@@ -2,12 +2,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { uuidToBase62 } from '@orbit/shared';
+import { SessionEndReason, uuidToBase62 } from '@orbit/shared';
 import { test } from 'node:test';
 import { ConfigService } from '@nestjs/config';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { PushService } from './push.service';
+import { releaseFactsOf } from '../common/session-release-shapes.fixture';
 import { findingCollapseId, findingCopy } from '../schedules/schedule-attention';
+import { turnStateFilter } from '../sessions/session-turn-state';
 
 function enabledConfig(): ConfigService {
   const values: Record<string, string> = {
@@ -28,6 +30,9 @@ test('needs-you includes only canonical Open, non-ending sessions', async () => 
       },
     },
     // The owner-item half of the count reads its own rows (see the two tests below); none here.
+    // The open owner requests and waiting task moves the same row counts (none here).
+    ownerRequest: { findMany: async () => [] },
+    projectHandoffApproval: { findMany: async () => [] },
     projectOpenItem: { findMany: async () => [] },
   };
   const service = new PushService(prisma as any, enabledConfig());
@@ -35,7 +40,8 @@ test('needs-you includes only canonical Open, non-ending sessions', async () => 
   assert.deepEqual(await service.needsYouSessions('owner-1'), ['s-open']);
   assert.deepEqual(calls[0].where, {
     ownerId: 'owner-1',
-    status: RunStatus.RUNNING,
+    // A turn in flight (sessions/session-turn-state.ts).
+    ...turnStateFilter(['IN_FLIGHT']),
     sessionKind: 'CONVERSATION',
     completedAt: null,
     archivedAt: null,
@@ -55,6 +61,9 @@ function approvalPrisma() {
   return {
     session: { findMany: async () => [{ id: 's-blocked', approvals: [{ id: 'approval-blocked', toolName: 'Bash' }] }] },
     // Overridden per test with the rows that half should or should not count.
+    // The open owner requests and waiting task moves the same row counts (none here).
+    ownerRequest: { findMany: async () => [] },
+    projectHandoffApproval: { findMany: async () => [] },
     projectOpenItem: { findMany: async (): Promise<any[]> => [] },
     // Which of those rows nobody owes any more (`openItemsNoLongerOwed`): none, here.
     $queryRaw: async (): Promise<Array<{ id: string }>> => [],
@@ -194,6 +203,8 @@ function settledSession(over: Record<string, unknown> = {}) {
   return {
     title: 'Fix the login bug',
     ownerId: 'owner-1',
+    // Released having finished the work, as its writer stores it beside SUCCEEDED: the alert reads these (plan step 4.8).
+    ...releaseFactsOf('finished work'),
     status: RunStatus.SUCCEEDED,
     retryAt: null,
     completedAt: null,
@@ -249,7 +260,7 @@ test('a settled session alerts its owner, collapsing on the session', async () =
 
 test('a failure carries its first error line', async () => {
   const { service, sent } = settleHarness(
-    settledSession({ status: RunStatus.FAILED, error: 'API Error: 529 overloaded_error' }),
+    settledSession({ ...releaseFactsOf('failed'), status: RunStatus.FAILED, error: 'API Error: 529 overloaded_error' }),
   );
 
   await service.notifySessionSettled('s-1');
@@ -260,7 +271,7 @@ test('a failure carries its first error line', async () => {
 });
 
 test('an ending not worth an interruption sends nothing', async () => {
-  const { service, sent } = settleHarness(settledSession({ status: RunStatus.CANCELLED }));
+  const { service, sent } = settleHarness(settledSession({ ...releaseFactsOf('ended'), status: RunStatus.CANCELLED }));
   await service.notifySessionSettled('s-1');
   assert.equal(sent.length, 0);
 });
@@ -334,7 +345,7 @@ test('approval push initially requires a canonical Open, non-ending RUNNING sess
 
   assert.deepEqual(calls[0].where, {
     id: 's-completed',
-    OR: [{ status: RunStatus.RUNNING }, { runningSubagents: { isEmpty: false } }],
+    OR: [turnStateFilter(['IN_FLIGHT']), { runningSubagents: { isEmpty: false } }],
     completedAt: null,
     archivedAt: null,
     deletedAt: null,
@@ -614,6 +625,9 @@ function ownerItemHarness(
 ) {
   const sent: { body: string; collapseId?: string }[] = [];
   const prisma = {
+    // The open owner requests and waiting task moves the same row counts (none here).
+    ownerRequest: { findMany: async () => [] },
+    projectHandoffApproval: { findMany: async () => [] },
     projectOpenItem: { findUnique: async () => item },
     // Whether the item is one nobody owes any more (`openItemsNoLongerOwed`): it is still owed.
     $queryRaw: async (): Promise<Array<{ id: string }>> => [],
@@ -1067,7 +1081,7 @@ test('notify from an Automatic task run reaches the coordinator without alerting
       return { placement: 'queued' };
     } }) },
   });
-  const live = { status: 'RUNNING', endReason: null, completedAt: null, archivedAt: null,
+  const live = { turnState: 'IN_FLIGHT', finishedAt: null, status: 'RUNNING', endReason: null, completedAt: null, archivedAt: null,
     deletedAt: null, cancelRequestedAt: null, retryAt: null };
   (harness.prisma as any).$queryRaw = async () => [];
   harness.prisma.session.findFirst = async (q: any) => {
@@ -1075,7 +1089,7 @@ test('notify from an Automatic task run reaches the coordinator without alerting
     if (q.select.task) return { title: 'Run', agentNotifiedAt: harness.rang.sessions.get(run) ?? null, task: { id: taskId, title: 'Build', project: {
       id: randomUUID(), coordinatorEnabled: true, coordinatorSessionId: coordinator, exceptionEscalationSeconds: 7200,
     } } };
-    if (q.select.status) return live;
+    if (q.select.turnState) return live;
     return { id: q.where.id, title: 'Run', taskId, workspace: null, permissionMode: 'default', engine: 'codex', owner: { preferences: {} } };
   };
   const result = await harness.service.notifyAgentMessage({ ...agentInput, sessionId: run, message: 'Ready to review' });
@@ -1118,7 +1132,7 @@ for (const unavailable of ['missing', 'ended', 'paused', 'fused', 'refused']) {
       if (q.select.task) return { title: 'Run', task: { id: randomUUID(), title: 'Build', project: {
         id: randomUUID(), coordinatorEnabled: true, coordinatorSessionId: unavailable === 'missing' ? null : coordinator, exceptionEscalationSeconds: 7200,
       } } };
-      if (q.select.status) return { status: unavailable === 'ended' ? 'COMPLETED' : 'RUNNING', endReason: null,
+      if (q.select.turnState) return { status: unavailable === 'ended' ? 'COMPLETED' : 'RUNNING', turnState: 'IN_FLIGHT', finishedAt: null, endReason: null,
         completedAt: unavailable === 'ended' ? new Date() : null, archivedAt: null, deletedAt: null,
         cancelRequestedAt: null, retryAt: unavailable === 'paused' ? new Date() : null };
       return null;
@@ -1294,7 +1308,9 @@ test('an escalated item whose coordinator cannot be reached says so, not "no one
   });
   const live = { status: 'AWAITING_INPUT', endReason: null, completedAt: null, archivedAt: null, deletedAt: null, cancelRequestedAt: null };
   const cases = [
-    { what: 'reaped, runner away', session: { ...live, status: 'FAILED', cancelRequestedAt: new Date() }, blocked: 'RUNNER_OFFLINE',
+    // The reaper records the failure on the carrying turn and copies it to lastTurnOutcome (removal step R2), which is
+    // what "released by a failure" reads since the status bridge went (R7).
+    { what: 'reaped, runner away', session: { ...live, status: 'FAILED', finishedAt: new Date(), cancelRequestedAt: new Date(), lastTurnOutcome: 'FAILED' }, blocked: 'RUNNER_OFFLINE',
       title: 'Now yours — no one acted on this for 2h 56m' },
     { what: 'live, but no message reaches it', session: live, blocked: 'RUN_RETIRED',
       title: 'Now yours — the coordinator can’t take messages' },

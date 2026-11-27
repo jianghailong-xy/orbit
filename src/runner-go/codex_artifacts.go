@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 )
 
 // artifactUploader sends a file already opened and judged (localFileScope.open). path is what the reply called it, for
@@ -49,7 +50,7 @@ func replyFileScope(asked, existing []string) localFileScope {
 }
 
 func rewriteLocalMarkdownImagesWithUploader(ctx context.Context, text string, roots []string, upload artifactUploader) string {
-	rewritten, _, _ := rewriteLocalMarkdownLinks(ctx, text, roots, upload)
+	rewritten, _, _ := rewriteLocalMarkdownLinks(ctx, text, roots, upload, nil)
 	return rewritten
 }
 
@@ -58,15 +59,18 @@ func rewriteLocalMarkdownImagesWithUploader(ctx context.Context, text string, ro
 // and the links to a local file that does not exist (missing). A relative link is looked for in each root in turn, the
 // working directory first: an agent told it may link a file in its uploads directory links one it saved there by name.
 // A link with a colon in it is no file this misses: `session.go:77` is a place in code, `orbit-task:…` an Orbit object.
-func rewriteLocalMarkdownLinks(ctx context.Context, text string, roots []string, upload artifactUploader) (string, []string, []string) {
-	if text == "" || upload == nil || len(roots) == 0 {
+func rewriteLocalMarkdownLinks(ctx context.Context, text string, roots []string, upload artifactUploader,
+	resolveDrive func(context.Context, string) (string, error)) (string, []string, []string) {
+	if text == "" {
 		return text, nil, nil
 	}
 	cleanRoots := cleanExistingRoots(roots)
-	if len(cleanRoots) == 0 {
-		return text, nil, nil
+	var scope localFileScope
+	if len(cleanRoots) > 0 {
+		scope = replyFileScope(roots, cleanRoots)
 	}
-	scope := replyFileScope(roots, cleanRoots)
+	mounted := sync.OnceValue(driveMounted)
+	driveIDs := map[string]string{}
 	uploaded := map[string]string{}
 	var outside, missing []string
 	rewritten := markdownAttachmentRE.ReplaceAllStringFunc(text, func(match string) string {
@@ -76,6 +80,27 @@ func rewriteLocalMarkdownLinks(ctx context.Context, text string, roots []string,
 		}
 		raw := strings.Trim(parts[3], "<>")
 		if skipMarkdownAttachmentSrc(raw) {
+			return match
+		}
+		if lookup, err := url.PathUnescape(raw); err == nil && !strings.ContainsAny(raw, "?#") {
+			if _, isDrive := driveMountRelative(lookup); isDrive && mounted() {
+				// Codex's early attachment pass leaves these for the shared reply flush.
+				p, err := normalizeDrivePath(lookup)
+				if err != nil || resolveDrive == nil {
+					return match
+				}
+				id, seen := driveIDs[p]
+				if !seen {
+					id, _ = resolveDrive(ctx, p)
+					driveIDs[p] = id
+				}
+				if id == "" {
+					return match
+				}
+				return fmt.Sprintf("%s[%s](%s%s)", parts[1], parts[2], driveLink(id), parts[4])
+			}
+		}
+		if len(cleanRoots) == 0 || upload == nil {
 			return match
 		}
 		path := localMarkdownLinkTarget(raw, cleanRoots)
@@ -169,7 +194,9 @@ func skipMarkdownAttachmentSrc(src string) bool {
 		strings.HasPrefix(lower, "data:") ||
 		strings.HasPrefix(lower, "http://") ||
 		strings.HasPrefix(lower, "https://") ||
-		strings.HasPrefix(lower, "orbit-attachment:")
+		strings.HasPrefix(lower, "orbit-attachment:") ||
+		strings.HasPrefix(lower, "orbit-drive:") ||
+		strings.HasPrefix(lower, "orbit-document:")
 }
 
 // localMarkdownLinkTarget is the file a link names: an absolute path as it is, and a relative one under the first root

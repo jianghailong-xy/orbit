@@ -31,6 +31,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import '../test-support/daemon-routes-over-http';
+import { WATCH_PREDICATE_VERSION } from './watch-predicate';
 
 const PG_URL = process.env.COORDINATOR_PG_URL;
 const skip = !PG_URL;
@@ -274,9 +275,9 @@ async function insertTask(owner: string, status: string): Promise<string> {
 async function insertSession(owner: string, status: string, runnerId: string): Promise<string> {
   const id = randomUUID();
   await sql.query(
-    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","status","assigned_runner_id",
+    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","turn_state","assigned_runner_id",
                            "provider","provider_builtin","num_turns","started_at","runtime_session_id")
-     VALUES ($1,'watch qa','the opening prompt',$2,$2,now(),$3,$4,'claude',TRUE,1,now(),$5)`,
+     VALUES ($1,'watch qa','the opening prompt',$2,$2,now(),(CASE ($3)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END),$4,'claude',TRUE,1,now(),$5)`,
     [id, owner, status, runnerId, `runtime-${id}`],
   );
   await sql.query(
@@ -413,7 +414,7 @@ qa('P-01', 'the production AppModule boots with the Watch modules, and the Watch
     ['a TTL under a minute', { ttlSeconds: 10 }, token, 400, 'TTL_OUT_OF_RANGE'],
     ['no targets', { targets: [] }, token, 400, 'EMPTY_TARGET_SET'],
     ['a session leaf over a task', { predicate: ALL('SESSION_TURN_SETTLED') }, token, 400, 'TARGET_KIND_MISMATCH'],
-    ['an unknown predicate version', { predicateVersion: 4 }, token, 400, 'PREDICATE_VERSION_UNSUPPORTED'],
+    ['an unknown predicate version', { predicateVersion: WATCH_PREDICATE_VERSION + 1 }, token, 400, 'PREDICATE_VERSION_UNSUPPORTED'],
   ];
   for (const [name, change, caller, status, code] of refusals) {
     const refused = await request(server, 'POST', '/api/watches', {

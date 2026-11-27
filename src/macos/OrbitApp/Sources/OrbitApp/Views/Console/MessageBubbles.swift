@@ -50,6 +50,8 @@ struct UserBubbleView: View {
     @Environment(\.sessionImagePreview) private var sessionPreview
     /// Set while the session is held by its runner's update, naming the bubble whose foot row says so.
     @Environment(\.runnerUpdatingFoot) private var runnerUpdatingFoot
+    /// The held tag's Cancel, offered where `HeldCancel.offers` says this message can still be taken back.
+    @Environment(\.heldCancel) private var heldCancel
     /// This bubble's `Queued · runner updating` (or `· runner full`), where it is the one held. That
     /// includes a message the server has accepted but no runner has taken yet: it is not on its way
     /// anywhere while the runner is full, so it says so in place of "Sending…" (web parity: the
@@ -373,12 +375,20 @@ struct UserBubbleView: View {
             }
             // What holds this message (web `QueuedFootCtx`): always shown, unlike the time.
             if let heldFoot {
-                RunnerUpdatingTagView(foot: heldFoot)
+                RunnerUpdatingTagView(foot: heldFoot, onCancel: heldCancelPress)
             }
         }
         // Reserve at least one line for the meta row.
         .frame(minHeight: metaHeight)
         .animation(.easeOut(duration: 0.12), value: hovering)
+    }
+
+    /// Cancel beside the held tag: the message no runner has taken yet, not the opening prompt, and
+    /// with the turn id the DELETE keys on (`HeldCancel.offers`; web `cancellableHeldTurn`).
+    private var heldCancelPress: (() -> Void)? {
+        guard let heldCancel, HeldCancel.offers(bubble) else { return nil }
+        let bubble = self.bubble
+        return { heldCancel(bubble) }
     }
 
     /// The words of a message that never reached the engine, back in the composer — beside the state
@@ -421,11 +431,12 @@ struct UserBubbleView: View {
 
     /// Settings › Translation: "Show original" and its flip (in the meta row, `delivered`), or on a line
     /// of its own the "Translating…" chip or "Couldn't translate, so it wasn't sent · Retry · Send as
-    /// written" (`SessionTranslation.userFoot`).
+    /// written · Cancel" (`SessionTranslation.userFoot`).
     @ViewBuilder
     private var translationFoot: some View {
         let parts = SessionTranslation.userFoot(bubble.translation, flipped: flipped, bilingual: bilingual, agentLanguage: agentLanguage,
-                                                originalHidden: originalHidden)
+                                                originalHidden: originalHidden,
+                                                cancellable: translationActions != nil && SessionTranslation.offersCancel(bubble))
         if !parts.isEmpty {
             TranslationFootView(parts: parts, alignment: .trailing) { action in
                 switch action {
@@ -433,6 +444,7 @@ struct UserBubbleView: View {
                 case .hideOriginal: originalHidden.toggle()
                 case .retryTurn: if let id = bubble.turnId { translationActions?.retryTurn(id) }
                 case .sendAsWritten: if let id = bubble.turnId { translationActions?.sendAsWritten(id) }
+                case .cancelTurn: translationActions?.cancelTurn(bubble)
                 case .retryReply: break
                 }
             }
@@ -530,7 +542,7 @@ struct AssistantBubbleView: View {
                     case .flip: flipped.toggle()
                     case .hideOriginal: originalHidden.toggle()
                     case .retryReply: if let seq = bubble.seq { translationActions?.retryReply(seq) }
-                    case .retryTurn, .sendAsWritten: break
+                    case .retryTurn, .sendAsWritten, .cancelTurn: break
                     }
                 }
             }

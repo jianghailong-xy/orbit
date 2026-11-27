@@ -11,6 +11,7 @@ import {
 } from '@orbit/shared';
 import { withSessionCapabilities } from '../sessions/session-state';
 import { assertCursorPermissionMode, assertDshPermissionMode } from './permission-semantics';
+import { factsOfWord } from '../sessions/session-legacy-words.fixture';
 import { normalizeBuiltinPermissionMode } from './runtime-provider';
 
 const ASK_MODES = [PermissionMode.DEFAULT, PermissionMode.ACCEPT_EDITS, PermissionMode.PLAN];
@@ -246,6 +247,7 @@ test('P5c cursor: the server admits exactly the modes the picker describes as ke
 });
 
 const ROW = {
+  ...factsOfWord('RUNNING'),
   status: 'RUNNING',
   cancelRequestedAt: null,
   startedAt: new Date(),

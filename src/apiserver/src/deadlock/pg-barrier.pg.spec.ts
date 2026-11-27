@@ -324,7 +324,7 @@ test('the three-party plan blocks where the fixture says it does', { skip: !URL,
       [ids.telemetrySessionId, ids.telemetryTurnAt],
     );
     await admin.query(
-      `UPDATE "session" SET "status" = 'AWAITING_INPUT'::run_status, "updated_at" = $2 WHERE "id" = $1::uuid`,
+      `UPDATE "session" SET "turn_state" = NULL, "updated_at" = $2 WHERE "id" = $1::uuid`,
       [ids.telemetrySessionId, ids.telemetryTurnAt],
     );
     await admin.query(

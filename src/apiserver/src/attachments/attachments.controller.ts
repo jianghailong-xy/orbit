@@ -76,7 +76,7 @@ export class AttachmentsController {
     return this.attachments.usage(user.userId);
   }
 
-  // The files one row of Settings → Storage counts (docs/orbit-files-design.md §2.10). Ahead of `:id`, as `usage` is.
+  // The files one row of Settings → Storage counts (docs/drive-design.md §2.10). Ahead of `:id`, as `usage` is.
   @PatScope('tasks:read', { workspaceConfinable: false })
   @Get('usage/projects/:id/files')
   projectFiles(
@@ -127,7 +127,7 @@ export class AttachmentsController {
     return this.attachments.deleteEverywhere(user.userId, id);
   }
 
-  // A pin keeps a file past its date (docs/orbit-files-design.md §2.8), and brings an expired one back while its bytes remain.
+  // A pin keeps a file past its date (docs/drive-design.md §2.8), and brings an expired one back while its bytes remain.
   @PatScope('tasks:write', { workspaceConfinable: false })
   @Put(':id/pin')
   pin(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string): Promise<FileView> {

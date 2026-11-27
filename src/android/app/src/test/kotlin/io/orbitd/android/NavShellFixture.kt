@@ -52,8 +52,12 @@ internal object NavShell {
     @Volatile var scheduled: Map<String, List<String>> = emptyMap()
     @Volatile var scheduleHistory = false
     @Volatile var folders = "[]"
+    /** The folder each of the fixture's own sessions is filed in, on its row and its detail alike. */
+    @Volatile var filedIn: Map<String, String> = emptyMap()
     @Volatile var tags = "[]"
     @Volatile var failWorkspaces: Int? = null
+    /** Answers a test adds before the fixture's own (the drive's routes): null passes the request on. */
+    @Volatile var routes: ((ApiRequest) -> ApiResponse?)? = null
 
     fun reset() {
         calls.clear(); muted = false; refuse = null; mergeAnswer = "merged"; mergeStatus = null
@@ -62,13 +66,13 @@ internal object NavShell {
         // and post its toast here.
         holdDelete = null; holdOpen = null; holdDeletes.clear()
         holdScope = null; scopeStatus = null; extra = emptyMap(); scheduled = emptyMap(); scheduleHistory = false
-        folders = "[]"; tags = "[]"; failWorkspaces = null
+        folders = "[]"; filedIn = emptyMap(); tags = "[]"; failWorkspaces = null; routes = null
     }
 
     /** A row of Alpha's. [fields] are more of its JSON, starting with a comma. */
     fun row(id: String, title: String, at: String = "2026-10-09T01:00:00Z", pending: Int = 0, fields: String = "") =
         """{"id":"$id","title":"$title","status":"AWAITING_INPUT","runState":"AWAITING_INPUT","lifecycleState":"OPEN",
-        "agent":{"id":"$ALPHA","name":"Alpha"},"agentId":"$ALPHA","createdAt":"2026-10-08T08:00:00Z","lastTurnAt":"$at",
+        "agent":{"id":"$ALPHA","name":"Alpha"},"agentId":"$ALPHA","createdAt":"2026-10-08T08:00:00Z","lastTurnAt":"$at","listedAt":"$at",
         "capabilities":{"canComplete":true,"canRestore":false},"pendingApprovals":$pending$fields}"""
 
     val workspaces = """[
@@ -93,7 +97,7 @@ internal object NavShell {
         return """{"id":"$id","title":"$title","status":"${if (run == "ENDED") "CANCELLED" else run}",
             "runState":"$run","lifecycleState":"$state",
             "agent":{"id":"$ALPHA","name":"Alpha"},"agentId":"$ALPHA","createdAt":"2026-10-08T08:00:00Z","lastTurnAt":"2026-10-09T01:00:00Z",
-            "capabilities":{"canComplete":${state == "OPEN"},"canRestore":${state != "OPEN"}},"tags":[],"pendingApprovals":0$linked,
+            "capabilities":{"canComplete":${state == "OPEN"},"canRestore":${state != "OPEN"}},"tags":[],"pendingApprovals":0$linked${filedIn[id]?.let { ""","folderId":"$it"""" } ?: ""},
             "engine":"claude","engineVersion":"2.4.1","settings":${settings()},
             "usage":{"inputTokens":190000,"outputTokens":108000,"cacheReadTokens":1520000,"cacheCreationTokens":0,"costUsd":4.37,"numTurns":23}}"""
     }
@@ -118,6 +122,7 @@ internal object NavShell {
         if (path == "auth/login") return@HttpTransport ok("""{"accessToken":"a05c-access","refreshToken":"a05c-refresh","user":{"id":"u1","email":"owner@a05c.test","name":"Owner"}}""")
         val query = api.query.joinToString("&") { (k, v) -> "$k=$v" }
         calls += "$method $path" + if (query.isEmpty()) "" else "?$query"
+        routes?.invoke(api)?.let { return@HttpTransport it }
         val id = api.path.getOrNull(1)?.let { part -> listOf(SESSION, PLAIN, RUN).firstOrNull { ObjectId.same(it, part) } }
         if (method == "DELETE") (id?.let { holdDeletes[it] } ?: holdDelete)?.await()
         if (method != "GET") refuse?.let { (status, message) -> return@HttpTransport ApiResponse(status, """{"message":"$message"}""".encodeToByteArray()) }

@@ -14,6 +14,7 @@ import {
   UpdateProviderModelTierDto,
 } from './dto';
 import { PrismaService } from '../prisma/prisma.service';
+import { learnModelIdentities } from '../runner-api/model-identity';
 import { subagentTierView } from '../runner-api/subagent-route';
 import { CodexLoginService } from './codex-login.service';
 import { DeepSeekBalanceService } from './deepseek-balance.service';
@@ -121,7 +122,7 @@ export class ProvidersController {
   @PatScope('workspaces:read', { workspaceConfinable: false })
   @Get('subagent-tiers')
   subagentTiers(@CurrentUser() user: AuthUser) {
-    return subagentTierView(this.prisma, user.userId);
+    return subagentTierView(this.prisma, user.userId, new Date(), (sightings) => void learnModelIdentities(this.prisma, sightings));
   }
 
   // The owner's tier for a model the catalogue gives none. Human-only: the runner's provider doors take no tier.
@@ -129,6 +130,13 @@ export class ProvidersController {
   @Patch('mine/:id/model-tier')
   setModelTier(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: UpdateProviderModelTierDto) {
     return this.providers.setModelTier(user.userId, id, dto.model, dto.tier ?? null);
+  }
+
+  // The owner's tier for a model of a built-in engine's catalogue (Claude Code, Cursor, …), set or cleared (null).
+  @PatScope('workspaces:write', { workspaceConfinable: false })
+  @Patch('builtin/:engine/model-tier')
+  setBuiltinModelTier(@CurrentUser() user: AuthUser, @Param('engine') engine: string, @Body() dto: UpdateProviderModelTierDto) {
+    return this.providers.setBuiltinModelTier(user.userId, engine, dto.model, dto.tier ?? null);
   }
 
   @PatScope('workspaces:write', { workspaceConfinable: false })

@@ -65,6 +65,8 @@ public enum NeedsYouGlyph: Equatable, Sendable {
     case warning
     case pause
     case hand
+    /// A terminal asking to be approved (docs/mocks/waiting-on-you-removal/02 ③).
+    case terminal
 
     init(_ kind: OwnerItemKind) {
         switch kind {
@@ -79,29 +81,43 @@ public enum NeedsYouGlyph: Equatable, Sendable {
     }
 }
 
-/// One notice that a conversation has just started waiting on the reader (the owner, 2026-11-15,
-/// `docs/mocks/needs-you-capsule/12-once`): shown once, as a toast, naming which conversation and what
-/// it waits on. How many wait is the lists' to say, never this.
+/// One notice that something has just started waiting on the reader (the owner, 2026-11-15,
+/// `docs/mocks/needs-you-capsule/12-once`): shown once, as a toast, naming what waits and on what.
+/// How many wait is the lists' to say, never this.
+///
+/// Two things are announced this way: a conversation (the session and its owner item) and a terminal
+/// asking to be approved (the owner, 2026-11-16: the resident needs-you bar is gone, so a terminal
+/// request is a one-time toast too). A terminal notice names no conversation — its press goes to
+/// that machine's pending section on the machine page — so `target` is nil for it.
 public struct NeedsYouToast: Equatable, Sendable, Identifiable {
-    /// The wait it announces (`NeedsYouLogic.waitKey`): one notice per wait.
+    /// The wait it announces: `NeedsYouLogic.waitKey` for a conversation, the request's own id for a
+    /// terminal, which is what makes it once per request.
     public let id: String
-    public let target: Session
-    /// Line one: the conversation.
+    /// The conversation that waits; nil for a terminal request.
+    public let target: Session?
+    /// Line one: the conversation, or "Approve a terminal".
     public let title: String
-    /// Line two: what it waits on, and the workspace.
+    /// Line two: what it waits on and the workspace, or the machine and the code it shows.
     public let line: String
     /// The owner item it waits on, so a press lands on that card; nil for a blocked tool call.
     public let ownerItem: SessionOwnerItem?
+    /// The terminal request it announces; nil for a conversation.
+    public let terminal: TerminalRequest?
 
-    public init(id: String, target: Session, title: String, line: String, ownerItem: SessionOwnerItem?) {
+    public init(id: String, target: Session?, title: String, line: String,
+                ownerItem: SessionOwnerItem?, terminal: TerminalRequest? = nil) {
         self.id = id
         self.target = target
         self.title = title
         self.line = line
         self.ownerItem = ownerItem
+        self.terminal = terminal
     }
 
-    public var glyph: NeedsYouGlyph { ownerItem.map { NeedsYouGlyph($0.kind) } ?? .hand }
+    public var glyph: NeedsYouGlyph {
+        if terminal != nil { return .terminal }
+        return ownerItem.map { NeedsYouGlyph($0.kind) } ?? .hand
+    }
 }
 
 /// What is waiting in the conversation ON SCREEN, and where in it: a count, the row to scroll to,

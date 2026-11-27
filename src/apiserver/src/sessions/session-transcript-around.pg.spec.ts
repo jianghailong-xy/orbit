@@ -168,8 +168,8 @@ async function account(h: Harness, name: string): Promise<{ id: string; bearer: 
 async function session(h: Harness, ownerId: string): Promise<string> {
   const id = randomUUID();
   await h.sql.query(
-    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","status","dispatch_origin","created_at","updated_at")
-     VALUES ($1,'around','p',$2,$2,'AWAITING_INPUT'::run_status,'USER',now(),now())`,
+    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","turn_state","dispatch_origin","created_at","updated_at")
+     VALUES ($1,'around','p',$2,$2,NULL,'USER',now(),now())`,
     [id, ownerId],
   );
   return id;

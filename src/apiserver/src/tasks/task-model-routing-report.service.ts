@@ -1,8 +1,9 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { USAGE_LIMIT_ERROR_MARKERS } from '@orbit/shared';
+import { RunFailureKind } from '@orbit/shared';
+import { failureKindIsSql } from '../common/run-failure-kind-filter';
+import { releaseWasFailureSql } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
-import { MODEL_AT_CAPACITY_ERROR_MARKER } from './model-routing';
 
 export interface ModelRoutingReportGroup {
   policyVersion: number;
@@ -43,19 +44,95 @@ export function sessionUsageUnreported(session: string): Prisma.Sql {
            AND (unreported_mp.owner_id IS NULL OR unreported_mp.owner_id = ${s}.owner_id))))))`;
 }
 
+/** The failure kinds that say nothing of the model: the runner's kind, else the legacy markers (runFailureKind). */
+const LIMIT_FAILURE_KINDS = [RunFailureKind.USAGE_LIMIT, RunFailureKind.CAPACITY] as const;
+
+/**
+ * Whether a run failed on a usage limit or a model at capacity: not the model's quality, so neither the report's
+ * failure count nor the Model tiers view's first pass counts it, as the router does not.
+ */
+export function limitFailure(run: string): Prisma.Sql {
+  return Prisma.sql`(${releaseWasFailureSql(run)} AND ${failureKindIsSql(run, LIMIT_FAILURE_KINDS)})`;
+}
+
+/** One provider × engine × model's done tasks, as the Model tiers view reads them (taskFirstPassByModel). */
+export interface TaskFirstPassRow {
+  provider: string;
+  engine: string;
+  model: string;
+  completedTaskCount: number;
+  firstPassTaskCount: number;
+}
+
+/**
+ * The done tasks whose first counted run started at or after `since`, by that run's provider × engine × model, and
+ * how many passed first time: the report's rule — one run, not FAILED, no FAIL verdict and no send-back in its
+ * window — with every run that failed on a usage limit or a model at capacity (limitFailure) left out entirely, so
+ * such a run neither takes the task nor makes it a second run. Reads only; routing never calls it.
+ */
+export async function taskFirstPassByModel(
+  db: Prisma.TransactionClient,
+  ownerId: string,
+  since: Date,
+): Promise<TaskFirstPassRow[]> {
+  return db.$queryRaw<TaskFirstPassRow[]>(Prisma.sql`
+    WITH counted AS (
+      SELECT s.id, s.task_id, ${releaseWasFailureSql('s')} AS run_failed, s.created_at, coalesce(s.engine, s.provider) AS engine, s.provider, s.model,
+             row_number() OVER history AS ordinal,
+             lead(s.created_at) OVER history AS next_created_at
+        FROM session s
+        JOIN task t ON t.id = s.task_id AND t.owner_id = ${ownerId}::uuid AND t.status = 'DONE'
+                   AND t.updated_at >= ${since}
+       WHERE s.owner_id = ${ownerId}::uuid AND s.starts_task_work AND NOT ${limitFailure('s')}
+      WINDOW history AS (PARTITION BY s.task_id ORDER BY s.created_at, s.id)
+    ),
+    assessed AS (
+      SELECT c.*, (c.run_failed OR EXISTS (
+               SELECT 1 FROM task v
+                WHERE v.owner_id = ${ownerId}::uuid AND v.verifies_task_id = c.task_id
+                  AND v.verdict = 'FAIL' AND v.updated_at >= c.created_at
+                  AND (c.next_created_at IS NULL OR v.updated_at < c.next_created_at)
+             ) OR EXISTS (
+               SELECT 1 FROM task_evidence_decision e
+                WHERE e.owner_id = ${ownerId}::uuid AND e.task_id = c.task_id
+                  AND e.decision = 'SEND_BACK' AND e.decided_at >= c.created_at
+                  AND (c.next_created_at IS NULL OR e.decided_at < c.next_created_at)
+             )) AS failed
+        FROM counted c
+    ),
+    per_task AS (
+      SELECT task_id, count(*) AS run_count, bool_or(failed) AS failed FROM assessed GROUP BY task_id
+    )
+    SELECT f.provider, f.engine, f.model, count(*)::int AS "completedTaskCount",
+           (count(*) FILTER (WHERE p.run_count = 1 AND NOT p.failed))::int AS "firstPassTaskCount"
+      FROM assessed f JOIN per_task p ON p.task_id = f.task_id
+     WHERE f.ordinal = 1 AND f.created_at >= ${since} AND f.model IS NOT NULL
+     GROUP BY f.provider, f.engine, f.model
+  `);
+}
+
+/** A report's `since` filter: absent is no lower bound; anything but an ISO timestamp is a 400. */
+export function reportSince(since: string | undefined): Date | null {
+  const sinceDate = since === undefined ? null : new Date(since);
+  if (sinceDate && (typeof since !== 'string' || !Number.isFinite(sinceDate.getTime()))) {
+    throw new BadRequestException('since must be an ISO timestamp');
+  }
+  return sinceDate;
+}
+
 @Injectable()
 export class TaskModelRoutingReportService {
   constructor(private readonly prisma: PrismaService) {}
 
   async read(ownerId: string, since?: string, agentId?: string) {
-    const sinceDate = since === undefined ? null : new Date(since);
-    if (sinceDate && (typeof since !== 'string' || !Number.isFinite(sinceDate.getTime()))) {
-      throw new BadRequestException('since must be an ISO timestamp');
-    }
+    const sinceDate = reportSince(since);
     const rows = await this.prisma.$queryRaw<Array<ModelRoutingReportGroup & { applied: boolean }>>(Prisma.sql`
       WITH routed_runs AS (
         SELECT d.policy_version, d.level, d.applied, s.provider, s.model,
-               s.id AS session_id, s.task_id, s.status AS run_status, s.effort,
+               s.id AS session_id, s.task_id,
+               -- The run failed: released by a failure (common/session-release.ts), never null: false for a run still
+               -- held.
+               ${releaseWasFailureSql('s')} AS run_failed, s.effort,
                s.created_at, s.finished_at, t.status AS task_status, t.completion_criterion
           FROM task_route_decision d
           JOIN task t ON t.id = d.task_id AND t.owner_id = ${ownerId}::uuid
@@ -67,7 +144,8 @@ export class TaskModelRoutingReportService {
       ),
       -- Filters choose samples, never cut short the history that determines the first run or cost.
       work_runs AS (
-        SELECT s.id, s.task_id, s.status, s.error, s.cost_usd, s.created_at,
+        SELECT s.id, s.task_id, ${releaseWasFailureSql('s')} AS run_failed,
+               s.error, s.failure_kind, s.cost_usd, s.created_at,
                ${sessionUsageUnreported('s')} AS usage_unknown,
                row_number() OVER history AS ordinal,
                lead(s.created_at) OVER history AS next_created_at
@@ -78,10 +156,8 @@ export class TaskModelRoutingReportService {
       ),
       assessed_runs AS (
         SELECT w.*,
-               NOT (w.status = 'FAILED' AND (${Prisma.join(
-                 [...USAGE_LIMIT_ERROR_MARKERS, MODEL_AT_CAPACITY_ERROR_MARKER].map((marker) =>
-                   Prisma.sql`lower(coalesce(w.error, '')) LIKE ${`%${marker}%`}`), ' OR ')}))
-               AND (w.status = 'FAILED' OR EXISTS (
+               NOT (w.run_failed AND ${failureKindIsSql('w', LIMIT_FAILURE_KINDS)})
+               AND (w.run_failed OR EXISTS (
                  SELECT 1 FROM task v
                   WHERE v.owner_id = ${ownerId}::uuid AND v.verifies_task_id = w.task_id
                     AND v.verdict = 'FAIL' AND v.updated_at >= w.created_at
@@ -113,7 +189,7 @@ export class TaskModelRoutingReportService {
                count(*)::int AS task_count,
                (count(*) FILTER (WHERE r.task_status = 'DONE'))::int AS completed_task_count,
                (count(*) FILTER (WHERE r.task_status = 'DONE' AND totals.run_count = 1
-                                 AND totals.failures = 0 AND r.run_status <> 'FAILED'))::int AS first_pass_task_count,
+                                 AND totals.failures = 0 AND NOT r.run_failed))::int AS first_pass_task_count,
                avg(totals.failures)::double precision AS average_failure_count,
                (count(*) FILTER (WHERE r.task_status = 'DONE' AND totals.usage_unknown))::int
                  AS usage_unknown_completed_task_count,

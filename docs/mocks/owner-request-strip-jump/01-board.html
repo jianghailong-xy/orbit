@@ -1,0 +1,183 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+:root{--brand:#2f6bff;--warn:#e8890c;--t1:#1d1f24;--t2:#5b606b;--t3:#8b909a;--line:#e6e8ec;--sunken:#f6f7f9;--hover:#eef1f6}
+*{box-sizing:border-box}
+body{margin:0;background:#eceef2;font-family:-apple-system,Inter,'Noto Sans SC',sans-serif;color:var(--t1)}
+.board{width:2280px;padding:40px;background:#eceef2}
+h1{font-size:30px;margin:0 0 6px}
+.lede{font-size:17px;color:var(--t2);margin:0 0 28px;line-height:1.6;max-width:1700px}
+.row{display:flex;gap:28px;align-items:flex-start}
+.frame{flex:1;background:#fff;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.08);overflow:hidden;position:relative}
+.ftag{position:absolute;top:12px;right:14px;font-size:14px;font-weight:600;padding:3px 10px;border-radius:999px;background:#fde8e8;color:#b42318}
+.ftag.new{background:#e3f6e8;color:#1a7f37}
+.cap{font-size:20px;font-weight:700;padding:16px 20px 4px}
+.capsub{font-size:15px;color:var(--t2);padding:0 20px 14px;line-height:1.5}
+/* app */
+.app{border-top:1px solid var(--line)}
+.hd{padding:14px 20px 10px;border-bottom:1px solid var(--line)}
+.crumb{font-size:13px;color:var(--t3)}
+.ttl{font-size:21px;font-weight:700;margin-top:4px;display:flex;gap:10px;align-items:center}
+.badge{font-size:12px;font-weight:600;color:var(--brand);border:1px solid #b9cdfd;border-radius:999px;padding:1px 8px}
+.sub{font-size:14px;color:var(--t2);margin-top:4px}
+.sub .w{color:var(--warn)}
+.strip{background:var(--sunken);border-bottom:1px solid var(--line)}
+.sl{display:flex;align-items:center;gap:8px;padding:7px 14px;font-size:13px;line-height:20px;position:relative}
+.sl.hl{background:var(--hover);outline:2px solid var(--brand);outline-offset:-2px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--brand);flex:none}
+.q{color:var(--t3);white-space:nowrap}
+.car{margin-left:auto;color:var(--t3)}
+.tx{height:420px;padding:16px 20px;overflow:hidden;position:relative;font-size:14px;line-height:1.6}
+.msg{background:#eef3ff;border-radius:10px;padding:10px 12px;margin:0 0 12px 60px;color:var(--t1)}
+.ai{color:var(--t1);margin-bottom:12px}
+.ai .g{color:var(--t3);font-size:13px}
+.fade{position:absolute;left:0;right:0;top:0;height:44px;background:linear-gradient(#fff,rgba(255,255,255,0))}
+.offnote{position:absolute;top:8px;left:50%;transform:translateX(-50%);font-size:12px;color:var(--t3);background:#fff;border:1px dashed #c9ccd3;border-radius:999px;padding:2px 10px}
+.orc{border:1px solid #f3c58a;border-radius:12px;background:#fffaf2;padding:12px 14px;margin-bottom:12px}
+.orc.flash{box-shadow:0 0 0 3px rgba(47,107,255,.35)}
+.orh{display:flex;gap:8px;align-items:center;font-size:12.5px}
+.ord{width:7px;height:7px;border-radius:50%;background:var(--warn)}
+.orw{color:var(--warn);font-weight:600}
+.ora{color:var(--t3)}
+.ort{font-size:15px;font-weight:650;margin:6px 0 2px;display:flex;justify-content:space-between}
+.ork{font-size:11.5px;font-weight:600;color:var(--t2);border:1px solid var(--line);border-radius:6px;padding:0 6px;height:20px}
+.orb{font-size:13px;color:var(--t2)}
+.btns{display:flex;gap:8px;margin-top:10px}
+.btn{font-size:13px;padding:4px 12px;border-radius:8px;border:1px solid var(--line);background:#fff}
+.btn.p{background:var(--brand);color:#fff;border-color:var(--brand)}
+.comp{border-top:1px solid var(--line);padding:12px 20px;color:var(--t3);font-size:14px}
+.mk{position:absolute;width:26px;height:26px;border-radius:50%;background:#e5484d;color:#fff;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.25);z-index:5}
+.arrow{position:absolute;border-left:2px dashed var(--brand);z-index:4}
+/* notes */
+.notes{display:flex;gap:28px;margin-top:28px}
+.card{flex:1;background:#fff;border-radius:14px;padding:18px 22px;box-shadow:0 1px 3px rgba(0,0,0,.08);font-size:15px;line-height:1.65}
+.card h2{font-size:18px;margin:0 0 10px}
+.card ol,.card ul{margin:0;padding-left:22px}
+.card li{margin-bottom:6px}
+code{font-family:'JetBrains Mono',monospace;font-size:13px;background:#f2f3f5;padding:1px 5px;border-radius:4px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+td,th{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+th{color:var(--t2);font-weight:600}
+.todo{background:#fff8e6;border:1px solid #f3d38a}
+</style></head>
+<body><div class="board">
+<h1>Owner request 也上置顶条：一按就跳到它的卡片</h1>
+<p class="lede">Web 会话页。今天 <code>request_owner_action</code> 发出的请求只在对话流里画成一张卡（<code>OwnerRequestCard</code>），列表行和标题写着 “Waiting on you”，可置顶条（<code>SessionDecisionStrip</code>，审批/证据/问题都在上面）里没有它；对话一长，卡片早滚出屏幕，只能手动往上翻找。提议：把每个未结束的 owner request 作为置顶条的一种“去处”，和其它卡片同一条线、同一种按法。只是导航，不在条上回答。</p>
+
+<div class="row">
+<!-- ① today -->
+<div class="frame"><span class="ftag">① 今天</span>
+<div class="cap">标题说 Waiting on you，但没有路</div>
+<div class="capsub">置顶条不出现（没有证据/问题/例外），请求卡在 40 条消息之上</div>
+<div class="app">
+ <div class="hd"><div class="crumb">← List freshness: event hints + conditional reads</div>
+ <div class="ttl">List freshness: event hints + conditional… <span class="badge">Coordinator</span></div>
+ <div class="sub"><span class="w">Waiting on you</span> · Open · 21m ago</div></div>
+ <div class="tx">
+  <div class="offnote">↑ Waiting on you card is 40 messages up</div>
+  <div class="fade"></div>
+  <div style="height:30px"></div>
+  <div class="msg">The orphan sweep flagged task 352QHAZ8… : a running session has taken no turn…</div>
+  <div class="ai"><span class="g">Worked for 2m 26s</span><br>The sweep is flagging the <u>profile run</u> for sitting idle since 11:01Z. That's the wait I already recorded: it needs you to reload, and no answer has come back. I'll end the idle session to free its slot…</div>
+  <div class="msg">Orbit: task 34zQ… landed on main.</div>
+  <div class="ai">Noted. 41 of 44 criteria hold; the remaining three wait on your device window.</div>
+ </div>
+ <div class="comp">Reply…</div>
+</div>
+<div class="mk" style="left:96px;top:218px">1</div>
+</div>
+
+<!-- ② proposal -->
+<div class="frame"><span class="ftag new">② 提议</span>
+<div class="cap">置顶条多一种去处：owner request</div>
+<div class="capsub">条上写请求自己的标题和等了多久；箭头说卡在上方 (↑) 还是下方 (↓)</div>
+<div class="app">
+ <div class="hd"><div class="crumb">← List freshness: event hints + conditional reads</div>
+ <div class="ttl">List freshness: event hints + conditional… <span class="badge">Coordinator</span></div>
+ <div class="sub"><span class="w">Waiting on you</span> · Open · 21m ago</div></div>
+ <div class="strip"><div class="sl hl"><span class="dot"></span><span>Reload the client to finish the profile run</span><span class="q">21m</span><span class="car">↑</span></div></div>
+ <div class="tx">
+  <div class="fade"></div>
+  <div style="height:30px"></div>
+  <div class="msg">The orphan sweep flagged task 352QHAZ8… : a running session has taken no turn…</div>
+  <div class="ai"><span class="g">Worked for 2m 26s</span><br>The sweep is flagging the <u>profile run</u> for sitting idle since 11:01Z. That's the wait I already recorded…</div>
+  <div class="msg">Orbit: task 34zQ… landed on main.</div>
+ </div>
+ <div class="comp">Reply…</div>
+</div>
+<div class="mk" style="left:12px;top:266px">2</div>
+</div>
+
+<!-- ③ after press -->
+<div class="frame"><span class="ftag new">③ 按下之后</span>
+<div class="cap">滚到卡片，停在条下方</div>
+<div class="capsub">和其它去处同一套落点（卡片顶端离可视区顶 48px，松开尾部钉住）；卡片短暂描边</div>
+<div class="app">
+ <div class="hd"><div class="crumb">← List freshness: event hints + conditional reads</div>
+ <div class="ttl">List freshness: event hints + conditional… <span class="badge">Coordinator</span></div>
+ <div class="sub"><span class="w">Waiting on you</span> · Open · 21m ago</div></div>
+ <div class="strip"><div class="sl"><span class="dot"></span><span>Reload the client to finish the profile run</span><span class="q">21m</span><span class="car">↑</span></div></div>
+ <div class="tx">
+  <div style="height:30px"></div>
+  <div class="orc flash">
+   <div class="orh"><span class="ord"></span><span class="orw">Waiting on you</span><span class="ora">Asked 21m ago</span></div>
+   <div class="ort">Reload the client to finish the profile run <span class="ork">Step</span></div>
+   <div class="orb">The profile run needs one reload of the web client so it can read the cold-start timings. Reload any open Orbit tab, then press Done.</div>
+   <div class="btns"><span class="btn p">Done</span><span class="btn">Can't do it</span></div>
+  </div>
+  <div class="msg">Can you reload now? I'll keep the run open until 13:00Z.</div>
+ </div>
+ <div class="comp">Reply…</div>
+</div>
+<div class="mk" style="left:28px;top:296px">3</div>
+</div>
+
+<!-- ④ several -->
+<div class="frame"><span class="ftag new">④ 和别的去处并存</span>
+<div class="cap">一条线轮流指，按一次去下一张</div>
+<div class="capsub">已有规则不变：显示 “1 of 3”，箭头指向下一次按下去的位置</div>
+<div class="app">
+ <div class="hd"><div class="crumb">← Session state: three activity states and the foot</div>
+ <div class="ttl">Session state: three activity states… <span class="badge">Coordinator</span></div>
+ <div class="sub"><span class="w">Waiting for approval</span> · Open · just now</div></div>
+ <div class="strip"><div class="sl hl"><span class="dot"></span><span>Escalated to you · merge check is red on main</span><span class="q">3h</span><span class="q">·</span><span class="q">1 of 3</span><span class="car">↑</span></div></div>
+ <div class="tx" style="font-size:13.5px">
+  <table style="margin-top:6px">
+   <tr><th>#</th><th>去处（顺序）</th><th>条上的字</th></tr>
+   <tr><td>1</td><td>Exception / escalation（已有）</td><td>Escalated to you · …</td></tr>
+   <tr><td>2</td><td><b>Owner request（新）</b>，按等待时长，最久的在前</td><td><b>request.title</b></td></tr>
+   <tr><td>3</td><td>Coordinator question（已有）</td><td>question 原文</td></tr>
+   <tr><td>…</td><td>Weakening / crossing / evidence / owner confirmation / settlement（已有，不变）</td><td>—</td></tr>
+  </table>
+  <p style="color:var(--t2);margin-top:12px">Owner request 和例外、问题一样只有 owner 能结，放在它们之间：比证据更急（会话在等你），比已升级的例外缓。</p>
+ </div>
+ <div class="comp">Reply…</div>
+</div>
+</div>
+</div>
+
+<div class="notes">
+<div class="card"><h2>规则</h2>
+<ol>
+<li>进条的是：<b>这个会话自己发出的</b>、state = <code>PENDING</code> 的 owner request，且对话里正画着它的卡（<code>useSessionOwnerRequestInserts</code> 同一份数据），与证据行“有卡才指”的规则一致。</li>
+<li>条上的字 = <code>request.title</code>（卡片标题原文），后面是等了多久（<code>createdAt</code>）。不加 kind 标签，条是一行。</li>
+<li>按下 = 导航到 <code>#owner-request-&lt;id&gt;</code>，沿用 <code>WAITING_CARD_GAP</code> + 松开尾部钉住的落点；不在条上提供 Done / 回答按钮（条只指路，见 DecisionRail 注释）。</li>
+<li>箭头 ↑/↓ 按卡片相对视口的实测位置给，和例外卡同一测法。</li>
+<li>请求在别处结束（手机、Waiting on you 页）→ 下一次读到就从条上消失；条空了整条不画。</li>
+<li>手机端同样上条（证据的 “waiting on you” 折叠组在手机上隐藏，那是另一回事，不受影响）。</li>
+</ol></div>
+<div class="card"><h2>会改的文件</h2>
+<ul>
+<li><code>src/web/src/components/DecisionRail.tsx</code>：<code>ways</code> 增加 <code>ownerRequests</code> 一类、<code>onRevealOwnerRequest</code>；<code>SessionDecisionStrip</code> 透传</li>
+<li><code>src/web/src/components/WorkspaceView.tsx</code>：把会话里的 pending owner request（已有的 inserts 读）交给条，并实现 reveal（复用 waiting-card 落点）</li>
+<li><code>src/web/src/components/DecisionRail*.test.tsx</code>：新去处的顺序、文字、按下跳转、结束后消失</li>
+<li>iOS / Android 有同样的置顶条：本板只做 Web；要不要同步见右侧</li>
+</ul></div>
+<div class="card todo"><h2>待你定</h2>
+<ol>
+<li><b>顺序</b>：owner request 放在“例外之后、问题之前”（提议），还是排在所有去处最前？</li>
+<li><b>标题里的 “Waiting on you” 字样</b>也做成可点（点了同样跳卡）？提议<b>不做</b>：一处入口就够，标题行别的状态词都不可点，做了会不一致。</li>
+<li><b>三端</b>：只做 Web，还是 iOS（参考端）/ Android 一起排期？</li>
+</ol></div>
+</div>
+</div></body></html>

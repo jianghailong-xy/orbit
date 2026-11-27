@@ -21,7 +21,7 @@ import { defaultStartLine, readProjectCodebase } from '../projects/project-integ
 import { doneTaskLandingWork } from '../projects/project-integration-job';
 import { automaticAuthorizationRefusal } from '../projects/project-promotion';
 import { changedFileCount, mergeTargetOf } from '../sessions/session-move';
-import { TASK_OCCUPYING } from './reclaim-stalled-task';
+import { heldFilter } from '../common/session-release';
 import { readTaskCommitEvidence } from './task-codeless';
 import type { DependentRelease } from './tasks.service';
 
@@ -269,7 +269,7 @@ async function readEndsSession(
       startsTaskWork: true,
       deletedAt: null,
       cancelRequestedAt: null,
-      status: { in: TASK_OCCUPYING },
+      ...heldFilter(),
     },
     select: { id: true, runningBgJobs: true },
   });

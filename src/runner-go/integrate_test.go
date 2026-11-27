@@ -440,6 +440,96 @@ func TestIntegrationNewSyncTaskResolvesPromotionMergeConflict(t *testing.T) {
 	}
 }
 
+// TestIntegrationHeldLandingLandsAfterSyncTask is R1 of docs/design/project-line-upstream-sync.md §9: the
+// git half of the line-sync path. Main moves and conflicts with the project branch, so task X's landing
+// stops CONFLICT at MAIN_SYNC before its own commits are looked at. Nothing about X changes: no new
+// commit, no reopen. A sync task cut from the line tip merges main and resolves the ledger; it lands by
+// MERGE with no MAIN_SYNC of its own. X's landing then runs again with the very same command and the same
+// untouched branch, finds main already in the line, and lands with no MAIN_SYNC either. The line ends up
+// holding X's work, main's tip and the resolution, and its old tip is an ancestor of all of it.
+func TestIntegrationHeldLandingLandsAfterSyncTask(t *testing.T) {
+	t.Parallel()
+	r := newIntegrationRepo(t)
+	lineTip, mainTip := contestedLine(t, r)
+
+	// Task X, DONE: its own work on a branch cut from the line, unrelated to the ledger.
+	r.checkoutNew("task/x", lineTip)
+	r.write("x.txt", "task X's own work\n")
+	xSha := r.commit("task X")
+	r.push("task/x")
+	r.checkout("main")
+
+	xCommand := r.command("task/x", "project/line")
+	xCommand.SessionBaseSha = lineTip
+	first := runIntegrationJob(xCommand, silent)
+	if first.State != "CONFLICT" || first.Phase != "MAIN_SYNC" {
+		t.Fatalf("X's first landing = %s at %s (%s), want CONFLICT at MAIN_SYNC", first.State, first.Phase, first.ErrorCode)
+	}
+	if !slices.Contains(first.Conflicts, "ledger.txt") {
+		t.Fatalf("conflicts = %v, want the ledger", first.Conflicts)
+	}
+	if first.UpstreamSha != mainTip || first.TargetShaBefore != lineTip {
+		t.Fatalf("reported U/T0 = %s/%s, want %s/%s", first.UpstreamSha, first.TargetShaBefore, mainTip, lineTip)
+	}
+	if got := r.originRev("refs/heads/project/line"); got != lineTip {
+		t.Fatalf("the conflicted landing moved the line to %s", got)
+	}
+
+	// The sync task: cut from the line tip, merges main, resolves the ledger, commits only that merge.
+	r.checkoutNew("task/sync", lineTip)
+	syncSha := absorbMain(t, r)
+	r.push("task/sync")
+	r.checkout("main")
+	syncCommand := r.command("task/sync", "project/line")
+	syncCommand.SessionBaseSha = lineTip
+	var syncPhases []string
+	synced := runIntegrationJob(syncCommand, func(phase string, _ *IntegrationUpstreamMoved) {
+		syncPhases = append(syncPhases, phase)
+	})
+	if synced.State != "LANDED" {
+		t.Fatalf("sync landing = %s (%s %s, conflicts %v), want LANDED", synced.State, synced.ErrorCode, synced.Phase, synced.Conflicts)
+	}
+	if slices.Contains(syncPhases, "MAIN_SYNC") || synced.MainSyncSha != "" || !slices.Contains(syncPhases, "MERGE") {
+		t.Fatalf("sync phases %v, mainSyncSha %q: want MERGE and no MAIN_SYNC", syncPhases, synced.MainSyncSha)
+	}
+	if !isAncestor(r.work, syncSha, synced.LandedSha) {
+		t.Fatal("the sync task's commit is not in what landed")
+	}
+
+	// X's held landing runs again: the same command, the same source, X's branch untouched.
+	if got := r.originRev("refs/heads/task/x"); got != xSha {
+		t.Fatalf("X's branch moved to %s; it must stay %s", got, xSha)
+	}
+	var xPhases []string
+	second := runIntegrationJob(xCommand, func(phase string, _ *IntegrationUpstreamMoved) {
+		xPhases = append(xPhases, phase)
+	})
+	if second.State != "LANDED" {
+		t.Fatalf("X's held landing = %s (%s %s, conflicts %v), want LANDED", second.State, second.ErrorCode, second.Phase, second.Conflicts)
+	}
+	if slices.Contains(xPhases, "MAIN_SYNC") || second.MainSyncSha != "" {
+		t.Fatalf("X's held landing absorbed main again (phases %v, mainSyncSha %q)", xPhases, second.MainSyncSha)
+	}
+	if second.SourceSha != xSha || second.TargetShaBefore != synced.LandedSha {
+		t.Fatalf("source/target before = %s/%s, want X %s onto the sync landing %s", second.SourceSha, second.TargetShaBefore, xSha, synced.LandedSha)
+	}
+	landed := r.originRev("refs/heads/project/line")
+	if landed != second.LandedSha {
+		t.Fatalf("origin holds %s, the result claims %s", landed, second.LandedSha)
+	}
+	for _, ancestor := range []string{lineTip, mainTip, syncSha} {
+		if !isAncestor(r.work, ancestor, landed) {
+			t.Fatalf("%s is not an ancestor of the line: history was rewritten or a side is missing", ancestor)
+		}
+	}
+	if body, _ := git(r.work, "show", landed+":ledger.txt"); body+"\n" != resolvedLedger {
+		t.Fatalf("the sync task's resolution did not survive X's landing: %q", body)
+	}
+	if body, _ := git(r.work, "show", landed+":x.txt"); body != "task X's own work" {
+		t.Fatalf("X's work is not on the line: %q", body)
+	}
+}
+
 // TestIntegrationLandsASourceWhoseAbsorbedUpstreamMovedOn is the clean half of J-S2's source-absorb
 // branch. A source that absorbed main at an earlier tip and carries the resolution — the sync-task
 // shape, or the absorb of a reworked task — is the branch the CURRENT upstream must be merged into
@@ -2257,8 +2347,13 @@ func TestIntegrationLandingPathsExempt(t *testing.T) {
 			}
 			result := runIntegrationJob(cmd, silent)
 			expectedChecks := 2
-			if scenario == "upstream-absorbed" {
-				expectedChecks = 3 // K3 attributes the red landing check on M.
+			if scenario != "exempt" && scenario != "bare-directory" && scenario != "promotion" {
+				// K3 attributes every red landing check: on M after an absorb, on T0 otherwise. "exit 7"
+				// is red there too.
+				expectedChecks = 3
+				if !result.BaselineRed || len(result.Checks) != 3 || result.Checks[2].Scope != "BASELINE" {
+					t.Fatalf("red landing check not attributed: %+v", result)
+				}
 			}
 			if len(result.Checks) != expectedChecks || !strings.Contains(result.Checks[0].OutputTail, "acceptance-ran") {
 				t.Fatalf("acceptance did not run: %+v", result)
@@ -2279,8 +2374,78 @@ func TestIntegrationLandingPathsExempt(t *testing.T) {
 	}
 }
 
+// §12.15 P-C2: an exempt task's landing is handed its acceptance alone (the control plane leaves the
+// landing check out of the command) and the reason. The acceptance runs on the combined tree; the
+// landing check is recorded skipped as TASK_EXEMPT with that reason, and nothing else is skipped.
+func TestIntegrationLandingTaskExempt(t *testing.T) {
+	const reason = "Docs-only change; the landing build has nothing to say about it."
+	for _, scenario := range []string{"exempt", "acceptance-red", "older-command"} {
+		t.Run(scenario, func(t *testing.T) {
+			r := newIntegrationRepo(t)
+			r.checkoutNew("project/line", "main")
+			r.write("line.txt", "line\n")
+			r.commit("line work")
+			r.push("project/line")
+			r.checkoutNew("task/exempt", "main")
+			r.write("task.txt", "task\n")
+			r.commit("task work")
+			r.push("task/exempt")
+			r.checkout("main")
+			lineBefore := r.originRev("refs/heads/project/line")
+			// The acceptance sees the combined tree: the task's file and the line's together.
+			script := "test -f task.txt && test -f line.txt && echo acceptance-ran"
+			if scenario == "acceptance-red" {
+				script = "echo acceptance-ran; exit 3"
+			}
+			acceptance := IntegrationCheckSpec{Name: "TASK_ACCEPTANCE", Command: script, ExpectedExitCode: 0, TimeoutSeconds: 10}
+			cmd := r.command("task/exempt", "project/line", acceptance)
+			if scenario != "older-command" {
+				cmd.LandingCheckExemptReason = reason
+			}
+			result := runIntegrationJob(cmd, silent)
+			if len(result.Checks) == 0 || result.Checks[0].Name != "TASK_ACCEPTANCE" || !strings.Contains(result.Checks[0].OutputTail, "acceptance-ran") {
+				t.Fatalf("the acceptance did not run: %+v", result)
+			}
+			switch scenario {
+			case "exempt":
+				if result.State != "LANDED" || len(result.Checks) != 2 || result.Checks[0].ExitCode == nil || *result.Checks[0].ExitCode != 0 {
+					t.Fatalf("exempt landing: %+v", result)
+				}
+				skipped := result.Checks[1]
+				if skipped.Name != "LANDING_CHECK" || skipped.Skipped != "TASK_EXEMPT" || skipped.Reason != reason || skipped.ExitCode != nil || len(skipped.Files) != 0 {
+					t.Fatalf("skip record: %+v", skipped)
+				}
+				encoded, _ := json.Marshal(skipped)
+				if !strings.Contains(string(encoded), `"skipped":"TASK_EXEMPT"`) || !strings.Contains(string(encoded), `"reason":"`+reason+`"`) {
+					t.Fatalf("wire result: %s", encoded)
+				}
+				if r.originRev("refs/heads/project/line") == lineBefore {
+					t.Fatalf("the exempt task did not land on the line")
+				}
+			case "acceptance-red":
+				// The exemption covers the project's landing check only: a red acceptance still stops the landing.
+				if result.State != "CHECK_FAILED" || len(result.Checks) != 1 || result.Checks[0].ExitCode == nil || *result.Checks[0].ExitCode != 3 {
+					t.Fatalf("a red acceptance must stop an exempt landing: %+v", result)
+				}
+				if r.originRev("refs/heads/project/line") != lineBefore {
+					t.Fatalf("a red acceptance pushed")
+				}
+			case "older-command":
+				// A command without the reason (what a runner without TASK_EXEMPT reads too) runs what it holds.
+				if result.State != "LANDED" || len(result.Checks) != 1 {
+					t.Fatalf("plain landing: %+v", result)
+				}
+			}
+		})
+	}
+}
+
+// K3: a red landing check is run again on the tree without the task, whether or not this generation
+// absorbed upstream. "no-absorb*" land on a line already at upstream's tip; "fresh-line*" on a line
+// that does not exist on origin yet, whose T0 is main's own tip (task 352ZEtmx7cOXY91yIodUk: a red
+// main read as each task's own CHECK_FAILED and was handed to its session).
 func TestIntegrationBaselineAttribution(t *testing.T) {
-	for _, scenario := range []string{"baseline-red", "task-red", "no-absorb", "timed-out", "baseline-timed-out", "source-absorb", "baseline-unprepared", "baseline-worktree-failed"} {
+	for _, scenario := range []string{"baseline-red", "task-red", "no-absorb", "no-absorb-red", "fresh-line", "fresh-line-red", "timed-out", "baseline-timed-out", "source-absorb", "baseline-unprepared", "baseline-worktree-failed"} {
 		t.Run(scenario, func(t *testing.T) {
 			r := newIntegrationRepo(t)
 			recipe := "#!/bin/sh\nmkdir -p node_modules\ntouch node_modules/ready\n"
@@ -2290,14 +2455,17 @@ func TestIntegrationBaselineAttribution(t *testing.T) {
 			r.writeIn("scripts/worktree-overlay.sh", recipe)
 			r.commit("environment recipe")
 			r.push("main")
+			fresh := strings.HasPrefix(scenario, "fresh-line")
 			r.checkoutNew("project/line", "main")
-			r.push("project/line")
+			if !fresh {
+				r.push("project/line")
+			}
 			r.checkoutNew("task/red", "project/line")
 			r.write("task.txt", "task\n")
 			r.commit("task")
 			r.push("task/red")
 			r.checkout("main")
-			if scenario != "no-absorb" {
+			if !strings.HasPrefix(scenario, "no-absorb") {
 				r.write("upstream.txt", "upstream\n")
 				r.commit("upstream")
 				r.push("main")
@@ -2312,7 +2480,7 @@ func TestIntegrationBaselineAttribution(t *testing.T) {
 				r.push("main")
 			}
 			command := "test -f node_modules/ready || exit 9; test ! -f task.txt"
-			if scenario == "baseline-red" {
+			if scenario == "baseline-red" || scenario == "no-absorb-red" || scenario == "fresh-line-red" {
 				command = "test -f node_modules/ready || exit 9; exit 7"
 			}
 			if scenario == "timed-out" {
@@ -2326,8 +2494,15 @@ func TestIntegrationBaselineAttribution(t *testing.T) {
 			}
 			spec := IntegrationCheckSpec{Name: "LANDING_CHECK", Command: command, ExpectedExitCode: 0, TimeoutSeconds: 1}
 			result := runIntegrationJob(r.command("task/red", "project/line", spec), silent)
-			if result.State != "CHECK_FAILED" || result.BaselineRed != (scenario == "baseline-red") {
+			baselineRed := scenario == "baseline-red" || scenario == "no-absorb-red" || scenario == "fresh-line-red"
+			if result.State != "CHECK_FAILED" || result.BaselineRed != baselineRed {
 				t.Fatalf("result: %+v", result)
+			}
+			if fresh {
+				// The line still does not exist, and the job measured against main's own tip.
+				if r.originRev("refs/heads/project/line") != "" || result.TargetShaBefore != result.UpstreamSha || result.MainSyncSha != "" {
+					t.Fatalf("fresh line: %+v", result)
+				}
 			}
 			if scenario == "baseline-unprepared" || scenario == "baseline-worktree-failed" {
 				original := result.Checks[0]
@@ -2336,7 +2511,7 @@ func TestIntegrationBaselineAttribution(t *testing.T) {
 				}
 			}
 			expected := 2
-			if scenario == "no-absorb" || scenario == "timed-out" || scenario == "baseline-unprepared" || scenario == "baseline-worktree-failed" {
+			if scenario == "timed-out" || scenario == "baseline-unprepared" || scenario == "baseline-worktree-failed" {
 				expected = 1
 			}
 			if len(result.Checks) != expected {
@@ -2355,10 +2530,10 @@ func TestIntegrationBaselineAttribution(t *testing.T) {
 				if baseline.Scope != "BASELINE" {
 					t.Fatalf("scope: %+v", baseline)
 				}
-				if scenario == "baseline-red" && (baseline.ExitCode == nil || *baseline.ExitCode != 7) {
+				if baselineRed && (baseline.ExitCode == nil || *baseline.ExitCode != 7) {
 					t.Fatalf("baseline was not prepared: %+v", baseline)
 				}
-				if (scenario == "task-red" || scenario == "source-absorb") && (baseline.ExitCode == nil || *baseline.ExitCode != 0) {
+				if (scenario == "task-red" || scenario == "source-absorb" || scenario == "no-absorb" || scenario == "fresh-line") && (baseline.ExitCode == nil || *baseline.ExitCode != 0) {
 					t.Fatalf("task leaked into baseline or recipe did not run: %+v", baseline)
 				}
 			}

@@ -42,11 +42,16 @@ import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.auth.SessionHandle
+import io.orbitd.android.cards.OwnerRequestStore
+import io.orbitd.android.cards.ProjectReopenCard
+import io.orbitd.android.core.cards.ProjectReopenFacts
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.navigation.*
 import io.orbitd.android.cards.CardFocus
 import io.orbitd.android.reader.landingEntry
+import io.orbitd.android.reader.LandingFix
+import io.orbitd.android.reader.LandingFixWindowCopy
 import io.orbitd.android.realtime.PagePoll
 import io.orbitd.android.realtime.PagePolls
 import io.orbitd.android.taskprojects.*
@@ -481,7 +486,20 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
             else -> openCoordinator(card)
         }
     }
+    // Agents' requests to reopen this project (docs/project-reopen-request-design.md §6.2), above the header while it is settled.
+    val ownerRequests = remember(handle) { OwnerRequestStore.of(app.session, handle, app.processScope) }
+    val asked by ownerRequests.state.collectAsState()
+    LaunchedEffect(ownerRequests, id) { ownerRequests.load(OwnerRequestStore.OPEN) }
+    val reopenAsks = if (status == "OPEN") emptyList() else ProjectReopenFacts.pending(asked.open, id)
+    // A row that arrives above the header would leave the page scrolled past it (the list keeps the header where it was): a reader at
+    // the top is taken back to the top, where the row is.
+    LaunchedEffect(reopenAsks.size) {
+        if (reopenAsks.isNotEmpty() && listState.firstVisibleItemIndex == reopenAsks.size && listState.firstVisibleItemScrollOffset == 0) listState.scrollToItem(0)
+    }
     LazyColumn(Modifier.fillMaxSize().testTag("project-detail"), state = listState, contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp)) {
+        items(reopenAsks, key = { "reopen:${it.id}" }) { ask ->
+            Box(Modifier.padding(top = 8.dp)) { ProjectReopenCard(ask, ownerRequests, onProjectPage = true, reopened = { scope.launch { load() } }) }
+        }
         item(key = "header") { Header(state, doc, now, connected, menu = {
             OpenItemsEntry(ProjectPage.openItemsSummary(doc, state.openItems), state.openItemsUnread) { dialog = ProjectDialog.OpenItems }
             Box {
@@ -528,7 +546,10 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
                 // Read at the press: a merge still live asks before the agent takes over. One that cannot be read asks too.
                 mergeLive = {
                     try { RunSettings.mergeLive(api.currentPromotion(id)) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { true }
-                })
+                },
+                // The owner's Revert on the coordinator's changes list; the page reads the project again whichever way it went.
+                revertChange = { change -> attempt("${LandingMeasuredCopy.notReverted} — ") { api.revertSettingChange(id, change.id) } },
+                openTask = openTask)
         }
         doc.text("goal")?.trim()?.takeIf { it.isNotEmpty() }?.let { goal -> item(key = "goal") { SectionHead("Goal"); Folded(goal, 132, link) } }
         state.graph?.takeIf { it.objects("marks").isNotEmpty() }?.let { graph -> item(key = "graph") {
@@ -551,7 +572,7 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
             doc.text("instructions")?.trim()?.takeIf { it.isNotEmpty() }?.let { Folded(it, 180, link) }
                 ?: Text(ProjectPage.noInstructions, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        tasksSection(state, doc, openTask, loadMore = {
+        tasksSection(state, doc, openTask, open, openSession = { open(OrbitRoute(Destination.SESSION, it)) }, loadMore = {
             val cursor = state.cursor ?: return@tasksSection
             if (state.loadingMore || state.refreshing) return@tasksSection
             state.loadingMore = true
@@ -665,6 +686,7 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
             // Review on the coordinator's request to start: into its conversation, onto the start card.
             reviewStart = { row -> dialog = null; openCoordinator(row.text("itemId")?.let { "start:$it" }) }, perform = perform,
             openTask = { taskId -> dialog = null; openTask(taskId) },
+            openSession = { session -> dialog = null; open(OrbitRoute(Destination.SESSION, session)) },
             retry = { scope.launch { load(refreshGraph = false) } }, close = { dialog = null })
     }
 }
@@ -763,7 +785,8 @@ private fun LazyListScope.openItemsAttention(state: ProjectPageState, doc: JsonO
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun OpenItemsSheet(state: ProjectPageState, doc: JsonObject, now: Instant, enabled: Boolean, startOwn: () -> Unit, recordDone: () -> Unit,
-    reviewStart: (JsonObject) -> Unit, perform: (String, JsonObject) -> Unit, openTask: (String) -> Unit, retry: () -> Unit, close: () -> Unit) {
+    reviewStart: (JsonObject) -> Unit, perform: (String, JsonObject) -> Unit, openTask: (String) -> Unit, openSession: (String) -> Unit, retry: () -> Unit,
+    close: () -> Unit) {
     ModalBottomSheet(onDismissRequest = close, modifier = Modifier.testTag("project-open-items-sheet")) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 12.dp, bottom = 24.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -776,7 +799,10 @@ private fun OpenItemsSheet(state: ProjectPageState, doc: JsonObject, now: Instan
             val summary = ProjectPage.openItemsSummary(doc, items)
             when {
                 items != null && summary != null -> {
-                    Text(summary.subtitle, Modifier.padding(end = 8.dp).testTag("project-open-items-subtitle"), style = MaterialTheme.typography.labelMedium,
+                    // Revision 42 (board ④ d): what its own session is fixing is open, though none of it waits on the owner.
+                    val fixingCount = LandingFix.beingFixed(items).size
+                    Text(if (summary.needsYou == 0 && fixingCount > 0) LandingFixWindowCopy.noneWaitingOnYou(fixingCount) else summary.subtitle,
+                        Modifier.padding(end = 8.dp).testTag("project-open-items-subtitle"), style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     val start = StartProjectCopy.pageRow(ProjectDoc.status(doc), ProjectDoc.started(doc), items)
                     val done = ProjectDone.pageRow(doc, items)
@@ -807,6 +833,12 @@ private fun OpenItemsSheet(state: ProjectPageState, doc: JsonObject, now: Instan
                             }
                             needsYou.forEach { row -> OpenItemRow(row, now, main, enabled, perform, openTask) { perform("REVIEW", row) } }
                         }
+                        // Revision 42 (board ④ d ①): the landing failures their task's own session is fixing — nobody's Needs you.
+                        val beingFixed = LandingFix.beingFixed(items)
+                        if (beingFixed.isNotEmpty()) {
+                            GroupLabel("${LandingFixWindowCopy.BEING_FIXED_BY_ITS_SESSION} · ${beingFixed.size}", MaterialTheme.colorScheme.primary)
+                            beingFixed.forEach { row -> BeingFixedRow(row, now, enabled) { LandingFix.workSession(row)?.sessionId?.let(openSession) } }
+                        }
                     }
                 }
                 state.openItemsUnread -> Column(Modifier.fillMaxWidth().padding(vertical = 24.dp).testTag("project-open-items-failed"),
@@ -821,8 +853,27 @@ private fun OpenItemsSheet(state: ProjectPageState, doc: JsonObject, now: Instan
 }
 
 @Composable
-private fun GroupLabel(text: String) = Text(text.uppercase(), Modifier.padding(top = 14.dp, bottom = 2.dp), style = MaterialTheme.typography.labelSmall,
-    fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun GroupLabel(text: String, ink: Color = MaterialTheme.colorScheme.onSurfaceVariant) = Text(text.uppercase(), Modifier.padding(top = 14.dp, bottom = 2.dp),
+    style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = ink)
+
+/** An item its task's own session is fixing (board ④ d ①): the person mark, the item's title, `The task's session is on it · 4m · round 1
+ *  of 2 · nothing was pushed`, and `Open session ›` — the whole row opens that session. No Review: nothing is asked of the owner. */
+@Composable
+private fun BeingFixedRow(row: JsonObject, now: Instant, enabled: Boolean, openSession: () -> Unit) {
+    val tag = "open-item:${row.text("itemId")}"
+    Row(Modifier.fillMaxWidth().clickable(enabled = enabled, role = Role.Button, onClick = openSession).padding(vertical = 10.dp).testTag(tag),
+        horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
+        Icon(painterResource(R.drawable.ic_person), null, Modifier.padding(top = 2.dp).size(16.dp), tint = MaterialTheme.colorScheme.primary)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(row.text("title").orEmpty(), Modifier.testTag("$tag:title"), fontWeight = FontWeight.SemiBold)
+            Text(LandingFix.beingFixedLine(row, now), Modifier.testTag("$tag:being-fixed"), style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text(LandingFixWindowCopy.OPEN_SESSION_LINK, Modifier.testTag("$tag:open-session"), style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+    }
+    HorizontalDivider()
+}
 
 /** A request somebody asked the owner (iOS `startItem`'s asked row and `ProjectDoneRequestRow`): the amber dot over what it asks,
  * who asked and how long ago, and Review across the row — the whole row opens it too. */
@@ -914,13 +965,14 @@ private fun LazyListScope.overviewSection(state: ProjectPageState, doc: JsonObje
     val paused = doc.text("pausedAt") != null
     val manual = if ((buckets.number("ready") ?: 0) > 0) ProjectPage.manualReady(if (state.queueUnread) null else state.queue, status, started, paused) else null
     val cells = ProjectPage.overviewCells(buckets, panorama.obj("shape")?.number("taskCount") ?: ProjectDoc.taskCount(doc), doc.obj("integration")?.text("line"),
-        started, paused, manual?.number("count") ?: 0, RunSettings.mainBranchName(doc.obj("integration")?.text("upstreamRef")))
+        started, paused, manual?.number("count") ?: 0, RunSettings.mainBranchName(doc.obj("integration")?.text("upstreamRef")),
+        noLine = ProjectLine.none(state.integration, started))
     item(key = "overview") {
         SectionHead("Work overview", panorama.obj("shape")?.let(ProjectPage::overviewSubtitle))
         Column(Modifier.testTag("project-overview"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             // The same card the project's sessions page draws (iOS 22124bb0a): on a server that lists its jobs a press opens them; on an
             // older one the card is a read — there is no second door on the project's own page. Its Retry is the jobs list's.
-            state.integration?.let { view -> ProjectPage.landingCard(view, now, state.integrationReadAt, state.integrationReadFailed)?.let {
+            state.integration?.takeUnless { ProjectLine.none(it, started) }?.let { view -> ProjectPage.landingCard(view, now, state.integrationReadAt, state.integrationReadFailed)?.let {
                 ProjectLandingCardView(it, onOpenJobs = if (ProjectPage.inFlightJobs(view) != null) openJobs else null, onOpenProject = null,
                     openLanding = openLanding, retry = retry, skipCheck = skipCheck) } }
             cells.chunked(2).forEach { pair -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1178,8 +1230,8 @@ internal fun RunPress(label: String, enabled: Boolean, tag: String, description:
     }
 }
 
-private fun LazyListScope.criteriaSection(doc: JsonObject, openTask: (String) -> Unit, actions: CriteriaActions?, now: Instant) {
-    val criteria = doc.objects("acceptanceCriteriaItems").sortedBy { it.number("ordinal") ?: 0 }
+internal fun LazyListScope.criteriaSection(doc: JsonObject, openTask: (String) -> Unit, actions: CriteriaActions?, now: Instant) {
+    val criteria = ProjectPage.withLandingReasons(doc.objects("acceptanceCriteriaItems"), doc.obj("derivedDone")).sortedBy { it.number("ordinal") ?: 0 }
     item(key = "criteria-head") { SectionHead("Acceptance criteria") }
     val movedOut = doc.objects("criteriaMovedOut")
     if (criteria.isEmpty()) { item(key = "criteria-empty") { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1189,17 +1241,25 @@ private fun LazyListScope.criteriaSection(doc: JsonObject, openTask: (String) ->
     item(key = "criteria") {
         var expanded by rememberSaveable { mutableStateOf(false) }
         val limit = ProjectPage.criteriaPreviewCompact
+        // The criteria's words in the owner's language (Settings › Translation), flipped to the agent's by the foot. Only the words:
+        // each row's menus and writes keep the criterion as it came.
+        var showOriginal by rememberSaveable { mutableStateOf(false) }
+        val translated = OwnerCardTranslation.project(doc, LocalTranslation.current.cardLanguage)?.objects("acceptanceCriteriaItems")
+            ?.takeIf { it != doc.objects("acceptanceCriteriaItems") }
+        val words = translated?.takeUnless { showOriginal }?.associate { it.text("id") to it.text("text") }.orEmpty()
         Column(Modifier.testTag("project-criteria"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             val mixed = DoneFollowUps.standingMixed(criteria)
             Text(mixed ?: ProjectPage.criteriaStanding(criteria.size), Modifier.testTag("criteria-standing"), style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             val main = RunSettings.mainBranchName(doc.obj("integration")?.text("upstreamRef"))
             (if (expanded) criteria else criteria.take(limit)).forEach { criterion ->
-                CriterionRow(criterion, doc.obj("integration")?.text("ref"), main, openTask, criteria, actions, now) }
+                CriterionRow(criterion, words[criterion.text("id")] ?: criterion.text("text").orEmpty(), doc.obj("integration")?.text("ref"), main,
+                    openTask, criteria, actions, now) }
             ProjectPage.criteriaDisclosure(criteria.size, limit, expanded)?.let { (press, meta) ->
                 OutlinedButton(onClick = { expanded = !expanded }, Modifier.fillMaxWidth()) { Text(press) }
                 Text(meta, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterHorizontally))
             }
+            if (translated != null) io.orbitd.android.translation.CardTranslationFoot(showOriginal, { showOriginal = !showOriginal })
             MovedOutLines(movedOut, "criteria-moved-out", actions?.openProject)
             Text(if (mixed != null) DoneCopy.ACCEPTANCE_NOTE_MIXED else ProjectPage.criteriaOutcomeNote, style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1208,7 +1268,7 @@ private fun LazyListScope.criteriaSection(doc: JsonObject, openTask: (String) ->
 }
 
 @Composable
-private fun CriterionRow(criterion: JsonObject, ref: String?, main: String, openTask: (String) -> Unit, all: List<JsonObject>, actions: CriteriaActions?, now: Instant) {
+private fun CriterionRow(criterion: JsonObject, text: String, ref: String?, main: String, openTask: (String) -> Unit, all: List<JsonObject>, actions: CriteriaActions?, now: Instant) {
     var method by rememberSaveable(criterion.text("id")) { mutableStateOf(false) }
     val satisfied = ProjectDoc.satisfied(criterion)
     Row(Modifier.fillMaxWidth().testTag("criterion:${criterion.number("ordinal")}"), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1222,7 +1282,7 @@ private fun CriterionRow(criterion: JsonObject, ref: String?, main: String, open
                 color = if (satisfied == true) Color.White else MaterialTheme.colorScheme.onSurface)
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(criterion.text("text").orEmpty())
+            Text(text)
             criterion.obj("movedFrom")?.let { MovedFromLine(it, actions?.openProject) }
             if (DoneFollowUps.byConfirmation(criterion)) ConfirmationWorkView(criterion, actions, now, "criterion-confirmation:${criterion.number("ordinal")}")
             else ProjectPage.criterionWork(criterion, ref, main)?.let { work ->
@@ -1250,20 +1310,26 @@ private fun CriterionRow(criterion: JsonObject, ref: String?, main: String, open
 private fun tasksTail(state: ProjectPageState): Int =
     1 + ProjectPage.taskGroups(state.tasks).let { groups -> if (groups.isEmpty()) 1 else groups.sumOf { 1 + it.tasks.size } } + if (state.cursor != null) 1 else 0
 
-private fun LazyListScope.tasksSection(state: ProjectPageState, doc: JsonObject, openTask: (String) -> Unit, loadMore: () -> Unit) {
+private fun LazyListScope.tasksSection(state: ProjectPageState, doc: JsonObject, openTask: (String) -> Unit, open: (OrbitRoute) -> Unit, openSession: (String) -> Unit, loadMore: () -> Unit) {
     val groups = ProjectPage.taskGroups(state.tasks)
     item(key = "tasks-head") { SectionHead("Tasks", "${ProjectDoc.taskCount(doc)}") }
     if (groups.isEmpty()) item(key = "tasks-empty") { Text("No tasks yet.", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     groups.forEach { group ->
         item(key = "group:${group.key}") { GroupLabel(group.heading) }
         items(group.tasks, key = { "task:${group.key}:${it.text("id")}" }) { task ->
-            val tags = ProjectPage.rowTags(task, group.heading, doc.obj("integration")?.text("ref"), doc.obj("integration")?.text("upstreamRef"))
-            Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { task.text("id")?.let(openTask) }.padding(vertical = 6.dp).testTag("project-task:${task.text("id")}"),
+            val tags = ProjectPage.rowTags(task, group.heading, doc.obj("integration")?.text("ref"), doc.obj("integration")?.text("upstreamRef"),
+                noLine = ProjectLine.none(state.integration, ProjectDoc.started(doc)))
+            // Revision 42 (board ④ e): while its own session fixes the task's landing, the row goes into that session.
+            val fixingIn = ProjectPage.fixingSession(task)
+            Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { fixingIn?.let(openSession) ?: task.text("id")?.let(openTask) }
+                .padding(vertical = 6.dp).testTag("project-task:${task.text("id")}"),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 val glyph = ProjectPage.taskGlyph(task)
                 Text(glyphText(glyph), color = glyphColor(glyph))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(task.text("title").orEmpty(), maxLines = 2, color = if (group.settled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
+                    // No account that could run it can run now (§7.5): one quiet line under the title, never a chip in it.
+                    if (io.orbitd.android.tasks.TaskAccountHold.showsOnRow(task)) io.orbitd.android.tasks.TaskAccountHoldLine(task, open)
                     val unmet = task.number("unmetCount") ?: 0; val blocks = task.number("blocksCount") ?: 0
                     if (tags.isNotEmpty() || unmet > 0 || blocks > 0) Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                         tags.forEach { Chip(it.text, it.tone) }

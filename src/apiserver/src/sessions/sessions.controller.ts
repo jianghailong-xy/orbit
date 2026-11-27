@@ -8,6 +8,7 @@ import {
   Header,
   Headers,
   HttpCode,
+  HttpStatus,
   MessageEvent,
   Optional,
   Param,
@@ -15,18 +16,20 @@ import {
   Post,
   Put,
   Query,
+  Req,
   Res,
   Sse,
   StreamableFile,
   UseGuards,
 } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import type { Response } from 'express';
 import { ModuleRef } from '@nestjs/core';
 import { ProjectsService } from '../projects/projects.service';
 import { PublicIdPipe } from '../common/public-id';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { concatMap, defer, from, interval, map, merge, Observable, switchMap, throwError } from 'rxjs';
-import { ApprovalDecisionRequest, RunEventType, SessionSettingsPatch } from '@orbit/shared';
+import { ApprovalDecisionRequest, RunEventType, RunStatus, SessionSettingsPatch } from '@orbit/shared';
 import { replayableEventSql } from '../common/system-noise';
 import { AllowQueryToken } from '../auth/allow-query-token.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -35,6 +38,7 @@ import { TerminalRoute } from '../auth/terminal-credentials';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { untilStopping } from '../common/graceful-stop';
 import { senderClientOfRequest } from './turn-sender-client';
+import { actingSession } from '../wiki/wiki.controller';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SetSessionTagsDto } from '../session-tags/dto';
@@ -59,9 +63,11 @@ import { MergeReceiptService } from './merge-receipt.service';
 import { SessionOwnerGuard } from './session-owner.guard';
 import { SessionsService } from './sessions.service';
 import { ifNoneMatchHits, isOpenListView, openListEtag } from './open-list-version';
+import { decodeListingCursor } from './session-listing';
 import { assertClientTurnIdNotReserved } from './watch-turn-key';
 import { parseMaxPayload, truncatePayload } from './truncate-payload';
 import { coalesceDeltas, isStreamingDelta } from './coalesce-deltas';
+import { parseTailLines } from './background-job-tail';
 import { translationEventOf } from './reply-translation';
 import {
   KEEPALIVE_MS,
@@ -295,6 +301,114 @@ export class SessionsController {
     return this.sessions.workspaceSessionCounts(user.userId);
   }
 
+  /**
+   * Where a workspace list's project rows go, for every project it names at once
+   * (SessionsService.projectPlacement): each one's coordinator, Open or Completed, the sessions in
+   * `view` waiting on the owner, and how many sessions in `view` it has. `projectIds` is a
+   * comma-separated list of public ids. One read for the whole list, where it used to make one or two
+   * `GET /sessions?projectId=` a project (docs/list-freshness-design.md W4); that read stays, and its
+   * shape, for every client that still sends it.
+   *
+   * Conditional: the answer carries an ETag of its own bytes and a read that names it is answered 304,
+   * decided here for the reason the Open list's is (Express's own check refuses `Cache-Control:
+   * no-cache`). Above `@Get(':id')` for the reason `search` is.
+   */
+  @PatScope('sessions:read', { workspaceConfinable: 'LIST' })
+  @Get('project-placement')
+  async projectPlacement(
+    @CurrentUser() user: AuthUser,
+    @Query('projectIds') projectIdsParam?: string,
+    @Query('view') view?: string,
+    @Headers('if-none-match') ifNoneMatch?: string,
+    @Res({ passthrough: true }) res?: Response,
+  ) {
+    const lifecycle = view === undefined || view === 'open' ? 'open' : view === 'completed' ? 'completed' : null;
+    if (!lifecycle) throw new BadRequestException('view must be open or completed');
+    const parts = (projectIdsParam ?? '').split(',').map((part) => part.trim()).filter(Boolean);
+    if (parts.length > SessionsController.PLACEMENT_MAX_PROJECTS) {
+      throw new BadRequestException(`at most ${SessionsController.PLACEMENT_MAX_PROJECTS} projectIds`);
+    }
+    const pipe = new PublicIdPipe();
+    const projectIds = parts.map((part) => pipe.transform(part, { type: 'query', data: 'projectIds' }) as string);
+    const projects = await this.sessions.projectPlacement(user.userId, {
+      projectIds, view: lifecycle, confinedTo: workspaceConfinement(user),
+    });
+    const body = { projects };
+    if (res) {
+      const etag = `W/"pp1-${createHash('sha256').update(JSON.stringify(body)).digest('base64url').slice(0, 27)}"`;
+      res.setHeader('ETag', etag);
+      if (ifNoneMatchHits(ifNoneMatch, etag)) {
+        res.status(304);
+        return undefined;
+      }
+    }
+    return body;
+  }
+
+  /** More project ids than any workspace list shows; a longer list is refused rather than read. */
+  private static readonly PLACEMENT_MAX_PROJECTS = 500;
+
+  /**
+   * One page of a workspace's session list as top-level entries (docs/session-list-scale-design.md §3.2,
+   * SessionsService.sessionListing): `{ folders, entries, next }`, `folders` on the first page of the
+   * workspace's own list only. Pass `next` back as `after` for the page that follows. When the list's order
+   * switched since `after` was written (the Completed view's does, on whether anything is held), the answer is
+   * the first page again, with `restarted: true` and the first page's `folders`.
+   *
+   * Conditional on the Open list's data version (open-list-version.ts), scoped by every parameter and by
+   * which folders the workspace has: a read that names the ETag it holds is answered 304 before anything
+   * is built, for the reason the flat list's is decided here. Above `@Get(':id')` for the reason `search` is.
+   */
+  @PatScope('sessions:read', { workspaceConfinable: 'LIST' })
+  @Get('listing')
+  async listing(
+    @CurrentUser() user: AuthUser,
+    @Query('workspaceId', PublicIdPipe) workspaceId?: string,
+    @Query('view') view?: string,
+    @Query('folderId', PublicIdPipe) folderId?: string,
+    @Query('limit') limitParam?: string,
+    @Query('after') after?: string,
+    @Headers('if-none-match') ifNoneMatch?: string,
+    @Res({ passthrough: true }) res?: Response,
+  ) {
+    if (!workspaceId) throw new BadRequestException('workspaceId is required');
+    const lifecycle = view === undefined || view === 'open' ? 'open' : view === 'completed' ? 'completed' : null;
+    if (!lifecycle) throw new BadRequestException('view must be open or completed');
+    const parsed = limitParam === undefined ? SessionsController.LISTING_PAGE : Number(limitParam);
+    if (!Number.isInteger(parsed) || parsed < 1) throw new BadRequestException('limit must be a positive whole number');
+    const limit = Math.min(parsed, SessionsController.LISTING_MAX_PAGE);
+    const cursor = after ? decodeListingCursor(after) : null;
+    const confinedTo = workspaceConfinement(user);
+    if (res) {
+      const [version, folders] = await Promise.all([
+        this.sessions.openListVersion(user.userId),
+        this.sessions.sessionListingFolderMark(user.userId, workspaceId, confinedTo),
+      ]);
+      const etag = openListEtag(version, {
+        read: 'listing',
+        workspaceId,
+        view: lifecycle,
+        folderId,
+        limit,
+        after,
+        confinedTo: confinedTo?.join(','),
+        folders,
+      });
+      res.setHeader('ETag', etag);
+      if (ifNoneMatchHits(ifNoneMatch, etag)) {
+        res.status(304);
+        return undefined;
+      }
+    }
+    return this.sessions.sessionListing(user.userId, {
+      workspaceId, view: lifecycle, folderId: folderId || null, limit, after: cursor, confinedTo,
+    });
+  }
+
+  /** A page of the listing when the read names none, and the most one may ask for. */
+  private static readonly LISTING_PAGE = 40;
+  private static readonly LISTING_MAX_PAGE = 200;
+
   // Cross-scope search for the clients' ⌘K palette. MUST stay above `@Get(':id')` — Nest matches
   // routes in declaration order, so below it the literal path would be swallowed as an id.
   // An empty `q` returns recents, which is what makes the palette a session switcher too.
@@ -304,8 +418,9 @@ export class SessionsController {
     @CurrentUser() user: AuthUser,
     @Query('q') q?: string,
     @Query('limit') limit?: string,
+    @Query('folderId', PublicIdPipe) folderId?: string,
   ) {
-    return this.sessions.search(user.userId, q, Number(limit) || 20);
+    return this.sessions.search(user.userId, q, Number(limit) || 20, folderId || null);
   }
 
   /**
@@ -445,6 +560,8 @@ export class SessionsController {
     return this.sessions.createTurn(user.userId, id, dto, {
       translate: true,
       senderClient: senderClientOfRequest(user.credential, client, device),
+      // The owner's own message: the session moves to the top of their list (session.listed_at).
+      listed: true,
     });
   }
 
@@ -464,6 +581,8 @@ export class SessionsController {
     return this.sessions.createTurn(user.userId, id, dto, {
       translate: true,
       senderClient: senderClientOfRequest(user.credential, client, device),
+      // The owner's own message: the session moves to the top of their list (session.listed_at).
+      listed: true,
     });
   }
 
@@ -560,6 +679,7 @@ export class SessionsController {
       credential: user.credential,
       translate: true,
       senderClient: senderClientOfRequest(user.credential, client, device),
+      listed: true,
     });
   }
 
@@ -631,7 +751,7 @@ export class SessionsController {
     @Body(PublicIdPipe.forFields('attachmentIds')) dto?: SessionInterruptDto,
   ) {
     assertClientTurnIdNotReserved(dto?.clientTurnId);
-    return this.sessions.interrupt(user.userId, id, dto, { translate: true });
+    return this.sessions.interrupt(user.userId, id, dto, { translate: true, listed: true });
   }
 
   @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
@@ -712,6 +832,14 @@ export class SessionsController {
     return this.sessions.adoptWorktreeBranch(user.userId, id);
   }
 
+  /** Close a failed merge's strip: clear the stored conflict or error so the bar shows Merge (or
+   *  "✓ In main") again. Changes nothing in git; the next failed merge shows a new strip. */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Post(':id/merge-failure/dismiss')
+  dismissMergeFailure(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.sessions.dismissMergeFailure(user.userId, id);
+  }
+
   // A session's public link — `GET | PUT | POST | DELETE /sessions/:id/share` — is served by
   // ShareLinksController, beside the task's and the project's.
 
@@ -788,6 +916,23 @@ export class SessionsController {
   @Post(':id/pin')
   pin(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.pin(user.userId, id);
+  }
+
+  /**
+   * Run now (docs/mocks/queued-run-now): start this session's queued message at once, over its runner's limit, for that
+   * one turn. A person's own act (decision E): a token is refused here, a terminal by TERMINAL_REFUSED_ROUTES, and a
+   * request carrying an acting session RUN_NOW_OWNER_CHANNEL_ONLY. 409 RUN_NOW_REFUSED with the English reason when
+   * a free slot would not start it, or the runner cannot take one more (run-now.ts).
+   */
+  @PatForbidden('OWNER_INTERACTIVE')
+  @Post(':id/run-now')
+  @HttpCode(HttpStatus.OK)
+  runNow(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ) {
+    return this.sessions.runNow(user.userId, id, actingSession(request.headers));
   }
 
   /** Remove this session's pin. */
@@ -885,6 +1030,17 @@ export class SessionsController {
   }
 
   /**
+   * The session's Orbit workflows (docs/subagent-workflow-design.md §5.1), oldest first, each keyed by its
+   * `mcp__orbit__workflow` call: name, phases, status, calls done and failed, cost and limit. Its calls are the
+   * SubAgent runs above whose `workflowRunId` is its id.
+   */
+  @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
+  @Get(':id/workflows')
+  workflowRuns(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.sessions.listWorkflowRuns(user.userId, id);
+  }
+
+  /**
    * The authoritative, complete list of background shells the session ever launched (every
    * Bash(run_in_background), with output recovered from the workspace's Read polls). Derived over ALL
    * persisted events, so the "Background processes" tray shows the same complete list on every
@@ -895,6 +1051,52 @@ export class SessionsController {
   @Get(':id/background')
   backgroundShells(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.getBackgroundShells(user.userId, id);
+  }
+
+  /**
+   * The newest lines of one bg_run job's output (`?lines=N`, at most and by default 40; at most 8 KB in all), without
+   * terminal colour codes, read just now from the job's file by the runner hosting the session, over the runner link.
+   * A running job answers what it has written so far; one that ended answers from its file while its runner still
+   * holds it, else 404 BACKGROUND_JOB_OUTPUT_GONE, and the client shows the end of the output the job's wake carried.
+   * 404 BACKGROUND_JOB_NOT_FOUND for a job the session never ran; 409 RUNNER_CANNOT_READ_JOB_OUTPUT for a runner
+   * that predates the read; 503 RUNNER_OFFLINE, 503 RUNNER_LINK_UNAVAILABLE and 504 RUNNER_DID_NOT_ANSWER when it
+   * cannot be asked now (SessionsService.readBackgroundJobTail).
+   *
+   * Pacing, which every client keeps: ask only while the job's card is on screen (opened, or folded showing its newest
+   * line) with the app in the foreground, and the job is running — the first time when the card appears, then 5 s
+   * after the previous answer, one request at a time. Stop when the card leaves the screen, the app goes to the
+   * background, or the job ends (an answer's `status` is no longer `running`, or the job's end arrives in the
+   * transcript); read once more then for the final lines. Nothing is asked for a card that is not visible. A 404 or 409
+   * stops asking for that job; a 503 or 504 waits 30 s before the next try.
+   */
+  @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
+  @Get(':id/background/jobs/:jobId/tail')
+  backgroundJobTail(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('jobId') jobId: string,
+    @Query('lines') lines?: string,
+  ) {
+    return this.sessions.readBackgroundJobTail(user.userId, id, jobId, parseTailLines(lines));
+  }
+
+  /**
+   * The owner's stop of one running bg_run job (`bgj_…`) of the session: the runner hosting it kills it as bg_kill
+   * does, under the reason `stopped_by_owner`. 202 `stopping` once asked; a repeat answers the same, or 200 `killed`
+   * once it ended that way. 404 for an unknown job, 409 BACKGROUND_JOB_ENDED for one that ended otherwise, 409
+   * RUNNER_CANNOT_STOP_JOB for a runner that predates the stop (GET /background lists its jobs not `stoppable`).
+   */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Post(':id/background/jobs/:jobId/stop')
+  async stopBackgroundJob(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('jobId') jobId: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const answer = await this.sessions.stopBackgroundJob(user.userId, id, jobId);
+    res.status(answer.status === 'stopping' ? 202 : 200);
+    return answer;
   }
 
   /**

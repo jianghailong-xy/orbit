@@ -98,6 +98,8 @@ export interface ManagedRunnerWorkload {
   operations: number;
   /** Events buffered for the control plane and not yet acknowledged by it. */
   unflushedEvents: number;
+  /** drive handles holding bytes no commit has taken yet; absent from a runner that has no drive. */
+  driveWrites?: number;
   /** How long, in whole seconds, all four have been zero; 0 while any is not. */
   idleSeconds: number;
   /** The `requestedAt` of a sleep request this instance, idle, is ready to honour: its acceptance.
@@ -119,6 +121,23 @@ export const MANAGED_RUNNER_CAPACITY_UNAVAILABLE = 'MANAGED_RUNNER_CAPACITY_UNAV
 
 /** 409 to an explicit sleep: the runner has work in flight or queued, and sleep never interrupts work. */
 export const MANAGED_RUNNER_BUSY = 'MANAGED_RUNNER_BUSY';
+
+/** 409 to an Update Now: the runner already runs the current image (its status has no `update`). */
+export const MANAGED_RUNNER_CURRENT = 'MANAGED_RUNNER_CURRENT';
+
+/** The body of POST /api/managed-runner/update-now (docs/managed-runner-update-now-design.md). */
+export interface ManagedRunnerUpdateNowRequest {
+  /** Stop the running turns to update now. Absent or false: a busy runner is refused 409 MANAGED_RUNNER_BUSY. */
+  interruptTurns?: boolean;
+}
+
+/** A turn running on the managed runner, as a busy Update Now's 409 lists it. */
+export interface ManagedRunnerBusyTurn {
+  sessionId: string;
+  title: string;
+  /** ISO 8601, or null when the session never recorded a start. */
+  startedAt: string | null;
+}
 
 /** What the owner asked of the managed runner. */
 export type ManagedRunnerDesiredState = 'RUNNING' | 'SLEEPING' | 'DELETED';
@@ -146,8 +165,16 @@ export interface ManagedRunnerCapability {
   contractVersion: number;
 }
 
+/** `GET /api/auth/capabilities` → `documents`: whether this server offers the Drive (ORBIT_DRIVE_ENABLED,
+ *  off by default). A server that predates the field always had it on. */
+export interface DocumentsCapability {
+  enabled: boolean;
+}
+
 export interface ServerCapabilities {
   managedRunners: ManagedRunnerCapability;
+  /** Absent on a server that predates the switch: read that as on. */
+  documents?: DocumentsCapability;
 }
 
 /** A safe, structured cause. Never a raw infrastructure error, endpoint or credential. */
@@ -188,6 +215,16 @@ export interface ManagedRunnerStatus {
   usable: boolean;
   reason: ManagedRunnerReason | null;
   retryAfter: string | null;
+  /**
+   * Its next automatic try, kept as the manager stored it: a restart's backoff, or a FAILED runner's slow retry
+   * (taken once it is due and work is waiting, so it may be past). Null when none is scheduled. FAILED with a
+   * retryable reason and this set, it comes back by itself, and work sent to it waits for it. Absent from an older
+   * server.
+   */
+  nextAttemptAt?: string | null;
+  /** How many tries in a row it has spent on its way up or restarting since it last stood up; 0 when none. Absent
+   *  from an older server. */
+  attempt?: number;
   /** What the runner was found ready with when it became READY: a runtime installed and signed in
    *  on it (its name), or else one of the owner's own model keys a runtime installed on it runs (the
    *  key's slug). A default workspace with no history starts its first session on it. Null until then. */
@@ -201,7 +238,35 @@ export interface ManagedRunnerStatus {
    * predates it, which queued nothing before READY: read `initialProvider` then.
    */
   firstSessionProvider?: string | null;
+  /** The runner runs an older build than the current image's. Absent when it runs the current one, when it is
+   *  not running (asleep, failed, being provisioned), when the server cannot tell, and from an older server. */
+  update?: ManagedRunnerUpdate;
   actions: ManagedRunnerActions;
+}
+
+/** One build of the managed runner image: the source commit it was built from, and when, if known. */
+export interface ManagedRunnerBuild {
+  /** The source commit. Empty on `running` when the runner reports a release version, whose commit the server is not
+   *  told. */
+  sha: string;
+  /** The release it was published for, as its runner reports it (`0.1.261-beta.83`). Absent for an image built from a
+   *  checkout, whose runner reports `managed-<sha>`, and from an older server. */
+  version?: string;
+  builtAt?: string;
+}
+
+/**
+ * The managed runner's container was made from an older image than the one it would be made from now
+ * (docs/managed-runner-update-now-design.md). `available`: READY on the older build. `updating`: the owner's
+ * Update Now, or an image roll, is on its way to the next container, made from the current one.
+ */
+export interface ManagedRunnerUpdate {
+  running: ManagedRunnerBuild;
+  current: ManagedRunnerBuild;
+  phase: 'available' | 'updating';
+  /** `updating` on a busy runner whose backend cannot stop it (neither Docker nor Kubernetes, which both can): the
+   *  owner's Update Now waits for the runner to be idle and interrupts nothing. Absent otherwise. */
+  waitsForIdle?: true;
 }
 
 /** The body of every managed runner write. */

@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
-import { CreatorType, PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { CreatorType, PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -15,14 +16,17 @@ import { TASK_RUN_TRIGGER, taskRunDesiredSessionId, taskRunRequestKey } from './
 import { TASK_RUN_ACTION } from './task-run-receipt';
 
 /**
- * P1 of model routing (docs/model-routing-design.md §8): every fresh run is routed IN SHADOW.
+ * P1 of model routing (docs/model-routing-design.md §8): every fresh run is routed, and its decision
+ * recorded once per run request. It was shadow-only at first; since the owner's 2026-11-20 decision there
+ * is no per-Agent switch, so with the account's switch on a decided tier is APPLIED (`applied: true`, the
+ * Session runs on it) and a run with no tier is the baseline. The file name is historical.
  *
  * Driven through `TasksService.execute` / `batchExecute` — the doors Run Now, `task_start`, the
  * sweeps and bulk Run all reach — on a real PostgreSQL, because what is being proven lives in it:
  * the receipt's frozen target, `task_route_decision`'s `UNIQUE (task_id, request_token)`, and the
- * Session `sessions.create` writes. Each fixture's Agent has smart selection off (the default),
- * an effort of its own, and a runner reporting Opus and Sonnet — so a decision that routes always
- * differs from what runs, and "the Session is the baseline" is a claim with something to lose.
+ * Session `sessions.create` writes. Each fixture's Agent has its old switch off (the default, no
+ * longer read), an effort of its own, and a runner reporting Opus and Sonnet — so a decision that routes
+ * always differs from the baseline, and "the Session is the route" is a claim with something to lose.
  */
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -166,7 +170,7 @@ async function assertSessionIsBaseline(
   const session = await db.session.findUniqueOrThrow({
     where: { id: sessionId }, select: { provider: true, model: true, effort: true },
   });
-  assert.deepEqual(session, expected, 'smart selection is off, so the Session is what it was before routing');
+  assert.deepEqual(session, expected, 'no tier was decided, so the Session is what it was before routing');
   const recorded = baseline as { provider: string; model: string | null; effort: string | null };
   assert.deepEqual(
     { provider: recorded.provider, model: recorded.model, effort: recorded.effort }, expected,
@@ -174,7 +178,27 @@ async function assertSessionIsBaseline(
   );
 }
 
-test('a fresh run records one shadow decision, frozen in a v3 target, and runs the baseline',
+/** A decided tier is applied: the Session runs on it, and the baseline still names what would have run. */
+async function assertSessionIsRoute(
+  db: PrismaClient,
+  sessionId: string,
+  route: { provider: string | null; model: string | null; effort: string | null },
+  baseline: unknown,
+) {
+  const session = await db.session.findUniqueOrThrow({
+    where: { id: sessionId }, select: { provider: true, model: true, effort: true },
+  });
+  assert.deepEqual(session, { provider: route.provider, model: route.model, effort: route.effort },
+    'the account has smart selection on, so the Session is the route');
+  const recorded = baseline as { provider: string; model: string | null; effort: string | null };
+  assert.deepEqual(
+    { provider: recorded.provider, model: recorded.model, effort: recorded.effort },
+    { provider: 'claude', model: null, effort: AGENT_EFFORT },
+    'and the decision\'s baseline still names what would have run without routing',
+  );
+}
+
+test('a fresh run records one decision, frozen in a v3 target, and runs on it',
   { skip, timeout: 120_000 }, async () => {
     assertCoordinatorPgUrlIsIsolated(URL!);
     const services = connect();
@@ -192,11 +216,11 @@ test('a fresh run records one shadow decision, frozen in a v3 target, and runs t
       assert.equal(row.ownerId, target.ownerId);
       assert.equal(row.requestToken, press, 'keyed by the run request the lease was taken under');
       assert.equal(row.sessionId, sessionId, 'and joined to the Session its plan named');
-      // Routing had something to say — tier M is Sonnet at medium — and it was not applied.
+      // Routing had something to say — tier M is Sonnet at medium — and it was applied.
       assert.deepEqual(
         { applied: row.applied, policyVersion: row.policyVersion, level: row.level,
           provider: row.provider, model: row.model, effort: row.effort },
-        { applied: false, policyVersion: 2, level: 'M', provider: 'claude', model: SONNET, effort: 'medium' },
+        { applied: true, policyVersion: 4, level: 'M', provider: 'claude', model: SONNET, effort: 'medium' },
       );
       assert.equal(row.reasons[0], `[coordinator] Tier M: suggested by the coordinator — ${HINT_REASON}`);
       assert.deepEqual(row.baseline, {
@@ -207,29 +231,26 @@ test('a fresh run records one shadow decision, frozen in a v3 target, and runs t
       });
       const features = row.features as Record<string, unknown>;
       assert.equal(features.modelHint, 'M');
-      assert.equal(features.modelRouting, false);
+      assert.equal('modelRouting' in features, false, 'the Agent\'s old switch is not read, nor recorded');
       assert.equal(features.priorRuns, 0);
       assert.equal(features.lastRun, null);
       assert.equal(features.escalatedFrom, null);
       assert.equal(features.dependents, 0);
       assert.ok((features.promptChars as number) > 0);
 
-      // THE RUN TARGET IS v3 (docs/provider-engine-contract.md §6.4): what is dispatched is the task's
-      // own pins — no engine pin here — and no effort, beside the decision it was planned with, which
-      // names the engine it chose.
+      // THE RUN TARGET IS v3 (docs/provider-engine-contract.md §6.4): what is dispatched is the route,
+      // beside the decision it was planned with, which names the engine it chose.
       const bound = await receipt(services.db, target.ownerId, TASK_RUN_ACTION.execute, press);
       assert.equal(bound.status, 'COMPLETED');
       assert.equal(bound.target.v, 3);
       assert.equal(bound.target.kind, 'RUN');
       assert.deepEqual(
-        { engine: bound.target.engine, provider: bound.target.provider, model: bound.target.model, effort: bound.target.effort },
-        { engine: null, provider: 'claude', model: null, effort: null },
+        { provider: bound.target.provider, model: bound.target.model, effort: bound.target.effort },
+        { provider: 'claude', model: SONNET, effort: 'medium' },
       );
       assert.deepEqual(bound.target.route, { ...snapshotOf(row), engine: 'claude' });
 
-      await assertSessionIsBaseline(
-        services.db, sessionId, { provider: 'claude', model: null, effort: AGENT_EFFORT }, row.baseline,
-      );
+      await assertSessionIsRoute(services.db, sessionId, row, row.baseline);
 
       // The same press again is answered from its receipt, and adds nothing.
       assert.equal(await runNow(services, target, taskId, press), sessionId);
@@ -262,7 +283,7 @@ test('a bulk run records one decision per fresh item, under that item\'s own req
       const expected = new Map([
         [suggested, {
           decision: { level: 'S', model: SONNET, effort: 'low' },
-          session: { provider: 'claude', model: null, effort: AGENT_EFFORT },
+          session: { provider: 'claude', model: SONNET, effort: 'low' },
           reason: `[coordinator] Tier S: suggested by the coordinator — ${HINT_REASON}`,
         }],
         [unsuggested, {
@@ -286,13 +307,14 @@ test('a bulk run records one decision per fresh item, under that item\'s own req
         const [row] = rows;
         assert.equal(row.requestToken, token);
         assert.equal(row.sessionId, sessionId);
-        assert.equal(row.applied, false);
+        assert.equal(row.applied, row.level !== null, 'applied exactly when a tier was decided');
         assert.deepEqual({ level: row.level, model: row.model, effort: row.effort }, want.decision);
         assert.equal(row.reasons[0], want.reason);
         const item = bound.target.items.find((i: { taskId: string }) => i.taskId === taskId);
-        assert.equal(item.effort, null);
+        assert.equal(item.effort, row.applied ? row.effort : null);
         assert.deepEqual(item.route, { ...snapshotOf(row), engine: 'claude' });
-        await assertSessionIsBaseline(services.db, sessionId!, want.session, row.baseline);
+        if (row.applied) await assertSessionIsRoute(services.db, sessionId!, want.session, row.baseline);
+        else await assertSessionIsBaseline(services.db, sessionId!, want.session, row.baseline);
       }
     } finally {
       await services.db.$disconnect();
@@ -307,9 +329,10 @@ test('a takeover carries out the bound decision instead of routing again, and re
       const target = await fixture(services.db, 'takeover');
       const [taskId] = target.taskIds;
       const press = randomUUID();
-      // Decided at S by a holder that died between binding and recording; the task now says M.
+      // Decided at S by a holder that died between binding and recording; the task now says M. Bound
+      // as a shadow decision (`applied: false`), as one bound before 2026-11-20 is: it is carried out as bound.
       const route = {
-        policyVersion: 2, applied: false, level: 'S', provider: 'claude', model: SONNET, effort: 'low',
+        policyVersion: 4, applied: false, level: 'S', provider: 'claude', model: SONNET, effort: 'low',
         baseline: { provider: 'claude', model: null, effort: AGENT_EFFORT }, features: { modelHint: 'S' },
         reasons: ['decided by the holder that died'],
       };
@@ -357,7 +380,7 @@ test('replaying an answered single run or bulk run through a takeover writes no 
 
       // A bulk press over both, after the single run has ended: one fresh item each.
       await services.db.session.update({
-        where: { id: sessionId }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
+        where: { id: sessionId }, data: { turnState: null, finishedAt: new Date() },
       });
       const bulk = randomUUID();
       const answer = await services.tasks.batchExecute(target.ownerId, target.taskIds, undefined, bulk);
@@ -445,7 +468,7 @@ test('a press that continues a paused run is not routed', { skip, timeout: 120_0
     const [taskId] = target.taskIds;
     const paused = await runNow(services, target, taskId, randomUUID());
     await services.db.session.update({
-      where: { id: paused }, data: { status: RunStatus.AWAITING_INPUT },
+      where: { id: paused }, data: { turnState: null },
     });
     const press = randomUUID();
 
@@ -472,12 +495,12 @@ test('earlier work runs feed the decision; task and session details carry each r
       const run1 = await runNow(services, target, taskId, randomUUID());
       await services.db.session.update({
         where: { id: run1 },
-        data: { status: RunStatus.FAILED, finishedAt: new Date(), model: SONNET, error: 'the engine exited 1' },
+        data: { turnState: null, lastTurnOutcome: 'FAILED', finishedAt: new Date(), model: SONNET, error: 'the engine exited 1' },
       });
       const run2 = await runNow(services, target, taskId, randomUUID());
       await services.db.session.update({
         where: { id: run2 },
-        data: { status: RunStatus.FAILED, finishedAt: new Date(), model: OPUS,
+        data: { turnState: null, lastTurnOutcome: 'FAILED', finishedAt: new Date(), model: OPUS,
           error: "You've hit your weekly limit · resets 1pm" },
       });
       const run3 = await runNow(services, target, taskId, randomUUID());
@@ -485,7 +508,7 @@ test('earlier work runs feed the decision; task and session details carry each r
       const row = (await decisionsOf(services.db, taskId)).find((r) => r.sessionId === run3)!;
       assert.equal(row.level, 'L', 'one tier above run 1');
       assert.deepEqual({ model: row.model, effort: row.effort, applied: row.applied },
-        { model: OPUS, effort: 'high', applied: false });
+        { model: OPUS, effort: 'high', applied: true });
       const features = row.features as Record<string, unknown>;
       assert.deepEqual(
         { priorRuns: features.priorRuns, priorFailures: features.priorFailures,
@@ -494,13 +517,11 @@ test('earlier work runs feed the decision; task and session details carry each r
       );
       assert.deepEqual(features.lastRun, { ordinal: 1, level: 'M', model: SONNET, outcome: 'FAILED' });
       assert.ok(row.reasons.includes('Run 2 hit a usage limit — not counted'), row.reasons.join(' | '));
-      await assertSessionIsBaseline(
-        services.db, run3, { provider: 'claude', model: null, effort: AGENT_EFFORT }, row.baseline,
-      );
+      await assertSessionIsRoute(services.db, run3, row, row.baseline);
 
       const summary = {
-        level: 'L', provider: 'claude', model: OPUS, effort: 'high', applied: false, escalated: true,
-        reasons: row.reasons, policyVersion: 2, decidedAt: row.createdAt,
+        level: 'L', provider: 'claude', model: OPUS, effort: 'high', applied: true, escalated: true,
+        reasons: row.reasons, relaxedRun: null, policyVersion: 4, decidedAt: row.createdAt,
       };
       const detail = await services.tasks.get(target.ownerId, taskId) as unknown as {
         sessions: Array<{ id: string; route: Record<string, unknown> | null }>;
@@ -523,7 +544,7 @@ test('earlier work runs feed the decision; task and session details carry each r
     }
   });
 
-test('missing hint infers a shadow tier from current features while hint and pin keep precedence',
+test('missing hint infers a tier from current features while hint and pin keep precedence',
   { skip, timeout: 120_000 }, async () => {
     assertCoordinatorPgUrlIsIsolated(URL!);
     const services = connect();
@@ -537,14 +558,18 @@ test('missing hint infers a shadow tier from current features while hint and pin
         const [row] = await decisionsOf(services.db, taskId);
         const index = target.taskIds.indexOf(taskId);
         assert.equal(row.level, index === 0 ? 'L' : index === 1 ? 'S' : null);
-        assert.equal(row.applied, false);
-        assert.equal(row.policyVersion, 2);
+        assert.equal(row.applied, index !== 2, 'a decided tier is applied; the pin decides none');
+        assert.equal(row.policyVersion, 4);
         if (index === 0) {
           assert.match(row.reasons[0], /\[rule\] Rule inference/);
           assert.equal((row.features as Record<string, unknown>).isForeman, true);
         }
-        await assertSessionIsBaseline(services.db, sessionId,
-          { provider: 'claude', model: index === 2 ? OPUS : null, effort: AGENT_EFFORT }, row.baseline);
+        if (index === 2) {
+          await assertSessionIsBaseline(services.db, sessionId,
+            { provider: 'claude', model: OPUS, effort: AGENT_EFFORT }, row.baseline);
+        } else {
+          await assertSessionIsRoute(services.db, sessionId, row, row.baseline);
+        }
       }
     } finally {
       await services.db.$disconnect();

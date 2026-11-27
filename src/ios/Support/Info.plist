@@ -26,6 +26,7 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>orbit</string>
+				<string>orbit-session</string>
 			</array>
 		</dict>
 	</array>

@@ -9,14 +9,16 @@ import {
   sessionTaskCard,
   toUuid,
   type SessionCreatedTaskCounts,
+  type SessionCreatedTasks,
   type WatchView,
 } from '@orbit/shared';
 import { pageHref } from '../lib/orbitLink';
-import { sessionCreatedTasksQuery, watchesQuery } from '../lib/queries';
+import { watchesQuery } from '../lib/queries';
 import { isLiveWatch, taskStaleLines, watchedTasks, watchesFollowing } from '../lib/watches';
 import { TaskStatusPill } from './TaskStatusPill';
 import { relTime } from './Transcript';
 import { useNow } from './WatchParts';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * The session's Tasks card, above the composer between Background processes and the branch bar: the
@@ -34,16 +36,21 @@ import { useNow } from './WatchParts';
  * one took over as the one doing the work, with `replaces` naming the original, and its tallies count
  * those same rows — so re-sorting or re-reading them here is how the pills and the sentence would
  * stop agreeing. `sessionTaskCard` only lifts the watched ones to the top.
+ *
+ * The rows are the page's read (`sessionCreatedTasksQuery`, which the session page owns and hands in
+ * as `tasks`), so the strip adds no read of its own: one read serves the page.
  */
 export function SessionCreatedTasksStrip({
   sessionId,
+  tasks: data,
   openRequest = 0,
 }: {
   sessionId: string;
+  /** The session's created tasks, as the page read them; undefined until that read answers. */
+  tasks: SessionCreatedTasks | undefined;
   /** Bumped to open the list from elsewhere on the page — the start card's "View tasks". */
   openRequest?: number;
 }) {
-  const { data } = useQuery(sessionCreatedTasksQuery(sessionId));
   const watchesQ = useQuery(watchesQuery());
   const now = useNow();
   const [open, setOpen] = useState(false);
@@ -61,6 +68,7 @@ export function SessionCreatedTasksStrip({
   const single = card.counts.total === 1 && card.rows.length === 1 ? card.rows[0] : undefined;
   // More than one: what is running, or the newest task and how it stands, as the Agents line says it.
   const band = sessionTaskBand(card);
+  const pill = single ? single.standing : band?.row.standing;
   const toggle = () => setOpen((o) => !o);
 
   return (
@@ -70,36 +78,42 @@ export function SessionCreatedTasksStrip({
         <span className="bg-tray-title ct-head">{COPY.title}</span>
         {single ? (
           <>
-            <span className="ct-one" title={single.title}>
-              {single.title}
-            </span>
+            <Tooltip content={single.title} truncatedOnly>
+              <span className="ct-one">
+                {single.title}
+              </span>
+            </Tooltip>
             {single.watched && <WatchEye stale={single.stale} />}
-            {single.standing && <TaskStatusPill {...single.standing} />}
           </>
         ) : (
           <>
             {card.watching > 0 && (
-              <span className={`ct-watching${card.stale ? ' is-stale' : ''}`} title="Watched by this session">
-                <EyeOutlined /> {card.watching}
-              </span>
+              <Tooltip content="Watched by this session" delay={TEXT_TOOLTIP_DELAY_MS}>
+                <span className={`ct-watching${card.stale ? ' is-stale' : ''}`}>
+                  <EyeOutlined /> {card.watching}
+                </span>
+              </Tooltip>
             )}
             {band && (
               <>
-                <span className="bg-tray-count ct-count" title={band.row.title}>
-                  {band.failed > 0 && (
-                    <>
-                      <span className="ct-failed">{`${band.failed} failed`}</span>
-                      {' · '}
-                    </>
-                  )}
-                  {band.text}
-                </span>
-                {band.row.standing && <TaskStatusPill {...band.row.standing} />}
+                <Tooltip content={band.row.title} delay={TEXT_TOOLTIP_DELAY_MS}>
+                  <span className="bg-tray-count ct-count">
+                    {band.failed > 0 && (
+                      <>
+                        <span className="ct-failed">{`${band.failed} failed`}</span>
+                        {' · '}
+                      </>
+                    )}
+                    {band.text}
+                  </span>
+                </Tooltip>
               </>
             )}
           </>
         )}
         <span className="wt-spacer" />
+        {/* The pill sits at the right edge, as the Agents line's failed count and the branch bar's state do. */}
+        {pill && <TaskStatusPill {...pill} />}
         <button
           type="button"
           className="wt-expand"
@@ -121,15 +135,17 @@ export function SessionCreatedTasksStrip({
               </div>
             ))}
             {card.rows.map((row) => (
-              <Link key={row.id} className="ct-row" to={pageHref({ kind: 'task', id: toUuid(row.id) })}>
+              <Link key={row.id} className="ct-row" data-row-focus="" to={pageHref({ kind: 'task', id: toUuid(row.id) })}>
                 <span className="ct-pill">{row.standing && <TaskStatusPill {...row.standing} />}</span>
                 <span className="ct-eye">{row.watched && <WatchEye stale={row.stale} />}</span>
-                <span className="ct-title" title={row.title}>
-                  {row.title}
-                  {row.replaces && (
-                    <span className="ct-replaces">{` · ${COPY.replacesPrefix}${row.replaces.title}`}</span>
-                  )}
-                </span>
+                <Tooltip content={row.title} truncatedOnly>
+                  <span className="ct-title">
+                    {row.title}
+                    {row.replaces && (
+                      <span className="ct-replaces">{` · ${COPY.replacesPrefix}${row.replaces.title}`}</span>
+                    )}
+                  </span>
+                </Tooltip>
                 <span className="ct-age">{row.createdAt ? relTime(row.createdAt) : COPY.elsewhere}</span>
                 <span className="ct-caret">›</span>
               </Link>
@@ -139,13 +155,13 @@ export function SessionCreatedTasksStrip({
           {data && data.projects.length > 0 && (
             <div className="ct-foot">
               {data.projects.map((project) => (
-                <Link
-                  key={project.id}
-                  to={pageHref({ kind: 'project', id: toUuid(project.id) })}
-                  title={project.title}
-                >
-                  {COPY.openProject}
-                </Link>
+                <Tooltip key={project.id} content={project.title} align="start">
+                  <Link
+                    to={pageHref({ kind: 'project', id: toUuid(project.id) })}
+                  >
+                    {COPY.openProject}
+                  </Link>
+                </Tooltip>
               ))}
             </div>
           )}

@@ -388,13 +388,6 @@ final class TaskDetailCopyParityTests: XCTestCase {
                        "Policy v23 · decided Oct 3, 2:24 AM · \(TaskDetailCopy.usageLimitNote)")
     }
 
-    func testTheAgentsSwitchSaysWhatTheWebSwitchSays() throws {
-        let web = try source(Self.workspaceSettings)
-        // The web row puts the long sentence in its tooltip, under a shorter description of its own.
-        assertSays(web, "title=\"\(TaskDetailCopy.smartSelectionSwitch)\"", in: Self.workspaceSettings)
-        assertSays(web, "tooltip=\"\(TaskDetailCopy.smartSelectionSwitchDetail)\"", in: Self.workspaceSettings)
-    }
-
     func testTheComposersModelMenuSaysWhyItIsThisModel() throws {
         let web = try source(Self.workspace)
         assertSays(web, "<span className=\"composer-model-spark\">✦</span> "

@@ -42,6 +42,12 @@ public struct TailScrollSample: Equatable, Sendable {
 /// content that shrank reports exactly what a finger dragging up reports — an offset that fell. So
 /// the transcript stopped following a reply that was still being written, once in every turn that
 /// thinks. Telling the two apart needs one more fact per sample (below).
+///
+/// One thing stands outside these rules: while a row the transcript was opened at is held in place
+/// (`TranscriptLanding`: a waiting card, a record a link named), the tail is not pinned at all, and
+/// neither the geometry follow nor a resize follow carries the transcript to it. Web reads its pin
+/// the same way (`atBottomRef.current = … && !landingRef.current && pinnedToTail(…)` in `measure()`),
+/// and so does Android, whose follow is released with the hold.
 public enum TailPinning {
     /// Within this many points of the end still reads as pinned (web uses the same 80px).
     public static let nearBottom: Double = 80

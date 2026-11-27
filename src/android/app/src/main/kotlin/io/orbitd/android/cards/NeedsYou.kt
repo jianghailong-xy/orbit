@@ -7,6 +7,7 @@ import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.projects.ProjectDoc
 import io.orbitd.android.projects.ProjectDone
 import io.orbitd.android.projects.RunSettings
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import java.time.Instant
 
@@ -32,15 +33,19 @@ data class NeedsYouBanner(val count: Int, val target: JsonObject, val text: Stri
 /** One notice that a conversation has just started waiting on the reader (OrbitKit `NeedsYouToast`; the owner, 2026-11-15,
  * `docs/mocks/needs-you-capsule/12-once`): [title] the conversation, [line] what it waits on and its workspace. [id] is the wait it
  * announces (`NeedsYouLogic.waitKey`): one notice per wait. */
-data class NeedsYouToast(val id: String, val target: JsonObject, val title: String, val line: String, val ownerItem: OwnerItem? = null) {
-    val glyph: NeedsYouGlyph get() = ownerItem?.let { NeedsYouGlyph.of(it.kind) } ?: NeedsYouGlyph.HAND
+data class NeedsYouToast(val id: String, val target: JsonObject, val title: String, val line: String, val ownerItem: OwnerItem? = null,
+    /** A terminal asking to be approved (the owner, 2026-11-16: board waiting-on-you-removal 02 ③ as a notice under 12-once): its
+     * request id, whose machine's Terminals to approve a press opens. [target] is then no conversation. */
+    val terminalRequest: String? = null) {
+    val glyph: NeedsYouGlyph get() = if (terminalRequest != null) NeedsYouGlyph.TERMINAL
+        else ownerItem?.let { NeedsYouGlyph.of(it.kind) } ?: NeedsYouGlyph.HAND
 }
 
 /** Which mark the needs-you bar draws in its circle (OrbitKit `NeedsYouGlyph`): one per owner item kind — work that landed without
  * the owner's confirmation wearing the merge's, since a merge into main is what it is about — the raised hand for a blocked tool call;
  * in the conversation on screen, a question's or an exception's, by the card a press goes to. */
 enum class NeedsYouGlyph {
-    MERGE, QUESTION, WARNING, PAUSE, HAND;
+    MERGE, QUESTION, WARNING, PAUSE, HAND, TERMINAL;
 
     companion object {
         fun of(kind: String) = when (kind) {
@@ -138,6 +143,16 @@ object NeedsYouLogic {
         return if (rows.isEmpty()) said.copy(glyph = NeedsYouGlyph.HAND) else said
     }
 
+    /** The prefix of an owner request's row address: the pending request this conversation filed, drawn inline where it was filed. */
+    const val ownerRequestPrefix = "owner-request:"
+
+    /** The pending owner requests this conversation drew inline (iOS `.ownerRequest` rows of `openBelowRows`), by where each sits:
+     * [placed] is [OwnerRequests.place]'s map (row index, -1 ahead of every loaded row), walked in that order, a row's own
+     * requests oldest first. Not a question: the owner answers it by a door. -1 is drawn only once no older rows remain. */
+    fun ownerRequestRows(placed: Map<Int, List<OwnerRequest>>, hasOlder: Boolean = false): List<BelowRow> =
+        placed.entries.filter { !(it.key < 0 && hasOlder) }.sortedBy { it.key }
+            .flatMap { entry -> entry.value.filter { it.pending }.map { BelowRow(ownerRequestPrefix + it.id, false) } }
+
     /** The address the coordinator's done card is drawn under (`CardFocus`). */
     fun doneKey(projectId: String) = "done:$projectId"
 
@@ -199,7 +214,7 @@ object NeedsYouLogic {
      * kind for, and the push's for a blocked tool call. */
     fun noticeWord(row: JsonObject): String {
         val kind = row.text("waitingKind")?.takeIf { it.isNotEmpty() && it != "UNKNOWN" } ?: return replyWord
-        return SessionHeader.waitingWord(kind, ownerItems(row))
+        return SessionHeader.waitingWord(kind, ownerItems(row), row["ownerRequests"] as? JsonArray, row["taskMoves"] as? JsonArray)
     }
 
     /** At most this many notices at once; the rest are said as "and N more" (12-once). */

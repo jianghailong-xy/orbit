@@ -55,7 +55,8 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { type PrismaClient, RunStatus } from '@prisma/client';
+import { type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -284,7 +285,7 @@ test('a lost claim is recovered without the session ever going silent', {
         title,
         prompt: OPENING,
         provider: 'claude',
-        status: RunStatus.PENDING,
+        turnState: 'QUEUED',
         dispatchOrigin: 'USER',
         startsTaskWork: false,
       },

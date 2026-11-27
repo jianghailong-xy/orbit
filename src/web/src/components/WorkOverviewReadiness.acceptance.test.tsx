@@ -159,7 +159,8 @@ describe('mobile Work overview consumes canonical readiness', () => {
   });
 
   it('keeps manual and automatic READY meanings distinct without changing their lane', () => {
-    expect(projectTaskWorkLabel(tasks[2] as never)?.text).toBe('Ready · can start now');
+    // A task set to start by hand says so on its row (G5); the band heading keeps "can start now".
+    expect(projectTaskWorkLabel(tasks[2] as never)?.text).toBe('Ready · set to start by hand');
     expect(projectTaskWorkLabel(tasks[3] as never)?.text).toBe('Ready · automatic dispatch');
     expect(html).toContain('Ready · can start now');
     expect(html).toContain('Ready · automatic dispatch');

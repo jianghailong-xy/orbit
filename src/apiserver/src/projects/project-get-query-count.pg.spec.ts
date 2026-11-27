@@ -38,7 +38,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import type { PrismaService } from '../prisma/prisma.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
@@ -54,6 +54,10 @@ import { ProjectsService } from './projects.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
+// A translator configured, so `translationLanguages` reads the owner's preferences whatever the environment
+// says (see the count below). The owner here never turns translation on, so nothing is ever sent to it.
+const realTranslatorKey = process.env.DEEPSEEK_API_KEY;
+process.env.DEEPSEEK_API_KEY = 'project-get-query-count-pg-spec';
 
 /** The verification method every criterion here declares; never the thing under test. */
 const METHOD = 'Read it and say whether it holds';
@@ -64,7 +68,7 @@ const sha = (nibble: string) => nibble.repeat(40);
 /**
  * What one project detail read costs, whatever is in the project.
  *
- * Thirty-two statements, and every one of them is per RELATION rather than per row:
+ * Thirty-six statements, and every one of them is per RELATION rather than per row:
  *
  *   4  the project document — the row, its coordinator members, its runtime, its criteria;
  *   1  the per-status task tally, read from `project_task_status_count` by project id. It replaced
@@ -132,7 +136,20 @@ const sha = (nibble: string) => nibble.repeat(40);
  *      `movedFrom` (board 02 G/I): one raw statement over the move activity rows, found by 0555's
  *      two partial indexes and joined to the criterion and both projects (`criterion-move-record.ts`);
  *   1  the owner rulings still live, added 2026-11-17 with `rulings` (coordinator handoff v2 §2): one
- *      `findMany` by project and owner, bounded by `PROJECT_RULINGS_READ_MAX` (`project-ruling.ts`).
+ *      `findMany` by project and owner, bounded by `PROJECT_RULINGS_READ_MAX` (`project-ruling.ts`);
+ *   1  the coordinator's cardless landing-check changes, added 2026-11-20 with `settingChanges`
+ *      (§12.15 P-R1, board D7): the owner reads what the coordinator changed without a card and
+ *      reverts it from the project page, so the detail read carries them. One `findMany` by project
+ *      and owner, bounded by `SETTING_CHANGES_READ_MAX`; the binding and the named tasks are read
+ *      only when a row needs them, and neither fixture here has a row (`project-setting-change.ts`);
+ *   2  Settings › Translation for the title and criteria, added 2026-11-25 with `translation`
+ *      (ProjectTextTranslation, migration 1600): the owner's translation preferences, one `findUnique` of
+ *      the user row (`translationLanguages`; it sends nothing when no translator is configured, so this
+ *      file sets DEEPSEEK_API_KEY and the count does not depend on the environment), and the stored
+ *      translation, one `findUnique` of project_text_translation by the project's id. Neither is per
+ *      criterion: the stored row holds every criterion's text, and whether it is still current is a
+ *      digest computed from the criteria the project query above already read. With translation off,
+ *      as here, nothing is queued, so no statement is sent after the read returns.
  *
  * Measured, not asserted from the code: the derivations are each written as ONE `findMany` (two,
  * for the lane below), and Prisma resolves a nested `select` with one statement per relation
@@ -168,7 +185,7 @@ const sha = (nibble: string) => nibble.repeat(40);
  * and fourth would BOTH be five statements at the large fixture and one at the small one if they
  * were written per criterion, and the equality assertion is what sees the difference.
  */
-const STATEMENTS_PER_READ = 33;
+const STATEMENTS_PER_READ = 36;
 
 test('the project detail read costs the same number of statements at either size', {
   skip, concurrency: 1, timeout: 300_000,
@@ -181,6 +198,8 @@ test('the project detail read costs the same number of statements at either size
 
   const { prisma, statements } = countingPrismaClientFor(url);
   t.after(async () => {
+    if (realTranslatorKey === undefined) delete process.env.DEEPSEEK_API_KEY;
+    else process.env.DEEPSEEK_API_KEY = realTranslatorKey;
     await prisma.$disconnect().catch(() => undefined);
     await sql.end().catch(() => undefined);
   });
@@ -279,7 +298,7 @@ test('the project detail read costs the same number of statements at either size
             taskId: task.id,
             title: `ran ${task.id}`,
             prompt: 'do the work',
-            status: RunStatus.SUCCEEDED,
+            turnState: null, finishedAt: new Date(), 
             branch: `orbit/${label}-${position}-${index}`,
             isolationStatus: 'worktree',
           },
@@ -368,7 +387,7 @@ test('the project detail read costs the same number of statements at either size
     for (const table of ['"project"', '"task"', '"project_task_status_count"',
       '"project_acceptance_criterion_definition"', '"session_merge_receipt"',
       '"project_criteria_authorship"', '"project_blocker"', '"project_codebase"',
-      '"project_integration_job"']) {
+      '"project_integration_job"', '"project_text_translation"', '"user"']) {
       assert.ok(sent.some((text) => text.includes(table)),
         `the project detail read must reach ${table}; it sent:\n${listing(sent)}`);
     }

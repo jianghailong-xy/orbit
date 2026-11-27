@@ -14,6 +14,8 @@ import io.orbitd.android.core.schedule.ConditionView
 import io.orbitd.android.core.schedule.ConditionWaitingItem
 import io.orbitd.android.core.schedule.ScheduleApi
 import io.orbitd.android.core.schedule.ScheduleCard
+import io.orbitd.android.core.schedule.ScheduleChangeAnswer
+import io.orbitd.android.core.schedule.ScheduleChangeConversationResponse
 import io.orbitd.android.core.schedule.ScheduleDecisionOutcome
 import io.orbitd.android.core.schedule.ScheduleDetailResponse
 import io.orbitd.android.core.schedule.ScheduleDisplay
@@ -71,6 +73,8 @@ class ScheduledStore internal constructor(private val auth: AuthSession, val han
         val approvals: Map<String, JsonObject> = emptyMap(),
         /** What each conversation asked and changed (`GET /sessions/:id/schedule-cards`), by canonical session id. */
         val sessions: Map<String, SessionScheduleCardsResponse> = emptyMap(),
+        /** Each schedule's change-conversation read (`GET /schedules/:id/change`), by canonical schedule id. */
+        val changes: Map<String, ScheduleChangeConversationResponse> = emptyMap(),
         /** The run a session is, with its schedule, by canonical session id. */
         val runs: Map<String, RunContext> = emptyMap(),
         val loaded: Boolean = false,
@@ -112,6 +116,7 @@ class ScheduledStore internal constructor(private val auth: AuthSession, val han
         fun schedule(id: String): ScheduleView? = detail(id)?.schedule ?: schedules.firstOrNull { ObjectId.same(it.id, id) }
         fun card(id: String): ScheduleCard? = cards[key(id)]
         fun session(id: String): SessionScheduleCardsResponse? = sessions[key(id)]
+        fun change(id: String): ScheduleChangeConversationResponse? = changes[key(id)]
         fun run(sessionId: String): RunContext? = runs[key(sessionId)]
 
         /** The draft the panel's conversation produced, once its agent has drafted it. */
@@ -208,8 +213,6 @@ class ScheduledStore internal constructor(private val auth: AuthSession, val han
      * A conversation's schedule cards and records, and — for a run's session — the run and its schedule (W2's `run`, else found
      * among the schedules by [scheduleRunId], the session's own read).
      */
-    fun loadSession(sessionId: String, scheduleRunId: String? = null) { scope.launch { loadSessionNow(sessionId, scheduleRunId) } }
-
     suspend fun loadSessionNow(sessionId: String, scheduleRunId: String? = null) {
         val read = try { api.sessionCards(sessionId) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
         if (!live()) return
@@ -233,6 +236,26 @@ class ScheduledStore internal constructor(private val auth: AuthSession, val han
         return null
     }
 
+    /** Change… (§8.2): the schedule's open change conversation, if any, and the opening a new one would start with. */
+    fun loadChange(id: String) { scope.launch {
+        // Read afresh each time: an answer kept from an earlier visit may name a conversation since completed.
+        mutable.update { it.copy(changes = it.changes - key(id)) }
+        val change = try { api.change(id) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { return@launch }
+        if (live()) mutable.update { it.copy(changes = it.changes + (key(id) to change)) }
+    } }
+
+    /** The draft change screen's send: opens the conversation with the person's first words — or says them in the one
+     * another device opened meanwhile. Null on a refusal, said in [State.errorText]. */
+    suspend fun openChange(id: String, text: String): ScheduleChangeAnswer? {
+        mutable.update { it.copy(errorText = null) }
+        return try {
+            api.openChange(id, text)
+        } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) {
+            mutable.update { it.copy(errorText = ScheduleApi.refusal(error)) }
+            null
+        }
+    }
+
     // MARK: presses
 
     /** What a press on a card came to: done, withdrawn by the server (409 SCHEDULE_REQUEST_STALE: shown, not retried), or refused
@@ -246,10 +269,26 @@ class ScheduledStore internal constructor(private val auth: AuthSession, val han
         val settled: Boolean get() = this !is Refused
     }
 
-    suspend fun runNow(id: String) = control(id) { api.runNow(id) }
+    suspend fun runNow(id: String, openRun: (String) -> Unit = {}) = control(id) {
+        api.runNow(id)?.run?.sessionId?.let(openRun)
+    }
+
+    suspend fun cancelRun(run: ScheduleRunView, sessionId: String): String? {
+        val error = control(run.scheduleId) { api.stopRun(run.id) }
+        if (error == null) loadSessionNow(sessionId, run.id)
+        return error
+    }
     suspend fun pause(id: String) = control(id) { api.pause(id) }
     suspend fun resume(id: String) = control(id) { api.resume(id) }
     suspend fun undo(id: String, revision: Int) = control(id) { api.undo(id, revision) }
+    /** Rename (§8.4) what the dialog holds, over the name it opened with: nothing is sent while that is empty or unchanged. */
+    suspend fun rename(id: String, draft: String, from: String): String? {
+        val title = ScheduleDisplay.renameTitle(draft, from) ?: return null
+        return control(id) { api.rename(id, title) }
+    }
+    /** The dialogs' presses, on the store's scope: a dialog is gone once pressed. */
+    fun renameNow(id: String, draft: String, from: String) { scope.launch { rename(id, draft, from) } }
+    fun deleteNow(id: String) { scope.launch { delete(id) } }
     suspend fun delete(id: String): String? {
         val said = control(id) { api.delete(id) }
         if (said == null && ObjectId.same(mutable.value.inspectedId, id)) inspect(null)

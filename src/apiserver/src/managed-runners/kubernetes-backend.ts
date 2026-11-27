@@ -16,6 +16,7 @@ import { LEGACY_MANAGED_ADMISSION_DENIAL_MARKER, MANAGED_ADMISSION_DENIAL_MARKER
 import {
   ManagedRunnerConflict,
   type ManagedCredential,
+  type ManagedDriveMountDelivery,
   type ManagedFencingReceipt,
   type ManagedInstance,
   type ManagedReplacementVolume,
@@ -30,11 +31,14 @@ import { capacityBudget, computeShare, storageShare, type CapacityBudget, type C
 import { observedStop, readFencingReceipt, type ManagedRunnerPredecessor, type ObservedStopProof } from './managed-runner-fencing';
 import type { ManagedRunnerProfile } from './managed-runner-profile';
 import {
+  MANAGED_POD_TERMINATION_GRACE_SECONDS,
   MANAGED_STOP_REPORT_FINALIZER,
   OWNER_ANNOTATION,
   RUNNER_ANNOTATION,
   bootstrapCredentialOf,
+  buildDriveMountSecret,
   buildManagedPod,
+  driveMountSecretName,
   buildManagedPvc,
   buildManagedSecret,
   managedAdmissionProbeName,
@@ -62,6 +66,8 @@ import {
  *   instance      bare Pod `mr-<runner uuid>` (runner-pod.yaml.example), behind the admission guard
  *   stop report   the kubelet's terminal container states (podStopConfirmed), kept on the Pod by the
  *                 manager's finalizer until the manager has recorded them, whoever deleted it
+ *   stop          the Pod deleted by UID with its termination grace (`stopInstance`), for the owner's
+ *                 Update Now alone (`ownerStopsOnly`)
  *   released      no VolumeAttachment names the volume's PV
  *   fencing       an operator's receipt in ConfigMap `mr-fence-<runner uuid>`
  *   capacity      the profile's budget, pooled by cluster key and namespace
@@ -115,17 +121,31 @@ function credentialOf(secret: Secret): KubeCredential {
 }
 
 /**
+ * The kubelet's eviction for local storage: the Pod's emptyDir (/tmp) or its containers' writable layers over their
+ * limit ("Usage of EmptyDir volume \"tmp\" exceeds the limit \"1Gi\".", "Pod ephemeral local storage usage exceeds the
+ * total limit of containers 1Gi."), or the node low on it ("The node was low on resource: ephemeral-storage."). An
+ * eviction for memory or anything else is not one.
+ */
+const STORAGE_EVICTION = /ephemeral|EmptyDir/i;
+
+/**
  * How a terminal Pod ended, by the kubelet's container states: the runner's exit code, and whether a
  * container ended killed (137) with the runtime's OOMKilled reason — which, like Docker's flag, is
- * also given for a container in which only a child process was killed.
+ * also given for a container in which only a child process was killed. A Pod the kubelet evicted for
+ * local storage (`reason` Evicted) also says `storageFull`, with or without a container state.
  */
 function exitOf(pod: Pod): ManagedInstance['exit'] {
   if (!podTerminated(pod)) return null;
+  const storageFull = pod.status?.reason === 'Evicted' && STORAGE_EVICTION.test(pod.status?.message ?? '');
   const ended = (statuses: PodContainerStatus[] | undefined) => (statuses ?? []).flatMap((c) => (c.state?.terminated ? [c.state.terminated] : []));
   const runner = ended(pod.status?.containerStatuses);
   const all = [...ended(pod.status?.initContainerStatuses), ...runner];
-  if (all.length === 0) return null;
-  return { code: (runner[0] ?? all[0]).exitCode ?? null, outOfMemory: all.some((t) => t.reason === 'OOMKilled' && t.exitCode === 137) };
+  if (all.length === 0) return storageFull ? { code: null, outOfMemory: false, storageFull } : null;
+  return {
+    code: (runner[0] ?? all[0]).exitCode ?? null,
+    outOfMemory: all.some((t) => t.reason === 'OOMKilled' && t.exitCode === 137),
+    ...(storageFull ? { storageFull } : {}),
+  };
 }
 
 /**
@@ -160,8 +180,9 @@ function podPreparing(pod: Pod): boolean {
   });
 }
 
-/** `pod` as an instance, `image` being the one the profile names now. */
-function instanceOf(pod: Pod, image: string): KubeInstance {
+/** `pod` as an instance, `image` being the one the profile names now, `revision` its source commit and `version` the
+ *  release it was published for, if known. */
+function instanceOf(pod: Pod, image: string, revision?: string, version?: string): KubeInstance {
   const terminated = podTerminated(pod);
   const previous = podImages(pod).find((made) => made !== image);
   return {
@@ -177,7 +198,9 @@ function instanceOf(pod: Pod, image: string): KubeInstance {
     // itself: it waits for the manager, which records its stop and then removes it (`removeInstance`).
     removing: !!pod.metadata.deletionTimestamp && !(terminated && podHeldForStopReport(pod)),
     exit: exitOf(pod),
-    ...(previous ? { previousImage: previous } : {}),
+    ...(previous
+      ? { previousImage: previous, ...(revision ? { currentImageRevision: revision, ...(version ? { currentImageVersion: version } : {}) } : {}) }
+      : {}),
     pod,
   };
 }
@@ -187,6 +210,8 @@ export class KubernetesBackend implements ManagedRunnerBackend {
   readonly terms = TERMS;
   readonly location: { readonly clusterKey: string; readonly namespace: string };
   readonly rollImage: string;
+  readonly driveMount?: ManagedDriveMountDelivery;
+  readonly ownerStopsOnly = true as const;
 
   constructor(
     private readonly kube: ManagedKubeClient,
@@ -194,6 +219,23 @@ export class KubernetesBackend implements ManagedRunnerBackend {
   ) {
     this.location = { clusterKey: profile.clusterKey, namespace: profile.kubernetes.namespace };
     this.rollImage = profile.runner.image;
+    if (profile.files) {
+      const secrets = kube.driveSecrets;
+      if (!secrets) throw new Error(`the profile gives runners the drive, but the client cannot reach namespace ${profile.files.namespace}`);
+      const namespace = profile.files.namespace;
+      this.driveMount = {
+        name: `Secret ${namespace}/mrf-<runner uuid>`,
+        read: async (mapping) => {
+          const secret = await secrets.get(driveMountSecretName(mapping.runnerId));
+          return secret ? credentialOf(secret) : null;
+        },
+        deliver: async (mapping, token) =>
+          credentialOf(await this.createOrReadBack(secrets, buildDriveMountSecret(this.identity(mapping), namespace, token))),
+        remove: async (mapping, credential) => {
+          await secrets.delete(driveMountSecretName(mapping.runnerId), { uid: (credential as KubeCredential).secret.metadata.uid });
+        },
+      };
+    }
   }
 
   names(runnerId: string) {
@@ -306,7 +348,7 @@ export class KubernetesBackend implements ManagedRunnerBackend {
 
   async readInstance(mapping: ManagedRunner): Promise<KubeInstance | null> {
     const pod = await this.kube.pods.get(managedPodName(mapping.runnerId));
-    return pod ? instanceOf(pod, this.profile.runner.image) : null;
+    return pod ? instanceOf(pod, this.profile.runner.image, this.profile.runner.imageRevision, this.profile.runner.imageVersion) : null;
   }
 
   /**
@@ -347,6 +389,18 @@ export class KubernetesBackend implements ManagedRunnerBackend {
     const name = managedPodName(mapping.runnerId);
     await this.kube.pods.delete(name, { uid: mapping.podUid! });
     await this.releaseStopReport(name, mapping.podUid!);
+  }
+
+  /**
+   * Asks the recorded Pod to stop, for the owner's Update Now: deleted by UID — a successor under the same name is
+   * never touched — with the grace every managed Pod is made with, never a shorter one. The kubelet sends the runner
+   * SIGTERM, and its ordinary shutdown stops its turns, which stay resumable; past the grace it is killed. The
+   * stop-report finalizer keeps the deleted Pod, so the kubelet's terminal report of it stays to be read
+   * (`readInstance`), and only that report is the stop proof: asking is none. Asked again on every pass until then,
+   * which changes nothing on a Pod already being deleted.
+   */
+  async stopInstance(mapping: ManagedRunner): Promise<void> {
+    await this.kube.pods.delete(managedPodName(mapping.runnerId), { uid: mapping.podUid!, gracePeriodSeconds: MANAGED_POD_TERMINATION_GRACE_SECONDS });
   }
 
   // ── stop proof ─────────────────────────────────────────────────────────────────────────────

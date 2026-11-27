@@ -14,7 +14,7 @@ export const FEISHU_OPEN_PLATFORM_ORIGINS: Readonly<Record<FeishuPlatform, strin
   LARK: 'https://open.larksuite.com',
 };
 
-/** What an alert card carries (§6.4): the titles only, the default, or the details as well. */
+/** What an alert card carries (§6.4): the titles only, or the details as well, the default. */
 export const FEISHU_MESSAGE_DETAILS = ['TITLES_ONLY', 'FULL'] as const;
 export type FeishuMessageDetail = (typeof FEISHU_MESSAGE_DETAILS)[number];
 

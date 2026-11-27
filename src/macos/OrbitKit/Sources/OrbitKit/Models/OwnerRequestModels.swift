@@ -10,6 +10,14 @@ public enum OwnerRequestKind: String, Codable, Sendable, CaseIterable {
     case confirm = "CONFIRM"
     /// An agent asking the owner to create a wiki for its workspace's repository (docs/wiki-explicit-creation-design.md §3.6).
     case wikiCreate = "WIKI_CREATE"
+    /// An agent proposing changes to the owner's own Settings (docs/settings-from-conversation-design.md §5.1).
+    case settingsChange = "SETTINGS_CHANGE"
+    /// An agent on an Orbit Cloud runner asking the owner to sign in to a site in that runner's browser.
+    case browserSignIn = "BROWSER_SIGN_IN"
+    /// An agent proposing one setting of a runner (its Max Concurrent), which the owner applies with one press.
+    case change = "CHANGE"
+    /// An agent asking the owner to reopen a settled project (docs/project-reopen-request-design.md §6).
+    case projectReopen = "PROJECT_REOPEN"
 }
 
 public enum OwnerRequestState: String, Codable, Sendable, CaseIterable {
@@ -86,17 +94,37 @@ public struct OwnerRequestSecretGrant: Codable, Equatable, Sendable {
     }
 }
 
+/// CHANGE: the runner setting asked for (`change_spec`), and its value when it was asked.
+public struct OwnerRequestChangeSpec: Codable, Equatable, Sendable {
+    public let runnerId: String
+    public let field: String
+    public let requested: Int
+    public let before: Int
+    public init(runnerId: String, field: String = "maxConcurrent", requested: Int, before: Int) {
+        self.runnerId = runnerId
+        self.field = field
+        self.requested = requested
+        self.before = before
+    }
+}
+
 public struct OwnerRequestAnswer: Codable, Equatable, Sendable {
     public let option: Int?
     public let text: String?
     /// WIKI_CREATE once DONE: the wiki made.
     public let spaceId: String?
     public let name: String?
-    public init(option: Int? = nil, text: String? = nil, spaceId: String? = nil, name: String? = nil) {
+    /// CHANGE once DONE: the value written, and the value it replaced at that moment.
+    public let applied: Int?
+    public let actualBefore: Int?
+    public init(option: Int? = nil, text: String? = nil, spaceId: String? = nil, name: String? = nil,
+                applied: Int? = nil, actualBefore: Int? = nil) {
         self.option = option
         self.text = text
         self.spaceId = spaceId
         self.name = name
+        self.applied = applied
+        self.actualBefore = actualBefore
     }
 }
 
@@ -119,6 +147,11 @@ public struct OwnerRequest: Codable, Equatable, Sendable, Identifiable {
     /// WIKI_CREATE: the repository the wiki is asked for, and the asking session's workspace it would read it from.
     public let repoUrlNorm: String?
     public let workspaceId: String?
+    /// BROWSER_SIGN_IN: the site to sign in to, and the Orbit Cloud runner whose browser it is.
+    public let browserSite: String?
+    public let browserRunnerId: String?
+    /// The asking session's title, when the server serves it.
+    public let askedBySessionTitle: String?
     public let expiresAt: String?
     public let askedBySessionId: String
     public let projectId: String?
@@ -132,6 +165,10 @@ public struct OwnerRequest: Codable, Equatable, Sendable, Identifiable {
     /// The request's agent-written words in the owner's language (Settings › Translation): title,
     /// why, ifUnanswered, options, the steps' text and verifyHint. Nil until translated.
     public let translation: OwnerCardTranslation?
+    /// SETTINGS_CHANGE: `{changes: [{key, from, to, tier}]}`; read with `SettingsFromConversation.entries`.
+    public let payload: JSONValue?
+    /// CHANGE: the runner setting asked for, and its value when it was asked.
+    public let changeSpec: OwnerRequestChangeSpec?
 
     public init(id: String, kind: OwnerRequestKind, state: OwnerRequestState = .pending, title: String,
                 why: String, blocksTaskIds: [String] = [], ifUnanswered: String? = nil,
@@ -139,11 +176,13 @@ public struct OwnerRequest: Codable, Equatable, Sendable, Identifiable {
                 steps: [OwnerRequestStep]? = nil, secretSpec: OwnerRequestSecretSpec? = nil,
                 secretScope: String? = nil, secretGrant: OwnerRequestSecretGrant? = nil,
                 verifyHint: String? = nil, repoUrlNorm: String? = nil, workspaceId: String? = nil,
+                browserSite: String? = nil, browserRunnerId: String? = nil, askedBySessionTitle: String? = nil,
                 expiresAt: String? = nil, askedBySessionId: String,
                 projectId: String? = nil, resolvedAt: String? = nil, resolvedByUserId: String? = nil,
                 resolutionNote: String? = nil, answer: OwnerRequestAnswer? = nil,
                 resolvedClient: String? = nil, createdAt: String,
-                translation: OwnerCardTranslation? = nil) {
+                translation: OwnerCardTranslation? = nil, payload: JSONValue? = nil,
+                changeSpec: OwnerRequestChangeSpec? = nil) {
         self.id = id
         self.kind = kind
         self.state = state
@@ -160,6 +199,9 @@ public struct OwnerRequest: Codable, Equatable, Sendable, Identifiable {
         self.verifyHint = verifyHint
         self.repoUrlNorm = repoUrlNorm
         self.workspaceId = workspaceId
+        self.browserSite = browserSite
+        self.browserRunnerId = browserRunnerId
+        self.askedBySessionTitle = askedBySessionTitle
         self.expiresAt = expiresAt
         self.askedBySessionId = askedBySessionId
         self.projectId = projectId
@@ -170,12 +212,15 @@ public struct OwnerRequest: Codable, Equatable, Sendable, Identifiable {
         self.resolvedClient = resolvedClient
         self.createdAt = createdAt
         self.translation = translation
+        self.payload = payload
+        self.changeSpec = changeSpec
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, kind, state, title, why, blocksTaskIds, ifUnanswered, options, recommendedOption, steps
         case secretSpec, secretScope, secretGrant, verifyHint, repoUrlNorm, workspaceId, expiresAt, askedBySessionId, projectId
-        case resolvedAt, resolvedByUserId, resolutionNote, answer, resolvedClient, createdAt, translation
+        case browserSite, browserRunnerId, askedBySessionTitle
+        case resolvedAt, resolvedByUserId, resolutionNote, answer, resolvedClient, createdAt, translation, payload, changeSpec
     }
 
     public init(from decoder: Decoder) throws {
@@ -196,6 +241,9 @@ public struct OwnerRequest: Codable, Equatable, Sendable, Identifiable {
         verifyHint = try? c.decodeIfPresent(String.self, forKey: .verifyHint)
         repoUrlNorm = try? c.decodeIfPresent(String.self, forKey: .repoUrlNorm)
         workspaceId = try? c.decodeIfPresent(String.self, forKey: .workspaceId)
+        browserSite = try? c.decodeIfPresent(String.self, forKey: .browserSite)
+        browserRunnerId = try? c.decodeIfPresent(String.self, forKey: .browserRunnerId)
+        askedBySessionTitle = try? c.decodeIfPresent(String.self, forKey: .askedBySessionTitle)
         expiresAt = try? c.decodeIfPresent(String.self, forKey: .expiresAt)
         askedBySessionId = try c.decode(String.self, forKey: .askedBySessionId)
         projectId = try? c.decodeIfPresent(String.self, forKey: .projectId)
@@ -206,6 +254,8 @@ public struct OwnerRequest: Codable, Equatable, Sendable, Identifiable {
         resolvedClient = try? c.decodeIfPresent(String.self, forKey: .resolvedClient)
         createdAt = try c.decode(String.self, forKey: .createdAt)
         translation = (try? c.decodeIfPresent(OwnerCardTranslation.self, forKey: .translation)) ?? nil
+        payload = (try? c.decodeIfPresent(JSONValue.self, forKey: .payload)) ?? nil
+        changeSpec = (try? c.decodeIfPresent(OwnerRequestChangeSpec.self, forKey: .changeSpec)) ?? nil
     }
 }
 
@@ -266,6 +316,12 @@ public struct OwnerRequestDoneBody: Encodable, Equatable, Sendable {
         self.text = text
         self.sendAsWritten = sendAsWritten ? true : nil
     }
+}
+
+/// `POST /owner-requests/:id/apply`: the value the owner applies, the requested one or one they chose.
+public struct OwnerRequestApplyBody: Encodable, Equatable, Sendable {
+    public let maxConcurrent: Int
+    public init(maxConcurrent: Int) { self.maxConcurrent = maxConcurrent }
 }
 
 /// `POST /owner-requests/:id/decline`. The reason is required: the asking session acts on it.

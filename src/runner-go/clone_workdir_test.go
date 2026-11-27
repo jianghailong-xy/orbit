@@ -197,12 +197,13 @@ func TestCloneWorkDirPathChecks(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(fx.root, "link")); err != nil {
 		t.Fatal(err)
 	}
+	home := filepath.Dir(fx.root)
 	for name, workDir := range map[string]string{
-		"outside the root": filepath.Join(fx.dir, "repo"),
-		"steps up":         filepath.Join(fx.root, "..", "repo"),
-		"through a link":   filepath.Join(fx.root, "link", "repo"),
-		"the root itself":  fx.root,
-		"relative":         "repo",
+		"outside home":   filepath.Join(fx.dir, "repo"),
+		"steps up":       fx.root + "/../repo", // as sent: filepath.Join would clean the .. away
+		"through a link": filepath.Join(fx.root, "link", "repo"),
+		"home itself":    home,
+		"relative":       "repo",
 	} {
 		t.Run(name, func(t *testing.T) {
 			request := fx.request("x")
@@ -218,6 +219,51 @@ func TestCloneWorkDirPathChecks(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(outside, "repo")); err == nil {
 		t.Error("a clone was made through the link")
+	}
+}
+
+// clone-workdir/v2: a control plane names the clone in home itself, <home>/<name>; its temporary directory is made
+// beside it there, and a restart sweeps one left in home as it does one left in the repos root.
+func TestCloneWorkDirIntoHome(t *testing.T) {
+	fx := newGithubFixture(t)
+	fx.saveMachineCredential(t, machineGoodPass)
+	home := filepath.Dir(fx.root)
+	request := fx.request("repo")
+	request.WorkDir = filepath.Join(home, "repo")
+	temp := filepath.Join(home, cloneTempPrefix+testCloneWorkspace)
+	sawTemp := false
+	report := cloneWorkDir(context.Background(), request, testCloneMachine, func(int) {
+		if _, err := os.Stat(temp); err == nil {
+			sawTemp = true
+		}
+	})
+	if report.State != cloneStateReady {
+		t.Fatalf("report = %+v, want READY", report)
+	}
+	if !sawTemp {
+		t.Error("the clone was not made in a temporary directory in home")
+	}
+	if got := mustGit(t, request.WorkDir, "rev-list", "--count", "origin/main"); got != "3" {
+		t.Errorf("origin/main has %s commits, want 3", got)
+	}
+	if _, err := os.Stat(fx.root); err == nil {
+		t.Error("a clone in home made the repos root")
+	}
+
+	leftovers := []string{filepath.Join(home, cloneTempPrefix+"left-in-home"), filepath.Join(fx.root, cloneTempPrefix+"left-in-root")}
+	for _, dir := range leftovers {
+		if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sweepCloneTemps()
+	for _, dir := range leftovers {
+		if _, err := os.Stat(dir); err == nil {
+			t.Errorf("%s was left", dir)
+		}
+	}
+	if _, err := os.Stat(request.WorkDir); err != nil {
+		t.Errorf("the sweep took the finished clone: %v", err)
 	}
 }
 
@@ -585,9 +631,14 @@ func TestTransportDeclaresCloneWorkDir(t *testing.T) {
 	if want := "export const CLONE_WORKDIR_CAPABILITY = '" + cloneWorkDirCapabilityV1 + "';"; !strings.Contains(string(dto), want) {
 		t.Errorf("@orbit/shared does not say %s", want)
 	}
+	if want := "export const CLONE_WORKDIR_HOME_CAPABILITY = '" + cloneWorkDirCapabilityV2 + "';"; !strings.Contains(string(dto), want) {
+		t.Errorf("@orbit/shared does not say %s", want)
+	}
 	for _, list := range []string{runnerCapabilitiesV1, strings.Join(linkHello("process-a").GetCapabilities(), ",")} {
-		if !strings.Contains(","+list+",", ","+cloneWorkDirCapabilityV1+",") {
-			t.Errorf("%q omits %s", list, cloneWorkDirCapabilityV1)
+		for _, capability := range []string{cloneWorkDirCapabilityV1, cloneWorkDirCapabilityV2} {
+			if !strings.Contains(","+list+",", ","+capability+",") {
+				t.Errorf("%q omits %s", list, capability)
+			}
 		}
 	}
 }

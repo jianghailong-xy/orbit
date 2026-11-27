@@ -1,5 +1,6 @@
 package io.orbitd.android.reader
 
+import io.orbitd.android.core.protocol.SessionFacts
 import kotlinx.serialization.json.*
 
 /** One changed file of a session's worktree, as `SessionDetail.changedFiles` carries it; binary when its counts are negative. */
@@ -7,7 +8,8 @@ internal data class ChangedFile(val path: String, val additions: Int, val deleti
     val binary: Boolean get() = additions < 0 || deletions < 0
 
     companion object {
-        fun of(detail: JsonObject?): List<ChangedFile> = (detail?.get("changedFiles") as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
+        fun of(detail: JsonObject?): List<ChangedFile> = parse(detail?.get("changedFiles"))
+        fun parse(value: JsonElement?): List<ChangedFile> = (value as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
             .mapNotNull { file -> file.string("path")?.let { ChangedFile(it, file.int("additions"), file.int("deletions"), file.string("status").orEmpty()) } }
         private fun JsonObject.int(key: String) = (get(key) as? JsonPrimitive)?.intOrNull ?: 0
     }
@@ -22,12 +24,12 @@ internal object WorktreeBarLogic {
 
     /** No isolation → hidden; `shared-nogit` → the nudge; a worktree with a branch and a change (or an outcome to report) → the bar. */
     fun mode(isolationStatus: String?, branch: String?, changedFileCount: Int, mergeStatus: String? = null,
-        commitStatus: String? = null, hasMergeRecovery: Boolean = false): Mode {
+        commitStatus: String? = null, hasMergeRecovery: Boolean = false, hasCommitWork: Boolean = false): Mode {
         val iso = isolationStatus ?: return Mode.HIDDEN
         if (iso == "shared-nogit") return Mode.NOT_ISOLATED
         if (iso != "worktree" || branch == null) return Mode.HIDDEN
         val actionable = mergeStatus in setOf("pending", "conflict", "error") || commitStatus in setOf("pending", "error")
-        return if (changedFileCount > 0 || actionable || hasMergeRecovery) Mode.WORKTREE else Mode.HIDDEN
+        return if (changedFileCount > 0 || hasCommitWork || actionable || hasMergeRecovery) Mode.WORKTREE else Mode.HIDDEN
     }
 
     /** What a session without a worktree (`shared-nogit`: it edits its workspace's folder directly) says above the composer. */
@@ -66,6 +68,15 @@ internal object WorktreeBarLogic {
         "AWAITING_INPUT", "INTERRUPTED" -> sending || (runningSubagents ?: 0) > 0
         else -> false
     }
+
+    /**
+     * Whether the runner finalized the worktree: what gates Commit versus Merge. With the session facts it is `released` (no runner
+     * holds the session), or a queued turn with nothing yet running; without them (an older server) the status is not
+     * RUNNING, AWAITING_INPUT or INTERRUPTED.
+     */
+    fun committed(detail: JsonObject, runStatus: String?): Boolean =
+        SessionFacts.released(detail)?.let { it || SessionFacts.phase(detail) == "PENDING" }
+            ?: (runStatus !in setOf("RUNNING", "AWAITING_INPUT", "INTERRUPTED"))
 
     /** The sub-agents still at work: the detail's `runningSubagents` ids, or the session list row's `runningSubagentCount`. */
     fun runningSubagents(detail: JsonObject): Int? =

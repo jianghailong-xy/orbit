@@ -49,9 +49,23 @@ export interface ManagedRunnerProfile {
     namespace: string;
   };
   storage: { className: string; capacity: string };
+  /**
+   * The Drive (docs/drive-technical-design.md §6.1). Absent, runner Pods get no drive: the
+   * `drive.orbit.dev` CSI plugin (deploy/managed-runner/drive-csi) is not installed in this environment. Present, every
+   * runner Pod receives the drive at /run/orbit-drive, and the manager writes each generation's mount credential into
+   * Secret `mrf-<runner uuid>` of `namespace`, where only the plugin reads it.
+   */
+  files?: { namespace: string };
   runner: {
     /** Pinned by digest: `<repository>@sha256:<64 hex>`. */
     image: string;
+    /** That image's `org.opencontainers.image.revision` label, the source commit it was built from: what the status
+     *  names as the current build when a runner runs an older one. Optional: without it the status cannot tell. */
+    imageRevision?: string;
+    /** That image's `org.opencontainers.image.version` label, the release it was published for, which its runner
+     *  reports as its version: what the status compares a runner's reported version with. Optional: without it the
+     *  status compares by revision. */
+    imageVersion?: string;
     /** The Orbit server the runner reports to: HTTPS, or HTTP to a loopback address. */
     serverUrl: string;
     maxConcurrent: number;
@@ -80,7 +94,10 @@ export interface ManagedRunnerProfile {
       cpu: string;
       /** Memory requests, likewise. */
       memory: string;
-      /** Ephemeral storage: each Pod reserves its `/tmp` bound (`runner.tmpSizeLimit`). */
+      /**
+       * Ephemeral storage: each Pod reserves `runner.tmpSizeLimit` of it. Its /tmp is no longer ephemeral storage but a
+       * directory of its data volume (managed-runner-resources.ts TMP_SUBPATH), so this is a reservation, not a bound.
+       */
       ephemeralStorage: string;
       /** Runner Pods admitted at once. */
       pods: number;
@@ -148,7 +165,10 @@ export interface DockerRunnerProfile {
     /** The Orbit server the runner reports to: HTTPS, or HTTP to a loopback or private address of the host's container network. */
     serverUrl: string;
     maxConcurrent: number;
-    /** `/tmp`, a tmpfs counted in the container's memory. */
+    /**
+     * Each runner's share of the pool's ephemeral-storage budget. It bounds nothing in the container: /tmp is a
+     * directory of the runner's data volume (channel.py TMP_SUBPATH), within that volume's disk limit.
+     */
     tmpSizeLimit: string;
     /** The container's limits, which are also its compute share: Docker reserves nothing below them. */
     resources: { cpu: string; memory: string; pids: number };
@@ -183,6 +203,11 @@ export interface DockerRunnerHost extends DockerChannelHost {
   /** This host's pool budget; absent, the profile's `capacity` (if any), the rest derived from the host. */
   capacity?: DockerRunnerProfile['capacity'];
 }
+
+/** A source commit, as the image's revision label carries it. */
+const SOURCE_REVISION = /^[0-9a-f]{7,40}$/;
+/** A release version, as the image's version label carries it: the release tag without its "v". */
+const RELEASE_VERSION = /^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$/;
 
 /** `runner.image` on a remote profile: adopt the image each channel reports in /v1/info. */
 export const DOCKER_IMAGE_FROM_CHANNEL = 'channel';
@@ -318,8 +343,15 @@ export function parseManagedRunnerProfile(value: unknown): ManagedRunnerProfileR
       className: text('storage.className', DNS_SUBDOMAIN, 'must be a DNS subdomain'),
       capacity: text('storage.capacity', QUANTITY, 'is not a quantity'),
     },
+    ...(at('files') === undefined ? {} : { files: { namespace: text('files.namespace', DNS_LABEL, 'must be a DNS label') } }),
     runner: {
       image: text('runner.image', PINNED_IMAGE, 'must be pinned by digest (<repository>@sha256:<64 hex>)'),
+      ...(at('runner.imageRevision') !== undefined
+        ? { imageRevision: text('runner.imageRevision', SOURCE_REVISION, 'must be a git commit SHA (7 to 40 lowercase hex)') }
+        : {}),
+      ...(at('runner.imageVersion') !== undefined
+        ? { imageVersion: text('runner.imageVersion', RELEASE_VERSION, 'must be a release version, such as 0.1.261-beta.83') }
+        : {}),
       serverUrl: https('runner.serverUrl', true),
       maxConcurrent: count('runner.maxConcurrent', 1),
       tmpSizeLimit: text('runner.tmpSizeLimit', QUANTITY, 'is not a quantity'),
@@ -345,6 +377,10 @@ export function parseManagedRunnerProfile(value: unknown): ManagedRunnerProfileR
     },
     lifecycle: lifecycleOf(count, backoff),
   };
+  // The mount credential never enters the runner's namespace (§4.3): its Secret lives where only the plugin reads it.
+  if (profile.files && profile.files.namespace === profile.kubernetes.namespace) {
+    problems.push("files.namespace must not be kubernetes.namespace: the mount credential never enters the runner's namespace");
+  }
   if (!problems.length) problems.push(...capacityProblems(profile));
   return problems.length ? { ok: false, problems } : { ok: true, profile };
 }
@@ -434,7 +470,7 @@ function parseDockerRunnerProfile(value: Record<string, unknown>): ManagedRunner
 
   if (at('schemaVersion') !== 1) problems.push('schemaVersion must be 1');
   if (at('valueKind') !== 'actual') problems.push('valueKind must be "actual": an example profile authorizes nothing');
-  for (const section of ['kubernetes', 'admission']) {
+  for (const section of ['kubernetes', 'admission', 'files']) {
     if (has(section)) problems.push(`${section} belongs to the kubernetes backend; a docker profile does not name it`);
   }
 
@@ -578,7 +614,10 @@ function parseDockerRunnerProfile(value: Record<string, unknown>): ManagedRunner
   return problems.length ? { ok: false, problems } : { ok: true, profile };
 }
 
-/** The Docker profile's amounts: countable, and one runner's /tmp held within its memory. */
+/**
+ * The Docker profile's amounts: countable. `runner.tmpSizeLimit` is no longer held against `runner.resources.memory`:
+ * /tmp is on the data volume, not a tmpfs in the container's memory.
+ */
 function dockerAmountProblems(profile: DockerRunnerProfile): string[] {
   const problems: string[] = [];
   const quantities: Array<[string, string | undefined, 'unit' | 'milli']> = [
@@ -604,10 +643,6 @@ function dockerAmountProblems(profile: DockerRunnerProfile): string[] {
   });
   for (const [path, quantity, scale] of quantities) {
     if (quantity !== undefined && !quantityUnits(quantity, scale)) problems.push(`${path} must be a positive quantity small enough to count exactly`);
-  }
-  if (problems.length) return problems;
-  if (quantityUnits(profile.runner.tmpSizeLimit)! > quantityUnits(profile.runner.resources.memory)!) {
-    problems.push('runner.tmpSizeLimit is a tmpfs held in memory and cannot exceed runner.resources.memory');
   }
   return problems;
 }

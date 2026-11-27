@@ -69,7 +69,9 @@ struct NeedsYouToastCard: View {
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(notice.title), \(notice.line)")
-        .accessibilityHint(notice.ownerItem == nil ? "Opens the session waiting on you" : "Opens the card waiting on you")
+        .accessibilityHint(notice.terminal != nil ? Terminals.needsYouHint
+                          : notice.ownerItem == nil ? "Opens the session waiting on you"
+                                                    : "Opens the card waiting on you")
         .accessibilityAction(named: "Dismiss") { model.dismissNeedsYouToast(notice.id) }
         .accessibilityIdentifier("needs-you-toast")
     }
@@ -98,6 +100,8 @@ extension NeedsYouGlyph {
         case .warning: return "exclamationmark.triangle.fill"
         case .pause: return "pause.fill"
         case .hand: return "hand.raised.fill"
+        // A terminal asking to be approved — the same mark the Mac list's Needs you line draws.
+        case .terminal: return "terminal"
         }
     }
 }

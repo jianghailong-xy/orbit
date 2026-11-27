@@ -1,8 +1,11 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
+import { LandingPullRequest } from './LandingPullRequest';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeftOutlined,
+  ArrowRightOutlined,
+  ArrowUpOutlined,
   BranchesOutlined,
   CheckCircleFilled,
   ClockCircleOutlined,
@@ -24,6 +27,7 @@ import {
   UnorderedListOutlined,
   UserOutlined,
 } from '@ant-design/icons';
+import { TASK_EXEMPT_COPY, exemptCheckReason } from '../lib/landingCheck';
 import type {
   IntegrationJobKind,
   IntegrationTimelineEntry,
@@ -40,6 +44,7 @@ import {
   landingAttemptCard,
   landingCheckLabel,
   landingCheckPassed,
+  landingCheckTaskExempt,
   landingTimelineText,
   scopedLandingEntries,
   landingEntryOk,
@@ -78,6 +83,15 @@ import {
   type LandingLogSelectors,
 } from '../lib/queries';
 import { landingSteps, type LandingStep } from '../lib/landingSteps';
+import {
+  LANDING_FIX_COPY,
+  LANDING_FIX_RETURNED_BECAUSE,
+  landingFixEventSub,
+  landingFixEvents,
+  landingFixSince,
+  landingFixStanding,
+  type LandingFixEvent,
+} from '../lib/landingFix';
 import { triggerMessage, type TriggerMessage } from '../lib/landingTrigger';
 import {
   LANDING_SENTENCE_COPY,
@@ -101,6 +115,8 @@ import { Menu, type MenuItem } from './ui/Menu';
 import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
 import { Spinner } from './ui/Spinner';
+import { useProjectIntegration } from '../lib/pollOwner';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /** How long a landing the window was opened on stays outlined (board 03 f). */
 const FOCUS_OUTLINE_MS = 1_500;
@@ -194,7 +210,7 @@ export function ProjectLandingsWindow({
   const landings = useMemo(() => landingsWindow(rows, merges, { now: new Date() }), [rows, merges]);
 
   const cards = landings.now;
-  const integrationQ = useQuery({ ...projectIntegrationQuery(projectId), enabled: cards.length > 0 });
+  const integrationQ = useProjectIntegration(projectId, cards.length > 0);
   const promotionQ = useQuery({
     ...projectPromotionQuery(projectId),
     enabled: cards.some((card) => card.subject === 'PROMOTION'),
@@ -308,8 +324,9 @@ export function ProjectLandingsWindow({
         <Menu
           side="bottom"
           align="end"
+          tooltip="More actions"
           trigger={(
-            <button type="button" className="landing-page-more" aria-label="More actions" title="More actions">
+            <button type="button" className="landing-page-more" aria-label="More actions">
               <MoreOutlined />
             </button>
           )}
@@ -386,17 +403,24 @@ export function ProjectLandingsWindow({
         {/* What this window is and the way to who decides: nothing to type here (LS6). One plain line on
             the window's bottom edge — a lock and the sentence's first half, the coordinator's door at
             the end (docs/mocks/landings-ui-polish ③). */}
-        <span className="landing-page-foot-line" title={SESSION_LANDINGS_COPY.ORBIT_RUNS_THESE_LANDINGS}>
-          <LockOutlined aria-hidden="true" />
-          <span className="sr-only">{SESSION_LANDINGS_COPY.ORBIT_RUNS_THESE_LANDINGS}</span>
-          <span className="landing-page-foot-words" aria-hidden="true">{runs}</span>
-        </span>
+        <Tooltip content={SESSION_LANDINGS_COPY.ORBIT_RUNS_THESE_LANDINGS} delay={TEXT_TOOLTIP_DELAY_MS} align="start">
+          <span className={`landing-page-foot-line${cards.some((card) => card.state === 'FIXING') ? ' has-decisions' : ''}`}>
+            <LockOutlined aria-hidden="true" />
+            <span className="sr-only">{SESSION_LANDINGS_COPY.ORBIT_RUNS_THESE_LANDINGS}</span>
+            <span className="landing-page-foot-words" aria-hidden="true">{runs}</span>
+            {/* A landing in its own task's session's hands is decided there first (web b ③). */}
+            {cards.some((card) => card.state === 'FIXING') ? (
+              <span className="landing-page-foot-decisions">{LANDING_FIX_COPY.DECISIONS_SESSION_FIRST}</span>
+            ) : null}
+          </span>
+        </Tooltip>
         {coordinatorId ? (
-          <Button className="landing-page-foot-open" icon={<UserOutlined />}
-            title={LANDING_PAGE_COPY.DECISIONS_THE_COORDINATOR}
-            onClick={() => onOpenSession(coordinatorId)}>
-            {LANDING_PAGE_COPY.OPEN_COORDINATOR_LINK}
-          </Button>
+          <Tooltip content={cards.some((card) => card.state === 'FIXING') ? LANDING_FIX_COPY.DECISIONS_SESSION_FIRST : LANDING_PAGE_COPY.DECISIONS_THE_COORDINATOR} align="end">
+            <Button className="landing-page-foot-open" icon={<UserOutlined />}
+              onClick={() => onOpenSession(coordinatorId)}>
+              {LANDING_PAGE_COPY.OPEN_COORDINATOR_LINK}
+            </Button>
+          </Tooltip>
         ) : null}
       </div>
     </div>
@@ -569,8 +593,9 @@ function LandingMore({
       align="end"
       open={open}
       onOpenChange={onOpenChange}
+      tooltip="Landing actions"
       trigger={(
-        <button type="button" className="landings-window-more" aria-label="Landing actions" title="Landing actions">
+        <button type="button" className="landings-window-more" aria-label="Landing actions">
           <MoreOutlined />
         </button>
       )}
@@ -713,6 +738,7 @@ function LandingWindowRow({
         />
       ) : null}
       <LandingReply parts={sentence} open={expanded} onToggle={onToggle} />
+      {landing?.pullRequest ? <LandingPullRequest pullRequest={landing.pullRequest} main={row.promotion ? mainBranchName(row.promotion.upstreamRef) : 'main'} /> : null}
       {expanded ? (
         <div className="landings-window-record">
           {merge ? <LandingReceiptBlock receipt={landingMergeReceipt(row.promotion, landing)} /> : null}
@@ -896,15 +922,34 @@ function LandingWindowCard({
     : [{ key: 'loading', label: LANDING_PAGE_COPY.LOADING_LANDING, disabled: true }];
   // A landing that waits for a decision carries the doors to the people who make it (board 02 d):
   // the coordinator, and the task (or the round's own card). A timed-out one has its own doors.
-  const waiting = entry.state === 'AWAITING_DECISION' && !settledAt && !timedOut;
+  // Revision 42 (§12.7, web b, c): a failure in its task's own session's hands, or handed back by it.
+  const fix = timedOut ? null : landingFixStanding(landing);
+  const fixing = fix?.state === 'FIXING' || (entry.state === 'FIXING' && !settledAt && !timedOut);
+  const waiting = entry.state === 'AWAITING_DECISION' && !settledAt && !timedOut && !fixing;
+  const handedBack = waiting && fix?.state === 'RETURNED' ? fix : null;
+  const lastWords = handedBack?.lastMessage ?? null;
   const waitDoors = waiting && landing ? [
     ...(facts.coordinatorId ? ['OPEN_COORDINATOR' as const] : []),
+    ...(handedBack?.sessionId ? ['OPEN_SESSION' as const] : []),
     ...(landing.subject === 'TASK' && landing.taskId ? ['OPEN_TASK' as const] : []),
     ...(landing.subject === 'PROMOTION' && currentPromotion ? ['REVIEW_CARD' as const] : []),
   ] : [];
-  const doorLabel = (action: LandingMenuAction): string => action === 'OPEN_COORDINATOR'
+  const fixDoors = fixing && landing ? [
+    ...(fix?.sessionId ? ['OPEN_SESSION' as const] : []),
+    ...(landing.subject === 'TASK' && landing.taskId ? ['OPEN_TASK' as const] : []),
+  ] : [];
+  const doorLabel = (action: LandingMenuAction | 'OPEN_SESSION'): string => action === 'OPEN_COORDINATOR'
     ? LANDING_PAGE_COPY.OPEN_COORDINATOR
-    : action === 'OPEN_TASK' ? LANDING_PAGE_COPY.OPEN_TASK : LANDING_PAGE_COPY.REVIEW_CARD;
+    : action === 'OPEN_SESSION' ? LANDING_FIX_COPY.OPEN_SESSION
+      : action === 'OPEN_TASK' ? LANDING_PAGE_COPY.OPEN_TASK : LANDING_PAGE_COPY.REVIEW_CARD;
+  const press = (action: LandingMenuAction | 'OPEN_SESSION'): void => {
+    if (action === 'OPEN_SESSION') {
+      const id = fix?.sessionId;
+      if (id) onOpenSession(id);
+      return;
+    }
+    run(action);
+  };
 
   const running = card?.running === true && !settledAt;
   // A round's word (Merge check, Merge to main) says which of its jobs this is.
@@ -924,10 +969,11 @@ function LandingWindowCard({
   // A landing that runs keeps its steps open, as the chat keeps the turn in hand; any other opens with the press.
   const stepsOpen = expanded || running;
   const statusHead = outcome ? outcome.title
+    : fixing ? `${LANDING_FIX_COPY.FIXING} · ${LANDING_FIX_COPY.ITS_OWN_SESSION_IS_ON_IT}`
     : card ? [card.rightIsClock ? card.word : card.right, waiting ? SESSION_LANDINGS_COPY.WAITING : null].filter(Boolean).join(' · ')
       : session.isError ? LANDING_PAGE_COPY.UPDATE_UNAVAILABLE
         : landing ? LANDING_PAGE_COPY.QUEUED : LANDING_PAGE_COPY.LOADING_LANDING;
-  const failedHead = !outcome && card != null && (card.stoppedOnFailure || timedOut);
+  const failedHead = !outcome && !fixing && card != null && (card.stoppedOnFailure || timedOut);
 
   // A landing that runs is the chat's turn in hand: its Working for head.
   const workingHead = running && Number.isFinite(started)
@@ -987,17 +1033,18 @@ function LandingWindowCard({
         </div>
       ) : null}
       <LandingReply parts={sentence} open={stepsOpen} onToggle={onToggle} />
+      {landing?.pullRequest ? <LandingPullRequest pullRequest={landing.pullRequest} main={main} /> : null}
       {/* What a landing in hand still carries — what stopped it, its clock, who decides and the doors — on the chat's own
           status card, under its steps. */}
       {running ? null : (
         <section
-          className={`chat-status-card landings-window-card${failedHead ? ' is-failed' : ''}${timedOut ? ' is-timed-out' : ''}${settledAt ? ' is-settled' : ''}`}
+          className={`chat-status-card landings-window-card${failedHead ? ' is-failed' : ''}${fixing ? ' is-fixing' : ''}${timedOut ? ' is-timed-out' : ''}${settledAt ? ' is-settled' : ''}`}
           data-state={card?.state ?? outcome?.title ?? ''}
           role="status"
         >
           <div className="chat-status-head">
             <span className={`chat-status-icon landings-window-status-icon${failedHead ? ' is-failed' : ''}`} aria-hidden="true">
-              {failedHead ? <CloseOutlined /> : outcome?.ok ? <CheckCircleFilled /> : <ClockCircleOutlined />}
+              {failedHead ? <CloseOutlined /> : fixing ? <UserOutlined /> : outcome?.ok ? <CheckCircleFilled /> : <ClockCircleOutlined />}
             </span>
             <span className="landings-window-status-title">{statusHead}</span>
             {card?.rightIsClock ? <span className="landings-window-status-clock">{card.right}</span> : null}
@@ -1063,10 +1110,47 @@ function LandingWindowCard({
             {card?.timedOut && hintText(gates, pushSentence, attempt) ? (
               <div className="landing-card-hint">{hintText(gates, pushSentence, attempt)}</div>
             ) : null}
+            {/* Its own task's session is fixing it (web b ①): who, for how long, which round, and the doors to it. */}
+            {fixing ? (
+              <div className="landings-window-wait">
+                <div className="landings-window-wait-line landing-fix-who">
+                  <UserOutlined aria-hidden="true" />
+                  <span>
+                    <b>{LANDING_FIX_COPY.THE_TASKS_SESSION}</b>
+                    {` ${LANDING_FIX_COPY.IS_FIXING_IT}`}
+                    {fix ? ` · ${landingFixSince(fix.at, now)} · ${LANDING_FIX_COPY.ROUND(fix.round)}` : null}
+                  </span>
+                </div>
+                {fixDoors.length > 0 ? (
+                  <div className="landing-card-actions">
+                    {fixDoors.map((action, index) => (
+                      <Button key={action} variant={index === 0 ? 'primary' : undefined} onClick={() => press(action)}>
+                        {doorLabel(action)}
+                      </Button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            {/* It could not fix it (web c ①): what it said last, as it said it, over who has it now. */}
+            {handedBack ? (
+              <div className="landing-fix-quote">
+                <i>{handedBack.returnReason ? LANDING_FIX_RETURNED_BECAUSE[handedBack.returnReason] : LANDING_FIX_RETURNED_BECAUSE.NO_NEW_COMMIT}</i>
+                <span>{lastWords ? `“${lastWords}”` : LANDING_FIX_COPY.SAID_NOTHING}</span>
+              </div>
+            ) : null}
             {/* Who decides, and the doors to them, under what stopped it. */}
             {waitDoors.length > 0 ? (
               <div className="landings-window-wait">
-                {facts.coordinatorId ? (
+                {handedBack ? (
+                  <div className="landings-window-wait-line landing-fix-who">
+                    <UserOutlined aria-hidden="true" />
+                    <span>
+                      <b>{LANDING_FIX_COPY.COORDINATOR}</b>
+                      {` ${LANDING_FIX_COPY.HAS_IT} · ${landingFixSince(handedBack.at, now)}`}
+                    </span>
+                  </div>
+                ) : facts.coordinatorId ? (
                   <div className="landings-window-wait-line">
                     <UserOutlined aria-hidden="true" />
                     <span>{LANDING_PAGE_COPY.DECISIONS_THE_COORDINATOR}</span>
@@ -1074,7 +1158,7 @@ function LandingWindowCard({
                 ) : null}
                 <div className="landing-card-actions">
                   {waitDoors.map((action, index) => (
-                    <Button key={action} variant={index === 0 ? 'primary' : undefined} onClick={() => run(action)}>
+                    <Button key={action} variant={index === 0 ? 'primary' : undefined} onClick={() => press(action)}>
                       {doorLabel(action)}
                     </Button>
                   ))}
@@ -1188,6 +1272,16 @@ function LandingSteps({
   const facts = timeline.facts.filter((fact) => fact.kind !== 'PROMOTION_STATE');
   const several = timeline.sections.length > 1;
   const lastIndex = timeline.sections.length - 1;
+  // Revision 42's three rows (§12.7, web b ②, c ②), on lines of their own: a fix landing again opens its attempt, a
+  // hand-off and a hand-back close the attempt whose failure they were about.
+  const fixEvents = landingFixEvents(landing);
+  const fixRows = (sectionJobId: string, kinds: readonly string[]): ReactNode => fixEvents
+    .filter((event) => kinds.includes(event.entry.kind)
+      && timeline.sections.find((section) => section.jobId === sectionJobId)?.entries.includes(event.entry))
+    .map((event) => (
+      <LandingFixRow key={event.entry.id ?? `${event.entry.kind}-${event.entry.at}`} event={event} events={fixEvents}
+        settled={landing.settledAt != null} />
+    ));
   return (
     <div className="landing-timeline landings-window-steps">
       {facts.map((fact, index) => (
@@ -1201,7 +1295,8 @@ function LandingSteps({
           const last = index === steps.length - 1;
           const failed = step.entries.some(({ entry, index: at }) =>
             entryGlyph(entry, section.kind, section.entries, at).tone === 'failed');
-          return failed ? 'failed' : last && live ? 'running' : last && current && attempt?.state === 'QUEUED' ? 'pending' : 'ok';
+          const skipped = step.key === 'check:LANDING_CHECK' && landingCheckTaskExempt(step.summary) !== null;
+          return failed ? 'failed' : skipped ? 'skipped' : last && live ? 'running' : last && current && attempt?.state === 'QUEUED' ? 'pending' : 'ok';
         });
         const failedCount = statuses.filter((status) => status === 'failed').length;
         const isLast = sectionIndex === lastIndex;
@@ -1214,6 +1309,7 @@ function LandingSteps({
         const automatic = section.entries.find((entry) => entry.kind === 'AUTOMATIC_ATTEMPT')?.data;
         return (
           <Fragment key={section.jobId}>
+          {fixRows(section.jobId, ['FIXED_BY_SESSION'])}
           {/* What queued this attempt: the turn's opening message (docs/mocks/landings-chat-trigger). */}
           {section.trigger ? (
             <LandingTrigger
@@ -1269,6 +1365,7 @@ function LandingSteps({
               </div>
             ) : null}
           </section>
+          {fixRows(section.jobId, ['HANDED_TO_SESSION', 'RETURNED_TO_COORDINATOR'])}
           </Fragment>
         );
       })}
@@ -1279,7 +1376,7 @@ function LandingSteps({
   );
 }
 
-type StepStatus = 'ok' | 'failed' | 'running' | 'pending';
+type StepStatus = 'ok' | 'failed' | 'running' | 'pending' | 'skipped';
 
 const STEP_ICON: Record<string, ReactNode> = {
   queue: <UnorderedListOutlined />,
@@ -1329,9 +1426,12 @@ function LandingStepRow({
         onClick={() => setManual(!open)}>
         <span className="chat-tool-caret">{open ? <DownOutlined /> : <RightOutlined />}</span>
         <span className="chat-tool-icon">{STEP_ICON[step.key]}</span>
-        <span className="chat-tool-name">{step.name}</span>
-        <span className="chat-tool-summary">{landingTimelineText(step.summary)}</span>
-        {status === 'failed' ? <CloseCircleFilled className="chat-tool-status err" />
+        <span className="chat-tool-name">{status === 'skipped' ? `${step.name} · ${TASK_EXEMPT_COPY.SKIPPED}` : step.name}</span>
+        <span className="chat-tool-summary">{status === 'skipped'
+          ? exemptCheckReason(landingCheckTaskExempt(step.summary)?.reason ?? '')
+          : landingTimelineText(step.summary)}</span>
+        {status === 'skipped' ? <ArrowRightOutlined className="chat-tool-status skipped" />
+          : status === 'failed' ? <CloseCircleFilled className="chat-tool-status err" />
           : status === 'running' ? <LoadingOutlined className="chat-tool-status running" spin />
             : status === 'pending' ? <ClockCircleOutlined className="chat-tool-status pending" />
               : <CheckCircleFilled className="chat-tool-status ok" />}
@@ -1402,13 +1502,49 @@ function TimelineLine({
             selectors={selectors}
           />
         ) : null}
-        {selectors && !landingCheckPassed(entry) ? (
+        {selectors && !landingCheckPassed(entry) && !landingCheckTaskExempt(entry) ? (
           <LandingInlineOutput
             key={`inline-${selectors.jobId}-${selectors.claim}-${selectors.round ?? 0}-${selectors.check}`}
             sessionId={sessionId}
             selectors={selectors}
           />
         ) : null}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * One of revision 42's three rows (§12.7; web b ②, c ②): the server's sentence with its time and mark — a person for
+ * the hand-off, an arrow up for the fix landing again, an arrow for the hand-back — the round under a hand-off and,
+ * under a hand-back still waiting, where the session's last words are. The newest of them is drawn in bold.
+ */
+function LandingFixRow({ event, events, settled }: {
+  event: LandingFixEvent;
+  events: readonly LandingFixEvent[];
+  settled: boolean;
+}): JSX.Element {
+  const { entry } = event;
+  const sub = landingFixEventSub(event, events, settled);
+  const newest = events.at(-1) === event;
+  const sha = entry.kind === 'FIXED_BY_SESSION' && typeof entry.data?.sourceSha === 'string'
+    ? entry.data.sourceSha.slice(0, 7) : null;
+  const text = landingTimelineText(entry);
+  // `Fixed in 4be19c2 · landing again`: the commit in the code face the board gives it.
+  const words = sha && text.includes(sha)
+    ? <>{text.slice(0, text.indexOf(sha))}<code>{sha}</code>{text.slice(text.indexOf(sha) + sha.length)}</>
+    : text;
+  return (
+    <div className={`landing-timeline-entry landing-fix-row is-${entry.kind.toLowerCase().replace(/_/g, '-')}`}
+      data-landing-fix-row={entry.kind}>
+      <span className="landing-timeline-time">{clockTime(entry.at)}</span>
+      <span className="landing-timeline-glyph landing-fix-glyph" aria-hidden="true">
+        {entry.kind === 'HANDED_TO_SESSION' ? <UserOutlined />
+          : entry.kind === 'FIXED_BY_SESSION' ? <ArrowUpOutlined /> : <ArrowRightOutlined />}
+      </span>
+      <span className="landing-timeline-body">
+        <span className="landing-timeline-text">{newest ? <b>{words}</b> : words}</span>
+        {sub ? <span className="landing-timeline-sub">{sub}</span> : null}
       </span>
     </div>
   );
@@ -1442,7 +1578,7 @@ function useSeen<T extends Element>(): [(node: T | null) => void, boolean] {
 }
 
 /** What a timeline mark says, and the ink it says it in (mockups 05 a/e/i). */
-type TimelineTone = 'queued' | 'running' | 'ok' | 'failed' | 'takeover';
+type TimelineTone = 'queued' | 'running' | 'ok' | 'failed' | 'takeover' | 'skipped';
 
 function entryGlyph(
   entry: IntegrationTimelineEntry,
@@ -1451,6 +1587,7 @@ function entryGlyph(
   index: number,
 ): { glyph: string; tone: TimelineTone } {
   if (entry.data?.skipped === 'PATHS_EXEMPT') return { glyph: '≡', tone: 'queued' };
+  if (landingCheckTaskExempt(entry)) return { glyph: '→', tone: 'skipped' };
   switch (entry.kind) {
     case 'TAKEN_OVER':
       return { glyph: '↗', tone: 'takeover' };

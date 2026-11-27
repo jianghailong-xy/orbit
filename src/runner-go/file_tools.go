@@ -25,7 +25,7 @@ import (
 	"unicode/utf8"
 )
 
-// The file tools (docs/orbit-files-design.md §2.2, §2.3): how an agent keeps a screenshot or a report in Orbit instead
+// The file tools (docs/drive-design.md §2.2, §2.3): how an agent keeps a screenshot or a report in Orbit instead
 // of committing it, and gets it back. `file_upload`, `file_fetch` and `file_list` are `orbit file upload|fetch|list`
 // (file_cli.go), which run the runFileTool below: one implementation, two doors.
 //
@@ -61,7 +61,19 @@ const fileCallTimeout = 2 * time.Minute
 
 // fileDoorRoute is the upload route. Not the attachment route, which an older server would answer 200 while ignoring
 // every field this sends: this path, it answers 404, which fileCallError turns into a sentence.
-func fileDoorRoute(sessionID string) string { return "/runner/sessions/" + sessionID + "/files" }
+func fileDoorRoute(sessionID string) string {
+	return "/runner/sessions/" + sessionID + "/files" + subagentRunQuery()
+}
+
+// subagentRunQuery names the SubAgent run this process belongs to, if any, on a call that keeps a file. The session is
+// the parent's, which a remote SubAgent's runner does not host: the server lets the run's target runner in by it
+// (docs/subagent-design.md §10.2).
+func subagentRunQuery() string {
+	if runID := strings.TrimSpace(os.Getenv(envSubagentRunID)); runID != "" {
+		return "?subagentRunId=" + url.QueryEscape(runID)
+	}
+	return ""
+}
 
 // sessionFile is one file as the server describes it. On the machine door `id` is the UUID and `publicId` the short id;
 // on every other door both are the short id. An agent is shown the short id, so that the same file is spelled the same
@@ -103,7 +115,7 @@ type fileAnswer struct {
 	Label     string `json:"label,omitempty"`
 	MimeType  string `json:"mimeType"`
 	SizeBytes int64  `json:"sizeBytes"`
-	// Empty only on a row from before Orbit Files, whose bytes the server has not hashed yet.
+	// Empty only on a row from before Drive, whose bytes the server has not hashed yet.
 	SHA256    string `json:"sha256,omitempty"`
 	Link      string `json:"link"`
 	CreatedAt string `json:"createdAt,omitempty"`
@@ -239,7 +251,7 @@ func (t *Transport) createFileBundle(sessionID, name, label string, files []bund
 		body["label"] = label
 	}
 	var out sessionFile
-	err := t.do(nil, http.MethodPost, "/runner/sessions/"+sessionID+"/file-bundles", body, &out, fileCallTimeout)
+	err := t.do(nil, http.MethodPost, "/runner/sessions/"+sessionID+"/file-bundles"+subagentRunQuery(), body, &out, fileCallTimeout)
 	return out, err
 }
 
@@ -256,7 +268,7 @@ func (t *Transport) setFilePinned(sessionID, fileID string, pinned bool) (sessio
 		method = http.MethodDelete
 	}
 	var out sessionFile
-	err := t.do(nil, method, "/runner/sessions/"+sessionID+"/files/"+url.PathEscape(fileID)+"/pin", nil, &out, taskOpTimeout)
+	err := t.do(nil, method, "/runner/sessions/"+sessionID+"/files/"+url.PathEscape(fileID)+"/pin"+subagentRunQuery(), nil, &out, taskOpTimeout)
 	return out, err
 }
 
@@ -269,7 +281,7 @@ func (t *Transport) listFiles(filter url.Values) (json.RawMessage, error) {
 // downloadFile streams one file's bytes into this session's uploads directory, under the file's own id, because two
 // files of a folder can share a name, and answers where they went, their sha256 and their length. saveLocalFile puts
 // them there only once they are all in and match `want`, so a dropped connection or a wrong byte leaves no file that
-// looks fetched. `want` is empty for a row from before Orbit Files, which has no sha256 to match. The bytes also go to
+// looks fetched. `want` is empty for a row from before Drive, which has no sha256 to match. The bytes also go to
 // keep, for a caller that reads them: what was checked, and not what a path holds afterwards.
 func (t *Transport) downloadFile(parent context.Context, sessionID, fileID, name, want string, keep io.Writer) (path, sum string, size int64, err error) {
 	noteTransportAttempt()
@@ -326,6 +338,9 @@ type fileToolContext struct {
 	// retry queues behind it and keeps everything a second time, so a call stops at the longest it may hold the engine
 	// and says what it got done.
 	callTimeout time.Duration
+	// progress counts a drive_put or drive_get call's bytes for the chat's transfer card (drive_progress.go); nil
+	// reports nothing.
+	progress *driveProgress
 }
 
 // callContext is the time this call has.
@@ -508,7 +523,17 @@ func uploadPath(t *Transport, tool fileToolContext, path, taskID, label, as stri
 	return out, nil
 }
 
-// newFileUploadScope is what file_upload may read: this session's own directories and, in a session with no worktree,
+// newFileUploadScope also accepts the mounted drive. The ~/Drive symlink and the mount point
+// resolve to the same root, so access through either spelling is checked against the mount.
+func newFileUploadScope(sessionID string) localFileScope {
+	scope := newSessionFileScope(sessionID)
+	if driveMounted() {
+		scope.roots = append(scope.roots, realPath(driveMountPath))
+	}
+	return scope
+}
+
+// newSessionFileScope covers this session's own directories and, in a session with no worktree,
 // the working directory it was called from, which is that session's checkout. Nothing the session can write decides it,
 // so no repository's configuration does: git would read that from the checkout. A working directory that is / or holds
 // the home directory is no root, so the rule fails closed whatever directory an engine starts this process in, and a
@@ -521,8 +546,13 @@ func uploadPath(t *Transport, tool fileToolContext, path, taskID, label, as stri
 // broad it is, with Orbit's own directory still refused (session.go): the engine can read there anyway in such a session,
 // and refusing would take away ordinary reply images. So in a session running at / or in a home directory, a reply's link
 // reaches that directory and file_upload does not.
-func newFileUploadScope(sessionID string) localFileScope {
+func newSessionFileScope(sessionID string) localFileScope {
 	dirs := artifactRequestRoots(sessionID)
+	// A remote SubAgent runs in a worktree of its own under Orbit's directory (addRemoteSubagentTree), which is its
+	// checkout as a session's worktree is the session's. On any other machine nothing stands there.
+	if runID := strings.TrimSpace(os.Getenv(envSubagentRunID)); validatePathSegmentID(runID) == nil {
+		dirs = append(dirs, filepath.Join(remoteSubagentDir(runID), "tree"))
+	}
 	cwd, err := os.Getwd()
 	if err != nil || hasOwnWorktree(sessionID) || !usableAsARoot(cwd) {
 		return newLocalFileScope(dirs)
@@ -579,6 +609,10 @@ func fileScopeError(path, reason, sessionID string) error {
 	next := "Copy the file there first."
 	if reason == localFileInOrbitsDirectory {
 		next = "That file is not one to upload."
+	}
+	if driveMounted() {
+		return fmt.Errorf("file_upload: %s is outside the allowed paths: %s. Use this session's checkout, "+
+			"its uploads directory (%s), or the mounted Drive. %s", path, reason, uploads, next)
 	}
 	return fmt.Errorf("file_upload: %s is %s, so nothing was uploaded. file_upload reads only this session's checkout and "+
 		"its uploads directory, %s, the same rule a reply's links follow. %s", path, reason, uploads, next)
@@ -771,7 +805,7 @@ func bundlePathProblem(rel string) string {
 }
 
 // fetchFile is file_fetch. A bundle's bytes are its manifest, which is saved and read out: a judge usually wants a few
-// of a folder's files, and picks them from this (docs/orbit-files-design.md §6, item 2).
+// of a folder's files, and picks them from this (docs/drive-design.md §6, item 2).
 func fetchFile(t *Transport, tool fileToolContext, id string) (fileAnswer, error) {
 	var out fileAnswer
 	sessionID, err := fileSessionOf(tool, "file_fetch")

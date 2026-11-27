@@ -6,15 +6,16 @@ import { ForbiddenException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   SessionRunSource,
   type Runner,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { TaskStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
+import { isReleasedStatus } from '../common/session-release';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
@@ -30,6 +31,8 @@ import {
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { establishProjectContractForPgTest } from './project-contract-test-helper';
 import { ProjectsService } from './projects.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { WORD_SELECT } from '../test-support/session-word';
 
 /**
  * The agent's `ensure` door, against a real PostgreSQL.
@@ -207,7 +210,7 @@ async function world(
     data: {
       id: actingSessionId, ownerId, creatorId: ownerId, workspaceId: actingWorkspaceId,
       assignedRunnerId: runnerId, title: `${label} acting`, prompt: `${label} acting`,
-      provider: 'claude', status: RunStatus.AWAITING_INPUT, numTurns: 1,
+      provider: 'claude', turnState: null, numTurns: 1,
       startedAt: new Date(), runtimeSessionId: `runtime-${actingSessionId}`,
       dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
     },
@@ -246,12 +249,14 @@ async function world(
   }
 
   if (!shape.neverOpened) {
+    const status = shape.status ?? RunStatus.AWAITING_INPUT;
     await db.session.create({
       data: {
         id: coordinatorSessionId, ownerId, creatorId: ownerId, workspaceId: landingWorkspaceId,
         assignedRunnerId: shape.offlineRunner ? offlineRunnerId : runnerId,
         title: `coordinator: ${label}`, prompt: `coordinator: ${label}`, provider: 'claude',
-        status: shape.status ?? RunStatus.AWAITING_INPUT,
+        turnState: turnStateOfWord(status),
+        ...(isReleasedStatus(status) ? { finishedAt: new Date()} : {}),
         startedAt: shape.startedAt === undefined ? new Date() : shape.startedAt,
         completedAt: shape.completedAt ?? null,
         deletedAt: shape.deletedAt ?? null,
@@ -275,7 +280,7 @@ async function world(
     // the retirement, which 0130 refuses while a live session is working on the task.
     await db.session.update({
       where: { id: coordinatorSessionId },
-      data: { status: RunStatus.FAILED },
+      data: { turnState: null, finishedAt: new Date()},
     });
     await stack.tasks.update(ownerId, taskId, { status: TaskStatus.CANCELLED });
     await stack.tasks.update(ownerId, taskId, { supersededByTaskId: successorId });
@@ -496,7 +501,7 @@ test('a conversation whose run was replaced is replaced too, and the old one is 
       const before = await coordination(stack.db, w.projectId);
       const standingBefore = await stack.db.session.findUniqueOrThrow({
         where: { id: standingSession(w) },
-        select: { completedAt: true, status: true },
+        select: { completedAt: true, ...WORD_SELECT },
       });
       assert.equal(standingBefore.completedAt, null, 'the fixture must not pre-complete the row');
 

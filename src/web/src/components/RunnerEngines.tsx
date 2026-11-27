@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { DeleteOutlined, DownloadOutlined, EditOutlined, EllipsisOutlined, LoadingOutlined, LoginOutlined, PauseOutlined, PlayCircleOutlined, PlusOutlined, StarOutlined } from '@ant-design/icons';
+import { DeleteOutlined, DownloadOutlined, EditOutlined, EllipsisOutlined, LoadingOutlined, LoginOutlined, LogoutOutlined, PauseOutlined, PlayCircleOutlined, PlusOutlined, StarOutlined } from '@ant-design/icons';
 import {
   accountToStartOn,
   AgentProvider,
@@ -25,6 +25,7 @@ import { api } from '../api';
 import { agentFixView, engineNotUpdatingFixTarget, installFixTarget } from '../lib/agentFix';
 import { AgentFixButton, AgentFixLine } from './AgentFix';
 import { accountIsPaused, usePauseClock } from '../lib/accountPause';
+import { AccountHealthLine } from './AccountHealthLine';
 import { AccountPauseActions, AccountPauseStatus, type AccountPauseControls } from './AccountPause';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
@@ -112,6 +113,16 @@ import {
   runnerAccountSettingDefault,
   runnerAccountSettingDefaultMany,
   runnerAccountSettingDefaultOne,
+  RUNNER_DEFAULT_SIGN_OUT,
+  RUNNER_DEFAULT_SIGN_OUT_CONFIRM,
+  RUNNER_DEFAULT_SIGN_OUT_RUNNING_DETAIL,
+  RUNNER_DEFAULT_SIGNING_OUT,
+  runnerDefaultSignOutDetail,
+  runnerDefaultSignOutFailed,
+  runnerDefaultSignOutRunningMany,
+  runnerDefaultSignOutRunningOne,
+  runnerDefaultSignOutTerminal,
+  runnerDefaultSignOutTitle,
 } from '../lib/runnerAccountCopy';
 import { loginExpiresLine, signedOutNote } from '../lib/accountLogin';
 import { foldFromAnywhere } from '../lib/foldHead';
@@ -130,6 +141,7 @@ import { ProviderTile } from './ProviderGallery';
 import { GoogleSignInTerms, KIMI_SITE, RunnerSignIn } from './RunnerSignIn';
 import type { Runner } from './TasksSidePanel';
 import { useMachineName } from '../lib/managedRunner';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /** An engine this page has a row for: one a runner signs in with, or OpenCode — which it does not. */
 type RowEngine = LoginEngine | 'opencode';
@@ -355,7 +367,8 @@ const CLAUDE_ACCOUNT_SWAP_CAPABILITIES = ['claude-account-swap/v1', 'claude-acco
  *  that follows the machine's "done" drops it, a beat later. */
 function beingRemoved(runner: Runner, engine: RowEngine, account: string): boolean {
   const removal = runner.accountRemove;
-  return removal?.engine === engine && removal.account === account &&
+  // Default is never removed from the machine: a relayed state naming it is its sign-out.
+  return account !== 'default' && removal?.engine === engine && removal.account === account &&
     (removal.status === 'pending' || removal.status === 'done');
 }
 
@@ -475,38 +488,106 @@ function QuotaCell({ kind, quota, next, signIn = true }: { kind: RowKind; quota:
               <b>{quota.cursor.plan} plan</b>
             </div>
           )}
-          <span
-            className="re-quota-none"
-            title={`Cursor doesn’t report how much of ${
+          <Tooltip
+            content={`Cursor doesn’t report how much of ${
               quota.cursor.plan ? `the ${quota.cursor.plan} plan’s` : 'this account’s'
             } usage is left, so Orbit shows no number rather than 0%.`}
+            delay={TEXT_TOOLTIP_DELAY_MS}
           >
-            Usage unavailable
-          </span>
+            <span className="re-quota-none">
+              Usage unavailable
+            </span>
+          </Tooltip>
         </>
       ) : (
-        <span
-          className="re-quota-none"
-          title={kind === 'unknown' && signIn ? 'No quota reading — the sign-in check didn’t answer.' : undefined}
-        >
-          {kind === 'in'
-            ? quota.noLimit
-              ? RUNNER_ENGINE_NO_QUOTA_LIMIT
-              : 'No quota reported'
-            : kind === 'out'
-              ? 'Sign in to see quota'
-              : kind === 'unknown' && signIn
-                ? RUNNER_ENGINE_NO_READING
-                : '—'}
-        </span>
+        <Tooltip content={kind === 'unknown' && signIn ? 'No quota reading — the sign-in check didn’t answer.' : undefined} delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="re-quota-none">
+            {kind === 'in'
+              ? quota.noLimit
+                ? RUNNER_ENGINE_NO_QUOTA_LIMIT
+                : 'No quota reported'
+              : kind === 'out'
+                ? 'Sign in to see quota'
+                : kind === 'unknown' && signIn
+                  ? RUNNER_ENGINE_NO_READING
+                  : '—'}
+          </span>
+        </Tooltip>
       )}
     </div>
   );
 }
 
+/** Whether Default's sign-out, relayed to the runner, is under way for this engine. */
+function signingOutDefault(runner: Runner, engine: RowEngine): boolean {
+  const removal = runner.accountRemove;
+  return removal?.engine === engine && removal.account === 'default' && removal.status === 'pending';
+}
+
+/**
+ * Default's Sign out… (docs/default-sign-out-design.md): asked first, then relayed to the runner, which
+ * deletes the login and refuses while sessions run on Default. That refusal arrives as the runner's
+ * state, so a press that is waiting on it asks again and resends with `force`. `available` is false
+ * unless Default is signed in and the runner declares `<engine>-default-sign-out/v1`.
+ */
+function useDefaultSignOut(runner: Runner, engine: RowEngine, name: string, signedIn: boolean, anchor: RefObject<Element | null>, returnFocus: RefObject<HTMLButtonElement | null>) {
+  const machineNameOf = useMachineName();
+  const message = useToast();
+  const qc = useQueryClient();
+  const [confirming, setConfirming] = useState(false);
+  const [awaiting, setAwaiting] = useState(false);
+  const [running, setRunning] = useState(0);
+  const send = useMutation({
+    mutationFn: (force: boolean) =>
+      api<RunnerAccountRemoveState>(`/runners/${runner.id}/accounts/${engine}/default/sign-out`, { method: 'POST', body: { force } }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: runnersQuery().queryKey });
+      setAwaiting(true);
+    },
+    onError: (e: Error) => message.error(runnerDefaultSignOutFailed(name), e.message),
+  });
+  const removal = runner.accountRemove;
+  const outcome = removal?.engine === engine && removal.account === 'default' ? removal : null;
+  useEffect(() => {
+    if (!awaiting || !outcome || outcome.status === 'pending') return;
+    setAwaiting(false);
+    if (outcome.status !== 'failed') return;
+    if (outcome.sessions?.length) setRunning(outcome.sessions.length);
+    else message.error(runnerDefaultSignOutFailed(name), outcome.message ?? undefined);
+  }, [awaiting, outcome, message, name]);
+  const available = signedIn && !!runner.capabilities?.includes(`${engine}-default-sign-out/v1`);
+  const pending = send.isPending || signingOutDefault(runner, engine);
+  const machine = machineNameOf(runner);
+  const command = engine === 'claude' || engine === 'codex' ? engine : null;
+  const common = { anchor, returnFocus, popupClassName: 're-confirm', danger: true, confirmText: RUNNER_DEFAULT_SIGN_OUT_CONFIRM } as const;
+  const questions = available ? (
+    <>
+      <Popconfirm
+        {...common}
+        title={runnerDefaultSignOutTitle(name)}
+        description={`${runnerDefaultSignOutDetail(machine)}${command ? ` ${runnerDefaultSignOutTerminal(machine, command)}` : ''}`}
+        open={confirming}
+        onOpenChange={(open) => { if (!open) setConfirming(false); }}
+        onCancel={() => setConfirming(false)}
+        onConfirm={() => { send.mutate(false); setConfirming(false); }}
+      />
+      <Popconfirm
+        {...common}
+        title={running === 1 ? runnerDefaultSignOutRunningOne(name) : runnerDefaultSignOutRunningMany(running, name)}
+        description={RUNNER_DEFAULT_SIGN_OUT_RUNNING_DETAIL}
+        open={running > 0}
+        onOpenChange={(open) => { if (!open) setRunning(0); }}
+        onCancel={() => setRunning(0)}
+        onConfirm={() => { send.mutate(true); setRunning(0); }}
+      />
+    </>
+  ) : null;
+  return { available, pending, ask: () => setConfirming(true), questions };
+}
+
 /** Routine account maintenance stays in one menu. The pause dialog lives outside the dropdown
  *  so closing the menu does not unmount the operation it just opened. `moreRef` is its button. */
-function RunnerAccountMenu({ onRename, onSignIn, signInLabel, onSetDefault, setDefaultBlocked, onRemove, offline, removing, removesInOrbit, pause, moreRef }: {
+function RunnerAccountMenu({ onRename, onSignIn, signInLabel, onSetDefault, setDefaultBlocked, onRemove, onSignOut, signingOut, offline, removing, removesInOrbit, pause, moreRef }: {
   onRename?: () => void;
   /** Set as default, on an added Claude Code account only. */
   onSetDefault?: () => void;
@@ -517,6 +598,9 @@ function RunnerAccountMenu({ onRename, onSignIn, signInLabel, onSetDefault, setD
    *  couldn't answer. */
   signInLabel?: string;
   onRemove?: () => void;
+  /** Default's Sign out…, which deletes its login from the machine. */
+  onSignOut?: () => void;
+  signingOut?: boolean;
   offline: boolean;
   removing?: boolean;
   /** Remove changes only Orbit's own record (Default's): nothing goes to the machine, so it stays
@@ -558,6 +642,7 @@ function RunnerAccountMenu({ onRename, onSignIn, signInLabel, onSetDefault, setD
         disabled: !!setDefaultBlocked,
         onSelect: onSetDefault,
       }] : []),
+      ...(onSignOut ? [{ key: 'sign-out', icon: <LogoutOutlined aria-hidden />, label: RUNNER_DEFAULT_SIGN_OUT, disabled: offline || signingOut, onSelect: onSignOut }] : []),
       ...(onRemove ? [
         { type: 'separator' as const, key: 'divider' },
         { key: 'remove', icon: <DeleteOutlined aria-hidden />, label: 'Remove account', danger: true, disabled: (offline && !removesInOrbit) || removing, onSelect: onRemove },
@@ -569,7 +654,8 @@ function RunnerAccountMenu({ onRename, onSignIn, signInLabel, onSetDefault, setD
         align="end"
         popupClassName="re-account-menu"
         items={items}
-        trigger={<Button ref={moreRef} size="small" variant="text" className="re-action re-more" icon={<EllipsisOutlined />} aria-label="More actions" title="More actions"
+        tooltip="More actions"
+        trigger={<Button ref={moreRef} size="small" variant="text" className="re-action re-more" icon={<EllipsisOutlined />} aria-label="More actions"
           onFocus={() => {
             if (!renameOnFocus.current) return;
             renameOnFocus.current = false;
@@ -675,6 +761,8 @@ function EngineRow({
   const message = useToast();
   const qc = useQueryClient();
   const kind = rowKindOf(health, runner.install, engine);
+  const menuAnchor = useRef<HTMLSpanElement>(null);
+  const more = useRef<HTMLButtonElement>(null);
   // This row's engine, where it is one this page signs in. OpenCode is the one row here without a
   // relayable sign-in — it authenticates per provider, and the runner refuses a login it would
   // have to drive — so every sign-in affordance hangs off this, and what the row offers instead is
@@ -684,7 +772,7 @@ function EngineRow({
   const googleLogin = engine === 'antigravity' ? (antigravity?.googleLogin ?? 'needs_update') : undefined;
   const envKey = engine === 'antigravity' && kind === 'in' && health?.authSource !== 'google';
   const loginHint = googleLogin === 'unsupported_platform'
-    ? 'Google sign-in is not supported on macOS runners yet. Use a Gemini API key.'
+    ? "Google sign-in is not supported on this runner's operating system. Use a Gemini API key."
     : googleLogin === 'needs_update' ? 'Update this runner to sign in with Google.' : null;
   // Cursor CLI's own admission (cursorRunnerState): a runner that predates it, a platform its pinned
   // build was never measured on, or a build other than the pinned one. Each is the row's whole story —
@@ -738,6 +826,7 @@ function EngineRow({
   // The engine's one account, which this row is when it stands alone — not when it heads a group of
   // one, as it does while Default is removed from Orbit (accountRowsOf).
   const single = !grouped && engineKeepsAccounts(engine) && health?.accounts?.length === 1 ? health.accounts[0] : undefined;
+  const signOut = useDefaultSignOut(runner, engine, single ? accountNameOf(single) : '', single?.id === 'default' && kind === 'in' && !envKey && !regionBlocked, menuAnchor, more);
   // What the head says for its group: how many of its accounts could take a session now, out of
   // those staying — one being removed is counted as gone already.
   const kept = accounts.filter((account) => !beingRemoved(runner, engine, account.id));
@@ -887,14 +976,15 @@ function EngineRow({
           owner, which error — is one pointer away instead of gone. Absent for a healthy
           engine, which has nothing further to say. */}
       {note && (
-        <span
-          className={`re-upd${warn ? ' warn' : ''}${note.text.endsWith(ENGINE_UPDATE_WARNING_DISMISSED) ? ' dismissed' : ''}`}
-          title={health?.update?.message}
-        >
-          {/* Folded, the head shares its width with a status and a quota, so the note takes a line
-              of its own (.re-grp.folded) rather than leave half of itself on the next. */}
-          {columns ? note.text : <>{' '}· {note.text}</>}
-        </span>
+        <Tooltip content={health?.update?.message} delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span
+            className={`re-upd${warn ? ' warn' : ''}${note.text.endsWith(ENGINE_UPDATE_WARNING_DISMISSED) ? ' dismissed' : ''}`}
+          >
+            {/* Folded, the head shares its width with a status and a quota, so the note takes a line
+                of its own (.re-grp.folded) rather than leave half of itself on the next. */}
+            {columns ? note.text : <>{' '}· {note.text}</>}
+          </span>
+        </Tooltip>
       )}
     </>
   );
@@ -938,6 +1028,7 @@ function EngineRow({
           <div style={{ minWidth: 0 }}>
             <div className="re-name">{engineNameOf(engine)}</div>
             {meta && <div className="re-meta">{meta}</div>}
+            <AccountHealthLine runnerId={runner.id} engine={engine} account={single?.id ?? 'default'} />
           </div>
         </div>
       )}
@@ -967,7 +1058,11 @@ function EngineRow({
       )}
       {!grouped && !cursorBlocked && !regionBlocked && (
         <>
-          <AccountPauseStatus until={single?.pausedUntil} now={now} detail={kind === 'in' ? 'Signed in' : undefined} status={antigravity?.supported === false ? { color: 'orange', label: 'Update runner' } : statusOf(kind, quota, now, loginEngine !== null)} />
+          {signOut.pending ? (
+            <div className="re-status"><Badge tone="info" icon={<LoadingOutlined />}>{RUNNER_DEFAULT_SIGNING_OUT}</Badge></div>
+          ) : (
+            <AccountPauseStatus until={single?.pausedUntil} now={now} detail={kind === 'in' ? 'Signed in' : undefined} status={antigravity?.supported === false ? { color: 'orange', label: 'Update runner' } : statusOf(kind, quota, now, loginEngine !== null)} />
+          )}
           {envKey ? <div className="re-quota re-meta">env key · runs on your Gemini key</div> : <QuotaCell kind={kind} quota={quota} signIn={loginEngine !== null} />}
         </>
       )}
@@ -1005,8 +1100,12 @@ function EngineRow({
         {/* A group's sign-ins are its accounts', each on its own row. */}
         {!grouped && action()}
         {!grouped && (
+          <span ref={menuAnchor} className="re-menu-anchor">
           <RunnerAccountMenu
             offline={offline}
+            moreRef={more}
+            onSignOut={signOut.available ? signOut.ask : undefined}
+            signingOut={signOut.pending}
             onSignIn={!regionBlocked && loginEngine !== null && (kind === 'in' || kind === 'unknown') && (loginEngine !== 'antigravity' || (googleLogin === 'available' && !envKey))
               ? () => onSignIn(signIn === engine ? null : engine)
               : undefined}
@@ -1018,7 +1117,9 @@ function EngineRow({
               endpoint: `/runners/${runner.id}/accounts/${engine}/${single.id}/pause`,
             } : undefined}
           />
+          </span>
         )}
+        {!grouped && signOut.questions}
       </div>
 
       {/* The check got no answer: said once under the head, with what it does and does not mean.
@@ -1158,7 +1259,10 @@ function EngineRow({
       )}
       {loginEngine !== null && signIn === engine && (!googleLogin || googleLogin === 'available') && (
         <div className="re-panel">
-          <RunnerSignIn runnerId={runner.id} engine={loginEngine} />
+          {/* The row's Sign in starts the sign-in as the panel opens, as + Account does, and opens no tab: once the link
+              is there the card offers this browser or, on an Orbit Cloud runner, the runner's (docs/runner-browser-engine-
+              sign-in-design.md §2). Kimi asks which site first; Antigravity's Google terms stand on the row before the press. */}
+          <RunnerSignIn runnerId={runner.id} engine={loginEngine} autoStart={loginEngine !== 'kimi'} />
         </div>
       )}
       {addAccountTo && signIn === addAccountPanel(addAccountTo) && (
@@ -1281,9 +1385,11 @@ function AccountName({
       {renamedDefault && <span className="re-chip">DEFAULT</span>}
       {/* Where Automatic starts the next session — the account pools' mark for the same thing. */}
       {next && (
-        <span className="re-chip" title="Automatic starts new sessions here">
-          NEXT
-        </span>
+        <Tooltip content="Automatic starts new sessions here" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="re-chip">
+            NEXT
+          </span>
+        </Tooltip>
       )}
     </div>
   );
@@ -1348,7 +1454,8 @@ function AccountRow({
   // What became of the last removal asked for here, if it was this account's of this engine's: the
   // button says it is under way, and a machine that refused says why.
   const removal = runner.accountRemove;
-  const mine = removal?.engine === engine && removal.account === account.id ? removal : null;
+  // Default is never removed from the machine: a state naming it is its sign-out, which asks again itself.
+  const mine = !isDefault && removal?.engine === engine && removal.account === account.id ? removal : null;
   const removing = beingRemoved(runner, engine, account.id);
   const refused = mine?.status === 'failed' ? mine.message : null;
   // The sessions the machine named as running in it, when that is why it refused.
@@ -1383,6 +1490,13 @@ function AccountRow({
       ),
     onSettled: () => void qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
     onError: (e: Error) => message.error(runnerAccountSetDefaultFailed(accountNameOf(account)), e.message),
+  });
+  // The failure stays on the runner's record until the owner dismisses it here, or asks again.
+  const dismissSwapFailure = useMutation({
+    mutationFn: () =>
+      api<{ ok: true }>(`/runners/${runner.id}/accounts/${engine}/${account.id}/set-default`, { method: 'DELETE' }),
+    onSettled: () => void qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
+    onError: (e: Error) => message.error("Couldn't dismiss it", e.message),
   });
   const canSetDefault = engine === 'claude' && !isDefault;
   const setDefaultBlocked = !runner.online
@@ -1445,10 +1559,13 @@ function AccountRow({
   const swapForeign = swapMine?.status === 'pending' ? swapMine.foreignProcesses.length : 0;
   const menuAnchor = useRef<HTMLSpanElement>(null);
   const more = useRef<HTMLButtonElement>(null);
+  const signOut = useDefaultSignOut(runner, engine, accountNameOf(account), isDefault && kind === 'in' && !envKey && !regionBlocked, menuAnchor, more);
   const menu = (
     <RunnerAccountMenu
       offline={!runner.online}
       removing={removing}
+      onSignOut={signOut.available ? signOut.ask : undefined}
+      signingOut={signOut.pending}
       removesInOrbit={isDefault}
       moreRef={more}
       onRename={() => setEditing(true)}
@@ -1473,18 +1590,21 @@ function AccountRow({
           {/* Where the account lives and which one it is — never who: the account's email and id
               stay on the machine, and the fingerprint is a prefix of a non-reversible one. A Kimi
               account says its site first, which is each account's own (kimi.com or kimi.ai). */}
-          <div className="re-meta" title={accountDir(account)}>
-            {engine === 'kimi' && account.kimiRegion && `${KIMI_SITE[account.kimiRegion].domain} · `}
-            {/* A Cursor CLI account says its plan first, as Cursor names it. */}
-            {engine === 'cursor' && snapshot?.planName && `${snapshot.planName} plan · `}
-            {tildePath(accountDir(account))}
-            {account.fingerprintPrefix && ` · account ${account.fingerprintPrefix}…`}
-          </div>
+          <Tooltip content={accountDir(account)} truncatedOnly mono>
+            <div className="re-meta">
+              {engine === 'kimi' && account.kimiRegion && `${KIMI_SITE[account.kimiRegion].domain} · `}
+              {/* A Cursor CLI account says its plan first, as Cursor names it. */}
+              {engine === 'cursor' && snapshot?.planName && `${snapshot.planName} plan · `}
+              {tildePath(accountDir(account))}
+              {account.fingerprintPrefix && ` · account ${account.fingerprintPrefix}…`}
+            </div>
+          </Tooltip>
+          <AccountHealthLine runnerId={runner.id} engine={engine} account={account.id} />
         </div>
       </div>
-      {removing ? (
+      {removing || signOut.pending ? (
         <div className="re-status">
-          <Badge tone="info" icon={<LoadingOutlined />}>Removing…</Badge>
+          <Badge tone="info" icon={<LoadingOutlined />}>{removing ? 'Removing…' : RUNNER_DEFAULT_SIGNING_OUT}</Badge>
         </div>
       ) : (
         // On a machine blocked for its region the account can take no session there: its sign-in is all
@@ -1510,17 +1630,18 @@ function AccountRow({
           </Button>
         )}
         {/* The confirmation stays anchored to More after its menu closes. */}
-        {removable ? (
+        {removable || signOut.available ? (
           <>
             <span ref={menuAnchor} className="re-menu-anchor">{menu}</span>
-            <Popconfirm
+            {signOut.questions}
+            {removable && <Popconfirm
               {...removeQuestion}
               anchor={menuAnchor}
               open={confirmingRemove}
               onOpenChange={(open) => { if (!open) setConfirmingRemove(false); }}
               onCancel={() => setConfirmingRemove(false)}
               returnFocus={more}
-            />
+            />}
             {canSetDefault && (
               <Popconfirm
                 {...setDefaultQuestion}
@@ -1596,6 +1717,15 @@ function AccountRow({
       {/* The machine could not swap the logins, and put both back: its reason, as a refused removal's. */}
       {swapMine?.status === 'failed' && (
         <div className="re-panel bad re-swap-failed">
+          <button
+            type="button"
+            className="wt-notice-close re-panel-close"
+            aria-label="Dismiss"
+            disabled={dismissSwapFailure.isPending}
+            onClick={() => dismissSwapFailure.mutate()}
+          >
+            ✕
+          </button>
           <div className="re-panel-row">{runnerAccountSetDefaultFailed(accountNameOf(account))}</div>
           {swapMine.message && <div className="re-panel-row">{swapMine.message}</div>}
           <div className="re-panel-hint">{RUNNER_ACCOUNT_SET_DEFAULT_UNCHANGED}</div>
@@ -1618,7 +1748,7 @@ function AccountRow({
       )}
       {signIn === panel && (
         <div className="re-panel">
-          <RunnerSignIn runnerId={runner.id} engine={engine} account={account.id} />
+          <RunnerSignIn runnerId={runner.id} engine={engine} account={account.id} autoStart={engine !== 'kimi'} />
         </div>
       )}
     </div>
@@ -1634,7 +1764,7 @@ function BlockingSessions({ sessions }: { sessions: RunnerAccountRemoveSession[]
         const label = tone === 'running' ? RUNNER_ACCOUNT_IN_USE_RUNNING : tone === 'waiting' ? RUNNER_ACCOUNT_IN_USE_WAITING : null;
         return (
           <li key={s.id}>
-            <Link className="re-blocking-row" to={`/sessions/${encodeId(s.id)}`}>
+            <Link className="re-blocking-row" data-row-focus="" to={`/sessions/${encodeId(s.id)}`}>
               <span className={`re-blocking-dot ${tone}`} aria-hidden />
               <span className="re-blocking-title">{s.title.trim() || RUNNER_ACCOUNT_IN_USE_UNTITLED}</span>
               {label && <span className="re-blocking-state">{label}</span>}
@@ -1665,9 +1795,11 @@ function RemovedDefault({ runner, engine, removed }: { runner: Runner; engine: L
     <div className="re-row re-acct re-acct-end re-removed">
       <div className="re-id">
         <span className="re-rail" aria-hidden="true" />
-        <div id={line} className="re-removed-line" title={removed.home}>
-          {runnerDefaultRemovedLine(name, tildePath(removed.home))}
-        </div>
+        <Tooltip content={removed.home} delay={TEXT_TOOLTIP_DELAY_MS} mono>
+          <div id={line} className="re-removed-line">
+            {runnerDefaultRemovedLine(name, tildePath(removed.home))}
+          </div>
+        </Tooltip>
       </div>
       <div className="re-act">
         <Button size="small" className="re-action re-use-again" loading={restore.isPending} aria-describedby={line} onClick={() => restore.mutate()}>

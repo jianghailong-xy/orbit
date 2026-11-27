@@ -1,6 +1,8 @@
 import { questionsWithCoordinator } from '../sessions/run-question';
 import { KEEP_BACKGROUND_WORK_END_CONTENT } from '../sessions/running-work';
-import { readMergeRecovery, type MergeRecoveryAction } from '@orbit/shared';
+import { readMergeRecovery, type MergeRecoveryAction, type SessionPhaseFields } from '@orbit/shared';
+import { readOneSessionPhaseFields } from '../sessions/session-phase';
+import { readOneSessionBackgroundFields } from '../sessions/task-work-carrier';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { EventEmitter } from 'events';
 import { randomUUID } from 'crypto';
@@ -21,6 +23,7 @@ import {
   NormalizedRunEvent,
   RunEventType,
   RunStatus,
+  SCHEDULE_CARDS_CHANGED_MAX_SESSIONS,
   SessionEndReason,
   SessionFilingState,
   SessionLifecycleState,
@@ -38,7 +41,9 @@ import { enqueueRecap } from '../sessions/recap';
 import { translationEventOf } from '../sessions/reply-translation';
 import { deriveSessionCapabilities } from '../sessions/session-state';
 import { readWorktreeArtifactRequest } from '../sessions/worktree-artifact';
-import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
+import { heldFilter, isHeld, releasedFilter } from '../common/session-release';
+import { LEGACY_STATUS_SELECT, legacySessionStatus, readLandingSettlements } from '../sessions/session-legacy-words';
+import { TURN_STATE_SELECT, turnStateFilter } from '../sessions/session-turn-state';
 import { isNoiseSystemEvent, NON_REPLAYABLE_EVENT_TYPES } from '../common/system-noise';
 import { isSessionGenerating } from '../common/session-generating';
 import { countLiveApprovals } from '../sessions/abandoned-approvals';
@@ -51,10 +56,13 @@ import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
 import { latestAcceptedCheckpoint } from '../projects/task-checkpoint.service';
 import { ControlPlaneLeader } from './control-plane-leader';
 import { RUNNER_WAKE_CHANNEL } from './runner-wake';
+import { OwnerRequestHints } from './owner-request-hints';
 import { OpenListHints } from './open-list-hints';
 import { RunnerHints, type LinkLiveEvent, type LinkTurnPrefix } from './runner-hints';
 import {
   ownerItemsForRow,
+  ownerRequestsForRow,
+  taskMovesForRow,
   readOwnerDecisionsBySession,
   sessionWaitingKind,
   type OwnerDecisionsOnSession,
@@ -229,7 +237,22 @@ function taskChangedData(
   };
 }
 
+/** `data` for `schedule_cards.changed`: the sessions, or a resync when there were too many to name. */
+function scheduleCardsChangedData(payload: Record<string, unknown>): Record<string, unknown> {
+  const cardSessionIds = Array.isArray(payload.cardSessionIds)
+    ? payload.cardSessionIds.filter((id): id is string => typeof id === 'string' && id.length > 0)
+    : [];
+  return { cardSessionIds, resync: payload.resync === true || cardSessionIds.length === 0 };
+}
+
 /** Reconstruct lifecycle fields for the legacy session.ended wire event. */
+/** The session-phase fields without the row's end reason, for the one event that sends the end reason it settled with. */
+function withoutEndReason(fields: SessionPhaseFields | null): Omit<SessionPhaseFields, 'endReason'> | null {
+  if (!fields) return null;
+  const { endReason: _fromRow, ...rest } = fields;
+  return rest;
+}
+
 function endedSessionStates(
   status: RunStatus | string,
   endReason: SessionEndReason | string | null,
@@ -381,8 +404,11 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   private readonly hub = new Subject<HubMessage>();
   /** Per hub message, what its control event says, read once for every stream (eventData). */
   private readonly eventDataReads = new WeakMap<HubMessage, Promise<Record<string, unknown> | null>>();
+  /** Per hub message, an owner's `task.changed` as it is sent, its creator sessions read once (withCreatorSessions). */
+  private readonly ownerTaskChangeReads = new WeakMap<HubMessage, Promise<Record<string, unknown>>>();
   /** `sessions.list_changed` for the streams that declared it (open-list-hints.ts). */
   private readonly listHints: OpenListHints;
+  private readonly ownerRequestHints: OwnerRequestHints;
   /** This replica's own publications, never one the NOTIFY bridge carried in (see localPublications). */
   private readonly published = new Subject<{ runId: string; event: NormalizedRunEvent }>();
   private readonly waiters = new EventEmitter(); // event name = the key waitForNotice waits on
@@ -439,6 +465,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   ) {
     this.waiters.setMaxListeners(0);
     this.listHints = new OpenListHints(prisma);
+    this.ownerRequestHints = new OwnerRequestHints(prisma);
   }
 
   async onModuleInit(): Promise<void> {
@@ -448,6 +475,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   onModuleDestroy(): void {
     this.stopped = true;
     this.listHints.stop();
+    this.ownerRequestHints.stop();
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.listener?.removeAllListeners('error');
     this.listener?.end().catch(() => undefined);
@@ -1293,6 +1321,15 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  /** What waits on the owner on these conversations changed with no turn behind it — an owner
+   *  request filed, answered or withdrawn, a task move asked or answered. Each row re-reads its
+   *  summary (`session.updated`, so `pendingApprovals`, `waitingKind`, `ownerRequests` and
+   *  `taskMoves` arrive at once), and the owner's badge and Feishu cards are reconciled. */
+  publishOwnerSignalChanged(ownerId: string, sessionIds: Iterable<string>): void {
+    for (const sessionId of new Set(sessionIds)) this.publishSessionUpdated(sessionId);
+    this.push.scheduleBadgeSync(ownerId);
+  }
+
   /** Drop the cached owner + workspace of a session that moved to another workspace
    *  (SessionsService.move). The cached workspaceId is otherwise only evicted when the session
    *  ends, and it is what every later control event names as the envelope's `agentId`. The runner
@@ -1424,6 +1461,55 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     this.publishForUser(ownerId, RunEventType.TERMINALS_CHANGED, id);
   }
 
+  /**
+   * An agent's directory sync into the owner's Drive started, reported progress or ended
+   * (docs/drive-directory-sync-design.md S4). THE PAYLOAD IS THE SYNC'S ID AND NOTHING ELSE: the tray reads
+   * `GET /drive/syncs`, and re-reads it on focus and reconnect. Published after the write commits, and only to the
+   * streams that declared `hints=drive_syncs`.
+   */
+  publishDriveSync(ownerId: string, syncId: string): void {
+    this.publish(`${RealtimeService.USER_SCOPE}${ownerId}`, {
+      seq: 0,
+      type: RunEventType.DRIVE_SYNC,
+      ts: new Date().toISOString(),
+      payload: { syncId },
+    });
+  }
+
+  /**
+   * The owner's drive changed (docs/drive-technical-design.md §5.4): a write committed rows to its change feed,
+   * the highest of them `seq`. THE PAYLOAD IS THE SEQ AND NOTHING ELSE: no name, path or size. An accelerant only: the Files
+   * page reads `GET /drive/changes` for what changed, and re-reads it on focus and reconnect. Published after the write
+   * commits, and only to the streams that declared `hints=drive_changed`.
+   */
+  publishDriveChanged(ownerId: string, seq: number): void {
+    this.publish(`${RealtimeService.USER_SCOPE}${ownerId}`, {
+      seq: 0,
+      type: RunEventType.DRIVE_CHANGED,
+      ts: new Date().toISOString(),
+      payload: { seq: String(seq) },
+    });
+  }
+
+  /**
+   * What these sessions' schedule cards (`GET /sessions/:id/schedule-cards`) read may have moved: a card one of them put
+   * up, a change it recorded, or a schedule its cards and records name. User-scoped, keyed by the owner like the
+   * libraries; the payload names the sessions and nothing else, at most SCHEDULE_CARDS_CHANGED_MAX_SESSIONS of them, a
+   * wider change being a `resync`. Only a stream that declared `hints=schedule_cards` is sent it (streamForUser). An
+   * accelerant: the cards keep their safety read, so a dropped one costs latency. Published after the write commits.
+   */
+  publishScheduleCardsChanged(ownerId: string, sessionIds: ReadonlyArray<string | null | undefined>): void {
+    const ids = [...new Set(sessionIds.filter((id): id is string => typeof id === 'string' && id.length > 0))];
+    if (ids.length === 0) return;
+    const resync = ids.length > SCHEDULE_CARDS_CHANGED_MAX_SESSIONS;
+    this.publish(`${RealtimeService.USER_SCOPE}${ownerId}`, {
+      seq: 0,
+      type: RunEventType.SCHEDULE_CARDS_CHANGED,
+      ts: new Date().toISOString(),
+      payload: { cardSessionIds: resync ? [] : ids, resync },
+    });
+  }
+
   /** Same, but for a deployment-wide change every user sees — today only the shared (admin-owned)
    *  model providers. Reaches every connected stream; keep it to genuinely global, low-rate edits. */
   publishForAllUsers(type: RunEventType, id: string): void {
@@ -1444,15 +1530,37 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   // never enter (the sync controlTypeFor() filter drops them before owner resolution).
   // See docs/realtime-control-plane-stream.md.
 
-  streamForUser(userId: string, options: { listChanged?: boolean } = {}): Observable<ControlEvent> {
+  streamForUser(
+    userId: string,
+    options: {
+      listChanged?: boolean;
+      listScopes?: boolean;
+      ownerRequests?: boolean;
+      driveChanged?: boolean;
+      driveSyncs?: boolean;
+      scheduleCards?: boolean;
+    } = {},
+  ): Observable<ControlEvent> {
     const events$ = this.hub.asObservable().pipe(
       filter((m) => controlTypeFor(m.event.type) !== null),
+      // `drive.changed` only for a stream that declared it (`?hints=drive_changed`), for the same reason.
+      filter((m) => options.driveChanged === true || m.event.type !== RunEventType.DRIVE_CHANGED),
+      // `drive.sync` only for a stream that declared it (`?hints=drive_syncs`): a running sync reports every 2 seconds.
+      filter((m) => options.driveSyncs === true || m.event.type !== RunEventType.DRIVE_SYNC),
+      // `schedule_cards.changed` only for a stream that declared it (`?hints=schedule_cards`), like the hints below.
+      filter((m) => options.scheduleCards === true || m.event.type !== RunEventType.SCHEDULE_CARDS_CHANGED),
       mergeMap((m) => this.toControlEvent(userId, m)),
       filter((e): e is ControlEvent => e !== null),
     );
     // `sessions.list_changed` only for a stream that declared it (`?hints=list_changed`): a shipped
     // client re-reads everything on an event type it does not know (open-list-hints.ts).
-    return options.listChanged ? merge(events$, this.listHints.watch(userId)) : events$;
+    // `owner_requests.changed` likewise, for a stream that declared `?hints=owner_requests`. Only a stream that
+    // also declared `?hints=list_scopes` is told which workspaces moved (`scopes`); any other gets `{ version }`.
+    const hinted = [
+      ...(options.listChanged ? [this.listHints.watch(userId, { scoped: options.listScopes === true })] : []),
+      ...(options.ownerRequests ? [this.ownerRequestHints.watch(userId)] : []),
+    ];
+    return hinted.length > 0 ? merge(events$, ...hinted) : events$;
   }
 
   /** Map a hub run event to a control event for `userId`, or null if it isn't this user's
@@ -1480,9 +1588,16 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       }
       const owner = sessionId.slice(RealtimeService.USER_SCOPE.length);
       if (owner !== userId && owner !== RealtimeService.USER_SCOPE_ALL) return null;
+      const taskChange = type === ControlEventType.TASK_CHANGED ? this.ownerTaskChange(message, owner) : null;
       const data =
-        type === ControlEventType.TASK_CHANGED
-          ? taskChangedData(ev.payload)
+        taskChange
+          ? taskChange instanceof Promise ? await taskChange : taskChange
+          : type === ControlEventType.DRIVE_CHANGED
+            ? { seq: String(ev.payload.seq ?? '') }
+            : type === ControlEventType.DRIVE_SYNC
+              ? { syncId: String(ev.payload.syncId ?? '') }
+            : type === ControlEventType.SCHEDULE_CARDS_CHANGED
+              ? scheduleCardsChangedData(ev.payload)
           : type === ControlEventType.AGENT_CHANGED
             ? {
                 agentId: String(ev.payload.id ?? ''),
@@ -1523,6 +1638,48 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    * it was sent when each read its own. Keyed weakly by the message, so it lives as long as the
    * message does and no longer.
    */
+  /**
+   * An owner-keyed `task.changed` as every stream of the owner is sent it: a bounded one with its creators, read once
+   * per hub message and copied per stream. One that reads nothing is answered at once, in the order it was published,
+   * as before; one that reads may be overtaken by a later event, as a session's events already are.
+   */
+  private ownerTaskChange(message: HubMessage, ownerId: string): Record<string, unknown> | Promise<Record<string, unknown>> {
+    const change = taskChangedData(message.event.payload);
+    if (change.resync || change.taskIds.length === 0) return change;
+    let read = this.ownerTaskChangeReads.get(message);
+    if (!read) {
+      read = this.withCreatorSessions(change, ownerId);
+      this.ownerTaskChangeReads.set(message, read);
+    }
+    return read.then((shared) => structuredClone(shared));
+  }
+
+  /**
+   * A bounded `task.changed` with the sessions that created its rows (`creatorSessionIds`) and the projects they are in
+   * (`rowProjectIds`), so a client can tell which session's "Tasks created here" and which project's integration line
+   * it can move. Left as it was — the client then reads every such read — for a resync, when a row it names is not
+   * found (deleted, or not this owner's), or when the read fails.
+   */
+  private async withCreatorSessions(
+    change: ControlTaskChanged & Record<string, unknown>,
+    ownerId: string,
+  ): Promise<ControlTaskChanged & Record<string, unknown>> {
+    if (change.resync || change.taskIds.length === 0) return change;
+    try {
+      const rows = await this.prisma.task.findMany({
+        where: { id: { in: change.taskIds }, ownerId },
+        select: { creatorSessionId: true, projectId: true },
+      });
+      if (rows.length !== change.taskIds.length) return change;
+      const creators = rows.map((row) => row.creatorSessionId).filter((id): id is string => !!id);
+      const projects = rows.map((row) => row.projectId).filter((id): id is string => !!id);
+      return { ...change, creatorSessionIds: [...new Set(creators)], rowProjectIds: [...new Set(projects)] };
+    } catch (error) {
+      this.log.warn(`task.changed creators not read: ${(error as Error).message}`);
+      return change;
+    }
+  }
+
   private eventData(
     message: HubMessage,
     type: ControlEventType,
@@ -1546,7 +1703,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       case ControlEventType.SESSION_CREATED:
         // A scheduled task's run enters no list (docs/scheduled-tasks-design.md §7.4, §12.1): an open list is not
         // told about it. It is reached from its schedule's history and its notification.
-        if ((await this.prisma.session.findUnique({ where: { id: sessionId }, select: { runSource: true } }))?.runSource === 'SCHEDULE') {
+        // Nor is a schedule's change conversation (§8.2), which is reached from its schedule.
+        if (['SCHEDULE', 'SCHEDULE_CHANGE'].includes(
+          (await this.prisma.session.findUnique({ where: { id: sessionId }, select: { runSource: true } }))?.runSource ?? '',
+        )) {
           return null;
         }
       // falls through
@@ -1591,6 +1751,11 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
             lifecycleState,
             filingState,
             endReason,
+            // The row as it stands now (sessions/session-phase.ts); absent when the session is gone. The end reason
+            // stays the one the end settled with, as this event has always sent it.
+            ...withoutEndReason(await readOneSessionPhaseFields(this.prisma, sessionId)),
+            // The Background mark's inputs, activity and runningBgCount, the row as it stands now; absent when it is gone.
+            ...(await readOneSessionBackgroundFields(this.prisma, sessionId)),
           };
         }
       case ControlEventType.SESSION_ERROR:
@@ -1598,9 +1763,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       case ControlEventType.BACKGROUND_TASK:
         return backgroundPayloadOf(ev.payload) as unknown as Record<string, unknown>;
       case ControlEventType.TASK_CHANGED:
-        // No DB augmentation: bounded writers already name every changed row, while ambiguous
-        // writers set `resync`. The normalizer also keeps old `{taskId}` events compatible.
-        return taskChangedData(ev.payload);
+        // Bounded writers already name every changed row, while ambiguous writers set `resync`. The
+        // normalizer also keeps old `{taskId}` events compatible; a bounded change also says who
+        // created its rows (withCreatorSessions).
+        return this.withCreatorSessions(taskChangedData(ev.payload), ownerId);
       case ControlEventType.AGENT_CHANGED:
         // Same: a nudge to refetch the owner's workspace list. The id here is the CHANGED workspace —
         // the envelope's `agentId` stays the calling session's workspace.
@@ -1617,7 +1783,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         // and this is the number the client overwrites its row with.
         const reader = await this.prisma.session.findUnique({
           where: { id: sessionId },
-          select: { id: true, taskId: true, status: true, engineTurnActive: true, runningBgShells: true, runningSubagents: true },
+          select: {
+            id: true, taskId: true, ...TURN_STATE_SELECT, engineTurnActive: true, runningBgShells: true,
+            runningSubagents: true,
+          },
         });
         const approvals = reader ? await countLiveApprovals(this.prisma, reader) : 0;
         const decisions = await this.ownerDecisionsOn(sessionId, ownerId);
@@ -1670,7 +1839,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         ownerId: true,
         taskId: true,
         title: true,
-        status: true,
+        // The facts the legacy words are derived from (sessions/session-legacy-words.ts), among them the end reason
+        // and the release column the capabilities below read (common/session-release.ts).
+        ...LEGACY_STATUS_SELECT,
         engineTurnActive: true,
         // Read by the approval count below: the set a card's `background_job_id` has to be in to
         // be a question on a conversation that is not generating (migration 0291).
@@ -1680,12 +1851,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         enginePhase: true,
         runClaimedAt: true,
         enginePhaseSince: true,
-        endReason: true,
         completedAt: true,
         archivedAt: true,
         deletedAt: true,
         cancelRequestedAt: true,
-        startedAt: true,
         numTurns: true,
         retryAt: true,
         runtimeSessionId: true,
@@ -1703,6 +1872,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         sourceRefusalCode: true,
         sourceRefusalDetail: true,
         lastTurnAt: true,
+        listedAt: true,
+        createdAt: true,
         // What the row previews, and the recap the list prefers to it: an already-open list
         // learns a new reply (or a fresh recap) from this event alone, so a summary that omitted
         // them would leave every row on screen previewing the turn before the one just finished.
@@ -1726,8 +1897,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       },
     });
     if (!s) return null;
-    const sessionState = deriveSessionState(s);
-    const runState = deriveSessionRunState(s);
+    const status = legacySessionStatus(s, (await readLandingSettlements(this.prisma, [s])).get(s.id));
+    const worded = { ...s, status };
+    const sessionState = deriveSessionState(worded);
+    const runState = deriveSessionRunState(worded);
     const lifecycleState = deriveSessionLifecycleState(s);
     const filingState = deriveSessionFilingState(s);
     const capabilities = deriveSessionCapabilities(s);
@@ -1752,8 +1925,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       id: s.id,
       taskId: s.taskId ?? null,
       title: s.title ?? null,
-      status: s.status as RunStatus,
-      runStatus: s.status as RunStatus,
+      status,
+      runStatus: status,
       sessionState,
       runState,
       lifecycleState,
@@ -1787,6 +1960,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       questionWithCoordinator: s.taskId ? (await questionsWithCoordinator(this.prisma, [sessionId])).get(sessionId) ?? null : null,
       pendingApprovals,
       waitingKind: sessionWaitingKind(approvals, decisions),
+      // phase, released, lastTurnOutcome, waitingOn (sessions/session-phase.ts), over the count above.
+      ...(await readOneSessionPhaseFields(this.prisma, sessionId, pendingApprovals)),
+      // The Background mark's inputs, activity and runningBgCount, as the list row reads them.
+      ...(await readOneSessionBackgroundFields(this.prisma, sessionId)),
       confirmationUnderReview: underReview
         ? {
           ...underReview,
@@ -1797,9 +1974,15 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       // The four owner items, sent with every summary — including as an empty list, which is how a
       // row learns that the one it was showing has been answered (§7.6 V13).
       ownerItems: ownerItemsForRow(decisions),
+      // The open owner requests and waiting task moves, sent as [] too: that is how an answered
+      // request or move clears the row.
+      ownerRequests: ownerRequestsForRow(decisions),
+      taskMoves: taskMovesForRow(decisions),
       awaitingReplyFrom: peers?.awaitingReplyFrom ?? [],
       owesReplyTo: peers?.owesReplyTo ?? [],
       lastTurnAt: s.lastTurnAt ? s.lastTurnAt.toISOString() : null,
+      // The list's order key; NULL only on a row an older server inserted mid-deploy, read as its creation.
+      listedAt: (s.listedAt ?? s.createdAt).toISOString(),
       // The two previews, clipped the way the list's own query clips them, and the recap beside
       // them. Null as a value, not "unchanged": a preview the server cleared has to clear on the
       // row holding this summary, and a recap the session does not have is a null.
@@ -1953,8 +2136,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
             // Terminal sessions have no supervisor and may be claimed directly
             // by this runner's current heartbeat process.
             OR: [
-              { status: { notIn: OPEN_SESSION_STATUSES } },
-              { status: { in: OPEN_SESSION_STATUSES }, inboxLeaseOwner: leaseOwner },
+              releasedFilter(),
+              { ...heldFilter(), inboxLeaseOwner: leaseOwner },
             ],
           },
         ],
@@ -1968,7 +2151,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         mergeRecoveryAction: true,
         mergeOperationId: true,
         mergeOperationOwner: true,
-        status: true,
+        finishedAt: true,
         taskId: true,
         ownerId: true,
         workspace: { select: { workDir: true } },
@@ -1985,9 +2168,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
               mergeStatus: 'pending',
               mergeOperationId: s.mergeOperationId,
               OR: [{ mergeOperationOwner: null }, { mergeOperationOwner: leaseOwner }],
-              ...(OPEN_SESSION_STATUSES.includes(s.status)
-                ? { status: { in: OPEN_SESSION_STATUSES }, inboxLeaseOwner: leaseOwner }
-                : { status: { notIn: OPEN_SESSION_STATUSES } }),
+              ...(isHeld(s) ? { ...heldFilter(), inboxLeaseOwner: leaseOwner } : releasedFilter()),
             },
             // Redelivery restamps requestedAt each heartbeat, so the staleness clock in
             // pendingWorktreeOperationMayBeExecuting measures time since the owning process
@@ -2080,7 +2261,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
             // SessionsService.commitWorktree): the parent turn and sub-workspaces write the
             // checkout, background shells (dev servers, watchers) don't gate it.
             inboxLeaseOwner: leaseOwner,
-            status: RunStatus.AWAITING_INPUT,
+            // Parked: held, with no turn queued, in flight or abandoned.
+            AND: [turnStateFilter([null])],
             cancelRequestedAt: null,
             runningSubagents: { isEmpty: true },
             OR: [{ commitOperationOwner: null }, { commitOperationOwner: leaseOwner }],
@@ -2095,7 +2277,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
             // Without the flag the old reasoning stands: the checkout may already be gone.
             // Unowned is claimed once, the same way the live arm does it: whoever sets
             // commitOperationOwner first stops being unowned for everybody else.
-            status: { notIn: OPEN_SESSION_STATUSES },
+            ...releasedFilter(),
             OR: [
               { commitOperationOwner: leaseOwner },
               { commitOperationOwner: null, worktreeDirty: true },
@@ -2108,7 +2290,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         branch: true,
         commitOperationId: true,
         commitAction: true,
-        status: true,
+        finishedAt: true,
       },
     });
     const claimed = await Promise.all(
@@ -2124,10 +2306,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
               assignedRunnerId: runnerId,
               commitStatus: 'pending',
               commitOperationId: s.commitOperationId,
-              ...(OPEN_SESSION_STATUSES.includes(s.status)
+              ...(isHeld(s)
                 ? {
                     inboxLeaseOwner: leaseOwner,
-                    status: RunStatus.AWAITING_INPUT,
+                    AND: [turnStateFilter([null])],
                     cancelRequestedAt: null,
                     runningSubagents: { isEmpty: true },
                     OR: [
@@ -2136,7 +2318,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
                     ],
                   }
                 : {
-                    status: { notIn: OPEN_SESSION_STATUSES },
+                    ...releasedFilter(),
                     OR: [
                       { commitOperationOwner: leaseOwner },
                       { commitOperationOwner: null, worktreeDirty: true },

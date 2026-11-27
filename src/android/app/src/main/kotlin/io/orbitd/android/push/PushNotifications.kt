@@ -87,8 +87,8 @@ class PushNotifications(private val context: Context) {
         return try { manager.notify(tag, 0, notification); true } catch (_: SecurityException) { false }
     }
 
-    /** An owner request's two actions: the kind's own (Provide key, Answer, Mark done, Review), which opens the request's card on its
-     * input, and Later, which puts it off for an hour on this device ([OwnerRequestLaterReceiver]). Neither ends the request, and a
+    /** An owner request's two actions: the kind's own (Provide key, Answer, Mark done, Review), which opens the conversation that asked
+     * on the request's card, its input focused, and Later, which puts it off for an hour on this device ([OwnerRequestLaterReceiver]). Neither ends the request, and a
      * SECRET has no inline reply: a key is typed only into its card. */
     private fun ownerRequestActions(message: PushMessage, data: Map<String, String>, tag: String): List<Notification.Action> {
         val link = message.payload.ownerRequestLink ?: return emptyList()

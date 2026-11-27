@@ -36,7 +36,8 @@ import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 import { JwtService } from '@nestjs/jwt';
-import { type PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -152,7 +153,7 @@ test('Feishu: the owner answers a tool approval on its card — Allow once and D
     await db.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title, prompt: 'the work', provider: 'claude',
-        status: RunStatus.RUNNING, engineTurnActive: true, dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(),
+        turnState: 'IN_FLIGHT', engineTurnActive: true, dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(),
         runtimeSessionId: randomUUID(),
       },
     });
@@ -392,7 +393,7 @@ test('Feishu: the owner answers a tool approval on its card — Allow once and D
     // The session no longer running: nothing waits on the card's answer any more.
     const ended = await session('Ended');
     const gone = await ask(ended);
-    await db.session.update({ where: { id: ended }, data: { status: RunStatus.SUCCEEDED, engineTurnActive: false } });
+    await db.session.update({ where: { id: ended }, data: { turnState: null, finishedAt: new Date(), engineTurnActive: false } });
     const g = await click(gone.messageId, callbacks(gone.card)[0]!);
     assert.deepEqual(g.answer.toast, { type: 'info', content: STALE });
     assert.match(allText(g.answer.card.data), /No longer waiting in Orbit/);

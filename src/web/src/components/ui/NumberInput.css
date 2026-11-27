@@ -11,7 +11,7 @@
 
 .orbit-number-input[data-size='small'] {
   padding-inline: 7px;
-  border-radius: var(--orbit-radius-sm);
+  border-radius: 6px;
 }
 
 .orbit-number-input-field {

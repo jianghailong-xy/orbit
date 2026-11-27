@@ -120,22 +120,51 @@ class OrbitEventLineTest {
     }
 
     @Test fun knownBlocksKeepTheirLinesHeadinglessBetweenTheAssistantRows() {
-        listOf(turn("", job) to "background-wake", turn("", wakeup) to "background-wake", turn("", subagent) to "subagent-finished",
+        listOf(turn("", wakeup) to "background-wake",
             RunEvent("user", 9, buildJsonObject { put("text", watch) }, "turn-9", ago) to "watch-wake").forEachIndexed { i, (event, tag) ->
             show(event)
             assertTrue("$tag is drawn", compose.onAllNodes(hasTestTag(tag) and hasAnyAncestor(hasTestTag("event:9")), useUnmergedTree = true)
                 .fetchSemanticsNodes().isNotEmpty())
             compose.onAllNodesWithTag("orbit-event", useUnmergedTree = true).assertCountEquals(0)
             assertHeadingless("event:9")
-            shot("0${i + 3}-${listOf("job", "wakeup", "subagent", "watch")[i]}")
+            shot("0${i + 4}-${listOf("wakeup", "watch")[i]}")
         }
+    }
+
+    // A job's end, new output or stall is drawn on its Job card (JobCardView, board C1), so its turn draws nothing at all: not a line, not
+    // the From Orbit line, not the reader's row (web `Transcript.backgroundWake.test.tsx`).
+    @Test fun aJobsNewsDrawsNothingWhichItsCardDraws() {
+        val event = turn("", job)
+        show(event)
+        compose.onAllNodesWithTag("event:9", useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithTag("background-wake", useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithTag("orbit-event", useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithText("From Orbit", useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithText("web suite", substring = true, useUnmergedTree = true).assertCountEquals(0)
+        assertFalse(SteerDelivery.readersOwn(event))
+        assertFalse(SteerDelivery.orbitOnly(event))
+    }
+
+    // A SubAgent's end is drawn on its card (SubagentCardEnd), so its turn draws nothing at all: not a line of its own, not the From Orbit
+    // line, not the reader's row (docs/mocks/subagent-card-and-end-line; web `Transcript.orbitEvent.test.tsx`).
+    @Test fun aSubagentsEndDrawsNothingWhichItsCardDraws() {
+        val event = turn("", subagent)
+        show(event)
+        compose.onAllNodesWithTag("event:9", useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithTag("orbit-event", useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithText("From Orbit", useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithText("Fix the card and run the suite.", useUnmergedTree = true).assertCountEquals(1)
+        compose.onAllNodesWithText("Find every caller of pollQuota", substring = true, useUnmergedTree = true).assertCountEquals(0)
+        assertFalse(SteerDelivery.readersOwn(event))
+        assertFalse(SteerDelivery.orbitOnly(event))
     }
 
     @Test fun typedWordsKeepTheirRowWithoutTheAppendedNote() {
         val event = turn("Ship it", future)
         show(event)
         compose.onAllNodesWithTag("orbit-event", useUnmergedTree = true).assertCountEquals(0)
-        compose.onAllNodes(hasText("You") and hasAnyAncestor(hasTestTag("event:9")), useUnmergedTree = true).assertCountEquals(1)
+        // The reader's own turn carries no heading (1da59c34c2, as iOS): only another sender's is headed.
+        compose.onAllNodes(hasText("You") and hasAnyAncestor(hasTestTag("event:9")), useUnmergedTree = true).assertCountEquals(0)
         compose.onAllNodes(hasText("Ship it") and hasAnyAncestor(hasTestTag("event:9")), useUnmergedTree = true).assertCountEquals(1)
         compose.onAllNodes(hasText("Orbit attached", substring = true), useUnmergedTree = true).assertCountEquals(0)
         compose.onAllNodes(hasText("<orbit-future-thing>", substring = true), useUnmergedTree = true).assertCountEquals(0)
@@ -145,7 +174,7 @@ class OrbitEventLineTest {
     }
 
     @Test fun aWakeCardKeepsItsContentWithoutTheLeftoverNoteOrFold() {
-        val note = "$job\n\n$future"
+        val note = "$job\n\n$wakeup\n\n$future"
         show(turn("", note))
         compose.onNodeWithTag("background-wake", useUnmergedTree = true).assertExists()
         compose.onAllNodesWithText("Orbit attached", substring = true, useUnmergedTree = true).assertCountEquals(0)

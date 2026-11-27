@@ -51,7 +51,7 @@ export const MOVE_TASK_APPROVE_CONSEQUENCE = 'Confirming is the move: the task j
 /** A MOVE_TASK with no target takes the task out of its project, filed under none: the "to" end
  *  reads this literal, and confirming it joins no project. */
 export const NO_PROJECT = 'no project';
-export const MOVE_TASK_OUT_APPROVE_CONSEQUENCE = "Confirming takes the task out of this project; no project's acceptance counts it any more.";
+export const MOVE_TASK_OUT_APPROVE_CONSEQUENCE = "Confirming takes the task out of this project as soon as you answer; no project's acceptance counts it any more.";
 export const MOVE_TASK_DENY_CONSEQUENCE = 'Refusing is final for this request, and the task stays where it is. If you change your mind, move the task yourself.';
 
 /** What each state means for a MOVE_TASK, where `CROSSING_STATE_MEANING` speaks for a filing: the

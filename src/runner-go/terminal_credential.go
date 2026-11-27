@@ -34,7 +34,7 @@ asks the Orbit app on your phone to approve "Terminal on <this machine>" and sho
 shows; once you approve, the credential is remembered for 30 days in the OS keychain (macOS
 Keychain, or the Linux Secret Service when one is running), and otherwise in
 $ORBIT_HOME/terminal.json (0600). It is never put in the environment. A credential that expired or
-that the server refuses (revoked in Settings → Terminals) is replaced by asking again.
+that the server refuses (revoked on its machine's page in Settings) is replaced by asking again.
 `
 
 const (
@@ -344,7 +344,7 @@ func terminalSignIn(server string, cfg *RunnerConfig, out io.Writer) (*terminalC
 		case "expired":
 			return nil, errors.New("the approval request expired before it was approved: run `orbit terminal login` again")
 		case "delivered":
-			return nil, errors.New("the credential was handed to an earlier answer that never arrived here: revoke it in Settings → Terminals and run `orbit terminal login` again")
+			return nil, errors.New("the credential was handed to an earlier answer that never arrived here: revoke it on this machine's page in Settings and run `orbit terminal login` again")
 		default:
 			return nil, fmt.Errorf("%s answered the terminal sign-in with %q", server, answer.Status)
 		}

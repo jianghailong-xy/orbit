@@ -1,29 +1,29 @@
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
+
+import type { TurnState } from '../sessions/session-turn-state';
+import { HELD_SESSION_STATUSES } from './session-release';
 
 /**
- * A runner slot represents active execution, not a resident (warm) runtime process.
- * Keep this separate from the broader "open/live session" sets used by streaming,
- * cancellation and resumability.
+ * A runner slot represents active execution, not a resident (warm) runtime process: the turn state IN_FLIGHT
+ * (sessions/session-turn-state.ts, common/session-working.ts `sessionHoldsSlot`), never `phase`. Keep this separate
+ * from the broader "open/live session" sets used by streaming, cancellation and resumability.
  */
-export const ACTIVE_TURN_STATUSES: RunStatus[] = [RunStatus.RUNNING];
 
-/** Non-terminal sessions retained across runner restart (active ones plus cold/warm state). */
-export const OPEN_SESSION_STATUSES: RunStatus[] = [
-  RunStatus.PENDING,
-  RunStatus.RUNNING,
-  RunStatus.AWAITING_INPUT,
-  RunStatus.INTERRUPTED,
-];
+/** Non-terminal sessions retained across runner restart (active ones plus cold/warm state): the held ones. */
+export const OPEN_SESSION_STATUSES: RunStatus[] = [...HELD_SESSION_STATUSES];
 
 /**
  * A session that still owes an answer: queued for a turn, or running one. NOT the same as
  * "open" — an AWAITING_INPUT session has already produced its result and is merely parked in
  * case someone replies, and INTERRUPTED is a turn that was abandoned.
  *
- * This is the definition the rest of orchestration already used: session_create(wait) returns
- * the moment a child leaves PENDING/RUNNING ("result ready"), and the claim's supervisor
- * exemption asks the same question of a parent's children. Anything counting a tree's
- * unfinished work must use it too, or it contradicts what the caller was told.
+ * This is the definition the rest of orchestration already used: the watch leaf
+ * SESSION_TURN_SETTLED is a child leaving PENDING/RUNNING ("result ready"), and the claim's
+ * supervisor exemption asks the same question of a parent's children. Anything counting a tree's
+ * unfinished turns must use it too. `session_await` and `session_create(wait)` now wait by default
+ * for SESSION_QUIESCENT (watches/watch-predicate.ts), which also waits out a child's own background
+ * job, subagent and armed wake-ups; those hold no runner slot, so the spawn-tree allowance keeps
+ * counting turns with this set.
  */
 export const UNSETTLED_SESSION_STATUSES: RunStatus[] = [RunStatus.PENDING, RunStatus.RUNNING];
 
@@ -98,11 +98,18 @@ export const SERVICE_TOKEN_CONCURRENCY = 3;
  */
 export const SPAWN_TREE_OUTSTANDING = 50;
 
-/** Queueing work onto an idle interactive session requires a fresh runner slot. */
-export function statusAfterTurnEnqueued(status: RunStatus): RunStatus {
-  return status === RunStatus.AWAITING_INPUT || status === RunStatus.INTERRUPTED
+/** A held session parked on a turn that was abandoned before it answered. */
+export const ABANDONED_TURN_STATUS: RunStatus = RunStatus.INTERRUPTED;
+
+/**
+ * Queueing work onto an idle interactive session requires a fresh runner slot. Given the word the writer read and
+ * returns the word it writes; the turn state written beside it is that word's (turnStateOfWord,
+ * sessions/session-turn-state.ts), as that module's turnStateAfterTurnEnqueued gives it from a turn state.
+ */
+export function statusAfterTurnEnqueued(status: RunStatus | string): RunStatus {
+  return status === RunStatus.AWAITING_INPUT || status === ABANDONED_TURN_STATUS
     ? RunStatus.PENDING
-    : status;
+    : status as RunStatus;
 }
 
 /** Keep an already-held slot only when another executable turn is already queued. */
@@ -110,7 +117,7 @@ export function statusAfterTurnCompleted(hasPendingExecutableTurn: boolean): Run
   return hasPendingExecutableTurn ? RunStatus.RUNNING : RunStatus.AWAITING_INPUT;
 }
 
-/** Losing a runner is fatal only while that runner is actively executing work. */
-export function runnerOfflineIsFatal(status: RunStatus): boolean {
-  return status === RunStatus.RUNNING;
+/** Losing a runner is fatal only while that runner is actively executing work: a dispatched turn (IN_FLIGHT). */
+export function runnerOfflineIsFatal(turnState: TurnState | null): boolean {
+  return turnState === 'IN_FLIGHT';
 }

@@ -3,7 +3,6 @@ package io.orbitd.android.cards
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -39,42 +38,28 @@ internal fun FitsOrStack(modifier: Modifier = Modifier, wide: @Composable () -> 
 }
 
 /**
- * A turn the control plane opened because a background job had news or a wakeup came due (A08-11; iOS `BackgroundWakeCardView`):
- * one line in the agent's stream — its mark, what happened, which job, how it came out, when, and the details label — that opens to
- * the rest. A failed job's output tail stays out of the fold, three rendered lines with 展开输出 / 收起输出. When it does not fit one
- * line, the name and the closing words each take a line under the title. A wake written into the running turn says how far it got.
+ * A turn the control plane opened because a wakeup came due (A08-11; iOS `BackgroundWakeCardView`): one line in the agent's stream — its
+ * clock, "Scheduled wakeup", why it was asked for, when, and the details label — that opens to the rest. When it does not fit one line,
+ * the name and the closing words each take a line under the title. A wake written into the running turn says how far it got. A
+ * background job's end, new output or stall draws no line any more (board C1): the job is one card from start to end (reader
+ * `JobCardView`), and [wake] holds only the wakeups that came due beside it ([io.orbitd.android.core.cards.BgJob.wakeupsOnly]).
  */
 @Composable
 internal fun BackgroundWakeLine(wake: JsonObject, ts: String?, steerState: String? = null, undelivered: Boolean = false,
     queued: Boolean = false, onCancelQueued: (() -> Unit)? = null) {
     var open by rememberSaveable(wake.toString()) { mutableStateOf(false) }
-    val jobs = BackgroundWakeCard.jobs(wake)
-    val failed = jobs.any(BackgroundWakeCard::isFailed)
-    val several = jobs.size > 1
-    val red = MaterialTheme.colorScheme.error
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     val label = MaterialTheme.typography.bodySmall
-    val mark = @Composable {
-        when {
-            failed -> Icon(painterResource(R.drawable.ic_x_circle), null, Modifier.size(14.dp), tint = red)
-            BackgroundWakeCard.isPending(wake) -> Icon(painterResource(R.drawable.ic_clock), null, Modifier.size(14.dp), tint = secondary)
-            else -> Icon(painterResource(R.drawable.ic_check_circle), null, Modifier.size(14.dp), tint = LocalOrbitColors.current.success)
-        }
-    }
-    val title = @Composable { Text(BackgroundWakeCard.title(wake), style = label, color = if (failed) red else secondary, maxLines = 1) }
+    val mark = @Composable { Icon(painterResource(R.drawable.ic_clock), null, Modifier.size(14.dp), tint = secondary) }
+    val title = @Composable { Text(BackgroundWakeCard.title, style = label, color = secondary, maxLines = 1) }
     val name = BackgroundWakeCard.lineName(wake)
-    val isCommand = jobs.size == 1 && jobs.single().text("description").isNullOrEmpty()
     val nameText = @Composable { modifier: Modifier ->
-        name?.let { Text(it, modifier, style = if (isCommand) label.copy(fontFamily = FontFamily.Monospace) else label,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f), maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        name?.let { Text(it, modifier, style = label, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f), maxLines = 1,
+            overflow = TextOverflow.Ellipsis) }
     }
     val closing = @Composable {
-        BackgroundWakeCard.lineStatus(wake)?.let {
-            Text(it, Modifier.background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 1.dp),
-                style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace), color = secondary, maxLines = 1)
-        }
         ts?.let { BackgroundWakeCard.relative(it) }?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = secondary, maxLines = 1) }
-        Text(BackgroundWakeCard.detailsLabel(wake), Modifier.testTag("wake-details-label"), style = MaterialTheme.typography.labelSmall,
+        Text(BackgroundWakeCard.details, Modifier.testTag("wake-details-label"), style = MaterialTheme.typography.labelSmall,
             color = secondary, maxLines = 1)
         Icon(painterResource(R.drawable.ic_chevron_forward), null, Modifier.size(12.dp).rotate(if (open) 90f else 0f), tint = secondary.copy(alpha = 0.6f))
     }
@@ -95,13 +80,7 @@ internal fun BackgroundWakeLine(wake: JsonObject, ts: String?, steerState: Strin
                     Row(Modifier.padding(start = 20.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) { closing() }
                 }
             })
-        if (open) WakeFold(wake, several)
-        jobs.filter { BackgroundWakeCard.isFailed(it) && !it.text("outputTail").isNullOrEmpty() }.forEach { job ->
-            Column(Modifier.padding(start = 20.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                if (several) Text(BackgroundWakeCard.name(job), style = MaterialTheme.typography.labelSmall, color = secondary)
-                OutputTail(job.text("outputTail").orEmpty())
-            }
-        }
+        if (open) WakeFold(wake)
         if (undelivered) Text(BackgroundWakeCard.undelivered, Modifier.padding(start = 20.dp), style = MaterialTheme.typography.labelSmall,
             color = LocalOrbitColors.current.needsYou)
         steerState?.let { Text(it, Modifier.padding(start = 20.dp).testTag("background-wake:steer"), style = MaterialTheme.typography.labelSmall, color = secondary) }
@@ -131,52 +110,14 @@ internal fun QueuedFoot(modifier: Modifier = Modifier, cancel: () -> Unit) {
     }
 }
 
-/** A job's output tail — a failure's under the line, a quiet job's in its row in the fold — bounded by rendered lines so compact JSON
- * cannot fill the transcript; its own fold, apart from the line's. */
+/** What the line carried, opened: a row per wakeup, who queued the turn, and what the agent read — hung off a rule. */
 @Composable
-private fun OutputTail(text: String, tag: String = "background-wake:failed-output") {
-    var open by rememberSaveable(text) { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f), RoundedCornerShape(6.dp))
-        .padding(horizontal = 10.dp, vertical = 8.dp).testTag(tag), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(BackgroundWakeCard.outputTail, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        SelectionContainer {
-            Text(text, Modifier.testTag("background-wake:tail"), style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = if (open) Int.MAX_VALUE else 3, overflow = TextOverflow.Ellipsis)
-        }
-        Text(if (open) BackgroundWakeCard.collapseOutput else BackgroundWakeCard.expandOutput,
-            Modifier.clickable(role = Role.Button) { open = !open }.testTag("background-wake:toggle-output"),
-            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-    }
-}
-
-/** What the line carried, opened: a row per job or wakeup, who queued the turn, and what the agent read — hung off a rule. */
-@Composable
-private fun WakeFold(wake: JsonObject, several: Boolean) {
+private fun WakeFold(wake: JsonObject) {
     var raw by rememberSaveable(wake.toString()) { mutableStateOf(false) }
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     Row(Modifier.padding(start = 20.dp).height(IntrinsicSize.Min)) {
         Box(Modifier.width(2.dp).fillMaxHeight().background(secondary.copy(alpha = 0.25f)))
         Column(Modifier.padding(start = 10.dp).testTag("background-wake:fold"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            BackgroundWakeCard.jobs(wake).forEach { job ->
-                val described = !job.text("description").isNullOrEmpty()
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    if (several || described) Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(BackgroundWakeCard.name(job), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f))
-                        if (several) BackgroundWakeCard.status(job)?.let {
-                            Text(it, style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace), color = secondary)
-                        }
-                    }
-                    if (described || !several) Text(job.text("command").orEmpty(), style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace), color = secondary)
-                    Text(BackgroundWakeCard.jobMeta(job), style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace), color = secondary)
-                    BackgroundWakeCard.stall(job)?.let { stall ->
-                        Text(BackgroundWakeCard.stallLine(stall), Modifier.testTag("background-wake:stall"),
-                            style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace), color = secondary)
-                        // A quiet job is no bad news: what it last wrote stays in the fold, not under the line.
-                        job.text("outputTail")?.takeIf { it.isNotEmpty() }?.let { OutputTail(it, "background-wake:stall-output") }
-                    }
-                }
-            }
             BackgroundWakeCard.wakeups(wake).forEach { wakeup ->
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     wakeup.text("reason")?.takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
@@ -184,7 +125,7 @@ private fun WakeFold(wake: JsonObject, several: Boolean) {
                     wakeup.text("prompt")?.takeIf { it.isNotEmpty() }?.let { PromptFold(it) }
                 }
             }
-            Text(BackgroundWakeCard.meta(wake), style = MaterialTheme.typography.labelSmall, color = secondary)
+            Text(BackgroundWakeCard.meta, style = MaterialTheme.typography.labelSmall, color = secondary)
             Disclosure(BackgroundWakeCard.rawSummary, raw, "background-wake:raw") { raw = !raw }
             if (raw) SelectionContainer { Text(wake.text("text").orEmpty(), style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace), color = secondary) }
         }

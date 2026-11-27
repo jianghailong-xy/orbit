@@ -283,8 +283,8 @@ func TestWatchHelpIsReachableFromEveryDoor(t *testing.T) {
 
 func TestAgentInstructionsSendOrbitWaitsToWatches(t *testing.T) {
 	const exe = "/usr/local/bin/orbit"
-	instructions := orbitCLIInstructions(exe, true, true, true)
-	for _, phrase := range []string{"do not poll", "task_await", "session_await", "end your turn"} {
+	instructions := orbitCLIInstructions(exe, true, true, true, true)
+	for _, phrase := range []string{"never poll or sleep", "task_await", "session_await", "end your turn"} {
 		if !strings.Contains(instructions, phrase) {
 			t.Errorf("instructions do not say %q", phrase)
 		}
@@ -294,7 +294,7 @@ func TestAgentInstructionsSendOrbitWaitsToWatches(t *testing.T) {
 			t.Fatalf("the wait paragraph must stay ASCII for codex's context value; byte %d is %q", i, orbitWaitInstructions[i])
 		}
 	}
-	plain := strings.Join(orbitCLIAllowedTools(exe, false), "\n")
+	plain := strings.Join(orbitCLIAllowedTools(exe, false, false), "\n")
 	for _, rule := range []string{"Bash(" + exe + " task await *)", "Bash(" + exe + " watch create *)", "Bash(" + exe + " watch cancel *)"} {
 		if !strings.Contains(plain, rule) {
 			t.Errorf("allowed tools miss %q", rule)
@@ -303,7 +303,7 @@ func TestAgentInstructionsSendOrbitWaitsToWatches(t *testing.T) {
 	if strings.Contains(plain, " session await *)") {
 		t.Error("a session without orchestration was pre-approved for session await")
 	}
-	if !strings.Contains(strings.Join(orbitCLIAllowedTools(exe, true), "\n"), "Bash("+exe+" session await *)") {
+	if !strings.Contains(strings.Join(orbitCLIAllowedTools(exe, true, false), "\n"), "Bash("+exe+" session await *)") {
 		t.Error("an orchestrating session is not pre-approved for session await")
 	}
 }

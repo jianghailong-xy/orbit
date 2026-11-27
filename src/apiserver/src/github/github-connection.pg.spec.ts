@@ -65,6 +65,8 @@ import { GithubCallbackController, GithubController } from './github.controller'
 const URL_ = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
 const CALLBACK = 'https://orbit.example.test/api/integrations/github/callback';
+/** docs/design/protected-branch-landing.md §8: the address GitHub delivers the App's webhooks to. */
+const WEBHOOK = 'https://orbit.example.test/api/integrations/github/webhook';
 const MIGRATION = readFileSync(path.resolve(__dirname, '../../prisma/migrations/0820_github_app_connection/migration.sql'), 'utf8');
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
 const s256 = (text: string) => createHash('sha256').update(text).digest('base64url');
@@ -226,6 +228,7 @@ test('GitHub P0 on PostgreSQL: the App setting, connecting through the code flow
     assert.deepEqual(empty.json, {
       enabled: false, appId: null, slug: null, clientId: '', secretSaved: false, keySaved: false, secretUnreadable: false,
       callbackUrl: CALLBACK, connectedUsers: 0, clonedWorkspaces: 0,
+      webhookUrl: WEBHOOK, webhookSecretSaved: false, lastDeliveryAt: null,
     });
     assert.equal((await call('GET', '/api/integrations/github', { bearer: ada.bearer })).json.available, false);
     assert.equal((await call('GET', '/api/integrations/github/start', { bearer: ada.bearer })).json.code, 'GITHUB_NOT_CONFIGURED');
@@ -256,6 +259,7 @@ test('GitHub P0 on PostgreSQL: the App setting, connecting through the code flow
     assert.deepEqual(saved.json, {
       enabled: true, appId: String(github.appId), slug: github.slug, clientId: github.clientId, secretSaved: true, keySaved: true,
       secretUnreadable: false, callbackUrl: CALLBACK, connectedUsers: 0, clonedWorkspaces: 0,
+      webhookUrl: WEBHOOK, webhookSecretSaved: false, lastDeliveryAt: null,
     });
     const [row] = await rows('SELECT * FROM github_app_config');
     assert.equal(row.slug, github.slug);

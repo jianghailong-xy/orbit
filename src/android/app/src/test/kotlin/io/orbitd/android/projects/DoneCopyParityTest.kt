@@ -17,9 +17,17 @@ class DoneCopyParityTest {
         .filter { Modifier.isStatic(it.modifiers) && it.type == String::class.java }
         .associate { it.isAccessible = true; it.name to it.get(null) as String }
 
+    /** The Delivers hints since the server stopped reading the mark (§12.15 P-M3): the web's task for revision 42 part two
+     * (350fMiNUjSVyj5VGo47lF, 4e487f20ec) changes the same two constants on its own branch. Until that lands beside this one the web
+     * file still holds the old words, and these are held to the new ones here; once it has, the rule above holds them as it holds every other. */
+    private val aheadOfWeb = mapOf(
+        "RUN_DELIVERS_CODE_HINT" to "The default. Landing follows the commits each task delivers.",
+        "RUN_DELIVERS_NOT_CODE_HINT" to "A label only: Orbit no longer reads it. Landing follows the commits each task delivers.",
+    )
+
     @Test fun everyWordIsTheWebsNamedConstant() {
         assertTrue("DoneCopy has no words", words.size > 100)
-        val missing = words.filter { (name, value) -> !web.contains("export const $name = '$value';") }
+        val missing = words.filter { (name, value) -> !web.contains("export const $name = '$value';") && aheadOfWeb[name] != value }
         assertTrue("DoneCopy words that are not the web's constant of the same name: $missing", missing.isEmpty())
     }
 

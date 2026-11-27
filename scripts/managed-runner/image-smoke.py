@@ -17,7 +17,7 @@ import uuid
 
 HOME = Path('/home/orbit')
 ORBIT = HOME / '.orbit'
-WORKDIR = HOME / 'orbit-repos'  # the runner's own work directory: the repos folder
+WORKDIR = HOME  # the runner's own work directory: home itself
 WORKSPACE = WORKDIR / 'smoke-project'  # the fixture's checkout, made by the fixture
 SESSION = 'artificial-smoke-session'
 RUNNER = 'artificial-smoke-runner'

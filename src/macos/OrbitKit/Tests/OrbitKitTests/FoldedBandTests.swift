@@ -29,15 +29,15 @@ final class FoldedBandTests: XCTestCase {
         let asked = "2026-11-16T02:40:00.000Z"
         let after = "2026-11-16T02:45:00.000Z"
         XCTAssertEqual(FoldedBand.processes([proc("a", "running"), proc("b", "completed", endedAt: after),
-                                             proc("c", "running")], lastUserMessageAt: asked, sessionLive: true),
+                                             proc("c", "running")], clearedAt: asked, sessionLive: true),
                        "2 running")
         XCTAssertEqual(FoldedBand.processes((0..<10).map { proc("\($0)", "completed", endedAt: after) },
-                                            lastUserMessageAt: asked, sessionLive: true), "10")
+                                            clearedAt: asked, sessionLive: true), "10")
         // Ended before the person's last message: no row, so no mark.
         XCTAssertNil(FoldedBand.processes([proc("a", "completed", endedAt: "2026-11-16T02:39:00.000Z")],
-                                          lastUserMessageAt: asked, sessionLive: true))
+                                          clearedAt: asked, sessionLive: true))
         // A session that is not live runs nothing, whatever its list last said.
-        XCTAssertNil(FoldedBand.processes([proc("a", "running")], lastUserMessageAt: asked, sessionLive: false))
+        XCTAssertNil(FoldedBand.processes([proc("a", "running")], clearedAt: asked, sessionLive: false))
     }
 
     private func card(running: Int = 0, failed: Int = 0, done: Int, total: Int) throws -> SessionTaskCard {

@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Headers,
   Param,
@@ -26,6 +27,7 @@ import {
   UpdateTaskDto,
 } from '../tasks/dto';
 import { ProjectAttributionService } from '../projects/project-attribution.service';
+import { LANDING_CHECK_EXEMPT_COORDINATOR_ONLY } from '../tasks/task-landing-check-exempt';
 import { TasksService } from '../tasks/tasks.service';
 import {
   DAG_CHANGE_CARD_TOOL,
@@ -281,6 +283,15 @@ export class RunnerTasksController {
     @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Body() dto: UpdateTaskDto,
   ) {
+    // A runner write without a session reads as the owner below. The landing-check exemption is the
+    // owner's or the coordinator's (§12.15 P-C2), and a machine credential is neither on its own.
+    if (!sessionId && (dto.landingCheckExempt !== undefined || dto.landingCheckExemptReason !== undefined)) {
+      throw new ForbiddenException({
+        code: LANDING_CHECK_EXEMPT_COORDINATOR_ONLY,
+        message: 'a task\'s landing-check exemption is written from the project\'s coordinator session or by the '
+          + 'owner; this runner write names no session. Nothing was written',
+      });
+    }
     return this.tasks.update(runner.ownerId, id, dto, sessionId);
   }
 

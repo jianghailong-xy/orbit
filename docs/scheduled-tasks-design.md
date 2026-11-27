@@ -28,6 +28,15 @@ adds to revision 3:
 | 6 | Approvals answered with "don't ask again" hold for later runs (existing workspace rules) | §6.4 | |
 | 7 | Which of Orbit's four timers an agent should reach for | §1 | |
 
+**Sub-daily and planned end** (owner, 2026-11-18; project *Sub-daily schedules and planned end*) add to revision 4:
+the `EVERY` rule (§3, §5.1) inside the same runs-per-week envelope (§4), a run limit shorter than the interval and a
+one-interval catch-up (§5.2, §7.2), `maxRuns` beside `endAt` with a suggested 7-day end for sub-daily rules (§8.5),
+what clients already shipped need (§9.3), and missed slots collapsed in the run list (§9.2).
+
+**Rename** (owner, 2026-11-26; board `docs/mocks/schedule-rename/`): a person may rename a schedule directly, the
+one field a surface edits (§2, §8.4). D1 = A: a narrow REST door that changes the title alone. D2 = B: no hold, so an
+agent may rename it again later, recorded with **Undo** like any other change.
+
 ## 1. Why, and which timer
 
 A user wants recurring work that outlives any conversation:
@@ -77,7 +86,8 @@ Every part of a schedule belongs to one side:
 Three consequences follow, and the rest of the document is their detail:
 
 1. **Said, not configured.** No surface has a field. Changes are said in any session ("make it 9:00", "only on
-   weekdays", "stop opening PRs"). The page is for reading and stopping.
+   weekdays", "stop opening PRs"). The page is for reading and stopping. The one exception is the name (owner
+   2026-11-26, §8.4 *Rename*): a label, not the goal, the risk, the budget or the authority.
 2. **One rule for cards.** A change that stays inside the envelope applies at once, is recorded and can be undone. A
    change that grows it waits for one press (§4). Nothing else asks.
 3. **A person hears from a schedule only when it found something new or needs them** (§7.3). There is no notify
@@ -98,11 +108,13 @@ Schedule
   rule          { kind: ONCE, at }
                 { kind: DAILY, time }
                 { kind: WEEKLY, time, weekdays[] }
+                { kind: EVERY, minutes, time, weekdays[], until? }   sub-daily, §5.1
                 { kind: CRON, expr }                   P3
   timezone      IANA name
-  startAt, endAt?
+  startAt, endAt?                                      endAt: the planned end by time, §8.5
+  maxRuns?                                             the planned end by count of started runs, §8.5
   accessLevel   CHECK_ONLY | OPEN_PR
-  runLimitMinutes                                      default 30
+  runLimitMinutes                                      default 30; EVERY: min(30, minutes / 2), always < minutes
   envelope      { workspaceId, accessLevel, runsPerWeek, runLimitMinutes }     §4, written only by a press
   state         ACTIVE | PAUSED | HELD | ENDED
   heldReason?, endedReason?                            DELETED | END_REACHED | GOAL_REACHED
@@ -128,6 +140,7 @@ ScheduleRun
   failureReason?                                       closed set, §7.2
   heldReason?                                          why a HELD run's start checks failed, §6.1
   notBeforeAt?                                         a QUEUED run starts no earlier: a retry's wait, §7.2
+  capacityHeldAt?                                      last seen waiting on a full runner, run or batch, §7.2
 
 ScheduleFinding
   scheduleId, key, firstRunId?, lastSeenRunId?, notifiedAt?, links[]
@@ -146,6 +159,25 @@ writes the schedule. A newer UPDATE request for the same schedule supersedes the
 
 Rule encoding: weekdays are `MON` … `SUN`; `ONCE.at` is a local `YYYY-MM-DDTHH:mm` in the schedule's time zone;
 `DAILY` and `WEEKLY` take `time` as a local `HH:mm`.
+
+`EVERY` is the sub-daily rule ("every 30 minutes from 9 to 6 on weekdays", "every 2 hours"):
+
+- `minutes` is one of 30, 60, 120, 180, 240, 360, 480, 720; anything else is refused. A rhythm of a day or more is
+  `DAILY` or `WEEKLY`.
+- `time` is the window start, a local `HH:mm`: the day's first slot.
+- `until` is the optional window end, a local `HH:mm` later than `time` on the same day, and inclusive: a slot that
+  falls exactly on it fires. Without `until` the window runs to the end of the day (23:59), so the slots go round the
+  clock from `time`.
+- Every day starts again at `time`; a window never crosses midnight. Every allowed interval divides 24 hours, so a
+  rule with no `until` whose `time` is less than one interval past midnight ("every 2 hours" is `time` 00:00) is evenly
+  spaced across midnight too. "Every 3 hours from 10:00" is 10:00, 13:00, 16:00, 19:00 and 22:00, then 10:00 the next
+  day: the agent that writes the rule reads it back on the card, so the person sees which they get.
+- `weekdays` is always written out, all seven when the person named none.
+- The server always writes `time` and `weekdays` on an `EVERY` rule, whatever the input omitted. That is a hard
+  requirement of the clients already shipped (§9.3), not a convenience.
+- `maxRuns` is an integer of at least 1 and is allowed on every rule kind; it is the only schedule field §8.5 adds.
+  `CRON` stays P3: `EVERY` covers the sub-daily rhythms people ask for, with a window and weekdays, and nothing in it needs an
+  expression.
 
 There is no notify field and no runner field: §7.3 decides who hears, and a run goes to any online runner the
 workspace can use.
@@ -168,8 +200,8 @@ The envelope is what a person agreed to on a card. It has four parts and nothing
 | --- | --- | --- |
 | workspace | a different workspace | *Runs in* |
 | access level | `CHECK_ONLY` → `OPEN_PR` | *May* |
-| runs per week | more of them (weekly → daily is 1 → 7) | *Costs* |
-| run limit | a longer run (default 30 minutes, at most 2 hours) | *Costs* |
+| runs per week | more of them (weekly → daily is 1 → 7; every 30 minutes, 09:00–18:00, Mon–Fri is 95) | *Costs* |
+| run limit | a longer run (default 30 minutes, at most 2 hours; under an `EVERY` interval, §7.2) | *Costs* |
 
 The rule, checked by the server on every `schedule_create` and `schedule_update`:
 
@@ -198,22 +230,49 @@ The rule, checked by the server on every `schedule_create` and `schedule_update`
   revision (`SCHEDULE_ALREADY_UNDONE`); revision 1, the creation, cannot be undone. Bringing an ENDED schedule back
   counts against `SCHEDULE_LIMIT`.
 
+**Runs per week of an `EVERY` rule** is its slots per day times its distinct weekdays:
+
+```text
+slotsPerDay  = floor((windowEnd - time) / minutes) + 1        windowEnd = until, or 23:59 without one
+runsPerWeek  = slotsPerDay × |weekdays|
+```
+
+Worked example: every 30 minutes from 09:00 until 18:00, Monday to Friday. The slots are 09:00, 09:30, … 17:30,
+18:00 (`until` is inclusive): floor(540 / 30) + 1 = 19 a day, and 19 × 5 = **95** runs a week, which is what the card's
+*Costs* line says ("Up to 95 runs a week, 15 min each"). Every hour round the clock is 24 × 7 = 168; every 12 hours from
+09:00 is 2 × 7 = 14. The count is of the rule's slots on an ordinary day; a daylight-saving day that loses or gains an
+hour (§5.1) does not change it.
+
+There is no new authority concept for sub-daily rules: a shorter interval, a wider window or another weekday is more
+runs per week, and grows the envelope like daily → weekly does. So for an `EVERY` rule the time of day, the window and
+the weekdays are inside the envelope only while `runsPerWeek` stays at or below `envelope.runsPerWeek`; "make it every
+15 minutes" is refused (not an allowed interval), "make it every 30 minutes" from hourly waits on the widen card, and
+"only until 17:00" applies at once. Moving between kinds is judged the same way: `DAILY` → `EVERY 60` is 7 → 168 and
+waits; `EVERY 720` → `DAILY` applies at once.
+
 The budget is counted in runs and minutes, not in money, because a subscription account reports no cost per run.
 The inspector shows what was used: "This month: 14 runs · 41 min", with a cost where the engine reports one.
 
 **Runs per week bounds the runs that start, not only the rule.** Moving the time of day or the weekdays is inside
 the envelope, and a session that moved its rule to "a few minutes from now" after every run would otherwise run back
-to back. So before a run starts (§6.1) the server counts, under the schedule lock the start takes (so two replicas
-cannot both pass), **the schedule's runs that actually started, of every trigger, whose planned slot (`plannedAt`; a
-MANUAL run's is when it was asked for) lies after the same local time 7 days before this run's own slot, in the
-schedule's time zone.** The window is on planned slots, not start times, so how late a start is (the worker's pass,
+to back. So before an automatic run starts (§6.1) the server counts, under the schedule lock the start takes (so two
+replicas cannot both pass), **the schedule's automatic runs (every trigger but MANUAL) that actually started and count
+(below), whose planned slot (`plannedAt`) lies after the same local time 7 days before this run's own slot, in the
+schedule's time zone.** No Run now is in this count: the rhythm the owner approved always runs, however often anyone
+pressed Run now that week (2026-11-23: six presses in three days had cost a daily schedule its next three slots). Run
+now has its own count, §8.4. The window is on planned slots, not start times, so how late a start is (the worker's pass,
 a runner back after an outage) never moves a run into or out of it: a rule inside its envelope never trips it, and a
 rule moved to "a few minutes from now" still gives each run its own slot. It is local time, not 7×24 hours, so a
 week across a daylight-saving change is still a week. At `envelope.runsPerWeek` or more, the slot is not started: it is MISSED with
 `failureReason = OVER_BUDGET`, the schedule stays ACTIVE (not HELD, not paused) and its next slot is computed as
-usual. A start retried because it never reached its engine (§7.2) is one start. The owner is told once, by push,
+usual. A start retried because it never reached its engine (§7.2) is one start. **A run counts only if its first turn
+was delivered (`delivered_at`, §7.2) or it is still live (QUEUED, RUNNING or AWAITING_APPROVAL with a start), so an
+in-flight run holds its place and two quick starts cannot overshoot.** A run that ended without ever being
+delivered (MISSED, CANCELLED, or FAILED with `RUNNER_UNAVAILABLE`, `QUOTA` or `ENGINE_CRASHED_BEFORE_START`) counts 0:
+it did nothing, so it must not cost a later slot its place. The `SCHEDULE_OVER_BUDGET` refusal of §8.4 reads the same
+window and the same rule, over Run now presses instead. The owner is told once, by push,
 for a slot over budget, and not again for the next ones in a row; the run list says "Not started: it had already
-started as many runs in the past 7 days as you allowed." Run now follows §8.4.
+started as many scheduled runs in the past 7 days as you allowed." Run now follows §8.4.
 
 The count is of starts already made, read against the envelope as it is now. When the owner narrows runs per week
 mid-week, the runs that already started in the window stay counted against the new, smaller number, so the
@@ -230,7 +289,8 @@ A worker reads `Schedule WHERE state = 'ACTIVE' AND nextDueAt <= now()`. For eac
 1. Insert the run for `plannedAt = nextDueAt`. A conflict on `(scheduleId, plannedAt)` means another worker already
    fired this slot: stop there.
 2. Advance `nextDueAt` to the next slot after now, in the schedule's time zone. Past `endAt`, or after a `ONCE`
-   rule's only slot, the schedule becomes ENDED (`END_REACHED`).
+   rule's only slot, the schedule becomes ENDED (`END_REACHED`). Reaching `maxRuns` ends it too, at the start that
+   reaches it (§8.5).
 3. Apply overlap: when a run is RUNNING or AWAITING_APPROVAL, the new run is QUEUED. When one is already QUEUED, the
    older queued run becomes SKIPPED and the new one takes its place. There is never more than one waiting.
 
@@ -248,6 +308,23 @@ started when the schedule already started its runs per week in the 7 days before
 - `ONCE` is a schedule with one slot: "check at 18:00 whether the deploy is healthy and tell me". It differs
   from `Task.runAt` in what it produces: a report, not a deliverable.
 
+**`EVERY` slots** are on the local wall clock of the schedule's time zone, never counted as elapsed time from the
+previous run, so a late or long run never shifts the ones after it:
+
+- On each local day whose weekday is in `weekdays`, the slots are `time`, `time + minutes`, `time + 2 × minutes`, …
+  while the local time is at or before the window end (`until`, inclusive; 23:59 without one). A day not in
+  `weekdays` has none. Each day starts again at `time` (§3).
+- Each local slot is turned into an instant with the same rules as `DAILY`: a slot in the hour a spring-forward
+  skips moves to the first valid minute after it, and a slot in the hour a fall-back repeats fires on the first
+  occurrence only. Two slots that land on the same instant are one slot (`unique(scheduleId, plannedAt)` already
+  says so). So every 30 minutes on a day 02:00 jumps to 03:00 has 02:00 and 02:30 both moved to 03:00 and runs once
+  there: that day has two runs fewer. On the day 02:00 falls back to 01:00, 01:00 and 01:30 fire once, at their first
+  occurrence, and the repeated hour has no slots: still one slot per wall-clock time, never one per elapsed half-hour.
+- `nextDueAt` is the first such instant strictly after now, also inside `startAt` and `endAt` (both inclusive, as for
+  every rule). The search reaches 8 local days ahead, enough for any non-empty `weekdays`.
+- Example, every 30 minutes from 09:00 until 18:00 on Mon–Fri, Asia/Shanghai: on Friday at 17:40 the next slot is
+  18:00; at 18:00:01 it is Monday 09:00.
+
 ### 5.2 Missed slots
 
 A slot is missed when its run could not start near its time: the runner was offline, the apiserver was down,
@@ -257,6 +334,12 @@ dispatch was paused, the account's quota was exhausted.
   recorded MISSED. Nothing replays a backlog.
 - Catch-up reaches back one period (24 hours for `ONCE`). An older slot is recorded MISSED and the schedule waits
   for its next slot. A missed `ONCE` notifies, because nothing else will run.
+- For `EVERY` the period is **one interval** (`minutes`), not 24 hours: a slot is caught up only while its next
+  slot has not come yet, so a catch-up never runs beside, or instead of, a newer slot. Every 30 minutes round the clock,
+  the apiserver down from 00:50 to 09:20: on recovery the 09:00 slot runs as `CATCH_UP`, the 16 slots 01:00 … 08:30
+  are MISSED (the run list shows them as one row, §9.2), and 09:30 runs as usual. Back at 09:35 instead, 09:30 would
+  run and 09:00 be MISSED too. The window of the start retries (§7.2) is the same interval, so on a
+  30-minute rule they are after 1, 5 and 15 minutes and then MISSED.
 - A run shows both `plannedAt` and `startedAt`, so a late run says it was late.
 - The same holds for a run already written whose start meets the outage. A runner that is offline (a managed runner
   asleep is not: opening the session wakes it) leaves the run QUEUED, without spending an attempt, looking again
@@ -503,16 +586,31 @@ run (`LANDING_FAILED`) with its reason, through the same push and **Waiting on y
 - `note` replaces the schedule's note. It is for what the next run should know and the prompt does not say: a moved
   URL, a rate limit, where it left off.
 - The report ends the run. The session's turn may go on, but nothing after it changes the run.
+- What the run's session is doing is read from its published state alone (`readSessionPhaseReadings`: the phase
+  fields and `sessionWakes`, in `schedule-run-session-reading.ts`), never from a session column. A session released,
+  or settled idle with nothing to wake it for a minute (`SCHEDULE_IDLE_SETTLE_MS`, from `idle_seen_at`), without a
+  report fails the run: `ENGINE_CRASHED` for a release by a failure, `NO_REPORT` otherwise. An end somebody asked for
+  counts once the session is released, not when it is asked.
 - A session that ends or settles idle without a report fails the run with `NO_REPORT`. Silence never reads as "no
   change". A session is not idle while one of its `bg_run` jobs (job or watch, not a service) is still running or a
-  turn, such as that job's wake, is still to be answered: a run may end its turn to wait for a job, and its run limit
-  still counts that wait.
+  turn, such as that job's wake, is still to be answered, nor while something is set to wake it (`sessionWillWake`: a
+  `schedule_wakeup` still pending, the RESUME_SESSION watch a `task_await` or `session_await` leaves, an armed retry): a
+  run may end its turn to wait for any of these, and its run limit still counts that wait.
+- NO_REPORT and ENGINE_CRASHED are the server's reading of the session, not the agent's word, and the session can
+  come back after either, so they are the failures a report can still replace. Once a person has written to the run's
+  session after the run was failed so, a report from that
+  session is taken as if it had come in time: the run takes its outcome, the failure it counted is undone, its Waiting
+  on you item is withdrawn (a late FAILED files its own), and a push replaces the failure's banner
+  (`REPORTED_LATE`, or the late FAILED's own). It is refused (`SCHEDULE_RUN_ENDED`) before anyone has written, once a
+  newer run of the schedule has started, and on a deleted schedule. Every other failure stays final: RUN_LIMIT and
+  APPROVAL_TIMEOUT interrupt the run on purpose, so its session is stopped rather than read.
 
 ### 7.2 Failure reasons and retries
 
 | `failureReason` | Retried | Meaning |
 | --- | --- | --- |
 | `RUNNER_UNAVAILABLE`, `QUOTA`, `ENGINE_CRASHED_BEFORE_START` | yes, then MISSED (§5.2) | the run never reached the engine (no `delivered_at` on its first turn) |
+| `RUNNER_FULL` | no: MISSED | the run's session waited for a full runner, run or batch until the catch-up window closed |
 | `LANDING_FAILED`, `REPORTED_FAILED`, `NO_REPORT`, `ENGINE_CRASHED`, `APPROVAL_TIMEOUT`, `RUN_LIMIT` | no | the work started and may have had effects |
 | `CANCELLED_BY_OWNER` | no | the owner stopped this run |
 
@@ -529,12 +627,34 @@ run (`LANDING_FAILED`) with its reason, through the same push and **Waiting on y
 - `consecutiveFailures` counts FAILED runs in a row and resets on NO_CHANGE or CHANGED. At 3 the notification says
   "failed 3 runs in a row". The schedule is **not** paused.
 - Whether a run reached its engine is its first turn's `delivered_at`. A run whose first turn is not delivered 10
-  minutes after it started is `RUNNER_UNAVAILABLE` (its session is ended); a session that FAILED before delivery is
+  minutes after it started is `RUNNER_UNAVAILABLE` (its session is ended), unless a full runner holds it (below); a session that FAILED before delivery is
   `QUOTA` when its error is a usage-limit message, else `ENGINE_CRASHED_BEFORE_START`; after delivery it is
   `ENGINE_CRASHED`. A session that ended before delivery is `RUNNER_UNAVAILABLE`, after it `NO_REPORT`. A retry is the same run row back in QUEUED with `attempt + 1` and `notBeforeAt`, and a new
   session; a newer run already waiting takes its place instead.
+- **A full runner is not a missing one.** A run whose session is queued because its runner, its run tree or its
+  batch is full (the session list's `queuedReason` `runner_at_capacity`, `tree_at_capacity` or `batch_at_capacity`,
+  the same SQL: `sessions/queued-reason-sql.ts`) keeps that one session waiting for a slot, with no 10-minute limit
+  and no new attempt, until its catch-up deadline; when a slot frees it is claimed and the run goes on as usual. Each
+  pass that finds it held writes `capacityHeldAt`, and once nothing holds it the 10-minute limit counts from the later
+  of `startedAt` and `capacityHeldAt`, so a slot that has just freed gets the same 10 minutes to be claimed. Still
+  waiting past the deadline, the run is MISSED with `RUNNER_FULL` and its session is ended. A session held by
+  anything else (a runner draining for an update, a clone or a disk gate, or nothing the server can name) keeps the
+  10-minute `RUNNER_UNAVAILABLE` rule and its retries, and a runner offline at the start still opens no session and
+  looks again every minute (§5.2). Pausing (a MANUAL run aside), holding or deleting the schedule retires the waiting
+  session on the next pass (the run is CANCELLED), and Stop this run ends a session whose first turn was never
+  delivered rather than interrupting it, so it cannot start once a slot frees. This followed production on
+  2026-11-19: a Run now on a full 20-slot runner was retired and reopened five times over two hours, each session
+  never getting a turn, and then MISSED as `RUNNER_UNAVAILABLE` ("found no runner online") with the runner online.
 - The run limit counts the engine's working time from `delivered_at`: time a card kept the run waiting is left out,
   so the 2-hour approval timeout can be reached under a run limit of at most 2 hours.
+- **On an `EVERY` rule the run limit is shorter than the interval.** `runLimitMinutes >= minutes` is refused on
+  `schedule_create` and `schedule_update` (`SCHEDULE_RUN_LIMIT_NOT_SHORTER_THAN_INTERVAL`, naming both numbers), before
+  any card: a change of interval that would leave the limit too long has to shorten the limit in the same call. When
+  the input names no limit, an `EVERY` rule gets **min(30, minutes / 2)**: 15 minutes every 30 minutes, 30 every hour
+  or longer. A rule changed to `EVERY` from another kind without a limit in the patch gets the same default if its old
+  limit is not shorter than the new interval, and keeps its limit otherwise. So a run normally ends before its next
+  slot fires, and the overlap rule of §5 (one QUEUED, the older SKIPPED) is for runs held up by a card, not for every
+  run. A shorter limit is always inside the envelope (§4), so this default never needs a card.
 - SKIPPED, MISSED and HELD runs are not failures.
 
 ### 7.3 Who hears
@@ -548,6 +668,7 @@ run (`LANDING_FAILED`) with its reason, through the same push and **Waiting on y
 | HELD, AWAITING_APPROVAL | yes | push and **Waiting on you** |
 | the run ended its own schedule (§8.3) | once | push, opens the schedule |
 | a slot MISSED over the weekly budget (§4) | once, not for the next slots in a row | push, opens the schedule |
+| the schedule reached its planned end, `endAt` or `maxRuns` (§8.5) | once | push, opens the schedule |
 
 - "Tell me every day" needs no setting: the agent writes a prompt that reports each run as CHANGED with a key per day
   (`summary@2026-11-15`).
@@ -566,7 +687,8 @@ run (`LANDING_FAILED`) with its reason, through the same push and **Waiting on y
 - Every run on Claude Code runs in Auto, whatever its access level (owner 2026-11-18), and so do the SubAgents it
   starts: a run waits on no card nobody is there to answer. The level's deny lists still apply in Auto. Other
   engines keep the level's mode: their Auto has no classifier.
-- A NO_CHANGE run completes its session. CHANGED and FAILED runs leave it open for follow-up questions.
+- A NO_CHANGE run completes its session, on the worker's pass once nothing works in it (a job or SubAgent it left
+  running is not stopped under it). CHANGED and FAILED runs leave it open for follow-up questions.
 - Archiving or deleting a run's session keeps the run row; the run shows its session as gone.
 
 ## 8. Creating and changing
@@ -577,8 +699,8 @@ run (`LANDING_FAILED`) with its reason, through the same push and **Waiting on y
 2. When the session can, the agent **does the check once, right there**, and answers with today's result. This is
    the baseline.
 3. The agent calls `schedule_create({intent, title, prompt, rule, timezone?, accessLevel, runLimitMinutes?,
-   baseline?: {key, summary, links?}})`. Workspace and agent are the calling session's. It asks back only when
-   something a person owns is missing ("how often?"), never for a field.
+   endAt?, maxRuns?, baseline?: {key, summary, links?}})`. Workspace and agent are the calling session's. It asks
+   back only when something a person owns is missing ("how often?"), never for a field.
 4. The session shows one card. It has no fields and one press:
 
    ```text
@@ -621,8 +743,25 @@ in progress keeps the revision it started with.
   change. It applies at once inside the envelope, including by itself, and is recorded in the revision’s before /
   after and undoable. Pass it when the prompt or access changes as well as the time; a rule or time-zone change
   without it clears the old read-back so the read derives it.
-- In the inspector, **Change…** opens a new session in the schedule's workspace with the schedule attached, and the
-  person types what to change.
+- **Change…** (inspector, row swipe, long-press and context menus) opens the schedule's **change conversation**
+  (owner 2026-11-19, board `docs/mocks/scheduled-tasks/03-change.png`):
+  - It is a session in the schedule's workspace, bound to the schedule (`Session.changeScheduleId`, `runSource =
+    SCHEDULE_CHANGE`). Its first message is the agent's, drawn by Orbit from the schedule, and starts no engine: until
+    the person says something the client draws it and nothing is written; the session keeps it as it was then
+    (`Session.scheduleChangeOpening`). It says what the schedule does,
+    *When*, *May*, *Costs*, then what can change at once and undo (time, days, what it checks, how it reports) and
+    what needs the owner's **Allow** (more runs, longer runs, more access, another workspace).
+  - The engine starts with the person's first reply. Each message reaches it with a note after the person's words
+    (`<orbit_schedule_change>`, the control plane's) naming the schedule as it is at delivery (id, revision, rule,
+    envelope, read-back) and asking it to change that schedule with `schedule_update`, asking back only for what only
+    the person can decide.
+  - A change made from it is recorded as the person's (`changedBy = USER`), with the person's latest words as
+    `askedText`; the history shows them and links the conversation. A change made from any other session is still
+    `SESSION`.
+  - Change… again returns to the schedule's latest change conversation while it is open; a new one opens once that
+    one is completed, archived or deleted. One opened and left without a word leaves nothing behind.
+  - It is not listed in the workspace's session list: it is reached from the schedule (history, Change…) and from
+    **Waiting on you** when it holds a card. A strip at its top names the schedule and opens it.
 
 ### 8.3 A run changing its own schedule
 
@@ -642,11 +781,87 @@ Each is a `ScheduleRevision` with `changedBy = RUN` and **Undo**. A run asking t
 | --- | --- |
 | Pause | ACTIVE → PAUSED, `nextDueAt` = NULL, a QUEUED run becomes CANCELLED. A RUNNING run continues. |
 | Resume | PAUSED or HELD → ACTIVE, next slot after now. From HELD the §6.1 checks run first. Slots missed while paused are not caught up. |
-| Run now | Writes a MANUAL run under the overlap rule. Allowed when PAUSED; refused when ENDED. Only the owner's own press (the owner-interactive channel) starts over the weekly budget. A session's or a personal access token's Run now is refused over budget (`SCHEDULE_OVER_BUDGET`): a token is what an agent with a shell on the runner holds, so exempting it would let the budget be passed without the owner. Inside the budget both work as before. Either counts as a start toward later automatic runs (§4), and that is the cost of the press: the owner's Run now inside a full week starts, and the next automatic slot is then MISSED (`OVER_BUDGET`). |
+| Run now | Writes a MANUAL run under the overlap rule, recording whether the owner pressed it (`by_owner`). Allowed when PAUSED; refused when ENDED. The owner's own press (the owner-interactive channel) always starts and counts toward no budget. A session's or a personal access token's press counts toward a budget of its own: the same window, the same delivered-or-live rule and the same `envelope.runsPerWeek` as §4, over those presses alone, and over it the press is refused (`SCHEDULE_OVER_BUDGET`). A token is what an agent with a shell on the runner holds, so exempting it would let the budget be passed without the owner. No press takes an automatic slot's place (§4). A run's own session cannot press Run now at all (`SCHEDULE_RUN_SESSION_SCOPE`), so the loop the weekly count guards against is a rule moved to "a few minutes from now", which §4 bounds. Presses still count toward a planned end by count (`maxRuns`, §8.5). |
 | Stop this run | Interrupts the run's session, run → CANCELLED (`CANCELLED_BY_OWNER`). The schedule is unchanged. |
 | Delete | ENDED (`DELETED`), a QUEUED run is cancelled, a RUNNING one continues. Runs and findings are kept. |
+| Rename | Sets `title` alone (§8.4 *Rename*). Refused when ENDED. |
 
-Agents have the same five as tools, so "pause the Codex check until Monday" works from a chat.
+Agents have the same five as tools, so "pause the Codex check until Monday" works from a chat. Rename has no tool of
+its own: an agent renames with `schedule_update({title})`, as before.
+
+**Rename** (owner 2026-11-26, board `docs/mocks/schedule-rename/01-board.png`):
+
+- `title` only: intent, prompt, rule, access and envelope are untouched. The text is trimmed and must be 1–200
+  characters (`checkText`, the same as `schedule_update`). Unchanged text after trimming writes nothing.
+- Always inside the envelope: it applies at once, writes a `ScheduleRevision` (`changedBy = USER`, the title's before
+  and after), shows in the history as "Renamed from “…”" and has **Undo** (`POST /api/schedules/:id/undo`).
+- Allowed while ACTIVE, PAUSED or HELD, and while a run is under way; refused when ENDED (`SCHEDULE_ENDED`). A run in
+  progress keeps its revision and its session keeps its title; later runs, notifications and **Waiting on you** use
+  the new name.
+- No hold (D2 = B): a session or a run may set the title again later through `schedule_update`; that change is
+  recorded and undoable like every other.
+- Clients: **Rename…** in the row's context, long-press and ⋯ menus and in the inspector's ⋯. On web and macOS the
+  inspector title becomes a field in place (Return or leaving it saves, Esc cancels); on iOS the system alert with
+  one text field, the current name selected, Save off while empty or unchanged; Android follows iOS with a dialog.
+
+### 8.5 Planned end
+
+A schedule may stop on its own, by time, by count, or by whichever comes first:
+
+- **`endAt`** (exists): an instant; no slot after it fires (a slot exactly at it does). "Every hour for the next 6
+  hours" is `EVERY 60` with `endAt` 6 hours out; "until 18:00 today" is `endAt` today at 18:00 in the schedule's time
+  zone.
+- **`maxRuns`** (new, optional, at least 1, on every kind of rule): the schedule stops after this many runs have
+  **started**. Starts are counted as §4 counts them: runs of every trigger (SCHEDULED, CATCH_UP and MANUAL) that
+  actually started, a retried undelivered start counted once; SKIPPED, MISSED, HELD and CANCELLED-before-start runs
+  are not counted. The count is over the schedule's whole life. "Check the next 10 releases" or "the next 3 mornings"
+  is `maxRuns`.
+
+Reaching either ends the schedule ENDED (`END_REACHED`), the reason a `ONCE` rule already ends with:
+
+- `endAt`: when the worker advances `nextDueAt` (§5 step 2) and finds no slot at or before `endAt`.
+- `maxRuns`: in the transaction that starts the run reaching it, under the schedule lock §4's count already takes, so
+  two replicas cannot both start a last run. `nextDueAt` becomes NULL and a QUEUED run is CANCELLED. The run that
+  reached it goes on and reports as usual.
+- One push, **"Stopped as planned after N runs"** (N the runs started in all, "after 1 run" for one), opening the
+  schedule. It is sent once the schedule is ENDED and no run of it is still running, so the last run's own push, if it
+  found something, comes first. A `ONCE` schedule, whose end is its only slot, sends none.
+- `endAt` and `maxRuns` are inside the envelope (§4): setting, moving or removing either applies at once with
+  **Undo**. A patch that sets `maxRuns` at or below the runs already started is refused
+  (`SCHEDULE_MAX_RUNS_ALREADY_REACHED`): ending now is `schedule_end`.
+
+**Suggested end for sub-daily rules.** A schedule that runs several times a day and is forgotten costs the most, so
+a create card for an `EVERY` rule that names neither `endAt` nor `maxRuns` carries a suggested end of **7 days**: the
+same local time 7 days after **Create** is pressed, in the schedule's time zone. The card shows it on its own line,
+with the one press that removes it:
+
+```text
+When      Every 30 min · 09:00–18:00 · Mon–Fri · Asia/Shanghai
+Ends      In 7 days, Nov 27 (suggested)                                   [No end]
+Costs     Up to 95 runs a week, 15 min each
+```
+
+**No end** strikes the line on the card; **Create** then writes no end. The press travels with Create
+(`POST /api/schedule-requests/:id/allow {dropSuggestedEnd: true}`), so it writes nothing on its own, and a client that
+does not know the field creates with the suggestion kept. The suggestion is the server's (the card's `proposed` carries
+`suggestedEnd: true`), never the agent's, and an end the person or agent named is never marked suggested and has no
+**No end**. `DAILY`, `WEEKLY` and `ONCE` rules get no suggestion.
+
+**How the end reads on clients.** Every client draws the same words, from one function in `@orbit/shared` (and its
+Swift and Kotlin twins), from the view's `endAt`, `maxRuns` and a new `runsLeft` (`maxRuns` minus the runs started,
+computed by the server; NULL without `maxRuns`):
+
+| Planned end | Reads |
+| --- | --- |
+| `endAt` today, local | "until 18:00 today" |
+| `endAt` tomorrow | "until 18:00 tomorrow" |
+| `endAt` later | "until Nov 27, 18:00" ("until Nov 27" at 00:00) |
+| `maxRuns` | "3 runs left", "1 run left" |
+| both | "until 18:00 today · 3 runs left" |
+| ENDED `END_REACHED` with a planned end | "Stopped as planned after 12 runs" |
+
+The read appears after the rule on a schedule's row, as the *Ends* line of the inspector, and on the create and change
+cards. A schedule with no planned end shows nothing.
 
 ## 9. Surfaces
 
@@ -657,7 +872,9 @@ Agents have the same five as tools, so "pause the Codex check until Monday" work
   sessions only). The descriptions of `schedule_create` and `schedule_wakeup` carry the table of §1.
 - REST: `GET /api/schedules`, `GET /api/schedules/:id`, `GET /api/schedules/:id/runs`,
   `POST /api/schedules/:id/{pause,resume,run,undo}`, `DELETE /api/schedules/:id`, `POST /api/schedule-runs/:id/stop`.
-  There is no REST door that creates or changes a schedule: those go through a session and its card.
+  `POST /api/schedules/:id/rename {title}` (§8.4 *Rename*, owner 2026-11-26) is the one REST door that changes a
+  schedule, and it changes the title alone; it answers as Undo does (the schedule and the change's record). There is
+  no other REST door that creates or changes a schedule: those go through a session and its card.
 - The cards (S4, 2026-11-15): a card is its `ScheduleChangeRequest` row. `schedule_create` returns at once with the
   PENDING create card (and says in words that nothing is scheduled yet); `schedule_update` returns APPLIED with the
   change's record (its Undo is `POST /api/schedules/:id/undo`) or PENDING with the envelope card. The owner's press is
@@ -674,6 +891,12 @@ Agents have the same five as tools, so "pause the Codex check until Monday" work
   session (claim field `scheduleRun`, `ORBIT_SCHEDULE_RUN=1`).
 - The quick-add line: `POST /api/schedules/drafts {workspaceId, text}` opens an ordinary session with the sentence;
   `GET /api/schedules/drafts` lists the account's PENDING create cards, each naming the session that put it up.
+- Change… (§8.2): `GET /api/schedules/:id/change` answers `{sessionId, opening}`: the schedule's open change
+  conversation if it has one, and the opening Orbit draws for a new one; nothing is written. `POST
+  /api/schedules/:id/change {text}` opens one with the person's first words and answers `{sessionId, created}`; when
+  one is already open (another device), the words are said there and `created` is false. The person's door: a request
+  with an acting session is refused `SCHEDULE_CHANGE_FROM_SESSION`. `GET /api/sessions/:id/schedule-cards` adds
+  `change`, the opening a change conversation was drawn with.
 - Tokens: the reads take `sessions:read`, the controls `sessions:write`; no token reaches a card press.
 
 ### 9.2 Clients
@@ -688,20 +911,45 @@ As decided in revision 3, modelled on Reminders' *Scheduled* list:
   and a failing one is tagged on its own row, on the day of its next run. While a run of it is under way (Run now,
   or its next slot) the tag is off: a failure puts it back, a run that did not fail clears it. A held schedule has no
   next run and is listed under **Paused**, before the paused ones, with its Held tag. **Show past runs** puts earlier runs back, ticked off. A workspace filter sits in the header.
+- **Rule sentence** for `EVERY` (the server's `ruleText`, and `scheduleRuleText` on clients): "Every 30 min,
+  09:00–18:00, Mon–Fri"; "Every hour"; "Every 2 hours from 08:00, weekends"; seven weekdays are left unsaid. The
+  timeline lists a sub-daily schedule once per day, at its next slot that day, not once per slot.
+- **Missed slots, collapsed:** in a run list (the inspector's history, `GET /api/schedules/:id/runs` as clients draw
+  it) consecutive MISSED runs of one schedule, with no other run between them, are one row: "16 slots missed,
+  01:00–08:30" (the first and last `plannedAt`, local; with dates when they span days: "Nov 19, 22:00–Nov 20, 06:30").
+  A single MISSED run is its own row as before. The row expands to the runs it covers, and the reason line is the
+  newest run's (§5.2, §4). The rows stay one per slot on the server: collapsing is drawing, done the same on every
+  client by a shared function.
 - **Inspector** (beside the list on web and macOS, a sheet on iOS): the read-back sentence, next run, last result,
   *What was asked* (the intent), *Notes for the next run*, this month's use, history (runs and revisions with
-  **Undo**, each naming who made it: you, a session, or a run), the controls of §8.4 and **Change…**.
+  **Undo**, each naming who made it: you, a session, or a run), the controls of §8.4 (with **Rename…**) and
+  **Change…**.
 - **Quick-add line** at the end of the list: "Describe a scheduled task…" with the workspace it will use.
 - **Sessions:** the create card, the change line with Undo, the widen card; on a run's session a header naming the
-  schedule and the report card.
+  schedule and the report card; on a change conversation a strip naming the schedule, which opens it.
 - **Waiting on you:** failed runs, held schedules, run approvals and widen cards asked by a run.
 
 Mocks first, with iOS as the reference. Client work starts after the owner approves them.
 
+### 9.3 Clients already shipped
+
+`EVERY` and `maxRuns` reach clients that predate them, and those must keep working:
+
+- shipped macOS and iOS clients decode a rule of an unknown `kind` as `WEEKLY`, and throw when it has no `time`,
+  which fails the whole schedule list;
+- shipped Android drops a rule without `time`.
+
+So every `EVERY` rule the server writes or returns carries `time` and `weekdays` (§3), and an old client reads it as
+"weekly at `time` on `weekdays`": one row it shows wrongly, never a list it cannot read. The server's `ruleText`
+carries the true sentence for a client that shows it. `maxRuns` and `runsLeft` are extra fields old clients ignore.
+A spec on the server asserts that every `EVERY` rule it writes has both fields; each client keeps a decoding test of
+an `EVERY` fixture through its old path.
+
 ## 10. Out of scope for v1
 
 - A deploy access level. Pausing automatically after failures. A form.
-- Cron and sub-daily rules (P3). The envelope already counts runs per week, so they need no new rule.
+- Cron rules (P3). Sub-daily rhythms are `EVERY` (§3), so nothing that needs an expression is left.
+- Raising the `WHEN` rule's 7-runs-a-week cap.
 - Pinning a runner.
 - A cheap pre-check before starting a model ("only start a session if this URL's hash changed"). The Watch contract
   keeps shell out of the server; if wanted later it belongs on the runner. That pre-check is now designed in
@@ -714,7 +962,8 @@ Mocks first, with iOS as the reference. Client work starts after the owner appro
 | --- | --- |
 | P1 server | migration and model; envelope rule; firing worker with overlap, catch-up and retry; start checks; run block; report, note and findings; run limit; notifications into push and Waiting on you; run sessions hidden and completed; revisions with undo; MCP tools with the create and widen cards; read-only REST and controls; pg specs for every rule in §4–§8 |
 | P2 clients | boards → owner approval → left-drawer page, inspector and session cards on iOS, then web, macOS, Android |
-| P3 | cron and sub-daily rules |
+| Sub-daily | `EVERY` rules (§3, §5.1), their runs per week (§4), run limit and catch-up (§5.2, §7.2), the planned end (§8.5), shipped-client compatibility (§9.3) and the collapsed missed row (§9.2): server and shared first, then the clients independently |
+| P3 | cron rules |
 
 ## 12. Open points for P1, settled (S2, 2026-11-15)
 
@@ -856,7 +1105,8 @@ session's or a personal access token's Run now over it is refused (`SCHEDULE_OVE
 reuses the run row and clears `startedAt`). No migration: `schedule_run.planned_at`, `started_at` and `failure_reason` carry it.
 
 **3. The defaults** stay: approval timeout 2 hours; retries after 1, 5 and 15 minutes, then hourly inside the
-catch-up window (§5.2, §7.2); run limit 30 minutes, at most 120. One change: the run limit counts working time only, without
+catch-up window (§5.2, §7.2); run limit 30 minutes, at most 120 (an `EVERY` rule: min(30, interval / 2) and always
+shorter than the interval, §7.2). One change: the run limit counts working time only, without
 the time a card waited (§7.2), or the approval timeout could never fire. A first turn not delivered within 10
 minutes is `RUNNER_UNAVAILABLE`; a slot fired within 10 minutes of its time is SCHEDULED, later it is CATCH_UP.
 

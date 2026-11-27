@@ -1,6 +1,6 @@
 import type { ReportedEngine, RunnerAgentFix, RunnerAttentionFixKind, RunnerAttentionFixRequest } from '@orbit/shared';
 import type { AttentionItem } from './runnerAttention';
-import { agentFixSignInAbove, agentFixSignInBelow, agentFixStartsIn } from './runnerCopy';
+import { agentFixSignInAbove, agentFixSignInBelow, agentFixSignInOnMachinePage, agentFixStartsIn } from './runnerCopy';
 
 /**
  * Fix with an agent (POST /runners/:id/attention/:kind/fix): which warnings offer it, and what to draw.
@@ -41,10 +41,52 @@ export function installFixTarget(engine: ReportedEngine): AgentFixTarget {
 /** The Update engines report with failed lines: the machine's, whichever engines failed. */
 export const ENGINE_UPDATE_FIX_TARGET: AgentFixTarget = { kind: 'engineUpdateFailed', engine: null, body: {} };
 
+/** The engine whose sandbox names the missing package, in the transcript's warning
+ *  (docs/mocks/codex-sandbox-fix-with-agent). */
+export const SANDBOX_FIX_ENGINE: ReportedEngine = 'codex';
+
+/** The missing-bubblewrap warning a session's transcript caught: one press installs what Codex wants. */
+export function sandboxFixTarget(engine: ReportedEngine = SANDBOX_FIX_ENGINE): AgentFixTarget {
+  return { kind: 'sandboxMissing', engine, body: { engine } };
+}
+
 export type AgentFixView =
   | { state: 'fixing'; workspaceName: string; sessionId: string }
   | { state: 'ready'; line: string | null }
   | { state: 'blocked'; line: string };
+
+/** A transcript row's warning has no runner-reported card: it is the warning itself, so it draws the
+ *  agent at work, the one that already finished with it, or the button. */
+export type SandboxFixView =
+  | { state: 'fixing'; workspaceName: string; sessionId: string }
+  | { state: 'handled'; workspaceName: string; sessionId: string }
+  | { state: 'ready'; line: string | null }
+  | { state: 'blocked'; line: string };
+
+/**
+ * What the transcript's sandbox warning draws. The handled line comes before the button so a history
+ * row that already handed the work to an agent does not offer a second one; a later warning is a new
+ * row, and this one's session is over.
+ */
+export function sandboxFixView(fix: RunnerAgentFix | null | undefined): SandboxFixView | null {
+  if (!fix) return null;
+  const isSandbox = (f: { kind: RunnerAttentionFixKind; engine: ReportedEngine | null }) =>
+    f.kind === 'sandboxMissing' && f.engine === SANDBOX_FIX_ENGINE;
+  const fixing = fix.fixing.find(isSandbox);
+  if (fixing) return { state: 'fixing', workspaceName: fixing.workspaceName, sessionId: fixing.sessionId };
+  const handled = fix.handled.find(isSandbox);
+  if (handled) return { state: 'handled', workspaceName: handled.workspaceName, sessionId: handled.sessionId };
+  if (fix.blocked) {
+    const signIn = fix.blocked.code === 'engineSignedOut' && fix.engineName
+      ? agentFixSignInOnMachinePage(fix.engineName)
+      : '';
+    return { state: 'blocked', line: fix.blocked.message + signIn };
+  }
+  return {
+    state: 'ready',
+    line: fix.workspaceName && fix.engineName ? agentFixStartsIn(fix.workspaceName, fix.engineName) : null,
+  };
+}
 
 /**
  * What one warning draws: the fixing line while its agent is open, else the button — disabled with the

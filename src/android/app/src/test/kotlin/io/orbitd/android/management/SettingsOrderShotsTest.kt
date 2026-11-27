@@ -102,10 +102,11 @@ class SettingsOrderShotsTest {
         open(null)
         await("1 needs you")
         val order = listOf(SETTINGS_PERSONAL, GENERAL, "Notifications", "Appearance", SETTINGS_PROFILE, "Shared links", AccessTokens.TITLE,
-            Terminals.TITLE, MachinesAndModels.MACHINES, SETTINGS_PROVIDERS, "Sign out")
+            MachinesAndModels.MACHINES, SETTINGS_PROVIDERS, "Sign out")
         val tops = order.map(::top)
         assertEquals("top to bottom: $order", tops.sorted(), tops)
-        listOf("Preferences", "Account", "Instance", "Admin", "Email", "Change password", MachinesAndModels.TITLE, SESSION_RECAPS)
+        // No Terminals row: each machine's page lists its own terminals (docs/mocks/terminals-on-machine-page).
+        listOf("Preferences", "Account", "Instance", "Admin", "Email", "Change password", MachinesAndModels.TITLE, SESSION_RECAPS, Terminals.TITLE)
             .forEach { compose.onAllNodesWithText(it).assertCountEquals(0) }
         compose.onAllNodesWithText("Orbit ", substring = true).assertCountEquals(0)
         shot("settings-home")

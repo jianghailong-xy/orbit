@@ -1,6 +1,7 @@
 package io.orbitd.android.schedule
 
 import io.orbitd.android.core.schedule.ScheduleCard
+import io.orbitd.android.core.schedule.ScheduleChangeOpening
 import io.orbitd.android.core.schedule.ScheduleChangeRecord
 import io.orbitd.android.core.schedule.ScheduleRule
 import io.orbitd.android.core.schedule.ScheduleRunView
@@ -110,6 +111,25 @@ class ScheduleAppTest {
         val run = ScheduleRunView(id = "r2", scheduleId = schedule, plannedAt = "2026-11-14T09:59:00.000Z", state = "RUNNING")
         val state = ScheduledStore.State(runs = mapOf(ScheduledStore.key(session) to ScheduledStore.RunContext(view(schedule), run, null)))
         assertEquals(listOf("schedule-run-strip-r2"), ScheduleInsert.of(state, session).map { it.key })
+    }
+
+    @Test fun aChangeConversationOpensWithOrbitsOpeningAheadOfEveryRow() {
+        // A change conversation (§8.2): the schedule-cards read's `change` leads the transcript, before the person's
+        // first words, with no moment of its own; cards and records still go where they happened.
+        val opening = ScheduleChangeOpening(scheduleId = schedule, title = "Codex stable check", revision = 3, does = "Checks",
+            `when` = "Every day at 09:00", runsIn = "apiserver", may = "Check only", costs = "Up to 7 runs a week")
+        val card = ScheduleCard(id = "c1", kind = "UPDATE", createdAt = "2026-11-14T10:05:00.000Z")
+        val state = ScheduledStore.State(sessions = mapOf(ScheduledStore.key(session) to
+            SessionScheduleCardsResponse(cards = listOf(card), records = emptyList(), change = opening)))
+        val inserts = ScheduleInsert.of(state, ObjectId.toPublic(session))
+        assertEquals(listOf("schedule-change-opening-$schedule", "schedule-card-c1"), inserts.map { it.key })
+        val placed = ScheduleInsert.place(listOf("2026-11-14T10:00:00.000Z"), inserts)
+        assertEquals(listOf("schedule-change-opening-$schedule"), placed[-1]?.map { it.key })
+        assertEquals(listOf("schedule-card-c1"), placed[0]?.map { it.key })
+        // An ordinary conversation reads no change, and draws none.
+        assertEquals(emptyList<ScheduleInsert>(),
+            ScheduleInsert.of(ScheduledStore.State(sessions = mapOf(ScheduledStore.key(session) to
+                SessionScheduleCardsResponse(cards = emptyList(), records = emptyList()))), session))
     }
 
     @Test fun theTimelineListsOnlyTheFilteredWorkspaceAndItsDrafts() {

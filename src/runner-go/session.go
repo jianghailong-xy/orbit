@@ -861,7 +861,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// this belongs to the flush and not to the engine's reader. The roots are this session's own
 	// directories; the memo keeps a retried batch, or a mock linked twice, from being uploaded
 	// again under a second id.
-	replyFiles := newReplyAttachmentIDs()
+	replyFiles := replyFilesOf(sessionID)
+	defer replyFileMemos.Delete(sessionID)
 	replyFileRoots := []string{execDir, uploadsDir(sessionID)}
 	// takeBuffered takes what is buffered, its reply files uploaded.
 	takeBuffered := func(flushCtx context.Context) []RunEvent {
@@ -975,12 +976,18 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// run_event held the message. Keep the last one so finalize can carry it.
 	var lastErrMu sync.Mutex
 	lastErrorMessage := ""
+	// What the run's last FAILED turn failed with, as its adapter classified it, and its admission (§5.1):
+	// finalize carries both on a FAILED end. Under lastErrMu.
+	var lastTurnFailure *RunFailure
+	var lastTurnAdmission *bool
 	// Baseline for the main-checkout card below, taken before this session runs anything so
 	// pre-existing changes are never blamed on it. Nil unless the session is isolated.
 	mainCheckout := watchMainCheckout(job.WT)
 	// The session's background work (newBgTailer below), declared ahead of emitThrough, which
 	// announces its runner-hosted jobs again behind every `resumed` handshake.
 	var bg *bgTailer
+	// What this run's events say is executing, for the heartbeat to state whole (session_executing.go).
+	executing := newExecutingFold()
 	// Declared ahead of emitThrough, which spawns it behind a successful turn_end, and assigned
 	// once emitFor exists: the server's next-message guess for an engine without one
 	// (orbit_prompt_suggestion.go), filed against the turn it follows like the engine's own.
@@ -992,7 +999,10 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		payload = runnerSecrets().scrubPayload(payload)
 		// The one place a turn the engine runs on its own shows up at all. Told before the
 		// event is buffered, so nothing reading the stream is ahead of the pool.
-		pool.engineTurnEvent(live, eventType, payload)
+		if pool.engineTurnEvent(live, eventType, payload) && t.returnHeldSlot != nil {
+			go t.returnHeldSlot(sessionID) // the engine's own turn ended under a claim held for the update
+		}
+		executing.observe(eventType, payload)
 		// A tool may have written to the volume (a commit, an edit): a managed runner syncs it
 		// behind the tool, in the background, without holding the stream up (volume_durability.go).
 		if eventType == evToolResult {
@@ -1225,6 +1235,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		}
 		cancelFlush()
 	}
+	// From here on this run states, on every heartbeat, what is executing in the session: its jobs adopted above included.
+	clearExecutingProbe := pool.setExecutingProbe(live, executingProbeFor(executing, bg))
+	defer clearExecutingProbe()
 	// Claude records background-shell completions in its transcript even while the session is
 	// idle, but only streams them to stdout on the next turn; tail the transcript so a shell
 	// that finishes between turns still clears from the "Background processes" tray. (Claude
@@ -1302,6 +1315,15 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		// Every owner-request secret's value out of its text and patches, before it is kept on disk or sent
 		// (secret_wire.go).
 		req = scrubTurnComplete(req, sessionID)
+		// A classification and an admission belong to a FAILED turn only (engine_failure.go); the last one is the
+		// run's, for finalize.
+		if req.Status != stFailed {
+			req.Failure, req.Admission = nil, nil
+		} else {
+			lastErrMu.Lock()
+			lastTurnFailure, lastTurnAdmission = req.Failure, req.Admission
+			lastErrMu.Unlock()
+		}
 		// Kept before anything else: the flush below sends no completion when it fails, and a runner that
 		// stops, or is killed, before the control plane answers leaves it to its next process.
 		completions.keep(req)
@@ -1415,6 +1437,11 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	lastClaimJob := job
 	respawns := 0
 	terminalAckSettled := false
+	// failedTurnHeld: a failed turn this run reported under the session-release protocol holds the session for this
+	// run's release, or may (session_release.go failedTurnHold). The run ends then by the release alone, with the
+	// failure's permanent commit; nothing else this supervisor does takes another turn.
+	failedTurnHeld := false
+	hold := holdNone
 	leaseResetGeneration := ""
 	retirePendingGeneration := func() error {
 		if leaseResetGeneration == "" {
@@ -1470,7 +1497,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			break
 		}
 		permitGeneration := pool.permitGeneration(live)
-		next, err := t.turnComplete(turnAckCtx, sessionID, kept)
+		next, declared, err := t.turnCompleteReporting(turnAckCtx, sessionID, kept)
 		completions.settle(kept.TurnID, unansweredAtStop(err))
 		if err != nil {
 			switch {
@@ -1492,11 +1519,16 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			leaseResetGeneration = ""
 			break
 		}
+		if heldByFailedTurn(declared, next) {
+			failedTurnHeld, hold = true, holdConfirmed
+			status = stFailed
+			break
+		}
 		if !retainsTurnPermit(next) {
 			pool.park(live, permitGeneration)
 		}
 	}
-	for !terminalAckSettled {
+	for !terminalAckSettled && !failedTurnHeld {
 		if sessionCtx.Err() != nil || shutdownCtx.Err() != nil {
 			break
 		}
@@ -1664,7 +1696,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 				}
 			} else {
 				syncManagedVolume("a failed turn", execDir)
-				terminalAckStatus, terminalAckErr = t.turnComplete(turnAckCtx, sessionID, ack.request)
+				var declared bool
+				terminalAckStatus, declared, terminalAckErr = t.turnCompleteReporting(turnAckCtx, sessionID, ack.request)
 				completions.settle(ack.request.TurnID, unansweredAtStop(terminalAckErr))
 				if isLeaseOwnershipError(terminalAckErr) {
 					markOwnershipLost(terminalAckErr)
@@ -1678,10 +1711,23 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 				// finalized as it always was, with the cancel's reason standing.
 				regionReport := ack.request.Subtype == claudeRegionRefusedSubtype || ack.request.Subtype == claudeRegionStoppedSubtype
 				regionHold := regionReport && (terminalAckStatus == stPending || terminalAckStatus == stAwaitingInput)
-				if terminalAckErr == nil && !terminalTurnCompleteStatus(terminalAckStatus) && !regionHold {
+				// Under the session-release protocol the failure is the turn's, and the session is held for the
+				// release this run sends once its engine and checkout are done with (session_release.go). Its
+				// inbox generation is released below, as after any engine that stopped.
+				if h := holdAfterReport(declared, terminalAckStatus, terminalAckErr); h != holdNone {
+					if h == holdUnknown {
+						logln("failed turn of", sessionID, "reported as its outcome, with no answer ("+terminalAckErr.Error()+"); the session may be held, so it ends by its release")
+					} else {
+						logln("failed turn of", sessionID, "reported as its outcome; the session is held for its release")
+					}
+					failedTurnHeld, hold = true, h
+					terminalAckErr = nil
+					status = stFailed
+					pendingTerminalAck.clear(ack.request.TurnID)
+				} else if terminalAckErr == nil && !terminalTurnCompleteStatus(terminalAckStatus) && !regionHold {
 					terminalAckErr = fmt.Errorf("failed-turn turn-complete returned non-terminal status %q", terminalAckStatus)
 				}
-				if terminalAckErr == nil {
+				if terminalAckErr == nil && !failedTurnHeld {
 					terminalAckSettled = true
 					status = terminalAckStatus
 					pendingTerminalAck.clear(ack.request.TurnID)
@@ -1730,7 +1776,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			}
 			break
 		}
-		if terminalAckSettled {
+		if terminalAckSettled || failedTurnHeld {
 			break
 		}
 		firstSpawn = false
@@ -1811,16 +1857,20 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		case <-time.After(time.Duration(respawns) * crashRespawnBackoff):
 		}
 	}
-	if ctx.Err() != nil && !terminalAckSettled {
+	// A held failed turn is not turned into a stop by the teardown cancel its own report asked for: its release reports
+	// the failure, and its commit is the permanent one (finalizeWorktreeReport).
+	if ctx.Err() != nil && !terminalAckSettled && !failedTurnHeld {
 		status = stCancelled
 	}
 	// Events the link gave up end the session as failed, with why (markEventsGivenUp), unless it was cancelled, settled
 	// or lost to another process first.
-	if givenUp := eventsGivenUp.Load(); givenUp != nil && ctx.Err() == nil && !terminalAckSettled && !ownershipLost.Load() {
+	if givenUp := eventsGivenUp.Load(); givenUp != nil && ctx.Err() == nil && !terminalAckSettled && !failedTurnHeld && !ownershipLost.Load() {
 		status = stFailed
 		finalizeSubtype = ""
 		lastErrMu.Lock()
 		lastErrorMessage = (*givenUp).Error()
+		// The run ends on the runner's reason, not the engine's: no turn's classification describes it.
+		lastTurnFailure, lastTurnAdmission = nil, nil
 		lastErrMu.Unlock()
 	}
 	// Stop and join runner-owned background work before the final event drain and
@@ -1917,6 +1967,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	if status == stFailed {
 		lastErrMu.Lock()
 		finalizeRequest.Error = lastErrorMessage
+		finalizeRequest.Failure, finalizeRequest.Admission = lastTurnFailure, lastTurnAdmission
 		lastErrMu.Unlock()
 		finalizeRequest.Subtype = finalizeSubtype
 	}
@@ -1932,10 +1983,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	}
 	// The finalize commit and the engine's last writes are on the volume before the end is reported.
 	syncManagedVolume("the session's end", execDir)
-	err := retryIdempotentWhile(finalizeCtx, func(attemptCtx context.Context) error {
-		_, attemptErr := t.finalizeRun(attemptCtx, job.SessionID, finalizeRequest)
-		return attemptErr
-	}, isRetryableTransportError)
+	// The release under the session-release protocol, the finalize under the old one (session_release.go endRun).
+	protocol, err := endRun(finalizeCtx, t, job.SessionID, finalizeRequest, hold)
 	if isLeaseOwnershipError(err) {
 		markOwnershipLost(err)
 		logln(fmt.Sprintf("⏏ interactive run %s — detached before stale finalization", job.SessionID))
@@ -1944,7 +1993,11 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	if err != nil {
 		logln("run finalization failed for", job.SessionID+":", err)
 	} else {
-		logln(fmt.Sprintf("■ interactive run %s → %s", job.SessionID, status))
+		if protocol == "release" {
+			logln(fmt.Sprintf("■ interactive run %s → %s (released)", job.SessionID, status))
+		} else {
+			logln(fmt.Sprintf("■ interactive run %s → %s", job.SessionID, status))
+		}
 		// After the end is on the record and still inside the finalization fence, so no claim of this
 		// session can be setting its checkout up meanwhile. A finalize that failed keeps everything: the
 		// branch is then the only record of what the chat was on.
@@ -1966,6 +2019,11 @@ var builtinTaskTools = []string{
 	"TaskCreate", "TaskUpdate", "TaskGet", "TaskList", "TaskOutput", "TaskStop",
 	"TodoWrite", "TodoRead",
 }
+
+// builtinSubAgentTools are Claude's own sub-agent tool, under the two names it has had. They are disabled in a session
+// that is served Orbit's delegate (claude_spawn.go), which is the door for the same request that records the work and
+// brings its result back (design D1). Denying a name the installed claude does not have is a no-op.
+var builtinSubAgentTools = []string{"Agent", "Task"}
 
 // withBuiltinTaskToolsDisallowed appends builtinTaskTools to the agent's configured
 // disallow list, de-duplicated and order-stable.
@@ -2297,6 +2355,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// The generation's inbox: what fetches its turns, and the turnIds being processed (dedup
 	// lease re-delivery).
 	inbox := newInboxPoller(t, job.SessionID, leaseGeneration)
+	inbox.holdTurns(waitTurnPermit, job, completeTurn) // a turn waiting for its permit does not stop the inbox being read
 	defer inbox.close()
 	// Exact Orbit executable turn owned by this Claude generation. It is separate from the
 	// transcript attribution cursor: the poller and stdout reader use it as one linearization
@@ -2571,16 +2630,22 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				}
 				// Prepend any buffered `!`-shell output as context - claude sees the
 				// command+output with this message (CLI `!` semantics), no turn spent on it.
+				// The CLI runs a slash command only when the text starts with it: nothing goes in front of one,
+				// and what would have (shell output, the reset note, a reply-file correction) waits for the next message.
+				slashCommand := isClaudeSlashCommand(resp.Content)
 				feedText := resp.Content
-				if len(pendingShellCtx) > 0 {
+				if len(pendingShellCtx) > 0 && !slashCommand {
 					feedText = strings.Join(pendingShellCtx, "\n") + "\n\n" + resp.Content
 					// NOT cleared here: a message the runtime refuses below is never fed, and
 					// the shell output it was carrying still belongs to whatever is fed next.
 				}
 				// A conversation compacted or resumed since the last message: this one says so first. Like the
 				// shell output, the flag is cleared only once the message is accepted below.
-				carriesReset := !steer && contextReset.Load()
+				carriesReset := !steer && !slashCommand && contextReset.Load()
 				feedText = withContextResetNote(feedText, carriesReset, job.insideRecordedWork())
+				if !steer && !slashCommand {
+					feedText = withReplyFileCorrection(feedText, replyFilesOf(job.SessionID).takeCorrection())
+				}
 				// Tell claude where the written-to-disk uploads landed (absolute paths outside
 				// the worktree), so it reads them with its tools instead of expecting inline
 				// content it never received.
@@ -2645,7 +2710,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				// so everything that answers for it can be put in place before it can be
 				// answered.
 				deliveries.accept(delivery, slot.receipt)
-				pendingShellCtx = nil // this message carries it now
+				if !slashCommand {
+					pendingShellCtx = nil // this message carries it now
+				}
 				if carriesReset {
 					contextReset.Store(false)
 				}
@@ -3024,6 +3091,8 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// content filtering) shows up here while the trailing `result` still says success,
 	// so we use it to fail the turn below. Reset once the turn's `result` is handled.
 	var lastAssistantText string
+	// What the turn put out before its result, for the admission of a failed one (claudeTurnOutput).
+	var turnOutput claudeTurnOutput
 	// Running context-window occupancy: the latest top-level assistant message's total
 	// tokens (input + cache + output). Carried into each turn_end event so the clients'
 	// context gauge updates live and, via event replay, on session reopen. Persists
@@ -3117,6 +3186,7 @@ scanLoop:
 			if len(pending) == 0 {
 				engineOwnTurn.Store(true)
 			}
+			turnOutput.observe(msg)
 			if txt := assistantText(msg); txt != "" {
 				lastAssistantText = txt
 			}
@@ -3223,6 +3293,14 @@ scanLoop:
 					isConnectionFailure(r.Result) || isConnectionFailure(lastAssistantText)) {
 				turnStatus = stFailed
 			}
+			// What a failed turn failed with, and whether the engine put anything out first (§5.2, §5.3).
+			var turnFailure engineFailure
+			var turnAdmitted *bool
+			if turnStatus == stFailed {
+				turnFailure = claudeTurnFailureOf(r.Result, lastAssistantText)
+				turnAdmitted = turnOutput.admission(r, firstNonEmpty(turnFailure.Said, strings.TrimSpace(r.Result), strings.TrimSpace(lastAssistantText)))
+			}
+			turnOutput = claudeTurnOutput{}
 			lastAssistantText = ""
 			// A failed turn's own card is what comes next, so nothing is suggested after it.
 			lastAnsweredTurnID = ""
@@ -3259,7 +3337,7 @@ scanLoop:
 					BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 					BranchMerged:   branchMergedInto(job.WT),
 					WorktreeBranch: currentBranch(job.WT),
-				}); err != nil {
+				}.withFailure(turnFailure, turnAdmitted)); err != nil {
 					logln("turn-complete failed for", job.SessionID+":", err)
 				}
 				inbox.clearInflight(turnID)

@@ -12,6 +12,8 @@ import { randomUUID } from 'node:crypto';
 import { RunEventType, uuidToBase62, type SessionRequestView } from '@orbit/shared';
 
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import { RELEASE_FAILURE_SELECT } from '../common/session-release';
+import { TURN_STATE_SELECT } from './session-turn-state';
 import { PrismaService } from '../prisma/prisma.service';
 import { derivedUuid } from '../projects/project-dispatch-identity';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -295,7 +297,7 @@ export class SessionRequestService {
       const asker = await tx.session.findFirst({
         where: { id: request.fromSessionId, ownerId: request.ownerId },
         select: {
-          status: true, retryAt: true, retryClaimedAt: true, cancelRequestedAt: true,
+          ...RELEASE_FAILURE_SELECT, ...TURN_STATE_SELECT, retryAt: true, retryClaimedAt: true, cancelRequestedAt: true,
           completedAt: true, archivedAt: true, deletedAt: true,
         },
       });
@@ -332,8 +334,8 @@ export class SessionRequestService {
     const asker = await this.prisma.session.findFirst({
       where: { id: request.fromSessionId, ownerId: request.ownerId },
       select: {
-        title: true, taskId: true, status: true, endReason: true, cancelRequestedAt: true, retryAt: true,
-        retryClaimedAt: true, completedAt: true, archivedAt: true, deletedAt: true,
+        title: true, taskId: true, ...RELEASE_FAILURE_SELECT, ...TURN_STATE_SELECT,
+        cancelRequestedAt: true, retryAt: true, retryClaimedAt: true, completedAt: true, archivedAt: true, deletedAt: true,
       },
     });
     // The asker's row is gone: nothing left to tell, and the mark is cleared so a request that
@@ -377,7 +379,7 @@ export class SessionRequestService {
       const asker = await tx.session.findFirst({
         where: { id: request.fromSessionId, ownerId: request.ownerId },
         select: {
-          status: true, retryAt: true, retryClaimedAt: true, cancelRequestedAt: true,
+          ...RELEASE_FAILURE_SELECT, ...TURN_STATE_SELECT, retryAt: true, retryClaimedAt: true, cancelRequestedAt: true,
           completedAt: true, archivedAt: true, deletedAt: true,
         },
       });
@@ -425,8 +427,8 @@ export class SessionRequestService {
     const asker = await this.prisma.session.findFirst({
       where: { id: request.fromSessionId, ownerId: request.ownerId },
       select: {
-        title: true, taskId: true, status: true, endReason: true, cancelRequestedAt: true, retryAt: true,
-        retryClaimedAt: true, completedAt: true, archivedAt: true, deletedAt: true,
+        title: true, taskId: true, ...RELEASE_FAILURE_SELECT, ...TURN_STATE_SELECT,
+        cancelRequestedAt: true, retryAt: true, retryClaimedAt: true, completedAt: true, archivedAt: true, deletedAt: true,
       },
     });
     if (!asker?.taskId) return;

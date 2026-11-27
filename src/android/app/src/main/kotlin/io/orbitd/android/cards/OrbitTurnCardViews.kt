@@ -52,6 +52,8 @@ internal fun OrbitTurnCardView(card: InteractionCard, event: RunEvent?, open: (S
     val ts = event?.ts
     when (field) {
         "sessionOpening" -> { SessionOpeningLine(source, event, open); return }
+        // The message telling a coordinator its project was started (board-4; OrbitKit `ProjectStartedCardView`).
+        "projectStarted" -> { ProjectStartedCardView(card, event, open, undelivered); return }
         "evidenceReview" -> TurnCardFrame(
             tag = "turn-evidence-review",
             tone = if (OrbitTurnCards.evidenceReviewOpen(source)) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -135,13 +137,13 @@ private fun liveRunQuestion(card: InteractionCard): JsonObject {
     return OrbitTurnCards.runQuestionShown(stored, request)
 }
 
-/** Whether a card is one of the five this file draws: the row is then only that card (and the opening, only its line). */
+/** Whether a card is one of Orbit's turns this file draws — the five, and Project started: the row is then only that card (and the opening, only its line). */
 internal fun isOrbitTurnCard(card: InteractionCard) =
-    card.key.substringAfterLast(':') in setOf("evidenceReview", "evidenceSendBack", "runQuestion", "runNotice", "sessionOpening")
+    card.key.substringAfterLast(':') in setOf("evidenceReview", "evidenceSendBack", "runQuestion", "runNotice", "sessionOpening", "projectStarted")
 
 @Composable
 private fun TurnCardFrame(tag: String, tone: Color, icon: Int, head: String, ts: String?, body: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxWidth().testTag(tag)
+    Column(Modifier.conversationCard().testTag(tag)
         .background(tone.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
         .border(1.dp, tone.copy(alpha = 0.30f), RoundedCornerShape(8.dp))
         .padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {

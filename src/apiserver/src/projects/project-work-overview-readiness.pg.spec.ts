@@ -5,13 +5,13 @@ import {
   CreatorType,
   PrismaClient,
   RunnerStatus,
-  RunStatus,
   SessionDispatchOrigin,
   TaskCompletionCriterion,
   TaskCompletionPolicy,
   TaskStatus,
   TaskVerdict,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -162,7 +162,7 @@ async function makeWorld(db: PrismaClient): Promise<World> {
       taskId: verifierRunning,
       title: 'running verifier',
       prompt: 'verify independently',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
     },
@@ -195,7 +195,7 @@ async function makeWorld(db: PrismaClient): Promise<World> {
       taskId: verifierPassed,
       title: 'settled verifier',
       prompt: 'verify independently',
-      status: RunStatus.SUCCEEDED,
+      turnState: null, finishedAt: new Date(), 
       dispatchOrigin: SessionDispatchOrigin.USER,
       endReason: 'task_done',
       completedAt: new Date(),

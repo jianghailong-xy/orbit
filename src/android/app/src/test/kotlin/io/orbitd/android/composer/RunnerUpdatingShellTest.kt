@@ -3,6 +3,7 @@ package io.orbitd.android.composer
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import java.io.File
 import java.time.Instant
@@ -96,6 +97,7 @@ class RunnerUpdatingShellTest : ComposerShellTest() {
             .map { it.config[SemanticsProperties.Text].joinToString("") { t -> t.text } }
         assertEquals(listOf("Queued", "·", "runner updating"), foot)
         assertFalse("the foot row says it, not the page's block", has(hasTestTag("runner-updating"), unmerged = true))
+        assertRightAligned(compose.onNodeWithTag("runner-updating-foot", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot)
         shot("android-runner-updating")
         compose.onNodeWithTag("runner-updating-foot:reason", useUnmergedTree = true).performClick()
         await { has(hasTestTag("runner-updating-pop"), unmerged = true) }
@@ -103,6 +105,68 @@ class RunnerUpdatingShellTest : ComposerShellTest() {
             text("runner-updating-pop:text"))
         assertTrue(has(hasText("Runner updating") and hasAnyAncestor(isDialog())))
         draw("android-runner-updating-popover", compose.activity.window.decorView, ShadowDialog.getLatestDialog()!!.window!!.decorView)
+    }
+
+    /** A full runner (docs/mocks/queued-card-runner-full; web e90dc6fb93): the session's opening was answered, and the reader's next
+     * message, accepted but taken by no runner, waits under `Queued · runner full · Cancel` — [opening] the opening prompt instead. */
+    private fun full(opening: Boolean = false) {
+        ComposerShell.runner = ComposerShell.obj("""{"id":"${ComposerShell.RUNNER}","name":"HPC","online":true,"status":"ONLINE",
+            "version":"0.1.253","engines":[{"engine":"claude","installed":true,"auth":"yes"}],
+            "modelCatalog":{"claude":[{"value":"claude-opus-5-5","label":"Opus 5.5"}]}}""")
+        ComposerShell.session = ComposerShell.fields("""{"title":"Task 6 queue","status":"PENDING","runStatus":"PENDING","runState":"QUEUED",
+            "queuedReason":"runner_at_capacity","queuedActive":4,"queuedLimit":4,"queuedSince":"${Instant.now().minusSeconds(15 * 60L)}"}""")
+        ComposerShell.events = if (opening) emptyList() else listOf(
+            ComposerShell.obj("""{"type":"user","seq":1,"turnId":"t-1","ts":"${Instant.now().minusSeconds(40 * 60L)}","payload":{"text":"Start task 6"}}"""),
+            ComposerShell.obj("""{"type":"assistant","seq":2,"turnId":"t-1","payload":{"text":"Task 6 is filed and waiting for a runner."}}"""),
+            ComposerShell.obj("""{"type":"turn_end","seq":3,"turnId":"t-1","payload":{"subtype":"success"}}"""))
+        ComposerShell.answers["GET sessions/${ComposerShell.SESSION}/turns"] = { io.orbitd.android.core.net.ApiResponse(200,
+            """[{"turnId":"$heldId","kind":"message","placement":"accepted","content":"Why is task 6 still queued?","attachments":[],
+            ${if (opening) "\"opening\":true," else ""}"createdAt":"${Instant.now().minusSeconds(15 * 60L)}"}]""".encodeToByteArray()) }
+    }
+    private val heldId = "01a0cca7-8609-70ed-a0e2-d4b55b832b91"
+
+    private fun foot() = compose.onNodeWithTag("runner-updating-foot", useUnmergedTree = true).onChildren().fetchSemanticsNodes()
+        .map { it.config[SemanticsProperties.Text].joinToString("") { t -> t.text } }
+
+    @Test fun anAcceptedMessageAFullRunnerHoldsCanBeCancelledAndItsWordsComeBack() {
+        full(); signIn(); openSession()
+        await { has(hasTestTag("runner-updating-foot:cancel"), unmerged = true) }
+        assertEquals(listOf("Queued", "·", "runner full", "·", "Cancel"), foot())
+        // Under the waiting message, not under the opening the runner already answered.
+        val message = compose.onNodeWithTag("accepted:$heldId").fetchSemanticsNode().boundsInRoot
+        val row = compose.onNodeWithTag("runner-updating-foot", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue("the foot row is under the waiting message", row.top >= message.bottom)
+        assertRightAligned(row)
+        shot("android-runner-full-cancel")
+        compose.onNodeWithTag("composer-input").performTextInput("a draft")
+        compose.onNodeWithTag("runner-updating-foot:cancel", useUnmergedTree = true).performClick()
+        await { ComposerShell.calls.contains("DELETE sessions/${ComposerShell.SESSION}/turns/$heldId") }
+        await { compose.onNodeWithTag("composer-input").fetchSemanticsNode().config.getOrNull(SemanticsProperties.EditableText)?.text ==
+            "a draft\n\nWhy is task 6 still queued?" }
+        await { !has(hasTestTag("accepted:$heldId")) }
+    }
+
+    @Test fun theOpeningPromptAFullRunnerHoldsHasNoCancel() {
+        full(opening = true); signIn(); openSession()
+        await { has(hasTestTag("runner-updating-foot"), unmerged = true) }
+        assertEquals(listOf("Queued", "·", "runner full"), foot())
+        assertFalse(has(hasTestTag("runner-updating-foot:cancel"), unmerged = true))
+    }
+
+    /** A message the runner has echoed is the runner's: the foot row under it has no Cancel. */
+    @Test fun anEchoedMessageAFullRunnerHoldsHasNoCancel() {
+        full()
+        ComposerShell.answers.remove("GET sessions/${ComposerShell.SESSION}/turns")
+        signIn(); openSession()
+        await { has(hasTestTag("runner-updating-foot"), unmerged = true) }
+        assertEquals(listOf("Queued", "·", "runner full"), foot())
+        assertFalse(has(hasTestTag("runner-updating-foot:cancel"), unmerged = true))
+    }
+
+    /** Under the reader's own message the row stands at the bubble's right edge, as on iOS and web, not at the list's left. */
+    private fun assertRightAligned(row: androidx.compose.ui.geometry.Rect) {
+        val width = compose.activity.window.decorView.width
+        assertTrue("the foot row is on the right (left=${row.left}, right=${row.right}, width=$width)", row.left > width / 2f)
     }
 
     private fun shot(name: String) = draw(name, compose.activity.window.decorView)

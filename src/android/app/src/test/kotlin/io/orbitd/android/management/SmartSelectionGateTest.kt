@@ -114,16 +114,29 @@ class SmartSelectionGateTest {
         compose.onNodeWithText("Coordinator: A well-specified fix.").assertExists()
         compose.onNodeWithTag("task-runs-with-done").performClick()
         page = "workspace"
-        await("Smart model selection for tasks")
-        compose.onNodeWithText("Task runs").assertExists()
+        await("Working directory")
+        // The Agent has no switch of its own any more: the account's alone decides.
+        compose.onAllNodesWithText("Task runs").assertCountEquals(0)
+        compose.onAllNodesWithText("Smart model selection for tasks").assertCountEquals(0)
     }
 
-    @Test fun theWorkspaceFormHasNoTaskRunsWhileTheSwitchIsOff() {
+    @Test fun theWorkspaceFormHasNoSmartSelectionSwitchOfItsOwn() {
         val api = api()
         compose.setContent { WorkspaceSettings(api, ManagementFixture.WORKSPACE, revision, {}, {}, {}) }
         await("Working directory")
         compose.onAllNodesWithText("Task runs").assertCountEquals(0)
         compose.onAllNodesWithText("Smart model selection for tasks").assertCountEquals(0)
+    }
+
+    /** Done on the Agent form writes no modelRouting: the Agent has no switch of its own (owner, 2026-11-20). */
+    @Test fun savingTheWorkspaceFormNeverWritesModelRouting() {
+        val api = api()
+        compose.setContent { CompositionLocalProvider(LocalSmartSelection provides true) { WorkspaceSettings(api, ManagementFixture.WORKSPACE, revision, {}, {}, {}) } }
+        await("Working directory")
+        compose.onNodeWithText("Name").performTextInput(" renamed")
+        compose.onNodeWithText("Done").performClick()
+        compose.waitUntil(60_000) { fixture.bodies.any { it.startsWith("PATCH workspaces/") } }
+        assertTrue(fixture.bodies.none { it.startsWith("PATCH workspaces/") && it.contains("modelRouting") })
     }
 
     /** The switch is the whole app's at once: what AccountAppearance hands every page — the composer's ✦ (A11c) as much as the task
@@ -142,8 +155,8 @@ class SmartSelectionGateTest {
                 }
             }
         }
-        await("smart selection: off"); await("Smart model selection")
-        compose.onNode(hasText("Smart model selection") and isToggleable()).performScrollTo().performClick()
+        await("smart selection: off"); await("Route by tier")
+        compose.onNode(hasText("Route by tier") and isToggleable()).performScrollTo().performClick()
         await("smart selection: on")
         assertEquals(true, fixture.modelRouting)
     }
@@ -154,10 +167,10 @@ class SmartSelectionGateTest {
             SettingsScreen(api, OrbitRoute(Destination.SETTINGS, "sessions"), revision, {}, {}, logout = {}, changed = {}, workspaceDeleted = {},
                 deviceAlerts = { true }, notifications = {}, about = {})
         }
-        await("Smart model selection")
+        await("Route by tier")
         compose.onNodeWithText(SMART_MODEL_SELECTION_HINT, useUnmergedTree = true).assertExists()
         // An account that never wrote it reads on.
-        val row = hasText("Smart model selection") and isToggleable()
+        val row = hasText("Route by tier") and isToggleable()
         compose.waitUntil(60_000) { runCatching { compose.onNode(row).assertIsOn() }.isSuccess }
         compose.onNode(row).performScrollTo().performClick()
         compose.waitUntil(60_000) { fixture.modelRouting == false }

@@ -90,7 +90,7 @@ func startDshACP(ctx context.Context, spec DshLaunchSpec, mapper *dshEventMapper
 		cancel()
 		return nil, err
 	}
-	if err := startSessionProcess(cmd); err != nil {
+	if err := startSessionEngine(cmd, spec.orbitSessionID); err != nil {
 		_ = stdin.Close()
 		_ = stdout.Close()
 		_ = stderr.Close()
@@ -430,7 +430,10 @@ const (
 )
 
 type dshTurnRecord struct {
-	State     string   `json:"state"`
+	State string `json:"state"`
+	// Cut: a prompted turn a runner stop cut once its drain ran out (cutForRunnerStop). Orbit keeps it leased and
+	// hands it back to the next process as the stop's continuation, which is prompted rather than recovered.
+	Cut       bool     `json:"cut,omitempty"`
 	OpenTools []string `json:"openTools,omitempty"`
 	Status    string   `json:"status,omitempty"`
 	Subtype   string   `json:"subtype,omitempty"`
@@ -612,6 +615,7 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 		p.emitFor(turnID, kind, payload)
 	})
 	permissions.workspace = spec.Cwd
+	permissions.uploads = uploadsDir(p.job.SessionID)
 	app, err := startDshACP(p.ctx, *spec, mapper, permissions, p.emit)
 	if err != nil {
 		return fail("failed to start DeepSeek Harness: " + err.Error())
@@ -655,6 +659,7 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 	// The generation's inbox poller: what fetches its turns, and the turnIds already taken on, which
 	// a redelivery of one is dropped against for the generation's whole life.
 	poller := newInboxPoller(p.t, p.job.SessionID, p.leaseGeneration)
+	poller.holdTurns(p.waitTurnPermit, p.job, p.completeTurn) // a turn waiting for its permit does not stop the inbox being read
 	defer poller.close()
 	inbox := make(chan *RunInboxResponse, 8)
 	pollErrors := make(chan error, 1)
@@ -688,6 +693,8 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 	var activeID string
 	stopped := false // a local stop of the active turn; see dshSettlementOutcome
 	var queued []*RunInboxResponse
+	// A person's `!` command and its output, fed to their next message as on every other engine.
+	var shellContext []string
 	worktree := func(req *TurnCompleteRequest) {
 		req.IsolationStatus = p.job.IsolationStatus
 		req.ChangedFiles, req.ChangedDiff = liveDiff(p.job.WT)
@@ -762,11 +769,29 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 		if !p.waitTurnPermit(p.ctx) {
 			return false
 		}
-		if rec, ok := ledger.get(resp.TurnID); ok {
+		rec, recorded := ledger.get(resp.TurnID)
+		// Handed back after a runner stop: cut by this binary's stop (Cut), or settled INTERRUPTED by an earlier
+		// binary's, which cancelled the turn at the stop and whose completion never reached Orbit (Orbit would not hand
+		// back a turn it had heard end). Either way Orbit's delivery is its continuation, and it is prompted. Any
+		// other settled turn is reported again as it settled; a prompted one never settled is a crash, not replayed.
+		cut := recorded && ((rec.State == dshTurnPrompted && rec.Cut) || (rec.State == dshTurnSettled && rec.Status == stInterrupted))
+		if recorded && !cut {
 			p.setTurn(resp.TurnID)
 			recoverTurn(resp, rec)
 			p.setTurn("")
 			return true
+		}
+		if cut {
+			// A turn a runner stop cut, handed back: Orbit's delivery is the stop's continuation ("interrupted
+			// because its runner restarted / the runner update interrupted this turn; continue"), and dsh's resumed
+			// session holds what the turn did before. Its tools still open never got their result.
+			for _, id := range rec.OpenTools {
+				p.emitFor(resp.TurnID, evToolResult, map[string]interface{}{
+					"toolUseId": id, "toolCallId": id, "status": "failed", "isError": true,
+					"content":          "dsh stopped before this tool returned a final status; side effects may have occurred",
+					"runtimeSessionId": sessionID, "localTurnId": resp.TurnID,
+				})
+			}
 		}
 		activeID = resp.TurnID
 		p.setTurn(activeID)
@@ -777,7 +802,8 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 		// This composition takes text only (no image, audio or embedded-context prompts), so attachments
 		// are saved as files and named in the prompt. Fetched before the turn is recorded: a crash until
 		// then leaves a turn that is safe to run again.
-		text, refs := prepareTextOnlyPrompt(p.ctx, p.t, p.job, resp, nil)
+		text, refs := prepareTextOnlyPrompt(p.ctx, p.t, p.job, resp, shellContext)
+		shellContext = nil
 		userEvent := map[string]interface{}{"text": resp.Content, "runtimeSessionId": sessionID, "localTurnId": activeID}
 		if len(refs) > 0 {
 			userEvent["attachments"] = refs
@@ -798,6 +824,34 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 		}()
 		return true
 	}
+	// cutForRunnerStop ends the active turn's prompt as a runner stop that outlasted its drain does on every engine
+	// (watchShutdownDrain): marked `interrupt {reason: runner_restart}` (or the Update Now's runner_update) and left
+	// unsettled, so Orbit keeps it leased and the next process is handed it back as the stop's continuation. dsh is
+	// cancelled first, so its session keeps the turn as far as it went; its answer is not reported.
+	cutForRunnerStop := func() {
+		turnID := activeID
+		if err := ledger.update(func() {
+			if rec := ledger.Turns[turnID]; rec != nil && rec.State == dshTurnPrompted {
+				rec.Cut = true
+			}
+		}); err != nil {
+			logln("dsh turn ledger:", err)
+		}
+		p.emitFor(turnID, evInterrupt, stopInterruptPayload(p.shutdownCtx))
+		logln("runner stop for", p.job.SessionID+"; cutting the dsh turn in flight, which the next process continues")
+		stopped = true
+		permissions.close()
+		cancelCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		err := app.write(cancelCtx, map[string]interface{}{"jsonrpc": "2.0", "method": "session/cancel",
+			"params": map[string]interface{}{"sessionId": sessionID}})
+		cancel()
+		if err != nil {
+			app.fail(err)
+		}
+		awaitPrompt()
+		activeID, stopped = "", false
+		p.setTurn("")
+	}
 	closeSession := func() {
 		permissions.close()
 		closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -807,23 +861,37 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 			app.fail(err)
 		}
 	}
-	// runAcceptance runs a task's EXECUTABLE acceptance command on the runner in the session's
-	// worktree, with the same runSynchronousShellTurn every other engine uses, and reports its exit
-	// code and output in the same shape. dsh is idle while it runs and is never told about it.
-	runAcceptance := func(resp *RunInboxResponse) bool {
+	// runShell runs a shell turn on the runner in the session's worktree, with the same
+	// runSynchronousShellTurn every other engine uses, and reports its exit code and output in the
+	// same shape: a task's EXECUTABLE acceptance command, or a person's `!` command. dsh is idle
+	// while it runs and is never told about it.
+	runShell := func(resp *RunInboxResponse) bool {
 		if !p.waitTurnPermit(p.ctx) {
 			return false
 		}
 		p.setTurn(resp.TurnID)
-		req, err := runSynchronousShellTurn(p.ctx, p.t, p.job, p.execDir, resp,
-			func(typ string, payload map[string]interface{}) { p.emitFor(resp.TurnID, typ, payload) })
-		if err != nil {
-			req = TurnCompleteRequest{TurnID: resp.TurnID, Status: stFailed, Result: err.Error(), Subtype: "shell"}
+		emit := func(typ string, payload map[string]interface{}) { p.emitFor(resp.TurnID, typ, payload) }
+		var req TurnCompleteRequest
+		if command, background := shellTurnBackgroundCommand(resp); background {
+			runShellTurnBackground(p.bg, p.execDir, p.scratchDir, command, resp.TurnID, emit, p.job.Agent.Env)
+			req = TurnCompleteRequest{TurnID: resp.TurnID, Status: stSucceeded, Result: "started in background", Subtype: "shell"}
+		} else {
+			var err error
+			req, err = runSynchronousShellTurn(p.ctx, p.t, p.job, p.execDir, resp, emit)
+			if err != nil {
+				req = TurnCompleteRequest{TurnID: resp.TurnID, Status: stFailed, Result: err.Error(), Subtype: "shell"}
+			}
+			// A person's command and its output are context for their next message; an acceptance
+			// command is the runner's own.
+			if req.ShellOutput != nil && !resp.TaskAcceptance {
+				shellContext = append(shellContext,
+					fmt.Sprintf("<bash-input>%s</bash-input>\n<bash-stdout>%s</bash-stdout>", resp.Content, *req.ShellOutput))
+			}
 		}
 		req.RuntimeSessionID = sessionID
 		req.BranchSha = effectiveBranchSha(p.job.WT)
 		if err := p.completeTurn(req); err != nil {
-			logln("dsh acceptance turn-complete failed:", err)
+			logln("dsh shell turn-complete failed:", err)
 		}
 		p.setTurn("")
 		return true
@@ -833,7 +901,7 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 			next := queued[0]
 			queued = queued[1:]
 			if next.Kind == "shell" {
-				if !runAcceptance(next) {
+				if !runShell(next) {
 					return stCancelled, true, false
 				}
 				continue
@@ -852,11 +920,24 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 			}
 			return stCancelled, true, false
 		case <-p.shutdownCtx.Done():
-			stopped = activeID != ""
-			closeSession()
+			// The runner stops (SIGTERM, a self-update, the owner's Update Now): as on every engine, the turn in flight
+			// gets the drain (stopDrainBudget) and is reported if it ends within it; otherwise it is cut, left for the
+			// next process to continue (cutForRunnerStop). Nothing new is taken on meanwhile.
+			pollCancel()
 			if activeID != "" {
-				settle(awaitPrompt(), true)
+				select {
+				case done := <-promptDone:
+					settle(done, true)
+				case <-time.After(stopDrainBudget(p.shutdownCtx, shutdownDrainTimeout)):
+					cutForRunnerStop()
+				case <-p.ctx.Done():
+					stopped = true
+					permissions.close()
+					settle(<-promptDone, true)
+					return stCancelled, true, false
+				}
 			}
+			closeSession()
 			return stCancelled, true, false
 		case err := <-pollErrors:
 			// Another owner holds the lease: end the process tree first, so nothing more runs on
@@ -949,19 +1030,11 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 				if !poller.markInflight(resp.TurnID) {
 					continue
 				}
-				if resp.TaskAcceptance {
-					// The server-generated EXECUTABLE command is the runner's, not the engine's: it
-					// waits behind the messages ahead of it and then runs in the worktree exactly as
-					// every other engine runs it (runAcceptance), never through dsh or its model.
-					queued = append(queued, resp)
-					continue
-				}
-				// A person's `!` shell has no bridge in this composition (P5); the turn still reaches a terminal.
-				if err := p.completeTurn(TurnCompleteRequest{TurnID: resp.TurnID, Status: stFailed, Subtype: subtypeUnknownKind,
-					Result: "DeepSeek Harness sessions do not run shell turns", RuntimeSessionID: sessionID,
-					BranchSha: effectiveBranchSha(p.job.WT)}); err != nil {
-					logln("dsh shell refusal turn-complete failed:", err)
-				}
+				// A shell turn is the runner's, not the engine's: the server-generated EXECUTABLE
+				// acceptance command, or a person's `!` command. It waits behind the turns ahead of
+				// it and then runs in the worktree exactly as every other engine runs it (runShell),
+				// never through dsh or its model.
+				queued = append(queued, resp)
 			default:
 				reportUnknownInboxKind(resp, p.job, p.completeTurn)
 			}

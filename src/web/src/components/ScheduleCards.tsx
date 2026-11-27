@@ -1,9 +1,11 @@
-import { useMemo, useState, type JSX, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type JSX, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   SCHEDULE_COPY,
+  SCHEDULE_RUN_STATUS_COPY,
   scheduleChangeLineText,
+  scheduleChangeOpeningRows,
   scheduleCostsParts,
   scheduleCreateNotice,
   scheduleCreateWhen,
@@ -15,9 +17,15 @@ import {
   scheduleKeepLabel,
   scheduleReportedText,
   scheduleRunLine,
+  scheduleDidntRunText,
+  scheduleQueuedFullText,
+  scheduleRunNotStartedStripText,
+  scheduleRunStatusKind,
   scheduleRunStripText,
   scheduleRunsInText,
+  scheduleStartedOnText,
   type ScheduleCard,
+  type ScheduleChangeOpening,
   type ScheduleChangeRecord,
   type ScheduleCreateCard,
   type ScheduleDecisionAnswer,
@@ -26,18 +34,23 @@ import {
   type ScheduleEnvelopeCard,
   type ScheduleEnvelopeLines,
   type ScheduleRule,
+  type ScheduleRunSessionStatus,
+  type ScheduleRunStatusKind,
   type ScheduleRunView,
+  type SessionScheduleCardsResponse,
   type ScheduleView,
   type ScheduleWhenLines,
 } from '@orbit/shared';
 import { api, ApiError } from '../api';
 import { decisionReceiptAnchor } from '../lib/decisionReceipt';
 import { CONDITION_COPY, conditionQuery, firingOfRun, readingText } from '../lib/conditions';
+import { capacityHeldRunText, capacityHeldTag, capacityHeldWaited } from '../lib/queuedCapacity';
 import {
   scheduleClock,
   scheduleDetailQuery,
   scheduleRecordUndoable,
   schedulePath,
+  scheduleRunSessionPath,
   sessionScheduleCardsQuery,
   undoScheduleRecord,
   viewerTimezone,
@@ -353,18 +366,35 @@ export interface ScheduleRunOfSession {
   schedule: ScheduleView;
   run: ScheduleRunView;
   detail: ScheduleDetailResponse | undefined;
+  /** Where the run stands for this session (its tries, its queue); null from a server before it. */
+  status?: ScheduleRunSessionStatus | null;
+  /** The card this session shows in place of the run's report and the composer, if any (board scheduled-run-not-started). */
+  card?: ScheduleRunStatusKind | null;
 }
 
 /**
- * The schedule and run a run's session belongs to, read from the session alone: its schedule-cards answer names the
- * run it serves however old (`run`), and the run names its schedule. Nothing else is searched.
+ * A conversation's schedule cards (`GET /sessions/:id/schedule-cards`), read once for the page: the session page reads
+ * them here and hands the answer to the hooks below, so one observer reads them however many things they draw.
  */
-export function useScheduleRunOfSession(sessionId: string | null | undefined): ScheduleRunOfSession | null {
+export function useSessionScheduleCards(sessionId: string | null | undefined): SessionScheduleCardsResponse | undefined {
   const cards = useQuery({ ...sessionScheduleCardsQuery(sessionId ?? ''), enabled: Boolean(sessionId) });
-  const run = sessionId ? cards.data?.run ?? null : null;
+  return sessionId ? cards.data : undefined;
+}
+
+/**
+ * The schedule and run a run's session belongs to, read from the session alone: its schedule-cards answer
+ * (`useSessionScheduleCards`) names the run it serves however old (`run`), and the run names its schedule. Nothing else
+ * is searched.
+ */
+export function useScheduleRunOfSession(
+  sessionId: string | null | undefined,
+  cards: SessionScheduleCardsResponse | undefined,
+): ScheduleRunOfSession | null {
+  const run = sessionId ? cards?.run ?? null : null;
   const detail = useQuery({ ...scheduleDetailQuery(run?.scheduleId ?? ''), enabled: Boolean(run) });
   if (!run || !detail.data) return null;
-  return { schedule: detail.data.schedule, run, detail: detail.data };
+  const status = cards?.runStatus ?? null;
+  return { schedule: detail.data.schedule, run, detail: detail.data, status, card: scheduleRunStatusKind(run, status) };
 }
 
 /**
@@ -414,14 +444,164 @@ function ScheduleRunFiringStrip({ of }: { of: ScheduleRunOfSession }): JSX.Eleme
 }
 
 /** The strip at the top of a run's session. */
+/**
+ * A change conversation's head (§8.2, board 03-change ③): the strip naming the schedule, which opens it, and Orbit's
+ * opening — the schedule as it was when the conversation was opened, and what can change at once or needs Allow.
+ */
+export function ScheduleChangeOpeningView({ opening }: { opening: ScheduleChangeOpening }): JSX.Element {
+  const navigate = useNavigate();
+  const T = C.changeConversation;
+  return (
+    <div className="sched-change-opening" data-schedule-change-opening="">
+      <div className="sched-strip">
+        <CalendarIcon />
+        <span><b>{opening.title}</b>{C.separator}{opening.runsIn}</span>
+        <button type="button" className="sched-link sched-strip-door" onClick={() => navigate(schedulePath(opening.scheduleId))}>
+          {T.openInScheduled}
+        </button>
+      </div>
+      <p>{withTitleBold(scheduleFill(T.lead, { title: opening.title }), opening.title)}</p>
+      <dl className="sched-change-rows">
+        {scheduleChangeOpeningRows(opening).map((row) => (
+          <div key={row.label}><dt>{row.label}</dt><dd>{row.text}</dd></div>
+        ))}
+      </dl>
+      <p>{T.tail}</p>
+    </div>
+  );
+}
+
 export function ScheduleRunStrip({ of }: { of: ScheduleRunOfSession }): JSX.Element {
   if (of.run.trigger === 'CONDITION') return <ScheduleRunFiringStrip of={of} />;
   return (
     <div className="sched-strip" data-schedule-strip="">
       <CalendarIcon />
-      <span>{scheduleRunStripText(of.run, of.schedule.accessLevel, viewerTimezone())}</span>
+      <span>
+        {of.card
+          ? scheduleRunNotStartedStripText(of.run, of.schedule.accessLevel, viewerTimezone())
+          : scheduleRunStripText(of.run, of.schedule.accessLevel, viewerTimezone())}
+      </span>
     </div>
   );
+}
+
+const RS = SCHEDULE_RUN_STATUS_COPY;
+
+/** A clock that moves twice a minute, for the run card's waits counted in minutes. */
+function useMinuteNow(): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return now;
+}
+
+/** What the run card names that the run does not: the machine and the engine of this session. */
+export interface ScheduleRunStatusNames {
+  runner: string;
+  engine: string;
+}
+
+/**
+ * A run's session where the run did not get under way (board docs/mocks/scheduled-run-not-started ②③④, owner's B1):
+ * in place of the run's report and the composer, what happened to the run and the doors that act on it.
+ *
+ *   * ② Didn't run: why, each try's time, when it gave up and the next run; Run now and Open schedule.
+ *   * ③ Queued · runner full: the queue's own sentence, how long it has waited and when it gives up; Cancel run and
+ *     Open schedule.
+ *   * ④ Started on try N: why this try stopped; Open the run, to the session the run went on in.
+ */
+export function ScheduleRunStatusCard({ of, names }: { of: ScheduleRunOfSession; names: ScheduleRunStatusNames }): JSX.Element | null {
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const now = useMinuteNow();
+  const { run, status, card } = of;
+  const invalidate = () => void qc.invalidateQueries({ queryKey: ['schedules'] });
+  const runNow = useMutation({
+    mutationFn: () => api<{ run: ScheduleRunView }>(`/schedules/${encodeURIComponent(run.scheduleId)}/run`, { method: 'POST' }),
+    onSuccess: (answer) => {
+      const path = scheduleRunSessionPath(answer.run);
+      if (path) navigate(path);
+    },
+    onSettled: invalidate,
+  });
+  const cancel = useMutation({
+    mutationFn: () => api(`/schedule-runs/${encodeURIComponent(run.id)}/stop`, { method: 'POST' }),
+    onSettled: invalidate,
+  });
+  if (!status || !card) return null;
+  const timezone = viewerTimezone();
+  const openSchedule = (
+    <Button className="sched-run-door" onClick={() => navigate(schedulePath(run.scheduleId))}>{RS.actions.openSchedule}</Button>
+  );
+  const error = scheduleErrorText(runNow.error) ?? scheduleErrorText(cancel.error);
+  const errorLine = error ? <div className="sched-run-error" role="alert">{error}</div> : null;
+
+  if (card === 'DIDNT_RUN') {
+    const text = scheduleDidntRunText({ run, status, runner: names.runner, now: new Date(now), timezone });
+    return (
+      <div className="sched-run-card" data-schedule-run-card="DIDNT_RUN">
+        <div className="sched-run-title"><span className="sched-run-dot" data-tone="muted" />{text.title}</div>
+        <p className="sched-run-body">{text.reason}</p>
+        <div className="sched-run-chips">
+          {text.tries.map((time, i) => <span key={`${i}:${time}`} className="sched-run-chip">{time}</span>)}
+        </div>
+        {text.gaveUp ? <div className="sched-run-meta is-gave-up">{text.gaveUp}</div> : null}
+        {text.next ? <div className="sched-run-meta">{text.next}</div> : null}
+        <div className="sched-run-doors">
+          <Button className="sched-run-door" variant="primary" disabled={runNow.isPending} onClick={() => runNow.mutate()}>
+            {RS.actions.runNow}
+          </Button>
+          {openSchedule}
+        </div>
+        {errorLine}
+      </div>
+    );
+  }
+
+  if (card === 'QUEUED_FULL' && status.queue) {
+    const gate = { ...status.queue, lastTurnAt: status.queue.since };
+    const text = scheduleQueuedFullText({
+      tag: capacityHeldTag(gate),
+      waited: capacityHeldWaited(gate, now),
+      deadline: status.queue.deadline,
+      now: new Date(now),
+      timezone,
+    });
+    return (
+      <div className="sched-run-card" data-schedule-run-card="QUEUED_FULL">
+        <div className="sched-run-title"><span className="sched-run-dot" data-tone="waiting" />{text.title}</div>
+        <p className="sched-run-body">{capacityHeldRunText(gate, names.runner)}</p>
+        <div className="sched-run-meta">{text.waited}</div>
+        <div className="sched-run-doors">
+          <Button className="sched-run-door" disabled={cancel.isPending} onClick={() => cancel.mutate()}>
+            {RS.actions.cancelRun}
+          </Button>
+          {openSchedule}
+        </div>
+        {errorLine}
+      </div>
+    );
+  }
+
+  if (card === 'STARTED_ON') {
+    const text = scheduleStartedOnText({ run, status, engine: names.engine, runner: names.runner, timezone });
+    const path = scheduleRunSessionPath(run);
+    if (!text || !path) return null;
+    return (
+      <div className="sched-run-card" data-schedule-run-card="STARTED_ON">
+        <div className="sched-run-title"><span className="sched-run-dot" data-tone="started" />{text.title}</div>
+        <p className="sched-run-body">{text.body}</p>
+        <div className="sched-run-doors">
+          <Button className="sched-run-door is-wide" variant="primary" onClick={() => navigate(path)}>
+            {RS.actions.openRun}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+  return null;
 }
 
 interface RunLink {
@@ -472,29 +652,44 @@ export function ScheduleRunReport({ of }: { of: ScheduleRunOfSession }): JSX.Ele
  */
 export function useSessionScheduleInserts(
   sessionId: string | null | undefined,
+  cards: SessionScheduleCardsResponse | undefined,
   events: ReadonlyArray<{ seq: number; ts?: string }>,
   run: ScheduleRunOfSession | null,
+  names: ScheduleRunStatusNames = { runner: '', engine: '' },
 ): TranscriptInsert[] {
-  const cards = useQuery({ ...sessionScheduleCardsQuery(sessionId ?? ''), enabled: Boolean(sessionId) });
+  const { runner, engine } = names;
   return useMemo(() => {
     if (!sessionId) return [];
     const inserts: TranscriptInsert[] = [];
     // A run's strip leads, and its report comes before the change lines after the same event (board 2/2 ⑤).
     if (run) {
       inserts.push({ anchor: 'head', moment: '', key: 'schedule-run-strip', element: <ScheduleRunStrip of={run} /> });
+      // A run that did not get under way here says what happened to it under the strip, and has no report of its own
+      // (board scheduled-run-not-started ②③④).
+      if (run.card) {
+        inserts.push({
+          anchor: 'head', moment: '', key: `schedule-run-card:${run.run.id}`,
+          element: <ScheduleRunStatusCard of={run} names={{ runner, engine }} />,
+        });
+      }
       const last = events.reduce<number | null>((max, e) => (max === null || e.seq > max ? e.seq : max), null);
       const at = run.run.endedAt ? decisionReceiptAnchor(events, run.run.endedAt) : null;
       const anchor = at === null || at === 'head' ? last : at;
-      if (anchor !== null && ENDED_STATES.includes(run.run.state)) {
+      if (!run.card && anchor !== null && ENDED_STATES.includes(run.run.state)) {
         inserts.push({ anchor, moment: run.run.endedAt ?? '', key: `schedule-run-report:${run.run.id}`, element: <ScheduleRunReport of={run} /> });
       }
     }
+    // A change conversation opens with Orbit's message, before the person's first words (§8.2).
+    const opening = cards?.change;
+    if (opening) {
+      inserts.push({ anchor: 'head', moment: '', key: 'schedule-change-opening', element: <ScheduleChangeOpeningView opening={opening} /> });
+    }
     // Cards and change lines in the order they happened, so two after the same event read as they were made.
     const said = [
-      ...(cards.data?.cards ?? []).map((card) => ({
+      ...(cards?.cards ?? []).map((card) => ({
         at: card.createdAt, key: `schedule-card:${card.id}`, element: <ScheduleCardView card={card} />,
       })),
-      ...(cards.data?.records ?? []).map((record) => ({
+      ...(cards?.records ?? []).map((record) => ({
         at: record.createdAt,
         key: `schedule-record:${record.scheduleId}:${record.revision}`,
         element: <ScheduleRecordLine record={record} />,
@@ -506,5 +701,5 @@ export function useSessionScheduleInserts(
       inserts.push({ anchor, moment: item.at, key: item.key, element: item.element });
     }
     return inserts;
-  }, [sessionId, events, cards.data, run]);
+  }, [sessionId, events, cards, run, runner, engine]);
 }

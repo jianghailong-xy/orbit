@@ -98,14 +98,15 @@ func (s *bgJobService) admit(spec bgJobSpec) bgGateVerdict {
 }
 
 // routineOnDsh applies Auto's rule for one sandbox escalation to a job. The rule reads a command line, so a
-// request that also sets variables is not routine: LD_PRELOAD or BASH_ENV change what that line does.
+// request that also sets variables is not routine: LD_PRELOAD or BASH_ENV change what that line does. The
+// session's other directories (its uploads) count as the workspace does, as they do inside the session.
 func (s *bgJobService) routineOnDsh(spec bgJobSpec) bool {
 	if s.requestSetsEnv(spec) {
 		return false
 	}
 	return dshAutoRoutineEscalation(dshPermissionAsk{Name: "bash", Input: map[string]interface{}{
 		"command": spec.Command, "workdir": spec.Dir, "sandbox_permissions": "require_escalated",
-	}}, s.execDir)
+	}}, s.execDir, s.extraDirs...)
 }
 
 // requestSetsEnv reports whether a job's environment holds anything beyond the agent's own.
@@ -390,6 +391,10 @@ func claudeNoteEngineMode(job *ClaimedSession, msg map[string]interface{}) {
 	}
 }
 
+// ownerWaitJobDescriptionSuffix ends the description of every job startOwnerWait starts: what bg_list shows, and
+// what the live eval tells an owner wait's wake by (agent_eval_wake_test.go).
+const ownerWaitJobDescriptionSuffix = ": waiting for the owner's confirmation"
+
 // startOwnerWait is the one way a hosted job starts without passing the gate, and what it can do is fixed here
 // rather than asked for: it is `orbit mcp` serving a single call that puts a card in front of the owner and
 // blocks until it is answered (handOffOwnerWait), under this session's own identity. The caller names the call
@@ -437,16 +442,19 @@ func (s *bgJobService) startOwnerWait(args map[string]interface{}) bgSocketRespo
 	// rest of who is asking: the agent the write is attributed to, the current task, the orchestration
 	// switch. The timeout is cleared so the job waits as long as the owner takes, and only this tool is
 	// served. The request file is unlinked once open, so nothing is left behind however the job ends.
-	command := fmt.Sprintf("{ rm -f %s && ORBIT_AGENT_ID=%s ORBIT_TASK_ID=%s %s=%s %s=%s %s= %s mcp; } < %s",
+	// The browser switch too, which browser_request_sign_in is served under (browser_tools.go).
+	browserOn := s.job != nil && s.job.BrowserEnabled
+	command := fmt.Sprintf("{ rm -f %s && ORBIT_AGENT_ID=%s ORBIT_TASK_ID=%s %s=%s %s=%s %s=%s %s= %s mcp; } < %s",
 		shellQuote(file.Name()), shellQuote(s.agentID), shellQuote(s.taskID),
-		envMCPOrchestration, orchestrationEnv(s.allowOrchestration), envMCPTools, shellQuote(name), envMCPCallTimeout,
+		envMCPOrchestration, orchestrationEnv(s.allowOrchestration), envBrowser, browserEnv(browserOn),
+		envMCPTools, shellQuote(name), envMCPCallTimeout,
 		shellQuote(exe), shellQuote(file.Name()))
 	status, err := s.bg.startJob(bgJobSpec{
 		Command:     command,
 		Kind:        bgKindWatch,
 		Dir:         s.execDir,
 		ScratchDir:  s.scratchDir,
-		Description: "Orbit " + name + ": waiting for the owner's confirmation",
+		Description: "Orbit " + name + ownerWaitJobDescriptionSuffix,
 		Env:         mergedBgEnv(s.env, nil),
 		SessionID:   s.sessionID,
 		WakeOnExit:  true,

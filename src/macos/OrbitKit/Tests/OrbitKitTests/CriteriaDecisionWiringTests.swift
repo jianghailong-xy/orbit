@@ -332,6 +332,20 @@ final class CriteriaDecisionWiringTests: XCTestCase {
                        "a record has no answers left to offer")
         XCTAssertFalse(card.contains("CriteriaDecisions.approveLabel"),
                        "and no button that would send a second decision to the door")
+        // D1 A: the frame and head in the warning tone, the verdict in the success tone.
+        XCTAssertTrue(card.contains(".approvalChrome(Self.color(CriteriaDecisions.receiptTone))"),
+                      "the receipt is framed in OrbitKit's receipt tone")
+        XCTAssertTrue(card.contains("tone: Self.color(CriteriaDecisions.receiptTone)"),
+                      "and its head is in it too")
+        XCTAssertTrue(card.contains(".foregroundStyle(Self.color(CriteriaDecisions.receiptVerdictTone))"),
+                      "while the verdict and its check mark keep the success tone")
+        XCTAssertTrue(card.contains("case .warning: return .orange"), "the warning tone is orange")
+        XCTAssertFalse(card.contains("approvalChrome(.green)"), "the receipt is no longer green")
+        // The fold, as a DisclosureGroup, from OrbitKit's derivation.
+        XCTAssertTrue(card.contains("CriteriaDecisions.settledFold(settled)"),
+                      "the fold is drawn from OrbitKit's SettledFold")
+        XCTAssertTrue(card.contains("DisclosureGroup(isExpanded: $foldOpen)"),
+                      "as a disclosure, closed by default")
     }
 
     // MARK: the bar, and the cards it points at

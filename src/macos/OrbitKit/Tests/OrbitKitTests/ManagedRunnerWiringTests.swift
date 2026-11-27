@@ -109,10 +109,10 @@ final class ManagedRunnerWiringTests: XCTestCase {
         let lift = try slice(console, from: "private var sendCapabilities: SessionCapabilities? {", to: "\n    }")
         XCTAssertTrue(lift.contains("ManagedRunnerLogic.sendCapabilities(serverCapabilities, acceptsWork: managed?.display.acceptsWork == true)"))
         // Sending decides its refusal and its endpoint from the same capabilities the composer showed.
-        let send = try slice(console, from: "let terminalAttempt = ComposerLogic.shouldResume(status: sessionStatus)",
+        let send = try slice(console, from: "let terminalAttempt = ComposerLogic.shouldResume(status: sessionStatus, released: serverReleased)",
                              to: "let accepted = try await postTurn(")
-        XCTAssertTrue(flat(send).contains("ComposerLogic.blockedMessage(status: sessionStatus, capabilities: sendCapabilities)"))
-        XCTAssertTrue(send.contains("ComposerLogic.shouldResume(status: sessionStatus, capabilities: sendCapabilities)"))
+        XCTAssertTrue(flat(send).contains("ComposerLogic.blockedMessage(status: sessionStatus, released: serverReleased, capabilities: sendCapabilities)"))
+        XCTAssertTrue(flat(send).contains("ComposerLogic.shouldResume(status: sessionStatus, released: serverReleased, capabilities: sendCapabilities)"))
         XCTAssertFalse(send.contains("capabilities: serverCapabilities"))
     }
 
@@ -148,8 +148,9 @@ final class ManagedRunnerWiringTests: XCTestCase {
     func testManagedSetupUsesTheSharedNoticeAndSkipsProbes() throws {
         let card = try source("Views/MachineSetupCard.swift")
         XCTAssertTrue(card.contains("ManagedRunnerCopy.Setup.Notice.preparing"))
-        XCTAssertTrue(card.contains("guard managedState == nil, !disabled"))
-        XCTAssertTrue(card.contains("MachineSetup.uncheckedFolder(name: folder, root: root)"))
+        XCTAssertTrue(card.contains("canAsk: managedState == nil && !disabled"))
+        XCTAssertTrue(card.contains("MachineSetup.typedPick(folder: folder, found: found, root: root, machine: machine, managedState: managedState)"),
+                      "a name is taken unchecked (MachineSetupFullPathTests pins the rule)")
         XCTAssertFalse(card.contains("RunnerSignInView"))
         XCTAssertFalse(try source("ConsoleModel.swift").contains("machineSetup"))
     }
@@ -189,8 +190,9 @@ final class ManagedRunnerWiringTests: XCTestCase {
         XCTAssertTrue(confirm.contains("workspaceCount: model.agents?.items.count ?? 0)"))
         // Its row in the list is the managed one: the shared short label, never Online/Offline (D4).
         XCTAssertTrue(flat(list).contains("managed: ManagedRunnerLogic.row(runnerID: r.id, status: model.managedRunner?.status)"))
-        // Needs you does not repeat the heartbeat's "offline" for it.
-        XCTAssertTrue(flat(page).contains("let attention = lists.attention.filter { !isManagedOffline($0) && shows($0) }"))
+        // Needs you does not repeat the heartbeat's "offline" for it — and the terminals asking to be
+        // approved lead that section, so its attention lines are read once the lists have settled.
+        XCTAssertTrue(flat(page).contains("let attention = lists.settled ? lists.attention.filter { !isManagedOffline($0) && shows($0) } : []"))
         let notOffline = try slice(list, from: "private func isManagedOffline(", to: "\n    }")
         XCTAssertTrue(notOffline.contains("guard case .offline(let runnerID) = item.kind else { return false }"))
         XCTAssertTrue(notOffline.contains("ManagedRunnerLogic.row(runnerID: runnerID, status: model.managedRunner?.status) != nil"))

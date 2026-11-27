@@ -11,6 +11,7 @@ import {
   WORKSPACE_UPDATE_APPROVAL_TOOL_NAME,
 } from '../sessions/workspace-write-card-values';
 import type { OrchestratorWorkspaceInput } from './runner-agents.controller';
+import { worktreeNeedsGit } from '../workspaces/worktree-needs-git';
 
 /**
  * What a session may write about a workspace (`agent_create`, `agent_update`, `orbit agent create`,
@@ -144,9 +145,15 @@ export async function workspaceWriteCardInput(
   const id = workspaceIdOf(agentId);
   const workspace = id === null ? null : await prisma.workspace.findFirst({
     where: { id, ownerId: caller.ownerId, deletedAt: null },
-    select: { id: true, name: true, workDir: true, env: true, runner: { select: { id: true, name: true, displayName: true } } },
+    select: {
+      id: true, name: true, workDir: true, env: true, workDirIsGit: true, repoUrl: true, autoInitGit: true,
+      enableWorktree: true, runner: { select: { id: true, name: true, displayName: true } },
+    },
   });
   if (!workspace) throw new NotFoundException('workspace not found');
+  // A write the update would refuse is refused before its card is filed: nobody is asked to approve it.
+  const needsGit = worktreeNeedsGit(workspace, write);
+  if (needsGit) throw needsGit;
   const standing = Object.keys((workspace.env ?? {}) as Record<string, unknown>);
   return {
     agentId: workspace.id,

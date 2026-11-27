@@ -3,13 +3,43 @@
  *
  * One model for the things a session can need from a person: a DECISION it may not make, a
  * SECRET only the owner holds, a MANUAL_STEP only a person can do, a yes/no CONFIRM, and a WIKI_CREATE —
- * a wiki for its repository, which only the owner makes (docs/wiki-explicit-creation-design.md §3.6). This file
+ * a wiki for its repository, which only the owner makes (docs/wiki-explicit-creation-design.md §3.6), and a BROWSER_SIGN_IN
+ * — a sign-in to a site in the Orbit Cloud runner's shared browser, which only the owner does (browser_request_sign_in,
+ * docs/mocks/runner-browser/03-agent-tools.html ①), and a CHANGE — one setting of one of the owner's runners, which the
+ * owner applies with one press (docs/design/owner-request-change.md; v1: a runner's Max Concurrent). This file
  * is the rules with no database in them — what a filing must hold per kind, the state machine, and
  * the lock-screen copy — so they can be read and tested in one place.
  */
 
-export const OWNER_REQUEST_KINDS = ['DECISION', 'SECRET', 'MANUAL_STEP', 'CONFIRM', 'WIKI_CREATE'] as const;
+import {
+  OWNER_REQUEST_CHANGE_REPLACED_NOTE,
+  PROJECT_REOPEN_KIND,
+  PROJECT_REOPEN_NOTES,
+  type OwnerRequestChangeAnswer,
+  type OwnerRequestChangeFiling,
+  type OwnerRequestChangeOutcome,
+  type OwnerRequestChangeSpec,
+} from '@orbit/shared';
+
+export const OWNER_REQUEST_KINDS = [
+  'DECISION', 'SECRET', 'MANUAL_STEP', 'CONFIRM', 'WIKI_CREATE', 'BROWSER_SIGN_IN', 'CHANGE',
+] as const;
 export type OwnerRequestKind = (typeof OWNER_REQUEST_KINDS)[number];
+
+/**
+ * An agent proposing a change to the owner's own Settings (docs/settings-from-conversation-design.md §5.1, migration
+ * 1273). Filed only by `POST /runner/settings-proposals`, which writes its title and payload, so it is not one of the
+ * OWNER_REQUEST_KINDS `POST /runner/owner-requests` takes.
+ */
+export const SETTINGS_CHANGE = 'SETTINGS_CHANGE';
+/**
+ * A session asking the owner to reopen a DONE or CANCELLED project (docs/project-reopen-request-design.md §4, migration
+ * 1573). Filed only by `POST /runner/projects/:id/reopen-requests`, which writes its title and payload, so it is not one
+ * of the OWNER_REQUEST_KINDS either.
+ */
+export const PROJECT_REOPEN = PROJECT_REOPEN_KIND;
+/** Every kind a session files and the owner is alerted to. */
+export type FiledOwnerRequestKind = OwnerRequestKind | typeof SETTINGS_CHANGE | typeof PROJECT_REOPEN;
 
 export const OWNER_REQUEST_STATES = ['PENDING', 'DONE', 'DECLINED', 'EXPIRED', 'WITHDRAWN'] as const;
 export type OwnerRequestState = (typeof OWNER_REQUEST_STATES)[number];
@@ -44,6 +74,53 @@ export const OWNER_REQUEST_NOT_ASKER = 'OWNER_REQUEST_NOT_ASKER';
 export const WIKI_CREATE_DECLINED = 'WIKI_CREATE_DECLINED';
 /** A WIKI_CREATE filed from a workspace with no repository: there is nothing to make a wiki for. */
 export const WIKI_CREATE_NO_REPOSITORY = 'WIKI_CREATE_NO_REPOSITORY';
+
+/** A settings proposal whose every change is already in force (design §5.1 step 2): nothing to ask the owner. */
+export const SETTINGS_ALREADY_SET = 'SETTINGS_ALREADY_SET';
+/** A settings proposal re-filing a change this session's card was declined for (design §5.1 step 4). */
+export const SETTINGS_CHANGE_DECLINED = 'SETTINGS_CHANGE_DECLINED';
+/** Saving a SETTINGS_CHANGE card on a request that carries an acting session (design §5.2): only the owner saves it. */
+export const SETTINGS_OWNER_CHANNEL_ONLY = 'SETTINGS_OWNER_CHANNEL_ONLY';
+/** Saving a SETTINGS_CHANGE card after one of its settings changed since it was proposed (design §5.2). */
+export const SETTINGS_STALE = 'SETTINGS_STALE';
+
+/**
+ * BROWSER_SIGN_IN (board docs/mocks/runner-browser/03-agent-tools.html ①). Filed only by browser_request_sign_in, through
+ * POST /runner/browser/sign-in-requests, from a session on the account's Orbit Cloud runner; never through
+ * request_owner_action's door, which refuses the kind. Orbit writes the title from the site; the agent's reason is `why`.
+ * Answered DONE (the owner signed in) or DECLINED (Not now); the agent's call waits for that answer and returns it, so the
+ * ending is not also delivered as a turn.
+ */
+export const BROWSER_SIGN_IN_KIND = 'BROWSER_SIGN_IN';
+/** The site a BROWSER_SIGN_IN names: a host as the agent typed it (`github.com`, `accounts.google.com:443`). */
+export const BROWSER_SIGN_IN_SITE = /^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?(?::\d{1,5})?$/;
+export const MAX_BROWSER_SIGN_IN_SITE = 253;
+/** The reason the decline door records for the card's Not now. */
+export const BROWSER_SIGN_IN_NOT_NOW = 'Not now';
+
+/** The card's title, which the server writes: "Sign in to github.com". */
+export function browserSignInTitle(site: string): string {
+  return `Sign in to ${site}`;
+}
+
+/**
+ * The site as browser_request_sign_in passed it, reduced to its host: an agent that pastes the login page's URL names the
+ * same site as one that types the host. Lowercased; a path, query or credentials in the URL are dropped, never stored.
+ * Undefined when what is left is not a host.
+ */
+export function browserSignInSite(raw: string | undefined): string | undefined {
+  let site = raw?.trim() ?? '';
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(site)) {
+    try {
+      site = new URL(site).host;
+    } catch {
+      return undefined;
+    }
+  }
+  site = site.toLowerCase();
+  if (!site || site.length > MAX_BROWSER_SIGN_IN_SITE || !BROWSER_SIGN_IN_SITE.test(site)) return undefined;
+  return site;
+}
 
 /** The maintenance a wiki made from a WIKI_CREATE card starts with (design §3.6): the Create wiki form's defaults. */
 export const WIKI_CREATE_DAILY_RUN_LIMIT = 8;
@@ -111,6 +188,8 @@ export interface OwnerRequestFiling {
   recommendedOption?: number;
   steps?: OwnerRequestStep[];
   secretSpec?: OwnerRequestSecretSpecFiling;
+  /** CHANGE: the one setting asked for. v1: `{ runnerId, maxConcurrent }`. */
+  change?: OwnerRequestChangeFiling;
   verifyHint?: string;
   expiresAt?: string;
   clientRequestId?: string;
@@ -126,7 +205,7 @@ export class OwnerRequestNotFileable extends Error {}
  * `clientRequestId` and the `projectId` it is filed under.
  */
 const NOT_FOR_WIKI_CREATE = [
-  'title', 'blocksTaskIds', 'options', 'recommendedOption', 'steps', 'secretSpec', 'verifyHint', 'expiresAt',
+  'title', 'blocksTaskIds', 'options', 'recommendedOption', 'steps', 'secretSpec', 'change', 'verifyHint', 'expiresAt',
 ] as const satisfies readonly (keyof OwnerRequestFiling)[];
 
 /** A secret's environment variable (design §3.2). */
@@ -170,6 +249,11 @@ export function normalizeOwnerRequest(filing: OwnerRequestFiling, now: Date): Ow
   const title = trimmed(filing.title);
   const why = trimmed(filing.why);
   const { kind } = filing;
+  if (kind === BROWSER_SIGN_IN_KIND) {
+    throw new OwnerRequestNotFileable(
+      'a BROWSER_SIGN_IN request is filed with browser_request_sign_in, from a session on the Orbit Cloud runner',
+    );
+  }
   if (kind === 'WIKI_CREATE') {
     const carried = NOT_FOR_WIKI_CREATE.find((field) => filing[field] !== undefined);
     if (carried) {
@@ -190,6 +274,7 @@ export function normalizeOwnerRequest(filing: OwnerRequestFiling, now: Date): Ow
   only('recommendedOption', 'DECISION');
   only('steps', 'MANUAL_STEP');
   only('secretSpec', 'SECRET');
+  only('change', 'CHANGE');
 
   const options = filing.options?.map((option) => {
     const label = trimmed(option.label);
@@ -243,6 +328,9 @@ export function normalizeOwnerRequest(filing: OwnerRequestFiling, now: Date): Ow
     };
   }
 
+  let change: OwnerRequestChangeFiling | undefined;
+  if (kind === 'CHANGE') change = normalizeChange(filing.change);
+
   let expiresAtDate: Date | null = null;
   if (filing.expiresAt !== undefined) {
     expiresAtDate = new Date(filing.expiresAt);
@@ -260,6 +348,7 @@ export function normalizeOwnerRequest(filing: OwnerRequestFiling, now: Date): Ow
     recommendedOption: filing.recommendedOption,
     steps,
     secretSpec,
+    change,
     verifyHint: trimmed(filing.verifyHint),
     expiresAt: filing.expiresAt,
     clientRequestId: trimmed(filing.clientRequestId),
@@ -268,20 +357,46 @@ export function normalizeOwnerRequest(filing: OwnerRequestFiling, now: Date): Ow
   };
 }
 
+/**
+ * A CHANGE's `change`, checked against the typed allow-list (design §2, decision 2): exactly one runner and one setting,
+ * and v1's one setting is Max Concurrent, an integer of at least 1 — the floor `PATCH /runners/:id` holds it to.
+ */
+function normalizeChange(change: OwnerRequestChangeFiling | undefined): OwnerRequestChangeFiling {
+  if (!change || typeof change !== 'object') {
+    throw new OwnerRequestNotFileable('a CHANGE request needs change: { runnerId, maxConcurrent }');
+  }
+  const other = Object.keys(change).find((key) => key !== 'runnerId' && key !== 'maxConcurrent');
+  if (other) {
+    throw new OwnerRequestNotFileable(`change.${other} is not a setting a CHANGE request can ask for; it names maxConcurrent only`);
+  }
+  const runnerId = typeof change.runnerId === 'string' ? change.runnerId.trim() : '';
+  if (!runnerId) throw new OwnerRequestNotFileable('change.runnerId is required: the runner whose setting changes');
+  const { maxConcurrent } = change;
+  if (maxConcurrent === undefined) throw new OwnerRequestNotFileable('change.maxConcurrent is required: the value asked for');
+  if (!Number.isInteger(maxConcurrent) || maxConcurrent < 1) {
+    throw new OwnerRequestNotFileable('change.maxConcurrent must be an integer of at least 1');
+  }
+  return { runnerId, maxConcurrent };
+}
+
 /** The banner's first line, per kind. Short enough to read at a glance on a lock screen. */
-const ALERT_TITLES: Readonly<Record<OwnerRequestKind, string>> = {
+const ALERT_TITLES: Readonly<Record<FiledOwnerRequestKind, string>> = {
   DECISION: 'Decision needed',
   SECRET: 'Secret needed',
   MANUAL_STEP: 'Action needed',
   CONFIRM: 'Please confirm',
   WIKI_CREATE: 'Create a wiki?',
+  SETTINGS_CHANGE: 'Confirm settings',
+  BROWSER_SIGN_IN: 'Sign in needed',
+  CHANGE: 'Setting change',
+  PROJECT_REOPEN: 'Reopen project?',
 };
 
 /** Longest body a lock screen shows without cutting it. */
 export const OWNER_REQUEST_ALERT_BODY_MAX = 110;
 
 /** The lock-screen alert for a newly filed request: the kind as the title, the request's own title as the body. */
-export function ownerRequestAlert(kind: OwnerRequestKind, title: string): { title: string; body: string } {
+export function ownerRequestAlert(kind: FiledOwnerRequestKind, title: string): { title: string; body: string } {
   const line = title.replace(/\s+/g, ' ').trim();
   const body = line.length <= OWNER_REQUEST_ALERT_BODY_MAX
     ? line
@@ -295,7 +410,7 @@ export function ownerRequestAlert(kind: OwnerRequestKind, title: string): { titl
  * a SECRET has no reply path outside its card (secrets design §7.2), and the other kinds are read before they are
  * answered.
  */
-export function ownerRequestPushCategory(kind: OwnerRequestKind): string {
+export function ownerRequestPushCategory(kind: FiledOwnerRequestKind): string {
   return `ORBIT_OWNER_REQUEST_${kind}`;
 }
 
@@ -322,6 +437,10 @@ export interface EndedOwnerRequest {
   secretGrant?: { exposure: string; expiresAt: Date } | null;
   /** WIKI_CREATE: the repository the wiki was asked for. */
   repoUrlNorm?: string | null;
+  /** CHANGE: `{ runnerId, field, requested, before }`, as the server wrote it at filing. */
+  changeSpec?: unknown;
+  /** PROJECT_REOPEN: `{ projectId, statusAtAsk, settledAt, plannedWork, askers }`, as the server wrote it. */
+  payload?: unknown;
 }
 
 /**
@@ -335,6 +454,34 @@ function wikiCreateMeaning(request: EndedOwnerRequest): string | undefined {
     return `The owner created the wiki ${name}. You can propose to it now.`;
   }
   if (request.state === 'DECLINED') return 'The owner does not want a wiki for this repository. Do not ask again.';
+  return undefined;
+}
+
+/**
+ * A CHANGE withdrawn because a newer filing for the same runner setting replaced it (design §2): not withdrawn by this
+ * session, whatever the generic WITHDRAWN line says, so its turn says what happened.
+ */
+function changeReplacedMeaning(request: EndedOwnerRequest): string | undefined {
+  if (request.kind !== 'CHANGE' || request.state !== 'WITHDRAWN') return undefined;
+  if (request.resolutionNote !== OWNER_REQUEST_CHANGE_REPLACED_NOTE) return undefined;
+  return 'A newer request for the same runner setting replaced it; that one is the request the owner sees now.';
+}
+
+/**
+ * A PROJECT_REOPEN's endings, in the words the asking sessions read (design §3): on DONE the project is OPEN and the
+ * agent retries the write that was refused; on a decline it does not ask again; a deleted project has nothing to retry.
+ */
+function projectReopenMeaning(request: EndedOwnerRequest): string | undefined {
+  if (request.kind !== PROJECT_REOPEN) return undefined;
+  if (request.state === 'DONE') {
+    return 'The project is OPEN again: the owner reopened it. Retry the write that was refused.';
+  }
+  if (request.state === 'DECLINED') {
+    return 'The owner did not reopen the project; their reason is in the payload. Do not ask again: tell the person.';
+  }
+  if (request.state === 'WITHDRAWN' && request.resolutionNote === PROJECT_REOPEN_NOTES.projectDeleted) {
+    return 'The project was deleted while the request waited; there is nothing to reopen.';
+  }
   return undefined;
 }
 
@@ -397,6 +544,15 @@ export function ownerRequestResolutionPayload(request: EndedOwnerRequest): Recor
     if (request.state === 'DONE' && made.spaceId) payload.wiki = { spaceId: made.spaceId, name: made.name ?? null };
     return payload;
   }
+  if (request.kind === 'CHANGE') {
+    payload.change = ownerRequestChangeOutcome(request);
+    return payload;
+  }
+  if (request.kind === PROJECT_REOPEN) {
+    const asked = (request.payload ?? {}) as { projectId?: string; statusAtAsk?: string };
+    payload.project = { projectId: asked.projectId ?? null, statusAtAsk: asked.statusAtAsk ?? null };
+    return payload;
+  }
   if (request.kind === 'DECISION' && answer.option !== undefined) {
     const options = (request.options ?? []) as OwnerRequestOption[];
     payload.chosenOption = { index: answer.option, label: options[answer.option]?.label ?? null };
@@ -406,16 +562,36 @@ export function ownerRequestResolutionPayload(request: EndedOwnerRequest): Recor
 }
 
 /**
+ * A CHANGE's `change` in its resolution turn (design §5): what was asked and the value then, and, only when the owner
+ * applied it, the value written and the one it replaced at that moment. The agent reads `applied`: the owner may have
+ * chosen another number than `requested`.
+ */
+export function ownerRequestChangeOutcome(request: Pick<EndedOwnerRequest, 'state' | 'changeSpec' | 'answer'>): OwnerRequestChangeOutcome {
+  const spec = (request.changeSpec ?? {}) as OwnerRequestChangeSpec;
+  const outcome: OwnerRequestChangeOutcome = {
+    runnerId: spec.runnerId,
+    field: spec.field,
+    requested: spec.requested,
+    before: spec.before,
+  };
+  const answer = (request.answer ?? {}) as Partial<OwnerRequestChangeAnswer>;
+  if (request.state === 'DONE' && typeof answer.applied === 'number') {
+    return { ...outcome, applied: answer.applied, actualBefore: answer.actualBefore };
+  }
+  return outcome;
+}
+
+/**
  * The message the asking session is woken with when its request ends: one line naming the request and how it ended,
  * then the structured payload as JSON. Built only from columns an ended request never changes, so every attempt at one
  * delivery writes the same bytes and a retry replays the turn already queued.
  */
 export function ownerRequestResolutionTurn(request: EndedOwnerRequest): string {
-  const wiki = wikiCreateMeaning(request);
+  const special = wikiCreateMeaning(request) ?? changeReplacedMeaning(request) ?? projectReopenMeaning(request);
   const meaning = ENDING_MEANING[request.state as Exclude<OwnerRequestState, 'PENDING'>] ?? 'it ended';
   const header = [
-    wiki
-      ? `Orbit owner request ${request.id} (${request.kind}) ended ${request.state}. ${wiki}`
+    special
+      ? `Orbit owner request ${request.id} (${request.kind}) ended ${request.state}. ${special}`
       : `Orbit owner request ${request.id} (${request.kind}) ended ${request.state}: ${meaning}.`,
     '',
     'This turn was queued by Orbit when the request ended, not typed by a person. The request is final and will not wake this session again.',

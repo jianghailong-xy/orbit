@@ -121,6 +121,29 @@ class StartProjectCardTest {
         shows(RunSettings.automaticOffMain)
     }
 
+    private fun coordinatorRequest(extra: String) = StartProjectCopy.request(kotlinx.serialization.json.Json.parseToJsonElement(
+        """{"startRequest":{"settings":{"line":"PROJECT_BRANCH","automatic":true,"maxConcurrentTasks":3},"why":"","criteriaDigest":"$seal"$extra}}""",
+    ).let { it as kotlinx.serialization.json.JsonObject })!!
+
+    @Test fun theLineMenuNamesTheServersDefaultBranchWhenTheRequestNamesNone() {
+        card(coordinatorRequest(""","defaultProjectBranchName":"refs/heads/project/runner-ios-macos-web-34WvwUS8""""), asked = true)
+        compose.onNodeWithTag("$tag-line").performScrollTo().performClick()
+        compose.onNodeWithText("project/runner-ios-macos-web-34WvwUS8 — ${RunSettings.lineProjectBranchHint}").assertIsDisplayed()
+    }
+
+    @Test fun theLineMenuFallsBackToTheProjectIdForAnOlderServer() {
+        card(coordinatorRequest(""), asked = true)
+        compose.onNodeWithTag("$tag-line").performScrollTo().performClick()
+        compose.onNodeWithText("project/$project — ${RunSettings.lineProjectBranchHint}").assertIsDisplayed()
+    }
+
+    @Test fun theOwnersOwnCardNamesTheIntegrationReadsDefaultBranch() {
+        card(StartProjectCopy.ownerRequest(StartProjectCopy.Settings("PROJECT_BRANCH", null, true, 2, null), seal, "refs/heads/project/runner-ios-macos-web-34WvwUS8"),
+            asked = false, hasCoordinator = false)
+        compose.onNodeWithTag("$tag-line").performScrollTo().performClick()
+        compose.onNodeWithText("project/runner-ios-macos-web-34WvwUS8 — ${RunSettings.lineProjectBranchHint}").assertIsDisplayed()
+    }
+
     @Test fun anEmptyMergeCheckIsNoneAndNothingIsWarnedAbout() {
         card(request(check = null), asked = true)
         compose.onNodeWithTag("$tag-merge-check-value", useUnmergedTree = true).performScrollTo().assertTextEquals(RunSettings.mergeCheckNone)
@@ -157,6 +180,21 @@ class StartProjectCardTest {
         card(StartProjectCopy.ownerRequest(StartProjectCopy.Settings("MAIN", null, true, 1, null), seal), asked = false, hasCoordinator = true)
         shows(StartProjectCopy.nobodyAsked)
         compose.onNodeWithText(StartProjectCopy.opensCoordinator).assertDoesNotExist()
+    }
+
+    @Test fun aRequestWithNoLineDrawsOneSentenceInPlaceOfTheLandingRows() {
+        val request = request(check = null)
+        card(request.copy(settings = request.settings.copy(line = null)), asked = true)
+        shows(LandingMeasuredCopy.landsWhenATaskCommits)
+        shows(RunSettings.automaticSays(true, null, true))
+        for (row in listOf(RunSettings.tasksLandOn, RunSettings.mainBranch, RunSettings.delivery, LandingCheckCopy.label)) {
+            compose.onNodeWithText(row).assertDoesNotExist()
+        }
+        compose.onNodeWithTag("$tag-automatic").performScrollTo().performClick()
+        shows(RunSettings.automaticSays(false, null, true))
+        compose.onNodeWithText(StartProjectCopy.mergingIntoMain).assertDoesNotExist()
+        compose.onNodeWithTag("$tag-confirm").performScrollTo().assertIsEnabled().performClick()
+        assertEquals(1, started)
     }
 
     @Test fun aRequestThatNoLongerStandsIsDimmedWithStartDeadAndSaysWhy() {

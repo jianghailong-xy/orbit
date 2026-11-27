@@ -6,11 +6,11 @@ import type { ConfigService } from '@nestjs/config';
 import {
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { IntegrationJobCommand as SharedIntegrationJobCommand } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -34,6 +34,7 @@ import { taskLandingSql } from './project-criterion-landing';
 import { canonicalRepoUrl } from './project-integration-line';
 import { readProjectListAttention } from './project-list-attention';
 import { ProjectOpenItemService } from './project-open-item.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * Revision 29's deploy-time pass (`docs/project-integration-line-contract.md` §10.9 「迁移」 2), and the
@@ -43,8 +44,9 @@ import { ProjectOpenItemService } from './project-open-item.service';
  *
  *  (1) the freeze's scope (O-L4): in a project whose line has started, a DONE code task not known to be
  *      on the line is frozen from its rows when its work has stopped and names its commit — not when
- *      the work still moves, the identity cannot be named, the task is codeless, already landed or not
- *      DONE, nor in a project whose line has not started; one OBSERVE_LANDING per project
+ *      the work still moves, the identity cannot be named, the task is already landed or not DONE, nor
+ *      in a project whose line has not started — and a task flagged codeless that committed is frozen
+ *      like any other (§12.15 P-M3); one OBSERVE_LANDING per project
  *      (`trigger: DEPLOY`), handed only the frozen tasks, and no history rewritten;
  *  (2) the round (10-28's shape on a PLATFORM MAIN line): the observation — after a failed look queued
  *      again (O-J4) — writes the receipts, M-T13 retires the BLOCKED candidates and closes their items,
@@ -261,7 +263,7 @@ async function world(
     data: {
       id: coordinatorSessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
       title: `coordinator: ${label}`, prompt: `coordinator: ${label}`, provider: 'claude',
-      status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+      turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true, numTurns: 1, startedAt: new Date(),
       runtimeSessionId: `runtime-${coordinatorSessionId}`,
     },
@@ -334,7 +336,7 @@ async function historicalTask(
     data: {
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId: task.id, workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId, title, prompt: title, provider: 'claude',
-      status: work.moving ? RunStatus.RUNNING : RunStatus.SUCCEEDED,
+      turnState: turnStateOfWord(work.moving ? RunStatus.RUNNING : RunStatus.SUCCEEDED),
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true, isolationStatus: 'worktree',
       branch: work.branch, branchSha: work.branchSha, baseSha: work.baseSha, numTurns: 1,
       startedAt: minutesAgo(300), createdAt: minutesAgo(300), runtimeSessionId: randomUUID(),
@@ -491,6 +493,7 @@ test('(1) §10.9 迁移 2, O-L4: only finished code work that has stopped moving
       const unknown = await historicalTask(stack, w, 'no-tip', {
         branch: 'orbit/no-tip', branchSha: null, baseSha: sha('b'),
       });
+      // Flagged codeless, and committed: since revision 42 (§12.15 P-M3) it is code work like any other.
       const codeless = await historicalTask(stack, w, 'codeless', {
         branch: 'orbit/codeless', branchSha: sha('e'), baseSha: sha('b'),
       }, { codeless: true });
@@ -517,8 +520,8 @@ test('(1) §10.9 迁移 2, O-L4: only finished code work that has stopped moving
       const run = await runPass();
       const mine = run.projects.find((project) => project.projectId === w.projectId);
       assert.ok(mine, 'the pass did not look at the project');
-      assert.deepEqual([...mine.frozen].sort(), [settled.taskId, alsoSettled.taskId].sort(),
-        'the pass freezes exactly the settled work that names its commit');
+      assert.deepEqual([...mine.frozen].sort(), [settled.taskId, alsoSettled.taskId, codeless.taskId].sort(),
+        'the pass freezes exactly the settled work that names its commit, codeless flag or not');
       assert.deepEqual(
         Object.fromEntries(mine.left.map((task) => [task.taskId, task.settlement])),
         { [moving.taskId]: 'WORK_MOVING', [unknown.taskId]: 'IDENTITY_UNKNOWN' },
@@ -534,7 +537,7 @@ test('(1) §10.9 迁移 2, O-L4: only finished code work that has stopped moving
       assert.equal(frozen.deliveredBranch, 'orbit/settled');
       assert.equal(frozen.deliveredSessionId, settled.sessionId);
       assert.ok(frozen.deliveredAt);
-      for (const left of [moving, unknown, codeless, notDone, landed, elsewhere]) {
+      for (const left of [moving, unknown, notDone, landed, elsewhere]) {
         assert.equal((await delivered(stack, left.taskId)).deliveredAt, null, `${left.title} was frozen`);
       }
 
@@ -550,7 +553,7 @@ test('(1) §10.9 迁移 2, O-L4: only finished code work that has stopped moving
       assert.equal(command.jobId, queued.id);
       assert.deepEqual(
         (command.observeTasks ?? []).map((task) => task.taskId).sort(),
-        [settled.taskId, alsoSettled.taskId].sort(),
+        [settled.taskId, alsoSettled.taskId, codeless.taskId].sort(),
       );
 
       // Nothing rewritten, nothing invented: the candidate stands as the check left it, no receipt or

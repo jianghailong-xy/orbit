@@ -16,10 +16,13 @@ describe('the Personal pages, each at /settings/<slug>', () => {
     ['notifications', '<NotificationsSettingsPage />'],
     ['appearance', '<AppearanceSettingsPage />'],
     ['profile', '<ProfilePage />'],
-    ['storage', '<StorageSettingsPage />'],
-    ['storage/:kind/:id', '<StorageFilesPage />'],
     ['shared-links', '<SharedLinksPage />'],
     ['access-tokens', '<AccessTokensPage />'],
+    ['secrets', '<SecretsPage />'],
+    ['providers/routing', '<ModelRoutingPage />'],
+    // Old addresses of what Model routing holds, their query kept.
+    ['routing-report', '<KeepQueryRedirect to="/settings/providers/routing" />'],
+    ['providers/tiers', '<KeepQueryRedirect to="/settings/providers/routing" />'],
     ['integrations/feishu', '<FeishuIntegrationPage />'],
     ['integrations/feishu/connect-group', '<FeishuConnectGroupPage />'],
     ['integrations/github', '<GithubIntegrationPage />'],
@@ -33,6 +36,11 @@ describe('the Personal pages, each at /settings/<slug>', () => {
 
   it('keeps Access tokens after Shared links', () => {
     expect(block.indexOf('path="access-tokens"')).toBeGreaterThan(block.indexOf('path="shared-links"'));
+  });
+
+  it('keeps Secrets right after Access tokens', () => {
+    expect(block.indexOf('path="secrets"')).toBeGreaterThan(block.indexOf('path="access-tokens"'));
+    expect(block.indexOf('path="secrets"')).toBeLessThan(block.indexOf('path="terminals"'));
   });
 
   it('has no one-page Settings left', () => {

@@ -41,7 +41,8 @@ import test from 'node:test';
 import { Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import { PrismaClient, RunStatus, RunnerStatus, type ModelProvider } from '@prisma/client';
+import { PrismaClient, RunnerStatus, type ModelProvider } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, uuidToBase62, type ClaimedSession } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -73,6 +74,7 @@ import { CodexLoginService } from './codex-login.service';
 import { DeepSeekBalanceService } from './deepseek-balance.service';
 import { ProvidersService } from './providers.service';
 import '../test-support/dequeue-under-lease';
+import { fixtureFacts, withWord, WORD_SELECT } from '../test-support/session-word';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -214,7 +216,7 @@ async function sessionOn(
     data: {
       title: 'pool closure',
       prompt: 'hello',
-      status,
+      ...fixtureFacts({ status }),
       ownerId,
       creatorId: ownerId,
       workspaceId: at.workspaceId,
@@ -395,7 +397,7 @@ suite("an account pool's admission, closed at every door, on real PostgreSQL", {
   }
   /** The session's next message queued, which is what has the runner claim it again. */
   const nextTurn = (sessionId: string) =>
-    db.session.update({ where: { id: sessionId }, data: { status: RunStatus.PENDING } });
+    db.session.update({ where: { id: sessionId }, data: { turnState: 'QUEUED', finishedAt: null} });
   /** The runner reporting its engine up: the first event of the process the claim just spawned. */
   async function engineStarted(runnerId: string, sessionId: string, seq: number) {
     const { runtimeSessionId } = await db.session.findUniqueOrThrow({
@@ -417,11 +419,11 @@ suite("an account pool's admission, closed at every door, on real PostgreSQL", {
       .map((event) => (event.payload as { notice?: unknown }).notice)
       .filter((notice): notice is string => typeof notice === 'string');
   const token = (env: Record<string, string> | undefined) => env?.ANTHROPIC_AUTH_TOKEN;
-  const recorded = (sessionId: string) =>
-    db.session.findUniqueOrThrow({
+  const recorded = async (sessionId: string) =>
+    withWord(await db.session.findUniqueOrThrow({
       where: { id: sessionId },
-      select: { provider: true, status: true, poolMemberProviderId: true, poolSwitchNotice: true },
-    });
+      select: { provider: true, ...WORD_SELECT, poolMemberProviderId: true, poolSwitchNotice: true },
+    }));
   const memberIdsOf = async (poolId: string) =>
     (await db.providerPoolMember.findMany({ where: { poolId }, select: { providerId: true } }))
       .map((member) => member.providerId)

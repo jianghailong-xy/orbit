@@ -204,7 +204,7 @@ func TestCursorLaunchSpecWhitelistsEnvironment(t *testing.T) {
 		"SSL_CERT_FILE", "SSL_CERT_DIR", "NODE_EXTRA_CA_CERTS", "NODE_USE_ENV_PROXY",
 		"HOME", "SHELL", "CURSOR_CONFIG_DIR", "CURSOR_DATA_DIR", "AGENT_CLI_CREDENTIAL_STORE", "NO_OPEN_BROWSER", "DIRENV_DISABLE",
 		"CURSOR_AGENT_DISABLE_DEBUG_LOG", "ORBIT_SESSION_ID", "ORBIT_AGENT_ID", "ORBIT_TASK_ID", "ORBIT_ALLOW_ORCHESTRATION",
-		envWatches, envWiki, envScheduleRun, envSpawnDepth, envBgSocket, envBgToken,
+		envWatches, envWiki, envDocuments, envBrowser, envWorkflows, envScheduleRun, envSpawnDepth, envBgSocket, envBgToken,
 		// The workspace's own variables, its key among them.
 		"ANTHROPIC_API_KEY", "CURSOR_API_KEY", "WORKSPACE_VALUE"} {
 		allowed[key] = true

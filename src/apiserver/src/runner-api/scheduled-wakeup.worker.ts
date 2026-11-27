@@ -8,13 +8,15 @@ import {
   OnModuleInit,
   Optional,
 } from '@nestjs/common';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { turnStateOf, TURN_STATE_SELECT } from '../sessions/session-turn-state';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService, type WakeupMissedReason } from '../push/push.service';
 import { RUNNER_BEATS, runnerIsOnline } from '../runners/runner-presence';
 import { RETRY_CLAIM_WINDOW_MS } from '../sessions/session-request';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
+import { RELEASE_FAILURE_SELECT, releaseWasFailure, releaseWasFailureFilter } from '../common/session-release';
 import { BACKGROUND_WAKE_TURN_PREFIX, sessionHasEnded, undeliveredWakeTurn } from './background-job-wake';
 import { fileSubagentWake, fileWorkflowWake, type SubagentWakeOutcome, unfiledSubagentWakes, unfiledWorkflowWakes } from './subagent-wake';
 import { interruptRunsOfOfflineTargets } from './subagent-remote';
@@ -110,10 +112,10 @@ export type ScheduledWakeupOutcome =
   | 'LOOP_ENDED'
   | 'RETRY';
 
-/** A FAILED session the auto-retry sweep is to bring back: armed, or claimed a moment ago, and still open. */
+/** Released by a failure, and the auto-retry sweep is to bring it back: armed, or claimed a moment ago, and still open. */
 function recoveringByRetry(now: Date): Prisma.SessionWhereInput {
   return {
-    status: RunStatus.FAILED,
+    AND: [releaseWasFailureFilter()],
     deletedAt: null,
     completedAt: null,
     archivedAt: null,
@@ -124,7 +126,7 @@ function recoveringByRetry(now: Date): Prisma.SessionWhereInput {
 /** What a silent loop's alert reads of its session: its title, and whether its runner is there. */
 const SILENT_SESSION = {
   title: true,
-  status: true,
+  ...TURN_STATE_SELECT,
   assignedRunner: { select: { status: true, ...RUNNER_BEATS } },
 } as const satisfies Prisma.SessionSelect;
 
@@ -418,7 +420,7 @@ export class ScheduledWakeupWorker implements OnModuleInit, OnModuleDestroy {
       const session = await this.prisma.session.findUnique({ where: { id: tick.sessionId }, select: SILENT_SESSION });
       if (!session) return;
       const runnerOnline = runnerIsOnline(session.assignedRunner, now.getTime());
-      if (runnerOnline && session.status === RunStatus.RUNNING && (await this.turnRunning(tick.sessionId))) return;
+      if (runnerOnline && turnStateOf(session) === 'IN_FLIGHT' && (await this.turnRunning(tick.sessionId))) return;
       if (!(await claimLoopAlert(this.prisma, tick.loopId, silentSince, now))) return;
       const standing = tickStanding(tick.session, now);
       const reason: WakeupMissedReason = !runnerOnline
@@ -523,8 +525,8 @@ export class ScheduledWakeupWorker implements OnModuleInit, OnModuleDestroy {
       if (!(error instanceof HttpException)) throw error;
       // Refused: the runner is offline, the task's run was replaced, the session cannot be resumed. Unless
       // it is no longer FAILED — somebody else brought it back meanwhile — which the next pass files.
-      const current = await this.prisma.session.findUnique({ where: { id: tick.sessionId }, select: { status: true } });
-      if (current && current.status !== RunStatus.FAILED) return 'RETRY';
+      const current = await this.prisma.session.findUnique({ where: { id: tick.sessionId }, select: RELEASE_FAILURE_SELECT });
+      if (current && !releaseWasFailure(current)) return 'RETRY';
       this.log.warn(`tick ${tick.id} of wakeup loop ${tick.loopId} could not revive session ${tick.sessionId}, so it is counted missed: ${messageOf(error)}`);
       return this.missTick(tick, 'keep');
     }

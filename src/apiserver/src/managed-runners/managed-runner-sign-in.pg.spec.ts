@@ -226,7 +226,7 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
         assert.deepEqual(await rows('SELECT id, workspace_id, assigned_runner_id, provider, status FROM session ORDER BY id'), before.sessions);
 
         const capabilities = await call(server, 'GET', '/api/auth/capabilities', signedIn.json.accessToken);
-        assert.deepEqual(capabilities.json, { managedRunners: { enabled: false, contractVersion: 1 } });
+        assert.deepEqual(capabilities.json, { managedRunners: { enabled: false, contractVersion: 1 }, documents: { enabled: false } });
       } finally {
         await server.stop();
       }
@@ -405,7 +405,7 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
     const token = await bearer(quietUser.id);
     const refreshToken = generateToken(32);
     await db.refreshToken.create({ data: { userId: quietUser.id, tokenHash: sha256(refreshToken), expiresAt: new Date(Date.now() + 86_400_000) } });
-    assert.deepEqual((await call(server, 'GET', '/api/auth/capabilities', token)).json, { managedRunners: { enabled: true, contractVersion: 1 } });
+    assert.deepEqual((await call(server, 'GET', '/api/auth/capabilities', token)).json, { managedRunners: { enabled: true, contractVersion: 1 }, documents: { enabled: false } });
     const status = await statusOf(token);
     assert.equal(status.managementState, 'NOT_PROVISIONED');
     assert.equal(status.actions.canEnsure, true);

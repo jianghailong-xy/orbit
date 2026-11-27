@@ -12,6 +12,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.runtime.saveable.SaveableStateHolder
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -33,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
 import io.orbitd.android.core.auth.AuthState
@@ -197,8 +200,7 @@ fun SessionCardsReads(cards: SessionCardsModel) {
     }
 }
 
-/** The height of the list the rail is drawn in, in px, less what floats over its top; 0 where nobody says. A card asked for top first is brought in as a span of
- * nearly that height, which the list scrolls to by the card's top edge, whichever side of the screen the card is on. */
+/** The measured height available to bring in a waiting card by its top, in px. Zero while the reader positions the rail. */
 val LocalCardViewport = compositionLocalOf { 0 }
 
 /** A04 is the only live-state owner. Reconnection/foreground/REST invalidations all feed this rail. */
@@ -237,26 +239,34 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
             // A11 hook: the card a project page opened this conversation onto is brought into view once drawn.
             val requester = remember { BringIntoViewRequester() }
             val viewport = LocalCardViewport.current
-            if (focus != null && CardFocus.matches(focus, card.key)) LaunchedEffect(focus, card.key) {
+            val waiting = asked == CardFocus.WAITING
+            if (focus != null && CardFocus.matches(focus, card.key) && (!waiting || viewport > 0)) LaunchedEffect(focus, card.key) {
                 // The waiting card a project row opened onto shows its top, not its foot: a span from its top nearly the list's height.
-                if (asked == CardFocus.WAITING && viewport > 0) requester.bringIntoView(Rect(0f, 0f, 1f, viewport * 0.9f))
+                if (waiting) requester.bringIntoView(Rect(0f, 0f, 1f, viewport * 0.9f))
                 else requester.bringIntoView()
+                // Spent, and then held where it was brought to: the reader re-applies it as the conversation moves around it.
+                withFrameNanos { }
+                CardFocus.hold(session.id, card.key, waiting)
                 CardFocus.spend(session.id)
             }
-            Box(Modifier.bringIntoViewRequester(requester)) {
+            Box(Modifier.bringIntoViewRequester(requester).onGloballyPositioned { CardFocus.report(session.id, card.key, it.positionInRoot().y) }.then(if (CoordinatorQueue.isSent(card)) Modifier else Modifier.conversationCard())) {
                 val preview = CardPreviews.preview(card)
                 val fresh = cards.fresh(session, card)
                 val result = results[card.key]?.takeIf { it.binding == card.binding } ?: CardActionState()
                 val submit = { verb: CardVerb, input: CardInput -> cards.submit(card, verb, input) }
                 when {
-                    // A08-13: a question that has ended is the record it became, replayed in its review.
-                    card.family == CardFamily.QUESTION_RECORD -> QuestionRecordCard(card) { cards.open(card.key) }
+                    // A08-13: a question that has ended is the record it became, unfolded in place (board card-ui-polish ③).
+                    card.family == CardFamily.QUESTION_RECORD -> QuestionRecordCard(card, open = open)
                     // A11-9: the merge into main is one line where it happened; its card is on the project's sessions page, and the line
                     // opens the same review (iOS `PromotionEventLine`, 6b4bef713) — the conversation's way into a review, as a preview is.
                     card.family == CardFamily.PROMOTION -> PromotionEventLine(card.source.takeUnless { card.status == CardPreviews.stale },
                         "${card.key}:preview", Modifier.testTag(card.key)) { cards.open(card.key) }
                     // A08-2: a long decision is a compact preview here, answered in its full-height review.
                     preview != null -> CardPreviewView(card, preview) { cards.open(card.key) }
+                    // Board-4: the criteria decision's receipt is orange with what it approved folded under it, and the start's receipt
+                    // says what the project was started on and with — each its own card, never a list of the record's fields.
+                    card.key.startsWith("receipt:") && card.family == CardFamily.CRITERIA_CHANGE -> CriteriaReceiptCard(card)
+                    card.key.startsWith("receipt:") && card.family == CardFamily.ACCEPTANCE -> StartReceiptCard(card)
                     // A11b hook: the coordinator's request draws the start card (iOS `StartProjectCardView`), not the generic card.
                     card.family == CardFamily.START -> CoordinatorStartCard(card, session.snapshot?.standing.orEmpty(), fresh, result, open, discuss, submit = submit)
                     CoordinatorQueue.isSent(card) -> SentToCoordinatorLine(card)
@@ -278,7 +288,7 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
             if (focus != null && CardFocus.matches(focus, key)) LaunchedEffect(focus, key) {
                 requester.bringIntoView(); doneReview = true; CardFocus.spend(session.id)
             }
-            Box(Modifier.bringIntoViewRequester(requester)) {
+            Box(Modifier.bringIntoViewRequester(requester).conversationCard()) {
                 CoordinatorDoneCard(app, cards.handle, session.id, coordinated, detail, session.snapshot?.standing.orEmpty(), session.fresh, open,
                     reviewing = doneReview, review = { doneReview = it })
             }
@@ -502,15 +512,15 @@ private fun RecordFooter(record: CardRecord) {
 /** What a recorded acceptance confirmation opens to (web `AcceptanceReceiptFold`): closed, a brand-coloured reading control; open,
  * the change rows, the numbered words, a note and the seal. */
 @Composable
-private fun ReceiptFold(receipt: AcceptanceReceipt) {
+internal fun ReceiptFold(receipt: AcceptanceReceipt, tag: String = "card-review", indent: Dp = 22.dp) {
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     val colors = LocalOrbitColors.current
     var open by rememberSaveable { mutableStateOf(false) }
     Text(if (open) CardPreviews.receiptCloseLabel else receipt.openLabel,
-        Modifier.padding(start = 22.dp, top = 6.dp).clickable { open = !open }.testTag("card-review:receipt-toggle"),
+        Modifier.padding(start = indent, top = 6.dp).clickable { open = !open }.testTag("$tag:receipt-toggle"),
         style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold), color = MaterialTheme.colorScheme.primary)
     if (!open) return
-    Column(Modifier.padding(start = 22.dp, top = 6.dp).testTag("card-review:receipt-fold"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(Modifier.padding(start = indent, top = 6.dp).testTag("$tag:receipt-fold"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         receipt.changes.forEach { row ->
             val tone = when (row.mark) { "+" -> colors.success; "↑" -> colors.needsYou; else -> secondary }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

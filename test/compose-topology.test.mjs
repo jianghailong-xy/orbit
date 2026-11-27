@@ -86,19 +86,19 @@
 // unless the host's .env sets it. No service, mount or port is added, and a deployment whose .env does not name it reads
 // every visitor's address exactly as before.
 //
-// On 2026-11-02 Orbit Files' storage layer (project 34qIISTdcSurVokwRlp4w, task T1 34qId87cYLgqqL3UPTPMW, of the design the
-// account owner approved that day, docs/orbit-files-design.md §2.10) moved attachment bytes out of Postgres into a store
+// On 2026-11-02 Drive' storage layer (project 34qIISTdcSurVokwRlp4w, task T1 34qId87cYLgqqL3UPTPMW, of the design the
+// account owner approved that day, docs/drive-design.md §2.10) moved attachment bytes out of Postgres into a store
 // named by sha256, and added to the apiserver six lines of environment — the store (local unless the host's .env says s3)
 // and the S3-compatible bucket's endpoint, bucket, key pair and region, each empty unless .env sets it — and one bind
 // mount, ./data/files, the local store's directory, beside ./data/postgres as the design asks. No service or port is
 // added. The two blocks below pin those lines.
 //
-// On 2026-11-02 Orbit Files' off-host copy (project 34qIISTdcSurVokwRlp4w, task T10 34qNRF5OyfOW3hQ6J0NF3, of the same
+// On 2026-11-02 Drive' off-host copy (project 34qIISTdcSurVokwRlp4w, task T10 34qNRF5OyfOW3hQ6J0NF3, of the same
 // design, whose §2.10 has the backup sidecar sync ./data/files; its coordinator filed this mount) gave pgbackup one
 // read-only bind mount of ./data/files, so that scripts/pg-backup.sh can copy attachment bytes off the host. No service,
 // port or environment is added, and with no ORBIT_BACKUP_SYNC_TARGET nothing reads the mount. (r) pins the line.
 //
-// On 2026-11-03 Orbit Files' retention (project 34qIISTdcSurVokwRlp4w, task T9 34qId8ccRB4cbKVh8Bws1, of the same design,
+// On 2026-11-03 Drive' retention (project 34qIISTdcSurVokwRlp4w, task T9 34qId8ccRB4cbKVh8Bws1, of the same design,
 // whose §2.8 and §2.10 ask for a per-account quota and a grace period no shorter than the Postgres backup retention; its
 // coordinator approved this pin) added three lines to the apiserver's environment: the quota, empty unless the host's .env
 // sets it, and the two values pgbackup keeps base backups by, with pgbackup's own defaults, so that the grace period reads
@@ -164,6 +164,29 @@
 // ce80000db8 then added one apiserver environment line, ORBIT_RUN_STOPPED_WAKE (on unless the host's .env sets
 // ORBIT_RUN_STOPPED_WAKE_MODE to off), and the three comment lines that explain it; the account owner approved it as a
 // deployment setting on 2026-11-20. No service, mount or port is added; the block below pins the line.
+//
+// On 2026-11-20 the account owner settled that every self-hosted deployment runs a monitoring stack in Compose (project
+// 350mFkGGRDovIfipePH2O, whose instructions record the decision and its rules: no new internet-facing surface, never the
+// Docker socket, a memory limit on every container, a pg_monitor role of its own for postgres-exporter). Its first phase
+// (task 350mIIwdkZa5qmLnRglPv) adds four services under a profile of their own, monitoring, which (t) pins line by line:
+// prometheus, node-exporter and postgres-exporter, resident, and pg-monitor-role, which runs once each time the profile
+// comes up and exits, making postgres-exporter's role over the Postgres socket. None publishes a port; node-exporter
+// mounts the host's /proc, /sys and / read-only, as nobody with every capability dropped. Two named volumes are added,
+// Prometheus's data and the role's password. The apiserver gains two fixed environment lines, the internal listener
+// Prometheus scrapes (src/apiserver/src/metrics/metrics-listener.ts), which serves /metrics alone and is published
+// nowhere. A deployment whose .env does not name the profile renders exactly what it did, but for those two lines.
+//
+// Its logs phase (task 350mIJ1Dm9cOVsvHhJAhm) adds two more services under the same profile, which (t) pins line by line:
+// loki, which keeps the lines, publishes no port and has a retention, and alloy, which ships this project's container
+// logs to it from /var/lib/docker/containers mounted read-only, never from the Docker socket, and leaves out managed
+// runners' containers (deploy/monitoring/alloy). Two named volumes are added, Loki's data and Alloy's read positions.
+// The apiserver gains one environment line, ORBIT_LOG_FORMAT (json unless the host's .env says text), its JSON log lines
+// carrying the web gateway's request id (src/apiserver/src/common/request-log.ts).
+//
+// On 2026-11-24 the drive was renamed Drive (project 352m8OwBHdxxcHAOboe9B, whose instructions the account owner
+// chose: old names keep working wherever a host .env still uses them). The apiserver's and pgbackup's ORBIT_FILES_*
+// lines become ORBIT_DRIVE_*, each defaulting to its ORBIT_FILES_* value and then to the default it had, so a host
+// .env from before renders the same values under the new names. Nothing else moves; the blocks below pin the lines.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -225,7 +248,28 @@ const LINK_PROFILE = 'runner-link';
 const NATS = 'nats';
 // NATS's whole configuration since task B4, pinned by (q).
 const NATS_CONF = 'src/link-gateway/nats.conf';
-const APPROVED_ADDITIONS = [WIKI_WORKER, DOCKER_CHANNEL, MANAGED_RUNNER_FIREWALL, LINK_GATEWAY, NATS];
+// Added by the monitoring project on 2026-11-20 (see the top of this file): started only under their own profile.
+const MONITORING_PROFILE = 'monitoring';
+const PROMETHEUS = 'prometheus';
+const NODE_EXPORTER = 'node-exporter';
+const PG_MONITOR_ROLE = 'pg-monitor-role';
+const POSTGRES_EXPORTER = 'postgres-exporter';
+const GRAFANA = 'grafana';
+const LOKI = 'loki';
+const ALLOY = 'alloy';
+const MONITORING = [PROMETHEUS, NODE_EXPORTER, PG_MONITOR_ROLE, POSTGRES_EXPORTER, GRAFANA, LOKI, ALLOY];
+// Each image by version and index digest, the default its ORBIT_*_IMAGE variable falls back to.
+const PROMETHEUS_IMAGE = 'prom/prometheus:v3.16.0@sha256:e04987641b57704f408e31f6373ba4138ecf27cb4a165d24aabb6c38fddd0f06';
+const NODE_EXPORTER_IMAGE = 'prom/node-exporter:v1.13.1@sha256:7296504d4ada44b7d7ab4431e27e9f9900d8488f8d55842f4b12ae2704e16dfe';
+const POSTGRES_EXPORTER_IMAGE = 'prometheuscommunity/postgres-exporter:v0.21.1@sha256:3b8e05a84282cd1199ad2fb6c66f362738bf4c68c1547d8f4226a34a7dd6d8d7';
+// Its two named volumes, the last lines of the file, and the comment above them.
+const GRAFANA_IMAGE = 'grafana/grafana:12.2.0@sha256:74144189b38447facf737dfd0f3906e42e0776212bf575dc3334c3609183adf7';
+const LOKI_IMAGE = 'grafana/loki:3.7.10@sha256:b43c257ccfc925d4a50b8717cac61a3b51df8c48d01847936057e5c4075a24a7';
+const ALLOY_IMAGE = 'grafana/alloy:v1.22.0@sha256:9acc2529bc1edb7f5b2bd801dd8334ebc80c158e3a9e5526ecd7c9a273d43189';
+const MONITORING_VOLUMES = ['  prometheus-data:', '  pg-monitor-secret:', '  grafana-data:', '  loki-data:', '  alloy-data:'];
+// pg-monitor-role is the one approved addition that is not resident: it runs once each time the profile comes up.
+const ONE_SHOT = [PG_MONITOR_ROLE];
+const APPROVED_ADDITIONS = [WIKI_WORKER, DOCKER_CHANNEL, MANAGED_RUNNER_FIREWALL, LINK_GATEWAY, NATS, ...MONITORING];
 const REMOVED_SERVICES = [
   'watchdog', 'outcome-coordinator', 'outcome-coordinator-secondary', 'executable-dead-man',
 ];
@@ -271,7 +315,7 @@ const postgresConfiguration = git('show', `${POSTGRES_CONFIGURATION_SHA}:${COMPO
  * service that happened to precede it.
  */
 function services(source) {
-  const body = source.match(/^services:\n([\s\S]*?)(?=^\S|\Z)/m)?.[1] ?? '';
+  const body = source.match(/^services:\n([\s\S]*?)(?=^\S|(?![\s\S]))/m)?.[1] ?? '';
   const blocks = new Map();
   let name = null;
   let lines = [];
@@ -319,9 +363,9 @@ test('the approved configuration commits still have exactly the five surviving s
   assert.deepEqual([...survivingConfigurationServices.keys()], EXPECTED_SERVICES);
 });
 
-test('(a) Compose declares exactly the five surviving services, the wiki worker, the Docker channel, the managed runners\' firewall, the runner link gateway and its NATS', () => {
+test('(a) Compose declares exactly the five surviving services, the wiki worker, the Docker channel, the managed runners\' firewall, the runner link gateway, its NATS and the monitoring profile\'s four', () => {
   assert.deepEqual([...currentServices.keys()].sort(), [...EXPECTED_SERVICES, ...APPROVED_ADDITIONS].sort());
-  assert.equal(currentServices.size, 10);
+  assert.equal(currentServices.size, 17);
 });
 
 test('(b) no removed sidecar is named anywhere in Compose', () => {
@@ -344,7 +388,10 @@ test('(c) nothing was added back: no new service, no new always-on process, no i
   // No resident process beyond the ones the five surviving services already ran, the wiki worker and
   // the Docker channel: resident processes too (restart: unless-stopped), which is what the owner approved.
   assert.deepEqual(alwaysOn(currentServices).sort(),
-    [...alwaysOn(baselineServices).filter((name) => currentServices.has(name)), ...APPROVED_ADDITIONS].sort());
+    [...alwaysOn(baselineServices).filter((name) => currentServices.has(name)),
+      ...APPROVED_ADDITIONS.filter((name) => !ONE_SHOT.includes(name))].sort());
+  // The one run-once service the owner's monitoring decision allows, by name: it sets no restart policy at all.
+  for (const name of ONE_SHOT) assert.doesNotMatch(currentServices.get(name), /^\s+restart:/m, `${name} restarts`);
   // No one-shot substitute: nothing may declare a run-once profile or a restart policy that
   // re-runs a job, and no service may be introduced solely to be `docker compose run`. The three
   // profiles are the Docker channel's, the managed runners' firewall's and the runner link's, which the gateway
@@ -357,8 +404,9 @@ test('(c) nothing was added back: no new service, no new always-on process, no i
     [MANAGED_RUNNER_FIREWALL, [`    profiles: [${FIREWALL_PROFILE}]`]],
     [LINK_GATEWAY, [`    profiles: [${LINK_PROFILE}]`]],
     [NATS, [`    profiles: [${LINK_PROFILE}]`]],
+    ...MONITORING.map((name) => [name, [`    profiles: [${MONITORING_PROFILE}]`]]),
   ]);
-  assert.equal(current.match(/^\s+profiles:/gm).length, 4);
+  assert.equal(current.match(/^\s+profiles:/gm).length, 11);
   assert.doesNotMatch(current, /^\s+restart: (on-failure|always)$/m);
   assert.doesNotMatch(current, /\bexecutable-acceptance-dead-man\b/);
 });
@@ -389,7 +437,16 @@ test('(s) the two-stage release names each image through variables, and changes 
   // two-stage release deploys, still built where they run and named as before.
   assert.deepEqual(lines.filter((line) => /^\s+image:/.test(line) && !TWO_STAGE_IMAGES.has(line) && !TWO_STAGE_WEB_IMAGE.endsWith(line)),
     ['    image: postgres:16-alpine', '    image: postgres:16-alpine', '    image: orbit-docker-channel:local',
-      '    image: orbit-cloud-runner-firewall:local']);
+      '    image: orbit-cloud-runner-firewall:local',
+      // The monitoring profile's (2026-11-20, the top of this file): (t) pins them. pg-monitor-role runs pgbackup's image,
+      // which deploy/postgres-pinned.yml pins with theirs.
+      `    image: \${ORBIT_REGISTRY:+\${ORBIT_REGISTRY}/}\${ORBIT_PROMETHEUS_IMAGE:-${PROMETHEUS_IMAGE}}`,
+      `    image: \${ORBIT_REGISTRY:+\${ORBIT_REGISTRY}/}\${ORBIT_NODE_EXPORTER_IMAGE:-${NODE_EXPORTER_IMAGE}}`,
+      '    image: postgres:16-alpine',
+      `    image: \${ORBIT_REGISTRY:+\${ORBIT_REGISTRY}/}\${ORBIT_POSTGRES_EXPORTER_IMAGE:-${POSTGRES_EXPORTER_IMAGE}}`,
+      `    image: \${ORBIT_REGISTRY:+\${ORBIT_REGISTRY}/}\${ORBIT_GRAFANA_IMAGE:-${GRAFANA_IMAGE}}`,
+      `    image: \${ORBIT_REGISTRY:+\${ORBIT_REGISTRY}/}\${ORBIT_LOKI_IMAGE:-${LOKI_IMAGE}}`,
+      `    image: \${ORBIT_REGISTRY:+\${ORBIT_REGISTRY}/}\${ORBIT_ALLOY_IMAGE:-${ALLOY_IMAGE}}`]);
 });
 
 /** What Compose acts on: comments and blank lines document a block, they cannot run a process. */
@@ -446,12 +503,18 @@ const APPROVED_APISERVER_BLOCKS = [
   [
     '      ORBIT_RUN_STOPPED_WAKE: "${ORBIT_RUN_STOPPED_WAKE_MODE:-on}"',
   ],
+  // The log format (2026-11-23, task 350mIJ1Dm9cOVsvHhJAhm, the top of this file): JSON lines with the request id unless
+  // the host's .env says text. It comes right after PORT in the file, before CORS_ORIGINS.
+  [
+    '      ORBIT_LOG_FORMAT: "${ORBIT_LOG_FORMAT:-json}"',
+  ],
   // Claude Code on an OpenAI key (2026-11-11, the top of this file): its flag, the flag of the owner's own Codex login
   // pool, and the upstream hosts an admin lists besides api.openai.com, each empty unless the host's .env sets it. They
   // come right after PUBLIC_ORIGIN's line in the file, before the proxies'.
   [
     '      ORBIT_CLAUDE_OPENAI_GATEWAY: "${ORBIT_CLAUDE_OPENAI_GATEWAY:-}"',
     '      ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY: "${ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY:-}"',
+    '      ORBIT_SESSION_RELEASE_V1: "${ORBIT_SESSION_RELEASE_V1:-}"',
     '      ORBIT_GATEWAY_UPSTREAM_HOSTS: "${ORBIT_GATEWAY_UPSTREAM_HOSTS:-}"',
   ],
   // The proxies in front of the gateway (2026-10-28, the top of this file), empty unless the host's .env sets it.
@@ -494,6 +557,13 @@ const APPROVED_APISERVER_BLOCKS = [
     '      RUNNER_LINK_INTERNAL_HOST: "${RUNNER_LINK_INTERNAL_HOST:-0.0.0.0}"',
     '      RUNNER_LINK_NATS_SEED: "${RUNNER_LINK_NATS_APISERVER_SEED:-}"',
   ],
+  // The internal metrics listener (2026-11-20, the top of this file): fixed, so that deploy/monitoring/prometheus.yml
+  // scrapes the port it opens on, on every interface of the container and published nowhere. It comes right after the
+  // forwarding's lines in the file, before the releases'.
+  [
+    '      METRICS_INTERNAL_PORT: "9091"',
+    '      METRICS_INTERNAL_HOST: 0.0.0.0',
+  ],
   // The runner link's releases (2026-10-25, the top of this file): where the apiserver reads what /dl publishes, the web
   // container beside it unless the host's .env names another. It comes after the forwarding's lines in the file, and
   // before the managed runners'.
@@ -501,25 +571,29 @@ const APPROVED_APISERVER_BLOCKS = [
     '      RUNNER_RELEASE_DL_URL: "${RUNNER_RELEASE_DL_URL:-http://web/dl/}"',
   ],
   // The repository a report opens its issue in (2026-11-19, the top of this file), empty unless the host's .env sets it.
-  // The line comes right after the releases', before Orbit Files' store.
+  // The line comes right after the releases', before Drive' store.
   [
     '      ORBIT_RELEASE_REPOSITORY: "${ORBIT_RELEASE_REPOSITORY:-}"',
   ],
-  // Orbit Files' store (2026-11-02, the top of this file): local unless the host's .env says s3, and the S3-compatible
+  // Drive' store (2026-11-02, the top of this file): local unless the host's .env says s3, and the S3-compatible
   // bucket's endpoint, bucket, key pair and region, each empty unless .env sets it. It comes after the releases' line in
-  // the file, and before the managed runners'.
+  // the file, and before the managed runners'. Amended on 2026-11-24, when the drive was renamed Drive (project
+  // 352m8OwBHdxxcHAOboe9B): each is ORBIT_DRIVE_*, falling back to its ORBIT_FILES_* name in the host's .env.
   [
-    '      ORBIT_FILES_BACKEND: "${ORBIT_FILES_BACKEND:-local}"',
-    '      ORBIT_FILES_S3_ENDPOINT: "${ORBIT_FILES_S3_ENDPOINT:-}"',
-    '      ORBIT_FILES_S3_BUCKET: "${ORBIT_FILES_S3_BUCKET:-}"',
-    '      ORBIT_FILES_S3_ACCESS_KEY_ID: "${ORBIT_FILES_S3_ACCESS_KEY_ID:-}"',
-    '      ORBIT_FILES_S3_SECRET_ACCESS_KEY: "${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}"',
-    '      ORBIT_FILES_S3_REGION: "${ORBIT_FILES_S3_REGION:-}"',
+    '      ORBIT_DRIVE_BACKEND: "${ORBIT_DRIVE_BACKEND:-${ORBIT_DOCUMENTS_BACKEND:-${ORBIT_FILES_BACKEND:-local}}}"',
+    '      ORBIT_DRIVE_S3_ENDPOINT: "${ORBIT_DRIVE_S3_ENDPOINT:-${ORBIT_DOCUMENTS_S3_ENDPOINT:-${ORBIT_FILES_S3_ENDPOINT:-}}}"',
+    '      ORBIT_DRIVE_S3_BUCKET: "${ORBIT_DRIVE_S3_BUCKET:-${ORBIT_DOCUMENTS_S3_BUCKET:-${ORBIT_FILES_S3_BUCKET:-}}}"',
+    '      ORBIT_DRIVE_S3_ACCESS_KEY_ID: "${ORBIT_DRIVE_S3_ACCESS_KEY_ID:-${ORBIT_DOCUMENTS_S3_ACCESS_KEY_ID:-${ORBIT_FILES_S3_ACCESS_KEY_ID:-}}}"',
+    '      ORBIT_DRIVE_S3_SECRET_ACCESS_KEY: "${ORBIT_DRIVE_S3_SECRET_ACCESS_KEY:-${ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY:-${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}}}"',
+    '      ORBIT_DRIVE_S3_REGION: "${ORBIT_DRIVE_S3_REGION:-${ORBIT_DOCUMENTS_S3_REGION:-${ORBIT_FILES_S3_REGION:-}}}"',
+    '      ORBIT_DRIVE_S3_MIRROR: "${ORBIT_DRIVE_S3_MIRROR:-${ORBIT_DOCUMENTS_S3_MIRROR:-${ORBIT_FILES_S3_MIRROR:-0}}}"',
   ],
-  // Orbit Files' quota and grace period (2026-11-03, the top of this file): the quota, empty unless the host's .env sets it,
+  // Drive' quota and grace period (2026-11-03, the top of this file): the quota, empty unless the host's .env sets it,
   // and pgbackup's two retention values with its own defaults. They come right after the store's lines in the file.
+  // Amended on 2026-11-24 like the store's lines: ORBIT_DRIVE_*, falling back to ORBIT_FILES_*.
   [
-    '      ORBIT_FILES_QUOTA_BYTES: "${ORBIT_FILES_QUOTA_BYTES:-}"',
+    '      ORBIT_DRIVE_QUOTA_BYTES: "${ORBIT_DRIVE_QUOTA_BYTES:-${ORBIT_DOCUMENTS_QUOTA_BYTES:-${ORBIT_FILES_QUOTA_BYTES:-}}}"',
+    '      ORBIT_DRIVE_STORE_QUOTA_BYTES: "${ORBIT_DRIVE_STORE_QUOTA_BYTES:-${ORBIT_DOCUMENTS_STORE_QUOTA_BYTES:-${ORBIT_FILES_STORE_QUOTA_BYTES:-}}}"',
     '      ORBIT_BASE_BACKUP_INTERVAL: "${ORBIT_BASE_BACKUP_INTERVAL:-86400}"',
     '      ORBIT_BASE_BACKUP_KEEP: "${ORBIT_BASE_BACKUP_KEEP:-2}"',
   ],
@@ -529,6 +603,11 @@ const APPROVED_APISERVER_BLOCKS = [
   // existing deployment gains nothing on its disk.
   [
     '      ORBIT_MANAGED_RUNNERS_ENABLED: "${ORBIT_MANAGED_RUNNERS_ENABLED:-false}"',
+    // Approved by the account owner on 2026-11-24 (13:24:44Z, Orbit owner question item 353A3PcmP9bnqWpDCRayY, project
+    // 35370KiEBDnxlOS5Yyaxh), added by main commit 84eab3a5fb: the drive's switch, off unless the host's .env says true.
+    // The owner approved the line in both forms at that time; fix task 353ADwf90oOHuEm2Jp52K pinned the Drive form
+    // and this is the Drive form: ORBIT_DRIVE_ENABLED, falling back to ORBIT_DOCUMENTS_ENABLED and then ORBIT_FILES_ENABLED.
+    '      ORBIT_DRIVE_ENABLED: "${ORBIT_DRIVE_ENABLED:-${ORBIT_DOCUMENTS_ENABLED:-${ORBIT_FILES_ENABLED:-false}}}"',
     '      ORBIT_MANAGED_RUNNER_BROWSER_ENABLED: "${ORBIT_MANAGED_RUNNER_BROWSER_ENABLED:-false}"',
     '      ORBIT_MANAGED_RUNNERS_PROFILE: /var/lib/orbit-cloud-runners/profile.json',
     '    volumes:',
@@ -537,7 +616,7 @@ const APPROVED_APISERVER_BLOCKS = [
     // read-only, at its path from before, which profile.json and channel.json written by an earlier install name.
     '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners:ro"',
   ],
-  // Orbit Files' directory (2026-11-02, the top of this file): the local store and the uploads' temporary files, a bind
+  // Drive' directory (2026-11-02, the top of this file): the local store and the uploads' temporary files, a bind
   // mount of ./data/files beside ./data/postgres. It is the next entry of the managed runners' `volumes:`, before the name
   // every apiserver answers to.
   [
@@ -557,8 +636,17 @@ const APPROVED_WEB_BLOCK = [
   '        ORBIT_RUNNER_SOURCE: "${ORBIT_RUNNER_SOURCE:-.}"',
   '        ORBIT_RUNNER_SOURCE_SHA: "${ORBIT_RUNNER_SOURCE_SHA:-}"',
 ];
-// Orbit Files' off-host copy (2026-11-02, the top of this file): the sidecar reads the files directory and cannot write it.
+// Drive' off-host copy (2026-11-02, the top of this file): the sidecar reads the files directory and cannot write it.
+// Its bucket settings were amended on 2026-11-24 like the apiserver's: ORBIT_DRIVE_*, falling back to ORBIT_FILES_*.
 const PGBACKUP_FILES_MOUNT = '      - ./data/files:/var/lib/orbit/files:ro';
+const PGBACKUP_S3_MIRROR = [
+  '      ORBIT_DRIVE_S3_MIRROR: "${ORBIT_DRIVE_S3_MIRROR:-${ORBIT_DOCUMENTS_S3_MIRROR:-${ORBIT_FILES_S3_MIRROR:-0}}}"',
+  '      ORBIT_DRIVE_S3_ENDPOINT: "${ORBIT_DRIVE_S3_ENDPOINT:-${ORBIT_DOCUMENTS_S3_ENDPOINT:-${ORBIT_FILES_S3_ENDPOINT:-}}}"',
+  '      ORBIT_DRIVE_S3_BUCKET: "${ORBIT_DRIVE_S3_BUCKET:-${ORBIT_DOCUMENTS_S3_BUCKET:-${ORBIT_FILES_S3_BUCKET:-}}}"',
+  '      ORBIT_DRIVE_S3_ACCESS_KEY_ID: "${ORBIT_DRIVE_S3_ACCESS_KEY_ID:-${ORBIT_DOCUMENTS_S3_ACCESS_KEY_ID:-${ORBIT_FILES_S3_ACCESS_KEY_ID:-}}}"',
+  '      ORBIT_DRIVE_S3_SECRET_ACCESS_KEY: "${ORBIT_DRIVE_S3_SECRET_ACCESS_KEY:-${ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY:-${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}}}"',
+  '      ORBIT_DRIVE_S3_REGION: "${ORBIT_DRIVE_S3_REGION:-${ORBIT_DOCUMENTS_S3_REGION:-${ORBIT_FILES_S3_REGION:-}}}"',
+];
 // The approved additions to postgres's command that (k) sets aside, which (i) pins byte for byte with the rest of the
 // service. Each is found by its LAST line: `      - -c` opens every setting, so a block's first line would find the
 // command's first setting instead. Only its lines and the comment directly above them go, up to the directive before
@@ -573,7 +661,7 @@ const APPROVED_POSTGRES_BLOCKS = [
   ],
 ];
 test('nothing beyond the approved configuration was added to pgbackup, apiserver or web', () => {
-  const approved = { pgbackup: [PGBACKUP_FILES_MOUNT], apiserver: APPROVED_APISERVER_ADDITIONS, web: APPROVED_WEB_BLOCK };
+  const approved = { pgbackup: [...PGBACKUP_S3_MIRROR, PGBACKUP_FILES_MOUNT], apiserver: APPROVED_APISERVER_ADDITIONS, web: APPROVED_WEB_BLOCK };
   for (const [name, additions] of Object.entries(approved)) {
     assert.deepEqual(
       directivesNotInBaseline(currentServices.get(name), survivingConfigurationServices.get(name)),
@@ -586,6 +674,18 @@ test('nothing beyond the approved configuration was added to pgbackup, apiserver
  * `source` without the service `name` and the comment lines that introduce it, as the file read before
  * that service was added: the blank line before its comment stays, the one after its block goes.
  */
+/** `source` without the monitoring profile's volumes and the comment that introduces them. */
+function withoutMonitoringVolumes(source) {
+  let lines = source.split('\n');
+  const first = lines.indexOf(MONITORING_VOLUMES[0]);
+  assert.ok(first > 0, 'docker-compose.yml has no prometheus-data volume');
+  assert.deepEqual(lines.slice(first, first + MONITORING_VOLUMES.length), MONITORING_VOLUMES);
+  let from = first;
+  while (/^ {2}#/.test(lines[from - 1])) from -= 1;
+  lines = [...lines.slice(0, from), ...lines.slice(first + MONITORING_VOLUMES.length)];
+  return lines.join('\n');
+}
+
 function withoutService(source, name) {
   const lines = source.split('\n');
   const header = lines.indexOf(`  ${name}:`);
@@ -606,7 +706,7 @@ function withoutService(source, name) {
  */
 function withoutApprovedAdditions(source) {
   let lines = source.split('\n');
-  for (const block of [...APPROVED_APISERVER_BLOCKS, [PGBACKUP_FILES_MOUNT], APPROVED_WEB_BLOCK]) {
+  for (const block of [PGBACKUP_S3_MIRROR, ...APPROVED_APISERVER_BLOCKS, [PGBACKUP_FILES_MOUNT], APPROVED_WEB_BLOCK]) {
     const first = lines.indexOf(block[0]);
     assert.ok(first > 0, `docker-compose.yml no longer has the approved ${block[0].trim()}`);
     const last = lines.indexOf(block[block.length - 1], first);
@@ -633,9 +733,8 @@ function withoutApprovedAdditions(source) {
 // approved blocks are pinned beside them, as postgres's are by (i); all are set aside here, so that a line added
 // anywhere else still turns this red exactly as it did before those decisions.
 test('(k) removing the sidecars is subtraction: setting the approved wiki worker aside, Compose lost more lines than it gained', () => {
-  const rest = withoutApprovedAdditions(withoutService(withoutService(
-    withoutService(withoutService(withoutService(current, WIKI_WORKER), DOCKER_CHANNEL), MANAGED_RUNNER_FIREWALL),
-    LINK_GATEWAY), NATS));
+  const rest = withoutMonitoringVolumes(withoutApprovedAdditions([WIKI_WORKER, DOCKER_CHANNEL, MANAGED_RUNNER_FIREWALL,
+    LINK_GATEWAY, NATS, ...MONITORING].reduce(withoutService, current)));
   const scratch = mkdtempSync(path.join(tmpdir(), 'compose-topology-'));
   try {
     writeFileSync(path.join(scratch, 'baseline.yml'), baseline);
@@ -952,7 +1051,7 @@ test('(q) the runner link\'s NATS configuration is exactly the one task B4 added
   assert.doesNotMatch(command, /"-(?:V|D|DV|VV|DVV)"|--trace|--debug/);
 });
 
-// The files directory since Orbit Files (see the top of this file): the apiserver writes it, the backup sidecar reads it
+// The files directory since Drive (see the top of this file): the apiserver writes it, the backup sidecar reads it
 // and nothing else sees it. A writable mount in the sidecar could damage the only local copy of every attachment.
 test('(r) ./data/files is the apiserver\'s to write and pgbackup\'s to read, and no other service mounts it', () => {
   const mounts = { apiserver: ['      - ./data/files:/var/lib/orbit/files'], pgbackup: [PGBACKUP_FILES_MOUNT] };
@@ -1001,7 +1100,7 @@ for last; do :; done
       env: {
         PATH: `${stubs}:${process.env.PATH}`,
         ORBIT_ARCHIVE_DIR: path.join(scratch, 'archive'),
-        ORBIT_FILES_DIR: filesDir,
+        ORBIT_DRIVE_DIR: filesDir,
         ORBIT_BACKUP_SYNC_TARGET: target,
         ORBIT_BACKUP_MIN_FREE_MB: '0',
       },
@@ -1055,7 +1154,7 @@ test('(r) the sidecar copies the files after the archive, beside its target, wit
   assert.ok(slashed.rsyncCalls[2].endsWith(` ${FILES_SYNC_TARGET}/`), slashed.rsyncCalls[2]);
 });
 
-test('(r) a files directory with nothing but tmp/ has nothing to copy, as with ORBIT_FILES_BACKEND=s3, and that is no error', () => {
+test('(r) a files directory with nothing but tmp/ has nothing to copy, as with ORBIT_DRIVE_BACKEND=s3, and that is no error', () => {
   for (const files of [['tmp'], []]) {
     const { status, log, rsyncCalls } = backupRound({ target: SYNC_TARGET, files });
     assert.equal(status, 7, log);
@@ -1092,4 +1191,220 @@ test('(r) a failed off-host copy is logged and costs neither the other copy nor 
     assert.ok(log.includes(`ERROR: off-host sync to ${failing} failed: connection refused`), log);
     assert.ok(rsyncCalls.some((call) => call.endsWith(` ${other}/`)), rsyncCalls.join('\n'));
   }
+});
+
+// The monitoring profile's four services as task 350mIIwdkZa5qmLnRglPv added them on the owner's decision of 2026-11-20
+// (see the top of this file), every directive of each in order. Prometheus: its image by digest, a read-only root, every
+// capability dropped, a memory limit, its configuration read-only and a volume of its own, retention from .env. node-exporter:
+// the host's /proc, /sys and / read-only, as nobody with no capability. pg-monitor-role: pgbackup's image and socket, run
+// once, no restart policy. postgres-exporter: orbit_monitor's password from the volume pg-monitor-role writes. None
+// publishes a port or has the host's network, and none is given the Docker socket. Changing any of it is a new decision,
+// made here. Task 350mIIyOWkjqn2a9K7iMR (same project) gave node-exporter its textfile collector: pgbackup's backup
+// metrics, from ./data/pg-archive/metrics alone, read-only, never the rest of the archive.
+test('(t) the monitoring services are exactly the ones the monitoring project added on 2026-11-20, off unless its profile is on', () => {
+  assert.deepEqual(directives(currentServices.get(PROMETHEUS)), [
+    '  prometheus:',
+    `    profiles: [${MONITORING_PROFILE}]`,
+    `    image: \${ORBIT_REGISTRY:+\${ORBIT_REGISTRY}/}\${ORBIT_PROMETHEUS_IMAGE:-${PROMETHEUS_IMAGE}}`,
+    '    container_name: orbit-prometheus',
+    '    restart: unless-stopped',
+    '    mem_limit: 1g',
+    '    read_only: true',
+    '    cap_drop: [ALL]',
+    '    security_opt: [\"no-new-privileges:true\"]',
+    '    command:',
+    '      - --config.file=/etc/prometheus/prometheus.yml',
+    '      - --storage.tsdb.path=/prometheus',
+    '      - --storage.tsdb.retention.time=${ORBIT_PROMETHEUS_RETENTION:-15d}',
+    '      - --storage.tsdb.retention.size=${ORBIT_PROMETHEUS_RETENTION_SIZE:-4GB}',
+    '    volumes:',
+    '      - ./deploy/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro',
+    '      - prometheus-data:/prometheus',
+    '    expose:',
+    '      - \"9090\"',
+    '    healthcheck:',
+    '      test: [\"CMD\", \"wget\", \"-q\", \"-O\", \"/dev/null\", \"http://127.0.0.1:9090/-/ready\"]',
+    '      interval: 10s',
+    '      timeout: 5s',
+    '      retries: 6',
+    '      start_period: 30s',
+  ]);
+  assert.deepEqual(directives(currentServices.get(NODE_EXPORTER)), [
+    '  node-exporter:',
+    `    profiles: [${MONITORING_PROFILE}]`,
+    `    image: \${ORBIT_REGISTRY:+\${ORBIT_REGISTRY}/}\${ORBIT_NODE_EXPORTER_IMAGE:-${NODE_EXPORTER_IMAGE}}`,
+    '    container_name: orbit-node-exporter',
+    '    restart: unless-stopped',
+    '    user: \"65534:65534\"',
+    '    mem_limit: 128m',
+    '    read_only: true',
+    '    cap_drop: [ALL]',
+    '    security_opt: [\"no-new-privileges:true\"]',
+    '    command:',
+    '      - --path.procfs=/host/proc',
+    '      - --path.sysfs=/host/sys',
+    '      - --path.rootfs=/host/root',
+    '      - --web.listen-address=:9100',
+    '      - --collector.textfile.directory=/textfile',
+    '    volumes:',
+    '      - /proc:/host/proc:ro',
+    '      - /sys:/host/sys:ro',
+    '      - /:/host/root:ro,rslave',
+    '      - ./data/pg-archive/metrics:/textfile:ro',
+    '    expose:',
+    '      - \"9100\"',
+  ]);
+  assert.deepEqual(directives(currentServices.get(PG_MONITOR_ROLE)), [
+    '  pg-monitor-role:',
+    `    profiles: [${MONITORING_PROFILE}]`,
+    '    image: postgres:16-alpine',
+    '    container_name: orbit-pg-monitor-role',
+    '    mem_limit: 64m',
+    '    entrypoint: [\"/bin/sh\", \"/usr/local/bin/pg-monitor-role.sh\"]',
+    '    environment:',
+    '      PGHOST: /var/run/postgresql',
+    '      PGUSER: orbit',
+    '      PGDATABASE: orbit',
+    '    depends_on:',
+    '      postgres:',
+    '        condition: service_healthy',
+    '    volumes:',
+    '      - ./scripts/pg-monitor-role.sh:/usr/local/bin/pg-monitor-role.sh:ro',
+    '      - pg-socket:/var/run/postgresql',
+    '      - pg-monitor-secret:/secret',
+  ]);
+  assert.deepEqual(directives(currentServices.get(POSTGRES_EXPORTER)), [
+    '  postgres-exporter:',
+    `    profiles: [${MONITORING_PROFILE}]`,
+    `    image: \${ORBIT_REGISTRY:+\${ORBIT_REGISTRY}/}\${ORBIT_POSTGRES_EXPORTER_IMAGE:-${POSTGRES_EXPORTER_IMAGE}}`,
+    '    container_name: orbit-postgres-exporter',
+    '    restart: unless-stopped',
+    '    mem_limit: 128m',
+    '    read_only: true',
+    '    cap_drop: [ALL]',
+    '    security_opt: [\"no-new-privileges:true\"]',
+    '    environment:',
+    '      DATA_SOURCE_URI: \"postgres:5432/orbit?sslmode=disable\"',
+    '      DATA_SOURCE_USER: orbit_monitor',
+    '      DATA_SOURCE_PASS_FILE: /secret/password',
+    '    depends_on:',
+    '      pg-monitor-role:',
+    '        condition: service_completed_successfully',
+    '    volumes:',
+    '      - pg-monitor-secret:/secret:ro',
+    '    expose:',
+    '      - \"9187\"',
+  ]);
+});
+
+test('(t) every monitoring service has a memory limit, logs like the rest, and publishes no port', () => {
+  for (const name of MONITORING) {
+    const block = services(current).get(name);
+    assert.match(block, /^ {4}mem_limit: \d+[mg]$/m, `${name} has no memory limit`);
+    assert.match(block, /^ {4}logging: \*logging$/m, `${name} does not rotate its log`);
+    assert.doesNotMatch(block, /^ {4}(network_mode|pid|privileged|cap_add):/m, `${name} widens its sandbox`);
+    // Grafana alone publishes a port, on this host's loopback.
+    if (name !== GRAFANA) assert.doesNotMatch(block, /^ {4}ports:/m, `${name} publishes a port`);
+  }
+});
+
+// Grafana is never on the Orbit origin (the task of 2026-11-23, "Grafana on loopback"): the web app keeps its login token
+// in localStorage, and a script served from the same origin can read it. So its one published port is on 127.0.0.1, with
+// no location for it in either nginx configuration, and it cannot start with Grafana's default password.
+test('(t) Grafana is published on 127.0.0.1 only, is on no nginx route, and signs nobody up or in without the generated password', () => {
+  const block = currentServices.get(GRAFANA);
+  assert.deepEqual([...block.matchAll(/^ {4}ports:\n((?: {6}- .*\n)+)/gm)].map((m) => m[1].trim()),
+    ['- "127.0.0.1:${GRAFANA_PORT:-3030}:3000"']);
+  for (const file of ['gateway/nginx.conf', 'src/web/nginx.conf']) {
+    assert.doesNotMatch(readFileSync(path.join(repo, file), 'utf8'), /grafana/i, `${file} routes to Grafana`);
+  }
+  for (const [name, value] of [['GF_USERS_ALLOW_SIGN_UP', 'false'], ['GF_AUTH_ANONYMOUS_ENABLED', 'false']]) {
+    assert.match(block, new RegExp(`^ {6}${name}: "${value}"$`, 'm'));
+  }
+  assert.match(block, /^ {6}GF_SECURITY_ADMIN_PASSWORD: \$\{GRAFANA_ADMIN_PASSWORD:-\}$/m);
+  assert.match(block, /\[ -n "\$\$GF_SECURITY_ADMIN_PASSWORD" \] \|\|/, 'Grafana starts with no password');
+  assert.match(block, /^ {4}mem_limit: \d+m$/m);
+});
+
+test('(t) the monitoring profile adds exactly five named volumes, and the file ends with them', () => {
+  assert.ok(asWritten.endsWith(`${MONITORING_VOLUMES.join('\n')}\n`), 'docker-compose.yml no longer ends with the monitoring volumes');
+  assert.deepEqual([...asWritten.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gm)].map((m) => m[1]).slice(-6),
+    ['pg-socket', 'prometheus-data', 'pg-monitor-secret', 'grafana-data', 'loki-data', 'alloy-data']);
+});
+
+// The logs phase (task 350mIJ1Dm9cOVsvHhJAhm, the top of this file), every directive of both services in order. Loki: no
+// port, a read-only root, no capability, a memory limit and ORBIT_LOKI_RETENTION. Alloy: Docker's containers directory
+// read-only and never the Docker socket, nor any other host path; it tells this project's containers from others, and from
+// managed runners', by their own records there (deploy/monitoring/alloy/log-targets.sh).
+test('(t) Loki keeps the logs with a bounded retention, and Alloy reads them without the Docker socket', () => {
+  assert.deepEqual(directives(currentServices.get(LOKI)), [
+    '  loki:',
+    `    profiles: [${MONITORING_PROFILE}]`,
+    `    image: \${ORBIT_REGISTRY:+\${ORBIT_REGISTRY}/}\${ORBIT_LOKI_IMAGE:-${LOKI_IMAGE}}`,
+    '    container_name: orbit-loki',
+    '    restart: unless-stopped',
+    '    mem_limit: 512m',
+    '    read_only: true',
+    '    cap_drop: [ALL]',
+    '    security_opt: ["no-new-privileges:true"]',
+    '    command: ["-config.file=/etc/loki/loki.yml", "-config.expand-env=true"]',
+    '    environment:',
+    '      ORBIT_LOKI_RETENTION: "${ORBIT_LOKI_RETENTION:-168h}"',
+    '    volumes:',
+    '      - ./deploy/monitoring/loki.yml:/etc/loki/loki.yml:ro',
+    '      - loki-data:/loki',
+    '    tmpfs:',
+    '      - /tmp',
+    '    expose:',
+    '      - "3100"',
+  ]);
+  const loki = readFileSync(path.join(repo, 'deploy/monitoring/loki.yml'), 'utf8');
+  assert.match(loki, /^ {2}retention_period: \$\{ORBIT_LOKI_RETENTION:-168h\}$/m);
+  assert.match(loki, /^ {2}retention_enabled: true$/m);
+  assert.deepEqual(directives(currentServices.get(ALLOY)), [
+    '  alloy:',
+    `    profiles: [${MONITORING_PROFILE}]`,
+    `    image: \${ORBIT_REGISTRY:+\${ORBIT_REGISTRY}/}\${ORBIT_ALLOY_IMAGE:-${ALLOY_IMAGE}}`,
+    '    container_name: orbit-alloy',
+    '    restart: unless-stopped',
+    '    init: true',
+    '    mem_limit: 256m',
+    '    read_only: true',
+    '    cap_drop: [ALL]',
+    '    security_opt: ["no-new-privileges:true"]',
+    '    entrypoint: ["/bin/bash", "/etc/orbit-alloy/run.sh"]',
+    '    environment:',
+    '      ORBIT_COMPOSE_PROJECT: "${COMPOSE_PROJECT_NAME}"',
+    '    depends_on:',
+    '      loki:',
+    '        condition: service_started',
+    '    volumes:',
+    '      - ./deploy/monitoring/alloy:/etc/orbit-alloy:ro',
+    '      - /var/lib/docker/containers:/var/lib/docker/containers:ro',
+    '      - alloy-data:/alloy-data',
+    '    tmpfs:',
+    '      - /run/orbit-alloy',
+    '      - /tmp',
+    '    healthcheck:',
+    '      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/12345 && printf \'GET /-/ready HTTP/1.0\\\\r\\\\n\\\\r\\\\n\' >&3 && grep -q \' 200 \' <&3"]',
+    '      interval: 10s',
+    '      timeout: 5s',
+    '      retries: 6',
+    '      start_period: 30s',
+  ]);
+  // No monitoring service is given the Docker socket, by any path to it.
+  for (const name of MONITORING) assert.doesNotMatch(currentServices.get(name), /docker\.sock|\/var\/run\/docker|\/run\/docker/, `${name} mounts the Docker socket`);
+  // Alloy's list leaves a managed runner out on its own labels, before anything else matches.
+  const targets = readFileSync(path.join(repo, 'deploy/monitoring/alloy/log-targets.sh'), 'utf8');
+  assert.match(targets, /grep -qE '"orbit\\.managed-runner\\.\[a-z-\]\+":' "\$cfg" && continue/);
+});
+
+test('(t) Prometheus scrapes the apiservers by their shared name on the internal listener, and the link gateway by its own name', () => {
+  const config = readFileSync(path.join(repo, 'deploy/monitoring/prometheus.yml'), 'utf8');
+  const jobs = [...config.matchAll(/^ {2}- job_name: ([a-z-]+)$/gm)].map((m) => m[1]);
+  assert.deepEqual(jobs, ['apiserver', 'link-gateway', 'node', 'postgres', 'prometheus']);
+  assert.match(config, /job_name: apiserver\n {4}dns_sd_configs:\n {6}- names: \[orbit-apiservers\]\n {8}type: A\n {8}port: 9091\n/);
+  assert.match(config, /job_name: link-gateway\n {4}dns_sd_configs:\n {6}- names: \[link-gateway\]\n {8}type: A\n {8}port: 9464\n/);
+  // The apiserver's listener opens on the port Prometheus scrapes.
+  assert.match(currentServices.get('apiserver'), /^ {6}METRICS_INTERNAL_PORT: "9091"$/m);
 });

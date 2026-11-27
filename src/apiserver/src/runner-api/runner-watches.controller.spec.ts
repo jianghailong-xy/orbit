@@ -6,7 +6,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException, RequestMethod } from '@nestjs/common';
 import { HTTP_CODE_METADATA, METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
-import { uuidToBase62 } from '@orbit/shared';
+import { uuidToBase62, WATCH_LEAF_SINCE_VERSION, type WatchLeaf } from '@orbit/shared';
 import { assertLeavesFitTargets, parseRequestedPredicate } from '../watches/watch-request';
 import { WatchesService } from '../watches/watches.service';
 import { RunnerWatchesController, WATCH_RELEASE_OUTCOMES } from './runner-watches.controller';
@@ -451,15 +451,18 @@ test('every await preset the contract gives agents is a predicate this server ac
     CONTRACT.agentSurface.awaitPresets,
   );
   assert.deepEqual(families.map(([tool]) => tool).sort(), ['session_await', 'task_await']);
-  // Parsed under the grammar the agent tools send them in: runner-go's watchPredicateVersion.
-  const toolsVersion = 1;
+  // Parsed under the grammar the agent tools send each one in: the lowest it needs (runner-go
+  // minimalWatchPredicateVersion), which is version 1 for every preset but the SESSION_QUIESCENT ones.
+  const toolsVersion = (predicate: unknown) =>
+    Math.max(1, ...[...JSON.stringify(predicate).matchAll(/"leaf":"([A-Z_]+)"/gu)].map(([, leaf]) => WATCH_LEAF_SINCE_VERSION[leaf as WatchLeaf]));
   for (const [tool, family] of families) {
     for (const [until, predicate] of Object.entries(family.until)) {
-      const parsed = parseRequestedPredicate(predicate, toolsVersion);
+      const parsed = parseRequestedPredicate(predicate, toolsVersion(predicate));
       assert.deepEqual(parsed, predicate, `${tool} ${until} did not survive the request parser unchanged`);
       assert.doesNotThrow(() => assertLeavesFitTargets(parsed, [family.targetKind]), `${tool} ${until}`);
     }
   }
   const wait = CONTRACT.agentSurface.sessionCreateWait.watch.predicate;
-  assert.doesNotThrow(() => assertLeavesFitTargets(parseRequestedPredicate(wait, toolsVersion), ['SESSION']));
+  assert.equal(CONTRACT.agentSurface.sessionCreateWait.watch.predicateVersion, toolsVersion(wait));
+  assert.doesNotThrow(() => assertLeavesFitTargets(parseRequestedPredicate(wait, toolsVersion(wait)), ['SESSION']));
 });

@@ -3,6 +3,7 @@ package io.orbitd.android.directory
 import io.orbitd.android.cards.NeedsYouLogic
 import io.orbitd.android.cards.OwnerItem
 import io.orbitd.android.core.cards.ClaudeRegion
+import io.orbitd.android.core.protocol.SessionFacts
 import io.orbitd.android.core.cards.OwnerRequests
 import io.orbitd.android.core.cards.OwnerReview
 import io.orbitd.android.projects.ProjectDone
@@ -13,9 +14,11 @@ import io.orbitd.android.core.cards.CoordinatorDeliveryLine
 import io.orbitd.android.tasks.TaskDetailCopy
 import io.orbitd.android.watch.WatchSessionSummary
 import java.time.Instant
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 
 /**
  * The line under a session's title (OrbitKit `SessionLine`, a port of web's `sessionLine`): for a live session that is
@@ -50,7 +53,8 @@ data class SessionLine(val text: String, val tone: Tone) {
          * nothing else. [machine] is the runner it runs on, by name: a session held for the Claude region says Anthropic is
          * unavailable there, where it is known. */
         internal fun make(s: DirectorySession, live: Boolean, watching: WatchSessionSummary? = null,
-                          recaps: Boolean = true, now: Instant = Instant.now(), machine: String? = null): SessionLine {
+                          recaps: Boolean = true, now: Instant = Instant.now(), machine: String? = null,
+                          cloneProgress: Int? = null): SessionLine {
             // Somebody waiting on YOU outranks everything else the row could say, outside the generating gate: an owner
             // decision is held open by no turn, so it sits on a parked conversation.
             if (live && s.pendingApprovals > 0) return SessionLine(SessionHeader.waitingWord(s), Tone.APPROVAL)
@@ -77,7 +81,10 @@ data class SessionLine(val text: String, val tone: Tone) {
                 if (held == null && QueuedCapacity.isCapacityHeld(s.queuedGate)) return SessionLine(QueuedCapacity.CAPACITY_HELD_LINE, Tone.QUEUED)
                 // Keep Free holds a new session on a runner short of disk (web `queuedLabel`).
                 if (held == null && QueuedDiskLow.isDiskHeld(s.queuedGate)) return SessionLine(QueuedDiskLow.TITLE, Tone.QUEUED)
-                return SessionLine(held ?: SessionLineCopy.queued, Tone.QUEUED)
+                // Held by its clone: git's percentage once this app has heard one (board clone-progress-wait-card ④).
+                if (held == null && QueuedClone.isCloning(s.queuedGate)) return SessionLine(cloneProgress?.let(QueuedClone::rowLabel) ?: QueuedClone.TITLE, Tone.QUEUED)
+                if (held == null && QueuedClone.isFailed(s.queuedGate)) return SessionLine(QueuedClone.FAILED_TITLE, Tone.QUEUED)
+                return SessionLine(held ?: s.queueWord, Tone.QUEUED)
             }
             // Parked while a sub-agent or workflow it started works on: the workspace itself is still working.
             if (live) s.runningSubagentCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.subagentRunningLine(it, s.runningSubagentTitle), Tone.RUNNING) }
@@ -165,6 +172,8 @@ internal object SessionLineCopy {
     /** A wait the server reports that will resume the session by itself (OrbitKit `Session.waitingToResume`). */
     const val waitingToResume = "Waiting to resume"
     const val succeeded = "Succeeded"
+    const val finished = "Finished"
+    const val onHold = "On hold"
     const val retrying = "Retrying"
     const val disconnected = "Disconnected"
     const val failed = "Failed"
@@ -177,14 +186,18 @@ internal object SessionLineCopy {
 /** OrbitKit `SessionHeader`'s two words the line falls back on. */
 internal object SessionHeader {
     /** The run's short state word; where the session is filed is not consulted. [watching]: parked with a live watch that
-     * will resume it, it reads the watch's word. */
+     * will resume it, it reads the watch's word. Where the server sends the session facts, the word is the state's, from `phase` alone
+     * ([SessionDisplay.state]); the marks beside it are the caller's to draw. What follows is the reading for an older control plane. */
     fun statusWord(s: DirectorySession, watching: WatchSessionSummary? = null, now: Instant = Instant.now()): String {
+        SessionDisplay.state(s.displayFacts)?.let { return it.word }
         if (s.pendingApprovals > 0) return waitingWord(s)
         if (s.confirmationUnderReview != null) return OwnerReview.underReview
-        return when (s.effectiveRunState) {
+        return when (s.displayRunState) {
             RunState.QUEUED -> if (RunnerUpdating.isRunnerUpdating(s.queuedGate)) RunnerUpdating.runnerUpdatingTitle(s.queuedGate)
                 else if (QueuedCapacity.isCapacityHeld(s.queuedGate)) QueuedCapacity.title(s.queuedGate)
-                else if (QueuedDiskLow.isDiskHeld(s.queuedGate)) QueuedDiskLow.TITLE else SessionLineCopy.queued
+                else if (QueuedDiskLow.isDiskHeld(s.queuedGate)) QueuedDiskLow.TITLE
+                else if (QueuedClone.isCloning(s.queuedGate)) QueuedClone.TITLE
+                else if (QueuedClone.isFailed(s.queuedGate)) QueuedClone.FAILED_TITLE else s.queueWord
             RunState.RUNNING -> SessionLineCopy.stateRunning
             RunState.AWAITING_INPUT -> when {
                 // A turn the runtime started for itself keeps the run parked for its whole duration.
@@ -196,7 +209,7 @@ internal object SessionHeader {
                 (s.runningBgCount ?: 0) > 0 -> SessionLineCopy.bgRunning(s.runningBgCount ?: 0)
                 else -> SessionLineCopy.waitingForReply
             }
-            RunState.SUCCEEDED -> SessionLineCopy.succeeded
+            RunState.SUCCEEDED -> if (s.releasedRunState == RunState.SUCCEEDED) SessionLineCopy.finished else SessionLineCopy.succeeded
             // Not "Failed" while the server is still going to send it again.
             RunState.FAILED -> if (s.retryPending(now)) SessionLineCopy.retrying
                 else if (s.error.orEmpty().lowercase().contains("offline")) SessionLineCopy.disconnected else SessionLineCopy.failed
@@ -208,25 +221,53 @@ internal object SessionHeader {
     /** What a session waiting on you says, in the words of whatever is waiting: the kind the server named, when this build has
      * words for it, else the row's long-standing approval word. */
     fun waitingWord(s: DirectorySession): String =
-        waitingWord(s.waitingKind, NeedsYouLogic.ownerItems(s.ownerItems.orEmpty().filterIsInstance<JsonObject>()))
+        waitingWord(s.waitingKind, NeedsYouLogic.ownerItems(s.ownerItems.orEmpty().filterIsInstance<JsonObject>()), s.ownerRequests, s.taskMoves)
 
     /** The same words from the wire's own fields, for a reader holding the raw row (the needs-you notice). */
-    fun waitingWord(waitingKind: String?, ownerItems: List<OwnerItem>): String = when (waitingKind) {
+    fun waitingWord(waitingKind: String?, ownerItems: List<OwnerItem>, ownerRequests: JsonArray? = null,
+        taskMoves: JsonArray? = null): String = when (waitingKind) {
         "OWNER_CONFIRMATION" -> OwnerConfirmationCopy.waitingForConfirmation
         "OWNER_ITEM" -> NeedsYouLogic.oldestItemWord(ownerItems) ?: SessionLineCopy.unnamedWord
         "START_REQUEST" -> StartProjectCopy.readyToStart
         "DONE_REQUEST" -> ProjectDone.readyToClose
         "RECORD_AS_DONE" -> ProjectDone.recordAsDoneRow
-        "OWNER_REQUEST" -> OwnerRequests.waitingOnYou
+        "OWNER_REQUEST", "MOVE_REQUEST" -> OwnerRequestRowWords.word(waitingKind, ownerRequests, taskMoves) ?: SessionLineCopy.unnamedWord
         else -> SessionLineCopy.unnamedWord
+    }
+}
+
+/** What a row waiting on a session's own question says (`@orbit/shared` `ownerRequestRowWord`, held to it word for word by
+ * SessionLineTest): an open owner request by its kind, and task moves by how many wait. A row the server calls `OWNER_REQUEST` holds
+ * requests of one kind only; two kinds are a mix, which the server sends under another kind and the row keeps "Waiting for approval". */
+internal object OwnerRequestRowWords {
+    val requestWords = mapOf("DECISION" to "Decision for you", "SECRET" to "Key needed", "MANUAL_STEP" to "Steps for you",
+        "CONFIRM" to "Confirm for you", "WIKI_CREATE" to "Create wiki")
+    fun taskMoves(moves: Int) = if (moves == 1) "Approve task move" else "Approve $moves task moves"
+
+    /** The word, or null when the kind is neither or the list it needs is missing or empty (an older control plane). */
+    fun word(kind: String?, ownerRequests: JsonArray?, taskMoves: JsonArray?): String? = when (kind) {
+        "OWNER_REQUEST" -> ((ownerRequests?.firstOrNull() as? JsonObject)?.get("kind") as? JsonPrimitive)?.contentOrNull?.let(requestWords::get)
+        "MOVE_REQUEST" -> taskMoves.orEmpty().sumOf { ((it as? JsonObject)?.get("count") as? JsonPrimitive)?.intOrNull ?: 0 }
+            .takeIf { it > 0 }?.let(::taskMoves)
+        else -> null
     }
 }
 
 /** OrbitKit `SessionRunState`: what the run is doing or how it ended, apart from where the session is filed. */
 internal enum class RunState { QUEUED, RUNNING, AWAITING_INPUT, INTERRUPTED, SUCCEEDED, FAILED, ENDED, UNKNOWN }
 
+private val KNOWN_RUN_STATUSES = setOf("PENDING", "RUNNING", "AWAITING_INPUT", "SUCCEEDED", "FAILED", "INTERRUPTED", "CANCELLED")
+
 /** `SessionRunState.resolve`: the server's `runState` first, then its raw run status and end reason. */
 internal val DirectorySession.effectiveRunState: RunState get() {
+    // A held session whose status word this build does not know reads the phase, as web does (a release is worded by [displayRunState]).
+    // A known status keeps its reading: a parked turn with a background job says so, which the phase alone cannot.
+    if (released == false && (runStatus ?: status) !in KNOWN_RUN_STATUSES && RunState.entries.none { it != RunState.UNKNOWN && it.name == runState }) when (phase) {
+        "PENDING" -> return RunState.QUEUED
+        // `activity` is TURN on every queued or running row; only another one (a background job, a wait) is a parked session.
+        "RUNNING" -> return if (activity.isNullOrEmpty() || activity == "TURN") RunState.RUNNING else RunState.AWAITING_INPUT
+        "IDLE" -> return if (lastTurnOutcome == "INTERRUPTED") RunState.INTERRUPTED else RunState.AWAITING_INPUT
+    }
     RunState.entries.firstOrNull { it != RunState.UNKNOWN && it.name == runState }?.let { return it }
     return when (runStatus ?: status) {
         "PENDING" -> RunState.QUEUED
@@ -240,6 +281,28 @@ internal val DirectorySession.effectiveRunState: RunState get() {
         else -> RunState.UNKNOWN
     }
 }
+
+/** What the session's release establishes, for the words and marks drawn from it (OrbitKit `Session.releasedRunState`): null until
+ * released, and null when the payload carries no `released` (an older server). */
+internal val DirectorySession.releasedRunState: RunState? get() {
+    if (released != true) return null
+    return when (SessionFacts.afterRelease(endReason, lastTurnOutcome, workFinished, isLanding)) {
+        "FINISHED" -> RunState.SUCCEEDED
+        "FAILED" -> RunState.FAILED
+        else -> RunState.ENDED
+    }
+}
+
+/** The run state a row draws its word and mark from (OrbitKit `Session.displayRunState`): what the release established, an
+ * interrupted session that is being ended staying Interrupted until the release lands, else [effectiveRunState]. */
+internal val DirectorySession.displayRunState: RunState get() {
+    releasedRunState?.let { return it }
+    if (SessionFacts.endingAfterInterrupt(released, endReason, lastTurnOutcome)) return RunState.INTERRUPTED
+    return effectiveRunState
+}
+
+/** The queued word: "On hold" while the server says the turn is held (OrbitKit `Session.queueWord`). */
+internal val DirectorySession.queueWord: String get() = if (waitingOn == "HOLD") SessionLineCopy.onHold else SessionLineCopy.queued
 
 /** Held for its runner's Claude region (docs/claude-region-check-contract.md §10, §11; web `claudeRegionHeld`): queued, with a region
  * refusal as its error. Its message waits, and nothing is working on it. */

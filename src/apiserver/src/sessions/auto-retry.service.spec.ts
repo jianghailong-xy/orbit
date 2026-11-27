@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { CONTINUE_MESSAGE, type PlanUsageSnapshot } from '@orbit/shared';
 import { encryptSecret } from '../providers/provider-crypto';
 import { QueueService } from '../queue/queue.service';
 import { AutoRetryService, RetryClaimLost } from './auto-retry.service';
 import type { SessionsService } from './sessions.service';
 import { AUTO_RETRY_TURN_KEY_PREFIX } from './watch-turn-key';
+import { turnStateOf, type TurnStateFacts } from './session-turn-state';
 
 const NOW = new Date('2026-08-03T16:25:00Z');
 const PAST = new Date('2026-08-03T16:20:00Z');
@@ -66,14 +67,26 @@ type SessionRow = Record<string, unknown>;
  *  `{ taskId: null }` branch, and a fake that let a missing relation through would report the
  *  predicate as working when it excluded every session that has no task at all. */
 function matchesBranch(row: SessionRow, cond: Record<string, unknown>): boolean {
-  return Object.entries(cond).every(([key, expected]) => matchesField(row[key], expected));
+  return Object.entries(cond).every(([key, expected]) => {
+    // A branch may hold its own OR or AND: the release module's failure filter is one such branch.
+    if (key === 'OR') return (expected as Array<Record<string, unknown>>).some((c) => matchesBranch(row, c));
+    if (key === 'AND') return (expected as Array<Record<string, unknown>>).every((c) => matchesBranch(row, c));
+    return matchesField(row[key], expected);
+  });
 }
 
-/** One field of a branch: a scalar, `{ not: value }`, or a to-one relation filter, nested as deep as
- *  the `where` goes (the cancelled-project veto reads `task.project.status`). */
+/** One field of a branch: a scalar, `{ not: value }` and `{ equals: value }` (either or both), `{ in }`, `{ notIn }`, or a to-one
+ *  relation filter, nested as deep as the `where` goes (the cancelled-project veto reads `task.project.status`). */
 function matchesField(actual: unknown, expected: unknown): boolean {
   if (expected !== null && typeof expected === 'object' && !(expected instanceof Date)) {
-    if ('not' in expected) return (actual ?? null) !== (expected as { not: unknown }).not;
+    if ('not' in expected || 'equals' in expected) {
+      const filter = expected as { not?: unknown; equals?: unknown };
+      if ('not' in filter && (actual ?? null) === filter.not) return false;
+      return !('equals' in filter) || (actual ?? null) === filter.equals;
+    }
+    if ('in' in expected) return (expected as { in: unknown[] }).in.includes(actual ?? null);
+    // A parked row's turn-state filter reads a row with no turn state by its stored word (session-turn-state.ts).
+    if ('notIn' in expected) return !(expected as { notIn: unknown[] }).notIn.includes(actual ?? null);
     const related = actual as Record<string, unknown> | null | undefined;
     if (!related) return false;
     return Object.entries(expected as Record<string, unknown>)
@@ -82,11 +95,11 @@ function matchesField(actual: unknown, expected: unknown): boolean {
   return (actual ?? null) === expected;
 }
 
-/** Every `AND` clause of a `where`, each of which is itself an OR of branches. The dispatch-hold
- *  veto rides here, so a fake that read only the top-level OR would report a paused session as due
- *  and see nothing at all. */
-function matchesAnd(row: SessionRow, clauses: Array<{ OR?: Array<Record<string, unknown>> }>): boolean {
-  return clauses.every((clause) => (clause.OR ?? []).some((cond) => matchesBranch(row, cond)));
+/** Every `AND` clause of a `where`, each a branch of its own (most of them an OR of branches). The
+ *  dispatch-hold veto rides here, and so does the parked state a compare-and-set asks again, so a fake
+ *  that read only the top-level OR would report a paused session as due and see nothing at all. */
+function matchesAnd(row: SessionRow, clauses: Array<Record<string, unknown>>): boolean {
+  return clauses.every((clause) => matchesBranch(row, clause));
 }
 
 function makeService(
@@ -183,7 +196,10 @@ function makeService(
           return row ? [{
             taskId: row.taskId,
             startsTaskWork: opts.startsTaskWorkAtSettle ?? row.startsTaskWork,
-            status: row.status, retryAt: row.retryAt, retryAttempts: row.retryAttempts,
+            // Where the row stands, as the locked read selects it: released or held, and its turn state.
+            released: row.finishedAt != null,
+            turnState: turnStateOf(row as unknown as TurnStateFacts),
+            retryAt: row.retryAt, retryAttempts: row.retryAttempts,
           }] : [];
         }
         const target = rows.find((r) => r.taskId != null);
@@ -244,17 +260,17 @@ function makeService(
       updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
         updates.push(args);
         // Honour the guards the service relies on: `retryAt: { not: null }` is the claim (a
-        // fixture with retryAt null models a user message that already won it), and `status`
-        // is the "nobody has taken over" gate the backoff path uses.
+        // fixture with retryAt null models a user message that already won it), and the parked
+        // state in the AND list is the "nobody has taken over" gate the backoff path uses.
         const row = rows.find((r) => r.id === args.where.id);
         // Every field the service names is honoured, not just the two this fake used to look at.
         // A fake that ignored `retryAt`'s exact instant, the attempt count or the task/role could
         // not see the bug those clauses exist for: a claim landing on a row somebody re-armed,
         // re-pointed or demoted in between.
         const where = args.where as {
-          status?: string; retryAt?: { not: null } | Date | null;
+          retryAt?: { not: null } | Date | null;
           retryAttempts?: number; taskId?: string | null; startsTaskWork?: boolean;
-          AND?: Array<{ OR?: Array<Record<string, unknown>> }>;
+          AND?: Array<Record<string, unknown>>;
         };
         const retryAtMatches = () => {
           if (where.retryAt === undefined) return true;
@@ -268,7 +284,6 @@ function makeService(
         const hit =
           !!row &&
           retryAtMatches() &&
-          (where.status === undefined || where.status === row.status) &&
           (where.retryAttempts === undefined || where.retryAttempts === row.retryAttempts) &&
           (where.taskId === undefined || where.taskId === (row.taskId ?? null)) &&
           (where.startsTaskWork === undefined || where.startsTaskWork === row.startsTaskWork) &&
@@ -452,6 +467,15 @@ function row(over: SessionRow = {}): SessionRow {
     assignedRunner: { planUsage: null, status: 'ONLINE', lastHeartbeatAt: NOW },
     status: RunStatus.AWAITING_INPUT,
     ...over,
+    // A FAILED row is released by a failure, as every writer releases one: the release column set (at the sweep's own
+    // instant unless the case says when, so the offline wait has spent nothing) and the failure on its last turn,
+    //. The rest are held.
+    ...(over.status === RunStatus.FAILED
+      ? {
+          finishedAt: over.finishedAt !== undefined ? over.finishedAt : NOW,
+          lastTurnOutcome: over.lastTurnOutcome !== undefined ? over.lastTurnOutcome : 'FAILED',
+        }
+      : {}),
   };
 }
 
@@ -513,7 +537,7 @@ test('skips an idle session that is being torn down', async () => {
 });
 
 test('leaves a live session alone', async () => {
-  const { service, resumed } = makeService([row({ status: RunStatus.RUNNING })]);
+  const { service, resumed } = makeService([row({ turnState: 'IN_FLIGHT', status: RunStatus.RUNNING })]);
   await service.sweep(NOW);
   assert.deepEqual(resumed, [], 'it is already working; nothing is waiting on us');
 });
@@ -698,7 +722,7 @@ test("a Claude session on Automatic goes as soon as another of its runner's acco
 // the session to the user having never once tried it.
 test('waits for an offline runner without spending an attempt', async () => {
   const { service, resumed, rows } = makeService([
-    row({ status: RunStatus.FAILED, cancelRequestedAt: PAST, assignedRunner: offlineRunner }),
+    row({ status: RunStatus.FAILED, finishedAt: NOW, cancelRequestedAt: PAST, assignedRunner: offlineRunner }),
   ]);
   await service.sweep(NOW);
   assert.deepEqual(resumed, [], 'resume() would only refuse it as RUNNER_OFFLINE');

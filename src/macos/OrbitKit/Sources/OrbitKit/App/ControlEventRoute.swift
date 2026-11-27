@@ -46,11 +46,13 @@ public enum ControlEventRoute: Equatable, Sendable {
     case folders
     /// `wiki.changed`: what the Wiki has loaded, and the wiki chat.
     case wiki
-    /// `terminals.changed`: the approve card's requests and Settings → Terminals.
+    /// `terminals.changed`: the approve card's requests and each machine page's Terminals.
     case terminals
     /// `translation.status_changed`: the account (`GET /users/me`), whose `translationUnavailableUntil`
     /// the composer's language tag reads.
     case account
+    /// `drive.changed`: what the Drive page has loaded. `drive.sync`: the agents' directory syncs as well.
+    case drive(syncs: Bool)
     /// Nothing to read: the reserved `notification` channel, and any type this client does not know.
     case nothing
 
@@ -76,6 +78,8 @@ public enum ControlEventRoute: Equatable, Sendable {
         case .wikiChanged: return .wiki
         case .terminalsChanged: return .terminals
         case .translationStatusChanged: return .account
+        case .driveChanged: return .drive(syncs: false)
+        case .driveSync: return .drive(syncs: true)
         case .notification, .unknown: return .nothing
         }
     }

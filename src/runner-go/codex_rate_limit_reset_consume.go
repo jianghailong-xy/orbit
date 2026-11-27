@@ -3,14 +3,20 @@ package main
 import (
 	"context"
 	"errors"
-	"os"
+	"io/fs"
 	"time"
 )
 
 // The Codex rate-limit reset step, runner half of docs/codex-rate-limit-reset-contract.md §6.4: what
 // this process does with the CONSUME or REFRESH command the relay (codex_rate_limit_reset_relay.go)
-// hands it, on the runner's default Codex account. runnerCapabilitiesV1 declares
-// codexRateLimitResetCapabilityV1 because this carries those commands out.
+// hands it, on the Codex account slot the command names (contract v2 §12.3): Default for a version 1
+// command, and for a version 2 one its accountSlot — Default, or an added slot read and consumed in that
+// slot's own CODEX_HOME. runnerCapabilitiesV1 declares codexRateLimitResetCapabilityV1 and
+// codexRateLimitResetCapabilityV2 because this carries those commands out.
+//
+// The slot is resolved on every attempt, and never stands in for another: a command naming an added slot
+// that is gone is answered as an account that is not the operation's (ACCOUNT_MISMATCH) without a read,
+// a consume or an app-server anywhere — not in Default's login, and not in a directory made up for it.
 //
 // The provider key is the command's, which is the operation's: nothing here makes one, keeps one, or
 // calls consume without one. Each consume call follows a read, on the same app-server, that names the
@@ -46,9 +52,10 @@ const (
 
 // codexResetConsumer carries out the reset steps of one runner process.
 type codexResetConsumer struct {
-	// The Codex usage probe: its reader stamps each block a step reads in the sequence the probe's own
-	// reads use, and its cache keeps the block for the next heartbeat.
-	probe *planUsageProbe
+	// The Codex usage probes, one per account slot: the reader of the slot a step runs on stamps each
+	// block it reads in the sequence that probe's own reads use, and its cache keeps the block for the
+	// next heartbeat.
+	usage *codexAccountUsage
 
 	consumeTimeout time.Duration
 	attemptTimeout time.Duration
@@ -59,9 +66,9 @@ type codexResetConsumer struct {
 	wait          func(ctx context.Context, d time.Duration) bool
 }
 
-func newCodexResetConsumer(probe *planUsageProbe) *codexResetConsumer {
+func newCodexResetConsumer(usage *codexAccountUsage) *codexResetConsumer {
 	return &codexResetConsumer{
-		probe:          probe,
+		usage:          usage,
 		consumeTimeout: codexResetConsumeTimeout,
 		attemptTimeout: codexResetAttemptTimeout,
 		callFreshness:  codexResetCallFreshness,
@@ -81,7 +88,7 @@ type codexResetConsumeAttempt struct {
 	stale     bool
 	delivered time.Time
 	// How the attempt's read of the account compared with the operation's: match, mismatch, unidentified or
-	// unsupported; empty when there was no read.
+	// unsupported; slot_gone when the command's added slot no longer exists; empty when there was no read.
 	account string
 }
 
@@ -227,14 +234,22 @@ func (c *codexResetConsumer) consume(ctx context.Context, cmd CodexRateLimitRese
 		// No persisted key to call with: the relay acts on no such command, and nothing is called.
 		return codexResetConsumeAttempt{result: codexResetResult(cmd, "CONSUME_NOT_CALLED", "PROTOCOL_UNSUPPORTED")}
 	}
-	if !codexSharedStateAllowed(os.Environ()) {
+	target, err := c.target(cmd)
+	if err != nil {
+		// The command's added slot is gone (or cannot be resolved): nothing is read or called for it.
+		if errors.Is(err, fs.ErrNotExist) {
+			return codexResetConsumeAttempt{result: codexResetResult(cmd, "CONSUME_NOT_CALLED", "ACCOUNT_MISMATCH"), account: "slot_gone"}
+		}
+		return codexResetConsumeAttempt{result: codexResetResult(cmd, "CONSUME_RETRYING", "READ_FAILED")}
+	}
+	if !codexSharedStateAllowed(target.env) {
 		// The runner's own environment signs Codex in with custom API credentials, which is not the
-		// default login an operation is bound to (§3).
+		// login an operation is bound to (§3).
 		return codexResetConsumeAttempt{result: codexResetResult(cmd, "CONSUME_NOT_CALLED", codexResetUnsupportedAuth)}
 	}
 	var tried codexResetConsumeAttempt
-	err = withDefaultCodexAppServer(ctx, c.attemptTimeout, func(ctx context.Context, app *codexAppServer) error {
-		block, code := c.read(ctx, app)
+	err = withCodexAppServer(ctx, target.env, c.attemptTimeout, func(ctx context.Context, app *codexAppServer) error {
+		block, code := c.read(ctx, app, target.probe)
 		switch {
 		case block == nil:
 			tried.result = codexResetResult(cmd, "CONSUME_RETRYING", code)
@@ -302,13 +317,23 @@ func (c *codexResetConsumer) call(ctx context.Context, app *codexAppServer, cmd 
 func (c *codexResetConsumer) refresh(ctx context.Context, cmd CodexRateLimitResetCommand, attempt int) CodexRateLimitResetResultRequest {
 	account := ""
 	result := func() CodexRateLimitResetResultRequest {
-		if !codexSharedStateAllowed(os.Environ()) {
-			// Custom API credentials in the runner's environment: this process reads no default account.
+		target, err := c.target(cmd)
+		if err != nil {
+			// The command's added slot is gone: the operation's account can no longer be read here, and is
+			// not read anywhere else.
+			if errors.Is(err, fs.ErrNotExist) {
+				account = "slot_gone"
+				return codexResetResult(cmd, "REFRESH_FAILED", "ACCOUNT_MISMATCH")
+			}
+			return codexResetResult(cmd, "REFRESH_FAILED", "READ_FAILED")
+		}
+		if !codexSharedStateAllowed(target.env) {
+			// Custom API credentials in the runner's environment: this process reads no Codex account.
 			return codexResetResult(cmd, "REFRESH_FAILED", codexResetAccountUnidentified)
 		}
 		var result CodexRateLimitResetResultRequest
-		err := withDefaultCodexAppServer(ctx, c.attemptTimeout, func(ctx context.Context, app *codexAppServer) error {
-			block, code := c.read(ctx, app)
+		err = withCodexAppServer(ctx, target.env, c.attemptTimeout, func(ctx context.Context, app *codexAppServer) error {
+			block, code := c.read(ctx, app, target.probe)
 			switch {
 			case block == nil:
 				result = codexResetResult(cmd, "REFRESH_FAILED", code)
@@ -342,14 +367,24 @@ func (c *codexResetConsumer) refresh(ctx context.Context, cmd CodexRateLimitRese
 	return result
 }
 
-// read makes this process's next read of the account on app and keeps it in the probe cache, as the
-// probe keeps its own. It returns the read's block, or no block and the code of a read that made none.
-func (c *codexResetConsumer) read(ctx context.Context, app *codexAppServer) (*PlanUsageRateLimitReset, string) {
-	usage, err := c.probe.codexReset.readCodexPlanUsage(ctx, app)
+// target is the account slot cmd names, resolved now: a version 1 command is Default's.
+func (c *codexResetConsumer) target(cmd CodexRateLimitResetCommand) (codexResetTarget, error) {
+	slot := cmd.AccountSlot
+	if slot == "" {
+		slot = accountSlotDefaultID
+	}
+	return c.usage.resetTarget(slot)
+}
+
+// read makes this process's next read of the account on app and keeps it in the cache of probe, the
+// probe of the slot the step runs on, as that probe keeps its own. It returns the read's block, or no
+// block and the code of a read that made none.
+func (c *codexResetConsumer) read(ctx context.Context, app *codexAppServer, probe *planUsageProbe) (*PlanUsageRateLimitReset, string) {
+	usage, _, err := probe.codexReset.readCodexPlanUsage(ctx, app)
 	if err != nil {
 		return nil, "READ_FAILED"
 	}
-	c.probe.store(usage)
+	probe.store(usage)
 	if usage.RateLimitReset == nil {
 		return nil, "READ_FAILED"
 	}

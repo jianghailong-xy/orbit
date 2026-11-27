@@ -3,6 +3,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { PUBLIC_ID_FIELDS } from './codec';
 import { WIKI_IMPORT_RULES } from './wiki';
+import { WIKI_CHAT_READ, WIKI_CHAT_RULES } from './wikiChat';
 import {
   KIND_SPECS,
   WIKI_ANCHOR_SPECS,
@@ -800,13 +801,15 @@ describe('wiki contract', () => {
       expect(event('tool_result', call(tool)), tool).toBe('agent_words');
     }
     // A read of the wiki is not observed, under any engine's name or through the CLI.
-    for (const tool of ['mcp__orbit__wiki_search', 'mcp__orbit__wiki_get', 'orbit__wiki_search', 'orbit__wiki_get', 'wiki_search', 'wiki_get']) {
+    for (const tool of ['mcp__orbit__wiki_search', 'mcp__orbit__wiki_get', 'mcp__orbit__wiki_read', 'orbit__wiki_search', 'orbit__wiki_get', 'orbit__wiki_read', 'wiki_search', 'wiki_get', 'wiki_read']) {
       expect(wikiCallReadsWiki(tool, null), tool).toBe(true);
       expect(of({ kind: 'tool_call', ...call(tool) }), tool).toBe('agent_words');
     }
     for (const command of [
       'orbit wiki search release',
       'orbit wiki get 34abc --json',
+      'orbit wiki read 34abc',
+      "'/usr/local/bin/orbit' wiki read 34abc | head",
       "'/usr/local/bin/orbit' wiki search release | head",
       '/root/.orbit/bin/orbit wiki get 34abc',
       'cd src && orbit wiki search "a phrase"',
@@ -898,6 +901,8 @@ describe('wiki contract', () => {
     }
     // The dossier and the import say so too.
     expect(CONTRACT.maintenance.dossier.wikiReads).toMatch(/wikiCallReadsWiki/u);
+    expect(CONTRACT.maintenance.dossier.wikiReads).toMatch(/wiki_read/u);
+    expect(CONTRACT.sourceRules.wikiReads).toMatch(/background_task/u);
     expect(CONTRACT.effectPolicy.taintedRule).toMatch(/originSessionId/u);
     expect(CONTRACT.effectPolicy.taintedRule).toMatch(/runtime_session_id/u);
     expect(CONTRACT.import.source).toMatch(/evidence\.secondHand/u);
@@ -1527,7 +1532,11 @@ describe('wiki contract', () => {
     for (const route of [routes.state, routes.versions, routes.version, routes.edit, routes.confirm, routes.decide]) expect(user).toContain(route);
     expect(Object.values<string>(routes).some((route) => route.includes('/api/runner/'))).toBe(false);
     expect(plan.who.owner).toMatch(/WIKI_OWNER_CHANNEL_ONLY/u);
-    expect(plan.who.draft).toMatch(/in process: no door takes a draft or a proposal, nor answers a read of the plan to a session/u);
+    expect(plan.who.draft).toMatch(/in process: no door takes a draft or a proposal, nor answers a read of the plan to a session, since P11 \(2026-10-19\) — but a wiki chat's read of the confirmed version \(who\.chat\)/u);
+    // A wiki chat reads the confirmed version (chat.read), on the runner door, and nothing else of the plan.
+    expect(plan.who.chat).toMatch(/wiki_read on the runner door \(chat\.read/u);
+    expect(plan.who.chat).toMatch(/no other version, no draft's content, no proposal/u);
+    expect(plan.who.owner).toMatch(/the runner door has no route of the plan but chat\.read/u);
     expect(plan.guard).toMatch(/^requireConfirmedPlan\(/u);
     expect(plan.guard).toMatch(/WIKI_PLAN_UNCONFIRMED/u);
     const status = (code: string) => CONTRACT.refusals.find((r: { code: string }) => r.code === code)?.httpStatus;
@@ -1535,8 +1544,9 @@ describe('wiki contract', () => {
     expect(status('WIKI_PLAN_STALE')).toBe(409);
     expect(status('WIKI_PLAN_UNCONFIRMED')).toBe(409);
     expect(CONTRACT.realtime.publishedWhen.some((when: string) => /plan was stored or confirmed/u.test(when))).toBe(true);
-    // No tool: confirming and deciding are the owner's (hard constraint 2).
-    expect(plan.tool).toMatch(/^none/u);
+    // No tool confirms or decides: that is the owner's (hard constraint 2). A chat reads the confirmed version (chat.read).
+    expect(plan.tool).toMatch(/^wiki_read \(chat\.read\) reads the confirmed version to a wiki chat/u);
+    expect(plan.tool).toMatch(/No MCP tool confirms or decides anything of the plan \(hard constraint 2\)/u);
     for (const tool of CONTRACT.agentSurface.tools) expect(tool).not.toMatch(/plan/u);
 
     // A draft under an idempotency key (0339): the same draft landing again is answered with the version
@@ -1770,11 +1780,50 @@ describe('wiki contract', () => {
     expect(status('WIKI_DOC_INVALID')).toBe(422);
     expect(status('WIKI_PLAN_STALE')).toBe(409);
     expect(CONTRACT.realtime.publishedWhen.some((when: string) => /document's sections were written/u.test(when))).toBe(true);
-    expect(docs.tool).toMatch(/^none/u);
+    // One tool reads a document, a chat's alone (chat.read); none writes one.
+    expect(docs.tool).toMatch(/^wiki_read \(chat\.read\): read-only and a wiki chat's alone/u);
+    expect(docs.tool).toMatch(/No MCP tool writes a document/u);
+    expect(docs.who.read).toMatch(/through wiki_read on the runner door \(chat\.read\)/u);
+    expect(docs.who.read).toMatch(/WIKI_SESSION_EXCLUDED/u);
     for (const tool of CONTRACT.agentSurface.tools) expect(tool).not.toMatch(/doc/u);
     // The topic articles stay until the clients have moved over.
     expect(docs.means).toMatch(/wiki_topic_summary/u);
     expect(CONTRACT.articles.tables).toEqual(['wiki_topic_summary']);
+  });
+
+  it('serves a wiki chat its read of the wiki on the runner door, a view cut at readMaxChars (chat.read, D10)', () => {
+    const read = CONTRACT.chat.read;
+    // The route is the runner door's, and the runner serves the tool with this release (T7), so tools names it.
+    expect(read.route).toBe(WIKI_CHAT_READ.route);
+    expect(CONTRACT.agentSurface.doors.runner.routes).toContain(read.route);
+    expect(CONTRACT.agentSurface.tools).toContain('wiki_read');
+    expect(read.tool).toMatch(/TestWikiAgentSurfaceIsTheContracts/u);
+    // A chat's alone, as wiki_draft is.
+    expect(read.who).toMatch(/WIKI_SESSION_EXCLUDED/u);
+    expect(read.who).toMatch(/agentSurface\.excludedSessions/u);
+    expect(keysOf(read.params)).toEqual(['none', 'q', 'doc', 'section', 'draft', 'more', 'together']);
+    expect(read.params.doc).toMatch(/WIKI_PLAN_UNCONFIRMED/u);
+    expect(read.answer).toMatch(/WIKI_PLAN_STALE/u);
+    for (const field of ['view', 'planVersion', 'planDraft', 'writerJobs', 'text', 'more']) expect(read.answer).toMatch(new RegExp(`\\b${field}\\b`, 'u'));
+    // Every answer opens with the header, word for word, and is cut at readMaxChars.
+    expect(read.header).toBe(WIKI_CHAT_READ.header);
+    expect(read.header).toMatch(/a view of the wiki, not a source/u);
+    expect(CONTRACT.chat.rules.readMaxChars).toBe(WIKI_CHAT_RULES.readMaxChars);
+    expect(WIKI_CHAT_RULES.readMaxChars).toBe(60_000);
+    expect(read.cut).toMatch(/rules\.readMaxChars/u);
+    // D10, settled in the contract: the cursor, the search, the taint rule and the exposure.
+    expect(keysOf(read.decisions)).toEqual(['more', 'q', 'tainted', 'exposure']);
+    expect(read.decisions.more).toMatch(/<planVersion>:<line>/u);
+    expect(read.decisions.q).toMatch(/every word is a substring of its title, its covers and its shown sentences/u);
+    expect(read.decisions.tainted).toMatch(/push\.eligible\.taintedOnlyWithTrust/u);
+    expect(read.decisions.exposure).toMatch(/channel get/u);
+    expect(read.decisions.exposure).toMatch(/No new channel and no migration/u);
+    expect(keysOf(CONTRACT.exposureChannels)).toEqual(['push', 'search', 'get']);
+    expect(CONTRACT.exposureChannels.get).toMatch(/wiki_read/u);
+    expect(CONTRACT.exposureRules.reads).toMatch(/chat\.read\.decisions\.exposure/u);
+    // A view, never a source: a wiki_read call is a wiki read.
+    expect(wikiCallReadsWiki('wiki_read', null)).toBe(true);
+    expect(read.source).toMatch(/WIKI_SOURCE_UNRESOLVED/u);
   });
 
   it('declares every refusal once, with a status and a scope, and names no code it does not declare', () => {
@@ -1809,10 +1858,11 @@ describe('wiki contract', () => {
     expect(status('WIKI_OWNER_CHANNEL_ONLY')).toBe(403);
   });
 
-  it('gives agents five tools and two doors, and no way to decide', () => {
+  it('gives agents six tools and two doors, and no way to decide', () => {
     const surface = CONTRACT.agentSurface;
-    // The fifth, wiki_draft, is a wiki chat's alone (agentSurface.chat.draft): every other session is refused it.
-    expect(surface.tools).toEqual(['wiki_search', 'wiki_get', 'wiki_propose', 'wiki_note', 'wiki_draft']);
+    // The fifth, wiki_draft, and the sixth, wiki_read, are a wiki chat's alone (agentSurface.chat.draft, chat.read): every other session is refused them.
+    expect(surface.tools).toEqual(['wiki_search', 'wiki_get', 'wiki_propose', 'wiki_note', 'wiki_draft', 'wiki_read']);
+    expect(surface.toolSpecs.wiki_read.readOnly).toBe(true);
     expect(keysOf(surface.toolSpecs)).toEqual(surface.tools);
     expect(keysOf(surface.cli)).toEqual(surface.tools);
     expect(surface.toolSpecs.wiki_search.readOnly).toBe(true);

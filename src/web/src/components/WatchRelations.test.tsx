@@ -80,6 +80,12 @@ type TaskRow = { title?: string; status?: string; terminalReason?: string };
  */
 function serve(watches: WatchView[], rows: Record<string, TaskRow> = {}) {
   vi.mocked(api).mockImplementation((async (path: string) => {
+    if (path === '/watches?following=true') {
+      const all = watches;
+      const newest = all.slice(0, 100);
+      const rest = [...all.filter((w) => w.state === 'ACTIVE'), ...all.filter((w) => w.state === 'PAUSED'), ...all.filter((w) => watchProblem(w))];
+      return [...new Map([...newest, ...rest].map((w) => [w.id, w])).values()];
+    }
     if (path === '/watches') return watches.slice(0, 100);
     if (path === '/watches?needsAttention=true') return watches.filter((w) => watchProblem(w)).slice(0, 100);
     const state = /^\/watches\?state=([A-Z]+)$/.exec(path);
@@ -202,7 +208,7 @@ describe('a task’s Followed by', () => {
   });
 });
 
-describe('a session’s Following and Followed by', () => {
+describe('a session’s Followed by', () => {
   const watches = () => [
     watch('WAITING', { targets: [target('TASK', 'T1'), target('TASK', 'T2')], ...resumes('S_ME') }),
     watch('ON_ME', { targets: [target('SESSION', 'S_ME')] }),
@@ -210,17 +216,17 @@ describe('a session’s Following and Followed by', () => {
     watch('UNRELATED', { targets: [target('SESSION', 'S_OTHER')] }),
   ];
 
-  it('counts what the session waits on and what waits on it, live watches only', async () => {
+  it('counts what waits on the session, live watches only, and no chip for what it waits on', async () => {
     serve(watches());
     await mount(<SessionWatchBadges sessionId="S_ME" />);
-    expect(buttons(container!)).toEqual(['Following 2 tasks', 'Followed by 1', 'Follow']);
+    expect(buttons(container!)).toEqual(['Followed by 1', 'Follow']);
 
     await click(
-      [...container!.querySelectorAll('button')].find((b) => b.textContent?.includes('Following')),
-      'Following',
+      [...container!.querySelectorAll('button')].find((b) => b.textContent?.includes('Followed by')),
+      'Followed by',
     );
     const rows = [...document.body.querySelectorAll<HTMLElement>('.watch-popover .watch-row')];
-    expect(rows.map((r) => r.dataset.watchId)).toEqual(['WAITING']);
+    expect(rows.map((r) => r.dataset.watchId)).toEqual(['ON_ME']);
   });
 
   it('offers only Follow on a session nothing relates to', async () => {
@@ -372,7 +378,7 @@ describe('a session’s Following and Followed by', () => {
         a.getAttribute('href'),
       ]);
     expect(rows(watches[0])).toEqual([
-      ['Succeeded', 'Second', '/sessions/S2'],
+      ['Finished', 'Second', '/sessions/S2'],
       ['Running', 'First', '/sessions/S1'],
     ]);
     expect(rows(watches[1])).toEqual([['Queued', 'Third', '/sessions/S3']]);
@@ -468,7 +474,6 @@ describe('a session’s Following and Followed by', () => {
       </>,
     );
     expect(container!.querySelector('.watch-strip'), 'no strip: it waits on the person').toBeNull();
-    // The header's chip counts the same set, so it must not count this one either: only Follow left.
     expect(buttons(container!)).toEqual(['Follow']);
   });
 
@@ -506,7 +511,7 @@ describe('a session’s Following and Followed by', () => {
     }),
   ];
 
-  it('leaves a task’s run session to the Tasks card: no strip, while Following still names both', async () => {
+  it('leaves a task’s run session to the Tasks card: no strip, and no header chip', async () => {
     serve(awaitBoth(runs('T1', NOTIFY)));
     await mount(
       <>
@@ -515,8 +520,7 @@ describe('a session’s Following and Followed by', () => {
       </>,
     );
     expect(container!.querySelector('.watch-strip')).toBeNull();
-    // The relations say the watches as they were made: one on a task, one on a session.
-    expect(buttons(container!)).toEqual(['Following 2 targets', 'Follow']);
+    expect(buttons(container!)).toEqual(['Follow']);
   });
 
   it('keeps a run session on the strip, by its own name, when an older server names no task for it', async () => {
@@ -586,7 +590,7 @@ describe('a live watch older than the newest 100', () => {
     ...resumes('S_ME'),
   });
 
-  it('still keeps the session’s strip and Following, and the task’s Followed by', async () => {
+  it('still keeps the session’s strip and the task’s Followed by', async () => {
     serve([...ended, older]);
     await mount(
       <>
@@ -597,7 +601,7 @@ describe('a live watch older than the newest 100', () => {
     );
 
     expect(container!.querySelector('.watch-strip .bg-tray-title')?.textContent).toBe('Watching');
-    expect(buttons(container!.querySelector('.watch-badges')!)).toEqual(['Following 2 targets', 'Follow']);
+    expect(buttons(container!.querySelector('.watch-badges')!)).toEqual(['Follow']);
     const followedBy = container!.querySelector('section')!;
     expect(followedBy.querySelector('.tdp-section-title span')?.textContent).toBe('Followed by (1)');
     expect([...followedBy.querySelectorAll<HTMLElement>('.watch-row')].map((r) => r.dataset.watchId)).toEqual([

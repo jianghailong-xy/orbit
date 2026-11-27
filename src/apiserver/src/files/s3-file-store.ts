@@ -3,10 +3,10 @@ import { createReadStream } from 'node:fs';
 import http, { type IncomingMessage } from 'node:http';
 import https from 'node:https';
 import type { Readable } from 'node:stream';
-import { removeTempFile, type FileStore, type S3FilesConfig } from './file-store';
+import { SHA256_NAME, assertRange, removeTempFile, type ByteRange, type FileStore, type S3FilesConfig, type StoredObject } from './file-store';
 
 /**
- * An S3-compatible bucket as a file store (`ORBIT_FILES_BACKEND=s3`, docs/orbit-files-design.md §2.10):
+ * An S3-compatible bucket as a file store (`ORBIT_DRIVE_BACKEND=s3`, docs/drive-design.md §2.10):
  * `files/<sha256[0:2]>/<sha256>`, addressed path-style (`<endpoint>/<bucket>/<key>`), which AWS S3, MinIO,
  * Ceph, R2 and the other S3-compatible services all answer.
  *
@@ -57,12 +57,17 @@ export class S3FileStore implements FileStore {
     }
   }
 
-  async open(sha256: string): Promise<Readable | null> {
-    const response = await this.send('GET', this.keyOf(sha256));
-    if (response.statusCode === 200) return response;
+  async open(sha256: string, range?: ByteRange): Promise<Readable | null> {
+    if (range) assertRange(range);
+    const response = await this.send('GET', this.keyOf(sha256), undefined, range ? { range: `bytes=${range.start}-${range.end}` } : {});
+    if (response.statusCode === (range ? 206 : 200)) return response;
     if (response.statusCode === 404) {
       response.resume();
       return null;
+    }
+    if (range && response.statusCode === 416) {
+      response.resume();
+      throw new RangeError(`the range ${range.start}-${range.end} starts past the end of ${this.keyOf(sha256)}`);
     }
     throw await failure(response, 'GET', this.keyOf(sha256));
   }
@@ -76,24 +81,56 @@ export class S3FileStore implements FileStore {
     response.resume();
   }
 
+  /** Every `files/<xx>/<sha256>` object in the bucket, a page of ListObjectsV2 at a time. */
+  async *list(): AsyncIterable<StoredObject> {
+    let token: string | undefined;
+    do {
+      const query: Record<string, string> = { 'list-type': '2', prefix: 'files/', 'max-keys': '1000' };
+      if (token) query['continuation-token'] = token;
+      const response = await this.send('GET', '', undefined, {}, query);
+      if (response.statusCode !== 200) throw await failure(response, 'GET', 'files/ (list)');
+      let body = '';
+      for await (const chunk of response) body += String(chunk);
+      for (const item of body.matchAll(/<Contents>([\s\S]*?)<\/Contents>/g)) {
+        const key = /<Key>([^<]*)<\/Key>/.exec(item[1]!)?.[1] ?? '';
+        const name = key.split('/')[2];
+        if (!name || key !== this.keyOf(name) || !SHA256_NAME.test(name)) continue;
+        yield {
+          sha256: name,
+          sizeBytes: Number(/<Size>(\d+)<\/Size>/.exec(item[1]!)?.[1] ?? 0),
+          modifiedAt: new Date(/<LastModified>([^<]*)<\/LastModified>/.exec(item[1]!)?.[1] ?? 0),
+        };
+      }
+      token = /<IsTruncated>true<\/IsTruncated>/.test(body) ? /<NextContinuationToken>([^<]*)<\/NextContinuationToken>/.exec(body)?.[1] : undefined;
+    } while (token);
+  }
+
   /** One signed request; resolves with the response once its headers have arrived. */
   private send(
     method: 'HEAD' | 'GET' | 'PUT' | 'DELETE',
     key: string,
     upload?: { body: Readable; sizeBytes: number; sha256: string },
+    extraHeaders: Record<string, string> = {},
+    query: Record<string, string> = {},
   ): Promise<IncomingMessage> {
     const base = this.endpoint.pathname.replace(/\/+$/, '');
-    const requestPath = `${base}/${[this.config.bucket, ...key.split('/')].map(sigV4Encode).join('/')}`;
+    const requestPath = `${base}/${[this.config.bucket, ...(key ? key.split('/') : [])].map(sigV4Encode).join('/')}`;
+    const queryString = Object.entries(query)
+      .map(([name, value]) => [sigV4Encode(name), sigV4Encode(value)] as const)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([name, value]) => `${name}=${value}`)
+      .join('&');
     const amzDate = this.now().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
     const payloadSha256 = upload?.sha256 ?? EMPTY_PAYLOAD_SHA256;
     const headers: Record<string, string> = {
       host: this.endpoint.host,
       'x-amz-content-sha256': payloadSha256,
       'x-amz-date': amzDate,
+      ...extraHeaders,
       ...(upload ? { 'content-length': String(upload.sizeBytes), 'content-type': 'application/octet-stream' } : {}),
     };
     const authorization = sigV4Authorization(
-      { method, path: requestPath, headers, payloadSha256 },
+      { method, path: requestPath, query: queryString, headers, payloadSha256 },
       { accessKeyId: this.config.accessKeyId, secretAccessKey: this.config.secretAccessKey, region: this.config.region, service: 's3' },
       amzDate,
     );
@@ -104,7 +141,7 @@ export class S3FileStore implements FileStore {
           hostname: this.endpoint.hostname,
           port: this.endpoint.port || undefined,
           method,
-          path: requestPath,
+          path: queryString ? `${requestPath}?${queryString}` : requestPath,
           headers: { ...headers, authorization },
         },
         (response) => {
@@ -148,6 +185,8 @@ export interface SigV4Request {
   method: string;
   /** The path exactly as it is sent, already encoded. */
   path: string;
+  /** The query string, already encoded and sorted by name; none when empty or absent. */
+  query?: string;
   /** Every header to sign, `host` among them. */
   headers: Record<string, string>;
   /** The payload's sha256 in hex, as `x-amz-content-sha256` states it. */
@@ -162,7 +201,7 @@ export interface SigV4Credentials {
 }
 
 /**
- * The Authorization header of an AWS Signature Version 4 request with no query string, signed at `amzDate`
+ * The Authorization header of an AWS Signature Version 4 request signed at `amzDate`
  * (`YYYYMMDDTHHMMSSZ`): the canonical request, the string to sign over its hash, and the key derived from the
  * secret through the date, region and service.
  */
@@ -176,7 +215,7 @@ export function sigV4Authorization(request: SigV4Request, credentials: SigV4Cred
   const canonicalRequest = [
     request.method,
     request.path,
-    '',
+    request.query ?? '',
     ...headers.map(([name, value]) => `${name}:${value}`),
     '',
     signedHeaders,

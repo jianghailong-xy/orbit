@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException, NotFoundException } from '@nestjs/common';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
+import { isReleasedStatus } from '../common/session-release';
 import { SessionsService } from './sessions.service';
 import { reloadCarriesEnv, RESTART_RELOAD_CONTENT } from './session-settings';
 
@@ -26,6 +27,8 @@ function sessionRow(over: Partial<Row> = {}): Row {
     deletedAt: null,
     sessionKind: 'CONVERSATION',
     env: { FOO: 'bar' },
+    // A terminal row carries its release column (session_release_fact_chk).
+    ...(isReleasedStatus(String(over.status ?? RunStatus.AWAITING_INPUT)) ? { finishedAt: new Date() } : {}),
     ...over,
   };
 }
@@ -95,7 +98,7 @@ test('a live idle session queues one reload that carries the env, and wakes the 
 
 test('during a turn in flight it is queued behind that turn: afterTurn is true', async () => {
   for (const kind of ['message', 'shell']) {
-    const { service, reloads } = harness(sessionRow({ status: RunStatus.RUNNING }), [
+    const { service, reloads } = harness(sessionRow({ turnState: 'IN_FLIGHT', status: RunStatus.RUNNING }), [
       answeredOpening,
       { id: 'running', sessionId: SESSION, seq: 2, kind, status: 'IN_FLIGHT', content: 'work', clientTurnId: 'c-2' },
     ]);
@@ -112,7 +115,7 @@ test('an ended engine is refused 409 ENGINE_NOT_RUNNING and nothing is queued', 
     { status: RunStatus.SUCCEEDED },
     { status: RunStatus.CANCELLED },
     { status: RunStatus.FAILED },
-    { status: RunStatus.PENDING },
+    { turnState: 'QUEUED', status: RunStatus.PENDING },
     { status: RunStatus.AWAITING_INPUT, cancelRequestedAt: new Date() },
   ]) {
     const { service, state, reloads } = harness(sessionRow(over), [answeredOpening]);

@@ -1,5 +1,6 @@
 package io.orbitd.android.push
 
+import io.orbitd.android.core.protocol.SessionFacts
 import io.orbitd.android.core.auth.OrbitApi
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.net.ApiError
@@ -14,8 +15,9 @@ enum class PushCheck { ACTIVE, STALE, MISSING, FORBIDDEN, UNKNOWN }
 
 /** Push supplies identities only. Every decision here is read with the current authenticated handle. */
 class PushAuthority(private val api: OrbitApi, private val handle: SessionHandle) {
-    /** An unsuccessful/invalid read throws: an offline snapshot must never look like an empty set. */
-    suspend fun needsYou(): Set<String> = array(get(listOf("sessions"), listOf("view" to "open")))
+    /** The sessions waiting on the owner, from the Open rows the store holds (its `since=` delta reads): this class sends no
+     * `GET /sessions` of its own. An invalid row throws: a broken snapshot must never look like an empty set. */
+    fun needsYou(rows: List<JsonObject>): Set<String> = rows
         .mapNotNull { row ->
             val id = canonical(row.text("id"))
             val pending = row.number("pendingApprovals")
@@ -95,15 +97,18 @@ class PushAuthority(private val api: OrbitApi, private val handle: SessionHandle
             payload.sessionId != null -> {
                 val row = sessionRead(payload.sessionId)
                 if (row.present("deletedAt")) PushCheck.MISSING
-                else if (payload.kind in setOf("finished", "failed") &&
-                    (row.text("status") != (if (payload.kind == "finished") "SUCCEEDED" else "FAILED") || row.present("retryAt") ||
-                        (payload.kind == "failed" && row.present("completedAt")))) PushCheck.STALE
+                else if (payload.kind in setOf("finished", "failed") && pushStale(row, payload.kind == "finished")) PushCheck.STALE
                 else PushCheck.ACTIVE
             }
             // A schedule alert with no run's session stands while its schedule exists.
             payload.kind == PushPayload.SCHEDULE -> {
                 val row = objectRead(listOf("schedules", payload.scheduleId!!)).obj("schedule") ?: throw ProtocolException()
                 if (ObjectId.same(row.text("id"), payload.scheduleId)) PushCheck.ACTIVE else throw ProtocolException()
+            }
+            // The block stands while GET /account-health lists it; once cleared (Check again, a success) the push is stale.
+            payload.kind == PushPayload.ACCOUNT_NEEDS_ACTION -> {
+                val blocks = array(objectRead(listOf("account-health"))["blocks"])
+                if (blocks.any { it.text("id") == payload.accountHealthId }) PushCheck.ACTIVE else PushCheck.STALE
             }
             payload.runnerId != null -> {
                 val runner = array(get(listOf("runners"))).firstOrNull { ObjectId.same(it.text("id"), payload.runnerId) }
@@ -190,4 +195,17 @@ class PushAuthority(private val api: OrbitApi, private val handle: SessionHandle
         if (lifecycle !in setOf("OPEN", "COMPLETED", "TRASH")) throw ProtocolException()
         return lifecycle == "OPEN" && listOf("completedAt", "archivedAt", "deletedAt").none { row.present(it) }
     }
+}
+
+/**
+ * Whether a finished or failed push no longer stands for its session's row. With the session facts: Finished stands for a released
+ * session whose work finished, Failed for a release after a failed turn that nobody asked for, and an end somebody asked for stands
+ * for neither (D2). Without them (an older server) the exact SUCCEEDED / FAILED status decides, as before. An armed retry retires both.
+ */
+internal fun pushStale(row: JsonObject, finished: Boolean): Boolean {
+    fun has(key: String) = row[key] != null && row[key] != JsonNull
+    if (has("retryAt")) return true
+    if (SessionFacts.present(row)) return !(if (finished) SessionFacts.released(row) == true && SessionFacts.finished(row) else SessionFacts.failed(row)) ||
+        (!finished && has("completedAt"))
+    return (row["status"] as? JsonPrimitive)?.takeIf { it.isString }?.content != (if (finished) "SUCCEEDED" else "FAILED") || (!finished && has("completedAt"))
 }

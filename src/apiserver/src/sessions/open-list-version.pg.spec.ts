@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -14,6 +15,7 @@ import { readOpenListVersion } from './open-list-version';
 import { EVIDENCE_REVIEW_TURN_KEY_PREFIX } from './watch-turn-key';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
+import { turnStateOfWord } from './session-turn-state';
 
 /**
  * The Open list answers 304 from `readOpenListVersion` without building the list, so the version
@@ -90,7 +92,8 @@ async function fixture(t: { after: (fn: () => Promise<void>) => void }): Promise
     await db.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title: `olv ${id}`,
-        prompt: 'olv', provider: 'claude', providerBuiltin: true, status, startedAt: new Date(),
+        prompt: 'olv', provider: 'claude', providerBuiltin: true, turnState: turnStateOfWord(status), startedAt: new Date(),
+        ...(status === RunStatus.SUCCEEDED ? { finishedAt: new Date()} : {}),
         dispatchOrigin: SessionDispatchOrigin.USER,
       },
     });
@@ -115,10 +118,11 @@ async function poll(
   let listed = 0;
   const service = new Proxy(f.sessions, {
     get(target, key, receiver) {
-      if (key === 'list') {
-        return (...args: Parameters<SessionsService['list']>) => {
+      // Every build of list rows, the plain read's and a since= read's, is one call of listRows.
+      if (key === 'listRows') {
+        return (...args: unknown[]) => {
           listed += 1;
-          return target.list(...args);
+          return (target as unknown as { listRows: (...a: unknown[]) => Promise<unknown> }).listRows.apply(receiver, args);
         };
       }
       return Reflect.get(target, key, receiver);
@@ -190,7 +194,7 @@ test('every source the Open list row shows moves its version', { skip }, async (
   await changes(f, 'a new session', () => db.session.create({
     data: {
       ownerId: f.ownerId, creatorId: f.ownerId, workspaceId: f.workspaceId, title: 'new', prompt: 'new',
-      status: RunStatus.PENDING, dispatchOrigin: SessionDispatchOrigin.USER,
+      turnState: 'QUEUED', dispatchOrigin: SessionDispatchOrigin.USER,
     },
   }));
   await changes(f, 'a session completed', () =>
@@ -289,7 +293,7 @@ async function parkedSession(f: Fixture): Promise<string> {
     data: {
       ownerId: f.ownerId, creatorId: f.ownerId, workspaceId: f.workspaceId, assignedRunnerId: f.runnerId,
       title: 'olv parked', prompt: 'olv', provider: 'claude', providerBuiltin: true,
-      status: RunStatus.AWAITING_INPUT, startedAt: new Date(), dispatchOrigin: SessionDispatchOrigin.USER,
+      turnState: null, startedAt: new Date(), dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });
   return row.id;
@@ -414,12 +418,14 @@ test('every counter source has its table triggers', { skip }, async (t) => {
   const expected = new Set([
     'approval:approval',
     'conversation_turn:conversation_turn',
+    'owner_request:owner_request',
     'project:project',
     'project_acceptance_criterion_definition:criterion_definition',
     'project_codebase:codebase',
     'project_coordinator_wake:coordinator_wake',
     'project_criteria_authorship:criteria_authorship',
     'project_criteria_decision:criteria_decision',
+    'project_handoff_approval:handoff_approval',
     'project_integration_job:integration_job',
     'project_open_item:project_open_item',
     'project_promotion:promotion',
@@ -471,12 +477,20 @@ async function connection(t: { after: (fn: () => Promise<void>) => void }): Prom
   return client;
 }
 
-/** How many rows the account's `session` counter is spread over (0487). */
+/** How many rows the account's `session` counter is spread over (0487), its workspace keys (1464) included. */
 async function sessionCounterRows(f: Fixture): Promise<number> {
   const [row] = await f.db.$queryRaw<Array<{ n: number }>>`
     SELECT count(*)::int AS n FROM open_list_epoch
-     WHERE owner_id = ${f.ownerId}::uuid AND split_part(source, '#', 1) = 'session'`;
+     WHERE owner_id = ${f.ownerId}::uuid AND split_part(split_part(source, '#', 1), '@', 1) = 'session'`;
   return row.n;
+}
+
+/** Each counter key's total (`<source>`, `<source>@w:<ws>`, `<source>@c:<ws>`), its shards added up. */
+async function keyTotals(f: Fixture): Promise<Map<string, number>> {
+  const rows = await f.db.$queryRaw<Array<{ key: string; total: number }>>`
+    SELECT split_part(source, '#', 1) AS key, sum(epoch)::int AS total
+      FROM open_list_epoch WHERE owner_id = ${f.ownerId}::uuid GROUP BY 1`;
+  return new Map(rows.map((row) => [row.key, row.total]));
 }
 
 /**
@@ -553,6 +567,78 @@ test('two writers taking two counters in opposite orders both commit', { skip },
 });
 
 /**
+ * 1464 keys the session and turn counters by workspace. One workspace's key is one counter like the account's was,
+ * so two writers of it while one holds it must not queue (0487's guarantee, kept by calling the same bump with a
+ * new key), and the key's total moves by exactly the statements committed.
+ */
+test('two writers of one workspace\'s session key, one holding it, neither waits; the key moves by the commits', { skip }, async (t) => {
+  const f = await fixture(t);
+  const key = `session@w:${f.workspaceId}`;
+  await f.db.session.update({ where: { id: f.sessionId }, data: { title: 'warm' } });
+  const start = (await keyTotals(f)).get(key) ?? 0;
+  const holder = await connection(t);
+  const writer = await connection(t);
+  await holder.query('BEGIN');
+  await holder.query(`SET LOCAL lock_timeout = '300ms'`);
+  await holder.query(`UPDATE session SET title = 'held' WHERE id = $1`, [f.sessionId]);
+  await writer.query(`SET lock_timeout = '300ms'`);
+  const began = Date.now();
+  // Another row of the same workspace: it shares nothing with the holder but the workspace's key.
+  await writer.query(`UPDATE session SET title = 'beside' WHERE id = $1`, [f.otherId]);
+  await writer.query(`UPDATE session SET title = 'beside again' WHERE id = $1`, [f.otherId]);
+  assert.ok(Date.now() - began < 300, 'a write beside an open one waited');
+  assert.equal((await keyTotals(f)).get(key), start + 2, 'the writes committed beside an open one did not move the workspace key by two');
+  const rows = await f.db.$queryRaw<Array<{ source: string }>>`
+    SELECT source FROM open_list_epoch WHERE owner_id = ${f.ownerId}::uuid AND split_part(source, '#', 1) = ${key}`;
+  assert.equal(rows.length, 2, 'the writer beside the holder did not take a shard of the key of its own');
+  await holder.query('COMMIT');
+  assert.equal((await keyTotals(f)).get(key), start + 3, 'the held write\'s commit did not move the key by one');
+  // Nothing moved the account key: both rows are in one workspace's Open list.
+  assert.equal((await keyTotals(f)).get('session'), undefined);
+});
+
+test('two transactions taking the session and turn keys of two workspaces in opposite orders both commit', { skip }, async (t) => {
+  const f = await fixture(t);
+  const otherWorkspace = randomUUID();
+  await f.db.workspace.create({ data: { id: otherWorkspace, ownerId: f.ownerId, runnerId: f.runnerId, name: 'olv-other', enabled: true } });
+  await f.db.session.update({ where: { id: f.otherId }, data: { workspaceId: otherWorkspace } });
+  const turnOf = async (sessionId: string) => (await f.db.conversationTurn.create({
+    data: { sessionId, seq: 1, clientTurnId: `olv-${randomUUID()}`, kind: 'message', content: 'x', status: 'PENDING' },
+  })).id;
+  const turnA = await turnOf(f.sessionId);
+  const turnB = await turnOf(f.otherId);
+  const sessionA = `session@w:${f.workspaceId}`;
+  const turnKeyB = `conversation_turn@w:${otherWorkspace}`;
+  const sessionB = `session@w:${otherWorkspace}`;
+  const turnKeyA = `conversation_turn@w:${f.workspaceId}`;
+  const start = await keyTotals(f);
+  const a = await connection(t);
+  const b = await connection(t);
+  for (const client of [a, b]) {
+    await client.query('BEGIN');
+    // Longer than deadlock_timeout, so a wait cycle is the deadlock detector's to end (40P01), and a plain wait 55P03.
+    await client.query(`SET LOCAL lock_timeout = '5s'`);
+  }
+  await a.query(`UPDATE session SET title = 'a' WHERE id = $1`, [f.sessionId]);
+  await b.query(`UPDATE conversation_turn SET content = 'b' WHERE id = $1`, [turnB]);
+  const began = Date.now();
+  const crossed = await Promise.allSettled([
+    a.query(`UPDATE conversation_turn SET content = 'a' WHERE id = $1`, [turnA]),
+    b.query(`UPDATE session SET title = 'b' WHERE id = $1`, [f.otherId]),
+  ]);
+  assert.deepEqual(
+    crossed.map((outcome) => outcome.status === 'fulfilled' ? 'committed' : (outcome.reason as { code?: string }).code),
+    ['committed', 'committed'],
+  );
+  assert.ok(Date.now() - began < 1_000, 'a crossed write waited');
+  await a.query('COMMIT');
+  await b.query('COMMIT');
+  const end = await keyTotals(f);
+  const by = (key: string) => (end.get(key) ?? 0) - (start.get(key) ?? 0);
+  assert.deepEqual([by(sessionA), by(turnKeyA), by(sessionB), by(turnKeyB)], [1, 1, 1, 1], 'the keys did not move by exactly the committed statements');
+});
+
+/**
  * A LANDING row is in no flat list (contract §2.9 LS6), so only the project grouping's
  * `includeLanding=1` read can show it. That read is built every time — its rows are a few — and
  * takes Express's body-hash ETag, while the flat Open list must not move for a change it never
@@ -588,7 +674,7 @@ test('a landing insert and its settlement leave the flat Open list alone', { ski
   await db.session.create({
     data: {
       id: sessionId, ownerId: f.ownerId, creatorId: f.ownerId, title: 'Land the task',
-      prompt: 'Orbit runs this landing.', status: RunStatus.AWAITING_INPUT,
+      prompt: 'Orbit runs this landing.', turnState: null,
       sessionKind: 'LANDING', provider: 'orbit', providerBuiltin: true, startsTaskWork: false,
       dispatchOrigin: SessionDispatchOrigin.USER,
     },
@@ -611,7 +697,7 @@ test('a landing insert and its settlement leave the flat Open list alone', { ski
   await db.projectLanding.update({
     where: { sessionId }, data: { settledAt: new Date(), settledAs: 'LANDED' },
   });
-  await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.SUCCEEDED, completedAt: new Date() } });
+  await db.session.update({ where: { id: sessionId }, data: { turnState: null, finishedAt: new Date(), completedAt: new Date() } });
   const plainAfterSettlement = await poll(f, plain.etag);
   assert.equal(plainAfterSettlement.status, 304, 'a settlement moved the plain list');
   assert.equal(plainAfterSettlement.etag, plain.etag);
@@ -664,9 +750,9 @@ test('a write landing after the build is not hidden behind the version kept with
   const f = await fixture(t);
   const racing = new Proxy(f.sessions, {
     get(target, key, receiver) {
-      if (key === 'list') {
-        return async (...args: Parameters<SessionsService['list']>) => {
-          const rows = await target.list(...args);
+      if (key === 'listRows') {
+        return async (...args: unknown[]) => {
+          const rows = await (target as unknown as { listRows: (...a: unknown[]) => Promise<unknown> }).listRows.apply(receiver, args);
           await f.db.session.update({ where: { id: f.sessionId }, data: { title: 'written after the build' } });
           return rows;
         };

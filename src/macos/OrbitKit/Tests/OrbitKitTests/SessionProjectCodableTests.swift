@@ -87,6 +87,40 @@ final class SessionProjectCodableTests: XCTestCase {
         }
     }
 
+    func testSidebarRowsCarryThePauseAndOlderReadsAreNotPaused() throws {
+        func row(_ extra: String) throws -> ProjectSummary {
+            try JSONDecoder().decode(ProjectSummary.self, from: Data(
+                #"{"id":"p1","title":"Project","status":"OPEN"\#(extra)}"#.utf8))
+        }
+        let owner = try row(#"""
+        ,"pausedAt":"2026-11-19T10:00:00.000Z","pausedReason":"OWNER",
+         "fuse":{"paused":false,"episodeId":null,"observed":null,"limit":null}
+        """#)
+        XCTAssertEqual(owner.pausedAt, "2026-11-19T10:00:00.000Z")
+        XCTAssertEqual(owner.pausedReason, "OWNER")
+        XCTAssertEqual(owner.fuse, .notPaused)
+
+        let legacy = try row(#","pausedAt":"2026-11-19T10:00:00.000Z","pausedReason":"LEGACY_AUTOMATIC_OFF""#)
+        XCTAssertEqual(legacy.pausedReason, "LEGACY_AUTOMATIC_OFF")
+
+        let fuse = try row(#"""
+        ,"pausedAt":null,"pausedReason":null,
+         "fuse":{"paused":true,"episodeId":"350N4oGD3euQuPJ0VT9TD","observed":6,"limit":6}
+        """#)
+        XCTAssertNil(fuse.pausedAt)
+        XCTAssertEqual(fuse.fuse, ProjectSidebarFuse(paused: true, episodeId: "350N4oGD3euQuPJ0VT9TD", observed: 6, limit: 6))
+
+        for older in ["", #","fuse":null"#, #","fuse":{}"#] {
+            let decoded = try row(older)
+            XCTAssertNil(decoded.pausedAt)
+            XCTAssertNil(decoded.pausedReason)
+            XCTAssertEqual(decoded.fuse, .notPaused, "a server that sends no pause is a project that is not paused")
+        }
+        for decoded in [owner, legacy, fuse] {
+            XCTAssertEqual(try JSONDecoder().decode(ProjectSummary.self, from: JSONEncoder().encode(decoded)), decoded)
+        }
+    }
+
     func testProjectChangedIsRecognizedAsAUserScopedEvent() throws {
         let event = try JSONDecoder().decode(ControlEvent.self, from: Data(#"""
         {"type":"project.changed","sessionId":"","agentId":null,"ts":"2026-10-04T00:00:00Z","data":{"projectId":"p1"}}
@@ -221,7 +255,7 @@ final class SessionProjectRefreshWiringTests: XCTestCase {
         let model = try appSource("ProjectsModel.swift")
         XCTAssertTrue(model.contains("async let sidebarRead = api.sidebarProjects()"))
         XCTAssertTrue(model.contains("if let list = try? await sidebarRead { assignIfChanged(\\.sidebarProjects, list) }"))
-        XCTAssertTrue(model.contains("2_000_000_000"))
+        XCTAssertTrue(model.contains("ListReads(key: \"projects\", delay: 2)"), "once for a burst, two seconds after it")
     }
 
     func testMemberSummariesRefreshProgressAndPatchEveryLoadedRelation() throws {

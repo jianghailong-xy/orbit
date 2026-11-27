@@ -16,6 +16,8 @@
 //     `link-stream-v1` (docs/runner-browser-design.md §4).
 //   - Paste into the browser of a stream (StreamPaste, StreamPasted), capability
 //     `link-stream-paste-v1` (docs/runner-browser-design.md §5).
+//   - The newest lines of a bg_run job's output, for its card in the app (BackgroundJobTailRequest,
+//     BackgroundJobTailResponse), capability `bg-output-tail/v1`.
 //
 // Units: times are Unix milliseconds (`*_unix_ms`), durations are milliseconds (`*_ms`).
 syntax = "proto3";
@@ -87,6 +89,10 @@ message Frame {
     StreamPaste stream_paste = 25;
     // Runner to gateway: how a StreamPaste ended.
     StreamPasted stream_pasted = 26;
+    // Gateway to runner: the newest lines of one bg_run job's output.
+    BackgroundJobTailRequest background_job_tail_request = 27;
+    // Runner to gateway: the answer to a BackgroundJobTailRequest.
+    BackgroundJobTailResponse background_job_tail_response = 28;
   }
 }
 
@@ -773,4 +779,69 @@ enum StreamCloseCode {
   STREAM_CLOSE_CODE_CONNECTION_LOST = 6;
   // The runner did not answer StreamOpen in time.
   STREAM_CLOSE_CODE_TIMEOUT = 7;
+}
+
+// The newest lines of one bg_run job's output, for the job's card in the app while its owner has it
+// on screen (GET /sessions/:id/background/jobs/:jobId/tail). Between the apiserver and the gateway it
+// is a NATS request on rnr.<runnerId> carrying a Frame with only background_job_tail_request set, in
+// protobuf's canonical JSON, answered on its reply subject by a Frame with only
+// background_job_tail_response set. The gateway sends it only to a connection whose Hello declared
+// `bg-output-tail/v1`, preferring the one whose process supervises the session, and answers the
+// apiserver itself when there is none or the runner does not answer in time.
+
+// Gateway to runner: read the end of one job's output file. The runner answers with a
+// BackgroundJobTailResponse carrying the same request_id.
+message BackgroundJobTailRequest {
+  // Identifies the request; the answer carries it back.
+  string request_id = 1;
+  // The session that ran the job.
+  string session_id = 2;
+  // The job, as bg_run named it (bgj_...).
+  string job_id = 3;
+  // At most this many of the output's last lines.
+  uint32 max_lines = 4;
+  // At most this many bytes of text, counted after colour codes are taken out.
+  uint32 max_bytes = 5;
+}
+
+// What became of a BackgroundJobTailRequest.
+enum BackgroundJobTailOutcome {
+  // Not stated; read as BACKGROUND_JOB_TAIL_OUTCOME_NOT_FOUND.
+  BACKGROUND_JOB_TAIL_OUTCOME_UNSPECIFIED = 0;
+  // The runner read the job's output: status, exit_code and text say what it found.
+  BACKGROUND_JOB_TAIL_OUTCOME_OK = 1;
+  // The runner hosts no such job of the session any more: the session ended there, or the runner
+  // restarted without it. The job's wake still carries the end of its output.
+  BACKGROUND_JOB_TAIL_OUTCOME_NOT_FOUND = 2;
+  // Gateway: it holds no connection of the runner.
+  BACKGROUND_JOB_TAIL_OUTCOME_NO_CONNECTION = 3;
+  // Gateway: the runner's connections do not declare `bg-output-tail/v1`.
+  BACKGROUND_JOB_TAIL_OUTCOME_UNSUPPORTED = 4;
+  // Gateway: the runner did not answer in time.
+  BACKGROUND_JOB_TAIL_OUTCOME_TIMEOUT = 5;
+}
+
+// Runner to gateway, and gateway to apiserver: the end of one job's output.
+message BackgroundJobTailResponse {
+  // The request_id of the BackgroundJobTailRequest this answers.
+  string request_id = 1;
+  // The session asked about.
+  string session_id = 2;
+  // The job asked about.
+  string job_id = 3;
+  // What became of the request; the fields below are set only for BACKGROUND_JOB_TAIL_OUTCOME_OK.
+  BackgroundJobTailOutcome outcome = 4;
+  // The job as the runner holds it: running, completed, failed or killed.
+  string status = 5;
+  // Whether the job has exited with exit_code.
+  bool exited = 6;
+  // The job's exit code, once exited is true.
+  int32 exit_code = 7;
+  // The output's last lines, without terminal colour codes or NUL bytes, at most max_lines of them
+  // and max_bytes long, each ended by a newline but a last line still being written.
+  string text = 8;
+  // Whether the output holds more than text: older lines were left out.
+  bool truncated = 9;
+  // How long the output file was when it was read, in bytes.
+  uint64 output_bytes = 10;
 }

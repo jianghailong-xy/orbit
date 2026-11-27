@@ -53,7 +53,7 @@ runner over the existing link, and a viewer in the client.
 
 ## 3. Inside the runner
 
-- **Image.** Add `chromium`, `xvfb`, `x11vnc` and fonts (`fonts-noto-cjk`, `fonts-noto-color-emoji`) from the same
+- **Image.** Add `chromium`, `xvfb`, `x11vnc` and fonts (`fonts-noto-cjk`, `fonts-noto-color-emoji`, and `fonts-noto-core` for the other scripts: Indic, Thai, Arabic, Hebrew…) from the same
   dated Debian snapshot, and `@playwright/mcp` pinned like the other npm tools. Each gets a version check in the
   `tool-versions.json` step. About +350 MB. No websockify: the server side speaks WebSocket, the container only raw
   RFB on a local socket.
@@ -61,6 +61,10 @@ runner over the existing link, and a viewer in the client.
   `/home/orbit/.orbit/browser/profile` on the runner's volume, so logins survive restarts and image rolls (not a
   volume rebuild). It starts at the first browser tool call or when the owner presses **Open browser**, and stops
   after 15 minutes with no tool call and no viewer. Nothing runs on a runner that never uses a browser.
+- **Chrome ending by itself.** Chromium quits when its last tab or window closes, which the owner and the agent both
+  do; the viewer's stream would then show the display's empty black surface forever. While a viewer is open, Chrome
+  alone is started again on the same display and VNC server, so the stream stays open and shows the new window. With
+  no viewer, all three programs stop; the next **Open browser** or browser call starts them together.
 - **One session at a time (the browser lease).** The first session whose agent calls a browser tool holds the lease
   until its turn ends or it has made no browser call for 5 minutes. Another session's browser call meanwhile returns a
   tool error naming the holder ("The browser is in use by session …; try again after it finishes"), so the agent can
@@ -110,6 +114,9 @@ owner's browser ──WSS──▶ nginx ──▶ apiserver /api/runners/:id/br
 
 ## 5. The viewer (web first)
 
+**Revised 2026-11-24 (owner).** A session no longer shows the browser: the Browser chip above the composer and the
+view-only drawer it opened are removed. The browser is opened from Settings only, into its own tab (below).
+
 **Revised 2026-11-19 (owner, option C; board `docs/mocks/runner-browser/02-control-view.html`).** The drawer squeezed
 the 1280×800 screen to about 37%, too small to act in, and paste never reached the remote Chrome. Now:
 
@@ -119,23 +126,24 @@ the 1280×800 screen to about 37%, too small to act in, and paste never reached 
   uses the browser, "Paste with ⌘V" (Ctrl+V elsewhere), `1280 × 800 · <scale>%` and Live. View only, the bar says
   "Watching the browser · used by <session>", linking to the session, with **Take control**. Closing the tab closes
   the stream. Not found while the switch is off.
-- **Settings' Open browser** and **a session's Take control** open that tab already in control (`window.open` on the
-  click, one named window per runner). The session's drawer stays as a view-only quick look with **↗ Open in new
-  tab** and **Take control**; either closes the drawer, and its stream, before the tab opens its own, so the two never
-  hold both of the runner's streams.
+- **Settings' Open browser** opens that tab already in control (`window.open` on the click, one named window per
+  runner).
 - **Paste through Chrome's DevTools**, not the VNC clipboard (RFB cut text is Latin-1; x11vnc is not known to speak
   the UTF-8 Extended Clipboard). In control, the viewer keeps ⌘V / Ctrl+V from noVNC (the keystroke never reaches the
   runner, so nothing pastes twice), takes the browser's own `paste` event, and sends the text as a text message on its
   viewer WebSocket. The apiserver passes it on only while that viewer said it is in control, at most 64 KiB, one at a
   time, as a `StreamPaste` link frame (capability `link-stream-paste-v1`); the runner inserts it with
   `Input.insertText` into the page that has focus, without the session lease (P3 = B), and answers `StreamPasted`.
+  When a page is shown but none has the window's focus, Chrome's own UI (the address bar) has it, which DevTools
+  cannot reach: the runner puts the text on the display's X clipboard (`xclip`, UTF-8), presses Ctrl+V (`xdotool`)
+  and empties the clipboard a second later.
   A refusal ("Click a text field in the browser first", too long, no answer) shows in the bar. The text is never
   logged or stored anywhere on the way: it is often a password.
 - **Copy back**, best effort: noVNC's `clipboard` event (x11vnc's cut text from the remote CLIPBOARD) is written with
   `navigator.clipboard.writeText`, or at the next key or click if the browser wants a gesture. Only in control. Being
   RFB cut text, it is Latin-1: other text does not come back whole. Not fixed here.
 
-The original v1 viewer, for the record (the drawer parts are superseded above):
+The original v1 viewer, for the record (the drawer and the session's chip are superseded above):
 
 - **From a session.** A **Browser** chip in the outputs bar, shown when the switch is on, the session runs on the
   managed runner and the browser is running. The drawer's header says which session holds the browser.
@@ -146,12 +154,12 @@ The original v1 viewer, for the record (the drawer parts are superseded above):
 
 Control (P3 = B, shared input):
 
-- **View only by default** from a session. **Take control** sends pointer and keys; the header then says "You are
-  controlling the browser · the agent keeps running".
+- **View only** until **Take control** in the tab's bar, which sends pointer and keys; the bar then says "You are
+  controlling the browser · the agent keeps running". Settings' Open browser opens the tab already in control.
 - **Taking control does not interrupt the agent.** The owner and the agent both act on the same page; the agent sees
   the owner's changes in its next page snapshot. The owner who wants the agent to stop uses the session's existing
-  Stop. Opening the browser from Settings while a session holds it says so in the drawer's footer and asks nothing.
-- **Hand back** (from a session) or **Done** (from Settings) only stops sending input. Nothing is sent to the agent.
+  Stop. Opening the browser from Settings while a session holds it says so in the tab's footer and asks nothing.
+- **Done** only stops sending input and leaves the tab view only. Nothing is sent to the agent.
 - macOS, iOS and Android come later; they can host the same noVNC page in a web view.
 
 ## 6. Security
@@ -183,7 +191,7 @@ Control (P3 = B, shared input):
    `browser` MCP server for Claude Code and Codex first. Agents can use a browser; nobody watches yet.
 2. **Stream** — the four link frames, gateway relay, apiserver WebSocket route, nginx location, runner socket bridge.
 3. **Web viewer** — Browser chip, Settings' Open browser and Clear saved logins, drawer, view only, take control
-   and hand back (shared input).
+   and hand back (shared input). The chip and the drawer were removed on 2026-11-24 (§5).
 4. **Later** — the remaining engines, native clients, guests.
 
 Each phase is tested on the managed-runner lab (`scripts/managed-runner/lab/`) with the switch on, and with it off to

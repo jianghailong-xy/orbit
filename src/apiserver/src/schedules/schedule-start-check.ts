@@ -136,34 +136,84 @@ export function scheduleBudgetWindowStart(plannedAt: Date, timezone: string): Da
 }
 
 /**
- * Whether a slot planned at `plannedAt` is over the envelope's runs per week (§4): the runs that actually started (a
- * session was opened) whose own planned slot lies in the 7 days before it, of every trigger, against
- * `envelopeRunsPerWeek`. Windowed on planned slots, not start times, so a start's latency (the worker's pass, a runner
- * back after an outage) never moves a run into or out of the window: the slots of a rule inside its envelope are never
- * closer than the envelope allows, and a rule moved to "a few minutes from now" still gives each run its own slot. A
- * MANUAL run's slot is when it was asked for. A retry of a start that never reached its engine is the same row with
- * `startedAt` cleared (§7.2), so its attempts are one start. Read under the schedule lock the start takes.
+ * Whether an automatic slot planned at `plannedAt` is over the envelope's runs per week (§4): the automatic runs (every
+ * trigger but MANUAL, SCHEDULE_RUN_AUTOMATIC) that actually started (a session was opened) and were delivered to their
+ * engine or are still live (SCHEDULE_RUN_COUNTS_TOWARD_BUDGET), whose own planned slot lies in the 7 days before it,
+ * against `envelopeRunsPerWeek`. A Run now never takes an automatic slot's place: the rhythm the owner approved always
+ * runs. Windowed on planned slots, not start times, so a start's latency (the worker's pass, a runner back after an
+ * outage) never moves a run into or out of the window: the slots of a rule inside its envelope are never closer than
+ * the envelope allows, and a rule moved to "a few minutes from now" still gives each run its own slot. A retry of a
+ * start that never reached its engine is the same row with `startedAt` cleared (§7.2), so its attempts are one start.
+ * Read under the schedule lock the start takes.
  */
 export async function scheduleOverBudget(db: Db, schedule: Schedule, plannedAt: Date): Promise<boolean> {
   return (await scheduleBudgetStarts(db, schedule, plannedAt)) >= schedule.envelopeRunsPerWeek;
 }
 
-/** The runs that count against the budget for a slot planned at `plannedAt`, as scheduleOverBudget reads them. */
+/** The automatic runs that count against the budget for a slot planned at `plannedAt`, as scheduleOverBudget reads them. */
 export async function scheduleBudgetStarts(db: Db, schedule: Schedule, plannedAt: Date): Promise<number> {
+  return scheduleBudgetCount(db, schedule, plannedAt, SCHEDULE_RUN_AUTOMATIC);
+}
+
+/**
+ * The Run now presses of sessions and personal access tokens that count against their own budget at `at` (§8.4): the
+ * same window and the same delivered-or-live rule, against the same `envelopeRunsPerWeek`, kept apart from the
+ * automatic runs. The owner's own presses count toward neither.
+ */
+export async function scheduleAgentPressStarts(db: Db, schedule: Schedule, at: Date): Promise<number> {
+  return scheduleBudgetCount(db, schedule, at, SCHEDULE_RUN_AGENT_PRESS);
+}
+
+function scheduleBudgetCount(db: Db, schedule: Schedule, plannedAt: Date, which: Prisma.ScheduleRunWhereInput): Promise<number> {
   return db.scheduleRun.count({
     where: {
       scheduleId: schedule.id,
-      startedAt: { not: null },
+      ...which,
+      ...SCHEDULE_RUN_COUNTS_TOWARD_BUDGET,
       plannedAt: { gt: scheduleBudgetWindowStart(plannedAt, schedule.timezone) },
     },
   });
 }
 
+/** A run the rule started: a slot, a catch-up or a condition's firing, never a Run now. */
+const SCHEDULE_RUN_AUTOMATIC = { trigger: { not: 'MANUAL' } } as const satisfies Prisma.ScheduleRunWhereInput;
+
+/** A Run now that a session or a personal access token pressed, not the owner. */
+const SCHEDULE_RUN_AGENT_PRESS = { trigger: 'MANUAL', byOwner: false } as const satisfies Prisma.ScheduleRunWhereInput;
+
 /**
- * The SCHEDULE_OVER_BUDGET refusal of a Run now that is not the owner's own press (§8.4): the runs actually started in
- * the window, then the number the owner allowed.
+ * A run that costs budget (§4): it started (a session was opened) and either still holds its place (QUEUED, RUNNING
+ * or AWAITING_APPROVAL with a start, so two quick starts cannot overshoot) or its first turn reached the engine
+ * (`delivered_at`). A run that ended without ever being delivered (MISSED, CANCELLED or FAILED with
+ * RUNNER_UNAVAILABLE, QUOTA or ENGINE_CRASHED_BEFORE_START) did nothing and counts 0.
+ */
+export const SCHEDULE_RUN_COUNTS_TOWARD_BUDGET = {
+  startedAt: { not: null },
+  OR: [
+    { state: { in: ['QUEUED', 'RUNNING', 'AWAITING_APPROVAL'] } },
+    { sessions: { some: { turns: { some: { deliveredAt: { not: null } } } } } },
+  ],
+} as const satisfies Prisma.ScheduleRunWhereInput;
+
+/**
+ * A run that started, as the budget counts starts: a session was opened for it, and a retry of a start that never
+ * reached its engine cleared `startedAt` again, so its attempts are one start.
+ */
+export const SCHEDULE_RUN_STARTED = { startedAt: { not: null } } as const satisfies Prisma.ScheduleRunWhereInput;
+
+/**
+ * The runs a schedule has started in all (§8.5), counted as the budget counts them, over the schedule's whole life:
+ * what a planned end by count (`maxRuns`) is measured against. Read under the schedule lock where it decides a start.
+ */
+export function scheduleRunsStarted(db: Db, scheduleId: string): Promise<number> {
+  return db.scheduleRun.count({ where: { scheduleId, ...SCHEDULE_RUN_STARTED } });
+}
+
+/**
+ * The SCHEDULE_OVER_BUDGET refusal of a Run now that is not the owner's own press (§8.4): the presses of sessions and
+ * tokens that count in the window (scheduleAgentPressStarts), then the number the owner allowed.
  */
 export function scheduleOverBudgetMessage(started: number, allowed: number): string {
-  return `This schedule has started ${started} ${started === 1 ? 'run' : 'runs'} in the past 7 days; ` +
+  return `Run now by a session or a token has started ${started} ${started === 1 ? 'run' : 'runs'} of this schedule in the past 7 days; ` +
     `its owner allowed ${allowed} a week. Only the owner can run it now.`;
 }

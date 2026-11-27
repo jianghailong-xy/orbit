@@ -2,10 +2,12 @@ import { lazy, useEffect, useMemo, useRef, useState, type ReactNode } from 'reac
 import {
   SessionLifecycleState,
   type ProjectIntegrationSettings,
+  type ProjectSettingChangeView,
   type ProjectListIntegration,
   type ProjectListCoordinatorActivity,
   type TaskIntegrationView,
   type TaskSignInHold,
+  type TaskRunReason,
   type TaskStatus,
 } from '@orbit/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -23,6 +25,8 @@ import { ProjectBlockersCard, type ProjectBlockers } from '../components/Project
 import { CoordinatorQuestions } from '../components/CoordinatorQuestionCard';
 import { WaitingOnYouTaskBadge } from '../components/OwnerRequestCard';
 import { TaskSignInHoldNote } from '../components/TaskSignInHold';
+import { TaskAccountHoldLine } from '../components/TaskAccountHold';
+import type { TaskAccountHold } from '../lib/accountHealth';
 import { LazyBoundary } from '../components/ErrorBoundary';
 import { ProjectPromotion } from '../components/ProjectPromotionCard';
 import { ProjectReadyToRun } from '../components/ProjectReadyToRun';
@@ -57,6 +61,7 @@ import {
   type OpenProjectView,
 } from '../components/ProjectsToolbar';
 import { encodeId, routeId } from '../lib/idCodec';
+import { LANDING_FIX_COPY } from '../lib/landingFix';
 import { NOT_STARTED, START_PROJECT_INTENT, projectStarted } from '../lib/projectStart';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { markdownToPlainText } from '../lib/markdownText';
@@ -76,7 +81,6 @@ import {
 } from '../lib/projectAttention';
 import {
   projectCoordinatorStatusQuery,
-  projectIntegrationQuery,
   projectsPath,
   projectsQueryKey,
   runnersQuery,
@@ -86,6 +90,7 @@ import { type TaskDependencyGraphResponse } from '../lib/taskDependencyGraph';
 import { scheduledStart } from '../lib/taskSchedule';
 import { ProjectTasksGraph } from '../components/ProjectTasksGraph';
 import { ProjectTaskLink } from '../components/ProjectTaskLink';
+import { ProjectReopenRow } from '../components/ProjectReopenCard';
 import { Alert } from '../components/ui/Alert';
 import { Badge, type BadgeProps } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
@@ -118,6 +123,10 @@ import {
   type CriterionMovedOut,
   type ProjectDoneDocument,
 } from '../lib/projectDone';
+import { RUN_STALLED } from '../lib/projectDependencyGraph';
+import { PROJECT_TASK_STARTS_BY_HAND } from '../lib/projectStart';
+import { useProjectIntegration } from '../lib/pollOwner';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from '../components/ui/Tooltip';
 
 // The panel a task opens in over this page — TaskDetailPanel, and the transcript and editors it
 // draws — is needed only once a task is open, so it is not on the page's own import path: the
@@ -224,6 +233,8 @@ interface ProjectDetail extends Omit<Project, 'integration'> {
   nonCodeReason?: string | null;
   /** The criteria this project moved out to a follow-up (board 02 G). */
   criteriaMovedOut?: readonly CriterionMovedOut[];
+  /** The coordinator's and the owner's landing-check history, newest first (§12.15 P-R1). */
+  settingChanges?: ProjectSettingChangeView[];
 }
 
 export const STATUS_COLOR: Record<Project['status'], string> = {
@@ -701,10 +712,12 @@ function ProjectRowMeter({ buckets }: { buckets: ProjectPanoramaBuckets }) {
           a pointer. */}
       <div className="project-row-buckets" aria-hidden="true">
         {PANORAMA_BUCKETS.filter((bucket) => panoramaBucketValue(buckets, bucket.key) > 0).map((bucket) => (
-          <span key={bucket.key} title={bucket.label}>
-            <Glyph shape={bucket.glyph} color={bucket.color} size={8} />
-            <b>{panoramaBucketValue(buckets, bucket.key).toLocaleString('en-US')}</b>
-          </span>
+          <Tooltip key={bucket.key} content={bucket.label} delay={TEXT_TOOLTIP_DELAY_MS}>
+            <span>
+              <Glyph shape={bucket.glyph} color={bucket.color} size={8} />
+              <b>{panoramaBucketValue(buckets, bucket.key).toLocaleString('en-US')}</b>
+            </span>
+          </Tooltip>
         ))}
       </div>
     </div>
@@ -1144,6 +1157,7 @@ export function ProjectDetailPage() {
               card beside two lines of title metadata, creating a large dead rectangle under the
               title. A balanced command centre now leads with changing work state and the way to
               act on it, followed by the stable goal they are working toward. */}
+          {p.status === 'DONE' || p.status === 'CANCELLED' ? <ProjectReopenRow projectId={id!} /> : null}
           <header className="project-detail-identity" data-project-block="header">
             <h2 className="page-title orbit-typography">
               {p.title}
@@ -1822,6 +1836,8 @@ export interface ProjectTask {
   title: string;
   /** Why the auto-run sweep holds this task although it reads Ready (server-computed); null or absent otherwise. */
   hold?: TaskSignInHold | null;
+  /** Why its next automatic start stands down: no account that could run it can run now (§7.5); null or absent otherwise. */
+  accountHold?: TaskAccountHold | null;
   // Keep this tied to the server's enum. A hand-written subset once omitted FAILED, so a failed
   // task reached the status-mark lookup at runtime even though TypeScript claimed it could not.
   status: TaskStatus;
@@ -1860,6 +1876,9 @@ export interface ProjectTask {
     | 'CANCELLED';
   verificationState?: 'PENDING' | 'BLOCKED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'MISSING' | null;
   autoRunWhenReady?: boolean;
+  /** Why a RUNNING row runs, and whether its background jobs went quiet (`runningLabel`). */
+  runReason?: TaskRunReason | null;
+  runStalled?: boolean;
   /** Where this task sits between "done" and "on main" (contract §2.7, §7.3 V10). Optional because
    *  a server from before the integration line answers without it, and a row that read an absent
    *  field as NOT_APPLICABLE would be claiming to know something it was never told. */
@@ -1904,14 +1923,26 @@ const UNKNOWN_TASK_STATUS_MARK = { glyph: 'ring', color: 'var(--text-3)' } as co
 
 /** The server's canonical work lane, translated once for every desktop/phone task row. */
 export function projectTaskWorkLabel(task: ProjectTask): { text: string; color: string } | null {
-  switch (projectTaskWorkStateOf(task)) {
+  const workState = projectTaskWorkStateOf(task);
+  // Held for a person to start (G5): said on the row in the Project started card's words, not only
+  // on that card. `false`, not falsy — an older server sends no flag, and that is no claim.
+  if (task.autoRunWhenReady === false && (workState === 'READY' || (workState === 'BLOCKED' && !taskWaitsForLanding(task)))) {
+    return {
+      text: `${workState === 'READY' ? 'Ready' : 'Blocked'} · ${PROJECT_TASK_STARTS_BY_HAND}`,
+      color: workState === 'READY' ? 'gold' : 'default',
+    };
+  }
+  switch (workState) {
     case 'READY':
       return {
         text: task.autoRunWhenReady ? 'Ready · automatic dispatch' : 'Ready · can start now',
         color: 'gold',
       };
     case 'RUNNING':
-      return { text: 'Running', color: 'processing' };
+      // A stalled run (G4) says so here as well as in the task graph and the run queue.
+      return task.runStalled
+        ? { text: `Running · ${RUN_STALLED}`, color: 'gold' }
+        : { text: 'Running', color: 'processing' };
     case 'BLOCKED':
       // A row held by nothing but a landing says WHAT it is waiting for instead (§7.3 V10). One
       // tag, not two: "Blocked" beside "Waits for 1 task to land" reads as two different holds,
@@ -2035,7 +2066,7 @@ export function TaskStatusMark({ status }: { status: ProjectTask['status'] }) {
  * on its line (§10.9) has no receipt yet either, so it waits in the same lane.
  */
 const INTEGRATING_STATES: ReadonlySet<TaskIntegrationView['state']> = new Set([
-  'QUEUED', 'RUNNING', 'CONFLICT', 'CHECK_FAILED', 'ERROR', 'AWAITING_OWNER', 'AWAITING_OBSERVATION',
+  'QUEUED', 'RUNNING', 'CONFLICT', 'CHECK_FAILED', 'ERROR', 'FIXING', 'AWAITING_OWNER', 'AWAITING_OBSERVATION',
 ]);
 const LANDED_STATES: ReadonlySet<TaskIntegrationView['state']> = new Set([
   'ON_INTEGRATION_LINE', 'ON_UPSTREAM',
@@ -2112,6 +2143,9 @@ export function projectTaskIntegrationTag(
       return { text: `Conflict · ${who}`, color: 'red' };
     case 'CHECK_FAILED':
       return { text: `Checks failed · ${who}`, color: 'red' };
+    case 'FIXING':
+      // Revision 42 (§12.7, web e ②): the task's own session is fixing its failed landing; the tag opens that session.
+      return { text: LANDING_FIX_COPY.TASK_ROW, color: 'purple' };
     case 'ERROR':
       return { text: `Integration error · ${who}`, color: 'red' };
     case 'AWAITING_OWNER':
@@ -2283,10 +2317,7 @@ export function ProjectTasks({ projectId }: { projectId: string }) {
   // The same entry the integration row above already holds, under the same key: a landed row has
   // to NAME the branch it landed on, and reading it here costs nothing — two `useQuery` calls on
   // one key are one request and one cache entry.
-  const integration = useQuery({
-    ...projectIntegrationQuery(projectId),
-    enabled: Boolean(projectId),
-  });
+  const integration = useProjectIntegration(projectId);
   const branches: TaskLandingBranches = {
     ref: integration.data?.ref ?? null,
     upstreamRef: integration.data?.upstreamRef ?? null,
@@ -2488,7 +2519,15 @@ function ProjectTaskRow({
                       behind (§7.3 V10). Beside the work lane rather than replacing it: "DONE" is
                       still true of a task whose checks are running, and the two tags together are
                       the sentence — finished, not there yet. */}
-                  {integrationTag ? (
+                  {integrationTag && task.integration?.state === 'FIXING' && task.integration.workSessionId ? (
+                    // Pressed, it goes into the task's own session, which is fixing its landing (web e ②).
+                    <Link className="project-task-integration-press" to={`/sessions/${encodeURIComponent(encodeId(task.integration.workSessionId))}`}
+                      onClick={(e) => e.stopPropagation()}>
+                      <Badge data-testid="project-task-integration" tone={tagTone(integrationTag.color)}>
+                        {integrationTag.text}
+                      </Badge>
+                    </Link>
+                  ) : integrationTag ? (
                     <Badge data-testid="project-task-integration" tone={tagTone(integrationTag.color)}>
                       {integrationTag.text}
                     </Badge>
@@ -2512,13 +2551,17 @@ function ProjectTaskRow({
                       reader who needs the exact moment behind a to-the-minute local rendering. */}
                   {starts ? (
                     <Badge>
-                      <time dateTime={starts.iso} title={starts.iso}>
-                        Starts {starts.local}
-                      </time>
+                      <Tooltip content={starts.iso} delay={TEXT_TOOLTIP_DELAY_MS}>
+                        <time dateTime={starts.iso}>
+                          Starts {starts.local}
+                        </time>
+                      </Tooltip>
                     </Badge>
                   ) : null}
                 </span>
               </h4>
+              {/* No account that could run it can run now (§7.5): one quiet line under the title, never a chip in it. */}
+              {task.accountHold && !task.hold ? <TaskAccountHoldLine hold={task.accountHold} /> : null}
               <div className="orbit-list-item-meta-description">
                 <span className="project-task-row-description">
                   {excerpt(task.acceptanceCriteria, 'No acceptance criteria set')}

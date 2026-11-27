@@ -147,7 +147,7 @@ test('a caller idempotency key makes a task create safe to send again', { skip, 
     await prisma.session.create({
       data: {
         id, title: 'task create idempotency key', prompt: 'task create idempotency key', ownerId: owner,
-        creatorId: owner, assignedRunnerId: runnerId, status: 'AWAITING_INPUT', startedAt: new Date(),
+        creatorId: owner, assignedRunnerId: runnerId, turnState: null, startedAt: new Date(),
         runtimeSessionId: `runtime-${id}`, provider: 'claude',
       },
     });

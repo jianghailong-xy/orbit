@@ -43,6 +43,9 @@ func claudeInitFrame(t *testing.T, status string, withSkill bool) map[string]int
 func agentToolsServedForTest(sw agentToolsSwitches) []string {
 	var names []string
 	for _, op := range operationCatalog().Ops {
+		if op.Object == objectBrowser && !sw.Browser {
+			continue // off means absent (browser_tools.go)
+		}
 		if agentToolsFamilyOf(op) != "" && agentToolsWithheldBy(op, sw) == "" && op.Tool != scheduleRunReportTool {
 			names = append(names, op.Tool)
 		}
@@ -79,6 +82,9 @@ func TestClaudeInitBecomesTheAgentToolsReport(t *testing.T) {
 			if f.Served != 0 || f.Total == 0 || f.Reason != "orchestration" {
 				t.Errorf("orchestration family = %+v, want none served, said why", f)
 			}
+		case f.ID == "browser":
+			// The session was spawned with the browser switch off: off means absent, so the report has no such family.
+			t.Errorf("browser family = %+v, want none with the switch off", f)
 		case f.Served != f.Total || f.Reason != "":
 			t.Errorf("family %s = %+v, want all served", f.ID, f)
 		}
@@ -281,9 +287,10 @@ func TestAgentToolsReportReadsTheRecordedEngineFrames(t *testing.T) {
 	}
 	job := agentToolsJob() // orchestration off, as the probe's orbit mcp was spawned
 	r := claudeAgentToolsReport(job, init)
-	want := len(agentToolsServedForTest(agentToolsSwitches{Orchestration: false, Watches: true, Wiki: true}))
-	if r.MCP.Status != "connected" || r.MCP.Tools != want {
-		t.Errorf("recorded Claude init read as %+v, want connected with %d tools", r.MCP, want)
+	// Claude enumerated the tools in the recording. Keep the count from that probe as the catalogue grows.
+	const recordedClaudeTools = 100
+	if r.MCP.Status != "connected" || r.MCP.Tools != recordedClaudeTools {
+		t.Errorf("recorded Claude init read as %+v, want connected with %d tools", r.MCP, recordedClaudeTools)
 	}
 	if r.Skill.Loaded == nil || !*r.Skill.Loaded {
 		t.Errorf("recorded Claude init does not show the playbooks loaded: %+v", r.Skill)
@@ -294,6 +301,8 @@ func TestAgentToolsReportReadsTheRecordedEngineFrames(t *testing.T) {
 		}
 	}
 
+	// Codex reported whether the server connected. The runner infers its tools from the current catalogue.
+	want := len(agentToolsServedForTest(agentToolsSwitches{Orchestration: false, Watches: true, Wiki: true}))
 	lines, err := os.ReadFile(filepath.Join("testdata", "agent-tools", "recorded", "codex-0.167.2-startup.jsonl"))
 	if err != nil {
 		t.Fatal(err)

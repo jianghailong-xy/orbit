@@ -1,3 +1,4 @@
+import { makeTrialDue } from './account-health.service';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
@@ -25,7 +26,7 @@ import { PublicIdPipe } from '../common/public-id';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { codexLoginView, codexPoolUnavailableReason, maskedAccount, POOL_LOGIN_SELECT } from './codex-login';
-import { engineTableOptions, revokeKeyGatewayTokens } from './key-gateway';
+import { engineTableOptions, gatewayKeyDialect, revokeKeyGatewayTokens } from './key-gateway';
 import { claudeCodexLoginEnabled, poolTableOptions } from './codex-login-claude';
 import { CreateModelProviderDto, CreateProviderPoolDto, UpdateModelProviderDto } from './dto';
 import { decryptSecret, encryptSecret } from './provider-crypto';
@@ -44,7 +45,7 @@ import { withPreset } from './preset-overlay';
 import { keyCredential, keyRowEngine, usableProviderScope } from './custom-provider';
 import { cursorKeyCheckers, cursorKeyCheckRelay } from './cursor-key-check-relay';
 import { RUNNER_BEATS } from '../runners/runner-presence';
-import { openCodeKeyModel } from '@orbit/shared';
+import { openCodeKeyModel, regionSiblings } from '@orbit/shared';
 import { storedCredential } from './engine-provider';
 import { geminiApiModel, isInternalHost } from './held-key';
 import { keyFingerprint } from './provider-engine-resolution';
@@ -712,11 +713,14 @@ export class ProvidersService {
       await this.recordSessionEngines(current);
     }
     const row = await this.prisma.modelProvider.update({ where: { id }, data });
+    // A key saved again may be the fix for a block on it (docs/routing-account-health-design.md §6.3): its trial is due
+    // now; the ladder is kept. A key's health is its owner's, so a shared key has none to make due.
+    if (apiKeyEnc && row.ownerId) await makeTrialDue(this.prisma, row.ownerId, { providerId: row.id });
     // A key switched off, given a new secret or moved to another endpoint or protocol: the tokens Claude Code
     // sessions on it run with through the gateway stop at once (docs/claude-engine-openai-gateway-design.md
     // §4.2). The session's next claim mints a token on the key as it now is.
-    // Only an OpenAI key ever has such tokens.
-    if (keyDialect(current.runtime) === 'openai' && (dto.enabled === false || apiKeyEnc || protocolMoves || endpointMoves)) {
+    // Only an OpenAI or OpenAI-compatible key ever has such tokens.
+    if (gatewayKeyDialect(current.runtime) && (dto.enabled === false || apiKeyEnc || protocolMoves || endpointMoves)) {
       await revokeKeyGatewayTokens(this.prisma, row.id);
     }
     this.publishChanged(ownerId, row.id);
@@ -749,6 +753,50 @@ export class ProvidersService {
        WHERE "id" = ${current.id}::uuid`;
     this.publishChanged(ownerId, current.id);
     return this.desensitize(await this.prisma.modelProvider.findUniqueOrThrow({ where: { id: current.id } }));
+  }
+
+  /**
+   * Set or clear (null) the owner's SubAgent tier for one model of a built-in engine's catalogue
+   * (docs/subagent-design.md §4.2, §7): `UserPreferences.builtinModelTiers[engine][model]`, which overrides the
+   * built-in tier table and the family tiers for that model on that engine. A tier is set only for a model one
+   * of the owner's runners reports for that engine; a clear is always taken.
+   */
+  async setBuiltinModelTier(ownerId: string, engine: string, model: string, tier: 'S' | 'M' | 'L' | 'XL' | null) {
+    if (!isEngine(engine)) throw new NotFoundException('engine not found');
+    if (tier !== null) {
+      const runners = await this.prisma.runner.findMany({
+        where: { ownerId, modelCatalog: { not: Prisma.DbNull } },
+        select: { modelCatalog: true },
+      });
+      const reported = runners.some(({ modelCatalog }) => {
+        const rows = (modelCatalog as Record<string, unknown> | null)?.[engine];
+        return Array.isArray(rows) && rows.some((row) => (row as { value?: unknown } | null)?.value === model);
+      });
+      if (!reported) {
+        throw new BadRequestException({ code: 'MODEL_NOT_LISTED', message: `${ENGINE_CLI_NAMES[engine]} does not list ${model}` });
+      }
+    }
+    // The model's own key, set or removed inside the statement, as setModelTier does: two tiers set at once
+    // cannot overwrite each other. A map that is not an object is replaced.
+    await this.prisma.$executeRaw`
+      UPDATE "user"
+         SET "preferences" = jsonb_set(
+               CASE WHEN jsonb_typeof("preferences") = 'object' THEN "preferences" ELSE '{}'::jsonb END,
+               '{builtinModelTiers}',
+               CASE WHEN ${tier}::text IS NULL
+                 THEN CASE WHEN jsonb_typeof("preferences"->'builtinModelTiers') = 'object'
+                        THEN "preferences"->'builtinModelTiers' #- ARRAY[${engine}::text, ${model}::text]
+                        ELSE '{}'::jsonb END
+               ELSE (CASE WHEN jsonb_typeof("preferences"->'builtinModelTiers') = 'object'
+                       THEN "preferences"->'builtinModelTiers' ELSE '{}'::jsonb END)
+                    || jsonb_build_object(${engine}::text,
+                         (CASE WHEN jsonb_typeof("preferences"->'builtinModelTiers'->${engine}::text) = 'object'
+                            THEN "preferences"->'builtinModelTiers'->${engine}::text ELSE '{}'::jsonb END)
+                         || jsonb_build_object(${model}::text, ${tier}::text))
+               END)
+       WHERE "id" = ${ownerId}::uuid`;
+    this.publishChanged(ownerId, engine);
+    return { engine, model, tier };
   }
 
   /** The id of one of the caller's own providers, found by the slug `orbit provider list` shows — the
@@ -1110,7 +1158,14 @@ export class ProvidersService {
       runtime?: string;
     },
     ownerId?: string,
-  ): Promise<{ ok: boolean; status?: number; message: string; keyCheck?: CursorKeyCheckOutcome }> {
+  ): Promise<{
+    ok: boolean;
+    status?: number;
+    message: string;
+    keyCheck?: CursorKeyCheckOutcome;
+    /** The vendor's other platform, when the key this one refused works there. */
+    region?: { id: string; label: string; baseUrl: string };
+  }> {
     // A Cursor key is no model API this side can probe, and is never sent anywhere from here: a runner of
     // the caller's asks Cursor CLI's `agent models` with it (checkCursorKey).
     if (dto.runtime === AgentProvider.CURSOR) {
@@ -1135,13 +1190,14 @@ export class ProvidersService {
     const isResponses = dto.runtime === 'codex';
     const isOpenAIDialect = isResponses || dto.runtime === 'kimi';
     const isAnthropic = !isGemini && !isOpenAIDialect;
-    const endpoint = isGemini
-      ? `${base}/v1beta/models/${encodeURIComponent(geminiApiModel(model))}:generateContent`
-      : isResponses
-        ? `${base}/responses`
-        : isOpenAIDialect
-          ? `${base}/chat/completions`
-          : `${base}/v1/messages`;
+    const endpointOf = (root: string) =>
+      isGemini
+        ? `${root}/v1beta/models/${encodeURIComponent(geminiApiModel(model))}:generateContent`
+        : isResponses
+          ? `${root}/responses`
+          : isOpenAIDialect
+            ? `${root}/chat/completions`
+            : `${root}/v1/messages`;
     // The Gemini API takes its key in a header of its own, which is the one agy sends.
     const headers: Record<string, string> = isGemini
       ? { 'Content-Type': 'application/json', 'x-goog-api-key': dto.apiKey }
@@ -1160,17 +1216,19 @@ export class ProvidersService {
         ? { model, input: 'ping', max_output_tokens: 16 }
         : { model, max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] };
     if (isAnthropic) body.system = "You are Claude Code, Anthropic's official CLI for Claude.";
-    try {
-      const resp = await fetch(endpoint, {
+    const send = (root: string) =>
+      fetch(endpointOf(root), {
         method: 'POST',
         redirect: 'manual',
         headers,
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(8000),
       });
+    try {
+      const resp = await send(base);
       if (resp.ok) return { ok: true, status: resp.status, message: 'Connected' };
       if (resp.status === 401 || resp.status === 403) {
-        return { ok: false, status: resp.status, message: 'Invalid API key' };
+        return { ok: false, status: resp.status, ...(await this.refusedKeyElsewhere(base, send)) };
       }
       if (resp.status === 404) {
         // For codex a 404 on /responses is usually not a typo in the URL: it is an OpenAI-compatible
@@ -1201,6 +1259,32 @@ export class ProvidersService {
       const timedOut = e instanceof Error && e.name === 'TimeoutError';
       return { ok: false, message: timedOut ? 'Timed out reaching the endpoint' : 'Could not reach the endpoint' };
     }
+  }
+
+  /**
+   * A vendor with separate international and China platforms (MiniMax, Z.AI/Zhipu, Moonshot) refuses
+   * a key from the other one with the same 401 as a wrong key. Before calling the key invalid, try it
+   * on the vendor's other platform — the same vendor, so the key goes nowhere it doesn't belong — and
+   * say which one it is from when it works there.
+   */
+  private async refusedKeyElsewhere(
+    base: string,
+    send: (root: string) => Promise<Response>,
+  ): Promise<{ message: string; region?: { id: string; label: string; baseUrl: string } }> {
+    const siblings = regionSiblings(base);
+    if (!siblings) return { message: 'Invalid API key' };
+    const platform = (r: { id: string }) => (r.id === 'cn' ? 'China platform' : 'international platform');
+    for (const other of siblings.others) {
+      const resp = await send(other.baseUrl.replace(/\/+$/, '')).catch(() => null);
+      if (resp?.ok) {
+        return {
+          message: `This key is from the ${platform(other)} (${other.site}), not the ${platform(siblings.region)}`,
+          region: { id: other.id, label: other.label, baseUrl: other.baseUrl },
+        };
+      }
+    }
+    const sites = [siblings.region, ...siblings.others].map((r) => r.site).join(' and ');
+    return { message: `Invalid API key — refused on both ${sites}` };
   }
 
   private async getScoped(ownerId: string | null, id: string) {

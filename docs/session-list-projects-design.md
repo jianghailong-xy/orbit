@@ -1,6 +1,6 @@
 # 会话列表里的项目条目：一个项目合成一个条目
 
-状态：已定稿（2026-10-04），按项目「会话列表：一个项目合成一个条目」分任务落地。修订：10-05 点条目改为进项目会话页；10-17 条目在别的 Workspace 里，方向键跨过、默认打开不挑它（§4.3、§4.4）；10-27 项目会话页的落地合成一行 Landings 与这个项目的 Landings 窗口，合入行也挪进窗口（集成线契约修订 28；§2、§3.2、§3.4、§5）；11-07 项目条目只放在 coordinator 所在的 Workspace，别处的成员会话照普通会话显示、带进度小标签（取代 10-04 的跨 Workspace 条目和 10-17 的跨过规则），做完的项目条目可以 Complete，会话行的 “You:” 只指你自己（§3.5、§3.6、§4.2、§4.3、§4.4、§6、§9，效果图 `docs/mocks/project-rows-by-workspace/`）。效果图在 `docs/mocks/session-list-projects/`：`01-web` 是真实 Web 控制台截图，新加的部分用控制台自己的样式画进页面；`02-ios` 是 iPhone 版式，照 `AgentSessionRow.compactRow` 画。
+状态：已定稿（2026-10-04），按项目「会话列表：一个项目合成一个条目」分任务落地。修订：10-05 点条目改为进项目会话页；10-17 条目在别的 Workspace 里，方向键跨过、默认打开不挑它（§4.3、§4.4）；10-27 项目会话页的落地合成一行 Landings 与这个项目的 Landings 窗口，合入行也挪进窗口（集成线契约修订 28；§2、§3.2、§3.4、§5）；11-07 项目条目只放在 coordinator 所在的 Workspace，别处的成员会话照普通会话显示、带进度小标签（取代 10-04 的跨 Workspace 条目和 10-17 的跨过规则），做完的项目条目可以 Complete，会话行的 “You:” 只指你自己（§3.5、§3.6、§4.2、§4.3、§4.4、§6、§9，效果图 `docs/mocks/project-rows-by-workspace/`）；11-19 项目条目加 Pause / Resume：`/projects/sidebar` 带暂停字段，第 2 行加 2a「到了每日上限」和 2b「你暂停的」，右滑第一格按项目状态放 Pause / Resume / Complete、全滑不触发任何操作，长按加 Pause / Resume，三个提示条（§3.3、§3.4、§4.2、§4.3、§6、§9，owner 11-19 定稿的效果图 `docs/mocks/project-row-swipe/02-pause-resume.png`，源文件 `02-pause-resume.html`，之前的滑动分析 `board.png`）。效果图在 `docs/mocks/session-list-projects/`：`01-web` 是真实 Web 控制台截图，新加的部分用控制台自己的样式画进页面；`02-ios` 是 iPhone 版式，照 `AgentSessionRow.compactRow` 画。
 本文是执行会话的契约：写代码前读它；实现与本文冲突时，先说清楚再改，别悄悄偏离。
 
 ## 1. 为什么
@@ -58,6 +58,13 @@
 
 每个项目加 `taskCounts: { done, failed, total }`，取自触发器维护的 `project_task_status_count`：`done` 是 DONE，`failed` 是 FAILED，`total` 是除 CANCELLED 外的全部。`buckets.running`、`attention`、`coordinatorActivity` 已经有了。
 
+**暂停字段（11-19）**：每个项目再加
+
+- `pausedAt`（ISO 或 null）、`pausedReason`（`OWNER` | `LEGACY_AUTOMATIC_OFF` | null），取自项目行：`POST /projects/:id/pause` 写的暂停，或旧客户端的 Automatic 开关关掉时写的暂停；`POST /projects/:id/resume` 解除。
+- `fuse: { paused, episodeId, observed, limit }`，取自这个项目还开着的 `project_fuse_episode`（每日花费上限触发的暂停，`docs/project-coordinator-status-contract.md` 的 `coordination.fuse`），`POST /projects/:id/fuse/:episodeId/resume` 解除。`observed` / `limit` 是触发时的读数，行上写 `<observed>/<limit> today`；没在暂停时是 `{ paused: false, episodeId: null, observed: null, limit: null }`，字段永远在。`episodeId` 和其余 id 一样以公开编码发出。
+
+整页的 fuse 只读一条语句（`readOpenFuseEpisodes`，`project_id = ANY(...) AND resumed_at IS NULL`），不按项目逐个查：这个端点每个标签页 15 秒轮询一次（`project-sidebar-pause.spec.ts` 钉着语句数不随项目数增长）。三端的模型都把这几个字段当可选：旧服务端不给时就是没在暂停。
+
 ### 3.4 实时
 
 不加新事件（集成线契约修订 12 确认这一条对落地会话同样成立）。客户端：
@@ -65,6 +72,7 @@
 - 成员会话的 `session.updated` 本来就实时，条目上的状态点、第 2 行的话跟着它变。
 - 落地会话（修订 12，对实现的要求）不发 `session.created` / `session.updated`，也不新增 `landing.updated`：它不进条目的状态点，项目会话页的 Landings 行与 Landings 窗口随页面轮询刷新，落地会话页按集成线契约 §2.7a 的节奏轮询。旧客户端因此收不到落地会话行，也不会为它弹「Session failed」通知。
 - 进度数字（`taskCounts`、`buckets.running`）和 coordinator 处理中的例外来自 `/projects/sidebar`：照旧 15 秒轮询，另外收到成员会话的 `session.updated` 时去抖（约 2 秒）顺手刷新一次。
+- 暂停与恢复（11-19）：`/pause`、`/resume` 本来就发 `project.changed`；花费上限触发暂停和 `/fuse/:episodeId/resume` 现在也发，于是别的标签页和设备随它刷新 `/projects/sidebar`。按下 Pause / Resume 的那一端自己立刻刷新，不等事件。
 - 把两端都没处理的 `project.changed` 接上：Web 的 `groupsFor` 现在只刷会话，Swift 的 `ControlEventType` 把它解成 `.unknown`；收到时刷新项目摘要。
 
 ### 3.5 `lastUserFrom`（owner 11-07）
@@ -114,6 +122,8 @@
 
 1. **coordinator 等你**：它会话行现在的原话（Web `sessionLine` / iOS `SessionLine.make`），如 `Approve merge to main`、`Question from coordinator`、`Escalated to you`、`Paused`、`Ready to start`，琥珀色。
 2. **有执行会话等你**（coordinator 没在等）：`<那个会话行的等待原话> · <会话名>`，如 `Waiting for your confirmation · 额度恢复后自动重试`，琥珀色。几个都在等时取等得最久的那个。会话名在窄栏里会被截断，Web 悬停能看全。
+   - **2a 到了每日上限**（11-19，`fuse.paused`）：`Paused at the daily limit · <observed>/<limit> today`，如 `Paused at the daily limit · 6/6 today`，琥珀色，前面一个暂停符号。琥珀是因为它在等你：只有你能让它继续。
+   - **2b 你暂停的**（11-19，`pausedAt` 不为 null，`OWNER` 和 `LEGACY_AUTOMATIC_OFF` 一样写）：还有在跑的任务时 `Paused · <n> runs finishing`（`n` 是 `buckets.running`，1 时写 `1 run finishing`），没有时 `Paused · <ago>`（从 `pausedAt` 算，写法同行上其他时长，如 `Paused · 2h`），灰字，前面一个暂停符号；进度小标签也变灰。两种暂停同时成立时写 2a。
 3. **coordinator 在处理例外**（`/projects/sidebar` 的 `attention.coordinatorItems`）：项目页那个蓝标签的话去掉 `Coordinator ·` 前缀、首字母大写，如 `Resolving a merge conflict · 18m`，蓝字。
 4. **coordinator 正在跑一轮**（转圈，runner 在线）：coordinator 会话行的原话（`Running …` 蓝字）。
 5. **平台有在途的落地**（19555f614，本条此前漏写）：项目列表 / 侧栏的 `integration.inFlight` 描述的那个作业，选法同项目页的 landing 行（运行中优先，再按最早领取或入队）：`Merge to main · queued · 13m`、`Landing · checking · 4m · <task>`（几条同时在途时种类后写 `<n> jobs`，不带任务名）。运行中且心跳不超过 10 分钟用 `running` 语气（同 `Running …`），排队或心跳更旧用 `queued` 语气。旧服务端只给 `activeJobCount` 时写 `Landing · <n> job(s)`。web `sessionProjectLandingLine`，OrbitKit 同一文案。
@@ -129,7 +139,24 @@
   - 项目 DONE 或 CANCELLED 后，菜单第一项是 `Complete`，下面一条分隔线：把 coordinator 和这个项目还在 Open 的会话一起移进 Completed（§3.6）。iOS、Android 长按同样。不自动移走（owner 11-07）。
   - **不放任何回答按钮**：回答只在对话里的卡片上（`OwnerConfirmationCard.test` 钉着“会话列表上不能有回答入口”）。
 - **方向键与默认打开**（Web，owner 11-07 的决定，取代 10-17 的跨过规则；效果图 `docs/mocks/project-rows-by-workspace/`）：↑ / ↓ 逐行切换打开的会话；从侧栏进 Workspace 时，默认打开列表里的一条。项目条目只出现在 coordinator 所在的 Workspace（§4.4），在那里它算作 coordinator 那一行，↑ / ↓ 走到它就打开 coordinator。别的 Workspace 里没有项目条目，项目的成员会话是普通行，方向键和默认打开照普通会话。没有 coordinator 的项目照 §4.4 的例外：条目像文件夹行，↑ / ↓ 跨过它，默认打开不挑它。
-- **滑动**（iOS、Web 手机）：右滑 `Pin` / `Unpin`，左滑 `Move`。
+- **滑动**（iOS、Android、Web 手机；owner 11-19，效果图 `docs/mocks/project-row-swipe/02-pause-resume.png`，取代此前的「右滑 `Pin` / `Unpin`」）：
+  - **右滑**：第一格是项目此刻能做的那一个状态操作，第二格 `Pin` / `Unpin`。
+    | 项目状态 | 第一格 |
+    |---|---|
+    | 没开始（`startedAt` 为 null） | 没有，只有 `Pin` / `Unpin`。开始要花钱、会弹卡片，留在对话里（点条目进去） |
+    | 已开始、OPEN、没暂停 | `Pause`（橙色），调 `POST /projects/:id/pause` |
+    | 你暂停的（`pausedAt`）或到了每日上限（`fuse.paused`） | `Resume`（绿色）。你暂停的调 `POST /projects/:id/resume`；到了上限的调 `POST /projects/:id/fuse/:episodeId/resume`，请求体为空，**从不提高上限**；两种同时成立时先解每日上限 |
+    | DONE / CANCELLED（Open 视图） | `Complete`（绿色，§3.6） |
+  - **左滑**：`Move`，各状态一样。
+  - **全滑不触发任何操作**：项目条目上拖到底只把行拉长再弹回，操作要点按（会话行全滑是 Complete，项目条目上不沿用）。
+  - `Pause` / `Resume` 只给项目的 owner：共享项目里的访客看不到这一格（也不在长按菜单里）。
+  - 不放 `Start`、`Delete`、`Share`、停掉在跑的工作和任何回答：要花钱、撤不回，或者要上下文，留在对话或项目页。
+- **长按 / Web ⋯ 菜单里的 Pause / Resume**（11-19）：放进 `Pin` / `Move…` 那一组，排在最前：`Pause` 或 `Resume`、`Pin` / `Unpin`、`Move…`；规则同上表（DONE / CANCELLED 的 `Complete` 照旧是整个菜单第一项）。菜单是完整的列表，给 VoiceOver 和没有滑动的 macOS。
+- **按下之后的提示条**（11-19）：
+  - Pause 之后：`Project paused`，第二行 `<n> runs still going · nothing new starts or merges`（`n` 是 `buckets.running`，1 时 `1 run still going`，0 时只写 `Nothing new starts or merges`），带 `Undo`；`Undo` 就是 Resume（`/resume`）。没有确认框，因为可以撤回。已在跑的任务照常跑完，Pause 不提供停掉它们，停要到各自会话里。
+  - Resume（你暂停的）之后：不弹提示条，第 2 行回到原样；Resume 不带 `Undo`，再暂停就是再滑一次。
+  - 到了上限的 Resume 之后：`Resumed`，第二行 `The daily limit was not raised · Change on the project page`，点第二行进项目页。批准继续花，但上限不变；要提高上限在项目页里做。
+  - 服务端拒绝时：`Couldn't pause the project`（Resume 时 `Couldn't resume the project`），第二行是原因的话，不写错误码：只有 owner 能按时（403）`Only the project's owner can pause it` / `Only the project's owner can resume it`；项目没开始（`PROJECT_NOT_STARTED`）`The project hasn't started yet`；其余写服务端回的 `message`。
 - **选中态**（Web）：打开的会话是这个项目的成员时，条目高亮。
 
 ### 4.4 放在哪
@@ -145,7 +172,7 @@
 ## 5. 项目会话页
 
 - **入口**：点条目（10-05 起）、菜单里的 `Sessions`。
-- **Web**：会话栏原地换页，地址带 `?project=<id>`，浏览器后退、刷新都对；在这一页里打开会话时参数跟着走。做法照文件夹页（`?folder=`）。
+- **Web**：会话栏原地换页。列表自己的地址带 `?project=<id>`，浏览器后退、刷新都对。会话的地址不带它（owner 2026-11-25）：会话开着时项目页记在控制台里（`lib/conversationProjectPage`，按标签页存，刷新还在），复制出去的 `/sessions/<id>` 不带项目页；旧链接带的 `?project=` 读一次后从地址上去掉。做法照文件夹页。
 - **iOS**：iPhone 推进导航栈（`NavNode` 加一种页面）；iPad 中间栏原地换页。和文件夹页走同一套。
 - **页头**：‹ 回到 Workspace 的列表；标题是项目名，下面一行小字 `Project · <n> sessions`；右上角一个按钮（iOS 用 `square.grid.2x2`）直接进项目页，不再是 ⋯ 菜单（owner 10-06 的决定）。这里没有 New session：项目的会话由 coordinator 派发。
 - **进度条**：页头下面一条，迷你进度条 + `<done>/<total> done · <m> running`，不进项目页：Web 用 ↗，iOS 走页头右上角那个按钮（owner 10-06 的决定）。
@@ -169,6 +196,12 @@
 | 会话行里别的会话发来、还没回的消息（三端，11-07） | `<会话标题>: <消息>`，发送会话没有标题时 `Untitled session: <消息>`；你自己发的仍是 `You: <消息>` |
 | 会话行里 Orbit 自己发进会话、还没回的消息（三端，owner 11-07） | `Orbit: <一句话>`：有通知卡片时是对话里那条通知的句子（`COORDINATOR_DELIVERY_SENTENCES`），如 `Orbit: Evidence revision 2 submitted: <任务名>`、`Orbit: Criteria proposal approved`；没有卡片时是消息的第一行，如 `Orbit: Orbit Watch <id> matched at generation 1: <原因>`、`Orbit: Start the task “<任务名>”.` |
 | 条目菜单（owner 10-04 的决定） | `Open Session`、`Sessions`、`Open Project`、`Pin`、`Unpin`、`Move…` |
+| 第 2 行 2a：到了每日上限（三端，owner 11-19） | `Paused at the daily limit · <observed>/<limit> today` |
+| 第 2 行 2b：你暂停的（三端，owner 11-19） | `Paused · <n> runs finishing`、`Paused · 1 run finishing`、`Paused · <ago>` |
+| 右滑与长按 / ⋯ 菜单的状态操作（三端，owner 11-19） | `Pause`、`Resume`、`Complete` |
+| Pause 之后的提示条（三端，owner 11-19） | `Project paused`；`<n> runs still going · nothing new starts or merges`、`1 run still going · nothing new starts or merges`、`Nothing new starts or merges`；按钮 `Undo` |
+| 到了上限的 Resume 之后的提示条（三端，owner 11-19） | `Resumed`；`The daily limit was not raised · Change on the project page` |
+| 拒绝时的提示条（三端，owner 11-19） | `Couldn't pause the project`、`Couldn't resume the project`；原因 `Only the project's owner can pause it`、`Only the project's owner can resume it`、`The project hasn't started yet`，其余是服务端的 `message` |
 | 项目会话页页头按钮（iOS，owner 10-06 的决定） | `Open Project` |
 | 项目会话页 | `Project · <n> sessions`、`Coordinator`（节名）、`<done>/<total> done · <m> running` |
 | 合入卡与合入行（owner 10-06 的决定；合入行修订 28 起在 Landings 窗口里） | `Merge into main?`、`Needs you`、`Merge into main queued` / `confirmed`、`Re-checking before merging into main…`、`Merging into main…`、`Can’t merge into main yet`、`Details`、`Merged into main`、`<sha> · <n> tasks · by you`；协调会话那一行 `Merge into main is waiting for you · Review`、`✓ Merged into main · <sha> · <n> tasks`（OrbitKit `PromotionCards`，web `lib/projectMerge.ts`，`ProjectMergeCopyParityTests` 对照） |
@@ -213,3 +246,10 @@
 7. 三端：§4.3 做完的项目条目的 `Complete`，依赖 6。
 8. Owner 在部署后的 Web、TestFlight 和 Android 构建上对照效果图确认，依赖以上全部。
 9. 服务端 + 三端：§3.5 的 Orbit 消息（`lastUserFromOrbit`，行上写 `Orbit: <一句话>`），依赖 5；8 也依赖它。
+
+### 11-19 修订的分任务（Pause / Resume）
+
+1. 服务端 + 模型 + 本文：§3.3 的暂停字段、§3.4 的 fuse 事件，三端模型解码（Web `SidebarProject`、OrbitKit `ProjectSummary`、Android `ProjectPause`），本文与效果图 `docs/mocks/project-row-swipe/`。
+2. iOS / macOS：§4.2 的 2a、2b，§4.3 的右滑、长按与提示条（`SessionProjectPage.swift` 的 `SessionProjectRowActions`、`SessionProjectGrouping.swift` 的第 2 行），依赖 1。
+3. Android：同上（`directory/SessionProjects.kt`），依赖 1。
+4. Web：手机滑动与 ⋯ 菜单（`WorkspaceView.tsx`、`sessionProjects.ts`），依赖 1。

@@ -1,4 +1,6 @@
 import { Prisma } from '@prisma/client';
+import { sessionTurnStateSql } from '../sessions/session-turn-state';
+import { sessionHeldSql } from './session-release';
 import { SPAWN_TREE_RUNNER_RESERVE } from './session-scheduling';
 
 /**
@@ -12,7 +14,12 @@ import { SPAWN_TREE_RUNNER_RESERVE } from './session-scheduling';
  *
  * Every fragment takes its table aliases as raw SQL because the two queries name the session
  * table differently, and neither may bind an alias as a parameter.
+ *
+ * An active turn, the one thing that holds a slot, is the turn state IN_FLIGHT (what RUNNING said), and a turn still
+ * owed is QUEUED or IN_FLIGHT (PENDING or RUNNING), read through sessions/session-turn-state.ts
+ * (docs/session-status-retirement-plan.md §1.4). `phase` is never read here: it is RUNNING for a background job too.
  */
+const inFlight = (alias: string): Prisma.Sql => Prisma.sql`${sessionTurnStateSql(alias)} = 'IN_FLIGHT'`;
 
 /**
  * How many active turns a spawn tree currently holds, NOT counting supervisors.
@@ -32,11 +39,11 @@ export function treeActiveTurns(sessionAlias: string): Prisma.Sql {
   return Prisma.sql`(
     SELECT count(*) FROM "session" tree
     WHERE tree."root_session_id" = ${s}."root_session_id"
-      AND tree."status" = 'RUNNING'
+      AND ${inFlight('tree')}
       AND NOT EXISTS (
         SELECT 1 FROM "session" child
         WHERE child."parent_session_id" = tree.id
-          AND child."status" IN ('PENDING', 'RUNNING')
+          AND ${sessionTurnStateSql('child')} IN ('QUEUED', 'IN_FLIGHT')
       )
   )`;
 }
@@ -69,24 +76,28 @@ export function runnerActiveTurns(runnerIdSql: Prisma.Sql): Prisma.Sql {
   return Prisma.sql`(
     SELECT count(*) FROM "session" active
     WHERE active."assigned_runner_id" = ${runnerIdSql}
-      AND active."status" = 'RUNNING'
+      -- Held, beside the turn state, so a runner's held rows are the access path (session_runner_held_idx).
+      AND ${sessionHeldSql('active')}
+      AND ${inFlight('active')}
   )`;
 }
 
 /**
- * Sessions on a runner that run no turn but hold one of its slots through a background job: open,
- * not RUNNING, and named by the runner's last beat (runner_presence.background_job_session_ids,
+ * Sessions on a runner that run no turn but hold one of its slots through a background job: open
+ * (held), not IN_FLIGHT, and named by the runner's last beat (runner_presence.background_job_session_ids,
  * migration 0780; runners/runner-background-holders.ts). The runner itself admits against turns
  * plus these (src/runner-go/session_pool.go), so a count of turns alone reads a full machine as
- * having room. Only the queued explanation reads it; the server's own claim gate counts turns,
- * and the runner holds back its claims by itself. Ask it only of a runner known to be online: a
+ * having room. The queued explanation reads it, and so does Run now's overflow claim, which may go
+ * past the limit only up to max + burst of what the runner admits against; the ordinary claim gate
+ * counts turns, and the runner holds back its claims by itself. Ask it only of a runner known to be online: a
  * stale presence row still names the holders of its last beat.
  */
 export function runnerBackgroundHeldSessions(runnerIdSql: Prisma.Sql): Prisma.Sql {
   return Prisma.sql`(
     SELECT count(*) FROM "session" held
     WHERE held."assigned_runner_id" = ${runnerIdSql}
-      AND held."status" IN ('PENDING', 'AWAITING_INPUT', 'INTERRUPTED')
+      AND ${sessionHeldSql('held')}
+      AND ${sessionTurnStateSql('held')} IS DISTINCT FROM 'IN_FLIGHT'
       AND held.id = ANY(
         SELECT unnest(p."background_job_session_ids") FROM "runner_presence" p
          WHERE p."runner_id" = ${runnerIdSql}
@@ -100,6 +111,17 @@ export function batchActiveTurns(sessionAlias: string): Prisma.Sql {
   return Prisma.sql`(
     SELECT count(*) FROM "session" ba
     WHERE ba."batch_id" = ${s}."batch_id"
-      AND ba."status" = 'RUNNING'
+      AND ${inFlight('ba')}
   )`;
+}
+
+/** Whether session `alias` holds a Run now pass whose turn is still queued: what the overflow claim takes it on. */
+export function overCapacityPassPendingSql(alias: string): Prisma.Sql {
+  const s = Prisma.raw(alias);
+  return Prisma.sql`(${s}."over_capacity_turn_id" IS NOT NULL AND EXISTS (
+    SELECT 1 FROM "conversation_turn" pass
+     WHERE pass."id" = ${s}."over_capacity_turn_id"
+       AND pass."session_id" = ${s}."id"
+       AND pass."status" = 'PENDING'
+  ))`;
 }

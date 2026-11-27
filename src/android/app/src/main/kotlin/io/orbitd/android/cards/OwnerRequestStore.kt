@@ -8,11 +8,10 @@ import io.orbitd.android.core.cards.AccountSecret
 import io.orbitd.android.core.cards.OwnerRequest
 import io.orbitd.android.core.cards.OwnerRequests
 import io.orbitd.android.core.cards.OwnerRequestsApi
-import io.orbitd.android.core.cards.TerminalRequest
-import io.orbitd.android.core.cards.TerminalsApi
 import io.orbitd.android.core.cards.text
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.net.ApiRequest
+import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.net.NetworkException
 import io.orbitd.android.core.protocol.ProtocolException
 import io.orbitd.android.core.protocol.Wire
@@ -26,50 +25,59 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerializationException
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 
 /**
- * The owner requests this account has, as the conversation that asked and the "Waiting on you" inbox read them: one read per list
- * (`open`, `all`, `done`, `declined`), each request's answer standing in for it in every list as soon as a door returns it. One store
+ * The owner requests this account has, as the conversation that asked reads them: one read per list (`open`, `all`), each
+ * request's answer standing in for it in every list as soon as a door returns it. One store
  * per signed-in handle; another account's requests are never drawn.
  */
 class OwnerRequestStore internal constructor(private val auth: AuthSession, val handle: SessionHandle, private val scope: CoroutineScope,
-    private val api: OwnerRequestsApi = OwnerRequestsApi(auth, handle), private val terminals: TerminalsApi = TerminalsApi(auth, handle)) {
+    private val api: OwnerRequestsApi = OwnerRequestsApi(auth, handle)) {
 
     data class State(
         val lists: Map<String, List<OwnerRequest>> = emptyMap(),
-        /** The lists the last read of failed for, so a page can say it could not read them. */
-        val failed: Set<String> = emptySet(),
         val savedSecrets: List<AccountSecret> = emptyList(),
         /** The tasks a request holds up, by id, as their titles were read. */
         val taskTitles: Map<String, String> = emptyMap(),
-        /** The open projects as `GET /projects?status=OPEN` last answered: their attention counts the coordinators' questions. */
-        val projects: List<JsonObject> = emptyList(),
-        /** The coordinators' open questions, off the open items of each project that has one (web `WaitingOnYouPage`). */
-        val questions: List<OwnerRequests.CoordinatorQuestionRow> = emptyList(),
-        /** Terminals asking to be approved (docs/terminal-session-design.md): their cards head the Open tab, whole, and count with the
-         * rest. Each waits ten minutes at most. */
-        val terminalRequests: List<TerminalRequest> = emptyList(),
-        /** The scheduled tasks' four kinds, pending (docs/scheduled-tasks-design.md §6.4): their cards head the Open tab, whole, and
-         * count with the rest. They are answered at the schedule's own doors. */
+        /** The scheduled tasks' four kinds, pending (docs/scheduled-tasks-design.md §6.4): their cards head the Scheduled page, whole,
+         * and are answered at the schedule's own doors. There is no Waiting on you page (docs/mocks/waiting-on-you-removal). */
         val scheduleItems: List<ScheduleWaitingItem> = emptyList(),
         /** A condition's two kinds, pending: the can't-read card and the 30-day question (docs/condition-triggers-design.md §5.3,
-         * §6.2). They head the Open tab with the schedule's and count with the rest. */
+         * §6.2). They head the Scheduled page with the schedule's. */
         val conditionItems: List<io.orbitd.android.core.schedule.ConditionWaitingItem> = emptyList(),
     ) {
         fun list(filter: String) = lists[filter].orEmpty()
         val open get() = list(OPEN)
-        /** The inbox's one count: [OwnerRequests.waitingCount] and the terminals waiting for a decision. */
-        fun waitingCount(projects: List<JsonObject>, snoozes: Map<String, Long>, now: java.time.Instant) =
-            OwnerRequests.waitingCount(open, projects, snoozes, now) + terminalRequests.size + scheduleItems.size +
-                conditionItems.size
         /** A request by either spelling of its id, from any list. */
         fun find(id: String): OwnerRequest? = lists.values.flatten().firstOrNull { OwnerRequests.key(it.id) == OwnerRequests.key(id) }
     }
 
     private val mutable = MutableStateFlow(State())
     val state: StateFlow<State> = mutable.asStateFlow()
+
+    private val accountState = MutableStateFlow<JsonObject?>(null)
+    /** `GET /users/me` as last read: the marks (`changedBy`) a SETTINGS_CHANGE card's Undo reads (design §5.3). */
+    val account: StateFlow<JsonObject?> = accountState.asStateFlow()
+
+    /** The account read again, for the marks a just-applied card wrote. A failed read keeps what was drawn. */
+    suspend fun loadAccount() {
+        try {
+            val me = Wire.decode(auth.request(handle, ApiRequest(listOf("users", "me"))).requireSuccess().body, JsonObject.serializer())
+            if (live()) accountState.value = me
+        } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { /* The card shows no Undo until it can be read. */ }
+    }
+
+    /** Undo of a change made from a conversation (design §5.3): the owner's own preferences PATCH with each key's `from`. Null when
+     * it went through, else what to say. */
+    suspend fun undoSettings(values: JsonObject): String? {
+        if (values.isEmpty()) return null
+        return try {
+            val bytes = values.toString().encodeToByteArray()
+            auth.request(handle, ApiRequest(listOf("users", "me", "preferences"), HttpMethod.PATCH, body = bytes)).requireSuccess()
+            loadAccount(); null
+        } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { message(error) }
+    }
 
     private fun live() = (auth.state.value as? AuthState.SignedIn)?.handle === handle
 
@@ -80,37 +88,13 @@ class OwnerRequestStore internal constructor(private val auth: AuthSession, val 
                 try {
                     val (requests, scheduled, conditions) = api.listWithConditions(filter)
                     if (!live()) return@launch
-                    mutable.update { state -> state.copy(lists = state.lists + (filter to requests), failed = state.failed - filter,
+                    mutable.update { state -> state.copy(lists = state.lists + (filter to requests),
                         scheduleItems = if (filter == OPEN) scheduled.filter { it.state == OwnerRequests.PENDING } else state.scheduleItems,
                         conditionItems = if (filter == OPEN) conditions.filter { it.state == OwnerRequests.PENDING } else state.conditionItems) }
                     titles(requests.flatMap { it.blocksTaskIds })
                 } catch (cancel: CancellationException) { throw cancel }
-                catch (_: Exception) { mutable.update { it.copy(failed = it.failed + filter) } }
+                catch (_: Exception) { /* The list stands as it was last read. */ }
             }
-        }
-    }
-
-    /**
-     * The coordinators' questions, which stay on their own table: the open projects, and — for the inbox's rows ([items]) — the open
-     * items of each project whose attention says a question is waiting. The drawer's count needs only the projects.
-     */
-    fun loadQuestions(items: Boolean) {
-        scope.launch {
-            try {
-                val projects = Wire.decode(auth.request(handle, ApiRequest(listOf("projects"), query = listOf("status" to "OPEN"))).requireSuccess().body,
-                    JsonArray.serializer()).filterIsInstance<JsonObject>()
-                if (!live()) return@launch
-                mutable.update { it.copy(projects = projects) }
-                if (!items) return@launch
-                val questions = OwnerRequests.projectsWithQuestions(projects).flatMap { project ->
-                    val id = project.text("id") ?: return@flatMap emptyList()
-                    val read = try {
-                        Wire.decode(auth.request(handle, ApiRequest(listOf("projects", id, "open-items"))).requireSuccess().body, JsonObject.serializer())
-                    } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
-                    OwnerRequests.coordinatorQuestions(project, read)
-                }
-                if (live()) mutable.update { it.copy(questions = questions) }
-            } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { /* The requests still stand on their own. */ }
         }
     }
 
@@ -120,23 +104,6 @@ class OwnerRequestStore internal constructor(private val auth: AuthSession, val 
             catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { /* No saved secrets to offer. */ }
         }
     }
-
-    /** The terminals waiting for a decision. A server that predates terminals answers none; a failed read keeps what was drawn. */
-    fun loadTerminalRequests() {
-        scope.launch {
-            try { terminals.requests().let { requests -> if (live()) mutable.update { it.copy(terminalRequests = requests) } } }
-            catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { /* The next read tries again. */ }
-        }
-    }
-
-    /** Approve or Deny a terminal: null when it was recorded — its card leaves at once — else what to say. The list is read again
-     * either way. */
-    suspend fun decideTerminal(request: TerminalRequest, approve: Boolean): String? = try {
-        if (approve) terminals.approve(request.id) else terminals.deny(request.id)
-        mutable.update { state -> state.copy(terminalRequests = state.terminalRequests.filterNot { it.id == request.id }) }
-        null
-    } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { message(error) }
-    finally { loadTerminalRequests() }
 
     private suspend fun titles(ids: List<String>) {
         ids.distinct().filterNot { it in mutable.value.taskTitles }.forEach { id ->
@@ -169,8 +136,6 @@ class OwnerRequestStore internal constructor(private val auth: AuthSession, val 
     companion object {
         const val OPEN = "open"
         const val ALL = "all"
-        const val DONE = "done"
-        const val DECLINED = "declined"
         private var shared: OwnerRequestStore? = null
 
         fun of(auth: AuthSession, handle: SessionHandle, scope: CoroutineScope): OwnerRequestStore {

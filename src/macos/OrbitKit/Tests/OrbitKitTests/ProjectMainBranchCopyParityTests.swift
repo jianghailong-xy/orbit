@@ -140,8 +140,9 @@ final class ProjectMainBranchCopyParityTests: XCTestCase {
             assertSays(web, part, in: Self.words)
         }
         let card = try flat(Self.card)
-        // Offered only where the read says the project has a repository …
-        assertSays(card, "upstream: standing?.repository ? startMainBranch(settings.upstreamRef, standing) : null,",
+        // Offered only where the request names a line and the read says the project has a
+        // repository (a request with no line has no main branch row, P-M2) …
+        assertSays(card, "upstream: settings.line && standing?.repository ? startMainBranch(settings.upstreamRef, standing) : null,",
                    in: Self.card)
         // … sent as a full ref whenever the card offered one …
         assertSays(card, "...(draft.upstream ? { upstreamRef: mainBranchRef(draft.upstream) } : {}),", in: Self.card)

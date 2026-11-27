@@ -96,7 +96,9 @@ type codexAppServer struct {
 	orbitExecutable string
 	// resetNotePending says the conversation was compacted or resumed since the last turn/start: the next one leads
 	// with orbitContextResetNote (context_reset_note.go).
-	resetNotePending    atomic.Bool
+	resetNotePending atomic.Bool
+	// cloudSandboxNoted says this process has told the transcript that Codex's sandbox is off on Orbit Cloud.
+	cloudSandboxNoted   atomic.Bool
 	instructionMode     codexInstructionMode
 	instructionMu       sync.Mutex
 	contextGeneration   uint64
@@ -245,6 +247,35 @@ func beginCodexAppTurnFinalize(activeMu *sync.Mutex, active **codexAppActiveTurn
 	}, true
 }
 
+// mergeCodexFailure gives result what the turn gathered of its failure when its end said none of its own: the
+// words and code of the error that came before it, and whether it did any work.
+func mergeCodexFailure(result codexTurnResult, snapshot codexAppTurnSnapshot) codexTurnResult {
+	if result.failureSaid == "" {
+		result.failureSaid = snapshot.result.failureSaid
+	}
+	if result.failureCode == "" {
+		result.failureCode = snapshot.result.failureCode
+	}
+	result.sawWork = result.sawWork || snapshot.result.sawWork
+	return result
+}
+
+// codexTurnAdmission is §5.2's measurement of a Codex turn: no reply text, no item of work, no billed token.
+func codexTurnAdmission(result codexTurnResult, snapshot codexAppTurnSnapshot) *bool {
+	said := strings.TrimSpace(snapshot.fullText) != "" || strings.TrimSpace(snapshot.deltaText) != ""
+	return turnAdmission(said || result.sawWork, result.Usage, 0)
+}
+
+// codexItemIsWork reports an item that is neither the conversation's text nor the model's reasoning: a command,
+// an edit, a tool call — anything that means the turn got past admission.
+func codexItemIsWork(item map[string]interface{}) bool {
+	switch firstString(item, "type", "kind") {
+	case "", "userMessage", "agentMessage", "reasoning":
+		return false
+	}
+	return true
+}
+
 func finishCodexAppTurnFinalize(activeMu *sync.Mutex, active **codexAppActiveTurn, finishing *codexAppActiveTurn) {
 	activeMu.Lock()
 	if *active == finishing {
@@ -351,7 +382,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		return stFailed, true, false
 	}
 	if !resumedThread && app.currentInstructionMode() == codexInstructionsInjectItems {
-		if err := app.injectAgentContext(ctx, threadID, job.Agent, job.insideRecordedWork(), job.watchesOn()); err != nil {
+		if err := app.injectAgentContext(ctx, threadID, job.Agent, job.sessionShape(app.orbitExecutable)); err != nil {
 			// Some downstream builds can report a newer-looking user agent while
 			// omitting the experimental method. Preserve discoverability through
 			// the lower-priority user-input fallback instead of failing the session.
@@ -366,8 +397,21 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 
 	var activeMu sync.Mutex
 	var active *codexAppActiveTurn
+	// The Codex turn running whoever started it, and the Stop waiting on Codex (codex_stop.go).
+	var stop codexStopState
+	// answerStop writes a Stop's answer on the turn it was pressed on: Interrupted once Codex has
+	// confirmed, the failure otherwise — the turn is still running and the person who pressed Stop
+	// needs to know it did not take.
+	answerStop := func(orbitTurnID string, err error) {
+		if err != nil {
+			emitFor(orbitTurnID, evError, map[string]interface{}{"message": interruptFailureMessage(err)})
+			return
+		}
+		emitFor(orbitTurnID, evInterrupt, map[string]interface{}{})
+	}
 	// The generation's inbox: what fetches its turns, and the turnIds being processed.
 	inbox := newInboxPoller(t, job.SessionID, leaseGeneration)
+	inbox.holdTurns(waitTurnPermit, job, completeTurn) // a turn waiting for its permit does not stop the inbox being read
 	defer inbox.close()
 
 	steerDispatch := &codexSteerDispatcher{
@@ -449,6 +493,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		if result.Usage == nil {
 			result.Usage = snapshot.result.Usage
 		}
+		result = mergeCodexFailure(result, snapshot)
 
 		if result.Status == "" {
 			result.Status = stSucceeded
@@ -458,6 +503,11 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		}
 		if result.Status == stFailed && result.Result == "" {
 			result.Result = result.Error
+		}
+		// A Stop pressed on this turn is answered by how it ended, ahead of its end: Interrupted
+		// when it was, nothing more when it ended on its own first.
+		if orbitTurnID, ok := takeCodexStop(&activeMu, &stop, snapshot.orbitTurnID, false); ok && result.Status == stInterrupted {
+			answerStop(orbitTurnID, nil)
 		}
 		emit(evTurnEnd, codexTurnEndPayload(result, 1, 0, job))
 		liveFiles, livePatches := liveDiff(job.WT)
@@ -480,7 +530,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 			BranchMerged:   branchMergedInto(job.WT),
 			WorktreeBranch: currentBranch(job.WT),
-		}, workerCtx); err != nil {
+		}.withFailure(codexTurnFailureOf(result), codexTurnAdmission(result, snapshot)), workerCtx); err != nil {
 			logln("turn-complete failed for", job.SessionID+":", err)
 		}
 		finishCodexAppTurnFinalize(&activeMu, &active, a)
@@ -488,6 +538,8 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		setTurn("")
 	}
 
+	// Codex's answer to turn/interrupt settles the Stop waiting on it, whichever way it went; it
+	// leaves nothing in flight either way, so a Stop after a refused or unanswered one asks again.
 	sendInterrupt := func(codexTurnID string) {
 		if codexTurnID == "" {
 			return
@@ -495,21 +547,33 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		asyncWg.Add(1)
 		go func(turnID string) {
 			defer asyncWg.Done()
-			reqCtx, cancel := context.WithTimeout(workerCtx, 10*time.Second)
+			deadline := time.Now().Add(codexInterruptTimeout)
+			reqCtx, cancel := context.WithDeadline(workerCtx, deadline)
 			defer cancel()
-			if _, err := app.request(reqCtx, "turn/interrupt", map[string]interface{}{"threadId": threadID, "turnId": turnID}); err != nil {
+			_, err := app.request(reqCtx, "turn/interrupt", map[string]interface{}{"threadId": threadID, "turnId": turnID})
+			if err != nil && workerCtx.Err() != nil {
+				// The process is going away; its teardown owns that account.
+				return
+			}
+			forgetCodexInterrupt(&activeMu, &active, &stop, turnID)
+			if err != nil {
 				logln("codex turn/interrupt failed for", job.SessionID+":", err)
+				if errors.Is(err, context.DeadlineExceeded) {
+					err = fmt.Errorf("Codex did not confirm it within %s", codexInterruptTimeout)
+				} else if awaitCodexTurnEnd(workerCtx, &activeMu, &stop, turnID, deadline) {
+					// Refused because the turn ended on its own: its end answered the Stop
+					// (finalizeActive, or the hook for a turn Codex started itself), with the
+					// marker if it ended interrupted. No failure to tell; nothing left waiting.
+					takeCodexStop(&activeMu, &stop, "", true)
+					return
+				} else if workerCtx.Err() != nil {
+					return
+				}
+			}
+			if orbitTurnID, ok := takeCodexStop(&activeMu, &stop, "", true); ok {
+				answerStop(orbitTurnID, err)
 			}
 		}(codexTurnID)
-	}
-
-	requestActiveInterrupt := func(finalizeBeforeStart bool) {
-		codexTurnID, beforeStart := requestCodexAppInterrupt(&activeMu, &active)
-		if beforeStart && finalizeBeforeStart {
-			finalizeActive(codexTurnResult{Status: stInterrupted, Subtype: "interrupted"})
-			return
-		}
-		sendInterrupt(codexTurnID)
 	}
 
 	recordCodexTurnID := func(orbitTurnID, codexTurnID string) {
@@ -541,6 +605,13 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			case <-app.done:
 				return
 			case msg := <-app.notifications:
+				// A turn Codex started itself has no Orbit turn to finalize: a Stop pressed on it is
+				// answered here, by how it ended.
+				if ended, interrupted := trackCodexRunningTurn(threadID, msg, &activeMu, &stop); ended {
+					if orbitTurnID, ok := takeCodexStop(&activeMu, &stop, "", false); ok && interrupted {
+						answerStop(orbitTurnID, nil)
+					}
+				}
 				handleCodexAppNotificationWithImageFallback(threadID, msg, emit, &activeMu, &active, finalizeActive, func(codexTurnID string) {
 					recordCodexTurnID("", codexTurnID)
 				}, func(text string) string {
@@ -833,8 +904,23 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			// RunInterruptRequest.stopBackgroundWork — the composer's Stop ends this session's
 			// background work with the turn; see bgTailer.stopBackgroundWork.
 			stopBackgroundWorkForTurn(bg, resp)
-			emit(evInterrupt, map[string]interface{}{})
-			requestActiveInterrupt(true)
+			// Asked of Codex whether or not a turn of OURS is in flight: Codex also runs turns nobody
+			// handed it, and those are the ones somebody reaches for Stop over. The marker is not
+			// written here: it goes up once Codex confirms (answerStop), and a stop that does not
+			// take says so instead.
+			plan := planCodexStop(&activeMu, &active, &stop)
+			switch {
+			case plan.idle:
+				// Nothing was stopped, which is not the Interrupted marker's to say — but the
+				// person who pressed Stop still gets an answer.
+				logln("stop for", job.SessionID, "found no codex turn running")
+				emit(evSystem, codexStopNothingRunningPayload())
+			case plan.beforeStart:
+				// Codex never had the turn: finalizing it interrupted is the confirmation.
+				finalizeActive(codexTurnResult{Status: stInterrupted, Subtype: "interrupted"})
+			default:
+				sendInterrupt(plan.interrupt)
+			}
 
 		case "reload":
 			applyRuntimeReload(job, resp.Content)
@@ -863,7 +949,8 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			}
 
 		case "end":
-			requestActiveInterrupt(false)
+			codexTurnID, _ := requestCodexAppInterrupt(&activeMu, &active)
+			sendInterrupt(codexTurnID)
 			// A turn/completed notification may already be flushing turn_end and
 			// /turn-complete on the notification goroutine. Keep the app-server and
 			// its ack context alive until that finalizer clears active.
@@ -876,25 +963,30 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 func requestCodexAppInterrupt(activeMu *sync.Mutex, active **codexAppActiveTurn) (string, bool) {
 	activeMu.Lock()
 	defer activeMu.Unlock()
-	if *active == nil {
+	return requestCodexAppInterruptLocked(*active)
+}
+
+// requestCodexAppInterruptLocked marks a interrupted and returns the Codex turn to send
+// turn/interrupt for, if one is to be sent now; beforeStart when the turn never reached Codex.
+// interruptSent stays set only while a turn/interrupt is on its way (forgetCodexInterrupt), so a
+// Stop after one that went unanswered or was refused sends another. Called with activeMu held.
+func requestCodexAppInterruptLocked(a *codexAppActiveTurn) (string, bool) {
+	if a == nil || a.finishing {
 		return "", false
 	}
-	if (*active).finishing {
-		return "", false
+	a.interruptRequested = true
+	if a.retryWake != nil {
+		close(a.retryWake)
+		a.retryWake = nil
 	}
-	(*active).interruptRequested = true
-	if (*active).retryWake != nil {
-		close((*active).retryWake)
-		(*active).retryWake = nil
-	}
-	if !(*active).startSent && (*active).codexTurnID == "" {
+	if !a.startSent && a.codexTurnID == "" {
 		return "", true
 	}
-	if (*active).codexTurnID == "" || (*active).interruptSent {
+	if a.codexTurnID == "" || a.interruptSent {
 		return "", false
 	}
-	(*active).interruptSent = true
-	return (*active).codexTurnID, false
+	a.interruptSent = true
+	return a.codexTurnID, false
 }
 
 func markCodexAppTurnStarted(activeMu *sync.Mutex, active **codexAppActiveTurn, orbitTurnID, codexTurnID string) (string, string) {
@@ -987,6 +1079,19 @@ func codexStderrIsStateInitFailure(line string) bool {
 // repeats through a session, and the turns themselves still complete.
 func codexStderrDiagnostic(line string) (map[string]interface{}, bool) {
 	lower := strings.ToLower(line)
+	// Codex's sandbox setup logs this at ERROR and then runs with its bundled copy, so the turn
+	// still works: a degraded sandbox, not a failed run. Matched on Codex's own sentence, not the
+	// URL or the word "bubblewrap", so another sandbox line keeps its existing treatment.
+	if strings.Contains(lower, "could not find bubblewrap on path") {
+		return map[string]interface{}{
+			"component":   "sandbox",
+			"phase":       "startup",
+			"severity":    "WARN",
+			"impact":      "degraded",
+			"recoverable": true,
+			"code":        "bubblewrap_missing",
+		}, true
+	}
 	tokenInvalidated := strings.Contains(lower, "token_invalidated") || strings.Contains(lower, "token has been invalidated")
 	if strings.Contains(lower, "codex_models_manager") &&
 		strings.Contains(lower, "failed to refresh available models") {
@@ -1260,6 +1365,8 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 	if err != nil {
 		exe = ""
 	}
+	// Probed once per process, on the first launch, and only on an Orbit Cloud runner.
+	job.codexCloudSandboxUnavailable = codexCloudSandboxUnavailable()
 	args := codexAppServerCommandArgs(job, stateDir, exe)
 	cmd := exec.CommandContext(procCtx, "codex", args...)
 	configureSessionProcessTree(cmd)
@@ -1287,6 +1394,8 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 	// process and dies with it — deliberately, since terminateSessionProcessTree
 	// walks the ppid table precisely to catch escapees. Stage 4 verdict.
 	cmd.Env = append(cmd.Env, bgJobEnvPairs(job.SessionID)...)
+	// On the Orbit Cloud runner with the browser on, a tool the agent runs opens its pages there (browser_opener.go).
+	cmd.Env = browserOpenerEnv(cmd.Env, job.BrowserEnabled)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		cancel()
@@ -1316,7 +1425,7 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 		orbitMCP:        exe != "",
 		consentScope:    consentScope,
 	}
-	if err := startSessionProcess(cmd); err != nil {
+	if err := startSessionEngine(cmd, job.SessionID); err != nil {
 		cancel()
 		return nil, err
 	}
@@ -1338,7 +1447,7 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 				continue
 			}
 			payload := map[string]interface{}{"stderr": line + "\n"}
-			if diagnostic, ok := codexStderrDiagnostic(line); ok {
+			if diagnostic, ok := codexStderrDiagnosticFor(job, line); ok {
 				payload["diagnostic"] = diagnostic
 			}
 			emit(evSystem, payload)
@@ -1397,9 +1506,12 @@ func (a *codexAppServer) startOrResumeThread(ctx context.Context, job *ClaimedSe
 
 func (a *codexAppServer) startTurn(ctx context.Context, threadID string, job *ClaimedSession, execDir, upDir, orbitTurnID, prompt string, imagePaths []string) (string, error) {
 	mode, generation := a.prepareInstructionContext(func() error {
-		return a.injectAgentContext(ctx, threadID, job.instructionAgent(), job.insideRecordedWork(), job.watchesOn())
+		return a.injectAgentContext(ctx, threadID, job.instructionAgent(), job.sessionShape(a.orbitExecutable))
 	})
 	prompt = a.turnPrompt(prompt, job.insideRecordedWork())
+	if codexCloudSandboxOff(job, codexPermissionMode(job)) && a.cloudSandboxNoted.CompareAndSwap(false, true) && a.emit != nil {
+		a.emit(evSystem, codexCloudSandboxNoticePayload())
+	}
 	result, err := a.request(ctx, "turn/start", codexTurnParams(
 		threadID, job, execDir, upDir, orbitTurnID, prompt, imagePaths,
 		codexTurnContextOptions{
@@ -1420,14 +1532,9 @@ func (a *codexAppServer) turnPrompt(prompt string, taskSession bool) string {
 	return withContextResetNote(prompt, a.resetNotePending.Swap(false), taskSession)
 }
 
-func (a *codexAppServer) injectAgentContext(
-	ctx context.Context,
-	threadID string,
-	agent AgentExecConfig,
-	insideRecordedWork bool,
-	watches bool,
-) error {
-	items := codexInjectedAgentItems(agent, a.orbitExecutable, insideRecordedWork, watches)
+// injectAgentContext gives the thread agent's context as a developer message; shape names the CLI as a.orbitExecutable.
+func (a *codexAppServer) injectAgentContext(ctx context.Context, threadID string, agent AgentExecConfig, shape SessionShape) error {
+	items := codexInjectedAgentItems(agent, shape)
 	if len(items) == 0 {
 		return nil
 	}
@@ -1438,16 +1545,16 @@ func (a *codexAppServer) injectAgentContext(
 	return err
 }
 
-func codexAgentContext(agent AgentExecConfig, executable string, insideRecordedWork, watches bool) string {
-	context := withOrbitCLIInstructions(agent.AppendSystemPrompt, executable, insideRecordedWork, watches, agentDelegates(agent))
+func codexAgentContext(agent AgentExecConfig, shape SessionShape) string {
+	context := withOrbitInstructions(agent.AppendSystemPrompt, compose(shape, codexProfile).System)
 	if strings.TrimSpace(context) == "" {
 		return codexImageDeliveryInstructions
 	}
 	return context + "\n\n" + codexImageDeliveryInstructions
 }
 
-func codexInjectedAgentItems(agent AgentExecConfig, executable string, insideRecordedWork, watches bool) []map[string]interface{} {
-	context := codexAgentContext(agent, executable, insideRecordedWork, watches)
+func codexInjectedAgentItems(agent AgentExecConfig, shape SessionShape) []map[string]interface{} {
+	context := codexAgentContext(agent, shape)
 	return []map[string]interface{}{
 		{
 			"type": "message",
@@ -1626,13 +1733,7 @@ func codexContextParagraphs(text string, maxBytes int) []string {
 	return values
 }
 
-func codexAgentAdditionalContext(
-	agent AgentExecConfig,
-	executable string,
-	generation uint64,
-	insideRecordedWork bool,
-	watches bool,
-) map[string]interface{} {
+func codexAgentAdditionalContext(agent AgentExecConfig, shape SessionShape, generation uint64) map[string]interface{} {
 	context := map[string]interface{}{}
 	prefix := fmt.Sprintf("orbit_%08d_", generation)
 	context[prefix+"image_delivery"] = map[string]interface{}{
@@ -1641,13 +1742,13 @@ func codexAgentAdditionalContext(
 	}
 	// Orbit's instructions, the agent primer first, as whole paragraphs: one value of their length
 	// would pass the 1,000-token cap, and Codex would keep only part of it.
-	for i, part := range codexContextParagraphs(orbitCLIInstructions(executable, insideRecordedWork, watches, agentDelegates(agent)), codexContextValueMaxBytes) {
+	for i, part := range codexContextParagraphs(compose(shape, codexProfile).System, codexProfile.ValueCapBytes) {
 		context[fmt.Sprintf("%scli_%08d", prefix, i)] = map[string]interface{}{
 			"kind":  "application",
 			"value": part,
 		}
 	}
-	for i, part := range splitUTF8ByBytes(agent.AppendSystemPrompt, codexContextValueMaxBytes) {
+	for i, part := range splitUTF8ByBytes(agent.AppendSystemPrompt, codexProfile.ValueCapBytes) {
 		context[fmt.Sprintf("%sagent_append_%08d", prefix, i)] = map[string]interface{}{
 			"kind":  "application",
 			"value": part,
@@ -1656,15 +1757,15 @@ func codexAgentAdditionalContext(
 	return context
 }
 
-func codexLegacyAgentContext(agent AgentExecConfig, executable string, insideRecordedWork, watches bool) string {
-	context := codexAgentContext(agent, executable, insideRecordedWork, watches)
+func codexLegacyAgentContext(agent AgentExecConfig, shape SessionShape) string {
+	context := codexAgentContext(agent, shape)
 	return "<orbit_application_context>\n" + context + "\n</orbit_application_context>"
 }
 
 func codexTurnParams(threadID string, job *ClaimedSession, execDir, upDir, orbitTurnID, prompt string, imagePaths []string, contextOptions codexTurnContextOptions) map[string]interface{} {
 	input := []map[string]interface{}{}
 	if contextOptions.Mode == codexInstructionsUserInput {
-		if context := codexLegacyAgentContext(job.instructionAgent(), contextOptions.Executable, job.insideRecordedWork(), job.watchesOn()); context != "" {
+		if context := codexLegacyAgentContext(job.instructionAgent(), job.sessionShape(contextOptions.Executable)); context != "" {
 			input = append(input, map[string]interface{}{"type": "text", "text": context})
 		}
 	}
@@ -1688,7 +1789,7 @@ func codexTurnParams(threadID string, job *ClaimedSession, execDir, upDir, orbit
 	}
 	if contextOptions.Mode == codexInstructionsAdditionalContext {
 		if additional := codexAgentAdditionalContext(
-			job.instructionAgent(), contextOptions.Executable, contextOptions.Generation, job.insideRecordedWork(), job.watchesOn(),
+			job.instructionAgent(), job.sessionShape(contextOptions.Executable), contextOptions.Generation,
 		); len(additional) > 0 {
 			// Application context becomes developer-role fragments without replacing
 			// local/project developer_instructions. Keys stay stable across ordinary
@@ -1717,7 +1818,7 @@ func codexThreadParams(job *ClaimedSession, execDir, upDir string) map[string]in
 	params := map[string]interface{}{
 		"cwd":                   execDir,
 		"approvalPolicy":        codexApprovalPolicy(codexPermissionMode(job)),
-		"sandbox":               codexSandboxMode(codexPermissionMode(job)),
+		"sandbox":               codexThreadSandboxMode(job, codexPermissionMode(job)),
 		"runtimeWorkspaceRoots": codexRuntimeWorkspaceRoots(codexPermissionMode(job), job, execDir, upDir),
 		// The thread's own source: a user's turn, as the CLI reports one, not Orbit's "orbit" — the
 		// backend sees `thread_source: user` in the turn metadata.
@@ -2202,6 +2303,9 @@ func handleCodexAppNotificationWithImageFallback(threadID string, msg codexRPCMe
 		item := mapValue(firstPresent(params, "item"))
 		activeMu.Lock()
 		if *active != nil {
+			if codexItemIsWork(item) {
+				(*active).result.sawWork = true
+			}
 			handleCodexItemWithImageFallback(map[string]interface{}{"item": item}, emit, &(*active).result, &(*active).fullText, false, processAssistant, imageFallback)
 		}
 		activeMu.Unlock()
@@ -2231,7 +2335,8 @@ func handleCodexAppNotificationWithImageFallback(threadID string, msg codexRPCMe
 		}
 		activeMu.Unlock()
 	case "error":
-		errMsg := nestedString(params, "error", "message")
+		said := nestedString(params, "error", "message")
+		errMsg := said
 		if errMsg == "" {
 			errMsg = "codex app-server error"
 		}
@@ -2242,6 +2347,8 @@ func handleCodexAppNotificationWithImageFallback(threadID string, msg codexRPCMe
 			(*active).result.Status = stFailed
 			(*active).result.Subtype = "error"
 			(*active).result.Error = errMsg
+			(*active).result.failureSaid = said
+			(*active).result.failureCode = codexErrorInfoName(mapValue(params["error"])["codexErrorInfo"])
 		}
 		activeMu.Unlock()
 	case "item/autoApprovalReview/completed":
@@ -2294,6 +2401,8 @@ func handleCodexAppNotificationWithImageFallback(threadID string, msg codexRPCMe
 			result.Status = stFailed
 			result.Subtype = "failed"
 			result.Error = errMsg
+			result.failureSaid = errMsg
+			result.failureCode = codexErrorInfoName(mapValue(turn["error"])["codexErrorInfo"])
 		case "interrupted":
 			result.Status = stInterrupted
 			result.Subtype = "interrupted"

@@ -72,6 +72,13 @@ cat > "$app/Contents/Info.plist" <<PLIST
     <key>CFBundleURLName</key><string>${BUNDLE_ID}</string>
     <key>CFBundleURLSchemes</key><array><string>orbit</string><string>orbit-session</string></array>
   </dict></array>
+  <!-- A session row dragged onto a folder row (Views/SessionFolderDrop.swift): the app's own type,
+       so nothing outside the app reads the drag as text or a file. -->
+  <key>UTExportedTypeDeclarations</key><array><dict>
+    <key>UTTypeIdentifier</key><string>app.orbit.session-row</string>
+    <key>UTTypeDescription</key><string>Orbit session row</string>
+    <key>UTTypeConformsTo</key><array><string>public.data</string></array>
+  </dict></array>
   <!-- The App Group (signed into the entitlements below) that holds the share inbox and snapshot. -->
   <key>OrbitAppGroup</key><string>${APP_GROUP}</string>
 ${sparkle_keys}

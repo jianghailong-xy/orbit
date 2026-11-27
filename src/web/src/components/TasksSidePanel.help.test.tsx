@@ -9,9 +9,9 @@ import { HelpDrawer } from './HelpDrawer';
 import { HELP_DRAWER_EVENT, HelpDrawerProvider } from '../lib/helpDrawer';
 
 /**
- * The ways into help on the web (board docs/mocks/help-center/01-web.png ⓪): the ? button beside the avatar at the
- * sidebar's foot, the account menu's Help center row (the full /help), and the ? key, which is a character while
- * typing; Esc closes the drawer. The drawer's frame (①): Help, Articles | Ask, ↗ to /help, and close.
+ * The ways into help on the web (board docs/mocks/help-center/01-web.png ⓪): the account menu's Help center row (the
+ * full /help) and the ? key, which is a character while typing; Esc closes the drawer. The sidebar's foot holds the
+ * account button alone. The drawer's frame (①): Help, Articles | Ask, ↗ to /help, and close.
  */
 
 vi.mock('../api', async (importOriginal) => ({
@@ -76,7 +76,6 @@ async function visit(path: string): Promise<void> {
 }
 
 const drawer = () => document.querySelector<HTMLElement>('aside.help-drawer');
-const helpButton = () => container!.querySelector<HTMLButtonElement>('.tp-user button.tp-help')!;
 
 async function press(node: HTMLElement): Promise<void> {
   await act(async () => node.click());
@@ -131,28 +130,20 @@ afterEach(async () => {
   vi.mocked(api).mockReset();
 });
 
-describe('the ? button beside the avatar', () => {
-  it('sits in the panel foot after the account button and toggles the drawer', async () => {
+describe('the sidebar foot', () => {
+  it('holds the account button and no ? button', async () => {
     serve('MEMBER');
     await visit('/projects');
     const foot = container!.querySelector('.tp-user')!;
-    expect([...foot.children].map((child) => child.className.split(' ')[0])).toEqual(['tp-user-trigger', 'tp-help']);
-    expect(helpButton().getAttribute('aria-label')).toBe('Help');
-    expect(drawer()).toBeNull();
-
-    await press(helpButton());
-    expect(drawer()).toBeTruthy();
-    expect(helpButton().getAttribute('aria-pressed')).toBe('true');
-
-    await press(helpButton());
-    expect(drawer()).toBeNull();
-    expect(helpButton().getAttribute('aria-pressed')).toBe('false');
+    expect([...foot.children].map((child) => child.className.split(' ')[0])).toEqual(['tp-user-trigger']);
   });
+});
 
+describe('the help drawer', () => {
   it('opens the drawer frame: Help, Articles | Ask, open in /help and close', async () => {
     serve('MEMBER');
     await visit('/projects');
-    await press(helpButton());
+    await key(QUESTION);
     const frame = drawer()!;
     expect(frame.querySelector('.help-drawer-title')?.textContent).toBe('Help');
     expect([...frame.querySelectorAll('[role="radio"]')].map((tab) => tab.textContent)).toEqual(['Articles', 'Ask']);
@@ -165,7 +156,7 @@ describe('the ? button beside the avatar', () => {
     expect(pathname).toBe('/help');
     expect(drawer()).toBeNull();
 
-    await press(helpButton());
+    await key(QUESTION);
     await press(drawer()!.querySelector<HTMLElement>('[aria-label="Close help"]')!);
     expect(drawer()).toBeNull();
   });
@@ -185,11 +176,11 @@ describe('the ? button beside the avatar', () => {
 });
 
 describe('the account menu', () => {
-  it('has Help center after Settings and before Admin, and it opens /help', async () => {
+  it('has Help center before Settings and Admin, and it opens /help', async () => {
     serve('ADMIN');
     await visit('/projects');
     await openAccountMenu();
-    expect(menuRows()).toEqual(['MachinesNone', 'Settings', 'Help center', 'Admin', 'Log out']);
+    expect(menuRows()).toEqual(['MachinesNone', 'Model routingBalance', 'Help center', 'Settings', 'Admin', 'Log out']);
 
     const row = [...document.querySelectorAll<HTMLElement>('[role="menu"].tp-account-menu [role="menuitem"]')].find(
       (item) => item.textContent === 'Help center',
@@ -198,11 +189,11 @@ describe('the account menu', () => {
     expect(pathname).toBe('/help');
   });
 
-  it('has Help center after Settings for a member too', async () => {
+  it('has Help center before Settings for a member too', async () => {
     serve('MEMBER');
     await visit('/projects');
     await openAccountMenu();
-    expect(menuRows()).toEqual(['MachinesNone', 'Settings', 'Help center', 'Log out']);
+    expect(menuRows()).toEqual(['MachinesNone', 'Model routingBalance', 'Help center', 'Settings', 'Log out']);
   });
 });
 
@@ -262,7 +253,7 @@ describe('Esc', () => {
   it('closes the drawer even from a field', async () => {
     serve('MEMBER');
     await visit('/projects');
-    await press(helpButton());
+    await key(QUESTION);
     await key({ key: 'Escape' }, document.querySelector<HTMLElement>('[aria-label="A field"]')!);
     expect(drawer()).toBeNull();
   });

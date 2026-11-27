@@ -239,15 +239,15 @@ const WAKE = [
   '```',
 ].join('\n');
 
-// Built the way runner-api/background-job-wake.ts `buildBackgroundWakeBlock` builds it.
+// Built the way runner-api/scheduled-wakeup.ts builds a wakeup's block. A background job's wake draws no row
+// in the tail at all (job-card board E1): it waits on its job's card (WorkspaceView.queuedJobWake.test.tsx).
 const BG_WAKE = [
-  '<background-job-wake>',
-  '  A background job you started with bg_run has news you were waiting for; the control plane opened this turn for it:',
-  '    bgj_10bca948d369｜job｜bash scripts/run-pg-spec.sh src/apiserver/src/tasks/task-dispatch-priority.pg.spec.ts｜land gate',
-  '      ended｜completed｜exit code 0',
-  '      output /root/.orbit/runs/01a0d619/bgj_10bca948d369.output｜this covers bytes 0–821',
-  '  The control plane recorded this for you; the user did not say it. Read the full output with mcp__orbit__bg_output by id; pass sinceOffset to read only what is new.',
-  '</background-job-wake>',
+  '<scheduled-wakeup>',
+  '  The wakeup you asked for with schedule_wakeup is due; the control plane opened this turn for it:',
+  '    2026-11-20T10:00:00.000Z scheduled 600 seconds out, due 2026-11-20T10:10:00.000Z',
+  '    reason: check the land gate',
+  '  The control plane recorded this for you; the user did not say it. To wait again, call mcp__orbit__schedule_wakeup again.',
+  '</scheduled-wakeup>',
 ].join('\n');
 
 const TYPED = 'and check the dark theme too';
@@ -442,7 +442,7 @@ const CASES: Case[] = [
     acceptable: true,
   },
   {
-    name: 'a background job’s wake',
+    name: 'a scheduled wakeup',
     row: { turnId: 'turn-bg', content: BG_WAKE, createdAt: TS, authoredByOrbit: true },
     echo: { text: BG_WAKE, controlPlaneNote: BG_WAKE },
     root: '.bgwake',
@@ -535,6 +535,8 @@ function cardShape(card: Element, slot: string): string {
   copy.querySelectorAll(slot).forEach((el) => el.remove());
   for (const el of [copy, ...copy.querySelectorAll('*')]) {
     el.removeAttribute('data-seq');
+    // A tooltip trigger's generated id differs between the two drawings; it is not part of the card's shape.
+    if (el.id.startsWith('base-ui-')) el.removeAttribute('id');
     el.classList.remove('is-queued', 'chat-queued');
   }
   return copy.outerHTML;

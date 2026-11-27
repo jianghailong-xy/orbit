@@ -5,7 +5,7 @@ import { Agent as HttpsAgent, request as httpsRequest } from 'node:https';
 import { AgentProvider } from '@orbit/shared';
 import { ACCOUNT_DISABLED, DisabledAccounts } from '../auth/disabled-accounts';
 import { sha256 } from '../common/crypto.util';
-import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
+import { isHeld } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
 import { poolPauseBlocksRequest } from './pool-pause';
 import { claudeCodexLoginEnabled } from './codex-login-claude';
@@ -414,7 +414,7 @@ export class PoolLoginGatewayService {
         pool: { select: { slug: true, label: true, engine: true, ownerId: true, shared: true } },
         session: {
           select: {
-            status: true, ownerId: true, provider: true, poolCodexAccountId: true, poolKeyId: true,
+            finishedAt: true, ownerId: true, provider: true, poolCodexAccountId: true, poolKeyId: true,
             completedAt: true, deletedAt: true, owner: { select: { disabledAt: true } },
             engine: true, model: true, cancelRequestedAt: true, endReason: true,
           },
@@ -426,7 +426,7 @@ export class PoolLoginGatewayService {
     // A SubAgent's token (mintSubagentPoolLoginToken) names its own credential, and its child runs codex on this
     // pool whatever the parent session runs: only the codex gateway serves it, on a pool its owner did not share.
     const subagent = Boolean(row.accountId || row.keyId);
-    const open = OPEN_SESSION_STATUSES.includes(session.status) && !session.completedAt;
+    const open = isHeld(session) && !session.completedAt;
     const current =
       pool.engine === AgentProvider.CODEX &&
       !session.deletedAt &&

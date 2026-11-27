@@ -54,8 +54,10 @@
  * `verdict = 'PASS'` alone is not enough, and each of the others closes a window somebody
  * downstream could otherwise start work in:
  *
- *  1. **The check's run has settled naturally.** `SUCCEEDED` with `end_reason = 'task_done'` and a
- *     lifecycle of COMPLETED (§4.2). Not a turn count — V5's lesson, from one table over: turns are
+ *  1. **The check's run has settled naturally.** Released (`finished_at` set) with `end_reason =
+ *     'task_done'`, the end of a task that is DONE (decision D5 and §12.3 of
+ *     docs/session-three-state-design.md read the work's result off the release and its end reason,
+ *     never the terminal status), and a lifecycle of COMPLETED (§4.2). Not a turn count — V5's lesson, from one table over: turns are
  *     written when a turn ENDS while the task is marked DONE from inside it, so "0 turns" reads as
  *     "never ran" on exactly the runs that did. And not a bare `SUCCEEDED` either: a session a
  *     person ended with `complete`/`cancel` carries a different `end_reason`, and this project's
@@ -85,6 +87,7 @@
  */
 
 import { RunStatus } from '@orbit/shared';
+import { isReleased, sessionHeldSql, sessionReleasedSql } from '../common/session-release';
 import { TASK_OCCUPYING } from './reclaim-stalled-task';
 import { taskNotRetiredSql } from './task-supersession';
 import { verificationLiveness } from './verification-liveness';
@@ -130,6 +133,8 @@ export const VERIFICATION_EPOCH_GATES_NEEDING_A_HUMAN: ReadonlySet<VerificationE
 /** One run of a check, by its own terminal facts. */
 export interface VerificationRunFact {
   runStatus: string;
+  /** The release column (common/session-release.ts): set once the run was released, null while it is held. */
+  finishedAt: Date | string | null;
   endReason: string | null;
   deletedAt: unknown;
   /** `completed_at ?? archived_at`: non-null is §4.2's COMPLETED lifecycle. */
@@ -175,7 +180,7 @@ export function verificationRunSettled(check: VerificationEpochCheckFact): boole
   const live = check.runs.some((run) => TASK_OCCUPYING.includes(run.runStatus as RunStatus));
   if (live) return false;
   return check.runs.some((run) => run.deletedAt == null
-    && run.runStatus === RunStatus.SUCCEEDED
+    && isReleased(run)
     && run.endReason === VERIFICATION_RUN_END_REASON
     && run.completionAt != null);
 }
@@ -351,7 +356,6 @@ export function verificationCheckSameScopeSql(check: string, subject: string): s
  */
 export function verificationEpochNeedsHumanSql(alias = 't', dependent?: string): string {
   const subject = `COALESCE(${alias}."verifies_task_id", ${alias}."id")`;
-  const occupying = TASK_OCCUPYING.map((status) => `'${status}'`).join(', ');
   return `(NOT ${verificationEpochOpenSql(alias, dependent)}
     AND NOT EXISTS (
       -- "Something in motion will open this." No live check at all is NOT that: every check of the
@@ -376,7 +380,7 @@ export function verificationEpochNeedsHumanSql(alias = 't', dependent?: string):
                       SELECT 1 FROM "session" needs_human_run
                        WHERE needs_human_run."task_id" = needs_human_check."id"
                          AND needs_human_run."deleted_at" IS NULL
-                         AND needs_human_run."status"::text IN (${occupying})
+                         AND ${sessionHeldSql('needs_human_run').sql}
                     )))
          )
     ))`;
@@ -407,7 +411,6 @@ export function latestLiveVerificationCheckIdSql(subject: string): string {
  * the dispatcher correctly waits for the natural run.
  */
 export function verificationCheckPassedSql(check: string, subject: string): string {
-  const occupying = TASK_OCCUPYING.map((status) => `'${status}'`).join(', ');
   return `(
     (
       ${check}."status" = 'DONE'
@@ -417,13 +420,13 @@ export function verificationCheckPassedSql(check: string, subject: string): stri
         SELECT 1 FROM "session" passed_live
          WHERE passed_live."task_id" = ${check}."id"
            AND passed_live."deleted_at" IS NULL
-           AND passed_live."status"::text IN (${occupying})
+           AND ${sessionHeldSql('passed_live').sql}
       )
       AND EXISTS (
         SELECT 1 FROM "session" passed_run
          WHERE passed_run."task_id" = ${check}."id"
            AND passed_run."deleted_at" IS NULL
-           AND passed_run."status"::text = '${RunStatus.SUCCEEDED}'
+           AND ${sessionReleasedSql('passed_run').sql}
            AND passed_run."end_reason" = '${VERIFICATION_RUN_END_REASON}'
            AND (passed_run."completed_at" IS NOT NULL OR passed_run."archived_at" IS NOT NULL)
       )

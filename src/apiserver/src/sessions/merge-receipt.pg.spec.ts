@@ -18,7 +18,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
-import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import { uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -75,7 +76,7 @@ async function world(db: PrismaClient, label: string): Promise<World> {
   await db.session.create({
     data: {
       id: sessionId, ownerId, creatorId: ownerId, workspaceId, taskId,
-      title: label, prompt: 'p', status: RunStatus.SUCCEEDED,
+      title: label, prompt: 'p', turnState: null, finishedAt: new Date(), 
       branch: 'orbit/25c-work', isolationStatus: 'worktree',
     },
   });
@@ -482,7 +483,7 @@ suite('merge receipts, on real PostgreSQL', async (t) => {
     await db.session.create({
       data: {
         id: second, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: original.workspaceId,
-        taskId: w.taskId, title: 'takeover', prompt: 'p', status: RunStatus.SUCCEEDED,
+        taskId: w.taskId, title: 'takeover', prompt: 'p', turnState: null, finishedAt: new Date(), 
         branch: 'orbit/25c-work', isolationStatus: 'worktree',
       },
     });

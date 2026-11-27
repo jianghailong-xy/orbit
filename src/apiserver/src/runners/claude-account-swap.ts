@@ -20,6 +20,9 @@ import type {
 import { DEFAULT_ACCOUNT } from '../providers/account';
 import { reportedRunAccount } from '../providers/plan-usage-accounts';
 import { FORMER_DEFAULT_KEY, sanitizeRunnerEngines } from '../common/runner-engines';
+import { isReleased } from '../common/session-release';
+import { LEGACY_STATUS_SELECT, legacySessionStatus, readLandingSettlements } from '../sessions/session-legacy-words';
+import { sessionTurnStateSql, TURN_STATE_SELECT, turnStateOf } from '../sessions/session-turn-state';
 
 /** Runner swaps an added Claude account's login with the one in ~/.claude (§5). One that does not declare it would
  *  never answer the request. */
@@ -157,7 +160,8 @@ function claudeAccountOf(session: SwapSession, engines: unknown, workspaceChoice
 
 const SWAP_SESSION_SELECT = {
   id: true,
-  status: true,
+  // The turn state's columns (sessions/session-turn-state.ts), the release column among them.
+  ...TURN_STATE_SELECT,
   provider: true,
   providerBuiltin: true,
   claudeAccount: true,
@@ -266,22 +270,23 @@ export async function swapClaudeAccountRecords(
        AND "claude_account" IN (${DEFAULT_ACCOUNT}, ${added})`;
 
   // Every session that chose one of the two, on this runner or bound for it: its choice names the account's new folder.
-  const chosen = await tx.$queryRaw<Array<{ id: string; status: string }>>`
+  const chosen = await tx.$queryRaw<Array<{ id: string; finishedAt: Date | null; queued: boolean }>>`
     UPDATE "session" s
        SET "claude_account" = CASE WHEN s."claude_account" = ${DEFAULT_ACCOUNT} THEN ${added} ELSE ${DEFAULT_ACCOUNT} END
      WHERE s."claude_account" IN (${DEFAULT_ACCOUNT}, ${added})
        AND (s."assigned_runner_id" = ${runnerId}::uuid
             OR (s."assigned_runner_id" IS NULL
                 AND EXISTS (SELECT 1 FROM "workspace" w WHERE w.id = s."workspace_id" AND w."runner_id" = ${runnerId}::uuid)))
-    RETURNING s.id, s.status::text AS status`;
+    RETURNING s.id, s.finished_at AS "finishedAt", (${sessionTurnStateSql('s')} IS NOT DISTINCT FROM 'QUEUED') AS queued`;
 
   // Every session on either account, whether its own column moved or its workspace's choice carries it: its account's
   // folder changed under it, so a live one is reloaded into the new one.
-  const affected = new Map<string, string>(chosen.map((row) => [row.id, row.status]));
+  // Queued: the turn state QUEUED (what PENDING said), read through sessions/session-turn-state.ts.
+  const affected = new Map<string, { finishedAt: Date | null; queued: boolean }>(chosen.map((row) => [row.id, row]));
   for (const session of unchosen) {
     const target = swappedAccount(claudeAccountOf(session, runner.engines), added);
     if (!target) continue;
-    affected.set(session.id, session.status);
+    affected.set(session.id, { finishedAt: session.finishedAt, queued: turnStateOf(session) === 'QUEUED' });
     const followsWorkspace = claudeAccountOf(
       session, runner.engines, swappedAccount(session.workspace?.claudeAccount, added) ?? session.workspace?.claudeAccount ?? null,
     );
@@ -292,18 +297,16 @@ export async function swapClaudeAccountRecords(
 
   const reload: string[] = [];
   const release: string[] = [];
-  for (const [id, status] of affected) {
-    if (ENDED.has(status)) continue;
+  for (const [id, session] of affected) {
+    if (isReleased(session)) continue;
     release.push(id);
-    // A PENDING session is started by its next claim, which reads its account then.
-    if (status === 'PENDING') continue;
+    // A queued session is started by its next claim, which reads its account then.
+    if (session.queued) continue;
     await reloadLocked(tx, id);
     reload.push(id);
   }
   return { reload, release };
 }
-
-const ENDED = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED']);
 
 /** The session ids a pending report names, kept only when they are ids, and a bounded number of them. */
 export function swapWaitingOn(value: unknown): string[] {
@@ -359,13 +362,15 @@ export async function claudeAccountSwapWaitingOf(
       ...(ownerId ? { ownerId } : {}),
       OR: named.map((r) => ({ assignedRunnerId: r.id, id: { in: r.claudeAccountSwapWaiting ?? [] } })),
     },
-    select: { id: true, title: true, status: true, assignedRunnerId: true, createdAt: true },
+    // What the word each one reads on the wire is derived from (sessions/session-legacy-words.ts).
+    select: { id: true, title: true, ...LEGACY_STATUS_SELECT, assignedRunnerId: true, createdAt: true },
     orderBy: { createdAt: 'asc' },
   });
+  const landings = await readLandingSettlements(prisma, rows);
   for (const row of rows) {
     if (!row.assignedRunnerId) continue;
     const list = out.get(row.assignedRunnerId) ?? [];
-    list.push({ id: row.id, title: row.title, status: row.status as RunnerAccountRemoveSession['status'] });
+    list.push({ id: row.id, title: row.title, status: legacySessionStatus(row, landings.get(row.id)) });
     out.set(row.assignedRunnerId, list);
   }
   return out;

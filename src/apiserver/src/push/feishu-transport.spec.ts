@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import type { ConfigService } from '@nestjs/config';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { renderFeishuCard, type FeishuAlert, type FeishuCard } from '../feishu/cards/feishu-cards';
 import type { FeishuSendResult } from '../feishu/feishu-outbound';
 import {
@@ -22,6 +22,7 @@ import {
 } from './feishu-transport';
 import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { PushService } from './push.service';
+import { releaseFactsOf } from '../common/session-release-shapes.fixture';
 
 /** Neither APNs nor FCM: Feishu is the only channel. */
 const NO_DEVICES = { get: () => undefined } as unknown as ConfigService;
@@ -71,6 +72,9 @@ test('an approval reaches Feishu with no device: one card for the stretch, its a
       findFirst: async () => ({ title: 'Fix the build', ownerId: OWNER }),
       findMany: async () => [{ id: sessionId }],
     },
+    // The open owner requests and waiting task moves the same row counts (none here).
+    ownerRequest: { findMany: async () => [] },
+    projectHandoffApproval: { findMany: async () => [] },
     projectOpenItem: { findMany: async () => [] },
     $queryRaw: async () => [],
     approval: {
@@ -112,7 +116,10 @@ test('a settlement reaches Feishu: Finished / Failed, one card per settlement, a
     const prisma: { session: { findUnique: () => Promise<unknown> }; conversationTurn: unknown } = {
       session: {
         findUnique: async () => ({
-          title: 'Ship the release', ownerId: OWNER, status, retryAt: null, completedAt: null, deletedAt: null,
+          title: 'Ship the release', ownerId: OWNER,
+          // The release facts its writer stores beside the status (plan step 4.8: the alert reads these).
+          ...releaseFactsOf(status === RunStatus.FAILED ? 'failed' : 'finished work'),
+          status, retryAt: null, completedAt: null, deletedAt: null,
           error: 'provider error: overloaded', recapText: 'Tagged v1.2.3', owner: { preferences: prefs },
         }),
       },
@@ -202,6 +209,9 @@ test('an owner item reaches Feishu: one card per item, announced again into the 
   const projectId = randomUUID();
   const coordinator = randomUUID();
   const prisma = {
+    // The open owner requests and waiting task moves the same row counts (none here).
+    ownerRequest: { findMany: async () => [] },
+    projectHandoffApproval: { findMany: async () => [] },
     projectOpenItem: {
       findUnique: async () => ({
         kind: 'COORDINATOR_QUESTION', state: 'OPEN', assignee: 'OWNER', assigneeReason: 'DEFAULT',
@@ -384,7 +394,7 @@ test('a transport that throws costs the devices nothing', async () => {
   const sessionId = randomUUID();
   const sent: string[] = [];
   const prisma = {
-    session: { findUnique: async () => ({ title: 'T', ownerId: OWNER, status: RunStatus.SUCCEEDED, retryAt: null, completedAt: null, deletedAt: null, error: null, recapText: null, owner: { preferences: {} } }) },
+    session: { findUnique: async () => ({ title: 'T', ownerId: OWNER, ...releaseFactsOf('finished work'), status: RunStatus.SUCCEEDED, retryAt: null, completedAt: null, deletedAt: null, error: null, recapText: null, owner: { preferences: {} } }) },
     conversationTurn: { findFirst: async () => { throw new Error('database gone'); } },
     deviceToken: { findMany: async () => [{ id: 'd', token: 'device', platform: 'ios', bundleId: 'io.orbitd.app', environment: 'sandbox', loginSessionId: null }] },
   };

@@ -13,6 +13,9 @@
  * reports go through the runner door's own handler, and the silence it decides is the passage of the
  * database's clock after the last of them.
  *
+ * SESSION_QUIESCENT (predicateVersion 4), the default of `session_await` and `session_create(wait)`, is decided
+ * here too, at the end of the file, from the running sets, retry, watches and wake-ups the rows hold.
+ *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/watches/watch-evaluator.pg.spec.ts
  *
  * Non-destructive: every row carries an id this run generated. Each case first retires the live
@@ -29,7 +32,8 @@ import { after, before, beforeEach, test } from 'node:test';
 import { BadRequestException, ForbiddenException, Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import {
   NormalizedRunEvent,
   RunEventType,
@@ -58,6 +62,8 @@ import {
   WatchEvaluatorService,
   watchHintFor,
 } from './watch-evaluator.service';
+import { WATCH_PREDICATE_VERSION } from './watch-predicate';
+import { vectorSessionStatus } from './watch-vector.fixture';
 import { redactReason, redactSnapshot } from './watch-redaction';
 import { WatchesService } from './watches.service';
 
@@ -267,10 +273,11 @@ async function insertSession(row: {
 }): Promise<string> {
   const id = randomUUID();
   await sql.query(
-    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","status","end_reason",
-                           "completed_at","deleted_at","assigned_runner_id")
-     VALUES ($1,'watched session','p',$2,$2,now(),$3,$4,
-             CASE WHEN $5::boolean THEN now() END, CASE WHEN $6::boolean THEN now() END, $7)`,
+    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","turn_state","end_reason",
+                           "completed_at","deleted_at","assigned_runner_id", "finished_at")
+     VALUES ($1,'watched session','p',$2,$2,now(),(CASE ($3)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END),$4,
+             CASE WHEN $5::boolean THEN now() END, CASE WHEN $6::boolean THEN now() END, $7,
+             CASE WHEN $3::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END)`,
     [id, row.owner ?? ownerId, row.status, row.endReason ?? null, row.completedAt ?? false, row.deletedAt ?? false, row.runnerId ?? null],
   );
   return id;
@@ -523,7 +530,7 @@ test('every leaf decides the contract vectors from the rows the evaluator reads'
     vectors += 1;
     const session = givenSession
       ? await insertSession({
-          status: givenSession.status,
+          status: vectorSessionStatus(givenSession),
           endReason: givenSession.endReason ?? null,
           completedAt: givenSession.completedAt != null,
           deletedAt: givenSession.deletedAt != null,
@@ -668,8 +675,9 @@ test('a published event only schedules an evaluation: a status it claims is not 
   assert.equal(hinted.state, 'ACTIVE', 'a Match was derived from an event payload');
   assert.equal((await readMatches(watchId)).length, 0);
 
-  // The row fails too, and the same event now finds it.
-  await sql.query(`UPDATE "session" SET "status" = 'FAILED' WHERE "id" = $1`, [session]);
+  // The row fails too, released as a failure is (its turn records it), and the same event now finds it.
+  await sql.query(`UPDATE "session" SET "turn_state" = NULL, "last_turn_outcome" = 'FAILED', "finished_at" = COALESCE("finished_at", now())
+                    WHERE "id" = $1`, [session]);
   realtime.publish(session, event(RunEventType.STATUS, { status: 'FAILED' }));
   const [match] = await eventually('the Match', () => readMatches(watchId), (m) => m.length === 1);
   assert.equal(match.snapshot.targets[0].observed?.status, 'FAILED');
@@ -1027,7 +1035,7 @@ test('a worker killed holding a lease, an apiserver restarted around waiting wat
 
   // While it is down both conditions come true, and the event that would have hinted reaches nobody.
   await sql.query(`UPDATE "task" SET "status" = 'FAILED' WHERE "id" = $1`, [work]);
-  await sql.query(`UPDATE "session" SET "status" = 'AWAITING_INPUT' WHERE "id" = $1`, [conversation]);
+  await sql.query(`UPDATE "session" SET "turn_state" = NULL WHERE "id" = $1`, [conversation]);
   firstServer.realtime.publish(conversation, event(RunEventType.STATUS, { status: 'AWAITING_INPUT' }));
   // Due, and nobody takes them: the closed application really did stop its loop.
   for (const id of waiting) await eventually('its sweep to come due', () => readWatch(id), (w) => w.due === true, 10_000);
@@ -1056,7 +1064,7 @@ test('a worker killed holding a lease, an apiserver restarted around waiting wat
   assert.equal(beforeRestart.state, 'ACTIVE');
   await sql.query(`UPDATE "runner" SET "last_heartbeat_at" = NULL WHERE "id" = $1`, [runnerId]);
   await sql.query(`UPDATE "runner" SET "last_heartbeat_at" = now() WHERE "id" = $1`, [runnerId]);
-  await sql.query(`UPDATE "session" SET "status" = 'AWAITING_INPUT' WHERE "id" = $1`, [onRunner]);
+  await sql.query(`UPDATE "session" SET "turn_state" = NULL WHERE "id" = $1`, [onRunner]);
   const [parked] = await eventually('the watch to see the parked session', () => readMatches(watched), (m) => m.length === 1);
   assert.ok(parked.matchedAt >= beforeRestart.nextEvaluateAt!, 'matched before its sweep, so something other than the row decided');
   await secondServer.close();
@@ -1282,7 +1290,7 @@ async function jobHost(prisma: PrismaClient) {
       title: 'a session waiting on its job',
       prompt: 'run the soak test and tell me how it went',
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: false,
       assignedRunnerId: runner.id,
@@ -1493,7 +1501,7 @@ test('a job that ended is not quiet: the leaf does not hold, no deadline is sche
     { predicateVersion: 3 },
   );
   assert.equal((await evaluator.evaluate(eitherWay)).outcome, 'SCHEDULED');
-  await sql.query(`UPDATE "session" SET "status" = 'SUCCEEDED' WHERE "id" = $1`, [host.sessionId]);
+  await sql.query(`UPDATE "session" SET "turn_state" = NULL, "finished_at" = COALESCE("finished_at", now()) WHERE "id" = $1`, [host.sessionId]);
   assert.equal((await evaluator.evaluate(eitherWay)).outcome, 'MATCHED');
   const [match] = await readMatches(eitherWay);
   assert.equal(match.reason, `ANY_OF(ANY SESSION_JOB_NO_OUTPUT_FOR(300s, ${JOB}) 0/1, ANY SESSION_RUN_TERMINAL 1/1)`);
@@ -1512,7 +1520,7 @@ test('the job leaf is checked where a watch is created: its version, its window,
   const before = await count();
   const refused: Array<[string, Record<string, unknown>, string]> = [
     ['under version 2', { predicateVersion: 2 }, 'UNKNOWN_PREDICATE_KIND'],
-    ['under a version this build does not serve', { predicateVersion: 4 }, 'PREDICATE_VERSION_UNSUPPORTED'],
+    ['under a version this build does not serve', { predicateVersion: WATCH_PREDICATE_VERSION + 1 }, 'PREDICATE_VERSION_UNSUPPORTED'],
     ['a window under the minimum', { predicate: quiet(WATCH_LIMITS.minNoOutputSeconds - 1) }, 'PREDICATE_PARAMETER_INVALID'],
     ['a window past the longest TTL', { predicate: quiet(WATCH_LIMITS.maxTtlSeconds + 1) }, 'PREDICATE_PARAMETER_INVALID'],
     ['a fractional window', { predicate: quiet(300.5) }, 'PREDICATE_PARAMETER_INVALID'],
@@ -1536,3 +1544,258 @@ async function sessionStatus(sessionId: string): Promise<string> {
   const { rows: [row] } = await sql.query<{ status: string }>(`SELECT "status"::text AS "status" FROM "session" WHERE "id" = $1`, [sessionId]);
   return row.status;
 }
+
+// ── SESSION_QUIESCENT (predicateVersion 4, docs/session-three-state-plan.md step 1.3) ────────────────────────
+//
+// The condition `session_await` and `session_create(wait)` wait for by default, decided from the rows the
+// evaluator and the create path read: the session's running sets, its retry, the RESUME_SESSION watches it
+// observes and its pending wake-ups. Kept in this file rather than one of its own, so the PG roster (and so
+// the CI shards, which take its indices mod 3) does not move.
+
+const QUIESCENT_CONTRACT = CONTRACT as unknown as {
+  agentSurface: {
+    awaitPresets: { session_await: { default: string; until: Record<string, unknown> } };
+    sessionCreateWait: { watch: { predicate: unknown; predicateVersion: number } };
+  };
+};
+const sessionAwait = QUIESCENT_CONTRACT.agentSurface.awaitPresets.session_await;
+/** The two default waits, each with the grammar version it is sent under. */
+const QUIESCENT_DEFAULTS: Array<{ name: string; predicate: unknown; version: number }> = [
+  { name: 'session_await default', predicate: sessionAwait.until[sessionAwait.default], version: 4 },
+  {
+    name: 'session_create(wait)',
+    predicate: QUIESCENT_CONTRACT.agentSurface.sessionCreateWait.watch.predicate,
+    version: QUIESCENT_CONTRACT.agentSurface.sessionCreateWait.watch.predicateVersion,
+  },
+];
+const TURN_SETTLED_TERM = { kind: 'ALL', over: 'ALL_TARGETS', leaf: 'SESSION_TURN_SETTLED' };
+const QUIESCENT_TERM = { kind: 'ALL', over: 'ALL_TARGETS', leaf: 'SESSION_QUIESCENT' };
+
+
+let quiescentEvaluator: WatchEvaluatorService;
+let quiescentWatches: WatchesService;
+
+/** A replica for one case: its own pool and evaluator, stopped by the next case's beforeEach. */
+function startQuiescent(): void {
+  const { prisma, evaluator } = replica();
+  quiescentEvaluator = evaluator;
+  quiescentWatches = new WatchesService(prisma as unknown as PrismaService);
+}
+
+interface QuiescentSessionRow {
+  status?: string;
+  endReason?: string | null;
+  completed?: boolean;
+  jobs?: string[];
+  subagents?: string[];
+  engineTurn?: boolean;
+  retryInSeconds?: number | null;
+}
+
+async function quiescentSession(row: QuiescentSessionRow = {}): Promise<string> {
+  const id = randomUUID();
+  await sql.query(
+    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","turn_state","end_reason",
+                           "completed_at","running_bg_jobs","running_subagents","engine_turn_active","retry_at", "finished_at")
+     VALUES ($1,'a child session','p',$2,$2,now(),(CASE ($3)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END),$4,CASE WHEN $5::boolean THEN now() END,$6::text[],$7::text[],$8,
+             CASE WHEN $9::int IS NOT NULL THEN now() + make_interval(secs => $9::int) END,
+             CASE WHEN $3::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END)`,
+    [
+      id, ownerId, row.status ?? 'AWAITING_INPUT', row.endReason ?? null, row.completed ?? false,
+      row.jobs ?? [], row.subagents ?? [], row.engineTurn ?? false, row.retryInSeconds ?? null,
+    ],
+  );
+  return id;
+}
+
+async function quiescentUpdate(sessionId: string, set: string): Promise<void> {
+  await sql.query(`UPDATE "session" SET ${set} WHERE "id" = $1`, [sessionId]);
+}
+
+/** A RESUME_SESSION watch `observer` waits on, as task_await or session_await leaves it: the observer is armed to wake. */
+async function armResumeWatch(observer: string): Promise<string> {
+  const other = await quiescentSession({ status: 'RUNNING' });
+  return quiescentWatch(other, TURN_SETTLED_TERM, 1, { observer, state: 'ACTIVE' });
+}
+
+async function armPendingWakeup(sessionId: string): Promise<void> {
+  await sql.query(
+    `INSERT INTO "session_scheduled_wakeup"("id","session_id","state","delay_seconds","reason","due_at")
+     VALUES ($1,$2,'PENDING',600,'check the soak test',now() + interval '10 minutes')`,
+    [randomUUID(), sessionId],
+  );
+}
+
+/** A ONE_SHOT watch as creation leaves it, due now: a user's NOTIFY_USER one, or `observer`'s RESUME_SESSION one. */
+async function quiescentWatch(
+  target: string,
+  predicate: unknown,
+  version: number,
+  over: { observer?: string; state?: string } = {},
+): Promise<string> {
+  const id = randomUUID();
+  await sql.query(
+    `WITH "created" AS (
+       INSERT INTO "watch"("id","owner_id","observer_type","observer_session_id","predicate","mode","action","state",
+                           "expires_at","next_evaluate_at","predicate_version")
+       VALUES ($1,$2,$3,$4,$5::jsonb,'ONE_SHOT',$6,$7,now() + interval '1 hour',now(),$8)
+       RETURNING "id"
+     )
+     INSERT INTO "watch_target"("id","watch_id","target_kind","target_resource_id")
+     SELECT $9, "created"."id", 'SESSION', $10 FROM "created"`,
+    [
+      id, ownerId, over.observer ? 'SESSION' : 'USER', over.observer ?? null, JSON.stringify(predicate),
+      over.observer ? 'RESUME_SESSION' : 'NOTIFY_USER', over.state ?? 'ACTIVE', version, randomUUID(), target,
+    ],
+  );
+  return id;
+}
+
+/** What the evaluator decides for a fresh watch with this predicate over `target`: true when it MATCHED. */
+async function quiescentDecides(target: string, predicate: unknown, version: number): Promise<boolean> {
+  const watchId = await quiescentWatch(target, predicate, version);
+  const { outcome } = await quiescentEvaluator.evaluate(watchId);
+  assert.ok(outcome === 'MATCHED' || outcome === 'SCHEDULED', `unexpected outcome ${outcome}`);
+  return outcome === 'MATCHED';
+}
+
+/** What the create path decides for the same watch: the service POST /api/watches and the runner door create with. */
+async function quiescentDecidedAtCreate(target: string, predicate: unknown, version: number): Promise<boolean> {
+  const created = await quiescentWatches.create(ownerId, {
+    predicateVersion: version,
+    predicate,
+    targets: [{ kind: 'SESSION', id: target }],
+    action: 'NOTIFY_USER',
+  } as unknown as CreateWatchDto);
+  return created.state === 'MATCHED';
+}
+
+async function quiescentDefaults(target: string): Promise<Record<string, boolean>> {
+  const verdicts: Record<string, boolean> = {};
+  for (const wait of QUIESCENT_DEFAULTS) {
+    verdicts[`${wait.name} (evaluator)`] = await quiescentDecides(target, wait.predicate, wait.version);
+    verdicts[`${wait.name} (create)`] = await quiescentDecidedAtCreate(target, wait.predicate, wait.version);
+  }
+  return verdicts;
+}
+
+const everyDefault = (value: boolean) =>
+  Object.fromEntries(QUIESCENT_DEFAULTS.flatMap((wait) => [[`${wait.name} (evaluator)`, value], [`${wait.name} (create)`, value]]));
+
+test('a child at AWAITING_INPUT with a job in running_bg_jobs does not satisfy the default waits until the job ends', { skip, timeout: 60_000 }, async () => {
+  startQuiescent();
+  const child = await quiescentSession({ jobs: ['bgj_0a1b2c3d4e5f'] });
+  // The stored condition the default used to be holds for it: that is the early return this step removes.
+  assert.equal(await quiescentDecides(child, TURN_SETTLED_TERM, 1), true);
+  assert.deepEqual(await quiescentDefaults(child), everyDefault(false));
+  await quiescentUpdate(child, `"running_bg_jobs" = '{}'`);
+  assert.deepEqual(await quiescentDefaults(child), everyDefault(true));
+});
+
+test('a child at AWAITING_INPUT with a running subagent does not satisfy the default waits until the subagent ends', { skip, timeout: 60_000 }, async () => {
+  startQuiescent();
+  const child = await quiescentSession({ subagents: ['toolu_01AbCdEf'] });
+  assert.equal(await quiescentDecides(child, TURN_SETTLED_TERM, 1), true);
+  assert.deepEqual(await quiescentDefaults(child), everyDefault(false));
+  await quiescentUpdate(child, `"running_subagents" = '{}'`);
+  assert.deepEqual(await quiescentDefaults(child), everyDefault(true));
+});
+
+test('a waiting watch on a working child matches once the work ends, decided again from the rows', { skip, timeout: 60_000 }, async () => {
+  startQuiescent();
+  const child = await quiescentSession({ jobs: ['bgj_0a1b2c3d4e5f'], subagents: ['toolu_01AbCdEf'] });
+  const watchId = await quiescentWatch(child, QUIESCENT_DEFAULTS[1].predicate, QUIESCENT_DEFAULTS[1].version);
+  assert.equal((await quiescentEvaluator.evaluate(watchId)).outcome, 'SCHEDULED');
+  await quiescentUpdate(child, `"running_bg_jobs" = '{}'`);
+  assert.equal((await quiescentEvaluator.evaluate(watchId)).outcome, 'SCHEDULED', 'the subagent still runs');
+  await quiescentUpdate(child, `"running_subagents" = '{}'`);
+  assert.equal((await quiescentEvaluator.evaluate(watchId)).outcome, 'MATCHED');
+  const { rows: [match] } = await sql.query<{ snapshot: any }>(
+    `SELECT "per_target_snapshot" AS "snapshot" FROM "watch_match" WHERE "watch_id" = $1`,
+    [watchId],
+  );
+  const observed = match.snapshot.targets[0].observed;
+  assert.deepEqual({ executing: observed.executing, wakeArmed: observed.wakeArmed }, { executing: false, wakeArmed: false });
+});
+
+test('SESSION_QUIESCENT answers each case of the table from the rows', { skip, timeout: 120_000 }, async () => {
+  startQuiescent();
+  const cases: Array<[string, () => Promise<string>, boolean]> = [
+    ['held idle, nothing armed', () => quiescentSession(), true],
+    ['held idle with a job', () => quiescentSession({ jobs: ['bgj_0a1b2c3d4e5f'] }), false],
+    ['held idle with a subagent', () => quiescentSession({ subagents: ['toolu_01AbCdEf'] }), false],
+    ['held idle with an engine turn', () => quiescentSession({ engineTurn: true }), false],
+    ['held idle with a watch it waits on', async () => { const s = await quiescentSession(); await armResumeWatch(s); return s; }, false],
+    ['held idle with a wake-up', async () => { const s = await quiescentSession(); await armPendingWakeup(s); return s; }, false],
+    ['held idle with a retry armed', () => quiescentSession({ retryInSeconds: 600 }), false],
+    ['FAILED with a retry armed', () => quiescentSession({ status: 'FAILED', retryInSeconds: 600 }), false],
+    ['FAILED with nothing armed', () => quiescentSession({ status: 'FAILED' }), true],
+    [
+      'ended by a person with a stale watch and wake-up',
+      async () => {
+        const s = await quiescentSession({ status: 'CANCELLED', endReason: 'ended' });
+        await armResumeWatch(s);
+        await armPendingWakeup(s);
+        return s;
+      },
+      true,
+    ],
+    ['a turn queued', () => quiescentSession({ status: 'PENDING' }), false],
+    ['a turn running', () => quiescentSession({ status: 'RUNNING' }), false],
+  ];
+  for (const [name, make, expected] of cases) {
+    const target = await make();
+    assert.equal(await quiescentDecides(target, QUIESCENT_TERM, 4), expected, `${name} (evaluator)`);
+    assert.equal(await quiescentDecidedAtCreate(target, QUIESCENT_TERM, 4), expected, `${name} (create)`);
+  }
+});
+
+test('the contract vectors that ask SESSION_QUIESCENT are decided as they say', { skip, timeout: 60_000 }, async () => {
+  startQuiescent();
+  let driven = 0;
+  for (const vector of CONTRACT.vectors) {
+    if (!('SESSION_QUIESCENT' in vector.expect)) continue;
+    const given = vector.given.session;
+    const target = await quiescentSession({
+      status: vectorSessionStatus(given),
+      endReason: given.endReason ?? null,
+      jobs: (vector.given.jobs ?? []).map((job: { id: string }) => job.id),
+      subagents: given.runningSubagents ?? [],
+      retryInSeconds: given.retryAt ? 600 : null,
+    });
+    if (given.hasResumeWatch) await armResumeWatch(target);
+    if (given.hasPendingWakeup) await armPendingWakeup(target);
+    assert.equal(await quiescentDecides(target, QUIESCENT_TERM, 4), vector.expect.SESSION_QUIESCENT, vector.id);
+    driven += 1;
+  }
+  assert.ok(driven >= 6, `only ${driven} vectors asked SESSION_QUIESCENT`);
+});
+
+test('a stored SESSION_TURN_SETTLED watch gives the same verdict as before for the same rows, work running beside the turn or not', { skip, timeout: 120_000 }, async () => {
+  startQuiescent();
+  // The base commit's leaf: the status left PENDING and RUNNING. Nothing else about the row is read.
+  const before = (status: string) => !['PENDING', 'RUNNING'].includes(status);
+  const statuses = ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED', 'SUCCEEDED', 'FAILED', 'CANCELLED'];
+  const beside: QuiescentSessionRow[] = [{}, { jobs: ['bgj_0a1b2c3d4e5f'] }, { subagents: ['toolu_01AbCdEf'] }, { engineTurn: true }, { retryInSeconds: 600 }];
+  for (const status of statuses) {
+    for (const extra of beside) {
+      const target = await quiescentSession({ status, ...extra });
+      for (const version of [1, 2, 3, 4]) {
+        assert.equal(await quiescentDecides(target, TURN_SETTLED_TERM, version), before(status), `${status} ${JSON.stringify(extra)} v${version}`);
+      }
+    }
+    const watched = await quiescentSession({ status });
+    await armResumeWatch(watched);
+    await armPendingWakeup(watched);
+    assert.equal(await quiescentDecides(watched, TURN_SETTLED_TERM, 1), before(status), `${status} with a watch and a wake-up armed`);
+  }
+});
+
+test('a version-3 request naming SESSION_QUIESCENT is refused, so no older grammar meets it', { skip, timeout: 30_000 }, async () => {
+  startQuiescent();
+  const target = await quiescentSession();
+  await assert.rejects(
+    () => quiescentDecidedAtCreate(target, QUIESCENT_TERM, 3),
+    (error: unknown) => error instanceof BadRequestException && (error.getResponse() as { code?: string }).code === 'UNKNOWN_PREDICATE_KIND',
+  );
+});

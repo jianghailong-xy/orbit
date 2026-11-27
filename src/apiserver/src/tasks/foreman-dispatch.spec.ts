@@ -8,7 +8,6 @@ import {
   MAX_CONSECUTIVE_FOREMEN,
   TasksService,
 } from './tasks.service';
-import { TASK_OCCUPYING } from './reclaim-stalled-task';
 
 /** Real uuids throughout: the note now encodes the task id, and the codec rejects anything else. */
 const TASK_IDS = ['550e8400-e29b-41d4-a716-446655440000', '6ba7b810-9dad-11d1-80b4-00c04fd430c8'];
@@ -261,7 +260,8 @@ test('an idle-but-live session counts as occupied, not as a stall', async () => 
   const f = makeService([]);
   await f.sweep();
 
-  assert.equal((f.sqlText().match(/::run_status/g) ?? []).length, TASK_OCCUPYING.length);
+  // Every held session (the release column, the same sessions as TASK_OCCUPYING since plan step 4.3).
+  assert.match(f.sqlText(), /JOIN session s ON s\.task_id = t\.id\s+WHERE t\.list_id = tl\.id\s+AND s\."finished_at" IS NULL/);
 });
 
 // Suppressing while one foreman is unfinished only stops concurrent coordinators. The moment one

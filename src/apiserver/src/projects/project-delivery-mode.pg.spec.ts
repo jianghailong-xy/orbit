@@ -51,7 +51,8 @@ import { HttpException, Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { uuidToBase62 } from '@orbit/shared';
-import { RunStatus, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -253,7 +254,7 @@ test('a project’s delivery mode is the owner’s to choose, unlocked by the li
         title: label,
         prompt: label,
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
         runtimeSessionId: randomUUID(),
@@ -398,11 +399,15 @@ test('a project’s delivery mode is the owner’s to choose, unlocked by the li
         title: 'the first code task',
         prompt: 'the first code task',
         provider: 'claude',
-        status: RunStatus.SUCCEEDED,
+        turnState: null, 
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: true,
         isolationStatus: 'worktree',
         branch: `orbit/first-integration-${f.publicId}`,
+        // Finished, as /finalize writes SUCCEEDED, with a tip of its own past its base: settled work with
+        // commits to land. Since §12.15 P-M1 a run with no finish is work still moving, and queues nothing.
+        baseSha: 'a'.repeat(40), branchSha: 'b'.repeat(40), worktreeBranch: `orbit/first-integration-${f.publicId}`,
+        worktreeDirty: false, changedFiles: ['src/first.ts'], finishedAt: new Date(),
       },
     });
     await prisma.task.update({ where: { id: created.id }, data: { status: TaskStatus.DONE } });

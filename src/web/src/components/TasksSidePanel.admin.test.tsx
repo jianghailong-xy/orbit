@@ -36,6 +36,7 @@ function serve(role: 'ADMIN' | 'MEMBER') {
     if (path === '/sessions/counts') return [];
     if (path === '/users/me') return { id: 'me', name: 'Me', email: 'me@example.com', role, avatarUpdatedAt: null };
     if (path === '/wiki/spaces') return [];
+    if (path === '/auth/capabilities') return { managedRunners: { enabled: false }, documents: { enabled: true } };
     throw new Error(`unstubbed ${path}`);
   }) as never);
 }
@@ -116,10 +117,10 @@ describe('Admin, for an admin', () => {
   it('is a row of the account menu right under Settings, not a top-nav entry', async () => {
     serve('ADMIN');
     await visit('/projects');
-    expect(topEntries()).toEqual(['Projects', 'Tasks', 'Scheduled', 'Waiting on you', 'Wiki']);
+    expect(topEntries()).toEqual(['Projects', 'Tasks', 'Scheduled', 'Wiki', 'Drive']);
 
     await openAccountMenu();
-    expect(menuRows()).toEqual(['MachinesNone', 'Settings', 'Help center', 'Admin', 'Log out']);
+    expect(menuRows()).toEqual(['MachinesNone', 'Model routingBalance', 'Help center', 'Settings', 'Admin', 'Log out']);
   });
 
   it('opens the Users page', async () => {
@@ -147,9 +148,9 @@ describe('Admin, for a member', () => {
   it('is nowhere: the account menu has no Admin row', async () => {
     serve('MEMBER');
     await visit('/projects');
-    expect(topEntries()).toEqual(['Projects', 'Tasks', 'Scheduled', 'Waiting on you', 'Wiki']);
+    expect(topEntries()).toEqual(['Projects', 'Tasks', 'Scheduled', 'Wiki', 'Drive']);
 
     await openAccountMenu();
-    expect(menuRows()).toEqual(['MachinesNone', 'Settings', 'Help center', 'Log out']);
+    expect(menuRows()).toEqual(['MachinesNone', 'Model routingBalance', 'Help center', 'Settings', 'Log out']);
   });
 });

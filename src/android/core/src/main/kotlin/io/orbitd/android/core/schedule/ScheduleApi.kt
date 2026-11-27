@@ -46,10 +46,15 @@ class ScheduleApi(private val api: OrbitApi, private val handle: SessionHandle) 
     suspend fun pause(id: String) { send(listOf("schedules", id, "pause"), HttpMethod.POST) }
     suspend fun resume(id: String) { send(listOf("schedules", id, "resume"), HttpMethod.POST) }
     /** Run now: one run outside the rule, counted against the week like any other. */
-    suspend fun runNow(id: String) { send(listOf("schedules", id, "run"), HttpMethod.POST) }
+    suspend fun runNow(id: String): ScheduleRunAnswer? =
+        ScheduleRunAnswer.parse(parse(send(listOf("schedules", id, "run"), HttpMethod.POST)))
     /** Undo one revision: the change line's and the history's Undo. */
     suspend fun undo(id: String, revision: Int) {
         send(listOf("schedules", id, "undo"), HttpMethod.POST, buildJsonObject { put("revision", revision) })
+    }
+    /** Rename (§8.4): the title alone, applied at once. */
+    suspend fun rename(id: String, title: String) {
+        send(listOf("schedules", id, "rename"), HttpMethod.POST, buildJsonObject { put("title", title) })
     }
     suspend fun delete(id: String) { send(listOf("schedules", id), HttpMethod.DELETE) }
     suspend fun stopRun(runId: String) { send(listOf("schedule-runs", runId, "stop"), HttpMethod.POST) }
@@ -80,6 +85,14 @@ class ScheduleApi(private val api: OrbitApi, private val handle: SessionHandle) 
     /** The cards a conversation asked and the changes it made, drawn in it. */
     suspend fun sessionCards(sessionId: String): SessionScheduleCardsResponse =
         read(get(listOf("sessions", sessionId, "schedule-cards")), SessionScheduleCardsResponse::parse)
+
+    /** Change… (§8.2): the schedule's open change conversation, if any, and the opening a new one would start with. */
+    suspend fun change(id: String): ScheduleChangeConversationResponse =
+        read(get(listOf("schedules", id, "change")), ScheduleChangeConversationResponse::parse)
+
+    /** Opens the schedule's change conversation with the person's first words, or says them in the one still open. */
+    suspend fun openChange(id: String, text: String): ScheduleChangeAnswer =
+        read(send(listOf("schedules", id, "change"), HttpMethod.POST, buildJsonObject { put("text", text) }), ScheduleChangeAnswer::parse)
 
     private suspend fun decide(id: String, door: String, body: JsonObject): ScheduleDecisionOutcome = try {
         val answer = send(listOf("schedule-requests", id, door), HttpMethod.POST, body)

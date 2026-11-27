@@ -47,7 +47,11 @@ import { canonicalJson } from './canonical-json';
 export const PROJECT_INTEGRATION_APPROVAL_TOOL_NAME = 'orbit_project_update_integration';
 
 /** The merge-check fields, in the spelling the DTO and the card both use. */
-const MERGE_CHECK_FIELDS = ['mergeCheckCommand', 'mergeCheckTimeoutSeconds', 'landingCheckCommand', 'landingCheckTimeoutSeconds'] as const;
+const MERGE_CHECK_FIELDS = ['mergeCheckCommand', 'mergeCheckTimeoutSeconds', 'landingCheckCommand', 'landingCheckTimeoutSeconds', 'landingCheck'] as const;
+
+/** The landing-check fields: the ones the project's coordinator may write with no card where
+ *  §12.15 P-C1 holds (`ProjectsService.assertIntegrationIsWrittenByItsOwner`). */
+const LANDING_CHECK_FIELD_SET: ReadonlySet<string> = new Set(['landingCheckCommand', 'landingCheckTimeoutSeconds', 'landingCheck']);
 
 /** Where a project's work lands. No card authorises these; see the header. */
 const INTEGRATION_LINE_FIELDS = ['line', 'projectBranchName', 'upstreamRef'] as const;
@@ -66,6 +70,10 @@ export function isIntegrationLineField(key: string): boolean {
 
 export function isMergeCheckField(key: string): boolean {
   return MERGE_CHECK_FIELD_SET.has(key);
+}
+
+export function isLandingCheckField(key: string): boolean {
+  return LANDING_CHECK_FIELD_SET.has(key);
 }
 
 /**

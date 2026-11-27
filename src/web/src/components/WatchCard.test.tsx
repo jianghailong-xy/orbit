@@ -103,6 +103,9 @@ function serve(routes: Record<string, (init?: Init) => unknown>, titles: Record<
     if (state && list && (init?.method ?? 'GET') === 'GET') {
       return (list() as WatchView[]).filter((w) => w.state === state[1]);
     }
+    if (path === '/watches?following=true' && (init?.method ?? 'GET') === 'GET') {
+      return list ? (list() as WatchView[]) : [];
+    }
     if (path === '/watches?needsAttention=true' && (init?.method ?? 'GET') === 'GET') {
       return list ? (list() as WatchView[]).filter((w) => watchProblem(w)) : [];
     }

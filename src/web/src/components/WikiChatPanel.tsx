@@ -42,6 +42,7 @@ import {
   updateSessionConfig,
 } from '../api';
 import { Menu } from './ui/Menu';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 import { ApprovalPanel } from './ApprovalPanel';
 import { PendingTray } from './PendingTray';
 import { SessionConversation } from './SessionConversation';
@@ -241,32 +242,38 @@ export function WikiChatPanel({
         </button>
       )}
       <div className="wk-chat-head">
-        <button
-          type="button"
-          className="wk-chat-title"
-          aria-expanded={history}
-          title={WIKI_CHAT_HISTORY}
-          onClick={() => setHistory((open) => !open)}
-        >
-          <span className="t">{title}</span>
-          <CaretDownOutlined className="caret" />
-        </button>
-        <button type="button" className="wk-chat-ib" aria-label={WIKI_CHAT_NEW} title={WIKI_CHAT_NEW} onClick={() => onChat(WIKI_CHAT_NEW_PARAM)}>
-          <PlusOutlined />
-        </button>
-        <button
-          type="button"
-          className="wk-chat-ib"
-          aria-label={WIKI_CHAT_OPEN_SESSION}
-          title={WIKI_CHAT_OPEN_SESSION}
-          disabled={fresh || history}
-          onClick={() => navigate(`/sessions/${encodeId(sessionId!)}`)}
-        >
-          <ArrowRightOutlined />
-        </button>
-        <button type="button" className="wk-chat-ib" aria-label={WIKI_CHAT_CLOSE} title={WIKI_CHAT_CLOSE} onClick={onClose}>
-          <CloseOutlined />
-        </button>
+        <Tooltip content={WIKI_CHAT_HISTORY} side="bottom" align="start">
+          <button
+            type="button"
+            className="wk-chat-title"
+            aria-expanded={history}
+            onClick={() => setHistory((open) => !open)}
+          >
+            <span className="t">{title}</span>
+            <CaretDownOutlined className="caret" />
+          </button>
+        </Tooltip>
+        <Tooltip content={WIKI_CHAT_NEW} side="bottom">
+          <button type="button" className="wk-chat-ib" aria-label={WIKI_CHAT_NEW} onClick={() => onChat(WIKI_CHAT_NEW_PARAM)}>
+            <PlusOutlined />
+          </button>
+        </Tooltip>
+        <Tooltip content={WIKI_CHAT_OPEN_SESSION} side="bottom">
+          <button
+            type="button"
+            className="wk-chat-ib"
+            aria-label={WIKI_CHAT_OPEN_SESSION}
+            disabled={fresh || history}
+            onClick={() => navigate(`/sessions/${encodeId(sessionId!)}`)}
+          >
+            <ArrowRightOutlined />
+          </button>
+        </Tooltip>
+        <Tooltip content={WIKI_CHAT_CLOSE} side="bottom" align="end">
+          <button type="button" className="wk-chat-ib" aria-label={WIKI_CHAT_CLOSE} onClick={onClose}>
+            <CloseOutlined />
+          </button>
+        </Tooltip>
       </div>
       {history && (
         <WikiChatHistory
@@ -590,6 +597,7 @@ function useChatToolbar({
   configured,
   resolved,
   current,
+  codexSandboxUnavailable,
   change,
 }: {
   engine: AgentProvider;
@@ -598,6 +606,7 @@ function useChatToolbar({
   configured: ConfiguredProvider[];
   resolved: boolean;
   current: ChatConfig;
+  codexSandboxUnavailable?: boolean;
   change: (next: ChatConfigChange) => void;
 }) {
   const qc = useQueryClient();
@@ -619,7 +628,7 @@ function useChatToolbar({
   const cursorSettings = cursorAuto ? [] : cursorSettingRows(shownCursorPick);
   const onOwnModels = engine === AgentProvider.CLAUDE && !isLoginProvider(provider) && configured.some((p) => p.slug === provider);
   const permissionSemanticsFor = (label: string) =>
-    derivePermissionSemantics(engine, modeValue(label), onOwnModels ? undefined : shownModel, runner?.runsAsRoot, catalog);
+    derivePermissionSemantics(engine, modeValue(label), onOwnModels ? undefined : shownModel, runner?.runsAsRoot, catalog, codexSandboxUnavailable);
 
   const remember = (patch: { defaultEffort: string }) =>
     qc.setQueryData<Me>(meQuery().queryKey, (prev) =>
@@ -742,17 +751,18 @@ function wikiChatChips(attachments: WikiChatAttachments, dispatch: Dispatch<Wiki
         </span>
       )}
       {quote && (
-        <span
-          className="composer-pill composer-file wk-chat-chip q"
-          data-kind="quote"
-          title={quote.selected > quote.sentenceIds.length ? wikiChatCapped(quote.selected) : undefined}
-        >
-          <span className="composer-file-name q1">{quote.first}</span>
-          <span className="composer-file-size sub">{wikiChatQuoteCounts(quote.sentenceIds.length, quote.sources)}</span>
-          <button type="button" className="composer-file-remove x" aria-label={wikiChatRemove(quote.first)} onClick={() => dispatch({ type: 'crossQuote' })}>
-            <CloseOutlined />
-          </button>
-        </span>
+        <Tooltip content={quote.selected > quote.sentenceIds.length ? wikiChatCapped(quote.selected) : undefined} delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span
+            className="composer-pill composer-file wk-chat-chip q"
+            data-kind="quote"
+          >
+            <span className="composer-file-name q1">{quote.first}</span>
+            <span className="composer-file-size sub">{wikiChatQuoteCounts(quote.sentenceIds.length, quote.sources)}</span>
+            <button type="button" className="composer-file-remove x" aria-label={wikiChatRemove(quote.first)} onClick={() => dispatch({ type: 'crossQuote' })}>
+              <CloseOutlined />
+            </button>
+          </span>
+        </Tooltip>
       )}
     </>
   );
@@ -1067,17 +1077,19 @@ function WikiChatPick({
   onChange: (value: string) => void;
 }) {
   return (
-    <span className="wk-chat-pick" title={label}>
-      <span className="v">{shown}</span>
-      <DownOutlined className="ic" />
-      <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </span>
+    <Tooltip content={label}>
+      <span className="wk-chat-pick">
+        <span className="v">{shown}</span>
+        <DownOutlined className="ic" />
+        <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}>
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </span>
+    </Tooltip>
   );
 }
 
@@ -1092,6 +1104,7 @@ interface ChatSession {
   provider?: string | null;
   model?: string | null;
   permissionMode?: string | null;
+  codexSandboxUnavailable?: boolean;
   effort?: string | null;
   fastMode?: boolean | null;
   numTurns?: number;
@@ -1172,7 +1185,9 @@ function WikiChatSession({
     | { model?: string | null; effort?: string | null; runnerId?: string | null }
     | undefined;
   const model = effectiveSessionModel(engine, provider, session?.model, workspaceRow?.model, catalog, machine.configured, runner?.runtimeDefaultModels);
-  const permissionMode = session?.permissionMode ?? 'default';
+  const me = useQuery(meQuery());
+  // A session that stored no mode runs in the account's, else Auto, as the server resolves it.
+  const permissionMode = session?.permissionMode ?? me.data?.preferences?.defaultPermissionMode ?? DEFAULT_PERMISSION_MODE;
   const current: ChatConfig = {
     model,
     permissionMode: resolved ? clampPermissionModeForModel(permissionMode, model, engine, provider, machine.configured, catalog) : permissionMode,
@@ -1214,6 +1229,7 @@ function WikiChatSession({
     configured: machine.configured,
     resolved,
     current,
+    codexSandboxUnavailable: session?.codexSandboxUnavailable,
     change: (config) => configMut.mutate(config),
   });
   const online = runner?.online ?? false;
@@ -1405,11 +1421,6 @@ function WikiChatSession({
     draft.setHistIdx(-1);
     setFailed(null);
     if (words.startsWith('!')) {
-      // DeepSeek Harness has no shell bridge: the command stays in the composer rather than going out to fail.
-      if (engine === AgentProvider.DSH) {
-        message.warning('DeepSeek Harness sessions don’t run ! shell commands', 'Ask the agent to run it instead.');
-        return;
-      }
       const command = words.slice(1).trim();
       if (command) send.mutate({ content: command, images: [], shell: true, intent: 'NEXT_TURN' });
       else draft.setText('');

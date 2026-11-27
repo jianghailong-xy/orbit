@@ -3,22 +3,31 @@ import type { Request, Response } from 'express';
 import type { IncomingHttpHeaders, IncomingMessage, OutgoingHttpHeaders } from 'node:http';
 import { Agent as HttpsAgent } from 'node:https';
 import { StringDecoder } from 'node:string_decoder';
-import { AgentProvider, keyDialect, providerPreset } from '@orbit/shared';
+import { AgentProvider, providerPreset } from '@orbit/shared';
 import { ACCOUNT_DISABLED, ACCOUNT_DISABLED_MESSAGE, DisabledAccounts } from '../auth/disabled-accounts';
 import { sha256 } from '../common/crypto.util';
-import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
+import { isHeld } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   anthropicError,
   assembleMessage,
+  ChatStreamConverter,
   estimateInputTokens,
   MessagesStreamConverter,
+  toChatCompletionsRequest,
   toInputTokensRequest,
   toResponsesRequest,
   toSse,
+  type MessagesEvent,
   type TranslateContext,
 } from './anthropic-gateway';
-import { ANTHROPIC_GATEWAY_PATH, anthropicGatewayEnabled, gatewaySmallModel, KEY_GATEWAY_TOKEN_PREFIX } from './key-gateway';
+import {
+  ANTHROPIC_GATEWAY_PATH,
+  anthropicGatewayEnabled,
+  gatewayKeyDialect,
+  gatewaySmallModel,
+  KEY_GATEWAY_TOKEN_PREFIX,
+} from './key-gateway';
 import { resolveHost, UpstreamRefused, vetUpstream, type HostResolver, type VettedUpstream } from './gateway-upstream';
 import { catalogModels } from './model-catalog';
 import {
@@ -38,7 +47,7 @@ import { servesKeptSubagent } from './kept-subagent-gateway';
 
 /**
  * What a token authenticates (docs/claude-engine-openai-gateway-design.md §5.2): one session, of one person, on
- * one of their OpenAI keys — and nothing more. Everything here was read live at the request.
+ * one of their OpenAI or OpenAI-compatible keys — and nothing more. Everything here was read live at the request.
  */
 export interface AnthropicGatewayCaller {
   sessionId: string;
@@ -50,6 +59,11 @@ export interface AnthropicGatewayCaller {
     slug: string;
     /** The name its owner gave it, which every refusal names it by. */
     label: string;
+    /**
+     * What the key's endpoint speaks, which decides where a turn goes (design §10): `openai` to its `/responses`,
+     * `openai-compatible` to its `/chat/completions`.
+     */
+    dialect: 'openai' | 'openai-compatible';
     baseUrl: string;
     apiKeyEnc: string;
     presetSlug: string | null;
@@ -87,7 +101,9 @@ export function refuseAnthropic(res: Response, status: number, type: string, mes
 /**
  * The /api/gw/anthropic gateway (design §4.1): Claude Code on an OpenAI key sends Anthropic Messages here with
  * an `orbit-gwk-` token, and this sends them on to the key's `/responses` as OpenAI Responses with the key,
- * translating the answer back (anthropic-gateway/, a pure module). The key is decrypted only for that request.
+ * translating the answer back (anthropic-gateway/, a pure module). On an OpenAI-compatible key they go to its
+ * `/chat/completions` as Chat Completions instead (design §10), with the same tokens, endpoint rule, failure
+ * table and usage records. The key is decrypted only for that request.
  *
  * Every upstream failure is answered in Anthropic's shape with the status and wording design §5.4 gives it,
  * and does what it says to the key (gatewayFailure): a 401 marks the key INVALID, a spent budget records
@@ -113,7 +129,7 @@ export class AnthropicGatewayService {
    * The token's (session, key, person) when it may still be used; ACCOUNT_DISABLED when it may but for its
    * person's account, which an administrator disabled; null for every other way it may not — revoked (the key
    * was switched off or given a new secret) or expired, the session ended (or its end was asked for) or moved to another credential or
-   * engine, the key switched off or no longer an OpenAI key, or the gateway switched off. A deleted session,
+   * engine, the key switched off or no longer an OpenAI or OpenAI-compatible key, or the gateway switched off. A deleted session,
    * key or person took the token row with it.
    */
   async caller(token: string | undefined): Promise<AnthropicGatewayCaller | typeof ACCOUNT_DISABLED | null> {
@@ -134,7 +150,7 @@ export class AnthropicGatewayService {
         },
         session: {
           select: {
-            status: true, ownerId: true, provider: true, engine: true, model: true, completedAt: true, deletedAt: true,
+            finishedAt: true, ownerId: true, provider: true, engine: true, model: true, completedAt: true, deletedAt: true,
             cancelRequestedAt: true, endReason: true,
             owner: { select: { disabledAt: true } },
           },
@@ -143,8 +159,9 @@ export class AnthropicGatewayService {
     });
     if (!row || row.revokedAt || row.expiresAt.getTime() <= Date.now()) return null;
     const { session, provider } = row;
+    const dialect = gatewayKeyDialect(provider.runtime);
     const open =
-      OPEN_SESSION_STATUSES.includes(session.status) &&
+      isHeld(session) &&
       !session.completedAt &&
       // An end asked for (SessionsService.end): the runner has yet to stop it, but it serves no more turns.
       !session.cancelRequestedAt &&
@@ -155,10 +172,10 @@ export class AnthropicGatewayService {
       session.provider === provider.slug &&
       session.engine === AgentProvider.CLAUDE &&
       provider.enabled &&
-      keyDialect(provider.runtime) === 'openai' &&
+      dialect !== null &&
       // A personal key is its owner's alone; a shared one (no owner) an admin's, as dispatch scopes it.
       (provider.ownerId === null || provider.ownerId === row.userId);
-    if (!current) return null;
+    if (!current || dialect === null) return null;
     // A session no longer open serves on only while its handover left a SubAgent running on its tokens.
     if (!open && !(await servesKeptSubagent(this.prisma, row.sessionId))) return null;
     // Asked last, as the pool gateway asks it: the token itself is good, and works again once enabled.
@@ -168,7 +185,7 @@ export class AnthropicGatewayService {
       userId: row.userId,
       sessionModel: session.model,
       key: {
-        id: provider.id, slug: provider.slug, label: provider.label, baseUrl: provider.baseUrl, apiKeyEnc: provider.apiKeyEnc,
+        id: provider.id, slug: provider.slug, label: provider.label, dialect, baseUrl: provider.baseUrl, apiKeyEnc: provider.apiKeyEnc,
         presetSlug: provider.presetSlug, followsPreset: provider.followsPreset, models: provider.models,
         keyCheckState: provider.keyCheckState, spentUntil: provider.spentUntil,
       },
@@ -213,16 +230,22 @@ export class AnthropicGatewayService {
       promptCacheKey: caller.sessionId,
       webSearchSources: true,
     };
+    const chat = caller.key.dialect === 'openai-compatible';
     if (path === COUNT_TOKENS) {
-      await this.countTokens(res, caller, message, ctx, upstream);
+      // Chat Completions has no token count: the estimate answers (design §10.4).
+      if (chat) res.status(200).json({ input_tokens: estimateInputTokens(message) });
+      else await this.countTokens(res, caller, message, ctx, upstream);
       this.log.log(`session ${caller.sessionId} key ${caller.key.slug}: POST ${path} in ${Date.now() - started}ms`);
       return;
     }
-    const { request } = toResponsesRequest(message, ctx);
+    const { request } = chat ? toChatCompletionsRequest(message, ctx) : toResponsesRequest(message, ctx);
     const upstreamModel = String(request.model);
     const estimate = estimateInputTokens(message);
     const window = contextWindow(caller.key, upstreamModel);
-    const said: FailureContext = { keyLabel: caller.key.label, model: upstreamModel, contextWindow: window, inputTokensEstimate: estimate };
+    const said: FailureContext = {
+      keyLabel: caller.key.label, model: upstreamModel, contextWindow: window, inputTokensEstimate: estimate,
+      ...(chat ? { upstream: new URL(caller.key.baseUrl.trim()).hostname } : {}),
+    };
     const line = (what: string) =>
       this.log.log(`session ${caller.sessionId} key ${caller.key.slug} model ${upstreamModel}: POST ${path} → ${what} in ${Date.now() - started}ms`);
     if (caller.key.keyCheckState === 'INVALID') {
@@ -235,11 +258,11 @@ export class AnthropicGatewayService {
     const payload = Buffer.from(JSON.stringify(request), 'utf8');
     let answer: Answer;
     try {
-      answer = await sendUpstream(this.agent, 'POST', upstreamUrl(caller.key.baseUrl, '/responses'),
+      answer = await sendUpstream(this.agent, 'POST', upstreamUrl(caller.key.baseUrl, chat ? '/chat/completions' : '/responses'),
         upstreamHeaders(caller.key.apiKeyEnc, payload.length, 'text/event-stream'), payload, res, upstream.lookup);
     } catch (e) {
       if (!res.headersSent) answerFailure(res, gatewayFailure(null, 'server_error', `the Orbit gateway could not reach it: ${(e as Error).message}`, { ...said, spentUntil: new Date() }));
-      this.log.warn(`session ${caller.sessionId} key ${caller.key.slug}: OpenAI unreachable: ${(e as Error).message}`);
+      this.log.warn(`session ${caller.sessionId} key ${caller.key.slug}: ${said.upstream ?? 'OpenAI'} unreachable: ${(e as Error).message}`);
       return;
     }
     const status = answer.response.statusCode ?? 502;
@@ -258,11 +281,10 @@ export class AnthropicGatewayService {
       line(`${status} ${code || 'error'}`);
       return;
     }
-    const converter = new MessagesStreamConverter({
-      model: typeof message.model === 'string' ? message.model : upstreamModel,
-      contextWindow: window,
-      inputTokensEstimate: estimate,
-    });
+    const streamCtx = { model: typeof message.model === 'string' ? message.model : upstreamModel, contextWindow: window, inputTokensEstimate: estimate };
+    const converter: Converter = chat ? new ChatStreamConverter(streamCtx) : new MessagesStreamConverter(streamCtx);
+    /** What the answer used: off the Responses stream by the tap, off the chunks by the Chat Completions converter. */
+    const used = (tapped: ResponsesOutcome): ResponsesOutcome => (converter instanceof ChatStreamConverter ? converter.outcome : tapped);
     if (message.stream !== true) {
       // Unstreamed — the CLI's own retry of a stream that broke, and its side requests: one response,
       // read whole, so a failure anywhere in it is answered with its status rather than a 200.
@@ -276,7 +298,7 @@ export class AnthropicGatewayService {
       const tap = new ResponsesStreamTap();
       tap.push(raw);
       tap.end();
-      void this.record(caller, tap.outcome, upstreamModel);
+      void this.record(caller, used(tap.outcome), upstreamModel);
       if ('error' in whole) {
         const failed = converter.failure ?? { code: 'server_error', message: whole.error.message };
         await this.fail(res, caller, null, failed.code, failed.message, answer.response.headers, said);
@@ -289,7 +311,10 @@ export class AnthropicGatewayService {
       line(`${status} in ${usage?.input_tokens ?? 0} out ${usage?.output_tokens ?? 0}`);
       return;
     }
-    const early = await earlyFailure(answer.response);
+    // A compatible server that answered one whole JSON completion in place of a stream has no first event to read:
+    // the converter reads it whole (chat-stream.ts).
+    const wholeJson = chat && /application\/json/i.test(String(answer.response.headers['content-type'] ?? ''));
+    const early = wholeJson ? null : await earlyFailure(answer.response, chat ? chatFirstWord : responsesFirstWord);
     if (early) {
       answer.response.destroy();
       await this.fail(res, caller, null, early.code, early.message, answer.response.headers, said);
@@ -300,7 +325,7 @@ export class AnthropicGatewayService {
       const usage = outcome.usage
         ? ` in ${outcome.usage.input_tokens ?? 0} out ${outcome.usage.output_tokens ?? 0}`
         : '';
-      void this.record(caller, outcome, upstreamModel);
+      void this.record(caller, used(outcome), upstreamModel);
       const failed = converter.failure;
       if (failed) {
         // Output had begun, so the CLI was told by an `error` event; the key is answered for all the same.
@@ -340,7 +365,7 @@ export class AnthropicGatewayService {
       : { spentUntil: until ?? null };
     try {
       await this.prisma.modelProvider.updateMany({ where: { id: caller.key.id, apiKeyEnc: caller.key.apiKeyEnc }, data });
-      this.log.log(`session ${caller.sessionId} key ${caller.key.slug}: ${effect === 'key_invalid' ? 'refused by OpenAI — marked invalid' : `insufficient_quota — spent until ${until?.toISOString()}`}`);
+      this.log.log(`session ${caller.sessionId} key ${caller.key.slug}: ${effect === 'key_invalid' ? `refused by ${caller.key.dialect === 'openai' ? 'OpenAI' : 'its endpoint'} — marked invalid` : `insufficient_quota — spent until ${until?.toISOString()}`}`);
     } catch (e) {
       this.log.warn(`session ${caller.sessionId} key ${caller.key.slug}: could not record ${effect}: ${(e as Error).message}`);
     }
@@ -348,7 +373,8 @@ export class AnthropicGatewayService {
 
   /**
    * What one answer used (design §5.5, decision D8), read off the Responses stream as it passed by the same tap
-   * the pool gateway reads (`responses-stream-tap.ts`) and priced with `openai-prices.ts`: a `key_gateway_usage`
+   * the pool gateway reads (`responses-stream-tap.ts`) — or off the Chat Completions chunks by their converter
+   * (design §10.3) — and priced with `openai-prices.ts`: a `key_gateway_usage`
    * row for the session and key, a `usage` row (input counted the way a Claude row counts it, without what came
    * from the cache), and the cost added to `session.cost_usd`, which turn-complete then leaves alone for such a
    * session (gatewayBooksSpend). Written after the answer is out, off the stream's path; an answer that names no
@@ -424,6 +450,13 @@ export class AnthropicGatewayService {
   }
 }
 
+/** What turns an upstream stream into Messages events: the Responses converter, or the Chat Completions one. */
+type Converter = {
+  push(chunk: Buffer | string): MessagesEvent[];
+  end(): MessagesEvent[];
+  readonly failure: { code: string; message: string } | undefined;
+};
+
 /** A token count as an answer gave it: a whole number, never below zero. */
 function count(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
@@ -478,6 +511,11 @@ export interface FailureContext {
    * pool (anthropic-login-gateway.service.ts), whose 401 the login gateway answers itself.
    */
   subject?: string;
+  /**
+   * Who answers in place of `OpenAI`: the endpoint's host, for an OpenAI-compatible key (design §10), which is
+   * then `the key "<keyLabel>"` rather than `the OpenAI key`.
+   */
+  upstream?: string;
   model: string;
   contextWindow?: number;
   inputTokensEstimate?: number;
@@ -518,7 +556,8 @@ export function gatewayFailure(
   const said = message.trim().replace(/\.$/, '');
   const detail = said ? `: ${said}` : '';
   const key = `"${ctx.keyLabel}"`;
-  const subject = ctx.subject ?? `the OpenAI key ${key}`;
+  const vendor = ctx.upstream ?? 'OpenAI';
+  const subject = ctx.subject ?? (ctx.upstream ? `the key ${key}` : `the OpenAI key ${key}`);
   const theKey = ctx.subject ?? `the key ${key}`;
   if (SPENT_ERROR_CODES.has(code)) {
     return {
@@ -538,34 +577,34 @@ export function gatewayFailure(
       status: 401,
       type: 'authentication_error',
       message: ctx.subject
-        ? `OpenAI refused ${ctx.subject}${detail}.`
-        : `OpenAI refused the key ${key}${detail}. Orbit marked it invalid: add a new key in Providers to go on.`,
+        ? `${vendor} refused ${ctx.subject}${detail}.`
+        : `${vendor} refused the key ${key}${detail}. Orbit marked it invalid: add a new key in Providers to go on.`,
       cliRetries: false,
       effect: 'key_invalid',
     };
   }
   if (status === 404 || code === 'model_not_found') {
-    return { status: 404, type: 'not_found_error', message: `OpenAI has no model "${ctx.model}" for ${theKey}${detail}.`, cliRetries: false, effect: null };
+    return { status: 404, type: 'not_found_error', message: `${vendor} has no model "${ctx.model}" for ${theKey}${detail}.`, cliRetries: false, effect: null };
   }
   if (status === 403) {
-    return { status: 403, type: 'permission_error', message: `${theKey.charAt(0).toUpperCase()}${theKey.slice(1)} may not use the model "${ctx.model}" on OpenAI${detail}.`, cliRetries: false, effect: null };
+    return { status: 403, type: 'permission_error', message: `${theKey.charAt(0).toUpperCase()}${theKey.slice(1)} may not use the model "${ctx.model}" on ${vendor}${detail}.`, cliRetries: false, effect: null };
   }
   if (status === 429 || code === 'rate_limit_exceeded') {
     return {
       status: 429,
       type: 'rate_limit_error',
-      message: `OpenAI is rate-limiting ${theKey}, and was still refusing after the Orbit gateway waited${detail}.`,
+      message: `${vendor} is rate-limiting ${theKey}, and was still refusing after the Orbit gateway waited${detail}.`,
       cliRetries: false,
       effect: null,
     };
   }
   if (status !== null ? status >= 400 && status < 500 && status !== 408 : code === 'invalid_prompt' || code === 'invalid_request_error') {
-    return { status: status ?? 400, type: 'invalid_request_error', message: said || code || 'OpenAI refused the request.', cliRetries: false, effect: null };
+    return { status: status ?? 400, type: 'invalid_request_error', message: said || code || `${vendor} refused the request.`, cliRetries: false, effect: null };
   }
   return {
     status: 529,
     type: 'overloaded_error',
-    message: `OpenAI could not answer${status !== null ? ` (${status})` : ''}${detail || '.'}`,
+    message: `${vendor} could not answer${status !== null ? ` (${status})` : ''}${detail || '.'}`,
     cliRetries: true,
     effect: null,
   };
@@ -594,13 +633,36 @@ const PREAMBLE = new Set(['response.created', 'response.in_progress', 'response.
 const EARLY_LIMIT = 256 * 1024;
 
 /**
- * Whether a Responses stream fails before it says anything (`response.failed` or `error` as the first
- * event after the preamble): its code and message, the bytes read put back for the relay otherwise. A
- * stream that ends without a word is a failure too. Read before the answer's head goes out, so such a
- * failure — a spent budget, an overflow, an overload, which OpenAI may send this way — is answered with
+ * What a stream's first event says: `skip` for one that says nothing yet, its failure, or null for any other —
+ * the response has begun.
+ */
+export type FirstWord = (event: Record<string, unknown> | undefined) => 'skip' | { code: string; message: string } | null;
+
+/** A Responses stream: its preamble says nothing; `response.failed` or `error` after it is a failure. */
+export const responsesFirstWord: FirstWord = (event) => {
+  const type = typeof event?.type === 'string' ? event.type : '';
+  if (!type || PREAMBLE.has(type)) return 'skip';
+  if (type !== 'response.failed' && type !== 'error') return null;
+  const error = ((type === 'error' ? event!.error ?? event : (event!.response as Record<string, unknown> | undefined)?.error) ?? {}) as Record<string, unknown>;
+  return { code: String(error.code ?? error.type ?? 'server_error'), message: String(error.message ?? '') };
+};
+
+/** A Chat Completions stream: a chunk carrying `error` is a failure; any other first word, `[DONE]` too, is not. */
+export const chatFirstWord: FirstWord = (event) => {
+  const error = event?.error;
+  if (!error || typeof error !== 'object') return null;
+  const e = error as Record<string, unknown>;
+  return { code: String(e.code ?? e.type ?? 'server_error'), message: String(e.message ?? '') };
+};
+
+/**
+ * Whether a stream fails before it says anything (for Responses, `response.failed` or `error` as the first
+ * event after the preamble; `firstWord` reads it): its code and message, the bytes read put back for the relay
+ * otherwise. A stream that ends without a word is a failure too. Read before the answer's head goes out, so
+ * such a failure — a spent budget, an overflow, an overload, which OpenAI may send this way — is answered with
  * its own status, as an error answer is: on an SSE `error` event the CLI would ask again unstreamed.
  */
-export function earlyFailure(response: IncomingMessage): Promise<{ code: string; message: string } | null> {
+export function earlyFailure(response: IncomingMessage, firstWord: FirstWord = responsesFirstWord): Promise<{ code: string; message: string } | null> {
   return new Promise((resolve) => {
     const decoder = new StringDecoder('utf8');
     const chunks: Buffer[] = [];
@@ -625,15 +687,12 @@ export function earlyFailure(response: IncomingMessage): Promise<{ code: string;
           const block = text.slice(0, at.index);
           text = text.slice(at.index + at[0].length);
           const data = block.split(/\r?\n/).filter((l) => l.startsWith('data:')).map((l) => l.slice(5).trimStart()).join('\n');
-          const event = data ? (parseJson(Buffer.from(data)) as Record<string, unknown> | undefined) : undefined;
-          const type = typeof event?.type === 'string' ? event.type : '';
-          if (!type || PREAMBLE.has(type)) continue;
-          if (type === 'response.failed' || type === 'error') {
-            const error = ((type === 'error' ? event!.error ?? event : (event!.response as Record<string, unknown> | undefined)?.error) ?? {}) as Record<string, unknown>;
-            finish({ code: String(error.code ?? error.type ?? 'server_error'), message: String(error.message ?? '') });
-          } else {
-            finish(null);
-          }
+          // A block with no data (an SSE comment, a keep-alive) says nothing.
+          if (!data) continue;
+          const event = parseJson(Buffer.from(data)) as Record<string, unknown> | undefined;
+          const word = firstWord(event && typeof event === 'object' ? event : undefined);
+          if (word === 'skip') continue;
+          finish(word);
           return;
         }
         if (size > EARLY_LIMIT) {

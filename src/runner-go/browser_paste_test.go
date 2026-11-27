@@ -127,6 +127,22 @@ func TestPasteWithNoFieldFocusedIsRefusedAndInsertsNothing(t *testing.T) {
 	}
 }
 
+// A page is shown but none has the window's focus: Chrome's own UI has it (the address bar), which DevTools cannot
+// reach, so the text goes through the display's clipboard instead, exactly and once.
+func TestPasteWithTheFocusInChromesOwnUIGoesThroughTheClipboard(t *testing.T) {
+	var got []string
+	prev := pasteIntoBrowserUI
+	pasteIntoBrowserUI = func(_ context.Context, text string) error { got = append(got, text); return nil }
+	t.Cleanup(func() { pasteIntoBrowserUI = prev })
+	d := newFakeDevTools(t, map[string]int{"shown": 1, "background": 0})
+	if err := insertBrowserText(context.Background(), d.srv.URL, pasteSample); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+	if len(got) != 1 || got[0] != pasteSample || len(d.insertedTexts()) != 0 {
+		t.Fatalf("through the clipboard %q, inserted %q", got, d.insertedTexts())
+	}
+}
+
 func TestPasteOverTheCapIsRefusedWithoutAskingTheBrowser(t *testing.T) {
 	d := newFakeDevTools(t, map[string]int{"focused-field": 6})
 	err := insertBrowserText(context.Background(), d.srv.URL, strings.Repeat("x", browserPasteMaxBytes+1))
@@ -147,8 +163,6 @@ func TestALinkStreamPasteIsInsertedAndAnswered(t *testing.T) {
 	if !slices.Contains(r.conn.hello.GetCapabilities(), linkStreamPasteCapability) {
 		t.Fatal("a managed runner did not declare paste")
 	}
-	// No real browser: the stream bridges the stand-in socket.
-	r.m.work.streams.viewer = func() (func(), error) { return func() {}, nil }
 	var mu sync.Mutex
 	var got []string
 	r.m.work.streams.paste = func(_ context.Context, text string) error {

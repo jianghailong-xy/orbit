@@ -224,8 +224,8 @@ export function queuedTurnEvent(turn: QueuedTurnRow): UserTurnEvent {
 /**
  * Reconcile one successful `view=active` snapshot into the optimistic accepted-turn list.
  *
- * The snapshot owns only rows recovered from an earlier active snapshot, and may remove such a row
- * only when it already existed when this request began. Local POST acknowledgements remain until
+ * The snapshot may remove only rows recovered from an earlier active snapshot that already
+ * existed when this request began. Local POST acknowledgements remain until
  * their matching durable user event or terminal boundary arrives: the API can observe that event
  * before this tab's SSE does, and an empty response must not cause a visible gap.
  *
@@ -256,7 +256,9 @@ export function reconcileAcceptedUserTurnSnapshot(
     // A server copy must not downgrade a local acknowledgement into a snapshot-owned entry. The
     // API can observe the durable user event before this tab receives its SSE; if the following
     // snapshot then omits the row, the local bubble still has to bridge that last network gap.
-    next.push(localByKey.get(turn.key) ?? turn);
+    // While the snapshot lists the turn, its translation is what the bubble shows.
+    const local = localByKey.get(turn.key);
+    next.push(local ? { ...local, translation: turn.translation } : turn);
     included.add(turn.key);
   }
 

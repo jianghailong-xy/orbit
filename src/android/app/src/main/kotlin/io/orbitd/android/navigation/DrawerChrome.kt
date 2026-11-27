@@ -220,12 +220,17 @@ fun DrawerLabel(text: String, color: Color = Color.Unspecified) = Text(text, col
 
 /** iOS `workspacesHeader`: the rule and the group label that set the Workspaces apart from the work above them. */
 @Composable
-fun DrawerWorkspacesHeading(title: String) {
+fun DrawerWorkspacesHeading(title: String, trailing: (@Composable () -> Unit)? = null) {
     Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
         androidx.compose.material3.HorizontalDivider(Modifier.padding(start = DrawerMetrics.textLeading, end = DrawerMetrics.hInset),
             color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-        Text(title, Modifier.padding(start = DrawerMetrics.textLeading, top = 14.dp, bottom = 4.dp).semantics { heading() },
-            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // New workspace on any machine (docs/mocks/new-workspace-form/02-apple-entry, owner A): the + at the heading's trailing edge.
+        Row(Modifier.fillMaxWidth().padding(start = DrawerMetrics.textLeading, end = DrawerMetrics.textLeading - 4.dp),
+            verticalAlignment = Alignment.Bottom) {
+            Text(title, Modifier.weight(1f).padding(top = 14.dp, bottom = 4.dp).semantics { heading() },
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            trailing?.invoke()
+        }
     }
 }
 

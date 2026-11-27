@@ -111,3 +111,37 @@ func TestDshRealDefaultCacheRootDenied(t *testing.T) {
 	h.end()
 	h.evidence(t.Name(), map[string]interface{}{"cacheRoot": cache, "marker": "absent", "cards": 0, "denied": true})
 }
+
+// TestDshRealAutoUploads: in Auto, a dsh session writes its uploads directory without a card, as a Claude Code
+// session does (--add-dir). A confined shell command writes it through the sandbox's own grants (the uploads root
+// rides dshSandboxCacheRootPlugin), and dsh's write tool, whose own file sandbox has no setting for another root,
+// escalates once and is allowed by Orbit without a person.
+func TestDshRealAutoUploads(t *testing.T) {
+	dshRealCacheRootScenario(t)
+	h := newDshRealHarness(t, "auto", true)
+	uploads := uploadsDir(h.job.SessionID)
+	shellMarker, toolMarker := filepath.Join(uploads, "bench", "shell.txt"), filepath.Join(uploads, "bench", "tool.txt")
+	h.model.plans = []dshPlan{
+		{tool: "bash", args: map[string]interface{}{"command": "mkdir -p " + filepath.Dir(shellMarker) + " && printf shell > " + shellMarker,
+			"description": "write the uploads directory"}},
+		{tool: "write", args: map[string]interface{}{"file_path": toolMarker, "content": "tool",
+			"sandbox_permissions": "danger-full-access", "justification": "write the bench result"}},
+		{text: "P4 uploads answer"},
+	}
+	h.start()
+	h.send("t1", "message", "Write the bench results.")
+	done := h.settled("t1")
+	_, shellResult := h.toolResult("t1", "bash")
+	shell, shellErr := os.ReadFile(shellMarker)
+	tool, toolErr := os.ReadFile(toolMarker)
+	if done.Status != stSucceeded || shellErr != nil || string(shell) != "shell" || toolErr != nil || string(tool) != "tool" {
+		t.Fatalf("both writes must land in the uploads directory: turn=%s shell=%q (%v) tool=%q (%v) bash=%q",
+			done.Status, shell, shellErr, tool, toolErr, firstString(shellResult, "content"))
+	}
+	if len(h.cp.cards()) != 0 || len(h.notes("permission_denied")) != 0 || len(h.notes("permission_auto_allowed")) != 1 {
+		t.Fatalf("no card, and one visible auto-allow for the write tool's escalation: cards=%d denied=%d autoAllowed=%d",
+			len(h.cp.cards()), len(h.notes("permission_denied")), len(h.notes("permission_auto_allowed")))
+	}
+	h.end()
+	h.evidence(t.Name(), map[string]interface{}{"uploads": uploads, "cards": 0, "autoAllowed": 1})
+}

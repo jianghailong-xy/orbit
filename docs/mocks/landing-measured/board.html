@@ -1,0 +1,326 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<title>落地是量出来的：客户端画什么（修订 42 第二部分）</title>
+<link rel="stylesheet" href="../landing-session/v4/kit.css">
+<link rel="stylesheet" href="../landing-session/v4/web.css">
+<script src="../landing-session/v4/kit.js"></script>
+<script src="../landing-session/v4/web.js"></script>
+<style>
+/* 2026-11-20 · 契约修订 42 第二部分（§12.11–12.18）的效果图。部件取自 ../landing-session/v4；本图自己的类都带 lm- 前缀。 */
+.lm-part { margin-bottom: 50px; width: max-content; padding: 6px 4px 0; }
+.lm-row { display: flex; gap: 40px; align-items: flex-start; margin-bottom: 30px; }
+.lm-webcol { display: flex; flex-direction: column; gap: 34px; }
+.lm-webcol figure { width: 1180px; }
+.lm-webcol figcaption { max-width: 1180px; }
+.lm-lede { max-width: 1250px; }
+figcaption ul.lm-ul { list-style: none; padding-left: 0; }
+.lm-cap { margin-top: 14px; font-size: 13.5px; line-height: 1.62; color: #4a4a52; }
+.lm-cap b { color: #16161a; }
+.lm-rec { display: inline-block; font-size: 11.5px; font-weight: 700; background: #d7f2df; color: #155c2e; border-radius: 999px; padding: 0 8px; }
+.lm-alt { display: inline-block; font-size: 11.5px; font-weight: 700; background: #ececf0; color: #3a3a40; border-radius: 999px; padding: 0 8px; }
+
+/* —— 共用小件 —— */
+.lm-sec { margin: 14px 0 0; }
+.lm-sec > .h { font-size: 13px; font-weight: 650; color: var(--l2); text-transform: none; margin: 0 0 6px 2px; }
+.lm-card { background: #fff; border-radius: 13px; box-shadow: inset 0 0 0 .5px rgba(60,60,67,.2); overflow: hidden; }
+.lm-grp { background: rgba(120,120,128,.1); border-radius: 13px; overflow: hidden; }
+.lm-r { padding: 10px 13px; border-bottom: .5px solid var(--sep); font-size: 15px; line-height: 1.35; }
+.lm-r:last-child { border-bottom: 0; }
+.lm-r .k { display: flex; align-items: center; gap: 8px; }
+.lm-r .k b { font-weight: 500; flex: 1; }
+.lm-r .k .v { color: var(--l2); font-size: 14.5px; }
+.lm-r .hint { font-size: 12.5px; color: var(--l2); margin-top: 3px; line-height: 1.42; }
+.lm-r .hint b { color: var(--label); font-weight: 600; }
+.lm-code { font: 12px/1.5 "JetBrains Mono", monospace; background: #fff; border-radius: 8px; padding: 6px 9px; margin-top: 6px; color: #2c2c33; box-shadow: inset 0 0 0 .5px rgba(60,60,67,.2); word-break: break-all; }
+.lm-tog { width: 44px; height: 26px; border-radius: 13px; background: var(--green); position: relative; flex: none; }
+.lm-tog::after { content: ""; position: absolute; right: 2px; top: 2px; width: 22px; height: 22px; border-radius: 50%; background: #fff; }
+.lm-tog.off { background: #d9d9de; } .lm-tog.off::after { right: auto; left: 2px; }
+.lm-prov { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--l2); margin-top: 6px; }
+.lm-who { font-size: 11.5px; font-weight: 700; border-radius: 999px; padding: 0 8px; line-height: 18px; flex: none; }
+.lm-who.owner { background: #16161a; color: #fff; } .lm-who.coord { background: #ffe8c7; color: #8a4b00; } .lm-who.card { background: #d6e4ff; color: #14428f; } .lm-who.start { background: #e3e0ff; color: #3b2fa0; }
+.lm-seg { display: flex; background: rgba(120,120,128,.14); border-radius: 9px; padding: 2px; margin-top: 8px; }
+.lm-seg span { flex: 1; text-align: center; font-size: 13px; padding: 5px 4px; border-radius: 7px; color: var(--label); }
+.lm-seg span.on { background: #fff; font-weight: 650; box-shadow: 0 1px 3px rgba(0,0,0,.14); }
+.lm-segchip { display: inline-flex; gap: 3px; align-items: center; font-size: 11.5px; color: var(--l2); margin-top: 3px; }
+.lm-segchip i { font-style: normal; border-radius: 999px; padding: 0 7px; line-height: 17px; background: rgba(120,120,128,.14); }
+.lm-segchip i.ok { background: #dff3e4; color: #1d6b32; } .lm-segchip i.wait { background: #ececf0; } .lm-segchip i.sk { background: #fff1c2; color: #7a5300; }
+.lm-btn { display: inline-block; font-size: 13.5px; font-weight: 600; border-radius: 999px; padding: 5px 14px; background: rgba(120,120,128,.14); color: var(--tint); white-space: nowrap; }
+.lm-btn.red { background: rgba(255,59,48,.11); color: var(--red-ink); }
+.lm-btn.off { color: var(--l3); background: rgba(120,120,128,.08); }
+.lm-btn.pri { background: var(--tint); color: #fff; }
+.lm-chg { padding: 11px 13px; border-bottom: .5px solid var(--sep); }
+.lm-chg:last-child { border-bottom: 0; }
+.lm-chg .t { display: flex; align-items: center; gap: 7px; font-size: 14.5px; font-weight: 650; }
+.lm-chg .t .tm { margin-left: auto; font-size: 12.5px; font-weight: 400; color: var(--l2); }
+.lm-chg .ft { display: flex; gap: 6px; align-items: baseline; font-size: 13px; margin-top: 4px; line-height: 1.4; }
+.lm-chg .ft s { color: #8e8e93; } .lm-chg .ft .arr { color: var(--l2); }
+.lm-chg .ft code, .lm-code2 { font: 11.8px/1.4 "JetBrains Mono", monospace; background: rgba(120,120,128,.12); border-radius: 5px; padding: 0 5px; }
+.lm-chg .why { font-size: 13px; color: #2c2c33; margin-top: 3px; line-height: 1.42; }
+.lm-chg .act { display: flex; gap: 8px; align-items: center; margin-top: 7px; font-size: 12.5px; color: var(--l2); }
+.lm-chg.rev { opacity: .62; }
+.lm-note { font-size: 12.5px; color: var(--l2); line-height: 1.45; }
+.lm-banner { margin: 8px 14px; border-radius: 12px; padding: 9px 12px; background: #fff8dc; box-shadow: inset 0 0 0 1px #f0d77a; font-size: 13px; line-height: 1.45; color: #4a3b00; }
+.lm-ck { display: flex; align-items: flex-start; gap: 9px; padding: 9px 13px; border-bottom: .5px solid var(--sep); font-size: 14px; line-height: 1.38; }
+.lm-ck:last-child { border-bottom: 0; }
+.lm-ck .m { width: 20px; flex: none; padding-top: 1px; }
+.lm-ck .b { flex: 1; min-width: 0; } .lm-ck .b b { font-weight: 600; }
+.lm-ck .s { font-size: 12.5px; color: var(--l2); margin-top: 1px; }
+.lm-ck .r { font-size: 12.5px; color: var(--l2); flex: none; }
+.lm-ck.skip .b b { color: #7a5300; }
+.lm-skipchip { display: inline-block; font-size: 11.5px; font-weight: 700; background: #fff1c2; color: #7a5300; border-radius: 999px; padding: 0 8px; line-height: 18px; }
+
+/* —— web —— */
+.lm-wmain { padding: 0 30px 20px; overflow: hidden; height: calc(100% - 66px); }
+.lm-wcard { border: 1px solid var(--border); border-radius: 12px; background: #fff; max-width: 760px; }
+.lm-wcard .hd { padding: 14px 18px 10px; border-bottom: 1px solid var(--border-subtle); }
+.lm-wcard .hd b { font-size: 16px; }
+.lm-wcard .hd span { display: block; font-size: 12.5px; color: var(--text-3); margin-top: 1px; }
+.lm-wcard .sec { padding: 12px 18px; border-bottom: 1px solid var(--border-subtle); }
+.lm-wcard .sec:last-child { border-bottom: 0; }
+.lm-wcard .sec > .h { font-size: 13px; font-weight: 650; color: var(--text-2); margin-bottom: 6px; }
+.lm-wrow { display: flex; align-items: center; gap: 10px; padding: 5px 0; font-size: 14px; }
+.lm-wrow .l { flex: 1; } .lm-wrow .v { color: var(--text-2); }
+.lm-whint { font-size: 12.5px; color: var(--text-3); line-height: 1.5; margin-top: 2px; }
+.lm-wsel { border: 1px solid var(--border); border-radius: 8px; padding: 3px 10px; font-size: 13px; background: #fff; }
+.lm-wcode { font: 12px/1.55 "JetBrains Mono", monospace; background: var(--bg-sunken); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 7px 10px; margin: 4px 0; word-break: break-all; }
+.lm-wprov { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--text-3); margin-top: 4px; }
+.lm-wseg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.lm-wseg span { padding: 4px 13px; font-size: 13px; border-right: 1px solid var(--border); } .lm-wseg span:last-child { border-right: 0; }
+.lm-wseg span.on { background: #eef3ff; color: var(--brand); font-weight: 600; }
+.lm-wchg { display: grid; grid-template-columns: 150px 1fr 190px 120px; gap: 14px; padding: 10px 18px; border-bottom: 1px solid var(--border-subtle); font-size: 13.5px; align-items: start; }
+.lm-wchg:last-child { border-bottom: 0; } .lm-wchg.head { font-size: 12px; color: var(--text-3); font-weight: 600; padding-top: 8px; padding-bottom: 8px; background: var(--bg-subtle); }
+.lm-wchg .why { color: var(--text-2); font-size: 12.5px; margin-top: 2px; }
+.lm-wchg code { font: 12px/1.4 "JetBrains Mono", monospace; background: var(--bg-hover); border-radius: 5px; padding: 0 5px; }
+.lm-wchg s { color: var(--text-3); }
+.lm-wchg.rev { opacity: .6; }
+.lm-wtask { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; font-size: 14px; }
+.lm-wtask .tm { margin-left: auto; font-size: 12px; color: var(--text-3); }
+.lm-wpill { white-space: nowrap; font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 0 8px; line-height: 18px; background: var(--bg-hover); color: var(--text-2); }
+.lm-wpill.ok { background: var(--success-bg); color: var(--success); } .lm-wpill.sk { background: #fff1c2; color: #7a5300; }
+.lm-wpill.co { background: #ffe8c7; color: #8a4b00; } .lm-wpill.ow { background: #1f2329; color: #fff; } .lm-wpill.cd { background: #e8efff; color: #3a5fc4; } .lm-wpill.st { background: #e3e0ff; color: #3b2fa0; }
+.lm-wd { display: grid; grid-template-columns: 1fr 1fr; gap: 0 28px; font-size: 14px; }
+.lm-wd .kv { display: flex; padding: 6px 0; border-bottom: 1px solid var(--border-subtle); } .lm-wd .kv .k { width: 130px; color: var(--text-3); flex: none; } .lm-wd .kv .v { flex: 1; }
+.lm-wck { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border-subtle); font-size: 14px; }
+.lm-wck:last-child { border-bottom: 0; }
+.lm-wck .m { width: 18px; flex: none; padding-top: 2px; } .lm-wck .b { flex: 1; } .lm-wck .s { font-size: 12.5px; color: var(--text-3); }
+.lm-wck .r { font-size: 12.5px; color: var(--text-3); }
+.lm-wck.skip .b b { color: #7a5300; }
+.lm-wbtn { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; padding: 3px 12px; font-size: 13px; font-weight: 500; background: #fff; color: var(--text-1); white-space: nowrap; }
+.lm-wbtn.pri { background: var(--brand); border-color: var(--brand); color: #fff; font-size: 14px; padding: 6px 18px; }
+.lm-wbtn.danger { color: var(--error); border-color: #f3c3bf; }
+.lm-wbtn.off { color: var(--text-4); background: var(--bg-subtle); }
+.lm-wdim { position: absolute; inset: 0; background: rgba(31,35,41,.32); }
+.lm-wdlg { position: absolute; left: 330px; top: 130px; width: 520px; background: #fff; border-radius: 14px; padding: 20px 22px; box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+.lm-wdlg b { font-size: 16px; } .lm-wdlg p { font-size: 13.5px; line-height: 1.6; color: var(--text-2); margin: 8px 0; }
+
+/* —— 待定 —— */
+.lm-dec { width: 1450px; display: flex; flex-direction: column; gap: 22px; }
+.lm-q { background: #fff; border-radius: 16px; padding: 16px 20px 16px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
+.lm-q h3 { margin: 0 0 4px; font-size: 16.5px; display: flex; gap: 10px; align-items: center; }
+.lm-q h3 .id { background: #16161a; color: #fff; border-radius: 8px; padding: 0 9px; font-size: 13px; line-height: 22px; }
+.lm-q > p { margin: 0 0 12px; font-size: 13.5px; color: #4a4a52; line-height: 1.6; }
+.lm-opts { display: grid; gap: 16px; }
+.lm-opt { border-radius: 12px; padding: 10px 12px 12px; background: #f6f6f9; box-shadow: inset 0 0 0 1px rgba(0,0,0,.06); position: relative; }
+.lm-opt.rec { background: #f1fbf3; box-shadow: inset 0 0 0 2px #34a853; }
+.lm-opt h4 { margin: 0 0 8px; font-size: 14px; display: flex; gap: 8px; align-items: center; }
+.lm-opt p { margin: 8px 0 0; font-size: 13px; line-height: 1.55; color: #3a3a42; }
+.lm-mini { background: #fff; border-radius: 11px; padding: 9px 11px; font-size: 13.5px; line-height: 1.45; box-shadow: inset 0 0 0 .5px rgba(60,60,67,.22); color: #16161a; font-family: "Inter","Noto Sans SC",sans-serif; }
+.lm-mini .dim { color: #6a6a72; font-size: 12.5px; }
+.lm-mini .row { display: flex; align-items: center; gap: 8px; }
+.lm-mini .row .sp { flex: 1; }
+.lm-mini code { font: 11.5px/1.4 "JetBrains Mono", monospace; background: rgba(120,120,128,.14); border-radius: 5px; padding: 0 4px; }
+.lm-mini hr { border: 0; border-top: .5px solid rgba(60,60,67,.2); margin: 7px 0; }
+.lm-mini .tag { margin: 0; }
+</style>
+<body>
+<h1>落地是量出来的，不是贴标签：客户端画什么（契约修订 42 第二部分 · 2026-11-20）</h1>
+<p class="lede lm-lede">依据 <code>docs/project-integration-line-contract.md</code> §12.15（P-M1…P-C2、P-R1）与 §12.16（读模型）。每一屏画<b>现在</b>与<b>改后</b>，iPhone 与 web 各一；Android 照 iPhone 的版式，不画。<br>
+英文是上线文案，中文是说明；项目、任务与人名是示例数据（一个只做运维、不改代码的项目：「Rotate staging credentials」）。<br>
+<b>条文没有定的地方</b>画了几个方案，推荐的带绿框与 <span class="lm-rec">推荐</span>；汇总在最后一张 ⑥，共 9 条（D1–D9）。条文已定的（开始卡一行文案、不画线与检查两段；无线时不画任何落地行；谁设置/何时；显式 <code>NONE</code>；任务免检带理由；留痕与 owner 可改回）原样画，不再问。</p>
+<div id="board"></div>
+<script>
+const PN = 'Rotate staging credentials';
+const WN = PN;
+const T1 = 'Rotate the staging database password';
+const T2 = 'Move cron jobs off the old VM';
+const T3 = 'Delete unused staging buckets';
+const T4 = 'Write the handover notes';
+const BR = 'project/35Qa…7mXk';
+const CHK = 'npm run check:landing';
+const MCHK = 'npm test';
+const rf = (tag, label, ph, cap) => `<figure><span class="tag ${tag}">${label}</span>${ph}<div class="lm-cap">${cap}</div></figure>`;
+const nn = (k) => `<span class="num">${k}</span>`;
+const cp = (title, items) => `<b>${title}</b><ul class="lm-ul">${items.map((x) => `<li>${x}</li>`).join('')}</ul>`;
+const pnav = (title, sub, left = 'chevl', right = 'dots') => `<div class="nav"><div class="circ">${ic(left, 21, '#000', 2.3)}</div><div class="ttl"><b>${title}</b><span>${sub}</span></div>${right ? `<div class="circ">${ic(right, 24, '#000', 1.7)}</div>` : '<div style="width:38px"></div>'}</div>`;
+const IP = (at, nav, body) => phone(`${statusBar(at, 90)}${nav}${body}`);
+const who = (k) => k === 'start' ? '<span class="lm-who start">Set at start</span>' : k === 'owner' ? '<span class="lm-who owner">You</span>' : k === 'coord' ? '<span class="lm-who coord">Coordinator</span>' : '<span class="lm-who card">Approved on a card</span>';
+const wwho = (k) => k === 'start' ? '<span class="lm-wpill st">Set at start</span>' : k === 'owner' ? '<span class="lm-wpill ow">You</span>' : k === 'coord' ? '<span class="lm-wpill co">Coordinator</span>' : '<span class="lm-wpill cd">Approved on a card</span>';
+const WF = (main, h = 760, title = WN, sub = 'Project · Settings') => `<div class="webf" style="width:1180px;height:${h}px">${wsb(WN)}<div class="wmain"><div class="mhd"><div class="bc">‹ Projects</div><div class="t"><b>${title}</b></div><div class="sub">${sub}</div></div>${main}</div></div>`;
+const WFC = (col, main, h = 760) => `<div class="webf" style="width:1180px;height:${h}px">${wsb(WN)}<div class="wcol">${col}</div><div class="wmain">${main}</div></div>`;
+const chevI = '›';
+
+/* ① 开始卡 ─────────────────────────────────────────────────────────────── */
+const startTop = `<div class="lm-sec"><div class="h">Done when · 3 criteria</div><div class="lm-grp"><div class="lm-r" style="font-size:14px">Staging DB password is rotated and every service reads the new one.<div class="hint">+2 more ${chevI}</div></div></div></div>
+<div class="lm-sec"><div class="h">Plan · 6 tasks in 3 levels</div><div class="lm-grp"><div class="lm-r" style="font-size:14px">${T1}<div class="hint">+5 more · View tasks ›</div></div></div></div>`;
+const startNow = `<div class="lm-sec"><div class="h">How it runs</div><div class="lm-grp">
+<div class="lm-r"><div class="k"><b>Tasks land on</b><span class="v">Project branch ⌄</span></div><div class="hint">Needs a repository. <code class="lm-code2">${BR}</code></div></div>
+<div class="lm-r"><div class="k"><b>Main branch</b><span class="v">main ⌄</span></div></div>
+<div class="lm-r"><div class="k"><b>Landing check</b></div><div class="lm-code" style="color:#8e8e93">Leave blank to use merge check</div><div class="hint">Runs when a task lands on the project branch.<br>Uses merge check</div></div>
+<div class="lm-r"><div class="k"><b>Merge check</b><span class="v">None ${chevI}</span></div></div>
+<div class="lm-r"><div class="k"><b>At most</b><span class="v">3 tasks at once</span></div></div>
+<div class="lm-r"><div class="k"><b>Automatic</b><span class="lm-tog"></span></div></div></div></div>`;
+const startNew = `<div class="lm-sec"><div class="h">How it runs</div><div class="lm-grp">
+<div class="lm-r" style="background:rgba(62,105,246,.07)"><div class="k"><b style="font-weight:400">Lands on the project’s branch when a task commits</b></div></div>
+<div class="lm-r"><div class="k"><b>Merge check</b><span class="v">None ${chevI}</span></div></div>
+<div class="lm-r"><div class="k"><b>At most</b><span class="v">3 tasks at once</span></div></div>
+<div class="lm-r"><div class="k"><b>Automatic</b><span class="lm-tog"></span></div></div></div></div>`;
+const startSheet = (mid) => IP('09:41', pnav(PN, 'Project · Not started'), `<div class="dimbg"></div><div class="sheet"><div class="grab"></div><div class="sn">Start this project?<span class="x">${ic('x', 15, 'rgba(60,60,67,.75)', 2.6)}</span></div><div class="sb"><div class="sheet-asked asked" style="font-size:13px;color:var(--l2)">The coordinator asked 12m ago</div>${startTop}${mid}</div><div class="bar" style="display:block"><div class="btn pri" style="display:block">Start the project</div><div style="text-align:center;margin-top:7px;font-size:12px;color:var(--l2)">Opens a coordinator · starts ${T1} now · confirms these 3 criteria</div></div></div>`);
+const wStart = (mid) => WF(`<div class="lm-wmain"><div class="lm-wcard" style="margin-top:16px"><div class="hd"><b>Start this project?</b><span>The coordinator asked 12m ago</span></div>
+<div class="sec"><div class="h">Done when · 3 criteria</div><div style="font-size:14px">Staging DB password is rotated and every service reads the new one. <span style="color:var(--text-3)">+2 more</span></div></div>
+<div class="sec"><div class="h">Plan · 6 tasks in 3 levels</div><div style="font-size:14px">${T1} <span style="color:var(--text-3)">+5 more · View tasks ›</span></div></div>
+<div class="sec"><div class="h">How it runs</div>${mid}</div>
+<div class="sec" style="display:flex;align-items:center;gap:14px"><span class="lm-wbtn pri">Start the project</span><span class="lm-whint">Opens a coordinator · starts ${T1} now · confirms these 3 criteria</span></div></div></div>`, 790, PN, 'Project · Not started');
+const wStartNow = wStart(`<div class="lm-wrow"><span class="l">Tasks land on</span><span class="lm-wsel">Project branch ⌄</span></div><div class="lm-whint">Needs a repository. <code>${BR}</code></div>
+<div class="lm-wrow"><span class="l">Main branch</span><span class="lm-wsel">main ⌄</span></div>
+<div class="lm-wrow" style="align-items:flex-start;flex-direction:column;gap:0"><span class="l">Landing check</span><div class="lm-wcode" style="width:100%;color:var(--text-3)">Leave blank to use merge check</div><div class="lm-whint">Runs when a task lands on the project branch. · Uses merge check</div></div>
+<div class="lm-wrow"><span class="l">Merge check</span><span class="v">None ›</span></div><div class="lm-wrow"><span class="l">At most</span><span class="lm-wsel">3</span><span class="v">tasks at once</span></div><div class="lm-wrow"><span class="l">Automatic</span><span class="v">On</span></div>`);
+const wStartNew = wStart(`<div class="lm-wrow" style="background:#f3f7ff;border-radius:8px;padding:8px 10px">Lands on the project’s branch when a task commits</div>
+<div class="lm-wrow"><span class="l">Merge check</span><span class="v">None ›</span></div><div class="lm-wrow"><span class="l">At most</span><span class="lm-wsel">3</span><span class="v">tasks at once</span></div><div class="lm-wrow"><span class="l">Automatic</span><span class="v">On</span></div>`);
+
+/* ② 项目页（无线） ─────────────────────────────────────────────────────── */
+const segRow = (t, tm, sub, segs) => `<div class="r"><div class="a"><span class="t">${t}</span><span class="tm">${tm}</span></div><div class="b"><span class="sub">${sub}</span></div>${segs ? `<div class="lm-segchip">${segs}</div>` : ''}</div>`;
+const SG_NOW = '<i class="ok">Done</i><i class="ok">Accepted</i><i class="wait">Landing · queued</i>';
+const rowsNow = segRow(T2, 'just now', 'Moved 4 of 6 cron jobs…', '<i class="ok">Work</i><i class="wait">Accepted</i><i class="wait">Landing</i>')
+  + segRow(T1, '9m ago', 'Rotated; services restarted.', SG_NOW) + segRow(T3, '31m ago', 'Deleted 3 buckets; listed the rest.', SG_NOW);
+const rowsNew = segRow(T2, 'just now', 'Moved 4 of 6 cron jobs…', '') + segRow(T1, '9m ago', 'Rotated; services restarted.', '') + segRow(T3, '31m ago', 'Deleted 3 buckets; listed the rest.', '');
+const coordRowP = sessRow({ t: PN, tm: 'just now', chip: 'Coordinator', sub: 'Two tasks running; the third waits on the first.' });
+const pgNow = IP('11:20', pnav(PN, 'Project · 7 sessions', 'chevl', 'grid'), `<div class="list">${progWithLanding(3, 6, 1, landingLine({ word: 'Landing', state: 'queued', what: T1, live: 'Waiting for a runner to pick it up', grey: true }))}${sh('Coordinator')}${coordRowP}${lgroup([lrow({ t: T1, tm: '9m ago', sub: 'Landing · queued', cls: 'mut' }), lrow({ t: T3, tm: '31m ago', sub: 'Landing · queued', cls: 'mut' })])}${sh('Today')}${rowsNow}</div>`);
+const pgNew = IP('11:20', pnav(PN, 'Project · 7 sessions', 'chevl', 'grid'), `<div class="list">${progCard(3, 6, 1)}${sh('Coordinator')}${coordRowP}${sh('Today')}${rowsNew}</div>`);
+const wColNow = `${wcolHead(7, PN)}<div class="body">${wcard({ done: 3, total: 6, run: 1, landing: wland(pl({ tone: 'idle', word: 'Landing', state: 'queued', what: T1, label: 'Waiting for a runner', clock: '9m', right: '' })) })}${wsec('Coordinator')}${wrow({ t: PN, tm: 'just now', chip: 'co', sub: 'Two tasks running…' })}${wsec('Landings')}${wrow({ t: T1, tm: '9m ago', sub: 'Landing · queued' })}${wrow({ t: T3, tm: '31m ago', sub: 'Landing · queued' })}${wsec('Today')}${wrow({ t: T2, tm: 'just now', sub: 'Moved 4 of 6 cron jobs…' })}${wrow({ t: T1, tm: '9m ago', sub: 'Rotated; services restarted.' })}</div>`;
+const wColNew = `${wcolHead(7, PN)}<div class="body">${wcard({ done: 3, total: 6, run: 1, landing: '' })}${wsec('Coordinator')}${wrow({ t: PN, tm: 'just now', chip: 'co', sub: 'Two tasks running…' })}${wsec('Today')}${wrow({ t: T2, tm: 'just now', sub: 'Moved 4 of 6 cron jobs…' })}${wrow({ t: T1, tm: '9m ago', sub: 'Rotated; services restarted.' })}${wrow({ t: T3, tm: '31m ago', sub: 'Deleted 3 buckets…' })}</div>`;
+const ovRow = (k, v, extra = '') => `<div class="lm-wrow" style="border-bottom:1px solid var(--border-subtle);padding:9px 0"><span class="l">${k}</span><span class="v">${v}</span>${extra}</div>`;
+const ovNow = `<div class="lm-wmain"><div class="lm-wcard" style="margin-top:16px"><div class="hd"><b>Work overview</b></div><div class="sec">${ovRow('Tasks', '6 · 3 done · 1 running')}${ovRow('Landings', '2 queued ›')}${ovRow('Merge into main', 'Not ready')}</div></div></div>`;
+const ovNew = `<div class="lm-wmain"><div class="lm-wcard" style="margin-top:16px"><div class="hd"><b>Work overview</b></div><div class="sec">${ovRow('Tasks', '6 · 3 done · 1 running')}${ovRow('Merge into main', 'Not ready')}</div></div></div>`;
+
+/* ③ 设置 ──────────────────────────────────────────────────────────────── */
+const lcCard = (inner) => `<div class="lm-sec"><div class="h">Landing check</div><div class="lm-grp"><div class="lm-r">${inner}</div></div></div>`;
+const lineSet = `<div class="lm-sec"><div class="h">Line</div><div class="lm-grp"><div class="lm-r"><div class="k"><b>Tasks land on</b><span class="v">Project branch</span></div><div class="hint">Started with the first commit · <code class="lm-code2">${BR}</code></div></div><div class="lm-r"><div class="k"><b>Merge check</b><span class="v">${MCHK}</span></div></div></div></div>`;
+const setNow = IP('11:42', pnav('Settings', PN, 'chevl', null), `<div class="list">${lineSet}${lcCard(`<div class="k"><b>Command</b></div><div class="lm-code">${CHK}</div><div class="hint">Runs when a task lands on the project branch.</div><div class="k" style="margin-top:8px"><b>Timeout</b><span class="v">Uses merge check timeout</span></div><div class="hint">Changing it asks you to confirm on a card.</div>`)}</div>`);
+const lcSeg = (on) => `<div class="lm-seg"><span class="${on === 0 ? 'on' : ''}">Merge check</span><span class="${on === 1 ? 'on' : ''}">Command</span><span class="${on === 2 ? 'on' : ''}">No check</span></div>`;
+const provLine = (k, tm) => `<div class="lm-prov">${who(k)}<span>${tm}</span></div>`;
+const setCoord = IP('11:42', pnav('Settings', PN, 'chevl', null), `<div class="list">${lineSet}${lcCard(`${lcSeg(1)}<div class="lm-code">${CHK}</div>${provLine('coord', 'set 12m ago')}<div class="hint">Runs when a task lands on the project branch. Changes the coordinator makes are listed under <b>Coordinator’s changes</b>.</div>`)}<div class="lm-sec"><div class="h">Coordinator’s changes</div><div class="lm-grp"><div class="lm-r"><div class="k"><b>3 changes</b><span class="v">${chevI}</span></div></div></div></div></div>`);
+const setNone = IP('11:42', pnav('Settings', PN, 'chevl', null), `<div class="list">${lineSet}${lcCard(`${lcSeg(2)}<div class="lm-r" style="padding:10px 0 0;border:0"><b style="font-weight:600">No check.</b> Tasks land with only their own acceptance. <span style="color:var(--l2)">The merge check still runs before main.</span></div>${provLine('owner', 'set 3m ago')}`)}
+<div class="lm-sec"><div class="h">Who can set it</div><div class="lm-grp"><div class="lm-r" style="font-size:13.5px"><div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">${who('owner')}<span class="lm-note">Anything you set; the coordinator then needs a card to change it.</span></div><div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">${who('coord')}<span class="lm-note">No card, while the merge check exists.</span></div><div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">${who('card')}<span class="lm-note">A change you confirmed on a card.</span></div><div style="display:flex;gap:8px;align-items:center">${who('start')}<span class="lm-note">The coordinator proposed it and you pressed Start; it may still change it without a card. A value you typed on the start card reads as You.</span></div></div></div></div></div>`);
+const wLc = (inner, h = 760) => WF(`<div class="lm-wmain"><div class="lm-wcard" style="margin-top:16px"><div class="hd"><b>Settings</b></div><div class="sec"><div class="h">Line</div><div class="lm-wrow"><span class="l">Tasks land on</span><span class="v">Project branch · <code style="font:12px monospace">${BR}</code></span></div><div class="lm-wrow"><span class="l">Merge check</span><span class="v"><code style="font:12px monospace">${MCHK}</code></span></div></div>${inner}</div></div>`, h);
+const wSetNow = wLc(`<div class="sec"><div class="h">Landing check</div><div class="lm-wcode">${CHK}</div><div class="lm-whint">Runs when a task lands on the project branch. Changing it asks you to confirm on a card.</div><div class="lm-wrow"><span class="l">Timeout</span><span class="v">Uses merge check timeout</span></div></div>`, 470);
+const wSegC = (on) => `<div class="lm-wseg"><span class="${on === 0 ? 'on' : ''}">Merge check</span><span class="${on === 1 ? 'on' : ''}">Command</span><span class="${on === 2 ? 'on' : ''}">No check</span></div>`;
+const wSetNew = wLc(`<div class="sec"><div class="h">Landing check</div>${wSegC(1)}<div class="lm-wcode" style="margin-top:8px">${CHK}</div><div class="lm-wprov">${wwho('coord')}<span>set 12m ago</span></div><div class="lm-whint">Runs when a task lands on the project branch.</div></div>
+<div class="sec"><div class="h">The same field, in its other states</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+<div style="border:1px solid var(--border-subtle);border-radius:10px;padding:10px 12px;font-size:13.5px"><b>Command · you set it</b><div class="lm-wcode"><code style="background:none;padding:0">${CHK}</code></div><div class="lm-wprov">${wwho('owner')}<span>set 2d ago</span></div></div>
+<div style="border:1px solid var(--border-subtle);border-radius:10px;padding:10px 12px;font-size:13.5px"><b>Command · approved on a card</b><div class="lm-wcode"><code style="background:none;padding:0">${CHK}</code></div><div class="lm-wprov">${wwho('card')}<span>confirmed 5d ago</span></div></div>
+<div style="border:1px solid var(--border-subtle);border-radius:10px;padding:10px 12px;font-size:13.5px"><b>Command · set at start</b><div class="lm-wcode"><code style="background:none;padding:0">${CHK}</code></div><div class="lm-wprov">${wwho('start')}<span>3d ago</span></div></div>
+<div style="border:1px solid var(--border-subtle);border-radius:10px;padding:10px 12px;font-size:13.5px"><b>No check</b><div style="margin:6px 0">${wSegC(2)}</div><div class="lm-whint">Tasks land with only their own acceptance. The merge check still runs before main.</div><div class="lm-wprov">${wwho('owner')}<span>set 3m ago</span></div></div></div></div>`, 900);
+
+/* ④ 免检 ──────────────────────────────────────────────────────────────── */
+const REASON = 'Only moves cron entries; the landing check needs a database this task cannot reach.';
+const tkNow = IP('11:50', pnav('Move cron jobs off the old VM', 'Task · Done', 'chevl', 'dots'), `<div class="list"><div class="lm-sec"><div class="h">Landing</div><div class="lm-grp"><div class="lm-r"><div class="k"><b>Landed on ${BR}</b><span class="v">3m ago</span></div><div class="hint">Acceptance passed · Landing check passed · 2m 40s</div></div></div></div>
+<div class="lm-sec"><div class="h">Checks in the landing</div><div class="lm-card"><div class="lm-ck"><span class="m">${ic('check', 16, 'var(--green-ink)', 2.6)}</span><div class="b"><b>Task acceptance</b><div class="s">cron-moved.sh · 14s</div></div></div><div class="lm-ck"><span class="m">${ic('check', 16, 'var(--green-ink)', 2.6)}</span><div class="b"><b>Landing check</b><div class="s">${CHK}</div></div><span class="r">2m 26s</span></div></div></div></div>`);
+const tkNew = IP('11:50', pnav('Move cron jobs off the old VM', 'Task · Done', 'chevl', 'dots'), `<div class="list"><div class="lm-sec"><div class="h">Landing</div><div class="lm-grp"><div class="lm-r"><div class="k"><b>Landed on ${BR}</b><span class="v">3m ago</span></div><div class="hint">Acceptance passed · Landing check skipped</div></div><div class="lm-r"><div class="k"><b>Landing check</b><span class="lm-skipchip">Exempt</span></div><div class="hint"><b>${REASON}</b></div><div class="lm-prov">${who('coord')}<span>marked 20m ago</span></div><div style="margin-top:8px"><span class="lm-btn">Remove exemption</span></div></div></div></div>
+<div class="lm-sec"><div class="h">Checks in the landing</div><div class="lm-card"><div class="lm-ck"><span class="m">${ic('check', 16, 'var(--green-ink)', 2.6)}</span><div class="b"><b>Task acceptance</b><div class="s">cron-moved.sh · 14s</div></div></div><div class="lm-ck skip"><span class="m">${ic('arrowr', 16, '#B35A00', 2.4)}</span><div class="b"><b>Landing check · Skipped</b><div class="s">Exempt: ${REASON}</div></div></div><div class="lm-ck"><span class="m" style="color:#8e8e93">${ic('merge', 15, '#8e8e93', 2.2)}</span><div class="b"><b>Merge check before main</b><div class="s">Still runs · ${MCHK}</div></div></div></div></div></div>`);
+const wTask = (exempt) => WF(`<div class="lm-wmain"><div class="lm-wcard" style="margin-top:16px;max-width:900px"><div class="hd"><b>Move cron jobs off the old VM</b><span>Task · Done · 9m ago</span></div>
+<div class="sec"><div class="h">Landing</div><div class="lm-wd"><div class="kv"><span class="k">Line</span><span class="v">Project branch</span></div><div class="kv"><span class="k">Landed</span><span class="v">3m ago on <code style="font:12px monospace">${BR}</code></span></div><div class="kv"><span class="k">Acceptance</span><span class="v">Passed</span></div>
+<div class="kv"><span class="k">Landing check</span><span class="v">${exempt ? `<span class="lm-wpill sk">Exempt</span> <span style="color:var(--text-2)">${REASON}</span><div class="lm-wprov" style="white-space:nowrap">${wwho('coord')}<span>marked 20m ago</span></div><div style="margin-top:8px"><span class="lm-wbtn">Remove exemption</span></div>` : 'Passed · 2m 26s'}</span></div></div></div>
+<div class="sec"><div class="h">Checks in the landing</div>
+<div class="lm-wck"><span class="m">${ic('check', 15, '#1a7f37', 2.6)}</span><div class="b"><b>Task acceptance</b><div class="s">cron-moved.sh</div></div><span class="r">14s</span></div>
+${exempt ? `<div class="lm-wck skip"><span class="m">${ic('arrowr', 15, '#B35A00', 2.4)}</span><div class="b"><b>Landing check · Skipped</b><div class="s">Exempt: ${REASON}</div></div></div><div class="lm-wck"><span class="m" style="color:#8f959e">${ic('merge', 14, '#8f959e', 2.2)}</span><div class="b"><b>Merge check before main</b><div class="s">Still runs · ${MCHK}</div></div></div>` : `<div class="lm-wck"><span class="m">${ic('check', 15, '#1a7f37', 2.6)}</span><div class="b"><b>Landing check</b><div class="s">${CHK}</div></div><span class="r">2m 26s</span></div>`}</div></div></div>`, 680, 'Move cron jobs off the old VM', 'Task · Done');
+
+/* ⑤ 协调者的改动 ──────────────────────────────────────────────────────── */
+const chg = ({ f, from, to, why, k, tm, act, rev }) => `<div class="lm-chg ${rev ? 'rev' : ''}"><div class="t">${f}<span class="tm">${tm}</span></div><div class="ft"><s>${from}</s><span class="arr">→</span><span>${to}</span></div><div class="why">${why}</div><div class="act">${who(k)}${act}</div></div>`;
+const CH = [
+  { f: 'Landing check', from: `<code>${CHK}</code>`, to: '<b>No check</b>', why: 'This project only changes infrastructure; the command has nothing to build.', k: 'coord', tm: '12m ago', act: '<span class="lm-btn red">Revert</span>' },
+  { f: 'Check exempt · Move cron jobs…', from: 'not exempt', to: 'exempt', why: REASON, k: 'coord', tm: '20m ago', act: '<span class="lm-btn red">Revert</span>' },
+  { f: 'Landing check', from: 'Uses merge check', to: `<code>${CHK}</code>`, why: '', k: 'owner', tm: '2d ago', act: '<span class="lm-note">Your change · nothing to revert</span>' },
+];
+const chNow = IP('11:42', pnav('Settings', PN, 'chevl', null), `<div class="list">${lineSet}${lcCard(`<div class="k"><b>Command</b></div><div class="lm-code">${CHK}</div><div class="hint">Runs when a task lands on the project branch.</div>`)}
+<div class="lm-sec"><div class="h">Today a coordinator change asks you first</div><div class="lm-banner"><b>Change project integration settings?</b><br>Landing check: <code>${CHK}</code> → none<br><span class="lm-btn pri" style="margin-top:6px;font-size:13px">Confirm</span> <span class="lm-btn" style="font-size:13px">Not now</span></div><div class="lm-note" style="margin-top:4px">One card per change; nothing is kept afterwards but the new value.</div></div></div>`);
+const chNew = IP('11:42', pnav('Coordinator’s changes', PN, 'chevl', null), `<div class="list" style="margin-top:6px"><div class="lm-note" style="margin:6px 2px 8px">What the coordinator changed on its own since the project started. Revert puts the old value back and takes the field away from the coordinator: it needs a card from then on.</div><div class="lm-card">${CH.map(chg).join('')}</div></div>`);
+const chRev = IP('11:43', pnav('Coordinator’s changes', PN, 'chevl', null), `<div class="dimbg" style="z-index:8"></div><div class="list" style="margin-top:6px"><div class="lm-card">${chg({ ...CH[0], act: '<span class="lm-btn red">Revert</span>' })}</div></div><div class="sheet" style="top:auto;height:300px;bottom:0"><div class="grab"></div><div class="sn">Revert this change?</div><div class="sb"><div style="font-size:14px;line-height:1.5">Landing check goes back from <b>No check</b> to <code class="lm-code2">${CHK}</code>.</div><div class="lm-note" style="margin-top:8px">The coordinator can no longer change this field without a card.</div><div style="display:flex;gap:10px;margin-top:16px"><span class="btn bordred grow" style="flex:1;text-align:center">Revert</span><span class="btn sec grow" style="flex:1">Cancel</span></div></div></div>`);
+const chDone = IP('11:44', pnav('Coordinator’s changes', PN, 'chevl', null), `<div class="list" style="margin-top:6px"><div class="lm-card">${chg({ ...CH[0], rev: true, act: '<span class="lm-note">Reverted by you · just now · coordinator needs a card for this field</span>' })}${chg(CH[1])}${chg(CH[2])}</div></div>`);
+const wChgRow = (c) => `<div class="lm-wchg ${c.rev ? 'rev' : ''}"><div><b>${c.f}</b></div><div>${c.from} → ${c.to}<div class="why">${c.why}</div></div><div>${wwho(c.k)}<div class="why">${c.tm}</div></div><div>${c.act}</div></div>`;
+const wCH = CH.map((c) => ({ ...c, from: c.from.replace(/<code>/g, '<s><code>').replace(/<\/code>/g, '</code></s>').replace(/^(not exempt|2|Uses merge check)$/, '<s>$1</s>'), act: c.act.includes('Revert') ? '<span class="lm-wbtn danger">Revert</span>' : '<span class="lm-whint">Your change</span>' }));
+const wChanges = WF(`<div class="lm-wmain"><div class="lm-wcard" style="margin-top:16px;max-width:1000px"><div class="hd"><b>Coordinator’s changes</b><span>What the coordinator changed on its own. Revert puts the old value back; that field then needs your card.</span></div>
+<div class="lm-wchg head"><span>Setting</span><span>Change and reason</span><span>Who · when</span><span></span></div>${wCH.map(wChgRow).join('')}</div>
+<div class="lm-note" style="margin-top:10px;font-size:13px">Today none of this exists: the coordinator’s write goes through a card, and only the current value stays.</div></div>`, 560, PN, 'Project · Settings');
+const wChgRev = `<div class="webf" style="width:1180px;height:560px">${wsb(WN)}<div class="wmain"><div class="mhd"><div class="bc">‹ Projects</div><div class="t"><b>${PN}</b></div><div class="sub">Project · Settings</div></div><div class="lm-wmain"><div class="lm-wcard" style="margin-top:16px;max-width:1000px"><div class="lm-wchg head"><span>Setting</span><span>Change and reason</span><span>Who · when</span><span></span></div>${wChgRow({ ...wCH[0], rev: false })}</div></div><div class="lm-wdim"></div><div class="lm-wdlg"><b>Revert this change?</b><p>Landing check goes back from <b>No check</b> to <code style="font:12px monospace">${CHK}</code>. The coordinator can no longer change this field without a card.</p><div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px"><span class="lm-wbtn">Cancel</span><span class="lm-wbtn danger">Revert</span></div></div></div></div>`;
+
+/* ⑥ 待定 ──────────────────────────────────────────────────────────────── */
+const opt = (rec, label, mini, text) => `<div class="lm-opt ${rec ? 'rec' : ''}"><h4>${rec ? '<span class="lm-rec">推荐</span>' : '<span class="lm-alt">备选</span>'}${label}</h4>${mini}<p>${text}</p></div>`;
+const mini = (h) => `<div class="lm-mini">${h}</div>`;
+const Q = (id, title, desc, opts, cols = 3) => `<div class="lm-q"><h3><span class="id">${id}</span>${title}</h3><p>${desc}</p><div class="lm-opts" style="grid-template-columns:repeat(${cols},1fr)">${opts.join('')}</div></div>`;
+const decisions = `<div class="lm-dec">
+${Q('D1', '开始卡：没带线时，owner 能不能在卡上自己选线', '§12.15 P-M2 只定了「不带 line 时不画线与检查两段，画一行文案」。没说 owner 想自己指定时怎么办。',
+ [opt(1, '只有那一行，不给控件', mini(`<div class="row"><b>How it runs</b></div><div>Lands on the project’s branch when a task commits</div><hr><div class="row dim"><span>Merge check</span><span class="sp"></span><span>None ›</span></div>`), '线在第一份提交出现时按 L2 求值。想先定线的人，在 Chat about this 里让协调者带上 line 重新请求（卡就变回今天的样子）。卡上少一个决定，也不多一条路径。'),
+  opt(0, '文案后跟一个「Choose a line ›」', mini(`<div>Lands on the project’s branch when a task commits</div><div style="color:#3E69F6;margin-top:3px">Choose a line ›</div>`), '给 owner 一扇自己的门，展开后就是今天的线与检查两段。要多一条「owner 在开始卡上建线」的写路径，违背 §12.12 P2「协调者提出、owner 一次确认」的分工。'),
+  opt(0, '文案旁灰字解释「why no line」', mini(`<div>Lands on the project’s branch when a task commits</div><div class="dim">No task has committed yet, so there is no branch.</div>`), '多一句解释，但契约要的是「一行」文案；第二行会在每个无线项目的开始卡上永久出现。')])}
+${Q('D2', '没有线的项目页：要不要留一句「还没有落地」', '§12.16 已定：不画集成三段、不画 Landings 行。没定的是整块地方是真的空着，还是放一个安静的说明。',
+ [opt(1, '什么都不画', mini(`<div class="row dim"><span>Tasks</span><span class="sp"></span><span>6 · 3 done</span></div><div class="row dim"><span>Merge into main</span><span class="sp"></span><span>Not ready</span></div>`), '契约的字面；没有东西要落时，界面就没有落地这个概念。第一份提交出现、线开始的那一刻，Landing 卡与 Landings 行才第一次出现。'),
+  opt(0, '一行灰字：「Nothing to land yet」', mini(`<div class="row dim"><span>Landings</span><span class="sp"></span><span>Nothing to land yet</span></div>`), '运维项目永远看着一个空的落地行；也与 §7.3 的 <i>Nothing to land</i>（任务行上、已量出没有提交）同词不同义。'),
+  opt(0, '任务行上画「No commits」小标', mini(`<div class="row"><span>Rotate the staging database password</span><span class="sp"></span><span class="tag n">No commits</span></div>`), '把量出来的事实画出来，但正是 P1 想去掉的「按落不落地给任务分类」的外观。')])}
+${Q('D3', '落地检查「谁设置的、何时」画在哪', '§12.16 已定：读口给 <code>{ command, setBy: OWNER | COORDINATOR | CARD, setAt }</code>。没定的是怎么画。',
+ [opt(1, '检查下面一行：徽标 + 时间', mini(`<div class="lm-code2" style="display:inline-block">${CHK}</div><div class="row" style="margin-top:6px"><span class="lm-who coord">Coordinator</span><span class="dim">set 12m ago</span></div>`), '值与它的来历在一起看；四种徽标同一个位置。owner 写的黑底「You」，卡经手的蓝底「Approved on a card」，开始时定的紫色「Set at start」（D9），协调者的琥珀色；都带时间。'),
+  opt(0, '设置页另起一行「Set by」', mini(`<div class="row"><span>Landing check</span><span class="sp"></span><code>${CHK}</code></div><div class="row"><span class="dim">Set by</span><span class="sp"></span><span>Coordinator · 12m ago</span></div>`), '像表单，整齐，但把来历当成又一个设置项；owner 要的是一眼看出「这是不是我定的」。'),
+  opt(0, '只在协调者写的时候标，其余不画', mini(`<div><code class="lm-code2">${CHK}</code></div><div class="dim">(owner / card: nothing)</div>`), '少一点噪音，但「没标」要靠 owner 记住意思；§12.16 要的是每种来源都读得到。')])}
+${Q('D4', '显式「不跑」（<code>NONE</code>）与「用合并检查」怎么区分、怎么设', '§12.15 P-C1 定了 <code>null</code> = 回落到合并检查，<code>NONE</code> = 只跑任务验收。没定的是 owner 与协调者在客户端怎么选、怎么命名。',
+ [opt(1, '三段开关：Merge check · Command · No check', mini(`<div class="lm-seg" style="margin:0"><span>Merge check</span><span class="on">Command</span><span>No check</span></div>`), '三个值并列，永远只有一个被选中；「No check」下面一句话说清后果：<i>Tasks land with only their own acceptance. The merge check still runs before main.</i> 空输入框不再兼任「回落」。'),
+  opt(0, '输入框里写 <code>none</code>', mini(`<div class="lm-code2" style="display:block;padding:6px 8px">none</div>`), '零新控件，但一条叫 <code>none</code> 的命令与「不跑」撞车；今天的占位文字「Leave blank to use merge check」也要同时留着。'),
+  opt(0, '一个「Skip the landing check」开关', mini(`<div class="row"><span>Skip the landing check</span><span class="sp"></span><span class="lm-tog"></span></div>`), '开关把「不跑」画成例外，而它是三个并列的值之一；关上开关之后「回落」与「命令」又要另外分。')])}
+${Q('D5', '免检的任务：画在哪', '§12.15 P-C2 定了：任务带理由免检，检查结果记 <code>Skipped: TASK_EXEMPT</code>，任务验收与合并检查照跑。没定的是任务页的形态、owner 能不能当场去掉。',
+ [opt(1, '任务页 Landing 段里一行 + 落地检查清单里一行「Skipped」', mini(`<div class="row"><b>Landing check</b><span class="lm-skipchip">Exempt</span></div><div class="dim">Only moves cron entries…</div><div class="row dim" style="margin-top:4px"><span class="lm-who coord">Coordinator</span><span>marked 20m ago</span><span class="sp"></span><span style="color:#3E69F6;font-weight:600">Remove exemption</span></div>`), '免检出现在检查发生的地方，而不是任务的标题上；owner 点 Remove exemption 即写回 <code>false</code>，同时进 ⑤ 的改动列表。理由整句显示，不截断。'),
+  opt(0, '任务页顶上一条琥珀横幅', mini(`<div style="background:#fff8dc;border-radius:8px;padding:6px 8px">Exempt from the landing check — only moves cron entries…</div>`), '更醒目，但免检是协调者对一件事的判断、不是任务的状态；任务页顶上已经是 DONE / 验收的位置。'),
+  opt(0, '清单里只有「Skipped」，任务页不画', mini(`<div class="row"><span>Landing check</span><span class="sp"></span><span class="lm-skipchip">Skipped</span></div>`), '最省，但 owner 只有点开落地才看得到理由，也找不到去掉它的地方。')])}
+${Q('D6', '协调者的改动列表：放哪、列哪些', '§12.15 P-R1 定了：每次写入留一行，项目页 Settings 段按时间列出谁、何时、从什么改成什么、为什么；owner 可改回。没定的是入口与范围。',
+ [opt(1, 'Settings 里一个入口行「Coordinator’s changes · 3 ›」，进去是整页列表', mini(`<div class="row"><b>Coordinator’s changes</b><span class="sp"></span><span class="dim">3 ›</span></div>`), 'iPhone 推一页、web 在 Settings 下方展开；列表含落地检查、任务免检两类，owner 自己的写入也列出（没有 Revert，只写「Your change」）。'),
+  opt(0, '直接把最近几条平铺在 Settings 里', mini(`<div class="dim">Landing check: <code>npm run…</code> → none · 12m ago</div><div class="dim">Check exempt: Move cron… · 20m ago</div>`), '无需点进去；但 Settings 页被一个会不断变长的账本占满，iPhone 上要滚过它才到设置本身。'),
+  opt(0, '只在项目的 Activity 里追加', mini(`<div class="dim">Activity · 12m ago · Coordinator set the landing check to none</div>`), '没有新页，但 Activity 里没有 Revert 的位置，也不能按字段过滤。')])}
+${Q('D7', 'Revert：直接生效，还是先确认', 'P-R1 说 owner 写过的值协调者不能再无卡覆盖；所以一次 Revert 会让这个字段回到卡的流程。没定的是按下去时的确认。',
+ [opt(1, '先弹确认，写明后果', mini(`<b>Revert this change?</b><div class="dim">Landing check goes back from No check to <code>${CHK}</code>. The coordinator needs a card for this field from now on.</div><div class="row" style="margin-top:6px"><span class="lm-btn red">Revert</span><span class="lm-btn">Cancel</span></div>`), '后果（字段被收回）不是列表行上看得出来的；确认一步值得。已改回的行变灰，写「Reverted by you」，不再有按钮。'),
+  opt(0, '按一下就改回，页底给「Undo」', mini(`<div class="row"><span>Reverted</span><span class="sp"></span><span style="color:#3E69F6;font-weight:600">Undo</span></div>`), '快，但「Undo」要把字段重新还给协调者，是第二条新的写路径；web 的 toast 也会被页面刷新带走。'),
+  opt(0, '只有还是当前值的行才有 Revert', mini(`<div class="dim">Row 3 of 3 is no longer current → no button</div>`), '这一条<b>不与</b>上面互斥：无论选哪个，都建议只给仍是当前值的行画 Revert（后来又被改过的行置灰），免得改回一个早已不是现值的旧值。')])}
+${Q('D8', '开始卡：无线时还要不要留 Merge check 一行', '§12.15 P-M2 的字面是「线与检查两段都不画」。图上<b>偏离了它</b>：保留了 Merge check 一行。因为之后若有任务提交、且开着 Automatic，进 main 前守门的就是合并检查，所以让 owner 在开始时就定。',
+ [opt(1, '保留 Merge check 一行（图上画的）', mini(`<div>Lands on the project’s branch when a task commits</div><hr><div class="row dim"><span>Merge check</span><span class="sp"></span><span>None ›</span></div>`), '偏离条文的字面，但不多一个决定：这一行今天就在卡上，owner 本来就在这里定它。建议同时把 P-M2 的措辞改成「去掉线与落地检查两段」。'),
+  opt(0, '照条文：不画 Merge check 行', mini(`<div>Lands on the project’s branch when a task commits</div><div class="dim">(no merge check row)</div>`), '与条文一字不差；但运维项目中途出现第一份提交时，main 前没有任何检查，owner 要到设置里才补得上；Automatic 项目会在没有检查的情况下自动合入。')], 2)}
+${Q('D9', '「开始卡上由 owner 按 Start 确认的落地检查」读作什么', '落地检查任务在加第四种来历 START：协调者在开始请求里提议了落地检查，owner 按 Start 即确认；协调者之后仍可无卡修改。owner 在开始卡上自己输入的值读作 You。每种来历都带时间。',
+ [opt(1, '徽标 Set at start', mini(`<code>${CHK}</code><div class="row" style="margin-top:6px"><span class="lm-who start">Set at start</span><span class="dim">Start pressed 3d ago</span></div>`), '说的是事实（开始时定的），也提示它之后仍可能被协调者改；与 Approved on a card（改动过一张卡）不混。'),
+  opt(0, '读作 Approved on a card', mini(`<code>${CHK}</code><div class="row" style="margin-top:6px"><span class="lm-who card">Approved on a card</span></div>`), '少一种徽标，但开始卡确认之后协调者可以无卡再改，而「卡」暗示改它要卡；会误导。'),
+  opt(0, '读作 Coordinator', mini(`<code>${CHK}</code><div class="row" style="margin-top:6px"><span class="lm-who coord">Coordinator</span></div>`), '值确实是协调者写的，但 owner 按过 Start 看过它；抹掉这一点，owner 就分不出「我看过的」与「它后来改的」。')])}
+</div>`;
+
+const P = (id, png, bandHtml, inner) => `<section class="lm-part" id="${id}" data-png="${png}">${bandHtml}${inner}</section>`;
+document.getElementById('board').innerHTML = [
+P('p1', '01-start-card', band('① 开始卡', 'after', '没有线的开始请求：去掉线与检查两段，画一行文案（§12.15 P-M2）'),
+`<div class="lm-row">${rf('now', 'a · 现在 · iPhone', startSheet(startNow), cp('今天', [`${nn(1)}开始请求必须在项目分支与 main 之间选一条线，所以「How it runs」永远有线、分支、落地检查三段。运维项目也要选。`]))}
+${rf('after', 'b · 改后 · iPhone', startSheet(startNew), cp('不带线时', [`${nn(1)}线与落地检查两段整段不画，换一行 <b>Lands on the project’s branch when a task commits</b>（条文给的原句，上线文案）。`, `${nn(2)}合并检查、并发数、Automatic 照旧。没有仓库也能开始（不再有 START_REPOSITORY_UNKNOWN）。`, `${nn(3)}要不要在这行旁给 owner 一个选线的门：<b>D1</b>。`, `${nn(4)}<b>与 §12.15 P-M2 的字面不同</b>：条文是线与检查两段都不画，这里<b>保留了 Merge check 一行</b>。理由：之后若有任务提交且开了 Automatic，守住 main 的就是合并检查，所以让 owner 在开始时就把它定好（<b>D8</b>）。`]))}</div>
+<div class="lm-webcol">${rf('now', 'c · 现在 · web', wStartNow, '今天：线、分支、落地检查三段。')}${rf('after', 'd · 改后 · web', wStartNew, '改后：一行文案，与 iPhone 同一句；Merge check 一行保留，与 §12.15 P-M2 的字面不同，理由见 iPhone 的第 4 条（D8）。')}</div>`),
+P('p2', '02-project-page', band('② 已开始、还没有线的项目页', 'after', '没有落地卡、没有 Landings 行、任务行上没有落地一段（§12.16）'),
+`<div class="lm-row">${rf('now', 'a · 现在 · iPhone', pgNow, cp('今天', [`${nn(1)}进度卡下面一张 Landing 卡：灰色「queued」，在等 runner 领一个其实什么也不会落的作业。`, `${nn(2)}Landings 组里每个 DONE 的任务一行。`, `${nn(3)}每条任务行底下三段：Work · Accepted · Landing。`]))}
+${rf('after', 'b · 改后 · iPhone', pgNew, cp('改后', [`${nn(1)}进度卡下面没有 Landing 卡；没有 Landings 组。`, `${nn(2)}任务行回到只有标题与一句话，没有落地一段。`, `${nn(3)}第一份提交出现、线开始之后，这三处第一次出现（线开始前的空白要不要有说明：<b>D2</b>）。`]))}</div>
+<div class="lm-webcol">${rf('now', 'c · 现在 · web', WFC(wColNow, ovNow, 700), '今天：会话栏的 Landing 行与 Landings 组；Work overview 里有 Landings 一行。')}${rf('after', 'd · 改后 · web', WFC(wColNew, ovNew, 700), '改后：这些都不画。')}</div>`),
+P('p3', '03-settings', band('③ 项目设置：落地检查与它的来历', 'after', '谁设置的（You / Coordinator / Approved on a card）、何时，以及显式的「No check」（§12.15 P-C1，§12.16）'),
+`<div class="lm-row">${rf('now', 'a · 现在 · iPhone', setNow, cp('今天', [`${nn(1)}只有命令与超时；谁写的、何时写的都看不出来。空框「回落到合并检查」与「不跑」没有区别可言（没有后者）。`]))}
+${rf('after', 'b · 改后 · 协调者设的', setCoord, cp('改后：命令，带来历', [`${nn(1)}三段开关：Merge check · Command · No check（<b>D4</b>）。`, `${nn(2)}命令下一行：徽标 + 时间（<b>D3</b>）。`, `${nn(3)}下面一个入口进 ⑤ 的改动列表。`]))}
+${rf('after', 'c · 改后 · 显式 No check', setNone, cp('「不跑」是一个值', [`${nn(1)}选中 No check 时，写明后果：只跑任务验收，进 main 的合并检查照跑。`, `${nn(2)}下面小表说明四种来历各是什么，新增的 <b>Set at start</b>（<b>D9</b>）（上线时不画这块，这里只为讲明）。`]))}</div>
+<div class="lm-webcol">${rf('now', 'd · 现在 · web', wSetNow, '今天。')}${rf('after', 'e · 改后 · web', wSetNew, '改后：同一个字段的五种读法：协调者设的、owner 设的、卡确认的、开始时设的、显式 No check；每一种都带时间。')}</div>`),
+P('p4', '04-exempt-task', band('④ 免检落地检查的任务', 'after', '任务页上带理由，落地的检查清单里记为 Skipped（§12.15 P-C2）'),
+`<div class="lm-row">${rf('now', 'a · 现在 · iPhone', tkNow, cp('今天', [`${nn(1)}任务的落地检查照项目设置跑，清单里是它的通过与耗时。没有办法对一条任务说「这条不用」。`]))}
+${rf('after', 'b · 改后 · iPhone', tkNew, cp('改后', [`${nn(1)}Landing 段里 Landing check 一行：<span class="lm-skipchip">Exempt</span> + 整句理由 + 谁写的、何时；owner 有 Remove exemption（<b>D5</b>）。`, `${nn(2)}检查清单里：任务验收 ✓，落地检查 <b>Skipped</b> 并写 <i>Exempt: 理由</i>，合并检查一行说明仍会跑。`]))}</div>
+<div class="lm-webcol">${rf('now', 'c · 现在 · web', wTask(false), '今天。')}${rf('after', 'd · 改后 · web', wTask(true), '改后：同样两处，任务页的 Landing 一栏与检查清单。')}</div>`),
+P('p5', '05-changes', band('⑤ 协调者的改动列表，owner 可改回', '改动留痕：谁、何时、从什么到什么、为什么（§12.15 P-R1）'.length ? 'after' : 'after', '谁、何时、从什么改成什么、为什么；owner 可改回，改回后该字段回到卡'),
+`<div class="lm-row">${rf('now', 'a · 现在 · iPhone', chNow, cp('今天', [`${nn(1)}协调者每改一次就出一张卡等你确认；确认之后只剩新值，没有一处看得到改过什么。`]))}
+${rf('after', 'b · 改后 · 列表', chNew, cp('改后', [`${nn(1)}一页列表：改了什么、从什么到什么、理由、谁、何时；协调者写的每行一个 Revert（<b>D6</b>）。`, `${nn(2)}你自己写的行不画 Revert。`]))}
+${rf('after', 'c · 改后 · 按下 Revert', chRev, cp('先确认', [`${nn(1)}写明后果：这个字段此后回到卡（<b>D7</b>）。`]))}
+${rf('after', 'd · 改后 · 改回之后', chDone, cp('改回之后', [`${nn(1)}那一行变灰，写「Reverted by you」与后果；它的 Revert 没有了。`]))}</div>
+<div class="lm-webcol">${rf('after', 'e · 改后 · web 列表', wChanges, '改后：Settings 下方的整页表格；Revert 在每个协调者行的最右。')}${rf('after', 'f · 改后 · web 按下 Revert', wChgRev, '确认对话框；与 iPhone 同一句话。')}</div>`),
+P('p6', '06-decisions', band('⑥ 条文没定、待你定的 9 条', 'tbd', '每条画出备选，绿框是推荐；未裁决前按推荐画'),
+`${decisions}<p style="max-width:1450px;color:#6a6a72;font-size:13.5px;margin-top:14px">这里每一条都不改契约条文，只是 §12.15/12.16 留给客户端的空白。你裁决后，结果写进 <code>README.md</code>，三个客户端的任务照它画。</p>`),
+].join('');
+</script>
+</body></html>

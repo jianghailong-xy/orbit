@@ -49,14 +49,15 @@ final class DiagnosticRowWiringTests: XCTestCase {
         XCTAssertTrue(notice.contains(#"Label(message, systemImage: "exclamationmark.triangle.fill")"#)
                       && notice.contains(": Color.orange)"),
                       "a notice keeps the warning tone on its whole line")
-        XCTAssertTrue(item.contains("case .diagnostic(let notice):\n            DiagnosticNoticeRow(notice: notice)"),
+        XCTAssertTrue(item.contains(#"case .diagnostic(let notice):"#)
+                      && item.contains("DiagnosticNoticeRow(notice: notice, console: notice.isSandboxMissing ? console : nil,"),
                       "a diagnostic is drawn by its own row")
     }
 
     /// Only the mark keeps the warning tone; the label is dim, the engine's words grey, the count dimmed.
     func testADiagnosticRowIsGreyWithOnlyItsMarkInTheWarningTone() throws {
         let row = try section(try source(Self.console), from: "struct DiagnosticNoticeRow: View {",
-                              to: "/// What `TranscriptView` watches")
+                              to: "struct SandboxFixActionView: View {")
         XCTAssertTrue(row.contains(#"Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)"#),
                       "the mark keeps the warning tone")
         XCTAssertTrue(row.contains("Text(notice.label).font(.orbitMeta).monospacedDigit().foregroundStyle(.tertiary)"),
@@ -66,5 +67,22 @@ final class DiagnosticRowWiringTests: XCTestCase {
                       && row.contains(".foregroundStyle(Color.orange.opacity(0.7))"), "the count is the dimmed mark's tone")
         XCTAssertTrue(row.contains(".help(notice.message)"), "the whole logged line is its help, as web's tooltip")
         XCTAssertFalse(row.contains(".font(.orbitLabel).foregroundStyle(.orange)"), "the row is not a notice's line")
+    }
+
+    /// The sandbox warning's one action (web's `SandboxFixAction`): the button, the agent at work, or
+    /// the one that already finished with the row — which offers no second agent.
+    func testTheSandboxWarningDrawsTheAgentAtWorkOrTheButton() throws {
+        let action = try section(try source(Self.console), from: "struct SandboxFixActionView: View {",
+                                 to: "/// What `TranscriptView` watches")
+        XCTAssertTrue(action.contains("RunnerAgentFixLogic.sandboxState(console.runnerAgentFix)"),
+                      "the row reads this machine's agent-fix state")
+        XCTAssertTrue(action.contains("Button(RunnerPageCopy.AGENT_FIX_BUTTON) { Task { await console.fixSandbox() } }"),
+                      "the press starts the agent on that machine")
+        XCTAssertTrue(action.contains("RunnerPageCopy.agentFixFixing(workspace: entry.workspaceName)"),
+                      "the fixing line names the workspace")
+        XCTAssertTrue(action.contains("RunnerPageCopy.agentFixFixed(workspace: workspaceName)"),
+                      "a finished row says what was done with it")
+        XCTAssertTrue(action.contains("Button(RunnerPageCopy.AGENT_FIX_OPEN_SESSION) { openSession(sessionId) }"),
+                      "the finished row still opens that session")
     }
 }

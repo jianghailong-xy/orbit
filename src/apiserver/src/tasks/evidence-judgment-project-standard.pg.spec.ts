@@ -50,11 +50,11 @@ import { HttpException } from '@nestjs/common';
 import {
   CreatorType,
   type PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import { uuidToBase62 } from '@orbit/shared';
 import {
@@ -236,7 +236,7 @@ suite('EVIDENCE_JUDGMENT cannot be declared on work that is in no project', asyn
         // Terminal, so the row is stranded rather than merely busy: a task with a LIVE run cannot
         // be moved between projects at all, and a control asserting the way out is still open must
         // not be measuring that unrelated wall.
-        status: RunStatus.SUCCEEDED,
+        turnState: null, finishedAt: new Date(), 
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: true,
       },

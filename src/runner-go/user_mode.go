@@ -30,7 +30,8 @@ var userModeActions = map[string]string{
 	"login": "", "logout": "", "whoami": "", "api": "",
 	// Reads the catalogue this binary carries and asks no server anything, so it is the person's as much
 	// as anybody's.
-	"guide": "",
+	"guide":         "",
+	"subagent rate": "only the session that started the SubAgent run can rate it (ORBIT_SESSION_ID)",
 
 	"task list":              "",
 	"task labels":            "",
@@ -79,6 +80,8 @@ var userModeActions = map[string]string{
 	"project request-promotion": "it requests promotion as the project’s current coordinator conversation (ORBIT_SESSION_ID)",
 	"project request-done": "it asks the account owner as the project's coordinating session (ORBIT_SESSION_ID), " +
 		"and recording a project done is the owner's own press in the Orbit app",
+	"project request-reopen": "it asks the account owner as the session it runs in (ORBIT_SESSION_ID), " +
+		"and reopening a project is the owner's own press in the Orbit app",
 
 	"session list":           "",
 	"session search":         "",

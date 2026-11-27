@@ -96,15 +96,15 @@ object ProjectMergeCard {
 data class ProjectTimelineSection(val id: String, val title: String, val sessions: List<DirectorySession>)
 
 object ProjectTimeline {
-    /** The sessions keep the order they are given in (the page's load sorts them by last activity, newest first). The buckets and their
-     * titles are the list's own, without Pinned: the project's page has none. */
+    /** The buckets and their titles are the list's own, without Pinned: the project's page has none. Each is placed and ordered by
+     * listedAt (createdAt when null), then createdAt, then id, as the rows' times read (contracts/session-list-order.fixtures.json). */
     fun sections(sessions: List<DirectorySession>, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): List<ProjectTimelineSection> {
         val today = now.atZone(zone).toLocalDate()
         val buckets = List(recencyTitles.size) { mutableListOf<DirectorySession>() }
-        for (session in sessions) {
-            val at = (session.lastTurnAt ?: session.createdAt)?.let { runCatching { Instant.parse(it) }.getOrNull() }
-            buckets[recencyBucket(at, today, zone)] += session
-        }
+        val created = { s: DirectorySession -> runCatching { Instant.parse(s.createdAt) }.getOrNull() ?: Instant.MIN }
+        val ordered = sessions.sortedWith(compareByDescending<DirectorySession> { it.listedInstant() ?: Instant.MIN }
+            .thenByDescending(created).thenBy { it.id })
+        for (session in ordered) buckets[recencyBucket(session.listedInstant(), today, zone)] += session
         return buckets.mapIndexedNotNull { i, rows -> if (rows.isEmpty()) null else ProjectTimelineSection("time:$i", recencyTitles[i], rows) }
     }
 }

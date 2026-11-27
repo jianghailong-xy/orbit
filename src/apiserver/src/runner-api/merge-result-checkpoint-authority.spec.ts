@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException } from '@nestjs/common';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunnerApiController } from './runner-api.controller';
 
 // `[K6]` §7 at the merge-result door: the server decides, and it fails closed.
@@ -56,6 +56,7 @@ function harness(opts: {
     [
       {
         status: RunStatus.SUCCEEDED,
+        finishedAt: new Date(),
         inboxLeaseOwner: null,
         mergeStatus: 'pending',
         mergeOperationId: OPERATION_ID,

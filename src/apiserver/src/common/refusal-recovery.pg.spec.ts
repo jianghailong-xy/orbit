@@ -155,7 +155,7 @@ test('Project and Task refusals carry their contracted recovery, and leak nothin
     await db.session.create({
       data: {
         id: coordinatorId, title: 'coordinator', prompt: 'coordinator', ownerId, creatorId: ownerId, workspaceId,
-        assignedRunnerId: runnerId, status: 'AWAITING_INPUT', startedAt: new Date(), runtimeSessionId: `runtime-${coordinatorId}`,
+        assignedRunnerId: runnerId, turnState: null, startedAt: new Date(), runtimeSessionId: `runtime-${coordinatorId}`,
       },
     });
     const pb = await project(a, `B ${RUN}`);

@@ -18,7 +18,8 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
 import { ConflictException } from '@nestjs/common';
-import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { RunInboxResponse } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -73,7 +74,7 @@ async function liveSession(db: PrismaClient, ownerId: string, on: Machine): Prom
     data: {
       title: 'live',
       prompt: 'hello',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       ownerId,
       creatorId: ownerId,
       workspaceId: on.workspaceId,
@@ -182,7 +183,7 @@ suite('POST /sessions/:id/restart, on real PostgreSQL', async (t) => {
   await t.test('(3) an ended engine is refused 409 ENGINE_NOT_RUNNING and nothing is queued', async () => {
     const box = await machine(db, me, 'restart-ended');
     const ended = await liveSession(db, me, box);
-    await db.session.update({ where: { id: ended }, data: { status: RunStatus.CANCELLED } });
+    await db.session.update({ where: { id: ended }, data: { turnState: null, finishedAt: new Date()} });
 
     await assert.rejects(sessions.restart(me, ended), (error: unknown) => {
       assert.ok(error instanceof ConflictException, String(error));

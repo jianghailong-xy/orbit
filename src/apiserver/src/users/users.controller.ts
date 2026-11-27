@@ -23,6 +23,7 @@ import { AVATAR_MAX_BYTES, readAvatar } from './avatar';
 import { UpdatePreferencesDto, UpdateProfileDto } from './dto';
 import { SIGN_IN_METHODS_SELECT, signInMethodsOf } from './sign-in-methods';
 import { normalizeDefaultModels } from '../providers/engine-provider';
+import { changedByOf, mergePreferences, withChangedBy, type SettingChangedBy } from './preferences-merge';
 import { translationAvailable, translationUnavailableUntil } from '../sessions/translation';
 import { promptOptimizerAvailable } from '../sessions/prompt-optimizer';
 
@@ -72,7 +73,25 @@ export class UsersController {
   @Get('me')
   async me(@CurrentUser() user: AuthUser) {
     const account = await this.prisma.user.findUnique({ where: { id: user.userId }, select: ME_SELECT });
-    return account && asMe(account);
+    return account && this.answer(account);
+  }
+
+  /**
+   * The account as `me` answers with it, with `changedBy`: each setting last changed from a conversation's card
+   * (docs/settings-from-conversation-design.md §5.3) with that conversation's title, which the Settings row names it by.
+   * A session since deleted reads with a null title.
+   */
+  private async answer(account: Prisma.UserGetPayload<{ select: typeof ME_SELECT }>) {
+    const marks = changedByOf((account.preferences ?? {}) as Record<string, unknown>);
+    const sessionIds = [...new Set(Object.values(marks).map((mark) => mark.sessionId))];
+    const sessions = sessionIds.length === 0 ? [] : await this.prisma.session.findMany({
+      where: { id: { in: sessionIds }, ownerId: account.id, deletedAt: null },
+      select: { id: true, title: true },
+    });
+    const titles = new Map(sessions.map((session) => [session.id, session.title]));
+    const changedBy: Record<string, SettingChangedBy & { sessionTitle: string | null }> = {};
+    for (const [key, mark] of Object.entries(marks)) changedBy[key] = { ...mark, sessionTitle: titles.get(mark.sessionId) ?? null };
+    return { ...asMe(account), changedBy };
   }
 
   /**
@@ -86,7 +105,7 @@ export class UsersController {
   async updateProfile(@CurrentUser() user: AuthUser, @Body() dto: UpdateProfileDto) {
     const name = dto.name.trim();
     if (!name) throw new BadRequestException('name must not be empty');
-    return asMe(await this.prisma.user.update({
+    return this.answer(await this.prisma.user.update({
       where: { id: user.userId },
       data: { name },
       select: ME_SELECT,
@@ -150,39 +169,18 @@ export class UsersController {
       where: { id: user.userId },
       select: { preferences: true },
     });
-    const merged = { ...((current?.preferences ?? {}) as Record<string, unknown>) };
-    if (dto.theme !== undefined) merged.theme = dto.theme;
-    if (dto.defaultModel !== undefined) merged.defaultModel = dto.defaultModel;
+    const values: Record<string, unknown> = { ...dto };
     if (dto.defaultModels !== undefined) {
       // Keyed by (engine, provider) — `<engine>:<provider>` — and an older client's own keys kept as it
       // wrote them, beside the new key each means (docs/provider-engine-contract.md §6.5).
-      merged.defaultModels = {
-        ...((merged.defaultModels ?? {}) as Record<string, string>),
-        ...(await normalizeDefaultModels(this.prisma, user.userId, dto.defaultModels)),
-      };
+      values.defaultModels = await normalizeDefaultModels(this.prisma, user.userId, dto.defaultModels);
     }
-    if (dto.defaultPermissionMode !== undefined) merged.defaultPermissionMode = dto.defaultPermissionMode;
-    if (dto.defaultEffort !== undefined) merged.defaultEffort = dto.defaultEffort;
-    if (dto.notifySessionFinished !== undefined)
-      merged.notifySessionFinished = dto.notifySessionFinished;
-    if (dto.notifyAgentMessage !== undefined) merged.notifyAgentMessage = dto.notifyAgentMessage;
-    if (dto.enableOrchestration !== undefined) merged.enableOrchestration = dto.enableOrchestration;
-    if (dto.modelRouting !== undefined) merged.modelRouting = dto.modelRouting;
-    if (dto.optimizeFor !== undefined) merged.optimizeFor = dto.optimizeFor;
-    if (dto.promptSuggestions !== undefined) merged.promptSuggestions = dto.promptSuggestions;
-    if (dto.recaps !== undefined) merged.recaps = dto.recaps;
-    if (dto.translationEnabled !== undefined) merged.translationEnabled = dto.translationEnabled;
-    if (dto.translationLanguage !== undefined) merged.translationLanguage = dto.translationLanguage;
-    if (dto.translationAgentLanguage !== undefined) merged.translationAgentLanguage = dto.translationAgentLanguage;
-    if (dto.promptOptimizer !== undefined) merged.promptOptimizer = dto.promptOptimizer;
-    if (dto.translationBilingual !== undefined) merged.translationBilingual = dto.translationBilingual;
-    if (dto.subagentBlockedProviders !== undefined) merged.subagentBlockedProviders = [...new Set(dto.subagentBlockedProviders)];
-    // null goes back to the default (session-create-allowance.ts), which is an absent key.
-    if (dto.cardFreeTaskCreates === null) delete merged.cardFreeTaskCreates;
-    else if (dto.cardFreeTaskCreates !== undefined) merged.cardFreeTaskCreates = dto.cardFreeTaskCreates;
-    return asMe(await this.prisma.user.update({
+    const { merged, written } = mergePreferences((current?.preferences ?? {}) as Record<string, unknown>, values);
+    // The owner set these themselves: a "Set from <conversation>" mark on them ends (docs/settings-from-conversation-design.md §5.3).
+    const preferences = withChangedBy(merged, written);
+    return this.answer(await this.prisma.user.update({
       where: { id: user.userId },
-      data: { preferences: merged as Prisma.InputJsonValue },
+      data: { preferences: preferences as Prisma.InputJsonValue },
       select: ME_SELECT,
     }));
   }

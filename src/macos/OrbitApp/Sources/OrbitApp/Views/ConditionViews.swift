@@ -223,7 +223,6 @@ struct ConditionWaitingCardView: View {
         if let schedule = condition?.scheduleId {
             appModel.openSchedule(schedule)
         } else if let task = condition?.taskId {
-            appModel.ownerRequests?.inboxPresented = false
             appModel.route(to: .task(task))
         }
         return nil

@@ -119,6 +119,13 @@ public enum MachineSetupCopy {
     public static func setupUpdatingCreate(machine: String) -> String {
         "\(machine) updates itself first: this version can’t check folders yet."
     }
+    // The folder field takes a full path too (docs/mocks/new-workspace-form, decision 2 A). The hint is said where the
+    // screen names the machine already (New workspace on a machine that has one); a bare machine's card keeps
+    // SETUP_FOLDER_HINT.
+    public static func setupFolderOrPathHint(root: String) -> String {
+        "A name in \(root), or a full path. Uses the folder if it exists, otherwise creates it."
+    }
+    public static func setupPathUnchecked(machine: String) -> String { "\(machine) checks a full path once it’s up." }
     public static let SETUP_CREATE = "Create workspace"
     public static func setupCreateFailed(why: String) -> String { "Couldn’t create the workspace: \(why)" }
 

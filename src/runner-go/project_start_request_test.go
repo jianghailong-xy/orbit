@@ -123,7 +123,7 @@ func TestProjectRequestStartIsABaseToolThatSaysWhenToCallIt(t *testing.T) {
 		}
 		schema, _ := tool["inputSchema"].(map[string]interface{})
 		required, _ := schema["required"].([]string)
-		if strings.Join(required, ",") != "projectId,line,maxConcurrentTasks,why" {
+		if strings.Join(required, ",") != "projectId,maxConcurrentTasks,why" {
 			t.Fatalf("project_request_start requires %v", required)
 		}
 	}
@@ -437,7 +437,6 @@ func TestProjectRequestStartRefusesABadShapeBeforeARoundTrip(t *testing.T) {
 	}
 	for name, mutate := range map[string]func(map[string]interface{}){
 		"no project":               func(a map[string]interface{}) { delete(a, "projectId") },
-		"no line":                  func(a map[string]interface{}) { delete(a, "line") },
 		"an unknown line":          func(a map[string]interface{}) { a["line"] = "SOMEWHERE" },
 		"automatic as a string":    func(a map[string]interface{}) { a["automatic"] = "yes" },
 		"no concurrency":           func(a map[string]interface{}) { delete(a, "maxConcurrentTasks") },
@@ -682,5 +681,25 @@ func TestProjectRequestStartCLICarriesLandingSettings(t *testing.T) {
 	body := (*seen)[0].body
 	if body["landingCheckCommand"] != "npm run landing" || body["landingCheckTimeoutSeconds"] != float64(180) {
 		t.Fatalf("request lost landing settings: %#v", body)
+	}
+}
+
+// P-M2: a request with no line is a request, and carries none.
+func TestProjectRequestStartWithoutALineSendsNone(t *testing.T) {
+	srv, seen := startRequestServer(t, http.StatusCreated, startRequestFiledBody)
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "343dlzsYWKo5z8l2M8tsB"}
+	res := mcp.callTool("project_request_start", map[string]interface{}{
+		"projectId": "proj-1", "maxConcurrentTasks": float64(3), "why": "ready",
+	})
+	if res["isError"] == true {
+		t.Fatalf("project_request_start without a line returned an error: %s", toolText(t, res))
+	}
+	if _, sent := (*seen)[len(*seen)-1].body["line"]; sent {
+		t.Fatalf("a request with no line sent one: %#v", (*seen)[len(*seen)-1].body)
+	}
+	if res := mcp.callTool("project_request_start", map[string]interface{}{
+		"projectId": "proj-1", "line": "SIDEWAYS", "maxConcurrentTasks": float64(3), "why": "ready",
+	}); res["isError"] != true {
+		t.Fatal("a line that is neither PROJECT_BRANCH nor MAIN was accepted")
 	}
 }

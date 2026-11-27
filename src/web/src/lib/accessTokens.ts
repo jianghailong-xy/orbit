@@ -16,10 +16,25 @@ export const SCOPE_GROUPS: readonly { resource: string; read: string; write?: st
   { resource: 'Events', read: 'events:read' },
 ];
 
+/**
+ * The one scope that is not read/write by resource: Files (the Drive) is a single grant that
+ * reads and changes it, so the Read-only preset leaves it out and Read & write includes it.
+ */
+export const FILES_SCOPE = 'drive';
+const FILES_GROUP = { resource: 'Drive', read: FILES_SCOPE, write: FILES_SCOPE };
+
+/**
+ * Notifications (POST /api/notify): sends a push to your own Orbit apps and reaches nothing else, the one grant a
+ * monitoring system such as Grafana needs. Not a read, so Read-only leaves it out and Read & write includes it.
+ */
+export const NOTIFY_SCOPE = 'notify';
+
 export const READ_SCOPES: readonly string[] = SCOPE_GROUPS.map((group) => group.read);
-export const ALL_SCOPES: readonly string[] = SCOPE_GROUPS.flatMap((group) =>
-  group.write ? [group.read, group.write] : [group.read],
-);
+export const ALL_SCOPES: readonly string[] = [
+  ...SCOPE_GROUPS.flatMap((group) => (group.write ? [group.read, group.write] : [group.read])),
+  FILES_SCOPE,
+  NOTIFY_SCOPE,
+];
 
 export type ScopePreset = 'read' | 'readWrite' | 'custom';
 
@@ -40,14 +55,15 @@ const sameSet = (scopes: readonly string[], of: readonly string[]) =>
 export function scopeSummary(scopes: readonly string[]): string {
   if (sameSet(scopes, ALL_SCOPES)) return 'Read & write · everything';
   if (sameSet(scopes, READ_SCOPES)) return 'Read-only · everything';
-  return SCOPE_GROUPS.flatMap((group) => {
+  // Files is one grant that reads and writes, so it reads as a group whose read and write are the same scope.
+  return [...SCOPE_GROUPS, FILES_GROUP].flatMap((group) => {
     const read = scopes.includes(group.read);
     const write = !!group.write && scopes.includes(group.write);
     if (read && write) return [`${group.resource}: read & write`];
     if (read) return [`${group.resource}: read`];
     if (write) return [`${group.resource}: write`];
     return [];
-  }).join(' · ');
+  }).concat(scopes.includes(NOTIFY_SCOPE) ? ['Notifications: send'] : []).join(' · ');
 }
 
 /** The lifetimes a token is issued with (§11.1); 90 days unless another is chosen. */

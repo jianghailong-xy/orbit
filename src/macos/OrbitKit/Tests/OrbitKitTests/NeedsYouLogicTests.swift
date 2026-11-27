@@ -516,7 +516,7 @@ final class NeedsYouLogicTests: XCTestCase {
                         lastTurnAt: "2026-11-15T02:00:00Z")
         let seen = Set([a].map(NeedsYouLogic.waitKey))
         let fresh = NeedsYouLogic.newlyWaiting([a, b], seen: seen)
-        XCTAssertEqual(fresh.map(\.target.id), ["b"], "only what was not waiting before")
+        XCTAssertEqual(fresh.compactMap(\.target?.id), ["b"], "only what was not waiting before")
         let notice = try XCTUnwrap(fresh.first)
         XCTAssertEqual(notice.title, "Orbit 接入 Ollama")
         XCTAssertEqual(notice.line, "Needs your reply · orbit-op")
@@ -526,14 +526,16 @@ final class NeedsYouLogicTests: XCTestCase {
         XCTAssertTrue(NeedsYouLogic.newlyWaiting([a, b], seen: bothSeen).isEmpty, "the same wait, not again")
         let bAgain = session("b", approvals: 1, agentName: "orbit-op", title: "Orbit 接入 Ollama",
                              lastTurnAt: "2026-11-15T03:00:00Z")
-        XCTAssertEqual(NeedsYouLogic.newlyWaiting([a, bAgain], seen: bothSeen).map(\.target.id), ["b"],
+        XCTAssertEqual(NeedsYouLogic.newlyWaiting([a, bAgain], seen: bothSeen).compactMap(\.target?.id), ["b"],
                        "stopping again is a new wait")
         XCTAssertTrue(NeedsYouLogic.newlyWaiting([a, b], seen: seen, excluding: "b").isEmpty,
                       "the conversation on screen has its own card in front of the reader")
     }
 
     /// An owner request stops no turn, so the conversation keeps taking turns while it waits: each
-    /// one is the same wait, not a new notice, and the notice says the request's own words.
+    /// one is the same wait, not a new notice, and the notice says the row's own words — with no
+    /// request listed beside the row, the long-standing approval word, never "Waiting on you"
+    /// (docs/mocks/waiting-on-you-removal).
     func testAnOwnerRequestIsNoticedOnceWhateverTurnsFollow() throws {
         func filed(_ lastTurnAt: String) -> Session {
             Session(id: "t", title: "Task: Walkthrough", status: .awaitingInput, agentId: "w",
@@ -543,7 +545,7 @@ final class NeedsYouLogicTests: XCTestCase {
                     lastTurnAt: lastTurnAt)
         }
         let notice = try XCTUnwrap(NeedsYouLogic.newlyWaiting([filed("2026-11-17T22:36:15Z")], seen: []).first)
-        XCTAssertEqual(notice.line, "Waiting on you · orbit-develop")
+        XCTAssertEqual(notice.line, "Waiting for approval · orbit-develop")
         let seen = Set([filed("2026-11-17T22:36:15Z")].map(NeedsYouLogic.waitKey))
         XCTAssertTrue(NeedsYouLogic.newlyWaiting([filed("2026-11-17T22:52:34Z")], seen: seen).isEmpty,
                       "a later turn of the same conversation is the same wait")

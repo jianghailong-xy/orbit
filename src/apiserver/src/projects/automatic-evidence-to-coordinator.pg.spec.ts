@@ -5,11 +5,11 @@ import { test } from 'node:test';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { uuidToBase62 } from '@orbit/shared';
@@ -55,6 +55,7 @@ import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskDispatchRefusalProducer } from './task-dispatch-refusal.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
+import { fixtureFacts, wordOf, WORD_SELECT } from '../test-support/session-word';
 
 /**
  * AN AUTOMATIC PROJECT'S COORDINATOR DECIDES THE EVIDENCE; THE OWNER'S CARD IS THE FALLBACK.
@@ -230,7 +231,7 @@ async function conversation(
       title,
       prompt: title,
       provider: 'claude',
-      status: options.status ?? RunStatus.AWAITING_INPUT,
+      ...fixtureFacts({ status: options.status ?? RunStatus.AWAITING_INPUT }),
       dispatchOrigin: SessionDispatchOrigin.USER,
       ...(options.taskId === undefined ? { titleManagedByProject: true } : {}),
       ...(options.ended ? { completedAt: new Date() } : {}),
@@ -774,9 +775,9 @@ test('(6) a coordinator conversation that has ended is not written to or revived
         'an ended conversation was written to');
       const standing = await stack.db.session.findUniqueOrThrow({
         where: { id: w.coordinatorSessionId! },
-        select: { status: true, completedAt: true },
+        select: { ...WORD_SELECT, completedAt: true },
       });
-      assert.equal(standing.status, RunStatus.SUCCEEDED, 'the ended conversation was revived');
+      assert.equal(wordOf(standing), RunStatus.SUCCEEDED, 'the ended conversation was revived');
       assert.ok(standing.completedAt);
       assert.deepEqual(await ownerAsked(stack, w), [w.taskId]);
       assert.equal(await ownerCount(stack, w), 1);
@@ -877,7 +878,7 @@ test('(9) the hold ends the moment the coordinator cannot act on it, and not whi
       const later = new Date(Date.now() + (ESCALATION_SECONDS + 60) * 1_000);
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId! },
-        data: { status: RunStatus.FAILED },
+        data: { turnState: null, lastTurnOutcome: 'FAILED', finishedAt: new Date()},
       });
       assert.deepEqual(await ownerAsked(stack, w), [], 'a paused coordinator lost the revision it was handed');
       assert.deepEqual(await ownerAsked(stack, w, later), []);
@@ -890,7 +891,7 @@ test('(9) the hold ends the moment the coordinator cannot act on it, and not whi
       // Parked on a retry is the same pause.
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId! },
-        data: { status: RunStatus.AWAITING_INPUT, retryAt: new Date(Date.now() + 3_600_000) },
+        data: { turnState: null, finishedAt: null, retryAt: new Date(Date.now() + 3_600_000) },
       });
       assert.deepEqual(await ownerAsked(stack, w, later), []);
       assert.equal(await ownerCount(stack, w, later), 0);
@@ -898,7 +899,7 @@ test('(9) the hold ends the moment the coordinator cannot act on it, and not whi
       // Over — filed as Completed by its owner: it will not decide anything, and the owner is asked.
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId! },
-        data: { status: RunStatus.FAILED, retryAt: null, completedAt: new Date() },
+        data: { turnState: null, lastTurnOutcome: 'FAILED', finishedAt: new Date(), retryAt: null, completedAt: new Date() },
       });
       assert.deepEqual(await ownerAsked(stack, w), [w.taskId]);
       assert.equal(await ownerCount(stack, w), 1);
@@ -1049,7 +1050,7 @@ test('(13) a coordinator conversation that is only down is not written to or rev
       const w = await world(stack, 'down');
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId! },
-        data: { status: RunStatus.FAILED },
+        data: { turnState: null, lastTurnOutcome: 'FAILED', finishedAt: new Date()},
       });
       const badgeBefore = await badge(stack, w);
       await submit(stack, w);
@@ -1062,9 +1063,9 @@ test('(13) a coordinator conversation that is only down is not written to or rev
         'a conversation that is down was written to');
       const standing = await stack.db.session.findUniqueOrThrow({
         where: { id: w.coordinatorSessionId! },
-        select: { status: true },
+        select: { ...WORD_SELECT },
       });
-      assert.equal(standing.status, RunStatus.FAILED, 'the conversation was revived to be told');
+      assert.equal(wordOf(standing), RunStatus.FAILED, 'the conversation was revived to be told');
       // Refused before the convergence ledger: it is judged when it is delivered, once the coordinator is back.
       assert.equal(await convergenceDecisions(stack.db, w.projectId), 0);
 

@@ -260,6 +260,20 @@ func TestV2ProgressNamesTheLocalLockWaitAndThePrepareStep(t *testing.T) {
 	if waiting.Phase != "FETCH" {
 		t.Fatalf("the local lock wait was reported in phase %q, want FETCH", waiting.Phase)
 	}
+	// A wait can last hours behind another job's hung check (2026-11-19): every periodic report
+	// through it still names the step, so the control plane reads it as waiting, not fetching.
+	cp.waitForReport(t, "WAITING_LOCAL_LOCK on three ticks", func(IntegrationJobProgressRequest) bool {
+		reports, _, _, _ := cp.snapshot()
+		waits := 0
+		for _, report := range reports {
+			if report.Step != "WAITING_LOCAL_LOCK" || report.Phase != "FETCH" {
+				t.Errorf("a report during the wait said phase %q step %q", report.Phase, report.Step)
+				return true
+			}
+			waits++
+		}
+		return waits >= 3
+	})
 	held.Unlock()
 	preparing := cp.waitForReport(t, "PREPARE", func(report IntegrationJobProgressRequest) bool {
 		return report.Step == "PREPARE"

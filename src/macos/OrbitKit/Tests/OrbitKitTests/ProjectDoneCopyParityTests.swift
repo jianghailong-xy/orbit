@@ -102,6 +102,7 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         ("DONE_CHECK_TASK", ProjectDone.checkTask),
         ("DONE_CHECK_OWNER_ITEMS", ProjectDone.checkOwnerItems),
         ("DONE_CHECK_LANDINGS", ProjectDone.checkLandings),
+        ("DONE_CHECK_DEFERRED_LANDINGS", ProjectDone.checkDeferredLandings),
         ("DONE_CARD_FINDINGS_HEADING", ProjectDone.findingsHeading),
         ("DONE_CARD_FINDINGS_ACCEPTED", ProjectDone.findingsAccepted),
         ("DONE_CARD_RECORD_ANYWAY", ProjectDone.recordAsDoneAnyway),
@@ -401,8 +402,8 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         // Each is rendered with sentinels, then each part is found as the web template spells it.
         XCTAssertEqual(ProjectDone.tally(counts()),
                        "23 criteria · 19 met · 17 landed on main · 1 in flight · 2 merged outside Orbit"
-                           + " · 3 no code to land")
-        XCTAssertEqual(ProjectDone.cardTally(counts()), "19 met · 17 landed on main · 3 nothing to land")
+                           + " · 3 no code to land · 4 not met")
+        XCTAssertEqual(ProjectDone.cardTally(counts()), "19 met · 17 landed on main · 3 nothing to land · 4 not met")
         XCTAssertEqual(ProjectDone.receiptTally(counts(), acceptedGaps: Self.gapCount),
                        "23 criteria met · 17 landed on main · 3 nothing to land · 7 gaps accepted")
         XCTAssertEqual(ProjectDone.receiptTally(nil, acceptedGaps: Self.gapCount), "7 gaps accepted")
@@ -417,7 +418,11 @@ final class ProjectDoneCopyParityTests: XCTestCase {
                       "the Why-not-done tally's on-main words are no longer said of the project's main branch")
         for part in [
             "`${counts.criteria} criteria`,\n    `${counts.met} met`,\n    `${counts.onMain} ${landedOn(main)}`,\n    ...reasonParts(counts),",
-            "`${counts.met} met`,\n    `${counts.onMain} ${landedOn(main)}`,\n    ...(noBranch > 0 ? [`${noBranch} ${REASON_LABELS.NO_BRANCH}`] : []),\n    ...(nothing > 0 ? [`${nothing} ${PROJECT_DONE_COPY.nothingToLand}`] : []),\n    ...waitPart,",
+            "`${counts.met} met`,\n    `${counts.onMain} ${landedOn(main)}`,\n    ...(noBranch > 0 ? [`${noBranch} ${REASON_LABELS.NO_BRANCH}`] : []),\n    ...(nothing > 0 ? [`${nothing} ${PROJECT_DONE_COPY.nothingToLand}`] : []),\n    ...(notMet > 0 ? [`${notMet} ${PROJECT_DONE_COPY.notMet}`] : []),\n    ...waitPart,",
+            "...reasonParts(counts),\n    ...(notMet > 0 ? [`${notMet} ${PROJECT_DONE_COPY.notMet}`] : []),",
+            "const notMet = Math.max(0, notMetCount(counts) - waiting);",
+            "return Math.max(0, counts.criteria - counts.met);",
+            "return derivedDone?.criteria.filter((criterion) => criterion.landingReason === 'IN_FLIGHT').length ?? 0;",
             "DONE_CARD_TALLY_OF.replace('{met}', String(counts.met)).replace('{n}', String(counts.criteria)),\n      ...waitPart,",
             "const waitPart = waiting > 0 ? [DONE_CARD_WAIT_CONFIRMATION.replace('{n}', String(waiting))] : [];",
             "return [`${counts.criteria} criteria met`, `${acceptedGaps} ${PROJECT_DONE_COPY.gapsAccepted}`].join(' · ');",
@@ -509,7 +514,9 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         XCTAssertEqual(ProjectDone.recordLabel(all, asked: false, check: ProjectDoneCheck(findings: [])),
                        ProjectDone.recordAsDone)
         // The meta line: who asked and how long the request has waited — or nobody.
-        XCTAssertTrue(card.contains("{project.title} · {doneRequest\n"), "the asked meta line drifted")
+        // The title is the translated one when there is one (d11950ba61), as the Apple card draws it.
+        XCTAssertTrue(card.contains("const title = words?.title || project.title;"), "the meta line's title drifted")
+        XCTAssertTrue(card.contains("{title} · {doneRequest\n"), "the asked meta line drifted")
         XCTAssertTrue(card.contains(
             "? [PROJECT_DONE_COPY.askedByCoordinator, doneRequestWaiting(requestWaitingSince, now)].filter(Boolean).join(' · ')"),
                       "the asked meta line drifted")
@@ -534,7 +541,7 @@ final class ProjectDoneCopyParityTests: XCTestCase {
 
     func testTheReceiptsSentencesAreTheWebs() throws {
         let card = try flat(Self.card)
-        XCTAssertTrue(card.contains("{project.title} · {doneProvenance({ doneBy: receipt?.doneBy ?? project.doneBy, acceptedGaps: accepted })}"))
+        XCTAssertTrue(card.contains("{title} · {doneProvenance({ doneBy: receipt?.doneBy ?? project.doneBy, acceptedGaps: accepted })}"))
         XCTAssertTrue(card.contains("{receiptDate ? ` · ${receiptDate}` : ''}"))
         XCTAssertTrue(card.contains("? `${DONE_CARD_RECEIPT}${receiptDateTime ? ` · ${receiptDateTime}` : ''}`"),
                       "the owner's receipt line drifted")
@@ -756,11 +763,13 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         }
         XCTAssertEqual(SessionHeader.waitingWord(for: session(.doneRequest)), ProjectDone.readyToClose)
         XCTAssertEqual(SessionHeader.waitingWord(for: session(.recordAsDone)), ProjectDone.recordAsDoneRow)
-        // An owner request the session filed: the web row's word, and its card's.
-        XCTAssertTrue(workspace.contains("if (s.waitingKind === 'OWNER_REQUEST') return WAITING_ON_YOU;"),
-                      "the web session row no longer says Waiting on you for an owner request")
+        // An owner request the session filed: the web row says the request kind's word (the shared
+        // `ownerRequestRowWord`); with no requests listed beside the kind, both fall back, never to
+        // "Waiting on you".
+        XCTAssertTrue(workspace.contains("return ownerRequestRowWord(s) ?? 'Waiting for approval';"),
+                      "the web session row no longer says the owner request kind's word")
         XCTAssertEqual(SessionLine.make(for: session(.ownerRequest), live: true),
-                       SessionLine(text: "Waiting on you", tone: .approval))
+                       SessionLine(text: "Waiting for approval", tone: .approval))
         XCTAssertEqual(SessionLine.make(for: session(.doneRequest), live: true),
                        SessionLine(text: "Ready to close", tone: .approval))
 
@@ -768,7 +777,8 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         XCTAssertTrue(items.contains(
             "`${PROJECT_DONE_COPY.openItemsDoneRequest} · ${row.doneRequest.gaps.length} ${PROJECT_DONE_COPY.gapsItCouldntProve}`"),
                       "the request's row on the project page drifted")
-        for part in ["{PROJECT_DONE_COPY.readyToClose}</div>", "title={PROJECT_DONE_COPY.heading}>{PROJECT_DONE_COPY.heading}</div>",
+        for part in ["{PROJECT_DONE_COPY.readyToClose}</div>", "<Tooltip content={PROJECT_DONE_COPY.heading} truncatedOnly>",
+                     "<div className=\"project-open-item-title\">{PROJECT_DONE_COPY.heading}</div>",
                      "{PROJECT_DONE_COPY.recordAsDoneRow}", "{PROJECT_DONE_COPY.notAskedYet}</div>",
                      "{ACTION_LABEL.REVIEW}"] {
             XCTAssertTrue(items.contains(part), "the project page's done rows drifted: no \(part.debugDescription)")

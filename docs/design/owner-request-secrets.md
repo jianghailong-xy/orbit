@@ -117,7 +117,10 @@ timestamps.
 - **"Use saved" is always the owner's click on one request.** Agents cannot list labels, and a saved secret is never
   applied automatically. Using one re-encrypts a copy into a new grant, so it follows that grant's scope and expiry.
 - A saved secret has no expiry and is the one long-lived copy in this design, which is why it should be opt-in.
-- Deleting a saved secret does not end grants already made from it. The owner revokes those on their cards.
+- Deleting a saved secret does not end grants already made from it, unless the owner asks it to
+  (`DELETE /account-secrets/:id?revokeCopies=true`): then each live grant made from it is revoked as its card's Revoke
+  would. A grant records the saved secret it came from (`saved_secret_id`, migration 1400) and the saved secret its
+  last use (`last_used_at`), so the Secrets page can show a saved secret's live copies.
 
 ## 4. Delivery to exactly one runner
 

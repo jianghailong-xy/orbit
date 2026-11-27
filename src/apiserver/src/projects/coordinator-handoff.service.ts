@@ -9,9 +9,17 @@ import {
   OnModuleInit,
   Optional,
 } from '@nestjs/common';
-import { Prisma, RunStatus } from '@prisma/client';
-import { type CoordinatorHandoffFailureCode, type CoordinatorHandoffView, RunEventType } from '@orbit/shared';
+import { Prisma } from '@prisma/client';
+import {
+  type CoordinatorHandoffFailureCode,
+  type CoordinatorHandoffRequest,
+  type CoordinatorHandoffSuccessor,
+  type CoordinatorHandoffView,
+  RunEventType,
+  RunStatus,
+} from '@orbit/shared';
 
+import { isReleased, RELEASE_FAILURE_SELECT, releaseWasFailure } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
@@ -24,6 +32,9 @@ import {
   coordinatorHandoffPrompt,
   coordinatorHandoffTurnId,
   coordinatorHandoffView,
+  readHandoffSuccessor,
+  successorColumns,
+  successorOf,
 } from './coordinator-handoff';
 import { ProjectsService } from './projects.service';
 
@@ -47,6 +58,12 @@ const ANSWERED_GRACE_MS = 60_000;
  *   skip   → HANDING_OVER with no note, then the same replacement (from WRITING or FAILED).
  *   cancel → CANCELLED, and the note turn withdrawn (queued) or stopped (running). Nothing changes.
  *   retry  → from FAILED, a new attempt: a new note turn under a new key.
+ *
+ * start, skip and retry may name what the successor runs on (`CoordinatorHandoffRequest`): kept on
+ * the row and handed to the replacement, and checked against create()'s own resolution first, so a
+ * pick that could not open never completes the outgoing coordinator. The note turn revives a
+ * coordinator that has ended (idle, or FAILED); when its own model cannot run, that turn fails and
+ * Hand over without a note, on another model, is the way out.
  *
  * Every transition is a compare-and-set on the row's state (and attempt, for a turn's end), so a
  * late end of a turn the owner already skipped, cancelled or retried past settles nothing.
@@ -77,18 +94,22 @@ export class CoordinatorHandoffService implements OnModuleInit, OnModuleDestroy 
   // ── The owner's doors ────────────────────────────────────────────────────────────────────────
 
   /** Hand over: ask the current coordinator for its note. A live handoff is answered as it stands. */
-  async start(ownerId: string, projectId: string): Promise<CoordinatorHandoffView> {
+  async start(ownerId: string, projectId: string, body?: CoordinatorHandoffRequest): Promise<CoordinatorHandoffView> {
     const coordinator = await this.openCoordinator(ownerId, projectId);
+    const successor = await this.checkedSuccessor(ownerId, coordinator.workspaceId, body);
     const live = await this.liveRow(coordinator.id);
-    if (live?.state === 'FAILED') return this.retry(ownerId, projectId);
-    if (live) return coordinatorHandoffView(live);
+    if (live?.state === 'FAILED') return this.retry(ownerId, projectId, body);
+    if (live) return coordinatorHandoffView(await this.rememberSuccessor(live, successor));
 
     const id = randomUUID();
     const clientTurnId = coordinatorHandoffTurnId(id, 1);
     let row: CoordinatorHandoffRow;
     try {
       row = await this.prisma.coordinatorHandoff.create({
-        data: { id, ownerId, projectId, fromSessionId: coordinator.id, state: 'WRITING', attempt: 1, clientTurnId },
+        data: {
+          id, ownerId, projectId, fromSessionId: coordinator.id, state: 'WRITING', attempt: 1, clientTurnId,
+          ...successorColumns(successor ?? null),
+        },
         select: HANDOFF_ROW_SELECT,
       });
     } catch (e) {
@@ -114,24 +135,29 @@ export class CoordinatorHandoffService implements OnModuleInit, OnModuleDestroy 
   }
 
   /** Skip the note / Hand over without a note: the replacement with no note, from WRITING or FAILED. */
-  async skip(ownerId: string, projectId: string): Promise<CoordinatorHandoffView> {
+  async skip(ownerId: string, projectId: string, body?: CoordinatorHandoffRequest): Promise<CoordinatorHandoffView> {
     const project = await this.project(ownerId, projectId);
     const fromSessionId = project.coordinatorSessionId;
     if (!fromSessionId) throw new ConflictException('this project has no coordinator to hand over');
+    const successor = await this.checkedSuccessor(ownerId, project.coordinatorWorkspaceId, body);
     const live = await this.liveRow(fromSessionId);
     let row: CoordinatorHandoffRow;
     if (live) {
       if (live.state === 'HANDING_OVER') throw new ConflictException('this handover is already under way');
+      const named = successor === undefined ? {} : successorColumns(successor);
       const moved = await this.prisma.coordinatorHandoff.updateMany({
         where: { id: live.id, state: live.state },
-        data: { state: 'HANDING_OVER', note: null, failureCode: null, endedAt: null },
+        data: { state: 'HANDING_OVER', note: null, failureCode: null, endedAt: null, ...named },
       });
       if (moved.count === 0) throw new ConflictException('this handover changed while it was being skipped — try again');
-      row = { ...live, state: 'HANDING_OVER', note: null, failureCode: null, endedAt: null };
+      row = { ...live, state: 'HANDING_OVER', note: null, failureCode: null, endedAt: null, ...named };
     } else {
       // Hand over without a note was pressed with no handoff under way: the same replacement.
       row = await this.prisma.coordinatorHandoff.create({
-        data: { id: randomUUID(), ownerId, projectId, fromSessionId, state: 'HANDING_OVER', attempt: 1 },
+        data: {
+          id: randomUUID(), ownerId, projectId, fromSessionId, state: 'HANDING_OVER', attempt: 1,
+          ...successorColumns(successor ?? null),
+        },
         select: HANDOFF_ROW_SELECT,
       });
     }
@@ -159,18 +185,20 @@ export class CoordinatorHandoffService implements OnModuleInit, OnModuleDestroy 
   }
 
   /** Try again: after a failure, a new attempt's note turn. */
-  async retry(ownerId: string, projectId: string): Promise<CoordinatorHandoffView> {
+  async retry(ownerId: string, projectId: string, body?: CoordinatorHandoffRequest): Promise<CoordinatorHandoffView> {
     const project = await this.project(ownerId, projectId);
     const live = project.coordinatorSessionId ? await this.liveRow(project.coordinatorSessionId) : null;
     if (!live) throw new ConflictException('there is no failed handover to try again');
-    if (live.state === 'WRITING') return coordinatorHandoffView(live);
+    const successor = await this.checkedSuccessor(ownerId, project.coordinatorWorkspaceId, body);
+    if (live.state === 'WRITING') return coordinatorHandoffView(await this.rememberSuccessor(live, successor));
     if (live.state !== 'FAILED') throw new ConflictException('this handover is already under way');
     const attempt = live.attempt + 1;
     const clientTurnId = coordinatorHandoffTurnId(live.id, attempt);
     const startedAt = new Date();
+    const named = successor === undefined ? {} : successorColumns(successor);
     const moved = await this.prisma.coordinatorHandoff.updateMany({
       where: { id: live.id, state: 'FAILED', attempt: live.attempt },
-      data: { state: 'WRITING', attempt, clientTurnId, startedAt, failureCode: null, endedAt: null },
+      data: { state: 'WRITING', attempt, clientTurnId, startedAt, failureCode: null, endedAt: null, ...named },
     });
     if (moved.count === 0) throw new ConflictException('this handover changed while it was being retried — try again');
     try {
@@ -179,7 +207,7 @@ export class CoordinatorHandoffService implements OnModuleInit, OnModuleDestroy 
       await this.fail(live.id, attempt, 'TURN_FAILED');
       throw e;
     }
-    const row = { ...live, state: 'WRITING', attempt, clientTurnId, startedAt, failureCode: null, endedAt: null };
+    const row = { ...live, state: 'WRITING', attempt, clientTurnId, startedAt, failureCode: null, endedAt: null, ...named };
     this.publish(row);
     return coordinatorHandoffView(row);
   }
@@ -203,7 +231,8 @@ export class CoordinatorHandoffService implements OnModuleInit, OnModuleDestroy 
     });
     if (turn?.clientTurnId !== row.clientTurnId) return;
     if (status !== RunStatus.SUCCEEDED) {
-      await this.fail(row.id, row.attempt, status === RunStatus.INTERRUPTED ? 'TURN_STOPPED' : 'TURN_FAILED');
+      if (status === RunStatus.INTERRUPTED) await this.fail(row.id, row.attempt, 'TURN_STOPPED');
+      else await this.noteTurnFailed(row);
       return;
     }
     await this.noteWritten(row, turnId);
@@ -228,7 +257,7 @@ export class CoordinatorHandoffService implements OnModuleInit, OnModuleDestroy 
       const [session, turn] = await Promise.all([
         this.prisma.session.findUnique({
           where: { id: row.fromSessionId },
-          select: { status: true, completedAt: true, archivedAt: true, deletedAt: true },
+          select: { ...RELEASE_FAILURE_SELECT, completedAt: true, archivedAt: true, deletedAt: true },
         }),
         this.prisma.conversationTurn.findUnique({
           where: { sessionId_clientTurnId: { sessionId: row.fromSessionId, clientTurnId: row.clientTurnId } },
@@ -238,9 +267,14 @@ export class CoordinatorHandoffService implements OnModuleInit, OnModuleDestroy 
       let code: CoordinatorHandoffFailureCode | null = null;
       if (!session || session.completedAt || session.archivedAt || session.deletedAt) code = 'TURN_STOPPED';
       else if (!turn) code = 'TURN_STOPPED';
-      else if (turn.status === 'ANSWERED') {
+      else if (turn.status !== 'ANSWERED' && isReleased(session)) {
+        // The note turn revived the conversation and it ended again before answering: most often its
+        // own model could not run (a provider whose sign-in failed, an engine that would not start).
+        // Released by a failure (common/session-release.ts), or stopped: an end that was asked for is a stop.
+        code = releaseWasFailure(session) ? 'TURN_FAILED' : 'TURN_STOPPED';
+      } else if (turn.status === 'ANSWERED') {
         if (turn.answeredAt && now.getTime() - turn.answeredAt.getTime() < ANSWERED_GRACE_MS) continue;
-        if (session.status === RunStatus.FAILED) code = 'TURN_FAILED';
+        if (releaseWasFailure(session)) code = 'TURN_FAILED';
         else {
           await this.noteWritten(row, turn.id);
           settled += 1;
@@ -252,6 +286,10 @@ export class CoordinatorHandoffService implements OnModuleInit, OnModuleDestroy 
         code = 'TIMED_OUT';
       }
       if (!code) continue;
+      if (code === 'TURN_FAILED') {
+        if (await this.noteTurnFailed(row)) settled += 1;
+        continue;
+      }
       if (await this.fail(row.id, row.attempt, code)) {
         settled += 1;
         if (code === 'TIMED_OUT') await this.withdrawNoteTurn(row);
@@ -261,6 +299,36 @@ export class CoordinatorHandoffService implements OnModuleInit, OnModuleDestroy 
   }
 
   // ── Inside ───────────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * The note turn failed. When it never reached the engine (never delivered: the coordinator's own model
+   * could not even start, as a provider whose sign-in failed or an engine that will not start) this
+   * conversation will not write a note however often it is asked. With a successor the owner named, the
+   * handover goes on without a note, on that successor, which is what Hand over asked for; with none,
+   * COORDINATOR_CANT_RUN says to pick one. A turn the engine did take and fail is TURN_FAILED, where Try
+   * again may help. True when this call settled the attempt.
+   */
+  private async noteTurnFailed(row: CoordinatorHandoffRow): Promise<boolean> {
+    const turn = row.clientTurnId
+      ? await this.prisma.conversationTurn.findUnique({
+        where: { sessionId_clientTurnId: { sessionId: row.fromSessionId, clientTurnId: row.clientTurnId } },
+        select: { deliveredAt: true },
+      })
+      : null;
+    if (turn?.deliveredAt) return this.fail(row.id, row.attempt, 'TURN_FAILED');
+    if (!successorOf(row)) return this.fail(row.id, row.attempt, 'COORDINATOR_CANT_RUN');
+    const moved = await this.prisma.coordinatorHandoff.updateMany({
+      where: { id: row.id, state: 'WRITING', attempt: row.attempt },
+      data: { state: 'HANDING_OVER', note: null },
+    });
+    if (moved.count === 0) return false;
+    const handingOver = { ...row, state: 'HANDING_OVER', note: null };
+    this.publish(handingOver);
+    await this.replace(row.ownerId, handingOver, null).catch((e) => this.logger.warn(
+      `handoff ${row.id}: the replacement without a note failed: ${e instanceof Error ? e.message : String(e)}`,
+    ));
+    return true;
+  }
 
   /** The note is in: HANDING_OVER with it, then the replacement. An empty reply is a failure. */
   private async noteWritten(row: CoordinatorHandoffRow, turnId: string): Promise<void> {
@@ -294,6 +362,7 @@ export class CoordinatorHandoffService implements OnModuleInit, OnModuleDestroy 
         fromSessionId: row.fromSessionId,
         note,
         waits,
+        successor: successorOf(row),
       });
     } catch (e) {
       const current = await this.prisma.coordinatorHandoff.updateMany({
@@ -338,13 +407,44 @@ export class CoordinatorHandoffService implements OnModuleInit, OnModuleDestroy 
     return text ?? null;
   }
 
-  /** The platform's turn asking for the note: NEXT_TURN, so a running turn finishes first. */
+  /**
+   * The platform's turn asking for the note: NEXT_TURN, so a running turn finishes first. Through resume,
+   * so a coordinator that has ended without being completed — recycled while idle, or FAILED — is revived
+   * to write it rather than refused with "the session has ended". When its model cannot run, the revived
+   * turn fails (afterTurn or the sweep), and the owner hands over without a note on another model.
+   */
   private async queueNoteTurn(ownerId: string, sessionId: string, clientTurnId: string): Promise<void> {
-    await this.sessions.createTurn(ownerId, sessionId, {
+    await this.sessions.resume(ownerId, sessionId, {
       clientTurnId,
       content: coordinatorHandoffPrompt(),
       intent: 'NEXT_TURN',
     });
+  }
+
+  /** The successor the request names (undefined: left out; null: cleared), refused now with create()'s own
+   *  refusal when it could not open. */
+  private async checkedSuccessor(
+    ownerId: string,
+    workspaceId: string | null,
+    body: CoordinatorHandoffRequest | undefined,
+  ): Promise<CoordinatorHandoffSuccessor | null | undefined> {
+    const successor = readHandoffSuccessor(body?.successor);
+    if (successor) await this.sessions.assertStartResolves(ownerId, { ...successor, workspaceId });
+    return successor;
+  }
+
+  /** A successor named on a handoff already under way replaces the one it had (null clears it); left out keeps it. */
+  private async rememberSuccessor(
+    row: CoordinatorHandoffRow,
+    successor: CoordinatorHandoffSuccessor | null | undefined,
+  ): Promise<CoordinatorHandoffRow> {
+    if (successor === undefined) return row;
+    const named = successorColumns(successor);
+    const updated = await this.prisma.coordinatorHandoff.updateMany({ where: { id: row.id, state: row.state }, data: named });
+    if (updated.count === 0) return row;
+    const next = { ...row, ...named };
+    this.publish(next);
+    return next;
   }
 
   /** Take the note turn back: off the queue when it has not run, stopped when it is running. */
@@ -369,6 +469,7 @@ export class CoordinatorHandoffService implements OnModuleInit, OnModuleDestroy 
       select: {
         id: true,
         coordinatorSessionId: true,
+        coordinatorWorkspaceId: true,
         coordinatorSession: { select: { id: true, deletedAt: true, completedAt: true, archivedAt: true } },
       },
     });
@@ -377,7 +478,7 @@ export class CoordinatorHandoffService implements OnModuleInit, OnModuleDestroy 
   }
 
   /** The project's coordinator, which has to be an open conversation to write a note. */
-  private async openCoordinator(ownerId: string, projectId: string): Promise<{ id: string }> {
+  private async openCoordinator(ownerId: string, projectId: string): Promise<{ id: string; workspaceId: string | null }> {
     const project = await this.project(ownerId, projectId);
     const session = project.coordinatorSession;
     if (!session || session.deletedAt || session.completedAt || session.archivedAt) {
@@ -385,7 +486,7 @@ export class CoordinatorHandoffService implements OnModuleInit, OnModuleDestroy 
         'this project has no open coordinator to write a handoff note — start a new coordinator without one',
       );
     }
-    return { id: session.id };
+    return { id: session.id, workspaceId: project.coordinatorWorkspaceId };
   }
 
   private liveRow(fromSessionId: string): Promise<CoordinatorHandoffRow | null> {

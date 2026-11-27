@@ -1,7 +1,8 @@
-import type { ManagedRunnerSleepRequest, ManagedRunnerWorkload } from '@orbit/shared';
+import { MANAGED_RUNNER_SLEEP_CAPABILITY, type ManagedRunnerSleepRequest, type ManagedRunnerWorkload } from '@orbit/shared';
 
 import type { PrismaService } from '../prisma/prisma.service';
 import type { ManagedRunnerInstance } from './managed-runner-instance';
+import { ownerUpdateDrain } from './managed-runner-status';
 import { managedRunnerWork } from './managed-runner-work';
 
 /**
@@ -20,6 +21,9 @@ import { managedRunnerWork } from './managed-runner-work';
  * while it is still idle by its own account; the route then records the acceptance — only if the
  * drain still stands, the request is the same, no demand has come since the drain began and the
  * records show nothing for the runner — and answers `confirmed`. Only a confirmed instance exits.
+ * The owner's Update Now drains the same way, and demand does not call it off (`ownerUpdateDrain`):
+ * its acceptance asks only that the drain and the owner's request still stand, whatever came since;
+ * what came waits for the next generation, which wakes at once.
  * The acceptance and the manager calling the drain off are each a conditional write on the same row
  * (`stop_acknowledged_at IS NULL` on the manager's side), so an instance can never stop for a drain
  * the manager has abandoned, and a drain it accepted is never abandoned under it.
@@ -52,9 +56,10 @@ export function sanitizeManagedWorkload(value: unknown): (ManagedRunnerWorkload 
   const operations = count(v.operations);
   const unflushedEvents = count(v.unflushedEvents);
   const idleSeconds = count(v.idleSeconds, MAX_IDLE_SECONDS);
-  if (activeTurns === null || backgroundJobs === null || operations === null || unflushedEvents === null || idleSeconds === null) return null;
+  const driveWrites = v.driveWrites === undefined ? 0 : count(v.driveWrites);
+  if (activeTurns === null || backgroundJobs === null || operations === null || unflushedEvents === null || idleSeconds === null || driveWrites === null) return null;
   const sleepReady = typeof v.sleepReady === 'string' && v.sleepReady.length <= 64 ? v.sleepReady : undefined;
-  return { activeTurns, backgroundJobs, operations, unflushedEvents, idleSeconds, ...(sleepReady ? { sleepReady } : {}) };
+  return { activeTurns, backgroundJobs, operations, unflushedEvents, idleSeconds, ...(driveWrites ? { driveWrites } : {}), ...(sleepReady ? { sleepReady } : {}) };
 }
 
 /** What the heartbeat route writes for the instance that sent `workload`. */
@@ -64,9 +69,10 @@ export function storedWorkloadFor(
   draining: boolean,
   now: Date,
 ): StoredManagedWorkload {
-  const { activeTurns, backgroundJobs, operations, unflushedEvents, idleSeconds } = workload;
+  const { activeTurns, backgroundJobs, operations, unflushedEvents, idleSeconds, driveWrites } = workload;
   return {
     activeTurns, backgroundJobs, operations, unflushedEvents, idleSeconds,
+    ...(driveWrites ? { driveWrites } : {}),
     generation: instance.generation,
     podUid: instance.podUid,
     receivedAt: now.toISOString(),
@@ -84,17 +90,41 @@ export function readStoredWorkload(value: unknown): StoredManagedWorkload | null
   return { ...figures, generation: v.generation, podUid: v.podUid, receivedAt: v.receivedAt, draining: v.draining === true };
 }
 
+/**
+ * What the authorized instance last reported, if it may be believed: it declares it can sleep, it heartbeated within
+ * `freshMs`, and the report is that fresh and comes from the generation and instance recorded now. Null otherwise —
+ * missing or stale telemetry never lets anything sleep or roll. `lastBeatAt` is the runner's last beat
+ * (runnerLastBeatAt).
+ */
+export function freshInstanceReport(
+  runner: { capabilities: readonly string[]; managedWorkload: unknown } | null,
+  lastBeatAt: Date | null,
+  mapping: { generation: number; podUid: string | null },
+  now: Date,
+  freshMs: number,
+): StoredManagedWorkload | null {
+  if (!runner?.capabilities.includes(MANAGED_RUNNER_SLEEP_CAPABILITY)) return null;
+  if (!lastBeatAt || now.getTime() - lastBeatAt.getTime() > freshMs) return null;
+  const report = readStoredWorkload(runner.managedWorkload);
+  if (!report || report.generation !== mapping.generation || report.podUid !== mapping.podUid) return null;
+  return now.getTime() - Date.parse(report.receivedAt) <= freshMs ? report : null;
+}
+
 /** Nothing in flight, by the runner's own account. */
 export function workloadIdle(workload: ManagedRunnerWorkload): boolean {
-  return workload.activeTurns === 0 && workload.backgroundJobs === 0 && workload.operations === 0 && workload.unflushedEvents === 0;
+  return workload.activeTurns === 0 && workload.backgroundJobs === 0 && workload.operations === 0 && workload.unflushedEvents === 0 && !workload.driveWrites;
 }
 
 export interface ManagedHeartbeatAnswer {
   /** The mapping drains: this heartbeat hands its instance no new work (landings, repository
    *  operations, merges, commits, rate-limit resets). */
   draining: boolean;
+  concurrencyCap?: number;
   /** The sleep request to answer with, confirmed once the instance's acceptance is recorded. */
   sleep?: ManagedRunnerSleepRequest;
+  /** The mapping is STARTING and this beat may be the one READY waits for: the route kicks the manager rather than
+   *  leave it to the next poll. */
+  starting?: boolean;
 }
 
 /**
@@ -111,35 +141,41 @@ export async function managedRunnerHeartbeat(
   const mapping = await prisma.managedRunner.findUnique({
     where: { id: instance.mappingId },
     select: {
-      id: true, runnerId: true, generation: true, podUid: true, managementState: true, desiredState: true,
+      id: true, runnerId: true, generation: true, podUid: true, managementState: true, desiredState: true, concurrencyCap: true,
       demandRevision: true, drainDemandRevision: true, stopRequestedAt: true, stopAcknowledgedAt: true,
+      imageRollTo: true, updateRequestedAt: true, updateCompletedAt: true,
     },
   });
-  if (!mapping || mapping.managementState !== 'DRAINING') return { draining: false };
+  if (!mapping) return { draining: false };
+  const cap = mapping.concurrencyCap == null ? {} : { concurrencyCap: mapping.concurrencyCap };
+  if (mapping.managementState === 'STARTING') return { draining: false, ...cap, starting: true };
+  if (mapping.managementState !== 'DRAINING') return { draining: false, ...cap };
   // Only the instance being drained is asked anything.
   if (mapping.generation !== instance.generation || mapping.podUid !== instance.podUid || !mapping.stopRequestedAt) {
-    return { draining: true };
+    return { draining: true, ...cap };
   }
   const requestedAt = mapping.stopRequestedAt.toISOString();
-  if (mapping.stopAcknowledgedAt) return { draining: true, sleep: { requestedAt, confirmed: true } };
+  if (mapping.stopAcknowledgedAt) return { draining: true, ...cap, sleep: { requestedAt, confirmed: true } };
   if (workload?.sleepReady === requestedAt && workloadIdle(workload) && mapping.drainDemandRevision !== null) {
-    const work = await managedRunnerWork(prisma, mapping.runnerId);
+    const owners = ownerUpdateDrain(mapping);
+    const work = owners ? [] : await managedRunnerWork(prisma, mapping.runnerId);
     if (work.length === 0) {
       const { count: accepted } = await prisma.managedRunner.updateMany({
         where: {
           id: mapping.id,
           managementState: 'DRAINING',
-          desiredState: 'SLEEPING',
           generation: instance.generation,
           podUid: instance.podUid,
           stopRequestedAt: mapping.stopRequestedAt,
           stopAcknowledgedAt: null,
-          demandRevision: mapping.drainDemandRevision,
+          ...(owners
+            ? { imageRollTo: mapping.imageRollTo, updateRequestedAt: mapping.updateRequestedAt }
+            : { desiredState: 'SLEEPING' as const, demandRevision: mapping.drainDemandRevision }),
         },
         data: { stopAcknowledgedAt: now },
       });
-      if (accepted === 1) return { draining: true, sleep: { requestedAt, confirmed: true } };
+      if (accepted === 1) return { draining: true, ...cap, sleep: { requestedAt, confirmed: true } };
     }
   }
-  return { draining: true, sleep: { requestedAt } };
+  return { draining: true, ...cap, sleep: { requestedAt } };
 }

@@ -31,7 +31,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { RunStatus, RunnerStatus, type PrismaClient } from '@prisma/client';
+import { RunnerStatus, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { TasksService } from '../tasks/tasks.service';
@@ -169,7 +170,7 @@ async function harness(t: { after(fn: () => Promise<void> | void): void }) {
         prompt: 'do the work',
         branch: input.branch,
         isolationStatus: 'worktree',
-        status: RunStatus.SUCCEEDED,
+        turnState: null, 
         baseSha: '1'.repeat(40),
         changedFiles: WORK_REPORTED as never,
         createdAt: new Date(Date.now() - 5 * 60_000),

@@ -2,11 +2,13 @@ import { Controller, Get, Header, Optional, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden } from '../auth/pat-scope.decorator';
 import { renderDbConflictMetrics } from '../common/db-conflict-metrics';
+import { renderHttpRequestMetrics } from '../common/http-request-metrics';
 import { PrismaService } from '../prisma/prisma.service';
 import { renderRunEventSeqConflictMetrics } from '../runner-api/run-event-seq-conflicts';
 import { renderCodexResetMetrics } from '../runners/codex-reset-metrics';
 import { renderWatchMetrics } from '../watches/watch-metrics';
 import { renderWikiModelMetrics } from '../wiki/wiki-model-metrics';
+import { renderFleetMetrics } from './fleet-metrics';
 
 /**
  * Where the database-conflict counters are read from.
@@ -39,10 +41,20 @@ export class MetricsController {
   @Header('Content-Type', 'text/plain; version=0.0.4')
   @Header('Cache-Control', 'no-store')
   async read(): Promise<string> {
-    // The Watch gauges and the wiki's System model are the parts read from the database, on every scrape
-    // (watches/watch-metrics.ts, wiki/wiki-model-metrics.ts).
-    return renderDbConflictMetrics() + renderCodexResetMetrics() + renderRunEventSeqConflictMetrics()
-      + (await renderWatchMetrics(this.prisma))
-      + (await renderWikiModelMetrics(this.prisma));
+    return renderMetrics(this.prisma);
   }
+}
+
+/**
+ * The whole body, as this route and the internal listener Prometheus scrapes (metrics-listener.ts) both serve it.
+ * The Watch gauges and the wiki's System model are the parts read from the database, on every scrape
+ * (watches/watch-metrics.ts, wiki/wiki-model-metrics.ts); the runner, session and task gauges are read from it at most
+ * once per FLEET_GAUGES_TTL_MS (fleet-metrics.ts).
+ */
+export async function renderMetrics(prisma?: PrismaService): Promise<string> {
+  return renderDbConflictMetrics() + renderCodexResetMetrics() + renderRunEventSeqConflictMetrics()
+    + renderHttpRequestMetrics()
+    + (await renderWatchMetrics(prisma))
+    + (await renderWikiModelMetrics(prisma))
+    + (await renderFleetMetrics(prisma));
 }

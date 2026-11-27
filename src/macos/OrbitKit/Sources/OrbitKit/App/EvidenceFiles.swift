@@ -5,7 +5,7 @@ import Foundation
    ─────────────────────────────────────────────────────────────────────────────────────────────
 
    The file area on the evidence card, the Evidence files page it opens and the viewer a thumbnail
-   opens (docs/orbit-files-design.md §2.6): the words, and the reading of the rows those words come
+   opens (docs/drive-design.md §2.6): the words, and the reading of the rows those words come
    from. The views in `EvidenceFilesViews.swift` draw this and decide nothing about it, so macOS and
    iOS cannot disagree, and it can be tested on Linux where no SwiftUI exists.
    `EvidenceFilesCopyParityTests` reads the web file and fails when the words drift.

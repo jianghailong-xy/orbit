@@ -104,7 +104,7 @@ class SessionSettingsPageTest {
         await(SESSION_RECAPS)
         // The title and its words are one list item, merged into one node: read each text on its own.
         fun textTop(text: String) = compose.onNodeWithText(text, useUnmergedTree = true).fetchSemanticsNode().positionInRoot.y
-        assertTrue("title, then its words, under Smart model selection's hint and above Suggested replies",
+        assertTrue("title, then its words, under Route by tier's hint and above Suggested replies",
             textTop(SMART_MODEL_SELECTION_HINT) < textTop(OPTIMIZE_FOR) && textTop(OPTIMIZE_FOR) < textTop(OPTIMIZE_FOR_DETAIL) &&
                 textTop(OPTIMIZE_FOR_DETAIL) < textTop(SUGGESTED_REPLIES))
         // The fixture's account names no optimizeFor: Balance is selected.

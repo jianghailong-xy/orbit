@@ -34,6 +34,9 @@ export const OPEN_ITEM_DOOR_SOURCE_JOBS = [
   'LAND_PROMOTION',
   /** §10.6 O-J4: the project's observations failing, `IE:observe:<projectId>`. */
   'OBSERVE_LANDING',
+  /** docs/design/project-line-upstream-sync.md §4.1: the project branch could not absorb the upstream,
+   *  `IMS:<serial_key>`. About the line, so it names no task. */
+  'LINE_SYNC',
   'TASK_FAILURE',
   'DIRECT',
 ] as const;
@@ -112,6 +115,12 @@ export interface OpenItemDoorInput {
   phase?: string | null;
   jobKind?: string | null;
   payload?: unknown;
+  /**
+   * Revision 42 (§12.5 W9): the item is in its task's own work session's hands — offered to it and not
+   * handed back (`inWorkSessionHands`). Its doors are then the work-session cell's, whoever its
+   * assignee is: {@link OPEN_ITEM_WORK_SESSION_DOOR_TABLE}.
+   */
+  workSession?: boolean;
 }
 
 /** The two non-failure item kinds have no landing source, but their presses still belong in the
@@ -260,6 +269,25 @@ const createSyncTask = (holder: OpenItemDoorAssignee): OpenItemDoor => door(
   'MCP',
   'REPAIR',
   ['SUCCESSOR_FILED'],
+  {
+    mcp: 'task_create',
+    route: '/runner/tasks',
+    resolving: true,
+  },
+);
+
+/**
+ * File the sync task that resolves a line-sync item (docs/design/project-line-upstream-sync.md §4.4): `task_create`
+ * with `fixesOpenItemId`. Filing it closes nothing; its landing is the only one the hold lets through, and that
+ * landing closes the item LANDED (L-T3) — the resolution this door leads to.
+ */
+const createLineSyncTask = (holder: OpenItemDoorAssignee): OpenItemDoor => door(
+  holder,
+  'task-create-line-sync',
+  'task_create',
+  'MCP',
+  'REPAIR',
+  ['LANDED'],
   {
     mcp: 'task_create',
     route: '/runner/tasks',
@@ -452,7 +480,7 @@ function recordLanding(holder: OpenItemDoorAssignee): OpenItemDoor {
   });
 }
 
-/** Declare the task codeless, with a reason (§1.1): it takes no part in its criterion's landing, and
+/** Declare the task codeless, with a reason (§1.1): it resolves no source and does not decide landing, and
  *  a `LANDING_UNOBSERVED` about it ends CODELESS. A task with commits of its own is refused
  *  `TASK_CODELESS_HAS_COMMITS`, as everywhere else. */
 function declareCodeless(holder: OpenItemDoorAssignee): OpenItemDoor {
@@ -486,6 +514,27 @@ function accept(holder: OpenItemDoorAssignee): OpenItemDoor {
   return door(holder, 'open-item-accept', 'open_item_accept', 'ROUTE', 'DECIDE', ['ACCEPTED'], {
     action: 'ACCEPT',
     route: '/projects/:id/open-items/:itemId/accept',
+  });
+}
+
+/**
+ * The owner's stop of a task's in-flight landing (§4.7, J-T8): QUEUED ends CANCELLED, RUNNING is asked
+ * to stop. It ends no item by itself — the attempt it stops is not the item's answer.
+ */
+function stopLanding(holder: OpenItemDoorAssignee): OpenItemDoor {
+  return door(holder, 'integration-stop', 'integration stop', 'ROUTE', 'CANCEL', [], {
+    route: '/projects/:id/tasks/:taskId/integration/stop',
+    resolving: false,
+  });
+}
+
+/**
+ * A candidate's stop is its Cancel (M-F3, M-T10): the owner retires the candidate, and the items about
+ * it end with it (PROMOTION_MOVED_ON).
+ */
+function cancelCandidate(holder: OpenItemDoorAssignee): OpenItemDoor {
+  return door(holder, 'promotion-cancel', 'promotion cancel', 'ROUTE', 'CANCEL', ['PROMOTION_MOVED_ON'], {
+    route: '/projects/:id/promotions/:promotionId/cancel',
   });
 }
 
@@ -530,6 +579,11 @@ export function sourceJobForOpenItem(input: OpenItemDoorInput): OpenItemDoorSour
   // §10.6 O-J4's item: the project's observations failing. It names no task and no promotion, so it
   // is read by its job's kind before the fallbacks below would file it as either.
   if (jobKind === 'OBSERVE_LANDING') return 'OBSERVE_LANDING';
+  // The line-sync item: a task landing's MAIN_SYNC conflict, filed about the project branch with no task
+  // (docs/design/project-line-upstream-sync.md §4.1). A legacy MAIN_SYNC item names its task and keeps its cell.
+  if (input.kind === 'INTEGRATION_CONFLICT' && !input.taskId && !input.promotionId && phase === 'MAIN_SYNC') {
+    return 'LINE_SYNC';
+  }
   if (input.kind === 'TASK_FAILED') return 'TASK_FAILURE';
   if (input.kind === 'COORDINATOR_QUESTION' || input.kind === 'FUSE_PAUSED'
       || input.kind === 'START_REQUEST' || input.kind === 'DONE_REQUEST') return 'DIRECT';
@@ -670,6 +724,19 @@ export function doorsForCell(cell: Pick<OpenItemDoorCell,
     return doors;
   }
 
+  if (sourceJob === 'LINE_SYNC') {
+    // docs/design/project-line-upstream-sync.md §4.1: the line could not absorb the upstream. No task is acted on —
+    // no reopen, comment, cancel or rerun — because no task's work caused it. The coordinator files one sync task
+    // (non-resolving: its landing closes the item, L-T3), or closes the item by hand when the upstream will fix it
+    // (L-T4); the owner can send it back to the coordinator.
+    if (assignee === 'COORDINATOR') doors.push(openCoordinator(assignee), askOwner(assignee));
+    else doors.push(askAgain(assignee));
+    doors.push(createLineSyncTask(assignee), createFixTask(assignee), handClose(assignee));
+    if (assignee === 'COORDINATOR') doors.push(handOver(assignee));
+    doors.push(openLanding(assignee));
+    return doors;
+  }
+
   // The coordinator and owner use the same integration_retry decision.  A conflict is different:
   // replaying the same source cannot repair it, so the table names the concrete branch-changing
   // operation that does.
@@ -730,7 +797,7 @@ function buildTable(): OpenItemDoorCell[] {
   const integrationKinds = OPEN_ITEM_DOOR_TODO_TYPES.filter(isIntegration);
   for (const todoType of integrationKinds) {
     for (const sourceJob of OPEN_ITEM_DOOR_SOURCE_JOBS.filter((job) =>
-      job !== 'TASK_FAILURE' && job !== 'DIRECT' && job !== 'OBSERVE_LANDING')) {
+      job !== 'TASK_FAILURE' && job !== 'DIRECT' && job !== 'OBSERVE_LANDING' && job !== 'LINE_SYNC')) {
       for (const failureClass of OPEN_ITEM_DOOR_FAILURE_CLASSES) {
         for (const assignee of OPEN_ITEM_DOOR_ASSIGNEES) {
           cells.push({ todoType, sourceJob, failureClass, assignee,
@@ -783,6 +850,12 @@ function buildTable(): OpenItemDoorCell[] {
   cells.push({ todoType: 'EVIDENCE_UNDECIDED', sourceJob: 'DIRECT', failureClass: 'ERROR',
     assignee: 'OWNER',
     doors: doorsForCell({ todoType: 'EVIDENCE_UNDECIDED', sourceJob: 'DIRECT', failureClass: 'ERROR', assignee: 'OWNER' }) });
+  // The line-sync item is a conflict, the coordinator's like every integration item, the owner's when there is none,
+  // it is handed over or the clock hands it on.
+  for (const assignee of OPEN_ITEM_DOOR_ASSIGNEES) {
+    cells.push({ todoType: 'INTEGRATION_CONFLICT', sourceJob: 'LINE_SYNC', failureClass: 'CONFLICT', assignee,
+      doors: doorsForCell({ todoType: 'INTEGRATION_CONFLICT', sourceJob: 'LINE_SYNC', failureClass: 'CONFLICT', assignee }) });
+  }
   // §10.6 O-J4: an observation fails one way — an ERROR — and its item is the coordinator's like every
   // integration item, the owner's when there is none or it is handed over.
   for (const assignee of OPEN_ITEM_DOOR_ASSIGNEES) {
@@ -791,6 +864,39 @@ function buildTable(): OpenItemDoorCell[] {
   }
   return cells;
 }
+
+/** The failures §12.3 hands to the task's own work session, as the matrix spells them. */
+export const OPEN_ITEM_WORK_SESSION_TODO_TYPES = ['INTEGRATION_CONFLICT', 'INTEGRATION_CHECK_FAILED'] as const;
+export const OPEN_ITEM_WORK_SESSION_SOURCE_JOBS = ['LAND_TASK', 'MAIN_SYNC', 'CHECK_PROMOTION', 'LAND_PROMOTION'] as const;
+
+/**
+ * Revision 42 (§12.5 W9, §4.7): the doors of an item in its task's own work session's hands. Only the
+ * owner's stop door — a task landing's integration stop, a candidate's Cancel — and "Chat about this",
+ * which is not a door (§4.7) and so is not in the cell. The coordinator holds nothing: `open_item_resolve`
+ * and `integration_retry` refuse such an item with 409 OPEN_ITEM_WITH_WORK_SESSION, because two sessions
+ * fixing one failure have no winner. Once the item is handed back (W7) its ordinary cell applies.
+ *
+ * One cell per kind, source and class the hand-off can open, held by the OWNER whatever the item's
+ * assignee will be on hand-back: `cellForOpenItem` ignores the assignee here.
+ */
+export function workSessionDoorsForCell(cell: Pick<OpenItemDoorCell, 'sourceJob'>): OpenItemDoor[] {
+  return [isPromotionSource(cell.sourceJob) ? cancelCandidate('OWNER') : stopLanding('OWNER')];
+}
+
+function buildWorkSessionTable(): OpenItemDoorCell[] {
+  const cells: OpenItemDoorCell[] = [];
+  for (const todoType of OPEN_ITEM_WORK_SESSION_TODO_TYPES) {
+    for (const sourceJob of OPEN_ITEM_WORK_SESSION_SOURCE_JOBS) {
+      // The kind and the class say the same thing: a conflict opens INTEGRATION_CONFLICT, a red check
+      // INTEGRATION_CHECK_FAILED.
+      const failureClass = todoType === 'INTEGRATION_CONFLICT' ? 'CONFLICT' : 'CHECK_FAILED';
+      cells.push({ todoType, sourceJob, failureClass, assignee: 'OWNER', doors: workSessionDoorsForCell({ sourceJob }) });
+    }
+  }
+  return cells;
+}
+
+export const OPEN_ITEM_WORK_SESSION_DOOR_TABLE: readonly OpenItemDoorCell[] = buildWorkSessionTable();
 
 /** The complete capability table for every source/type pairing that can actually open a row.
  * Impossible pairings (for example TASK_FAILED from a landing job) are not cells to hand to a
@@ -810,6 +916,12 @@ export function cellForOpenItem(input: OpenItemDoorInput): OpenItemDoorCell | nu
   const sourceJob = sourceJobForOpenItem(input);
   if (!todoType || !sourceJob) return null;
   const failureClass = failureClassForOpenItem(input);
+  if (input.workSession) {
+    // W9: no fall-through to the ordinary cell — an item the work session holds offers nothing else.
+    return OPEN_ITEM_WORK_SESSION_DOOR_TABLE.find((cell) => cell.todoType === todoType
+      && cell.sourceJob === sourceJob
+      && cell.failureClass === failureClass) ?? null;
+  }
   const assignee = normalizeAssignee(input.assignee);
   return OPEN_ITEM_DOOR_TABLE.find((cell) => cell.todoType === todoType
     && cell.sourceJob === sourceJob
@@ -863,6 +975,8 @@ export function appendOpenLanding(
 
 /** The action projection consumed by `project-open-item.ts`; order is the long-standing UI order. */
 export function openItemActionsFromDoors(input: OpenItemDoorInput): OpenItemAction[] {
+  // W9: the stop door is drawn by the landing window, not as a card press, and chat is not an action.
+  if (input.workSession) return [];
   const assignee = normalizeAssignee(input.assignee);
   const directDoors = doorsForOpenItem(input);
   if (input.fuseEpisodeId || input.kind === 'COORDINATOR_QUESTION') {
@@ -914,6 +1028,15 @@ export function openItemActionsFromDoors(input: OpenItemDoorInput): OpenItemActi
       (action !== 'ASK_COORDINATOR_AGAIN' || (assignee === 'OWNER' && input.askable))
       && doors.some((candidate) => candidate.action === action && candidate.holder === assignee)),
     input, doors, assignee);
+  }
+  if (sourceJobForOpenItem(input) === 'LINE_SYNC') {
+    // The line-sync item names no task, so none of a task's presses: the coordinator's conversation, the owner's
+    // ask-again, and the landing the conflict was found in.
+    const actions: OpenItemAction[] = assignee === 'COORDINATOR' ? ['OPEN_COORDINATOR'] : ['ASK_COORDINATOR_AGAIN'];
+    return appendOpenLanding(actions.filter((action) =>
+      (action !== 'ASK_COORDINATOR_AGAIN' || input.askable)
+      && directDoors.some((candidate) => candidate.implemented && candidate.holder === assignee && candidate.action === action)),
+    input, directDoors, assignee);
   }
   if (!input.taskId) return [];
   const doors = directDoors.length > 0

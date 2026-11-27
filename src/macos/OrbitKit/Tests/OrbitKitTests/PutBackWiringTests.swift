@@ -39,8 +39,8 @@ final class PutBackWiringTests: XCTestCase {
 
     func testTheConsolesRowsHandItThePress() throws {
         let console = try source(app + "Views/Console/ConsoleView.swift")
-        XCTAssertTrue(console.contains("}, putBack: putBack(bubble))"), "the queued tail")
-        XCTAssertTrue(console.contains("UserTurnRow(bubble: b, steer: steerControls(b), putBack: putBack(b))"),
+        XCTAssertTrue(console.contains("}, putBack: putBack(bubble),"), "the queued tail")
+        XCTAssertTrue(console.contains("UserTurnRow(bubble: b, steer: steerControls(b), putBack: putBack(b), revealItemCard: { console?.revealOpenItemCard($0) ?? false })"),
                       "the conversation")
         // Each asks the one rule before it hands the press on.
         XCTAssertEqual(console.components(separatedBy: "guard SteerDelivery.offersPutBack(bubble) else { return nil }").count, 2,

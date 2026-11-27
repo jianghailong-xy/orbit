@@ -32,10 +32,17 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import {
-  CreatorType, Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, TaskStatus,
+  CreatorType,
+  Prisma,
+  PrismaClient,
+  RunnerStatus,
+  SessionDispatchOrigin,
+  TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
+import { isReleasedStatus } from '../common/session-release';
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
@@ -44,6 +51,8 @@ import { ProjectsService } from '../projects/projects.service';
 import type { ProjectHandoffService } from '../projects/project-handoff.service';
 import type { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
 import { RunnerProjectsController } from './runner-projects.controller';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import type { SessionFixture } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -105,8 +114,9 @@ async function account(db: PrismaClient, label: string): Promise<Account> {
   const session = async (
     id: string,
     title: string,
-    extra: Partial<Omit<Prisma.SessionUncheckedCreateInput, 'id' | 'ownerId' | 'creatorId' | 'title' | 'prompt'>> = {},
+    extra: Omit<SessionFixture, 'id' | 'ownerId' | 'creatorId' | 'title' | 'prompt'> = {},
   ) => {
+    const { status = RunStatus.AWAITING_INPUT, ...extraFacts } = extra;
     await db.session.create({
       data: {
         id,
@@ -117,9 +127,12 @@ async function account(db: PrismaClient, label: string): Promise<Account> {
         title,
         prompt: title,
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: turnStateOfWord(status),
         dispatchOrigin: SessionDispatchOrigin.USER,
-        ...extra,
+        ...extraFacts,
+        ...(isReleasedStatus(status) ? {
+          finishedAt: extra.finishedAt ?? new Date(),
+        } : {}),
       },
     });
   };

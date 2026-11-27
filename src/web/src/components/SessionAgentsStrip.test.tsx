@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SubagentRunView } from "@orbit/shared";
 import { subagentSessionSummary } from "../lib/subagentRuns";
 import { SessionAgentsStrip } from "./SessionAgentsStrip";
+import { hoverTooltip } from "../test/tooltipHover";
 
 /**
  * The composer band's Agents line, as Apple's `AgentsBandRow` draws it (docs/mocks/agents-band-models): the
@@ -59,7 +60,6 @@ describe("subagentSessionSummary (OrbitKit SubagentSessionSummary)", () => {
     ])!;
     expect(s.band).toBe("Build the Mac app");
     expect(s.current?.toolUseId).toBe("a");
-    expect(s.failed).toBe(0);
     expect(s.rows.map((r) => r.toolUseId)).toEqual(["a", "b"]);
   });
 
@@ -95,7 +95,7 @@ describe("subagentSessionSummary (OrbitKit SubagentSessionSummary)", () => {
     expect(s.band).toBe("2 · 1 running");
   });
 
-  it("at rest, says the count alone and how many failed", () => {
+  it("at rest, says the count alone", () => {
     const s = subagentSessionSummary([
       run({ toolUseId: "a" }),
       run({
@@ -107,7 +107,6 @@ describe("subagentSessionSummary (OrbitKit SubagentSessionSummary)", () => {
       }),
     ])!;
     expect(s.band).toBe("2");
-    expect(s.failed).toBe(1);
     expect(s.current).toBeNull();
   });
 
@@ -178,6 +177,21 @@ describe("SessionAgentsStrip", () => {
     );
   };
 
+  // A stopped run was stopped on purpose: grey on the card and in the list, never in the red count
+  // (docs/mocks/subagent-card-and-end-line D1).
+  it("greys a stopped run and marks a lost one red in the list", async () => {
+    draw([
+      run({ toolUseId: "stopped", status: "STOPPED", description: "Sweep stale worktrees" }),
+      run({ toolUseId: "lost", status: "INTERRUPTED", description: "Port the retry" }),
+    ]);
+    await openList();
+    const rows = [...host.querySelectorAll<HTMLElement>(".ag-row")];
+    const rowOf = (name: string) => rows.find((r) => r.textContent?.includes(name))!;
+    expect(rowOf("Sweep stale worktrees").querySelector(".chat-tool-status.stopped")).not.toBeNull();
+    expect(rowOf("Sweep stale worktrees").querySelector(".chat-tool-status.err")).toBeNull();
+    expect(rowOf("Port the retry").querySelector(".chat-tool-status.err")).not.toBeNull();
+  });
+
   it("draws nothing for a session with no Agent", () => {
     draw([]);
     expect(host.innerHTML).toBe("");
@@ -234,7 +248,7 @@ describe("SessionAgentsStrip", () => {
 
   const deepseek = { model: "deepseek-v4.1-flash", modelLabel: "DeepSeek V4.1 Flash 1017" };
 
-  it("at rest, says how many machines and each model with its runs, and no check when all succeeded", () => {
+  it("at rest, says how many machines and each model with its runs, and no check when all succeeded", async () => {
     draw([
       run({ toolUseId: "a", workspaceName: "orbit-prod-fcm" }),
       run({ toolUseId: "b", workspaceName: "orbit-prod-fcm" }),
@@ -246,7 +260,7 @@ describe("SessionAgentsStrip", () => {
     expect(line.querySelector(".ag-band")!.textContent).toBe("5");
     expect(line.textContent).not.toContain("Deploy to production");
     expect(line.querySelector(".ag-fact")!.textContent).toBe("3 machines");
-    expect(line.querySelector(".ag-fact")!.getAttribute("title")).toBe(
+    expect(await hoverTooltip(line.querySelector(".ag-fact")!)).toBe(
       "Ran on\norbit-macos · 2\norbit-prod-fcm · 2\norbit-op · 1",
     );
     expect([...line.querySelectorAll(".ag-chip")].map((c) => c.textContent)).toEqual([
@@ -256,32 +270,27 @@ describe("SessionAgentsStrip", () => {
     expect(line.querySelector(".ag-chip-extra")!.textContent).toBe("COpus 5.5×2");
     expect(line.querySelector(".ag-more")!.textContent).toBe("+1");
     expect(line.querySelector(".chat-tool-status")).toBeNull();
-    expect(line.querySelector(".ag-failed")).toBeNull();
     expect(line.getAttribute("aria-label")).toBe(
       "Agents: 5, 3 machines, DeepSeek V4.1 Flash 1017 3 runs, Opus 5.5 2 runs",
     );
   });
 
-  it("at rest, a failure is the only thing at the right edge", () => {
+  // The reader can do nothing about a failed run: the line does not count it, folded or spoken.
+  it("never counts failures on the line", () => {
     draw([run({ toolUseId: "a" }), run({ toolUseId: "b", status: "FAILED" })]);
-    const line = host.querySelector(".bg-tray-row")!;
-    expect(line.querySelector(".ag-failed")!.textContent).toBe(" 1 failed");
-    // Both on the session's own model and machine: nothing about where the work went.
-    expect(line.querySelector(".ag-chip")).toBeNull();
-    expect(line.querySelector(".ag-fact")).toBeNull();
-  });
+    let line = host.querySelector(".bg-tray-row")!;
+    expect(line.textContent).not.toContain("failed");
+    expect(line.querySelector(".chat-tool-status")).toBeNull();
+    expect(line.getAttribute("aria-label")).toBe("Agents: 2");
 
-  it("while one runs, an earlier failure still shows, before the spinner", () => {
     draw([
       run({ toolUseId: "a", status: "FAILED" }),
       run({ toolUseId: "b", status: "RUNNING", endedAt: null, description: "Deploy df0fe42fb", createdAt: "2026-11-18T11:00:00.000Z" }),
     ]);
-    const line = host.querySelector(".bg-tray-row")!;
-    const failed = line.querySelector(".ag-failed")!;
-    expect(failed.textContent).toBe(" 1 failed");
-    const spinner = line.querySelector(".chat-tool-status.running")!;
-    expect(failed.compareDocumentPosition(spinner) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(line.getAttribute("aria-label")).toBe("Agents: Deploy df0fe42fb, 1 failed");
+    line = host.querySelector(".bg-tray-row")!;
+    expect(line.textContent).not.toContain("failed");
+    expect(line.querySelector(".chat-tool-status.running")).not.toBeNull();
+    expect(line.getAttribute("aria-label")).toBe("Agents: Deploy df0fe42fb");
   });
 
   it("running elsewhere, names its machine and its model", () => {

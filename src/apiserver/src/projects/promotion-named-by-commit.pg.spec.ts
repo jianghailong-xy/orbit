@@ -6,11 +6,11 @@ import { test } from 'node:test';
 import {
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { IntegrationJobCommand } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -36,6 +36,7 @@ import { landingFailureClass } from './project-integration-job';
 import { openItemMessage, readOpenItemDeliveryCard } from './project-open-item';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectPromotionService } from './project-promotion.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * The PLATFORM delivery of a MAIN line, by commit (`docs/project-integration-line-contract.md` §10.5
@@ -193,7 +194,7 @@ async function world(
     data: {
       id: coordinatorSessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
       title: `coordinator: ${label}`, prompt: `coordinator: ${label}`, provider: 'claude',
-      status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+      turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true, numTurns: 1, startedAt: new Date(),
       runtimeSessionId: `runtime-${coordinatorSessionId}`,
     },
@@ -273,13 +274,13 @@ async function workSession(stack: Stack, w: World, taskId: string, s: WorkSessio
     data: {
       id, ownerId: w.ownerId, creatorId: w.ownerId, taskId, workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId, title: `work ${s.branch}`, prompt: 'work', provider: 'claude',
-      status: finished ? RunStatus.SUCCEEDED : RunStatus.RUNNING,
+      turnState: turnStateOfWord(finished ? RunStatus.SUCCEEDED : RunStatus.RUNNING),
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true, isolationStatus: 'worktree',
       branch: s.branch, branchSha: s.branchSha, baseSha: s.baseSha, numTurns: 1,
       startedAt: minutesAgo(30), createdAt: minutesAgo(30), runtimeSessionId: randomUUID(),
       ...(s.worktreeBranch ? { worktreeBranch: s.worktreeBranch } : {}),
       ...(s.changedFiles ? { changedFiles: s.changedFiles as Prisma.InputJsonValue } : {}),
-      ...(finished ? { finishedAt: minutesAgo(s.finishedMinutesAgo!) } : {}),
+      ...(finished ? { finishedAt: minutesAgo(s.finishedMinutesAgo!)} : {}),
     },
   });
   return id;
@@ -426,31 +427,28 @@ test('(1) §10.9 6, O-L5: a TASK_BRANCH candidate is named by the commit its tas
       assert.deepEqual([check.kind, check.state, check.sourceSha, check.sessionId],
         ['CHECK_PROMOTION', 'QUEUED', sha('a'), done.sessionId], 'and the check queued beside it names the same commit');
 
-      // A DONE written while the work still moved: the candidate is inserted with nothing to name it by,
-      // and the finish that freezes the identity names it, and the check queued for it, in place. A
-      // project of its own, because one project's checks run one at a time (`#check:<project>`).
+      // A DONE written while the work still moved (§12.15 P-M1): no candidate yet — whether there is
+      // anything to offer is not known until the work settles. The finish that freezes the identity
+      // files it, named by that commit from the start, with its check. A project of its own, because one
+      // project's checks run one at a time (`#check:<project>`).
       const m = await world(stack, 'named-moving');
       const moving = await ownerTask(stack, m, 'still moving at its DONE');
       const live = await workSession(stack, m, moving, { branch: 'orbit/moving', branchSha: sha('c'), baseSha: sha('b') });
       await confirm(stack, m, moving);
       assert.deepEqual(await identityOf(stack, moving), { sha: null, branch: null, sessionId: null },
         'CONTROL: nothing is frozen while a session of the task can still commit');
-      const unnamed = await candidateOf(stack, moving);
-      assert.equal(unnamed.sourceSha, null, 'nothing names the delivered commit yet');
-      assert.equal((await jobOf(stack, unnamed.checkJobId!)).sourceSha, null);
-      assert.equal(await handed(stack, m.runnerId, 'named-1', CURRENT, unnamed.checkJobId), undefined,
-        'CONTROL: the claim guard holds the check while the work moves');
+      assert.equal(await stack.db.projectPromotion.count({ where: { taskId: moving } }), 0,
+        'no candidate while the work moves: the finish decides');
 
       await finalize(stack, m, live);
       assert.deepEqual(await identityOf(stack, moving), { sha: sha('c'), branch: 'orbit/moving', sessionId: live },
         'CONTROL: the finish froze the identity');
       const nowNamed = await candidateOf(stack, moving);
-      assert.equal(nowNamed.id, unnamed.id, 'the same candidate, not a second one');
       assert.equal(nowNamed.state, 'CHECKING');
       assert.equal(nowNamed.sourceSha, sha('c'),
-        'O-L4 3: the finish that froze the identity named the candidate by it, in the same transaction');
+        'O-L5: the finish files the candidate named by the commit it froze, in the same transaction');
       const nowChecked = await jobOf(stack, nowNamed.checkJobId!);
-      assert.deepEqual([nowChecked.id, nowChecked.state, nowChecked.sourceSha], [unnamed.checkJobId, 'QUEUED', sha('c')],
+      assert.deepEqual([nowChecked.state, nowChecked.sourceSha], ['QUEUED', sha('c')],
         'and its queued check, which is handed out by that commit');
       const command = await handed(stack, m.runnerId, 'named-2', CURRENT, nowNamed.checkJobId);
       assert.equal(command?.sourceSha, sha('c'));
@@ -716,29 +714,33 @@ test('(4) §10.9 4, O-L6: a check that finds the delivered commit already on mai
       assert.equal((await candidateOf(stack, lt.taskId)).state, 'SUPERSEDED');
       assert.equal((await itemsOf(stack, old, 'LANDED_WITHOUT_CONFIRMATION')).length, 1);
 
-      // O-L7 / O-R2: a branch that carried no commit of its own is on every line it forked from, so its
-      // ALREADY_LANDED says nothing by itself. With no session that reported work, there was nothing to
-      // land: the receipt, marked empty, raises nothing. With one that did, the work is elsewhere and no
-      // receipt claims it — the candidate is BLOCKED as before.
+      // §12.15 P-M1 (O-L7 at the DONE): a branch that carried no commit of its own is not offered to
+      // the line at all. With no session holding work of its own there is nothing to land: no candidate,
+      // no check, no receipt — it reads as nothing to land. With one that does — an earlier attempt whose
+      // own branch has a commit past its base — the work is elsewhere: no candidate either, and
+      // LANDING_UNOBSERVED (WORK_ELSEWHERE) is in front of somebody.
       const empty = await finishedTask(stack, w, 'carried nothing', {
         branch: 'orbit/nothing', branchSha: sha('b'), baseSha: sha('b'),
       });
-      const emptyCheck = await handed(stack, w.runnerId, 'seen-3', CURRENT, (await candidateOf(stack, empty.taskId)).checkJobId);
-      assert.ok(emptyCheck);
-      await report(stack, w, emptyCheck, alreadyThere(sha('b')));
-      const [emptyReceipt] = await receiptsOf(stack, empty.taskId);
-      assert.deepEqual(emptyReceipt?.detail, { integrationJobId: emptyCheck.jobId, observed: true, empty: true });
-      assert.equal((await candidateOf(stack, empty.taskId)).state, 'SUPERSEDED');
-      const workedElsewhere = await finishedTask(stack, w, 'worked somewhere this branch is not', {
-        branch: 'orbit/elsewhere', branchSha: sha('b'), baseSha: sha('b'), changedFiles: [{ path: 'a.txt' }],
+      assert.equal(await stack.db.projectPromotion.count({ where: { taskId: empty.taskId } }), 0,
+        'an empty branch is offered to no check');
+      assert.deepEqual(await receiptsOf(stack, empty.taskId), [], 'and no receipt is written for it');
+      const workedElsewhereId = await ownerTask(stack, w, 'worked somewhere this branch is not');
+      await workSession(stack, w, workedElsewhereId, {
+        branch: 'orbit/elsewhere-first', branchSha: sha('e'), baseSha: sha('b'), changedFiles: [{ path: 'a.txt' }],
+        finishedMinutesAgo: 5,
       });
-      const elsewhereCheck = await handed(stack, w.runnerId, 'seen-4', CURRENT,
-        (await candidateOf(stack, workedElsewhere.taskId)).checkJobId);
-      assert.ok(elsewhereCheck);
-      await report(stack, w, elsewhereCheck, alreadyThere(sha('b')));
+      await workSession(stack, w, workedElsewhereId, {
+        branch: 'orbit/elsewhere', branchSha: sha('b'), baseSha: sha('b'), finishedMinutesAgo: 2,
+      });
+      await confirm(stack, w, workedElsewhereId);
+      const workedElsewhere = { taskId: workedElsewhereId };
+      assert.equal(await stack.db.projectPromotion.count({ where: { taskId: workedElsewhere.taskId } }), 0);
       assert.deepEqual(await receiptsOf(stack, workedElsewhere.taskId), [], 'no receipt claims work that is not there');
-      const stillBlocked = await candidateOf(stack, workedElsewhere.taskId);
-      assert.deepEqual([stillBlocked.state, stillBlocked.blockedReason], ['BLOCKED', 'ALREADY_LANDED']);
+      const elsewhereItem = await stack.db.projectOpenItem.findFirst({
+        where: { taskId: workedElsewhere.taskId, kind: 'LANDING_UNOBSERVED', state: 'OPEN' }, select: { payload: true },
+      });
+      assert.equal((elsewhereItem?.payload as { reason?: string } | undefined)?.reason, 'WORK_ELSEWHERE');
       assert.deepEqual((await itemsOf(stack, w, 'LANDED_WITHOUT_CONFIRMATION')).map((item) => item.taskId), [pushed],
         'neither empty branch raised LANDED_WITHOUT_CONFIRMATION');
     } finally {
@@ -863,11 +865,20 @@ async function servedError(stack: Stack, w: World, kind = 'INTEGRATION_ERROR') {
   };
 }
 
-/** The check of a TASK_BRANCH candidate for a task whose branch was never pushed and never moved off `base`. */
+/**
+ * The check of a TASK_BRANCH candidate for a task whose branch was never pushed and never moved off `base`.
+ *
+ * A DONE written since §12.15 P-M1 files no candidate for such a branch (no-commit-no-landing.pg.spec.ts):
+ * these are the rows a DONE before P-M1 filed, which a deployment still holds and which O-L8's words are
+ * still for. Produced as that DONE left them: the candidate is filed over the work, then the identity's
+ * base is put back on the tip, the empty branch the row describes.
+ */
 async function checkOfAnEmptyBranch(stack: Stack, w: World, label: string, capabilities: string[]) {
   const t = await finishedTask(stack, w, 'Backfill order stats', {
-    branch: `orbit/${label}`, branchSha: sha('b'), baseSha: sha('b'), changedFiles: [],
+    branch: `orbit/${label}`, branchSha: sha('b'), baseSha: sha('9'), changedFiles: [],
   });
+  await stack.db.task.update({ where: { id: t.taskId }, data: { deliveredBaseSha: sha('b') } });
+  await stack.db.session.update({ where: { id: t.sessionId }, data: { baseSha: sha('b') } });
   const candidate = await candidateOf(stack, t.taskId);
   const check = await handed(stack, w.runnerId, `${label}-1`, capabilities, candidate.checkJobId);
   assert.ok(check, 'CONTROL: the source session\'s runner is handed the check');

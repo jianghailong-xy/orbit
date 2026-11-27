@@ -32,14 +32,17 @@ async function s3Request(config: S3FilesConfig, method: 'PUT', requestPath: stri
   });
 }
 
-/** VersityGW on Docker, on a port of its own, with a bucket of its own; removed when the test ends. */
-export async function startS3(after: (fn: () => void) => void): Promise<S3FilesConfig> {
+/**
+ * VersityGW on Docker, on a port of its own, with a bucket of its own; removed when the test ends. Its objects are kept in
+ * memory (tmpfs), or in `dataDir` on the host's disk for a spec whose objects would not fit there.
+ */
+export async function startS3(after: (fn: () => void) => void, dataDir?: string): Promise<S3FilesConfig> {
   const run = randomUUID().slice(0, 8);
-  const name = `orbit-files-s3-${run}`;
+  const name = `orbit-documents-s3-${run}`;
   const accessKeyId = `orbitfiles${run}`;
   const secretAccessKey = randomBytes(24).toString('hex');
   execFileSync('docker', [
-    'run', '-d', '--rm', '--name', name, '-p', '127.0.0.1::7070', '--tmpfs', '/data',
+    'run', '-d', '--rm', '--name', name, '-p', '127.0.0.1::7070', ...(dataDir ? ['-v', `${dataDir}:/data`] : ['--tmpfs', '/data']),
     S3_IMAGE, '--access', accessKeyId, '--secret', secretAccessKey, 'posix', '/data',
   ], { stdio: ['ignore', 'ignore', 'inherit'] });
   after(() => {
@@ -51,7 +54,7 @@ export async function startS3(after: (fn: () => void) => void): Promise<S3FilesC
   });
   const port = execFileSync('docker', ['port', name, '7070/tcp'], { encoding: 'utf8' }).split('\n')[0].split(':').pop();
   const config: S3FilesConfig = {
-    endpoint: `http://127.0.0.1:${port}`, bucket: `orbit-files-${run}`, accessKeyId, secretAccessKey, region: 'us-east-1',
+    endpoint: `http://127.0.0.1:${port}`, bucket: `orbit-documents-${run}`, accessKeyId, secretAccessKey, region: 'us-east-1',
   };
   const deadline = Date.now() + 60_000;
   for (;;) {

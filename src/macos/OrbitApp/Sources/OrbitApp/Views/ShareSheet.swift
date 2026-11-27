@@ -454,10 +454,10 @@ extension SessionGuestContext {
     /// Where and how the agent runs a guest's message in this session, for People who can reply: the
     /// machine its page names, else its runner's or its workspace's label, and its permission mode.
     @MainActor
-    static func of(_ session: Session, agents: AgentsModel?) -> SessionGuestContext {
+    static func of(_ session: Session, agents: AgentsModel?, accountDefault: String? = nil) -> SessionGuestContext {
         let workspace = session.agent?.id ?? session.agentId
         let runnerID = session.assignedRunnerId ?? workspace.flatMap { agents?.agent($0)?.runnerId }
         let name = agents?.machineName(for: session) ?? agents?.runnerLabel(runnerID) ?? runnerID ?? "Shared"
-        return SessionGuestContext(runnerName: name, permissionMode: session.permissionMode)
+        return SessionGuestContext(runnerName: name, permissionMode: session.permissionMode, accountDefault: accountDefault)
     }
 }

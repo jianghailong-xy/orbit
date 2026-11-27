@@ -16,6 +16,7 @@ import org.robolectric.annotation.Config
 import java.io.File
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.coroutines.ContinuationInterceptor
 
 /** The hand-off's far end: what was shared lands in the target composer as staged attachments and words, and nothing is sent. */
 @RunWith(RobolectricTestRunner::class)
@@ -46,11 +47,16 @@ class ShareDeliveryTest {
         return ComposerModel(auth, (auth.state.value as AuthState.SignedIn).handle, "s1", scope)
     }
 
+    /** The model on the test's own thread, as the app keeps it on the main one (OrbitApplication.processScope). Its uploads map has
+     * no lock, and neither has the list Robolectric's ContentResolver keeps URI grants in: on a pool, one upload releasing its grant
+     * while the next file took one threw ConcurrentModificationException. */
+    private fun CoroutineScope.modelScope() = CoroutineScope(SupervisorJob() + coroutineContext[ContinuationInterceptor]!!)
+
     private fun file(name: String, bytes: ByteArray): Uri =
         Uri.fromFile(File(RuntimeEnvironment.getApplication().cacheDir, name).apply { writeBytes(bytes) })
 
     @Test fun filesAndAShortLinkAreStagedAndNothingIsSent() = runBlocking {
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val scope = modelScope()
         val model = composer(scope)
         try {
             withTimeout(60_000) { model.state.first { it.loaded } }
@@ -64,13 +70,14 @@ class ShareDeliveryTest {
             assertEquals(setOf(16, 64), state.draft.attachments.map { it.size }.toSet())
             assertNull("no upload failed", state.error)
             // Uploads only: no message, no session created.
-            val sent = paths.filterNot { it.contains("auth/") || it.endsWith("attachments") }
+            // A snapshot under the list's lock: the transport may still be appending from another thread.
+            val sent = synchronized(paths) { paths.toList() }.filterNot { it.contains("auth/") || it.endsWith("attachments") }
             assertEquals(emptyList<String>(), sent)
         } finally { model.close(); scope.cancel() }
     }
 
     @Test fun longTextBecomesASharedTextAttachment() = runBlocking {
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val scope = modelScope()
         val model = composer(scope)
         try {
             withTimeout(60_000) { model.state.first { it.loaded } }
@@ -86,7 +93,7 @@ class ShareDeliveryTest {
     }
 
     @Test fun anOversizedFileFollowsTheExistingRejectPath() = runBlocking {
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val scope = modelScope()
         val model = composer(scope)
         try {
             withTimeout(60_000) { model.state.first { it.loaded } }

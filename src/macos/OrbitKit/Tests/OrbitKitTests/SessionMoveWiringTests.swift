@@ -106,21 +106,28 @@ final class SessionMoveWiringTests: XCTestCase {
             .matches(in: expression, range: NSRange(expression.startIndex..., in: expression))
             .map { String(expression[Range($0.range(at: 1), in: expression)!]) }
         XCTAssertEqual(inward, ["deleteAction", "moveAction", "shareAction"])
-        let leftToRight = try inward.reversed().map { try title(of: $0, in: actions) }
+        // Move's title comes from the one builder both row kinds draw, so it is read there.
+        XCTAssertTrue(actions.contains("return SessionRowAction.move(onMove)"),
+                      "the swipe and a project row draw the same Move")
+        let leftToRight = [try title(of: "shareAction", in: actions), "Move",
+                           try title(of: "deleteAction", in: actions)]
         XCTAssertEqual(leftToRight, ["Share", "Move", "Delete"])
 
         // The circles (iOS 26's compact list) and the system's buttons draw that one list, and the
         // circles reverse the trailing side to lay it out left to right.
         XCTAssertTrue(actions.contains("trailing: trailingActions"))
-        let system = try slice(actions, from: ".swipeActions(edge: .trailing, allowsFullSwipe: false) {", to: "}")
-        XCTAssertTrue(system.contains("ForEach(trailingActions) { button($0) }"))
+        let shell = code(try appSource("Views/SessionListRow.swift"))
+        let system = try slice(shell, from: ".swipeActions(edge: .trailing, allowsFullSwipe: false) {", to: "}")
+        XCTAssertTrue(system.contains("ForEach(trailing) { $0.menuItem }"))
         let circles = code(try appSource("Views/RowSwipeActions.swift"))
         XCTAssertTrue(circles.contains("let laidOut: [RowSwipeAction] = edge == .leading ? actions : actions.reversed()"),
                       "the trailing side is laid out from its innermost action, left to right")
 
         // Move is indigo with a folder; Share stays blue, Delete red and destructive.
         let move = try slice(actions, from: "private var moveAction: RowSwipeAction? {", to: "\n    }")
-        XCTAssertTrue(move.contains("RowSwipeAction(title: \"Move\", systemImage: \"folder\", tint: .indigo, perform: onMove)"))
+        XCTAssertTrue(move.contains("SessionRowAction.move(onMove)"))
+        let builder = try slice(actions, from: "enum SessionRowAction {", to: "\n}")
+        XCTAssertTrue(builder.contains("RowSwipeAction(title: \"Move\", systemImage: \"folder\", tint: .indigo, perform: perform)"))
         let delete = try slice(actions, from: "private var deleteAction: RowSwipeAction {", to: "\n    }")
         XCTAssertTrue(delete.contains("RowSwipeAction(title: \"Delete\", systemImage: \"trash\", tint: .red,"))
         XCTAssertTrue(delete.contains("role: .destructive) { model.deleteSession(session.id) }"))
@@ -131,10 +138,14 @@ final class SessionMoveWiringTests: XCTestCase {
     /// runs from one.
     func testDeleteCannotBeFiredByAFullSwipe() throws {
         let actions = code(try appSource("Views/SessionRowActions.swift"))
-        XCTAssertTrue(actions.contains(".swipeActions(edge: .trailing, allowsFullSwipe: false) {"))
-        XCTAssertFalse(actions.contains(".swipeActions(edge: .trailing, allowsFullSwipe: true"))
-        XCTAssertTrue(actions.contains(
-            ".circleSwipeActions(id: session.id, leading: leadingActions, trailing: trailingActions,"))
+        let shell = code(try appSource("Views/SessionListRow.swift"))
+        XCTAssertTrue(shell.contains(".swipeActions(edge: .trailing, allowsFullSwipe: false) {"))
+        XCTAssertFalse(shell.contains(".swipeActions(edge: .trailing, allowsFullSwipe: true"))
+        // The one list reaches both surfaces: the row's actions go into the shell, which is where
+        // the trailing side says no full swipe and the leading side is the only one that can fire.
+        XCTAssertTrue(actions.contains("trailing: trailingActions"))
+        XCTAssertTrue(shell.contains(
+            ".circleSwipeActions(id: subject.id, leading: leading, trailing: trailing,"))
 
         let circles = code(try appSource("Views/RowSwipeActions.swift"))
         let spaced = circles.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
@@ -169,7 +180,7 @@ final class SessionMoveWiringTests: XCTestCase {
         let menu = try slice(actions, from: "@ViewBuilder private var menu: some View {", to: "\n    }")
         let order = try positions(["Label(SharePanelCopy.share, systemImage: shareAction.systemImage)",
                                    "if let moveAction {", "Label(\"Move…\", systemImage: moveAction.systemImage)",
-                                   "Divider()", "button(deleteAction)"], in: menu)
+                                   "Divider()", "deleteAction.menuItem"], in: menu)
         XCTAssertEqual(order, order.sorted(), "Share… · Move… · — · Delete")
         let item = try slice(menu, from: "if let moveAction {", to: "Divider()")
         XCTAssertTrue(item.contains("Button(action: moveAction.perform)"), "the menu runs the swipe's own action")
@@ -181,7 +192,7 @@ final class SessionMoveWiringTests: XCTestCase {
     /// the Mac alike (the Mac's right-click menu has Move…), and Trash has none of them.
     func testTheNewEntriesAreCompiledForEveryPlatform() throws {
         let actions = code(try appSource("Views/SessionRowActions.swift"))
-        let made = "RowSwipeAction(title: \"Move\", systemImage: \"folder\", tint: .indigo, perform: onMove)"
+        let made = "RowSwipeAction(title: \"Move\", systemImage: \"folder\", tint: .indigo, perform: perform)"
         XCTAssertEqual(try branches(of: made, in: actions), [], "the Mac's rows have Move too")
         XCTAssertEqual(actions.components(separatedBy: "RowSwipeAction(title: \"Move\"").count - 1, 1,
                        "the swipe and the menu draw the same one")
@@ -195,18 +206,20 @@ final class SessionMoveWiringTests: XCTestCase {
         XCTAssertEqual(try branches(of: ".sheet(item: $movingSession)", in: agents), [])
         XCTAssertEqual(try branches(of: "await app.loadSessionFolders()", in: agents), [],
                        "the Mac reads the library too: its list draws the folder rows")
-        let row = try slice(agents, from: "@ViewBuilder private func sessionRow(", to: "private func tagSectionHeader(")
-        XCTAssertEqual(row.components(separatedBy: "onMove: { movingSession = s }").count - 1, 2,
-                       "both of the list's row shapes hand their session over")
-        let projectRow = try slice(agents, from: "private func projectRow(_ row: SessionProjectRow)", to: "\n    }")
-        XCTAssertEqual(projectRow.components(separatedBy: "onMove:").count - 1, 1,
-                       "the project row has one Move callback, acting on its coordinator")
-        XCTAssertTrue(projectRow.contains("onMove: { if let coordinator = row.coordinator { movingSession = coordinator } }"))
-        XCTAssertEqual(agents.components(separatedBy: "onMove:").count - 1, 3,
-                       "two ordinary row shapes and one project coordinator hand a session over")
-        let projectMenu = code(try appSource("Views/SessionProjectPage.swift"))
-        XCTAssertEqual(try branches(of: "Button(action: onMove) { Label(SessionProjectCopy.move, systemImage: \"folder\") }",
-                                    in: projectMenu), [])
+        XCTAssertEqual(agents.components(separatedBy: "onMove: { movingSession = $0 }").count - 1, 2,
+                       "the list's entries and its tag groups hand their session over")
+        // The project's row is the project variant's, through the shared shell; its Move acts on the
+        // coordinator, and both row kinds draw the one Move builder.
+        let project = code(try appSource("Views/SessionProjectPage.swift"))
+        let projectRow = try slice(project, from: "struct SessionProjectListRow: View {", to: "\n}\n")
+        XCTAssertTrue(projectRow.contains("case .move: return SessionRowAction.move { onMove(coordinator) }"),
+                      "the project row has one Move callback, acting on its coordinator")
+        XCTAssertEqual(projectRow.components(separatedBy: "onMove(").count - 1, 2,
+                       "the swipe and the menu both reach the coordinator through the callback")
+        XCTAssertEqual(agents.components(separatedBy: "onMove:").count - 1, 2,
+                       "the list hands a session over from its entries and its tag groups")
+        XCTAssertEqual(try branches(of: "Label(SessionProjectCopy.move, systemImage: \"folder\")", in: project), [],
+                       "the project's menu Move is every platform's")
 
         let sheet = code(try appSource("Views/SessionMoveSheet.swift"))
         XCTAssertEqual(try branches(of: "struct SessionMoveSheet: View", in: sheet), [])
@@ -340,11 +353,11 @@ final class SessionMoveWiringTests: XCTestCase {
         let app = code(try appSource("AppModel.swift"))
         let apply = try slice(app, from: "private func apply(_ ev: ControlEvent) {", to: "\n    }\n")
         let branch = try slice(apply, from: "case .folders:", to: "case .providers:")
-        XCTAssertTrue(branch.contains("Task { await loadSessionFolders() }"))
+        XCTAssertTrue(branch.contains("whenSeen(\"folders\") { app in Task { await app.loadSessionFolders() } }"))
         XCTAssertFalse(branch.contains("scheduleControlRefresh()"), "a folder change refetches no list")
         XCTAssertFalse(branch.contains("#else"), "the Mac draws folders too: it reads them on every platform")
 
-        let connected = try slice(app, from: "private func reconcileOnConnect() async {", to: "\n    }\n")
+        let connected = try slice(app, from: "private func alignOnScreenAfterConnect() async {", to: "\n    }\n")
         XCTAssertTrue(connected.contains("Task { await loadSessionFolders() }"))
 
         let load = try slice(app, from: "func loadSessionFolders() async {", to: "\n    }")

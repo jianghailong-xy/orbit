@@ -40,7 +40,8 @@ public struct SubagentBlock: Equatable, Sendable {
     public let outcome: String?
     /// The outcome is the files it changed, drawn in the primary weight.
     public let outcomeIsFiles: Bool
-    /// The run did not finish: the outcome is how it ended, drawn in red.
+    /// The run did not finish (failed or interrupted; a stop is no failure): the outcome is how it
+    /// ended, drawn in red.
     public let outcomeIsFailure: Bool
     /// `41s`, once the run has ended. The run's cost is left out.
     public let numbers: String?
@@ -93,7 +94,8 @@ public struct SubagentBlock: Equatable, Sendable {
                 }
             case "FAILED": outcome = "Failed"; isFailure = true
             case "INTERRUPTED": outcome = "Interrupted"; isFailure = true
-            case "STOPPED": outcome = "Stopped"; isFailure = true
+            // Stopped on purpose: grey, and no failure (board docs/mocks/subagent-card-and-end-line D1).
+            case "STOPPED": outcome = "Stopped"
             default: outcome = firstLine(result)
             }
         }
@@ -319,9 +321,6 @@ public struct SubagentSessionSummary: Equatable, Sendable {
     public let capsule: String
     /// The runs, the running ones first, then the rest newest first.
     public let rows: [SubagentRunView]
-    /// How many ended without finishing, in every state: red at the band's right edge, before the
-    /// spinner while one runs.
-    public let failed: Int
     /// The models the runs took, most runs first.
     public let models: [ModelCount]
     /// Every place the runs ran, most runs first; the session's own machine is `name: nil`.
@@ -364,7 +363,7 @@ public struct SubagentSessionSummary: Equatable, Sendable {
         return running > 1 ? "\(running) running · \(newest)" : newest
     }
 
-    /// What VoiceOver says for the band: "Agents: 12, 4 machines, Opus 5.5 9 runs, 1 failed".
+    /// What VoiceOver says for the band: "Agents: 12, 4 machines, Opus 5.5 9 runs".
     public var spoken: String {
         var parts = ["Agents: \(band)"]
         if running > 0 {
@@ -375,13 +374,23 @@ public struct SubagentSessionSummary: Equatable, Sendable {
                 parts += models.map { "\($0.label) \($0.count == 1 ? "1 run" : "\($0.count) runs")" }
             }
         }
-        if failed > 0 { parts.append("\(failed) failed") }
         return parts.joined(separator: ", ")
     }
 
     /// The model a run took, as its chip names it: the catalogue's label, the id, else its engine's name.
     public static func modelLabel(_ run: SubagentRunView) -> String? {
         nonEmpty(run.modelLabel) ?? nonEmpty(run.model) ?? nonEmpty(run.engine).map(SubagentBlock.shortName)
+    }
+
+    /// The model as the Agents sheet's row names it: the label without a trailing build number
+    /// (`DeepSeek V4.1 Flash 1017` → `DeepSeek V4.1 Flash`). The block in the conversation keeps it.
+    public static func sheetModelLabel(_ run: SubagentRunView) -> String? {
+        guard let label = modelLabel(run) else { return nil }
+        var words = label.split(separator: " ")
+        if words.count > 1, let last = words.last, last.count >= 4, last.allSatisfy(\.isNumber) {
+            words.removeLast()
+        }
+        return words.joined(separator: " ")
     }
 
     /// Whether a run took the session's own model: a shadow row (no engine of its own) runs on the
@@ -428,12 +437,9 @@ public struct SubagentSessionSummary: Equatable, Sendable {
             }
         }
         let own = { (run: SubagentRunView) in ownModel(run, parentEngine: parentEngine, parentModel: parentModel) }
-        let failed = rows.filter {
-            SubagentBlock.describe(input: .object([:]), run: $0, status: .ok).outcomeIsFailure
-        }.count
         let current = rows.first(where: \.isRunning)
         return SubagentSessionSummary(
-            count: runs.count, running: running, capsule: "\(runs.count)", rows: rows, failed: failed,
+            count: runs.count, running: running, capsule: "\(runs.count)", rows: rows,
             models: stableByCount(models), machines: stableByCount(machines),
             elsewhere: runs.contains { nonEmpty($0.workspaceName) != nil },
             spread: runs.contains { nonEmpty($0.workspaceName) != nil || !own($0) },

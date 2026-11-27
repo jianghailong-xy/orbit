@@ -11,6 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { RealtimeService } from './realtime.service';
 import { noSessionRequests } from '../test-support/prisma-transaction-double';
+import { isSessionPhaseFactsQuery, sessionPhaseFactsAnswer } from '../test-support/session-phase-facts';
 
 const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -21,6 +22,7 @@ type Row = {
   workspaceId: string | null;
   title: string | null;
   status: string;
+  turnState: string | null;
   endReason?: string | null;
   completedAt?: Date | null;
   archivedAt?: Date | null;
@@ -36,6 +38,9 @@ type Row = {
     lastHeartbeatAt: Date | null;
   } | null;
   lastTurnAt: Date | null;
+  /** The list's order key (session.listed_at, migration 1490), and the creation it is read as where it is NULL. */
+  listedAt: Date | null;
+  createdAt: Date;
   workspace: { id: string; name: string | null; model: string | null; effort: string | null } | null;
   coordinatorForProject?: { id: string; title: string } | null;
   folderId?: string | null;
@@ -74,7 +79,10 @@ function fakePrisma(
 ): PrismaService {
   return {
     $executeRawUnsafe: async () => 0,
-    $queryRaw: async ({ values }: { values: unknown[] }) => {
+    $queryRaw: async (query: { values: unknown[] }) => {
+      // phase, released, lastTurnOutcome, waitingOn (sessions/session-phase.ts), from these rows.
+      if (isSessionPhaseFactsQuery(query)) return sessionPhaseFactsAnswer(query, rows);
+      const { values } = query;
       const row = rows[values[0] as string];
       return [{ projectMembership: row?.coordinatorForProject ? {
         projectId: row.coordinatorForProject.id,
@@ -117,12 +125,13 @@ function fakePrisma(
     // …and the four owner items a project can be waiting on its owner for (§7.6 V13),
     // which these fixtures have none of either.
     sessionRequest: noSessionRequests(),
+    // The open owner requests and waiting task moves the same row counts (none here).
     // …and no coordinator handoff (projects/coordinator-handoff.ts).
     coordinatorHandoff: { findFirst: async () => null },
-    projectOpenItem: { findMany: async () => [] },
-    ownerRequest: { groupBy: async () => [] },
+    ownerRequest: { findMany: async () => [], groupBy: async () => [] },
     // A move out of a project waiting on the owner (57a2943fa4's crossing signal): none here.
     projectHandoffApproval: { findMany: async () => [] },
+    projectOpenItem: { findMany: async () => [] },
   } as unknown as PrismaService;
 }
 
@@ -133,6 +142,7 @@ const rowA: Row = {
   workspaceId: 'workspaceA',
   title: 'Fix bug',
   status: RunStatus.RUNNING,
+  turnState: 'IN_FLIGHT',
   cancelRequestedAt: null,
   startedAt: new Date('2026-06-26T00:00:00.000Z'),
   numTurns: 1,
@@ -144,6 +154,9 @@ const rowA: Row = {
     lastHeartbeatAt: new Date(),
   },
   lastTurnAt: new Date('2026-06-26T00:00:00.000Z'),
+  // Behind lastTurnAt, as on a session whose latest activity was not its owner's: the summary carries this one.
+  listedAt: new Date('2026-06-25T23:00:00.000Z'),
+  createdAt: new Date('2026-06-25T22:00:00.000Z'),
   workspace: { id: 'workspaceA', name: 'builder', model: 'opus', effort: 'high' },
   coordinatorForProject: { id: 'projectA', title: 'Fix the project' },
   // The SOURCE columns, as migration 0231 leaves them on every session that resolves no baseline:
@@ -203,6 +216,7 @@ test('a STATUS event reaches the owner as session.updated with a full summary', 
   });
   assert.equal(data.pendingApprovals, 3);
   assert.equal(data.lastTurnAt, '2026-06-26T00:00:00.000Z');
+  assert.equal(data.listedAt, '2026-06-25T23:00:00.000Z');
   assert.deepEqual(data.agent, {
     id: 'workspaceA',
     name: 'builder',
@@ -278,6 +292,7 @@ test('a parked conversation counts the cards a live runner-hosted job is still r
     id: 'sessParked',
     ownerId: 'userB',
     status: RunStatus.AWAITING_INPUT,
+    turnState: null,
     engineTurnActive: false,
     runningBgShells: ['bgj_up'],
   };
@@ -405,7 +420,9 @@ test('publishSessionCreated surfaces as session.created with the full summary', 
 });
 
 test('publishSessionLifecycleChanged preserves run outcome and exposes Completed canonically', async () => {
-  const svc = svcWith({ sessA: rowA }, 0);
+  // The row as the end left it, released: the event's four new fields are read from it (sessions/session-phase.ts).
+  const ended = { ...rowA, status: RunStatus.CANCELLED, turnState: null, finishedAt: new Date('2026-06-27T00:00:00.000Z') };
+  const svc = svcWith({ sessA: ended }, 0);
   const got: ControlEvent[] = [];
   const sub = svc.streamForUser('userA').subscribe((e) => got.push(e));
 
@@ -428,11 +445,18 @@ test('publishSessionLifecycleChanged preserves run outcome and exposes Completed
     lifecycleState: 'COMPLETED',
     filingState: 'ARCHIVED',
     endReason: 'completed',
+    phase: 'IDLE',
+    released: true,
+    lastTurnOutcome: null,
+    waitingOn: null,
+    workFinished: false,
   });
 });
 
 test('completing an already-ended session preserves its actual runState', async () => {
-  const svc = svcWith({ sessA: rowA }, 0);
+  // The row as the end left it, released: the event's four new fields are read from it (sessions/session-phase.ts).
+  const ended = { ...rowA, status: RunStatus.CANCELLED, turnState: null, finishedAt: new Date('2026-06-27T00:00:00.000Z') };
+  const svc = svcWith({ sessA: ended }, 0);
   const got: ControlEvent[] = [];
   const sub = svc.streamForUser('userA').subscribe((e) => got.push(e));
 
@@ -453,6 +477,11 @@ test('completing an already-ended session preserves its actual runState', async 
     lifecycleState: 'COMPLETED',
     filingState: 'ARCHIVED',
     endReason: 'ended',
+    phase: 'IDLE',
+    released: true,
+    lastTurnOutcome: null,
+    waitingOn: null,
+    workFinished: false,
   });
 });
 
@@ -461,6 +490,7 @@ test('a Completed successful summary keeps SUCCEEDED execution state', async () 
     ...rowA,
     status: RunStatus.SUCCEEDED,
     endReason: SessionEndReason.TASK_DONE,
+    finishedAt: new Date('2026-06-27T00:00:00.000Z'),
     completedAt: new Date('2026-06-27T00:00:00.000Z'),
     archivedAt: null,
     deletedAt: null,
@@ -790,10 +820,12 @@ test('task.changed carries a bounded row set or an explicit full-resync signal',
   await delay(30);
   sub.unsubscribe();
 
-  assert.deepEqual(events.map((event) => event.data), [
-    { taskId: 'taskA', taskIds: ['taskA', 'taskB'], resync: false },
-    { taskIds: [], resync: true },
-  ]);
+  // A bounded change reads who created its rows first (scoped-list-events.spec.ts), so the resync published after it
+  // can arrive first: the order of two nudges is no part of either.
+  const data = events.map((event) => event.data);
+  assert.equal(data.length, 2);
+  assert.deepEqual(data.find((d) => d.resync === false), { taskId: 'taskA', taskIds: ['taskA', 'taskB'], resync: false });
+  assert.deepEqual(data.find((d) => d.resync === true), { taskIds: [], resync: true });
 });
 
 test('publishForAllUsers reaches every stream (shared provider catalog)', async () => {
@@ -901,4 +933,32 @@ test('lifecycle signals never enter a per-session transcript stream', async () =
   // Only the real run event arrives; every lifecycle signal is filtered out.
   assert.equal(transcript.length, 1);
   assert.equal((transcript[0] as { type: string }).type, 'status');
+});
+
+/**
+ * An agent's directory sync reports every two seconds, and a shipped client re-reads everything on a type it does not
+ * know, so `drive.sync` reaches only a stream that declared `hints=drive_syncs`, and only its owner's
+ * (docs/drive-directory-sync-design.md S4).
+ */
+test('drive.sync reaches only its owner\'s streams that declared drive_syncs, carrying the sync id and nothing else', async () => {
+  const svc = svcWith({}, 0);
+  const declared: ControlEvent[] = [];
+  const undeclared: ControlEvent[] = [];
+  const theirs: ControlEvent[] = [];
+  const subs = [
+    svc.streamForUser('userA', { driveSyncs: true }).subscribe((e) => declared.push(e)),
+    svc.streamForUser('userA', { driveChanged: true }).subscribe((e) => undeclared.push(e)),
+    svc.streamForUser('userB', { driveSyncs: true }).subscribe((e) => theirs.push(e)),
+  ];
+
+  svc.publishDriveSync('userA', 'sync-1');
+  await delay(30);
+  for (const sub of subs) sub.unsubscribe();
+
+  assert.equal(declared.length, 1);
+  assert.equal(declared[0].type, 'drive.sync');
+  assert.deepEqual(declared[0].data, { syncId: 'sync-1' });
+  assert.equal(declared[0].sessionId, '');
+  assert.equal(undeclared.length, 0);
+  assert.equal(theirs.length, 0);
 });

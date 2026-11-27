@@ -1,7 +1,11 @@
-import { runningSubagentCards } from '../sessions/abandoned-approvals';
+import { readByLiveBackgroundJob, runningSubagentCards } from '../sessions/abandoned-approvals';
+import { isSessionGenerating } from '../common/session-generating';
+import { ENGINE_TURN } from '../common/session-working';
+import { RELEASE_FACTS_SELECT } from '../common/session-release';
 import { visibleQuestions, questionHolds } from '../sessions/run-question';
 import http2 from 'node:http2';
 import { randomUUID } from 'node:crypto';
+import { TURN_STATE_SELECT, turnStateFilter } from '../sessions/session-turn-state';
 import { fitCollapseId } from './collapse-id';
 import { ConflictException, Injectable, Logger, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
@@ -11,11 +15,14 @@ import { COORDINATOR_PAUSE_SELECT, conversationIsPaused } from '../projects/coor
 import { openFuseEpisodeId } from '../projects/project-fuse';
 import { ConfigService } from '@nestjs/config';
 import * as jwt from 'jsonwebtoken';
-import { RunStatus, type DeviceToken } from '@prisma/client';
+import { Prisma, type DeviceToken } from '@prisma/client';
+import { accountSubjectNames } from '../providers/account-health-subject';
+import { accountNeedsActionBody } from '../providers/account-health-copy';
+import type { AccountNeedsAction } from '../providers/account-health.service';
 import { AgentProvider, ENGINE_CLI_NAMES, RUN_NOTICE_MESSAGE_MAX, TRANSLATION_TIMEOUT_MS, uuidToBase62, type LoginEngine } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
-import { readOwnerItemSessionIds } from '../projects/owner-decision-signal';
+import { readOwnerItemSessionIds, readOwnerRequestSessionIds } from '../projects/owner-decision-signal';
 import {
   SESSION_ENDING_SELECT,
   conversationIsOver,
@@ -27,11 +34,12 @@ import {
 import { agentAlert } from './agent-alert';
 import { badgeDiff, BadgeState } from './badge-diff';
 import { ownerItemAlert } from './owner-item-alert';
-import { ownerRequestAlert, ownerRequestPushCategory, type OwnerRequestKind } from '../owner-requests/owner-request';
+import { ownerRequestAlert, ownerRequestPushCategory, type FiledOwnerRequestKind } from '../owner-requests/owner-request';
 import { ownerStarted, settleAlert } from './settle-alert';
 import { crossingRequestAlert } from './crossing-request-alert';
 import { CARD_SESSION_SELECT, crossingCardSessionId } from '../projects/project-handoff.service';
 import { FcmTransport } from './fcm-transport';
+import { WebPushTransport, webPushMessage, type WebPushKeys } from './web-push-transport';
 import { FeishuTransport, orbitUrl, type FeishuTarget } from './feishu-transport';
 import { fcmData } from './fcm-payload';
 import { claudeRegionPushBody, regionMachineName } from '../runners/runner-region';
@@ -39,6 +47,7 @@ import { HELD_TURN_STATUS, translationLanguages } from '../sessions/turn-transla
 import { waitForCardTranslation } from '../sessions/card-translation-wait';
 import { cardHasText } from '../sessions/reply-translation';
 import { isScheduleItemKind } from '../schedules/schedule-attention';
+import type { NotifyPriority } from './dto';
 
 const APNS_HOST_PROD = 'api.push.apple.com';
 const APNS_HOST_SANDBOX = 'api.sandbox.push.apple.com';
@@ -104,11 +113,21 @@ export interface AgentNotifyResult {
 }
 
 /**
+ * What became of a POST /notify call, as its caller is answered. `reason` is present only when nothing was delivered:
+ * PUSH_NOT_CONFIGURED — this server has no APNs or FCM credentials, so it pushes to nobody (not an error); NO_DEVICES —
+ * the token's owner has no Orbit app signed in that this server can reach; NOT_ACCEPTED — APNs and FCM took it for none.
+ */
+export type OwnerNotificationResult =
+  | { delivered: true; devices: number }
+  | { delivered: false; reason: 'PUSH_NOT_CONFIGURED' | 'NO_DEVICES' | 'NOT_ACCEPTED' };
+
+/**
  * What the Feishu card of an alert that is neither an approval, a settlement, an agent's message nor an owner item says
  * its kind is (docs/feishu-bot-design.md §6.1, last row), by the push's `kind`.
  */
 const FEISHU_EVENT_KINDS: Readonly<Record<string, string>> = {
   'engine-signed-out': 'Engine signed out',
+  'account-needs-action': 'Account needs action',
   'claude-region-blocked': 'Claude is not available on this runner',
   'runner-updating': 'Runner updating',
   'confirmation-raised': 'Coordinator raised this for your decision',
@@ -128,6 +147,35 @@ const FEISHU_EVENT_KINDS: Readonly<Record<string, string>> = {
 };
 
 /**
+ * The sessions that can hold a card raised outside a dispatched turn, which that work leaves parked
+ * (docs/session-three-state-design.md §11.3 item 2): the engine's own turn, or a runner-hosted process still up. The
+ * process is read off `runningBgShells`, the set `abandoned-approvals.ts` collects a job's card on, not
+ * `runningBgJobs`: a card is answerable exactly while the reap would leave it, and the badge rings for no other.
+ */
+const OUTSIDE_TURN_CARD_SESSIONS: Prisma.SessionWhereInput = {
+  OR: [{ AND: [turnStateFilter([null]), ENGINE_TURN.where] }, { runningBgShells: { isEmpty: false } }],
+};
+
+/**
+ * The cards of such a session somebody still has to answer, on the readers `SessionsService.stillBeingAsked` names: a
+ * card that names a background job while that job is in the session's set (`readByLiveBackgroundJob`), and one that
+ * names none while the engine's own turn is generating. A job's card whose job has ended is the reap's, never counted.
+ * SubAgent cards are the subagent half's and are not selected here.
+ */
+function outsideTurnCards<T extends { backgroundJobId?: string | null; toolUseId?: string | null }>(
+  session: Parameters<typeof isSessionGenerating>[0] & {
+    runningBgShells?: readonly string[] | null;
+    approvals?: readonly T[] | null;
+  },
+): T[] {
+  const generating = isSessionGenerating(session);
+  return (session.approvals ?? []).filter((card) =>
+    card.backgroundJobId == null
+      ? generating
+      : readByLiveBackgroundJob({ backgroundJobId: card.backgroundJobId }, session.runningBgShells ?? []));
+}
+
+/**
  * Shared reminder eligibility and reconciliation, with independent transports: APNs, FCM, and the account's own Feishu
  * app (FeishuTransport, docs/feishu-bot-design.md §6.1). Every alert below decides once whether and when to ring, with
  * the same claims for all three; a channel that fails never costs another one its delivery.
@@ -140,6 +188,7 @@ export class PushService {
   private readonly apnsCredentials: Partial<Record<ApnsEnvironment, ApnsCredentials>> = {};
   private readonly blockedApnsEnvironments = new Set<ApnsEnvironment>();
   private readonly fcm: FcmTransport;
+  private readonly web: WebPushTransport;
   // Per-owner "needs you" state last pushed to that user's devices, so a reconcile pushes only on a
   // real change and can tell iOS which sessions' banners to clear. In-memory/per-replica; pushes are
   // idempotent so a rare cross-replica double-send is harmless. See docs/cross-platform-badge-sync.md.
@@ -172,12 +221,19 @@ export class PushService {
       }
     }
     this.fcm = new FcmTransport(config);
+    this.web = new WebPushTransport(config);
     if (!this.apnsEnabled) this.log.warn('APNs not configured — iOS pushes disabled');
     if (!this.fcm.enabled) this.log.warn('FCM not configured — Android pushes disabled');
+    if (!this.web.enabled) this.log.warn('Web Push not configured — browser pushes disabled');
   }
 
   private get apnsEnabled(): boolean {
     return Object.keys(this.apnsCredentials).length > 0;
+  }
+
+  /** Some device transport (APNs, FCM or Web Push) is configured. */
+  private get devicePushEnabled(): boolean {
+    return this.apnsEnabled || this.fcm.enabled || this.web.enabled;
   }
 
   /**
@@ -198,7 +254,7 @@ export class PushService {
 
   /** APNs, FCM or Feishu can carry an alert (§6.1). Whether this account has a device or a bound app is `channels`'. */
   private get enabled(): boolean {
-    return this.apnsEnabled || this.fcm.enabled || Boolean(this.feishu);
+    return this.devicePushEnabled || Boolean(this.feishu);
   }
 
   /** The account's registered devices, and its Feishu app when alerts reach its owner there. */
@@ -261,12 +317,13 @@ export class PushService {
   }
 
   private async targets(ownerId: string): Promise<DeviceToken[]> {
-    if (!this.apnsEnabled && !this.fcm.enabled) return [];
+    if (!this.devicePushEnabled) return [];
     return this.withLiveSession(await this.prisma.deviceToken.findMany({ where: { userId: ownerId, OR: [
       ...(this.apnsEnabled ? [{ platform: 'ios', bundleId: this.bundleId,
         environment: { in: ['production', 'sandbox'] } }] : []),
       ...(this.fcm.enabled ? [{ platform: 'android', bundleId: this.fcm.packageName,
         environment: 'production' }] : []),
+      ...(this.web.enabled ? [{ platform: 'web', bundleId: 'web', environment: 'production' }] : []),
     ] } }));
   }
 
@@ -293,18 +350,23 @@ export class PushService {
   async notifyApprovalRequest(sessionId: string, approvalId: string, toolName: string, coordinatorFallback = false): Promise<void> {
     if (!this.enabled) return;
     try {
+      const gates = { completedAt: null, archivedAt: null, deletedAt: null, cancelRequestedAt: null };
+      const select = { title: true, ownerId: true, notificationsMuted: true, notifyNeedsYou: true, runSource: true };
       const session = await this.prisma.session.findFirst({
         where: {
           id: sessionId,
           // A running turn asks, and so does a SubAgent still running after its parent's turn ended
           // (docs/subagent-design.md §5.3); the "needs you" set below decides whether this card is one.
-          OR: [{ status: RunStatus.RUNNING }, { runningSubagents: { isEmpty: false } }],
-          completedAt: null,
-          archivedAt: null,
-          deletedAt: null,
-          cancelRequestedAt: null,
+          OR: [turnStateFilter(['IN_FLIGHT']), { runningSubagents: { isEmpty: false } }],
+          ...gates,
         },
-        select: { title: true, ownerId: true, notificationsMuted: true, notifyNeedsYou: true, runSource: true },
+        select,
+      }) ?? await this.prisma.session.findFirst({
+        // And so does work outside a dispatched turn, on a session still at AWAITING_INPUT: a background job, or a turn
+        // the engine started itself (docs/session-three-state-design.md §11.3 item 2). Asked second, and only when the
+        // first finds nothing, so the ordinary RUNNING approval still costs one read.
+        where: { id: sessionId, ...OUTSIDE_TURN_CARD_SESSIONS, ...gates },
+        select,
       });
       if (!session) return;
       // A scheduled task's run rings through its Waiting on you item instead (schedules/schedule-attention.ts).
@@ -467,6 +529,39 @@ export class PushService {
   }
 
   /**
+   * An account refused runs and needs the owner (docs/routing-account-health-design.md §8). Sent once per state change
+   * by AccountHealthService.recordFailure, which decides when; this only says it. Title: the runner's name (or a key's
+   * provider label). Same shape as notifyEngineSignedOut: no badge, no session id, thread `runner-<id>`; a key has no
+   * runner, so its thread is `account-<subjectKey>`. The payload carries what a client needs to open the account row and
+   * to call `POST /account-health/:id/check` from it: `accountHealthID`, `subjectKey`, `failureKind`, `blockedUntil`.
+   */
+  async notifyAccountNeedsAction(ownerId: string, alert: AccountNeedsAction): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const subject = await accountSubjectNames(this.prisma, ownerId, alert.subjectKey);
+      const { tokens, feishu } = await this.channels(ownerId);
+      if (tokens.length === 0 && !feishu) return;
+      const text = {
+        title: subject.title,
+        body: accountNeedsActionBody({ product: subject.product, kind: alert.kind, said: alert.said, trips: alert.trips }),
+      };
+      const body = JSON.stringify({
+        aps: { alert: text, sound: 'default', 'thread-id': subject.runnerId ? `runner-${subject.runnerId}` : `account-${alert.subjectKey}` },
+        kind: 'account-needs-action',
+        ...(subject.runnerId ? { runnerID: subject.runnerId } : {}),
+        accountHealthID: alert.rowId,
+        subjectKey: alert.subjectKey,
+        failureKind: alert.kind,
+        ...(alert.blockedUntil ? { blockedUntil: alert.blockedUntil.toISOString() } : {}),
+      });
+      this.background(this.feishuOther(feishu, { kind: 'account-needs-action', ...text }));
+      await this.deliver(tokens, body, 'alert', '10');
+    } catch (err) {
+      this.log.warn(`account needs action notify failed: ${(err as Error).message}`);
+    }
+  }
+
+  /**
    * A terminal asks to be approved (docs/terminal-session-design.md, "The terminal credential"): the owner's devices
    * ring with the machine and the code the terminal shows, and the tap opens the approve card. Devices only — the
    * approval is an owner-channel act made signed in to the app, so a Feishu card could not answer it. No badge, and
@@ -566,7 +661,7 @@ export class PushService {
         select: {
           title: true,
           ownerId: true,
-          status: true,
+          ...RELEASE_FACTS_SELECT,
           retryAt: true,
           completedAt: true,
           deletedAt: true,
@@ -808,7 +903,7 @@ export class PushService {
       if (tokens.length === 0 && !feishu) {
         // Nothing to reach this account through. Without device push on this server that is the
         // server's answer, not the account's: registering a device would change nothing.
-        return this.apnsEnabled || this.fcm.enabled
+        return this.devicePushEnabled
           ? { delivered: false, reason: 'no devices are registered for this account' }
           : { delivered: false, reason: 'push is not configured on this server' };
       }
@@ -846,7 +941,7 @@ export class PushService {
             sessionId: input.sessionId ?? null,
             openUrl: orbitUrl({ sessionId: input.sessionId }),
             // The whole message: a card has room for more than a banner (FULL only, §6.4).
-            render: async () => ({ kind: 'agent-message', sessionTitle: title, message: input.message.trim() }),
+            render: async () => ({ kind: 'agent-message', sessionTitle: title, message: input.message.trim(), ...(input.sessionId ? {} : { sessionless: true }) }),
           })
           : false,
       ]);
@@ -857,6 +952,30 @@ export class PushService {
       this.log.warn(`agent notify failed: ${message}`);
       return { delivered: false, reason: `push failed: ${message}` };
     }
+  }
+
+  /**
+   * POST /notify (push/notify.controller.ts): a notification someone holding the owner's `notify` token sent, pushed to
+   * that owner's own iOS and Android apps and no one else's. Only APNs and FCM: the account's Feishu app is not a device.
+   * No badge, no session: the tap opens Orbit. The caller's rate limit is the controller's. A transport failure is a
+   * device that did not accept it, so this answers rather than throws.
+   */
+  async notifyOwner(ownerId: string, input: { title: string; message: string; priority: NotifyPriority; url?: string }): Promise<OwnerNotificationResult> {
+    if (!this.devicePushEnabled) return { delivered: false, reason: 'PUSH_NOT_CONFIGURED' };
+    const tokens = await this.targets(ownerId);
+    if (tokens.length === 0) return { delivered: false, reason: 'NO_DEVICES' };
+    const body = JSON.stringify({
+      aps: {
+        alert: { title: input.title, body: input.message },
+        ...(input.priority === 'low' ? {} : { sound: 'default' }),
+        ...(input.priority === 'high' ? { 'interruption-level': 'time-sensitive' } : {}),
+        'thread-id': 'orbit-notify',
+      },
+      kind: 'notify',
+      ...(input.url ? { url: input.url } : {}),
+    });
+    const devices = await this.deliver(tokens, body, 'alert', input.priority === 'low' ? '5' : '10');
+    return devices > 0 ? { delivered: true, devices } : { delivered: false, reason: 'NOT_ACCEPTED' };
   }
 
   /**
@@ -1067,13 +1186,13 @@ export class PushService {
           return row ? { translation: row.translation } : null;
         },
       );
-      const alert = ownerRequestAlert(request.kind as OwnerRequestKind, translation?.title || request.title);
+      const alert = ownerRequestAlert(request.kind as FiledOwnerRequestKind, translation?.title || request.title);
       const body = JSON.stringify({
         aps: {
           alert,
           sound: 'default',
           // Per kind: the clients' actions open the card on its input, or put it off ("Later").
-          category: ownerRequestPushCategory(request.kind as OwnerRequestKind),
+          category: ownerRequestPushCategory(request.kind as FiledOwnerRequestKind),
           'thread-id': `owner-request-${request.askedBySessionId}`,
         },
         kind: 'owner-request',
@@ -1630,14 +1749,18 @@ export class PushService {
    *  The owner-item half does not carry the RUNNING gate: a coordinator conversation sits at
    *  AWAITING_INPUT precisely while it is waiting for the answer, which is the state this exists to
    *  make visible. It does carry the same gate a card does — a project with no coordinator bound,
-   *  or one whose conversation was filed away, is counted by neither (`readOwnerItemSessionIds`). */
+   *  or one whose conversation was filed away, is counted by neither (`readOwnerItemSessionIds`).
+   *
+   *  The open owner requests (`request_owner_action`) and the waiting task moves are counted the
+   *  same way and for the same reason: a card only the owner can answer, on the conversation that
+   *  asked (and, for a move, the target project's coordinator) — `readOwnerRequestSessionIds`. */
   async needsYouSessions(ownerId: string): Promise<string[]> {
-    const [rows, blockedOnOwner, withSubagents] = await Promise.all([
+    const [rows, blockedOnOwner, withSubagents, outsideTurn, askedOfOwner] = await Promise.all([
       this.prisma.session.findMany({
         where: {
           ownerId,
-          status: RunStatus.RUNNING,
-          // A LANDING row is never RUNNING; named anyway, so no status scan can ever count one.
+          ...turnStateFilter(['IN_FLIGHT']),
+          // A LANDING row never has a turn in flight; named anyway, so no scan can ever count one.
           sessionKind: 'CONVERSATION',
           completedAt: null,
           archivedAt: null,
@@ -1665,6 +1788,34 @@ export class PushService {
           approvals: { where: { status: 'PENDING', subagentRunId: { not: null } }, select: { id: true, toolName: true, subagentRunId: true } },
         },
       }),
+      // The conversations whose card was raised outside a dispatched turn, which leaves the status at AWAITING_INPUT
+      // (docs/session-three-state-design.md §11.3 item 2): which of their cards count is `outsideTurnCards` below.
+      this.prisma.session.findMany({
+        where: {
+          ownerId,
+          sessionKind: 'CONVERSATION',
+          completedAt: null,
+          archivedAt: null,
+          deletedAt: null,
+          cancelRequestedAt: null,
+          ...OUTSIDE_TURN_CARD_SESSIONS,
+          approvals: { some: { status: 'PENDING', subagentRunId: null } },
+        },
+        select: {
+          id: true,
+          taskId: true,
+          // isSessionGenerating's (common/session-generating.ts).
+          ...TURN_STATE_SELECT,
+          engineTurnActive: true,
+          runningBgShells: true,
+          approvals: {
+            where: { status: 'PENDING', subagentRunId: null },
+            select: { id: true, toolName: true, backgroundJobId: true, toolUseId: true },
+          },
+        },
+      }),
+      // The conversations an open owner request or a waiting task move is counted on (MOVE_REQUEST).
+      readOwnerRequestSessionIds(this.prisma, ownerId),
     ]);
     const visible = new Set((await visibleQuestions(this.prisma, rows.filter(r => r.taskId).flatMap(r => r.approvals))).map(a => a.id));
     // A running SubAgent's card is a question whatever its parent is doing (docs/subagent-design.md §5.3): a
@@ -1672,10 +1823,25 @@ export class PushService {
     const subagentCards = await visibleQuestions(this.prisma, await runningSubagentCards(this.prisma, withSubagents.flatMap(
       (r) => (r.approvals ?? []).map((card: { id: string; toolName: string; subagentRunId?: string | null }) => ({ ...card, sessionId: r.id })),
     )));
+    // A turn's card whose call has returned is over (the reap's finished-call rule, `reapApprovalsOfEndedTurns`).
+    const turnCalls = (outsideTurn ?? []).flatMap((r) => outsideTurnCards(r)
+      .filter((card) => card.backgroundJobId == null && card.toolUseId)
+      .map((card) => ({ sessionId: r.id, toolUseId: card.toolUseId as string })));
+    const returned = turnCalls.length === 0 ? new Set<string>() : new Set((await this.prisma.toolCall.findMany({
+      where: { OR: turnCalls.map((c) => ({ sessionId: c.sessionId, toolUseId: c.toolUseId })), finishedAt: { not: null } },
+      select: { sessionId: true, toolUseId: true },
+    })).map((call) => `${call.sessionId}:${call.toolUseId}`));
+    const outsideTurnIds: string[] = [];
+    for (const r of outsideTurn ?? []) {
+      const cards = outsideTurnCards(r).filter((card) => !card.toolUseId || !returned.has(`${r.id}:${card.toolUseId}`));
+      if (cards.length > 0 && (!r.taskId || (await visibleQuestions(this.prisma, cards)).length > 0)) outsideTurnIds.push(r.id);
+    }
     return [...new Set([
       ...rows.filter(r => !r.taskId || r.approvals.some(a => visible.has(a.id))).map(r => r.id),
       ...subagentCards.map(card => card.sessionId),
+      ...outsideTurnIds,
       ...blockedOnOwner,
+      ...askedOfOwner,
     ])];
   }
 
@@ -1756,6 +1922,14 @@ export class PushService {
           const res = await this.fcm.send(t.token, { ...data, registrationKey: t.id }, isCurrent);
           if (res.invalidToken) await this.prisma.deviceToken.deleteMany({ where });
           else if (!res.accepted) this.log.warn(`FCM ${res.reason}`);
+          return res.accepted;
+        }
+        if (t.platform === 'web' && this.web.enabled && t.bundleId === 'web' && t.environment === 'production') {
+          const message = webPushMessage(body, pushType, collapseId);
+          if (!message) return false;
+          const res = await this.web.send(t.token, t.webKeys as unknown as WebPushKeys, message, isCurrent);
+          if (res.invalidToken) await this.prisma.deviceToken.deleteMany({ where });
+          else if (!res.accepted) this.log.warn(`Web Push ${res.reason}`);
           return res.accepted;
         }
         if (t.platform !== 'ios' || !this.apnsEnabled || t.bundleId !== this.bundleId

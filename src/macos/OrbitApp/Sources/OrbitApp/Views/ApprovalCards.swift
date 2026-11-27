@@ -110,7 +110,13 @@ struct ApprovalHeader: View {
     let title: String
     let tone: Color
     var badge: String? = nil
-    /// A title that is a sentence the board draws whole ("Create task that starts on a condition?") wraps.
+    /// A small word drawn straight after the title, in the tone's own chip language — the exception
+    /// card's "Fixing" tag while a repair task is live (board card-ui-polish ①).
+    var inlineTag: String? = nil
+    /// The tag's colour, where it is not the header's: the Handling tag's blue, which the board's
+    /// Fixing tag shares, on a card whose own tone is the exception's amber.
+    var inlineTagTint: Color? = nil
+    /// The title that is a sentence the board draws whole ("Create task that starts on a condition?") wraps.
     var titleLines: Int = 1
 
     var body: some View {
@@ -126,6 +132,17 @@ struct ApprovalHeader: View {
                 .lineLimit(titleLines)
                 .fixedSize(horizontal: false, vertical: titleLines > 1)
                 .layoutPriority(1)      // a long MCP tool name truncates; the ask never does
+            if let inlineTag {
+                Text(inlineTag)
+                    .font(.orbitMeta.weight(.semibold))
+                    .foregroundStyle(inlineTagTint ?? tone)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .padding(.horizontal, 7).padding(.vertical, 2)
+                    .background((inlineTagTint ?? tone).opacity(0.16), in: Capsule())
+                    .overlay(Capsule().strokeBorder((inlineTagTint ?? tone).opacity(0.35),
+                                                    lineWidth: 1))
+            }
             Spacer(minLength: 4)
             if let badge {
                 Text(badge)
@@ -2517,7 +2534,7 @@ struct DeliveredDecisionCardView: View {
                                  onChat: { console.startOwnerRequestReply($0) })
             case .crossingBatch(let batchID):
                 CrossingDecisionCard(console: console, batchID: batchID)
-            case .scheduleCard, .scheduleRecord, .scheduleRunStrip, .scheduleRunReport:
+            case .scheduleCard, .scheduleRecord, .scheduleChangeOpening, .scheduleRunStrip, .scheduleRunReport:
                 ScheduleConsoleCard(console: console, kind: card.kind)
             }
         }
@@ -2897,22 +2914,37 @@ private struct CriteriaDecisionCard: View {
 
 /// The record of an answer to a held proposal, where the decision was made.
 ///
-/// Green and ticked, with no actions and no badge: this is not a question any more, and the only
-/// thing it has to do is say which way it went and when. It is drawn from the committed answer the
-/// read publishes rather than kept by the window that pressed the button, so it is here after a
-/// relaunch, on a device that never saw the card, and it is what the browser's receipt says, word
-/// for word (`CriteriaDecisions.recordedHeading` / `receiptLine`).
+/// Orange like the question it answers — web's `.criteria-decision`, frame and head in the warning
+/// tone, because what was answered is a ruler getting looser (decision D1 A) — with the verdict and
+/// its check mark green, and no actions. It is drawn from the committed answer the read publishes
+/// rather than kept by the window that pressed the button, so it is here after a relaunch, on a
+/// device that never saw the card, and it says what the browser's receipt says, word for word
+/// (`CriteriaDecisions.recordedHeading` / `receiptLine`). Under the line, folded, what the answer
+/// was about: web's "What this approved · …" (`CriteriaDecisions.settledFold`).
 private struct CriteriaDecisionReceiptCard: View {
     let settled: SettledCriteriaDecision
+    @State private var foldOpen = false
+    @State private var unchangedOpen = false
+
+    private static func color(_ tone: CriteriaDecisions.ReceiptTone) -> Color {
+        switch tone {
+        case .warning: return .orange
+        case .success: return .green
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
             ApprovalHeader(symbol: "checkmark.circle.fill",
                            title: CriteriaDecisions.recordedHeading,
-                           tone: .green)
+                           tone: Self.color(CriteriaDecisions.receiptTone))
             Text(CriteriaDecisions.receiptLine(settled))
-                .font(.orbitProse)
+                .font(.orbitProse.weight(.semibold))
+                .foregroundStyle(Self.color(CriteriaDecisions.receiptVerdictTone))
                 .frame(maxWidth: .infinity, alignment: .leading)
+            if let fold = CriteriaDecisions.settledFold(settled) {
+                foldView(fold)
+            }
             // Who is speaking, on the line that is standing in for the card's meta row: the browser
             // puts the same mark on its receipt, and a record of a decision the owner made is no
             // more the agent's writing than the question was.
@@ -2920,7 +2952,76 @@ private struct CriteriaDecisionReceiptCard: View {
                 .font(.orbitMonoFine).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .approvalChrome(.green)
+        .approvalChrome(Self.color(CriteriaDecisions.receiptTone))
+    }
+
+    /// Closed by default, like the Project started card's "What the coordinator was told": the
+    /// receipt's job is to say the decision was recorded; what it was about is asked second.
+    private func foldView(_ fold: CriteriaDecisions.SettledFold) -> some View {
+        DisclosureGroup(isExpanded: $foldOpen) {
+            VStack(alignment: .leading, spacing: 6) {
+                if let legend = fold.legend {
+                    Text(legend)
+                        .font(.orbitLabel).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                ForEach(fold.rows) { row in
+                    rowView(row)
+                }
+                if let line = fold.unchangedLine {
+                    DisclosureToggle(open: unchangedOpen, label: line) {
+                        unchangedOpen.toggle()
+                    }
+                    if unchangedOpen {
+                        ForEach(fold.unchanged) { row in
+                            Text("\(row.ordinal.map { "\($0). " } ?? "")\(row.text)")
+                                .font(.orbitLabel).foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+                if let note = fold.note {
+                    Text(note)
+                        .font(.orbitLabel).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(.top, 4)
+        } label: {
+            Text(fold.summary)
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// One moved criterion, as the live card draws its rows: the server's ordinal (none on a
+    /// dropped one), the words — a stored rewrite struck through and underlined in place — and the
+    /// badge in the warning tone.
+    private func rowView(_ row: CriteriaDecisions.SettledFold.Row) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            (Text(row.ordinal.map { "\($0). " } ?? "• ").foregroundStyle(.secondary)
+                + rewritten(row.words))
+                .font(.orbitProse)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(row.badge)
+                .font(.orbitLabel).foregroundStyle(.orange)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let method = row.method {
+                (Text("\(CriteriaDecisions.methodLabel): ") + rewritten(method))
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    private func rewritten(_ runs: [CriterionSegment]) -> Text {
+        runs.reduce(Text("")) { line, run in
+            switch run.side {
+            case .kept: return line + Text(run.text)
+            case .removed: return line + Text(run.text).strikethrough().foregroundStyle(.secondary)
+            case .added: return line + Text(run.text).underline()
+            }
+        }
     }
 }
 
@@ -3388,7 +3489,8 @@ private struct StartProjectCardView: View {
 private struct ProjectDoneCardView: View {
     let console: ConsoleModel
     @Environment(AppModel.self) private var model
-    /// Settings › Translation: the coordinator's judgment and gaps flip back to its own words.
+    /// Settings › Translation: the project's title and criteria, and the coordinator's judgment and
+    /// gaps, flip back to the words they were written in.
     @State private var showOriginal = false
     @Environment(\.opensPagesOverConsole) private var overConsole
     @State private var doneCheck: ProjectDoneCheck?
@@ -3424,8 +3526,8 @@ private struct ProjectDoneCardView: View {
             let row = console.doneRequestRow
             let owner = OwnerCardTranslations.ownerLanguage(model.user)
             ProjectDoneCard(
-                subject: subject,
                 // Drawn translated; Record as done sends the console's own request, as written.
+                subject: subject.shown(owner: owner, showOriginal: showOriginal),
                 request: row?.shownDoneRequest(owner: owner, showOriginal: showOriginal),
                 askedAt: row?.waitingSince,
                 confirmedAt: console.acceptanceConfirmation?.confirmation?.confirmedAt,
@@ -3440,7 +3542,8 @@ private struct ProjectDoneCardView: View {
                 onNotYet: row == nil ? nil : { await console.declineDoneRequest(note: $0) },
                 onReopen: { await console.reopenProject() },
                 followUps: followUps,
-                translationFoot: row?.translationFoot(owner: owner, showOriginal: showOriginal) ?? [],
+                translationFoot: OwnerCardTranslations.doneCardFoot(subject: subject, request: row, owner: owner,
+                                                                    showOriginal: showOriginal),
                 onFlipTranslation: { showOriginal.toggle() },
                 notYetRefused: console.doneDeclineRefusedUntranslated,
                 onNotYetAsWritten: row == nil ? nil : { await console.declineDoneRequest(note: $0, sendAsWritten: true) })
@@ -3457,11 +3560,13 @@ private struct ProjectDoneCardView: View {
 /// hands the card's facts to the coordinator this conversation is with.
 private struct ProjectNotDoneCardView: View {
     let console: ConsoleModel
+    @Environment(AppModel.self) private var model
 
     var body: some View {
         if let subject = console.projectDone {
             ProjectNotDoneCard(
                 subject: subject,
+                owner: OwnerCardTranslations.ownerLanguage(model.user),
                 withCoordinator: console.openItems?.withCoordinator.count ?? 0,
                 askedAt: nil,
                 onAskCoordinator: { Task { await console.askCoordinatorAboutDone() } })
@@ -3678,6 +3783,24 @@ struct StartProjectCard: View {
     @ViewBuilder
     private func howItRunsSection(editable: Bool) -> some View {
         StartSectionHead(title: StartProject.howItRuns)
+        if draft.linePending {
+            // A request that named no line (P-M2, board D1, D8): one sentence where the line, its
+            // main branch, its delivery and its landing check were, and the merge check kept.
+            StartPanel {
+                automaticRow(editable: editable)
+                Divider()
+                Text(StartProject.landsWhenCommits)
+                    .font(.orbitProse)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .startRow()
+                    .background(Color.accentColor.opacity(0.08))
+                    .accessibilityIdentifier("start-lands-when-commits")
+                Divider()
+                mergeCheckRow(editable: editable)
+                Divider()
+                atMostRow(editable: editable)
+            }
+        } else {
         StartPanel {
             automaticRow(editable: editable)
             Divider()
@@ -3719,6 +3842,7 @@ struct StartProjectCard: View {
             mergeCheckRow(editable: editable)
             Divider()
             atMostRow(editable: editable)
+        }
         }
         Text(StartProject.howItRunsNote(asked: asked, suggestedOff: asked && !request.settings.automatic))
             .font(.orbitLabel).foregroundStyle(.secondary)
@@ -3768,7 +3892,8 @@ struct StartProjectCard: View {
                                             ownerConfirmed: plan.ownerConfirmed,
                                             evidenceJudged: plan.evidenceJudged,
                                             escalationSeconds: escalationSeconds, main: draft.main,
-                                            deliveryMode: draft.agentPushes ? .agentPush : .platform)
+                                            deliveryMode: draft.agentPushes ? .agentPush : .platform,
+                                            linePending: draft.linePending)
         return VStack(alignment: .leading, spacing: 5) {
             Text(StartProject.comesToYou)
                 .font(.orbitMeta.weight(.semibold)).foregroundStyle(Color.blue)
@@ -4468,11 +4593,12 @@ private struct CoordinatorQuestionCardView: View {
 
     private var questionCard: some View {
         let standing = self.standing
-        // Orange while it waits on the owner, the colour of the `open question below` capsule
-        // that points at it; blue once it is no longer a question.
+        // The brand tone while it waits on the owner — the product's "somebody is being asked"
+        // colour, the same reason its icon and mark are blue — with the heavier edge carrying the
+        // emphasis. The answered card is the grey record (`CoordinatorQuestionRecordView`).
         let open = CoordinatorQuestions.isOpen(standing)
         return ApprovalReviewLayout(title: CoordinatorQuestions.heading,
-                             symbol: "questionmark.bubble.fill", tone: open ? .orange : .blue,
+                             symbol: "questionmark.bubble.fill", tone: .blue,
                              summary: previewSummary,
                              dimmed: !open, emphasized: open) {
             Text(CoordinatorQuestions.provenance)
@@ -4666,16 +4792,17 @@ private struct CoordinatorQuestionCardView: View {
 /// `handover`.
 struct CoordinatorQuestionRecordView: View {
     @Environment(\.inApprovalReview) private var inReview
-    @Environment(\.approvalReviewTarget) private var target
-    @Environment(\.openApprovalReview) private var openReview
     let source: ProjectClosedQuestion
     /// The turn handing the answer over still waits on the queue behind the coordinator's turn.
     var queued = false
     /// What to say when that turn's delivery went unconfirmed.
     var notice: String? = nil
-    /// The words that turn told the coordinator, for the sheet.
+    /// The words that turn told the coordinator, folded at the foot of the unfolded record.
     var told: OwnerAnswerTold? = nil
     @State private var toldOpen = false
+    /// Whether the record is unfolded under the card. Tapping the card toggles it in place (board
+    /// card-ui-polish ③); no sheet opens here.
+    @State private var open = false
     @Environment(AppModel.self) private var app: AppModel?
     /// Settings › Translation: the record flips back to the coordinator's words.
     @State private var showOriginal = false
@@ -4683,11 +4810,14 @@ struct CoordinatorQuestionRecordView: View {
     /// The record as drawn: the question in the owner's language where it was translated.
     private var record: ProjectClosedQuestion { source.shown(owner: owner, showOriginal: showOriginal) }
 
-    init(record: ProjectClosedQuestion, queued: Bool = false, notice: String? = nil, told: OwnerAnswerTold? = nil) {
+    init(record: ProjectClosedQuestion, queued: Bool = false, notice: String? = nil,
+         told: OwnerAnswerTold? = nil, initiallyOpen: Bool = false) {
         self.source = record
         self.queued = queued
         self.notice = notice
         self.told = told
+        // The evidence probe draws the record already unfolded; the conversation opens it folded.
+        _open = State(initialValue: initiallyOpen)
     }
 
     var body: some View {
@@ -4699,9 +4829,6 @@ struct CoordinatorQuestionRecordView: View {
             } actions: {
                 footer
             }
-        } else if let target {
-            Button { openReview(target) } label: { card }
-                .buttonStyle(.plain)
         } else {
             card
         }
@@ -4711,34 +4838,63 @@ struct CoordinatorQuestionRecordView: View {
     /// owner's own words; the note beside the option; an answer no coordinator has had yet, or one
     /// still on the queue; or who withdrew it and why. Its chip is grey, answered or withdrawn: the
     /// question has ended.
+    ///
+    /// Tapping it unfolds the full record in place — the question, every option with the chosen one
+    /// ticked, the owner's note and the footer — and the last row says `Hide details` while open.
     private var card: some View {
         VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
-            HStack(spacing: 8) {
-                Image(systemName: "questionmark.bubble.fill")
-                    .font(.orbitMeta)
-                    .foregroundStyle(Color.gray)
-                    .frame(width: 22, height: 22)
-                    .background(Color.gray.opacity(0.16), in: RoundedRectangle(cornerRadius: 6))
-                Text(CoordinatorQuestions.recordHeading(record))
-                    .font(.orbitProse.bold())
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                Spacer(minLength: 4)
-                if let time = CoordinatorQuestions.time(record) {
-                    Text(time).font(.orbitLabel).foregroundStyle(.secondary)
+            Button { open.toggle() } label: {
+                VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
+                    head
+                    cardLines
+                    if !open {
+                        Divider()
+                        HStack {
+                            Text(CoordinatorQuestions.viewDetails)
+                            Spacer(minLength: 8)
+                            Image(systemName: "chevron.right")
+                        }
+                        .font(.orbitLabel.weight(.semibold)).foregroundStyle(Color.accentColor)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            cardLines
-            Divider()
-            HStack {
-                Text(CoordinatorQuestions.viewDetails)
-                Spacer(minLength: 8)
-                Image(systemName: "chevron.right")
+            .buttonStyle(.plain)
+            if open {
+                details
+                footer
+                Button { open.toggle() } label: {
+                    HStack(spacing: 6) {
+                        Text(CoordinatorQuestions.hideDetails)
+                        Image(systemName: "chevron.up")
+                    }
+                    .font(.orbitLabel.weight(.semibold)).foregroundStyle(Color.accentColor)
+                }
+                .buttonStyle(.plain)
             }
-            .font(.orbitLabel.weight(.semibold)).foregroundStyle(Color.accentColor)
         }
         .approvalChrome(.gray, dashed: queued)
         .contentShape(Rectangle())
+    }
+
+    /// The card's identity row: what this record is, and when the answer ended.
+    private var head: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "questionmark.bubble.fill")
+                .font(.orbitMeta)
+                .foregroundStyle(Color.gray)
+                .frame(width: 22, height: 22)
+                .background(Color.gray.opacity(0.16), in: RoundedRectangle(cornerRadius: 6))
+            Text(CoordinatorQuestions.recordHeading(record))
+                .font(.orbitProse.bold())
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            if let time = CoordinatorQuestions.time(record) {
+                Text(time).font(.orbitLabel).foregroundStyle(.secondary)
+            }
+        }
     }
 
     /// The card's lines under its heading: the question's opening, cut at two lines, then how it
@@ -4997,6 +5153,10 @@ private struct OwnerItemCardView: View {
     var body: some View {
         let standing = self.standing
         let whoFixes = whoFixesRow(standing)
+        let shownRow: ProjectOpenItemRow? = {
+            if case .open(let row) = standing { return row }
+            return nil
+        }()
         VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
             #if os(iOS)
             if let whoFixes {
@@ -5015,10 +5175,10 @@ private struct OwnerItemCardView: View {
                         .lineLimit(1)
                 }
             } else {
-                header(whoFixes)
+                header(whoFixes, row: shownRow)
             }
             #else
-            header(whoFixes)
+            header(whoFixes, row: shownRow)
             #endif
             if whoFixes == nil {
                 Text(ExceptionCards.provenance)
@@ -5056,6 +5216,9 @@ private struct OwnerItemCardView: View {
                 nextBlock(row)
                 factBlock(row)
                 handlingBlock(row)
+                // A repair task is live on it: every door is a quiet link in one row with the chat,
+                // under the facts (board card-ui-polish ①, D1 = A).
+                if ExceptionCards.fixing(row) { quietRow(row) }
                 if askingToHandle { markHandledPanel() }
                 if observing {
                     ObserveAgainPanel(console: console, sending: $sending) { observing = false }
@@ -5079,8 +5242,11 @@ private struct OwnerItemCardView: View {
         }
     }
 
-    /// The card's header row: its kind, and the "Who fixes it?" card's one clock.
-    @ViewBuilder private func header(_ whoFixes: ProjectOpenItemRow?) -> some View {
+    /// The card's header row: its kind, the "Fixing" tag beside that kind while a repair task is
+    /// live on it (board card-ui-polish ①, in the Handling tag's blue), and the "Who fixes it?"
+    /// card's one clock.
+    @ViewBuilder private func header(_ whoFixes: ProjectOpenItemRow?,
+                                     row: ProjectOpenItemRow? = nil) -> some View {
         HStack(alignment: .center, spacing: 8) {
             // Work that reached main without the owner's confirmation is no escalation: it wears
             // its own kind word, the banner's, and the merge's mark (§10.7, as Android draws it).
@@ -5088,7 +5254,9 @@ private struct OwnerItemCardView: View {
                                : shownKind == .landedWithoutConfirmation ? "arrow.triangle.merge"
                                : "exclamationmark.triangle.fill",
                            title: ExceptionCards.title(shownKind, isPause: isPause),
-                           tone: .orange)
+                           tone: .orange,
+                           inlineTag: row.flatMap { ExceptionCards.fixing($0) ? ExceptionCards.fixingTag : nil },
+                           inlineTagTint: .accentColor)
             // D3 = A: the "Who fixes it?" card's one clock — the total wait, top right — in
             // place of the footer.
             if let whoFixes {
@@ -5104,75 +5272,168 @@ private struct OwnerItemCardView: View {
     /// pressing it does. The browser draws the same three in one washed panel at the top of its
     /// body (`project-open-item-next`), and reading order is the whole point of it: the reader knows
     /// what is being asked before they are shown what happened.
+    ///
+    /// While a repair task is live, that sentence and the handled-by line say the same thing twice
+    /// (board card-ui-polish ①): the block becomes the one line naming the task, and the doors wait
+    /// under the facts as quiet links (`quietRow`).
     @ViewBuilder private func nextBlock(_ row: ProjectOpenItemRow) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(ExceptionCards.requiredAction(row))
-                #if os(iOS)
-                // Never a large bold block on a phone (board owner-card-ios-text, rule 2): the doors
-                // under it say the same thing.
-                .font(.subheadline)
-                #else
-                .font(.orbitProse.weight(.semibold))
-                #endif
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            if let fixing = ExceptionCards.handledByLine(row) {
-                Text(fixing)
-                    .font(.orbitLabel)
-                    .foregroundStyle(.tint)
+        if ExceptionCards.fixing(row) {
+            fixingBlock(row)
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(ExceptionCards.requiredAction(row))
+                    #if os(iOS)
+                    // Never a large bold block on a phone (board owner-card-ios-text, rule 2): the doors
+                    // under it say the same thing.
+                    .font(.subheadline)
+                    #else
+                    .font(.orbitProse.weight(.semibold))
+                    #endif
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            ApprovalActions(stacked: true) {
-                // The card's own presses, in the three weights of mock 7 方案 B and the order the
-                // browser draws the same doors in — from the console's own read, which is what says
-                // whether the merge card a `Review` points at is on screen. A pause is a card of its
-                // own on both clients: one press, and not one of these weights.
-                if isPause {
-                    if pressable(row) {
-                        doorRow(ExceptionCards.actionConsequence(row, .resume)) {
-                            Button { press(row) } label: {
-                                Text(ExceptionCards.resume).approvalActionLabel()
+                if let fixing = ExceptionCards.handledByLine(row) {
+                    Text(fixing)
+                        .font(.orbitLabel)
+                        .foregroundStyle(.tint)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                ApprovalActions(stacked: true) {
+                    // The card's own presses, in the three weights of mock 7 方案 B and the order the
+                    // browser draws the same doors in — from the console's own read, which is what says
+                    // whether the merge card a `Review` points at is on screen. A pause is a card of its
+                    // own on both clients: one press, and not one of these weights.
+                    if isPause {
+                        if pressable(row) {
+                            doorRow(ExceptionCards.actionConsequence(row, .resume)) {
+                                Button { press(row) } label: {
+                                    Text(ExceptionCards.resume).approvalActionLabel()
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(sending)
                             }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(sending)
+                        }
+                    } else {
+                        ForEach(ExceptionCards.presses(row, mergeCard: console.mergeCardPromotionID),
+                                id: \.action) { cardPress in
+                            cardPressDoor(cardPress, row: row)
                         }
                     }
-                } else {
-                    ForEach(ExceptionCards.presses(row, mergeCard: console.mergeCardPromotionID),
-                            id: \.action) { cardPress in
-                        cardPressDoor(cardPress, row: row)
+                    // And the other way out, which is a sentence rather than a press: the card hands the
+                    // item to the composer, and the coordinator is told what to do about it. The same
+                    // control — and the same word — as the four other cards that do this
+                    // (`Approvals.chatAction`).
+                    Button {
+                        PlatformHaptics.tap()
+                        console.startOwnerItemReply(row, isPause: isPause)
+                    } label: {
+                        Text(Approvals.chatAction).approvalActionLabel()
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(sending)
+                    // The owner's own ending, drawn last and quietest (方案 B): it is for an exception
+                    // nobody has to act on any more, offered to the one reader who knows — and it is a
+                    // door like every other one here, so it wears its own line saying what it ends
+                    // (the browser draws it inside `CardActions` with the same consequence).
+                    if !isPause && ExceptionCards.markable(row) {
+                        doorRow(ExceptionCards.markHandledConsequence) {
+                            markHandledButton()
+                        }
                     }
                 }
-                // And the other way out, which is a sentence rather than a press: the card hands the
-                // item to the composer, and the coordinator is told what to do about it. The same
-                // control — and the same word — as the four other cards that do this
-                // (`Approvals.chatAction`).
-                Button {
-                    PlatformHaptics.tap()
-                    console.startOwnerItemReply(row, isPause: isPause)
-                } label: {
-                    Text(Approvals.chatAction).approvalActionLabel()
-                }
-                .buttonStyle(.bordered)
-                .disabled(sending)
-                // The owner's own ending, drawn last and quietest (方案 B): it is for an exception
-                // nobody has to act on any more, offered to the one reader who knows — and it is a
-                // door like every other one here, so it wears its own line saying what it ends
-                // (the browser draws it inside `CardActions` with the same consequence).
-                if !isPause && ExceptionCards.markable(row) {
-                    doorRow(ExceptionCards.markHandledConsequence) {
-                        markHandledButton()
-                    }
-                }
+            }
+            .padding(.horizontal, 10).padding(.vertical, 9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8).strokeBorder(Color.orange.opacity(0.22))
+            }
+        }
+    }
+
+    /// The one line a live repair is drawn as: "Being fixed in <task ↗>", each title a link to the
+    /// task, and under it what it asks of the reader — nothing unless it fails.
+    private func fixingBlock(_ row: ProjectOpenItemRow) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            ProgressView().controlSize(.small).padding(.top, 2)
+            VStack(alignment: .leading, spacing: 3) {
+                // One attributed line rather than a row of buttons: the title wraps inside the card
+                // (a flow of independent views measured it at its full single-line width and stretched
+                // the whole card past the phone's edge), and the link is the text itself.
+                Text(fixingLine(row))
+                    .font(.orbitLabel)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(ExceptionCards.fixingNothingForYou)
+                    .font(.orbitMeta).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .padding(.horizontal, 10).padding(.vertical, 9)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .background(Color.accentColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
         .overlay {
-            RoundedRectangle(cornerRadius: 8).strokeBorder(Color.orange.opacity(0.22))
+            RoundedRectangle(cornerRadius: 8).strokeBorder(Color.accentColor.opacity(0.35))
         }
+    }
+
+    /// "Being fixed in <title ↗> · <title ↗>": the first task's title is the link, and the rest
+    /// follow after a middot. A task whose id names no task is drawn as plain words rather than as a
+    /// link that could only do nothing.
+    private func fixingLine(_ row: ProjectOpenItemRow) -> AttributedString {
+        var line = AttributedString("\(ExceptionCards.beingFixedIn) ")
+        for (index, task) in ExceptionCards.liveRepairs(row).enumerated() {
+            if index > 0 { line += AttributedString(" · ") }
+            var title = AttributedString("\(task.title) ↗")
+            if let url = ExceptionCards.repairLink(task) {
+                title.link = url
+                title.foregroundColor = .accentColor
+                title.font = .orbitLabel.weight(.semibold)
+            }
+            line += title
+        }
+        return line
+    }
+
+    /// Every door as a quiet link, in one row with Chat about this, while a repair task is live:
+    /// nothing here is the reader's next step, so nothing carries a consequence line (board
+    /// card-ui-polish ①, D1 = A; web `project-open-item-quiet-row`).
+    @ViewBuilder private func quietRow(_ row: ProjectOpenItemRow) -> some View {
+        FlowLayout(spacing: 14) {
+            if !isPause {
+                ForEach(ExceptionCards.presses(row, mergeCard: console.mergeCardPromotionID,
+                                               quiet: true), id: \.action) { cardPress in
+                    if let make = makePress(cardPress, row: row) {
+                        Button(action: make) {
+                            Text(cardPress.label)
+                        }
+                        .buttonStyle(.plain)
+                        .font(.orbitLabel)
+                        .foregroundStyle(.tint)
+                        .disabled(sending)
+                    }
+                }
+            } else if pressable(row) {
+                Button { press(row) } label: { Text(ExceptionCards.resume) }
+                    .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.tint)
+                    .disabled(sending)
+            }
+            Button {
+                PlatformHaptics.tap()
+                console.startOwnerItemReply(row, isPause: isPause)
+            } label: {
+                Text(Approvals.chatAction)
+            }
+            .buttonStyle(.plain)
+            .font(.orbitLabel)
+            .foregroundStyle(.tint)
+            .disabled(sending)
+            if !isPause && ExceptionCards.markable(row) {
+                markHandledButton()
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// One door and the line that says what pressing it does. On a phone the line goes UNDER the

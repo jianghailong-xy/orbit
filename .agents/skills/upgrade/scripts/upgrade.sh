@@ -255,6 +255,61 @@ managed_runner_services_up() {
 }
 # ── end of the managed runners' section ─────────────────────────────────────────────────────────────
 
+# Monitoring (docs/self-hosting.md, "Monitoring"). Once, the first time this script runs on a .env that has no
+# ORBIT_MONITORING, the profile is switched on the way the runner link's is: the lines are appended at the end, every
+# line already there stays as it was, and Compose takes the last COMPOSE_PROFILES, which repeats the list above it with
+# monitoring. ORBIT_MONITORING=on is the record that this was done. Once the name is in .env, a later run never adds the
+# profile, so an operator who removes monitoring from COMPOSE_PROFILES keeps it off; adding it back by hand turns it on.
+# Grafana's admin password is written, once, wherever the profile is on and .env has none; one already there is never
+# replaced. postgres-exporter's password is made by the pg-monitor-role service into a volume, and is in no file.
+# A COMPOSE_PROFILES exported in this shell is what Compose takes, so it is left to its owner. Grafana is published on
+# this host's loopback alone.
+monitoring_profile_on() {
+  printf '%s\n' "${COMPOSE_PROFILES:-$(link_env COMPOSE_PROFILES)}" | tr ',' '\n' | tr -d ' ' | grep -x monitoring >/dev/null
+}
+monitoring_enable() {
+  local profiles stamp password_line=""
+  [ -f .env ] || return 0
+  stamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  if [ -z "$(link_env ORBIT_MONITORING)" ] && [ -z "${COMPOSE_PROFILES:-}" ]; then
+    profiles="$(link_env COMPOSE_PROFILES | tr -d ' ')"
+    if [ -n "$(tail -c 1 .env)" ]; then printf '\n' >>.env || return 0; fi
+    if monitoring_profile_on; then
+      # Turned on by hand before this script knew of it: only the record is written.
+      ( umask 077 && printf '# Monitoring: recorded by the upgrade script at %s. While ORBIT_MONITORING is here, an upgrade never adds monitoring back.\nORBIT_MONITORING=on\n' "$stamp" >>.env ) \
+        || { echo "!!  warning: could not write to .env; monitoring is left as it is" >&2; return 0; }
+    else
+      [ -n "$(link_env GRAFANA_ADMIN_PASSWORD)" ] || password_line="GRAFANA_ADMIN_PASSWORD=\"$(openssl rand -hex 16)\""$'\n'
+      ( umask 077 && printf '# ─────────── Monitoring: written by the upgrade script at %s ───────────\n# docs/self-hosting.md, "Monitoring". To turn it off, remove monitoring from the COMPOSE_PROFILES line below and keep\n# ORBIT_MONITORING: while that name is in this file, an upgrade does not add monitoring back.\nORBIT_MONITORING=on\n%sCOMPOSE_PROFILES=%s\n' \
+          "$stamp" "$password_line" "${profiles:+$profiles,}monitoring" >>.env ) \
+        || { echo "!!  warning: could not write to .env; monitoring is left as it is" >&2; return 0; }
+      echo "==> Monitoring is on: wrote ORBIT_MONITORING, COMPOSE_PROFILES and Grafana's admin password to .env (not shown)"
+    fi
+  fi
+  monitoring_profile_on || return 0
+  [ -z "$(link_env GRAFANA_ADMIN_PASSWORD)" ] || return 0
+  if [ -n "$(tail -c 1 .env)" ]; then printf '\n' >>.env || return 0; fi
+  ( umask 077 && printf '# Grafana'"'"'s admin password, written by the upgrade script at %s. Grafana keeps the one it first started with.\nGRAFANA_ADMIN_PASSWORD="%s"\n' \
+      "$stamp" "$(openssl rand -hex 16)" >>.env ) || { echo "!!  warning: could not write Grafana's admin password to .env" >&2; return 0; }
+  echo "==> Wrote GRAFANA_ADMIN_PASSWORD to .env (not shown)"
+}
+
+# After the stack is up: the monitoring services, where the profile is on. They are not in SERVICES, which is only what
+# an upgrade rebuilds, so `up` is told them by name; pg-monitor-role runs first, as a dependency. Loki refuses every write
+# once the data disk passes 90% (-ingester.wal-disk-full-threshold 0.9), so a host over that gets a warning, and Alloy
+# reads each container's log file from its start, dropping lines older than an hour.
+MONITORING_SERVICES="prometheus node-exporter postgres-exporter grafana loki alloy"
+monitoring_up() {
+  monitoring_profile_on || return 0
+  local used
+  used="$(df -P . 2>/dev/null | awk 'NR==2 { sub(/%/, "", $5); print $5 }')"
+  if [ -n "$used" ] && [ "$used" -gt 90 ] 2>/dev/null; then
+    echo "!!  warning: the disk this deployment is on is ${used}% full. Loki refuses every write once it passes 90%, so no logs are kept until space is freed." >&2
+  fi
+  echo "==> Starting the monitoring services"
+  $DC up -d --wait --wait-timeout 300 $MONITORING_SERVICES
+}
+
 # ── Runner link: this section is the same in both copies of /upgrade's script ───────────────────────
 # Runners work over the runner link (docs/self-hosting.md, "Runner link"), so an upgrade brings it up on a deployment that
 # has none. What .env says decides what this script may do:
@@ -732,6 +787,7 @@ else
 fi
 # Once what can stop this run before anything is built has had its say.
 if [ "$LINK_EARLY" -eq 0 ]; then link_prepare; fi
+monitoring_enable
 # The other apiservers a deployment adds in docker-compose.override.yml, apiserver-2 and on (docs/self-hosting.md,
 # "Several apiservers"). They run the apiserver's image and build nothing; they are recreated after it, below.
 # Where Compose lists none, nothing is added.
@@ -784,6 +840,7 @@ fi
 if printf '%s\n' "$COMPOSE_SERVICES" | grep -x pgbackup >/dev/null; then
   pgbackup_up
 fi
+monitoring_up
 
 echo "==> Stack status"
 $DC ps

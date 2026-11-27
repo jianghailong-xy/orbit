@@ -37,10 +37,10 @@ import {
   CreatorType,
   PrismaClient,
   RunnerStatus,
-  RunStatus,
   SessionDispatchOrigin,
   TaskCompletionCriterion,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -67,6 +67,8 @@ import { ViewerStreamCaps } from '../sessions/viewer-stream-caps';
 import { SharedRateLimiter } from '../shared/public-surface.guard';
 import { SharedController } from '../shared/shared.controller';
 import { ViewerStreamService } from '../sessions/viewer-stream.service';
+import { DriveContentService } from '../drive/drive-content.service';
+import { DriveService } from '../drive/drive.service';
 import { ShareLinksController } from './share-links.controller';
 import { ShareLinksService } from './share-links.service';
 
@@ -176,7 +178,7 @@ test('share links: one row per link, an owner interface for three roots, one 404
     await db.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, title, prompt: title,
-        status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+        turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
         ...(extra.legacyToken ? { shareToken: extra.legacyToken, sharedAt: extra.legacySharedAt ?? null } : {}),
         ...(extra.deletedAt ? { deletedAt: extra.deletedAt } : {}),
       },
@@ -227,6 +229,9 @@ test('share links: one row per link, an owner interface for three roots, one 404
       { provide: SessionsService, useValue: sessions },
       { provide: AttachmentsService, useValue: new AttachmentsService(prisma) },
       { provide: ShareLinksService, useValue: new ShareLinksService(prisma) },
+      // Drive file links, which nothing here shares or opens (share-links-drive-file.pg.spec.ts holds them).
+      { provide: DriveService, useValue: {} },
+      { provide: DriveContentService, useValue: {} },
       // A budget no case here comes near: the budget is public-surface.pg.spec's subject, not this one's.
       { provide: SharedRateLimiter, useValue: new SharedRateLimiter({ max: 100_000, windowMs: 60_000 }) },
       // The anonymous viewer streams' caps, at their defaults: the caps are public-surface.pg.spec's subject.

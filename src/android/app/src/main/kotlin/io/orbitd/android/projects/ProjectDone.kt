@@ -6,6 +6,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.max
 
 /** The owner records a project done at `POST /projects/:id/done` — bound to the seal they read, answering the coordinator's
  * DONE_REQUEST when there is one, and leaving an OWNER record a later check does not undo — or answers the request "Not yet…"
@@ -41,6 +42,7 @@ object ProjectDone {
     const val checkTask = "1 task is still running"
     const val checkOwnerItems = "Open owner items: {n}"
     const val checkLandings = "Landings in flight: {n}"
+    const val checkDeferredLandings = "Landings waiting for work sessions to finish: {n}"
     const val findingsHeading = "Orbit can’t prove {n} things"
     const val findingsAccepted = "These will be kept as the gaps you accepted."
     const val recordAsDoneAnyway = "Record as done anyway"
@@ -125,9 +127,34 @@ object ProjectDone {
         if (nonCode) return (listOf(DoneCopy.DONE_CARD_TALLY_OF.replace("{met}", "${counts.n("met")}").replace("{n}", "${counts.n("criteria")}")) + wait).joinToString(" · ")
         val noBranch = counts.obj("byReason")?.number("NO_BRANCH") ?: 0
         val nothing = nothingToLandCount(counts)
+        // The unmet criteria, apart from any landing reason; those waiting for a confirmation are said by their own part, so none is
+        // counted twice.
+        val unmet = max(0, notMetCount(counts) - waitingConfirmation)
         return (listOf("${counts.n("met")} met", "${counts.n("onMain")} ${landedOn(main)}") +
-            listOfNotNull(noBranch.takeIf { it > 0 }?.let { "$it ${reasonLabel("NO_BRANCH")}" }, nothing.takeIf { it > 0 }?.let { "$it $nothingToLand" }) + wait)
+            listOfNotNull(noBranch.takeIf { it > 0 }?.let { "$it ${reasonLabel("NO_BRANCH")}" }, nothing.takeIf { it > 0 }?.let { "$it $nothingToLand" },
+                unmet.takeIf { it > 0 }?.let { "$it $notMet" }) + wait)
             .joinToString(" · ")
+    }
+    /** The criteria their work has not met, counted apart: `counts.byReason` and `onMain` tally met criteria only, so an unmet one is
+     * never said by its landing lane (web's and OrbitKit's `notMetCount`). */
+    private fun notMetCount(counts: JsonObject) = max(0, counts.n("criteria") - counts.n("met"))
+    /** `projectDoneTally` (OrbitKit `ProjectDone.tally`): the criteria, how many are met, where met work landed, and the unmet ones apart:
+     * "5 criteria · 1 met · 0 landed on main · 1 in flight · 4 not met". */
+    fun tally(counts: JsonObject?, main: String = RunSettings.defaultMainBranch): String {
+        counts ?: return ""
+        val byReason = counts.obj("byReason")
+        return (listOf("${counts.n("criteria")} criteria", "${counts.n("met")} met", "${counts.n("onMain")} ${landedOn(main)}") +
+            reasonParts { byReason?.number(it) ?: 0 } + listOfNotNull(notMetCount(counts).takeIf { it > 0 }?.let { "$it $notMet" })).joinToString(" · ")
+    }
+    /** What the page's Record as done confirmation says (OrbitKit `recordAsDoneTally`): the Done tally, unmet criteria counted apart and
+     * never by their landing reason. A non-code project reads no landing, so it says how many are met and not met; with no counts (an
+     * older server) the criteria themselves are counted the same way. */
+    fun recordAsDoneTally(doc: JsonObject): String {
+        val counts = counts(doc)
+        if (counts != null && !DoneFollowUps.nonCode(doc)) return tally(counts, mainBranch(doc))
+        val (all, met) = counts?.let { it.n("criteria") to it.n("met") }
+            ?: doc.objects("acceptanceCriteriaItems").let { c -> c.size to c.count { ProjectDoc.satisfied(it) == true } }
+        return (listOf("$all criteria", "$met met") + listOfNotNull((all - met).takeIf { it > 0 }?.let { "$it $notMet" })).joinToString(" · ")
     }
     /** `projectDoneReceiptTally`: how many were met, then the same three, then what was accepted. */
     fun receiptTally(counts: JsonObject?, acceptedGaps: Int, main: String = RunSettings.defaultMainBranch, nonCode: Boolean = false) = if (counts == null) "$acceptedGaps $gapsAccepted"
@@ -194,6 +221,7 @@ object ProjectDone {
             "DONE_TASKS_IN_FLIGHT" -> (if (finding.objects("tasks").size == 1) checkTask else checkTasks) to finding.objects("tasks").size
             "DONE_OWNER_ITEMS_OPEN" -> checkOwnerItems to finding.objects("items").size
             "DONE_INTEGRATION_IN_FLIGHT" -> checkLandings to finding.objects("jobs").size
+            "DONE_LANDING_DEFERRED" -> checkDeferredLandings to finding.objects("tasks").size
             else -> return finding.text("message").orEmpty()
         }
         return template.replace("{n}", "$n").replace("{main}", main)
@@ -260,7 +288,10 @@ object ProjectDone {
         return (items.objects("needsYou") + items.objects("withCoordinator") + listOfNotNull(items.obj("startRequest")))
             .count { reviewing == null || it.text("itemId") != reviewing }
     }
-    fun runningCount(doc: JsonObject) = counts(doc)?.obj("byReason")?.n("IN_FLIGHT") ?: 0
+    /** How many criteria are still landing, met or not — what the Orbit checked line calls running. Read off the criteria, since
+     * `counts.byReason` tallies met criteria only (web's and OrbitKit's `criteriaInFlightCount`). */
+    fun runningCount(doc: JsonObject) = criteriaInFlightCount(doc.obj("derivedDone"))
+    fun criteriaInFlightCount(derivedDone: JsonObject?) = derivedDone?.objects("criteria")?.count { it.text("landingReason") == "IN_FLIGHT" } ?: 0
     /** `orbitCheckedText`: whether every criterion is met, what is running, what is open, and when the owner confirmed the criteria. */
     fun orbitCheckedLine(counts: JsonObject?, confirmedAt: String?, openItems: Int, running: Int, zone: ZoneId = ZoneId.systemDefault()): String {
         val allMet = counts != null && counts.n("met") == counts.n("criteria")

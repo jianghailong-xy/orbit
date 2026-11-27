@@ -18,7 +18,7 @@ final class SettingsHomeTests: XCTestCase {
         // Machines and Providers have no header: each one row says that name.
         XCTAssertEqual(SettingsHome.Group.allCases.map(SettingsHome.header), ["Personal", "Integrations", nil, nil])
         XCTAssertEqual(SettingsHome.rows(.personal),
-                       [.general, .notifications, .appearance, .profile, .sharedLinks, .accessTokens, .terminals])
+                       [.general, .notifications, .appearance, .profile, .sharedLinks, .accessTokens])
         // Integrations, as the web's settings nav groups it: GitHub's page (docs/github-workspace-design.md §8).
         XCTAssertEqual(SettingsHome.rows(.integrations), [.github])
         XCTAssertEqual(SettingsHome.page(.github), .github)
@@ -43,7 +43,7 @@ final class SettingsHomeTests: XCTestCase {
         XCTAssertEqual(Set(rows.map(SettingsHome.systemImage)).count, rows.count, "two rows share a glyph")
         XCTAssertEqual(rows.map(SettingsHome.title),
                        ["General", "Notifications", "Appearance", "Profile", "Shared links", "Access tokens",
-                        "Terminals", "GitHub", "Machines", "Providers"])
+                        "GitHub", "Machines", "Providers"])
         XCTAssertEqual(SettingsHome.systemImage(.machines), AppSection.runners.systemImage)
     }
 
@@ -71,7 +71,7 @@ final class SettingsHomeTests: XCTestCase {
         XCTAssertEqual(SessionSettings.Row.allCases,
                        [.defaultPermission, .orchestration, .modelRouting, .optimizeFor, .promptSuggestions, .recaps])
         XCTAssertEqual(SessionSettings.Row.allCases.map(SessionSettings.title),
-                       ["Default permission", "Session orchestration", "Smart model selection", "Optimize For",
+                       ["Default permission", "Session orchestration", "Route by tier", "Optimize For",
                         "Suggested replies", "Session recaps"])
         XCTAssertEqual(SessionSettings.footer(.defaultPermission), SettingsCopy.defaultPermissionHint)
         XCTAssertEqual(SessionSettings.footer(.orchestration), SettingsCopy.letSessionsOrchestrateHint)

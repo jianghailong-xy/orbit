@@ -1,9 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { HttpException, HttpStatus } from '@nestjs/common';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { SPAWN_TREE_OUTSTANDING } from '../common/session-scheduling';
 import { SessionsService } from './sessions.service';
+import { turnStateFilter } from './session-turn-state';
+
+/** The word each turn state is the fact of (session-turn-state.ts), for the inventory the mock counts. */
+const WORD_OF_TURN_STATE: Record<string, RunStatus> = {
+  QUEUED: RunStatus.PENDING, IN_FLIGHT: RunStatus.RUNNING, ABANDONED: RunStatus.INTERRUPTED,
+};
 
 /** What the tree actually holds, by status — the mock answers counts from this. */
 type Tree = Partial<Record<RunStatus, number>>;
@@ -31,16 +37,17 @@ function makeService(tree: Tree | number, startedThisHour = 0) {
       // Two different questions about the same tree: how much of it is unfinished, and how
       // fast it is being created. They are told apart by what the count filters on.
       //
-      // The status filter is applied for real rather than ignored, so these tests measure
-      // which statuses the service decided to charge for — the thing that was wrong.
+      // The turn state filter is applied for real rather than ignored, so these tests measure
+      // which states the service decided to charge for — the thing that was wrong.
       count: async ({
         where,
       }: {
-        where: { createdAt?: unknown; status?: { in: RunStatus[] } };
+        where: { createdAt?: unknown; OR?: Array<{ turnState?: { in?: string[] } }> };
       }) => {
         if (where.createdAt !== undefined) return startedThisHour;
         counted = where;
-        return (where.status?.in ?? []).reduce((n, s) => n + (inventory[s] ?? 0), 0);
+        const states = where.OR?.find((branch) => branch.turnState?.in)?.turnState?.in ?? [];
+        return states.map((state) => WORD_OF_TURN_STATE[state]).reduce((n, s) => n + (inventory[s] ?? 0), 0);
       },
     },
     user: { findUnique: async () => null },
@@ -93,7 +100,8 @@ test('the limit counts only sessions that still owe an answer', async () => {
 
   assert.deepEqual(counted(), {
     rootSessionId: 'root',
-    status: { in: [RunStatus.PENDING, RunStatus.RUNNING] },
+    // Held with a turn queued or in flight (a row not yet backfilled by its stored word).
+    ...turnStateFilter(['QUEUED', 'IN_FLIGHT']),
   });
 });
 

@@ -34,7 +34,7 @@ import java.net.URL
  * is ready and which claimed two Harness sessions on a DeepSeek key — one asking an approval, one failed with DeepSeek's real 401
  * sentence — and "a07d-dsh-old", whose Harness is a version Orbit doesn't support, and which answers an install. Signed in through
  * the product's screen, the app reads what the real server says and presses what it offers: the approval card's Allow and Deny alone,
- * the repair card and its Retry, a `!` command kept in the composer, the chip's runtime-picked model, and the engine page's install
+ * the repair card and its Retry, a `!` command sent as a shell turn, the chip's runtime-picked model, and the engine page's install
  * through the server's relay. Every press is read back from the stack's API with the owner's own token, beside the screenshots.
  * Arguments as ComposerStackDeviceTest's (a11Seed with its `a07d` part, ownerEmail, ownerPassword; base64), run by
  * scripts/tasks-projects-stack-device-test.sh with A11_TEST naming this class.
@@ -203,8 +203,9 @@ class DshStackDeviceTest {
         capture("a07d-stack-repair-retried")
     }
 
-    /** e789ce3dc, 7ca6ab87e: on Harness a `!` command stays in the composer with why, and the chip says the runtime picks the model. */
-    @Test fun s3_aShellCommandStaysAndTheChipSaysHarnessPicks() = journey("a07d-stack-composer") {
+    /** e789ce3dc, 7ca6ab87e: a `!` command on Harness goes out as a runner shell turn like any other engine's, and the chip says the
+     * runtime picks the model. */
+    @Test fun s3_aShellCommandGoesOutAndTheChipSaysHarnessPicks() = journey("a07d-stack-composer") {
         val id = sessionId("approval")
         val before = api("/sessions/$id").jsonObject
         reads += "before: model=${before.field("model")} engine=${before.field("engine")} status=${before.field("status")}"
@@ -214,14 +215,11 @@ class DshStackDeviceTest {
         }
         compose.onNodeWithTag("composer-input").performTextInput("!git status")
         compose.onNodeWithTag("composer-send").performClick()
-        awaitText("DeepSeek Harness sessions don't run ! shell commands — ask the agent to run it instead.")
-        assertTrue("the command stays where it was typed", has(hasTestTag("composer-input") and hasText("!git status")))
-        capture("a07d-stack-shell-refused")
-        // Nothing went out: no turn queued behind the running one.
-        SystemClock.sleep(3_000)
-        val turns = api("/sessions/$id/turns")
+        val turns = awaitServer("/sessions/$id/turns", "the ! command went out as a shell turn") { all ->
+            all.jsonArray.any { turn -> turn.jsonObject.field("kind") == "shell" && turn.jsonObject.field("content") == "git status" }
+        }
         keep("a07d-stack-shell-turns", turns)
-        assertTrue("no turn for the ! command: $turns", turns.jsonArray.none { it.jsonObject.toString().contains("git status") })
+        capture("a07d-stack-shell-sent")
         compose.onNodeWithTag("composer-input").performTextReplacement("")
     }
 

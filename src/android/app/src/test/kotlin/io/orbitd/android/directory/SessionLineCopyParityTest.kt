@@ -36,8 +36,8 @@ class SessionLineCopyParityTest {
 
     @Test fun everyFixedWordIsALiteralOfTheSwiftLineOrHeader() {
         val both = line + header
-        listOf(SessionLineCopy.running, SessionLineCopy.queued).forEach { assertLiteral(line, "SessionLine.swift", it) }
-        listOf(SessionLineCopy.queued, SessionLineCopy.stateRunning, SessionLineCopy.waitingForReply, SessionLineCopy.succeeded,
+        listOf(SessionLineCopy.running).forEach { assertLiteral(line, "SessionLine.swift", it) }
+        listOf(SessionLineCopy.queued, SessionLineCopy.stateRunning, SessionLineCopy.waitingForReply, SessionLineCopy.succeeded, SessionLineCopy.finished, SessionLineCopy.onHold,
             SessionLineCopy.retrying, SessionLineCopy.disconnected, SessionLineCopy.failed, SessionLineCopy.interrupted, SessionLineCopy.ended,
             SessionLineCopy.waitingToResume,
         ).forEach { assertLiteral(header, "SessionHeader.swift", it) }
@@ -46,7 +46,7 @@ class SessionLineCopyParityTest {
         val declared = SessionLineCopy::class.java.declaredFields.filter { it.type == String::class.java }
             .map { it.isAccessible = true; it.get(null) as String }
         assertTrue("a SessionLineCopy word is in neither Swift source: $declared", declared.all { both.contains("\"$it\"") })
-        assertEquals(14, declared.size)
+        assertEquals(16, declared.size)
     }
 
     @Test fun everyBuiltLineIsOneSwiftLiteral() {

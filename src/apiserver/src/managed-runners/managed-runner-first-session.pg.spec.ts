@@ -80,6 +80,7 @@ import {
   type ManagedRunnerRuntime,
 } from './managed-runner-runtime';
 import '../test-support/daemon-routes-over-http';
+import { wordOf } from '../test-support/session-word';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -284,7 +285,7 @@ test('a new account queues its first session while its managed runner waits for 
     const made = await call(server, 'POST', '/api/workspaces', fresh.token,
       { name: 'Project', runnerId: waiting.runnerId, newFolder: 'project' });
     assert.equal(made.status, 201, made.text);
-    assert.equal(made.json.workDir, '/home/orbit/orbit-repos/project');
+    assert.equal(made.json.workDir, '/home/orbit/project');
     type Listed = { id: string; lastProvider: string; lastEngine: string; providerBuiltin: boolean };
     const listed = async () => ((await call(server, 'GET', '/api/workspaces', fresh.token)).json as Listed[])
       .find((w) => toUuid(w.id) === toUuid(made.json.id))!;
@@ -339,7 +340,7 @@ test('a new account queues its first session while its managed runner waits for 
     assert.equal(named.status, 201, named.text);
     assert.deepEqual([named.json.status, named.json.provider, named.json.engine], ['PENDING', slug, 'claude']);
     const newWorkspace = await db.workspace.findUniqueOrThrow({ where: { id: toUuid(named.json.workspaceId) } });
-    assert.equal(newWorkspace.workDir, '/home/orbit/orbit-repos/first-session');
+    assert.equal(newWorkspace.workDir, '/home/orbit/first-session');
     const first = await call(server, 'POST', '/api/sessions', fresh.token, { workspaceId: workspace.id, prompt: 'the second message', title: 'existing workspace, nothing named' });
     assert.equal(first.status, 201, first.text);
     assert.deepEqual([first.json.status, first.json.provider, first.json.engine], ['PENDING', slug, 'claude']);
@@ -369,10 +370,16 @@ test('a new account queues its first session while its managed runner waits for 
     // The holder goes to sleep through the owner's request and the whole handshake.
     const asked = await call(server, 'POST', '/api/managed-runner/sleep', holder.token, { idempotencyKey: `sleep-${randomUUID()}`, revision: held.revision });
     assert.equal(asked.status, 202, asked.text);
-    await until(`${backend}: the holder DRAINING`, async () => (await mappingOf(holder.id))?.managementState === 'DRAINING');
-    const request = await heartbeat(held.runnerId, [{ engine: 'claude', installed: true, auth: 'yes' }]);
+    const holderEngines = [{ engine: 'claude', installed: true, auth: 'yes' }];
+    await until(`${backend}: the holder DRAINING`, async () => {
+      if ((await mappingOf(holder.id))?.managementState === 'DRAINING') return true;
+      // Report idle workload after the sleep request so the manager can start draining.
+      await heartbeat(held.runnerId, holderEngines);
+      return false;
+    });
+    const request = await heartbeat(held.runnerId, holderEngines);
     assert.ok(request.managedSleep?.requestedAt, `the drained instance is asked: ${JSON.stringify(request)}`);
-    const accepted = await heartbeat(held.runnerId, [{ engine: 'claude', installed: true, auth: 'yes' }], { ...IDLE, sleepReady: request.managedSleep!.requestedAt });
+    const accepted = await heartbeat(held.runnerId, holderEngines, { ...IDLE, sleepReady: request.managedSleep!.requestedAt });
     assert.equal(accepted.managedSleep?.confirmed, true);
     host.stopped(held.runnerId);
     await until(`${backend}: the holder SLEEPING`, async () => (await mappingOf(holder.id))?.managementState === 'SLEEPING');
@@ -389,7 +396,7 @@ test('a new account queues its first session while its managed runner waits for 
       assert.equal(claimed.provider, 'claude');
       assert.equal(claimed.agent.env.ANTHROPIC_BASE_URL, 'https://api.deepseek.com/anthropic');
     }
-    assert.equal((await db.session.findUniqueOrThrow({ where: { id: toUuid(first.json.id) } })).status, 'RUNNING');
+    assert.equal(wordOf((await db.session.findUniqueOrThrow({ where: { id: toUuid(first.json.id) } }))), 'RUNNING');
     // Once reported, both routes use create-workdir/v2's home rule, including while asleep.
     await db.runner.update({ where: { id: ready.runnerId }, data: {
       reposRoot: '/home/orbit/orbit-repos', capabilities: ['create-workdir/v1', 'create-workdir/v2'], capabilitiesReportedAt: new Date(),
@@ -425,6 +432,8 @@ test('a new account queues its first session while its managed runner waits for 
 
   await t.test('Docker: the first session is queued while the runner waits for capacity, and runs once it is READY', async () => {
     const profile = testDockerRunnerProfile({ clusterKey: `first-docker-${randomUUID().slice(0, 8)}`, lifecycle: LIFECYCLE, capacity: { maxActiveUsers: 1 } });
+    // This case claims two queued turns before either finishes. Leave room for both under the memory ceiling.
+    profile.runner.resources.memory = '3Gi';
     const channel = new FakeDockerChannel(profile.docker.instanceId, profile.runner.image);
     const server = await boot('docker', profile, { docker: () => channel });
     try {

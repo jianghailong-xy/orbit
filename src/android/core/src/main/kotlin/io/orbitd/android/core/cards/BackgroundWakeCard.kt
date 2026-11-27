@@ -1,8 +1,6 @@
 package io.orbitd.android.core.cards
 
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.longOrNull
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
@@ -10,10 +8,11 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * What a background wake reads as on screen (A08-11; OrbitKit `BackgroundWakeCard`, web `BackgroundWakeCard.tsx`): one line in the
- * agent's stream saying what happened, which job, how it came out and when — with the details label beside it — and folded under it
- * a row per job or wakeup, who queued the turn and what the agent received. A failed job's output tail stays out of the fold, folded
- * to three rendered lines. The source is [backgroundWake]'s projection of the control plane's note.
+ * What a scheduled wakeup's turn reads as on screen (A08-11; OrbitKit `BackgroundWakeCard`, web `BackgroundWakeCard.tsx`): one line in the
+ * agent's stream saying a wakeup came due, why it was asked for and when — with the details label beside it — and folded under it the
+ * wakeup's row, who queued the turn and what the agent received. A background job's end, new output or stall draws no line any more
+ * (board C1, file 350t1lTONlrPMjilBdXx7): the job is one card from start to end ([BgJob]), and only a wakeup that came due beside it is
+ * drawn ([BgJob.wakeupsOnly]). The source is [backgroundWake]'s projection of the control plane's note.
  */
 object BackgroundWakeCard {
     /** How much of a scheduled wakeup's prompt is shown before folding the rest away. */
@@ -22,98 +21,27 @@ object BackgroundWakeCard {
     const val rawSummary = "What the agent received"
     // The words iOS and the web draw on the card itself, in English since bab3256a7 (`BackgroundWakeCopyParityTests`).
     const val details = "Details"
-    const val jobDetails = "Job details"
-    const val outputTail = "Output tail"
-    const val expandOutput = "Show full output"
-    const val collapseOutput = "Show less"
+    const val title = "Scheduled wakeup"
+    const val meta = "Queued by a scheduled wakeup, not typed by you"
     const val readInThisTurn = "Read in this turn"
     const val readInThisTurnHere = "Read in this turn"
 
     fun jobs(wake: JsonObject) = wake.objects("jobs")
     fun wakeups(wake: JsonObject) = wake.objects("wakeups")
 
-    fun isFailed(job: JsonObject) = job.text("status") in setOf("failed", "killed")
-    /** The line's mark is the clock: a wakeup, or a job that has only written something. */
-    fun isPending(wake: JsonObject) = jobs(wake).none(::isFailed) && (jobs(wake).isEmpty() || jobs(wake).any { !it.flag("ended") })
-
-    fun title(wake: JsonObject): String {
-        val jobs = jobs(wake)
-        val only = jobs.firstOrNull() ?: return "Scheduled wakeup"
-        if (jobs.size > 1) return if (jobs.all { stall(it) != null }) "${jobs.size} background jobs went quiet" else "${jobs.size} background jobs finished"
-        if (stall(only) != null) return "Background job went quiet"
-        if (!only.flag("ended")) return "Background job has new output"
-        return if (isFailed(only)) "Background job failed" else "Background job finished"
-    }
-
-    /** How one job came out, as the word its row closes on — how long it has been quiet when it went quiet, null while it has only
-     * written something. */
-    fun status(job: JsonObject): String? {
-        stall(job)?.let { stall -> return stall.long("quietForMs")?.let { "quiet ${duration(it / 1000)}" } ?: "quiet" }
-        if (job.text("status") == "killed") return job.text("killReason")?.takeIf { it.isNotEmpty() }?.let { "killed: $it" } ?: "killed"
-        job.number("exitCode")?.let { return "exit $it" }
-        return if (job.flag("ended")) job.text("status") else null
-    }
-
-    fun name(job: JsonObject): String = job.text("description")?.takeIf { it.isNotEmpty() } ?: job.text("command").orEmpty()
-
-    /** What the line names after its title: the one job, or why the wakeup was asked for. */
-    fun lineName(wake: JsonObject): String? {
-        val jobs = jobs(wake)
-        if (jobs.size == 1) return name(jobs.single())
-        if (jobs.isNotEmpty()) return null
-        return wakeups(wake).firstOrNull()?.text("reason")?.takeIf { it.isNotEmpty() }
-    }
-
-    /** The one job's word, or how many of several failed. */
-    fun lineStatus(wake: JsonObject): String? {
-        val jobs = jobs(wake)
-        if (jobs.size == 1) return status(jobs.single())
-        val failed = jobs.filter(::isFailed)
-        return if (failed.isEmpty()) null else "${failed.size} of ${jobs.size} failed"
-    }
-
-    /** The details label the line ends on, before its chevron: a wakeup's, or a job's. */
-    fun detailsLabel(wake: JsonObject) = if (jobs(wake).isEmpty()) details else jobDetails
-
-    /** "bgj_13c53745a88a · 16.2 KB of output". */
-    fun jobMeta(job: JsonObject): String {
-        val id = job.text("id").orEmpty()
-        val to = job.number("outputTo") ?: return id
-        return "$id · ${if (to == 0) "no output" else "${formatBytes(to)} of output"}"
-    }
-
-    fun formatBytes(n: Int): String = when {
-        n < 1024 -> "$n B"
-        n < 1024 * 1024 -> String.format(Locale.ROOT, "%.1f KB", n / 1024.0)
-        else -> String.format(Locale.ROOT, "%.1f MB", n / (1024.0 * 1024.0))
-    }
-
-    /** How a quiet job stood (`<background-job-stall>`), or null for any other job. */
-    fun stall(job: JsonObject): JsonObject? = job["stall"] as? JsonObject
-
-    /** "Still running · 15m in · last wrote 15m ago" — a quiet job's row in the fold (OrbitKit `stallLine`, web `stallLine`). */
-    fun stallLine(stall: JsonObject, now: Instant = Instant.now()): String = buildList {
-        add("Still running")
-        stall.long("runningForMs")?.let { add("${duration(it / 1000)} in") }
-        if (stall.flag("wroteNothing")) add("has written nothing yet")
-        else stall.text("lastOutputAt")?.let { relative(it, now) }?.let { add("last wrote $it") }
-    }.joinToString(" · ")
+    /** What the line names after its title: why the wakeup was asked for. */
+    fun lineName(wake: JsonObject): String? = wakeups(wake).firstOrNull()?.text("reason")?.takeIf { it.isNotEmpty() }
 
     /** Whether a turn is only a note: no words, no files, and a note this client could not read as anything else — the note alone, never
      * an empty row in the reader's name (OrbitKit `drawsNoteAlone`, web `Transcript.tsx`'s fallback before `UserBubble`). */
     fun drawsNoteAlone(words: String, hasAttachments: Boolean, note: String?, queued: Boolean): Boolean =
         !queued && !note.isNullOrBlank() && words.isBlank() && !hasAttachments
 
-    private fun JsonObject.long(key: String): Long? = (this[key] as? JsonPrimitive)?.longOrNull
-
     /** "Asked for 1h out · came due 4m ago". */
     fun wakeupMeta(wakeup: JsonObject, now: Instant = Instant.now()): String = buildList {
         wakeup.number("delaySeconds")?.let { add("Asked for ${duration(it.toLong())} out") }
         wakeup.text("dueAt")?.let { relative(it, now) }?.let { add("came due $it") }
     }.joinToString(" · ")
-
-    /** Who queued the turn, said in the fold; when is on the line itself. */
-    fun meta(wake: JsonObject) = if (jobs(wake).isEmpty()) "Queued by a scheduled wakeup, not typed by you" else "Queued by a background job, not typed by you"
 
     /** How far a wake written into the running turn has got, in a steer's words (OrbitKit `SteerDelivery.state`) — null for every
      * other wake, and for one that never arrived, which [undelivered] says instead. */

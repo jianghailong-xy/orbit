@@ -46,7 +46,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import {
@@ -64,7 +65,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import { readLandingJobsByTask } from '../projects/project-criterion-landing';
-import { INTEGRATION_JOB_CLAIM } from '../projects/project-integration-job';
+import { INTEGRATION_JOB_CLAIM, settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
 import { configureProjectIntegration } from '../projects/project-integration-line';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { QueueService } from '../queue/queue.service';
@@ -255,6 +256,8 @@ async function doneCodeTask(stack: Stack, w: World, label: string): Promise<{ ta
   });
   const sessionId = randomUUID();
   const turnId = randomUUID();
+  const branch = `orbit/${label}`;
+  const finishedAt = new Date(Date.now() - 60_000);
   await db.session.create({
     data: {
       id: sessionId,
@@ -266,12 +269,11 @@ async function doneCodeTask(stack: Stack, w: World, label: string): Promise<{ ta
       title,
       prompt: title,
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
-      finishedAt: new Date(Date.now() - 60_000),
-      branch: `orbit/${label}`,
+      branch,
       isolationStatus: 'worktree',
       baseSha: 'b'.repeat(40),
     },
@@ -312,6 +314,17 @@ async function doneCodeTask(stack: Stack, w: World, label: string): Promise<{ ta
   });
   const task = await db.task.findUniqueOrThrow({ where: { id: declared.id }, select: { status: true } });
   assert.equal(task.status, TaskStatus.DONE, 'the acceptance command agreed');
+  await db.$transaction(async (tx) => {
+    const finished = await tx.session.update({
+      where: { id: sessionId },
+      data: {
+        turnState: null, finishedAt, 
+        branchSha: TASK_BRANCH_TIP, worktreeBranch: branch, worktreeDirty: false,
+      },
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
+  });
   return { taskId: declared.id, sessionId };
 }
 
@@ -401,7 +414,7 @@ test('(b) the hourly Trash purge takes a failed landing\'s session and its neigh
       const neighbour = await stack.db.session.create({
         data: {
           ownerId: w.ownerId, creatorId: w.ownerId, title: 'a chat', prompt: 'p',
-          status: RunStatus.SUCCEEDED,
+          turnState: null, finishedAt: new Date(), 
         },
         select: { id: true },
       });

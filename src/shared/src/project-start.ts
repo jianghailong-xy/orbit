@@ -13,12 +13,15 @@ import type { DeliveryMode, IntegrationLine } from './project-progress';
 /**
  * How a project runs, as a start sets it.
  *
- * - `line` — where its finished tasks land: its own branch first (`PROJECT_BRANCH`), or straight on
+ * - `line` — absent when the start named none: nothing about the line or the checks is written,
+ *   and the line is decided by the default rule when the first task with commits is done (P-M2).
+ *   Where its finished tasks land: its own branch first (`PROJECT_BRANCH`), or straight on
  *   its upstream (`MAIN`). Written as the owner's choice, unless the line had already started
  *   integrating, which locks it.
  * - `projectBranchName` — the project branch as a full `refs/heads/…` ref, only with
- *   `PROJECT_BRANCH`. Absent on a request means `refs/heads/project/<project id>`, or the branch the
- *   project already names.
+ *   `PROJECT_BRANCH`. Absent on a request means the server's default, which a request's read
+ *   carries as `defaultProjectBranchName` (`refs/heads/project/<title slug>-<8 characters of the
+ *   project id>`), or the branch the project already names.
  * - `upstreamRef` — the project's main branch as a full `refs/heads/…` ref: where its line comes
  *   from and what its work is merged into, with either line. On a start it is the owner's choice,
  *   recorded as such; on a coordinator's request it is a suggestion. Absent asks for nothing: the
@@ -34,7 +37,7 @@ import type { DeliveryMode, IntegrationLine } from './project-progress';
  *   sent either way, because a card that cannot say "no check" cannot be drawn.
  */
 export interface ProjectStartSettings {
-  line: IntegrationLine;
+  line?: IntegrationLine;
   projectBranchName?: string;
   upstreamRef?: string;
   automatic: boolean;
@@ -138,9 +141,8 @@ export type ProjectStartRequestBody = Omit<
  * - `START_TASK_HAS_NO_RUNNER` — tasks whose assignee is not a workspace bound to a runner.
  * - `START_REPOSITORY_UNKNOWN` — a project branch (or a merge check) asked for, and the project's
  *   coordination workspace names no repository.
- * - `START_CRITERION_CODELESS_UNDECLARED` (warn) — a criterion served only by work that looks like
- *   it produces no code (OWNER_CONFIRMED, or EVIDENCE_JUDGMENT with no acceptance command) and
- *   does not declare `codeless`: with no commit to land it can hold the criterion off LANDED.
+ * - `START_CRITERION_CODELESS_UNDECLARED` — no longer produced (P-M2); kept so an old request that
+ *   carries it still reads.
  * - `START_TASKS_START_BY_HAND` (warn) — tasks set `autoRunWhenReady=false`.
  * - `START_NO_MERGE_CHECK` (warn) — Automatic on a project branch with no merge check: the branch
  *   would merge into main with nothing run on the combined tree.
@@ -190,6 +192,14 @@ export interface ProjectStartRequest {
    * still carry some; the cards ignore them.
    */
   warnings: ProjectStartFinding[];
+  /**
+   * The project branch a start with no `settings.projectBranchName` would land on, as a full ref:
+   * the project's own branch when its line is already decided on one, else the server's default,
+   * `refs/heads/project/<title slug>-<8 characters of the project id>`. Filled in by the server on
+   * every read of the request, never filed with it. Absent on servers that predate it, which
+   * named the branch `refs/heads/project/<project id>`.
+   */
+  defaultProjectBranchName?: string;
 }
 
 /** What filing a start request answers: the request, the open item that holds it, and the one it

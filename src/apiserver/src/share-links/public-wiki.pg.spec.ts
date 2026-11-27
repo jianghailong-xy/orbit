@@ -32,10 +32,13 @@ import { test } from 'node:test';
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import { CreatorType, PrismaClient, RunnerStatus, RunStatus, SessionDispatchOrigin, TaskCompletionCriterion } from '@prisma/client';
+import { CreatorType, PrismaClient, RunnerStatus, SessionDispatchOrigin, TaskCompletionCriterion } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
+import { DriveContentService } from '../drive/drive-content.service';
+import { DriveService } from '../drive/drive.service';
 import { AttachmentsService } from '../attachments/attachments.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { publicIdHeaders } from '../common/public-id-headers';
@@ -153,7 +156,7 @@ test('wiki links: a space\'s written documents, read-only, with Footnotes the on
   await db.session.create({
     data: {
       id: sessionId, ownerId, creatorId: ownerId, workspaceId, title: sessionTitle, prompt: 'p',
-      status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+      turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });
   const taskId = randomUUID();
@@ -291,6 +294,9 @@ test('wiki links: a space\'s written documents, read-only, with Footnotes the on
       // A wiki link reads neither: the transcript and attachment routes answer it the one 404.
       // SharedController's streams, which nothing here opens.
       { provide: ViewerStreamService, useValue: {} },
+      // Drive file links, which nothing here shares or opens (share-links-drive-file.pg.spec.ts holds them).
+      { provide: DriveService, useValue: {} },
+      { provide: DriveContentService, useValue: {} },
       { provide: SessionsService, useValue: {} },
       { provide: AttachmentsService, useValue: {} },
       { provide: SharedRateLimiter, useValue: new SharedRateLimiter({ max: 100_000, windowMs: 60_000 }) },

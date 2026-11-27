@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+@testable import OrbitKit
 
 /// The cards Orbit hands a conversation — an exception item, a task's start, the project's start, a
 /// confirmation review's request and return, another session's message — sit on the agent's side, in
@@ -65,7 +66,9 @@ final class OrbitCardSideWiringTests: XCTestCase {
         }
         let rest = text[start.upperBound...]
         let width = String(rest[..<(rest.range(of: "\n    }\n")?.lowerBound ?? rest.endIndex)])
-        XCTAssertTrue(width.contains("frame(maxWidth: 720, alignment: .leading)"), "a card is no longer capped at 720 pt")
+        XCTAssertEqual(ConversationCardWidth.max, 720, "the conversation's card width moved off the approved 720 pt")
+        XCTAssertTrue(width.contains("frame(maxWidth: ConversationCardWidth.max, alignment: .leading)"),
+                      "a card is no longer capped at the shared conversation width")
         XCTAssertTrue(width.contains(".frame(maxWidth: .infinity, alignment: .leading)"),
                       "the capped card no longer sits at the leading edge")
     }
@@ -75,5 +78,30 @@ final class OrbitCardSideWiringTests: XCTestCase {
         let owner = try body(of: "struct UserBubbleView", in: bubbles)
         XCTAssertTrue(owner.contains("Spacer(minLength: 60)"),
                       "the owner's bubble no longer pushes itself right; check docs/mocks/orbit-cards-left")
+    }
+
+    /// Every card kind the conversation draws takes the one width: through `orbitCardWidth()` at the
+    /// row that draws it, or `ConversationCardWidth.max` where the card frames itself. No card keeps
+    /// its own 560/620 literal (docs/mocks/chat-card-width).
+    func testEveryConversationCardReadsTheSharedWidth() throws {
+        let transcript = try source(Self.views + "/Console/ConsoleView.swift")
+        for card in ["DeliveredDecisionCardView(console: console, card: card).orbitCardWidth()",
+                     "ApprovalCard(console: console, approval: approval).orbitCardWidth()",
+                     "DshRepairCardView(console: console, repair: repair).orbitCardWidth()",
+                     "AntigravityRepairCardView(console: console, repair: repair).orbitCardWidth()",
+                     "ToolFailureCardView(message: message, summary: summary).orbitCardWidth()",
+                     "AutoRetryCardView(console: console, notice: notice).orbitCardWidth()",
+                     "MainCheckoutCardView(console: console, item: item, notice: changed).orbitCardWidth()",
+                     ".frame(maxWidth: ConversationCardWidth.max, alignment: .leading)"] {
+            XCTAssertTrue(transcript.contains(card), "\(card) no longer takes the conversation card width")
+        }
+        XCTAssertFalse(transcript.contains("maxWidth: 560"), "the status card kept its own width")
+        let turns = try source(Self.views + "/Console/UserTurnRow.swift")
+        XCTAssertGreaterThanOrEqual(turns.components(separatedBy: ".orbitCardWidth()").count - 1, 5)
+        let tools = try source(Self.views + "/Console/ToolCards.swift")
+        XCTAssertTrue(tools.contains("SessionCreateCardView(payload: payload).orbitCardWidth()"))
+        XCTAssertTrue(tools.contains("defaultBody.orbitCardWidth()"), "an answered question is a card and takes the width")
+        let setup = try source(Self.views + "/MachineSetupCard.swift")
+        XCTAssertTrue(setup.contains("maxWidth: ConversationCardWidth.max"))
     }
 }

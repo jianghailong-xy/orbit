@@ -24,13 +24,13 @@ import { readProjectSidebarRollups } from './project-list-rollup';
  *
  * WHAT IS ASSERTED, AND WHY IT IS NOT A BUFFER COUNT
  * ==================================================
- * The task rows the statement reads for `lastActivityAt`, against the tasks the open projects hold.
+ * The task rows the statement examines for `lastActivityAt`, against the tasks the open projects hold.
  * (`running` is a SubPlan of its own, driven by its candidate set, so it is left out of the count;
  * `project-list-rollup.pg.spec.ts` owns it.) A buffer threshold would be a claim about this
  * fixture's size, the mistake this project has paid for three times; the rows read are the
  * property the index exists for, and they do not move with the table: one per project, however
  * many tasks each holds. The same statement with the index dropped, inside a
- * transaction that is rolled back, is the control — it must read the big project's every row, so
+ * transaction that is rolled back, is the control — it must examine at least as many rows as the big project holds, so
  * the assertion cannot pass on a fixture too small to tell the two paths apart. Both runs return
  * the same rows, which is the claim that matters most: this is an access path, not a new answer.
  *
@@ -67,11 +67,12 @@ interface PlanNode {
   'Scan Direction'?: string;
   'Actual Rows'?: number;
   'Actual Loops'?: number;
+  'Rows Removed by Filter'?: number;
   Plans?: PlanNode[];
 }
 
 interface Probe {
-  /** Every task row the `lastActivityAt` side's scans of `task` returned, across all their loops. */
+  /** Task rows the `lastActivityAt` scans returned or filtered out, across all their loops. */
   taskRowsRead: number;
   /** The scans of this index, each with the node it sits under. */
   probes: Array<{ node: PlanNode; parent: PlanNode | null }>;
@@ -86,7 +87,10 @@ function probe(plan: PlanNode): Probe {
     // InitPlan, not a SubPlan.
     if (node['Parent Relationship'] === 'SubPlan') return;
     if (node['Relation Name'] === 'task') {
-      found.taskRowsRead += (node['Actual Rows'] ?? 0) * (node['Actual Loops'] ?? 0);
+      // With only the owner/update index, the scan can stop at one match after skipping tasks
+      // from other projects. Those filtered rows also had to be read.
+      found.taskRowsRead += ((node['Actual Rows'] ?? 0) + (node['Rows Removed by Filter'] ?? 0))
+        * (node['Actual Loops'] ?? 0);
     }
     if (node['Index Name'] === INDEX) found.probes.push({ node, parent });
     for (const child of node.Plans ?? []) walk(child, node);
@@ -190,7 +194,7 @@ test('the rail reads one task per open project for lastActivityAt, not every tas
       const withIndex = await run(false);
       const withoutIndex = await run(true);
 
-      // The control first: without the index the statement reads the big project's every task.
+      // The control first: without the index the statement must examine at least this many tasks.
       // A fixture where this fails could not tell the two paths apart.
       assert.ok(withoutIndex.found.taskRowsRead >= BIG_PROJECT_TASKS,
         `the control read only ${withoutIndex.found.taskRowsRead} task rows`);
@@ -203,7 +207,7 @@ test('the rail reads one task per open project for lastActivityAt, not every tas
         assert.ok((node['Actual Rows'] ?? 0) <= 1, 'each probe returns at most one row');
       }
       assert.ok(withIndex.found.taskRowsRead * 100 < BIG_PROJECT_TASKS,
-        `the read returned ${withIndex.found.taskRowsRead} task rows for ${openProjects} projects`);
+        `the read examined ${withIndex.found.taskRowsRead} task rows for ${openProjects} projects`);
 
       // The same answer from both paths, in one snapshot each and over the same rows.
       assert.deepEqual(withIndex.rows, withoutIndex.rows);

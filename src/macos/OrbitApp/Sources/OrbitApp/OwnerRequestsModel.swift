@@ -2,8 +2,8 @@ import Foundation
 import Observation
 import OrbitKit
 
-/// The account's owner requests, behind the "Waiting on you" inbox, each conversation's request cards
-/// and the push actions. Owned by `AppModel` and rebuilt per instance, like the other section stores.
+/// The account's owner requests: each conversation's request cards and the push actions that open
+/// them. Owned by `AppModel` and rebuilt per instance, like the other section stores.
 ///
 /// Read on the app poll's floor and after every press; what the server answered is what is drawn. A
 /// secret's value never passes through here as state: a card hands it to `submitSecret` at the press
@@ -15,36 +15,29 @@ final class OwnerRequestsModel {
     private(set) var open: [OwnerRequest] = []
     /// Every state, newest first: what a conversation draws its ended requests from.
     private(set) var all: [OwnerRequest] = []
-    /// The Done and Declined tabs' own reads.
-    private(set) var ended: [OwnerRequests.InboxTab: [OwnerRequest]] = [:]
     private(set) var savedSecrets: [AccountSecret] = []
-    /// The coordinators' open questions: one inbox and one count with the requests (web `WaitingOnYouPage`).
-    private(set) var questions: [OwnerInboxQuestion] = []
-    /// The scheduled tasks' four kinds (failed, held, a run's approval, a run asking for more), pending: their cards
-    /// head the Open tab and count with the rest (docs/scheduled-tasks-design.md §6.4).
+    /// The scheduled tasks' four kinds (failed, held, a run's approval, a run asking for more), pending: their
+    /// cards head the Scheduled page (docs/scheduled-tasks-design.md §6.4). There is no Waiting on you sheet
+    /// (docs/mocks/waiting-on-you-removal; the owner, 2026-11-16).
     private(set) var scheduleItems: [ScheduleWaitingItem] = []
     /// A condition's two kinds, pending: the can't-read card and the 30-day question (docs/condition-triggers-design.md
-    /// §5.3, §6.2). They head the Open tab with the schedule's and count with the rest.
+    /// §5.3, §6.2). They head the Scheduled page with the schedule's.
     private(set) var conditionItems: [ConditionWaitingItem] = []
-    /// Terminals asking to be approved (docs/terminal-session-design.md): their cards head the Open tab, whole, and
-    /// count with the rest. Each waits ten minutes at most.
+    /// Terminals asking to be approved (docs/terminal-session-design.md). Each waits ten minutes at most.
+    /// Read here for the machine page's Needs you section (docs/mocks/waiting-on-you-removal/02).
     private(set) var terminalRequests: [TerminalRequest] = []
-    /// Answer on a question's row: its card, in the coordinator conversation it was asked in.
-    var onAnswerQuestion: (OwnerInboxQuestion) -> Void = { _ in }
     /// The titles of the tasks requests hold up, by id, read once each.
     private(set) var taskTitles: [String: String] = [:]
     private(set) var snoozes: [String: Date]
-    /// The list answered 404: the server predates owner requests.
-    private(set) var unsupported = false
-
-    /// The inbox is up, and the request a link or a push opened in it (its card open, its input focused).
-    var inboxPresented = false
-    var focusedRequestID: String?
-    /// The tab the inbox shows.
-    var tab: OwnerRequests.InboxTab = .open
 
     /// A runner's name for "Delivered to Runner HPC", from the app's runner snapshot.
     var runnerName: (String) -> String = { _ in "this runner" }
+    /// A runner's live row (Max Concurrent, sessions running) for a CHANGE card.
+    var runnerRow: (String) -> Runner? = { _ in nil }
+
+    /// Called after every read of the waiting terminals, whether or not the list moved: the app's
+    /// one-time notice takes its stock on the first read and speaks on the ones after it (iOS).
+    var onTerminalRequestsRead: (() -> Void)?
 
     private let api: APIClient
     private let store: OwnerRequestSnoozes
@@ -62,60 +55,35 @@ final class OwnerRequestsModel {
         snoozes = store.all()
     }
 
-    var waitingCount: Int {
-        OwnerRequests.waitingCount(open, questions: questions, snoozes: snoozes) + terminalRequests.count
-            + scheduleItems.count + conditionItems.count
-    }
-
-    /// The Open tab: pending requests and open questions, newest first.
-    var openEntries: [OwnerInboxEntry] { OwnerRequests.openEntries(open, questions: questions) }
-
     /// Every request this client has read, the newest read of each winning.
-    var known: [OwnerRequest] { OwnerRequests.merged(all, ended[.done] ?? [], ended[.declined] ?? [], open) }
+    var known: [OwnerRequest] { OwnerRequests.merged(all, open) }
 
     func request(_ id: String) -> OwnerRequest? { OwnerRequests.find(id, in: known) }
 
     func forSession(_ sessionID: String) -> [OwnerRequest] { OwnerRequests.forSession(known, sessionID: sessionID) }
 
-    func rows(_ tab: OwnerRequests.InboxTab) -> [OwnerRequest] {
-        tab == .open ? open : (ended[tab] ?? [])
-    }
-
     func load() async {
-        guard !unsupported else { return }
         do {
             let openList = try await api.ownerRequests(state: "open")
             assignIfChanged(\.open, openList.requests)
             assignIfChanged(\.scheduleItems, openList.scheduleItems.filter { $0.state == "PENDING" })
             assignIfChanged(\.conditionItems, openList.conditionItems.filter { $0.state == "PENDING" })
             assignIfChanged(\.all, try await api.ownerRequests(state: "all").requests)
-            if tab != .open { await loadTab(tab) }
-            await loadQuestions()
             await loadTerminalRequests()
-        } catch APIError.http(let status, _) where status == 404 {
-            assignIfChanged(\.unsupported, true)
         } catch {
             // The next tick reads again; what was drawn stays.
         }
         assignIfChanged(\.snoozes, store.all())
     }
 
-    /// The open projects whose coordinator asked the owner something, and each one's open questions.
-    /// A project that cannot be read keeps the questions it had.
-    func loadQuestions() async {
-        guard let projects = try? await api.projects(status: .open) else { return }
-        var next: [OwnerInboxQuestion] = []
-        for project in OwnerRequests.projectsAsking(projects) {
-            guard let items = try? await api.projectOpenItems(projectID: project.id) else {
-                next += questions.filter { $0.projectID == project.id }
-                continue
-            }
-            let document = try? await api.project(project.id)
-            next += OwnerRequests.questions(project: project, items: items,
-                                            coordinatorSessionID: document?.coordinatorSessionId,
-                                            coordinatorWorkspaceID: document?.coordinatorWorkspaceId)
-        }
-        assignIfChanged(\.questions, next)
+    /// The one request a door that holds only its id names — a link, a push's action, a reminder.
+    /// The account's lists usually already hold it; otherwise it is read on its own and adopted, so
+    /// the conversation that asked draws it on the next pass.
+    func read(_ id: String) async -> OwnerRequest? {
+        if let known = request(id) { return known }
+        guard let read = try? await api.ownerRequest(id) else { return nil }
+        adopt(read)
+        return read
     }
 
     /// The terminals waiting for a decision. A server that predates terminals answers 404: no cards.
@@ -127,6 +95,7 @@ final class OwnerRequestsModel {
         } catch {
             // The next tick reads again; what was drawn stays.
         }
+        onTerminalRequestsRead?()
     }
 
     /// Approve or Deny a terminal: the card leaves at once, and the list is read again either way.
@@ -138,11 +107,7 @@ final class OwnerRequestsModel {
             try await api.denyTerminalRequest(request.id)
         }
         terminalRequests.removeAll { $0.id == request.id }
-    }
-
-    func loadTab(_ tab: OwnerRequests.InboxTab) async {
-        guard tab != .open, let list = try? await api.ownerRequests(state: tab.filter) else { return }
-        if ended[tab] != list.requests { ended[tab] = list.requests }
+        onTerminalRequestsRead?()
     }
 
     func taskTitle(_ id: String) -> String { taskTitles[PublicID.storageKey(id)] ?? "Task" }
@@ -157,21 +122,6 @@ final class OwnerRequestsModel {
     func loadSavedSecrets() async {
         guard let list = try? await api.accountSecrets() else { return }
         assignIfChanged(\.savedSecrets, list.secrets)
-    }
-
-    /// The inbox, with this request's card open and its input focused: a push's first action, an
-    /// `orbit://owner-request/<id>` link. A request no list holds yet is read on its own.
-    func show(_ requestID: String) {
-        tab = .open
-        focusedRequestID = requestID
-        inboxPresented = true
-        store.wake(requestID)
-        snoozes = store.all()
-        guard request(requestID) == nil else { return }
-        Task { [weak self] in
-            guard let self, let read = try? await self.api.ownerRequest(requestID) else { return }
-            self.adopt(read)
-        }
     }
 
     // MARK: the doors
@@ -194,6 +144,23 @@ final class OwnerRequestsModel {
     /// A WIKI_CREATE card's Create wiki: the server makes the wiki and answers with the card, DONE.
     func createWiki(_ request: OwnerRequest) async throws {
         adopt(try await api.createWikiFromOwnerRequest(request.id))
+    }
+
+    /// A SETTINGS_CHANGE card's Save changes (design §5.2): the server writes the values and answers with the card,
+    /// DONE. A refusal 409 SETTINGS_STALE is thrown for the card to say so.
+    func applySettings(_ request: OwnerRequest) async throws {
+        adopt(try await api.applyOwnerRequestSettings(request.id))
+    }
+
+    /// A CHANGE card's Apply: the server writes the runner's Max Concurrent and answers with the card, DONE.
+    func applyChange(_ request: OwnerRequest, maxConcurrent: Int) async throws {
+        adopt(try await api.applyOwnerRequestChange(request.id, OwnerRequestApplyBody(maxConcurrent: maxConcurrent)))
+    }
+
+    /// A PROJECT_REOPEN card's Reopen: the server reopens the project as the project page's press does, settles every
+    /// pending reopen request of it, and answers with this card, DONE.
+    func reopenProject(_ request: OwnerRequest) async throws {
+        adopt(try await api.reopenProjectFromOwnerRequest(request.id))
     }
 
     func decline(_ request: OwnerRequest, reason: String, sendAsWritten: Bool = false) async throws {
@@ -245,20 +212,16 @@ final class OwnerRequestsModel {
             open.removeAll { PublicID.storageKey($0.id) == key }
         }
         all = all.contains(where: { PublicID.storageKey($0.id) == key }) ? replace(all) : [request] + all
-        for tab in ended.keys { ended[tab] = replace(ended[tab] ?? []) }
     }
 
     #if DEBUG
     /// Probe and preview fixtures: the lists as a read would have answered them.
-    func seed(open: [OwnerRequest], all: [OwnerRequest], ended: [OwnerRequests.InboxTab: [OwnerRequest]] = [:],
-              saved: [AccountSecret] = [], taskTitles: [String: String] = [:],
-              questions: [OwnerInboxQuestion] = [], terminalRequests: [TerminalRequest] = []) {
-        self.questions = questions
+    func seed(open: [OwnerRequest], all: [OwnerRequest], saved: [AccountSecret] = [],
+              taskTitles: [String: String] = [:], terminalRequests: [TerminalRequest] = []) {
         self.terminalRequests = terminalRequests
         self.taskTitles = Dictionary(uniqueKeysWithValues: taskTitles.map { (PublicID.storageKey($0.key), $0.value) })
         self.open = open
         self.all = all
-        self.ended = ended
         self.savedSecrets = saved
     }
     #endif

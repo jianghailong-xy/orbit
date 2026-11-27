@@ -132,7 +132,7 @@ final class FileHandoffWiringTests: XCTestCase {
     /// Finder shows this folder to the reader, and the name in it is not one Orbit chose.
     func testFilesLandInAFolderOfTheirOwn() throws {
         let body = try deliver()
-        XCTAssertTrue(body.contains(#".appendingPathComponent("Orbit Files", isDirectory: true)"#))
+        XCTAssertTrue(body.contains(#".appendingPathComponent("Documents", isDirectory: true)"#))
         XCTAssertTrue(body.contains("folder.appendingPathComponent(safeName(name))"))
         XCTAssertFalse(body.contains("temporaryDirectory.appendingPathComponent(safeName"))
     }

@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException, ConflictException } from '@nestjs/common';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
+import { isReleasedStatus } from '../common/session-release';
 import { RunnerApiController } from './runner-api.controller';
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
@@ -54,6 +56,8 @@ function mergeRow(overrides: Record<string, unknown> = {}) {
     mergeStatus: 'pending',
     mergeOperationId: NEW_OPERATION,
     mergeOperationOwner: NEW_OWNER,
+    // A terminal row carries its release column (session_release_fact_chk).
+    ...(isReleasedStatus(String(overrides.status ?? RunStatus.SUCCEEDED)) ? { finishedAt: new Date() } : {}),
     ...overrides,
   };
 }
@@ -65,6 +69,8 @@ function commitRow(overrides: Record<string, unknown> = {}) {
     commitStatus: 'pending',
     commitOperationId: NEW_OPERATION,
     commitOperationOwner: NEW_OWNER,
+    // A terminal row carries its release column (session_release_fact_chk).
+    ...(isReleasedStatus(String(overrides.status ?? RunStatus.AWAITING_INPUT)) ? { finishedAt: new Date() } : {}),
     ...overrides,
   };
 }
@@ -263,7 +269,7 @@ test('commit result rejects stale operation ABA and stale process ownership', as
     },
     {
       name: 'session left the idle boundary',
-      row: commitRow({ status: RunStatus.RUNNING }),
+      row: commitRow({ turnState: 'IN_FLIGHT', status: RunStatus.RUNNING }),
       operationId: NEW_OPERATION,
       leaseOwner: NEW_OWNER,
     },

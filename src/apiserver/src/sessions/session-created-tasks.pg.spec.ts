@@ -25,10 +25,11 @@ import {
   type Prisma,
   type PrismaClient,
   RunnerStatus,
-  RunStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
+import { isReleasedStatus } from '../common/session-release';
 import { SESSION_CREATED_TASKS_MAX_LIMIT, toUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -53,6 +54,7 @@ import {
 } from '../tasks/session-created-tasks.service';
 import { TasksController } from '../tasks/tasks.controller';
 import { TasksService } from '../tasks/tasks.service';
+import { turnStateOfWord } from './session-turn-state';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -142,7 +144,7 @@ test('the tasks a session created: its row, its counts, its order, and the task 
     await db.session.create({
       data: {
         id, ownerId, creatorId: ownerId, title, prompt: title,
-        status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+        turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
       },
     });
     return id;
@@ -196,7 +198,10 @@ test('the tasks a session created: its row, its counts, its order, and the task 
     await db.session.create({
       data: {
         id: randomUUID(), ownerId: me.ownerId, creatorId: me.ownerId, taskId,
-        title: `run of ${taskId}`, prompt: 'do the thing', status,
+        title: `run of ${taskId}`, prompt: 'do the thing', turnState: turnStateOfWord(status),
+        ...(isReleasedStatus(status) ? {
+          finishedAt: new Date(),
+        } : {}),
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       },
     });
@@ -606,7 +611,7 @@ test('the row writes no temp file, however many tasks the session created', {
     await db.session.create({
       data: {
         id, ownerId, creatorId: ownerId, title, prompt: title,
-        status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+        turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
       },
     });
     return id;
@@ -617,7 +622,10 @@ test('the row writes no temp file, however many tasks the session created', {
     db.session.create({
       data: {
         id: randomUUID(), ownerId, creatorId: ownerId, taskId,
-        title: `run of ${taskId}`, prompt: 'do the thing', status,
+        title: `run of ${taskId}`, prompt: 'do the thing', turnState: turnStateOfWord(status),
+        ...(isReleasedStatus(status) ? {
+          finishedAt: new Date(),
+        } : {}),
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       },
     });

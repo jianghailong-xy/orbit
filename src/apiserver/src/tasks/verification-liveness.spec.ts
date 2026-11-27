@@ -22,6 +22,7 @@ import { verificationGateStalled, verificationLiveness } from './verification-li
 
 const SETTLED_RUN: VerificationRunFact = {
   runStatus: RunStatus.SUCCEEDED,
+  finishedAt: new Date('2026-08-22T10:00:00.000Z'),
   endReason: 'task_done',
   deletedAt: null,
   completionAt: new Date('2026-08-22T10:00:00.000Z'),
@@ -29,6 +30,7 @@ const SETTLED_RUN: VerificationRunFact = {
 
 const LIVE_RUN: VerificationRunFact = {
   runStatus: RunStatus.RUNNING,
+  finishedAt: null,
   endReason: null,
   deletedAt: null,
   completionAt: null,
@@ -37,6 +39,7 @@ const LIVE_RUN: VerificationRunFact = {
 /** A run somebody ended by hand: it stopped, and it did not finish the task. */
 const COMPLETED_OUT: VerificationRunFact = {
   runStatus: RunStatus.SUCCEEDED,
+  finishedAt: new Date('2026-08-22T10:00:00.000Z'),
   endReason: 'complete',
   deletedAt: null,
   completionAt: new Date('2026-08-22T10:00:00.000Z'),

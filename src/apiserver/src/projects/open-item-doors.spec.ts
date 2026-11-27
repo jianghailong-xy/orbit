@@ -8,6 +8,7 @@ import {
   OPEN_ITEM_DOOR_ASSIGNEES,
   OPEN_ITEM_DIRECT_DOOR_TABLE,
   OPEN_ITEM_DOOR_TABLE,
+  OPEN_ITEM_WORK_SESSION_DOOR_TABLE,
   appendOpenLanding,
   cellForOpenItem,
   doorsForCell,
@@ -197,7 +198,7 @@ const FIX_JOB_ID = '0198f0e2-1c4a-7b31-9a5e-0d2f3c4b5a73';
  *  two (§10.7) — each about one task's work. An observation's failure (§10.6 O-J4) is the project's:
  *  `IE:observe:<projectId>` names no task, so its cell's row does not either. */
 function aboutATask(todoType: string, sourceJob?: string): boolean {
-  if (sourceJob === 'OBSERVE_LANDING') return false;
+  if (sourceJob === 'OBSERVE_LANDING' || sourceJob === 'LINE_SYNC') return false;
   return todoType.startsWith('INTEGRATION_') || todoType === 'TASK_FAILED' || todoType === 'DELIVERY_REVIEW'
     || todoType === 'LANDING_UNOBSERVED' || todoType === 'LANDED_WITHOUT_CONFIRMATION';
 }
@@ -233,11 +234,11 @@ function sampleFor(cell: OpenItemDoorCell) {
     askable: true,
     sourceJob: cell.sourceJob,
     failureClass: cell.failureClass,
-    phase: cell.sourceJob === 'MAIN_SYNC' ? 'MAIN_SYNC' : null,
-    jobKind: cell.sourceJob === 'MAIN_SYNC' ? 'LAND_TASK' : cell.sourceJob,
+    phase: (cell.sourceJob === 'MAIN_SYNC' || cell.sourceJob === 'LINE_SYNC') ? 'MAIN_SYNC' : null,
+    jobKind: (cell.sourceJob === 'MAIN_SYNC' || cell.sourceJob === 'LINE_SYNC') ? 'LAND_TASK' : cell.sourceJob,
     payload: {
-      jobKind: cell.sourceJob === 'MAIN_SYNC' ? 'LAND_TASK' : cell.sourceJob,
-      phase: cell.sourceJob === 'MAIN_SYNC' ? 'MAIN_SYNC' : undefined,
+      jobKind: (cell.sourceJob === 'MAIN_SYNC' || cell.sourceJob === 'LINE_SYNC') ? 'LAND_TASK' : cell.sourceJob,
+      phase: (cell.sourceJob === 'MAIN_SYNC' || cell.sourceJob === 'LINE_SYNC') ? 'MAIN_SYNC' : undefined,
       failureClass: cell.failureClass,
       files: cell.failureClass === 'CONFLICT' ? ['src/conflicted.ts'] : undefined,
       reason: cell.todoType === 'DELIVERY_REVIEW' ? 'OUTSIDE_DECLARED_SCOPE' : undefined,
@@ -913,4 +914,85 @@ test('§10.6 O-J4 §10.8: IE:observe has a cell for each holder whose one resolv
   assert.match(rekeyed, /\bintegration_observe\b/);
   assert.doesNotMatch(rekeyed, /\bopen_item_resolve\b/);
   assert.doesNotMatch(rekeyed, /\bnull\b/, 'the re-keyed preface wrote a door the cell does not hold as null');
+});
+
+/**
+ * Revision 42 (§12.5 W9): while a landing failure is in its task's own work session's hands, the
+ * coordinator and the owner see it, and its doors are two — the owner's stop (§4.7, J-T8) and "Chat about
+ * this", which is not a door. `open_item_resolve` and `integration_retry` refuse it (409
+ * OPEN_ITEM_WITH_WORK_SESSION), so neither may be in the cell or named by its message.
+ */
+test('W9: an item in its task\'s own work session\'s hands has only the owner\'s stop door', () => {
+  const routes = allRouteMetadata();
+  const names = mcpNamesFromSources();
+  const canExecute = executableByRegistry(routes, names);
+  // Every result §12.3 hands off has its cell: a conflict (REBASE / MERGE are LAND_TASK, and MAIN_SYNC)
+  // or a red check of a task landing, and the same two of a MAIN line's task-branch candidate.
+  const expected = [
+    ['INTEGRATION_CONFLICT', 'LAND_TASK'], ['INTEGRATION_CONFLICT', 'MAIN_SYNC'],
+    ['INTEGRATION_CONFLICT', 'CHECK_PROMOTION'], ['INTEGRATION_CONFLICT', 'LAND_PROMOTION'],
+    ['INTEGRATION_CHECK_FAILED', 'LAND_TASK'], ['INTEGRATION_CHECK_FAILED', 'CHECK_PROMOTION'],
+    ['INTEGRATION_CHECK_FAILED', 'LAND_PROMOTION'],
+  ];
+  for (const [todoType, sourceJob] of expected) {
+    assert.ok(OPEN_ITEM_WORK_SESSION_DOOR_TABLE.some((cell) => cell.todoType === todoType && cell.sourceJob === sourceJob),
+      `no work-session cell for ${todoType}/${sourceJob}`);
+  }
+  for (const cell of OPEN_ITEM_WORK_SESSION_DOOR_TABLE) {
+    const where = `${cell.todoType}/${cell.sourceJob}/${cell.failureClass}/work session`;
+    assert.equal(cell.doors.length, 1, `${where} holds more than the stop door`);
+    const [stop] = cell.doors;
+    assert.equal(stop.holder, 'OWNER', `${where}: the stop door is the owner's`);
+    assert.equal(stop.capability, 'CANCEL');
+    assert.equal(stop.kind, 'ROUTE');
+    assert.ok(canExecute(stop), `${where}: ${stop.route} is not a route any controller declares`);
+    assert.equal(stop.route, cell.sourceJob === 'CHECK_PROMOTION' || cell.sourceJob === 'LAND_PROMOTION'
+      ? '/projects/:id/promotions/:promotionId/cancel'
+      : '/projects/:id/tasks/:taskId/integration/stop');
+    assert.equal(cell.doors.some((door) => door.mcp === 'open_item_resolve' || door.mcp === 'integration_retry'), false);
+
+    // The row reads back as this cell whoever its assignee will be on hand-back, and never falls through
+    // to the ordinary cell; it projects no press, and its lead is none.
+    for (const assignee of OPEN_ITEM_DOOR_ASSIGNEES) {
+      const row = { ...sampleFor({ ...cell, assignee }), workSession: true };
+      assert.equal(cellForOpenItem(row), cell, `${where} as ${assignee} did not read back as the work-session cell`);
+      assert.deepEqual(doorsForOpenItem(row), cell.doors);
+      assert.deepEqual(openItemActionsFromDoors(row), [], `${where} as ${assignee} projects a press`);
+      assert.equal(primaryAction({ ...row, state: 'OPEN' }), undefined);
+      // The same row handed back is its ordinary cell again (W9: "the door table applies as it is").
+      const back = { ...row, workSession: false };
+      assert.notEqual(cellForOpenItem(back), cell);
+      assert.ok(doorsForOpenItem(back).some((door) => door.mcp === 'open_item_resolve'),
+        `${where} handed back lost its ordinary doors`);
+    }
+  }
+});
+
+test('W9: every tool name in a work-session cell\'s message belongs to that cell — and it holds none', () => {
+  const names = tableToolNames();
+  for (const cell of OPEN_ITEM_WORK_SESSION_DOOR_TABLE) {
+    const row = sampleFor(cell);
+    const message = openItemMessage({
+      id: ITEM_ID,
+      kind: cell.todoType,
+      title: `${cell.todoType} ${cell.sourceJob} ${cell.failureClass}`,
+      projectId: PROJECT_ID,
+      taskId: row.taskId,
+      promotionId: row.promotionId,
+      payload: row.payload,
+      workSession: true,
+      landedFixes: [{
+        taskId: FIX_TASK_ID, jobId: FIX_JOB_ID, state: 'LANDED',
+        targetRef: 'refs/heads/project/34YhlsSkybFDaTXbOfcxM', landedSha: 'a'.repeat(40),
+      }],
+      failedSourceSha: 'b'.repeat(40),
+    });
+    const where = `${cell.todoType}/${cell.sourceJob}/${cell.failureClass}/work session`;
+    for (const name of names) {
+      if (!new RegExp(`\\b${name}\\b`).test(message)) continue;
+      assert.ok(cell.doors.some((door) => door.mcp === name),
+        `${where} names ${name}, which its cell does not hold:\n${message}`);
+    }
+    assert.doesNotMatch(message, /\bopen_item_resolve\b|\bintegration_retry\b/, `${where} offers a refused door`);
+  }
 });

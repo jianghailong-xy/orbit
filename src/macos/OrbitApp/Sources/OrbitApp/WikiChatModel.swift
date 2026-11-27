@@ -148,7 +148,7 @@ final class WikiChatModel {
     /// over the page once the chat is folded away (board 42 ⑤, third phone).
     var updatedCard: WikiChatDraftView? {
         cards.values
-            .filter { $0.state == .applied && $0.rewrite?.result == .updated && $0.rewrite?.seen == false }
+            .filter { ($0.state == .applied || $0.state == .rewritten) && $0.rewrite?.result == .updated && $0.rewrite?.seen == false }
             .max { ($0.rewrite?.settledAt ?? "") < ($1.rewrite?.settledAt ?? "") }
     }
 
@@ -251,7 +251,10 @@ final class WikiChatModel {
             try? await Task.sleep(nanoseconds: 400_000_000)
             guard let self else { return }
             self.nudgeTask = nil
-            await self.reloadLoaded()
+            // Hidden since it was asked: owed, one read when the app is shown (§4 R3).
+            VisibilityGate.app.read("wiki-chat.loaded") { [weak self] in
+                Task { await self?.reloadLoaded() }
+            }
         }
     }
 

@@ -20,9 +20,11 @@ vi.mock('../api', async (importOriginal) => {
     api: vi.fn(),
     getSessionEventPage: vi.fn(),
     listQueuedTurns: vi.fn(),
+    sendTurn: vi.fn(),
     retryTurnTranslation: vi.fn(),
     sendTurnAsWritten: vi.fn(),
     retryReplyTranslation: vi.fn(),
+    cancelQueuedTurn: vi.fn(async () => undefined),
   };
 });
 vi.mock('../lib/transcriptStore', () => ({
@@ -30,7 +32,7 @@ vi.mock('../lib/transcriptStore', () => ({
   saveTranscript: async () => {},
 }));
 
-const { api, getSessionEventPage, listQueuedTurns, retryTurnTranslation, sendTurnAsWritten } = await import('../api');
+const { api, getSessionEventPage, listQueuedTurns, sendTurn, retryTurnTranslation, sendTurnAsWritten, cancelQueuedTurn } = await import('../api');
 const apiMock = vi.mocked(api);
 const seedMock = vi.mocked(getSessionEventPage);
 const { WorkspaceView } = await import('./WorkspaceView');
@@ -139,6 +141,7 @@ beforeEach(() => {
   locations = [];
   vi.mocked(listQueuedTurns).mockReset();
   vi.mocked(listQueuedTurns).mockImplementation(async () => queue as never);
+  vi.mocked(sendTurn).mockReset();
   vi.mocked(retryTurnTranslation).mockReset();
   vi.mocked(retryTurnTranslation).mockImplementation(async (_s, turnId) => ({
     turnId,
@@ -374,7 +377,7 @@ describe('a message held for its translation', () => {
     await mount();
     const feet = () => [...mounted().querySelectorAll('.chat-translate-foot.is-error')].map((n) => n.textContent);
     await waitForUi(() => expect(feet()).toHaveLength(REASONS.length));
-    expect(feet()).toEqual(REASONS.map(([, sentence]) => `${sentence}·Retry·Send as written`));
+    expect(feet()).toEqual(REASONS.map(([, sentence]) => `${sentence}·Retry·Send as written·Cancel`));
     // Each line's row grows below the bubble when it wraps (indexCss.failureFoot.test.ts).
     for (const foot of mounted().querySelectorAll('.chat-translate-foot.is-error')) {
       expect(foot.parentElement?.classList.contains('has-failure-foot')).toBe(true);
@@ -386,7 +389,7 @@ describe('a message held for its translation', () => {
     await mount();
     await waitForUi(() =>
       expect(mounted().querySelector('.chat-translate-foot.is-error')?.textContent).toBe(
-        "The translator didn't answer in time, so it wasn't sent·Retry·Send as written",
+        "The translator didn't answer in time, so it wasn't sent·Retry·Send as written·Cancel",
       ),
     );
     const action = (label: string) =>
@@ -406,12 +409,61 @@ describe('a message held for its translation', () => {
     expect(mounted().querySelector('.pending-tray')).toBeNull();
   });
 
+  it.each([false, true])('clears the chip when the held message becomes the accepted head (opening: %s)', async (opening) => {
+    const row = { ...held('TRANSLATING'), opening };
+    if (opening) seedMock.mockResolvedValue({ events: [], hasMore: false });
+    queue = [row];
+    await mount();
+    await waitForUi(() => expect(mounted().querySelector('.chat-translate-chip')?.textContent).toBe('Translating…'));
+
+    queue = [{ ...row, placement: 'accepted', content: 'Run all the tests again', translation: { ...row.translation, state: 'DONE' } }];
+    await publish([{ seq: 0, type: 'queued_turns_changed' }]);
+
+    await waitForUi(() => {
+      expect(mounted().querySelector('.chat-translate-chip')).toBeNull();
+      expect([...mounted().querySelectorAll('.chat-user:not(.chat-queued)')].at(-1)?.textContent).toContain(HELD_TEXT);
+    });
+  });
+
+  it('keeps a translated follow-up in the tray when the older send response arrives', async () => {
+    session = { ...PARKED, status: 'RUNNING', runStatus: 'RUNNING', runState: 'RUNNING', engineTurnActive: true };
+    const response = Promise.withResolvers<Awaited<ReturnType<typeof sendTurn>>>();
+    vi.mocked(sendTurn).mockReturnValueOnce(response.promise);
+    const row = held('TRANSLATING');
+    await mount();
+    await waitForUi(() => expect(box()).toBeTruthy());
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(box(), HELD_TEXT);
+      box().dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      box().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', altKey: true, bubbles: true, cancelable: true }));
+    });
+    await waitForUi(() => expect(sendTurn).toHaveBeenCalledOnce());
+
+    queue = [row];
+    await publish([{ seq: 0, type: 'queued_turns_changed' }]);
+    await waitForUi(() => expect(mounted().querySelector('.chat-translate-chip')?.textContent).toBe('Translating…'));
+
+    queue = [{ ...row, content: 'Run all the tests again', translation: { ...row.translation, state: 'DONE' } }];
+    await publish([{ seq: 0, type: 'queued_turns_changed' }]);
+    const trayText = () => mounted().querySelector('.pending-tray-text')?.textContent;
+    await waitForUi(() => expect(trayText()).toBe(HELD_TEXT));
+
+    await act(async () => response.resolve({
+      turnId: row.turnId, seq: 2, kind: 'message', placement: 'queued',
+      translation: { state: 'TRANSLATING', from: 'zh-Hans', original: HELD_TEXT },
+    }));
+    expect(mounted().querySelector('.chat-translate-chip')).toBeNull();
+    expect(trayText()).toBe(HELD_TEXT);
+  });
+
   it("failed: Retry and Send as written call the A1 doors for that turn", async () => {
     queue = [held('FAILED')];
     await mount();
     await waitForUi(() =>
       expect(mounted().querySelector('.chat-translate-foot.is-error')?.textContent).toBe(
-        "Couldn't translate, so it wasn't sent·Retry·Send as written",
+        "Couldn't translate, so it wasn't sent·Retry·Send as written·Cancel",
       ),
     );
     const action = (label: string) =>
@@ -430,6 +482,30 @@ describe('a message held for its translation', () => {
       [...mounted().querySelectorAll<HTMLButtonElement>('.chat-translate-foot button')].find((b) => b.textContent === 'Send as written')!.click(),
     );
     await waitForUi(() => expect(vi.mocked(sendTurnAsWritten)).toHaveBeenCalledWith(SESSION_PUBLIC, 'turn-held'));
+  });
+
+  it('failed: Cancel withdraws the turn and puts what the owner wrote back in the composer', async () => {
+    queue = [held('FAILED')];
+    await mount();
+    await waitForUi(() => expect(mounted().querySelector('.chat-translate-foot.is-error')).toBeTruthy());
+    queue = [];
+    await act(async () =>
+      [...mounted().querySelectorAll<HTMLButtonElement>('.chat-translate-foot button')].find((b) => b.textContent === 'Cancel')!.click(),
+    );
+    await waitForUi(() => expect(vi.mocked(cancelQueuedTurn)).toHaveBeenCalledWith(SESSION_PUBLIC, 'turn-held'));
+    await waitForUi(() => expect(mounted().querySelector('.chat-translate-foot.is-error')).toBeNull());
+    await waitForUi(() => expect(box().value).toBe(HELD_TEXT));
+  });
+
+  it('failed opening prompt: no Cancel, since the server keeps a session\'s opening', async () => {
+    seedMock.mockResolvedValue({ events: [], hasMore: false });
+    queue = [{ ...held('FAILED'), opening: true }];
+    await mount();
+    await waitForUi(() =>
+      expect(mounted().querySelector('.chat-translate-foot.is-error')?.textContent).toBe(
+        "Couldn't translate, so it wasn't sent·Retry·Send as written",
+      ),
+    );
   });
 });
 

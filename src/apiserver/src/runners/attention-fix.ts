@@ -6,6 +6,7 @@ import {
   type ReportedEngine,
   type RunnerAgentFix,
   type RunnerAgentFixBlockedCode,
+  type RunnerAgentFixHandled,
   type RunnerAgentFixing,
   type RunnerAttentionFixKind,
   type RunnerEngineHealth,
@@ -16,6 +17,8 @@ import { runnerOs } from '../common/runner-platform';
 import { signedOutEngineRefusal, type EnginePreflightRunner } from '../sessions/engine-signin-preflight';
 import { lastProviderByWorkspace, DEFAULT_AGENT_PROVIDER } from '../workspaces/workspace-provider';
 import { runnerIsOnline } from './runner-presence';
+import { heldFilter, isReleased } from '../common/session-release';
+import { LEGACY_STATUS_SELECT, legacySessionStatus, readLandingSettlements } from '../sessions/session-legacy-words';
 
 /**
  * Fix with an agent (docs/mocks/install-failed-fix-with-agent, and the board on task 34x9udvOf5AQdLYqYE9N4):
@@ -31,13 +34,15 @@ export const ATTENTION_FIX_KINDS: readonly RunnerAttentionFixKind[] = [
   'cannotSelfUpdate',
   'installFailed',
   'engineUpdateFailed',
+  'sandboxMissing',
 ];
 
 export function isAttentionFixKind(value: unknown): value is RunnerAttentionFixKind {
   return typeof value === 'string' && (ATTENTION_FIX_KINDS as readonly string[]).includes(value);
 }
 
-/** Whether this kind names an engine. An Update engines run is the machine's, whichever engines failed. */
+/** Whether this kind names an engine. An Update engines run is the machine's, whichever engines failed;
+ *  a missing sandbox prerequisite is the engine's own (docs/mocks/codex-sandbox-fix-with-agent). */
 export function attentionFixNeedsEngine(kind: RunnerAttentionFixKind): boolean {
   return kind !== 'cannotSelfUpdate' && kind !== 'engineUpdateFailed';
 }
@@ -75,15 +80,13 @@ export function attentionFixEntries(value: unknown): Map<string, AttentionFixEnt
   return out;
 }
 
-/** The statuses a session has once it is over: its agent is no longer at work on anything. */
-const OVER_STATUSES = ['SUCCEEDED', 'FAILED', 'CANCELLED'] as const;
-
-/** A session that is open: not over, completed or deleted. Ended sessions free the warning for a new press. */
+/** A session that is open: not over (released: its agent is no longer at work on anything), completed or deleted.
+ *  Ended sessions free the warning for a new press. */
 export const OPEN_FIX_SESSION = {
   deletedAt: null,
   completedAt: null,
   archivedAt: null,
-  status: { notIn: [...OVER_STATUSES] },
+  ...heldFilter(),
 } satisfies Prisma.SessionWhereInput;
 
 /** How long a stored entry whose session was never written still holds the warning: a press whose
@@ -201,7 +204,7 @@ export async function agentFixesOf(
   if (runners.length === 0) return out;
   const workspaces = await mostRecentWorkspaces(prisma, ownerId, runners.map((r) => r.id));
   const seeds = await lastProviderByWorkspace(prisma, [...workspaces.values()].map((w) => w.id));
-  const fixing = await openFixesOf(prisma, ownerId, runners);
+  const { fixing, handled } = await fixesOf(prisma, ownerId, runners);
   for (const runner of runners) {
     const workspace = workspaces.get(runner.id) ?? null;
     const seed = workspace ? seeds.get(workspace.id) ?? DEFAULT_AGENT_PROVIDER : null;
@@ -228,36 +231,62 @@ export async function agentFixesOf(
       engineName,
       blocked: verdict,
       fixing: fixing.get(runner.id) ?? [],
+      handled: handled.get(runner.id) ?? [],
     });
   }
   return out;
 }
 
-/** The warnings with an open session at work on them, per runner. */
-async function openFixesOf(
+/** The latest agent each warning was handed to, per runner: the open ones under `fixing`, the over
+ *  ones under `handled`. A session that is gone or was never written has nothing to link to. */
+async function fixesOf(
   prisma: Prisma.TransactionClient,
   ownerId: string,
   runners: Array<Pick<AgentFixRunner, 'id' | 'attentionFixes'>>,
-): Promise<Map<string, RunnerAgentFixing[]>> {
-  const out = new Map<string, RunnerAgentFixing[]>();
+): Promise<{ fixing: Map<string, RunnerAgentFixing[]>; handled: Map<string, RunnerAgentFixHandled[]> }> {
+  const fixing = new Map<string, RunnerAgentFixing[]>();
+  const handled = new Map<string, RunnerAgentFixHandled[]>();
   const wanted = runners.flatMap((runner) =>
     [...attentionFixEntries(runner.attentionFixes)].map(([key, entry]) => ({ runnerId: runner.id, key, entry })),
   );
-  if (wanted.length === 0) return out;
+  if (wanted.length === 0) return { fixing, handled };
   const sessions = await prisma.session.findMany({
-    where: { id: { in: wanted.map((w) => w.entry.sessionId) }, ownerId, ...OPEN_FIX_SESSION },
-    select: { id: true, workspaceId: true, workspace: { select: { name: true } } },
+    where: { id: { in: wanted.map((w) => w.entry.sessionId) }, ownerId, deletedAt: null },
+    select: {
+      id: true,
+      workspaceId: true,
+      // What the released session's word is derived from (sessions/session-legacy-words.ts), the release column among them.
+      ...LEGACY_STATUS_SELECT,
+      completedAt: true,
+      archivedAt: true,
+      workspace: { select: { name: true } },
+    },
   });
-  const open = new Map(sessions.map((s) => [s.id, s]));
+  const byId = new Map(sessions.map((s) => [s.id, s]));
+  const landings = await readLandingSettlements(prisma, sessions);
   for (const { runnerId, key, entry } of wanted) {
-    const session = open.get(entry.sessionId);
+    const session = byId.get(entry.sessionId);
     if (!session?.workspaceId) continue;
     const parsed = parseKey(key)!;
-    const list = out.get(runnerId) ?? [];
-    list.push({ ...parsed, sessionId: session.id, workspaceId: session.workspaceId, workspaceName: session.workspace?.name ?? '' });
-    out.set(runnerId, list);
+    const place = { sessionId: session.id, workspaceId: session.workspaceId, workspaceName: session.workspace?.name ?? '' };
+    if (fixSessionIsOpen(session)) {
+      const list = fixing.get(runnerId) ?? [];
+      list.push({ ...parsed, ...place });
+      fixing.set(runnerId, list);
+    } else if (isReleased(session)) {
+      const list = handled.get(runnerId) ?? [];
+      const status = legacySessionStatus(session, landings.get(session.id));
+      list.push({ ...parsed, ...place, status: String(status) as RunnerAgentFixHandled['status'] });
+      handled.set(runnerId, list);
+    }
   }
-  return out;
+  return { fixing, handled };
+}
+
+/** The same answer as `OPEN_FIX_SESSION` (its release column, not its status, says whether it is over), for a row already
+ *  read. */
+function fixSessionIsOpen(session: { completedAt: Date | null; archivedAt: Date | null; finishedAt: Date | null }): boolean {
+  return !session.completedAt && !session.archivedAt && !isReleased(session);
 }
 
 /** Whether a stored entry still holds its warning: its session is open, or its create is still in flight. */
@@ -419,6 +448,29 @@ export function installFailedPrompt(
   };
 }
 
+/** Codex without the system bubblewrap its sandbox wants (docs/mocks/codex-sandbox-fix-with-agent):
+ *  the warning a session's transcript caught, not a runner-reported state. The agent checks first,
+ *  because the package may have been installed since that row was written. */
+export function sandboxMissingPrompt(
+  runner: Pick<AgentFixRunner, 'name' | 'displayName' | 'hostname' | 'capabilities'>,
+  engine: ReportedEngine,
+): AttentionFixPrompt | null {
+  if (engine !== 'codex') return null;
+  const machine = machineName(runner);
+  const os = runnerOs(runner.capabilities);
+  const where = os ? `${machine}, ${OS_NAMES[os] ?? os}` : machine;
+  const name = engineDisplayName(engine);
+  return {
+    title: `Fix: ${name} can't find bubblewrap on ${machine}`,
+    prompt:
+      `${name} on this machine (${where}) reports that it could not find bubblewrap on PATH, so it is using its ` +
+      `bundled copy. If \`bwrap --version\` already works, tell me and stop. Otherwise install bubblewrap with this ` +
+      `machine's package manager (for example \`apt-get install -y bubblewrap\` on Debian/Ubuntu, ` +
+      `\`dnf install -y bubblewrap\` on Fedora, \`apk add bubblewrap\` on Alpine). ${CARE} ` +
+      `When you are done, tell me what \`bwrap --version\` reports; ${name} uses it the next time it starts.`,
+  };
+}
+
 /** An Update engines run (docs/mocks/engine-update-fix-with-agent): its report while it has failed lines,
  *  until the next run replaces it or Dismiss clears it. */
 export function engineUpdateFailedPrompt(
@@ -463,5 +515,7 @@ export function attentionFixPrompt(
       return cannotSelfUpdatePrompt(runner, selfUpdate, latestFromClient);
     case 'engineUpdateFailed':
       return engineUpdateFailedPrompt(runner);
+    case 'sandboxMissing':
+      return engine ? sandboxMissingPrompt(runner, engine) : null;
   }
 }

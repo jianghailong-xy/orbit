@@ -152,7 +152,6 @@ func TestHostSetupInstallsTheUnitsSystemdWillRead(t *testing.T) {
 		"TimeoutStopSec=180",
 		// An OOM kill inside the unit leaves the runner up (TestARunnerUnitSurvivesAnOOMKillInsideIt).
 		"OOMPolicy=continue",
-		"Delegate=yes",
 		"[Install]",
 		"WantedBy=multi-user.target",
 	})
@@ -252,25 +251,38 @@ func TestHostRunnerTemplateBakesInNoEnvironment(t *testing.T) {
 }
 
 // Setup is the one command in this design that needs root, so a non-root run has to end
-// with the exact line to re-run — not a diagnosis the operator has to translate. sudo looks
-// a bare name up only on its secure_path, which an account's own ~/.orbit/bin is never on, so
-// a bare `orbit` comes back as the binary's own path, and a path comes back as it was typed.
+// with the exact lines to run — not a diagnosis the operator has to translate. Run from the
+// machine's binary, that is one line: sudo looks a bare name up only on its secure_path, so a
+// bare `orbit` comes back as the binary's own path, and a path comes back as it was typed. Run
+// from any other copy, an account's own one included (through its launcher or not), setup
+// would refuse that copy under sudo too, so it names the root-owned copy to put in place first
+// and the setup to run from it.
 func TestHostSetupWithoutRootNamesTheSudoCommand(t *testing.T) {
-	for _, tc := range []struct{ invokedAs, rerun string }{
-		{"orbit", "sudo /usr/local/bin/orbit host setup"},
-		{"./orbit", "sudo ./orbit host setup"},
-		{"/home/alice/.orbit/bin/orbit", "sudo /home/alice/.orbit/bin/orbit host setup"},
+	const server = "https://orbit.example.com"
+	const own = "/home/alice/.orbit/bin/orbit"
+	copyFirst := "Put a root-owned copy in place, then set the host up from it:\n" +
+		"  sudo install -o 0 -g 0 -m 0755 " + own + " /usr/local/bin/orbit\n" +
+		"  sudo /usr/local/bin/orbit host setup --server " + server
+	for _, tc := range []struct{ name, invokedAs, exe, tail string }{
+		{"machine binary, bare", "orbit", machineBinaryPath, "re-run: sudo /usr/local/bin/orbit host setup --server " + server},
+		{"machine binary, relative", "./orbit", machineBinaryPath, "re-run: sudo ./orbit host setup --server " + server},
+		{"own copy, by path", own, own, copyFirst},
+		{"own copy, through the launcher", "orbit", own, copyFirst},
 	} {
-		t.Run(tc.invokedAs, func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			env, cmds, root := testHostEnv(t, 1000)
 			env.invokedAs = tc.invokedAs
+			env.executable = func() (string, error) { return tc.exe, nil }
 
-			err := hostSetup(env, "https://orbit.example.com")
+			err := hostSetup(env, server)
 			if err == nil {
 				t.Fatal("setup as a non-root user must fail")
 			}
-			if want := "re-run: " + tc.rerun + " --server https://orbit.example.com"; !strings.HasSuffix(err.Error(), want) {
-				t.Errorf("the error must end with the line to re-run, %q, got: %v", want, err)
+			if !strings.HasSuffix(err.Error(), tc.tail) {
+				t.Errorf("the error must end with what to run, %q, got: %v", tc.tail, err)
+			}
+			if strings.Contains(err.Error(), "sudo "+own+" host setup") {
+				t.Errorf("the error must not tell the operator to set the host up from a copy setup refuses: %v", err)
 			}
 			if installed := installedFiles(t, root); len(installed) != 0 {
 				t.Errorf("a refused setup must write nothing, found %v", installed)
@@ -717,8 +729,7 @@ func TestHostSetupSaysWhatItSetUp(t *testing.T) {
 		"  Runners: orbit-runner@<user>.service, one instance per Linux user,\n" +
 		"           each running that user's own ~/.orbit/bin/orbit\n" +
 		"  Server:  https://orbit.example.com\n\n" +
-		"  Every user on this host can now run `orbit register` without root.\n" +
-		"  Runners already running get background job limits (Delegate=yes) when they next restart.\n"
+		"  Every user on this host can now run `orbit register` without root.\n"
 	if out.String() != want {
 		t.Errorf("setup said:\n%s\nwant:\n%s", out.String(), want)
 	}

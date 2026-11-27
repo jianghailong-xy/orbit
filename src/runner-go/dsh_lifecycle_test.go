@@ -186,6 +186,20 @@ func (cp *lcControlPlane) activate() string {
 	return generation
 }
 
+// continueAs hands a cut turn back with `content`, as dequeueTurn hands back a turn a runner stop cut: the
+// same turn, its lease reclaimed, its text replaced by the stop's continuation.
+func (cp *lcControlPlane) continueAs(id, content string) {
+	cp.mu.Lock()
+	for _, turn := range cp.turns {
+		if turn.ID == id {
+			turn.Content = content
+			turn.expired = true
+		}
+	}
+	cp.mu.Unlock()
+	cp.notify()
+}
+
 func (cp *lcControlPlane) setLeaseLost(lost bool) {
 	cp.mu.Lock()
 	cp.leaseLost = lost
@@ -867,6 +881,9 @@ func TestDshLifecycleHelperProcess(t *testing.T) {
 				if strings.Contains(text, "[slow]") {
 					time.Sleep(150 * time.Millisecond)
 				}
+				if strings.Contains(text, "[slower]") {
+					time.Sleep(800 * time.Millisecond)
+				}
 				if strings.Contains(text, "[effect]") {
 					toolStart("in_progress")
 					effect()
@@ -993,22 +1010,30 @@ func TestDshLifecycleMultiTurnQueue(t *testing.T) {
 		h.cp.checkClean(t)
 		h.recordEvidence(t.Name())
 	})
-	t.Run("unsupported-turns-reach-a-terminal", func(t *testing.T) {
+	t.Run("shell-turns-run-on-the-runner", func(t *testing.T) {
 		h := newLCHarness(t)
-		h.cp.add("s1", "shell", "ls")
 		h.cp.add("t1", "message", "m1")
+		h.cp.add("s1", "shell", "printf shell-ok")
+		h.cp.add("t2", "message", "m2")
 		run := h.start(h.job())
-		shell := h.cp.waitSettled(t, "s1")
-		if shell.Status != stFailed || len(shell.Completions) != 1 || shell.Completions[0].Subtype != subtypeUnknownKind {
-			t.Fatalf("shell turn must settle once without ending the session: %+v", shell)
-		}
 		h.settledOnce("t1", stSucceeded, "reply to m1 after []")
+		shell := h.cp.waitSettled(t, "s1")
+		if shell.Status != stSucceeded || len(shell.Completions) != 1 || shell.Completions[0].Subtype != "shell" ||
+			shell.Completions[0].ShellExitCode == nil || *shell.Completions[0].ShellExitCode != 0 ||
+			shell.Completions[0].ShellOutput == nil || *shell.Completions[0].ShellOutput != "shell-ok" {
+			t.Fatalf("a person's shell turn must run and settle once without ending the session: %+v", shell)
+		}
+		h.settledOnce("t2", stSucceeded, "")
 		h.end(run, "end")
-		lcEqual(t, "engine prompts", h.promptTexts(), []string{"m1"})
+		lcEqual(t, "engine prompts", h.promptTexts(), []string{
+			"m1",
+			"<bash-input>printf shell-ok</bash-input>\n<bash-stdout>shell-ok</bash-stdout>\n\nm2",
+		})
+		h.checkNoEngineViolations()
 		h.cp.checkClean(t)
 	})
-	// D3: a task's EXECUTABLE acceptance command is the runner's to run, in the worktree, after the
-	// message ahead of it — never a prompt to dsh — while a person's `!` shell is still refused.
+	// D3: a task's EXECUTABLE acceptance command, and a person's `!` shell, are the runner's to run
+	// in the worktree, after the message ahead of them — never prompts to dsh.
 	t.Run("task-acceptance-runs-on-the-runner", func(t *testing.T) {
 		h := newLCHarness(t)
 		h.cp.busyDelivery = true // the acceptance turn arrives while the message is still running
@@ -1036,12 +1061,12 @@ func TestDshLifecycleMultiTurnQueue(t *testing.T) {
 			t.Fatalf("acceptance ran in %q, not the worktree %q", ran, h.work)
 		}
 		user := h.cp.waitSettled(t, "s1")
-		if user.Status != stFailed || len(user.Completions) != 1 || user.Completions[0].Subtype != subtypeUnknownKind ||
-			user.Completions[0].ShellExitCode != nil {
-			t.Fatalf("a person's shell turn must still be refused: %+v", user)
+		if user.Status != stSucceeded || len(user.Completions) != 1 || user.Completions[0].Subtype != "shell" ||
+			user.Completions[0].ShellExitCode == nil || *user.Completions[0].ShellExitCode != 0 {
+			t.Fatalf("a person's shell turn must run on the runner: %+v", user)
 		}
-		if _, err := os.Stat(filepath.Join(h.work, "user-shell-ran.txt")); !os.IsNotExist(err) {
-			t.Fatalf("a refused shell turn ran: %v", err)
+		if _, err := os.Stat(filepath.Join(h.work, "user-shell-ran.txt")); err != nil {
+			t.Fatalf("a person's shell turn did not run: %v", err)
 		}
 		h.end(run, "end")
 		lcEqual(t, "engine prompts", h.promptTexts(), []string{"m1 [slow]"})
@@ -1436,7 +1461,14 @@ func TestDshLifecycleLateEvents(t *testing.T) {
 	})
 }
 
+// A runner stop (SIGTERM, the owner's Update Now) with a turn in flight: the turn gets the drain, then is cut as on
+// every engine — marked interrupt runner_restart and left unsettled for Orbit to hand back — and the next process
+// prompts the continuation Orbit hands back for it on the resumed dsh session, instead of reporting it interrupted
+// (production, 2026-11-23: a dsh turn cut by Update Now never continued).
 func TestDshLifecycleShutdownAndResume(t *testing.T) {
+	previous := shutdownDrainTimeout
+	shutdownDrainTimeout = 300 * time.Millisecond
+	t.Cleanup(func() { shutdownDrainTimeout = previous })
 	h := newLCHarness(t)
 	h.cp.add("t1", "message", "m1")
 	run := h.start(h.job())
@@ -1449,27 +1481,97 @@ func TestDshLifecycleShutdownAndResume(t *testing.T) {
 	if run.status != stCancelled || !run.ended {
 		t.Fatalf("shutdown = %s ended=%v", run.status, run.ended)
 	}
-	h.settledOnce("t2", stInterrupted, "")
-	if h.count("session/close") != 1 || lcProcessAlive(engine) {
-		t.Fatalf("shutdown must close the session and end its process: %v alive=%v", h.methods(), lcProcessAlive(engine))
+	if cut := h.cp.turn("t2"); cut.Status != "IN_FLIGHT" || len(cut.Completions) != 0 {
+		t.Fatalf("a turn the stop cut must stay leased for the next process, unsettled: %+v", cut)
+	}
+	var reasons []string
+	for _, event := range h.events.snapshot() {
+		if event.turn == "t2" && event.typ == evInterrupt {
+			reasons = append(reasons, fmt.Sprint(event.payload["reason"]))
+		}
+	}
+	lcEqual(t, "the cut's interrupt", reasons, []string{interruptReasonRunnerRestart})
+	if h.count("session/cancel") != 1 || h.count("session/close") != 1 || lcProcessAlive(engine) {
+		t.Fatalf("the cut must cancel the prompt, close the session and end its process: %v alive=%v", h.methods(), lcProcessAlive(engine))
 	}
 	for _, kept := range []string{"orbit-owner.json", "orbit.patch.json", "orbit-turns.json", "profiles/acp/cordis.yml", "lc-sessions/lc-engine-session-1.json"} {
 		if _, err := os.Stat(filepath.Join(h.home, kept)); err != nil {
 			t.Fatalf("DSH_HOME lost %s on shutdown: %v", kept, err)
 		}
 	}
+	// Orbit hands the cut turn back to the next process as the stop's continuation (dequeueTurn).
+	h.cp.continueAs("t2", "continue-m2 [Orbit] The runner update interrupted this turn; continue.")
 	job := h.job()
 	job.RuntimeSessionID = first.RuntimeSessionID
 	next := h.start(job)
+	h.settledOnce("t2", stSucceeded, "reply to continue-m2 after [m1|m2]")
 	h.cp.add("t3", "message", "m3")
-	h.settledOnce("t3", stSucceeded, "reply to m3 after [m1|m2]")
+	h.settledOnce("t3", stSucceeded, "reply to m3 after [m1|m2|continue-m2]")
 	h.cp.add("t4", "message", "m4 [hold]")
-	lcWaitFor(t, "held prompt", func() bool { return h.count("session/prompt") == 4 })
+	lcWaitFor(t, "held prompt", func() bool { return h.count("session/prompt") == 5 })
 	h.end(next, "end")
 	h.settledOnce("t4", stInterrupted, "")
-	lcEqual(t, "engine session log", h.sessionLog(first.RuntimeSessionID).History, []string{"m1", "m2 [hold]", "m3", "m4 [hold]"})
+	lcEqual(t, "engine session log", lcFirstWords(h.sessionLog(first.RuntimeSessionID).History), []string{"m1", "m2", "continue-m2", "m3", "m4"})
 	h.cp.checkClean(t)
 	h.recordEvidence(t.Name())
+}
+
+// The production hang of 2026-11-23: an earlier binary's stop cancelled a dsh turn at once and settled it INTERRUPTED in
+// the ledger, and its completion never reached Orbit, which therefore handed the same turn back to the next process with
+// its continuation. That process re-sent the old settlement instead of prompting, and the turn never continued. It is
+// prompted now.
+func TestDshLifecycleTurnSettledInterruptedByAnEarlierStopContinues(t *testing.T) {
+	h := newLCHarness(t)
+	h.cp.add("t1", "message", "m1")
+	run := h.start(h.job())
+	first := h.settledOnce("t1", stSucceeded, "")
+	h.end(run, "e1")
+	// What the earlier binary left: t2 prompted, cancelled at the stop, settled INTERRUPTED in the ledger; Orbit has it
+	// in flight still.
+	ledger, err := loadDshTurnLedger(h.home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ledger.update(func() {
+		ledger.Turns["t2"] = &dshTurnRecord{State: dshTurnSettled, Status: stInterrupted, Subtype: "interrupted"}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h.cp.add("t2", "message", "continue-m2 [Orbit] The last message you were working on was interrupted because its runner restarted")
+	job := h.job()
+	job.RuntimeSessionID = first.RuntimeSessionID
+	next := h.start(job)
+	h.settledOnce("t2", stSucceeded, "reply to continue-m2 after [m1]")
+	h.end(next, "e2")
+	h.cp.checkClean(t)
+}
+
+// A turn that ends within the stop's drain is reported as any other, and nothing is cut.
+func TestDshLifecycleShutdownDrainLetsATurnFinish(t *testing.T) {
+	previous := shutdownDrainTimeout
+	shutdownDrainTimeout = 20 * time.Second
+	t.Cleanup(func() { shutdownDrainTimeout = previous })
+	h := newLCHarness(t)
+	h.cp.add("t1", "message", "m1 [slower]")
+	run := h.start(h.job())
+	lcWaitFor(t, "slow prompt", func() bool { return h.count("session/prompt") == 1 })
+	run.shutdown()
+	time.Sleep(200 * time.Millisecond)
+	if turn := h.cp.turn("t1"); turn.Status != "IN_FLIGHT" {
+		t.Fatalf("the drain must not cut the turn at once: %+v", turn)
+	}
+	// The prompt answers within the drain, and it is reported as any other.
+	run.wait(t)
+	h.settledOnce("t1", stSucceeded, "reply to m1 after []")
+	if h.count("session/cancel") != 0 {
+		t.Fatalf("nothing is cancelled: %v", h.methods())
+	}
+	for _, event := range h.events.snapshot() {
+		if event.typ == evInterrupt {
+			t.Fatalf("nothing is cut: %+v", event)
+		}
+	}
+	h.cp.checkClean(t)
 }
 
 func TestDshLifecycleCredentialReload(t *testing.T) {

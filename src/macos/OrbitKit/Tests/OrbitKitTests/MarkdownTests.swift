@@ -156,6 +156,24 @@ final class MarkdownTests: XCTestCase {
         ])
     }
 
+    func testTableCellBlocksSplitsOutImages() {
+        // A reply that listed its slide images in a table showed empty cells on iOS.
+        XCTAssertEqual(tableCellBlocks("![Flywheel](orbit-attachment:abc)"),
+                       [.image(source: "orbit-attachment:abc", alt: "Flywheel")])
+        XCTAssertEqual(tableCellBlocks("**Slide** ![x](orbit-attachment:abc) after"), [
+            .paragraph(text: "**Slide**"),
+            .image(source: "orbit-attachment:abc", alt: "x"),
+            .paragraph(text: "after"),
+        ])
+    }
+
+    func testTableCellBlocksLeavesOtherCellsAsTheirSource() {
+        XCTAssertEqual(tableCellBlocks("a `code` b"), [.paragraph(text: "a `code` b")])
+        XCTAssertEqual(tableCellBlocks("1."), [.paragraph(text: "1.")])
+        XCTAssertEqual(tableCellBlocks("- x ![i](orbit-attachment:a)"),
+                       [.paragraph(text: "- x ![i](orbit-attachment:a)")])
+    }
+
     func testMixedDocumentLikeTheScreenshot() {
         let md = """
         ## Skill created: bytefinder

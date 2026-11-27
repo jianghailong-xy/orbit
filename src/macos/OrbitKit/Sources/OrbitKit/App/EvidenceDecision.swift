@@ -862,26 +862,11 @@ public enum EvidenceDecisions {
         "\(open ? "Hide" : "Show") the \(decided.decision == .confirm ? "note" : "reason")"
     }
 
-    private static let receiptClockFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateStyle = .none
-        f.timeStyle = .short
-        return f
-    }()
-    private static let receiptDayFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateStyle = .short
-        f.timeStyle = .short
-        return f
-    }()
-
-    /// When a receipt says it was decided: the clock on the day it happened, the date as well after
-    /// — a bare "5:42" on a receipt a week old reads as this morning. Web's `decisionReceiptTime`,
-    /// same rule.
+    /// When a receipt says it was decided: the clock on the day it happened, `M/D` before it after
+    /// — a bare "5:42" on a receipt a week old reads as this morning. The rule every receipt keeps
+    /// (`OwnerConfirmations.receiptTime`, decision D4 A; web `decisionReceiptTime`).
     public static func receiptTime(_ decidedAt: String, now: Date = Date()) -> String {
-        guard let at = ThinkingSummary.date(decidedAt) else { return decidedAt }
-        let sameDay = Calendar.current.isDate(at, inSameDayAs: now)
-        return (sameDay ? receiptClockFormatter : receiptDayFormatter).string(from: at)
+        OwnerConfirmations.receiptTime(decidedAt, now: now) ?? decidedAt
     }
 
     /// The receipt's line: which answer, to which revision, and when — web's `decisionReceiptLine`,

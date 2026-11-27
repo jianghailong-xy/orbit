@@ -36,7 +36,9 @@ import { test } from 'node:test';
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import { type Prisma, RunStatus, RunnerStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { type Prisma, RunnerStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
+import { isReleasedStatus } from '../common/session-release';
 import { uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -79,6 +81,9 @@ import { SessionRequestService } from './session-request.service';
 import { SessionsService } from './sessions.service';
 import '../test-support/daemon-routes-over-http';
 import { sessionLease } from '../test-support/dequeue-under-lease';
+import type { SessionFixture } from '../test-support/session-word';
+import { turnStateOfWord } from './session-turn-state';
+import { WORD_SELECT } from '../test-support/session-word';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -255,18 +260,22 @@ test('a session reaches a wider session only as the table says', {
   /** A session parked between turns, in a mode and on an engine. A stored mode of null is written as null. */
   async function sessionIn(
     mode: string | null,
-    extra: Partial<Prisma.SessionUncheckedCreateInput> = {},
+    extra: SessionFixture = {},
   ): Promise<string> {
     const id = randomUUID();
     const engine = extra.engine ?? 'claude';
+    const { status: fixtureStatus = RunStatus.AWAITING_INPUT, ...extraFacts } = extra;
     await prisma.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
         title: `${mode} ${id.slice(-6)}`, prompt: `${mode}`,
         provider: engine, providerBuiltin: true, engine, permissionMode: mode,
-        status: RunStatus.AWAITING_INPUT, numTurns: 1, startedAt: new Date(), runtimeSessionId: randomUUID(),
+        turnState: turnStateOfWord(fixtureStatus), numTurns: 1, startedAt: new Date(), runtimeSessionId: randomUUID(),
         dispatchOrigin: SessionDispatchOrigin.USER,
-        ...extra,
+        ...extraFacts,
+        ...(isReleasedStatus(fixtureStatus) ? {
+          finishedAt: extra.finishedAt ?? new Date(),
+        } : {}),
       },
     });
     return id;
@@ -339,7 +348,7 @@ test('a session reaches a wider session only as the table says', {
    * Every direct relation, built the way the records hold it. Each makes the two sessions and returns
    * them: the caller first. `recipientExtra` is the target's shape, for a door that needs one.
    */
-  type Shape = Partial<Prisma.SessionUncheckedCreateInput>;
+  type Shape = SessionFixture;
   const RELATIONS: Record<string, (caller: string, target: string, shape?: Shape) => Promise<{ from: string; to: string }>> = {
     'parent to its child': async (caller, target, shape) => {
       const from = await sessionIn(caller);
@@ -405,7 +414,7 @@ test('a session reaches a wider session only as the table says', {
     const row = await prisma.session.findUniqueOrThrow({
       where: { id: sessionId },
       select: {
-        status: true, endReason: true, completedAt: true, deletedAt: true, mergeStatus: true, cancelRequestedAt: true,
+        ...WORD_SELECT, endReason: true, completedAt: true, deletedAt: true, mergeStatus: true, cancelRequestedAt: true,
         folderId: true,
       },
     });
@@ -428,7 +437,7 @@ test('a session reaches a wider session only as the table says', {
   async function deliveredTo(sessionId: string): Promise<{ content: string; turnId: unknown }> {
     await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
-      await tx.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+      await tx.session.update({ where: { id: sessionId }, data: { turnState: 'IN_FLIGHT' } });
     });
     for (let i = 0; i < 4; i++) {
       const next = await send('GET', `${path(sessionId)}/inbox?leaseGeneration=${await sessionLease(prisma, sessionId)}`);

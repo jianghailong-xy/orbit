@@ -3,6 +3,7 @@ import type {
   ProjectIntegrationView,
   ProjectOpenItemRow,
   ProjectOpenItemsView,
+  ProjectStartRequest,
   ProjectStartSettingKey,
   ProjectStartSettings,
   StartProjectRequestBody,
@@ -34,6 +35,9 @@ export const NOT_STARTED = 'Not started';
 export const START_DONE_WHEN = 'Done when';
 export const START_PLAN = 'Plan';
 export const START_HOW_IT_RUNS = 'How it runs';
+
+/** The one line a start request with no line draws in place of the line and the landing check (ruling D1). */
+export const START_NO_LINE = 'Lands on the project’s branch when a task commits';
 /** The link under the plan, to the tasks it names. */
 export const START_VIEW_TASKS = 'View tasks ›';
 /** Beside it, while the plan is drawn as levels: the project page's task graph, full screen. */
@@ -354,10 +358,14 @@ export const RUN_AUTOMATIC_OFF_MAIN = 'You decide when each task is done, and ea
 /** The five above, said of the project's main branch. */
 export function runAutomaticSays(
   automatic: boolean,
-  line: ProjectStartSettings['line'],
+  /** `null`: the request named no line, so nothing is decided about where work lands and no sentence names a branch. */
+  line: ProjectStartSettings['line'] | null,
   hasMergeCheck: boolean,
   main: string = DEFAULT_MAIN_BRANCH,
 ): string {
+  if (line === null) {
+    return automatic ? 'The coordinator decides when each task is done.' : 'You decide when each task is done.';
+  }
   if (!automatic) {
     return line === 'MAIN'
       ? `You decide when each task is done, and each merge into ${main} asks you.`
@@ -448,7 +456,7 @@ export interface StartComesToYouItem {
  */
 export function startComesToYou(input: {
   automatic: boolean;
-  line: ProjectStartSettings['line'];
+  line: ProjectStartSettings['line'] | null;
   /** The plan's OWNER_CONFIRMED tasks, by the order line's label and their title. */
   ownerConfirmed: ReadonlyArray<{ label: string; title: string }>;
   /** How many of its tasks are settled by a judgment of their evidence. */
@@ -464,7 +472,8 @@ export function startComesToYou(input: {
     : input.ownerConfirmed.map((task) => ({ text: `${task.label} · ${task.title}`, detail: START_YOU_CONFIRM }));
   // An agent that pushes its own work to main asks nobody to merge it (O-L2): no merge comes to the
   // owner on that line.
-  const merges: StartComesToYouItem[] = input.line === 'MAIN'
+  // A request with no line decides nothing about merging, so no merge comes to the owner on it.
+  const merges: StartComesToYouItem[] = input.line === null ? [] : input.line === 'MAIN'
     ? input.deliveryMode === 'AGENT_PUSH' ? [] : [{ text: startEachMergeInto(input.main), detail: null }]
     : input.automatic ? [] : [{ text: startMergingInto(input.main), detail: null }];
   const criteria = { text: START_CRITERIA_CHANGES, detail: null };
@@ -530,9 +539,10 @@ export const START_ROW_NOT_ASKED = 'not asked yet';
  *  find the start card, which the conversation scrolls to once it is drawn. */
 export const START_PROJECT_INTENT = 'start-project';
 
-/** A line as a sentence names it, mid-sentence: "a project branch", "directly into main". */
+/** A line as a sentence names it, mid-sentence: "a project branch", "directly into main". It takes a
+ *  line that was named: a request with none names none (`START_NO_LINE`), never "a project branch". */
 export function runLineInSentence(
-  line: ProjectStartSettings['line'],
+  line: NonNullable<ProjectStartSettings['line']>,
   main: string = DEFAULT_MAIN_BRANCH,
 ): string {
   return line === 'MAIN' ? `directly into ${main}` : 'a project branch';
@@ -541,14 +551,15 @@ export function runLineInSentence(
 /** The request's row under its title: who asked, and what it suggests — "The coordinator asked · a
  *  project branch · Automatic on · at most 3 at a time". Directly into the main branch the start
  *  opens with (`startMainBranch`), which a page holding no integration read takes from the
- *  suggestion alone. */
+ *  suggestion alone. A request that names no line says so in the start card's own sentence:
+ *  "The coordinator asked · Lands on the project’s branch when a task commits · …". */
 export function startRequestSummary(
   settings: ProjectStartSettings,
   main: string = mainBranchName(settings.upstreamRef),
 ): string {
   return [
     START_ROW_ASKED,
-    runLineInSentence(settings.line, main),
+    settings.line ? runLineInSentence(settings.line, main) : START_NO_LINE,
     `${RUN_AUTOMATIC} ${settings.automatic ? 'on' : 'off'}`,
     `at most ${settings.maxConcurrentTasks} at a time`,
   ].join(' · ');
@@ -601,12 +612,27 @@ export const RUN_SUMMARY_NO_MERGE_CHECK = 'no merge check';
 /** What a setting that is not what the coordinator suggested says when it is pointed at. */
 export const RUN_SETTING_DIFFERS = 'Not what the coordinator suggested';
 
-/** A project branch as a line names it: without `refs/heads/`, and `project/<id>` down to the first
- *  five characters of the id, which is how a reader tells two of them apart. */
+/** A project branch as a line names it: without `refs/heads/`. A readable name
+ *  (`project/<title slug>-<8 characters>`) is shown whole; only the old bare-id form,
+ *  `project/<public id>`, is cut down to the first five characters of the id, which is how a reader
+ *  tells two of those apart. */
 export function shortBranch(ref: string): string {
   const name = ref.replace(/^refs\/heads\//u, '');
-  const project = /^project\/(.{6,})$/u.exec(name);
+  const project = /^project\/([0-9A-Za-z]{20,})$/u.exec(name);
   return project ? `project/${project[1]!.slice(0, 5)}…` : name;
+}
+
+/** The project branch a start card names, without `refs/heads/`: the one the request names, else
+ *  the server's default for the project (`defaultProjectBranchName`), else — from a server that
+ *  predates that field — `project/<project id>`, the name such a server gave it. */
+export function startCardBranch(
+  request: Pick<ProjectStartRequest, 'settings' | 'defaultProjectBranchName'>,
+  projectId: string,
+): string {
+  const ref = request.settings.projectBranchName
+    ?? request.defaultProjectBranchName
+    ?? `refs/heads/project/${projectId}`;
+  return ref.replace(/^refs\/heads\//u, '');
 }
 
 /** One setting of the one-line summary, and whether it is not what the start was asked for. */
@@ -834,3 +860,8 @@ export const startProject = (
     method: 'POST',
     body,
   });
+
+/** A task set to start by hand (`autoRunWhenReady: false`), as its project-page row says it: the
+ *  Project started card's words for the same tasks ("1 task is set to start by hand, …",
+ *  ProjectStartedCard `projectStartedHeldLead`). */
+export const PROJECT_TASK_STARTS_BY_HAND = 'set to start by hand';

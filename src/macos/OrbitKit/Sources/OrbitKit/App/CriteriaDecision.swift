@@ -308,8 +308,8 @@ public struct PendingCriteriaDecisionRow: Codable, Equatable, Sendable, Identifi
 /// same proposal went stale knowing only that somebody had answered — which is what the account
 /// owner met on 2026-09-11, refusing in a browser and finding the phone's card dimmed with no way to
 /// tell which answer it had been given. The answer is a committed row, so it arrives on the same
-/// derived read as the rest of the card. It is the outcome and the two seals, never the proposal's
-/// words: a stale card still shows no diff.
+/// derived read as the rest of the card: the outcome and the two seals, and what the answer was
+/// about (`proposal`, `diff`), which only the receipt's fold draws — a stale card still shows no diff.
 public struct SettledCriteriaDecision: Codable, Equatable, Sendable {
     public let intentId: String
     public let decision: CriteriaDecisionAnswer
@@ -319,14 +319,99 @@ public struct SettledCriteriaDecision: Codable, Equatable, Sendable {
     public let baseSeal: String
     /// The seal standing afterwards: `baseSeal` again for a refusal, moved by an approval.
     public let resultingSeal: String
+    /// What the answer was about, the proposal's own side (web `SettledProposalMaterial`). Nil
+    /// from a server older than this build and when the server could not say: the receipt then
+    /// draws its line and no fold.
+    public let proposal: SettledProposalMaterial?
+    /// The diff the answer was given against, when the record kept it (web `SettledDecisionDiff`).
+    public let diff: SettledDecisionDiff?
 
     public init(intentId: String, decision: CriteriaDecisionAnswer, decidedAt: String,
-                baseSeal: String, resultingSeal: String) {
+                baseSeal: String, resultingSeal: String,
+                proposal: SettledProposalMaterial? = nil, diff: SettledDecisionDiff? = nil) {
         self.intentId = intentId
         self.decision = decision
         self.decidedAt = decidedAt
         self.baseSeal = baseSeal
         self.resultingSeal = resultingSeal
+        self.proposal = proposal
+        self.diff = diff
+    }
+}
+
+/// What an answered proposal did to one criterion (web `SettledCriterionChange`).
+public enum SettledCriterionChange: String, Codable, Equatable, Sendable {
+    case reworded = "REWORDED"
+    case added = "ADDED"
+    case dropped = "DROPPED"
+}
+
+/// One criterion an answered proposal moved: the half of it the record still holds (web
+/// `SettledCriterionEntry`). `ordinal` and `text` are nil on a dropped one.
+public struct SettledCriterionEntry: Codable, Equatable, Sendable {
+    public let change: SettledCriterionChange
+    public let definitionId: String?
+    public let ordinal: Int?
+    public let text: String?
+
+    public init(change: SettledCriterionChange, definitionId: String? = nil, ordinal: Int?,
+                text: String?) {
+        self.change = change
+        self.definitionId = definitionId
+        self.ordinal = ordinal
+        self.text = text
+    }
+}
+
+/// What one answered proposal asked for: what it moved, and how much it left alone (web
+/// `SettledProposalMaterial`).
+public struct SettledProposalMaterial: Codable, Equatable, Sendable {
+    public let changed: [SettledCriterionEntry]
+    public let rewordedCount: Int
+    public let addedCount: Int
+    public let droppedCount: Int
+    /// How many criteria the proposal restated with the words already sealed.
+    public let unchangedCount: Int
+
+    public init(changed: [SettledCriterionEntry], rewordedCount: Int, addedCount: Int,
+                droppedCount: Int, unchangedCount: Int) {
+        self.changed = changed
+        self.rewordedCount = rewordedCount
+        self.addedCount = addedCount
+        self.droppedCount = droppedCount
+        self.unchangedCount = unchangedCount
+    }
+}
+
+/// The diff one answer was given against, when the record still holds it (web
+/// `SettledDecisionDiff`): `snapshot` for a decision recorded since 0279, `predatesSnapshot` for
+/// one answered before the column existed. A state this build does not know is `unreadable`, so a
+/// newer server costs the fold its diff rather than the queue its decode.
+public enum SettledDecisionDiff: Codable, Equatable, Sendable {
+    case snapshot(CriteriaProposalDiff)
+    case predatesSnapshot
+    case unreadable
+
+    private enum CodingKeys: String, CodingKey { case state, diff }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        switch try values.decode(String.self, forKey: .state) {
+        case "SNAPSHOT": self = .snapshot(try values.decode(CriteriaProposalDiff.self, forKey: .diff))
+        case "PREDATES_SNAPSHOT": self = .predatesSnapshot
+        default: self = .unreadable
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .snapshot(let diff):
+            try values.encode("SNAPSHOT", forKey: .state)
+            try values.encode(diff, forKey: .diff)
+        case .predatesSnapshot: try values.encode("PREDATES_SNAPSHOT", forKey: .state)
+        case .unreadable: try values.encode("UNREADABLE", forKey: .state)
+        }
     }
 }
 
@@ -652,6 +737,9 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
     public let integration: ProjectIntegrationSettings?
     /// The non-code mark and the criteria moved out, for the done card (`ProjectDoneFollowUps.swift`).
     public let followUps: ProjectDoneFollowUpFields
+    /// Settings › Translation: the title and criteria in the owner's language, which the done cards
+    /// draw (`ProjectDoneSubject.shown`). Nil with translation off and from an older server.
+    public var translation: ProjectTextTranslation? = nil
 
     /// What the done cards read off this document.
     public var doneSubject: ProjectDoneSubject {
@@ -664,7 +752,7 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
                            derivedDone: derivedDone, doneBy: doneBy, doneAt: doneAt,
                            acceptedGaps: acceptedGaps, upstreamRef: integration?.upstreamRef,
                            projectID: id, nonCodeMark: followUps.nonCodeMark,
-                           criteriaMovedOut: followUps.criteriaMovedOut)
+                           criteriaMovedOut: followUps.criteriaMovedOut, translation: translation)
     }
     /// How many tasks the project holds — what the confirmation card's condition asks before it
     /// offers to start anything, because "Start the project" is a verb and this is its object.
@@ -733,6 +821,7 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
         exceptionEscalationSeconds = try? c.decodeIfPresent(Int.self, forKey: .exceptionEscalationSeconds)
         integration = try? c.decodeIfPresent(ProjectIntegrationSettings.self, forKey: .integration)
         followUps = (try? ProjectDoneFollowUpFields(from: decoder)) ?? ProjectDoneFollowUpFields()
+        translation = (try? c.decodeIfPresent(ProjectTextTranslation.self, forKey: .translation)) ?? nil
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -752,12 +841,13 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
         try c.encodeIfPresent(coordinatorSessionId, forKey: .coordinatorSessionId)
         try c.encodeIfPresent(exceptionEscalationSeconds, forKey: .exceptionEscalationSeconds)
         try c.encodeIfPresent(integration, forKey: .integration)
+        try c.encodeIfPresent(translation, forKey: .translation)
     }
 
     enum CodingKeys: String, CodingKey {
         case id, acceptanceCriteriaItems, title, status, coordinatorEnabled, startedAt
         case derivedDone, doneBy, doneAt, acceptedGaps
-        case coordinatorSessionId, exceptionEscalationSeconds, integration
+        case coordinatorSessionId, exceptionEscalationSeconds, integration, translation
         case counts = "_count"
     }
 }
@@ -1070,25 +1160,18 @@ public enum CriteriaDecisions {
     /// is handed to the window that pressed the button and to nobody else, so a record read back
     /// later — on a phone that never saw the card, or after the page was reloaded — says what was
     /// decided rather than claiming a destination it never learned.
-    public static func receiptLine(_ settled: SettledCriteriaDecision) -> String {
+    public static func receiptLine(_ settled: SettledCriteriaDecision, now: Date = Date()) -> String {
         let verdict = settled.decision == .approve ? "Approved" : "Refused"
-        return "✓ \(verdict) by you at \(receiptClock(settled.decidedAt))"
+        return "✓ \(verdict) by you at \(receiptClock(settled.decidedAt, now: now))"
     }
 
-    /// A receipt's clock, in the reader's own locale — the browser's `toLocaleTimeString` with a
-    /// two-digit hour and minute. Built once and reused, like `RelativeTime`'s formatters. An
-    /// unparseable stamp is shown as it came rather than dropped: a record with no time on it is a
-    /// record the reader cannot place.
-    private static let receiptClockFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateStyle = .none
-        f.timeStyle = .short
-        return f
-    }()
-
-    public static func receiptClock(_ decidedAt: String) -> String {
-        guard let date = ThinkingSummary.date(decidedAt) else { return decidedAt }
-        return receiptClockFormatter.string(from: date)
+    /// A receipt's moment: the reader's short clock when it is today, `M/D` before it otherwise —
+    /// `OwnerConfirmations.receiptTime`, the rule every receipt keeps (decision D4 A; web
+    /// `receiptClock`, src/shared/src/project-page-labels.fixture.json). An unparseable stamp is
+    /// shown as it came rather than dropped: a record with no time on it is a record the reader
+    /// cannot place.
+    public static func receiptClock(_ decidedAt: String, now: Date = Date()) -> String {
+        OwnerConfirmations.receiptTime(decidedAt, now: now) ?? decidedAt
     }
 
     /// One answer this console draws as a record.
@@ -1240,7 +1323,12 @@ public enum CriteriaDecisions {
     /// Every criterion this proposal would move, as rows. The untouched ones are not here — they
     /// are `unchangedRows` below, behind a fold, under a count that is always on screen.
     public static func changeRows(_ row: PendingCriteriaDecisionRow) -> [ChangeRow] {
-        movedEntries(row.diff).enumerated().map { index, entry in
+        changeRows(row.diff)
+    }
+
+    /// The same rows off a diff alone — the live card's and the receipt's stored one.
+    public static func changeRows(_ diff: CriteriaProposalDiff) -> [ChangeRow] {
+        movedEntries(diff).enumerated().map { index, entry in
             let textMoved = entry.change == .changed && entry.changed.contains(.text)
             let plain = (entry.proposed ?? entry.onRecord)?.text ?? ""
             return ChangeRow(
@@ -1265,11 +1353,154 @@ public enum CriteriaDecisions {
 
     /// The criteria the proposal leaves word for word alone, numbered as the server numbers them.
     public static func unchangedRows(_ row: PendingCriteriaDecisionRow) -> [String] {
-        unmovedEntries(row.diff).map { "\($0.ordinal). \($0.proposed?.text ?? "")" }
+        unchangedRows(row.diff)
+    }
+
+    public static func unchangedRows(_ diff: CriteriaProposalDiff) -> [String] {
+        unmovedEntries(diff).map { "\($0.ordinal). \($0.proposed?.text ?? "")" }
     }
 
     /// The request one press makes, as data, so what goes to the door can be asserted without a
     /// network — the same tactic the web card takes with `criteriaDecisionRequest`.
+    // MARK: derivation — what a receipt says it was about
+
+    /// The tones a receipt is drawn in (decision D1 A): the frame and head in the warning tone, like
+    /// web's `.criteria-decision` (`--warning-border` / `--warning-bg`), because what was answered
+    /// is a ruler getting looser; the verdict and its check mark in the success tone, like web's
+    /// `.criteria-decision-verdict` (`--success`).
+    public enum ReceiptTone: Equatable, Sendable { case warning, success }
+    public static let receiptTone: ReceiptTone = .warning
+    public static let receiptVerdictTone: ReceiptTone = .success
+
+    /// The fold's lead, which is the whole of how a refusal reads differently: an approval and a
+    /// refusal publish the same material, and only the answer says whether any of it took effect.
+    /// Web's `SETTLED_APPROVED_LEAD` / `SETTLED_REFUSED_LEAD`, word for word.
+    public static let settledApprovedLead = "What this approved"
+    public static let settledRefusedLead = "What this refused"
+    /// The tail of the proposal's line: how much of the ruler the decision left as it was.
+    public static let settledUnchangedOne = "criterion unchanged"
+    public static let settledUnchangedMany = "criteria unchanged"
+    /// What keeps the proposal's side from being read as a before-and-after: the words a rewrite
+    /// replaced were never stored for a decision older than the stored diff.
+    public static let settledNoBeforeWords =
+        "This is the proposal’s own wording. The words it replaced were never stored, so what is here is one side of the change and not a before-and-after."
+    /// The half a refusal says first: these words are on record, and nothing else is.
+    public static let settledNothingApplied =
+        "None of this was applied — the criteria on record stayed exactly as they were."
+    /// A dropped criterion's row, which has no words of its own to show.
+    public static let settledDroppedWordsGone = "its words are not on record"
+
+    public static func settledLead(_ decision: CriteriaDecisionAnswer) -> String {
+        decision == .approve ? settledApprovedLead : settledRefusedLead
+    }
+
+    /// One entry's badge, in the three words the live card's summary counts them in.
+    public static func settledChangeWord(_ change: SettledCriterionChange) -> String {
+        switch change {
+        case .reworded: return rewordedWord
+        case .added:    return addedWord
+        case .dropped:  return droppedWord
+        }
+    }
+
+    /// The proposal's closed line (web `settledSummary`): which answer, what it moved — by name
+    /// when it moved exactly one criterion — and how much it left alone.
+    public static func settledSummary(_ settled: SettledCriteriaDecision) -> String {
+        let lead = settledLead(settled.decision)
+        guard let proposal = settled.proposal else { return lead }
+        var counts: [String] = []
+        if proposal.rewordedCount > 0 { counts.append("\(proposal.rewordedCount) \(rewordedWord)") }
+        if proposal.droppedCount > 0 { counts.append("\(proposal.droppedCount) \(droppedWord)") }
+        if proposal.addedCount > 0 { counts.append("\(proposal.addedCount) \(addedWord)") }
+        let moved: String
+        if proposal.changed.count == 1, let only = proposal.changed.first, let ordinal = only.ordinal {
+            moved = "criterion \(ordinal) \(settledChangeWord(only.change))"
+        } else {
+            moved = counts.isEmpty ? changeSummaryNothingMoves : counts.joined(separator: ", ")
+        }
+        let unchanged = proposal.unchangedCount == 1 ? settledUnchangedOne : settledUnchangedMany
+        return "\(lead) · \(moved) · \(proposal.unchangedCount) \(unchanged)"
+    }
+
+    /// The receipt's fold "What this approved · …", laid out for a view that only assembles: web's
+    /// `SettledDiff` when the record kept the diff the answer was given against, `SettledProposal`
+    /// from the proposal's own side otherwise, and nil when there is neither — an empty disclosure
+    /// promises something behind it.
+    public struct SettledFold: Equatable, Sendable {
+        public struct Row: Equatable, Sendable, Identifiable {
+            public let id: String
+            /// The server's ordinal; nil for a dropped criterion, which has no place in the set.
+            public let ordinal: Int?
+            public let words: [CriterionSegment]
+            /// Empty on an untouched criterion, which carries none.
+            public let badge: String
+            public let method: [CriterionSegment]?
+
+            public init(id: String, ordinal: Int?, words: [CriterionSegment], badge: String,
+                        method: [CriterionSegment]? = nil) {
+                self.id = id
+                self.ordinal = ordinal
+                self.words = words
+                self.badge = badge
+                self.method = method
+            }
+
+            /// Every run of the words, joined — struck-through ones included, as a page's text is.
+            public var text: String { words.map(\.text).joined() }
+        }
+
+        /// The closed line.
+        public let summary: String
+        /// What the two marks mean, when a row carries them.
+        public let legend: String?
+        /// The criteria the decision moved, in order; dropped ones (no ordinal) last.
+        public let rows: [Row]
+        /// The fold over the untouched criteria (the stored diff only): its line and its rows.
+        public let unchangedLine: String?
+        public let unchanged: [Row]
+        /// The quiet line under the rows.
+        public let note: String?
+    }
+
+    public static func settledFold(_ settled: SettledCriteriaDecision) -> SettledFold? {
+        if case .snapshot(let diff) = settled.diff {
+            let rows = changeRows(diff).map {
+                SettledFold.Row(id: $0.id, ordinal: $0.ordinal, words: $0.words, badge: $0.badge,
+                                method: $0.method)
+            }
+            let same = unmovedEntries(diff).enumerated().map { index, entry in
+                SettledFold.Row(id: entry.definitionId ?? "same-\(index)", ordinal: entry.ordinal,
+                                words: [CriterionSegment(side: .kept, text: entry.proposed?.text ?? "")],
+                                badge: "")
+            }
+            return SettledFold(
+                summary: "\(settledLead(settled.decision)) · \(changeSummary(diff))",
+                legend: hasRewrite(diff) ? inlineDiffLegend : nil,
+                rows: rows,
+                unchangedLine: same.isEmpty ? nil : unchangedLine(same.count),
+                unchanged: same,
+                note: settled.decision == .reject ? settledNothingApplied : nil)
+        }
+        guard let proposal = settled.proposal else { return nil }
+        let placed = proposal.changed.enumerated().filter { $0.element.ordinal != nil }.map { index, entry in
+            SettledFold.Row(id: entry.definitionId ?? "placed-\(index)", ordinal: entry.ordinal,
+                            words: [CriterionSegment(side: .kept, text: entry.text ?? "")],
+                            badge: settledChangeWord(entry.change))
+        }
+        let dropped = proposal.changed.enumerated().filter { $0.element.ordinal == nil }.map { index, entry in
+            SettledFold.Row(id: entry.definitionId ?? "dropped-\(index)", ordinal: nil,
+                            words: [CriterionSegment(side: .kept, text: settledDroppedWordsGone)],
+                            badge: settledChangeWord(entry.change))
+        }
+        return SettledFold(
+            summary: settledSummary(settled),
+            legend: nil,
+            rows: placed + dropped,
+            unchangedLine: nil,
+            unchanged: [],
+            note: (settled.decision == .reject ? "\(settledNothingApplied) " : "") + settledNoBeforeWords)
+    }
+
     public static func request(row: PendingCriteriaDecisionRow,
                                decision: CriteriaDecisionAnswer) -> CriteriaDecisionRequest {
         CriteriaDecisionRequest(commitToken: row.commitToken, decision: decision,

@@ -17,12 +17,12 @@ class CoordinatorHandoffCopyParityTest {
     }
     private val shared by lazy { File(root, "src/shared/src/coordinator-handoff.ts").readText() }
 
-    /** `key: 'value',` and `key: (…) => …'value'…` lines of COORDINATOR_HANDOFF_COPY. */
+    /** Single- or double-quoted constants in COORDINATOR_HANDOFF_COPY. */
     private fun constant(key: String): String {
         val copy = shared.substringAfter("export const COORDINATOR_HANDOFF_COPY = {")
-        val match = Regex("""(?m)^\s*$key: '((?:[^'\\]|\\.)*)',""").find(copy)
+        val match = Regex("""(?m)^\s*$key: (?:'((?:[^'\\]|\\.)*)'|"([^"]*)"),""").find(copy)
         assertNotNull("COORDINATOR_HANDOFF_COPY.$key is not a plain string", match)
-        return match!!.groupValues[1].replace("\\'", "'")
+        return match!!.groupValues[1].replace("\\'", "'").ifEmpty { match.groupValues[2] }
     }
 
     @Test fun everyConstantIsTheSharedOnesWordForWord() {
@@ -43,6 +43,9 @@ class CoordinatorHandoffCopyParityTest {
             "tryAgain" to CoordinatorHandoffCopy.TRY_AGAIN,
             "handOverWithoutNote" to CoordinatorHandoffCopy.HAND_OVER_WITHOUT_NOTE,
             "keepThisCoordinator" to CoordinatorHandoffCopy.KEEP_THIS_COORDINATOR,
+            "successorRowTitle" to CoordinatorHandoffCopy.SUCCESSOR_ROW_TITLE,
+            "successorKeep" to CoordinatorHandoffCopy.SUCCESSOR_KEEP,
+            "successorRowDetail" to CoordinatorHandoffCopy.SUCCESSOR_ROW_DETAIL,
         ).forEach { (key, kotlin) -> assertEquals(key, constant(key), kotlin) }
     }
 

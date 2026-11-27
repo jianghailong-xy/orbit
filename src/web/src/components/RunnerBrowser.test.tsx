@@ -5,16 +5,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RunnerBrowserState } from '@orbit/shared';
-import { SessionBrowserChip } from './SessionBrowserChip';
+import type { OwnerRequest } from '../lib/ownerRequests';
 import { RunnerBrowserSection } from './settings/RunnerBrowserSection';
 import { RunnerBrowserPage } from '../pages/RunnerBrowserPage';
 
 /**
- * The web viewer of the Orbit Cloud runner's browser (docs/runner-browser-design.md §5; boards 01 frames 4–9 and 02
- * frames ② ③): the session's Browser chip and when it shows; the drawer as a view-only quick look whose Open in new
- * tab and Take control open the browser's own tab and close the drawer's stream; Settings' Open browser opening that
- * tab in control; the tab at /runners/:id/browser in control (Fit / 100%, Done, paste) and view only (Take control);
- * Clear saved logins behind a confirmation; and nothing at all while the server reports the browser off.
+ * The web viewer of the Orbit Cloud runner's browser (docs/runner-browser-design.md §5; board 02 frames ② ③):
+ * Settings' Open browser opening the browser's own tab in control; the tab at /runners/:id/browser in control
+ * (Fit / 100%, Done, paste) and view only (Take control); Clear saved logins behind a confirmation; and nothing at all while the server reports the browser off.
  *
  * noVNC is replaced by a stand-in that records what the viewer asked of it: `viewOnly` is the one switch between
  * watching and sending pointer and keys (noVNC drops every input event while it is true), and the keys that reach
@@ -116,6 +114,7 @@ const running = (over: Partial<RunnerBrowserState> = {}): RunnerBrowserState => 
   reportedAt: '2026-11-18T05:00:00.000Z',
   clearRequestedAt: null,
   profileClearedAt: null,
+  savedLogins: null,
   ...over,
 });
 
@@ -123,6 +122,41 @@ const running = (over: Partial<RunnerBrowserState> = {}): RunnerBrowserState => 
 let browser: RunnerBrowserState | 'off' = 'off';
 /** Every request the page made, as `METHOD path`. */
 let calls: string[] = [];
+/** The owner's open requests, as GET /owner-requests?state=open answers them. */
+let openRequests: OwnerRequest[] = [];
+/** GET /runners/:id/login: the runner's engine sign-in, as the sign-in card reads it. */
+let login: Record<string, unknown> = { status: null, engine: null, url: null, userCode: null, message: null };
+/** The last mount's query client, to re-read a list as the realtime stream would. */
+let queryClient: QueryClient | null = null;
+
+const signIn = (over: Partial<OwnerRequest> = {}): OwnerRequest => ({
+  id: 'req-sign-in',
+  kind: 'BROWSER_SIGN_IN',
+  state: 'PENDING',
+  title: 'Sign in to github.com',
+  why: 'Sign in to the account that owns acme/billing, so I can export the report.',
+  blocksTaskIds: [],
+  ifUnanswered: null,
+  options: null,
+  recommendedOption: null,
+  steps: null,
+  secretSpec: null,
+  secretGrant: null,
+  verifyHint: null,
+  browserSite: 'github.com',
+  browserRunnerId: RUNNER,
+  askedBySessionTitle: 'Export the monthly report from GitHub',
+  expiresAt: null,
+  askedBySessionId: SESSION,
+  projectId: null,
+  resolvedAt: null,
+  resolvedByUserId: null,
+  resolvedBySessionId: null,
+  resolutionNote: null,
+  answer: null,
+  createdAt: '2026-11-18T05:00:00.000Z',
+  ...over,
+});
 
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
@@ -161,6 +195,8 @@ afterAll(() => {
 beforeEach(() => {
   browser = 'off';
   calls = [];
+  openRequests = [];
+  login = { status: null, engine: null, url: null, userCode: null, message: null };
   opened = [];
   clipboard = [];
   vnc.made.length = 0;
@@ -174,6 +210,14 @@ beforeEach(() => {
       return browser;
     }
     if (path === `/runners/${RUNNER}/browser/clear` && init?.method === 'POST') return { requestedAt: '2026-11-18T05:01:00.000Z' };
+    if (path === '/owner-requests?state=open') return { requests: openRequests };
+    if (path === `/runners/${RUNNER}/login`) return login;
+    const done = /^\/owner-requests\/([^/]+)\/done$/.exec(path);
+    if (done && init?.method === 'POST') {
+      const answered = openRequests.find((r) => r.id === decodeURIComponent(done[1]));
+      openRequests = openRequests.filter((r) => r !== answered);
+      return { ...answered, state: 'DONE' };
+    }
     throw new Error(`no ${path} here`);
   });
 });
@@ -196,13 +240,12 @@ async function mount(node: React.ReactNode) {
   host = document.createElement('div');
   document.body.appendChild(host);
   root = createRoot(host);
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  queryClient = qc;
   act(() => root!.render(<QueryClientProvider client={qc}>{node}</QueryClientProvider>));
   await settle();
 }
 
-const chip = () => host!.querySelector<HTMLButtonElement>('.rb-chip');
-const drawer = () => document.querySelector<HTMLElement>('.rb-drawer');
 const buttonNamed = (name: string) =>
   [...document.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === name) ?? null;
 async function press(button: HTMLElement | null) {
@@ -210,38 +253,8 @@ async function press(button: HTMLElement | null) {
   await act(async () => button!.click());
   await settle();
 }
-/** The requests other than reading the browser's state: what the viewer sent anywhere else. */
-const writes = () => calls.filter((call) => call !== `GET /runners/${RUNNER}/browser`);
-
-describe('the session Browser chip', () => {
-  it('shows when the switch is on, the session runs on the managed runner, and the browser is running', async () => {
-    browser = running();
-    await mount(<SessionBrowserChip managedRunnerId={RUNNER} sessionId={SESSION} />);
-    expect(chip()?.textContent).toBe('Browser');
-    expect(chip()?.querySelector('.rb-chip-dot')).not.toBeNull();
-  });
-
-  it('is not drawn while the browser is not running', async () => {
-    browser = running({ state: 'IDLE', holderSessionId: null, holderTitle: null });
-    await mount(<SessionBrowserChip managedRunnerId={RUNNER} sessionId={SESSION} />);
-    expect(chip()).toBeNull();
-    expect(host!.innerHTML).toBe('');
-  });
-
-  it('reads nothing and draws nothing for a session on any other runner', async () => {
-    browser = running();
-    await mount(<SessionBrowserChip managedRunnerId={null} sessionId={SESSION} />);
-    expect(host!.innerHTML).toBe('');
-    expect(calls).toEqual([]);
-  });
-
-  it('draws nothing when the server reports the browser off (404)', async () => {
-    browser = 'off';
-    await mount(<SessionBrowserChip managedRunnerId={RUNNER} sessionId={SESSION} />);
-    expect(calls).toEqual([`GET /runners/${RUNNER}/browser`]);
-    expect(host!.innerHTML).toBe('');
-  });
-});
+/** The requests other than reads: what the viewer sent anywhere. */
+const writes = () => calls.filter((call) => !call.startsWith('GET '));
 
 
 const SECRET = '密码 Pässwörd 🔑';
@@ -265,84 +278,6 @@ async function pressPaste(text: string, mod: 'ctrlKey' | 'metaKey' = 'ctrlKey') 
   await pasteText(document.activeElement ?? canvas, text);
   await act(async () => void canvas.dispatchEvent(new KeyboardEvent('keyup', { key: 'v', code: 'KeyV', [mod]: true, bubbles: true })));
 }
-
-describe('the drawer from a session: a view-only quick look', () => {
-  it('opens view only on the runner viewer stream, saying who holds the browser, with Open in new tab and Take control', async () => {
-    browser = running();
-    await mount(<SessionBrowserChip managedRunnerId={RUNNER} sessionId={SESSION} />);
-    await press(chip());
-    expect(drawer()).not.toBeNull();
-    expect(vnc.made).toHaveLength(1);
-    expect(socket().url).toBe(`ws://${window.location.host}/api/runners/${RUNNER}/browser/vnc?access_token=web-login`);
-    expect(vnc.made[0].channel).toBe(socket());
-    expect(vnc.made[0].viewOnly).toBe(true);
-    expect(vnc.made[0].scaleViewport).toBe(true);
-    // The server is told this viewer is not in control.
-    expect(controlSaid()).toEqual([false]);
-    expect(drawer()!.querySelector('.orbit-overlay-title')?.textContent).toBe('Browser');
-    expect(buttonNamed('↗ Open in new tab')).not.toBeNull();
-    expect(buttonNamed('Take control')).not.toBeNull();
-    expect(drawer()!.querySelector('.rb-view-only')?.textContent).toBe('View only');
-    expect(drawer()!.querySelector('.rb-holder')?.textContent).toBe('Used by this session');
-    expect(drawer()!.querySelector('.rb-scaled')?.textContent).toBe('Fit');
-    expect(drawer()!.querySelector('.rb-link')?.textContent).toBe('Live');
-  });
-
-  it('names another session that holds the browser, and none when nobody does', async () => {
-    browser = running({ holderSessionId: '34z8OKBXxDRYsIZwzJ35T', holderTitle: 'Book the venue' });
-    await mount(<SessionBrowserChip managedRunnerId={RUNNER} sessionId={SESSION} />);
-    await press(chip());
-    expect(drawer()!.querySelector('.rb-holder')?.textContent).toBe('Used by “Book the venue” · it keeps running');
-    act(() => root!.unmount());
-    host!.remove();
-    browser = running({ holderSessionId: null, holderTitle: null });
-    await mount(<SessionBrowserChip managedRunnerId={RUNNER} sessionId={SESSION} />);
-    await press(chip());
-    expect(drawer()!.querySelector('.rb-holder')?.textContent).toBe('Not in use by any session');
-  });
-
-  it('Open in new tab opens the tab view only and hands it the stream: the drawer closes its own first', async () => {
-    browser = running();
-    await mount(<SessionBrowserChip managedRunnerId={RUNNER} sessionId={SESSION} />);
-    await press(chip());
-    await press(buttonNamed('↗ Open in new tab'));
-    expect(opened).toEqual([[`/runners/${RUNNER}/browser`, `orbit-browser-${RUNNER}`]]);
-    expect(vnc.made[0].disconnected).toBe(true);
-    expect(drawer()).toBeNull();
-    expect(writes()).toEqual([]);
-  });
-
-  it('Take control opens the tab already in control, closes the drawer’s stream, and interrupts nothing', async () => {
-    browser = running();
-    await mount(<SessionBrowserChip managedRunnerId={RUNNER} sessionId={SESSION} />);
-    await press(chip());
-    await press(buttonNamed('Take control'));
-    expect(opened).toEqual([[`/runners/${RUNNER}/browser?control=1`, `orbit-browser-${RUNNER}`]]);
-    expect(vnc.made).toHaveLength(1);
-    expect(vnc.made[0].viewOnly).toBe(true);
-    expect(vnc.made[0].disconnected).toBe(true);
-    // No interrupt, stop or message to the session: the only request ever made is reading the browser's state.
-    expect(writes()).toEqual([]);
-  });
-
-  it('sends no paste and no keys while it only looks', async () => {
-    browser = running();
-    await mount(<SessionBrowserChip managedRunnerId={RUNNER} sessionId={SESSION} />);
-    await press(chip());
-    await pressPaste(SECRET);
-    expect(pastesSent()).toEqual([]);
-    expect(socket().sent.join('')).not.toContain('Pässwörd');
-  });
-
-  it('closing the drawer closes the stream', async () => {
-    browser = running();
-    await mount(<SessionBrowserChip managedRunnerId={RUNNER} sessionId={SESSION} />);
-    await press(chip());
-    await press(document.querySelector<HTMLButtonElement>('.orbit-overlay-close'));
-    expect(vnc.made[0].disconnected).toBe(true);
-    expect(writes()).toEqual([]);
-  });
-});
 
 describe('Settings → Orbit Cloud runner → Browser', () => {
   it('draws nothing when the server reports the browser off (404)', async () => {
@@ -371,7 +306,6 @@ describe('Settings → Orbit Cloud runner → Browser', () => {
     await press(buttonNamed('Open browser'));
     expect(opened).toEqual([[`/runners/${RUNNER}/browser?control=1`, `orbit-browser-${RUNNER}`]]);
     expect(vnc.made).toHaveLength(0);
-    expect(drawer()).toBeNull();
     expect(document.querySelector('.orbit-confirm')).toBeNull();
     expect(writes()).toEqual([]);
   });
@@ -559,5 +493,152 @@ describe('the browser in a tab of its own, /runners/:id/browser', () => {
     await settle();
     expect(vnc.made).toHaveLength(2);
     expect(host!.querySelector('.rb-link')?.textContent).toBe('Live');
+  });
+});
+
+describe('a sign-in request in the browser tab (board 03-agent-tools frame ①, notes ④ ⑤)', () => {
+  const openTab = (path: string) =>
+    mount(
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/runners/:id/browser" element={<RunnerBrowserPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  const banners = () => [...host!.querySelectorAll<HTMLElement>('.rb-sign-in')];
+  const bannerText = () => banners().map((b) => b.querySelector('.rb-sign-in-text')?.textContent);
+
+  it('the card’s Open browser lands in control with the banner above the bar: the site, who asked, I’m signed in', async () => {
+    browser = running({ holderSessionId: null, holderTitle: null });
+    openRequests = [signIn()];
+    // The address the card's Open browser opens (OwnerRequestCard.browserSignIn.test.tsx).
+    await openTab(`/runners/${RUNNER}/browser?control=1`);
+    expect(vnc.made[0].viewOnly).toBe(false);
+    expect(controlSaid()).toEqual([true]);
+    expect(bannerText()).toEqual(['Sign in to github.com, asked by “Export the monthly report from GitHub”']);
+    // Above the bar.
+    expect(banners()[0].nextElementSibling?.classList.contains('rb-tab-bar')).toBe(true);
+    expect(banners()[0].querySelector('button')?.textContent).toBe('I’m signed in');
+    expect(writes()).toEqual([]);
+  });
+
+  it('I’m signed in answers the card as signed in (DONE), and the banner goes; control stays', async () => {
+    browser = running({ holderSessionId: null, holderTitle: null });
+    openRequests = [signIn()];
+    await openTab(`/runners/${RUNNER}/browser?control=1`);
+    await press(buttonNamed('I’m signed in'));
+    expect(writes()).toEqual(['POST /owner-requests/req-sign-in/done']);
+    expect(apiMock).toHaveBeenCalledWith('/owner-requests/req-sign-in/done', { method: 'POST', body: {} });
+    expect(banners()).toEqual([]);
+    expect(vnc.made[0].viewOnly).toBe(false);
+    expect(controlSaid()).toEqual([true]);
+  });
+
+  it('Done only stops control: it answers nothing and the banner stays', async () => {
+    browser = running({ holderSessionId: null, holderTitle: null });
+    openRequests = [signIn()];
+    await openTab(`/runners/${RUNNER}/browser?control=1`);
+    await press(buttonNamed('Done'));
+    expect(controlSaid()).toEqual([true, false]);
+    expect(writes()).toEqual([]);
+    expect(bannerText()).toEqual(['Sign in to github.com, asked by “Export the monthly report from GitHub”']);
+    expect(buttonNamed('I’m signed in')).not.toBeNull();
+  });
+
+  it('goes when the card is answered elsewhere (Not now on the card), once the list is read again', async () => {
+    browser = running();
+    openRequests = [signIn()];
+    await openTab(`/runners/${RUNNER}/browser?control=1`);
+    expect(banners()).toHaveLength(1);
+    openRequests = [];
+    await act(async () => void queryClient!.invalidateQueries({ queryKey: ['owner-requests'] }));
+    await settle();
+    expect(banners()).toEqual([]);
+  });
+
+  it('shows only for an open sign-in request for this runner', async () => {
+    browser = running();
+    openRequests = [
+      signIn({ id: 'other-runner', browserRunnerId: '34z8OKBXxDRYsIZwzJ35X' }),
+      signIn({ id: 'no-runner', browserRunnerId: null }),
+      signIn({ id: 'past-deadline', expiresAt: '2026-01-01T00:00:00.000Z' }),
+      signIn({ id: 'a-decision', kind: 'DECISION', browserSite: null, browserRunnerId: null }),
+    ];
+    await openTab(`/runners/${RUNNER}/browser`);
+    expect(banners()).toEqual([]);
+    expect(buttonNamed('I’m signed in')).toBeNull();
+  });
+
+  it('with no session title names only the site; two requests are two banners, oldest first', async () => {
+    browser = running();
+    openRequests = [
+      signIn({ id: 'later', browserSite: 'linear.app', createdAt: '2026-11-18T05:02:00.000Z' }),
+      signIn({ askedBySessionTitle: null }),
+    ];
+    await openTab(`/runners/${RUNNER}/browser`);
+    expect(bannerText()).toEqual(['Sign in to github.com', 'Sign in to linear.app, asked by “Export the monthly report from GitHub”']);
+  });
+
+  it('says so when the answer does not go through, and keeps the banner', async () => {
+    browser = running();
+    openRequests = [signIn()];
+    const answer = apiMock.getMockImplementation()!;
+    apiMock.mockImplementation(async (path: string, init?: { method?: string }) => {
+      if (path.endsWith('/done')) {
+        calls.push(`POST ${path}`);
+        throw new ApiError('this request is already DECLINED', 409);
+      }
+      return answer(path, init as never);
+    });
+    await openTab(`/runners/${RUNNER}/browser?control=1`);
+    await press(buttonNamed('I’m signed in'));
+    expect(banners()[0].querySelector('[role="alert"]')?.textContent).toBe("Couldn't send your answer");
+  });
+});
+
+describe('an engine sign-in that fails in the browser tab', () => {
+  const openTab = () =>
+    mount(
+      <MemoryRouter initialEntries={[`/runners/${RUNNER}/browser?control=1`]}>
+        <Routes>
+          <Route path="/runners/:id/browser" element={<RunnerBrowserPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  const failure = () => host!.querySelector<HTMLElement>('.rb-sign-in.is-failed');
+  const readLogin = async () => {
+    await act(async () => void queryClient!.invalidateQueries({ queryKey: ['runner-login', RUNNER] }));
+    await settle();
+  };
+  const ELIGIBILITY =
+    'Google sign-in could not be verified — Antigravity answered: Eligibility check failed: Your current account is not eligible for Antigravity. Verify your account to continue.';
+
+  it('says what the runner said once a sign-in it saw under way in the runner’s browser fails', async () => {
+    browser = running({ holderSessionId: null, holderTitle: null });
+    await openTab();
+    expect(failure()).toBeNull();
+    login = { ...login, status: 'awaiting_code', engine: 'antigravity', url: 'https://accounts.google.com/o/oauth2/auth', browser: 'code-taken' };
+    await readLogin();
+    expect(failure()).toBeNull();
+    login = { ...login, status: 'failed', url: null, browser: undefined, message: ELIGIBILITY };
+    await readLogin();
+    expect(failure()?.textContent).toBe(`Couldn't sign in to Antigravity — ${ELIGIBILITY} Try again from the sign-in card.`);
+    expect(writes()).toEqual([]);
+    // A new attempt under way takes it down.
+    login = { ...login, status: 'pending', message: null };
+    await readLogin();
+    expect(failure()).toBeNull();
+  });
+
+  it('shows nothing for a failure that had already happened, or one that never went through this browser', async () => {
+    browser = running({ holderSessionId: null, holderTitle: null });
+    login = { ...login, status: 'failed', engine: 'antigravity', message: ELIGIBILITY };
+    await openTab();
+    expect(failure()).toBeNull();
+    login = { ...login, status: 'awaiting_code', message: null };
+    await readLogin();
+    login = { ...login, status: 'failed', message: ELIGIBILITY };
+    await readLogin();
+    expect(failure()).toBeNull();
   });
 });

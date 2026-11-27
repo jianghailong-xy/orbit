@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SignInMethods } from '../lib/queries';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
  * Admin → Users and disabled accounts (docs/google-sign-in-design.md §5.5): the list says which
@@ -167,7 +168,7 @@ describe('Admin → Users · disabling accounts', { timeout: 60_000 }, () => {
     expect(status('admin@example.test')).toBe('Active');
     expect(status('dev@example.test')).toBe('Active');
     expect(status('gina@gmail.com')).toBe('Disabled');
-    expect(cellOf('gina@gmail.com', 'Status')?.querySelector('[title]')?.getAttribute('title')).toBe('Disabled on Oct 7, 2026');
+    expect(await hoverTooltip(cellOf('gina@gmail.com', 'Status')!.querySelector('.admin-users-status')!)).toBe('Disabled on Oct 7, 2026');
 
     // Your own account: neither, as the server refuses to disable it.
     expect(await menuOf('admin@example.test')).not.toContain(DISABLE_USER);

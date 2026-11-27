@@ -307,6 +307,34 @@ describe('the way back to a session’s first message', { timeout: 60_000 }, () 
     expect(mounted().querySelector('.chat-jump-start')).toBeNull();
   });
 
+  it('still takes a reader scrolled up into a fully loaded session back to the top', async () => {
+    // The owner's report: the pill showed in some sessions and not others. It was offered only while
+    // older pages were left on the server, so a session that fit in one page never had it, however
+    // far up its reader had scrolled.
+    vi.mocked(getSessionEventPage).mockImplementation((async (_id: string, opts: { before?: number }) => {
+      asked.push(opts.before);
+      return { events: PAGES.flat(), hasMore: false };
+    }) as never);
+
+    await mountTranscript();
+    await scrollUpOffTail();
+    const jump = mounted().querySelector<HTMLElement>('.chat-jump-start');
+    expect(jump, 'scrolled up off the tail, the way to the top is on screen').not.toBeNull();
+
+    await act(async () => {
+      jump!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    // Nothing older to ask for: it only scrolls.
+    expect(asked).toEqual([undefined]);
+    expect(scrollTop).toBe(0);
+
+    // At the top there is nothing to go back to.
+    await act(async () => {
+      mounted().querySelector('.workspace-scroll-wrap .workspace-sessions')!.dispatchEvent(new Event('scroll'));
+    });
+    expect(mounted().querySelector('.chat-jump-start')).toBeNull();
+  });
+
   it('is not offered to a reader who is still at the live tail', async () => {
     await mountTranscript();
 

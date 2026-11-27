@@ -31,7 +31,7 @@ const UNTOUCHED = [
 const REDACTED = [
   /^integration-jobs\//, /^wiki\/repo-ops\//, /-result$/, /^changesets$/, /^abandoned-checkouts$/,
   /^sessions\/import$/, /^sessions\/worktrees-removable$/, /^sessions\/takeover-leases$/,
-  /^sessions\/[^/]+\/(turn-complete|finalize|end|activate-leases|release-leases|takeover-leases|diff|naming|background-wake|scheduled-wakeup|artifacts\/result|import-result|commit-result|merge-result|source\/pin|orchestration-credential)$/,
+  /^sessions\/[^/]+\/(turn-complete|finalize|release|end|activate-leases|release-leases|return-slot|takeover-leases|diff|naming|background-wake|scheduled-wakeup|artifacts\/result|import-result|commit-result|merge-result|source\/pin|orchestration-credential)$/,
 ];
 
 const REDACTED_TEXT = '[redacted]';

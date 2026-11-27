@@ -271,8 +271,8 @@ class MainBranchTest {
     /** The done cards: the tallies, a criterion's place, and the gap Orbit fills in when nobody asked. */
     @Test fun theDoneCardsNameTheBranch() {
         val counts = j("""{"criteria":3,"met":2,"onMain":1,"byReason":{"NOTHING_TO_LAND":1}}""")
-        assertEquals("2 met · 1 landed on master · 1 nothing to land", ProjectDone.cardTally(counts, "master"))
-        assertEquals("2 met · 1 landed on main · 1 nothing to land", ProjectDone.cardTally(counts))
+        assertEquals("2 met · 1 landed on master · 1 nothing to land · 1 not met", ProjectDone.cardTally(counts, "master"))
+        assertEquals("2 met · 1 landed on main · 1 nothing to land · 1 not met", ProjectDone.cardTally(counts))
         assertEquals("3 criteria met · 1 landed on master · 1 nothing to land · 0 gaps accepted", ProjectDone.receiptTally(counts, 0, "master"))
         assertEquals("Landed on master", ProjectDone.landingReasonLabel(null, "master"))
         assertEquals("Landed on main", ProjectDone.landingReasonLabel(null))

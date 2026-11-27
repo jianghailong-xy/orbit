@@ -252,10 +252,10 @@ func TestRunnerCLICapabilitiesFollowTheOrchestrationGate(t *testing.T) {
 
 		// And pre-approved exactly where it is advertised.
 		rule := "Bash(/opt/orbit runner " + verb.action + " *)"
-		if !contains(orbitCLIAllowedTools("/opt/orbit", true), rule) {
+		if !contains(orbitCLIAllowedTools("/opt/orbit", true, false), rule) {
 			t.Errorf("an orchestrating session is not pre-approved %s", rule)
 		}
-		if contains(orbitCLIAllowedTools("/opt/orbit", false), rule) {
+		if contains(orbitCLIAllowedTools("/opt/orbit", false, false), rule) {
 			t.Errorf("a session without the grant is pre-approved %s", rule)
 		}
 	}

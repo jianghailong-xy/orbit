@@ -120,6 +120,9 @@ function makeFixture(t, { linkOnly = false } = {}) {
   return fixture;
 }
 
+// An .env an upgrade has already been through for monitoring (project 350mFkGGRDovIfipePH2O): the record is there, so the
+// upgrade writes nothing for it. The cases that are about the link's lines alone, or about .env staying as it is, start here.
+const MONITORED = 'ORBIT_MONITORING=on\n';
 const BEFORE_LINK = 'JWT_SECRET="kept"\nPROVIDER_SECRET_KEY="kept too"\nPUBLIC_ORIGIN="http://10.66.82.117:2086"\n';
 // A deployment shaped like production's: its own host name, ACME on 443, its own seeds.
 const PRODUCTION_SHAPED = `JWT_SECRET="kept"
@@ -132,7 +135,7 @@ RUNNER_LINK_GATEWAY_DIR=/srv/orbit/link-gateway
 RUNNER_LINK_ACME_DOMAINS=link.orbit.example.com
 RUNNER_LINK_ACME_EMAIL=ops@example.com
 ${SECRET_NAMES.map((name) => `RUNNER_LINK_${name}="production-${name}"`).join('\n')}
-`;
+${MONITORED}`;
 
 const indexOfCall = (calls, match) => {
   const at = calls.findIndex((call) => (match instanceof RegExp ? match.test(call) : call.includes(match)));
@@ -178,7 +181,12 @@ for (const upgrade of UPGRADES) {
       'RUNNER_LINK_METRICS_PORT=0',
       ...SECRET_NAMES.map((name) => `RUNNER_LINK_${name}="${secretValue(name)}"`),
       'COMPOSE_PROFILES=runner-link',
+      // Monitoring is on by default and added once, after the link's lines: the record, Grafana's password, the profile.
+      'ORBIT_MONITORING=on',
+      added.find((line) => line.startsWith('GRAFANA_ADMIN_PASSWORD=')),
+      'COMPOSE_PROFILES=runner-link,monitoring',
     ]);
+    assert.match(added.at(-2), /^GRAFANA_ADMIN_PASSWORD="[0-9a-f]{32}"$/);
 
     // The image makes the secrets, in no network and with no privilege; the link comes up before the apiserver is recreated.
     const calls = fixture.calls();
@@ -201,7 +209,7 @@ for (const upgrade of UPGRADES) {
     assert.equal(run.status, 0, run.output);
     const after = readFileSync(fixture.envFile, 'utf8');
     assert.ok(after.startsWith(`${before}\n`), 'what .env held comes first, its last line ended');
-    assert.deepEqual(after.split('\n').filter((line) => line.startsWith('COMPOSE_PROFILES=')), ['COMPOSE_PROFILES=a,b', 'COMPOSE_PROFILES=a,b,runner-link']);
+    assert.deepEqual(after.split('\n').filter((line) => line.startsWith('COMPOSE_PROFILES=')), ['COMPOSE_PROFILES=a,b', 'COMPOSE_PROFILES=a,b,runner-link', 'COMPOSE_PROFILES=a,b,runner-link,monitoring']);
     assert.ok(!run.output.includes('plain http'), 'an https origin is not warned about');
   });
 
@@ -255,7 +263,7 @@ for (const upgrade of UPGRADES) {
       [PRODUCTION_SHAPED, { FAKE_LINK_GATEWAY_HEALTH: 'unhealthy' }, /link-gateway is unhealthy/],
     ]) {
       const fixture = makeFixture(t);
-      const text = `${BEFORE_LINK}${body}`;
+      const text = `${BEFORE_LINK}${MONITORED}${body}`;
       writeFileSync(fixture.envFile, text);
       const run = fixture.run(upgrade, ['--no-pull'], extra);
       assert.equal(run.status, 0, run.output);
@@ -282,7 +290,7 @@ for (const upgrade of UPGRADES) {
 
   test(`${upgrade}: a same-origin link whose profile was taken out by hand is left off, with a warning`, (t) => {
     const fixture = makeFixture(t);
-    writeFileSync(fixture.envFile, BEFORE_LINK);
+    writeFileSync(fixture.envFile, BEFORE_LINK + MONITORED);
     assert.equal(fixture.run(upgrade, ['--no-pull']).status, 0);
     const off = readFileSync(fixture.envFile, 'utf8').replace(/\nCOMPOSE_PROFILES=runner-link\n/, '\n');
     writeFileSync(fixture.envFile, off);
@@ -300,10 +308,10 @@ for (const upgrade of UPGRADES) {
     assert.equal(empty.run(upgrade, ['--no-pull']).status, 0);
     assert.match(readFileSync(empty.envFile, 'utf8'), /\nRUNNER_LINK_URL=same-origin\n/);
     const exported = makeFixture(t);
-    writeFileSync(exported.envFile, BEFORE_LINK);
+    writeFileSync(exported.envFile, BEFORE_LINK + MONITORED);
     const run = exported.run(upgrade, ['--no-pull'], { RUNNER_LINK_URL: 'wss://link.example.test' });
     assert.equal(run.status, 0, run.output);
-    assert.equal(readFileSync(exported.envFile, 'utf8'), BEFORE_LINK);
+    assert.equal(readFileSync(exported.envFile, 'utf8'), BEFORE_LINK + MONITORED);
   });
 
   for (const [what, extra, said, wrote] of [
@@ -491,7 +499,7 @@ test('no script writes the switch: RUNNER_LINK_REQUIRED and runner_link_switch a
 
 test('a fresh install writes the link\'s lines once, after the managed runners\' profile, shows no secret, and checks the way a runner takes', (t) => {
   const fixture = makeFixture(t);
-  const run = fixture.run(INSTALL, ['--public-origin', 'http://10.66.82.117:2086', '--managed-runner-image', 'orbit-cloud-runner:fixture']);
+  const run = fixture.run(INSTALL, ['--public-origin', 'http://10.66.82.117:2086', '--managed-runners', '--managed-runner-image', 'orbit-cloud-runner:fixture']);
   assert.equal(run.status, 0, run.output);
   assertNoSecretShown(fixture, run);
   const text = readFileSync(fixture.envFile, 'utf8');
@@ -502,6 +510,7 @@ test('a fresh install writes the link\'s lines once, after the managed runners\'
   assert.deepEqual(live.filter((line) => line.startsWith('COMPOSE_PROFILES=')), [
     'COMPOSE_PROFILES=managed-runners-docker,managed-runner-firewall',
     'COMPOSE_PROFILES=managed-runners-docker,managed-runner-firewall,runner-link',
+    'COMPOSE_PROFILES=managed-runners-docker,managed-runner-firewall,runner-link,monitoring',
   ]);
   const calls = fixture.calls();
   const order = [LINK_BUILD, LINK_SECRETS, /^compose build /, 'compose up -d --wait --wait-timeout 900', DOOR_GATEWAY].map((match) => indexOfCall(calls, match));
@@ -516,7 +525,7 @@ test('a fresh install on https, and one without managed runners, get the link to
   const run = https.run(INSTALL, ['--public-origin', 'https://orbit.example.com', '--no-managed-runners']);
   assert.equal(run.status, 0, run.output);
   assert.ok(!run.output.includes('plain http'));
-  assert.deepEqual(readFileSync(https.envFile, 'utf8').split('\n').filter((line) => line.startsWith('COMPOSE_PROFILES=')), ['COMPOSE_PROFILES=runner-link']);
+  assert.deepEqual(readFileSync(https.envFile, 'utf8').split('\n').filter((line) => line.startsWith('COMPOSE_PROFILES=')), ['COMPOSE_PROFILES=runner-link', 'COMPOSE_PROFILES=runner-link,monitoring']);
   const noStart = makeFixture(t);
   const written = noStart.run(INSTALL, ['--no-managed-runners', '--no-start']);
   assert.equal(written.status, 0, written.output);
@@ -539,12 +548,13 @@ test('a fresh install whose link does not answer, or whose image makes no secret
 
 test('the firewall added later goes into both of a deployment\'s profile lines', (t) => {
   const fixture = makeFixture(t);
-  assert.equal(fixture.run(INSTALL, ['--no-managed-runner-firewall', '--managed-runner-image', 'orbit-cloud-runner:fixture', '--no-start']).status, 0);
+  assert.equal(fixture.run(INSTALL, ['--managed-runners', '--no-managed-runner-firewall', '--managed-runner-image', 'orbit-cloud-runner:fixture', '--no-start']).status, 0);
   const run = fixture.run(INSTALL, ['--enable-managed-runner-firewall']);
   assert.equal(run.status, 0, run.output);
   assert.deepEqual(readFileSync(fixture.envFile, 'utf8').split('\n').filter((line) => line.startsWith('COMPOSE_PROFILES=')), [
     'COMPOSE_PROFILES=managed-runners-docker,managed-runner-firewall',
     'COMPOSE_PROFILES=managed-runners-docker,managed-runner-firewall,runner-link',
+    'COMPOSE_PROFILES=managed-runners-docker,managed-runner-firewall,runner-link,monitoring',
   ]);
 });
 

@@ -9,7 +9,7 @@ the apiserver process nor any managed runner container is given `docker.sock`.
 
 Root Compose runs it as the `docker-channel` service, built from [Dockerfile](Dockerfile) (Python's
 standard library and this one file), under the `managed-runners-docker` profile: a fresh install
-(`scripts/install-server.sh`) switches that profile on in `.env`, and an upgrade never does, so a
+with `--managed-runners` (`scripts/install-server.sh`) switches that profile on in `.env`, and an upgrade never does, so a
 deployment installed without it does not run the channel. The design record is
 [docs/managed-runner-design.md](../../../docs/managed-runner-design.md), "Implementation record:
 Docker backend" and "Implementation record: new deployments"; operating it is in
@@ -31,7 +31,7 @@ Docker backend" and "Implementation record: new deployments"; operating it is in
 
 | Request | Answer |
 | --- | --- |
-| `GET /v1/info` | Its instance, image, network and limits (with `maxContainers` as it applies), whether volume removal is on, and the host (CPUs, memory, the disk Docker's volumes live on, what this instance's volumes hold) for the capacity budget. |
+| `GET /v1/info` | Its instance, image (and its `org.opencontainers.image.revision` label as `imageRevision` and its `org.opencontainers.image.version` label as `imageVersion`, the release it was published for, each null when the image has none or it is empty), network and limits (with `maxContainers` as it applies), whether volume removal is on, and the host (CPUs, memory, the disk Docker's volumes live on, what this instance's volumes hold) for the capacity budget. |
 | `GET /v1/resources` | Every volume, container and kept credential of this instance (credentials without their token). |
 | `PUT /v1/volumes/mr-data-<runner>` | Create the runner's data volume once (`ownerId`, `runnerId`, `limitBytes`); an existing one of this instance is returned as it is. |
 | `GET /v1/volumes/mr-data-<runner>` | The volume, if it is this instance's. |
@@ -59,11 +59,10 @@ Every request needs `Authorization: Bearer <token>`. Anything else is refused wi
   is `NAME_REFUSED`; another image is `IMAGE_REFUSED`; amounts above the configured ceilings are
   `LIMIT_REFUSED`. The template: the configured image (by local image ID), user `10001:10001`, every
   capability dropped, `no-new-privileges`, a read-only root filesystem, a private IPC namespace and
-  cgroup namespace, CPU (`NanoCpus`), memory (swap not beyond it), PIDs, `/tmp` as a sized,
-  executable tmpfs (`nosuid` and `nodev`, which Docker keeps on every tmpfs; below),
+  cgroup namespace, CPU (`NanoCpus`), memory (swap not beyond it), PIDs,
   restart policy `no`, bounded json-file logs, the one configured network, and exactly three mounts:
   the runner's data volume at `/home/orbit`, its bootstrap volume at `/run/orbit-bootstrap`, and
-  `/tmp`. The spec is checked against those rules before it is sent, and what Docker made of it is
+  the data volume's executable `.orbit-tmp` subpath at `/tmp`. Docker Engine 26 or later is required. The spec is checked against those rules before it is sent, and what Docker made of it is
   inspected and checked again before it starts (`TEMPLATE_VIOLATION`, removed unstarted).
 - **One container per data volume.** Creates are serialized per runner; only `mr-<runner uuid>` may
   use a runner's volume (`SINGLE_CONTAINER_GUARD` — the manager's guard probe asks for exactly this
@@ -111,50 +110,28 @@ Every request needs `Authorization: Bearer <token>`. Anything else is refused wi
 
 ## Disk limit
 
-A Docker local volume has no size limit of its own: the `local` driver's `size` option needs project
-quotas on the filesystem under Docker's data root (XFS `pquota`), which is host configuration this
-backend may not require or change, and loop-mounted images need privileges the channel does not
-take. So the limit is measured and enforced at the container, the way the kubelet enforces an
-ephemeral-storage limit:
+The channel reports `volumeLimitMode` in `/v1/info` and logs the mode at startup.
 
-- Each data volume carries its limit (`orbit.managed-runner.disk-limit-bytes`, the profile's
-  `storage.capacity`, which is also its storage share of the pool).
-- Every `diskCheckSeconds` the channel reads Docker's own measurement of every volume
-  (`GET /system/df?type=volume`). The container of a volume over its limit is stopped (SIGTERM, the
-  stop grace, SIGKILL) and the reason kept beside it; the manager sees the stop like any other and
-  fails the runner retryable, with the reason in its detail.
-- No container is created for a volume over its limit (`VOLUME_OVER_LIMIT`), so a retry does not
-  start it again until an operator frees space on the volume or raises its limit
-  (`volumeLimitOverrides`, by volume name).
+- **Filesystem.** With `volumeFilesystemRoot`, each data volume uses a preallocated ext4 image
+  of the requested size. The local driver binds the mounted image's data directory. An out-of-space
+  write under `/home/orbit` or `/tmp` returns `ENOSPC`. The channel samples filesystem usage for
+  the runner's budget. `host.disk` measures the backing disk and `host.managedVolumeBytes`
+  includes the full reservation for each image.
+- **Measured.** Without the filesystem root, the channel uses Docker's measurements every
+  `diskCheckSeconds`, stops runners whose volumes exceed their limits and refuses over-limit
+  starts with `VOLUME_OVER_LIMIT`. The host disk is measured at `diskProbePath`, Docker's data
+  root, or the channel's state directory in that order. Root Compose supplies a read-only probe
+  volume beside Docker's data volumes.
 
-The data is kept: nothing is deleted to enforce the limit. Writes between two checks can overshoot
-it; `diskCheckSeconds` bounds how long. `/tmp` is a tmpfs counted in the container's memory limit,
-and the root filesystem is read-only, so the data volume is the only disk a runner can fill.
+[The operations runbook](../../../docs/managed-runner-docker-operations.md#filesystem-limits-for-docker-data-volumes)
+covers host setup, migration and verification.
 
-The pool's storage, which the apiserver's budget hands out as each volume's share, is the disk
-Docker's volumes live on, as `/v1/info` reports it (`host.disk`): the filesystem of `diskProbePath`
-if it is set, otherwise of Docker's data root (`DockerRootDir`) where this process can see it, and
-otherwise, with a warning at start-up, of the state directory, which is right only when Docker's
-volumes are on the same filesystem. A channel in a container cannot see Docker's data root, and
-should not: it holds every container's files and every account's volume. Root Compose mounts an
-empty, anonymous volume of the channel's own there instead, read-only, at
-`/var/lib/orbit-docker-volumes`, and names it with `--disk-probe-path`. Docker keeps that volume
-beside every data volume, so its filesystem is theirs wherever the data root is, and it shows the
-channel nothing. A probe path that is not a directory stops the channel before it serves.
+## `/tmp` on the data volume
 
-## An executable `/tmp`
-
-Builds and test runners run what they write to the temporary directory: `go test` builds its test
-binary under `$TMPDIR` (or `/tmp`) and runs it there. Docker mounts a tmpfs `noexec` unless asked
-otherwise, so the template asks for `exec` (`TmpfsOptions.Options [["exec"]]`); Docker keeps a
-tmpfs `nosuid` and `nodev` whatever is asked, and takes no other option there. It is still sized
-(`resources.tmpBytes`, the profile's `runner.tmpSizeLimit`) and counted in the container's memory.
-It gives a runner nothing it did not have: its data volume is writable and executable already.
-`TmpfsOptions.Options` came with Docker Engine 27 (API 1.46). An older engine ignores it and keeps
-`/tmp` `noexec`, and the channel says so in its log at start-up. A
-container over its limit is stopped even when the record of why cannot be written (a full disk under
-the state directory). Measured overshoots, tuning, and how a runner comes back are in
-[the operations runbook](../../../docs/managed-runner-docker-operations.md#a-runners-volume-is-over-its-limit).
+Docker mounts the data volume’s `.orbit-tmp` directory at `/tmp` with `VolumeOptions.Subpath`. Before each
+create, the channel makes the directory root-owned with mode 1777 through a temporary container that never
+starts. The runner clears it at startup and after the last active session ends. The API still validates
+`resources.tmpBytes` against `limits.maxTmpBytes` for compatibility. Both paths share the volume’s capacity.
 
 ## Fencing receipt
 

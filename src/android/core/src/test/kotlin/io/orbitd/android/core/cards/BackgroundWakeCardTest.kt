@@ -6,7 +6,7 @@ import org.junit.Test
 import java.time.Instant
 
 /**
- * A08-11 (iOS dfd3224a4): the background wake's line, its fold and its receipt — case for case with OrbitKit's BackgroundWakeTests
+ * A08-11 (iOS dfd3224a4): the scheduled wakeup's line, its fold and its receipt, and what a Job card reads off a job's wake — case for case with OrbitKit's BackgroundWakeTests
  * and BackgroundWakeCopyParityTests, over the blocks the control plane writes today and the Chinese wording that shipped until
  * 2026-09-15 (the fixtures are those tests' own, copied verbatim).
  */
@@ -49,68 +49,42 @@ class BackgroundWakeCardTest {
     private val now = Instant.parse("2026-09-15T18:14:00.000Z")
     private fun wake(note: String) = requireNotNull(backgroundWake(note)) { "the note reads as a wake" }
 
-    @Test fun theLineSaysWhatHappenedForEveryShapeOfWake() {
-        val one = wake(enDone)
-        assertEquals("Background job finished", BackgroundWakeCard.title(one))
-        assertEquals("upgrade to 39551b637", BackgroundWakeCard.lineName(one))
-        assertEquals("exit 0", BackgroundWakeCard.lineStatus(one))
-        assertFalse(BackgroundWakeCard.isPending(one))
-        val failed = wake(zhFailed)
-        assertEquals("Background job failed", BackgroundWakeCard.title(failed))
-        assertEquals("Smoke: wakeOnExit on a job that exits 3", BackgroundWakeCard.lineName(failed))
-        assertEquals("exit 3", BackgroundWakeCard.lineStatus(failed))
-        val killed = wake(zhKilled)
-        assertEquals("Background job failed", BackgroundWakeCard.title(killed))
-        assertEquals("Soak: 2h", BackgroundWakeCard.lineName(killed))
-        assertEquals("killed: runner_shutdown", BackgroundWakeCard.lineStatus(killed))
-        val running = wake(enNewOutput)
-        assertEquals("Background job has new output", BackgroundWakeCard.title(running))
-        assertEquals("watch main CI 34997433169", BackgroundWakeCard.lineName(running))
-        assertNull(BackgroundWakeCard.lineStatus(running))
-        assertTrue(BackgroundWakeCard.isPending(running))
-        val several = wake(enTwoJobs)
-        assertEquals("2 background jobs finished", BackgroundWakeCard.title(several))
-        assertNull(BackgroundWakeCard.lineName(several))
-        assertEquals("1 of 2 failed", BackgroundWakeCard.lineStatus(several))
+    /** Board C1 (file 350t1lTONlrPMjilBdXx7): a job's end, new output or stall draws no line — its Job card says it — and a wakeup that
+     * came due keeps its line, beside a job's news or alone. */
+    @Test fun onlyAScheduledWakeupIsStillALine() {
+        listOf(enDone, enKilled, enTwoJobs, enNewOutput, zhFailed, zhKilled, enStall, enTwoStalls).forEach { note ->
+            assertNull(note, BgJob.wakeupsOnly(wake(note)))
+        }
         val wakeup = wake(enScheduled)
-        assertEquals("Scheduled wakeup", BackgroundWakeCard.title(wakeup))
+        assertSame(wakeup, BgJob.wakeupsOnly(wakeup))
+        assertEquals("Scheduled wakeup", BackgroundWakeCard.title)
         assertEquals("waiting for CI run 4242", BackgroundWakeCard.lineName(wakeup))
-        assertNull(BackgroundWakeCard.lineStatus(wakeup))
-        assertTrue(BackgroundWakeCard.isPending(wakeup))
+        val both = requireNotNull(BgJob.wakeupsOnly(wake("$enDone\n\n$enScheduled")))
+        assertTrue(BackgroundWakeCard.jobs(both).isEmpty())
+        assertEquals("waiting for CI run 4242", BackgroundWakeCard.lineName(both))
+        assertNotNull(BackgroundWakeCard.lineName(wake(zhScheduled)))
     }
 
-    @Test fun theLineSaysNothingMoreOfSeveralCleanJobs() {
-        val both = wake(enTwoJobs.replace("ended｜failed｜exit code 1", "ended｜completed｜exit code 0"))
-        assertNull(BackgroundWakeCard.lineStatus(both))
-        assertFalse(BackgroundWakeCard.isPending(both))
-        assertNull(BackgroundWakeCard.lineStatus(wake(enTwoJobsNoExitCode)))
-    }
-
-    @Test fun theFoldsRowsSayWhatEachJobWasAndWhatItWrote() {
-        val job = BackgroundWakeCard.jobs(wake(enDone)).first()
-        assertEquals("upgrade to 39551b637", BackgroundWakeCard.name(job))
-        assertEquals("exit 0", BackgroundWakeCard.status(job))
-        assertEquals("bgj_13c53745a88a · 16.2 KB of output", BackgroundWakeCard.jobMeta(job))
-        assertEquals("bgj_209fc7f9f47a · no output", BackgroundWakeCard.jobMeta(BackgroundWakeCard.jobs(wake(zhFailed)).first()))
-        val bare = buildJsonObject { put("id", "bgj_1"); put("kind", "job"); put("command", "bash a.sh"); put("status", "completed"); put("ended", true); put("exitCode", 0) }
-        assertEquals("bash a.sh", BackgroundWakeCard.name(bare))
-        assertEquals("bash a.sh", BackgroundWakeCard.lineName(buildJsonObject { put("jobs", JsonArray(listOf(bare))); putJsonArray("wakeups") {} }))
-        assertEquals("54 B", BackgroundWakeCard.formatBytes(54))
-        assertEquals("342.5 KB", BackgroundWakeCard.formatBytes(350_697))
-        assertEquals("2.0 MB", BackgroundWakeCard.formatBytes(2 * 1024 * 1024))
-    }
-
-    @Test fun theLineSaysWhatBecameOfAJobItWasToldLittleAbout() {
-        val killed = buildJsonObject { put("id", "bgj_1"); put("command", "bash a.sh"); put("status", "killed"); put("ended", true) }
-        assertEquals("killed", BackgroundWakeCard.status(killed))
-        assertEquals("bgj_1", BackgroundWakeCard.jobMeta(killed))
-        val ended = buildJsonObject { put("id", "bgj_2"); put("command", "bash a.sh"); put("status", "completed"); put("ended", true) }
-        assertEquals("completed", BackgroundWakeCard.status(ended))
+    /** What a Job card reads off a wake: each job's id, status, exit code, kill reason and the tail it carried. */
+    @Test fun aWakeStillReadsEveryJobItCarries() {
+        val done = BackgroundWakeCard.jobs(wake(enDone)).single()
+        assertEquals("bgj_13c53745a88a", done.text("id"))
+        assertEquals("upgrade to 39551b637", done.text("description"))
+        assertTrue(done.flag("ended")); assertEquals(0, done.number("exitCode"))
+        assertEquals("==> recreating apiserver\n==> apiserver is healthy", done.text("outputTail"))
+        assertEquals(16570, done.number("outputTo"))
+        val failed = BackgroundWakeCard.jobs(wake(zhFailed)).single()
+        assertEquals("failed", failed.text("status")); assertEquals(3, failed.number("exitCode"))
+        assertEquals("runner_shutdown", BackgroundWakeCard.jobs(wake(zhKilled)).single().text("killReason"))
+        assertEquals("runner_shutdown", BackgroundWakeCard.jobs(wake(enKilled)).single().text("killReason"))
+        assertEquals(listOf("bgj_987dbb363d36", "bgj_645de7bb677b"), BgJob.jobIds(wake(enTwoJobs)))
+        val news = BackgroundWakeCard.jobs(wake(enNewOutput)).single()
+        assertFalse(news.flag("ended")); assertEquals("* main CI is still running", news.text("outputTail"))
+        assertEquals(listOf(null, 0), BackgroundWakeCard.jobs(wake(enTwoJobsNoExitCode)).map { it.number("exitCode") })
     }
 
     @Test fun theFoldSaysNobodyTypedItAndKeepsTheOriginalBehindIt() {
-        assertEquals("Queued by a background job, not typed by you", BackgroundWakeCard.meta(wake(enDone)))
-        assertEquals("Queued by a scheduled wakeup, not typed by you", BackgroundWakeCard.meta(wake(enScheduled)))
+        assertEquals("Queued by a scheduled wakeup, not typed by you", BackgroundWakeCard.meta)
         assertEquals("What the agent received", BackgroundWakeCard.rawSummary)
         assertEquals("The session has not confirmed it received this.", BackgroundWakeCard.undelivered)
         assertEquals(8, BackgroundWakeCard.tailLines)
@@ -136,16 +110,12 @@ class BackgroundWakeCardTest {
         assertNull(BackgroundWakeCard.steerState(false, null, false))
     }
 
-    /** The card keeps the delivery's own words, the confirmed receipt included, and says its details and output tail as iOS and the web do. */
+    /** The card keeps the delivery's own words, the confirmed receipt included, and says its details as iOS and the web do. */
     @Test fun theCardSaysItsReceiptAndItsDetailsInTheWordsIosDraws() {
         assertEquals("Read in this turn", BackgroundWakeCard.steerReceipt("Read in this turn"))
         assertEquals("Waiting to be read", BackgroundWakeCard.steerReceipt("Waiting to be read"))
         assertNull(BackgroundWakeCard.steerReceipt(null))
-        assertEquals("Job details", BackgroundWakeCard.detailsLabel(wake(enDone)))
-        assertEquals("Details", BackgroundWakeCard.detailsLabel(wake(enScheduled)))
-        assertEquals("Output tail", BackgroundWakeCard.outputTail)
-        assertEquals("Show full output", BackgroundWakeCard.expandOutput)
-        assertEquals("Show less", BackgroundWakeCard.collapseOutput)
+        assertEquals("Details", BackgroundWakeCard.details)
     }
 
     @Test fun theWakeupRowSaysHowFarOutItWasAskedFor() {
@@ -159,39 +129,30 @@ class BackgroundWakeCardTest {
         assertEquals("", BackgroundWakeCard.wakeupMeta(buildJsonObject { }, now))
     }
 
-    /** A job gone quiet (docs/mocks/background-job-stall-line, option A): it used to be an empty row under "Orbit attached: context". */
-    @Test fun aJobGoneQuietIsTheSameLineWithHowLongItHasBeenQuiet() {
+    /** A job gone quiet: its stall block still reads, for its Job card's amber chip (board B1), and draws no line of its own. */
+    @Test fun aJobGoneQuietStillReadsHowLongItHasBeenQuiet() {
         val one = wake(enStall)
         val job = BackgroundWakeCard.jobs(one).single()
         assertEquals("running", job.text("status"))
         assertFalse(job.flag("ended"))
         assertEquals("entries=32 workers=6", job.text("outputTail"))
         assertEquals(21, job.number("outputTo"))
-        assertTrue(BackgroundWakeCard.isPending(one))
-        assertEquals("Background job went quiet", BackgroundWakeCard.title(one))
-        assertEquals("Nightly index rebuild (6 workers)", BackgroundWakeCard.lineName(one))
-        assertEquals("quiet 15m", BackgroundWakeCard.lineStatus(one))
-        val stall = requireNotNull(BackgroundWakeCard.stall(job))
+        val stall = requireNotNull(job.obj("stall"))
         assertEquals(15 * 60_000L + 2000, stall["runningForMs"]?.jsonPrimitive?.long)
+        assertEquals(15 * 60_000L, stall["quietForMs"]?.jsonPrimitive?.long)
         assertEquals("2026-09-15T17:59:00Z", stall.text("lastOutputAt"))
-        assertEquals("Still running · 15m in · last wrote 15m ago", BackgroundWakeCard.stallLine(stall, now))
         assertEquals(enStall, one.text("text"))
         assertEquals("", withoutWakeBlocks(enStall))
         assertNotNull(queuedWake(enStall))
+        assertNull(BgJob.wakeupsOnly(one))
 
-        val silent = wake(enStallSilent)
-        assertEquals("quiet 30m", BackgroundWakeCard.lineStatus(silent))
-        assertEquals("Still running · 30m in · has written nothing yet",
-            BackgroundWakeCard.stallLine(requireNotNull(BackgroundWakeCard.stall(BackgroundWakeCard.jobs(silent).single())), now))
-
-        val two = wake(enTwoStalls)
-        assertEquals("2 background jobs went quiet", BackgroundWakeCard.title(two))
-        assertNull(BackgroundWakeCard.lineStatus(two))
-        assertEquals(listOf("quiet 15m", "quiet 10m"), BackgroundWakeCard.jobs(two).map { BackgroundWakeCard.status(it) })
+        val silent = BackgroundWakeCard.jobs(wake(enStallSilent)).single().obj("stall")!!
+        assertEquals(30 * 60_000L, silent["quietForMs"]?.jsonPrimitive?.long)
+        assertTrue(silent.flag("wroteNothing"))
 
         val mixed = wake("$enDone\n\n$enStall")
         assertEquals(listOf(true, false), BackgroundWakeCard.jobs(mixed).map { it.flag("ended") })
-        assertEquals(listOf(false, true), BackgroundWakeCard.jobs(mixed).map { BackgroundWakeCard.stall(it) != null })
+        assertEquals(listOf(false, true), BackgroundWakeCard.jobs(mixed).map { it.obj("stall") != null })
     }
 
     @Test fun aTurnThatIsOnlyANoteDrawsTheNoteAlone() {

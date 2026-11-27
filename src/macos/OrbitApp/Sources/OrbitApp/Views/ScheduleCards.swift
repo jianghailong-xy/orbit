@@ -329,11 +329,13 @@ struct ScheduleRunStripView: View {
     @Environment(AppModel.self) private var appModel
     let schedule: ScheduleView
     let run: ScheduleRunView
+    /// The run did not get under way in this session: its strip names no start time (the status card follows).
+    var notStarted = false
 
     var body: some View {
         let zone = TimeZone.current.identifier
         VStack(alignment: .leading, spacing: 6) {
-            if fired {
+            if fired && !notStarted {
                 // A run its condition started names the firing, not a planned time (condition-triggers board ⑤ ②).
                 Label {
                     Text(ConditionDisplay.runFiredText(run: run, condition: appModel.scheduled?.condition(conditionID),
@@ -347,8 +349,10 @@ struct ScheduleRunStripView: View {
                 .accessibilityIdentifier("schedule-run-fired")
             } else {
                 Label {
-                    Text(ScheduleDisplay.runStripText(plannedAt: run.plannedAt, startedAt: run.startedAt,
-                                                      accessLevel: schedule.accessLevel, timezone: zone))
+                    Text(notStarted
+                         ? ScheduleRunStatus.stripText(plannedAt: run.plannedAt, accessLevel: schedule.accessLevel, timezone: zone)
+                         : ScheduleDisplay.runStripText(plannedAt: run.plannedAt, startedAt: run.startedAt,
+                                                        accessLevel: schedule.accessLevel, timezone: zone))
                         .fixedSize(horizontal: false, vertical: true)
                 } icon: {
                     Image(systemName: "calendar").foregroundStyle(Color.scheduleAccent)
@@ -368,6 +372,122 @@ struct ScheduleRunStripView: View {
 
     private var fired: Bool { run.trigger == "CONDITION" }
     private var conditionID: String? { schedule.rule.conditionId ?? schedule.condition?.id }
+}
+
+/// A run's session where the run did not get under way (board docs/mocks/scheduled-run-not-started ②③④), in place of
+/// the run's report and the composer: what happened to the run and the doors that act on it.
+///   * ② Didn't run: why, each try's time, when it gave up and the next run; Run now and Open schedule.
+///   * ③ Queued · runner full: the queue's sentence, the wait and when it gives up; Cancel run and Open schedule.
+///   * ④ Started on try N: why this try stopped; Open the run, to the session the run went on in.
+struct ScheduleRunStatusCardView: View {
+    /// The four doors the card offers; the owner of the card says what each does (and answers a refusal's sentence).
+    enum Door { case runNow, openSchedule, cancelRun, openRun }
+
+    let run: ScheduleRunView
+    let status: ScheduleRunSessionStatus
+    let kind: ScheduleRunStatus.Kind
+    /// The machine and the engine of this session, named in the card's sentences.
+    let runner: String?
+    let engine: String
+    let perform: (Door) async -> String?
+    @State private var busy = false
+    @State private var said: String?
+
+    private typealias A = ScheduleRunStatusCopy.Actions
+
+    var body: some View {
+        let zone = TimeZone.current.identifier
+        VStack(alignment: .leading, spacing: 10) {
+            switch kind {
+            case .didntRun:
+                let text = ScheduleRunStatus.didntRunText(run: run, status: status, runner: runner ?? "", now: Date(), timezone: zone)
+                title(text.title, tone: .secondary)
+                body(text.reason)
+                HStack(spacing: 6) {
+                    ForEach(Array(text.tries.enumerated()), id: \.offset) { _, time in
+                        Text(time).font(.orbitLabel).padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(Color.secondary.opacity(0.12), in: Capsule())
+                    }
+                }
+                .accessibilityIdentifier("schedule-run-tries")
+                if let gaveUp = text.gaveUp { meta(gaveUp) }
+                if let next = text.next { meta(next) }
+                doors {
+                    door(A.runNow, primary: true) { await perform(.runNow) }
+                    door(A.openSchedule) { await perform(.openSchedule) }
+                }
+            case .queuedFull:
+                if let gate = status.queue {
+                    let text = ScheduleRunStatus.queuedText(gate: gate, machine: runner, now: Date(), timezone: zone)
+                    title(text.title, tone: .scheduleWarn)
+                    body(text.body)
+                    meta(text.waited)
+                    doors {
+                        door(A.cancelRun) { await perform(.cancelRun) }
+                        door(A.openSchedule) { await perform(.openSchedule) }
+                    }
+                }
+            case .startedOn:
+                if let text = ScheduleRunStatus.startedOnText(run: run, status: status, engine: engine, runner: runner ?? "",
+                                                               timezone: zone), run.sessionId != nil {
+                    title(text.title, tone: .green)
+                    body(text.body)
+                    doors {
+                        door(A.openRun, primary: true) { await perform(.openRun) }
+                    }
+                }
+            }
+            if let said {
+                Text(said).font(.orbitLabel).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.secondary.opacity(0.3)))
+        .disabled(busy)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("schedule-run-card-\(kind.rawValue)")
+    }
+
+    private func title(_ text: String, tone: Color) -> some View {
+        HStack(spacing: 8) {
+            Circle().fill(tone).frame(width: 9, height: 9)
+            Text(text).font(.orbitControl.weight(.semibold))
+        }
+    }
+
+    private func body(_ text: String) -> some View {
+        Text(text).font(.orbitSubtext).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func meta(_ text: String) -> some View {
+        Text(text).font(.orbitLabel).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func doors<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        HStack(spacing: 10) { content() }
+    }
+
+    @ViewBuilder
+    private func door(_ title: String, primary: Bool = false, _ action: @escaping () async -> String?) -> some View {
+        let label = Text(title).lineLimit(1).minimumScaleFactor(0.7).frame(maxWidth: .infinity)
+        if primary {
+            Button { press(action) } label: { label }
+                .buttonStyle(.borderedProminent).accessibilityIdentifier("schedule-run-\(title)")
+        } else {
+            Button { press(action) } label: { label }
+                .buttonStyle(.bordered).accessibilityIdentifier("schedule-run-\(title)")
+        }
+    }
+
+    private func press(_ action: @escaping () async -> String?) {
+        busy = true
+        Task { @MainActor in
+            said = await action()
+            busy = false
+        }
+    }
 }
 
 /// What the run reported (board 02 ④, 01 ⑦ ②): "Reported: Changed · codex@0.49.0", its summary and its links; a run
@@ -436,12 +556,40 @@ struct ScheduleConsoleCard: View {
                     },
                     open: { appModel.openSchedule(record.scheduleId) })
             }
+        case .scheduleChangeOpening:
+            // A change conversation opens with Orbit's message, before the person's first words (§8.2).
+            if let opening = console.scheduleChangeOpening {
+                ScheduleChangeOpeningView(opening: opening)
+            }
         case .scheduleRunStrip:
             if let found = console.scheduleRun {
-                ScheduleRunStripView(schedule: found.schedule, run: found.run)
+                let card = console.scheduleRunCard
+                ScheduleRunStripView(schedule: found.schedule, run: found.run, notStarted: card != nil)
+                if let card, let status = console.scheduleCards?.runStatus {
+                    ScheduleRunStatusCardView(
+                        run: found.run, status: status, kind: card, runner: console.runnerName,
+                        engine: ProviderEngines.names.first { $0.engine == console.engine }?.name ?? console.engine,
+                        perform: { door in
+                            let said: String?
+                            switch door {
+                            case .runNow:
+                                let started = await appModel.scheduled?.runNowSession(found.run.scheduleId)
+                                said = started?.said
+                                if let session = started?.sessionID { appModel.openScheduleRun(sessionID: session) }
+                            case .cancelRun: said = await appModel.scheduled?.stop(runID: found.run.id, scheduleID: found.run.scheduleId)
+                            case .openSchedule: appModel.openSchedule(found.run.scheduleId); said = nil
+                            case .openRun:
+                                if let session = found.run.sessionId { appModel.openScheduleRun(sessionID: session) }
+                                said = nil
+                            }
+                            await console.refreshScheduleCards(force: true)
+                            return said
+                        })
+                }
             }
         case .scheduleRunReport:
-            if let found = console.scheduleRun {
+            // A run that did not get under way here has no report of its own: its card says what happened.
+            if let found = console.scheduleRun, console.scheduleRunCard == nil {
                 ScheduleRunReportView(run: found.run, findings: console.scheduleRunDetail?.findings ?? [])
             }
         default:

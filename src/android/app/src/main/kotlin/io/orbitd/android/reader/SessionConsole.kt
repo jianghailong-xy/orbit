@@ -16,6 +16,7 @@ import io.orbitd.android.core.cards.DshRuntime
 import io.orbitd.android.directory.directoryError
 import io.orbitd.android.management.EngineAccounts
 import io.orbitd.android.management.ManagementApi
+import io.orbitd.android.management.RunnerCopy
 import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.management.accountSnapshotReported
 import io.orbitd.android.management.cursorUsageLimit
@@ -149,6 +150,30 @@ internal class SessionConsole(val app: OrbitApplication, val handle: SessionHand
     val dshInstallInFlight get() = installInFlight && (runner?.get("install") as? JsonObject)?.string("engine") == DshRuntime.ENGINE
 
     fun installDsh() { if (canInstallDsh) install(DshRuntime.ENGINE, "DeepSeek Harness") }
+
+    // MARK: the transcript's sandbox warning (docs/mocks/codex-sandbox-fix-with-agent)
+
+    /** A sandbox Fix with an agent press is on its way; its button holds until the runner is read again. */
+    var sandboxFixStarting by mutableStateOf(false); private set
+    /** Why the last press could not start (a 409's own sentence), shown under that button. */
+    var sandboxFixError by mutableStateOf<String?>(null); private set
+
+    /** One press starts a session on this machine to install bubblewrap (the server's own door, as the machine page's button uses),
+     * then the runner is read again so the row turns into the fixing line. A transcript is history, so nothing else changes. */
+    fun fixSandbox() {
+        val id = runnerId ?: return
+        if (sandboxFixStarting) return
+        sandboxFixStarting = true; sandboxFixError = null
+        scope.launch {
+            try {
+                management.post(RunnerPage.agentFixPath(id, "sandboxMissing"), RunnerPage.agentFixBody("sandboxMissing", "codex", null))
+            } catch (cancel: CancellationException) { throw cancel }
+            catch (e: Exception) { sandboxFixError = "${RunnerCopy.FIX_FAILED} — ${directoryError(e)}" }
+            finally { sandboxFixStarting = false }
+            asked = true
+            read { it() }
+        }
+    }
 
     /** Where Update the API key goes, on the web (`onEditDshKey`): the page of the DeepSeek key this session runs on, else
      * Machines & models' API keys, where one is connected or turned back on — every DeepSeek key runs Harness, so no other key's page

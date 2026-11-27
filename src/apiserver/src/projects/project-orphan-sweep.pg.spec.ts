@@ -5,15 +5,16 @@ import { test } from 'node:test';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { uuidToBase62 } from '@orbit/shared';
 
+import { isReleasedStatus } from '../common/session-release';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { PushService } from '../push/push.service';
@@ -28,6 +29,7 @@ import { ORPHAN_SETTLE_MS, type PendingItem, readPendingAddressees } from './pen
 import { derivedUuid } from './project-dispatch-identity';
 import { openItemTurnId } from './project-open-item';
 import { ProjectOrphanSweepService } from './project-orphan-sweep.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * EVERY PENDING ITEM HAS AN ADDRESSEE; THE SWEEP REPORTS THE ONES THAT DO NOT, ONCE
@@ -137,6 +139,7 @@ async function conversation(
   options: { status?: RunStatus; ended?: boolean; taskId?: string; at?: Date } = {},
 ): Promise<string> {
   const id = randomUUID();
+  const status = options.status ?? RunStatus.AWAITING_INPUT;
   await db.session.create({
     data: {
       id,
@@ -149,7 +152,8 @@ async function conversation(
       title,
       prompt: title,
       provider: 'claude',
-      status: options.status ?? RunStatus.AWAITING_INPUT,
+      turnState: turnStateOfWord(status),
+      ...(isReleasedStatus(status) ? { finishedAt: new Date()} : {}),
       dispatchOrigin: SessionDispatchOrigin.USER,
       ...(options.at ? { createdAt: options.at, lastTurnAt: options.at } : { lastTurnAt: new Date() }),
       ...(options.ended ? { completedAt: new Date() } : {}),
@@ -347,7 +351,7 @@ test('evidence with an addressee that was told: the owner\'s card in a project t
     const u = await task(stack, auto, 'ended-run task');
     const ended = await conversation(stack.db, auto, 'ended run', { taskId: u });
     await submit(stack, auto, u, ended);
-    await stack.db.session.update({ where: { id: ended }, data: { status: RunStatus.SUCCEEDED, completedAt: new Date() } });
+    await stack.db.session.update({ where: { id: ended }, data: { turnState: null, finishedAt: new Date(), completedAt: new Date() } });
     await stack.db.task.update({ where: { id: u }, data: { acceptanceCriteria: 'reworded after the run ended' } });
     const untold = await itemOf(stack, auto, u);
     assert.deepEqual(untold.addressee, { kind: 'COORDINATOR', sessionId: auto.coord });

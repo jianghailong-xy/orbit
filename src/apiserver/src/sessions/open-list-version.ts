@@ -4,6 +4,7 @@ import type { PrismaService } from '../prisma/prisma.service';
 import { worktreeOperationFenceSql } from '../common/session-inbox-fence';
 import { EVIDENCE_REVIEW_WINDOW_SECONDS } from '../tasks/evidence-review';
 import { freshRunningBgJobs } from './background-job-activity';
+import { sessionTurnStateSql } from './session-turn-state';
 import { RUNNER_OFFLINE_AFTER_MS, runnerIsOnline, runnerLastBeatSql } from '../runners/runner-presence';
 
 /**
@@ -50,6 +51,43 @@ export async function readOpenListVersion(
   ownerId: string,
   nowMs: number = Date.now(),
 ): Promise<string> {
+  return (await readOpenListVersionParts(prisma, ownerId, nowMs)).version;
+}
+
+/**
+ * The version, and the two parts of it a `since=` read decides from whether it may build only the
+ * rows that moved (`SessionsService.listOpenSince`):
+ *
+ * - `epochs`: each source's counter total, so the read can tell WHICH sources were written since its
+ *   cursor's snapshot — every source a row reads has a rule there for finding the rows it moved, or
+ *   sends the read to a whole build.
+ * - `steady`: what of the rest a row can show that no per-row check of that read covers — each
+ *   runner's name and status and whether it reads online. Not the runners' beats: the delta does not
+ *   count a raw heartbeat as a change, and their presence rows are rewritten every 30 s.
+ * - `deadlinesPassed`: the decision deadlines passed, after which a row's waiting cards and decisions
+ *   are read again for every row.
+ */
+export interface OpenListVersionParts {
+  version: string;
+  epochs: Record<string, string>;
+  steady: string;
+  /**
+   * What the realtime hint poller compares besides the counter sums (docs/list-freshness-scope-hints.md
+   * §5.0): the version's non-counter inputs with the runner rows and their presence rows left out, and
+   * each runner's `steady` and the background-job holders of its presence row (the queued explanation
+   * reads them) in their place. A heartbeat or a runner column outside `steady` moves the
+   * version and not this.
+   */
+  hintClock: string;
+  /** How many of the account's decision deadlines have passed (the version's own count of them). */
+  deadlinesPassed: number;
+}
+
+export async function readOpenListVersionParts(
+  prisma: PrismaService,
+  ownerId: string,
+  nowMs: number = Date.now(),
+): Promise<OpenListVersionParts> {
   const o = Prisma.sql`${ownerId}::uuid`;
   // How many row versions, and an order-free fingerprint of which (only the few live sources use it).
   const rowsOf = (alias: string, from: Prisma.Sql) => {
@@ -63,7 +101,7 @@ export async function readOpenListVersion(
   // One statement, so one round trip and one plan.
   const [row] = await prisma.$queryRaw<Array<Record<string, unknown>>>(Prisma.sql`
     WITH runners AS MATERIALIZED (
-      SELECT r.id, r.ctid::text || ':' || r.xmin::text AS v, r.status::text AS status, ${runnerLastBeatSql('r')} AS beat
+      SELECT r.id, r.name, r.ctid::text || ':' || r.xmin::text AS v, r.status::text AS status, ${runnerLastBeatSql('r')} AS beat
         FROM runner r
        WHERE r.owner_id = ${o}
           -- Asked per runner (session_open_list_runner_idx is (owner_id, assigned_runner_id)): as an IN over the
@@ -76,19 +114,28 @@ export async function readOpenListVersion(
       -- not; it cannot lag a write. A LANDING session is not one of them: the flat list excludes
       -- those rows, and the read that can show them hashes its own body. A counter is the sum of
       -- its rows, keyed '<source>' and '<source>#<n>' (0487): a bump adds one to whichever row no
-      -- other writer holds, so writers never queue on it.
+      -- other writer holds, so writers never queue on it. A source keyed by workspace (1464,
+      -- '<source>@w:<ws>' or '<source>@c:<ws>', shard suffix after the key) is added up here as one
+      -- source, so these sums read as they did before the keys: only the hint poller reads them apart.
       COALESCE((SELECT string_agg(src || '=' || total, ',' ORDER BY src)
-                  FROM (SELECT split_part(source, '#', 1) AS src, sum(epoch) AS total
+                  FROM (SELECT split_part(split_part(source, '#', 1), '@', 1) AS src, sum(epoch) AS total
                           FROM open_list_epoch
                          WHERE owner_id = ${o}
                          GROUP BY 1) counters), '') AS epochs,
       -- The queued gate counts every running turn on the runner a PENDING row waits for.
-      ${rowsOf('x', Prisma.sql`FROM session x WHERE x.status = 'RUNNING' AND x.owner_id <> ${o}
-        AND x.assigned_runner_id IN (SELECT assigned_runner_id FROM session
-          WHERE owner_id = ${o} AND status = 'PENDING' AND assigned_runner_id IS NOT NULL)`)} AS foreign_running,
+      ${rowsOf('x', Prisma.sql`FROM session x WHERE x.finished_at IS NULL AND ${sessionTurnStateSql('x')} = 'IN_FLIGHT'
+        AND x.owner_id <> ${o}
+        AND x.assigned_runner_id IN (SELECT queued.assigned_runner_id FROM session queued
+          WHERE queued.owner_id = ${o} AND queued.finished_at IS NULL AND ${sessionTurnStateSql('queued')} = 'QUEUED'
+            AND queued.assigned_runner_id IS NOT NULL)`)} AS foreign_running,
       (SELECT count(*)::text || '/' || COALESCE(sum(hashtextextended(v, 0)), 0)::text FROM runners) AS runner,
       -- Those runners' presence rows, which a heartbeat rewrites without touching the runner's own.
       ${rowsOf('x', Prisma.sql`FROM runner_presence x WHERE x.runner_id IN (SELECT id FROM runners)`)} AS runner_presence,
+      -- The sessions each runner's last beat says hold a slot through a background job: what the queued
+      -- explanation reads from presence (runnerBackgroundHeldSessions). Only the hint token carries it, never the version.
+      (SELECT string_agg(p.runner_id::text || ':' || COALESCE((SELECT string_agg(h::text, ',' ORDER BY h)
+                                                                  FROM unnest(p.background_job_session_ids) h), ''), ';' ORDER BY p.runner_id)
+         FROM runner_presence p WHERE cardinality(p.background_job_session_ids) > 0 AND p.runner_id IN (SELECT id FROM runners)) AS bg_holders,
       -- Small enough to keep reading whole: every share link the account owns.
       ${ownedBy('share_link')} AS share_link,
       -- The thresholds the list decides on Postgres' clock. Each only flips one way as time passes.
@@ -106,7 +153,7 @@ export async function readOpenListVersion(
       -- What the thresholds decided on the JS clock are read from; not hashed (the counters are).
       (SELECT json_agg(json_build_array(s.running_bg_jobs, s.running_bg_job_activity))
          FROM session s WHERE s.owner_id = ${o} AND cardinality(s.running_bg_jobs) > 0) AS bg_jobs,
-      (SELECT json_agg(json_build_array(status, ${ms(Prisma.sql`beat`)})) FROM runners) AS runner_clock,
+      (SELECT json_agg(json_build_array(status, ${ms(Prisma.sql`beat`)}, id, name) ORDER BY id) FROM runners) AS runner_clock,
       -- The instants at which a JS-clock threshold flips: an evidence-review window closing (the
       -- delivery moment is stamped on the evidence row by migration 0484, so no task or turn is
       -- joined here), a coordinator's escalation running out (from a delivered wake or a done
@@ -125,24 +172,94 @@ export async function readOpenListVersion(
          WHERE i.owner_id = ${o} AND i.kind = 'DONE_REQUEST'
         UNION ALL
         SELECT v.due_at FROM task_owner_confirmation_review v WHERE v.owner_id = ${o}
+        UNION ALL
+        -- An owner request stops being counted on its row at its deadline, before the sweep that
+        -- writes it EXPIRED (owner-decision-signal.ts).
+        SELECT r.expires_at FROM owner_request r
+         WHERE r.owner_id = ${o} AND r.state = 'PENDING' AND r.expires_at IS NOT NULL
       ) d) AS deadlines
   `);
 
-  const { bg_jobs, runner_clock, deadlines, ...rows } = row;
+  const { bg_jobs, runner_clock, deadlines, bg_holders, ...rows } = row;
   // Same predicates as the readers, on the same instant-or-earlier: each count only moves one way.
   const deadlinesPassed = ((deadlines ?? []) as Array<number | null>)
     .filter((at) => at != null && at <= nowMs).length;
   const freshJobs = ((bg_jobs ?? []) as Array<[string[], unknown]>)
     .reduce((n, [jobs, activity]) => n + freshRunningBgJobs(jobs, activity, nowMs).length, 0);
-  const runnersOnline = ((runner_clock ?? []) as Array<[string, number | null]>)
-    .filter(([status, beat]) => runnerIsOnline({ status, lastHeartbeatAt: beat == null ? null : new Date(beat) }, nowMs))
-    .length;
+  const runners = ((runner_clock ?? []) as Array<[string, number | null, string, string]>)
+    .map(([status, beat, id, name]) => ({
+      id, name, status, online: runnerIsOnline({ status, lastHeartbeatAt: beat == null ? null : new Date(beat) }, nowMs),
+    }));
+  const runnersOnline = runners.filter((runner) => runner.online).length;
 
-  return createHash('sha256')
+  const version = createHash('sha256')
     .update(JSON.stringify([rows, deadlinesPassed, freshJobs, runnersOnline]))
     .digest('base64url')
     .slice(0, 27);
+  const epochs: Record<string, string> = {};
+  for (const entry of String(rows.epochs ?? '').split(',')) {
+    const at = entry.lastIndexOf('=');
+    if (at > 0) epochs[entry.slice(0, at)] = entry.slice(at + 1);
+  }
+  const steady = createHash('sha256')
+    .update(JSON.stringify(runners.map(({ id, name, status, online }) => [id, name, status, online])))
+    .digest('base64url')
+    .slice(0, 27);
+  const hintClock = createHash('sha256')
+    .update(JSON.stringify([
+      steady, bg_holders ?? null, rows.foreign_running, rows.share_link, rows.runners_offline_sql, rows.fenced, rows.share_links_live,
+      deadlinesPassed, freshJobs, runnersOnline,
+    ]))
+    .digest('base64url')
+    .slice(0, 27);
+  return { version, epochs, steady, hintClock, deadlinesPassed };
 }
+
+/**
+ * The `session` columns no Open list reads (migration 1420_open_list_undrawn_writes): neither the
+ * row query, its overlay, the probe of a `since=` read nor this version, so no client can draw them
+ * from the list. An UPDATE that changes nothing else moves no counter, and so sends no
+ * `sessions.list_changed`. The migration's `open_list_bump_session` names these same columns (and 1464's, which keys it by workspace)
+ * (`open-list-undrawn-writes.pg.spec.ts` writes each one and asserts that, and that the built rows
+ * do not change). A column the list starts to read must leave this list and that function.
+ */
+export const OPEN_LIST_UNDRAWN_SESSION_COLUMNS = [
+  // Every Prisma write of the row.
+  'updated_at',
+  // The context gauge (a mid-turn ping every 20 s, and turn_end), the Agent Tools report, the booked totals.
+  'context_tokens', 'context_window', 'agent_tools', 'engine_usage_totals',
+  'coordinator_context_epoch', 'coordinator_context_ack_key',
+  // A heartbeat's worktree snapshot, for every session of the runner whenever one of them changed.
+  'isolation_status', 'base_sha', 'changed_files', 'worktree_dirty', 'worktree_branch', 'branch_sha',
+  'branch_merged', 'merge_targets', 'branch_commits',
+  // Bookkeeping of the recap pass, the alerts and the inbox claim.
+  'recap_claimed_at', 'recap_event_seq', 'alerted_approval_at', 'agent_notified_at',
+  'inbox_lease_owner', 'inbox_lease_generation', 'inbox_request_id', 'inbox_request_turn_id', 'claim_request_id',
+  'retry_attempts', 'retry_claimed_at',
+] as const;
+
+/** The `conversation_turn` columns no Open list reads, as OPEN_LIST_UNDRAWN_SESSION_COLUMNS (`open_list_bump_via_session`). */
+export const OPEN_LIST_UNDRAWN_TURN_COLUMNS = [
+  'delivery_status', 'delivery_failure_code', 'delivery_failure_reason', 'delivery_terminal_at', 'delivery_acknowledged_at',
+  'lease_deadline_at', 'lease_generation',
+  'display_prompt', 'translation_state', 'translation_lang', 'translation_failure_reason', 'translation_http_status',
+  'wiki_context', 'coordinator_context_key',
+] as const;
+
+/**
+ * The `workspace` columns a runner heartbeat's directory and disk probe writes, none of which an Open
+ * list draws (migration 1428_open_list_workspace_probes, `open_list_bump_owner`, carried into 1464): the row reads a
+ * workspace's id, name, model and effort, and the queued gates its clone_state and, against the
+ * floor of a never-started PENDING session's runner, its free bytes. So an UPDATE that changes only
+ * these moves no counter, except a free-bytes change that flips that disk gate's verdict
+ * (common/runner-disk-gate.ts `sessionDiskHoldSql`), which the function bumps on by itself
+ * (`open-list-workspace-probes.pg.spec.ts`). A column the list starts to read must leave this list
+ * and that function.
+ */
+export const OPEN_LIST_UNDRAWN_WORKSPACE_COLUMNS = [
+  'work_dir_exists', 'work_dir_is_git', 'work_dir_probed_at', 'work_dir_free_bytes', 'work_dir_total_bytes',
+  'repo_url',
+] as const;
 
 /** The views the version answers for: Open, and its legacy alias. */
 export function isOpenListView(view: string | undefined): boolean {

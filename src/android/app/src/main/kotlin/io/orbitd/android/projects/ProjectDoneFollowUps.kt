@@ -20,9 +20,9 @@ object DoneCopy {
     const val NON_CODE_CHANGE = "Change"
     const val RUN_DELIVERS = "Delivers"
     const val RUN_DELIVERS_CODE = "Code"
-    const val RUN_DELIVERS_CODE_HINT = "Tasks land on a branch, and the done card checks the work reached {main}."
+    const val RUN_DELIVERS_CODE_HINT = "The default. Landing follows the commits each task delivers."
     const val RUN_DELIVERS_NOT_CODE = "Not code"
-    const val RUN_DELIVERS_NOT_CODE_HINT = "Documents, accounts, approvals. Orbit checks the criteria only; nothing lands."
+    const val RUN_DELIVERS_NOT_CODE_HINT = "A label only: Orbit no longer reads it. Landing follows the commits each task delivers."
     const val RUN_LANDING = "Landing"
     /** web projectStart.ts's: what Landing says while the project is marked non-code. */
     const val RUN_SWITCH_OFF = "Off"

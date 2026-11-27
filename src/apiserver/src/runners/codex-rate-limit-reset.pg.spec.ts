@@ -88,7 +88,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
  *  transaction — has finished. A client that gives up in that window is a timeout after the commit. */
 const HOLD = 'x-spec-hold-response-ms';
 /** The contract's view fields, and the twins PublicIdInterceptor adds beside `id` and `runnerId`. */
-const VIEW_FIELDS = Object.keys(CODEX_RATE_LIMIT_RESET_WIRE.CodexRateLimitResetOperationView);
+/** Every operation here is Default's, whose view carries no `accountSlot` (contract §12.4: that field
+ *  appears exactly on an added slot's view; codex-reset-added-account.pg.spec.ts covers it). */
+const VIEW_FIELDS = Object.keys(CODEX_RATE_LIMIT_RESET_WIRE.CodexRateLimitResetOperationView).filter((field) => field !== 'accountSlot');
 const TWINS = ['publicId', 'runnerPublicId'];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

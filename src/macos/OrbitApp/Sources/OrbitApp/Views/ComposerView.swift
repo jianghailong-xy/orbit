@@ -243,6 +243,8 @@ struct ComposerView: View {
     @State private var showPhotoPicker = false
     @State private var showFileImporter = false
     @State private var pickedPhotos: [PhotosPickerItem] = []
+    /// The + menu's Drive: Add from Drive (docs/mocks/drive, 01-ios ⑭).
+    @State private var showDrivePicker = false
     #endif
 
     // The models of the current engine and provider, in catalog order (Opus → Haiku). The model control's
@@ -821,22 +823,24 @@ struct ComposerView: View {
         guard !console.isDraft, let session = app.session(id: console.sessionID) else { return ContextActions() }
         let running = session.isGenerating || console.state.status == .running
         let projectID = session.projectId
+        let offersNewCoordinator = CoordinatorContextActions.offersNewCoordinator(session)
         return ContextActions(
             offersCompact: CoordinatorContextActions.offersCompact(slashItems: console.composerSlashItems,
                                                                    engine: console.engine),
             compactEnabled: CoordinatorContextActions.compactEnabled(running: running,
                                                                      handoff: session.coordinatorHandoff),
-            offersNewCoordinator: CoordinatorContextActions.offersNewCoordinator(session),
+            offersNewCoordinator: offersNewCoordinator,
             running: running,
             projectTitle: session.projectTitle ?? "the project",
+            successorEngines: offersNewCoordinator ? SessionProviderChoices.engines(sources: console.choiceSources) : [],
             compact: { Task { await console.compactConversation() } },
             pendingWaits: {
                 guard let projectID else { return [] }
                 return await console.coordinatorPendingWaits(projectID: projectID)
             },
-            handOver: {
+            handOver: { successor in
                 guard let projectID else { return }
-                Task { await console.coordinatorHandoff(projectID: projectID, .start) }
+                Task { await console.coordinatorHandoff(projectID: projectID, .start, successor: successor) }
             })
     }
 
@@ -1397,6 +1401,12 @@ struct ComposerView: View {
                 #endif
             } label: { Label("File", systemImage: "paperclip") }
             #if os(iOS)
+            // A drive file by its path (D21): offered while the server has Drive on, as the web's `drive` item.
+            if app.drive?.shown == true {
+                Button { showDrivePicker = true } label: {
+                    Label("Drive", systemImage: "folder")
+                }
+            }
             // Paste an image from the clipboard (macOS does this via the ⌘V monitor above). Only
             // shown when the clipboard actually holds an image — `hasImages` is a non-consuming
             // check, so it doesn't trigger the paste-access banner until the user taps to paste.
@@ -1436,6 +1446,16 @@ struct ComposerView: View {
         .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.item],
                       allowsMultipleSelection: true) { result in
             if case .success(let urls) = result { Task { await attachFiles(urls) } }
+        }
+        // The picked files go into the draft as their paths on the agent's mount; nothing is uploaded again.
+        .sheet(isPresented: $showDrivePicker) {
+            DrivePickerSheet(project: app.session(id: console.sessionID)?.projectMembership
+                                    .map { (id: $0.projectId, title: $0.projectTitle) }) { paths in
+                let text = console.composerText
+                let lead = text.isEmpty || text.hasSuffix(" ") || text.hasSuffix("\n") ? "" : " "
+                console.composerText = text + lead + paths.joined(separator: " ") + " "
+            }
+            .environment(app)
         }
         #endif
     }
@@ -2865,9 +2885,10 @@ struct ContextActions {
     var offersNewCoordinator = false
     var running = false
     var projectTitle = ""
+    var successorEngines: [EngineChoice] = []
     var compact: () -> Void = {}
     var pendingWaits: () async -> [CoordinatorPendingWait] = { [] }
-    var handOver: () -> Void = {}
+    var handOver: (CoordinatorHandoffSuccessor?) -> Void = { _ in }
 
     var isEmpty: Bool { !offersCompact && !offersNewCoordinator }
 
@@ -3117,15 +3138,16 @@ private struct CoordinatorHandoffConfirmPresentation: ViewModifier {
         content.sheet(isPresented: shown) {
             CoordinatorHandoffConfirmView(projectTitle: actions.projectTitle, running: actions.running,
                                           waits: waits ?? [],
+                                          successorEngines: actions.successorEngines,
                                           onCancel: { waits = nil },
-                                          onHandOver: {
+                                          onHandOver: { successor in
                                               waits = nil
-                                              actions.handOver()
+                                              actions.handOver(successor)
                                           })
         }
         #else
         content.alert(CoordinatorHandoffCopy.confirmTitle, isPresented: shown) {
-            Button(CoordinatorHandoffCopy.handOver) { actions.handOver() }
+            Button(CoordinatorHandoffCopy.handOver) { actions.handOver(nil) }
                 .keyboardShortcut(.defaultAction)
             Button(CoordinatorHandoffCopy.cancel, role: .cancel) {}
         } message: {

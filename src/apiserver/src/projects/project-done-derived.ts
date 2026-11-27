@@ -173,19 +173,22 @@ export interface DerivedDoneCriterion {
 /**
  * Every number a card prints about this project's criteria, counted once, here, from the same
  * answers `criteria` carries — so "1 criterion has no merge receipt" and "0 with no merge receipt"
- * can no longer sit on one card (2026-10-01). `onMain` and `byReason` partition the criteria:
- * they add up to `criteria`.
+ * can no longer sit on one card (2026-10-01). `onMain` and `byReason` partition the MET criteria:
+ * they add up to `met`. An unmet criterion is counted in `criteria` and nowhere else, because its
+ * landing lane describes work still to do, not anything that happened — "landed", "merged outside
+ * Orbit" or "ran without a branch" said of it would be false (2026-11-19, project page parity G1).
+ * Whether the project is done never reads these: that is `withheld`, over every criterion.
  */
 export interface DerivedDoneCounts {
   /** The stated criteria. */
   criteria: number;
   /** Satisfied by the work filed under them. */
   met: number;
-  /** LANDED, however: on main by work of their own, or with nothing to land. */
+  /** Met and LANDED, however: on main by work of their own, or with nothing to land. */
   landed: number;
-  /** LANDED with work of their own on the upstream — `landingReason` null. */
+  /** Met and LANDED with work of their own on the upstream — `landingReason` null. */
   onMain: number;
-  /** Every other criterion, by its `landingReason`. */
+  /** Every other met criterion, by its `landingReason`. */
   byReason: Record<CriterionLandingReason, number>;
 }
 
@@ -198,11 +201,9 @@ export interface DerivedProjectDone {
   confirmation: StandardSetConfirmationState;
   counts: DerivedDoneCounts;
   /**
-   * The project carries the explicit non-code mark (`project.non_code`, migration 0535). Such a
-   * project reads no landing: no criterion carries a `landingReason`, none is withheld as
-   * `CRITERION_UNLANDED`, and `counts.landed`, `onMain` and `byReason` are all zero — a client
-   * reading this flag shows no landing label or tally at all. `landing` on each criterion is still
-   * the fold's own answer, and `satisfied` is untouched.
+   * Always false since revision 42 (§12.15 P-M3): the non-code mark (`project.non_code`, migration
+   * 0535) is no longer read. A project none of whose tasks delivered a commit reads every criterion
+   * LANDED from that fact, with no mark. Kept so clients that read it still decode.
    */
   nonCode: boolean;
 }
@@ -222,12 +223,10 @@ export interface DerivedDoneCriterionAnswer extends DerivedDoneCriterion {
 /** The three clauses ONE criterion can trip, in the order the projection reports them. */
 export function criterionWithheldClauses(
   criterion: DerivedDoneCriterion,
-  /** The project is marked non-code: its criteria are never withheld for their landing. */
-  nonCode = false,
 ): DerivedDoneWithheld[] {
   const clauses: DerivedDoneWithheld[] = [];
   if (!criterion.satisfied) clauses.push('CRITERION_UNSATISFIED');
-  if (!nonCode && criterion.landing !== 'LANDED') clauses.push('CRITERION_UNLANDED');
+  if (criterion.landing !== 'LANDED') clauses.push('CRITERION_UNLANDED');
   if (criterion.independence !== 'INDEPENDENT') {
     clauses.push('CRITERION_AUTHORED_BY_ITS_OWN_EVIDENCE');
   }
@@ -251,8 +250,6 @@ const CRITERION_CLAUSES = [
 export function deriveProjectDone(
   criteria: readonly DerivedDoneCriterion[],
   confirmation: StandardSetConfirmationState,
-  /** The project's explicit non-code mark: a marked project reads no landing (see `nonCode`). */
-  nonCode = false,
 ): DerivedProjectDone {
   // Each criterion is asked once which clauses it trips, and the project's own list is the union
   // of those: the conjunction and the reasons it fails are the same three predicates, read once.
@@ -261,8 +258,7 @@ export function deriveProjectDone(
   // against a shorter standard set than the one on record — and would say so nowhere.
   const answers: DerivedDoneCriterionAnswer[] = criteria.map((criterion) => ({
     ...criterion,
-    ...(nonCode ? { landingReason: null } : {}),
-    withheld: criterionWithheldClauses(criterion, nonCode),
+    withheld: criterionWithheldClauses(criterion),
   }));
 
   const withheld: DerivedDoneWithheld[] = [];
@@ -278,21 +274,8 @@ export function deriveProjectDone(
     withheld,
     criteria: answers,
     confirmation,
-    counts: nonCode ? nonCodeCounts(answers) : derivedDoneCounts(answers),
-    nonCode,
-  };
-}
-
-/** A marked project's counts: the criteria and how many are met, and no landing tally at all. */
-function nonCodeCounts(criteria: readonly DerivedDoneCriterion[]): DerivedDoneCounts {
-  return {
-    criteria: criteria.length,
-    met: criteria.filter((criterion) => criterion.satisfied).length,
-    landed: 0,
-    onMain: 0,
-    byReason: Object.fromEntries(
-      CRITERION_LANDING_REASONS.map((reason) => [reason, 0]),
-    ) as Record<CriterionLandingReason, number>,
+    counts: derivedDoneCounts(answers),
+    nonCode: false,
   };
 }
 
@@ -301,15 +284,17 @@ export function derivedDoneCounts(criteria: readonly DerivedDoneCriterion[]): De
   const byReason = Object.fromEntries(
     CRITERION_LANDING_REASONS.map((reason) => [reason, 0]),
   ) as Record<CriterionLandingReason, number>;
+  // Only a met criterion is tallied by where its work is; an unmet one is in `criteria` alone.
+  const met = criteria.filter((criterion) => criterion.satisfied);
   let onMain = 0;
-  for (const criterion of criteria) {
+  for (const criterion of met) {
     if (criterion.landingReason === null) onMain += 1;
     else byReason[criterion.landingReason] += 1;
   }
   return {
     criteria: criteria.length,
-    met: criteria.filter((criterion) => criterion.satisfied).length,
-    landed: criteria.filter((criterion) => criterion.landing === 'LANDED').length,
+    met: met.length,
+    landed: met.filter((criterion) => criterion.landing === 'LANDED').length,
     onMain,
     byReason,
   };
@@ -391,7 +376,6 @@ export async function readDerivedProjectDoneReading(
     inFlight,
     independence,
     confirmation,
-    marked,
   ] = await Promise.all([
     prisma.projectAcceptanceCriterionDefinition.findMany({
       where: { projectId, project: { ownerId } },
@@ -414,7 +398,6 @@ export async function readDerivedProjectDoneReading(
     readInFlightLandingJobs(prisma, projectId),
     readCriterionIndependence(prisma, ownerId, projectId),
     latestConfirmation(prisma, projectId),
-    prisma.project.findFirst({ where: { id: projectId, ownerId }, select: { nonCode: true } }),
   ]);
 
   const standing = standardSetConfirmationStanding(
@@ -424,7 +407,7 @@ export async function readDerivedProjectDoneReading(
   const landing = criterionLandingWithReasons(landingFacts, branches, inFlight);
   return {
     derived: derivedDoneFromLanes(
-      satisfaction, landing, independence, standing.state, marked?.nonCode ?? false,
+      satisfaction, landing, independence, standing.state,
     ),
     standing,
     satisfaction,
@@ -485,8 +468,6 @@ export function derivedDoneFromLanes(
   landing: readonly CriterionLandingWithReason[],
   independence: readonly CriterionIndependenceAnswer[],
   confirmation: StandardSetConfirmationState,
-  /** The project's explicit non-code mark (`deriveProjectDone`). */
-  nonCode = false,
 ): DerivedProjectDone {
   const landed = new Map(landing.map((row) => [row.definitionId, row]));
   const independent = new Map(independence.map((row) => [row.definitionId, row]));
@@ -511,7 +492,7 @@ export function derivedDoneFromLanes(
     confirmation: row.confirmation,
   }));
 
-  return deriveProjectDone(criteria, confirmation, nonCode);
+  return deriveProjectDone(criteria, confirmation);
 }
 
 /**
@@ -610,37 +591,8 @@ export async function storeDerivedProjectStatus(
   projectId: string,
   options: StoreDerivedProjectStatusOptions = {},
 ): Promise<DerivedProjectDone> {
-  const reading = await readDerivedProjectDoneReading(prisma, ownerId, projectId);
-  const { derived } = reading;
-  const seal = reading.standing.currentVersion.digest;
-  const stored = await prisma.project.findFirst({
-    where: { id: projectId, ownerId },
-    select: {
-      title: true,
-      status: true,
-      doneBy: true,
-      doneAt: true,
-      doneCriteriaDigest: true,
-      doneTaskEpochs: true,
-      reopenedAt: true,
-      reopenedFacts: true,
-    },
-  });
-  if (!stored || stored.status === ProjectStatus.CANCELLED) return derived;
-
-  let reopenedBy: ProjectReopenReason | null = null;
-  if (stored.status === ProjectStatus.DONE && stored.doneBy === ('OWNER' satisfies ProjectDoneBy)) {
-    reopenedBy = await ownerRecordReopenedBy(prisma, ownerId, projectId, stored, seal);
-    if (reopenedBy === null) return derived;
-  } else if (stored.status === derived.status) {
-    return derived;
-  } else if (
-    derived.done
-    && stored.reopenedAt !== null
-    && await reopenStands(prisma, ownerId, projectId, stored.reopenedAt, stored.reopenedFacts)
-  ) {
-    return derived;
-  }
+  const { derived, seal, stored, write, reopenedBy } = await readDerivedProjectStatusWrite(prisma, ownerId, projectId);
+  if (!stored || write === null) return derived;
 
   const written = await prisma.project.updateMany({
     where: {
@@ -652,15 +604,7 @@ export async function storeDerivedProjectStatus(
       reopenedAt: stored.reopenedAt,
     },
     data: {
-      ...(derived.done
-        ? {
-          status: ProjectStatus.DONE,
-          doneBy: 'DERIVED' satisfies ProjectDoneBy,
-          doneAt: new Date(),
-          doneCriteriaDigest: seal,
-          acceptedGaps: [],
-        }
-        : { status: ProjectStatus.OPEN, ...NO_DONE_RECORD }),
+      ...(derived.done ? derivedDoneRecord(seal) : { status: ProjectStatus.OPEN, ...NO_DONE_RECORD }),
       ...NO_REOPEN_RECORD,
     },
   });
@@ -687,6 +631,67 @@ export async function storeDerivedProjectStatus(
     );
   }
   return derived;
+}
+
+/**
+ * What `storeDerivedProjectStatus` would write for this project now, read and not written: the facts'
+ * answer, the row as stored, and the status the projection stores over it — or null when it stores
+ * nothing (the stored status already says what the facts say, an owner's record or Reopen press stands,
+ * or the project is CANCELLED or gone). One function for the store and for a prediction of it
+ * (`landing-regression-repair.ts`), so the two cannot answer differently.
+ */
+export async function readDerivedProjectStatusWrite(
+  prisma: DerivationClient,
+  ownerId: string,
+  projectId: string,
+) {
+  const reading = await readDerivedProjectDoneReading(prisma, ownerId, projectId);
+  const { derived } = reading;
+  const seal = reading.standing.currentVersion.digest;
+  const stored = await prisma.project.findFirst({
+    where: { id: projectId, ownerId },
+    select: {
+      title: true,
+      status: true,
+      doneBy: true,
+      doneAt: true,
+      doneCriteriaDigest: true,
+      doneTaskEpochs: true,
+      reopenedAt: true,
+      reopenedFacts: true,
+    },
+  });
+  const unchanged = { derived, seal, stored, write: null, reopenedBy: null };
+  if (!stored || stored.status === ProjectStatus.CANCELLED) return unchanged;
+
+  let reopenedBy: ProjectReopenReason | null = null;
+  if (stored.status === ProjectStatus.DONE && stored.doneBy === ('OWNER' satisfies ProjectDoneBy)) {
+    reopenedBy = await ownerRecordReopenedBy(prisma, ownerId, projectId, stored, seal);
+    if (reopenedBy === null) return unchanged;
+  } else if (stored.status === derived.status) {
+    return unchanged;
+  } else if (
+    derived.done
+    && stored.reopenedAt !== null
+    && await reopenStands(prisma, ownerId, projectId, stored.reopenedAt, stored.reopenedFacts)
+  ) {
+    return unchanged;
+  }
+  const write: ProjectStatus = derived.done ? ProjectStatus.DONE : ProjectStatus.OPEN;
+  return { derived, seal, stored, write, reopenedBy };
+}
+
+/** The DONE the projection stores: recorded DERIVED, now, against the seal it was derived against. One
+ *  record for `storeDerivedProjectStatus` and for the landing repair's DONE over OPEN
+ *  (`landing-regression-repair.ts`), so the two cannot record DONE differently. */
+export function derivedDoneRecord(seal: string) {
+  return {
+    status: ProjectStatus.DONE,
+    doneBy: 'DERIVED' satisfies ProjectDoneBy,
+    doneAt: new Date(),
+    doneCriteriaDigest: seal,
+    acceptedGaps: [],
+  } satisfies Prisma.ProjectUpdateManyMutationInput;
 }
 
 /** The DONE record of a project that is not recorded done (`project.done_*`, migration 0345). */

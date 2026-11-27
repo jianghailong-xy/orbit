@@ -1,10 +1,10 @@
 # Optional managed runner image and restore contract
 
 This directory is an independent test delivery, except for the two parts a new deployment's Docker
-backend uses: the image below, which `scripts/install-server.sh` builds on the host and `/upgrade`
+backend uses: the image below, which `scripts/install-server.sh --managed-runners` builds on the host and `/upgrade`
 rebuilds there (docs/self-hosting.md, "What an upgrade does"), and the
 [restricted Docker channel](docker-channel/README.md), which root Compose runs under the
-`managed-runners-docker` profile a fresh install switches on (docs/self-hosting.md, "Managed
+`managed-runners-docker` profile a fresh install with `--managed-runners` switches on (docs/self-hosting.md, "Managed
 runners"). Root Compose, installation, release and upgrade entry points reference nothing else here
 and nothing of Kubernetes, Rook, Ceph or CSI (`scripts/managed-runner/deployment_boundary_test.py`
 checks that). The server's switch is off unless a deployment's `.env` turns it on, which an upgrade
@@ -22,8 +22,8 @@ or infer permission from available credentials. Local fixtures are preparation e
 ## Image and build
 
 [Dockerfile](image/Dockerfile) pins the base images by digest, Go 1.27.1, Node 26.10.0, a dated Debian
-package snapshot and every engine Orbit runs: Codex 0.170.0, Claude Code 2.1.328 (which also runs
-Anthropic-dialect API keys, DeepSeek's included), OpenCode 1.19.6, Kimi Code 2.6.3, Antigravity CLI 1.5.12,
+package snapshot and every engine Orbit runs: Codex 0.172.0, Claude Code 2.1.332 (which also runs
+Anthropic-dialect API keys, DeepSeek's included), OpenCode 1.19.6, Kimi Code 2.8.1, Antigravity CLI 1.5.18,
 Cursor CLI 2026.10.14-941492e and DeepSeek Harness 0.2.0-rc.2. [pins.json](image/pins.json) records each
 pin and where its digest comes from. Kimi Code and Antigravity CLI are fetched by URL and checked against
 the SHA-256/SHA-512 their publishers' manifests give; Codex, Claude Code and OpenCode are their npm
@@ -72,7 +72,31 @@ stay constant across rebuilds and nodes:
 | `/home/orbit/.orbit/codex-state` | Codex SQLite partitions, including database, WAL and SHM. |
 | `/home/orbit/.codex` | Default Codex auth/configuration, transcripts and sessions. |
 | `/home/orbit/.claude` | Claude Code configuration and session transcripts (`projects/<cwd>/<session>.jsonl`). |
-| `/home/orbit/orbit-repos` | The runner's work directory, empty at first: workspaces' folders are made here or in home when their first session is claimed. An image before 2026-11-17 also made an empty `orbit-repos/default`; the entrypoint removes it while it is still empty and moves the config and identity marker to `orbit-repos`. |
+| `/home/orbit/orbit-repos` | Where the runner clones repositories, made by the runner on its first clone; the image does not make it. The runner's work directory is home itself. An image before 2026-11-23 made `orbit-repos` and named it the work directory, and one before 2026-11-17 also made an empty `orbit-repos/default`; the entrypoint moves the config and identity marker to home, removes `orbit-repos/default` while it is still empty, and leaves `orbit-repos` as it is. |
+
+A volume an image before 2026-11-17 (a944a7f362) ran on was mounted at `/var/lib/orbit`, with home in
+its `home` folder. The entrypoint's start moves that folder's contents to the volume root, under the
+volume lock (the earlier home's own `container.lock`, which moves with it) and one durable rename at a
+time, so a start stopped at any step finishes on the next (`move_earlier_home`). If an image of today's
+layout without that move already started beside it, it left a home at the root, and what happens to
+that home depends on whether it was used:
+
+- **Unused** (owner, 2026-11-22): it holds no engine sign-in and no workspace file. A sign-in is
+  anything at Claude Code's `.claude/.credentials.json`, Codex's `.codex/auth.json`, Kimi Code's
+  `.kimi-code/credentials/*`, Antigravity's `.orbit/antigravity/google/antigravity-cli/antigravity-oauth-token`
+  (or `.gemini/antigravity-cli/...`) or Cursor's `.orbit/cursor/*/xdg-config/cursor/auth.json` (or
+  `.config/cursor/auth.json`, `.cursor/auth.json`), or the same file of any account added on the runner
+  (`.orbit/<engine>-accounts/<id>/...`). A workspace file is anything other than a folder under a
+  root folder whose name does not start with `.`, which covers `orbit-repos` and every workspace's stored
+  path under home, or under `.orbit/worktrees`. Empty folders are what a start makes before any work.
+  Conversations, logs, the runner's state and the engines' settings do not count. An unused root home is
+  set aside, not deleted: its entries move into `.orbit-setting-aside-home`, which is then renamed
+  `.orbit-empty-home-<UTC time>` and stays on the volume. Then the earlier home moves to the root.
+- **Used**: anything else. The root home is kept and `home` is left in place. The start logs a warning
+  that names the sign-in or file it found.
+
+A workspace stored under a hidden folder of home is not checked. If an unused home set aside held one,
+its files are in the `.orbit-empty-home-*` folder.
 
 The entrypoint fixes `HOME`, `ORBIT_HOME`, `CODEX_HOME` and `CLAUDE_CONFIG_DIR` to these paths. Codex
 partitions hash the absolute engine home; Git worktree metadata also embeds absolute paths. Moving
@@ -306,7 +330,9 @@ kubectl --context "$AUTHORIZED_TEST_CONTEXT" --namespace "$AUTHORIZED_TEST_NAMES
 In the managed namespace: Pods get, create (including `dryRun`), delete, patch (only to take its own
 finalizer off a Pod whose stop it recorded); PVCs get, create; Secrets get, create, delete;
 ConfigMaps get. Cluster-scoped and read-only: PersistentVolumes get, VolumeAttachments list. Nothing
-on nodes, Ceph or the webhook configuration.
+on nodes, Ceph or the webhook configuration. With the Drive (the profile's `files`
+section), also Secrets get, create, update and delete in `orbit-drive-system`, for the mount
+credentials (drive-csi/rbac.yaml).
 
 ## Reproducible checks and pending acceptance
 

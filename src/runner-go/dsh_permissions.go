@@ -85,6 +85,12 @@ type dshPermissionBridge struct {
 	emit    emitTurnFn
 	// workspace is the session's canonical cwd, the root a routine escalation must stay in.
 	workspace string
+	// uploads is the session's uploads directory, outside the checkout: Claude Code and Codex take it as a
+	// working directory of their own (--add-dir), so Auto writes there without a card here too.
+	uploads string
+	// subagent is a SubAgent's child claim; nil for a session. A read-only one's escalations are answered by its
+	// parent's mode (readonlySubagentAnswer).
+	subagent *ClaimedSession
 }
 
 func newDshPermissionBridge(policy func() dshPermissionPolicy, lookup func(string) (dshPermissionAsk, bool),
@@ -137,6 +143,7 @@ func (b *dshPermissionBridge) request(id interface{}, params map[string]interfac
 	b.mu.Lock()
 	open := b.open
 	b.mu.Unlock()
+	parentAllows, parentDecided := readonlySubagentAnswer(b.subagent, ask.Name)
 	switch {
 	case !open:
 		b.answer(id, "")
@@ -150,11 +157,45 @@ func (b *dshPermissionBridge) request(id interface{}, params map[string]interfac
 		note("permission_denied", "approval requested for a tool call Orbit has not received")
 		b.answer(id, dshRejectOnce)
 		return
+	case readonlySubagentRefusesEdit(b.subagent, ask.Name):
+		note("permission_denied", "a read-only SubAgent does not edit files")
+		b.answer(id, dshRejectOnce)
+		return
 	case !b.policy().Ask:
 		note("permission_denied", "Don't Ask refuses without asking")
 		b.answer(id, dshRejectOnce)
 		return
-	case b.policy().RoutineEscalations && dshAutoRoutineEscalation(ask, b.workspace):
+	case parentDecided && !parentAllows:
+		note("permission_denied", "the parent session's mode refuses without asking")
+		b.answer(id, dshRejectOnce)
+		return
+	case parentDecided:
+		b.mu.Lock()
+		allowed := b.open
+		if allowed {
+			b.answer(id, dshAllowOnce)
+		} else {
+			b.answer(id, "")
+		}
+		b.mu.Unlock()
+		if allowed {
+			note("permission_auto_allowed", "the parent session's mode allows it")
+		}
+		return
+	case b.policy().RoutineEscalations && dshAutoUploadsEdit(ask, b.workspace, b.uploads):
+		b.mu.Lock()
+		allowed := b.open
+		if allowed {
+			b.answer(id, dshAllowOnce)
+		} else {
+			b.answer(id, "")
+		}
+		b.mu.Unlock()
+		if allowed {
+			note("permission_auto_allowed", "Auto allows an edit in the session's uploads directory")
+		}
+		return
+	case b.policy().RoutineEscalations && dshAutoRoutineEscalation(ask, b.workspace, b.uploads):
 		// Allowed here, without a card, under the same lock as any other allow.
 		b.mu.Lock()
 		allowed := b.open
@@ -238,7 +279,7 @@ func bridgeDshPermission(ctx context.Context, t *Transport, sessionID string, as
 // temporary directory, and it is none of the high-impact commands Codex's Auto also leaves to a
 // person (codexAutoApproval: pushes, fetches, installs, remote shells, inline interpreters, secret
 // files, recursive deletes). Any other tool, or a command this cannot read, still asks.
-func dshAutoRoutineEscalation(ask dshPermissionAsk, workspace string) bool {
+func dshAutoRoutineEscalation(ask dshPermissionAsk, workspace string, extraRoots ...string) bool {
 	if ask.Name != "bash" || !filepath.IsAbs(workspace) {
 		return false
 	}
@@ -255,9 +296,30 @@ func dshAutoRoutineEscalation(ask dshPermissionAsk, workspace string) bool {
 		cwd = filepath.Clean(dir)
 	}
 	allowed, decided := codexAutoApproval(codexApprovalRequest{}, map[string]interface{}{"command": command, "cwd": cwd},
-		codexAutoApprovalContext{workspaceRoots: []string{workspace}})
+		codexAutoApprovalContext{workspaceRoots: append([]string{workspace}, nonEmptyStrings(extraRoots...)...)})
 	return allowed && decided && dshToolGateMatch(command) == "" && !dshContainerCommand.MatchString(command) &&
-		dshCommandStaysInWorkspace(command, cwd, workspace)
+		dshCommandStaysInWorkspace(command, cwd, workspace, extraRoots...)
+}
+
+// dshAutoUploadsEdit reports whether one escalated write or edit by dsh's own file tools targets a file in the
+// session's uploads directory, once links are resolved. dsh's file sandbox grants only the workspace and the temp
+// areas, with no setting for another root; approving the escalation widens that one file operation, nothing else.
+func dshAutoUploadsEdit(ask dshPermissionAsk, workspace, uploads string) bool {
+	if ask.Name != "write" && ask.Name != "edit" {
+		return false
+	}
+	input := mapValue(ask.Input)
+	path := firstString(input, "file_path")
+	if path == "" || firstString(input, "sandbox_permissions") == "" {
+		return false
+	}
+	if !filepath.IsAbs(path) {
+		if !filepath.IsAbs(workspace) {
+			return false
+		}
+		path = filepath.Join(workspace, path)
+	}
+	return pathWithin(path, uploads) || pathWithinAny(path, driveGrantRoots())
 }
 
 // A container command is never a routine escalation: a test stack's docker runs unasked inside the
@@ -382,7 +444,7 @@ func dshWritableRoots(workspace string) []string {
 // — and requires each to be in dshWritableRoots. It is not a shell parser: a word it cannot place
 // (a HOME path, an unknown variable, a .. that leaves) fails the command, so a misreading can only
 // ever lead to a card.
-func dshCommandStaysInWorkspace(command, cwd, workspace string) bool {
+func dshCommandStaysInWorkspace(command, cwd, workspace string, extraRoots ...string) bool {
 	text, ok := dshWithoutHeredocBodies(command)
 	if !ok {
 		return false
@@ -394,7 +456,7 @@ func dshCommandStaysInWorkspace(command, cwd, workspace string) bool {
 		return false
 	}
 	text = strings.NewReplacer("${PWD}", cwd, "$PWD", cwd).Replace(text)
-	roots := dshWritableRoots(workspace)
+	roots := append(dshWritableRoots(workspace), nonEmptyStrings(extraRoots...)...)
 	for _, word := range strings.FieldsFunc(text, func(r rune) bool { return strings.ContainsRune(" \t\r\n;|&<>()'\"`=", r) }) {
 		switch {
 		case strings.Contains(word, "://"):

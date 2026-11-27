@@ -201,7 +201,7 @@ class EvidenceFilesApplication : OrbitApplication() {
 }
 
 /**
- * The evidence card's files as a reader meets them (docs/orbit-files-design.md §2.6, the web's EvidenceFiles.test.tsx): the production
+ * The evidence card's files as a reader meets them (docs/drive-design.md §2.6, the web's EvidenceFiles.test.tsx): the production
  * Activity, AuthSession and reader over T6's route. The area under the criterion, the page it opens, the viewer a thumbnail opens,
  * what is left once the bytes have gone, and a version that cites no file. Each state's semantics tree and picture are written under
  * `src/android/build/evidence/evidence-files-t8/`.
@@ -484,7 +484,8 @@ class EvidenceFilesCardTest {
         openPage()
         compose.activityRule.scenario.recreate()
         await { exists(hasTestTag("evidence-files")) }
-        await { exists(hasTestTag("evidence-files:version")) }
+        // The version line is drawn at once from the revision; its count comes only once the recreated page has read the list again.
+        await { draws("evidence-files:version", "9 files · 1.8 MB") }
         says("evidence-files:version", "9 files · 1.8 MB")
     }
 

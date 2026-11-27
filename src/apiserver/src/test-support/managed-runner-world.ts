@@ -37,6 +37,8 @@ export interface WorldOptions {
   clusterKey?: string;
   /** Where the managers' warnings go. Default: nowhere. */
   log?: ManagedRunnerManagerOptions['log'];
+  /** Runner Pods receive the drive, and the managers write mount Secrets in the files namespace. */
+  files?: boolean;
 }
 
 export function managedRunnerWorld(db: PrismaClient, options: WorldOptions = {}) {
@@ -45,8 +47,9 @@ export function managedRunnerWorld(db: PrismaClient, options: WorldOptions = {})
     lifecycle: options.lifecycle,
     capacity: options.capacity,
     clusterKey: options.clusterKey ?? `world-${randomUUID().slice(0, 8)}`,
+    files: options.files,
   });
-  const cluster = installManagedRunnerAdmission(new FakeKubeCluster(profile.kubernetes.namespace), prisma, profile);
+  const cluster = installManagedRunnerAdmission(new FakeKubeCluster(profile.kubernetes.namespace, profile.files?.namespace), prisma, profile);
   const clock = { ms: Date.now() };
   const now = () => new Date(clock.ms);
   // Every world in a spec file shares one database, each at a cluster key, pool and fake cluster of
@@ -70,7 +73,7 @@ export function managedRunnerWorld(db: PrismaClient, options: WorldOptions = {})
   /** What the runner's runtimes are, as its heartbeats say: one signed in, unless a spec says otherwise. */
   const runnerSide: { engines: unknown[] } = { engines: [{ engine: 'claude', installed: true, auth: 'yes' }] };
 
-  async function heartbeat(runnerId: string, workload: Partial<typeof IDLE> = {}, opts: { sleep?: boolean; draining?: boolean } = {}) {
+  async function heartbeat(runnerId: string, workload: Partial<typeof IDLE> & { driveWrites?: number } = {}, opts: { sleep?: boolean; draining?: boolean } = {}) {
     const mapping = (await db.managedRunner.findUnique({ where: { runnerId } }))!;
     const sleep = opts.sleep !== false;
     await db.runner.update({

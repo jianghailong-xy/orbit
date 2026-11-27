@@ -25,11 +25,13 @@ func shortenSessionWait(t *testing.T) {
 // the watch, answers the child's polls with statuses and releases with outcomes, each in order with the
 // last one repeating, and keeps every request it was sent.
 type sessionWaitServer struct {
-	t         *testing.T
-	statuses  []string
-	releases  []string
-	watchCode int
-	watchBody string
+	t        *testing.T
+	statuses []string
+	releases []string
+	// The watch's state as each read of it answers, in order with the last one repeating; MATCHED when empty.
+	watchStates []string
+	watchCode   int
+	watchBody   string
 	// Cut the connection on every poll of the child, the way a control plane that went away does.
 	dropPolls bool
 
@@ -65,6 +67,12 @@ func (s *sessionWaitServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_, _ = w.Write([]byte(`{"id":"child-session","status":"` + nextScripted(&s.statuses) + `","result":"done"}`))
+	case "GET /api/runner/watches/watch-1":
+		state := "MATCHED"
+		if len(s.watchStates) > 0 {
+			state = nextScripted(&s.watchStates)
+		}
+		_, _ = w.Write([]byte(`{"id":"watch-1","state":"` + state + `"}`))
 	case "POST /api/runner/watches/watch-1/release":
 		_, _ = w.Write([]byte(`{"outcome":"` + nextScripted(&s.releases) + `"}`))
 	default:
@@ -135,15 +143,16 @@ func TestSessionCreateWaitRecordsTheWatchBeforeItWaitsAndReleasesItWhenAnsweredI
 		"POST /api/runner/watches",
 		"GET /api/runner/sessions/child-session",
 		"GET /api/runner/sessions/child-session",
+		"GET /api/runner/watches/watch-1",
 		"POST /api/runner/watches/watch-1/release",
 	}
 	if !reflect.DeepEqual(server.requests, want) {
 		t.Fatalf("requests = %#v, want %#v", server.requests, want)
 	}
-	// The line session_create(wait) always waited for, a settled turn, now waking the calling session.
+	// The new session finished all its work (version 4's SESSION_QUIESCENT), waking the calling session.
 	wantWatch := map[string]interface{}{
-		"predicateVersion": float64(1),
-		"predicate":        map[string]interface{}{"kind": "ALL", "over": "ALL_TARGETS", "leaf": "SESSION_TURN_SETTLED"},
+		"predicateVersion": float64(4),
+		"predicate":        map[string]interface{}{"kind": "ALL", "over": "ALL_TARGETS", "leaf": "SESSION_QUIESCENT"},
 		"targets":          []interface{}{map[string]interface{}{"kind": "SESSION", "id": "child-session"}},
 		"action":           "RESUME_SESSION",
 		"idempotencyKey":   "session-create-wait:child-session",
@@ -153,6 +162,52 @@ func TestSessionCreateWaitRecordsTheWatchBeforeItWaitsAndReleasesItWhenAnsweredI
 	}
 	if want := "{\"id\":\"child-session\",\"status\":\"AWAITING_INPUT\",\"result\":\"done\"}\n"; out != want {
 		t.Fatalf("an inline answer must print the session exactly as before: got %q, want %q", out, want)
+	}
+}
+
+// A child at AWAITING_INPUT whose own job or subagent still runs has a settled status, but its watch has not
+// matched: the inline answer waits for the watch, as the wake would, and only then returns and releases it.
+func TestSessionCreateWaitKeepsWaitingWhileTheSettledChildStillHasWorkRunning(t *testing.T) {
+	shortenSessionWait(t)
+	server := &sessionWaitServer{
+		t:           t,
+		statuses:    []string{"AWAITING_INPUT"},
+		watchStates: []string{"ACTIVE", "ACTIVE", "MATCHED"},
+		releases:    []string{"WAKE_WITHDRAWN"},
+	}
+	out, err := runSessionCreateWait(t, server)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reads := server.count("GET /api/runner/watches/watch-1"); reads != 3 {
+		t.Fatalf("watch reads = %d, want 3: two while it was ACTIVE and the one that saw it MATCHED", reads)
+	}
+	if polls := server.count("GET /api/runner/sessions/child-session"); polls != 3 {
+		t.Fatalf("session polls = %d, want one per watch read", polls)
+	}
+	if releases := server.count("POST /api/runner/watches/watch-1/release"); releases != 1 {
+		t.Fatalf("releases = %d, want the one after the inline answer", releases)
+	}
+	if want := "{\"id\":\"child-session\",\"status\":\"AWAITING_INPUT\",\"result\":\"done\"}\n"; out != want {
+		t.Fatalf("output = %q, want the session as an inline answer %q", out, want)
+	}
+}
+
+// A settled child whose watch never matches within the budget is handed back with the watch, not answered.
+func TestSessionCreateWaitHandsBackASettledChildWhoseWatchHasNotMatched(t *testing.T) {
+	shortenSessionWait(t)
+	t.Setenv(envSpawnDepth, "10")
+	server := &sessionWaitServer{t: t, statuses: []string{"AWAITING_INPUT"}, watchStates: []string{"ACTIVE"}}
+	out, err := runSessionCreateWait(t, server)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := decodeHandedBack(t, out)
+	if got.Watch.ID != "watch-1" || got.Watch.HandedBack != "TIMEOUT" {
+		t.Fatalf("watch = %#v, want watch-1 handed back on TIMEOUT", got.Watch)
+	}
+	if releases := server.count("POST /api/runner/watches/watch-1/release"); releases != 0 {
+		t.Fatalf("a handed-back watch was released %d times", releases)
 	}
 }
 

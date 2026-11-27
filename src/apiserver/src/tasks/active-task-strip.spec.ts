@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus, TaskStatus } from '@prisma/client';
+import { TaskStatus } from '@prisma/client';
+import { turnStateFilter } from '../sessions/session-turn-state';
 import { ACTIVE_TASK_STRIP_MAX, TasksService } from './tasks.service';
 
 const OWNER_ID = '00000000-0000-7000-8000-000000000001';
@@ -38,7 +39,7 @@ test('the strip asks for live runs and stuck statuses, not for a page of the lis
   // Running/queued live on the session rows, so they cannot be a column predicate; IN_PROGRESS
   // and FAILED are task statuses. A task qualifying on either side belongs in the strip.
   assert.deepEqual(calls.where.OR, [
-    { sessions: { some: { status: { in: [RunStatus.RUNNING, RunStatus.PENDING] } } } },
+    { sessions: { some: turnStateFilter(['IN_FLIGHT', 'QUEUED']) } },
     { status: { in: [TaskStatus.IN_PROGRESS, TaskStatus.FAILED] } },
   ]);
   assert.equal(calls.where.ownerId, OWNER_ID);

@@ -15,7 +15,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
-import { CreatorType, Prisma, RunStatus, RunnerStatus, TaskStatus } from '@prisma/client';
+import { CreatorType, Prisma, RunnerStatus, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { AgentProvider } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -150,7 +151,7 @@ test('T3 provider-engine API on PostgreSQL', { timeout: 600_000 }, async (t) => 
   }
   /** A claimed run that did a turn and then failed: there is a conversation to resume. */
   const ranAndFailed = (id: string) => db.session.update({ where: { id }, data: {
-    status: RunStatus.FAILED, numTurns: 1, runtimeSessionId: `runtime-${randomUUID()}`, startedAt: new Date(),
+    turnState: null, numTurns: 1, runtimeSessionId: `runtime-${randomUUID()}`, startedAt: new Date(),
     finishedAt: new Date(), inboxLeaseOwner: null, inboxLeaseGeneration: null,
   } });
   const resume = (ownerId: string, id: string, dto: Record<string, unknown> = {}) =>
@@ -347,7 +348,7 @@ test('T3 provider-engine API on PostgreSQL', { timeout: 600_000 }, async (t) => 
     // An edit every engine using it survives is taken: another DeepSeek key.
     await providers.update(owner, ds.id, { apiKey: 'sk-dialect-rotated' } as never);
     // Once nothing uses it on DeepSeek Harness, the protocol may move.
-    await db.session.update({ where: { id: harness.id }, data: { completedAt: new Date(), status: RunStatus.CANCELLED } });
+    await db.session.update({ where: { id: harness.id }, data: { completedAt: new Date(), turnState: null, finishedAt: new Date()} });
     await db.task.update({ where: { id: pinned.id }, data: { status: TaskStatus.CANCELLED } });
     await providers.update(owner, ds.id, { runtime: 'codex' } as never);
     assert.equal((await db.modelProvider.findUniqueOrThrow({ where: { id: ds.id } })).runtime, 'codex');
@@ -363,12 +364,12 @@ test('T3 provider-engine API on PostgreSQL', { timeout: 600_000 }, async (t) => 
     await create(at, { engine: AgentProvider.OPENCODE, provider: ds.slug, model: 'deepseek-v4-flash' });
     await create(at, { engine: AgentProvider.DSH, provider: ds.slug });
     const ended = await create(at, { engine: AgentProvider.CLAUDE, provider: ds.slug, model: 'deepseek-v4-flash' });
-    await db.session.update({ where: { id: ended.id }, data: { completedAt: new Date(), status: RunStatus.CANCELLED } });
+    await db.session.update({ where: { id: ended.id }, data: { completedAt: new Date(), turnState: null, finishedAt: new Date()} });
     // A session an older client opened in OpenCode's old encoding names the key by its model.
     await db.session.create({ data: {
       title: 'old encoding', prompt: '', ownerId: owner, creatorId: owner, workspaceId: at.workspaceId,
       assignedRunnerId: at.id, provider: AgentProvider.OPENCODE, providerBuiltin: true,
-      model: `orbit-${ds.slug}/deepseek-v4-flash`, status: RunStatus.AWAITING_INPUT,
+      model: `orbit-${ds.slug}/deepseek-v4-flash`, turnState: null,
     } });
     await tasks.create(owner, { title: 'pinned on Harness', engine: AgentProvider.DSH, provider: ds.slug, ...TASK_CHECK } as never);
     const done = await tasks.create(owner, { title: 'finished', provider: ds.slug, ...TASK_CHECK } as never);
@@ -531,7 +532,7 @@ test('T3 provider-engine API on PostgreSQL', { timeout: 600_000 }, async (t) => 
     const withKey = await machine(owner, { ORBIT_DSH_API_KEY: 'workspace-own-key' });
     const legacy = async (on: Machine) => (await db.session.create({ data: {
       title: 'legacy dsh', prompt: '', ownerId: owner, creatorId: owner, workspaceId: on.workspaceId, assignedRunnerId: on.id,
-      provider: AgentProvider.DSH, providerBuiltin: true, engine: AgentProvider.DSH, status: RunStatus.FAILED, numTurns: 1,
+      provider: AgentProvider.DSH, providerBuiltin: true, engine: AgentProvider.DSH, turnState: null, numTurns: 1,
       runtimeSessionId: `runtime-${randomUUID()}`, startedAt: new Date(), finishedAt: new Date(),
     } })).id;
     const kept = await legacy(withKey);
@@ -571,7 +572,7 @@ test('T3 provider-engine API on PostgreSQL', { timeout: 600_000 }, async (t) => 
     const written = await db.session.create({ data: {
       title: 'old name', prompt: '', ownerId: owner, creatorId: owner, workspaceId: elsewhere.workspaceId,
       assignedRunnerId: elsewhere.id, provider: retired, providerBuiltin: false, engine: AgentProvider.DSH,
-      status: RunStatus.PENDING,
+      turnState: 'QUEUED',
     } });
     assert.equal((await claimed(elsewhere, written.id)).agent.env?.ORBIT_DSH_API_KEY, key.apiKey);
 
@@ -634,20 +635,20 @@ test('T3 provider-engine API on PostgreSQL', { timeout: 600_000 }, async (t) => 
     // A session RAN on the DeepSeek key three days ago — the key's last use is its last turn.
     const ran = await create(at, { provider: ds.slug, model: 'deepseek-v4-flash' });
     const threeDaysAgo = new Date(Date.now() - 3 * 86_400_000);
-    await db.session.update({ where: { id: ran.id }, data: { lastTurnAt: threeDaysAgo, status: RunStatus.AWAITING_INPUT } });
+    await db.session.update({ where: { id: ran.id }, data: { lastTurnAt: threeDaysAgo, turnState: null } });
     // Opened on the GLM key and never took a turn: not a use — newer than the encoded session's turn,
     // so an implementation that counted creation would read it instead.
     const idle = await create(at, { provider: glm.slug, model: 'glm-5.2' });
-    await db.session.update({ where: { id: idle.id }, data: { status: RunStatus.AWAITING_INPUT } });
+    await db.session.update({ where: { id: idle.id }, data: { turnState: null } });
     // A key only ever opened on: nothing has spent it.
     const unspent = await connect(owner, 'openai');
     const opened = await create(at, { provider: unspent.slug, model: 'gpt-5.1' });
-    await db.session.update({ where: { id: opened.id }, data: { status: RunStatus.AWAITING_INPUT } });
+    await db.session.update({ where: { id: opened.id }, data: { turnState: null } });
     // A session an older client opened in OpenCode's old encoding still names the GLM key in its model.
     const encoded = await db.session.create({ data: {
       title: 'old encoding', prompt: '', ownerId: owner, creatorId: owner, workspaceId: at.workspaceId,
       assignedRunnerId: at.id, provider: AgentProvider.OPENCODE, providerBuiltin: true,
-      model: `orbit-${glm.slug}/glm-5.2`, status: RunStatus.AWAITING_INPUT,
+      model: `orbit-${glm.slug}/glm-5.2`, turnState: null,
     } });
     const yesterday = new Date(Date.now() - 86_400_000);
     await db.session.update({ where: { id: encoded.id }, data: { lastTurnAt: yesterday } });

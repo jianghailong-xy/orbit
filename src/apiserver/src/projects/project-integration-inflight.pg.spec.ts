@@ -43,7 +43,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { CreatorType, Prisma, PrismaClient, RunStatus, RunnerStatus, TaskStatus } from '@prisma/client';
+import { CreatorType, Prisma, PrismaClient, RunnerStatus, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { IntegrationJobKind, IntegrationJobPhase } from '@orbit/shared';
 import { Client } from 'pg';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -54,6 +55,7 @@ import {
 } from './coordinator-pg-test-safety';
 import { readProjectIntegrationLines, readProjectIntegrationView } from './project-integration-line';
 import { medianMs } from './project-promotion';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -269,9 +271,9 @@ async function sessionOf(
     data: {
       id, ownerId: f.ownerId, creatorId: f.ownerId, workspaceId,
       taskId: opts.taskId ?? null, title: 'landing fixture', prompt: 'landing fixture',
-      provider: 'claude', status: opts.finished ? RunStatus.SUCCEEDED : RunStatus.RUNNING,
+      provider: 'claude', turnState: turnStateOfWord(opts.finished ? RunStatus.SUCCEEDED : RunStatus.RUNNING),
       startsTaskWork: opts.startsTaskWork ?? false,
-      startedAt: new Date(), ...(opts.finished ? { finishedAt: new Date() } : {}),
+      startedAt: new Date(), ...(opts.finished ? { finishedAt: new Date()} : {}),
     },
   });
   return id;
@@ -878,6 +880,46 @@ test('the landing line describes running work before the queue, on real PostgreS
             summary: 'Waiting for another job on this runner: it is using this repository and target branch',
           });
           assert.equal(legacy?.liveness, 'LEGACY');
+        });
+
+      await t.test('(o2) a job waiting on the local lock names the job holding it, to its own owner',
+        async () => {
+          // 2026-11-19: two merges of one account sat behind a third project's merge check on the
+          // same runner and read "fetching · no output". The reason names the holder instead.
+          const f = await fixture(db, 'lock-waiter');
+          const machine = await usableRunner(db, f, 'workstation-gpu');
+          const repo = (await db.projectCodebase.findUniqueOrThrow({ where: { id: f.codebaseId } }))
+            .canonicalRepoUrl;
+          const holderProject = randomUUID();
+          await db.project.create({ data: { id: holderProject, ownerId: f.ownerId, title: 'Wiki' } });
+          const holderCodebase = await db.projectCodebase.create({
+            data: {
+              projectId: holderProject, ownerId: f.ownerId, canonicalRepoUrl: repo,
+              upstreamRef: 'refs/heads/main', integrationRef: `refs/heads/project/${holderProject}`,
+              integrationRefSource: 'EXPLICIT', refAuthority: 'REMOTE',
+            },
+          });
+          const holderFixture = { ownerId: f.ownerId, projectId: holderProject, codebaseId: holderCodebase.id };
+          const holder = await job(db, holderFixture, { at: minutesAgo(140), claimedAt: minutesAgo(135),
+            state: 'RUNNING', kind: 'CHECK_PROMOTION', phase: 'CHECK', progressProtocol: 'v2',
+            heartbeatAt: minutesAgo(0.2), outputMovedAt: minutesAgo(120), runnerId: machine,
+            targetRef: 'refs/heads/main', serialKey: 'lock-holder', idempotency: 'lock-holder' });
+          const waiting = await job(db, f, { at: minutesAgo(80), claimedAt: minutesAgo(78),
+            state: 'RUNNING', kind: 'LAND_PROMOTION', phase: 'FETCH', progressProtocol: 'v2',
+            step: 'WAITING_LOCAL_LOCK', stepStartedAt: minutesAgo(78), heartbeatAt: minutesAgo(0.2),
+            outputMovedAt: minutesAgo(78), runnerId: machine, targetRef: 'refs/heads/main',
+            serialKey: 'lock-waiter', idempotency: 'lock-waiter' });
+          const view = await read(db, f);
+          const entry = (view.inFlightJobs ?? []).find((candidate) => candidate.jobId === waiting);
+          assert.deepEqual(entry?.blockingReason, {
+            code: 'WAITING_LOCAL_LOCK',
+            summary: 'Waiting for runner workstation-gpu’s repository lock: the merge check of project '
+              + '“Wiki” holds it',
+            jobId: holder,
+          });
+          assert.ok(Math.abs(new Date(entry!.stepStartedAt!).getTime() - minutesAgo(78).getTime()) < 60_000,
+            'the wait is clocked from the step');
+          assert.deepEqual(view.inFlight?.blockingReason, entry?.blockingReason, 'the line carries it too');
         });
 
       await t.test('(p) the five liveness values ride on v2 and legacy claims', async () => {

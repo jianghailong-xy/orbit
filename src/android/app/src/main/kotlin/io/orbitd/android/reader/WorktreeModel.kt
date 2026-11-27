@@ -25,6 +25,27 @@ internal data class WorktreeState(val detail: JsonObject? = null, val busy: Bool
     /** The session's workspace, read for the notice of a session without a worktree. */
     val workspace: JsonObject? = null)
 
+internal data class BranchCommit(
+    val sha: String,
+    val subject: String,
+    val body: String?,
+    val committedAt: String,
+    val savedBy: String?,
+    val files: List<ChangedFile>,
+    val filesTruncated: Boolean,
+) {
+    companion object {
+        /** An empty array means no commits yet; null means the runner did not report them. */
+        fun of(detail: JsonObject): List<BranchCommit>? =
+            (detail["branchCommits"] as? JsonArray)?.filterIsInstance<JsonObject>()?.mapNotNull { commit ->
+                val sha = commit.string("sha") ?: return@mapNotNull null
+                BranchCommit(sha, commit.string("subject").orEmpty(), commit.string("body"),
+                    commit.string("committedAt").orEmpty(), commit.string("savedBy"),
+                    ChangedFile.parse(commit["files"]), (commit["filesTruncated"] as? JsonPrimitive)?.booleanOrNull == true)
+            }
+    }
+}
+
 /**
  * The worktree bar for one session (iOS `WorktreeModel`): the session detail behind the bar, polled while
  * an outcome is pending (3 s) or the session is live (5 s), the lazily read per-file diffs, and the commit /
@@ -60,23 +81,24 @@ internal class WorktreeModel(private val api: DirectoryApi, private val id: Stri
         if (follow) followed?.let { kind -> resultNotice(kind, next)?.let { followed = null; say(it) } }
     }
 
+    private var afterRepair = 0
+
     /**
-     * Keep the bar current while the session is on screen (web's refetch policy), and while a repair session works on its merge
-     * recovery: until the repair stops and then until the server's check of it is over — a few reads past the stop, since the
-     * server queues that check just after it.
+     * The bar's own cadence for a state no event announces (docs/list-freshness-design.md §4, R3): a merge or commit pending is read
+     * every 3 s, a repair session working on the merge recovery, and a few reads past its stop (the server queues its check just
+     * after), every 5 s. Null when nothing is in flight: the bar then follows the store's snapshot reads ([offer]) and the page poll's
+     * safety read, and the poll stops with the Activity (`PagePoll`), as every page's does. Asked once after each read.
      */
-    suspend fun poll(live: () -> Boolean) {
-        loadDetail()
-        var afterRepair = 0
-        while (currentCoroutineContext().isActive) {
-            val d = mutable.value.detail
-            val pending = d?.string("mergeStatus") == "pending" || d?.string("commitStatus") == "pending"
-            val repairing = d?.let { MergeRecovery.repair(it) }?.running == true
-            val checking = d?.let { MergeRecovery.checking(it) } == true
-            afterRepair = if (repairing) 3 else if (checking) 0 else maxOf(0, afterRepair - 1)
-            if (!pending && !live() && !repairing && !checking && afterRepair == 0) { delay(3_000); continue }
-            delay(if (pending) 3_000 else 5_000)
-            loadDetail()
+    fun inFlightMs(): Long? {
+        val d = mutable.value.detail
+        val pending = d?.string("mergeStatus") == "pending" || d?.string("commitStatus") == "pending"
+        val repairing = d?.let { MergeRecovery.repair(it) }?.running == true
+        val checking = d?.let { MergeRecovery.checking(it) } == true
+        afterRepair = if (repairing) 3 else if (checking) 0 else maxOf(0, afterRepair - 1)
+        return when {
+            pending -> 3_000L
+            repairing || checking || afterRepair > 0 -> 5_000L
+            else -> null
         }
     }
 
@@ -100,6 +122,20 @@ internal class WorktreeModel(private val api: DirectoryApi, private val id: Stri
         catch (cancel: CancellationException) { throw cancel }
         catch (error: Exception) { say(failure("Couldn't update the tracked branch", error)); return@act }
         say(WorktreeNotice("Now tracking this worktree's branch"))
+        loadDetail()
+    }
+
+    /** Close a failed merge's section (its ✕): gone at once, and the server clears the stored failure so it stays closed on every
+     * client. Nothing in git changes. A refusal puts it back and says why. */
+    fun dismissMergeFailure() = act {
+        val before = mutable.value.detail
+        before?.let { d -> mutable.update { it.copy(detail = JsonObject(d - "mergeStatus" - "mergeError")) } }
+        try { api.mutate(listOf("sessions", id, "merge-failure", "dismiss")) }
+        catch (cancel: CancellationException) { throw cancel }
+        catch (error: Exception) {
+            before?.let { d -> mutable.update { it.copy(detail = d) } }
+            say(failure("Couldn't dismiss the merge failure", error)); return@act
+        }
         loadDetail()
     }
 

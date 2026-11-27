@@ -81,9 +81,11 @@ export interface DoneRequest {
  *   is taking it to main.
  * - `NOTHING_TO_LAND` — its work ran a branch and the line found no commit of its own on it.
  * - `NO_RECEIPT` — no receipt puts its work on either branch: merged outside Orbit, or not merged.
- * - `NO_BRANCH` — its work ran without a branch and no job or receipt names it, so Orbit cannot see
- *   whether its changes reached main.
- * - `CODELESS` — its work has nothing to land: declared codeless, or done in another repository.
+ * - `NO_BRANCH` — its work ran without a branch yet reported changes (or only its newest attempt ran
+ *   without one), and no job or receipt names it, so Orbit cannot see whether its changes reached
+ *   main. Work that ran no branch and reported nothing has nothing to land (§12.15 P-M3).
+ * - `CODELESS` — its work has nothing to land here: it was done in another repository. (Until revision
+ *   42 a task declared codeless read this too; the flag is no longer read, §12.15 P-M3.)
  */
 export type CriterionLandingReason =
   | 'IN_FLIGHT'
@@ -113,6 +115,7 @@ export interface RequestProjectDoneBody {
  * - `DONE_OWNER_ITEMS_OPEN` — open items waiting on the owner.
  * - `DONE_INTEGRATION_IN_FLIGHT` — a landing or a merge into main (LAND_TASK, CHECK_PROMOTION,
  *   LAND_PROMOTION) queued or running.
+ * - `DONE_LANDING_DEFERRED` — DONE tasks whose landings wait for their work sessions to finish.
  * - `DONE_CRITERION_UNLANDED` (warn) — a criterion not LANDED, one finding each, with its reason.
  */
 export type ProjectDoneCheckCode =
@@ -121,6 +124,7 @@ export type ProjectDoneCheckCode =
   | 'DONE_TASKS_IN_FLIGHT'
   | 'DONE_OWNER_ITEMS_OPEN'
   | 'DONE_INTEGRATION_IN_FLIGHT'
+  | 'DONE_LANDING_DEFERRED'
   | 'DONE_CRITERION_UNLANDED';
 
 export interface ProjectDoneFinding {
@@ -248,10 +252,13 @@ export interface DoneState {
   ownerItems: Array<{ itemId: string; kind: OpenItemKind; title: string }>;
   /** The landings and merges into main queued or running, oldest first. */
   jobs: Array<{ integrationJobId: string; kind: string; state: string; taskId: string | null }>;
+  /** DONE tasks whose landing waits for their work sessions to finish, oldest first. */
+  deferredLandings?: ProjectDoneFinding['tasks'];
   criteriaDigest: string;
   stateDigest: string;
-  /** The project carries the explicit non-code mark (migration 0535): it reads no landing, so no
-   *  criterion carries a `reason` or `heldOffLanded`, and no `DONE_CRITERION_UNLANDED` is found. */
+  /** Always false since revision 42 (§12.15 P-M3): the non-code mark (migration 0535) is no longer
+   *  read, and landing follows from the commits the project's tasks delivered. Kept so clients that
+   *  read it still decode. */
   nonCode: boolean;
 }
 

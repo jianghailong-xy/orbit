@@ -15,6 +15,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.orbitd.android.TestOrbitApplication
+import io.orbitd.android.core.cards.BackgroundRow
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.RunEvent
 import io.orbitd.android.ui.OrbitTheme
@@ -97,7 +98,7 @@ class BackgroundTrayTest {
         compose.setContent {
             val c = cases[index]
             OrbitTheme {
-                BackgroundTray(c["list"]!!.jsonArray.map { it.jsonObject }, c["lastUserMessageAt"]?.jsonPrimitive?.contentOrNull,
+                BackgroundTray(c["list"]!!.jsonArray.map { it.jsonObject }, BackgroundRow.clearedAt(c["lastUserMessageAt"]?.jsonPrimitive?.contentOrNull, c["lastAgentTurnStartedAt"]?.jsonPrimitive?.contentOrNull),
                     c["sessionLive"]!!.jsonPrimitive.boolean)
             }
         }
@@ -106,6 +107,11 @@ class BackgroundTrayTest {
             settle()
             val name = c["case"]!!.jsonPrimitive.content
             val expect = c["expect"]!!.jsonObject
+            // A case that carries its transcript is read through the reader, as every client must.
+            c["events"]?.jsonArray?.map { it.jsonObject }?.let { raw ->
+                val events = raw.map { e -> RunEvent(e["type"]!!.jsonPrimitive.content, e["seq"]!!.jsonPrimitive.long, e["payload"]!!, ts = e["ts"]?.jsonPrimitive?.contentOrNull) }
+                assertEquals(name, c["lastUserMessageAt"]?.jsonPrimitive?.contentOrNull, BackgroundTrayLogic.lastUserMessageAt(events))
+            }
             if (expect["hidden"]?.jsonPrimitive?.boolean == true) {
                 compose.onAllNodesWithTag("background-tray").assertCountEquals(0)
                 return@forEachIndexed
@@ -213,7 +219,7 @@ class BackgroundTrayTest {
         val failed = obj("""{"shellId":"b2","kind":"shell","toolUseId":"tu_b2","command":"npm run build","startedSeq":12,
             "startedTs":"${ago(7_200)}","status":"failed","endedAt":"${ago(60)}"}""")
         setTray(list = listOf(running("a", 10, "web suite"), failed, job), lastUser = ago(3_600))
-        compose.onNodeWithContentDescription("Background processes, 2 running · 1 failed").performClick()
+        compose.onNodeWithContentDescription("Background processes, 2 running").performClick()
         settle()
         compose.onNodeWithText("Background processes").assertExists()
         compose.onNodeWithText("2 running · 3 total").assertExists()
@@ -232,6 +238,54 @@ class BackgroundTrayTest {
         compose.onNodeWithText("$ ./gradlew :app:test").assertExists()
     }
 
+    // MARK: a bg_run job's row and its Job card (board 350t1lTONlrPMjilBdXx7 D1, rulings R1 and R3)
+
+    private fun job(id: String, status: String, stoppable: Boolean? = null) = obj("""{"shellId":"$id","kind":"job","toolUseId":"$id",
+        "command":"./gradlew :app:test","description":"Job $id","startedSeq":40,"startedTs":"${ago(300)}","status":"$status"
+        ${stoppable?.let { ",\"stoppable\":$it" }.orEmpty()}}""")
+
+    private fun setJobTray(list: List<JsonObject>, jobs: JobCards, jump: (String) -> (() -> Unit)?) {
+        compose.setContent {
+            CompositionLocalProvider(LocalLifecycleOwner provides Owner(), LocalJobCards provides jobs) {
+                OrbitTheme { BackgroundTray(list, null, true, jumpToJob = jump) }
+            }
+        }
+        settle()
+    }
+
+    // E2 (revised 2026-11-21): the owner can do nothing about a failed job, so the folded row does not count it.
+    @Test fun aFailedJobIsNotCounted() {
+        val failed = JsonObject(job("bgj_f", "failed") + ("endedAt" to JsonPrimitive(ago(60))))
+        val row = BackgroundRow.rowOf(listOf(failed, job("bgj_r", "running")), null, true)!!
+        assertEquals(listOf(BackgroundRow.CountPart("running", "1 running")), row.countParts)
+    }
+
+    @Test fun tappingAJobInTheOpenedListGoesToItsCard() {
+        val jumped = mutableListOf<String>()
+        setJobTray(listOf(job("bgj_a", "running"), running("s", 10, "web suite")), JobCards()) { id -> if (id == "bgj_a") ({ jumped += id }) else null }
+        compose.onNodeWithTag("background-tray:row").performClick(); settle()
+        compose.onNodeWithText("Job bgj_a").performClick(); settle()
+        assertEquals(listOf("bgj_a"), jumped)
+        // The list closes onto the card; a shell row (or a job whose card is not drawn) still opens to its output.
+        compose.onNodeWithTag("background-tray:list").assertDoesNotExist()
+        compose.onNodeWithTag("background-tray:row").performClick(); settle()
+        compose.onNodeWithText("web suite").performClick(); settle()
+        compose.onNodeWithTag("background-proc:s:output").assertExists()
+    }
+
+    @Test fun aRunningStoppableJobTakesStopBehindTheCardsConfirmation() {
+        val stopped = mutableListOf<String>()
+        setJobTray(listOf(job("bgj_a", "running", stoppable = true), job("bgj_b", "running", stoppable = false), job("bgj_c", "running"),
+            job("bgj_d", "done", stoppable = true), running("s", 10, "web suite")), JobCards(stop = { stopped += it })) { null }
+        compose.onNodeWithTag("background-tray:row").performClick(); settle()
+        compose.onNodeWithTag("background-proc:bgj_a:stop").assertExists()
+        listOf("bgj_b", "bgj_c", "bgj_d", "s").forEach { compose.onNodeWithTag("background-proc:$it:stop").assertDoesNotExist() }
+        compose.onNodeWithTag("background-proc:bgj_a:stop").performClick(); settle()
+        compose.onNodeWithText("Stop this job?").assertExists()
+        compose.onNodeWithTag("job-stop-confirm").performClick(); settle()
+        assertEquals(listOf("bgj_a"), stopped)
+    }
+
     @Test fun aSessionThatIsNotLiveDropsItsStaleRunningItems() {
         setTray(list = three, live = false)
         compose.onAllNodesWithTag("background-tray").assertCountEquals(0)
@@ -241,6 +295,15 @@ class BackgroundTrayTest {
         // The list, opened over an ended item, does not spin a stale running one either.
         assertEquals("unknown", BackgroundTrayLogic.status(three[0], sessionLive = false))
         assertEquals("1 total", BackgroundTrayLogic.countText(listOf(three[0]), sessionLive = false))
+    }
+
+    @Test fun theLatestAgentTurnStartsAtItsEarliestEvent() {
+        assertNull(BackgroundTrayLogic.lastAgentTurnStartedAt(listOf(RunEvent("user", 1, obj("""{"text":"Hi"}"""), ts = "2026-11-16T02:40:00.000Z"))))
+        val events = listOf(
+            RunEvent("assistant", 1, obj("{}"), turnId = "t1", ts = "2026-11-16T02:41:00.000Z"),
+            RunEvent("assistant", 2, obj("{}"), turnId = "t2", ts = "2026-11-16T02:42:00.000Z"),
+            RunEvent("tool_use", 3, obj("{}"), turnId = "t2", ts = "2026-11-16T02:43:00.000Z"))
+        assertEquals("2026-11-16T02:42:00.000Z", BackgroundTrayLogic.lastAgentTurnStartedAt(events))
     }
 
     @Test fun theLastUserMessageIsTheNewestTypedTurn() {
@@ -264,6 +327,16 @@ class BackgroundTrayTest {
         assertTrue("all three are in the band: $watching $tray $tasks", watching > 0 && tray > 0 && tasks > 0)
         assertTrue("Watching, then Background, then Tasks", watching < tray && tray < tasks)
         assertEquals("one Background row", tray, reader.lastIndexOf("BackgroundTray("))
+    }
+
+    @Test fun theFoldedRowEndsCountThenMarkThenChevronAsTheAgentsRow() {
+        // The row's semantics are cleared to its one label, so its children's order is read from the source.
+        val tray = generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
+            .map { File(it, "app/src/main/kotlin/io/orbitd/android/reader/BackgroundTray.kt") }.first { it.isFile }.readText()
+        val folded = tray.substring(tray.indexOf("private fun FoldedRow("), tray.indexOf("private fun Mark("))
+        val at = listOf("AnimatedContent(item, Modifier.weight(1f)", "row.countParts.isNotEmpty()", "Mark(item.mark)",
+            "Icon(WatchIcons.chevronRight").map { piece -> folded.indexOf(piece).also { assertTrue("no $piece", it > 0) } }
+        assertEquals("name, count, mark, chevron", at.sorted(), at)
     }
 
     private companion object { const val FIXTURE = "src/shared/src/background-row.fixture.json" }

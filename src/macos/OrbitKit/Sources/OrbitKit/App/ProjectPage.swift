@@ -303,6 +303,18 @@ public enum ProjectPage {
     public static let landingTakenOver = "Taken over"
     public static let landingFirstStarted = "first started"
     public static let landingUsually = "usually"
+    /// The state word of a claimed job waiting for its runner's local lock: it has not started its
+    /// work, so it is not fetching and has no output to be quiet about. Web: `LANDING_LIVENESS_WORDS.WAITING`.
+    public static let landingWaiting = "waiting"
+
+    /// The server's sentence about a claimed job waiting for its runner's local lock, naming the job
+    /// holding it — or nil for any other job. A SILENT runner keeps its own words. Web: `localLockWait`.
+    private static func localLockWait(running: Bool, liveness: String?,
+                                      blockingReason: LandTaskBlockingReason?) -> String? {
+        guard running, liveness != "SILENT", liveness != "LEASE_EXPIRED",
+              let blockingReason, blockingReason.code == "WAITING_LOCAL_LOCK" else { return nil }
+        return blockingReason.summary
+    }
     /// The most rounds one claim of a `LAND_TASK` can run: the M of "round N of M" (§7.2 V6). The
     /// first round plus up to two refetches when the push loses a race (contract J5, appendix A-Q5;
     /// runner-go `integrate.go` `integrationRefetchRounds + 1`). Web: `LAND_TASK_ROUNDS_PER_CLAIM`.
@@ -434,7 +446,9 @@ public enum ProjectPage {
                         round: inFlight.round, check: inFlight.check, stepStartedAt: inFlight.stepStartedAt,
                         outputMovedAt: inFlight.outputMovedAt, typicalMs: inFlight.typicalMs,
                         livenessWord: inFlight.liveness,
-                        firstStartedAt: firstStartedAt(view, jobId: inFlight.jobId))
+                        firstStartedAt: firstStartedAt(view, jobId: inFlight.jobId),
+                        blockingReason: inFlight.blockingReason,
+                        heldOnPullRequest: inFlight.state == "PULL_REQUEST")
     }
 
     /// When the attempt behind a job FIRST started: the `landTask` row's own `startedAt` is the
@@ -515,7 +529,9 @@ public enum ProjectPage {
                            runner: job.runnerName, kind: job.kind, claim: job.claim, round: job.round,
                            check: job.check, stepStartedAt: job.stepStartedAt, outputMovedAt: job.outputMovedAt,
                            typicalMs: job.typicalMs, livenessWord: job.liveness,
-                           firstStartedAt: firstStartedAt(view, jobId: job.jobId))
+                           firstStartedAt: firstStartedAt(view, jobId: job.jobId),
+                           blockingReason: job.blockingReason,
+                           heldOnPullRequest: job.state == "PULL_REQUEST")
             return LandingJobLine(
                 jobId: job.jobId, taskId: job.taskId, line: line,
                 detail: landingJobDetail(job, main: main), retryable: job.retryable,
@@ -543,7 +559,8 @@ public enum ProjectPage {
                                         heartbeatAt: String?, kind: String?, claim: Int?, round: Int?,
                                         check: ProjectIntegrationCheck?, stepStartedAt: String?,
                                         outputMovedAt: String?, typicalMs: Int?, runner: String?,
-                                        firstStartedAt: String?, now: Date, updatedAt: Date?) -> LandingLiveness? {
+                                        firstStartedAt: String?, now: Date, updatedAt: Date?,
+                                        lockWait: String? = nil) -> LandingLiveness? {
         guard let liveness, liveness != "LEASE_EXPIRED", running else { return nil }
         let stepStart = RelativeTime.parse(stepStartedAt ?? startedAt)
         let heartbeat = heartbeatAt.flatMap(RelativeTime.parse)
@@ -569,7 +586,11 @@ public enum ProjectPage {
         // board says the liveness there — "checking · output 1s ago" (v4 04 and 07). The claim,
         // round and the usual duration follow it and are read in full on the wider rows.
         var clauses: [String] = []
-        if liveness == "LIVE" {
+        // A job waiting for its runner's local lock has not started: what holds it leads the line,
+        // and the step's clock is the wait's.
+        if let lockWait {
+            clauses.append(lockWait)
+        } else if liveness == "LIVE" {
             if let outputMoved {
                 clauses.append("\(lowercasingFirst(landingOutput)) "
                     + "\(max(0, Int(now.timeIntervalSince(outputMoved).rounded())))s ago")
@@ -617,7 +638,10 @@ public enum ProjectPage {
                                  round: Int? = nil, check: ProjectIntegrationCheck? = nil,
                                  stepStartedAt: String? = nil, outputMovedAt: String? = nil,
                                  typicalMs: Int? = nil, livenessWord: String? = nil,
-                                 firstStartedAt: String? = nil) -> LandingLine {
+                                 firstStartedAt: String? = nil,
+                                 blockingReason: LandTaskBlockingReason? = nil,
+                                 heldOnPullRequest: Bool = false) -> LandingLine {
+        let lockWait = localLockWait(running: running, liveness: livenessWord, blockingReason: blockingReason)
         // A queued job's heartbeat and phase can be an earlier claim's: only a running job's count.
         let reported = heartbeatAt.flatMap(RelativeTime.parse)
         let lastUpdate = running ? (reported ?? updatedAt) : updatedAt
@@ -639,7 +663,7 @@ public enum ProjectPage {
             liveness: livenessWord, running: running, startedAt: startedAt, heartbeatAt: heartbeatAt,
             kind: kind, claim: claim, round: round, check: check, stepStartedAt: stepStartedAt,
             outputMovedAt: outputMovedAt, typicalMs: typicalMs, runner: runner,
-            firstStartedAt: firstStartedAt, now: now, updatedAt: updatedAt)
+            firstStartedAt: firstStartedAt, now: now, updatedAt: updatedAt, lockWait: lockWait)
         return LandingLine(what: what,
                            // A legacy claim's runner reports only between steps, so its quiet is
                            // not a stall: the ring keeps turning and the line says why. SILENT is
@@ -647,7 +671,10 @@ public enum ProjectPage {
                            running: running && !unavailable && !silent && livenessWord != "SILENT",
                            state: unavailable ? "Update unavailable"
                                : silent ? landingNoReport
-                                   : running ? (integrationPhaseWords(main)[phase ?? ""] ?? "running") : "queued",
+                                   : running && lockWait != nil ? landingWaiting
+                                       : running ? (integrationPhaseWords(main)[phase ?? ""] ?? "running")
+                                           // Held on its pull request, not queued: GitHub is what it waits for (design §4.2).
+                                           : heldOnPullRequest ? "waiting for GitHub" : "queued",
                            clock: v6?.clock ?? landingClock(elapsed), word: word,
                            clockLabel: running ? "Elapsed" : "Queued for",
                            updated: report, wait: wait, liveness: v6)
@@ -792,6 +819,9 @@ public enum ProjectPage {
         /// says no "Nothing to do" (board v4 04 draws no body under that head). Read off
         /// `inFlight`, so a server that lists no jobs says it too.
         public let mergeJob: Bool
+        /// The pull request the landing waits on or ended in (design §8), read off `inFlight` while the card
+        /// holds one job; nil from a server that predates it.
+        public var pullRequest: LandingPullRequestView? = nil
 
         /// The head's two slots (`landingHead`) — the card's head is the landing row's: the same
         /// word, the same clock, the same state and freshness, in the merged row's anatomy.
@@ -844,7 +874,8 @@ public enum ProjectPage {
             skipNote: several ? nil
                 : lead?.skipCheck == "STOPPING" ? landingSkipCheckStopping
                 : lead?.skipCheck == "SKIPPED" ? landingSkipCheckSkipped : nil,
-            mergeJob: !several && ProjectMergeCard.isMergeJob(view.inFlight))
+            mergeJob: !several && ProjectMergeCard.isMergeJob(view.inFlight),
+            pullRequest: several ? nil : view.inFlight?.pullRequest)
     }
 
     /// The branch a job lands on, short, from the project's own landings — the field the task page's
@@ -929,6 +960,15 @@ public enum ProjectPage {
         }
     }
 
+    /// A criterion's landing half-sentence on the project page (D2 A): the Done card's words for its
+    /// `landingReason`, and none for a criterion its work has not met — that work has not landed
+    /// anywhere yet, whatever the landing lane says. Web's `criterionLandingHalfSentence`, held to
+    /// `src/shared/src/project-page-labels.fixture.json`.
+    public static func criterionLandingHalfSentence(satisfied: Bool?, landingReason: CriterionLandingReason?,
+                                                    main: String = RunSettings.defaultMainBranch) -> String? {
+        satisfied == true ? ProjectDone.landingReasonLabel(landingReason, main: main) : nil
+    }
+
     public static let metByItsWork = "Met by its work"
     public static let notMetByItsWork = "Not met by its work"
 
@@ -960,7 +1000,10 @@ public enum ProjectPage {
         guard let satisfied = c.satisfied else { return nil }
         var landing: String?
         var warning: String?
-        if satisfied, let raw = c.landing {
+        if c.landingReasonRead {
+            // D2 A: the reason decides it, in the Done card's words; an unmet criterion says none.
+            landing = criterionLandingHalfSentence(satisfied: satisfied, landingReason: c.landingReason, main: main)
+        } else if satisfied, let raw = c.landing {
             switch raw {
             case "ON_INTEGRATION_LINE":
                 landing = "on \(integrationRef ?? "the project branch")"
@@ -978,9 +1021,12 @@ public enum ProjectPage {
                                          action: requiredActionSentence[$0.requiredAction] ?? $0.requiredAction)
                 })
         }
+        let flagged = c.landingReasonRead
+            ? c.landingReason == .noReceipt || c.landingReason == .noBranch
+            : c.landing == "UNKNOWN"
         return CriterionWork(state: satisfied ? metByItsWork : notMetByItsWork,
                              landing: landing, landingWarning: warning,
-                             landingFlagged: satisfied && c.landing == "UNKNOWN",
+                             landingFlagged: satisfied && flagged,
                              reasons: reasons)
     }
 
@@ -1109,6 +1155,59 @@ public enum ProjectPage {
                                     + (done == nil ? 0 : 1))
     }
 
+    /// The page's Open items section (D3 A): drawn after the title area and before Work overview, as
+    /// web's mobile page draws `ProjectOpenItems` — whenever something is open, or the owner has a
+    /// row of their own to press (Start…, Record as done… · not asked yet), which an open project
+    /// always has once the read is in. Nil while there is nothing to draw, as web's returns null.
+    public struct OpenItemsSection: Equatable, Sendable {
+        /// The header's detail: "0 need you · oldest first".
+        public let hint: String
+        public let start: StartProject.PageRow?
+        public let done: ProjectDone.PageRow?
+        public let needsYou: [ProjectOpenItemRow]
+        /// "Being fixed by its session" (revision 42, §12.7): landing failures in their task's own
+        /// session's hands, drawn under Needs you and counted in nobody's.
+        public let beingFixed: [ProjectOpenItemRow]
+
+        public init(hint: String, start: StartProject.PageRow?, done: ProjectDone.PageRow?,
+                    needsYou: [ProjectOpenItemRow], beingFixed: [ProjectOpenItemRow] = []) {
+            self.hint = hint
+            self.start = start
+            self.done = done
+            self.needsYou = needsYou
+            self.beingFixed = beingFixed
+        }
+
+        /// Whether the Needs you group is drawn: anything in it, or the owner's own rows.
+        public var drawsNeedsYou: Bool { !needsYou.isEmpty || start != nil || done != nil }
+    }
+
+    /// The group's heading with its count: `Being fixed by its session · 1`.
+    public static func beingFixedHeading(_ count: Int) -> String {
+        "\(LandingFixCopy.beingFixedByItsSession) · \(count)"
+    }
+
+    /// The header's detail, in web's words. The pause is drawn as a card and not counted, as web
+    /// keeps it out of the group; the coordinator's items are not drawn here, as web's are not.
+    public static func openItemsHint(needsYou: Int) -> String {
+        "\(needsYou) need you · oldest first"
+    }
+
+    public static func openItemsSection(status: ProjectStatus, started: Bool?, derivedDone: ProjectDerivedDone?,
+                                        items: ProjectOpenItemsView?) -> OpenItemsSection? {
+        guard let items else { return nil }
+        let start = StartProject.pageRow(status: status, started: started, openItems: items)
+        let done = ProjectDone.pageRow(status: status, derivedDone: derivedDone, openItems: items)
+        let needsYou = needsYouRows(items)
+        let counted = needsYou.filter { $0.kind != .fusePaused }.count
+            + (start?.request == nil ? 0 : 1)
+            + (ProjectDone.live(openItems: items, status: status.rawValue) == nil ? 0 : 1)
+        let section = OpenItemsSection(
+            hint: openItemsHint(needsYou: counted), start: start, done: done, needsYou: needsYou,
+            beingFixed: items.withWorkSession)
+        return section.drawsNeedsYou || !section.beingFixed.isEmpty ? section : nil
+    }
+
     /// The owner's rows, without the request to record the project done should a server ever list
     /// it there too: it has a row of its own (`ProjectDone.PageRow`), as the browser keeps it out.
     public static func needsYouRows(_ items: ProjectOpenItemsView) -> [ProjectOpenItemRow] {
@@ -1232,6 +1331,7 @@ public enum ProjectPage {
     /// landing, never in Landed.
     private static let integratingStates: Set<String> = [
         "QUEUED", "RUNNING", "CONFLICT", "CHECK_FAILED", "ERROR", "AWAITING_OWNER", "AWAITING_OBSERVATION",
+        "FIXING",
     ]
     private static let landedStates: Set<String> = ["ON_INTEGRATION_LINE", "ON_UPSTREAM"]
 
@@ -1254,15 +1354,46 @@ public enum ProjectPage {
         public let tone: TagTone
     }
 
+    /// A running task whose background jobs have said nothing for ten minutes (`runStalled`).
+    public static let runStalled = "no output 10+ min"
+    /// A task set to start by hand (`autoRunWhenReady: false`), as its row says it: the Project
+    /// started card's words for the same tasks. Web's `PROJECT_TASK_STARTS_BY_HAND`.
+    public static let startsByHand = "set to start by hand"
+
+    private static let runReasonLabel: [String: String] = [
+        "TURN": "Turn in progress",
+        "BACKGROUND_JOB": "Background job",
+        "WAITING": "Waiting to be woken",
+    ]
+
+    /// What a running task says it is doing: "Running · Background job", and "· no output 10+ min"
+    /// when it stalled; nil when the server gave no reason. Web's `runningLabel`.
+    public static func runningLabel(runReason: String?, runStalled: Bool?) -> String? {
+        guard let reason = runReason, !reason.isEmpty else { return nil }
+        let label = "Running · \(runReasonLabel[reason] ?? reason)"
+        return runStalled == true ? "\(label) · \(Self.runStalled)" : label
+    }
+
     /// The row's lane as a tag ("Ready · can start now", "Running", "Failed", …), or nil where the
     /// lane goes without saying (done, cancelled, or waiting on a landing the other tag names).
     public static func workTag(_ t: ProjectTaskRow) -> Tag? {
-        switch workState(t) {
+        let state = workState(t)
+        // Held for a person to start (G5): said on the row in the Project started card's words.
+        // `false`, not absent — an older server sends no flag, and that is no claim.
+        if t.autoRunWhenReady == false, state == "READY" || (state == "BLOCKED" && !waitsForLanding(t)) {
+            return state == "READY"
+                ? Tag(text: "Ready · \(startsByHand)", tone: .warning)
+                : Tag(text: "Blocked · \(startsByHand)", tone: .neutral)
+        }
+        switch state {
         case "READY":
             return Tag(text: t.autoRunWhenReady == true ? "Ready · automatic dispatch" : "Ready · can start now",
                        tone: .warning)
         case "RUNNING":
-            return Tag(text: "Running", tone: .brand)
+            // A stalled run (G4) says so on its row as well as in the run queue.
+            return t.runStalled == true
+                ? Tag(text: "Running · \(runStalled)", tone: .warning)
+                : Tag(text: "Running", tone: .brand)
         case "BLOCKED":
             return waitsForLanding(t) ? nil : Tag(text: "Blocked", tone: .neutral)
         case "AWAITING_VERIFICATION":
@@ -1309,6 +1440,9 @@ public enum ProjectPage {
         case "CONFLICT": return Tag(text: "Conflict · \(who)", tone: .danger)
         case "CHECK_FAILED": return Tag(text: "Checks failed · \(who)", tone: .danger)
         case "ERROR": return Tag(text: "Integration error · \(who)", tone: .danger)
+        // Revision 42 (§12.7): the task's own session is fixing the failed landing; pressing the row
+        // opens that session (`fixingSessionID`).
+        case "FIXING": return Tag(text: LandingFixCopy.landingFixing, tone: .verification)
         case "AWAITING_OWNER": return Tag(text: "Awaiting your approval", tone: .warning)
         case "AWAITING_OBSERVATION":
             return Tag(text: waitingToBeSeenOn(RunSettings.mainBranchName(upstreamRef),
@@ -1318,6 +1452,13 @@ public enum ProjectPage {
         case "ON_UPSTREAM": return Tag(text: "On \(RunSettings.mainBranchName(upstreamRef))", tone: .success)
         default: return nil
         }
+    }
+
+    /// The task's own session a FIXING row opens instead of the task (revision 42, §12.7); nil for
+    /// every other row.
+    public static func fixingSessionID(_ t: ProjectTaskRow) -> String? {
+        guard t.integration?.state == "FIXING", let id = t.integration?.workSessionId, !id.isEmpty else { return nil }
+        return id
     }
 
     /// One band of the task list.

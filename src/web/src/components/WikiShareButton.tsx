@@ -6,6 +6,7 @@ import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 import { wikiSpacePath } from '../lib/wiki';
 import { ShareModal, shareLinkQueryKey } from './ShareModal';
 import { Button } from './ui/Button';
+import { Tooltip } from './ui/Tooltip';
 
 /**
  * The Wiki head's way to the space's public link (docs/share-links-design.md §10, mock share-links
@@ -23,16 +24,12 @@ export function WikiShareButton({ spaceId, spaceSlug }: { spaceId: string; space
   return (
     <>
       {live ? (
-        <button
-          type="button"
-          className="session-shared-pill"
-          title="Anyone with the link can view this wiki — open its sharing settings"
-          aria-label="Shared · Live"
-          onClick={() => setOpen(true)}
-        >
-          <GlobalOutlined />
-          {phone ? null : ' Shared · Live'}
-        </button>
+        <Tooltip content="Anyone with the link can view this wiki — open its sharing settings" side="bottom" align="end">
+          <button type="button" className="session-shared-pill" aria-label="Shared · Live" onClick={() => setOpen(true)}>
+            <GlobalOutlined />
+            {phone ? null : ' Shared · Live'}
+          </button>
+        </Tooltip>
       ) : (
         <Button icon={<GlobalOutlined />} aria-label="Share" onClick={() => setOpen(true)}>
           {phone ? null : 'Share'}

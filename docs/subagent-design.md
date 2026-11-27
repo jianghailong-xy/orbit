@@ -65,7 +65,7 @@ delegate({
 | `description` | 给父模型看，决定是否委派 | — |
 | `model` | `inherit` = 父会话的模型；`auto` = 路由；具体 id = 点名 | 当作 `auto`，Why 里写明 |
 | `size` | Orbit 扩展：S / M / L / XL | 忽略 |
-| `readonly` | `true` → 不给编辑工具；Claude 子 Agent 沿用父会话的权限模式，其他引擎降为 plan | — |
+| `readonly` | `true` → 不给编辑工具；各引擎都沿用父会话的权限模式，只读靠引擎自己的只读设置（§5.3） | — |
 | `tools` / `disallowedTools` | 原样传给支持它的引擎；不支持的引擎忽略并在 Why 里写明 | — |
 | `is_background` | 作为 `background` 的默认值 | — |
 
@@ -114,8 +114,8 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 
 只有「跑不起来」才去掉。**凡是在 Orbit 注册了的都参与路由，只是先后不同**（owner，2026-11-19）：
 
-- **所有档位都进池**，不只是要的那一档。没有档位的不再去掉：一个 Provider × 引擎**一个档位都没有**时（Antigravity、Cursor、
-  OpenCode、DSH 的内置登录，没标档位的自定义 endpoint），它的**默认模型**以「无档位」进池——runner 报的该引擎默认模型，
+- **所有档位都进池**，不只是要的那一档。没有档位的不再去掉：一个 Provider × 引擎**一个档位都没有**时（目录里没有一个已知
+  家族模型、owner 也没标档位的内置引擎，例如只报 `grok-4.7` 之类的 Cursor；没标档位的自定义 endpoint），它的**默认模型**以「无档位」进池——runner 报的该引擎默认模型，
   否则 Provider 自己的默认模型，否则列表第一个；列表里其余的模型记为去掉（`The model has no tier; <provider> runs <model>`），
   点名照样能用。已有档位的 Provider 里个别没档位的模型仍记为去掉。
 - **额度读不到**的订阅（runner 没报这个账号、或报了但没有窗口）不去掉，也不当作 100% 余量：排在额度已知的之后。
@@ -123,15 +123,54 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 **档位表**从「每个引擎一张」扩成「每个模型一行」：`(provider, model, effort) → 档位`。preset 的模型由目录提供档位和价格
 （价格取自 models.dev，preset 列表本来就从那里刷新，`providerPresets.ts`）；Claude / Codex 内置登录沿用今天
 `DEFAULT_MODEL_TIER_TABLE` 的映射，Kimi 内置登录也在这张表里（S/M 用 K3，L/XL 用 K3.1 Pro，没有就 K3；只给 SubAgent 用）。
+其余内置引擎（Cursor、Antigravity、OpenCode、DSH）的目录按**模型家族**定档（`MODEL_FAMILY_TIERS`：Claude Sonnet S/M、
+Claude Opus L/XL、Gemini Flash S/M、Gemini L/XL、Composer S、Claude Haiku S、Kimi K3 S/M、Kimi K3.1 Pro L/XL（无 K3.1 Pro 时 K3 顶替 L/XL；`kimi-k2.*` 不定档）），每档取该家族版本最新的模型，effort 夹到模型自己报的等级
+（`clampEffort`）；不属于任何已知家族的模型（Cursor 的 `grok-4.7`、`kimi-k2.*`，Antigravity 的 `gpt-oss-120b` 等）没有档位。
+
+**owner 给内置引擎的模型定档**（owner，2026-11-20：表总会漏，漏了应该点一下就能补，而不是等发版）：任何内置引擎目录里的
+任何模型，owner 都可以在 Providers 页的 Tier 列设一个档位或清除，存在账号偏好 `builtinModelTiers`（引擎 → 模型 → 档位），
+只经 `PATCH /providers/builtin/:engine/model-tier` 写（`tier: null` 清除）。设了档位的模型在该引擎上**只**占 owner 定的那一档，
+取代内置表和家族给它的档位；effort 是该档要的（S low、M medium、L high、XL max）夹到模型报的等级。清除后回到内置表 / 家族的档位，
+没有就回到无档位。只对 runner 报了的模型生效；用同一引擎目录的 key（例如 Claude Code 上的 Anthropic key）也读这份档位。
+owner 什么都没设时 Claude / Codex / Kimi 的行与以前逐字节相同；任务 run 的路由（`routeTaskRun`）不读它。
 
 **先按贴合度**：要的那一档 → 更高的档（近的先）→ 无档位的默认模型 → 更低的档（近的先）。选中的不在要的档时，理由里写明
-（`Nothing in tier M can run: …`）。**同一贴合度内**再按下表：
+（`Nothing in tier M can run: …`）。贴合度在每种模式下都是最外层的键。
+
+**同一贴合度内分两步：先选模型，再选账号**（owner，2026-11-22，策略版本 `p7-model-then-account-1`）。之前所有
+「凭据 × 引擎 × 模型」一起按额度排，结果是哪个账号的额度先过期就由它决定模型（S 档跑成了 Kimi K3 69 次、Sonnet 9 次），
+同一个模型在两个凭据上也被拆成两行报告。现在：
+
+1. **选模型**：同一贴合度里按模型 id 合并（`gpt-6.2-sol` 在 Codex 内置登录和 Codex Pool 上是同一个模型），按模型偏好排：
+   owner 在 Providers 页排的顺序（取这个模型最靠前的那个 Provider × 引擎）→ 档位来源（owner 自己定的档 > 规则：模型家族、实测、
+   preset 目录 > 引擎内置表）→ 表里同一档内原有的顺序。质量分（任务 351Ah51IZjAikVJUEduNc）以后会进这一步，现在路由不读它。
+   Intelligence 在这之前先按「档位上限高的模型先」（例如 L 档里 Opus 先于只到 L 的模型）。
+2. **选账号**：能跑这个模型的所有凭据（引擎自己的登录、号池、key）里，订阅先于计费 key；订阅里额度已知的先，再**先过期的先**，
+   再余量多的先；key 里便宜的先；最后按 owner 的顺序。
+
+严格程度跟 Optimize For（Settings › General，`optimizeForOf`）走：
 
 | Optimize For | 规则 |
 |---|---|
-| Cost（默认） | 订阅先于计费 key；订阅里额度已知的先，再**先过期的先**，再余量多的先；key 里便宜的先 |
-| Balance | 与 Cost 相同：可用的订阅（读得到额度与否）都先于计费 key（owner，2026-11-19）；与 Cost 只差在没给档位时抬到 M |
-| Intelligence | 档位上限高的模型先（例如 L 档里 Opus 先于 Sonnet-high），再额度已知的先，再先过期的先，并列时便宜的先 |
+| Cost | 不分两步，和以前一样：所有候选一起排——订阅先于计费 key，订阅里额度已知的先、再先过期的先、再余量多的先；key 里便宜的先 |
+| Balance（默认） | 先模型后账号，两个例外，同档的另一个模型可以接手：① 首选模型**没有一个订阅还有余量**（都 `quotaNearLimit`，或只有计费 key）时，按偏好的下一个有余量的模型；② 另一个模型的**周 / 月额度 24 小时内重置**（快要作废）、而首选模型没有这样的账号时，重置最早的那个模型。① ② 同时成立时 ② 优先 |
+| Intelligence | 严格先模型后账号：只有首选模型**没有一个账号能跑**（移除、未登录、到额度上限、被拒）时才换下一个模型；快用完、别的额度要作废都不换 |
+
+**「快要作废」的窗口取 24 小时**（`SUBAGENT_WASTE_WINDOW_MS`）：一天够当天的 run 把剩下的额度用掉，又短到首选模型仍拿着
+周窗口七天里的六天。只算窗口本身长于一天的（周、月）：5 小时窗口总在几小时内重置，每几个小时就还回来，不算作废；窗口长度未知的也不算。
+路由时刻由调用方传入（`SubagentRoutingInput.now`），没有时不触发这条。只有一个计费 key 的模型在 Balance 里算「没有余量」：
+免费额度先于花钱（owner，2026-11-19）。
+
+**理由**里写明哪一步定的：`Picked gpt-6.2-sol · low on codex-pool (Balance): model gpt-6.2-sol, preferred in tier S;
+account codex-pool: its quota resets first, a subscription pool whose account … has 70% of its quota left until …`；
+接手时写 `takes over tier S from the preferred claude-sonnet-5-5, which has every account near its limit` 或
+`…: its quota on kimi resets at …, within a day, and would otherwise go to waste`。Cost 的理由和以前逐字相同。
+
+**候选（fallbacks）按同一个顺序**：选中模型的所有账号 → 同档下一个模型的账号 → 下一个贴合度。额度 / 容量失败后换的就是这个顺序（§4.3）。
+
+**任务 run 不变**（`routeTaskRun` 借用这个路由器选候选）：它传 `rankTogether`，在每种模式下都照旧把所有候选一起排
+（Balance 等同 Cost，Intelligence 是上限高的先、再额度、再价格）。原因：默认的 Balance 下两步会改变 Agent 自己的引擎接不了时
+任务 run 拿到的模型，这次没有要这个改变。由 `model-routing-two-step.spec.ts` 钉住。
 
 **先过期的先**（owner，2026-11-19）：和 runner 上选账号同一条规则（`planUsage.ts` `rankAccounts`）——快用完的
 （`quotaNearLimit`：5 小时窗口 ≥ 80%，更长的 ≥ 90%）排最后，其余按额度作废的时刻（`quotaExpiresAt`：最长那个窗口的重置，
@@ -204,15 +243,29 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 
 ### 5.3 权限与审批
 
-- 权限模式：定义里 `readonly` → Claude 子 Agent 与父会话相同、去掉编辑工具（Edit / MultiEdit / Write / NotebookEdit），
-  因为 plan 下每次 Bash 都要问人，父会话开 Auto 时只读子 Agent 反而最打扰人；其他引擎 → plan。否则与父会话相同。不会比父会话宽（沿用 `assertChildModeOrNarrow` 的规则）。
-  只读子 Agent 在各引擎上怎样读仓库：Claude 在父会话的模式下保留读文件工具；Kimi、OpenCode、Cursor、Antigravity 在 plan 下保留各自的读文件工具；
-  DSH 没有 plan，用它的只读文件策略（Don't Ask）。Codex 只能用 shell 读仓库，而它的 plan 拒绝一切命令，所以只读的
-  Codex 子 Agent 不走 plan 的 Codex 配置，改用 Codex 自己的 `read-only` 沙箱（无写、无网络）加 `never`：命令不问人，
-  在沙箱里跑，写入由沙箱拒绝；要求越出沙箱的请求一律拒绝（`codexReadonlySubagentMode`）。会话本身的 plan 含义不变。
-  只读的 Kimi 子 Agent 在 plan 下每次 shell 调用都会请求批准：按 owner 2026-11-20 的决定，这类请求跟随父会话**当时**的模式——
-  父会话是 Auto 或 Bypass 时 runner 直接批准、不出卡；其他模式照常出卡（`kimiReadonlyShellFollowsParent`）。runner 不检查命令本身，
-  所以在这两种父模式下，Kimi 子 Agent 的「只读」只靠 plan 模式的指令约束，写文件的 shell 命令也会被执行。
+- 权限模式（owner 2026-11-23：任何模型、任何 coding agent 都透传父会话的权限模式，优先 Auto）：子 Agent 的模式**一律是父会话的模式**，
+  只读与否、哪个引擎都一样（`subagentChildMode`）；定义里写了模式且不比父会话宽（`isWiderThanParent`）时用它，只读的不用。
+  引擎守不住这个模式时取它守得住、又不更宽的最近一个，不拒绝：DSH 的 Plan → Don't Ask、Accept Edits → Default、Bypass → Auto；
+  Cursor 的 Default → Plan。
+  只读靠各引擎自己的只读设置，子 Agent 请求的批准按父会话**当时**的模式回答（`readonlySubagentAnswer`）：父会话 Auto / Bypass → 直接放行、
+  不出卡；Don't Ask → 直接拒绝；其他模式 → 照常出卡。编辑工具（Edit / MultiEdit / Write / NotebookEdit，各引擎的拼写）的请求一律拒绝
+  （`readonlySubagentRefusesEdit`）。各引擎：
+  - Claude：父会话的模式，去掉编辑工具（plan 下每次 Bash 都要问人，父会话开 Auto 时只读子 Agent 反而最打扰人）。
+  - Codex：只能用 shell 读仓库，而它的 plan 拒绝一切命令，所以用 Codex 自己的 `read-only` 沙箱（无写、无网络）加 `never`：
+    命令不问人，在沙箱里跑，写入由沙箱拒绝（`codexReadonlySubagentMode`）。会话本身的 plan 含义不变。
+  - Kimi：plan（关掉编辑），它请求的批准按上面的规则回答。
+  - Cursor：plan（关掉编辑）；plan 本来拒绝一切请求，只读子 Agent 的请求改按上面的规则回答，父会话问人时出卡。
+  - DSH：没有 plan，用它的只读文件策略（Default）；越出沙箱的请求按上面的规则回答，写文件的一律拒绝。
+  - OpenCode：运行中不能回答任何请求（它的 ask 一律被拒），所以启动时按父会话的模式定一次：Auto / Bypass → 那个模式，
+    拒绝编辑和它自己的 subagent（`openCodeReadonlyFollowsParent`）；其他 → plan。
+  - Antigravity：agy 的 plan 自己拒绝一切命令，所以改走 Orbit 的审批 hook（同 Default）：写文件拒绝（agy 自己的 artifact 除外），
+    其余按启动时父会话的模式回答（`agyApprovalPolicy.ReadonlyParentMode`）。
+  - 远程运行：领取里带父会话的模式（`RemoteSubagentClaim.parentPermissionMode`），目标 runner 按它回答，Plan 门也读它；
+    旧服务端不带时退回子 Agent 自己的模式。
+  runner 不检查命令本身（owner 2026-11-20）：父会话 Auto / Bypass 时，Claude 和 Codex 以外的只读子 Agent 的「只读」只靠关掉编辑工具和指令约束，
+  写文件的 shell 命令也会被执行。
+  写的子 Agent 继承父会话的 Auto 时，在 Kimi、OpenCode、Antigravity 上等同 Bypass（`runsAsBypass`）；按透传的规则这是预期的，
+  `isWiderThanParent` 只约束定义里点名的模式。
 - 审批卡用父会话的 `sessionId` 发出，`toolUseId` 加 runId 前缀，并带 `subagentRunId`（与 `backgroundJobId` 同一作用：
   父会话的 tool_result 到达时不把它当作已返回的调用收走）。卡片出现在父会话的审批区，标题写明来自哪个 SubAgent。
 - 子 Agent 的 AskUserQuestion / 计划审批一律拒绝，提示它把疑问写进结果里交回。Cursor 在 subagent 里也是这样。
@@ -246,6 +299,8 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 | `changed_files` | text[] |
 | `cost_usd`、`usage` | 子进程自己的用量 |
 | `created_at`、`ended_at` | |
+| `rating_score`、`rating_note`、`rated_at` | 父会话对结果的评分 1–5 与一句理由（`subagent_rate`，§7.1，migration 1429）；再评一次即替换 |
+| `rater_engine`、`rater_provider`、`rater_model` | 评分时父会话自己的引擎、provider 和模型 |
 
 花费：SubAgent 结束时 `cost_usd` 同时加到父会话的 `cost_usd`，所以今天读会话花费的预算和上限（`attempt-budget-meter`）
 自动把它算进去。今天的 `session_create` 子会话不汇总，这里不改它。
@@ -277,13 +332,53 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 
 ## 7. 设置与界面
 
-- **设置 → General → New sessions**：Optimize For（Cost / Balance / Intelligence），账号级，紧跟 Smart model selection
+- **设置 → General → New sessions**（2026-11-22 起在 Providers → Model routing）：Optimize For（Cost / Balance / Intelligence），账号级，紧跟 Smart model selection
   （owner，2026-11-19，board `docs/mocks/routing-mode-account`）。
 - **Agent 设置 → SubAgents**：开关、Providers（默认全部，点进去屏蔽）、
   Running at once。
 - **Providers 页**：每个模型多一列 Tier；preset 的档位和价格跟目录走，自定义 endpoint 显示 `Not set`，点开可以标。
+  内置引擎（Claude Code、Codex、Cursor、Antigravity……）列出 runner 目录里的**每个**模型：内置表或家族给了档位的显示该档位，
+  其余显示 `Not set`；每一行都可以点开设档位（覆盖目录的档位）或清除（`builtinModelTiers`，§4.2）。
 - **报告**：沿用 model routing 报告页，加一个 SubAgents 视图：按档位、模型统计次数、成功率、花费、额度换候选次数、
   没给 `size` 的比例。
+  已做（2026-11-20，owner 批准的效果图 [`mocks/subagent-workflow/08-report.html`](./mocks/subagent-workflow/08-report.html)）：
+  model routing 报告原本只有接口、没有页面，于是新开 **设置 → Routing report**（`/settings/routing-report`），两个视图
+  SubAgents 与 Workflows（`subagent-workflow-design.md` §8 P4），接口 `GET /tasks/model-routing/report/subagents?since=&agentId=`。
+  一次运行算在 Orbit **选的**档位和模型下（同任务报告「算在首次决策」的口径），换了候选记一次 Moved on；`agentId` 是父会话的
+  Agent；workflow 的调用就是 SubAgent 运行，两个视图数同一批 `subagent_run` 行，所以 workflow 的调用合计恒等于 SubAgents 里的
+  workflow 调用数。任务的路由报告以后作为第三个视图 Tasks 放进同一页。
+- **合并为 Model routing**（owner，2026-11-22）：Model tiers 与 Routing report 合成 **设置 → Providers → Model routing**
+  （`/settings/providers/routing`；旧地址 `/settings/providers/tiers`、`/settings/routing-report` 带着查询参数跳过来）。
+  页首是 Route by tier（原名 Smart model selection，同日改名）与 Optimize For（从 General 搬来），下面每个模型一行：档位（可改）、价格、Ran at（按档位分的
+  运行条，跑在当前没设的档位上的部分标出来）、Runs / Done / Cost，点开看分档明细；按名字调用和未路由的另起两段，没档位也没运行的
+  模型折叠。Workflows 视图不变。原生客户端仍在 General 里画这两个开关，待跟进。
+
+### 7.1 完成质量（只显示，不参与路由）
+
+owner（2026-11-21）：Model tiers 表每个模型一行多一列 **Quality**，同一格里放两个来源；**只显示，`routeSubagent` 和
+`routeTaskRun` 都不读它**（`model-quality.spec.ts` 守着这一点）。效果图 `docs/mocks/model-quality/01-board.png`。
+
+- **父模型给 SubAgent 打分**：MCP 工具 `subagent_rate`（CLI `orbit subagent rate RUN_ID --score N [--note TEXT]`），
+  参数 `runId`、`score` 1–5、可选 `note`（≤ 500 字符）。分数按父会话拿结果做了什么来定：1 = 丢掉或自己重做，3 = 改过才能用，
+  5 = 原样用上。只有发起这次运行的会话能评（`POST /runner/sessions/:id/subagents/:runId/rating`，run 按 (id, 该会话) 匹配，
+  别的会话读作不存在）；还在跑的运行拒绝 `SUBAGENT_RUN_RUNNING`；一次运行一条评分，再评即替换；SubAgent 自己拿不到这个工具。
+  写进 `subagent_run` 的评分列，连同评分时父会话自己的 engine / provider / model（§6.1）。
+  `<orbit-subagent-finished>` 块和前台 `delegate` 的返回各多一句，请父会话用过结果后打分；可选，没有任何东西等它。
+- **任务运行的首次通过**：沿用路由报告的口径（`task-model-routing-report.service.ts` 的 `taskFirstPassByModel`）：
+  已完成（DONE）的任务按其第一次运行的 provider × engine × model 计，只跑了一次、没有 FAILED、没有验证 FAIL、没有被退回即算首次通过。
+  因用量上限或模型满载失败的运行（`limitFailure`）**整条不算**：既不算失败，也不算一次运行，与路由的处理一致。
+- **汇总**（`GET /providers/subagent-tiers` 每个模型的 `quality`，`runner-api/model-quality.ts`）：近 90 天。
+  SubAgent：结束了的运行数、被评的数、按评分时间衰减的加权平均（半衰期 30 天），不足 5 条评分不给平均（显示 Not enough ratings），
+  另附评分者的模型及各自条数。任务：完成数、首次通过数、通过率，不足 10 个完成任务不给通过率（Not enough tasks）。
+  一次 SubAgent 运行算在交出结果的模型下：最后一次 attempt 的，影子行算父会话的引擎和它实际跑的模型，否则是决策选的。
+  一行模型把其 provider 各引擎的数加在一起。
+- **界面**（owner 在效果图上选 A1 · B1 · C1，2026-11-21）：Quality 一格两行，各带灰色小字来源——
+  `SubAgents  4.4 · 23 rated of 41`、`Tasks  86% first pass · 52 tasks`；不到门槛的一行灰色写 `Not enough ratings` /
+  `Not enough tasks`，两样都没有的模型只写一行 `No runs yet`；有平均分时，SubAgents 那行的提示写评分者
+  `Rated by Opus 5.5 (15) · Sonnet 5.5 (8)`（web 和 Mac 悬停，iPhone 和 Android 点一下）。表下多一句说明：只显示、不参与路由，
+  以及两个数各自的口径。Web 和 Mac 是 Tier 后面的一列；iPhone 和 Android 把两行放在模型名下面。
+  各端共用同一套文字规则：web `qualityLines`（`lib/subagentTiers.ts`）、Apple `SubagentSettings.qualityLines`、Android
+  `Subagents.qualityLines`。
 
 ## 8. 分期
 
@@ -342,6 +437,15 @@ P1 不路由，所以可以先把最难的部分（同 cwd 子进程、事件内
     挡不住数据库写入和网络请求。
 - **只交回文字结果**：不把任何文件带回父会话，也不留在目标 workspace。结果末尾由 runner 附一行
   `Discarded changes: <n> files (<paths…>)`，让父 Agent 知道它改过什么但没有带回。
+- **文件用 `file_upload` 交回**（owner 决策 2026-11-21）：改动不带回，但子 Agent 可以把截图、报告这类产物用 `file_upload`
+  存进 Orbit，挂在父会话下（不进父会话的工作区）。目标 runner 不托管父会话，所以：
+  - 子引擎的 `orbit mcp` 对上传、文件夹清单和 pin 的请求带 `?subagentRunId=<run>`；服务端（`sessionOfRemoteSubagent`）
+    只在这次运行属于该会话和账号、派给的正是这台 runner、且仍是 `RUNNING` 时放行，其余照旧按托管会话的 runner 判断。
+  - 目标 runner 上没有父会话的 socket，Plan 门读不到实时模式；远程运行的子引擎带 `ORBIT_SUBAGENT_REMOTE_MODE`
+    （领取时父会话的模式，旧服务端不带时是子 Agent 自己的模式），Plan 门按它判断。所以在 Plan 模式下领取的运行仍然不能上传。
+  - 远程运行的 worktree 在 `~/.orbit/remote-subagents/<run>/tree`，在 Orbit 自己的目录里；`file_upload` 把这次运行自己的
+    worktree 当作它的 checkout 放行（别的运行的不放行），父会话的 uploads 目录照旧可用。
+  - `file_fetch` 和其他 Orbit 写操作没有放开：服务端仍只认托管父会话的 runner。
 - 看不到父会话未提交的改动：工具描述里写明「remote SubAgents run on that workspace's own HEAD and return text only」，
   父 Agent 需要它看到新代码时，自己先提交并推送（或者在 prompt 里写清楚）。
 - **续跑**：worktree 随结束删掉，对话留下。目标 runner 把结束的运行记成 `ended`（`remote-subagents/<runId>/run.json`：

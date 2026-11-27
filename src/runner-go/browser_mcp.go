@@ -30,6 +30,9 @@ const (
 	browserMCPServerName = "browser"
 	browserMCPCommand    = "browser-mcp"
 	browserMCPAcquireOp  = "browser_acquire"
+	// browser_request_sign_in's two ops: give the lease up while the owner signs in, and take it back after.
+	browserSignInYieldOp = "browser_sign_in_yield"
+	browserSignInEndOp   = "browser_sign_in_end"
 	// playwrightMCPBinary is @playwright/mcp's cli.js, linked onto the image's PATH (deploy/managed-runner/image).
 	playwrightMCPBinary = "playwright-mcp"
 	// How long a tools/call waits, after the lease is granted, for a Chrome just started to answer on DevTools.
@@ -91,6 +94,32 @@ func (s *bgJobService) serveBrowserAcquire() bgSocketResponse {
 		return bgSocketResponse{Error: err.Error()}
 	}
 	return bgSocketResponse{OK: true, Result: map[string]string{"devTools": b.DevToolsEndpoint()}}
+}
+
+// serveBrowserSignInYield is the runner's half of op browser_sign_in_yield: this socket's session gives the lease up
+// while the owner is asked to sign in (browserSupervisor.YieldForSignIn). It answers whether the session held it.
+func (s *bgJobService) serveBrowserSignInYield() bgSocketResponse {
+	title := ""
+	if s.job != nil {
+		title = s.job.Title
+	}
+	held, err := runnerBrowserForSpawn().YieldForSignIn(s.sessionID, title)
+	if err != nil {
+		return bgSocketResponse{Error: err.Error()}
+	}
+	return bgSocketResponse{OK: true, Result: map[string]bool{"held": held}}
+}
+
+// serveBrowserSignInEnd is op browser_sign_in_end: the wait is over, and with retake the session takes the lease back.
+func (s *bgJobService) serveBrowserSignInEnd(retake bool) bgSocketResponse {
+	title := ""
+	if s.job != nil {
+		title = s.job.Title
+	}
+	if err := runnerBrowserForSpawn().EndSignIn(s.sessionID, title, retake); err != nil {
+		return bgSocketResponse{Error: err.Error()}
+	}
+	return bgSocketResponse{OK: true, Result: map[string]bool{"retaken": retake}}
 }
 
 // browserMCPProxy is one `orbit browser-mcp`: the engine on in/out, playwright-mcp on child.

@@ -497,7 +497,7 @@ struct TasksListView: View {
     }
     #endif
 
-    /// One row, wrapped for the container it is in — the same shape as `AgentPanes.sessionRow`. The
+    /// One row, wrapped for the container it is in — the same shape as `SessionListRow`. The
     /// row view itself is the same either way, actions included; what changes is who moves the
     /// screen: the three-column `List`'s selection, or the row's own destination value on the
     /// compact stack. There is no third state for "highlighted but not openable" to live in, because
@@ -950,6 +950,7 @@ struct TaskRowView: View {
                                   : "Waiting for prerequisites")
                     }
                 }
+                accountHoldLine
                 HStack(spacing: 7) {
                     TaskStatusPill(pill: TaskListLogic.pill(task))
                     Text(task.assignee?.name ?? "Unassigned")
@@ -967,6 +968,16 @@ struct TaskRowView: View {
         }
         .padding(.vertical, 3)
         #endif
+    }
+
+    /// A held task's one quiet line under its title (contract §3): not while it runs or is queued, nor
+    /// when the sign-in hold stands.
+    @ViewBuilder
+    private var accountHoldLine: some View {
+        if TaskAccountHoldCopy.showsOnRow(task.accountHold, signInHold: task.hold, running: task.running == true,
+                                          queued: task.queued == true), let hold = task.accountHold {
+            TaskAccountHoldLine(hold: hold)
+        }
     }
 
     #if os(iOS)
@@ -987,6 +998,7 @@ struct TaskRowView: View {
                         .monospacedDigit()
                 }
             }
+            accountHoldLine
             HStack(spacing: 7) {
                 TaskStatusPill(pill: TaskListLogic.pill(task))
                 phrase
@@ -1139,6 +1151,9 @@ private struct TaskDetailContent: View {
     @State private var editingAcceptance = false
     @State private var following = false
     @State private var importingInput = false
+    /// The project's record of this task's exemption from the landing check: who marked it and when
+    /// (board 04 b); nil until read.
+    @State private var exemptionMarked: ProjectSettingChange?
     @State private var inputToRemove: TaskInput?
     @State private var prerequisiteToRemove: TaskDependencyListRow?
     /// The reader's Graph/List choice; nil follows the component (`TaskDetailLogic.prefersGraph`).
@@ -1420,6 +1435,8 @@ private struct TaskDetailContent: View {
             do { try await Task.sleep(nanoseconds: 4_000_000_000) }
             catch { return }
             guard model.taskDetailIsOpen(taskID) else { return }
+            // A run in flight is read every 4 s — while the app can be seen (§4 R3).
+            if !model.appVisible { continue }
             _ = await tasks.loadDetail(taskID)
             guard let current = tasks.detail, TaskListLogic.isBusy(current) else { return }
         }
@@ -1439,7 +1456,8 @@ private struct TaskDetailContent: View {
                 hasLiveRun: TaskDetailLogic.liveRun(task) != nil,
                 hasEvidence: tasks.evidence.last != nil,
                 hasLanding: TaskLandingLogic.status(task.integration,
-                                                    taskStatus: task.status.rawValue) != nil,
+                                                    taskStatus: task.status.rawValue) != nil
+                    || task.landingCheckExempt == true,
                 hasDependencies: TaskDetailLogic.hasDependencies(task),
                 hasInputs: !(task.attachments ?? []).isEmpty,
                 hasAttribution: tasks.attribution.map {
@@ -1476,8 +1494,10 @@ private struct TaskDetailContent: View {
         case .evidence:
             if let latest = tasks.evidence.last { evidenceSection(task, latest) }
         case .landing:
-            if let landing = TaskLandingLogic.status(task.integration, taskStatus: task.status.rawValue) {
-                landingSection(landing)
+            let landing = TaskLandingLogic.status(task.integration, taskStatus: task.status.rawValue)
+            let exemption = TaskLandingCheckExemption.of(task, marked: exemptionMarked)
+            if landing != nil || exemption != nil {
+                landingSection(landing, exemption: exemption, task: task)
             }
         case .acceptance:
             acceptanceSection(task)
@@ -1547,6 +1567,10 @@ private struct TaskDetailContent: View {
                     .textSelection(.enabled)
                     .accessibilityIdentifier("task-fork-source")
             }
+            // No account that could run it can run now (contract §3): Held, why, and where to fix it.
+            if let hold = task.accountHold {
+                TaskAccountHoldNote(hold: hold)
+            }
             // How this row is judged, which nothing else on the page said.
             if let chip = TaskJudgment.chip(task) { judgmentChip(chip) }
         }
@@ -1594,8 +1618,10 @@ private struct TaskDetailContent: View {
     /// The task's Landing section, in the web's `LandTaskStatus` words: the badge, the generation,
     /// the step it is on or stopped at, the reason, and the six facts — then the one way into the
     /// segment's landing session.
-    private func landingSection(_ status: TaskLandingStatus) -> some View {
+    private func landingSection(_ landing: TaskLandingStatus?, exemption: TaskLandingCheckExemption?,
+                                task: TaskItem) -> some View {
         Section(TaskLandingCopy.landingSection) {
+            if let status = landing {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     if let badge = status.badge {
@@ -1628,6 +1654,9 @@ private struct TaskDetailContent: View {
                     Text(receipt).font(.orbitMeta).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                if let job = task.integration?.landTask, let pullRequest = job.pullRequest {
+                    LandingPullRequestBlock(pullRequest: pullRequest, main: TaskLandingLogic.branch(job.targetRef))
+                }
                 if !status.facts.isEmpty {
                     VStack(alignment: .leading, spacing: 2) {
                         ForEach(status.facts, id: \.label) { fact in
@@ -1649,6 +1678,18 @@ private struct TaskDetailContent: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            // Board 04 b (D5): exempt from the project's landing check, why, who and when, and the
+            // owner's Remove exemption.
+            if let exemption {
+                TaskExemptionRow(exemption: exemption, busy: tasks.mutatingTaskIDs.contains(task.id)) {
+                    Task { await tasks.removeLandingCheckExemption(task.id) }
+                }
+            }
+        }
+        .task(id: "\(task.id):\(task.landingCheckExempt == true):\(task.landingCheckExemptReason ?? ""):\(task.landingCheckExemptBySessionId ?? ""):\(task.landingCheckExemptOwnerSetAt ?? "")") {
+            guard task.landingCheckExempt == true, let projectID = task.projectId else { exemptionMarked = nil; return }
+            exemptionMarked = await tasks.exemptionMarked(projectID: projectID, taskID: task.id)
         }
     }
 
@@ -2037,7 +2078,7 @@ private struct TaskDetailContent: View {
             (TaskDetailCopy.engineLabel, ProviderEngines.cliName(runPin(task).runEngine)),
             (TaskDetailCopy.providerLabel, providerSummary(task)),
             (TaskDetailCopy.modelLabel, task.model.map { runModelName($0, task) }
-                ?? (smartSelection && assigneeAgent(task)?.modelRouting == true
+                ?? (smartSelection
                     ? TaskDetailCopy.smartSelectionPlaceholder : "Provider default")),
         ]
         return pairs.enumerated().reduce(Text("")) { line, entry in
@@ -2368,8 +2409,8 @@ private struct TaskDetailContent: View {
             engine: pin.runEngine, provider: pin.runProvider(firstDeepSeekKey: firstDeepSeekKey?.slug),
             catalog: model.agents?.modelCatalog(for: assigneeAgent(task)?.runnerId),
             configured: pinConfigured)
-        // Unpinned on an assignee with smart selection on, each run's model is picked for it.
-        let unpinned = smartSelection && assigneeAgent(task)?.modelRouting == true
+        // Unpinned with the account's smart selection on, each run's model is picked for it.
+        let unpinned = smartSelection
             ? TaskDetailCopy.smartSelectionPlaceholder : "Provider default"
         return Picker(TaskDetailCopy.modelLabel, selection: Binding(
             get: { task.model },
@@ -2875,12 +2916,15 @@ private struct TaskDetailContent: View {
     private func runRow(_ session: SessionRef, _ task: TaskItem) -> some View {
         let route = TaskDetailLogic.runRoute(session, smartSelection: smartSelection)
         let name: (String) -> String = { runModelName($0, task) }
+        // The state from `phase` and its marks (`SessionDisplay`); nil from an older server.
+        let state = SessionDisplay.state(session.displayFacts)
+        let running = state.map { $0 == .running } ?? (session.resolvedRunState == .running)
         return HStack(spacing: 10) {
             Group {
-                if session.resolvedRunState == .running {
+                if running {
                     ProgressView().controlSize(.small)
                 } else {
-                    Circle().fill(sessionColor(session)).frame(width: 8, height: 8)
+                    Circle().fill(state != nil ? Color.secondary : sessionColor(session)).frame(width: 8, height: 8)
                 }
             }
             .frame(width: 18)
@@ -2895,15 +2939,26 @@ private struct TaskDetailContent: View {
                     }
                 }
                 HStack(spacing: 6) {
-                    // One run of text, so the dot sits evenly between where it stands and what it ran on.
-                    let status = Text(sessionLabel(session))
-                        .foregroundStyle(session.resolvedRunState == .running ? Color.accentColor : sessionColor(session))
-                    if let ranOn = TaskDetailLogic.runModelLine(session, smartSelection: smartSelection, modelLabel: name) {
-                        (status + Text(" · \(ranOn)").foregroundStyle(Color.secondary))
-                            .lineLimit(1)
-                            .truncationMode(.tail)
+                    if let state {
+                        // The state word, its marks, then what it ran on.
+                        Text(state.word).foregroundStyle(running ? Color.accentColor : Color.secondary)
+                        SessionMarkPills(marks: SessionDisplay.marks(session.displayFacts) ?? [])
+                        if let ranOn = TaskDetailLogic.runModelLine(session, smartSelection: smartSelection, modelLabel: name) {
+                            Text("· \(ranOn)").foregroundStyle(Color.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
                     } else {
-                        status
+                        // One run of text, so the dot sits evenly between where it stands and what it ran on.
+                        let status = Text(sessionLabel(session))
+                            .foregroundStyle(session.resolvedRunState == .running ? Color.accentColor : sessionColor(session))
+                        if let ranOn = TaskDetailLogic.runModelLine(session, smartSelection: smartSelection, modelLabel: name) {
+                            (status + Text(" · \(ranOn)").foregroundStyle(Color.secondary))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        } else {
+                            status
+                        }
                     }
                     if let route, route.applied {
                         routeTierTag(route)
@@ -2919,6 +2974,10 @@ private struct TaskDetailContent: View {
                         .font(.orbitSubtext)
                         .foregroundStyle(Color.purple)
                         .fixedSize(horizontal: false, vertical: true)
+                }
+                // A pinned run that went elsewhere says which pin, where it ran and why (contract §3).
+                if let relaxed = session.route?.relaxedRun {
+                    RelaxedRunNote(sentence: relaxed)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -2954,16 +3013,7 @@ private struct TaskDetailContent: View {
     }
 
     private func sessionLabel(_ session: SessionRef) -> String {
-        switch session.resolvedRunState {
-        case .queued:        return "Queued"
-        case .running:       return "Running"
-        case .awaitingInput: return "Awaiting reply"
-        case .succeeded:     return "Succeeded"
-        case .failed:        return "Failed"
-        case .interrupted:   return "Interrupted"
-        case .ended:         return "Ended"
-        case .unknown, nil:  return "—"
-        }
+        ShareMarkdown.runLabel(session)
     }
 
     private func sessionColor(_ session: SessionRef) -> Color {

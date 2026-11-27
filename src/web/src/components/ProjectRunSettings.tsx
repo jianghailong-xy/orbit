@@ -1,7 +1,12 @@
-import { LANDING_CHECK_COPY, inheritedLandingCommand, inheritedLandingTimeout } from '../lib/landingCheck';
+import {
+  LANDING_CHECK_COPY, LANDING_CHECK_ORIGIN_COPY, LANDING_CHECK_ORIGIN_NOTES, LANDING_MODE_COPY,
+  inheritedLandingCommand, inheritedLandingTimeout, landingCheckModeOf, type LandingCheckMode,
+} from '../lib/landingCheck';
 import { useEffect, useState, type JSX } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { DeliveryMode, IntegrationLine, ProjectIntegrationView, ProjectPauseState, PromotionState } from '@orbit/shared';
+import type {
+  DeliveryMode, IntegrationLine, ProjectIntegrationView, ProjectPauseState, ProjectSettingChangeView, PromotionState,
+} from '@orbit/shared';
 import { api } from '../api';
 import {
   DEFAULT_MAIN_BRANCH,
@@ -68,15 +73,13 @@ import {
   RUN_DELIVERS_CODE_HINT,
   RUN_DELIVERS_NOT_CODE,
   RUN_DELIVERS_NOT_CODE_HINT,
-  RUN_LANDING,
-  RUN_LANDING_OFF_HINT,
   RUN_TO_CODE,
   RUN_TO_NOT_CODE,
   formatDoneDateTime,
   nonCodeProvenance,
   nonCodeReasonLine,
 } from '../lib/projectDone';
-import { projectIntegrationQuery, projectPromotionQuery } from '../lib/queries';
+import { projectPromotionQuery } from '../lib/queries';
 import { ago } from '../lib/watches';
 import { MainBranchSelect } from './MainBranchSelect';
 import { START_MAX_CONCURRENT_TASKS } from './StartProjectCard';
@@ -86,9 +89,13 @@ import { useConfirm } from './ui/ConfirmDialog';
 import { Input } from './ui/Input';
 import { NumberInput } from './ui/NumberInput';
 import { Radio, RadioGroup } from './ui/Radio';
+import { Segmented } from './ui/Segmented';
+import { ProjectChangesRow } from './ProjectLandingChanges';
 import { Select } from './ui/Select';
 import { Spinner } from './ui/Spinner';
 import { Switch } from './ui/Switch';
+import { useProjectIntegration } from '../lib/pollOwner';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * "How it runs" — every setting the start card set, in one block on the project page once the
@@ -148,6 +155,20 @@ function escalationLabel(seconds: number): string {
   return `${minutes} minute${minutes === 1 ? '' : 's'}`;
 }
 
+/** Who set the landing check and when, under it (D3): a badge and the time. */
+function LandingCheckOrigin({ setBy, setAt, now }: {
+  setBy: keyof typeof LANDING_CHECK_ORIGIN_COPY;
+  setAt: string | null;
+  now: number;
+}): JSX.Element {
+  return (
+    <div className="project-landing-origin">
+      <span className={`project-landing-badge is-${setBy.toLowerCase()}`}>{LANDING_CHECK_ORIGIN_COPY[setBy]}</span>
+      {setAt ? <span className="project-landing-origin-time">{`set ${ago(setAt, now)}`}</span> : null}
+    </div>
+  );
+}
+
 /**
  * What `PATCH /projects/:id/integration` accepts (§1.2 L5). Sent as one object so the server
  * validates the whole choice at once.
@@ -158,6 +179,8 @@ interface IntegrationSettingsBody {
   upstreamRef?: string;
   mergeCheckCommand?: string | null;
   landingCheckCommand?: string | null;
+  /** `NONE`: run no landing check (§12.15 P-C1); a command or a null command lifts it. */
+  landingCheck?: 'NONE';
   landingCheckTimeoutSeconds?: number | null;
   exceptionEscalationSeconds?: number;
   /** How the work reaches main (§10.5 O-L1); AGENT_PUSH only with a main line. */
@@ -187,7 +210,7 @@ function updateProjectAuthorization(projectId: string, body: AuthorizationBody):
 }
 
 /** `POST /projects/:id/pause` or `/resume` — the owner's alone. */
-function moveProject(projectId: string, door: 'pause' | 'resume'): Promise<ProjectPauseState> {
+export function moveProject(projectId: string, door: 'pause' | 'resume'): Promise<ProjectPauseState> {
   return api<ProjectPauseState>(`/projects/${encodeURIComponent(projectId)}/${door}`, { method: 'POST' });
 }
 
@@ -204,6 +227,8 @@ export interface RunSettingsProject {
   nonCodeSetAt?: string | null;
   /** The short reason given with the mark (0555). */
   nonCodeReason?: string | null;
+  /** The project's landing-check history, newest first (P-R1); absent from an older server. */
+  settingChanges?: ProjectSettingChangeView[];
 }
 
 /** The block as the reader edits it: the number box can be empty mid-edit, the text box is text,
@@ -216,6 +241,8 @@ interface RunSettingsDraft {
   maxConcurrentTasks: number | null;
   mergeCheckCommand: string;
   landingCheckCommand: string;
+  /** Which of the three the landing check is: the merge check, the command typed, or none at all. */
+  landingMode: LandingCheckMode;
   landingCheckTimeoutSeconds: number | null;
   escalationSeconds: number;
   /** How the work reaches main, as last chosen in this block; it counts only on a main line. */
@@ -242,6 +269,7 @@ function storedDraft(view: ProjectIntegrationView, project: RunSettingsProject):
     maxConcurrentTasks: project.maxConcurrentTasks,
     mergeCheckCommand: view.mergeCheckCommand ?? '',
     landingCheckCommand: view.landingCheckCommand ?? '',
+    landingMode: landingCheckModeOf(view),
     landingCheckTimeoutSeconds: view.landingCheckTimeoutSeconds ?? null,
     escalationSeconds: view.escalationSeconds,
     deliveryMode: view.deliveryMode ?? 'PLATFORM',
@@ -263,16 +291,21 @@ function runSettingsWrites(
   view: Pick<
     ProjectIntegrationView,
     'line' | 'repository' | 'upstreamRef' | 'lastMainBranch' | 'locked' | 'mergeCheckCommand' | 'escalationSeconds'
-    | 'deliveryMode' | 'landingCheckCommand' | 'landingCheckTimeoutSeconds'
+    | 'deliveryMode' | 'landingCheckCommand' | 'landingCheckTimeoutSeconds' | 'landingCheck'
   >,
   project: RunSettingsProject,
   draft: RunSettingsDraft,
 ): { integration: IntegrationSettingsBody | null; authorization: AuthorizationBody | null; nonCode: boolean | null } {
   const check = draft.mergeCheckCommand.trim() === '' ? null : draft.mergeCheckCommand;
-  const landing = draft.landingCheckCommand.trim() === '' ? null : draft.landingCheckCommand;
+  const landing = draft.landingMode === 'COMMAND' && draft.landingCheckCommand.trim() !== '' ? draft.landingCheckCommand : null;
+  const storedMode = landingCheckModeOf(view);
+  // No check is its own value (D4), written by name; the merge check and a command go through the command.
+  const landingWrite: IntegrationSettingsBody = draft.landingMode === 'NONE'
+    ? (storedMode !== 'NONE' ? { landingCheck: 'NONE' } : {})
+    : (landing !== (view.landingCheckCommand ?? null) || storedMode === 'NONE' ? { landingCheckCommand: landing } : {});
   const integration: IntegrationSettingsBody = {
-    ...(landing !== (view.landingCheckCommand ?? null) ? { landingCheckCommand: landing } : {}),
-    ...(draft.landingCheckTimeoutSeconds !== (view.landingCheckTimeoutSeconds ?? null)
+    ...landingWrite,
+    ...(draft.landingMode !== 'NONE' && draft.landingCheckTimeoutSeconds !== (view.landingCheckTimeoutSeconds ?? null)
       ? { landingCheckTimeoutSeconds: draft.landingCheckTimeoutSeconds } : {}),
     ...(!view.locked && draft.line !== null && draft.line !== view.line ? { line: draft.line } : {}),
     ...(!view.locked && draft.upstream !== null && draft.upstream !== storedUpstream(view)
@@ -314,7 +347,7 @@ export function ProjectRunSettings({
 }): JSX.Element {
   const qc = useQueryClient();
   // The same read the integration row above makes, by the same key: one request for both.
-  const integration = useQuery({ ...projectIntegrationQuery(projectId), enabled: Boolean(projectId) });
+  const integration = useProjectIntegration(projectId);
   const view = integration.data ?? null;
   // The merge on offer, read only where the Delivery row is drawn: switching to the agent's way while
   // one is live asks first (owner decision 2026-11-10). Same key as the card's own read.
@@ -397,8 +430,13 @@ export function ProjectRunSettings({
   const complete = draft.maxConcurrentTasks !== null
     && (draft.landingCheckTimeoutSeconds === null || (Number.isInteger(draft.landingCheckTimeoutSeconds) && draft.landingCheckTimeoutSeconds > 0));
   const missingCheck = draft.line !== null && runMergeCheckMissing({ ...draft, line: draft.line });
-  const branch = view.line === 'PROJECT_BRANCH' && view.ref ? view.ref : `project/${projectId}`;
+  // The server names the project branch, the line's own or the default it would choose; a server
+  // that predates `defaultProjectBranch` named it `project/<id>`.
+  const branch = view.line === 'PROJECT_BRANCH' && view.ref
+    ? view.ref
+    : view.defaultProjectBranch ?? `project/${projectId}`;
   const now = Date.now();
+  const landingCheckSetBy = view.landingCheck?.setBy ?? null;
   // The branch the sentences about where work goes name: the one being chosen, or main for a project
   // with no repository. Pausing is about the project as it stands, so its sentence names that one.
   const main = draft.upstream ?? DEFAULT_MAIN_BRANCH;
@@ -478,7 +516,6 @@ export function ProjectRunSettings({
             </div>
           </div>
 
-          {draft.nonCode ? null : (<>
           <div className="project-integration-setting">
             <div className="project-integration-setting-label">{RUN_TASKS_LAND_ON}</div>
             <div>
@@ -491,7 +528,9 @@ export function ProjectRunSettings({
                 onValueChange={(line) => set({ line: line || null })}
               >
                 <Radio value="PROJECT_BRANCH">
-                  <b>{RUN_LINE_PROJECT_BRANCH}</b> · <code className="start-card-branch" title={branch}>{shortBranch(branch)}</code>
+                  <b>{RUN_LINE_PROJECT_BRANCH}</b> · <Tooltip content={branch} delay={TEXT_TOOLTIP_DELAY_MS} mono>
+                    <code className="start-card-branch">{shortBranch(branch)}</code>
+                  </Tooltip>
                   {/* What each line means, while it can still be chosen. Once it is locked the choice
                       is history, and the sentence under the two — or under Main branch, on a project
                       that shows one — says why it cannot move. */}
@@ -568,8 +607,6 @@ export function ProjectRunSettings({
             </div>
           ) : null}
 
-          </>)}
-
           <div className="project-integration-setting">
             <div className="project-integration-setting-label">{RUN_AUTOMATIC}</div>
             <div>
@@ -615,33 +652,63 @@ export function ProjectRunSettings({
         <div className="project-run-settings-group">
           <div className="project-run-settings-group-head">{RUN_INTEGRATION}</div>
 
-          {draft.nonCode ? (
-            <div className="project-integration-setting project-run-landing-off">
-              <div className="project-integration-setting-label">{RUN_LANDING}</div>
-              <div className="project-integration-setting-hint">{RUN_LANDING_OFF_HINT}</div>
-            </div>
-          ) : (
-            <>
+          <>
               <div className="project-integration-setting">
                 <div className="project-integration-setting-label">{LANDING_CHECK_COPY.LABEL}</div>
                 <div>
                   {draft.line === 'MAIN' ? <div className="project-integration-setting-hint">{LANDING_CHECK_COPY.MAIN}</div> : <>
-                    <label>{LANDING_CHECK_COPY.COMMAND}</label>
-                    <Input value={draft.landingCheckCommand} aria-label={LANDING_CHECK_COPY.LABEL}
-                      placeholder={LANDING_CHECK_COPY.COMMAND_PLACEHOLDER}
-                      onChange={(event) => set({ landingCheckCommand: event.target.value })} />
-                    <div className="project-integration-setting-hint">{LANDING_CHECK_COPY.HINT}</div>
-                    {!draft.landingCheckCommand.trim() && <div className="project-integration-setting-hint">{inheritedLandingCommand(draft.mergeCheckCommand || null)}</div>}
-                    <label>{LANDING_CHECK_COPY.TIMEOUT}</label>
-                    <NumberInput className="project-check-timeout" min={1} precision={0} value={draft.landingCheckTimeoutSeconds}
-                      aria-label={`${LANDING_CHECK_COPY.LABEL} ${LANDING_CHECK_COPY.TIMEOUT}`}
-                      placeholder={LANDING_CHECK_COPY.INHERITS_TIMEOUT}
-                      onValueChange={(value) => set({ landingCheckTimeoutSeconds: value })} />
-                    <div className="project-integration-setting-hint">{LANDING_CHECK_COPY.TIMEOUT_HINT}</div>
-                    {draft.landingCheckTimeoutSeconds === null && <div className="project-integration-setting-hint">{inheritedLandingTimeout(view.mergeCheckTimeoutSeconds)}</div>}
+                    <Segmented<LandingCheckMode>
+                      className="project-landing-mode"
+                      aria-label={LANDING_CHECK_COPY.LABEL}
+                      value={draft.landingMode}
+                      onValueChange={(landingMode) => set({ landingMode })}
+                      options={[
+                        { value: 'MERGE_CHECK', label: LANDING_MODE_COPY.MERGE_CHECK },
+                        { value: 'COMMAND', label: LANDING_MODE_COPY.COMMAND },
+                        { value: 'NONE', label: LANDING_MODE_COPY.NONE },
+                      ]}
+                    />
+                    {draft.landingMode === 'COMMAND' ? <>
+                      <Input value={draft.landingCheckCommand} aria-label={LANDING_CHECK_COPY.LABEL}
+                        className="start-card-mono"
+                        placeholder={LANDING_CHECK_COPY.COMMAND_PLACEHOLDER}
+                        onChange={(event) => set({ landingCheckCommand: event.target.value })} />
+                      {landingCheckSetBy ? <LandingCheckOrigin setBy={landingCheckSetBy} setAt={view.landingCheck?.setAt ?? null} now={now} /> : null}
+                      <div className="project-integration-setting-hint">{LANDING_CHECK_COPY.HINT} {LANDING_MODE_COPY.COMMAND_NOTE}</div>
+                    </> : null}
+                    {draft.landingMode === 'MERGE_CHECK' ? <>
+                      {landingCheckSetBy ? <LandingCheckOrigin setBy={landingCheckSetBy} setAt={view.landingCheck?.setAt ?? null} now={now} /> : null}
+                      <div className="project-integration-setting-hint">{inheritedLandingCommand(draft.mergeCheckCommand || null)}</div>
+                    </> : null}
+                    {draft.landingMode === 'NONE' ? <>
+                      <div className="project-landing-none">
+                        <b>{LANDING_MODE_COPY.NONE_HEAD}</b> {LANDING_MODE_COPY.NONE_BODY}
+                      </div>
+                      {landingCheckSetBy ? <LandingCheckOrigin setBy={landingCheckSetBy} setAt={view.landingCheck?.setAt ?? null} now={now} /> : null}
+                      <div className="project-landing-who" aria-label={LANDING_MODE_COPY.WHO_CAN_SET}>
+                        <div className="project-integration-setting-label">{LANDING_MODE_COPY.WHO_CAN_SET}</div>
+                        {LANDING_CHECK_ORIGIN_NOTES.map((entry) => (
+                          <div key={entry.by} className="project-landing-who-row">
+                            <span className={`project-landing-badge is-${entry.by.toLowerCase()}`}>{LANDING_CHECK_ORIGIN_COPY[entry.by]}</span>
+                            <span>{entry.note}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </> : null}
+                    {draft.landingMode !== 'NONE' ? <>
+                      <label>{LANDING_CHECK_COPY.TIMEOUT}</label>
+                      <NumberInput className="project-check-timeout" min={1} precision={0} value={draft.landingCheckTimeoutSeconds}
+                        aria-label={`${LANDING_CHECK_COPY.LABEL} ${LANDING_CHECK_COPY.TIMEOUT}`}
+                        placeholder={LANDING_CHECK_COPY.INHERITS_TIMEOUT}
+                        onValueChange={(value) => set({ landingCheckTimeoutSeconds: value })} />
+                      <div className="project-integration-setting-hint">{LANDING_CHECK_COPY.TIMEOUT_HINT}</div>
+                      {draft.landingCheckTimeoutSeconds === null && <div className="project-integration-setting-hint">{inheritedLandingTimeout(view.mergeCheckTimeoutSeconds)}</div>}
+                    </> : null}
                   </>}
                 </div>
               </div>
+
+              <ProjectChangesRow projectId={projectId} changes={project.settingChanges} />
 
               <div className={missingCheck ? 'project-integration-setting is-warn' : 'project-integration-setting'}>
                 <div className="project-integration-setting-label">{RUN_MERGE_CHECK}</div>
@@ -663,8 +730,7 @@ export function ProjectRunSettings({
                   {missingCheck ? <div className="start-card-warn">{runNoMergeCheckWarning(main)}</div> : null}
                 </div>
               </div>
-            </>
-          )}
+          </>
 
           <div className="project-integration-setting">
             <div className="project-integration-setting-label">{RUN_ESCALATE_AFTER}</div>

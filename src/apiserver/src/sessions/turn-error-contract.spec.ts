@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException, NotFoundException } from '@nestjs/common';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { SessionsService } from './sessions.service';
 
 /**
@@ -131,6 +131,7 @@ test('an ended session refuses a send, a stop and a withdraw with one sentence',
         provider: 'claude',
         providerBuiltin: true,
         status: RunStatus.SUCCEEDED,
+        finishedAt: new Date(),
         cancelRequestedAt: null,
         deletedAt: null,
         prompt: 'p',

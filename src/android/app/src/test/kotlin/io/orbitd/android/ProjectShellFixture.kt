@@ -101,6 +101,8 @@ internal object ProjectShell {
     @Volatile var landings: String? = null
     /** The owner's open items on Launch, as `open-items.needsYou` lists them (A-2's X-E5 card and the Landings group's holders). */
     @Volatile var needsYouItems: String? = null
+    /** The project's answered questions (`closedQuestions` of the open-items read), as a JSON array. */
+    @Volatile var closedQuestions: String = "[]"
     /** The code session's derived `sourceLanding` (A-2's label at its bottom); null for a conversation that produced none. */
     @Volatile var sourceLanding: String? = null
     /** What `GET sessions/<LANDING>/landing/log` answers, one page. */
@@ -149,6 +151,8 @@ internal object ProjectShell {
     @Volatile var quietAttention: String? = null
     /** Whether Launch's coordinator has a turn under way (`engineTurnActive`), which the Open list draws as its spinner. */
     @Volatile var coordinatorWorking = false
+    /** The owner requests `GET owner-requests` lists, as a JSON array; none by default. A POST to a request's reopen-project answers it DONE. */
+    @Volatile var ownerRequests = "[]"
 
     // A15 F-22: How it runs' authorization set, fenced on its revision as `PATCH projects/:id` fences it. Off by default, which
     // leaves the set out of Launch's document as before.
@@ -168,11 +172,17 @@ internal object ProjectShell {
     @Volatile var coordinatorWaiting = false
     /** WAITING's transcript (`sessions/WAITING/events/page`) and its pending approvals, as JSON arrays; null answers with none. */
     @Volatile var waitingEvents: String? = null
+    @Volatile var waitingAround: JsonObject? = null
     @Volatile var waitingApprovals: String? = null
+    /** Whether WAITING's detail names its project, so its conversation reads the project's open items (the answered-question records). */
+    @Volatile var waitingReadsProject = false
     /** Whether Plain notes, in no project, waits on the owner too, so a conversation opened elsewhere shows the needs-you capsule. */
     @Volatile var plainWaiting = false
     /** A crossing decision's answer by its door id and body, when a test answers each row itself; null answers as [decide] does. */
     @Volatile var onDecision: ((String, String) -> ApiResponse)? = null
+    /** A move batch's one answer (`sessions/:id/task-moves/decision`) by its body, when a test answers it itself; null answers every
+     * waiting crossing as the body says. */
+    @Volatile var onMoveBatch: ((String) -> ApiResponse)? = null
 
     fun reset() {
         now = Instant.now()
@@ -180,17 +190,18 @@ internal object ProjectShell {
         done = false; doneBy = "DERIVED"; doneCounts = true; completedMembers = emptySet()
         promotion = null; merged = "[]"; mergeCheck = false; mergeJobKind = "CHECK_PROMOTION"; holder = null; criteria = null; pressStatus = 200; mergeWaiting = false; bodies.clear()
         landTasks = null; plan = null; documentStatus = 200; holdDocument = null; landing = null; landingById = emptyMap(); landingTitle = null; inFlightJobs = null
-        landings = null; needsYouItems = null; sourceLanding = null
+        landings = null; needsYouItems = null; closedQuestions = "[]"; sourceLanding = null
         landingLog = """{"jobId":"j-1","entries":[],"nextCursor":null}"""; taskTitle = "Wire the page"
         landingStatus = 200; landingLogStatus = 200
         coordinatorStatus = "{\"state\":\"NEVER_OPENED\"}"; doorStatus = 200; doorMessage = "The job is no longer running."
+        ownerRequests = "[]"
         landingServed = 0; holdLanding = null; holdLandingReads.clear(); landingAfterDoor = null; movedJobs.clear()
         taskRunning = false; holdTask = null
         // An earlier test's held request is dropped, never answered: answered now, it would write into this test's server state.
         trashed = emptySet(); holdDelete = null; holdMembers = null; attention = null
         quietAttention = null; coordinatorWorking = false
-        configRevision = null; automatic = true; maxConcurrentTasks = 2; crossings = null; tasks = null; coordEvents = null; onDecision = null
-        lineIdle = false; memberWaiting = true; coordinatorWaiting = false; waitingEvents = null; waitingApprovals = null; plainWaiting = false
+        configRevision = null; automatic = true; maxConcurrentTasks = 2; crossings = null; tasks = null; coordEvents = null; onDecision = null; onMoveBatch = null
+        lineIdle = false; memberWaiting = true; coordinatorWaiting = false; waitingEvents = null; waitingAround = null; waitingApprovals = null; waitingReadsProject = false; plainWaiting = false
         while (accountEvents.tryReceive().isSuccess) Unit
     }
 
@@ -214,7 +225,7 @@ internal object ProjectShell {
     private fun row(id: String, title: String, workspace: String, run: String, extra: String, lifecycle: String = "OPEN", lastTurnAt: String = ago(5),
         approvals: Int = 0) =
         """{"id":"$id","title":"$title","status":"$run","runState":"$run","lifecycleState":"$lifecycle","agent":{"id":"$workspace","name":"${if (workspace == ALPHA) "Alpha" else "Beta"}"},
-            "agentId":"$workspace","createdAt":"${ago(600)}","lastTurnAt":"$lastTurnAt","pendingApprovals":$approvals,"tags":[],
+            "agentId":"$workspace","createdAt":"${ago(600)}","lastTurnAt":"$lastTurnAt","listedAt":"$lastTurnAt","pendingApprovals":$approvals,"tags":[],
             "capabilities":{"canComplete":${lifecycle == "OPEN"},"canRestore":${lifecycle != "OPEN"}}$extra}"""
     private fun session(id: String) = if (id in completedMembers) openSession(id).replaceFirst("\"lifecycleState\":\"OPEN\"", "\"lifecycleState\":\"COMPLETED\"")
         .replace("\"canComplete\":true", "\"canComplete\":false").replace("\"canRestore\":false", "\"canRestore\":true") else openSession(id)
@@ -225,7 +236,7 @@ internal object ProjectShell {
             lastTurnAt = ago(30), approvals = if (coordinatorWaiting) 1 else 0)
         WORKER -> row(WORKER, "Wire tests", ALPHA, "RUNNING", ""","lastToolUse":"Bash",${member("TASK")}${
             sourceLanding?.let { ""","sourceLanding":$it""" }.orEmpty()}""", lastTurnAt = ago(2))
-        WAITING -> if (memberWaiting) row(WAITING, "Quota retry", BETA, "AWAITING_INPUT", ""","waitingKind":"OWNER_CONFIRMATION",${member("TASK")}""", lastTurnAt = ago(10), approvals = 1)
+        WAITING -> if (memberWaiting) row(WAITING, "Quota retry", BETA, "AWAITING_INPUT", ""","waitingKind":"OWNER_CONFIRMATION",${if (waitingReadsProject) "\"projectId\":\"$LAUNCH\"," else ""}${member("TASK")}""", lastTurnAt = ago(10), approvals = 1)
             else row(WAITING, "Quota retry", BETA, "AWAITING_INPUT", ""","lastAssistantText":"Retried the quota read",${member("TASK")}""", lastTurnAt = ago(10))
         PLAIN -> if (plainWaiting) row(PLAIN, "Plain notes", ALPHA, "AWAITING_INPUT", ""","waitingKind":"OWNER_CONFIRMATION"""", approvals = 1)
             else row(PLAIN, "Plain notes", ALPHA, "AWAITING_INPUT", ""","lastAssistantText":"Notes kept"""")
@@ -255,8 +266,8 @@ internal object ProjectShell {
         "inFlight":${if (mergeCheck) """{"kind":"$mergeJobKind","state":"RUNNING","phase":"CHECK","startedAt":"${ago(7)}","heartbeatAt":"${ago(0)}"}"""
             else """{"kind":"LAND_TASK","state":"RUNNING","phase":"CHECK","taskTitle":"Wire the page","startedAt":"${ago(3)}","heartbeatAt":"${ago(0)}"}"""}${
             landTasks?.let { ""","landTasks":$it""" }.orEmpty()}${inFlightJobs?.let { ""","inFlightJobs":$it""" }.orEmpty()}}"""
-    private val openItems get() = if (!startRequest) """{"needsYou":${needsYouItems ?: "[]"},"withCoordinator":[${holder.orEmpty()}]}""" else
-        """{"needsYou":${needsYouItems ?: "[]"},"withCoordinator":[],
+    private val openItems get() = if (!startRequest) """{"needsYou":${needsYouItems ?: "[]"},"withCoordinator":[${holder.orEmpty()}],"closedQuestions":$closedQuestions}""" else
+        """{"needsYou":${needsYouItems ?: "[]"},"withCoordinator":[],"closedQuestions":$closedQuestions,
         "startRequest":{"itemId":"start-1","waitingSince":"${ago(130)}","startRequest":{"criteriaDigest":"digest-1","why":"Everything is filed.",
         "settings":{"line":"PROJECT_BRANCH","automatic":true,"maxConcurrentTasks":3,"mergeCheckCommand":null,"projectBranchName":"project/launch"}}}}"""
     /** The projection a current server carries for a done project: six criteria, five on main and one with no code to land — or,
@@ -373,6 +384,7 @@ internal object ProjectShell {
                 ok("{}")
             }
             path == "sessions/$COORD/events/page" && coordEvents != null -> ok("""{"events":$coordEvents,"hasMore":false}""")
+            path == "sessions/$WAITING/events/page" && api.query.any { it.first == "around" } && waitingAround != null -> ok(waitingAround.toString())
             path == "sessions/$WAITING/events/page" && waitingEvents != null -> ok("""{"events":$waitingEvents,"hasMore":false}""")
             path == "sessions/$WAITING/approvals" && waitingApprovals != null -> ok(waitingApprovals!!)
             path.startsWith("sessions/") && path.endsWith("/page") -> ok("""{"events":[],"hasMore":false,"lastSeq":0,"latestSeq":0}""")
@@ -392,6 +404,12 @@ internal object ProjectShell {
             path == "projects/$LAUNCH/tasks/page" && tasks != null -> ok("""{"items":$tasks,"nextCursor":null}""")
             method == "POST" && crossings != null && path.startsWith("projects/$LAUNCH/handoffs/") && path.endsWith("/decision") ->
                 onDecision?.invoke(api.path[3], api.body?.decodeToString().orEmpty()) ?: decide(api.path[3])
+            method == "POST" && crossings != null && path.startsWith("sessions/") && path.endsWith("/task-moves/decision") ->
+                onMoveBatch?.invoke(api.body?.decodeToString().orEmpty()) ?: run {
+                    val deny = api.body?.decodeToString().orEmpty().contains("\"DENY\"")
+                    crossings = crossings!!.replace("\"state\":\"PENDING\"", "\"state\":\"${if (deny) "DENIED" else "APPLIED"}\"")
+                    ok("[]")
+                }
             path == "projects/$LAUNCH/integration" -> ok(integration)
             path == "projects/$LAUNCH/coordinator/status" -> ok(coordinatorStatus)
             path == "projects/$LAUNCH/open-items" -> ok(openItems)
@@ -412,6 +430,12 @@ internal object ProjectShell {
                 }
             }
             method == "POST" && path.startsWith("projects/$LAUNCH/promotions/") -> press(path.substringAfterLast('/'))
+            path == "owner-requests" && method == "GET" -> ok("""{"requests":$ownerRequests}""")
+            method == "POST" && path.startsWith("owner-requests/") && path.endsWith("/reopen-project") -> {
+                val answered = ownerRequests.removeSurrounding("[", "]").replaceFirst(""""state":"PENDING"""", """"state":"DONE","resolvedAt":"2026-11-24T14:02:00.000Z"""")
+                ownerRequests = "[$answered]"; done = false
+                ok(answered)
+            }
             path.startsWith("projects/") -> ok("{}")
             path.startsWith("wiki/") -> ApiResponse(404, """{"code":"WIKI_DISABLED","message":"The wiki is off."}""".encodeToByteArray())
             method == "GET" -> ok("[]")

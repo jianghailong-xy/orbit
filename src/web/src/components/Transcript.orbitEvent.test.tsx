@@ -106,9 +106,7 @@ describe('a turn carrying only Orbit’s blocks', () => {
 
   it('leaves the known blocks their own lines', async () => {
     for (const [event, selector] of [
-      [userEvent('', ZH_JOB_DONE), '.bgwake:not(.orbitwake):not(.sawake)'],
-      [userEvent('', ZH_SCHEDULED), '.bgwake:not(.orbitwake):not(.sawake)'],
-      [userEvent('', SUBAGENT_DONE), '.bgwake.sawake'],
+      [userEvent('', ZH_SCHEDULED), '.bgwake:not(.orbitwake)'],
       [userEvent(WATCH_EXPIRED), '.watch-wake'],
     ] as const) {
       await mount([event]);
@@ -116,6 +114,20 @@ describe('a turn carrying only Orbit’s blocks', () => {
       expect(container.querySelector('.orbitwake'), 'no generic line').toBeNull();
       expect(container.querySelector('.chat-user'), 'no bubble').toBeNull();
     }
+  });
+
+  // A background job's news is drawn on its job's card (JobCard), so its turn draws nothing either.
+  it('draws nothing for a background job’s news, which its card draws', async () => {
+    await mount([userEvent('', ZH_JOB_DONE)]);
+    expect(container.querySelector('.bgwake, .orbitwake, .chat-user'), container.innerHTML).toBeNull();
+  });
+
+  // A SubAgent's end is drawn on its card (SubagentCardEnd), so its turn draws nothing at all: not its own
+  // line, not this generic one, not the reader's bubble.
+  it('draws nothing for a SubAgent’s end, which its card draws', async () => {
+    await mount([userEvent('', SUBAGENT_DONE)]);
+    expect(container.querySelector('.bgwake, .orbitwake, .chat-user'), container.innerHTML).toBeNull();
+    expect(container.textContent).toBe('');
   });
 
   it('keeps typed words in the reader’s bubble and omits the appended note', async () => {

@@ -94,7 +94,7 @@ func TestExternalSenderNameCannotBreakTheBlock(t *testing.T) {
 // numbers are logged for the task's record and the block is held to a ceiling so a later edit that
 // grows it is a red, not a silent cost.
 func TestExternalSenderBlockBudget(t *testing.T) {
-	standing := orbitCLIInstructions("/usr/local/bin/orbit", true, true, true) + codexImageDeliveryInstructions
+	standing := orbitCLIInstructions("/usr/local/bin/orbit", true, true, true, true) + codexImageDeliveryInstructions
 	block := externalSenderBlock(ExternalSender{Source: "FEISHU", Name: "Lin Mei"})
 	before, added := estimateTokens(standing), estimateTokens("\n\n"+block)
 	t.Logf("agent instructions: %d bytes, ~%d tokens; Feishu sender block: %d bytes, ~%d tokens; with it: ~%d tokens (+%.1f%%)",

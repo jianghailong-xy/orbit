@@ -234,7 +234,7 @@ class ScheduledDeviceTest : IncrementDeviceTest() {
     private fun atTail() {
         compose.onNodeWithTag("transcript-list").performScrollToNode(hasTestTag("transcript-tail"))
         settle()
-        await("the transcript at its tail") { !exists(hasText("Jump to latest"), unmerged = true) }
+        await("the transcript at its tail") { !exists(hasContentDescription("Jump to latest"), unmerged = true) }
     }
 
     /** Board 01 ⑤ / 02 ②: the change line (with Undo) and the envelope card in the conversation that asked. */

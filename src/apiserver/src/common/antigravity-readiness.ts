@@ -6,13 +6,18 @@ import { runnerOs } from './runner-platform';
  *  such sign-in at all, so a start would only ever come back failed. */
 export const ANTIGRAVITY_GOOGLE_LOGIN_V1 = 'antigravity-google-login/v1';
 
+/** Runner also relays it on macOS, where agy is kept to a token file per account the way it is on
+ *  Linux (src/runner-go/antigravity_google_pty_darwin.go). A Mac runner without it refuses the sign-in
+ *  itself, and is one an update fixes. */
+export const ANTIGRAVITY_GOOGLE_LOGIN_MACOS_V1 = 'antigravity-google-login-macos/v1';
+
 /** The refusal for a runner that does not declare it, from the start and from the heartbeat alike. */
 export const ANTIGRAVITY_GOOGLE_LOGIN_TOO_OLD =
   'This runner is too old to sign Antigravity in with Google — update it, then try again.';
 
 /** The refusal for a runner on another platform: the runner's own words for it (login.go), so the
  *  card reads the same whichever side refused. */
-export const ANTIGRAVITY_GOOGLE_LOGIN_LINUX_ONLY = 'Signing Antigravity in with Google works only on a Linux runner for now.';
+export const ANTIGRAVITY_GOOGLE_LOGIN_UNSUPPORTED_PLATFORM = 'Signing Antigravity in with Google works only on a Linux or macOS runner for now.';
 
 export function hasGeminiEnvKey(env: unknown): boolean {
   if (!env || typeof env !== 'object' || Array.isArray(env)) return false;
@@ -22,13 +27,15 @@ export function hasGeminiEnvKey(env: unknown): boolean {
 
 /**
  * Whether Orbit can sign this runner's Antigravity into Google, from what its last heartbeat
- * declared: the relay itself, then the platform, which is Linux only for now (macOS keeps agy's
- * login in the system keychain). A runner that relays it but has not named its platform is let
- * through: it refuses a platform it cannot do on its own, and the relay reports that.
+ * declared: the relay itself, then the platform — Linux, or macOS on a runner that declares the
+ * macOS relay too (an older Mac runner refuses it, so it needs updating). A runner that relays it
+ * but has not named its platform is let through: it refuses a platform it cannot do on its own,
+ * and the relay reports that.
  */
 export function antigravityGoogleLogin(runner: { capabilities?: readonly string[] }): AntigravityGoogleLogin {
   if (!runner.capabilities?.includes(ANTIGRAVITY_GOOGLE_LOGIN_V1)) return 'needs_update';
   const os = runnerOs(runner.capabilities);
+  if (os === 'darwin') return runner.capabilities.includes(ANTIGRAVITY_GOOGLE_LOGIN_MACOS_V1) ? 'available' : 'needs_update';
   return os && os !== 'linux' ? 'unsupported_platform' : 'available';
 }
 
@@ -48,7 +55,7 @@ export function antigravityGoogleLoginRefusal(runner: { capabilities?: readonly 
     case 'needs_update':
       return ANTIGRAVITY_GOOGLE_LOGIN_TOO_OLD;
     case 'unsupported_platform':
-      return ANTIGRAVITY_GOOGLE_LOGIN_LINUX_ONLY;
+      return ANTIGRAVITY_GOOGLE_LOGIN_UNSUPPORTED_PLATFORM;
     default:
       return null;
   }

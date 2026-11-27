@@ -1,5 +1,7 @@
 package io.orbitd.android
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -254,7 +256,7 @@ class SessionListPageShellTest {
     /** iOS: a list that opens on today would be saying what its rows say. Later sections, and a Pinned that leads, keep their titles. */
     @Test fun theLeadingTodayHasNoTitleAndTheOthersDo() {
         val now = Instant.now().truncatedTo(ChronoUnit.SECONDS)
-        NavShell.extra = mapOf("open" to listOf(NavShell.row("34A05cSessionToday001", "Today's row", at = now.minusSeconds(60).toString()),
+        NavShell.extra = mapOf("open" to listOf(NavShell.row("34A05cSessionToday001", "Today's row", at = now.toString()),
             NavShell.row("34A05cSessionOlder001", "Older row", at = now.minus(3, ChronoUnit.DAYS).toString())))
         signIn()
         await { exists(hasRowMenu("Options for Today's row")) && exists(hasRowMenu("Options for Older row")) }
@@ -277,6 +279,25 @@ class SessionListPageShellTest {
         assertFalse(exists(hasRowMenu("Options for Pinned row")))
         compose.onNodeWithTag("pinned-heading").performClick()
         await { exists(hasRowMenu("Options for Pinned row")) }
+    }
+
+    /** Needs you folds the same way, under its own fold: folding it leaves Pinned open. */
+    @Test fun theNeedsYouSectionFoldsAndStaysFolded() {
+        NavShell.extra = mapOf("open" to listOf(NavShell.row("34A05cSessionPinned01", "Pinned row", fields = ""","pinnedAt":"2026-10-09T01:00:00Z""""),
+            NavShell.row("34A05cSessionWaits01", "Waiting row", pending = 1)))
+        signIn()
+        await { exists(hasRowMenu("Options for Waiting row")) }
+        val heading = compose.onNodeWithTag("needs-you-heading")
+        assertEquals(SessionListCopy.NEEDS_YOU_HIDES, heading.fetchSemanticsNode().config.getOrNull(SemanticsActions.OnClick)?.label)
+        heading.performClick()
+        await { !exists(hasRowMenu("Options for Waiting row")) }
+        assertTrue("Pinned keeps its own fold", exists(hasRowMenu("Options for Pinned row")))
+        assertEquals(SessionListCopy.NEEDS_YOU_SHOWS, compose.onNodeWithTag("needs-you-heading").fetchSemanticsNode().config.getOrNull(SemanticsActions.OnClick)?.label)
+        compose.activityRule.scenario.recreate()
+        await { exists(hasTestTag("needs-you-heading")) && exists(plain) }
+        assertFalse(exists(hasRowMenu("Options for Waiting row")))
+        compose.onNodeWithTag("needs-you-heading").performClick()
+        await { exists(hasRowMenu("Options for Waiting row")) }
     }
 
     /** A folder's row says what the sessions it hides would have said. Its page: its name over its workspace's, ⋯ and ✎, and the scope it was
@@ -351,13 +372,52 @@ class SessionListPageShellTest {
         await { exists(hasTestTag("schedule-history-run")) }
         compose.onNodeWithTag("schedule-history-run").performClick()
         await { exists(hasContentDescription("Session actions")) && ObjectId.same(app().realtime.state.value.session?.id, NavShell.RUN) }
-        openDrawer()
-        await { exists(drawerRow("Alpha") and isSelected()) }
-        compose.onNodeWithTag("drawer:scheduled").assertIsNotSelected()
-        compose.onNode(drawerRow("Alpha")).assertIsSelected().performClick()
+        // The folder under the session is put there once its detail is read (its workspace and lifecycle); a Back before that goes to
+        // the schedule, so the detail is what Back waits for, however long a loaded host takes to answer it.
+        await { app().realtime.state.value.session?.takeIf { ObjectId.same(it.id, NavShell.RUN) }?.snapshot?.detail != null }
+        // A session page's bar carries back and its own menu, not the drawer (1da59c34c2, as iOS): Back lands in the
+        // workspace's Scheduled runs folder, whose bar opens the drawer on that workspace.
         compose.onNodeWithContentDescription("Back").performClick()
         await { exists(hasRowMenu("Options for Completed run")) }
         compose.onNode(hasText("Scheduled runs") and hasAnyAncestor(hasTestTag("app-bar")), useUnmergedTree = true).assertExists()
+        openDrawer()
+        await { exists(drawerRow("Alpha") and isSelected()) }
+        compose.onNodeWithTag("drawer:scheduled").assertIsNotSelected()
+    }
+
+    /** A filed session opened by a link from outside the app (or a push, a share) lands with its folder's page under it: Back reaches its row, and
+     * Back again the workspace's list, where only the folder's row stands for it (web WorkspaceView, 6b22973954). */
+    @Test fun aFiledSessionOpenedByALinkLandsOverItsFoldersPage() {
+        NavShell.folders = """[{"id":"34A05cFolderResearch1","workspaceId":"${NavShell.ALPHA}","name":"Research"}]"""
+        NavShell.filedIn = mapOf(NavShell.PLAIN to "34A05cFolderResearch1")
+        signIn()
+        val folder = hasTestTag("folder-row:34A05cFolderResearch1")
+        await { exists(folder) && exists(review) }
+        assertFalse(exists(plain))
+        openLink("orbit-session:${NavShell.PLAIN}")
+        await { exists(hasContentDescription("Session actions")) && ObjectId.same(app().realtime.state.value.session?.id, NavShell.PLAIN) }
+        compose.onNodeWithContentDescription("Back").performClick()
+        await { exists(plain) }
+        compose.onNode(hasText("Research") and hasAnyAncestor(hasTestTag("app-bar")), useUnmergedTree = true).assertExists()
+        compose.onNodeWithContentDescription("Back").performClick()
+        await { exists(folder) }
+        assertFalse(exists(plain))
+        compose.onNodeWithContentDescription("Back").assertDoesNotExist()
+    }
+
+    /** An unfiled session, or one in a folder this phone does not know, opens over the page showing as before: Back is that page. */
+    @Test fun anUnfiledSessionOpenedByALinkOpensOverThePageShowing() {
+        NavShell.filedIn = mapOf(NavShell.PLAIN to "34A05cFolderUnknown01")
+        signIn()
+        await { exists(plain) && exists(review) }
+        listOf(NavShell.SESSION, NavShell.PLAIN).forEach { id ->
+            openLink("orbit-session:$id")
+            await { exists(hasContentDescription("Session actions")) && app().realtime.state.value.session?.takeIf { ObjectId.same(it.id, id) }?.snapshot?.detail != null }
+            compose.onNodeWithContentDescription("Back").performClick()
+            await { exists(plain) && exists(review) }
+            compose.onNode(hasText("Alpha") and hasAnyAncestor(hasTestTag("app-bar")), useUnmergedTree = true).assertExists()
+            compose.onNodeWithContentDescription("Back").assertDoesNotExist()
+        }
     }
 
     /** No connection: the rows stay and the list says nothing. The drawer heads its workspaces with why, in iOS's words. */
@@ -427,4 +487,13 @@ class SessionListPageShellTest {
         compose.waitUntil(60_000) { app().session.state.value is AuthState.SignedIn && app().realtime.state.value.directoryFresh }
     }
     private fun await(condition: () -> Boolean) = compose.waitUntil(60_000) { compose.waitForIdle(); condition() }
+    private fun openLink(link: String) {
+        compose.activityRule.scenario.onActivity {
+            val launch = it.intent
+            MainActivity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java).apply { isAccessible = true }
+                .invoke(it, Intent(Intent.ACTION_VIEW, Uri.parse(link)).setClass(it, MainActivity::class.java))
+            it.intent = launch
+        }
+        compose.waitForIdle()
+    }
 }

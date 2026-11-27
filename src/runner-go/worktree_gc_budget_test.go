@@ -235,9 +235,9 @@ func TestOverAStorageBudgetsFloorNewerMeasurementsMakeNothingLook(t *testing.T) 
 	requireCheckoutOnDisk(t, resting, "over the floor nothing goes")
 }
 
-// A wait that started without a budget went by the machine's rules, which keep checkouts a budget's floor does not. A
-// usable budget that comes in under its floor is a newer measurement than none, and the next sweep looks: a first
-// budget, and one the runner had before, back with the measurement it had then.
+// A wait that started without a budget waits an hour. A usable budget that comes in under its floor is a newer
+// measurement than none, and the next sweep looks: a first budget, and one the runner had before, back with the
+// measurement it had then.
 func TestABudgetThatComesInUnderItsFloorEndsAnHoursWait(t *testing.T) {
 	measured := smallBudget(60*oneMiB, time.Minute)
 	for _, hadItBefore := range []bool{false, true} {
@@ -262,19 +262,22 @@ func TestABudgetThatComesInUnderItsFloorEndsAnHoursWait(t *testing.T) {
 				s.clock.Advance(worktreeGCInterval)
 			}
 
+			// The control plane keeps it from this look, which starts the hour's wait, and then lets it go.
+			s.set(func() { s.answers["sess-parked"] = "kept" })
 			logs, looked := s.sweepAfter(worktreeGCInterval, underTheMachinesFloor(storage))
 
 			if !looked || !strings.Contains(logs, resumableWaitLine+s.clock.Now().Add(time.Hour).UTC().Format(time.RFC3339)) {
-				t.Fatalf("two days unwritten, the machine's rules keep it, and the look starts the hour's wait (looked %v), got:\n%s", looked, logs)
+				t.Fatalf("without a budget, the look found nothing and starts the hour's wait (looked %v), got:\n%s", looked, logs)
 			}
-			requireCheckoutOnDisk(t, parked, "two days unwritten is not two weeks")
+			requireCheckoutOnDisk(t, parked, "the control plane kept it")
+			s.set(func() { s.answers["sess-parked"] = "resumable" })
 
 			storage.budget.Store(measured)
 
 			if _, looked := s.sweepAfter(worktreeGCInterval, underTheMachinesFloor(storage)); !looked {
 				t.Fatal("a budget under its floor came in, and the sweep did not look")
 			}
-			requireCheckoutReclaimed(t, parked, "under the budget's floor, two days unwritten is enough")
+			requireCheckoutReclaimed(t, parked, "the budget's measurement ended the hour's wait")
 		})
 	}
 }

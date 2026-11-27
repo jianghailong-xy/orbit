@@ -399,7 +399,7 @@ async function fixture(
   await h.prisma.session.create({
     data: {
       id: sessionId, title: '修 fixture 的端口', prompt: 'p', ownerId: h.ownerId, creatorId: h.ownerId,
-      dispatchOrigin: 'USER', status: 'SUCCEEDED', lastTurnAt: new Date(), workspaceId,
+      dispatchOrigin: 'USER', turnState: null, finishedAt: new Date(), lastTurnAt: new Date(), workspaceId,
     },
   });
   const callId = randomUUID();
@@ -1710,8 +1710,8 @@ test('the documents step reads the confirmed plan through its read, and a sectio
   // A project of the owner's whose coordinator heard the owner's words about the fixture's port.
   const coordinator = randomUUID();
   await h.sql.query(
-    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","workspace_id","status","dispatch_origin","updated_at")
-     VALUES ($1,'the coordinator','p',$2,$2,$3,'RUNNING'::run_status,'USER',now())`,
+    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","workspace_id","turn_state","dispatch_origin","updated_at")
+     VALUES ($1,'the coordinator','p',$2,$2,$3,'IN_FLIGHT','USER',now())`,
     [coordinator, h.ownerId, fx.workspaceId],
   );
   const projectId = randomUUID();
@@ -3271,7 +3271,7 @@ async function workedSession(h: Harness, fx: Fixture, over: { heldOut?: boolean;
   const id = sessionOn(over.heldOut === true);
   await h.prisma.session.create({
     data: {
-      id, title: `修 fixture 的端口 ${id.slice(0, 8)}`, prompt: 'p', ownerId: h.ownerId, creatorId: h.ownerId, dispatchOrigin: 'USER', status: 'SUCCEEDED',
+      id, title: `修 fixture 的端口 ${id.slice(0, 8)}`, prompt: 'p', ownerId: h.ownerId, creatorId: h.ownerId, dispatchOrigin: 'USER', turnState: null, finishedAt: new Date(), 
       lastTurnAt: new Date(Date.now() - 3_600_000), workspaceId: fx.workspaceId, ...(over.engine ? { engine: over.engine } : {}),
     },
   });
@@ -4367,8 +4367,8 @@ const APP_GO = 'package app\n\n// main starts the service on the port its fixtur
 async function handBackPlan(h: Harness, fx: Fixture): Promise<void> {
   const coordinator = randomUUID();
   await h.sql.query(
-    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","workspace_id","status","dispatch_origin","updated_at")
-     VALUES ($1,'the coordinator','p',$2,$2,$3,'RUNNING'::run_status,'USER',now())`,
+    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","workspace_id","turn_state","dispatch_origin","updated_at")
+     VALUES ($1,'the coordinator','p',$2,$2,$3,'IN_FLIGHT','USER',now())`,
     [coordinator, h.ownerId, fx.workspaceId],
   );
   const projectId = randomUUID();
@@ -4993,7 +4993,7 @@ async function crossingSessions(h: Harness, fx: Fixture, count: number): Promise
     await h.prisma.session.create({
       data: {
         id, title: `spec page session ${String(i).padStart(2, '0')}`, prompt: 'p', ownerId: h.ownerId, creatorId: h.ownerId,
-        dispatchOrigin: 'USER', status: 'SUCCEEDED', lastTurnAt: restedAt(i), workspaceId: fx.workspaceId,
+        dispatchOrigin: 'USER', turnState: null, finishedAt: new Date(), lastTurnAt: restedAt(i), workspaceId: fx.workspaceId,
       },
     });
     ids.push(id);

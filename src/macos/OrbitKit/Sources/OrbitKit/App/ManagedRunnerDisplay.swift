@@ -158,7 +158,9 @@ public enum ManagedRunnerCopy {
 
     /// Sleep is not a fault: a sending client wakes it, and nothing warns that it is offline.
     public enum Setup {
-        public static let reposRoot = "/home/orbit/orbit-repos"
+        /// The managed runner's home, fixed by its image: a new folder goes here before it has reported
+        /// (@orbit/shared MANAGED_RUNNER_HOME).
+        public static let home = "/home/orbit"
         public enum Notice {
             public static let preparing = "Orbit is setting up your managed runner. You can create the workspace now; your first session starts when it’s ready."
             public static let asleep = "Your managed runner is asleep. Your first message wakes it (about 10 s)."
@@ -299,7 +301,10 @@ public enum ManagedRunnerLogic {
         let frozen = reason?.code == environmentUnavailable
         // Asleep, or going to sleep, it comes back only on a wake the server would perform.
         let wakeable = !sleepStates.contains(status.managementState) || status.actions.canWake
-        let acceptsWork = !frozen && wakeable && comingBack.contains(status.managementState)
+        // FAILED with its slow retry scheduled comes back by itself too (managed-runner-demand.ts `slowRetryScheduled`).
+        let slowRetry = status.managementState == "FAILED" && status.nextAttemptAt?.isEmpty == false
+            && status.reason?.retryable == true
+        let acceptsWork = !frozen && wakeable && (comingBack.contains(status.managementState) || slowRetry)
         let said = kind == .available ? nil : reason?.message
         return ManagedRunnerDisplay(
             kind: kind,
@@ -322,7 +327,7 @@ public enum ManagedRunnerLogic {
 
     public static func managedSetupState(runnerID: String?, status: ManagedRunnerStatus?) -> ManagedSetupState? {
         guard let row = row(runnerID: runnerID, status: status), row.acceptsWork,
-              row.kind != .available, row.kind != .unresponsive else { return nil }
+              row.kind != .available, row.kind != .unresponsive, row.kind != .failed else { return nil }
         return status?.initialProvider?.isEmpty == false ? .asleep : .preparing
     }
 

@@ -264,7 +264,8 @@ var capabilityContexts = []struct {
 
 // Every catalogue command is answered for in every context: listed, or in unavailableCapabilities
 // with one of the stable codes — never dropped without a word — and every entry declares the same
-// contract fields whichever list it is in.
+// contract fields whichever list it is in. The one exception is the Orbit Cloud browser's commands in a
+// session spawned with its switch off: off means absent, so they are in neither list (browser_tools.go).
 func TestEveryWithheldCapabilityHasAStableReason(t *testing.T) {
 	known := map[string]bool{}
 	for _, code := range capabilityUnavailableCodes {
@@ -276,6 +277,15 @@ func TestEveryWithheldCapabilityHasAStableReason(t *testing.T) {
 			r := readCapabilities(t)
 			for _, op := range operationCatalog().Ops {
 				if op.CLI == nil {
+					continue
+				}
+				if browserOpAbsent(op) {
+					if _, listed := r.listed[op.Tool]; listed {
+						t.Errorf("%s is listed with the browser switch off", op.Tool)
+					}
+					if _, withheld := r.withheld[op.Tool]; withheld {
+						t.Errorf("%s is in unavailableCapabilities with the browser switch off", op.Tool)
+					}
 					continue
 				}
 				code := r.code(t, op.Tool)
@@ -379,45 +389,48 @@ func TestTheAllowlistIsTheCapabilitySpecInEverySessionShape(t *testing.T) {
 	for _, orchestration := range []bool{false, true} {
 		for _, watches := range []string{"on", "off"} {
 			for _, wiki := range []string{"on", "off"} {
-				catalogFullestCLIContext(t)
-				t.Setenv(envMCPOrchestration, map[bool]string{true: "true", false: "false"}[orchestration])
-				t.Setenv(envWatches, watches)
-				t.Setenv(envWiki, wiki)
-				shape := "orchestration=" + map[bool]string{true: "on", false: "off"}[orchestration] + " watches=" + watches + " wiki=" + wiki
-				r := readCapabilities(t)
-				// The document's own doors: `capabilities --json` itself, and its graded views (`capabilities *`:
-				// --summary, --family, --id), which the instructions send an agent to (operation_discovery.go).
-				want := map[string]bool{"Bash(" + capabilityTestExe + " capabilities --json)": true,
-					"Bash(" + capabilityTestExe + " capabilities *)": true}
-				for _, c := range r.doc.Capabilities {
-					want["Bash("+strings.Join(c.Argv, " ")+" *)"] = true
-				}
-				forbidden := map[string]string{}
-				for _, c := range r.doc.UnavailableCapabilities {
-					rule := "Bash(" + strings.Join(c.Argv, " ") + " *)"
-					switch c.UnavailableCode {
-					case capabilityWatchesOff, capabilityWikiOff:
-						want[rule] = true
-					default:
-						forbidden[rule] = c.UnavailableCode
+				for _, browser := range []bool{true, false} {
+					catalogFullestCLIContext(t)
+					t.Setenv(envMCPOrchestration, map[bool]string{true: "true", false: "false"}[orchestration])
+					t.Setenv(envWatches, watches)
+					t.Setenv(envWiki, wiki)
+					t.Setenv(envBrowser, browserEnv(browser))
+					shape := "orchestration=" + map[bool]string{true: "on", false: "off"}[orchestration] + " watches=" + watches + " wiki=" + wiki + " browser=" + browserEnv(browser)
+					r := readCapabilities(t)
+					// The document's own doors: `capabilities --json` itself, and its graded views (`capabilities *`:
+					// --summary, --family, --id), which the instructions send an agent to (operation_discovery.go).
+					want := map[string]bool{"Bash(" + capabilityTestExe + " capabilities --json)": true,
+						"Bash(" + capabilityTestExe + " capabilities *)": true}
+					for _, c := range r.doc.Capabilities {
+						want["Bash("+strings.Join(c.Argv, " ")+" *)"] = true
 					}
-				}
-				got := map[string]bool{}
-				for _, rule := range orbitCLIAllowedTools(capabilityTestExe, orchestration) {
-					if !strings.HasPrefix(rule, "Bash('") {
-						got[rule] = true
+					forbidden := map[string]string{}
+					for _, c := range r.doc.UnavailableCapabilities {
+						rule := "Bash(" + strings.Join(c.Argv, " ") + " *)"
+						switch c.UnavailableCode {
+						case capabilityWatchesOff, capabilityWikiOff:
+							want[rule] = true
+						default:
+							forbidden[rule] = c.UnavailableCode
+						}
 					}
-				}
-				for rule := range want {
-					if !got[rule] {
-						t.Errorf("%s: no rule for %s", shape, rule)
+					got := map[string]bool{}
+					for _, rule := range orbitCLIAllowedTools(capabilityTestExe, orchestration, browser) {
+						if !strings.HasPrefix(rule, "Bash('") {
+							got[rule] = true
+						}
 					}
-				}
-				for rule := range got {
-					if code, bad := forbidden[rule]; bad {
-						t.Errorf("%s: %s is pre-approved but withheld (%s)", shape, rule, code)
-					} else if !want[rule] {
-						t.Errorf("%s: %s is pre-approved and the document says nothing of it", shape, rule)
+					for rule := range want {
+						if !got[rule] {
+							t.Errorf("%s: no rule for %s", shape, rule)
+						}
+					}
+					for rule := range got {
+						if code, bad := forbidden[rule]; bad {
+							t.Errorf("%s: %s is pre-approved but withheld (%s)", shape, rule, code)
+						} else if !want[rule] {
+							t.Errorf("%s: %s is pre-approved and the document says nothing of it", shape, rule)
+						}
 					}
 				}
 			}
@@ -460,7 +473,9 @@ func orbitTopLevelCommands(t *testing.T) []string {
 // catalogue's agent commands have their rules; its human-only commands carry their catalogue reason;
 // every other first word is in orbitCLIAllowlistExclusions, and none of those has a rule.
 func TestEveryOrbitCommandIsPreApprovedOrExcludedWithAReason(t *testing.T) {
-	rules := strings.Join(orbitCLIAllowedTools(capabilityTestExe, true), "\n")
+	// On the Orbit Cloud runner, the one place browser_request_sign_in is offered and pre-approved.
+	t.Setenv(envManagedRunnerGeneration, "3")
+	rules := strings.Join(orbitCLIAllowedTools(capabilityTestExe, true, true), "\n")
 	catalogWords := map[string]bool{}
 	for _, op := range operationCatalog().Ops {
 		if op.CLI == nil {
@@ -491,6 +506,12 @@ func TestEveryOrbitCommandIsPreApprovedOrExcludedWithAReason(t *testing.T) {
 		case word == "capabilities":
 			if !strings.Contains(rules, "Bash("+capabilityTestExe+" capabilities --json)") {
 				t.Error("capabilities --json is not pre-approved")
+			}
+		case word == "documents":
+			// `orbit drive` under its name while Drive was called Drive (drive_cli.go), still served for prompts
+			// that name it: the catalogue and the allowlist carry the commands under their current name only.
+			if !catalogWords["drive"] || strings.Contains(rules, "Bash("+capabilityTestExe+" documents ") {
+				t.Error("`orbit documents` is the unlisted alias of the catalogued `orbit drive`, never pre-approved itself")
 			}
 		case catalogWords[word]:
 			if excluded {
@@ -525,7 +546,7 @@ func TestRecoveryInvokesNameOnlyRunnableCapabilities(t *testing.T) {
 			r := readCapabilities(t)
 			inSession := os.Getenv("ORBIT_SESSION_ID") != ""
 			rules := map[string]bool{}
-			for _, rule := range orbitCLIAllowedTools(capabilityTestExe, mcpOrchestrationEnabled()) {
+			for _, rule := range orbitCLIAllowedTools(capabilityTestExe, mcpOrchestrationEnabled(), false) {
 				rules[rule] = true
 			}
 			surface := cliRecoverySurface{executable: capabilityTestExe, capabilities: r.doc.Capabilities, replayStdin: true}

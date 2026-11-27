@@ -28,7 +28,9 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { type PrismaClient, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
+import { isReleasedStatus } from '../common/session-release';
 import { Client } from 'pg';
 
 import { sha256 } from '../common/crypto.util';
@@ -37,6 +39,7 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import { RunnerApiController } from './runner-api.controller';
 import { readRunnerLinkHints } from './runner-link-hints';
 import '../test-support/daemon-routes-over-http';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 
@@ -74,8 +77,11 @@ test('linkHints.approvals: the decided approvals whose reader is still waiting, 
     const id = randomUUID();
     await prisma.session.create({
       data: {
-        id, ownerId, creatorId: ownerId, title: 'a session', prompt: 'work', provider: 'claude', status,
+        id, ownerId, creatorId: ownerId, title: 'a session', prompt: 'work', provider: 'claude', turnState: turnStateOfWord(status),
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false, assignedRunnerId: runnerId, numTurns: 1, ...extra,
+        ...(isReleasedStatus(status) ? {
+          finishedAt: new Date(),
+        } : {}),
       },
     });
     return id;
@@ -178,7 +184,7 @@ test('linkHints.approvals: the decided approvals whose reader is still waiting, 
     await prisma.session.update({ where: { id: parked }, data: { runningBgShells: [] } });
     assert.deepEqual(await approvalsOf(runnerA), byApproval([turnless, wakeCard]));
     // The sessions stop generating.
-    await prisma.session.update({ where: { id: running }, data: { status: RunStatus.AWAITING_INPUT } });
+    await prisma.session.update({ where: { id: running }, data: { turnState: null } });
     await prisma.session.update({ where: { id: selfDriven }, data: { engineTurnActive: false } });
     assert.deepEqual(await approvalsOf(runnerA), []);
   });

@@ -29,6 +29,9 @@ sealed class ScheduleRule {
     data class Once(val at: String) : ScheduleRule()
     data class Daily(override val time: String) : ScheduleRule()
     data class Weekly(override val time: String, val weekdays: List<String>) : ScheduleRule()
+    /** Sub-daily: a slot every [minutes] from [time] through [until] (inclusive; the end of the day when null), on [weekdays]. The
+     * server always writes `time` and `weekdays`, so a build that predates EVERY reads it as a [Weekly] rule. */
+    data class Every(val minutes: Int, override val time: String, val weekdays: List<String>, val until: String? = null) : ScheduleRule()
     /** A WHEN rule: starts a run each time its condition fires. [conditionId] is null on a create card, before Create writes the
      * condition. */
     data class When(val conditionId: String?, val runsPerWeek: Int, override val condition: ScheduleWhenCondition) : ScheduleRule()
@@ -44,12 +47,17 @@ sealed class ScheduleRule {
             is Once -> { put("kind", "ONCE"); put("at", at) }
             is Daily -> { put("kind", "DAILY"); put("time", time) }
             is Weekly -> { put("kind", "WEEKLY"); put("time", time); put("weekdays", JsonArray(weekdays.map(::JsonPrimitive))) }
+            is Every -> {
+                put("kind", "EVERY"); put("minutes", minutes); put("time", time)
+                put("weekdays", JsonArray(weekdays.map(::JsonPrimitive))); until?.let { put("until", it) }
+            }
             is When -> { put("kind", "WHEN"); put("conditionId", conditionId); put("runsPerWeek", runsPerWeek); put("condition", condition.toJson()) }
         }
     }
 
     companion object {
-        /** ONCE and DAILY by name; any other kind is weekly, as the Swift decoder reads it. */
+        /** ONCE, DAILY, EVERY and WHEN by name; any other kind is weekly, as the Swift decoder reads it. An EVERY rule without a
+         * readable `minutes` falls to that same weekly reading, so it is never dropped. */
         fun parse(json: JsonElement?): ScheduleRule? {
             val o = json as? JsonObject ?: return null
             return when (o.scheduleText("kind") ?: return null) {
@@ -57,6 +65,9 @@ sealed class ScheduleRule {
                 "DAILY" -> Daily(o.scheduleText("time") ?: return null)
                 "WHEN" -> When(o.scheduleText("conditionId"), o.scheduleInt("runsPerWeek") ?: 0,
                     ScheduleWhenCondition.parse(o["condition"]) ?: return null)
+                "EVERY" -> o.scheduleInt("minutes")?.takeIf { it > 0 }?.let { minutes ->
+                    Every(minutes, o.scheduleText("time") ?: return null, o.scheduleStrings("weekdays") ?: emptyList(), o.scheduleText("until"))
+                } ?: Weekly(o.scheduleText("time") ?: return null, o.scheduleStrings("weekdays") ?: emptyList())
                 else -> Weekly(o.scheduleText("time") ?: return null, o.scheduleStrings("weekdays") ?: emptyList())
             }
         }
@@ -163,6 +174,11 @@ data class ScheduleView(
     val revision: Int = 1,
     val startAt: String? = null,
     val endAt: String? = null,
+    /** The planned end by count (§8.5); null without one. */
+    val maxRuns: Int? = null,
+    val runsStarted: Int? = null,
+    /** maxRuns minus runsStarted, at least 0; null without maxRuns or from a server before it. */
+    val runsLeft: Int? = null,
     val nextDueAt: String? = null,
     val consecutiveFailures: Int = 0,
     val createdFromSessionId: String? = null,
@@ -205,6 +221,9 @@ data class ScheduleView(
                 revision = o.scheduleInt("revision") ?: 1,
                 startAt = o.scheduleText("startAt"),
                 endAt = o.scheduleText("endAt"),
+                maxRuns = o.scheduleInt("maxRuns"),
+                runsStarted = o.scheduleInt("runsStarted"),
+                runsLeft = o.scheduleInt("runsLeft"),
                 nextDueAt = o.scheduleText("nextDueAt"),
                 consecutiveFailures = o.scheduleInt("consecutiveFailures") ?: 0,
                 createdFromSessionId = o.scheduleText("createdFromSessionId"),
@@ -285,6 +304,8 @@ data class ScheduleChangeRecord(
     val after: JsonObject,
     val undoOfRevision: Int? = null,
     val undoneByRevision: Int? = null,
+    /** The person's words that asked for it, when it came from the schedule's change conversation (§8.2). */
+    val askedText: String? = null,
     val createdAt: String = "2026-11-14T10:00:00.000Z",
     val undo: ScheduleUndoDoor? = null,
 ) {
@@ -303,9 +324,84 @@ data class ScheduleChangeRecord(
                 after = o.scheduleObject("after") ?: JsonObject(emptyMap()),
                 undoOfRevision = o.scheduleInt("undoOfRevision"),
                 undoneByRevision = o.scheduleInt("undoneByRevision"),
+                askedText = o.scheduleText("askedText"),
                 createdAt = o.scheduleText("createdAt") ?: "",
                 undo = ScheduleUndoDoor.parse(o["undo"]),
             )
+        }
+    }
+}
+
+/**
+ * Orbit's opening of a change conversation (§8.2): the schedule as it was when the conversation was opened, drawn
+ * from `ScheduleCopy.ChangeConversation`. Kept on the session, so it still reads as the start of the conversation
+ * after the schedule has changed.
+ */
+data class ScheduleChangeOpening(
+    val scheduleId: String,
+    val title: String,
+    val revision: Int,
+    /** The read-back ("What it does"). */
+    val does: String = "",
+    /** "Every day at 09:00 · Asia/Shanghai". */
+    val `when`: String = "",
+    /** "apiserver · Codex agent". */
+    val runsIn: String = "",
+    /** "Open a PR · edits in its own worktree and opens a PR; can't merge or deploy". */
+    val may: String = "",
+    /** "Up to 7 runs a week, 30 min each". */
+    val costs: String = "",
+) {
+    companion object {
+        fun parse(json: JsonElement?): ScheduleChangeOpening? {
+            val o = json as? JsonObject ?: return null
+            return ScheduleChangeOpening(
+                scheduleId = o.scheduleText("scheduleId") ?: return null,
+                title = o.scheduleText("title") ?: return null,
+                revision = o.scheduleInt("revision") ?: return null,
+                does = o.scheduleText("does") ?: "",
+                `when` = o.scheduleText("when") ?: "",
+                runsIn = o.scheduleText("runsIn") ?: "",
+                may = o.scheduleText("may") ?: "",
+                costs = o.scheduleText("costs") ?: "",
+            )
+        }
+    }
+}
+
+/** One row of the opening's key/value box. */
+data class ScheduleChangeOpeningRow(val label: String, val text: String)
+
+/** The opening's rows, in order, as label and text. */
+fun scheduleChangeOpeningRows(opening: ScheduleChangeOpening): List<ScheduleChangeOpeningRow> = listOf(
+    ScheduleChangeOpeningRow(ScheduleCopy.ChangeConversation.does, opening.does),
+    ScheduleChangeOpeningRow(ScheduleCopy.ChangeConversation.`when`, opening.`when`),
+    ScheduleChangeOpeningRow(ScheduleCopy.ChangeConversation.runsIn, opening.runsIn),
+    ScheduleChangeOpeningRow(ScheduleCopy.ChangeConversation.may, opening.may),
+    ScheduleChangeOpeningRow(ScheduleCopy.ChangeConversation.costs, opening.costs),
+)
+
+/**
+ * `GET /schedules/:id/change`: the schedule's open change conversation if it has one, and the opening a new one
+ * would start with.
+ */
+data class ScheduleChangeConversationResponse(val sessionId: String?, val opening: ScheduleChangeOpening) {
+    companion object {
+        fun parse(json: JsonElement?): ScheduleChangeConversationResponse? {
+            val o = json as? JsonObject ?: return null
+            return ScheduleChangeConversationResponse(o.scheduleText("sessionId"),
+                ScheduleChangeOpening.parse(o["opening"]) ?: return null)
+        }
+    }
+}
+
+/** `POST /schedules/:id/change {text}`: the conversation the words went to; [created] is false when another device
+ * opened it meanwhile (the words were said in it, not lost). */
+data class ScheduleChangeAnswer(val sessionId: String, val created: Boolean) {
+    companion object {
+        fun parse(json: JsonElement?): ScheduleChangeAnswer? {
+            val o = json as? JsonObject ?: return null
+            return ScheduleChangeAnswer(o.scheduleText("sessionId") ?: return null, o.scheduleBool("created") ?: true)
         }
     }
 }
@@ -494,7 +590,7 @@ data class ScheduleRunAnswer(val run: ScheduleRunView) {
     }
 }
 
-/** `POST /schedules/:id/undo`: APPLIED, UNCHANGED or PENDING (a card, when undoing would widen). */
+/** `POST /schedules/:id/undo` and `…/rename`: APPLIED, UNCHANGED or PENDING (a card, when undoing would widen). */
 data class ScheduleUpdateAnswer(val outcome: String, val schedule: ScheduleView?, val card: ScheduleCard?) {
     companion object {
         fun parse(json: JsonElement?): ScheduleUpdateAnswer? {
@@ -504,18 +600,76 @@ data class ScheduleUpdateAnswer(val outcome: String, val schedule: ScheduleView?
     }
 }
 
-/** `GET /sessions/:id/schedule-cards`: the cards a conversation asked and the changes it made. */
+data class ScheduleRunTry(val sessionId: String, val startedAt: String, val claimed: Boolean, val reachedEngine: Boolean) {
+    companion object {
+        fun parse(json: JsonElement?): ScheduleRunTry? {
+            val o = json as? JsonObject ?: return null
+            return ScheduleRunTry(o.scheduleText("sessionId") ?: return null, o.scheduleText("startedAt") ?: return null,
+                o.scheduleBool("claimed") ?: return null, o.scheduleBool("reachedEngine") ?: return null)
+        }
+    }
+}
+
+data class ScheduleRunQueueGate(
+    val queuedReason: String,
+    val queuedActive: Int?,
+    val queuedLimit: Int?,
+    val queuedHeldByJobs: Int?,
+    val since: String,
+    val deadline: String,
+) {
+    companion object {
+        fun parse(json: JsonElement?): ScheduleRunQueueGate? {
+            val o = json as? JsonObject ?: return null
+            return ScheduleRunQueueGate(o.scheduleText("queuedReason") ?: return null, o.scheduleInt("queuedActive"),
+                o.scheduleInt("queuedLimit"), o.scheduleInt("queuedHeldByJobs"),
+                o.scheduleText("since") ?: return null, o.scheduleText("deadline") ?: return null)
+        }
+    }
+}
+
+data class ScheduleRunSessionStatus(
+    val tries: List<ScheduleRunTry>,
+    val thisTry: Int?,
+    val gaveUpAt: String?,
+    val notBeforeAt: String?,
+    val nextDueAt: String?,
+    val queue: ScheduleRunQueueGate?,
+) {
+    internal val currentTry: ScheduleRunTry? get() = thisTry?.takeIf { it > 0 }?.let { tries.getOrNull(it - 1) }
+
+    companion object {
+        fun parse(json: JsonElement?): ScheduleRunSessionStatus? {
+            val o = json as? JsonObject ?: return null
+            // thisTry indexes the original array, so dropping a malformed try would change its meaning.
+            val tries = (o["tries"] as? JsonArray)?.map { ScheduleRunTry.parse(it) ?: return null } ?: return null
+            return ScheduleRunSessionStatus(tries, o.scheduleInt("thisTry"), o.scheduleText("gaveUpAt"),
+                o.scheduleText("notBeforeAt"), o.scheduleText("nextDueAt"), ScheduleRunQueueGate.parse(o["queue"]))
+        }
+    }
+}
+
+/** `GET /sessions/:id/schedule-cards`: the cards a conversation asked, its changes, and its scheduled run. */
 data class SessionScheduleCardsResponse(
     /** A scheduled run's session: the run it serves, however old; null for any other session. */
     val run: ScheduleRunView? = null,
     val cards: List<ScheduleCard>,
     val records: List<ScheduleChangeRecord>,
+    /**
+     * A schedule's change conversation (§8.2): Orbit's opening, as the schedule was when it was opened, for its strip
+     * and its first message. Null on every other session (and on servers before it).
+     */
+    val change: ScheduleChangeOpening? = null,
+    val runStatus: ScheduleRunSessionStatus? = null,
 ) {
+    val statusKind: ScheduleRunStatusKind? get() = run?.let { ScheduleRunStatusDisplay.kind(it, runStatus) }
+
     companion object {
         fun parse(json: JsonElement?): SessionScheduleCardsResponse? {
             val o = json as? JsonObject ?: return null
             return SessionScheduleCardsResponse(ScheduleRunView.parse(o["run"]), o.scheduleList("cards", ScheduleCard::parse).orEmpty(),
-                o.scheduleList("records", ScheduleChangeRecord::parse).orEmpty())
+                o.scheduleList("records", ScheduleChangeRecord::parse).orEmpty(), ScheduleChangeOpening.parse(o["change"]),
+                ScheduleRunSessionStatus.parse(o["runStatus"]))
         }
     }
 }

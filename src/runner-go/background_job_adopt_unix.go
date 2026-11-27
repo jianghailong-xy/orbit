@@ -44,7 +44,7 @@ func (p *sessionPool) adoptRecordedJobs() {
 			logln(fmt.Sprintf("background %s %s of session %s exited (%d) while the runner re-executed; adopted to report its end",
 				rec.Kind, rec.JobID, rec.SessionID, exit))
 		} else {
-			p.holdWorktreeWriter(rec.SessionID, rec.JobID, bgHold{name: rec.JobID, runnerHosted: true, watch: rec.Kind == bgKindWatch || job.boundedLocked()})
+			p.holdWorktreeWriter(rec.SessionID, rec.JobID, bgHold{name: rec.JobID, runnerHosted: true, watch: rec.Kind == bgKindWatch})
 			logln(fmt.Sprintf("background %s %s of session %s (pid %d) adopted across the runner's re-exec",
 				rec.Kind, rec.JobID, rec.SessionID, rec.PID))
 		}
@@ -68,11 +68,7 @@ func adoptedJob(rec bgJobRecord) *bgJob {
 		// read of the tail this image starts is not mistaken for output written at the re-exec.
 		lastOutputAt, outputSeen = rec.StartedAt, outputSizeOf(rec.OutputPath)
 	}
-	var cg *bgJobCgroup
-	if rec.Limits != nil {
-		cg = adoptBgJobCgroup(rec.JobID)
-	}
-	job := &bgJob{
+	return &bgJob{
 		id:            rec.JobID,
 		kind:          rec.Kind,
 		command:       rec.Command,
@@ -92,27 +88,9 @@ func adoptedJob(rec bgJobRecord) *bgJob {
 		stallWakes:    rec.StallWakes,
 		stallWokenFor: rec.StallWokenFor,
 		recorded:      true,
-		limits:        rec.Limits,
-		limitsNote:    rec.LimitsNote,
+		kill:          func() { _ = terminateProcessTree(pid) },
+		reap:          func() int { return reapChild(pid) },
 	}
-	job.cgroup.Store(cg)
-	job.kill = func() {
-		_ = terminateProcessTree(pid)
-		cg.killAll()
-	}
-	job.reap = func() int {
-		code := reapChild(pid)
-		if cg != nil {
-			if f, err := os.OpenFile(rec.OutputPath, os.O_WRONLY|os.O_APPEND, 0); err == nil {
-				endBgJobCgroup(cg, rec.Limits, f)
-				f.Close()
-			} else {
-				endBgJobCgroup(cg, rec.Limits, nil)
-			}
-		}
-		return code
-	}
-	return job
 }
 
 // reapIfExited reaps the child pid if it has exited, with its exit code. An error means pid is not

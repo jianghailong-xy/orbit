@@ -35,7 +35,7 @@ public enum MenuBar {
     static func summary(_ g: SessionGroups, limit: Int = 8) -> MenuBarSummary {
         let items = (g.needsYou + g.running).prefix(limit).map(item)
         return MenuBarSummary(needsYou: g.needsYou.count,
-                              running: g.running.count,
+                              running: g.running.count + g.needsYou.filter { $0.phase == .running }.count,
                               queued: g.queued.count,
                               badge: badge(g.needsYou.count),
                               items: Array(items))
@@ -72,7 +72,8 @@ public enum MenuBar {
         // An idle recycle / user end settles CANCELLED just like a hard stop, so the raw
         // status would call a merely dormant session "Cancelled". Only `endReason` separates
         // them — defer to the reason-aware word rather than spell the rule out a third time.
-        case .cancelled: return SessionHeader.statusWord(for: s)
+        // An unknown status word resolves to the neutral ended run state; word it the same way.
+        case .cancelled, .unknown: return SessionHeader.statusWord(for: s)
         default: return s.effectiveRunStatus.rawValue.capitalized
         }
     }

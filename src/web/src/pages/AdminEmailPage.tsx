@@ -8,6 +8,7 @@ import { Input } from '../components/ui/Input';
 import { Spinner } from '../components/ui/Spinner';
 import { Switch } from '../components/ui/Switch';
 import { useToast } from '../lib/toast';
+import { Tooltip } from '../components/ui/Tooltip';
 
 type EmailMissing = 'SWITCH' | 'API_KEY' | 'FROM' | 'API_KEY_UNREADABLE';
 
@@ -226,15 +227,18 @@ export function AdminEmailPage() {
               )
             }
             control={
-              <Button
-                size="small"
-                onClick={() => sendTest.mutate()}
-                loading={sendTest.isPending}
-                disabled={changed || !settings.hasApiKey}
-                title={changed ? 'Save your changes first' : undefined}
-              >
-                Send test email
-              </Button>
+              <Tooltip content={changed ? 'Save your changes first' : undefined} align="end">
+                <span style={{ display: 'inline-flex' }}>
+                  <Button
+                    size="small"
+                    onClick={() => sendTest.mutate()}
+                    loading={sendTest.isPending}
+                    disabled={changed || !settings.hasApiKey}
+                  >
+                    Send test email
+                  </Button>
+                </span>
+              </Tooltip>
             }
           />
           <SettingsRow

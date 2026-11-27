@@ -75,6 +75,8 @@ class ManagementDeviceTest {
     @Volatile private var fleet: List<String>? = null
     /** The remote reports Antigravity's Google accounts and more accounts of Claude Code (A13c). */
     @Volatile private var accountsPass = false
+    /** GET account-health lists a refused Claude Code Default on the remote and a refused OpenAI key until Check again clears it. */
+    @Volatile private var accountHealthPass = false
     /** Default's Claude login lapses in two days until it is signed in again, then in a month. */
     @Volatile private var claudeRenewed = false
     /** The remote reports Kimi Code's accounts: Default alone on kimi.ai, or with Work on kimi.com ([kimiTwo]); [kimiOld] is a
@@ -294,6 +296,37 @@ class ManagementDeviceTest {
         }
     }
 
+    /** A blocked account's line and Check again on a machine's engine page and on a key's row, full screen, then cleared (contract §2, §4). */
+    @Test fun aBlockedAccountShowsItsLineAndCheckAgainOnTheRunnerPageAndOnAKey() {
+        start()
+        MockWebServer().use { server ->
+            server.dispatcher = dispatcher()
+            try {
+                role = "ADMIN"; runnerOnline = true; accountsPass = true; accountHealthPass = true
+                signIn(server); settings()
+                // The key row, under its engines, on Providers.
+                click(hasText("Providers") and hasClickAction())
+                await("OpenAI (work)")
+                compose.onAllNodesWithText("Incorrect API key provided", substring = true).onFirst().performScrollTo()
+                await("Incorrect API key provided")
+                capture("blocked-key-row")
+                back()
+                click(hasText("Machines") and hasClickAction()); await("Controlled remote")
+                click(hasText("Controlled remote") and hasClickAction()); await("Max Concurrent")
+                click(hasText("Claude Code") and hasClickAction())
+                await("Needs action · Claude Code said \"Your credit balance is too low\"")
+                capture("blocked-runner-page")
+                click(hasText("Check again") and hasClickAction())
+                compose.waitUntil(10_000) { calls.contains("POST /api/account-health/h-claude/check") }
+                compose.waitUntil(20_000) { compose.onAllNodesWithText("Needs action ·", substring = true).fetchSemanticsNodes().isEmpty() }
+                capture("blocked-runner-page-cleared")
+            } finally {
+                accountsPass = false; accountHealthPass = false
+                runBlocking { app.session.logout() }
+            }
+        }
+    }
+
     /**
      * A13c: Antigravity's Google sign-in and accounts, one quota window per Engines row, an account's row and menu, and the
      * sign-in card (A13-3/4/5/9), through the real shell over controlled HTTP. The card's Paste reads the clipboard, which
@@ -487,11 +520,11 @@ class ManagementDeviceTest {
                 signIn(server); settings()
                 await("2 active")
                 // Smart model selection is on Sessions' page (docs/mocks/ios-settings-order).
-                click(hasText("Sessions") and hasClickAction()); await("Smart model selection")
+                click(hasText("Sessions") and hasClickAction()); await("Route by tier")
                 capture("a13d-settings-sessions")
-                click(hasText("Smart model selection") and isToggleable())
+                click(hasText("Route by tier") and isToggleable())
                 compose.waitUntil(10_000) { modelRouting == true }
-                compose.waitUntil(10_000) { runCatching { compose.onNode(hasText("Smart model selection") and isToggleable()).assertIsOn() }.isSuccess }
+                compose.waitUntil(10_000) { runCatching { compose.onNode(hasText("Route by tier") and isToggleable()).assertIsOn() }.isSuccess }
                 capture("a13d-smart-selection-on")
                 back(); await("Appearance")
                 compose.onAllNodesWithText("Access tokens").onFirst().performScrollTo()
@@ -1279,7 +1312,7 @@ class ManagementDeviceTest {
           {"engine":"codex","installed":true,"version":"codex-cli 0.158.0","auth":"yes"},{"engine":"kimi","installed":false}],
         "planUsage":{"claude":{"fiveHour":{"utilization":42,"resetsAt":"${now.plusSeconds(7200)}"},"sevenDay":{"utilization":91,"resetsAt":"${now.plusSeconds(3 * 86400)}"}}},"install":null}"""
     private fun workspace() = """{"id":"$workspaceId","name":"$workspaceName","runnerId":"$runnerId","enabled":true,"workDir":"/home/ci/fixture","lastProvider":"claude",
-        "effort":"","modelRouting":false,"env":{"NODE_ENV":"test"},"workDirFreeBytes":"5368709120","workDirTotalBytes":"107374182400",
+        "effort":"","env":{"NODE_ENV":"test"},"workDirFreeBytes":"5368709120","workDirTotalBytes":"107374182400",
         "repoHealth":{"root":"/home/ci/fixture","state":"rebase","branch":"feature/x"},"position":0,"createdAt":"2026-09-01T10:00:00Z"}"""
     private fun session() = """{"id":"$sessionId","title":"Fixture session","status":"SUCCEEDED","lifecycleState":"OPEN","workspaceId":"$workspaceId","agentId":"$workspaceId",
         "createdAt":"${now.minusSeconds(600)}","lastTurnAt":"${now.minusSeconds(300)}","pendingApprovals":0}"""
@@ -1392,6 +1425,14 @@ class ManagementDeviceTest {
                 "/api/sessions/counts" -> """[{"workspaceId":"$workspaceId","active":1,"running":1,"jobs":0,"needsYou":0}]"""
                 "/api/providers" -> """[{"slug":"deepseek","label":"DeepSeek","runtime":"claude","defaultModel":"deepseek-chat"},{"slug":"dsh","label":"DeepSeek Harness","runtime":"dsh"},
                     {"slug":"openai-work","label":"OpenAI (work)","defaultModel":"gpt-5"}]"""
+                "/api/account-health" -> if (accountHealthPass) """{"blocks":[
+                    {"id":"h-claude","runnerId":"$runnerId","engine":"claude","account":"default","providerId":null,"poolId":null,"scopeModel":"",
+                     "kind":"ACCOUNT_ACTION_REQUIRED","said":"Your credit balance is too low","trips":1,"since":"${now.minusSeconds(3 * 3600)}","nextTrialAt":"${now.plusSeconds(3600)}",
+                     "trialRunning":false,"line":""},
+                    {"id":"h-key","runnerId":null,"engine":null,"account":null,"providerId":"K3","poolId":null,"scopeModel":"",
+                     "kind":"CREDENTIAL_REFUSED","said":"Incorrect API key provided","trips":1,"since":"${now.minusSeconds(2 * 3600)}","nextTrialAt":"${now.plusSeconds(7200)}",
+                     "trialRunning":false,"line":"Needs action · OpenAI said \"Incorrect API key provided\""}]}""" else """{"blocks":[]}"""
+                "/api/account-health/h-claude/check", "/api/account-health/h-key/check" -> { accountHealthPass = false; """{"cleared":1}""" }
                 "/api/providers/mine" -> mine()
                 "/api/access-tokens" -> tokens()
                 "/api/providers/pools" -> pools()

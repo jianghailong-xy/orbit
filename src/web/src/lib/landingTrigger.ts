@@ -12,6 +12,8 @@ export const LANDING_TRIGGER_COPY = {
   FROM_COORDINATOR_RERUN: 'From the coordinator · Rerun',
   FROM_YOU_RERUN: 'From you · Rerun',
   FROM_ORBIT_RERUN: 'From Orbit · Rerun',
+  /** Revision 42 (W7): the task's own session fixed its failed landing, and this attempt lands the fix. */
+  FROM_TASK_SESSION_FIX: 'From the task’s session · Fix',
   FROM_ORBIT: 'From Orbit',
   FROM_AUTOMATIC: 'From Automatic',
   FROM_YOU: 'From you',
@@ -58,6 +60,7 @@ export function triggerMessage(trigger: IntegrationTimelineTrigger, context: {
     case 'DONE':
       return { from: C.FROM_TASK_DONE, parts: land() };
     case 'RETRY': {
+      if (trigger.by === 'TASK') return { from: C.FROM_TASK_SESSION_FIX, parts: land() };
       const from = trigger.by === 'COORDINATOR' ? C.FROM_COORDINATOR_RERUN
         : trigger.by === 'OWNER' ? C.FROM_YOU_RERUN : C.FROM_ORBIT_RERUN;
       return { from, parts: trigger.reason ? [plain(trigger.reason)] : land() };

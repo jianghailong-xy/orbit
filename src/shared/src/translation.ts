@@ -484,6 +484,8 @@ export interface OwnerCardTranslation {
   steps?: Array<{ text?: string }>;
   /** An owner request's `verifyHint`. */
   verifyHint?: string;
+  /** A PROJECT_REOPEN request's `payload.plannedWork`. */
+  plannedWork?: string;
   /** A START_REQUEST's `why` uses `why` above. A DONE_REQUEST's `judgment`, or an owner-confirmation
    *  review's `judgment`. */
   judgment?: string;
@@ -498,6 +500,23 @@ export interface OwnerCardTranslation {
   /** A criteria-change proposal's `proposed`, index for index: each criterion's `text` and
    *  `verificationMethod`. */
   proposed?: Array<{ text?: string; verificationMethod?: string }>;
+}
+
+/**
+ * A project's title and its acceptance criteria's text in the owner's language (`translation` on `GET /projects/:id`):
+ * what the "Is this project done?" card, the project page's Done when list and the why-not-done card draw. Served only
+ * in the owner's current language, while it matches the project's current title and criteria, and with translation
+ * on; otherwise absent, and the server queues a new one. Stored in project_text_translation; the project's own fields
+ * stay exactly what the agent wrote. A criterion's `verificationMethod` is not translated.
+ */
+export interface ProjectTextTranslation {
+  lang: TranslationLanguage;
+  /** The project's words could not be translated: draw them as the agent wrote them. Nothing else is set. */
+  failed?: true;
+  /** The project's `title`. */
+  title?: string;
+  /** Each criterion's `text`, keyed by the criterion's `id` (`acceptanceCriteriaItems[].id`), in ordinal order. */
+  criteria?: Array<{ id: string; text: string }>;
 }
 
 /**

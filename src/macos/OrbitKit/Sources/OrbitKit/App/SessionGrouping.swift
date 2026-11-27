@@ -19,7 +19,8 @@ public enum SessionGrouping {
     /// Bucket the Open snapshot's actionable sessions, preserving input order within each bucket.
     /// `needsYou` = has pending approvals, or carries one of the four owner items (§7.6 V13) — but
     /// not when all it counts is a project ready to start (`countsOnlyAStart`);
-    /// `running` = otherwise live (running / awaiting / interrupted); `queued` = QUEUED.
+    /// `running` and `queued` use the server phase when available.
+    /// An older server's live (running / awaiting / interrupted) rows still count as running.
     /// Terminal/dormant sessions are excluded from these buckets.
     /// All live sessions are grouped here because the separate System list has been removed.
     public static func group(_ sessions: [Session]) -> SessionGroups {
@@ -47,7 +48,15 @@ public enum SessionGrouping {
         // an older snapshot, because the item itself is the evidence that somebody is waiting.
         if ((s.pendingApprovals ?? 0) > 0 && !countsOnlyAStart(s)) || !(s.ownerItems ?? []).isEmpty {
             return .needsYou
-        } else if s.effectiveRunState == .queued {
+        }
+        if let phase = s.phase {
+            switch phase {
+            case .pending: return .queued
+            case .running: return .running
+            case .idle: return nil
+            }
+        }
+        if s.effectiveRunState == .queued {
             return .queued
         } else if s.effectiveRunState.isLive {
             return .running

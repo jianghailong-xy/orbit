@@ -87,7 +87,7 @@ const prisma: Record<string, unknown> = {
       // offline (no heartbeat for a day).
       if (include && where.id === TARGET) {
         return {
-          id: TARGET, ownerId: RUNNER.ownerId, sessionKind: null, status: 'SUCCEEDED', endReason: null,
+          id: TARGET, ownerId: RUNNER.ownerId, sessionKind: null, status: 'SUCCEEDED', finishedAt: new Date(), endReason: null,
           wikiChatSpaceId: null, taskId: null, startsTaskWork: false, provider: 'claude', engine: null,
           numTurns: 1, runtimeSessionId: randomUUID(), startedAt: new Date(Date.now() - 86_400_000),
           cancelRequestedAt: null, deletedAt: null, completedAt: null, archivedAt: null,

@@ -8,10 +8,10 @@ import { JwtService } from '@nestjs/jwt';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { uuidToBase62 } from '@orbit/shared';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -27,6 +27,8 @@ import { AutoRetryService } from './auto-retry.service';
 import { MergeReceiptService } from './merge-receipt.service';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
+import { turnStateOfWord } from './session-turn-state';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 /**
  * A message sent into a run the task has already replaced, against a real PostgreSQL.
@@ -175,12 +177,13 @@ async function fixture(
       ...common,
       id: replaced,
       title: `${label}-replaced`,
-      status: RunStatus.FAILED,
+      // Released by a failure: the turn outcome records it (design §12.1), which is what makes its word FAILED.
+      turnState: null, lastTurnOutcome: 'FAILED',
       finishedAt: new Date(),
     },
   });
   await db.session.create({
-    data: { ...common, id: holder, title: `${label}-holder`, status: holderStatus },
+    data: { ...common, id: holder, title: `${label}-holder`, turnState: turnStateOfWord(holderStatus) },
   });
   return { ownerId, taskId, replaced, holder, sameRuntime, crossRuntime };
 }
@@ -202,7 +205,7 @@ async function turnsFor(db: PrismaClient, clientTurnId: string): Promise<string[
 async function sessionRow(db: PrismaClient, id: string) {
   return db.session.findUniqueOrThrow({
     where: { id },
-    select: { status: true, provider: true, providerBuiltin: true, cancelRequestedAt: true },
+    select: { ...WORD_SELECT, provider: true, providerBuiltin: true, cancelRequestedAt: true },
   });
 }
 
@@ -229,9 +232,9 @@ test('a message to a replaced run lands on the run that holds the claim, and say
         'the turn belongs to the run that holds the claim, and to nothing else');
 
       const replaced = await sessionRow(db, f.replaced);
-      assert.equal(replaced.status, RunStatus.FAILED, 'the replaced run is not revived behind this');
+      assert.equal(wordOf(replaced), RunStatus.FAILED, 'the replaced run is not revived behind this');
       const holder = await sessionRow(db, f.holder);
-      assert.equal(holder.status, RunStatus.RUNNING);
+      assert.equal(wordOf(holder), RunStatus.RUNNING);
       // Rule 2, in the case nobody asked for anything: a message with no provider in it is not an
       // instruction to stop what is going.
       assert.equal(holder.cancelRequestedAt, null, 'nothing authorised stopping the run that is going');
@@ -257,7 +260,7 @@ test('naming the provider the current run is already on is not a switch',
       const holder = await sessionRow(db, f.holder);
       assert.equal(holder.cancelRequestedAt, null,
         'the provider they chose is the one already running: there is nothing to stop');
-      assert.equal(holder.status, RunStatus.RUNNING);
+      assert.equal(wordOf(holder), RunStatus.RUNNING);
     } finally {
       await db.$disconnect();
     }
@@ -296,7 +299,7 @@ test('another provider asks for a confirmation, structurally, before anything is
 
       const holder = await sessionRow(db, f.holder);
       assert.equal(holder.cancelRequestedAt, null, 'an unconfirmed ask stops nothing');
-      assert.equal(holder.status, RunStatus.PENDING);
+      assert.equal(wordOf(holder), RunStatus.PENDING);
       assert.equal(holder.provider, 'claude', 'and it certainly does not move a running provider');
       assert.deepEqual(await turnsFor(db, dto.clientTurnId), [],
         'nothing was delivered on a question that has not been answered');
@@ -320,14 +323,14 @@ test('the confirmed switch stops the current run and continues this message on t
       assert.equal(answer.revived, true, 'this message opened a round of its own');
       const holder = await sessionRow(db, f.holder);
       assert.ok(holder.cancelRequestedAt, 'the run that was going has been stopped');
-      assert.equal(holder.status, RunStatus.CANCELLED);
+      assert.equal(wordOf(holder), RunStatus.CANCELLED);
       assert.equal(holder.provider, 'claude',
         'stopped, not rewritten: a run keeps the provider it ran on');
 
       const continued = await sessionRow(db, f.replaced);
       assert.equal(continued.provider, f.sameRuntime, 'the round continuing is on the chosen provider');
       assert.equal(continued.providerBuiltin, false);
-      assert.equal(continued.status, RunStatus.PENDING, 'and it is live again');
+      assert.equal(wordOf(continued), RunStatus.PENDING, 'and it is live again');
       assert.deepEqual(await turnsFor(db, dto.clientTurnId), [f.replaced],
         'the message is the opening of that round');
     } finally {
@@ -367,7 +370,7 @@ test('a run that has to wind down keeps the message honest: the stop lands, the 
       // What the runner does when it has finished winding the process down.
       await db.session.update({
         where: { id: f.holder },
-        data: { status: RunStatus.CANCELLED, finishedAt: new Date() },
+        data: { turnState: null, finishedAt: new Date() },
       });
 
       const answer = await sessions.resume(f.ownerId, f.replaced, dto as never, {
@@ -405,7 +408,7 @@ test('a provider on another runtime is refused, and nothing is stopped for it',
       const holder = await sessionRow(db, f.holder);
       assert.equal(holder.cancelRequestedAt, null,
         'a switch that can never happen must not cost a running run');
-      assert.equal(holder.status, RunStatus.PENDING);
+      assert.equal(wordOf(holder), RunStatus.PENDING);
       assert.equal((await sessionRow(db, f.replaced)).provider, 'claude');
       assert.deepEqual(await turnsFor(db, dto.clientTurnId), []);
     } finally {
@@ -574,7 +577,7 @@ test('a person\'s confirmed switch over the door stops the run in the way and co
       // A question is not an authorisation: nothing was stopped and nothing was delivered.
       const asked2 = await sessionRow(db, f.holder);
       assert.equal(asked2.cancelRequestedAt, null);
-      assert.equal(asked2.status, RunStatus.PENDING);
+      assert.equal(wordOf(asked2), RunStatus.PENDING);
       assert.deepEqual(await turnsFor(db, dto.clientTurnId), []);
 
       // 2. The answer, made exactly as `docs/session-message-routing-contract.md` §2.2 tells a
@@ -590,13 +593,13 @@ test('a person\'s confirmed switch over the door stops the run in the way and co
       // provider it ran on (rule 1).
       const stopped = await sessionRow(db, f.holder);
       assert.ok(stopped.cancelRequestedAt, 'the run in the way was stopped');
-      assert.equal(stopped.status, RunStatus.CANCELLED);
+      assert.equal(wordOf(stopped), RunStatus.CANCELLED);
       assert.equal(stopped.provider, 'claude');
 
       // The round continuing the message is on the provider the person chose…
       const continued = await sessionRow(db, f.replaced);
       assert.equal(continued.provider, f.sameRuntime);
-      assert.equal(continued.status, RunStatus.PENDING);
+      assert.equal(wordOf(continued), RunStatus.PENDING);
       // …and this message, delivered to it and to nothing else, is its opening.
       assert.deepEqual(await turnsFor(db, dto.clientTurnId), [f.replaced]);
     } finally {
@@ -625,12 +628,12 @@ test('the door stops nothing for a message that names no provider, or the one al
 
         const holder = await sessionRow(db, f.holder);
         assert.equal(holder.cancelRequestedAt, null, `${which}: nothing authorised a stop`);
-        assert.equal(holder.status, RunStatus.RUNNING, which);
+        assert.equal(wordOf(holder), RunStatus.RUNNING, which);
         assert.equal(holder.provider, 'claude', which);
       }
       // …and the run the person was looking at was not revived behind the message either: it is
       // still the ended row it was, with the work carried on in the run that holds the task.
-      assert.equal((await sessionRow(db, f.replaced)).status, RunStatus.FAILED);
+      assert.equal(wordOf((await sessionRow(db, f.replaced))), RunStatus.FAILED);
     } finally {
       await door.close();
       await db.$disconnect();

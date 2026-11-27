@@ -277,6 +277,9 @@ func prepareCursorLaunch(job *ClaimedSession, execDir, exe, dir string) (CursorL
 		"ORBIT_ALLOW_ORCHESTRATION":      orchestrationEnv(job.AllowOrchestration),
 		envWatches:                       watchesEnv(job.WatchesDisabled),
 		envWiki:                          wikiEnv(job.WikiDisabled),
+		envDocuments:                     documentsEnv(job.DocumentsDisabled),
+		envBrowser:                       browserEnv(job.BrowserEnabled),
+		envWorkflows:                     workflowsEnv(job.WorkflowsDisabled),
 		envScheduleRun:                   scheduleRunEnv(job.ScheduleRun),
 		envSpawnDepth:                    strconv.Itoa(job.SpawnDepth),
 	}
@@ -296,6 +299,8 @@ func prepareCursorLaunch(job *ClaimedSession, execDir, exe, dir string) (CursorL
 		}
 		spec.Env = append(kept, credential+"="+value)
 	}
+	// On the Orbit Cloud runner with the browser on, a tool the agent runs opens its pages there (browser_opener.go).
+	spec.Env = browserOpenerEnv(spec.Env, job.BrowserEnabled)
 	if err := prepareCursorShellSandbox(job, &spec, dir); err != nil {
 		return CursorLaunchSpec{}, fmt.Errorf("CURSOR_CONFIG_CONFLICT: cannot prepare Auto sandbox: %w", err)
 	}

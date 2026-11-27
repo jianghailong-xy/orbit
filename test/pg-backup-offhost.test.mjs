@@ -122,7 +122,9 @@ function fingerprint(dir) {
  * With `server` the target is reached through a stand-in ssh that runs the far side's real rsync, printing OpenSSH's warning first
  * if `server.warns`. `locked`, given the directories, names a directory of the target and the mode it has for the length of each poll.
  */
-function round({ prepare, system = CLUSTER, due = [], database = 'up', interval = 86_400, rsyncFailsOn = null, cut = null, server = null, locked = null }) {
+function round({ prepare, system = CLUSTER, due = [], database = 'up', interval = 86_400, rsyncFailsOn = null, cut = null, server = null, locked = null, mirror = false, bucketCopyFails = false, database_container = null, archiver = 'f|-|0', target = undefined, legacyNames = false }) {
+  // The settings' names, or their older names (`legacyNames: 'documents'` for ORBIT_DOCUMENTS_*, true for ORBIT_FILES_*), which the script still reads.
+  const S = legacyNames === 'documents' ? 'ORBIT_DOCUMENTS_' : legacyNames ? 'ORBIT_FILES_' : 'ORBIT_DRIVE_';
   // The far side has to reach this directory as the unprivileged account when this runs as root, so not through a private TMPDIR.
   const scratch = mkdtempSync(path.join(AS_ROOT ? '/tmp' : tmpdir(), 'pg-backup-offhost-'));
   try {
@@ -131,6 +133,7 @@ function round({ prepare, system = CLUSTER, due = [], database = 'up', interval 
       files: path.join(scratch, 'files'),
       target: path.join(scratch, 'backup-host', 'orbit-pg-archive'),
       filesTarget: path.join(scratch, 'backup-host', 'orbit-pg-archive-files'),
+      bucketTarget: path.join(scratch, 'backup-host', 'orbit-pg-archive-bucket'),
       tmp: path.join(scratch, 'tmp'),
     };
     mkdirSync(path.join(dirs.archive, 'base'), { recursive: true });
@@ -153,12 +156,16 @@ function round({ prepare, system = CLUSTER, due = [], database = 'up', interval 
       psql: `printf '%s\\n' "$*" >> '${queries}'
 case "$*" in
   *system_identifier*) [ '${database}' = up ] && echo ${system} || { echo 'could not connect to server' >&2; exit 2; } ;;
-  *file_blob*) [ '${database}' = up ] || { echo 'could not connect to server' >&2; exit 2; }; printf '%s\\n' ${due.map((name) => `'${name}'`).join(' ') || "''"} ;;
+  *pg_stat_archiver*) ${archiver === null ? "echo 'could not connect to server' >&2; exit 2" : `echo '${archiver}'`} ;;
+  *file_blob*) ${database_container
+    ? `exec docker exec -i '${database_container}' psql -U postgres "$@" ;;`
+    : `[ '${database}' = up ] || { echo 'could not connect to server' >&2; exit 2; }; printf '%s\\n' ${due.map((name) => `'${name}'`).join(' ') || "''"} ;;`}
   *) echo 0 ;;
 esac`,
       // A base backup is taken at the start of the round only when none is recent, which `prepare` decides.
       pg_basebackup: 'for arg; do case "$arg" in --pgdata=*) mkdir -p "${arg#--pgdata=}"; echo backup > "${arg#--pgdata=}/base.tar.gz" ;; esac; done',
       pg_archivecleanup: ':',
+      rclone: bucketCopyFails ? 'exit 1' : ':',
       ssh: server ? `while [ $# -gt 0 ]; do case "$1" in -p|-i|-o|-l) shift 2 ;; -*) shift ;; *) break ;; esac; done
 shift
 ${server.warns ? SSH_WARNING.map((line) => `printf '%s\\r\\n' '${line}' >&2`).join('\n') : ''}
@@ -181,10 +188,17 @@ exec '${realRsync}' "$@"`,
           PATH: `${stubs}:${process.env.PATH}`,
           TMPDIR: dirs.tmp,
           ORBIT_ARCHIVE_DIR: dirs.archive,
-          ORBIT_FILES_DIR: dirs.files,
-          ORBIT_BACKUP_SYNC_TARGET: server ? `backup-host:${dirs.target}` : dirs.target,
+          [`${S}DIR`]: dirs.files,
+          ORBIT_BACKUP_SYNC_TARGET: target !== undefined ? target : server ? `backup-host:${dirs.target}` : dirs.target,
           ORBIT_BACKUP_MIN_FREE_MB: '0',
           ORBIT_BASE_BACKUP_INTERVAL: String(interval),
+          ...(mirror ? {
+            [`${S}S3_MIRROR`]: '1',
+            [`${S}S3_ENDPOINT`]: 'http://127.0.0.1:9',
+            [`${S}S3_BUCKET`]: 'orbit',
+            [`${S}S3_ACCESS_KEY_ID`]: 'key',
+            [`${S}S3_SECRET_ACCESS_KEY`]: 'secret',
+          } : {}),
         },
         timeout: 30_000,
       });
@@ -203,14 +217,22 @@ exec '${realRsync}' "$@"`,
       cutShort = { log, mirror: fingerprint(dirs.target) };
       cut.then?.(dirs);
     }
-    const before = { mirror: fingerprint(dirs.target), copy: fingerprint(dirs.filesTarget) };
+    const before = { mirror: fingerprint(dirs.target), copy: fingerprint(dirs.filesTarget), bucket: fingerprint(dirs.bucketTarget) };
     const log = poll();
     return {
       log,
       cutShort,
       before,
-      after: { mirror: fingerprint(dirs.target), copy: fingerprint(dirs.filesTarget) },
-      archive: fingerprint(dirs.archive),
+      after: { mirror: fingerprint(dirs.target), copy: fingerprint(dirs.filesTarget), bucket: fingerprint(dirs.bucketTarget) },
+      // Without metrics/, the textfile node-exporter reads, which is this host's and never mirrored.
+      archive: fingerprint(dirs.archive).filter((line) => !line.startsWith('metrics/')),
+      metrics: existsSync(path.join(dirs.archive, 'metrics', 'pgbackup.prom'))
+        ? readFileSync(path.join(dirs.archive, 'metrics', 'pgbackup.prom'), 'utf8') : null,
+      metricsFiles: existsSync(path.join(dirs.archive, 'metrics')) ? readdirSync(path.join(dirs.archive, 'metrics')) : [],
+      newestBaseTime: (() => {
+        const bases = readdirSync(path.join(dirs.archive, 'base')).filter((name) => /^[0-9]{8}T[0-9]{6}Z$/.test(name)).sort();
+        return bases.length ? Math.floor(statSync(path.join(dirs.archive, 'base', bases.at(-1))).mtimeMs / 1000) : 0;
+      })(),
       queries: existsSync(queries) ? readFileSync(queries, 'utf8') : '',
       rsyncCalls: existsSync(rsyncCalls) ? readFileSync(rsyncCalls, 'utf8').trim().split('\n') : [],
       dirs,
@@ -945,6 +967,8 @@ test('and another cluster\'s mirror is refused over ssh as it is anywhere else, 
 /** A mirror and a files copy that already are this archive and these files, so that a round has nothing to change on either. */
 const nothingToChange = ({ archive, target, files, filesTarget }) => {
   archiveIn(archive);
+  // As on any poll after the first: the textfile's directory is there, so writing it leaves the archive's own time alone.
+  mkdirSync(path.join(archive, 'metrics'));
   mkdirSync(path.join(files, 'ab'));
   writeFileSync(path.join(files, 'ab', 'ab'.repeat(32)), 'bytes');
   execFileSync('rsync', ['-a', `${archive}/`, `${target}/`]);
@@ -987,7 +1011,7 @@ test('a target in step is asked what it always was: its two listings and one seg
     `--list-only ${archive}/wal/`,
     `--timeout=600 -e ssh ${target}/wal/<smallest> <scratch>`,
     `--list-only -r ${archive}/base/`,
-    `-a --delete --timeout=600 --itemize-changes --exclude .staging-* -e ssh ${archive}/ ${target}/`,
+    `-a --delete --timeout=600 --itemize-changes --exclude .staging-* --exclude /metrics/ -e ssh ${archive}/ ${target}/`,
   ]);
 });
 
@@ -1176,4 +1200,177 @@ test('a name that is not a sha256 is not a name: a database cannot aim this anyw
   assert.equal(onCopy(result).includes(inCopy(name)), true, result.log);
   assert.equal(onCopy(result).includes(inCopy(NAME('b'))), true, result.log);
   assert.doesNotMatch(result.log, /pruned/);
+});
+
+// ── The bucket's mirror (ORBIT_DRIVE_S3_MIRROR=1) ───────────────────────────────────────────────────────────────────
+
+/** A mirror that takes this archive, and a bucket mirror holding these names; the local directory holds `local`. */
+function prepareBucket(names, local = [NAME('f')]) {
+  return (dirs) => {
+    prepareCopy([], local)(dirs);
+    for (const name of names) {
+      mkdirSync(path.join(dirs.bucketTarget, name.slice(0, 2)), { recursive: true });
+      writeFileSync(path.join(dirs.bucketTarget, name.slice(0, 2), name), `bytes of ${name}`);
+    }
+  };
+}
+const onBucket = (result) => (result.after.bucket ?? []).map((line) => line.split(' ')[0]);
+
+test('with the bucket mirrored, a name the database says is due leaves it, and the rest stays', () => {
+  const [gone, neighbour] = [`aa${'1'.repeat(62)}`, `aa${'2'.repeat(62)}`];
+  const result = round({ mirror: true, due: [gone], prepare: prepareBucket([gone, neighbour]) });
+  assert.deepEqual(onBucket(result), [inCopy(neighbour)], result.log);
+  assert.match(result.log, /pruned 1 file\(s\) from .*-bucket/);
+});
+
+test('a host .env from before the Documents rename (ORBIT_FILES_DIR, ORBIT_FILES_S3_*) mirrors and prunes the same', () => {
+  const [gone, neighbour] = [`aa${'1'.repeat(62)}`, `aa${'2'.repeat(62)}`];
+  const result = round({ mirror: true, legacyNames: true, due: [gone], prepare: prepareBucket([gone, neighbour]) });
+  assert.deepEqual(onBucket(result), [inCopy(neighbour)], result.log);
+  assert.match(result.log, /pruned 1 file\(s\) from .*-bucket/);
+});
+
+test('a host .env from the Documents days (ORBIT_DOCUMENTS_DIR, ORBIT_DOCUMENTS_S3_*) mirrors and prunes the same', () => {
+  const [gone, neighbour] = [`aa${'1'.repeat(62)}`, `aa${'2'.repeat(62)}`];
+  const result = round({ mirror: true, legacyNames: 'documents', due: [gone], prepare: prepareBucket([gone, neighbour]) });
+  assert.deepEqual(onBucket(result), [inCopy(neighbour)], result.log);
+  assert.match(result.log, /pruned 1 file\(s\) from .*-bucket/);
+});
+
+test('a name not yet due is not in the due list, so the bucket mirror keeps it through its grace period', () => {
+  const [early] = [NAME('a')];
+  const result = round({ mirror: true, due: [], prepare: prepareBucket([early]) });
+  assert.deepEqual(onBucket(result), [inCopy(early)], result.log);
+  assert.doesNotMatch(result.log, /pruned/);
+});
+
+test('without ORBIT_DRIVE_S3_MIRROR=1 the bucket mirror is left alone, whatever is due', () => {
+  const gone = NAME('a');
+  const result = round({ due: [gone], prepare: prepareBucket([gone]) });
+  assert.deepEqual(onBucket(result), [inCopy(gone)], result.log);
+  assert.doesNotMatch(result.log, /-bucket/);
+});
+
+test('a failed bucket copy leaves the bucket mirror alone even when pruning is due', () => {
+  const gone = NAME('a');
+  const result = round({ mirror: true, bucketCopyFails: true, due: [gone], prepare: prepareBucket([gone]) });
+  assert.deepEqual(onBucket(result), [inCopy(gone)], result.log);
+  assert.match(result.log, /ERROR: copying the bucket .* failed/);
+  assert.doesNotMatch(result.queries, /storage = 's3'/);
+});
+
+test('an empty local directory does not stop the bucket mirror pruning, which is not a copy of it', () => {
+  const gone = NAME('a');
+  const result = round({ mirror: true, due: [gone], prepare: prepareBucket([gone], []) });
+  assert.deepEqual(onBucket(result), [], result.log);
+  assert.match(result.log, /ERROR: refusing to prune .*-files.*is empty or not mounted/);
+});
+
+test('a database it cannot read prunes nothing from the bucket mirror either', () => {
+  const gone = NAME('a');
+  const result = round({ mirror: true, database: 'down', due: [gone], prepare: prepareBucket([gone]) });
+  assert.deepEqual(onBucket(result), [inCopy(gone)], result.log);
+});
+
+test('against a real Postgres, the bucket mirror loses the object whose off_host_prune_at has passed and keeps the one not yet due', () => {
+  const name = `pgbackup-bucket-${process.pid}`;
+  const [due, notYet, local] = [NAME('d'), NAME('e'), NAME('f')];
+  const docker = (...args) => execFileSync('docker', args, { encoding: 'utf8' });
+  docker('run', '-d', '--rm', '--name', name, '-e', 'POSTGRES_PASSWORD=x', 'postgres:16-alpine');
+  try {
+    let ready = false;
+    for (let i = 0; i < 60 && !ready; i += 1) {
+      ready = spawnSync('docker', ['exec', name, 'pg_isready', '-h', '127.0.0.1', '-U', 'postgres']).status === 0;
+      if (!ready) spawnSync('sleep', ['1']);
+    }
+    assert.ok(ready, 'the throwaway Postgres came up');
+    const sql = (statement) => docker('exec', name, 'psql', '-h', '127.0.0.1', '-U', 'postgres', '-v', 'ON_ERROR_STOP=1', '-c', statement);
+    sql('create database orbit');
+    const inOrbit = (statement) => docker('exec', name, 'psql', '-h', '127.0.0.1', '-U', 'postgres', '-d', 'orbit', '-v', 'ON_ERROR_STOP=1', '-c', statement);
+    inOrbit('create table file_blob (sha256 text primary key, storage text not null, off_host_prune_at timestamp)');
+    inOrbit(`insert into file_blob values
+      ('${due}', 's3', now() at time zone 'utc' - interval '1 day'),
+      ('${notYet}', 's3', now() at time zone 'utc' + interval '3 days'),
+      ('${local}', 'local', now() at time zone 'utc' - interval '1 day')`);
+    const result = round({ mirror: true, database_container: name, prepare: prepareBucket([due, notYet, local]) });
+    assert.deepEqual(onBucket(result), [inCopy(notYet), inCopy(local)], result.log);
+    assert.match(result.log, /pruned 1 file\(s\) from .*-bucket/);
+  } finally {
+    spawnSync('docker', ['rm', '-f', name]);
+  }
+});
+
+// ── The textfile node-exporter reads ───────────────────────────────────────────────────────────────────────────────
+
+/** The value of one sample in the textfile, or undefined when it is not there. */
+function sample(text, name) {
+  const line = text.split('\n').find((one) => one.startsWith(`${name} `));
+  return line === undefined ? undefined : Number(line.slice(name.length + 1));
+}
+
+test('each poll writes the textfile: the interval, the newest base backup, WAL archiving and the mirror', () => {
+  const result = round({ interval: 43_200, prepare: ({ archive }) => archiveIn(archive) });
+  mirrored(result);
+  const text = result.metrics;
+  assert.ok(text, `no textfile: ${result.log}`);
+  assert.equal(sample(text, 'orbit_backup_base_interval_seconds'), 43_200);
+  assert.equal(sample(text, 'orbit_backup_base_last_success_timestamp_seconds'), result.newestBaseTime);
+  assert.ok(result.newestBaseTime > Date.parse('2026-01-02') / 1000, 'the time of the newest base backup in the archive');
+  assert.equal(sample(text, 'orbit_backup_wal_archive_failures_total'), 0);
+  assert.equal(sample(text, 'orbit_backup_wal_archive_failing'), 0);
+  for (const copy of ['archive', 'files', 'bucket']) {
+    assert.equal(sample(text, `orbit_backup_mirror_failures_total{copy="${copy}"}`), 0, copy);
+  }
+  // One HELP and one TYPE per family, a counter's name ending in _total, every line a comment or a sample.
+  for (const line of text.trim().split('\n')) {
+    assert.match(line, /^(?:# (?:HELP|TYPE) orbit_backup_[a-z_]+ .+|orbit_backup_[a-z_]+(?:\{copy="(?:archive|files|bucket)"\})? [0-9]+)$/, line);
+  }
+  assert.deepEqual(result.metricsFiles, ['pgbackup.prom'], 'written whole and renamed: no temporary file is left');
+  assert.ok(!result.after.mirror.some((line) => line.startsWith('metrics/')), 'the textfile is never mirrored');
+});
+
+test('a failing WAL archive is in the textfile with pg_stat_archiver\'s count', () => {
+  const result = round({ archiver: 't|000000010000000000000003|5', prepare: ({ archive }) => archiveIn(archive) });
+  assert.match(result.log, /ERROR: WAL archiving is failing \(last failed segment 000000010000000000000003, 5 failures\)/);
+  assert.equal(sample(result.metrics, 'orbit_backup_wal_archive_failures_total'), 5);
+  assert.equal(sample(result.metrics, 'orbit_backup_wal_archive_failing'), 1);
+});
+
+test('a pg_stat_archiver it could not read leaves the WAL lines out rather than serve a zero', () => {
+  const result = round({ archiver: null, prepare: ({ archive }) => archiveIn(archive) });
+  assert.equal(sample(result.metrics, 'orbit_backup_wal_archive_failures_total'), undefined);
+  assert.equal(sample(result.metrics, 'orbit_backup_wal_archive_failing'), undefined);
+  assert.equal(sample(result.metrics, 'orbit_backup_base_interval_seconds'), 86_400);
+});
+
+test('a mirror round that fails is counted, by copy', () => {
+  const file = 'ab'.repeat(32);
+  const result = round({
+    rsyncFailsOn: 'orbit-pg-archive',
+    prepare: ({ archive, files }) => {
+      archiveIn(archive);
+      mkdirSync(path.join(files, 'ab'));
+      writeFileSync(path.join(files, 'ab', file), 'bytes');
+    },
+  });
+  assert.match(result.log, /ERROR: off-host sync to /);
+  assert.equal(sample(result.metrics, 'orbit_backup_mirror_failures_total{copy="archive"}'), 1);
+  assert.equal(sample(result.metrics, 'orbit_backup_mirror_failures_total{copy="files"}'), 1);
+  assert.equal(sample(result.metrics, 'orbit_backup_mirror_failures_total{copy="bucket"}'), 0);
+});
+
+test('a refused target counts as a failed archive copy; with no target nothing is counted', () => {
+  const refusedRound = round({
+    prepare: ({ archive, target }) => {
+      archiveIn(archive);
+      archiveIn(target, { system: OTHER_CLUSTER, from: 80, to: 90 });
+    },
+  });
+  refused(refusedRound, /its archive belongs to cluster/);
+  assert.equal(sample(refusedRound.metrics, 'orbit_backup_mirror_failures_total{copy="archive"}'), 1);
+
+  const local = round({ target: '', prepare: ({ archive }) => archiveIn(archive) });
+  for (const copy of ['archive', 'files', 'bucket']) {
+    assert.equal(sample(local.metrics, `orbit_backup_mirror_failures_total{copy="${copy}"}`), 0, copy);
+  }
 });

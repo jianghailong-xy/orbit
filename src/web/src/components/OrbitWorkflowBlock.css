@@ -1,0 +1,164 @@
+/* An Orbit workflow's block (OrbitWorkflowBlock), as docs/mocks/subagent-workflow/board.html parts 2 and 3 draw it. */
+.owf .owf-badge {
+  margin-left: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: nowrap;
+}
+.owf .chat-tool-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* An interrupted workflow's red square, a stopped one's grey. */
+.owf-stop {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  margin: 0 2px;
+  border-radius: 1px;
+  background: var(--text-4);
+}
+.owf-stop.is-interrupted {
+  background: var(--error-solid);
+}
+.owf-banner {
+  margin: 4px 10px 8px 40px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-1);
+}
+.owf-banner.is-warn {
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+}
+.owf-banner.is-bad {
+  background: var(--error-bg);
+  border: 1px solid var(--error-border);
+  color: var(--error-solid);
+}
+.owf-detail {
+  padding-bottom: 6px;
+}
+.owf-group {
+  margin: 6px 10px 4px 30px;
+}
+.owf-group + .owf-group {
+  margin-top: 12px;
+}
+.owf-group-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text-2);
+}
+.owf-group-c {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+.owf-call {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: 4px;
+  padding: 4px 8px;
+  border-left: 2px solid #ddd2fb;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+:root[data-theme='dark'] .owf-call {
+  border-left-color: #4c3a7a;
+}
+.owf-call:hover {
+  background: var(--bg-sunken);
+}
+.owf-call.is-queued {
+  opacity: 0.6;
+  cursor: default;
+}
+.owf-call.is-queued:hover {
+  background: transparent;
+}
+.owf-call .chat-tool-icon {
+  flex: none;
+}
+.owf-call-label {
+  flex: none;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.owf-call-line {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-2);
+}
+.owf-call-meta {
+  margin-left: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.owf-queued {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-4);
+}
+.owf-call-line + .owf-queued,
+.owf-call-meta + .chat-tool-status {
+  margin-left: 0;
+}
+/* The call's SubAgent card, opened under its row: the third level of nesting. */
+.owf-call-card {
+  margin: 2px 0 6px 14px;
+}
+/* A log() line: grey italic, where the script wrote it. */
+.owf-log {
+  margin: 4px 10px 4px 34px;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--text-3);
+}
+.owf-group .owf-log {
+  margin-left: 14px;
+}
+/* The finished strip on the wake turn. */
+.owf-wake {
+  margin: 12px 0 4px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #f6f3ff;
+  border: 1px solid #e4dafc;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+:root[data-theme='dark'] .owf-wake {
+  background: rgba(124, 58, 237, 0.12);
+  border-color: rgba(167, 139, 250, 0.3);
+}
+.owf-wake b {
+  color: var(--text-1);
+}
+.owf-wake.is-failed b {
+  color: var(--error-solid);
+}
+.owf-wake-outcome {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.owf .chat-workflow-source {
+  margin: 8px 10px 0 30px;
+}

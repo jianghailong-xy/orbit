@@ -1,7 +1,9 @@
 // Session-list sectioning for the workspace console, mirroring the native `SessionTimeGrouping` /
-// `SessionTagGrouping` (OrbitKit) so the web list and the iOS drawer render the same shape from the
-// same server-sorted input. Both groupers are pure and take an already console-sorted list
-// (pinned-first, then most-recent activity) — they only bucket, never reorder within a bucket.
+// `SessionTagGrouping` (OrbitKit) and Android's `directoryGroups`: all three are held to
+// contracts/session-list-order.fixtures.json. The time sections order each section by listedAt
+// themselves, except where the caller keeps the server's order (Completed, the landings window).
+
+import { sessionPhaseOf, sessionRunStateOf } from './sessionState';
 
 /** A tag as the session list payload carries it (server-ordered: system first, then position). */
 export interface SessionTagRef {
@@ -17,7 +19,22 @@ export interface GroupableSession {
   // Set while the session is pinned to the top of the Open list.
   pinnedAt?: string | null;
   createdAt?: string | null;
+  /** The order key: moves only when the session changes for its owner (contracts/session-list-order.fixtures.json). */
+  listedAt?: string | null;
+  /** Liveness clock. Never an order key; it moves with every streamed event. */
   lastTurnAt?: string | null;
+  status?: string | null;
+  runStatus?: string | null;
+  pendingApprovals?: number | null;
+  retryAt?: string | null;
+  /** A project row's own roll-up of its members (the row has no status of its own). */
+  needsYou?: boolean;
+  running?: boolean;
+  /** The session facts' three-state field (contracts/session-state.contract.json); absent from an older control plane. */
+  phase?: string | null;
+  released?: boolean | null;
+  lastTurnOutcome?: string | null;
+  endReason?: string | null;
   tags?: SessionTagRef[] | null;
 }
 
@@ -35,14 +52,67 @@ const startOfDay = (d: Date): number => new Date(d.getFullYear(), d.getMonth(), 
 
 /**
  * 0 Today · 1 Yesterday · 2 2–7 days ago · 3 8–30 days ago · 4 Older, by the *calendar day*
- * of `lastTurnAt ?? createdAt`. A future timestamp (clock skew) reads as Today; a missing or
+ * of `listedAt ?? createdAt`. A future timestamp (clock skew) reads as Today; a missing or
  * unparseable one falls to Older. Rounding the day delta absorbs the ±1h a DST change puts into
  * the midnight-to-midnight span, so the bucket stays a true calendar-day count.
  */
+const listedTime = (s: GroupableSession): number => {
+  const iso = s.listedAt ?? s.createdAt;
+  return iso ? new Date(iso).getTime() : Number.NaN;
+};
+
+const createdTime = (s: GroupableSession): number => {
+  const t = s.createdAt ? new Date(s.createdAt).getTime() : Number.NaN;
+  return Number.isNaN(t) ? Number.NEGATIVE_INFINITY : t;
+};
+
+/** When a row was listed: the instant its place and its time both come from (contracts/session-list-order.fixtures.json). */
+export const sessionListedAt = (s: GroupableSession): string | null => s.listedAt ?? s.createdAt ?? null;
+
+/** How long a turn has run, as the row's time while its spinner shows: "45s", "12m", "3h", "2d" (OrbitKit
+ *  `RelativeTime.elapsed`, Android `TaskTime.elapsed`). */
+export const sessionElapsed = (iso: string, now: number = Date.now()): string => {
+  const diff = Math.max(0, (now - new Date(iso).getTime()) / 1000);
+  if (diff < 60) return `${Math.floor(diff)}s`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m`;
+  if (diff < 86_400) return `${Math.floor(diff / 3600)}h`;
+  return `${Math.floor(diff / 86_400)}d`;
+};
+
+/** A failure by the state word's own rule when the session facts are present (a release is a failure only when the
+ *  last turn failed and nobody asked for an end); by the legacy status from an older control plane. */
+const sessionFailed = (s: GroupableSession): boolean =>
+  sessionPhaseOf(s) && typeof s.released === 'boolean'
+    ? sessionRunStateOf(s) === 'FAILED'
+    : (s.status ?? s.runStatus) === 'FAILED';
+
+/** Needs you: an approval, question or owner decision is waiting, or a failure no retry is armed for. */
+export const sessionNeedsOwner = (s: GroupableSession): boolean =>
+  (s.pendingApprovals ?? 0) > 0 || s.needsYou === true || (sessionFailed(s) && !s.retryAt);
+
+/** Working: running or queued, or a failure the server is retrying. With the session facts, phase RUNNING (a turn
+ *  or work outside one, such as a background job) or PENDING decides; without them (an older control plane) the
+ *  run status does. */
+export const sessionIsWorking = (s: GroupableSession): boolean => {
+  const status = s.status ?? s.runStatus;
+  const phase = sessionPhaseOf(s);
+  const inFlight = phase ? phase === 'RUNNING' || phase === 'PENDING' : status === 'RUNNING' || status === 'PENDING';
+  return s.running === true || inFlight || (status === 'FAILED' && !!s.retryAt);
+};
+
+/** listedAt descending (createdAt when null), then createdAt descending, then id ascending. */
+export const compareListed = (a: GroupableSession, b: GroupableSession): number => {
+  const la = Number.isNaN(listedTime(a)) ? Number.NEGATIVE_INFINITY : listedTime(a);
+  const lb = Number.isNaN(listedTime(b)) ? Number.NEGATIVE_INFINITY : listedTime(b);
+  if (la !== lb) return la > lb ? -1 : 1;
+  const ca = createdTime(a);
+  const cb = createdTime(b);
+  if (ca !== cb) return ca > cb ? -1 : 1;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+};
+
 const bucketIndex = (s: GroupableSession, today: number): number => {
-  const iso = s.lastTurnAt ?? s.createdAt;
-  if (!iso) return 4;
-  const t = new Date(iso).getTime();
+  const t = listedTime(s);
   if (Number.isNaN(t)) return 4;
   const days = Math.round((today - startOfDay(new Date(t))) / 86_400_000);
   if (days <= 0) return 0;
@@ -52,18 +122,31 @@ const bucketIndex = (s: GroupableSession, today: number): number => {
   return 4;
 };
 
+/** The section options a list view draws with (contracts/session-list-order.fixtures.json): Pinned only in Open with
+ *  no tag filter, Needs you and Working in Open, and every view but Completed ordered by listedAt. */
+export const sessionListSectionOptions = (view: string, tagFiltered: boolean) => ({
+  pinnedFirst: view === 'open' && !tagFiltered,
+  attention: view === 'open',
+  keepOrder: view === 'completed',
+});
+
 /**
- * Bucket a console-sorted list into the recency sections. When `pinnedFirst` (the Open view,
- * where pinning applies), pinned sessions are lifted into a leading "Pinned" section in their given
- * order; every other session buckets by calendar day. Order within each bucket is preserved (so
- * recency still holds) and empty buckets are dropped. `now` is injectable for deterministic tests.
+ * Bucket sessions into the list's sections. When `pinnedFirst` (the Open view, where pinning
+ * applies), pinned sessions lead in a "Pinned" section. When `attention`, the rest go to "Needs you",
+ * then "Working", then a calendar-day bucket by `listedAt ?? createdAt`. Each section is ordered by
+ * listedAt, so streamed activity (lastTurnAt) never moves a row and a pin counts only in Pinned; with
+ * `keepOrder` (Completed, and the landings window; the default without `attention`) the given order
+ * is kept. Empty sections are dropped. `now` is injectable.
  */
 export function sessionTimeSections<T extends GroupableSession>(
   sessions: readonly T[],
-  opts: { pinnedFirst?: boolean; now?: Date } = {},
+  opts: { pinnedFirst?: boolean; attention?: boolean; keepOrder?: boolean; now?: Date } = {},
 ): SessionTimeSection<T>[] {
-  const { pinnedFirst = true, now = new Date() } = opts;
+  const { pinnedFirst = true, attention = false, now = new Date() } = opts;
+  const keepOrder = opts.keepOrder ?? !attention;
   const pinned: T[] = [];
+  const needs: T[] = [];
+  const working: T[] = [];
   const buckets: T[][] = [[], [], [], [], []];
   const today = startOfDay(now);
 
@@ -71,14 +154,20 @@ export function sessionTimeSections<T extends GroupableSession>(
     // Only the Open view honours pins; elsewhere a (possibly stale) pinnedAt just buckets by
     // time like any other session, so no "Pinned" section appears in Completed/Trash.
     if (pinnedFirst && s.pinnedAt) pinned.push(s);
+    else if (attention && sessionNeedsOwner(s)) needs.push(s);
+    else if (attention && sessionIsWorking(s)) working.push(s);
     else buckets[bucketIndex(s, today)].push(s);
   }
 
+  const ordered = (items: T[]): T[] => (keepOrder ? items : [...items].sort(compareListed));
   const out: SessionTimeSection<T>[] = [];
-  if (pinned.length) out.push({ title: 'Pinned', sessions: pinned });
-  buckets.forEach((items, i) => {
-    if (items.length) out.push({ title: TIME_TITLES[i], sessions: items });
-  });
+  const push = (title: string, items: T[]) => {
+    if (items.length) out.push({ title, sessions: ordered(items) });
+  };
+  push('Pinned', pinned);
+  push('Needs you', needs);
+  push('Working', working);
+  buckets.forEach((items, i) => push(TIME_TITLES[i], items));
   return out;
 }
 

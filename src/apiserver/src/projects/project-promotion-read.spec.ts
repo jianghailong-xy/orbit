@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { PrismaService } from '../prisma/prisma.service';
+import { IN_FLIGHT_JOB_STATES } from './in-flight-job-states';
 import { ProjectPromotionService } from './project-promotion.service';
 import type { ProjectPromotionView } from './project-promotion';
 
@@ -375,7 +376,8 @@ test('a confirmed merge reads its own landing job and reports queued independent
   assert.deepEqual(view?.execution, { state: 'QUEUED', phase: null, startedAt: createdAt });
   assert.deepEqual(reads.execution?.where, {
     id: 'land-this-candidate', projectId: 'project-1', promotionId: '3fFMHLbE7JTsr3vHFOzIDM',
-    kind: 'LAND_PROMOTION', state: { in: ['QUEUED', 'RUNNING'] },
+    // In flight, a promotion waiting on its pull request included (docs/design/protected-branch-landing.md §4.2).
+    kind: 'LAND_PROMOTION', state: { in: [...IN_FLIGHT_JOB_STATES] },
   });
 });
 

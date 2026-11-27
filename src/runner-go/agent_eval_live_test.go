@@ -80,6 +80,9 @@ type evalTranscript struct {
 	HarnessError  string           `json:"harnessError,omitempty"`
 	DurationMs    int              `json:"durationMs"`
 	Skip          *evalSkip        `json:"skip,omitempty"`
+	Files         []string         `json:"files,omitempty"`
+	// LeftOut is the instruction units the run was played without (ORBIT_AGENT_EVAL_LEAVE_OUT).
+	LeftOut []string `json:"leftOut,omitempty"`
 }
 
 func writeEvalTranscript(dir string, tr evalTranscript) error {
@@ -464,7 +467,7 @@ func (e *codexEvalEngine) start(s *evalSession) error {
 		return err
 	}
 	s.probeMCP(false)
-	s.context.EngineInstructions = len(codexAgentContext(s.job.Agent, s.exe, s.job.insideRecordedWork(), s.job.watchesOn()))
+	s.context.EngineInstructions = len(codexAgentContextOf(s.job.Agent, s.exe, s.job.insideRecordedWork(), s.job.watchesOn(), true))
 	return e.spawn(s)
 }
 
@@ -489,7 +492,7 @@ func (e *codexEvalEngine) spawn(s *evalSession) error {
 		return fmt.Errorf("thread: %w", err)
 	}
 	if !resumed && app.currentInstructionMode() == codexInstructionsInjectItems {
-		if err := app.injectAgentContext(s.ctx, threadID, s.job.Agent, s.job.insideRecordedWork(), s.job.watchesOn()); err != nil {
+		if err := app.injectAgentContext(s.ctx, threadID, s.job.Agent, agentShape(s.job.Agent, app.orbitExecutable, s.job.insideRecordedWork(), s.job.watchesOn(), true)); err != nil {
 			app.setInstructionMode(codexInstructionsUserInput)
 		}
 	}
@@ -663,6 +666,10 @@ func TestAgentEvalLive(t *testing.T) {
 	if os.Getenv(evalLiveEnv) != "live" {
 		t.Skipf("the black-box eval runs real engines and models; set %s=live (scripts/agent-eval.sh)", evalLiveEnv)
 	}
+	useEvalLeaveOut(t)
+	if left := evalLeftOutList(); len(left) > 0 {
+		t.Logf("instruction units left out: %s", strings.Join(left, ", "))
+	}
 	repeats, _ := strconv.Atoi(os.Getenv(evalRepeatsEnv))
 	if repeats < 1 {
 		repeats = 1
@@ -713,6 +720,9 @@ func TestAgentEvalLive(t *testing.T) {
 					eng = &claudeEvalEngine{model: claudeModel, effort: effort}
 				case providerCodex:
 					eng = &codexEvalEngine{model: codexModel, effort: effort}
+				case providerKimi:
+					// The engine's own configured model, as a session with no model of its own runs.
+					eng = &kimiEvalEngine{}
 				default:
 					t.Fatalf("%s names no engine the eval drives: %s", evalEnginesEnv, engine)
 				}
@@ -727,7 +737,8 @@ func TestAgentEvalLive(t *testing.T) {
 					if err := writeEvalTranscript(dir, evalTranscript{ScenarioHash: evalScenarioHash(), RepoSHA: evalRepoSHA(), Scenario: sc.ID, Engine: run.Engine,
 						Backend: run.Backend, EngineVersion: run.EngineVersion, Model: run.Model, Repeat: repeat, Exe: run.Exe,
 						Orchestration: orchestration, World: run.World, Turns: run.Turns, Events: run.Events, Ledger: run.Ledger,
-						ToolsListed: run.ToolsListed, Context: run.Context, HarnessError: run.HarnessError, DurationMs: run.DurationMs}); err != nil {
+						ToolsListed: run.ToolsListed, Context: run.Context, HarnessError: run.HarnessError, DurationMs: run.DurationMs,
+						Files: run.Files, LeftOut: evalLeftOutList()}); err != nil {
 						t.Errorf("transcript: %v", err)
 					}
 				}
@@ -850,6 +861,7 @@ func TestAgentEvalRegrade(t *testing.T) {
 	var skipped []evalSkip
 	seenSkips := map[string]bool{}
 	played := map[string]bool{}
+	leftOut := map[string]bool{}
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
 			continue
@@ -867,6 +879,7 @@ func TestAgentEvalRegrade(t *testing.T) {
 		}
 		if tr.Skip == nil {
 			played[tr.RepoSHA] = true
+			leftOut[strings.Join(tr.LeftOut, ",")] = true
 		}
 		if tr.Skip != nil {
 			if key := tr.Skip.Scenario + "|" + tr.Skip.Engine; !seenSkips[key] {
@@ -881,7 +894,7 @@ func TestAgentEvalRegrade(t *testing.T) {
 		}
 		run := &evalRun{Scenario: sc, Engine: tr.Engine, Backend: tr.Backend, EngineVersion: tr.EngineVersion, Model: tr.Model,
 			Repeat: tr.Repeat, Exe: tr.Exe, World: tr.World, Turns: tr.Turns, Events: tr.Events, Ledger: tr.Ledger,
-			ToolsListed: tr.ToolsListed, Context: tr.Context, HarnessError: tr.HarnessError, DurationMs: tr.DurationMs}
+			ToolsListed: tr.ToolsListed, Context: tr.Context, HarnessError: tr.HarnessError, DurationMs: tr.DurationMs, Files: tr.Files}
 		run.rebuildTurns(tr.Orchestration)
 		runs = append(runs, run)
 	}
@@ -904,6 +917,17 @@ func TestAgentEvalRegrade(t *testing.T) {
 				repoSHA = sha
 			}
 		}
+	}
+	// The report names the units the runs were played without, which every transcript must agree on.
+	if len(leftOut) > 1 {
+		t.Fatalf("the transcripts were played with different instruction units left out: %v", leftOut)
+	}
+	for list := range leftOut {
+		units, err := parseInstructionUnits(list)
+		if err != nil {
+			t.Fatal(err)
+		}
+		setEvalLeaveOut(t, units)
 	}
 	rep := buildEvalReport(runs, repoSHA, nil, skipped...)
 	if err := writeEvalReport(rep, parts[0]); err != nil {

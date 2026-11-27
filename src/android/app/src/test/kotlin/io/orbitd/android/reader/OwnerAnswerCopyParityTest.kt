@@ -45,6 +45,17 @@ class OwnerAnswerCopyParityTest {
         assertHas(webLine, "OwnerAnswerLine.tsx", "notice: undelivered ? '${OwnerAnswerLine.undelivered}' : null")
     }
 
+    /** The answered card opens in place, not in a sheet (board card-ui-polish ③): folded it says View details, unfolded Hide details —
+     * the web card's `VIEW_DETAILS`/`HIDE_DETAILS` and OrbitKit's `viewDetails`/`hideDetails`, and the web unfolds it by `setOpen`. */
+    @Test fun theAnsweredCardOpensInPlaceInTheWebsAndOrbitKitsWords() {
+        val kit = read("src/macos/OrbitKit/Sources/OrbitKit/App/OwnerItemCards.swift")
+        assertHas(webQuestion, "CoordinatorQuestionCard.tsx", "export const VIEW_DETAILS = '${CoordinatorQuestions.viewDetails}'")
+        assertHas(webQuestion, "CoordinatorQuestionCard.tsx", "export const HIDE_DETAILS = '${CoordinatorQuestions.hideDetails}'")
+        assertHas(webQuestion, "CoordinatorQuestionCard.tsx", "onClick={() => setOpen(!open)}")
+        assertHas(kit, "OwnerItemCards.swift", "public static let viewDetails = \"${CoordinatorQuestions.viewDetails}\"")
+        assertHas(kit, "OwnerItemCards.swift", "public static let hideDetails = \"${CoordinatorQuestions.hideDetails}\"")
+    }
+
     @Test fun aCardIsTheSameKindsOnEveryClient() {
         listOf("COORDINATOR_QUESTION", "DONE_REQUEST").forEach { kind ->
             assertHas(swift, "OwnerAnswer.swift", "= \"$kind\"")

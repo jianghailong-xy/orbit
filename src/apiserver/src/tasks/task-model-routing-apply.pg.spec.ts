@@ -5,7 +5,8 @@ import test from 'node:test';
 import { BadRequestException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { CreatorType, PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { CreatorType, PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -99,12 +100,12 @@ interface Fixture {
 
 type TaskSeed = { provider?: string | null; model?: string | null; modelHint?: string | null };
 
-/** An Agent with smart selection on — unless `routing` says otherwise — and its tasks. */
+/** An account with smart selection on, an Agent, and its tasks. The Agent has no switch of its own
+ *  any more (owner, 2026-11-20): the account's alone routes and applies every task run. */
 async function fixture(
   services: Services,
   label: string,
   tasks: TaskSeed[] = [{}],
-  routing = true,
 ): Promise<Fixture> {
   const { db } = services;
   const ownerId = randomUUID();
@@ -135,11 +136,6 @@ async function fixture(
   await db.workspace.create({
     data: { id: agentId, ownerId, runnerId, name: `${label}-agent`, enabled: true, effort: AGENT_EFFORT },
   });
-  if (routing) {
-    // The owner's door, and the only one: what `PATCH /workspaces/:id` reaches.
-    const turnedOn = await services.workspaces.update(ownerId, agentId, { modelRouting: true });
-    assert.equal(turnedOn.modelRouting, true);
-  }
   // LEGACY dispatch authority: these presses go through `execute`, not through a Coordinator.
   await db.project.create({ data: { id: projectId, ownerId, title: label, coordinatorEnabled: false } });
   const taskIds: string[] = [];
@@ -221,7 +217,7 @@ const turnsOf = (db: PrismaClient, sessionId: string) => db.conversationTurn.fin
 /** A run that was claimed, did a turn, and is now parked with nothing to wake it. */
 async function pause(db: PrismaClient, sessionId: string) {
   await db.session.update({
-    where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT, numTurns: 1 },
+    where: { id: sessionId }, data: { turnState: null, numTurns: 1 },
   });
 }
 
@@ -249,7 +245,8 @@ test('smart selection on: a fresh run is created on the routed model and effort,
         { applied: row.applied, level: row.level, provider: row.provider, model: row.model, effort: row.effort },
         { applied: true, level: 'M', provider: 'claude', model: SONNET, effort: 'medium' },
       );
-      assert.equal((row.features as Record<string, unknown>).modelRouting, true);
+      assert.equal('modelRouting' in (row.features as Record<string, unknown>), false,
+        'the Agent\'s old switch is no longer read, so no longer recorded');
       // The baseline is still recorded as what would have run without routing.
       assert.deepEqual(row.baseline, {
         // The task pins only the provider, so its engine is the one that provider runs on by default.
@@ -277,15 +274,26 @@ test('smart selection on: a fresh run is created on the routed model and effort,
       const summary = detail.sessions.find((s) => s.id === sessionId)?.route;
       assert.deepEqual({ applied: summary?.applied, level: summary?.level }, { applied: true, level: 'M' });
 
-      // Turned off again by the owner: the next fresh run is the baseline, routed in shadow only.
+      // The Agent's old switch, written on or off, is no longer read: the next fresh run is routed and applied.
       await services.db.session.update({
-        where: { id: sessionId }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
+        where: { id: sessionId }, data: { turnState: null, finishedAt: new Date() },
       });
       await services.workspaces.update(target.ownerId, target.agentId, { modelRouting: false });
       const next = await runNow(services, target, taskId, randomUUID());
-      assert.deepEqual(await sessionOf(services.db, next), { provider: 'claude', model: null, effort: AGENT_EFFORT });
-      const shadow = (await decisionsOf(services.db, taskId)).find((r) => r.sessionId === next)!;
-      assert.deepEqual({ applied: shadow.applied, level: shadow.level }, { applied: false, level: 'M' });
+      assert.deepEqual(await sessionOf(services.db, next), { provider: 'claude', model: SONNET, effort: 'medium' });
+      const still = (await decisionsOf(services.db, taskId)).find((r) => r.sessionId === next)!;
+      assert.deepEqual({ applied: still.applied, level: still.level }, { applied: true, level: 'M' });
+
+      // Only the account's switch turns it off: the next fresh run is the baseline, and nothing is recorded.
+      await services.db.session.update({
+        where: { id: next }, data: { turnState: null, finishedAt: new Date() },
+      });
+      await services.db.user.update({
+        where: { id: target.ownerId }, data: { preferences: { modelRouting: false, optimizeFor: 'cost' } },
+      });
+      const off = await runNow(services, target, taskId, randomUUID());
+      assert.deepEqual(await sessionOf(services.db, off), { provider: 'claude', model: null, effort: AGENT_EFFORT });
+      assert.equal((await decisionsOf(services.db, taskId)).some((r) => r.sessionId === off), false);
     } finally {
       await services.db.$disconnect();
     }
@@ -491,7 +499,7 @@ test('a takeover creates the run on the route that was bound, not on one decided
       const press = randomUUID();
       // Decided at S by a holder that died between binding and creating; the task now says M.
       const route = {
-        policyVersion: 2, applied: true, level: 'S', provider: 'claude', model: SONNET, effort: 'low',
+        policyVersion: 4, applied: true, level: 'S', provider: 'claude', model: SONNET, effort: 'low',
         baseline: { provider: 'claude', providerSource: 'task-pin', model: null, effort: AGENT_EFFORT },
         features: { modelHint: 'S', modelRouting: true }, reasons: ['decided by the holder that died'],
       };
@@ -524,7 +532,7 @@ test('a routed run refused by a run already holding the task names no pin the ta
       const press = randomUUID();
       await boundReceipt(services.db, target.ownerId, TASK_RUN_ACTION.execute, press, `task:${taskId}`,
         routedTarget(target, taskId, press, {
-          policyVersion: 2, applied: true, level: 'M', provider: 'claude', model: SONNET, effort: 'medium',
+          policyVersion: 4, applied: true, level: 'M', provider: 'claude', model: SONNET, effort: 'medium',
           baseline: { provider: 'claude', providerSource: 'task-pin', model: null, effort: AGENT_EFFORT },
           features: { modelHint: 'M', modelRouting: true }, reasons: ['decided by the holder that died'],
         }));
@@ -539,13 +547,15 @@ test('a routed run refused by a run already holding the task names no pin the ta
     }
   });
 
+// The Agent's switch is no longer read (owner, 2026-11-20), but the API still accepts and returns it, and
+// still keeps it out of the agent tools' reach.
 test('the switch is the owner\'s: the user API turns it on and off, the agent tools cannot touch it',
   { skip, timeout: 120_000 }, async () => {
     assertCoordinatorPgUrlIsIsolated(URL!);
     const services = connect();
     try {
       // The user API validates with a whitelist (main.ts): a boolean is kept, anything else is refused.
-      for (const Dto of [CreateWorkspaceDto, UpdateWorkspaceDto]) {
+      for (const Dto of [CreateWorkspaceDto, UpdateWorkspaceDto] as Array<typeof UpdateWorkspaceDto>) {
         const ok = plainToInstance(Dto, { name: 'agent', modelRouting: true });
         assert.deepEqual(await validate(ok, { whitelist: true }), []);
         assert.equal(ok.modelRouting, true, `${Dto.name} keeps it`);
@@ -560,7 +570,7 @@ test('the switch is the owner\'s: the user API turns it on and off, the agent to
         assert.deepEqual(refused.map((error) => error.property), ['modelRouting']);
       }
 
-      const target = await fixture(services, 'switch', [], false);
+      const target = await fixture(services, 'switch', []);
       const { db, workspaces } = services;
       const routingOf = async (id: string) =>
         (await db.workspace.findUniqueOrThrow({ where: { id }, select: { modelRouting: true } })).modelRouting;
@@ -639,7 +649,7 @@ test('Optimize For is frozen with CREATE; changed modes affect only later fresh 
         await setOptimizeFor(services.db, target.ownerId, 'intelligence');
         assert.equal(await runNow(services, target, taskId, press), run);
         assert.equal((await receipt(services.db, target.ownerId, TASK_RUN_ACTION.execute, press)).target.route.features.optimizeFor, mode);
-        await services.db.session.update({ where: { id: run }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() } });
+        await services.db.session.update({ where: { id: run }, data: { turnState: null, finishedAt: new Date() } });
       }
     } finally {
       await services.db.$disconnect();

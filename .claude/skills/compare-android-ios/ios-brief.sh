@@ -3,11 +3,14 @@
 # not have this checkout's skills, so section B of client-screenshots is pasted in verbatim, never summarised.
 #
 #   ios-brief.sh PAGE_FLAG UNTIL_TEXT BRANCH
-#     PAGE_FLAG   the probe landing flag, e.g. -probe.draft (section B2 says how to add one for another page)
+#     PAGE_FLAG   the probe landing arguments, one string: "-probe.draft", "-probe.session S2", "-probe.list"
+#                 (section B2 says how to add a landing for another page)
 #     UNTIL_TEXT  words that are on the page once it has drawn, e.g. "Send a task to get started."
 #     BRANCH      throwaway branch for the hand-back, e.g. probe/compare-new-session
 set -euo pipefail
 flag="${1:?page flag}"; until="${2:?until text}"; branch="${3:?branch}"
+# "-probe.session S2" → "-probe.session", "S2": the Swift launch-argument list the tests pass.
+args="$(printf '%s\n' $flag | sed 's/.*/"&"/' | paste -sd, - | sed 's/,/, /g')"
 skill="$(dirname "$0")/../client-screenshots/SKILL.md"
 section="$(awk '/^## B\. iOS Simulator/,/^## C\. Compare/' "$skill" | sed '$d' | sed '/^---$/d')"
 cat <<EOF
@@ -16,9 +19,10 @@ Take iOS Simulator screenshots of one Orbit iPhone page, light and dark, on an i
 Work in this machine's Orbit repo checkout and stay on whatever HEAD is checked out; note \`git rev-parse HEAD\`. You may create
 files only under \`.shot-probe/\` at the repo root. Never commit to or push the checked-out branch, and never change \`src/\`.
 
-The page: launch flag \`$flag\`; it has drawn once "$until" is on screen. In B2 step 3 the two tests open
-\`["$flag"]\` and \`["$flag", "-dark"]\` until "$until", and shoot "ios-shot" and "ios-shot-dark". If \`$flag\` is not
-\`-probe.draft\`, add its landing branch in B2 step 1 the way the draft one is added.
+The page: launch arguments \`[$args]\`; it has drawn once "$until" is on screen. In B2 step 3 the two tests open
+\`[$args]\` and \`[$args, "-dark"]\` until "$until", and shoot "ios-shot" and "ios-shot-dark" (in place of the
+section's draft tests). \`-probe.session <id>\`, \`-probe.list\` and \`-probe.machine\` already land in the harness; add a
+landing branch in B2 step 1 only for \`-probe.draft\` (as shown) or for a page that has none.
 
 Follow these steps exactly (section B of the project's client-screenshots skill, verbatim):
 

@@ -94,6 +94,8 @@ export interface Pod {
     phase?: string;
     startTime?: string;
     reason?: string;
+    /** The kubelet's sentence beside `reason`, as for an eviction: which resource ran out. */
+    message?: string;
     conditions?: PodCondition[];
     initContainerStatuses?: PodContainerStatus[];
     containerStatuses?: PodContainerStatus[];
@@ -132,6 +134,8 @@ export interface KubeWatch {
 export interface KubeDeleteOptions {
   /** Delete only the object with this UID: a successor under the same name is never deleted. */
   uid?: string;
+  /** How long the kubelet gives the Pod's containers between SIGTERM and SIGKILL. Absent: the object's own. */
+  gracePeriodSeconds?: number;
 }
 
 export interface KubeCreateOptions {
@@ -174,6 +178,11 @@ export interface ManagedKubeClient {
   readonly namespace: string;
   readonly persistentVolumeClaims: KubeResource<PersistentVolumeClaim>;
   readonly secrets: KubeResource<Secret>;
+  /**
+   * The Secrets of the profile's files namespace (`files.namespace`), where the manager writes each generation's
+   * mount credential for the Drive CSI plugin; absent when the profile has no drive.
+   */
+  readonly driveSecrets?: Pick<KubeResource<Secret>, 'get' | 'create' | 'delete'>;
   readonly pods: KubePods;
   /** Read-only: where an operator leaves a fencing receipt (managed-runner-fencing.ts). */
   readonly configMaps: Pick<KubeResource<ConfigMap>, 'get'>;

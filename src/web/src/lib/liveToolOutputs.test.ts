@@ -130,3 +130,16 @@ describe('foreground shell output snapshots', () => {
     expect(otherSession).toBe(current);
   });
 });
+
+describe('drive transfer byte counts', () => {
+  it('keeps a drive call’s count under its own id until its result lands', () => {
+    const counted = reduceLiveToolOutputs(EMPTY_LIVE_TOOL_OUTPUTS, {
+      type: 'tool_output',
+      payload: { toolUseId: 'toolu_01Drive', content: 'Uploaded 3355443 of 11954323 bytes', snapshotSeq: 4 },
+    });
+    expect(counted.get('toolu_01Drive')?.content).toBe('Uploaded 3355443 of 11954323 bytes');
+
+    const done = reduceLiveToolOutputs(counted, { type: 'tool_result', payload: { toolUseId: 'toolu_01Drive' } });
+    expect(done.has('toolu_01Drive')).toBe(false);
+  });
+});

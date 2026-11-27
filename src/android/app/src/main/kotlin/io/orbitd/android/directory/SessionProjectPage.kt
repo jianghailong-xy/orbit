@@ -10,7 +10,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.animation.core.Animatable
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.platform.LocalDensity
+import kotlin.math.roundToInt
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -96,12 +102,15 @@ internal fun SessionProjectRowView(row: SessionProjectRow, onOpen: () -> Unit, o
             Text(row.title, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
             ProjectIndicator(row.indicator)
             // An instant this clock cannot read draws no time at all.
-            (row.lastTurnAt ?: row.createdAt)?.let { WikiDate.relative(it, Instant.now()) }?.let {
+            (row.listedAt ?: row.createdAt)?.let { WikiDate.relative(it, Instant.now()) }?.let {
                 Text(it, style = MaterialTheme.typography.labelMedium, color = muted, maxLines = 1, softWrap = false)
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            ProjectProgressChip(row.taskCounts, row.runningCount, row.status)
+            ProjectProgressChip(row.taskCounts, row.runningCount, row.status, paused = row.pause.paused)
+            // 2a and 2b lead with a pause glyph (design §4.2).
+            if (row.pauseLine != null) Icon(painterResource(R.drawable.ic_pause), null, Modifier.size(11.dp).testTag("project-row-pause-glyph"),
+                tint = lineColor(row.line.tone))
             // The line, the sentence alone (iOS `SessionProjectRowView`, the web's project row).
             Text(row.line.text, Modifier.testTag("project-row-line"), maxLines = 1, overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodyMedium, color = lineColor(row.line.tone))
@@ -242,11 +251,11 @@ internal fun BreathingTerminal(modifier: Modifier = Modifier) {
 /** The progress chip at the head of the second line: the mini bar and "done/total", or — for a project the sidebar did not list —
  * its status word. Green once the project is done. */
 @Composable
-internal fun ProjectProgressChip(counts: ProjectTaskCounts?, running: Int, status: String) {
+internal fun ProjectProgressChip(counts: ProjectTaskCounts?, running: Int, status: String, paused: Boolean = false) {
     val ink = if (status == "DONE") LocalOrbitColors.current.success else MaterialTheme.colorScheme.onSurfaceVariant
     Row(Modifier.background(ink.copy(alpha = 0.14f), RoundedCornerShape(5.dp)).padding(horizontal = 6.dp, vertical = 2.dp).testTag("project-progress-chip"),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (counts != null) ProjectProgressBar(counts, running, Modifier.width(26.dp))
+        if (counts != null) ProjectProgressBar(counts, running, Modifier.width(26.dp), paused)
         Text(counts?.let { SessionProjectCopy.progress(it.done, it.total) } ?: SessionProjectCopy.statusLabel(status),
             style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = ink, maxLines = 1, softWrap = false)
     }
@@ -264,11 +273,15 @@ internal fun SessionProjectMarkChip(mark: SessionProjectMark) {
 
 /** Done, running and failed out of the total, over a grey track (iOS `SessionProjectProgressBar`). */
 @Composable
-internal fun ProjectProgressBar(counts: ProjectTaskCounts, running: Int, modifier: Modifier = Modifier) {
+internal fun ProjectProgressBar(counts: ProjectTaskCounts, running: Int, modifier: Modifier = Modifier, paused: Boolean = false) {
     Row(modifier.height(4.dp).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
         .clearAndSetSemantics {}) {
         if (counts.total > 0) {
-            listOf(counts.done to LocalOrbitColors.current.success, running to MaterialTheme.colorScheme.primary, counts.failed to MaterialTheme.colorScheme.error)
+            // A paused project's bar goes grey: what is done stays a lighter grey than the track, and nothing is drawn as running.
+            val grey = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            val segments = if (paused) listOf(counts.done + running + counts.failed to grey)
+                else listOf(counts.done to LocalOrbitColors.current.success, running to MaterialTheme.colorScheme.primary, counts.failed to MaterialTheme.colorScheme.error)
+            segments
                 .filter { it.first > 0 }.forEach { (n, color) -> Box(Modifier.weight(n.toFloat()).fillMaxHeight().background(color)) }
             (counts.total - counts.done - running - counts.failed).takeIf { it > 0 }?.let { Spacer(Modifier.weight(it.toFloat())) }
         }
@@ -276,12 +289,13 @@ internal fun ProjectProgressBar(counts: ProjectTaskCounts, running: Int, modifie
 }
 
 /** A project row's menu (iOS `SessionProjectRowActions`): the session its line speaks for, the project's sessions, its page — then
- * Pin and Move, which act on its coordinator. An OPEN project has no completion, sharing or deletion of its own; a finished one in
- * Open leads with Complete and a divider, which moves all its open sessions to Completed (§4.3, owner 2026-11-07). */
+ * Pause or Resume, Pin and Move (Pin and Move act on its coordinator). An OPEN project has no completion, sharing or deletion of its
+ * own; a finished one in Open leads with Complete and a divider, which moves all its open sessions to Completed (§4.3, owner
+ * 2026-11-07). The menu is the full list, for TalkBack, where there is no swipe. */
 @Composable
 internal fun ProjectRowMenu(row: SessionProjectRow, fresh: Boolean, view: SessionView, close: () -> Unit, complete: () -> Unit,
     openSession: (String) -> Unit, openSessions: () -> Unit, openProject: () -> Unit, pin: (DirectorySession) -> Unit,
-    move: (DirectorySession) -> Unit) {
+    move: (DirectorySession) -> Unit, pause: () -> Unit, resume: () -> Unit) {
     AlertDialog(onDismissRequest = close, title = { Text(row.title) }, modifier = Modifier.testTag("project-row-menu"),
         confirmButton = { TextButton(onClick = close) { Text("Close") } },
         text = {
@@ -296,12 +310,85 @@ internal fun ProjectRowMenu(row: SessionProjectRow, fresh: Boolean, view: Sessio
                 ActionButton(SessionProjectCopy.openProject, true) { close(); openProject() }
                 HorizontalDivider()
                 val coordinator = row.coordinator
-                ActionButton(if (coordinator?.pinnedAt != null) SessionProjectCopy.unpin else SessionProjectCopy.pin, coordinator != null && fresh) {
-                    close(); coordinator?.let(pin)
+                for (action in ProjectRowActions.menuGroup(row, view)) ActionButton(action.label, fresh) {
+                    close()
+                    when (action) {
+                        ProjectRowAction.PAUSE -> pause()
+                        ProjectRowAction.RESUME -> resume()
+                        ProjectRowAction.PIN, ProjectRowAction.UNPIN -> coordinator?.let(pin)
+                        ProjectRowAction.MOVE -> coordinator?.let(move)
+                        ProjectRowAction.COMPLETE -> Unit
+                    }
                 }
-                ActionButton(SessionProjectCopy.move, coordinator != null && fresh) { close(); coordinator?.let(move) }
             }
         })
+}
+
+/** The width one swipe action takes: the board's circle with its name under it. */
+private val SWIPE_SLOT = 76.dp
+
+/**
+ * A project row with its swipe actions behind it (design §4.3, owner 2026-11-19, docs/mocks/project-row-swipe): right reveals the one
+ * state change the project can take, then Pin; left reveals Move. A drag never fires anything, however far it goes — past the actions
+ * the row stretches a little and springs back — and a revealed action is a press, after which the row closes.
+ */
+@Composable
+internal fun SwipeableProjectRow(row: SessionProjectRow, view: SessionView, fresh: Boolean, onAction: (ProjectRowAction) -> Unit,
+    content: @Composable () -> Unit) {
+    val right = ProjectRowActions.swipeRight(row, view)
+    val left = ProjectRowActions.swipeLeft(row)
+    val slot = with(LocalDensity.current) { SWIPE_SLOT.toPx() }
+    val rightWidth = right.size * slot
+    val leftWidth = left.size * slot
+    val offset = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    Box(Modifier.fillMaxWidth().testTag("project-swipe:${row.projectId}")) {
+        if (offset.value > 0f) Row(Modifier.matchParentSize().padding(start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            right.forEach { SwipeSlot(it, row, fresh) { scope.launch { offset.animateTo(0f) }; onAction(it) } }
+        }
+        if (offset.value < 0f) Row(Modifier.matchParentSize().padding(end = 4.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+            left.forEach { SwipeSlot(it, row, fresh) { scope.launch { offset.animateTo(0f) }; onAction(it) } }
+        }
+        Box(Modifier.offset { IntOffset(offset.value.roundToInt(), 0) }.background(MaterialTheme.colorScheme.surface)
+            .pointerInput(rightWidth, leftWidth) {
+                detectHorizontalDragGestures(onDragEnd = {
+                    // Settled open when pulled past half of the actions, else shut: past the end it springs back, firing nothing.
+                    val at = offset.value
+                    val target = when { at > rightWidth / 2 && rightWidth > 0 -> rightWidth; at < -leftWidth / 2 && leftWidth > 0 -> -leftWidth; else -> 0f }
+                    scope.launch { offset.animateTo(target) }
+                }, onDragCancel = { scope.launch { offset.animateTo(0f) } }) { change, delta ->
+                    change.consume()
+                    // The drag is clamped to the actions plus a little stretch, and a side with none stays still.
+                    val next = (offset.value + delta).coerceIn(-(leftWidth * 1.25f), rightWidth * 1.25f)
+                    scope.launch { offset.snapTo(next) }
+                }
+            }) { content() }
+    }
+}
+
+@Composable
+private fun SwipeSlot(action: ProjectRowAction, row: SessionProjectRow, fresh: Boolean, onClick: () -> Unit) {
+    val colors = LocalOrbitColors.current
+    val tint = when (action) {
+        ProjectRowAction.PAUSE -> Color(0xFFFF9500)
+        ProjectRowAction.RESUME, ProjectRowAction.COMPLETE -> colors.success
+        else -> MaterialTheme.colorScheme.primary
+    }
+    val icon = when (action) {
+        ProjectRowAction.PAUSE -> R.drawable.ic_pause
+        ProjectRowAction.RESUME -> R.drawable.ic_play
+        ProjectRowAction.COMPLETE -> R.drawable.ic_check
+        ProjectRowAction.PIN -> R.drawable.ic_pin
+        ProjectRowAction.UNPIN -> R.drawable.ic_pin_filled
+        ProjectRowAction.MOVE -> R.drawable.ic_folder
+    }
+    Column(Modifier.width(SWIPE_SLOT).clickable(enabled = fresh, role = Role.Button, onClickLabel = action.label, onClick = onClick)
+        .testTag("project-swipe-action:${action.name.lowercase()}"), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(Modifier.size(48.dp).background(tint, CircleShape), contentAlignment = Alignment.Center) {
+            Icon(painterResource(icon), null, Modifier.size(22.dp), tint = Color.White)
+        }
+        Text(action.label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
 }
 
 /** What the page has read: its members and when, the landing read, and — while nobody has started the project — its open items. */
@@ -584,7 +671,10 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
             // The task landing on the project branch as a card of its own, under the progress card and only while something is in
             // flight (iOS 749d995c5, owner decision 2026-10-11, docs/mocks/project-landing-card). A press opens the jobs it counts — or,
             // from a server that lists none, the project page; a merge job's line is the merge card's, below.
-            if (ending == null) state.integration?.let { integration ->
+            // A project that started with no line has no landing to show (§12.16, board docs/mocks/landing-measured ②, ruling D2):
+            // no card, no Landings row, and nothing in their place, until its first task with commits starts the line.
+            val noLine = io.orbitd.android.projects.ProjectLine.none(state.integration, project?.let(ProjectDoc::started))
+            if (ending == null && !noLine) state.integration?.let { integration ->
                 ProjectMergeCard.taskLandingCard(integration, now, state.integrationReadAt, state.integrationReadFailed)?.let { card ->
                     item(key = "landing") {
                         ProjectLandingCardView(card, onOpenJobs = if (ProjectPage.inFlightJobs(integration) != null) ({ showsJobs = true }) else null,
@@ -639,7 +729,7 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
             // The project's landings, summed up in one row (owner 2026-10-27, board docs/mocks/landings-one-window 01 b): under the
             // coordinator, above the timeline, and absent for a project that has never had a landing. The whole row opens the project's
             // Landings window, at its bottom; the window lists every landing, and the merges into main among them.
-            SessionProjectLandings.rowSummary(state.landings, merge.merged, now,
+            if (!noLine) SessionProjectLandings.rowSummary(state.landings, merge.merged, now,
                 main = RunSettings.mainBranchName(state.integration?.text("upstreamRef")))?.let { summary ->
                 item(key = "heading:landings") { SectionHeading(SessionLandingsCopy.title) }
                 item(key = "landings") {

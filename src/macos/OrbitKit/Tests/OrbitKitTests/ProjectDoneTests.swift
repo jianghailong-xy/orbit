@@ -94,7 +94,7 @@ final class ProjectDoneTests: XCTestCase {
     func testNoCodeToLandIsCountedAsNothingToLandOnTheCardButNamedInTheTally() {
         let counts = ProjectDoneCounts(criteria: 7, met: 4, landed: 3, onMain: 3,
                                        byReason: [.inFlight: 1, .noReceipt: 1, .codeless: 2])
-        XCTAssertEqual(ProjectDone.cardTally(counts), "4 met · 3 landed on main · 2 nothing to land")
+        XCTAssertEqual(ProjectDone.cardTally(counts), "4 met · 3 landed on main · 2 nothing to land · 3 not met")
         // The Why-not-done tally names it for a met criterion; an unmet one is not met, whatever its
         // landing lane says — the same seven criteria, counted by their own answers.
         let derived = ProjectDerivedDone(criteria: [
@@ -197,8 +197,12 @@ final class ProjectDoneTests: XCTestCase {
         // A card nobody asked for answers no request: nothing is left out.
         XCTAssertEqual(ProjectDone.openItemsCount(ProjectOpenItemsView(needsYou: [row], startRequest: start)), 2)
         XCTAssertEqual(ProjectDone.openItemsCount(nil), 0)
-        XCTAssertEqual(ProjectDone.runningCount(closeout(counts: ProjectDoneCounts(
-            criteria: 3, met: 3, landed: 1, onMain: 1, byReason: [.inFlight: 2]))), 2)
+        // Read off the criteria, met or not, since byReason tallies met criteria only.
+        XCTAssertEqual(ProjectDone.runningCount(closeout(
+            criteria: [ProjectDoneCriterion(definitionId: "c1", satisfied: true, landing: "UNKNOWN", landingReason: .inFlight),
+                       ProjectDoneCriterion(definitionId: "c2", satisfied: false, landing: "UNKNOWN", landingReason: .inFlight),
+                       ProjectDoneCriterion(definitionId: "c3", satisfied: true)],
+            counts: ProjectDoneCounts(criteria: 3, met: 2, landed: 1, onMain: 1, byReason: [.inFlight: 1]))), 2)
     }
 
     // MARK: the receipt

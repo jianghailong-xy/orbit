@@ -103,7 +103,8 @@ describe('a Claude account whose login is about to lapse', () => {
 
     await act(async () => renew.click());
 
-    expect(defaultRow.querySelector('.re-panel')?.textContent).toContain('Sign in to Claude Code');
+    // The row's sign-in starts as its panel opens.
+    expect(defaultRow.querySelector('.re-panel')?.textContent).toContain('Starting sign-in on the runner');
   });
 });
 

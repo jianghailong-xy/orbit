@@ -3,15 +3,16 @@ import { randomUUID } from 'node:crypto';
 import { Logger } from '@nestjs/common';
 import {
   Prisma,
-  RunStatus,
   SessionDispatchOrigin,
   SessionRunSource,
 } from '@prisma/client';
-import { uuidToBase62 } from '@orbit/shared';
+import { RunStatus, uuidToBase62 } from '@orbit/shared';
 
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { INTEGRATION_ITEM_KINDS } from './project-open-item';
 import { LANDING_PROVIDER_SLUG } from '../providers/provider-slug';
+import { IN_FLIGHT_JOB_STATES } from './in-flight-job-states';
+import { branchName } from './project-criterion-landing';
 
 /**
  * The landing subject and the LANDING session it addresses
@@ -57,6 +58,19 @@ const LANDED_JOB_STATES: ReadonlySet<string> = new Set(['LANDED', 'ALREADY_LANDE
 const SUCCESSFUL_SETTLEMENTS: ReadonlySet<LandingSettledAs> = new Set([
   'LANDED', 'ALREADY_LANDED', 'NOTHING_TO_LAND', 'MERGED',
 ]);
+
+/**
+ * The status a LANDING container is written with: AWAITING_INPUT while its subject is open, and once the landing
+ * settled SUCCEEDED for a settlement that reached the line and CANCELLED for any other. The two writers below write
+ * it with `finished_at`, and the detail a LANDING link answers with before its row exists
+ * (SessionsService.landingOnlyDetail) shows the status the row would have from it.
+ */
+export function landingContainerStatus(landing: { settledAt: Date | string | null; settledAs: string | null }): RunStatus {
+  if (landing.settledAt === null) return RunStatus.AWAITING_INPUT;
+  return landing.settledAs && SUCCESSFUL_SETTLEMENTS.has(landing.settledAs as LandingSettledAs)
+    ? RunStatus.SUCCEEDED
+    : RunStatus.CANCELLED;
+}
 
 /** What a database door needs, without dragging the Nest provider into the signature. */
 export type LandingDb = Pick<Prisma.TransactionClient, '$transaction'>;
@@ -251,11 +265,6 @@ export async function ensureLandingSession(
         : null;
 
     const settled = landing.settledAt !== null;
-    const status = settled
-      ? (landing.settledAs && SUCCESSFUL_SETTLEMENTS.has(landing.settledAs as LandingSettledAs)
-          ? RunStatus.SUCCEEDED
-          : RunStatus.CANCELLED)
-      : RunStatus.AWAITING_INPUT;
 
     const [created] = await tx.session.createManyAndReturn({
       data: [{
@@ -266,7 +275,8 @@ export async function ensureLandingSession(
         titleManagedByProject: true,
         prompt: LANDING_PROMPT,
         sessionKind: 'LANDING',
-        status,
+        // A container never holds a turn: parked while its subject is open, released once it settled (plan §2.2 #2).
+        turnState: null,
         startsTaskWork: false,
         assignedRunnerId: null,
         taskId: null,
@@ -281,7 +291,10 @@ export async function ensureLandingSession(
         providerBuiltin: true,
         engine: null,
         mergeTargets: [],
-        ...(settled ? { completedAt: landing.settledAt } : {}),
+        // A settled subject starts released, at the moment it settled (design §4.2).
+        ...(settled
+          ? { completedAt: landing.settledAt, finishedAt: landing.settledAt }
+          : {}),
       }],
       skipDuplicates: true,
       select: { id: true },
@@ -291,13 +304,22 @@ export async function ensureLandingSession(
 }
 
 /** The server-generated title: `Land · <task>` (with `(#n)` from the second episode) or
- *  `Merge project/<id> → main · #<n>`. */
+ *  `Merge <project branch> → main · #<n>`, the branch the one the project's binding stores. */
 async function landingTitle(
   tx: Prisma.TransactionClient,
   landing: { subject: string; taskId: string | null; projectId: string; episode: number },
 ): Promise<string> {
   if (landing.subject === 'PROMOTION') {
-    return `Merge project/${uuidToBase62(landing.projectId)} → main · #${landing.episode}`;
+    // The stored ref, never one rebuilt from the id: a branch keeps the name it was given (a
+    // project's name is chosen once, from its title then). A merge into main has a binding.
+    const line = await tx.projectCodebase.findFirst({
+      where: { projectId: landing.projectId },
+      select: { integrationRef: true },
+    });
+    const branch = line
+      ? branchName(line.integrationRef)
+      : `project/${uuidToBase62(landing.projectId)}`;
+    return `Merge ${branch} → main · #${landing.episode}`;
   }
   const task = landing.taskId
     ? await tx.task.findFirst({ where: { id: landing.taskId }, select: { title: true } })
@@ -350,7 +372,7 @@ async function settleLanding(
     // pushes, so it cannot move this fact — and M-T13's receipt retirement stops one in the very
     // transaction that writes the receipt, which settles here.
     const inFlight = await tx.projectIntegrationJob.count({
-      where: { landingId, state: { in: ['QUEUED', 'RUNNING'] }, kind: { not: 'CHECK_PROMOTION' } },
+      where: { landingId, state: { in: [...IN_FLIGHT_JOB_STATES] }, kind: { not: 'CHECK_PROMOTION' } },
     });
     if (inFlight > 0) return false;
     if (!(await stillHolds(tx, locked))) return false;
@@ -370,8 +392,11 @@ async function settleLanding(
       await tx.session.update({
         where: { id: locked.sessionId },
         data: {
-          status: SUCCESSFUL_SETTLEMENTS.has(settledAs) ? RunStatus.SUCCEEDED : RunStatus.CANCELLED,
+          // Released: no turn (plan §2.2 #3).
+          turnState: null,
           completedAt: settledAt,
+          // Released with the status (design §4.2).
+          finishedAt: settledAt,
         },
       });
     }

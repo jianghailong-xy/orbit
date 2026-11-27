@@ -7,24 +7,20 @@ import type { RunnerBrowserClearResponse, RunnerBrowserState } from '@orbit/shar
 import { api, ApiError, getToken } from '../api';
 
 export const RUNNER_BROWSER_COPY = {
-  chip: 'Browser',
   title: 'Browser',
   viewOnly: 'View only',
   takeControl: 'Take control',
   done: 'Done',
-  openInNewTab: 'Open in new tab',
   controlling: 'You are controlling the browser',
   agentKeepsRunning: 'the agent keeps running',
   watching: 'Watching the browser',
   usedBy: 'used by',
-  heldByThis: 'Used by this session',
   heldByNone: 'Not in use by any session',
   heldBy: (title: string) => `Used by “${title}” · it keeps running`,
   heldByUntitled: 'Used by another session · it keeps running',
   untitledSession: 'another session',
   fit: 'Fit',
   actualSize: '100%',
-  scaled: 'Fit',
   size: (percent: number | null) => `1280 × 800${percent ? ` · ${percent}%` : ''}`,
   pasteHint: (mac: boolean) => (mac ? 'Paste with ⌘V' : 'Paste with Ctrl+V'),
   pasting: 'Pasting…',
@@ -51,6 +47,14 @@ export const RUNNER_BROWSER_COPY = {
   clearAsked: 'Saved logins will be cleared when the runner next checks in',
   clearPending: 'Clearing when the runner next checks in…',
   clearFailed: "Couldn't clear saved logins",
+  // The sign-in request's banner above the tab's bar (board 03-agent-tools frame ①, notes ④ ⑤).
+  signInAsked: (site: string, title: string | null) => (title ? `Sign in to ${site}, asked by “${title}”` : `Sign in to ${site}`),
+  signedIn: 'I’m signed in',
+  signedInFailed: "Couldn't send your answer",
+  // An engine sign-in this tab saw going through the runner's browser, and then fail: the card says so in the tab
+  // the owner left, so this one says it too instead of staying on the vendor's last page.
+  engineSignInFailed: (engine: string) => `Couldn't sign in to ${engine}`,
+  engineSignInRetry: 'Try again from the sign-in card.',
 } as const;
 
 /** `GET /runners/:id/browser`, or null when the server has no browser for it (the switch off answers 404). */
@@ -94,8 +98,8 @@ export function runnerBrowserTabPath(runnerId: string, control = false): string 
  * Opens the runner's browser in its tab, already in control or view only. One tab per runner (a named window), so
  * pressing twice does not take both of the runner's two streams. Called on the click, so no pop-up blocker stops it.
  */
-export function openRunnerBrowserTab(runnerId: string, control: boolean): void {
-  window.open(runnerBrowserTabPath(runnerId, control), `orbit-browser-${runnerId}`);
+export function openRunnerBrowserTab(runnerId: string, control: boolean): Window | null {
+  return window.open(runnerBrowserTabPath(runnerId, control), `orbit-browser-${runnerId}`);
 }
 
 /** Whether the viewer runs on a Mac (or an iPad), whose paste key is ⌘V. */

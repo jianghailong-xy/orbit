@@ -31,9 +31,12 @@ import {
   type WatchTargetStatusView,
   type WatchTargetTaskView,
 } from '@orbit/shared';
+import { PENDING_WAKEUP, RESUME_WATCH } from '../common/session-working';
 import { loggedRetry, transactionRetryDelayMs, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { legacySessionStatus, LEGACY_STATUS_SELECT, readLandingSettlements } from '../sessions/session-legacy-words';
+import { turnStateOf } from '../sessions/session-turn-state';
 import { readTaskWorkCarriers, taskRunOverlay } from '../sessions/task-work-carrier';
 import { assertEngineSession } from '../sessions/engine-session';
 import { CreateWatchDto, UpdateWatchDto } from './dto';
@@ -380,14 +383,39 @@ export class WatchesService {
   }
 
   async list(ownerId: string, state?: string, scope: WatchScope = {}): Promise<NamedWatchRow[]> {
+    return this.named(ownerId, await this.newestRows(ownerId, state, scope));
+  }
+
+  private async newestRows(ownerId: string, state?: string, scope: WatchScope = {}): Promise<WatchRow[]> {
     assertListState(state);
-    const watches = await this.prisma.watch.findMany({
+    return this.prisma.watch.findMany({
       where: { ownerId, ...(state !== undefined ? { state } : {}), ...scopeWhere(scope) },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: LIST_LIMIT,
       select: WATCH_VIEW_SELECT,
     });
-    return this.named(ownerId, watches);
+  }
+
+  /**
+   * `GET /watches?following=true`: what the web's Following page draws, in one answer — the newest
+   * LIST_LIMIT watches of any state, then every ACTIVE, PAUSED and needs-attention watch (at most
+   * LIST_LIMIT each) the newest did not already hold, each watch once. The four reads a client
+   * would otherwise make and merge, with every target named in one pass.
+   */
+  async listFollowing(ownerId: string): Promise<NamedWatchRow[]> {
+    const [newest, active, paused, attention] = await Promise.all([
+      this.newestRows(ownerId),
+      this.newestRows(ownerId, 'ACTIVE'),
+      this.newestRows(ownerId, 'PAUSED'),
+      this.attentionRows(ownerId),
+    ]);
+    const seen = new Set<string>();
+    const union = [newest, active, paused, attention].flat().filter((watch) => {
+      if (seen.has(watch.id)) return false;
+      seen.add(watch.id);
+      return true;
+    });
+    return this.named(ownerId, union);
   }
 
   /**
@@ -422,8 +450,9 @@ export class WatchesService {
       ? []
       : await this.prisma.session.findMany({
           where: { id: { in: sessionIds }, ownerId },
-          select: { id: true, title: true, status: true, endReason: true, taskId: true },
+          select: { id: true, title: true, taskId: true, ...LEGACY_STATUS_SELECT },
         });
+    const landings = await readLandingSettlements(this.prisma, sessions);
     const taskIds = [...new Set([...idsOf('TASK'), ...sessions.flatMap((row) => (row.taskId ? [row.taskId] : []))])];
     const [tasks, carriers] = await Promise.all([
       taskIds.length === 0
@@ -447,7 +476,7 @@ export class WatchesService {
     }
     const read = new Map<string, { title: string | null; status: WatchTargetStatusView; task: WatchTargetTaskView | null }>();
     for (const row of sessions) {
-      const state = deriveSessionRunState({ status: row.status, endReason: row.endReason });
+      const state = deriveSessionRunState({ status: legacySessionStatus(row, landings.get(row.id)), endReason: row.endReason });
       read.set(`SESSION:${row.id}`, {
         title: row.title,
         status: {
@@ -491,6 +520,10 @@ export class WatchesService {
    * read here as `watchDeadLetterCodeOf` reads it (and as the gauges in watch-metrics.ts already read it).
    */
   async listNeedingAttention(ownerId: string, state?: string): Promise<NamedWatchRow[]> {
+    return this.named(ownerId, await this.attentionRows(ownerId, state));
+  }
+
+  private async attentionRows(ownerId: string, state?: string): Promise<WatchRow[]> {
     assertListState(state);
     const needsLooking = Prisma.sql`(
           (d."state" = 'DEAD_LETTER'
@@ -509,12 +542,11 @@ export class WatchesService {
        ORDER BY w."created_at" DESC, w."id" DESC
        LIMIT ${LIST_LIMIT}::int`);
     // Read back through the view every other list answers with, so one watch reads the same wherever it is shown.
-    const watches = await this.prisma.watch.findMany({
+    return this.prisma.watch.findMany({
       where: { ownerId, id: { in: picked.map((row) => row.id) } },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       select: WATCH_VIEW_SELECT,
     });
-    return this.named(ownerId, watches);
   }
 
   /** Edit the condition or the deadline of a live watch. Its targets, its action and its mode stay as created. */
@@ -708,10 +740,14 @@ export class WatchesService {
     const sessions = await tx.session.findMany({
       where: { id: { in: ids('SESSION') }, ownerId },
       select: {
-        id: true, sessionKind: true, status: true, endReason: true,
+        id: true, ...LEGACY_STATUS_SELECT,
         completedAt: true, archivedAt: true, deletedAt: true,
         // The job leaf's columns: the jobs in flight and when each one's output last moved. Never their output.
         runningBgJobs: true, runningBgJobActivity: true,
+        // SESSION_QUIESCENT's columns (common/session-working.ts): work outside a turn, and what is armed to wake it.
+        engineTurnActive: true, runningSubagents: true, retryAt: true,
+        observingWatches: { where: RESUME_WATCH.where.observingWatches!.some, select: { id: true }, take: 1 },
+        scheduledWakeups: { where: PENDING_WAKEUP.where.scheduledWakeups!.some, select: { id: true }, take: 1 },
       },
     });
     const unreadable = request.targets.length - tasks.length - sessions.length;
@@ -735,6 +771,7 @@ export class WatchesService {
     const awaitingAnswer = new Set(approvals.map((approval) => approval.sessionId));
     const taskById = new Map(tasks.map((task) => [task.id, task]));
     const sessionById = new Map(sessions.map((session) => [session.id, session]));
+    const landings = await readLandingSettlements(tx, sessions);
     return request.targets.map((target): ObservedTarget => {
       if (target.kind === 'TASK') {
         const task = taskById.get(target.id)!;
@@ -761,13 +798,20 @@ export class WatchesService {
         fact: {
           kind: 'SESSION',
           sessionKind: session.sessionKind,
-          status: session.status,
+          status: legacySessionStatus(session, landings.get(session.id)),
+          turnState: turnStateOf(session),
+          finishedAt: session.finishedAt,
           endReason: session.endReason,
           completedAt: session.completedAt,
           archivedAt: session.archivedAt,
           deletedAt: session.deletedAt,
           pendingApproval: awaitingAnswer.has(target.id),
           jobs: sessionJobsOf(session.runningBgJobs, session.runningBgJobActivity),
+          engineTurnActive: session.engineTurnActive,
+          runningSubagents: session.runningSubagents,
+          retryAt: session.retryAt,
+          hasResumeWatch: session.observingWatches.length > 0,
+          hasPendingWakeup: session.scheduledWakeups.length > 0,
         },
       };
     });

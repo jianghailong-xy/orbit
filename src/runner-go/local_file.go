@@ -8,8 +8,119 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 )
+
+// The plain directory a runner Pod receives the drive in (drive.orbit.dev), and the ones a Pod of an older CSI driver
+// receives instead until those Pods have drained (drive-csi/README.md): /run/orbit-documents of documents.orbit.dev and
+// /run/orbit-files of files.orbit.dev.
+const driveRootPath = "/run/orbit-drive"
+
+var driveLegacyRootPaths = []string{"/run/orbit-documents", "/run/orbit-files"}
+
+// driveFSTypes are the mount daemon's FUSE types: fuse.orbit-drive, and the ones it had under the older drivers.
+var driveFSTypes = map[string]bool{"fuse.orbit-drive": true, "fuse.orbit-documents": true, "fuse.orbit-files": true}
+
+var (
+	mountinfoPath = "/proc/self/mountinfo"
+	// driveParentPath is the plain directory the daemon mounts below: whichever of the roots this Pod has. A
+	// sandbox that binds paths is given this one: it receives a remount of drive/, where a bind of drive/ itself would
+	// keep the dead mount (design §7.2).
+	driveParentPath = pickDriveRoot(driveRootPath, driveLegacyRootPaths...)
+	driveMountPath  = filepath.Join(driveParentPath, "drive")
+	driveHomePath   = "/home/orbit/Drive"
+	// driveStaleHomePaths are where earlier runners linked the drive (as Documents, before that Files). They are no
+	// longer the drive: ensureDriveLink removes one that is a link to the mount.
+	driveStaleHomePaths = []string{"/home/orbit/Documents", "/home/orbit/Files"}
+	// driveStaleLinkTargets are the mounts those earlier runners linked to, under the older drivers' roots: a link to
+	// one of them is the earlier runner's too, even in a Pod whose drive is now below /run/orbit-drive.
+	driveStaleLinkTargets = []string{"/run/orbit-documents/drive", "/run/orbit-files/drive"}
+)
+
+// pickDriveRoot is root, or else the first of legacy that is a directory: a Pod of an older CSI driver.
+func pickDriveRoot(root string, legacy ...string) string {
+	for _, dir := range append([]string{root}, legacy...) {
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			return dir
+		}
+	}
+	return root
+}
+
+// driveStatusPath is the daemon's status.json, in the plain parent directory beside the mount.
+var driveStatusPath = filepath.Join(driveParentPath, "status.json")
+
+// driveStatusFreshness is how long a status.json stays believable: the daemon rewrites it every few seconds, so one
+// older than this belongs to a daemon that is gone, and whatever it held can no longer be flushed (design §8.1).
+const driveStatusFreshness = 2 * time.Minute
+
+// driveUncommittedHandles is how many handles of the mounted drive hold bytes no commit has taken: status.json's
+// uncommittedHandles, or 0 when no drive is mounted, the file cannot be read, or the daemon stopped writing it.
+func driveUncommittedHandles() int {
+	if !driveMounted() {
+		return 0
+	}
+	data, err := os.ReadFile(driveStatusPath)
+	if err != nil {
+		return 0
+	}
+	var status struct {
+		UncommittedHandles int       `json:"uncommittedHandles"`
+		UpdatedAt          time.Time `json:"updatedAt"`
+	}
+	if json.Unmarshal(data, &status) != nil || status.UncommittedHandles < 0 || time.Since(status.UpdatedAt) > driveStatusFreshness {
+		return 0
+	}
+	return status.UncommittedHandles
+}
+
+// driveGrantRoots is what an engine's sandbox or working-directory grant names for the drive: the parent
+// and both spellings of the drive, or nothing on a runner that has no drive mounted (design §7.1, §7.2).
+func driveGrantRoots() []string {
+	if !driveMounted() {
+		return nil
+	}
+	return []string{driveParentPath, driveHomePath, driveMountPath}
+}
+
+func driveMounted() bool {
+	data, err := os.ReadFile(mountinfoPath)
+	if err != nil {
+		return false
+	}
+	mounted := false
+	for _, line := range strings.Split(string(data), "\n") {
+		mount, filesystem, ok := strings.Cut(line, " - ")
+		fields := strings.Fields(mount)
+		if ok && len(fields) >= 6 && unescapeMountinfo(fields[4]) == driveMountPath {
+			// A later mount at the same point hides the earlier one.
+			fstype, _, _ := strings.Cut(filesystem, " ")
+			mounted = driveFSTypes[fstype]
+		}
+	}
+	return mounted
+}
+
+// unescapeMountinfo undoes the kernel's octal escapes of a mountinfo field (\040 for a space).
+func unescapeMountinfo(field string) string {
+	if !strings.Contains(field, `\`) {
+		return field
+	}
+	var b strings.Builder
+	for i := 0; i < len(field); i++ {
+		if field[i] == '\\' && i+3 < len(field) {
+			if n, err := strconv.ParseUint(field[i+1:i+4], 8, 8); err == nil {
+				b.WriteByte(byte(n))
+				i += 3
+				continue
+			}
+		}
+		b.WriteByte(field[i])
+	}
+	return b.String()
+}
 
 // localFileScope is the one rule for a file of this machine on its way to the control plane, whichever door it leaves
 // by: file_upload, a file a reply links, a legacy artifact request or Codex's generated image. It goes by where a path
@@ -174,6 +285,11 @@ func insideDirectory(path string, dir os.FileInfo) bool {
 // (openWorktreeArtifactFile). What is true of the file, its type and size and what sniffing it says, is read from the
 // handle: the path may mean something else by then.
 func (s localFileScope) open(path string) (*os.File, os.FileInfo, error) {
+	return s.openRegular(path, true)
+}
+
+// openRegular enforces the path rule for both attachments and drive_put.
+func (s localFileScope) openRegular(path string, scanSecrets bool) (*os.File, os.FileInfo, error) {
 	real, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		return nil, nil, err
@@ -201,7 +317,7 @@ func (s localFileScope) open(path string) (*os.File, os.FileInfo, error) {
 		if err == nil && !info.Mode().IsRegular() {
 			err = errors.New("not a regular file")
 		}
-		if err == nil {
+		if err == nil && scanSecrets {
 			err = refuseFileHoldingSecret(file, real)
 		}
 		if err != nil {

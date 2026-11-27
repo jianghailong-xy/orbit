@@ -44,6 +44,7 @@
  *       uuid column among the call's columns) and the reply clears both.
  *  (13) Orbit's own message: merged and alone, the echo writes Orbit's mark beside the text (`lastUserFromOrbit`, a
  *       nullable jsonb column, cleared as SQL NULL) and the reply clears both.
+ *  (14) A Codex sandbox notice changes the session's permission semantics on both paths and tells clients to re-read.
  *
  * Every state is read on a second connection, never through the answer that wrote it.
  *
@@ -66,8 +67,10 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 import { type INestApplication, Logger, Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
-import { type PrismaClient, RunStatus } from '@prisma/client';
-import { RunEventType, type NormalizedRunEvent } from '@orbit/shared';
+import { type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
+import { isReleasedStatus } from '../common/session-release';
+import { PermissionMode, RunEventType, type NormalizedRunEvent } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { sha256 } from '../common/crypto.util';
@@ -103,6 +106,7 @@ import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer
 import { resetRunEventSeqConflictMetrics, runEventSeqConflictsSnapshot } from './run-event-seq-conflicts';
 import { WATCH_TURN_KEY_PREFIX } from '../sessions/watch-turn-key';
 import '../test-support/daemon-routes-over-http';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -222,6 +226,7 @@ async function bootDoor(db: PrismaClient, link: RunnerLinkState, realtime: Realt
   );
   assert.ok(linkServer, `the internal listener did not open: ${problems.join('; ')}`);
   return {
+    sessions,
     httpsPort: Number(doorUrl.slice(doorUrl.lastIndexOf(':') + 1)),
     linkPort: (linkServer.address() as AddressInfo).port,
     close: async () => {
@@ -338,6 +343,7 @@ test('the link gateway\'s merged event call: many sessions in one transaction, e
     const turnId = randomUUID();
     const generation = randomUUID();
     const process = options.process ?? of.leaseOwner;
+    const status = options.status ?? RunStatus.RUNNING;
     await prisma.session.create({
       data: {
         id: sessionId,
@@ -349,7 +355,10 @@ test('the link gateway\'s merged event call: many sessions in one transaction, e
         prompt: title,
         provider: 'claude',
         providerBuiltin: true,
-        status: options.status ?? RunStatus.RUNNING,
+        turnState: turnStateOfWord(status),
+        ...(isReleasedStatus(status) ? {
+          finishedAt: new Date(),
+        } : {}),
         dispatchOrigin: 'USER',
         startsTaskWork: false,
         startedAt: new Date(),
@@ -1131,5 +1140,43 @@ test('the link gateway\'s merged event call: many sessions in one transaction, e
           `round ${round}, pair ${i}: the message and Orbit's mark`);
       }
     }
+  });
+
+  await t.test('(14) a Codex sandbox notice persists sandbox-off semantics through merged and standalone ingest', async () => {
+    const single = await liveSession(a, 'Codex Auto, standalone');
+    const grouped = await liveSession(a, 'Codex Auto, merged');
+    const control = await liveSession(a, 'Codex Auto, no sandbox report');
+    await prisma.session.updateMany({
+      where: { id: { in: [single.sessionId, grouped.sessionId, control.sessionId] } },
+      data: { engine: 'codex', provider: 'codex', permissionMode: PermissionMode.AUTO, engineStartedAt: new Date() },
+    });
+    const semantics = async (sessionId: string) => (await door.sessions.get(a.ownerId, sessionId)).permissionSemantics;
+    const before = await semantics(control.sessionId);
+    assert.equal(before?.mode, PermissionMode.AUTO);
+    assert.equal(before?.sandbox, undefined);
+    assert.deepEqual(await semantics(single.sessionId), before);
+    assert.deepEqual(await semantics(grouped.sessionId), before);
+
+    const notice = ev(1, RunEventType.SYSTEM, {
+      noticeKind: 'codex-sandbox-unavailable',
+      provider: 'codex',
+      sandboxUnavailable: true,
+    });
+    const standalone = await alone(door.linkPort, a, single.sessionId, [notice]);
+    assert.equal(standalone.status, 202, JSON.stringify(standalone.body));
+    const call = await merged(door.linkPort, [
+      { of: a, sessionId: grouped.sessionId, events: [notice] },
+      { of: a, sessionId: control.sessionId, events: [ev(1, RunEventType.SYSTEM, { subtype: 'init' })] },
+    ]);
+    assert.deepEqual(answersOf(call), Array.from({ length: 2 }, () => ({ ok: true, durableSeq: 1, rejected: [] })));
+
+    for (const { sessionId } of [single, grouped]) {
+      const actual = await semantics(sessionId);
+      assert.equal(actual?.sandbox, 'off');
+      assert.match(actual?.note ?? '', /your Cloud runner's container isolates its commands/);
+      assert.doesNotMatch(JSON.stringify(actual), /workspace-write/);
+      await until('the session refresh notification', () => notesOf(sessionId).some((n) => n.u === 1));
+    }
+    assert.deepEqual(await semantics(control.sessionId), before);
   });
 });

@@ -249,6 +249,8 @@ export interface InFlightSkipFacts {
   pushReportedGeneration: bigint | null;
   claimGeneration: bigint;
   landingCheckCommand: string | null;
+  /** The project runs no landing check (`landingCheck` NONE, §12.15 P-C1). */
+  landingCheckNone?: boolean;
   mergeCheckCommand: string | null;
 }
 
@@ -281,7 +283,7 @@ export function inFlightSkipRefusal(job: InFlightSkipFacts): { code: string; mes
       message: 'this landing has already been asked to stop. Wait for its answer, then decide again.',
     };
   }
-  if (!(job.landingCheckCommand ?? job.mergeCheckCommand)) {
+  if (job.landingCheckNone || !(job.landingCheckCommand ?? job.mergeCheckCommand)) {
     return {
       code: INTEGRATION_SKIP_CHECK_NO_CHECK,
       message: 'this project has no landing check, so this landing runs none to skip.',

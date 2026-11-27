@@ -3,6 +3,7 @@ import { HttpException, Inject, Injectable, Logger, forwardRef } from '@nestjs/c
 import { Prisma } from '@prisma/client';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
+import { taskMovesRowWord } from '@orbit/shared';
 import { readOwnerDecisionsBySession } from '../projects/owner-decision-signal';
 import { orbitUrl } from '../push/feishu-transport';
 import { PushService } from '../push/push.service';
@@ -302,6 +303,8 @@ export class FeishuDirectService {
     try {
       await this.sessions.createTurn(app.ownerId, sessionId, { clientTurnId: feishuTurnKey(app.appId, eventId), content: text }, {
         senderClient: { client: 'feishu' },
+        // A person's message, as at the owner's own doors: the row moves to the top of the list.
+        listed: true,
         externalSender: sender,
         // Written with the turn, so a replay of this clientTurnId records nothing again. The chain is the one the slot
         // was held on, stamped as spoken in; no other chain is written for the session.
@@ -362,6 +365,8 @@ export class FeishuDirectService {
       await this.sessions.createTurn(app.ownerId, sessionId, { clientTurnId: feishuTurnKey(app.appId, eventId), content: text }, {
         ...(translation && langs ? { translated: { content: translation.text, from: langs.owner } } : {}),
         senderClient: { client: 'feishu' },
+        // A person's message, as at the owner's own doors: the row moves to the top of the list.
+        listed: true,
         // Written with the turn, so a second handling — a replay of this clientTurnId — records nothing again.
         onTurnWritten: async (tx, turn) => {
           await this.registerChain(tx, app, message.chatId, root, sessionId);
@@ -463,7 +468,11 @@ export class FeishuDirectService {
     ]);
     const entries = sessions.map((s) => ({
       title: s.title,
-      ownerItems: (decisions.get(s.id)?.ownerItems ?? []).map((item) => item.title),
+      ownerItems: [
+        ...(decisions.get(s.id)?.ownerItems ?? []).map((item) => item.title),
+        ...(decisions.get(s.id)?.ownerRequests ?? []).map((request) => request.title),
+        ...(decisions.get(s.id)?.taskMoves ?? []).map((group) => `${taskMovesRowWord(group.count)}: ${group.title}`),
+      ],
       url: orbitUrl({ sessionId: s.id }),
     }));
     await this.replyCard(app, message.messageId, 'status', renderStatusCard(entries, app.showOrbit));

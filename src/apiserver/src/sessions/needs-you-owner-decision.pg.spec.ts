@@ -82,11 +82,11 @@ import { test } from 'node:test';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -199,7 +199,7 @@ async function fixture(db: PrismaClient, label: string): Promise<Fixture> {
       title: `协调：${label}`,
       prompt: `协调：${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
       startedAt: new Date(),
@@ -550,7 +550,7 @@ test('the badge counts evidence waiting on the coordinator’s card, and only wh
         title: `${label} 执行会话`,
         prompt: `${label} 执行会话`,
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: true,
       },
@@ -977,7 +977,9 @@ test('the badge says Record as done… once a finished-looking project has waite
   const f = await fixture(db, 'looks-finished');
 
   // One criterion, confirmed, and the one task serving it DONE through the DONE fence — with no
-  // receipt anywhere, so the projection withholds DONE while every criterion is met.
+  // receipt anywhere, so the projection withholds DONE while every criterion is met. Its work ran
+  // a worktree branch and reported files: since revision 42 (§12.15 P-M3) landing follows the
+  // delivered commit, and work that ran no branch and reported nothing has nothing to land.
   await stack.projects.update(f.ownerId, f.projectId, {
     acceptanceCriteriaItems: [{ text: RULER, verificationMethod: METHOD }],
   } as never);
@@ -1000,10 +1002,51 @@ test('the badge says Record as done… once a finished-looking project has waite
       acceptanceExpectedExitCode: 0,
     },
   });
+  await db.session.create({
+    data: {
+      ownerId: f.ownerId,
+      creatorId: f.ownerId,
+      workspaceId: f.workspaceId,
+      taskId: served.id,
+      title: 'The work the ruler asks for',
+      prompt: 'Do the work',
+      turnState: null,
+      startsTaskWork: true,
+      finishedAt: new Date(),
+      changedFiles: ['work.md'],
+    },
+  });
   const settled = await sql.query(
     `UPDATE "task" SET "status" = 'DONE' WHERE "id" = $1::uuid AND "status" = 'OPEN'`, [served.id],
   );
   assert.equal(settled.rowCount, 1, 'the task reached DONE through the DONE fence');
+  // The session the task's work ran in: on its own branch, with a commit reported, and finished, so
+  // the criterion has a landing nobody recorded rather than nothing to land (§12.15 P-M3).
+  const { runnerId } = await db.workspace.findUniqueOrThrow({
+    where: { id: f.workspaceId }, select: { runnerId: true },
+  });
+  await db.session.create({
+    data: {
+      id: randomUUID(),
+      ownerId: f.ownerId,
+      creatorId: f.ownerId,
+      taskId: served.id,
+      workspaceId: f.workspaceId,
+      assignedRunnerId: runnerId,
+      title: 'the work the ruler asks for',
+      prompt: 'the work the ruler asks for',
+      provider: 'claude',
+      turnState: null,
+      dispatchOrigin: SessionDispatchOrigin.USER,
+      startsTaskWork: true,
+      isolationStatus: 'worktree',
+      branch: `orbit/${served.id.slice(0, 8)}`,
+      changedFiles: ['src/work.ts'],
+      startedAt: new Date(),
+      // Released, so with its cause beside finished_at (session_release_fact_chk, 1401/1402).
+      finishedAt: new Date(),
+    },
+  });
 
   // The settled fact, as the producer leaves it when it hands a finished-looking project to the
   // conversation coordinating it: DELIVERED there, instead of a judgment.

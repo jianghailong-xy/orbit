@@ -67,8 +67,10 @@ public enum EngineErrors {
     /// moved off an account whose credentials are intact. Every marker of a group must appear.
     static let edgeBlockMarkers = ["attention required", "cloudflare"]
     static let connectionDroppedMarkers = ["econnreset"]
+    /// A provider's gateway that timed out on its own upstream and passed Go's transport error on under a 406 (DashScope).
+    static let connectionTimedOutMarkers = ["read: connection timed out"]
 
-    static let connectionFailureMarkers = [edgeBlockMarkers, connectionDroppedMarkers]
+    static let connectionFailureMarkers = [edgeBlockMarkers, connectionDroppedMarkers, connectionTimedOutMarkers]
 
     /// The connection's answer, not the request's: it clears on its own, so the text is retried
     /// rather than handed to a human as a sign-in. Anchored at the start, like the other

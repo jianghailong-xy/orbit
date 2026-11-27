@@ -50,6 +50,12 @@ export type ScheduleRule =
   | { kind: 'ONCE'; at: string }
   | { kind: 'DAILY'; time: string }
   | { kind: 'WEEKLY'; time: string; weekdays: Weekday[] }
+  /**
+   * Sub-daily (§3, §5.1): slots at `time`, `time + minutes`, … on the local wall clock, through `until` (inclusive)
+   * or 23:59, on each of `weekdays`. `time` and `weekdays` are always written out: shipped clients read an unknown
+   * kind as WEEKLY and need both (§9.3).
+   */
+  | { kind: 'EVERY'; minutes: number; time: string; weekdays: Weekday[]; until?: string }
   | { kind: 'WHEN'; conditionId: string | null; runsPerWeek: number; condition: WhenCondition };
 
 /** A WHEN rule's limits (§3): checked at least every 60 s, a probe timeout of 1 to 60 s, up to 7 runs a week. */
@@ -62,6 +68,11 @@ export const WHEN_MAX_RUNS_PER_WEEK = 7;
 /** A repeat is at least 15 minutes, and at least the interval (conditions.service.ts CONDITION_MIN_REPEAT_SECONDS). */
 export const WHEN_MIN_REPEAT_SECONDS = 900;
 const WHEN_MAX_SECONDS = 7 * 24 * 3600;
+
+/** The intervals an EVERY rule may take, in minutes; each divides a day (§3). */
+export const EVERY_MINUTES = [30, 60, 120, 180, 240, 360, 480, 720] as const;
+/** Without `until`, an EVERY rule's window runs to the end of the day. */
+const EVERY_DAY_END = 23 * 60 + 59;
 
 const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
@@ -166,6 +177,18 @@ function parseLocalDateTime(at: unknown): number {
   return local;
 }
 
+/** How far out a sub-daily rule's suggested end is (§8.5). */
+export const SUGGESTED_END_DAYS = 7;
+
+/**
+ * An EVERY create card's suggested end (§8.5): the same local time `SUGGESTED_END_DAYS` days after `now`, in
+ * `timezone`, so a week across a daylight-saving change is still a week.
+ */
+export function suggestedEndAt(now: Date, timezone: string): Date {
+  const wall = now.getTime() + offsetAt(now.getTime(), timezone);
+  return new Date(instantOfLocal(wall + SUGGESTED_END_DAYS * DAY, timezone));
+}
+
 /** Validates a rule as it arrives from a caller and returns it in its canonical shape. */
 export function parseRule(raw: unknown): ScheduleRule {
   const rule = raw as Partial<Record<string, unknown>> | null;
@@ -185,11 +208,51 @@ export function parseRule(raw: unknown): ScheduleRule {
       const weekdays = WEEKDAYS.filter((d) => days.includes(d));
       return { kind: 'WEEKLY', time: rule.time as string, weekdays };
     }
+    case 'EVERY':
+      return parseEveryRule(rule);
     case 'WHEN':
       return parseWhenRule(rule);
     default:
-      throw new ScheduleRuleError('SCHEDULE_RULE_INVALID', 'A rule is ONCE, DAILY, WEEKLY or WHEN.');
+      throw new ScheduleRuleError('SCHEDULE_RULE_INVALID', 'A rule is ONCE, DAILY, WEEKLY, EVERY or WHEN.');
   }
+}
+
+/**
+ * `{ kind: 'EVERY', minutes, time?, weekdays?, until? }`: `time` defaults to 00:00 and `weekdays` to all seven, and
+ * both are always written out (§3, §9.3).
+ */
+function parseEveryRule(rule: Partial<Record<string, unknown>>): ScheduleRule {
+  const minutes = rule.minutes;
+  if (typeof minutes !== 'number' || !(EVERY_MINUTES as readonly number[]).includes(minutes)) {
+    throw new ScheduleRuleError('SCHEDULE_RULE_INVALID', `An EVERY rule's minutes is one of ${EVERY_MINUTES.join(', ')}.`);
+  }
+  const time = rule.time === undefined || rule.time === null ? '00:00' : rule.time;
+  const start = parseTime(time);
+  let days = rule.weekdays;
+  if (days === undefined || days === null) days = [...WEEKDAYS];
+  if (!Array.isArray(days) || days.length === 0 || days.some((d) => !WEEKDAYS.includes(d as Weekday))) {
+    throw new ScheduleRuleError('SCHEDULE_RULE_INVALID', `An EVERY rule's weekdays name one or more of ${WEEKDAYS.join(', ')}.`);
+  }
+  const weekdays = WEEKDAYS.filter((d) => (days as unknown[]).includes(d));
+  const out: ScheduleRule = { kind: 'EVERY', minutes, time: time as string, weekdays };
+  if (rule.until !== undefined && rule.until !== null) {
+    const end = parseTime(rule.until);
+    if (end.h * 60 + end.m <= start.h * 60 + start.m) {
+      throw new ScheduleRuleError('SCHEDULE_RULE_INVALID', "An EVERY rule's until is later than its time on the same day.");
+    }
+    out.until = rule.until as string;
+  }
+  return out;
+}
+
+/** An EVERY rule's slots on one day, as minutes after local midnight: time, time + minutes, … through the window end. */
+export function everySlotMinutes(rule: Extract<ScheduleRule, { kind: 'EVERY' }>): number[] {
+  const { h, m } = parseTime(rule.time);
+  const end = rule.until ? parseTime(rule.until) : null;
+  const last = end ? end.h * 60 + end.m : EVERY_DAY_END;
+  const slots: number[] = [];
+  for (let t = h * 60 + m; t <= last; t += rule.minutes) slots.push(t);
+  return slots;
 }
 
 function whenInvalid(message: string): never {
@@ -292,6 +355,8 @@ export function runsPerWeek(rule: ScheduleRule): number {
       return 7;
     case 'WEEKLY':
       return new Set(rule.weekdays).size;
+    case 'EVERY':
+      return everySlotMinutes(rule).length * new Set(rule.weekdays).size;
     case 'WHEN':
       return rule.runsPerWeek;
   }
@@ -326,17 +391,31 @@ export function nextDueAt(rule: ScheduleRule, timezone: string, after: Date, win
 
   if (rule.kind === 'ONCE') return within(instantOfLocal(parseLocalDateTime(rule.at), timezone));
 
-  const { h, m } = parseTime(rule.time);
-  const days = rule.kind === 'WEEKLY' ? new Set(rule.weekdays) : null;
+  // A day's slots as minutes after local midnight: one for DAILY and WEEKLY, the window's for EVERY.
+  let slots: number[];
+  if (rule.kind === 'EVERY') slots = everySlotMinutes(rule);
+  else {
+    const { h, m } = parseTime(rule.time);
+    slots = [h * 60 + m];
+  }
+  const days = rule.kind === 'DAILY' ? null : new Set(rule.weekdays);
   // Start from the local day before `floor`, so a slot that falls early on floor's UTC date is not skipped.
-  const startLocal = new Date(wallClock(floor, timezone));
+  const floorLocal = wallClock(floor, timezone);
+  const startLocal = new Date(floorLocal);
   const first = Date.UTC(startLocal.getUTCFullYear(), startLocal.getUTCMonth(), startLocal.getUTCDate()) - DAY;
   for (let i = 0; i <= 9; i++) {
     const day = first + i * DAY;
     if (days && !days.has(WEEKDAYS[(new Date(day).getUTCDay() + 6) % 7])) continue;
-    const t = instantOfLocal(day + (h * 60 + m) * MINUTE, timezone);
-    if (t > end) return null;
-    if (t >= floor) return new Date(t);
+    for (const slot of slots) {
+      const local = day + slot * MINUTE;
+      // Far enough before floor on the wall clock that no offset change brings it after: skip without the zone.
+      if (local < floorLocal - DAY / 4) continue;
+      // Each slot turns into an instant as DAILY's does: a skipped time moves to the jump, a repeated one fires on
+      // its first occurrence. Slots that land on the same instant are one: the next is strictly after `floor`.
+      const t = instantOfLocal(local, timezone);
+      if (t > end) return null;
+      if (t >= floor) return new Date(t);
+    }
   }
   return null;
 }

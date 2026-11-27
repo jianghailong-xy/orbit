@@ -3,6 +3,7 @@ package io.orbitd.android.push
 import io.orbitd.android.core.auth.*
 import io.orbitd.android.core.net.*
 import io.orbitd.android.core.protocol.ProtocolException
+import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.navigation.OrbitLinks
@@ -98,11 +99,11 @@ class PushAuthorityTest {
             """{"title":"A","body":"B","kind":"approve-merge-to-main","sessionID":"$sid","openItemID":"$iid"}""")))
     }
 
-    @Test fun needsYouUsesAuthenticatedOpenSnapshotWithPublicAliasesAndExcludesStartOnlyAndFiledRows() = runBlocking {
+    @Test fun needsYouReadsTheStoresOpenRowsWithPublicAliasesAndExcludesStartOnlyAndFiledRows() = runBlocking {
         authorityFixture { authority, server, _ ->
-            server.respond = { request ->
-                assertEquals("/api/sessions?view=open", request.path)
-                response("""[
+            server.respond = { throw AssertionError("needsYou asks the server for nothing: ${it.path}") }
+            fun rows(json: String) = (Wire.json.parseToJsonElement(json) as JsonArray).map { it as JsonObject }
+            assertEquals(setOf(ObjectId.canonical("1"), ObjectId.canonical("3")), authority.needsYou(rows("""[
                     {"id":"1","status":"RUNNING","lifecycleState":"OPEN","pendingApprovals":1},
                     {"id":"${ObjectId.canonical("1")}","lifecycleState":"OPEN","pendingApprovals":2},
                     {"id":"2","lifecycleState":"OPEN","pendingApprovals":1,"waitingKind":"START_REQUEST"},
@@ -110,13 +111,8 @@ class PushAuthorityTest {
                     {"id":"5","lifecycleState":"OPEN","pendingApprovals":2,"cancelRequestedAt":"2026-10-04"},
                     {"id":"6","lifecycleState":"COMPLETED","pendingApprovals":1},
                     {"id":"7","lifecycleState":"TRASH","pendingApprovals":1}
-                ]""")
-            }
-            assertEquals(setOf(ObjectId.canonical("1"), ObjectId.canonical("3")), authority.needsYou())
-            server.respond = { response("{\"unexpected\":[]}") }
-            try { authority.needsYou(); fail("Invalid read is not an authoritative empty list") } catch (_: ProtocolException) { }
-            server.respond = { response("[{\"id\":\"1\",\"lifecycleState\":\"OPEN\",\"pendingApprovals\":\"broken\"}]") }
-            try { authority.needsYou(); fail("Invalid count is not an authoritative zero") } catch (_: ProtocolException) { }
+                ]""")))
+            try { authority.needsYou(rows("[{\"id\":\"1\",\"lifecycleState\":\"OPEN\",\"pendingApprovals\":\"broken\"}]")); fail("Invalid count is not an authoritative zero") } catch (_: ProtocolException) { }
         }
     }
 
@@ -222,9 +218,9 @@ class PushAuthorityTest {
     }
 
     /** A terminal asking to be approved (docs/terminal-session-design.md): the shared fixture's sample is what notifyTerminalLogin
-     * sends (push.service.spec). It parses, rings on the needs-you channel, opens the Waiting on you inbox, and stands while the
+     * sends (push.service.spec). It parses, rings on the needs-you channel, opens Machines & models with its card lit, and stands while the
      * request is still waiting. Without its request or its machine it is not a notification. */
-    @Test fun aTerminalAskingToBeApprovedOpensTheInboxAndStandsWhileItWaits() = runBlocking {
+    @Test fun aTerminalAskingToBeApprovedOpensMachinesAndModelsAndStandsWhileItWaits() = runBlocking {
         val sample = pushFixture()["samples"]!!.jsonArray.map { it.jsonObject }
             .single { it["name"]!!.jsonPrimitive.content == "terminal-login" }
         val data = sample["data"]!!.jsonObject.mapValues { it.value.jsonPrimitive.content }
@@ -236,7 +232,7 @@ class PushAuthorityTest {
         assertEquals("Terminal on dev-laptop · code 7KQ-4MZ", push.payload.body)
         assertTrue(push.payload.isTerminalLogin)
         assertTrue(ObjectId.same(push.payload.terminalLoginId, request))
-        assertEquals(OrbitRoute(Destination.WAITING_ON_YOU, request, origin = Origin.EXTERNAL),
+        assertEquals(OrbitRoute(Destination.RUNNER, recordId = "terminal:${ObjectId.canonical(request)}", origin = Origin.EXTERNAL),
             push.link?.let { OrbitLinks.parse(it, origin = Origin.EXTERNAL) })
         for (missing in listOf("terminalLoginID", "runnerID")) {
             val payload = Json.parseToJsonElement(data.getValue("payload")).jsonObject - missing
@@ -409,6 +405,30 @@ class PushAuthorityTest {
     /** The server's one push per drain with the owner's work waiting (docs/runner-update-drain-design.md D3): it parses exactly as the
      * server sends it (the shared fixture's sample), names no engine, opens the runner, and stands while GET /runners lists the runner's
      * drainWaiting. Without its runner it is no notification. */
+    /** docs/account-health-owner-surface-contract.md §1: it opens its machine, names the row Check again takes, and stands only while
+     * GET /account-health lists that row. A key's push names no machine and no link. */
+    @Test fun anAccountNeedsActionPushOpensItsMachineAndStandsWhileTheBlockDoes() = runBlocking {
+        val push = message("account-needs-action", "runnerID" to runnerId, "accountHealthID" to "h1")
+        assertEquals(PushType.ALERT, push.type)
+        assertEquals("h1", push.payload.accountHealthId)
+        assertEquals(Destination.RUNNER, OrbitLinks.parse(push.link!!)!!.destination)
+        // A key or pool login has no machine: the Providers screen, where its row is.
+        val providers = message("account-needs-action", "accountHealthID" to "h2", "subjectKey" to "provider:k1").link
+        assertEquals("orbit://settings/providers", providers)
+        assertEquals(OrbitRoute(Destination.SETTINGS, "providers"), OrbitLinks.parse(providers!!)!!.copy(origin = OrbitRoute(Destination.SETTINGS).origin))
+        assertNull("it names its health row", runCatching { message("account-needs-action", "runnerID" to runnerId) }.getOrNull())
+        authorityFixture { authority, server, _ ->
+            var blocks = """[{"id":"h1"}]"""
+            server.respond = { request ->
+                assertEquals("/api/account-health", request.path)
+                response("""{"blocks":$blocks}""")
+            }
+            assertEquals(PushCheck.ACTIVE, authority.check(push))
+            blocks = "[]"
+            assertEquals("cleared by Check again", PushCheck.STALE, authority.check(push))
+        }
+    }
+
     @Test fun aRunnerUpdatingPushOpensItsRunnerAndStandsWhileWorkWaits() = runBlocking {
         val sample = pushFixture()["samples"]!!.jsonArray.map { it.jsonObject }
             .single { it["name"]!!.jsonPrimitive.content == "runner-updating" }
@@ -493,7 +513,6 @@ class PushAuthorityTest {
             val push = message("approval", "sessionID" to sid)
             server.server.shutdown()
             assertEquals(PushCheck.UNKNOWN, authority.check(push))
-            try { authority.needsYou(); fail("Offline must not clear current reminders") } catch (_: NetworkException) { }
             auth.logout()
             try { authority.check(push); fail("Retired account must not finish a check") } catch (_: SessionChanged) { }
         }

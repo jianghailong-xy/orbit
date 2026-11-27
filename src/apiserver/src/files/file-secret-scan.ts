@@ -37,28 +37,39 @@ function lineBreaksIn(bytes: Buffer): number {
 export async function findCredentialInFile(filePath: string): Promise<{ kind: string; line: number } | null> {
   const handle = await open(filePath, 'r');
   try {
-    const window = Buffer.allocUnsafe(SCAN_OVERLAP_BYTES + SCAN_READ_BYTES);
-    let held = 0;
-    let lineBreaksBefore = 0;
-    for (let first = true; ; first = false) {
-      const { bytesRead } = await handle.read(window, held, SCAN_READ_BYTES);
-      if (bytesRead === 0) return null;
-      held += bytesRead;
-      if (first && window.subarray(0, Math.min(held, BINARY_TEST_BYTES)).includes(0)) return null;
-      const found = findIssuedCredential(window.toString('latin1', 0, held));
-      if (found) return { kind: found.kind, line: lineBreaksBefore + lineBreaksIn(window.subarray(0, found.index)) + 1 };
-      const dropped = Math.max(0, held - SCAN_OVERLAP_BYTES);
-      lineBreaksBefore += lineBreaksIn(window.subarray(0, dropped));
-      window.copy(window, 0, dropped, held);
-      held -= dropped;
-    }
+    return await findCredentialInReads(async (window, at, length) => (await handle.read(window, at, length)).bytesRead);
   } finally {
     await handle.close();
   }
 }
 
 /**
- * Refuses an upload that holds a credential (docs/orbit-files-design.md §2.9). The file is refused as it is and never
+ * The scan itself, over any source of bytes: `read` fills `window` from `at` with at most `length` bytes and answers how
+ * many it put there, 0 at the end. A file and a drive version's chunks are both read this way, so a credential is found
+ * by the same shapes, the same overlap and the same binary test whichever it is in.
+ */
+export async function findCredentialInReads(
+  read: (window: Buffer, at: number, length: number) => Promise<number>,
+): Promise<{ kind: string; line: number } | null> {
+  const window = Buffer.allocUnsafe(SCAN_OVERLAP_BYTES + SCAN_READ_BYTES);
+  let held = 0;
+  let lineBreaksBefore = 0;
+  for (let first = true; ; first = false) {
+    const bytesRead = await read(window, held, SCAN_READ_BYTES);
+    if (bytesRead === 0) return null;
+    held += bytesRead;
+    if (first && window.subarray(0, Math.min(held, BINARY_TEST_BYTES)).includes(0)) return null;
+    const found = findIssuedCredential(window.toString('latin1', 0, held));
+    if (found) return { kind: found.kind, line: lineBreaksBefore + lineBreaksIn(window.subarray(0, found.index)) + 1 };
+    const dropped = Math.max(0, held - SCAN_OVERLAP_BYTES);
+    lineBreaksBefore += lineBreaksIn(window.subarray(0, dropped));
+    window.copy(window, 0, dropped, held);
+    held -= dropped;
+  }
+}
+
+/**
+ * Refuses an upload that holds a credential (docs/drive-design.md §2.9). The file is refused as it is and never
  * edited, because a kept file is the one its agent saw and its sha256 names. The route's cleanup removes the temporary
  * file, so nothing of it stays. The answer says what the credential looks like and where, and never repeats it.
  */

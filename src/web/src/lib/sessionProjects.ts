@@ -19,7 +19,7 @@ import { promotionTimelineDetail, promotionTimelineTitle } from './projectMerge'
 import { DEFAULT_MAIN_BRANCH, mainBranchName, runLineMain } from './projectStart';
 import type { SessionListView } from './queries';
 import { sessionFolderListing, type FolderSessionReadings, type SessionFolderRow } from './sessionFolders';
-import { sessionTimeSections, type GroupableSession } from './sessionGrouping';
+import { compareListed, sessionTimeSections, type GroupableSession } from './sessionGrouping';
 
 export interface SessionProjectSession extends GroupableSession {
   title?: string | null;
@@ -33,7 +33,9 @@ export interface SessionProjectLine {
   text: string;
   /** `warning` is a fact the row states in amber without asking anything: a landing the server
    *  judged timed out. It is deliberately not `approval`, which lights the row's needs-you dot. */
-  tone: 'preview' | 'running' | 'approval' | 'queued' | 'background' | 'watching' | 'review' | 'warning';
+  tone: 'preview' | 'running' | 'approval' | 'queued' | 'background' | 'watching' | 'review' | 'warning' | 'paused';
+  /** A pause glyph leads the line (§4.2 2a/2b). */
+  glyph?: 'pause';
 }
 
 export interface SessionProjectRow<T> extends GroupableSession {
@@ -52,7 +54,32 @@ export interface SessionProjectRow<T> extends GroupableSession {
   target: { kind: 'session' | 'project'; id: string };
   taskCounts?: ProjectSidebarTaskCounts;
   runningCount: number;
+  /** Null for a project nobody has started. */
+  startedAt: string | null;
+  /** How the project is paused (§4.2): the daily limit wins over the owner's own pause. */
+  pause: ProjectRowPause | null;
 }
+
+/** A paused project, and what Resume has to call (§4.3). */
+export type ProjectRowPause = { kind: 'fuse'; episodeId: string } | { kind: 'owner' };
+
+export type ProjectStateAction = 'pause' | 'resume' | 'complete';
+
+/** The first swipe slot / first menu item that is about the project's state (§4.3). Null for a project
+ *  nobody has started (starting spends money and stays in the conversation), and for a finished one
+ *  outside the Open view. */
+export function projectStateAction(
+  project: Pick<SessionProjectRow<unknown>, 'status' | 'startedAt' | 'pause'>,
+  view: SessionListView,
+): ProjectStateAction | null {
+  if (project.status === 'DONE' || project.status === 'CANCELLED') return view === 'open' ? 'complete' : null;
+  if (project.pause) return 'resume';
+  return project.startedAt ? 'pause' : null;
+}
+
+/** A project row never fires anything on a full swipe: dragging to the end stretches the row and
+ *  snaps back (§4.3). */
+export const PROJECT_ROW_FULL_SWIPE = false;
 
 /** The project an ordinary row belongs to where that project has no row: a member in a workspace its
  *  coordinator does not run in (owner 2026-11-07, docs/mocks/project-rows-by-workspace, option A). */
@@ -86,6 +113,9 @@ export const SESSION_PROJECT_COPY = {
   markHint: (title: string) => `Part of ${title} · open its sessions`,
   waitingSession: (text: string, title: string) => `${text} · ${title}`,
   noCoordinator: 'No coordinator',
+  /** A project row whose title nothing the list read names: a project with no coordinator, no sidebar row and
+   *  no member the list holds (a list read a page at a time). */
+  untitled: 'Project',
   openSession: 'Open Session',
   complete: 'Complete',
   openCoordinator: 'Open Coordinator',
@@ -94,6 +124,24 @@ export const SESSION_PROJECT_COPY = {
   pin: 'Pin',
   unpin: 'Unpin',
   move: 'Move…',
+  pause: 'Pause',
+  resume: 'Resume',
+  pausedAtLimit: (observed: number | null, limit: number | null) =>
+    observed != null && limit != null ? `Paused at the daily limit · ${observed}/${limit} today` : 'Paused at the daily limit',
+  pausedRuns: (n: number) => `Paused · ${n} ${n === 1 ? 'run' : 'runs'} finishing`,
+  pausedAgo: (ago: string | null) => ago ? `Paused · ${ago}` : 'Paused',
+  pausedTitle: 'Project paused',
+  pausedStill: (n: number) => n > 0
+    ? `${n} ${n === 1 ? 'run' : 'runs'} still going · nothing new starts or merges`
+    : 'Nothing new starts or merges',
+  undo: 'Undo',
+  resumedTitle: 'Resumed',
+  resumedLimitNote: 'The daily limit was not raised · Change on the project page',
+  refusedTitle: (door: 'pause' | 'resume') => `Couldn't ${door} the project`,
+  refusedReason: (door: 'pause' | 'resume', status: number | undefined, code: string | undefined, fallback: string) =>
+    status === 403 ? `Only the project's owner can ${door} it`
+      : code === 'PROJECT_NOT_STARTED' ? 'The project hasn\'t started yet'
+        : fallback,
   pageSubtitle: (sessions: number) => `Project · ${sessions} sessions`,
   /** The page's subtitle before its members have been read: no count it cannot vouch for yet. */
   pageSubtitleLoading: 'Project',
@@ -305,7 +353,8 @@ export const SESSION_LANDINGS_COPY = {
  */
 export interface LandingSessionSummary {
   subject: 'TASK' | 'PROMOTION';
-  state: 'IN_FLIGHT' | 'AWAITING_DECISION' | 'SETTLED';
+  /** FIXING (revision 42, §12.7): a failure of it is in its task's own session's hands. */
+  state: 'IN_FLIGHT' | 'AWAITING_DECISION' | 'FIXING' | 'SETTLED';
   settledAs: string | null;
   settledAt: string | null;
 }
@@ -345,7 +394,7 @@ export interface LandingsWindowRow {
 export interface LandingsWindowCard {
   sessionId: string;
   subject: 'TASK' | 'PROMOTION';
-  state: 'IN_FLIGHT' | 'AWAITING_DECISION';
+  state: 'IN_FLIGHT' | 'AWAITING_DECISION' | 'FIXING';
   /** The task's name (a round's own title), the line the card adds under its head. */
   title: string;
   at: number;
@@ -411,7 +460,7 @@ export function landingsWindow(
   const settled: Array<LandingsWindowRow & GroupableSession> = [];
   const now: LandingsWindowCard[] = [];
   const add = (row: LandingsWindowRow, at: string | null | undefined) =>
-    settled.push({ ...row, id: row.key, lastTurnAt: at ?? null });
+    settled.push({ ...row, id: row.key, lastTurnAt: at ?? null, listedAt: at ?? null });
   for (const row of rows) {
     const landing = row.landing;
     if (!landing) continue;
@@ -474,7 +523,7 @@ export function landingsWindow(
   const days = sessionTimeSections(settled, { pinnedFirst: false, now: opts.now })
     .map((section) => ({
       title: section.title,
-      rows: section.sessions.map(({ id: _id, lastTurnAt: _at, ...row }) => row).reverse(),
+      rows: section.sessions.map(({ id: _id, lastTurnAt: _at, listedAt: _listed, ...row }) => row).reverse(),
     }))
     .reverse();
   now.sort((a, b) => a.at - b.at || a.sessionId.localeCompare(b.sessionId));
@@ -574,7 +623,8 @@ export function landingsRowSummary(
   const now = opts.now ?? Date.now();
   const window = landingsWindow(landings, merges, { now: new Date(now) });
   const waiting = window.now.filter((card) => card.state === 'AWAITING_DECISION');
-  const inFlight = window.now.filter((card) => card.state === 'IN_FLIGHT');
+  // A landing its own task's session is fixing waits on nobody (revision 42, §12.7): it is in hand, as one in flight.
+  const inFlight = window.now.filter((card) => card.state === 'IN_FLIGHT' || card.state === 'FIXING');
   const today = window.days.find((day) => day.title === 'Today')?.rows ?? [];
   const settledAt = Math.max(...window.days.flatMap((day) => day.rows.map((row) => row.at)));
   const time = waiting.length > 0
@@ -626,6 +676,9 @@ export function sessionProjectListing<T extends SessionProjectSession>(
     workspaceId?: string | null;
     /** Same-view sessions across workspaces, used for the waiting line and tooltip count. */
     contentSessions?: readonly T[];
+    /** Each project's same-view session count across workspaces, as the server counted it; the tooltip
+     *  says at least this many. */
+    sessionCounts?: ReadonlyMap<string, number>;
     line: (session: T) => SessionProjectLine;
   } & FolderSessionReadings<T>,
 ): SessionProjectListing<T> {
@@ -659,29 +712,27 @@ export function sessionProjectListing<T extends SessionProjectSession>(
     const id = heldBy(session);
     return id ? { ...session, folderId: coordinators.get(id)?.folderId ?? null } : session;
   });
-  const folderListing = sessionFolderListing(assigned, folders, opts);
+  const grouped = sessionFolderListing(assigned, folders, opts);
+  // A folder's count is the rows its page lists: a project is one row, however many members it holds.
+  const rowsByFolder = new Map<string, Set<string>>();
+  for (const session of assigned) {
+    if (!session.folderId) continue;
+    const rows = rowsByFolder.get(session.folderId) ?? new Set<string>();
+    const projectId = heldBy(session);
+    rows.add(projectId ? `project:${projectId}` : session.id);
+    rowsByFolder.set(session.folderId, rows);
+  }
+  const folderListing = {
+    ...grouped,
+    folders: grouped.folders.map((row) => ({ ...row, sessionCount: rowsByFolder.get(row.folder.id)?.size ?? 0 })),
+  };
   const knownFolders = new Set(folders.map((folder) => folder.id));
   const inScope = (folderId: string | null | undefined) => opts.folderId
     ? folderId === opts.folderId
     : !folderId || !knownFolders.has(folderId);
   const loose = sessions.filter((session) => !heldBy(session) && inScope(session.folderId));
   const summaries = new Map(projects.map((project) => [project.id, project]));
-  const looseEntries = loose.map((session): SessionProjectEntry<T> => {
-    const membership = session.projectMembership;
-    if (!membership) return { ...session, kind: 'session' };
-    const summary = summaries.get(membership.projectId);
-    return {
-      ...session,
-      kind: 'session',
-      projectMark: {
-        projectId: membership.projectId,
-        title: summary?.title ?? membership.projectTitle,
-        status: summary?.status ?? membership.projectStatus,
-        taskCounts: summary?.taskCounts,
-        runningCount: summary?.buckets.running ?? 0,
-      },
-    };
-  });
+  const looseEntries = loose.map((session) => sessionEntry(session, summaries));
   if (!groups.size) {
     return { folders: opts.folderId ? [] : folderListing.folders, projects: [], sessions: loose, entries: looseEntries };
   }
@@ -691,80 +742,7 @@ export function sessionProjectListing<T extends SessionProjectSession>(
     const coordinator = coordinators.get(projectId) ?? null;
     const folderId = coordinator?.folderId ?? null;
     if (!inScope(folderId)) continue;
-    const summary = summaries.get(projectId);
-    const membership = members[0].projectMembership!;
-    const content = opts.contentSessions ? [...new Map([
-      ...opts.contentSessions.filter((session) => session.projectMembership?.projectId === projectId),
-      ...members,
-    ].map((session) => [session.id, session])).values()] : members;
-    const lines = new Map(content.map((session) => [session.id, opts.line(session)]));
-    const coordinatorLine = coordinator ? (lines.get(coordinator.id) ?? opts.line(coordinator)) : null;
-    const waiting = content.filter((session) => lines.get(session.id)?.tone === 'approval');
-    waiting.sort((a, b) => {
-      const left = waitingInstant(a);
-      const right = waitingInstant(b);
-      if (left !== right) {
-        if (!Number.isFinite(left)) return 1;
-        if (!Number.isFinite(right)) return -1;
-        return left - right;
-      }
-      return a.id.localeCompare(b.id);
-    });
-    const landing = sessionProjectLandingLine(
-      summary?.integration, opts.now ?? Date.now(), mainBranchName(summary?.mainBranch));
-    let line: SessionProjectLine;
-    let target: SessionProjectRow<T>['target'];
-    if (coordinatorLine?.tone === 'approval') {
-      line = coordinatorLine;
-      target = { kind: 'session', id: coordinator!.id };
-    } else if (waiting.length) {
-      const lead = waiting[0];
-      line = { text: SESSION_PROJECT_COPY.waitingSession(lines.get(lead.id)!.text, lead.title ?? ''), tone: 'approval' };
-      target = { kind: 'session', id: lead.id };
-    } else if (coordinator && summary?.attention?.coordinatorItems) {
-      const held = summary.attention.coordinatorItems;
-      const copy = SESSION_PROJECT_COORDINATOR_COPY[held.leadKind];
-      line = { text: [copy, elapsedLabel(held.oldestWaitingSince, opts.now ?? Date.now())].filter(Boolean).join(' · '), tone: 'running' };
-      target = { kind: 'session', id: coordinator.id };
-    } else if (coordinator && coordinatorLine && !opts.runnerOffline && opts.motion(coordinator) === 'spinner') {
-      line = coordinatorLine;
-      target = { kind: 'session', id: coordinator.id };
-    } else if (landing) {
-      line = landing;
-      target = coordinator ? { kind: 'session', id: coordinator.id } : { kind: 'project', id: projectId };
-    } else if (coordinatorLine) {
-      line = coordinatorLine;
-      target = { kind: 'session', id: coordinator!.id };
-    } else {
-      line = { text: SESSION_PROJECT_COPY.noCoordinator, tone: 'preview' };
-      target = { kind: 'project', id: projectId };
-    }
-    const latest = members.reduce((newest, session) => instant(session.lastTurnAt ?? session.createdAt) > instant(newest.lastTurnAt ?? newest.createdAt) ? session : newest);
-    const motions = opts.runnerOffline ? [] : members.map(opts.motion);
-    const needsYou = members.some((session) => lines.get(session.id)?.tone === 'approval');
-    const running = motions.includes('spinner');
-    const jobs = motions.includes('pulse');
-    rows.push({
-      id: projectId,
-      projectId,
-      title: summary?.title ?? membership.projectTitle,
-      status: summary?.status ?? membership.projectStatus,
-      members: [...members],
-      sessionCount: new Set([...content.map((session) => session.id), ...(coordinator ? [coordinator.id] : [])]).size,
-      coordinator,
-      folderId,
-      pinnedAt: coordinator?.pinnedAt ?? null,
-      lastTurnAt: latest.lastTurnAt ?? latest.createdAt,
-      createdAt: coordinator?.createdAt ?? latest.createdAt,
-      needsYou,
-      running,
-      jobs,
-      indicator: needsYou ? 'needs-you' : running ? 'running' : jobs ? 'jobs' : null,
-      line,
-      target,
-      taskCounts: summary?.taskCounts,
-      runningCount: summary?.buckets.running ?? motions.filter((motion) => motion === 'spinner').length,
-    });
+    rows.push(sessionProjectRow(projectId, members, coordinator, summaries.get(projectId), opts));
   }
   const entries: SessionProjectEntry<T>[] = [
     ...looseEntries,
@@ -772,9 +750,182 @@ export function sessionProjectListing<T extends SessionProjectSession>(
   ];
   entries.sort((a, b) => {
     if (opts.view === 'open' && !!a.pinnedAt !== !!b.pinnedAt) return a.pinnedAt ? -1 : 1;
-    const left = instant(a.lastTurnAt ?? a.createdAt);
-    const right = instant(b.lastTurnAt ?? b.createdAt);
-    return left === right ? 0 : left > right ? -1 : 1;
+    // Completed, at the same place, puts a session before a project, as GET /sessions/listing pages it
+    // (contracts/session-listing.fixtures.json).
+    if (opts.view === 'completed' && a.kind !== b.kind &&
+      instant(a.listedAt ?? a.createdAt) === instant(b.listedAt ?? b.createdAt)) return a.kind === 'session' ? -1 : 1;
+    return compareListed(a, b);
   });
   return { folders: opts.folderId ? [] : folderListing.folders, projects: rows, sessions: loose, entries };
+}
+
+/** The entry last made of each session object. */
+const sessionEntries = new WeakMap<object, SessionProjectEntry<SessionProjectSession>>();
+
+const sameMark = (a: SessionProjectMark | undefined, b: SessionProjectMark | undefined): boolean =>
+  a?.projectId === b?.projectId && a?.title === b?.title && a?.status === b?.status &&
+  a?.taskCounts === b?.taskCounts && a?.runningCount === b?.runningCount;
+
+/** A session's own entry in the list: a member of a project that has no row here carries the project's mark.
+ *  The same session object reading the same mark is the same entry object, so a list worked out again — a
+ *  re-read, a new page — does not redraw the rows it did not change. */
+export function sessionEntry<T extends SessionProjectSession>(
+  session: T,
+  summaries: ReadonlyMap<string, SidebarProject>,
+): SessionProjectEntry<T> {
+  const membership = session.projectMembership;
+  const summary = membership && summaries.get(membership.projectId);
+  const projectMark: SessionProjectMark | undefined = membership ? {
+    projectId: membership.projectId,
+    title: summary?.title ?? membership.projectTitle,
+    status: summary?.status ?? membership.projectStatus,
+    taskCounts: summary?.taskCounts,
+    runningCount: summary?.buckets.running ?? 0,
+  } : undefined;
+  const before = sessionEntries.get(session) as (T & { kind: 'session'; projectMark?: SessionProjectMark }) | undefined;
+  if (before && sameMark(before.projectMark, projectMark)) return before;
+  const entry: SessionProjectEntry<T> = projectMark
+    ? { ...session, kind: 'session', projectMark }
+    : { ...session, kind: 'session' };
+  sessionEntries.set(session, entry);
+  return entry;
+}
+
+/** What a project row is worked out with: `sessionProjectListing`'s options, as far as one row reads them. */
+export type SessionProjectRowOptions<T> = {
+  now?: number;
+  runnerOffline?: boolean;
+  contentSessions?: readonly T[];
+  sessionCounts?: ReadonlyMap<string, number>;
+  line: (session: T) => SessionProjectLine;
+} & FolderSessionReadings<T>;
+
+/** Where `GET /sessions/listing` placed a project's entry (docs/session-list-scale-design.md §3.2): a list
+ *  read a page at a time holds none of the members the entry stands for, so the server says where it goes,
+ *  when it last spoke and how many it holds. */
+export interface SessionProjectPlacement {
+  placedAt: string;
+  spokeAt: string;
+  memberCount: number;
+  /** Whether a member it holds runs / has a background job moving, which the list holds no row to read off. */
+  running?: boolean;
+  jobs?: boolean;
+}
+
+/**
+ * One project's row: `members` are the sessions it holds here as far as the list has them. A list that
+ * holds them all (`sessionProjectListing`) places the row by them; a list read a page at a time passes
+ * the server's `placed` instead, and the members it knows of — the coordinator and the members waiting on
+ * you here — say what the row reads.
+ */
+export function sessionProjectRow<T extends SessionProjectSession>(
+  projectId: string,
+  members: readonly T[],
+  coordinator: T | null,
+  summary: SidebarProject | undefined,
+  opts: SessionProjectRowOptions<T>,
+  placed?: SessionProjectPlacement,
+): SessionProjectRow<T> {
+  const content = opts.contentSessions ? [...new Map([
+    ...opts.contentSessions.filter((session) => session.projectMembership?.projectId === projectId),
+    ...members,
+  ].map((session) => [session.id, session])).values()] : [...members];
+  const membership = [...members, ...(coordinator ? [coordinator] : []), ...content]
+    .find((session) => session.projectMembership?.projectId === projectId)?.projectMembership ?? null;
+  const lines = new Map(content.map((session) => [session.id, opts.line(session)]));
+  const coordinatorLine = coordinator ? (lines.get(coordinator.id) ?? opts.line(coordinator)) : null;
+  const waiting = content.filter((session) => lines.get(session.id)?.tone === 'approval');
+  waiting.sort((a, b) => {
+    const left = waitingInstant(a);
+    const right = waitingInstant(b);
+    if (left !== right) {
+      if (!Number.isFinite(left)) return 1;
+      if (!Number.isFinite(right)) return -1;
+      return left - right;
+    }
+    return a.id.localeCompare(b.id);
+  });
+  const now = opts.now ?? Date.now();
+  const fuse = summary?.fuse;
+  const pause: ProjectRowPause | null = fuse?.paused && fuse.episodeId ? { kind: 'fuse', episodeId: fuse.episodeId }
+    : summary?.pausedAt ? { kind: 'owner' } : null;
+  const runningNow = summary?.buckets.running ?? 0;
+  const pausedLine: SessionProjectLine | null = fuse?.paused
+    ? { text: SESSION_PROJECT_COPY.pausedAtLimit(fuse.observed, fuse.limit), tone: 'warning', glyph: 'pause' }
+    : summary?.pausedAt
+      ? { text: runningNow > 0 ? SESSION_PROJECT_COPY.pausedRuns(runningNow) : SESSION_PROJECT_COPY.pausedAgo(elapsedLabel(summary.pausedAt, now)), tone: 'paused', glyph: 'pause' }
+      : null;
+  const landing = sessionProjectLandingLine(
+    summary?.integration, opts.now ?? Date.now(), mainBranchName(summary?.mainBranch));
+  let line: SessionProjectLine;
+  let target: SessionProjectRow<T>['target'];
+  if (coordinatorLine?.tone === 'approval') {
+    line = coordinatorLine;
+    target = { kind: 'session', id: coordinator!.id };
+  } else if (waiting.length) {
+    const lead = waiting[0];
+    line = { text: SESSION_PROJECT_COPY.waitingSession(lines.get(lead.id)!.text, lead.title ?? ''), tone: 'approval' };
+    target = { kind: 'session', id: lead.id };
+  } else if (pausedLine) {
+    line = pausedLine;
+    target = coordinator ? { kind: 'session', id: coordinator.id } : { kind: 'project', id: projectId };
+  } else if (coordinator && summary?.attention?.coordinatorItems) {
+    const held = summary.attention.coordinatorItems;
+    const copy = SESSION_PROJECT_COORDINATOR_COPY[held.leadKind];
+    line = { text: [copy, elapsedLabel(held.oldestWaitingSince, opts.now ?? Date.now())].filter(Boolean).join(' · '), tone: 'running' };
+    target = { kind: 'session', id: coordinator.id };
+  } else if (coordinator && coordinatorLine && !opts.runnerOffline && opts.motion(coordinator) === 'spinner') {
+    line = coordinatorLine;
+    target = { kind: 'session', id: coordinator.id };
+  } else if (landing) {
+    line = landing;
+    target = coordinator ? { kind: 'session', id: coordinator.id } : { kind: 'project', id: projectId };
+  } else if (coordinatorLine) {
+    line = coordinatorLine;
+    target = { kind: 'session', id: coordinator!.id };
+  } else {
+    line = { text: SESSION_PROJECT_COPY.noCoordinator, tone: 'preview' };
+    target = { kind: 'project', id: projectId };
+  }
+  const latest = members.length
+    ? members.reduce((newest, session) => instant(session.listedAt ?? session.createdAt) > instant(newest.listedAt ?? newest.createdAt) ? session : newest)
+    : null;
+  // `latest` places and dates the row (contracts/session-list-order.fixtures.json); the member that spoke last is
+  // carried as its liveness clock, which nothing orders or dates by.
+  const spoke = members.length
+    ? members.reduce((newest, session) => instant(session.lastTurnAt ?? session.createdAt) > instant(newest.lastTurnAt ?? newest.createdAt) ? session : newest)
+    : null;
+  const motions = opts.runnerOffline ? [] : members.map(opts.motion);
+  const needsYou = members.some((session) => lines.get(session.id)?.tone === 'approval');
+  const running = motions.includes('spinner') || (!opts.runnerOffline && !!placed?.running);
+  const jobs = motions.includes('pulse') || (!opts.runnerOffline && !!placed?.jobs);
+  const listedAt = placed?.placedAt ?? latest?.listedAt ?? latest?.createdAt ?? null;
+  return {
+    id: projectId,
+    projectId,
+    title: summary?.title ?? membership?.projectTitle ?? SESSION_PROJECT_COPY.untitled,
+    status: summary?.status ?? membership?.projectStatus ?? 'OPEN',
+    members: [...members],
+    sessionCount: Math.max(
+      new Set([...content.map((session) => session.id), ...(coordinator ? [coordinator.id] : [])]).size,
+      opts.sessionCounts?.get(projectId) ?? 0,
+      placed?.memberCount ?? 0,
+    ),
+    coordinator,
+    folderId: coordinator?.folderId ?? null,
+    pinnedAt: coordinator?.pinnedAt ?? null,
+    lastTurnAt: placed?.spokeAt ?? spoke?.lastTurnAt ?? spoke?.createdAt ?? null,
+    listedAt,
+    createdAt: coordinator?.createdAt ?? latest?.createdAt ?? listedAt,
+    needsYou,
+    running,
+    jobs,
+    indicator: needsYou ? 'needs-you' : running ? 'running' : jobs ? 'jobs' : null,
+    line,
+    target,
+    taskCounts: summary?.taskCounts,
+    runningCount: summary?.buckets.running ?? motions.filter((motion) => motion === 'spinner').length,
+    startedAt: summary?.startedAt ?? null,
+    pause,
+  };
 }

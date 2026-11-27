@@ -3,7 +3,10 @@ import { Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-r
 import { useQuery } from '@tanstack/react-query';
 import { getToken } from './api';
 import { encodeId, routeId } from './lib/idCodec';
+import { useEffect, type ReactNode } from 'react';
 import { useManagedRunner } from './lib/managedRunner';
+import { useDriveEnabled } from './lib/driveSwitch';
+import { resyncWebPush } from './lib/webPush';
 import { workspacesQuery, runnersQuery } from './lib/queries';
 import { machineDraftPath } from './lib/machineSetup';
 import { firstOpenableWorkspace } from './lib/workspaceOrder';
@@ -25,8 +28,9 @@ import { RunnerBrowserPage } from './pages/RunnerBrowserPage';
 import { GeneralSettingsPage } from './pages/settings/GeneralPage';
 import { NotificationsSettingsPage } from './pages/settings/NotificationsPage';
 import { AppearanceSettingsPage } from './pages/settings/AppearancePage';
-import { StorageSettingsPage } from './pages/settings/StoragePage';
-import { StorageFilesPage } from './pages/settings/StorageFilesPage';
+import { StorageSettingsPage } from './pages/drive/StoragePage';
+import { ModelRoutingPage } from './pages/settings/ModelRoutingPage';
+import { StorageFilesPage } from './pages/drive/StorageFilesPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AdminSignInPage } from './pages/AdminSignInPage';
 import { AdminEmailPage } from './pages/AdminEmailPage';
@@ -44,7 +48,7 @@ import { SetupPage } from './pages/SetupPage';
 import { ProjectDetailPage, ProjectsPage } from './pages/ProjectsPage';
 import { SharedLinksPage } from './pages/SharedLinksPage';
 import { AccessTokensPage } from './pages/AccessTokensPage';
-import { TerminalsPage } from './pages/TerminalsPage';
+import { SecretsPage } from './pages/SecretsPage';
 import { FeishuConnectGroupPage } from './pages/FeishuConnectGroupPage';
 import { FeishuIntegrationPage } from './pages/FeishuIntegrationPage';
 import { GithubIntegrationPage } from './pages/GithubIntegrationPage';
@@ -54,7 +58,9 @@ import { GuestLinkRedirect } from './pages/GuestSessionPage';
 import { SharedWikiDocRoute } from './pages/SharedWikiPage';
 import { TaskRoute } from './pages/TaskRoute';
 import { FollowingPage } from './pages/FollowingPage';
-import { WaitingOnYouPage } from './pages/WaitingOnYouPage';
+import { OwnerRequestRedirect } from './pages/OwnerRequestRedirect';
+import { DrivePage } from './pages/DrivePage';
+import { ScheduleChangePage } from './pages/ScheduleChangePage';
 import { ScheduledPage } from './pages/ScheduledPage';
 import { WikiPage } from './pages/WikiPage';
 import { HelpLayout } from './pages/help/HelpLayout';
@@ -79,6 +85,34 @@ function LegacySessionRedirect() {
 // `/runners` lands on /infrastructure with the query it carried, which opens a machine's Settings page:
 // older macOS/iOS clients open `/runners` and `/providers` with `?runner=<id>&engine=<engine>` to sign an
 // engine in, and that machine's page still opens on that engine.
+/** The old /settings/storage/:kind/:id addresses of one Storage row's files, now under Drive. */
+function StorageSettingsRedirect() {
+  const { kind, id } = useParams();
+  return <Navigate to={`/drive/storage/${kind}/${id}`} replace />;
+}
+
+/** The old /files/* and /documents/* addresses lead to /drive/* with the query kept. */
+function FilesRedirect() {
+  const { '*': rest } = useParams();
+  const { search } = useLocation();
+  return <Navigate to={{ pathname: rest ? `/drive/${rest}` : '/drive', search }} replace />;
+}
+
+/** Drive's routes: the page once the server has Drive, the not-found page without it, a spinner while that is read. */
+function DriveGate({ children, notFound }: { children: ReactNode; notFound: ReactNode }) {
+  const drive = useDriveEnabled();
+  if (!drive.settled) {
+    return (
+      <main className="app-main">
+        <div className="app-view app-view--doc" style={{ padding: 48, textAlign: 'center' }}>
+          <Spinner aria-busy="true" />
+        </div>
+      </main>
+    );
+  }
+  return drive.enabled ? <>{children}</> : <>{notFound}</>;
+}
+
 function InfrastructureRedirect() {
   const { search } = useLocation();
   return <Navigate to={{ pathname: '/infrastructure', search }} replace />;
@@ -94,6 +128,13 @@ function ProvidersRedirect() {
   const rest = pathname.replace(/^\/(admin\/)?providers\/?/, '');
   const to = rest === '' || /^(new|pools)(\/|$)/.test(rest) ? rest : `keys/${rest}`;
   return <Navigate to={{ pathname: `/settings/providers${to ? `/${to}` : ''}`, search }} replace />;
+}
+
+// An address a page left, landing where it went with the query it carried (a link to the Routing report's
+// Workflows view for 7 days opens Model routing on the same view and period).
+function KeepQueryRedirect({ to }: { to: string }) {
+  const { search } = useLocation();
+  return <Navigate to={{ pathname: to, search }} replace />;
 }
 
 // /settings/machines/:id, drawn afresh for each machine so nothing typed on one carries to the next.
@@ -199,6 +240,10 @@ export function App() {
   const authed = !!getToken();
   // Where Settings' Back to Orbit returns to.
   useRememberOutsideSettings();
+  // This browser's notification subscription, registered again on each signed-in load (lib/webPush.ts).
+  useEffect(() => {
+    if (authed) void resyncWebPush();
+  }, [authed]);
   const notFound = (
     <DocView>
       <NotFoundPage />
@@ -304,8 +349,9 @@ export function App() {
             <Route path="general" element={<GeneralSettingsPage />} />
             <Route path="notifications" element={<NotificationsSettingsPage />} />
             <Route path="appearance" element={<AppearanceSettingsPage />} />
-            <Route path="storage" element={<StorageSettingsPage />} />
-            <Route path="storage/:kind/:id" element={<StorageFilesPage />} />
+            {/* Storage moved into Drive (docs/mocks/drive, board choice a): the old addresses lead there. */}
+            <Route path="storage" element={<DriveGate notFound={notFound}><Navigate to="/drive/storage" replace /></DriveGate>} />
+            <Route path="storage/:kind/:id" element={<DriveGate notFound={notFound}><StorageSettingsRedirect /></DriveGate>} />
             <Route path="profile" element={<ProfilePage />} />
             {/* Old account-settings link, now Profile. Keep the redirect so existing
                 bookmarks/deep links don't 404. */}
@@ -314,8 +360,13 @@ export function App() {
             <Route path="shared-links" element={<SharedLinksPage />} />
             {/* The personal access tokens this account has issued: issue, list, revoke. */}
             <Route path="access-tokens" element={<AccessTokensPage />} />
-            {/* The terminals this account has approved: list, revoke (docs/terminal-session-design.md). */}
-            <Route path="terminals" element={<TerminalsPage />} />
+            {/* Every copy of a secret on a machine, and the saved secrets (project "Secrets management page"). */}
+            <Route path="secrets" element={<SecretsPage />} />
+            {/* The account-wide Terminals page is gone: each machine's page lists its own (docs/mocks/terminals-on-machine-page).
+                An old link opens Machines as /infrastructure does: the first machine's page, or General with none. */}
+            <Route path="terminals" element={<InfrastructureRoute />} />
+            {/* The Routing report's old address: it is on Providers → Model routing now, its view and filters kept. */}
+            <Route path="routing-report" element={<KeepQueryRedirect to="/settings/providers/routing" />} />
             {/* The account's own Feishu or Lark app (docs/feishu-bot-design.md §4.1, §4.2). */}
             <Route path="integrations/feishu" element={<FeishuIntegrationPage />} />
             {/* Connecting a Feishu group, opened from the bot's card with its one-time ticket (docs/feishu-bot-design.md §8.1). */}
@@ -335,6 +386,9 @@ export function App() {
             <Route path="providers/keys/:id" element={<ProviderConnectPage />} />
             <Route path="providers/pools" element={<SettingsPoolsPage />} />
             <Route path="providers/pools/:id" element={<ProviderPoolPage />} />
+            {/* Every model's tier beside how its runs went; Model tiers' old address leads here. */}
+            <Route path="providers/routing" element={<ModelRoutingPage />} />
+            <Route path="providers/tiers" element={<KeepQueryRedirect to="/settings/providers/routing" />} />
             <Route path="providers/:vendor" element={<SettingsKeysPage />} />
             <Route path="workspaces/:id" element={<SettingsWorkspacePage />} />
           </Route>
@@ -360,15 +414,46 @@ export function App() {
                 </FlushView>
               }
             />
-            {/* Everything an agent has asked the owner to do: owner requests and coordinator questions. */}
+            {/* A schedule's Change… (§8.2): Orbit's opening until the person's first words open the conversation. */}
             <Route
-              path="waiting"
+              path="scheduled/:id/change"
               element={
-                <DocView>
-                  <WaitingOnYouPage />
-                </DocView>
+                <FlushView>
+                  <ScheduleChangePage />
+                </FlushView>
               }
             />
+            {/* Drive, the account's drive (docs/mocks/drive/02-web): `?folder=` opens a folder and `?file=`
+                picks a file in it; its Trash is reached from inside it. */}
+            <Route
+              path="drive"
+              element={
+                <DriveGate notFound={notFound}>
+                  <FlushView>
+                    <DrivePage />
+                  </FlushView>
+                </DriveGate>
+              }
+            />
+            <Route path="drive/storage" element={<DriveGate notFound={notFound}><FlushView><StorageSettingsPage /></FlushView></DriveGate>} />
+            <Route path="drive/storage/:kind/:id" element={<DriveGate notFound={notFound}><FlushView><StorageFilesPage /></FlushView></DriveGate>} />
+            <Route
+              path="drive/trash"
+              element={
+                <DriveGate notFound={notFound}>
+                  <FlushView>
+                    <DrivePage view="trash" />
+                  </FlushView>
+                </DriveGate>
+              }
+            />
+            {/* The drive was once Files, then Documents: every old /files and /documents address keeps working, query string included. */}
+            <Route path="documents" element={<FilesRedirect />} />
+            <Route path="documents/*" element={<FilesRedirect />} />
+            <Route path="files" element={<FilesRedirect />} />
+            <Route path="files/*" element={<FilesRedirect />} />
+            {/* The Waiting on you inbox is gone; its old address opens the session that filed the request. */}
+            <Route path="waiting" element={<OwnerRequestRedirect />} />
             {/* Everything this account follows: watches, filed Active / Needs attention / Triggered
                 history. `?watch=<id>` opens one watch's card. */}
             <Route

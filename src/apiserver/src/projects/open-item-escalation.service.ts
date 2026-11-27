@@ -18,12 +18,14 @@ import {
   openItemDeliveredAt,
   openItemCoordinatorCanTake,
 } from './project-open-item';
-import { PROJECT_LIVE_SESSION_STATUS_SQL } from './live-session-status';
+import { sessionHeldSql } from '../common/session-release';
+import { sessionTurnStateSql } from '../sessions/session-turn-state';
 import {
   EVIDENCE_UNDECIDED_KIND,
   evidenceUndecidedEnding,
   openUndecidedEvidenceStatement,
 } from './evidence-undecided';
+import { IN_FLIGHT_JOB_STATES_SQL } from './in-flight-job-states';
 
 /**
  * How often the clock looks. Not how long anything waits: each item carries its own
@@ -221,14 +223,14 @@ export function escalatesAt(alias: string): Prisma.Sql {
            AND work."completed_at" IS NULL
            AND work."archived_at" IS NULL
            AND work."cancel_requested_at" IS NULL
-           AND work."status" IN (${Prisma.raw(PROJECT_LIVE_SESSION_STATUS_SQL)})
-           AND (work."status" <> 'INTERRUPTED' OR work."end_reason" IS NULL)
+           AND ${sessionHeldSql('work')}
+           AND (${sessionTurnStateSql('work')} IS DISTINCT FROM 'ABANDONED' OR work."end_reason" IS NULL)
       )
       OR EXISTS (
         SELECT 1
           FROM "project_integration_job" handling
          WHERE handling."id" = ${item}."handling_job_id"
-           AND handling."state" IN ('QUEUED', 'RUNNING')
+           AND handling."state" IN ${IN_FLIGHT_JOB_STATES_SQL}
       )
     THEN NULL
     -- Taken up: the project's coordinator took one of this item's own ITEM delivery
@@ -251,8 +253,8 @@ export function escalatesAt(alias: string): Prisma.Sql {
          AND coordinator."completed_at" IS NULL
          AND coordinator."archived_at" IS NULL
          AND coordinator."cancel_requested_at" IS NULL
-         AND coordinator."status" IN (${Prisma.raw(PROJECT_LIVE_SESSION_STATUS_SQL)})
-         AND (coordinator."status" <> 'INTERRUPTED' OR coordinator."end_reason" IS NULL)
+         AND ${sessionHeldSql('coordinator')}
+         AND (${sessionTurnStateSql('coordinator')} IS DISTINCT FROM 'ABANDONED' OR coordinator."end_reason" IS NULL)
          AND starts_with(taken."client_turn_id", ${OPEN_ITEM_TURN_PREFIX_SQL} || ${item}."id"::text || ':')
          AND taken."kind" = 'message'
          AND taken."delivered_at" >= ${item}."waiting_since"

@@ -1,0 +1,559 @@
+#!/usr/bin/python3 -I
+"""Fake `claude` CLI for the revision 42 part two e2e stack (NOT Claude Code: no model, account or network).
+
+Taken from the R29-13 landing-observation kit (docs/evidence/landing-observation/e2e/kit), which adapted
+src/android/scripts/a11-stack/fake-claude; this copy adds E2E-RUN. It speaks just enough of Claude Code's stream-json protocol
+for the runner to run real sessions: `--version` / `auth status` answer like a signed-in CLI; a stream-json session
+answers every control_request with success and, per user message, replays the user frame, then system/init, one
+assistant text and one result.
+
+What a turn does is read off its prompt, one directive per line (the scenario scripts put them in task descriptions
+or in messages they send):
+
+  E2E-DO: <action> [<action> ...]   (task runs only: ORBIT_TASK_ID set and the cwd is the task's worktree)
+      commit            commit E2E_WORK_<task id>.md in the worktree (always done first; the commit is the task's
+                        work; one file per task, so the work of two tasks never conflicts)
+      push-upstream     git push <remote> HEAD:<branch> -- the work goes straight to the line, the task branch is
+                        never pushed. <remote>/<branch> is read from the brief's own sentence (O-L3: "Push your
+                        commits to <remote>/<branch> before you finish"), else from E2E-UPSTREAM. Like an agent
+                        that pulls before it pushes, it first fetches <branch> and rebases onto it when the line
+                        has moved, so what it pushes is the task branch's own tip
+      push-cherry-pick  fetch <branch>, cherry-pick -x the work onto it in a scratch worktree (a DIFFERENT commit
+                        with the same change) and push that to <remote>/<branch>; the task branch keeps the original
+      push-task-branch  git push <remote> HEAD:refs/heads/<the task branch>
+      merge-receipt     record the push through the orbit MCP server's merge_receipt tool (ALREADY_MERGED, this
+                        session, sourceSha = HEAD, targetBranch = <branch>), as an agent that records its own
+                        push does
+  E2E-RUN <key>: <shell command>    (task runs only) run the command in the worktree, operations-style, and commit
+                        NOTHING: its stdout and stderr go to $LM_SCRATCH/<key>.out, outside the repository, and
+                        the turn fails if the worktree is not clean afterwards. Several lines run in order.
+  E2E-DETACH <key>: <ref>    (task runs only) `git fetch origin`, then `git checkout --detach <ref>` in the worktree, as
+                        a verification run told to check out its project's line does, and commit NOTHING: a report
+                        goes to $LM_SCRATCH/<key>.out, and the turn fails if HEAD did not move or the worktree is not
+                        clean afterwards. The runner then reports changed_files as the diff from the base to <ref>.
+  E2E-UPSTREAM: <remote>/<branch>    where push-* go when the brief does not say (a PLATFORM brief says "Do not push")
+  E2E-SHARED: <file>    (with E2E-DO; revision 42 part one) also write <file> holding this task's own line, in the same
+                        commit, so two tasks that both write it from the same tip conflict when the second one lands
+  E2E-ONFIX: resolve|decline    (with E2E-DO) what this task's session does with a landing-fix turn later: `resolve`
+                        merges the branches the turn names into its own branch, keeps both sides of every conflict,
+                        commits and ends the turn; `decline` commits nothing and ends the turn saying DECLINE_WORDS
+  E2E-BARRIER <name> <n>    (with E2E-DO) after the commit, wait (at most 300 s) until <n> task runs have reached
+                        barrier <name>, so the tasks of a pair have all started from the same tip
+
+A landing-fix turn (§12.5 W6: its prompt says "Orbit could not land your work") is answered by the E2E-ONFIX its task
+run recorded under $LM_SCRATCH/onfix/, found by ORBIT_TASK_ID or by the checkout's branch.
+  E2E-MCP <id> <tool> <json-arguments>   (any session) call one orbit MCP tool through `orbit mcp` -- the server
+                        the runner put in --mcp-config, run with this session's own environment -- after a
+                        `git fetch` in the cwd; the answer is logged under <id> and is the turn's reply
+
+  E2E-FAIL[-WHILE <flag>]: <text>   (any session) the turn fails with <text> as its error result, after writing
+                        E2E_FAILED_WORK.md in the cwd (work a failed run leaves uncommitted). With -WHILE, only
+                        while $LM_SCRATCH/<flag> exists; otherwise the turn is acknowledged.
+  E2E-HOLD-WHILE <flag>             (any session) the turn runs, holding its runner slot, while $LM_SCRATCH/<flag>
+                        exists (at most 600 s), and then goes on as any other turn
+  E2E-SWALLOW-WHILE <flag>          (any session) while $LM_SCRATCH/<flag> exists, the message is read and echoed
+                        and the turn ends with no reply at all (no assistant message): a delivery nobody answered.
+While $LM_SCRATCH/hold-commit-message exists, a one-shot `claude -p` asked for a commit message waits (up to 100 s)
+before it answers: the window between a failed turn's report and the release the runner sends after its commit.
+Anything else is acknowledged. Every action is logged as one JSON line to $LM_FAKE_LOG.
+"""
+import datetime
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import uuid
+
+VERSION = '2.1.312'
+ARGS = sys.argv[1:]
+
+
+def arg(flag):
+    for i, a in enumerate(ARGS):
+        if a == flag and i + 1 < len(ARGS):
+            return ARGS[i + 1]
+        if a.startswith(flag + '='):
+            return a.split('=', 1)[1]
+    return ''
+
+
+def log(kind, **extra):
+    path = os.environ.get('LM_FAKE_LOG')
+    if not path:
+        return
+    rec = {'at': datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='milliseconds'), 'pid': os.getpid(),
+           'kind': kind, 'session': os.environ.get('ORBIT_SESSION_ID', ''), 'task': os.environ.get('ORBIT_TASK_ID', ''),
+           'cwd': os.getcwd(), **extra}
+    with open(path, 'a') as f:
+        f.write(json.dumps(rec) + '\n')
+
+
+def out(obj):
+    sys.stdout.write(json.dumps(obj) + '\n')
+    sys.stdout.flush()
+
+
+def text_of(message):
+    content = (message or {}).get('content')
+    if isinstance(content, str):
+        return content
+    return '\n'.join(b.get('text') or '' for b in content or [] if isinstance(b, dict) and b.get('type') == 'text')
+
+
+def result(sid, text, is_error):
+    return {'type': 'result', 'subtype': 'success', 'is_error': is_error, 'num_turns': 1, 'result': text,
+            'session_id': sid, 'duration_ms': 50, 'duration_api_ms': 0, 'total_cost_usd': 0,
+            'usage': {'input_tokens': 0, 'output_tokens': 0, 'cache_creation_input_tokens': 0,
+                      'cache_read_input_tokens': 0}}
+
+
+def assistant(sid, text):
+    return {'type': 'assistant', 'session_id': sid, 'parent_tool_use_id': None,
+            'message': {'role': 'assistant', 'model': arg('--model') or 'lm42-fake',
+                        'content': [{'type': 'text', 'text': text}]}}
+
+
+def git(*argv, cwd=None):
+    r = subprocess.run(['git', *argv], capture_output=True, text=True, timeout=120, stdin=subprocess.DEVNULL, cwd=cwd)
+    return r.returncode, r.stdout.strip(), r.stderr.strip()
+
+
+def must(*argv, cwd=None):
+    code, so, se = git(*argv, cwd=cwd)
+    if code != 0:
+        raise RuntimeError(f'git {" ".join(argv)} exited {code}: {se[-400:]}')
+    return so
+
+
+# ── MCP: one tools/call through the orbit server the runner configured ─────────────────────────────────────────
+def orbit_mcp_command():
+    path = arg('--mcp-config')
+    try:
+        with open(path) as f:
+            server = json.load(f)['mcpServers']['orbit']
+        return [server['command'], *server.get('args', [])]
+    except (OSError, KeyError, ValueError):
+        return ['orbit', 'mcp']
+
+
+def mcp_call(tool, arguments):
+    proc = subprocess.Popen(orbit_mcp_command(), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, text=True)
+    def send(obj):
+        proc.stdin.write(json.dumps(obj) + '\n')
+        proc.stdin.flush()
+    def recv():
+        line = proc.stdout.readline()
+        return json.loads(line) if line else None
+    try:
+        send({'jsonrpc': '2.0', 'id': 1, 'method': 'initialize',
+              'params': {'protocolVersion': '2025-06-18', 'capabilities': {}, 'clientInfo': {'name': 'lm42-fake', 'version': '1'}}})
+        recv()
+        send({'jsonrpc': '2.0', 'method': 'notifications/initialized'})
+        send({'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call', 'params': {'name': tool, 'arguments': arguments}})
+        answer = recv()
+    finally:
+        try:
+            proc.stdin.close()
+            proc.wait(timeout=30)
+        except Exception:  # noqa: BLE001
+            proc.kill()
+    res = (answer or {}).get('result') or {}
+    text = '\n'.join(c.get('text', '') for c in res.get('content', []) if isinstance(c, dict))
+    return {'isError': bool(res.get('isError')) or 'error' in (answer or {}), 'text': text or json.dumps(answer)}
+
+
+def mcp_directives(prompt):
+    done = []
+    for m in re.finditer(r'^E2E-MCP\s+(\S+)\s+(\S+)\s+(\{.*\})\s*$', prompt, re.M):
+        call_id, tool, raw = m.group(1), m.group(2), m.group(3)
+        fetched = git('fetch', '--quiet', 'origin')
+        try:
+            arguments = json.loads(raw)
+            answer = mcp_call(tool, arguments)
+        except Exception as e:  # noqa: BLE001 - report, never crash the turn
+            arguments, answer = raw, {'isError': True, 'text': f'fake engine could not call {tool}: {e}'}
+        log('mcp', id=call_id, tool=tool, arguments=arguments, fetchExit=fetched[0], **answer)
+        done.append(f'[{call_id}] {tool} -> {"ERROR " if answer["isError"] else ""}{answer["text"][:1500]}')
+    return done
+
+
+# ── task work ─────────────────────────────────────────────────────────────────────────────────────────────────
+def push_target(prompt):
+    m = re.search(r'Push your commits to (\S+?)/(\S+?) before you finish', prompt)
+    if m:
+        return m.group(1), m.group(2), 'brief (O-L3)'
+    m = re.search(r'^E2E-UPSTREAM:\s*(\S+?)/(\S+)\s*$', prompt, re.M)
+    if m:
+        return m.group(1), m.group(2), 'E2E-UPSTREAM'
+    return None, None, None
+
+
+def ops_work(prompt):
+    """E2E-RUN lines: run each command in the worktree and commit nothing (an operations task)."""
+    runs = re.findall(r'^E2E-RUN\s+([A-Za-z0-9_.-]+):\s*(.+)$', prompt, re.M)
+    scratch = os.environ.get('LM_SCRATCH') or tempfile.gettempdir()
+    os.makedirs(scratch, exist_ok=True)
+    head_before = must('rev-parse', 'HEAD')
+    rec = {'runs': [], 'headBefore': head_before}
+    said = []
+    try:
+        for key, command in runs:
+            r = subprocess.run(['/bin/sh', '-c', command], capture_output=True, text=True, timeout=120,
+                               stdin=subprocess.DEVNULL)
+            path = os.path.join(scratch, f'{key}.out')
+            with open(path, 'w') as f:
+                f.write(f'$ {command}\n{r.stdout}{r.stderr}exit {r.returncode}\n')
+            rec['runs'].append({'key': key, 'command': command, 'exit': r.returncode, 'out': path,
+                                'stdoutTail': r.stdout[-300:]})
+            said.append(f'ran {key} (exit {r.returncode})')
+            if r.returncode != 0:
+                raise RuntimeError(f'{key}: `{command}` exited {r.returncode}: {r.stderr[-300:]}')
+        status = must('status', '--porcelain')
+        head_after = must('rev-parse', 'HEAD')
+        rec.update(headAfter=head_after, worktreeStatus=status)
+        if status or head_after != head_before:
+            raise RuntimeError(f'the worktree moved: HEAD {head_before[:10]} -> {head_after[:10]}, status {status!r}')
+        said.append(f'committed nothing; HEAD is still {head_after[:10]} and the worktree is clean')
+        log('ops-work', ok=True, **rec)
+        return 'lm42 fake engine: ' + '; '.join(said) + '. No model was called.', False
+    except Exception as e:  # noqa: BLE001 - report, and fail the turn
+        log('ops-work', ok=False, error=str(e), **rec)
+        return f'lm42 fake engine: {"; ".join(said)}; FAILED: {e}', True
+
+
+def detach_work(prompt):
+    """E2E-DETACH lines: check out another commit detached and commit nothing (the 2026-11-20 verification run)."""
+    runs = re.findall(r'^E2E-DETACH\s+([A-Za-z0-9_.-]+):\s*(\S+)\s*$', prompt, re.M)
+    scratch = os.environ.get('LM_SCRATCH') or tempfile.gettempdir()
+    os.makedirs(scratch, exist_ok=True)
+    head_before = must('rev-parse', 'HEAD')
+    rec = {'runs': [], 'headBefore': head_before, 'branchBefore': must('rev-parse', '--abbrev-ref', 'HEAD')}
+    said = []
+    try:
+        for key, ref in runs:
+            must('fetch', '--quiet', 'origin')
+            must('checkout', '--quiet', '--detach', ref)
+            head = must('rev-parse', 'HEAD')
+            path = os.path.join(scratch, f'{key}.out')
+            with open(path, 'w') as f:
+                f.write(f'$ git checkout --detach {ref}\nHEAD {head}\nexit 0\n')
+            rec['runs'].append({'key': key, 'ref': ref, 'head': head, 'out': path})
+            said.append(f'checked out {ref} detached at {head[:10]}')
+        status = must('status', '--porcelain')
+        head_after = must('rev-parse', 'HEAD')
+        rec.update(headAfter=head_after, worktreeStatus=status, branchAfter=must('rev-parse', '--abbrev-ref', 'HEAD'))
+        if status:
+            raise RuntimeError(f'the worktree is not clean: {status!r}')
+        if head_after == head_before:
+            raise RuntimeError(f'HEAD did not move from {head_before[:10]}: nothing was checked out')
+        said.append('committed nothing; the worktree is clean')
+        log('detach-work', ok=True, **rec)
+        return 'lm42 fake engine: ' + '; '.join(said) + '. No model was called.', False
+    except Exception as e:  # noqa: BLE001 - report, and fail the turn
+        log('detach-work', ok=False, error=str(e), **rec)
+        return f'lm42 fake engine: {"; ".join(said)}; FAILED: {e}', True
+
+
+# ── revision 42 part one: the landing-fix turn ───────────────────────────────────────────────────────────────
+DECLINE_WORDS = ('LFX42 decline: this conflict is with another task\'s line in the same file, and which line stays is '
+                 'not mine to decide, so I committed nothing. The coordinator should choose.')
+IDENT = ['-c', 'user.name=LM42 Fake Agent', '-c', 'user.email=agent@lm42.test']
+MARKER = re.compile(r'^(<<<<<<< |=======$|>>>>>>> )')
+
+
+def onfix_paths(branch):
+    base = os.path.join(os.environ.get('LM_SCRATCH') or tempfile.gettempdir(), 'onfix')
+    keys = [k for k in (os.environ.get('ORBIT_TASK_ID', ''), 'branch-' + branch.replace('/', '_')) if k]
+    return base, [os.path.join(base, k) for k in keys]
+
+
+def record_onfix(policy, branch):
+    base, paths = onfix_paths(branch)
+    os.makedirs(base, exist_ok=True)
+    for path in paths:
+        with open(path, 'w') as f:
+            f.write(policy + '\n')
+
+
+def barrier(name, count):
+    path = os.path.join(os.environ.get('LM_SCRATCH') or tempfile.gettempdir(), f'barrier-{name}')
+    os.makedirs(path, exist_ok=True)
+    with open(os.path.join(path, os.environ.get('ORBIT_TASK_ID', '') or str(os.getpid())), 'w') as f:
+        f.write(datetime.datetime.now(datetime.timezone.utc).isoformat() + '\n')
+    end = datetime.datetime.now().timestamp() + 300
+    while len(os.listdir(path)) < count:
+        if datetime.datetime.now().timestamp() > end:
+            raise RuntimeError(f'barrier {name}: only {len(os.listdir(path))} of {count} runs arrived in 300 s')
+        subprocess.run(['sleep', '1'])
+    return sorted(os.listdir(path))
+
+
+def landing_fix(prompt):
+    """Answer a landing-fix turn as the task's E2E-ONFIX says: resolve and commit, or decline and commit nothing."""
+    branch = must('rev-parse', '--abbrev-ref', 'HEAD')
+    head_before = must('rev-parse', 'HEAD')
+    _, paths = onfix_paths(branch)
+    policy = next((open(p).read().strip() for p in paths if os.path.exists(p)), '')
+    m = re.search(r'^1\. Merge (\S+?)(?: and (\S+?))? into your branch', prompt, re.M)
+    targets = [g for g in (m.groups() if m else ()) if g]
+    rec = {'policy': policy, 'branch': branch, 'headBefore': head_before, 'targets': targets,
+           'taskEnv': os.environ.get('ORBIT_TASK_ID', '')}
+    if policy != 'resolve':
+        rec.update(headAfter=must('rev-parse', 'HEAD'), worktreeStatus=must('status', '--porcelain'))
+        log('landing-fix', ok=True, declined=True, **rec)
+        return DECLINE_WORDS, False
+    try:
+        if not targets:
+            raise RuntimeError('the turn names no branch to merge')
+        must('fetch', '--quiet', 'origin')
+        resolved = []
+        for target in targets:
+            code, so, se = git(*IDENT, 'merge', '--no-edit', f'origin/{target}')
+            if code == 0:
+                continue
+            conflicted = [f for f in must('diff', '--name-only', '--diff-filter=U').split('\n') if f]
+            if not conflicted:
+                raise RuntimeError(f'git merge origin/{target} exited {code}: {se[-300:]}')
+            for name in conflicted:
+                with open(name) as f:
+                    kept = [line for line in f.read().splitlines(True) if not MARKER.match(line.rstrip('\n'))]
+                with open(name, 'w') as f:
+                    f.writelines(kept)
+                must('add', name)
+            must(*IDENT, 'commit', '--no-edit', '-q')
+            resolved += conflicted
+        head_after = must('rev-parse', 'HEAD')
+        status = must('status', '--porcelain')
+        rec.update(headAfter=head_after, worktreeStatus=status, resolved=resolved)
+        if status:
+            raise RuntimeError(f'the worktree is not clean after the fix: {status!r}')
+        log('landing-fix', ok=True, **rec)
+        merged = ', '.join(f'origin/{t}' for t in targets)
+        return (f'lm42 fake engine: landing fix: merged {merged} into {branch}, kept both sides of '
+                f'{", ".join(resolved) or "nothing (no conflict)"}, committed {head_after[:10]}. No model was called.'), False
+    except Exception as e:  # noqa: BLE001 - report, and fail the turn
+        log('landing-fix', ok=False, error=str(e), **rec)
+        return f'lm42 fake engine: landing fix FAILED: {e}', True
+
+
+def task_work(prompt):
+    if re.search(r'^E2E-DETACH\s', prompt, re.M) and not re.search(r'^E2E-DO:', prompt, re.M):
+        return detach_work(prompt)
+    if re.search(r'^E2E-RUN\s', prompt, re.M) and not re.search(r'^E2E-DO:', prompt, re.M):
+        return ops_work(prompt)
+    actions = []
+    for m in re.finditer(r'^E2E-DO:\s*(.+)$', prompt, re.M):
+        actions += m.group(1).split()
+    if not actions:
+        return 'lm42 fake engine: no E2E-DO directive; nothing done. No model was called.', False
+    first = (prompt.strip().splitlines() or [''])[0][:120]
+    rec = {'actions': actions}
+    said = []
+    try:
+        branch_now = must('rev-parse', '--abbrev-ref', 'HEAD')
+        base = must('rev-parse', 'HEAD')
+        work_file = f'E2E_WORK_{os.environ.get("ORBIT_TASK_ID", "") or "x"}.md'
+        with open(work_file, 'a') as f:
+            f.write(f'- {datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")} '
+                    f'{os.environ.get("ORBIT_TASK_ID", "")}: {first}\n')
+        must('add', work_file)
+        shared = re.search(r'^E2E-SHARED:\s*(\S+)\s*$', prompt, re.M)
+        if shared:
+            with open(shared.group(1), 'w') as f:
+                f.write(f'{os.environ.get("ORBIT_TASK_ID", "")}: this line is the work of this task\n')
+            must('add', shared.group(1))
+            rec['shared'] = shared.group(1)
+        must('-c', 'user.name=LM42 Fake Agent', '-c', 'user.email=agent@lm42.test', 'commit', '-qm',
+             f'e2e work for task {os.environ.get("ORBIT_TASK_ID", "")}')
+        work = must('rev-parse', 'HEAD')
+        rec.update(taskBranch=branch_now, parent=base, commit=work)
+        said.append(f'committed {work[:10]} on {branch_now}')
+        onfix = re.search(r'^E2E-ONFIX:\s*(resolve|decline)\s*$', prompt, re.M)
+        if onfix:
+            record_onfix(onfix.group(1), branch_now)
+            rec['onfix'] = onfix.group(1)
+        bar = re.search(r'^E2E-BARRIER\s+(\S+)\s+(\d+)\s*$', prompt, re.M)
+        if bar:
+            rec['barrier'] = barrier(bar.group(1), int(bar.group(2)))
+            said.append(f'met {bar.group(2)} runs at barrier {bar.group(1)}')
+        remote, branch, source = push_target(prompt)
+        rec.update(remote=remote, branch=branch, pushTargetFrom=source)
+        if 'push-upstream' in actions:
+            if not branch:
+                raise RuntimeError('push-upstream: the brief names no branch and there is no E2E-UPSTREAM')
+            must('fetch', '--quiet', remote, f'refs/heads/{branch}')
+            line_tip = must('rev-parse', 'FETCH_HEAD')
+            if git('merge-base', '--is-ancestor', line_tip, 'HEAD')[0] != 0:
+                must('-c', 'user.name=LM42 Fake Agent', '-c', 'user.email=agent@lm42.test', 'rebase', '--quiet', line_tip)
+                work = must('rev-parse', 'HEAD')
+                rec.update(rebasedOnto=line_tip, commit=work)
+                said.append(f'rebased onto {remote}/{branch} {line_tip[:10]} -> {work[:10]}')
+            code, so, se = git('push', remote, f'HEAD:refs/heads/{branch}')
+            rec['pushUpstream'] = {'exit': code, 'out': (so + '\n' + se)[-600:]}
+            if code != 0:
+                raise RuntimeError(f'push to {remote}/{branch} exited {code}: {se[-300:]}')
+            said.append(f'pushed {work[:10]} to {remote}/{branch} ({source}); the task branch was not pushed')
+        if 'push-cherry-pick' in actions:
+            if not branch:
+                raise RuntimeError('push-cherry-pick: no branch named')
+            must('fetch', '--quiet', remote, f'refs/heads/{branch}')
+            line_tip = must('rev-parse', 'FETCH_HEAD')
+            scratch = tempfile.mkdtemp(prefix='lm42-cp-')
+            os.rmdir(scratch)
+            must('worktree', 'add', '--detach', scratch, line_tip)
+            try:
+                must('-c', 'user.name=LM42 Fake Agent', '-c', 'user.email=agent@lm42.test', 'cherry-pick', '-x', work, cwd=scratch)
+                picked = must('rev-parse', 'HEAD', cwd=scratch)
+                code, so, se = git('push', remote, f'{picked}:refs/heads/{branch}', cwd=scratch)
+                rec['pushCherryPick'] = {'lineTipBefore': line_tip, 'picked': picked, 'exit': code, 'out': (so + '\n' + se)[-600:]}
+                if code != 0:
+                    raise RuntimeError(f'push of the cherry-pick exited {code}: {se[-300:]}')
+            finally:
+                git('worktree', 'remove', '--force', scratch)
+            said.append(f'pushed a cherry-pick of {work[:10]} as {picked[:10]} to {remote}/{branch}; '
+                        f'the task branch keeps {work[:10]}')
+        if 'push-task-branch' in actions:
+            remote_for_branch = remote or 'origin'
+            code, so, se = git('push', remote_for_branch, f'HEAD:refs/heads/{branch_now}')
+            rec['pushTaskBranch'] = {'exit': code, 'out': (so + '\n' + se)[-600:]}
+            said.append(f'pushed the task branch {branch_now} (exit {code})')
+        if 'merge-receipt' in actions:
+            answer = mcp_call('merge_receipt', {'result': 'ALREADY_MERGED', 'sourceSha': work, 'targetBranch': branch,
+                                                'sourceBranch': branch_now,
+                                                'message': 'pushed straight to the line by the agent'})
+            rec['mergeReceipt'] = answer
+            said.append(f'merge_receipt -> {"ERROR " if answer["isError"] else ""}{answer["text"][:300]}')
+        log('task-work', ok=True, **rec)
+        return 'lm42 fake engine: ' + '; '.join(said) + '. No model was called.', False
+    except Exception as e:  # noqa: BLE001 - report, and fail the turn
+        log('task-work', ok=False, error=str(e), **rec)
+        return f'lm42 fake engine: {"; ".join(said)}; FAILED: {e}', True
+
+
+def scratch_flag(name):
+    return os.path.exists(os.path.join(os.environ.get('LM_SCRATCH') or tempfile.gettempdir(), name))
+
+
+def swallowing(prompt):
+    m = re.search(r'^E2E-SWALLOW-WHILE\s+([A-Za-z0-9_.-]+)\s*$', prompt, re.M)
+    return bool(m) and scratch_flag(m.group(1))
+
+
+def hold(prompt):
+    """E2E-HOLD-WHILE <flag>: wait while the flag exists, at most 600 s."""
+    m = re.search(r'^E2E-HOLD-WHILE\s+([A-Za-z0-9_.-]+)\s*$', prompt, re.M)
+    if not m:
+        return
+    import time
+    log('turn-hold', flag=m.group(1))
+    for _ in range(1200):
+        if not scratch_flag(m.group(1)):
+            break
+        time.sleep(0.5)
+
+
+def failing(prompt):
+    """The error text an E2E-FAIL line makes this turn fail with, or None."""
+    m = re.search(r'^E2E-FAIL(?:-WHILE\s+([A-Za-z0-9_.-]+))?:\s*(.+)$', prompt, re.M)
+    if not m or (m.group(1) and not scratch_flag(m.group(1))):
+        return None
+    try:
+        with open('E2E_FAILED_WORK.md', 'a') as f:
+            f.write(f'- {datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")} work a failed run left\n')
+    except OSError:
+        pass
+    return m.group(2)
+
+
+def turn(sid, prompt):
+    """Returns (assistant text, is_error)."""
+    failure = failing(prompt)
+    if failure is not None:
+        return failure, True
+    parts = mcp_directives(prompt)
+    if parts:
+        return 'lm42 fake engine:\n' + '\n'.join(parts), False
+    if 'Orbit could not land your work' in prompt:
+        return landing_fix(prompt)
+    if os.environ.get('ORBIT_TASK_ID') and '/worktrees/' in os.getcwd():
+        return task_work(prompt)
+    return 'lm42 fake engine: acknowledged. No model was called.', False
+
+
+def main():
+    if '--version' in ARGS or '-v' in ARGS[:1]:
+        print(f'{VERSION} (Claude Code)')
+        return 0
+    if ARGS[:1] == ['auth']:
+        if ARGS[1:2] == ['status']:
+            print(json.dumps({'loggedIn': True, 'authMethod': 'lm42-fake', 'apiProvider': 'firstParty'}))
+        else:
+            print('[]' if ARGS[1:2] == ['list'] else '{}')
+        return 0
+    sid = arg('--session-id') or arg('--resume') or str(uuid.uuid4())
+    if arg('--input-format') != 'stream-json':
+        # one-shot `claude -p …` (commit messages, titles, recaps): a short canned answer
+        prompt = ARGS[-1] if ARGS and not ARGS[-1].startswith('-') else ''
+        text = 'lm42 fake engine reply.'
+        if prompt.startswith('/model '):
+            print(f'Set model to {prompt.split(None, 1)[1].strip()} (lm42 fake) for this session only')
+            return 0
+        if arg('-p').startswith('Generate a git commit message') and scratch_flag('hold-commit-message'):
+            log('commit-message-hold', cwd=os.getcwd())
+            import time
+            for _ in range(200):
+                if not scratch_flag('hold-commit-message'):
+                    break
+                time.sleep(0.5)
+        fmt = arg('--output-format')
+        if fmt == 'json':
+            print(json.dumps(result(sid, text, False)))
+        elif fmt == 'stream-json':
+            out({'type': 'system', 'subtype': 'init', 'session_id': sid, 'model': arg('--model') or 'lm42-fake',
+                 'claude_code_version': VERSION, 'slash_commands': [], 'skills': [], 'tools': [], 'mcp_servers': []})
+            out(assistant(sid, text))
+            out(result(sid, text, False))
+        else:
+            print(text)
+        return 0
+    log('session', sessionId=sid)
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            msg = json.loads(line)
+        except ValueError:
+            continue
+        kind = msg.get('type')
+        if kind == 'control_request':
+            out({'type': 'control_response',
+                 'response': {'subtype': 'success', 'request_id': msg.get('request_id'), 'response': {}}})
+        elif kind == 'user':
+            out(msg)  # --replay-user-messages: the echo is the delivery acknowledgement
+            prompt = text_of(msg.get('message'))
+            if swallowing(prompt):
+                log('turn-swallowed', prompt=prompt[:300])
+                out({'type': 'system', 'subtype': 'init', 'session_id': sid, 'model': arg('--model') or 'lm42-fake',
+                     'claude_code_version': VERSION, 'slash_commands': [], 'skills': [], 'tools': [], 'mcp_servers': []})
+                out(result(sid, '', False))
+                continue
+            if re.search(r'^E2E-HOLD-WHILE\s', prompt, re.M):
+                out({'type': 'system', 'subtype': 'init', 'session_id': sid, 'model': arg('--model') or 'lm42-fake',
+                     'claude_code_version': VERSION, 'slash_commands': [], 'skills': [], 'tools': [], 'mcp_servers': []})
+                hold(prompt)
+            text, is_error = turn(sid, prompt)
+            log('turn', isError=is_error, prompt=prompt[:300], reply=text[:600])
+            out({'type': 'system', 'subtype': 'init', 'session_id': sid, 'model': arg('--model') or 'lm42-fake',
+                 'claude_code_version': VERSION, 'slash_commands': [], 'skills': [], 'tools': [], 'mcp_servers': []})
+            out(assistant(sid, text))
+            out(result(sid, text, is_error))
+    log('stdin-closed')
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
 import { ConflictException } from '@nestjs/common';
-import { RunStatus, RunnerStatus } from '@prisma/client';
+import { RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { AgentProvider } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -24,6 +25,8 @@ import {
 } from '../runner-api/runner-provider-support';
 import { SessionsService } from '../sessions/sessions.service';
 import { QueueService } from './queue.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 process.env.PROVIDER_SECRET_KEY ??= 'dsh-install-gate-spec';
@@ -89,9 +92,9 @@ test('dsh install gate on PostgreSQL', { timeout: 300_000 }, async (t) => {
     // A Harness session that already ran on this runner, as one the runner reported and settled.
     const persisted = async (status: RunStatus, provider = 'dsh') => (await db.session.create({ data: {
       title: 'persisted dsh', prompt: 'first', ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: id,
-      provider, providerBuiltin: provider === 'dsh', status, numTurns: 1, usesRuntimeDefaultModel: true,
+      provider, providerBuiltin: provider === 'dsh', turnState: turnStateOfWord(status), numTurns: 1, usesRuntimeDefaultModel: true,
       runtimeSessionId: randomUUID(), startedAt: new Date(), permissionMode: 'default',
-      ...(status === RunStatus.CANCELLED ? { completedAt: new Date(), endReason: 'ended' } : {}),
+      ...(status === RunStatus.CANCELLED ? { finishedAt: new Date(), completedAt: new Date(), endReason: 'ended' } : {}),
     } })).id;
     const create = (provider: string, prompt = `create ${randomUUID()}`) =>
       sessions.create(ownerId, { workspaceId, provider, prompt, permissionMode: 'default' });
@@ -135,20 +138,20 @@ test('dsh install gate on PostgreSQL', { timeout: 300_000 }, async (t) => {
   await t.test('IG-PG3 a persisted Harness session keeps its follow-up queued with the notice and is never claimed', async () => {
     for (const id of [followUp, borrowed]) {
       await sessions.createTurn(f.ownerId, id, { clientTurnId: `follow-${id}`, content: `follow-up for ${id}` });
-      assert.equal((await row(id)).status, RunStatus.PENDING);
+      assert.equal(wordOf((await row(id))), RunStatus.PENDING);
     }
     await refusal(() => sessions.resume(f.ownerId, ended, { clientTurnId: 'revive-ended', content: 'revive the ended one' }),
       DSH_NOT_INSTALLED_ERROR);
     for (let poll = 0; poll < 3; poll += 1) assert.equal(await f.poll(CURRENT), null, 'a Harness session was handed to a runner without the CLI');
     for (const id of [followUp, borrowed]) {
       const waiting = await row(id);
-      assert.equal(waiting.status, RunStatus.PENDING, 'the waiting session left PENDING');
+      assert.equal(wordOf(waiting), RunStatus.PENDING, 'the waiting session left PENDING');
       assert.equal(waiting.error, DSH_NOT_INSTALLED_ERROR);
       assert.equal(waiting.numTurns, 1, 'a turn ran');
       assert.deepEqual((await turnsOf(id)).map((turn) => turn.status), ['PENDING'], 'the follow-up was delivered');
     }
     const stillEnded = await row(ended);
-    assert.equal(stillEnded.status, RunStatus.CANCELLED, 'a refused resume moved the ended session');
+    assert.equal(wordOf(stillEnded), RunStatus.CANCELLED, 'a refused resume moved the ended session');
     assert.equal((await turnsOf(ended)).length, 0, 'a refused resume queued its message');
   });
 
@@ -157,7 +160,7 @@ test('dsh install gate on PostgreSQL', { timeout: 300_000 }, async (t) => {
     const job = await f.poll(CURRENT);
     assert.equal(job?.sessionId, claude.id);
     assert.equal(job?.provider, AgentProvider.CLAUDE);
-    await db.session.update({ where: { id: claude.id }, data: { status: RunStatus.CANCELLED, completedAt: new Date() } });
+    await db.session.update({ where: { id: claude.id }, data: { turnState: null, finishedAt: new Date(), completedAt: new Date() } });
   });
 
   await t.test('IG-PG5 after the install the next heartbeat hands the same sessions over and new ones are created', async () => {
@@ -172,7 +175,7 @@ test('dsh install gate on PostgreSQL', { timeout: 300_000 }, async (t) => {
     for (const id of [followUp, borrowed]) {
       assert.equal(claimed.get(id)?.provider, AgentProvider.DSH);
       const running = await row(id);
-      assert.equal(running.status, RunStatus.RUNNING);
+      assert.equal(wordOf(running), RunStatus.RUNNING);
       assert.equal(running.error, null, 'the not-installed notice survived the claim');
     }
     const revived = await sessions.resume(f.ownerId, ended, { clientTurnId: 'revive-ended', content: 'revive the ended one' });
@@ -199,7 +202,7 @@ test('dsh install gate on PostgreSQL', { timeout: 300_000 }, async (t) => {
       await refusal(() => g.create('dsh'), notice);
       assert.equal(await g.poll(CURRENT), null);
       assert.equal((await row(waiting)).error, notice);
-      assert.equal((await row(waiting)).status, RunStatus.PENDING);
+      assert.equal(wordOf((await row(waiting))), RunStatus.PENDING);
     }
   });
 

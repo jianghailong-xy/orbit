@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { uuidToBase62 } from '@orbit/shared';
-import { UpdateRunnerDto, ReorderRunnersDto, RequestEngineInstallDto, StartInstallDto, StartLoginDto } from './dto';
+import { ReorderRunnersDto, RequestEngineInstallDto, StartInstallDto, StartLoginDto } from './dto';
 
 test('Antigravity can be installed and signed into', async () => {
   const install = Object.assign(new StartInstallDto(), { engine: 'antigravity' });
@@ -91,24 +91,5 @@ test('ReorderRunnersDto rejects duplicate ids, in either spelling', async () => 
 test('ReorderRunnersDto rejects a non-array, a non-string and an id in neither spelling', async () => {
   for (const ids of ['runner-1', [FIRST, 2], ['runner-1']]) {
     assert.notEqual((await validate(reorder(ids))).length, 0, JSON.stringify(ids));
-  }
-});
-
-test('UpdateRunnerDto takes background job limits that are set, cleared with null, or left out', async () => {
-  for (const body of [{}, { bgJobCpus: 0.5 }, { bgJobCpus: 1024, bgJobMemoryMb: 16 }, { bgJobCpus: null, bgJobMemoryMb: null }, { bgJobMemoryMb: 2147483647 }]) {
-    assert.equal((await validate(plainToInstance(UpdateRunnerDto, body))).length, 0, JSON.stringify(body));
-  }
-});
-
-test('UpdateRunnerDto refuses background job limits out of range, in English', async () => {
-  const messages = async (body: object) =>
-    (await validate(plainToInstance(UpdateRunnerDto, body))).flatMap((e) => Object.values(e.constraints ?? {}));
-  for (const body of [{ bgJobCpus: 0 }, { bgJobCpus: -1 }, { bgJobCpus: 1025 }, { bgJobCpus: '2' }, { bgJobCpus: Number.POSITIVE_INFINITY }]) {
-    const m = await messages(body);
-    assert.ok(m.length > 0 && m.every((x) => /^bgJobCpus /.test(x)), JSON.stringify(body) + ' ' + m.join('; '));
-  }
-  for (const body of [{ bgJobMemoryMb: 15 }, { bgJobMemoryMb: 0 }, { bgJobMemoryMb: 1.5 }, { bgJobMemoryMb: 2147483648 }, { bgJobMemoryMb: '512' }]) {
-    const m = await messages(body);
-    assert.ok(m.length > 0 && m.every((x) => /^bgJobMemoryMb /.test(x)), JSON.stringify(body) + ' ' + m.join('; '));
   }
 });

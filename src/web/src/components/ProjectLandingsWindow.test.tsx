@@ -16,6 +16,7 @@ import { api, getSession, type SessionDetail } from '../api';
 import { landingClockTime } from './ProjectPanoramaHeader';
 import { ProjectLandingsWindow } from './ProjectLandingsWindow';
 import landingCheckFixture from '../lib/landingCheckTimeline.fixture.json';
+import { hoverTooltip } from '../test/tooltipHover';
 
 vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api')>();
@@ -454,7 +455,7 @@ describe('a landing in the window', () => {
     expect(line.querySelector('.sr-only')?.textContent).toBe('Orbit runs these landings — nothing to type here.');
     const door = foot.querySelector<HTMLButtonElement>('button.landing-page-foot-open')!;
     expect(door.textContent).toBe('Open coordinator');
-    expect(door.getAttribute('title')).toBe('Decisions: the coordinator');
+    expect(await hoverTooltip(door)).toBe('Decisions: the coordinator');
     expect(door.querySelector('.anticon-user')).not.toBeNull();
     expect(foot.querySelector('input, textarea, [contenteditable]')).toBeNull();
     await click(door, 'Open coordinator');
@@ -606,6 +607,40 @@ describe('a landing in the window', () => {
     expect(marks('job-1')).toEqual(['✓:is-ok', '✓:is-ok']);
     expect(marks('job-2')).toEqual(['✗:is-failed']);
     expect(marks('job-3')).toEqual(['✓:is-ok', '✓:is-ok']);
+  });
+
+  it('a landing check skipped because its task is exempt is drawn Skipped with its reason, never as failed (D5)', async () => {
+    const reason = 'Only moves cron entries; the landing check needs a database this task cannot reach.';
+    const entry = (id: string, name: string, text: string, data: Record<string, unknown>, index: number): IntegrationTimelineEntry => ({
+      id, seq: Number(id.slice(1)), kind: 'CHECK_FINISHED', at: at(14, 58), claim: 1, round: 1,
+      check: { name, index }, phase: 'CHECK', step: null, actor: { type: 'RUNNER' }, reason: null, data, text,
+    } as IntegrationTimelineEntry);
+    view = landing({
+      timeline: {
+        sections: [{
+          title: 'Landing · 1', jobId: 'job-1', kind: 'LAND_TASK', generation: 1, state: 'LANDED',
+          entries: [
+            entry('r1', 'TASK_ACCEPTANCE', 'Task acceptance passed · 14s', { exitCode: 0, expectedExitCode: 0, timedOut: false }, 1),
+            entry('r2', 'LANDING_CHECK', `Landing check skipped · this task is exempt: ${reason}`,
+              { skipped: 'TASK_EXEMPT', reason, exitCode: null, timedOut: false }, 2),
+          ],
+        }],
+        facts: [], truncated: false,
+      },
+    });
+    await mount();
+    await openSteps();
+    const step = page().querySelector<HTMLElement>('section[data-job="job-1"] [data-step="check:LANDING_CHECK"]')!;
+    expect(step.querySelector('.chat-tool-name')?.textContent).toBe('Landing check · Skipped');
+    expect(step.querySelector('.chat-tool-summary')?.textContent).toBe(`Exempt: ${reason}`);
+    expect(step.querySelector('.chat-tool-status.err')).toBeNull();
+    expect(step.querySelector('.chat-tool-status.skipped')).not.toBeNull();
+    // Task acceptance beside it still passed.
+    expect(page().querySelector('[data-step="check:TASK_ACCEPTANCE"] .chat-tool-status.ok')).not.toBeNull();
+    // Opened, its line wears the skipped arrow, and no inline output was read for it.
+    expect(step.querySelector('.landing-timeline-glyph')?.className).toContain('is-skipped');
+    expect(step.querySelector('.landing-timeline-glyph')?.textContent).toBe('→');
+    expect(calls.some((call) => call.path.includes('/landing/log?'))).toBe(false);
   });
 
   it('a merge check that ended READY writes no Stopped · not landed on its card', async () => {

@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SignInMethods } from '../lib/queries';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
  * Admin → Users and the welcome email (docs/welcome-email-design.md §3.5): a row whose welcome email
@@ -169,7 +170,7 @@ describe('Admin → Users · the welcome email', { timeout: 60_000 }, () => {
     expect(status('admin@example.test')).toBe('Active');
     const line = cellOf('jordan@example.org', 'Status')?.querySelector('.admin-users-welcome-failed');
     expect(line?.textContent).toBe(WELCOME_EMAIL_FAILED);
-    expect(line?.getAttribute('title')).toMatch(/^403 The example\.com domain is not verified\nLast attempt Nov 11, 2026, \d{1,2}:21 [AP]M$/);
+    expect(await hoverTooltip(line!)).toMatch(/^403 The example\.com domain is not verified\nLast attempt Nov 11, 2026, \d{1,2}:21 [AP]M$/);
     expect(container!.querySelectorAll('.admin-users-welcome-failed')).toHaveLength(1);
   });
 

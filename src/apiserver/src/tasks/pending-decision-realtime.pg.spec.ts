@@ -42,12 +42,12 @@ import test from 'node:test';
 import { HttpException } from '@nestjs/common';
 import {
   CreatorType,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
   type PrismaClient,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import { type ControlEvent, uuidToBase62 } from '@orbit/shared';
 import {
@@ -141,7 +141,7 @@ async function evidenceFixture(db: PrismaClient, ownerId: string) {
         title,
         prompt: 'run the task',
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: taskFor !== undefined,
       },
@@ -153,7 +153,7 @@ async function evidenceFixture(db: PrismaClient, ownerId: string) {
       { sessionId, name: 'Bash', toolUseId: 'toolu_realtime_second', input: { command: 'npm test' }, isError: false },
     ],
   });
-  return { workspaceId, criterionId, taskId, sessionId, reviewSessionId };
+  return { workspaceId, criterionId, taskId, sessionId, reviewSessionId, projectId };
 }
 
 /** Every control event one owner's stream delivers, in arrival order. */
@@ -275,7 +275,9 @@ test('the four writes that move a pending decision each nudge the owner’s cont
   const decisionRows = async (): Promise<number> => Number((await sql.query<{ n: string }>(
     'SELECT count(*) AS n FROM "task_evidence_decision" WHERE "task_id" = $1', [f.taskId],
   )).rows[0].n);
-  const taskChanged = { taskId: f.taskId, taskIds: [f.taskId], resync: false };
+  // Since 4faeb2d431 task.changed also names its rows' projects and the sessions that created them: this task is the
+  // project's and no session created it.
+  const taskChanged = { taskId: f.taskId, taskIds: [f.taskId], resync: false, rowProjectIds: [f.projectId], creatorSessionIds: [] };
 
   await t.test('(1) evidence submitted: one task.changed naming the task', async () => {
     const mark = mine.events.length;

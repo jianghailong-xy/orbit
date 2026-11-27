@@ -88,9 +88,14 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(agents.contains("listRow(session, projects: projectRows, marks: projectMarks)"))
         XCTAssertFalse(agents.contains("listRow(session, projects: projectRows)"), "every row is handed the marks")
         let row = try slice(agents, from: "@ViewBuilder private func listRow(_ s: Session, projects: [String: SessionProjectRow],", to: "\n    }")
-        XCTAssertTrue(row.contains("if let project = projects[s.id]"))
-        XCTAssertTrue(row.contains("projectRow(project)"), "the recency projection is rendered as a project, never as a session")
-        XCTAssertTrue(row.contains("sessionRow(s, mark: marks[s.id])"))
+        XCTAssertTrue(row.contains("SessionListEntryRow("), "the list's one entry builder draws the row")
+        // The entry builder is the one place the project/session split lives, so both lists share it.
+        let entry = try slice(code(try appSource("Views/SessionListRow.swift")),
+                              from: "struct SessionListEntryRow: View {", to: "\n}\n")
+        XCTAssertTrue(entry.contains("if let project = projects[session.id]"))
+        XCTAssertTrue(entry.contains("SessionProjectListRow(row: project"),
+                      "the recency projection is rendered as a project, never as a session")
+        XCTAssertTrue(entry.contains("SessionRow("))
         XCTAssertEqual(try branches(of: "private static func projectListing(_ inputs: SessionListInputs, _ lines: SessionLineCache) -> SessionProjectListing {", in: agents), [],
                        "the Mac's list groups as the iPad's and web's do")
 
@@ -115,9 +120,7 @@ final class SessionProjectPageWiringTests: XCTestCase {
                       "and the section hands every row the marks")
         XCTAssertFalse(page.contains("listRow(session, projects: projects)"), "every row is handed the marks")
         let folderRow = try slice(page, from: "@ViewBuilder private func listRow(_ s: Session, projects: [String: SessionProjectRow],", to: "\n    }")
-        XCTAssertTrue(folderRow.contains("if let project = projects[s.id]"))
-        XCTAssertTrue(folderRow.contains("projectRow(project)"))
-        XCTAssertTrue(folderRow.contains("sessionRow(s, mark: marks[s.id])"))
+        XCTAssertTrue(folderRow.contains("SessionListEntryRow("), "the same one entry builder")
     }
 
     /// Both lists regroup only when an input changed: the body reads the memo, and the grouping is
@@ -147,37 +150,38 @@ final class SessionProjectPageWiringTests: XCTestCase {
     /// A phone's tap opens the coordinator's conversation (owner 2026-11-11, board 5); the iPad's
     /// column keeps the sessions page, and the menu's Sessions still opens it on both.
     func testTheRowOpensTheCoordinatorOnAPhoneAndItsMenuUsesTheGroupingTarget() throws {
-        for relative in ["Views/AgentsView.swift", "Views/SessionFolderPage.swift"] {
-            let source = code(try appSource(relative))
-            let row = try slice(source, from: "private func projectRow(_ row: SessionProjectRow)", to: "\n    }")
-            XCTAssertTrue(row.contains("SessionProjectAddress(projectID: row.projectId"))
-            XCTAssertTrue(row.contains("let onOpen = {"))
-            XCTAssertTrue(row.contains("SessionProjectRowView(row: row, onOpen: onTap)"), relative)
-            let tap = try slice(row, from: "let onTap = {", to: "return SessionProjectRowView(")
-            XCTAssertTrue(tap.contains("switch SessionProjectSheet.rowTap(row, held: app.sessions + "),
-                          "\(relative): the tap is OrbitKit's rule, read against the sessions the app holds")
-            XCTAssertTrue(tap.contains(", push: rowNavigation == .push) {"),
-                          "\(relative): a phone's tap reads the row's coordinator; the iPad's column opens the page")
-            XCTAssertTrue(tap.contains("case .waitingMember(let member): app.openWaitingMember(member, project: "),
-                          "\(relative): a member waiting on you is opened at its card (owner 2026-11-14)")
-            XCTAssertTrue(tap.contains(", push: rowNavigation == .push)\n"), relative)
-            XCTAssertTrue(tap.contains("case .coordinator(let coordinator): app.openProjectMember(coordinator, push: true)"),
-                          "\(relative): the coordinator's conversation is pushed over the list")
-            XCTAssertTrue(tap.contains("case .sessions: app.openProjectSessions("), relative)
-            XCTAssertFalse(tap.contains("row.target"), "\(relative): which session the line names is OrbitKit's to read")
-            XCTAssertTrue(row.contains("switch row.target"))
-            XCTAssertTrue(row.contains("case .session(let id):"))
-            XCTAssertTrue(row.contains("$0.id == id"))
-            XCTAssertTrue(row.contains("app.openProjectMember(session, push: rowNavigation == .push)"))
-            XCTAssertTrue(row.contains("case .project: app.openProjectSessions("))
-            XCTAssertTrue(row.contains("onSessions: { app.openProjectSessions("))
-            XCTAssertTrue(row.contains(".sessionProjectRowActions(row, view: "),
-                          "the menu knows which list it is in, for Complete")
-            XCTAssertTrue(row.contains("onOpen: onOpen,"),
-                          "the Open Session menu keeps the grouping target")
-            XCTAssertTrue(row.contains("app.openProject(row.projectId)"))
-            XCTAssertTrue(row.contains("movingSession = coordinator"))
-        }
+        // One project row for both lists, inside the shared shell: the list only supplies its
+        // Move callback.
+        let source = code(try appSource("Views/SessionProjectPage.swift"))
+        let row = try slice(source, from: "struct SessionProjectListRow: View {", to: "\n}\n")
+        XCTAssertTrue(row.contains("SessionProjectAddress(projectID: row.projectId"))
+        XCTAssertTrue(row.contains("private var onOpenTarget: () -> Void {"))
+        XCTAssertTrue(row.contains("content: { SessionProjectRowView(row: row) }"))
+        let tap = try slice(row, from: "private var onTap: () -> Void {", to: "private var onOpenTarget")
+        XCTAssertTrue(tap.contains("switch SessionProjectSheet.rowTap(row, held: held"),
+                      "the tap is OrbitKit's rule, read against the sessions the app holds")
+        XCTAssertTrue(tap.contains(", push: navigation == .push) {"),
+                      "a phone's tap reads the row's coordinator; the iPad's column opens the page")
+        XCTAssertTrue(tap.contains("case .waitingMember(let member): app.openWaitingMember(member, project: "),
+                      "a member waiting on you is opened at its card (owner 2026-11-14)")
+        XCTAssertTrue(tap.contains("case .coordinator(let coordinator): app.openProjectMember(coordinator, push: true)"),
+                      "the coordinator's conversation is pushed over the list")
+        XCTAssertTrue(tap.contains("case .sessions: app.openProjectSessions("))
+        XCTAssertFalse(tap.contains("row.target"), "which session the line names is OrbitKit's to read")
+        let open = try slice(row, from: "private var onOpenTarget: () -> Void {", to: "private var onSessions")
+        XCTAssertEqual(open.components(separatedBy: "switch row.target").count - 1, 1)
+        XCTAssertTrue(open.contains("case .session(let id):"))
+        XCTAssertTrue(open.contains("$0.id == id"))
+        XCTAssertTrue(open.contains("app.openProjectMember(session, push: navigation == .push)"))
+        XCTAssertTrue(open.contains("case .project:"))
+        XCTAssertTrue(open.contains("app.openProjectSessions(address)"))
+        XCTAssertTrue(row.contains("Button(action: onSessions)"), "Sessions opens the project's page")
+        XCTAssertTrue(row.contains("menu: { menu(pin: SessionRowAction.pin(coordinator, in: app)) })"),
+                      "the menu knows which list it is in, for Complete, and pins the coordinator")
+        XCTAssertTrue(row.contains("Button(action: onOpenTarget)"),
+                      "the Open Session menu keeps the grouping target")
+        XCTAssertTrue(row.contains("app.openProject(row.projectId)"))
+        XCTAssertTrue(row.contains("onMove(coordinator)"))
         let agents = code(try appSource("Views/AgentsView.swift"))
         let workspaceMove = try slice(agents, from: ".sheet(item: $movingSession) { s in", to: "\n        }")
         XCTAssertTrue(workspaceMove.contains("agents.agent(s.agent?.id ?? s.agentId ?? agent.id)"))
@@ -232,31 +236,29 @@ final class SessionProjectPageWiringTests: XCTestCase {
                              to: "\n        }")
         XCTAssertTrue(card.contains("console.cardRequestFollowed()"))
         XCTAssertTrue(card.contains("atBottom = false"), "off the live tail, so the next publish does not pull it down")
-        XCTAssertTrue(card.contains("holdScroll(to: hold.rowID, anchor: .top, animated: false)"),
+        XCTAssertTrue(card.contains("holdScroll(to: request.rowID, anchor: .top, animated: false)"),
                       "the card's top — header and title — not its middle or the transcript's end")
         XCTAssertFalse(card.contains("opensReview"), "the card is answered in place, no review sheet")
-        XCTAssertTrue(card.contains("for delay in [0.4, 1.0, 2.0] {"),
-                      "re-aimed while the rows above are measured: a self-sizing List lands by estimates first")
+        XCTAssertTrue(card.contains("landing = TranscriptLanding(rowID: request.rowID, sessionID: sessionID, place: .top, at: Date())"),
+                      "held while the rows above are measured: a self-sizing List lands by estimates first")
         let publishFollow = try slice(view, from: ".onChange(of: console.stateRevision) {", to: "recomputeStuck()")
-        XCTAssertTrue(publishFollow.contains("if let hold = cardHold, hold.sessionID == console.sessionID, Date() < hold.until {"),
-                      "a publish in the first moments keeps the card's top rather than following the tail")
-        XCTAssertTrue(view.contains("atBottom = true; cardHold = nil; console.readerTookOver()"),
+        XCTAssertTrue(publishFollow.contains("if keepLanding(proxy) {"),
+                      "a publish while the card is held keeps the card's top rather than following the tail")
+        XCTAssertTrue(view.contains("atBottom = true; landing = nil; console.readerTookOver()"),
                       "the reader's own send lets go of the card, and of a request not yet followed")
-        // The reader's own scroll lets go too: the re-aims and the publish branch stop once a finger
+        // The reader's own scroll lets go too: the put-backs and the publish branch stop once a finger
         // (or, on macOS, the trackpad or wheel) has moved the list.
         let trackers = try slice(view, from: "private func tracker(ruler:", to: "private func repinAfterResize")
-        XCTAssertEqual(trackers.components(separatedBy: "readerScrolled: { cardHold = nil; console.readerTookOver() }").count - 1, 2,
+        XCTAssertEqual(trackers.components(separatedBy: "readerScrolled: { landing = nil; console.readerTookOver() }").count - 1, 2,
                        "both platforms' trackers clear the hold, and a request not yet followed, on the reader's scroll")
         let tookOver = try slice(console, from: "func readerTookOver() {", to: "\n    }")
-        XCTAssertTrue(tookOver.contains("pendingWaitingCardUntil = nil"))
+        XCTAssertTrue(tookOver.contains("pendingWaitingCardAt = nil"))
         XCTAssertTrue(tookOver.contains("cardRequest = nil"))
         let scrollTracker = try slice(view, from: "private struct ScrollTracker", to: "private struct AnchorRow: ViewModifier {")
         XCTAssertTrue(scrollTracker.contains("if phase == .interacting { readerScrolled() }"),
                       "the reader's interaction, never the app's own scrollTo (.animating or none)")
         XCTAssertEqual(try branches(of: "if phase == .interacting { readerScrolled() }", in: scrollTracker), [],
                        "on both platforms, not inside the iOS-only block")
-        let reaim = try slice(card, from: "for delay in [0.4, 1.0, 2.0] {", to: "holdScroll(")
-        XCTAssertTrue(reaim.contains("guard cardHold == hold"), "a re-aim after the reader scrolled does nothing")
         XCTAssertTrue(view.contains(".onAppear { proxy.scrollTo(bottomID, anchor: .bottom); recomputeStuck() }"),
                       "every other opening keeps the bottom pin")
     }
@@ -323,16 +325,23 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(row.contains("SpinnerGlyph(color: .secondary)"))
         XCTAssertTrue(row.contains("BreathingGlyph(systemImage: \"terminal\")"))
         XCTAssertTrue(row.contains(".fill(.orange)"))
-        XCTAssertTrue(row.contains("row.lastTurnAt"), "time follows the group's newest activity")
+        XCTAssertTrue(row.contains("row.listedAt"), "time follows the group's newest listing, where the row sits")
     }
 
+    /// One tap target: the shell is the button, and the content carries no press of its own — the
+    /// progress chip is inline, not a second way in.
     func testTheWholeRowIsOneButtonWithTheProgressChipInline() throws {
         let source = code(try appSource("Views/SessionProjectPage.swift"))
         let row = try slice(source, from: "struct SessionProjectRowView: View {", to: "\n}\n")
-        XCTAssertTrue(row.contains("Button(action: onOpen)"))
+        XCTAssertFalse(row.contains("Button("), "the content draws no press of its own")
         XCTAssertFalse(row.contains("onSessions"), "the row has one tap target")
         XCTAssertFalse(row.contains("progressTap"))
         XCTAssertFalse(row.contains("progressChip.hidden()"))
+        // The shell is that one press, with a project's own open target in either shape.
+        let shell = code(try appSource("Views/SessionListRow.swift"))
+        XCTAssertTrue(shell.contains("Button(action: onOpen)"), "the opens-it-itself shape")
+        XCTAssertTrue(shell.contains("if let onOpen { onOpen() } else { app.openSessionRow(subject) }"),
+                      "and the compact shape")
     }
 
     func testThePageHeaderShowsTheProjectNameCountAndOneProjectAction() throws {
@@ -367,8 +376,8 @@ final class SessionProjectPageWiringTests: XCTestCase {
 
     func testTheProjectRowHasExactlyTheAllowedMenuAndSwipeActions() throws {
         let source = code(try appSource("Views/SessionProjectPage.swift"))
-        let actions = try slice(source, from: "private struct SessionProjectRowActions: ViewModifier {", to: "\n}\n")
-        let full = try slice(actions, from: "private var menu: some View {", to: "\n    }")
+        let row = try slice(source, from: "struct SessionProjectListRow: View {", to: "\n}\n")
+        let full = try slice(row, from: "private func menu(pin: RowSwipeAction?) -> some View {", to: "\n    }")
         // A finished project's row leads with Complete and a divider (§4.3, owner 2026-11-07); the rest
         // of the menu is every project row's.
         let complete = try slice(full, from: "if row.offersComplete(in: view) {", to: "\n        }")
@@ -387,32 +396,38 @@ final class SessionProjectPageWiringTests: XCTestCase {
             XCTUnwrap(menu.range(of: "SessionProjectCopy.sessions")?.lowerBound),
             XCTUnwrap(menu.range(of: "SessionProjectCopy.openProject")?.lowerBound),
             XCTUnwrap(menu.range(of: "Divider()")?.lowerBound),
-            XCTUnwrap(menu.range(of: "actionButton(pinAction)")?.lowerBound),
+            XCTUnwrap(menu.range(of: "pin.menuItem")?.lowerBound),
             XCTUnwrap(menu.range(of: "SessionProjectCopy.move")?.lowerBound),
         ]
         XCTAssertEqual(order, order.sorted())
         XCTAssertEqual(menu.components(separatedBy: "Button(action:").count - 1, 4)
         XCTAssertFalse(menu.contains("SessionProjectCopy.openCoordinator"))
-        XCTAssertTrue(menu.contains("Button(action: onOpen)"))
+        XCTAssertTrue(menu.contains("Button(action: onOpenTarget)"))
         XCTAssertTrue(menu.contains(".disabled(!canOpenSession)"))
-        let canOpen = try slice(actions, from: "private var canOpenSession: Bool {", to: "\n    }")
+        let canOpen = try slice(row, from: "private var canOpenSession: Bool {", to: "\n    }")
         XCTAssertTrue(canOpen.contains("if case .session = row.target { return true }"))
         XCTAssertTrue(canOpen.contains("return false"), "a project-page fallback is not an openable session")
-        let outsideComplete = actions.replacingOccurrences(of: complete, with: "")
+        let outsideComplete = row.replacingOccurrences(of: complete, with: "")
         for forbidden in ["Complete", "Share", "Delete", "Approve", "Answer", "Respond"] {
             XCTAssertFalse(outsideComplete.contains(forbidden), "project entries cannot offer `\(forbidden)`")
         }
-        XCTAssertTrue(actions.contains("leading: leadingActions"))
-        XCTAssertTrue(actions.contains("trailing: trailingActions"))
-        XCTAssertTrue(actions.contains(".swipeActions(edge: .leading"))
-        XCTAssertTrue(actions.contains(".swipeActions(edge: .trailing"))
-        XCTAssertTrue(actions.contains("private var leadingActions: [RowSwipeAction] { row.coordinator == nil ? [] : [pinAction] }"))
-        let trailing = try slice(actions, from: "private var trailingActions: [RowSwipeAction] {", to: "\n    }")
-        XCTAssertTrue(trailing.contains("RowSwipeAction(title: \"Move\""))
-        XCTAssertTrue(trailing.contains("perform: onMove"))
-        let pin = try slice(actions, from: "private var pinAction: RowSwipeAction {", to: "\n    }")
-        XCTAssertTrue(pin.contains("SessionProjectCopy.unpin : SessionProjectCopy.pin"))
-        XCTAssertTrue(pin.contains("app.setPinned(coordinator, pinned: !pinned)"))
+        // Pin and Move act on the coordinator, and both are the one implementations a plain session's
+        // row draws. The shell owns the surfaces they appear on.
+        XCTAssertTrue(row.contains("leading: row.leadingActions(in: view).map { swipeAction($0, coordinator) }"))
+        XCTAssertTrue(row.contains("trailing: row.trailingActions().map { swipeAction($0, coordinator) }"))
+        XCTAssertTrue(row.contains("case .pin: return SessionRowAction.pin(coordinator, in: app)"))
+        XCTAssertTrue(row.contains("case .move: return SessionRowAction.move { onMove(coordinator) }"))
+        XCTAssertTrue(row.contains("leadingFullSwipe: SessionProjectRow.allowsFullSwipe"),
+                      "a full swipe fires nothing on a project row, in every state")
+        XCTAssertEqual(row.components(separatedBy: "RowSwipeAction(title:").count - 1, 3,
+                       "only Pause, Resume and Complete are built here; Pin and Move are the shared ones")
+        let shell = code(try appSource("Views/SessionListRow.swift"))
+        XCTAssertTrue(shell.contains(".swipeActions(edge: .leading"))
+        XCTAssertTrue(shell.contains(".swipeActions(edge: .trailing"))
+        let builder = try slice(code(try appSource("Views/SessionRowActions.swift")),
+                                from: "enum SessionRowAction {", to: "\n}")
+        XCTAssertTrue(builder.contains("title: pinned ? \"Unpin\" : \"Pin\""))
+        XCTAssertTrue(builder.contains("model.setPinned(session, pinned: !pinned)"))
     }
 
     /// Complete on a finished project's row asks the server to move the whole project (§3.6), never
@@ -507,12 +522,16 @@ final class SessionProjectPageWiringTests: XCTestCase {
                       "a phone pushes the project's page over the sessions page, so back returns to it")
 
         let row = try slice(page, from: "@ViewBuilder private func sessionRow(_ session: Session)", to: "\n    }")
-        for part in ["AgentSessionRow(session: session", "Button { openMember(session) }",
+        for part in ["SessionRow(session: session, navigation: rowNavigation,",
+                     "let open: (() -> Void)? = rowNavigation == .push ? { openMember(session) } : nil",
                      "let scope: SessionView = session.effectiveLifecycleState == .completed ? .completed : .open",
-                     ".sessionRowActions(session, scope: scope", "onTag: { taggingSession = session }",
-                     "onShare: { sharingSession = session }", "onMove: moveAction(session)", ".tag(session.id)"] {
+                     "onTag: { taggingSession = session }",
+                     "onShare: { sharingSession = session }", "onMove: moveAction(session)", "onOpen: open"] {
             XCTAssertTrue(row.contains(part), "member rows preserve `\(part)`")
         }
+        // The shell is where the row is tagged, as it is for every row either list draws.
+        let shell = code(try appSource("Views/SessionListRow.swift"))
+        XCTAssertTrue(shell.contains(".tag(subject.id)"), "member rows are tag-driven in a column shell")
         let moveAction = try slice(page, from: "private func moveAction(_ session: Session) -> (() -> Void)? {", to: "\n    }")
         XCTAssertTrue(moveAction.contains("{ movingSession = session }"), "a member moves to a folder")
         XCTAssertFalse(row.contains("address.view"), "member actions and appearance use the session's lifecycle")
@@ -1007,8 +1026,8 @@ final class SessionProjectPageWiringTests: XCTestCase {
     /// project row opens it "like the iPad"); the Mac's workspace list draws the project rows too.
     func testTheProjectUILayerIsCompiledForIOSAndTheMac() throws {
         let page = try appSource("Views/SessionProjectPage.swift")
-        for part in ["struct SessionProjectRowView: View", "struct SessionProjectPage: View",
-                     "func sessionProjectRowActions("] {
+        for part in ["struct SessionProjectRowView: View", "struct SessionProjectListRow: View",
+                     "struct SessionProjectPage: View"] {
             XCTAssertEqual(try branches(of: part, in: page), [])
         }
         let app = code(try appSource("AppModel.swift"))
@@ -1026,7 +1045,9 @@ final class SessionProjectPageWiringTests: XCTestCase {
                                to: "workspaceList")
         XCTAssertTrue(column.contains("SessionProjectPage(address: address, rowNavigation: rowNavigation)"),
                       "the Mac's session column draws the page")
-        XCTAssertEqual(try branches(of: "private func projectRow(_ row: SessionProjectRow)", in: agents), [])
+        XCTAssertEqual(try branches(of: "struct SessionProjectListRow: View", in: page), [],
+                       "the Mac's list draws the project row too")
+        XCTAssertTrue(agents.contains("SessionListEntryRow("), "and through the one entry builder")
     }
 
     /// Where a project has no row (owner 2026-11-07, docs/mocks/project-rows-by-workspace, option A), a
@@ -1055,16 +1076,21 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertFalse(chip.contains("Button") || chip.contains("onTapGesture"), "not a press of its own on a phone")
         XCTAssertEqual(try branches(of: "struct SessionProjectMarkChip: View {", in: page), [])
 
-        for relative in ["Views/AgentsView.swift", "Views/SessionFolderPage.swift"] {
-            let source = code(try appSource(relative))
-            let row = try slice(source, from: "@ViewBuilder private func sessionRow(_ s: Session", to: "\n    }")
-            XCTAssertTrue(row.contains("projectMark: mark)"), relative)
-            XCTAssertTrue(row.contains("let onSessions: (() -> Void)? = mark.map { mark in"), relative)
-            XCTAssertTrue(row.contains("app.openProjectSessions(SessionProjectAddress(projectID: mark.projectId,"), relative)
-            XCTAssertEqual(row.components(separatedBy: "onSessions: onSessions)").count - 1, 2,
-                           "\(relative): both row shapes offer the project's sessions")
-            XCTAssertTrue(row.contains(".tag(s.id)"), relative)
-        }
+        // The one entry builder hands a marked member to the one session row, with the project's
+        // sessions as its long press, and the shell tags it like any row.
+        let entry = try slice(code(try appSource("Views/SessionListRow.swift")),
+                              from: "struct SessionListEntryRow: View {", to: "\n}\n")
+        XCTAssertTrue(entry.contains("projectMark: mark,"))
+        XCTAssertTrue(entry.contains("onSessions: mark.map { mark in"))
+        XCTAssertTrue(entry.contains("app.openProjectSessions(SessionProjectAddress(projectID: mark.projectId,"))
+        let row = try slice(code(try appSource("Views/SessionRowActions.swift")),
+                            from: "struct SessionRow: View {", to: "\n}\n")
+        XCTAssertTrue(row.contains("projectMark: projectMark)"), "the row draws the mark")
+        XCTAssertTrue(row.contains("if let onSessions {"), "and offers the project's sessions")
+        XCTAssertTrue(row.contains("Button(action: onSessions)"))
+        XCTAssertTrue(try slice(code(try appSource("Views/SessionListRow.swift")),
+                                from: "    @ViewBuilder private var wrapped: some View {",
+                                to: "    private var label: some View {").contains(".tag(subject.id)"))
 
         let actions = code(try appSource("Views/SessionRowActions.swift"))
         let menu = try slice(actions, from: "@ViewBuilder private var menu: some View {", to: "\n    }")
@@ -1171,7 +1197,9 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let go = try slice(page, from: "private func go(_ action: @escaping () -> Void) {", to: "\n    }")
         XCTAssertTrue(go.contains("if let leaveSheet { leaveSheet(action) } else { action() }"))
         let row = try slice(page, from: "@ViewBuilder private func sessionRow(_ session: Session)", to: "\n    }")
-        XCTAssertTrue(row.contains("Button { openMember(session) }"), "the coordinator's and members' rows")
+        XCTAssertTrue(row.contains("let open: (() -> Void)? = rowNavigation == .push ? { openMember(session) } : nil"),
+                      "the coordinator's and members' rows press through the shared shell")
+        XCTAssertTrue(row.contains("SessionRow(session: session, navigation: rowNavigation,"))
         XCTAssertTrue(page.contains("{ openMember(coordinator) }"), "the merge card's coordinator link")
         XCTAssertTrue(page.contains("go { app.openProjectFromConversation(address.projectID, overConsole: rowNavigation == .push) }"))
         XCTAssertTrue(page.contains("go { app.push(.landings(projectID: address.projectID)) }"))

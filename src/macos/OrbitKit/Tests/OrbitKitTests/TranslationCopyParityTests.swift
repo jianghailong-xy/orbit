@@ -7,14 +7,14 @@ import XCTest
 /// words to iOS and macOS, and nothing in either build notices a word changed at one end only — so
 /// each one is looked up in the web source it came from: the conversation's words in
 /// `TRANSLATION_COPY` (src/web/src/lib/translation.ts), the Settings section's on the General page
-/// (pages/settings/GeneralPage.tsx, its rows' titles and descriptions in settingsIndex.ts), and the
+/// (pages/settings/GeneralPage.tsx, its rows' titles and descriptions in src/shared/src/settingsIndex.ts), and the
 /// languages in @orbit/shared translation.ts. A missing counterpart is a FAILURE, never an
 /// `XCTSkip`.
 final class TranslationCopyParityTests: XCTestCase {
 
     private static let lib = "src/web/src/lib/translation.ts"
     private static let settings = "src/web/src/pages/settings/GeneralPage.tsx"
-    private static let settingsIndex = "src/web/src/pages/settings/settingsIndex.ts"
+    private static let settingsIndex = "src/shared/src/settingsIndex.ts"
     private static let shared = "src/shared/src/translation.ts"
 
     private enum ParityError: Error, CustomStringConvertible {
@@ -65,6 +65,7 @@ final class TranslationCopyParityTests: XCTestCase {
             ("sendFailed", TranslationCopy.sendFailed),
             ("retry", TranslationCopy.retry),
             ("sendAsWritten", TranslationCopy.sendAsWritten),
+            ("cancel", TranslationCopy.cancel),
             ("replyPending", TranslationCopy.replyPending),
             ("replyFailed", TranslationCopy.replyFailed),
             ("sentToAgent", TranslationCopy.sentToAgent),
@@ -143,6 +144,22 @@ final class TranslationCopyParityTests: XCTestCase {
         let shared = try source(Self.shared)
         assertContains(shared, "BILINGUAL_COLLAPSE_LINES = \(BilingualEnglish.collapseLines);", in: Self.shared)
         assertContains(shared, "BILINGUAL_LINE_CHARS = \(BilingualEnglish.lineChars);", in: Self.shared)
+    }
+
+    /// A held message's failed line ends in the web's order: Retry, Send as written, then Cancel
+    /// where the message can be withdrawn.
+    func testTheHeldMessagesFailedLineIsTheWebs() throws {
+        let web = try source(Self.parts)
+        assertContains(web, "<FootAction label={COPY.sendAsWritten} "
+            + "onPress={actions && turnId ? () => actions.sendAsWritten(turnId) : undefined} /> "
+            + "{cancelTurn && turnId && actions?.canCancelTurn?.(turnId) && ( <> <Sep /> "
+            + "<FootAction label={COPY.cancel} onPress={() => cancelTurn(turnId)} /> </> )}", in: Self.parts)
+        let held = TurnTranslation(state: .failed, from: .zhHans, original: "x")
+        let presses = SessionTranslation.userFoot(held, flipped: false, cancellable: true).compactMap { part -> String? in
+            if case .action(let label, _) = part { return label }
+            return nil
+        }
+        XCTAssertEqual(presses, ["Retry", "Send as written", "Cancel"])
     }
 
     /// The owner cards (board 04-owner-cards.html) draw two lines: the whole-card flip and an answer

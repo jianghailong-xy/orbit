@@ -1,0 +1,105 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+  body { margin:0; background:#f2f2f4; font:15px/1.6 Inter,"Noto Sans SC",sans-serif; color:#1d1d1f; }
+  .b-part { padding:28px 32px; width:1180px; box-sizing:border-box; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .b-sub { color:#6e6e73; margin:0 0 20px; }
+  .b-row { display:flex; gap:24px; }
+  .b-col { flex:1; background:#fff; border-radius:14px; padding:18px 18px 22px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+  .b-col h2 { font-size:16px; margin:0 0 2px; }
+  .b-col .b-tag { display:inline-block; font-size:12px; padding:1px 8px; border-radius:10px; background:#e8e8ed; color:#555; margin-bottom:10px; }
+  .b-col .b-tag.rec { background:#dcf2e1; color:#1a7f37; }
+  .b-stage { position:relative; height:400px; background:#fafafa; border-radius:10px; overflow:hidden; }
+  .b-menu { position:absolute; left:22px; bottom:84px; width:240px; background:#fff; border-radius:16px;
+            box-shadow:0 6px 24px rgba(0,0,0,.14); padding:8px; }
+  .b-it { display:flex; align-items:center; gap:12px; padding:7px 12px; border-radius:10px; font-size:17px; }
+  .b-it svg { width:17px; height:17px; flex:none; stroke:#333; fill:none; stroke-width:1.6; }
+  .b-it small { display:block; font-size:12px; color:#8a8a8d; line-height:1.3; }
+  .b-it.bad { outline:2px dashed #e5484d; outline-offset:-2px; }
+  .b-it.good { outline:2px dashed #1a7f37; outline-offset:-2px; }
+  .b-hd { font-size:12px; color:#8a8a8d; padding:6px 12px 2px; }
+  .b-sep { height:1px; background:#e5e5ea; margin:6px 4px; }
+  .b-comp { position:absolute; left:10px; right:-40px; bottom:-30px; height:100px; border:1px solid #c7c7cc;
+            border-radius:26px; background:#fff; }
+  .b-comp .b-bar { position:absolute; left:22px; bottom:44px; display:flex; align-items:center; gap:14px; font-size:16px; color:#555; }
+  .b-chip { background:#eee; border-radius:8px; padding:3px 10px; color:#1d1d1f; }
+  .b-chip.bad { outline:2px dashed #e5484d; }
+  .b-mk { display:inline-flex; width:20px; height:20px; border-radius:50%; background:#e5484d; color:#fff; font-size:12px;
+          align-items:center; justify-content:center; font-weight:600; margin-right:4px; }
+  .b-mk.g { background:#1a7f37; }
+  ol { margin:12px 0 0; padding-left:20px; font-size:14px; }
+  ol li { margin:3px 0; }
+  .b-dec { background:#fff; border-radius:14px; padding:18px 22px; margin-top:22px; }
+  .b-dec h2 { font-size:16px; margin:0 0 8px; }
+  .b-dec p { margin:4px 0; font-size:14px; }
+</style></head><body>
+<section class="b-part" id="part-1">
+  <h1>Composer「+」菜单：附件三项改名</h1>
+  <p class="b-sub">问题：File 和 From Files 只差一个词，看不出一个是「从这台设备上传」，一个是「从 Orbit 的 Files 里选」。Files 胶囊已去掉（87ba0d4d90）。</p>
+  <div class="b-row">
+    <div class="b-col">
+      <h2>① 今天</h2><span class="b-tag">现状</span>
+      <div class="b-stage">
+        <div class="b-menu">
+          <div class="b-it bad"><svg viewBox="0 0 24 24"><path d="M8 12l6-6a3 3 0 014 4l-8 8a5 5 0 01-7-7l7-7"/></svg>File</div>
+          <div class="b-it"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 16l5-5 5 5 3-3 5 5"/></svg>Image</div>
+          <div class="b-it bad"><svg viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v9H3z"/></svg>From Files</div>
+          <div class="b-sep"></div>
+          <div class="b-it">Shell</div><div class="b-it">Skill</div><div class="b-it">Command</div>
+        </div>
+        <div class="b-comp"><div class="b-bar">＋ <span class="b-chip bad">🗁 Files</span> Auto</div></div>
+      </div>
+      <ol>
+        <li><span class="b-mk">1</span>File 和 From Files 读起来像同一件事</li>
+        <li><span class="b-mk">2</span>「Files」是 Orbit 网盘的名字，新用户不知道</li>
+        <li><span class="b-mk">3</span>胶囊重复了菜单里的 From Files（已去掉）</li>
+      </ol>
+    </div>
+    <div class="b-col">
+      <h2>② 定稿：动词 + 来源（Fable 方案）</h2><span class="b-tag rec">已选</span>
+      <div class="b-stage">
+        <div class="b-menu">
+          <div class="b-it good"><svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></svg>Upload File</div>
+          <div class="b-it good"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 16l5-5 5 5 3-3 5 5"/></svg>Upload Image</div>
+          <div class="b-it good"><svg viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v9H3z"/></svg>Add from Documents</div>
+          <div class="b-sep"></div>
+          <div class="b-it">Shell</div><div class="b-it">Skill</div><div class="b-it">Command</div>
+        </div>
+        <div class="b-comp"><div class="b-bar">＋ Auto</div></div>
+      </div>
+      <ol>
+        <li><span class="b-mk g">1</span>前两项以 Upload 开头：从这台设备传上来</li>
+        <li><span class="b-mk g">2</span>第三项 Add from Documents：和选择器标题 Add from Files 一致</li>
+        <li><span class="b-mk g">3</span>File 的回形针换成上传箭头，和第三项的文件夹分开</li>
+      </ol>
+    </div>
+    <div class="b-col">
+      <h2>③ 方案 B 改</h2><span class="b-tag">未选</span>
+      <div class="b-stage">
+        <div class="b-menu">
+          <div class="b-hd">From Orbit</div>
+          <div class="b-it good"><svg viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v9H3z"/></svg>Files</div>
+          <div class="b-sep"></div>
+          <div class="b-it"><svg viewBox="0 0 24 24"><path d="M8 12l6-6a3 3 0 014 4l-8 8a5 5 0 01-7-7l7-7"/></svg>File</div>
+          <div class="b-it"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 16l5-5 5 5 3-3 5 5"/></svg>Image</div>
+          <div class="b-sep"></div>
+          <div class="b-it">Shell</div><div class="b-it">Skill</div>
+        </div>
+        <div class="b-comp"><div class="b-bar">＋ Auto</div></div>
+      </div>
+      <ol>
+        <li><span class="b-mk g">1</span>From Orbit 放最上面，只有这一个小标题</li>
+        <li><span class="b-mk g">2</span>Files 下面一条分隔线，File / Image 不加标题</li>
+        <li>Command 在画面外，仍在菜单最下面</li>
+      </ol>
+    </div>
+  </div>
+  <div class="b-dec">
+    <h2>待定 · 要你拍板</h2>
+    <p><b>D1（已定）：</b>Fable 复审后改用 ②：单字母之差的 Files / File 靠灰色小标题区分太弱；每项自带动词和来源，不要标题。</p>
+    <p><b>D2（随 Fable 方案）：</b>iOS、macOS、Android 的「+」菜单同步改成 Upload File / Upload Image；原生端暂无 Documents 项。</p>
+    <p><b>已落地：</b>web 三个 label + 一个图标 + composerMenu 测试 → 原生 ComposerView.swift addMenu、SessionComposer.kt 两个 label。</p>
+  </div>
+</section>
+</body></html>

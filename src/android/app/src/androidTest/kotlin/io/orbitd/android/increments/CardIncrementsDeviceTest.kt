@@ -195,7 +195,7 @@ class CardIncrementsDeviceTest : IncrementDeviceTest() {
         capture("02-question-review-markdown")
     }
 
-    /** A08-13: an answered and a withdrawn question stay as records where their cards were; View details replays the answer. */
+    /** A08-13: an answered and a withdrawn question stay as records where their cards were; View details unfolds the answer in place. */
     @Test fun endedCoordinatorQuestionsAreKeptAsRecords() = journey {
         openConversation()
         val record = Json.parseToJsonElement(answered).jsonObject
@@ -214,8 +214,10 @@ class CardIncrementsDeviceTest : IncrementDeviceTest() {
         verify("and why", textOf("item:q-withdrawn:reason") == "“Not needed after the rollback.”")
         capture("02-withdrawn-record")
         scrollTranscriptTo(hasTestTag("item:q-answered"))
-        compose.onNodeWithTag("item:q-answered").performClick()
+        // Board card-ui-polish ③: View details unfolds the record in place, with no sheet.
+        compose.onNodeWithTag("item:q-answered:details", useUnmergedTree = true).performClick()
         await("the answered record's replay") { exists(hasTestTag("item:q-answered:footer-line"), unmerged = true) }
+        verify("it opened in place", exists(hasTestTag("item:q-answered:unfolded"), unmerged = true) && !exists(hasTestTag("card-review")))
         verify("the replay ticks the option chosen", exists(hasTestTag("item:q-answered:option:1:chosen"), unmerged = true) &&
             !exists(hasTestTag("item:q-answered:option:0:chosen"), unmerged = true))
         verify("the replay's footer says who ended it", textOf("item:q-answered:footer-line") == CoordinatorQuestions.footerLine(record))
@@ -273,7 +275,7 @@ class CardIncrementsDeviceTest : IncrementDeviceTest() {
         capture("02-session-reply")
         scrollTranscriptTo(hasText("Task started"))
         verify("the task-start card names the task", exists(hasText("Wire the checks"), unmerged = true))
-        scrollTranscriptTo(hasText("Project item delivered"))
+        scrollTranscriptTo(hasText("Wire the checks failed"))
         verify("the delivery's two doors", exists(hasText("Open the failed session ↗"), unmerged = true) && exists(hasText("Open the landing ↗"), unmerged = true))
         capture("03-delivery")
         scrollTranscriptTo(hasText("Project started"))

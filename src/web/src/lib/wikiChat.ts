@@ -23,6 +23,7 @@ import {
   wikiChatPlanMovedNote,
   wikiChatResultLine,
   wikiChatRewriteLinks,
+  wikiChatHeldLine,
   wikiChatRewriteWaits,
   wikiDocChanged,
   wikiDocVersionHeading,
@@ -796,6 +797,8 @@ export interface WikiChatCardLook {
   actions: WikiChatAction[];
   /** The buttons of the line under an applied card: Settings, Try again, See changes. */
   rewriteActions: WikiChatAction[];
+  /** Why an open rewrite card waits for a press (`wikiChatHeldLine`): `Apply to write: …`; null for any other card. */
+  held: string | null;
 }
 
 /**
@@ -818,12 +821,15 @@ const STATE_TONE: Record<WikiChatDraftView['state'], WikiChatTone> = {
   replaced: 'grey',
   changed: 'amber',
   applied: 'ok',
+  rewritten: 'ok',
   discarded: 'grey',
   not_applied: 'grey',
   undone: 'grey',
 };
 
-export function wikiChatCardLook(view: Pick<WikiChatDraftView, 'kind' | 'state' | 'undoable' | 'rewrite' | 'label' | 'ops'>): WikiChatCardLook {
+export function wikiChatCardLook(
+  view: Pick<WikiChatDraftView, 'kind' | 'state' | 'undoable' | 'rewrite' | 'label' | 'ops'> & { held?: WikiChatDraftView['held'] },
+): WikiChatCardLook {
   const inReview = wikiChatAppliedInReview(view.state, view.ops);
   const all = wikiChatCardActions(wikiChatCardOf(view));
   return {
@@ -834,6 +840,7 @@ export function wikiChatCardLook(view: Pick<WikiChatDraftView, 'kind' | 'state' 
     inReview,
     actions: all.filter((action) => !REWRITE_ACTIONS.includes(action)),
     rewriteActions: all.filter((action) => REWRITE_ACTIONS.includes(action)),
+    held: view.state === 'draft' ? wikiChatHeldLine(view.held ?? null) : null,
   };
 }
 
@@ -861,7 +868,7 @@ const RESULT_TONE: Record<NonNullable<WikiChatDraftView['rewrite']>['result'], W
 };
 
 export function wikiChatResultLook(view: Pick<WikiChatDraftView, 'kind' | 'state' | 'undoable' | 'rewrite'>): WikiChatResultLook | null {
-  if (view.state !== 'applied' || !view.rewrite) return null;
+  if ((view.state !== 'applied' && view.state !== 'rewritten') || !view.rewrite) return null;
   const card = wikiChatCardOf(view);
   return {
     line: wikiChatResultLine(card.rewrite!),
@@ -873,7 +880,7 @@ export function wikiChatResultLook(view: Pick<WikiChatDraftView, 'kind' | 'state
 /** The press a settled rewrite the owner has opened makes, once (contract `chat.presses.seen`). */
 export function wikiChatNeedsSeen(view: Pick<WikiChatDraftView, 'state' | 'rewrite'>): boolean {
   const rewrite = view.rewrite;
-  if (view.state !== 'applied' || !rewrite || rewrite.seen) return false;
+  if ((view.state !== 'applied' && view.state !== 'rewritten') || !rewrite || rewrite.seen) return false;
   return rewrite.result === 'updated' || rewrite.result === 'same' || rewrite.result === 'failed';
 }
 

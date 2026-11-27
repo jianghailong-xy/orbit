@@ -36,11 +36,11 @@ import { ForbiddenException } from '@nestjs/common';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -50,6 +50,7 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { VERIFICATION_RUN_END_REASON } from './verification-dependency';
 import { TasksService } from './tasks.service';
+import { wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const suite = URL ? test : test.skip;
@@ -324,7 +325,7 @@ suite(
         title: 'independent verifier',
         prompt: 'Independently inspect the artifact and record a verdict.',
         provider: 'codex',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: true,
       },
@@ -345,7 +346,7 @@ suite(
     assert.equal(verifiedSubject.status, TaskStatus.DONE,
       'a PASS from an independent verifier still settles its subject');
     assert.equal(
-      (await db.session.findUniqueOrThrow({ where: { id: verifierSessionId } })).status,
+      wordOf((await db.session.findUniqueOrThrow({ where: { id: verifierSessionId } }))),
       RunStatus.AWAITING_INPUT,
       'the verifier session lifecycle is not what settled anything',
     );
@@ -358,7 +359,7 @@ suite(
     await db.session.update({
       where: { id: verifierSessionId },
       data: {
-        status: RunStatus.SUCCEEDED,
+        turnState: null, finishedAt: new Date(), 
         endReason: VERIFICATION_RUN_END_REASON,
         completedAt: new Date(),
       },
@@ -405,7 +406,7 @@ suite(
           title: `independent verifier (${label})`,
           prompt: 'Independently inspect the artifact and record a verdict.',
           provider: 'codex',
-          status: RunStatus.AWAITING_INPUT,
+          turnState: null,
           dispatchOrigin: SessionDispatchOrigin.USER,
           startsTaskWork: true,
         },
@@ -473,7 +474,7 @@ suite(
         title: 'ordinary run',
         prompt: 'do the ordinary work',
         provider: 'claude',
-        status: RunStatus.RUNNING,
+        turnState: 'IN_FLIGHT',
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: true,
       },

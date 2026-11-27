@@ -25,7 +25,7 @@ data class PushPayload(
     val watchId: String? = null,
     val generation: Int? = null,
     val wikiSpaceId: String? = null,
-    /** `owner-request`: the request, and its kind (DECISION, SECRET, MANUAL_STEP, CONFIRM or WIKI_CREATE), which names the notification's action. */
+    /** `owner-request`: the request, and its kind (DECISION, SECRET, MANUAL_STEP, CONFIRM, WIKI_CREATE or BROWSER_SIGN_IN), which names the notification's action. */
     val ownerRequestId: String? = null,
     val ownerRequestKind: String? = null,
     /** `terminal-login`: the terminal sign-in waiting for the owner's Approve (docs/terminal-session-design.md). */
@@ -38,6 +38,8 @@ data class PushPayload(
     /** `condition`: the condition that cannot be read (docs/condition-triggers-design.md §5.3); its Waiting on you item is
      * [ownerRequestId] when it filed one. */
     val conditionId: String? = null,
+    /** `account-needs-action`: the account_health row Check again takes. A key or pool login names no runner. */
+    val accountHealthId: String? = null,
 ) {
     val isOwnerItem get() = kind in ownerItemKinds
     val isReminder get() = kind == "approval" || isOwnerItem
@@ -45,15 +47,16 @@ data class PushPayload(
     val isTerminalLogin get() = kind == TERMINAL_LOGIN
     /** A decision only the owner can make, raised outside the owner items: a crossing request, a coordinator's confirmation hold. */
     val isOwnerDecision get() = kind == CROSSING_REQUEST || kind == CONFIRMATION_RAISED
-    /** An owner request's primary action (`orbit://owner-request/<id>`): the inbox, its card open on its input. Neither it nor
-     * Later ends the request; the tap on the notification itself opens the session that asked, as [link] says. */
+    /** An owner request's primary action (`orbit://owner-request/<id>`): the conversation that asked, opened on the request's card
+     * with its input focused ([io.orbitd.android.cards.OwnerRequestLinks]). Neither it nor Later ends the request; the tap on the
+     * notification itself opens that conversation too, as [link] says. */
     val ownerRequestLink: String? get() = ownerRequestId?.takeIf { isOwnerRequest }?.let { "orbit://owner-request/$it" }
 
     /** The existing ACTION_VIEW/OrbitLinks entry retains authentication and the caller's stack. */
     val link: String? get() = when {
         // A project done, and a pending item of a project nobody has (the orphan sweep, owner with no coordinator): its project.
         kind == "project-done" || kind == "project-orphan" -> projectId?.let { "orbit://project/$it" }
-        // A terminal asking to be approved: the Waiting on you inbox, whose Open tab heads with its card (iOS `.openTerminalRequests`).
+        // A terminal asking to be approved: Machines & models' Needs you section, its card lit (OrbitLinks).
         kind == TERMINAL_LOGIN -> terminalLoginId?.let { "orbit://terminal-login/$it" }
         kind == "watch-matched" -> watchId?.let { "orbit://watch/$it" }
         // A scheduled task's alert: its run's session when it names one, else the schedule's detail on the Scheduled page.
@@ -63,6 +66,8 @@ data class PushPayload(
         // About a machine: its sign-in lapsed, its Claude connection to Anthropic is in a region Anthropic does not offer Claude in,
         // or it drains for an update with the owner's work waiting on it.
         kind == "engine-signed-out" || kind == "claude-region-blocked" || kind == "runner-updating" -> runnerId?.let { "orbit://runner/$it" }
+        // An account the provider refused: its machine's page, or for a key or pool login the Providers screen, where its row is.
+        kind == ACCOUNT_NEEDS_ACTION -> runnerId?.let { "orbit://runner/$it" } ?: PROVIDERS_LINK
         // A merge into main waiting on the owner opens its project's sessions page, where its card is, as that project's root
         // (iOS 6b4bef713 `Notifications.intent`). Every other owner item opens the conversation, and so does a merge naming no project.
         kind == "approve-merge-to-main" && projectId != null -> "orbit://project/$projectId"
@@ -88,6 +93,10 @@ data class PushPayload(
         const val SCHEDULE = "schedule"
         /** A condition that cannot be read (apiserver `notifyCondition`). A condition that fires rings as its run's `schedule` push. */
         const val CONDITION = "condition"
+        /** An account the provider refused, or that failed to start runs three times (docs/account-health-owner-surface-contract.md §1). */
+        const val ACCOUNT_NEEDS_ACTION = "account-needs-action"
+        /** Settings' Providers screen (keys and pools): where a key's or pool login's blocked row is. */
+        const val PROVIDERS_LINK = "orbit://settings/providers"
     }
 }
 
@@ -107,7 +116,7 @@ data class PushMessage(
             "engine-signed-out", "confirmation-problems", "watch-matched", "wiki-review-mode-manual",
             "wiki-review-mode-tiered", "wiki-maintenance-failing", "loop-missed", "wakeup-dropped", "claude-region-blocked",
             "runner-updating", PushPayload.OWNER_REQUEST, PushPayload.TERMINAL_LOGIN, PushPayload.CROSSING_REQUEST,
-            PushPayload.CONFIRMATION_RAISED, PushPayload.SCHEDULE, PushPayload.CONDITION)
+            PushPayload.CONFIRMATION_RAISED, PushPayload.SCHEDULE, PushPayload.CONDITION, PushPayload.ACCOUNT_NEEDS_ACTION)
 
         /** No unknown version, malformed identifier, or partial route can become a notification. */
         fun parse(data: Map<String, String>): PushMessage? = try {
@@ -142,7 +151,7 @@ data class PushMessage(
                 id("taskID"), id("recordID"), id("runnerID"), string("engine"), id("watchID"),
                 number("generation"), id("wikiSpaceID"), ownerRequestId = id("ownerRequestID"), ownerRequestKind = string("ownerRequestKind"),
                 terminalLoginId = id("terminalLoginID"), handoffId = id("handoffID"), scheduleId = id("scheduleID"),
-                scheduleKind = string("scheduleKind"), conditionId = id("conditionID"))
+                scheduleKind = string("scheduleKind"), conditionId = id("conditionID"), accountHealthId = string("accountHealthID"))
             if (type == PushType.ALERT) {
                 require(!payload.title.isNullOrBlank() && payload.body != null && payload.kind in kinds)
                 when (payload.kind) {
@@ -162,6 +171,8 @@ data class PushMessage(
                     PushPayload.SCHEDULE -> require(payload.scheduleId != null)
                     // A condition that cannot be read names the condition; its session and item only when it has them.
                     PushPayload.CONDITION -> require(payload.conditionId != null)
+                    // An account row: the health row Check again takes; the machine only when the account is a machine's sign-in.
+                    PushPayload.ACCOUNT_NEEDS_ACTION -> require(!payload.accountHealthId.isNullOrBlank())
                     "confirmation-problems" -> require(payload.sessionId != null && payload.taskId != null && payload.recordId != null)
                     // A confirmed region flip is about its runner's Claude Code, as a sign-out is about its runner's engine.
                     "engine-signed-out", "claude-region-blocked" -> require(payload.runnerId != null && !payload.engine.isNullOrBlank())

@@ -12,6 +12,7 @@
  * lets both sides name the same interface instead of keeping two that drift.
  */
 import type { IntegrationCheckResult, IntegrationJobKind, IntegrationJobOutputCheck, IntegrationJobPhase, IntegrationJobState } from './dto';
+import type { LandingPullRequestView } from './pull-request-landing';
 import type { ProjectStartRequest, ProjectStartSettingKey, ProjectStartSettings } from './project-start';
 import type { DoneRequest } from './project-done';
 import type { OwnerCardTranslation } from './translation';
@@ -47,6 +48,14 @@ export interface ProjectIntegrationSettings<Instant = string> {
   lineAbsentReason: 'NOT_DECIDED' | null;
   /** The integration line's branch, spelled as a merge receipt spells it (no `refs/heads/`). */
   ref: string | null;
+  /**
+   * The branch a project branch line is on, short (no `refs/heads/`): the line's own once it is
+   * decided on one, and otherwise the default the server would choose for a project branch nobody
+   * named, `project/<title slug>-<8 characters of the project id>`. Clients show it rather than
+   * building a name themselves. Absent on servers that predate it, which named the branch
+   * `project/<project id>`.
+   */
+  defaultProjectBranch?: string;
   /** The project's main branch, short (no `refs/heads/`); null while it has no binding. */
   upstreamRef: string | null;
   /**
@@ -67,7 +76,11 @@ export interface ProjectIntegrationSettings<Instant = string> {
   startedAt: Instant | null;
   landingCheckCommand: string | null;
   landingCheckTimeoutSeconds: number | null;
-  landingCheckCommandAbsentReason: 'FALLS_BACK_TO_MERGE_CHECK' | null;
+  /** Why there is no landing-check command: it falls back to the merge check (§11 K1), or the
+   *  project was told to run none (`NONE`, §12.15 P-C1). */
+  landingCheckCommandAbsentReason: 'FALLS_BACK_TO_MERGE_CHECK' | 'NONE' | null;
+  /** The landing check and who set it last (§12.16). Absent on servers that predate it. */
+  landingCheck?: ProjectLandingCheck<Instant>;
   mergeCheckCommand: string | null;
   mergeCheckCommandAbsentReason: 'NOT_CONFIGURED' | null;
   mergeCheckTimeoutSeconds: number | null;
@@ -82,6 +95,27 @@ export interface ProjectIntegrationSettings<Instant = string> {
   /** When the account owner last wrote `deliveryMode` — null while nobody ever chose it. Absent on
    *  servers that predate it. */
   deliveryModeChosenAt?: Instant | null;
+}
+
+/** Who last wrote a project's landing check (§12.14): the account owner (at their own door, or a
+ *  value of their own on the start card), a merge-check card the owner answered, the owner's Start
+ *  press confirming the coordinator's proposal (`START`, §12.12 P2), or the project's coordinator
+ *  with no card (§12.15 P-C1). `OWNER` and `CARD` keep it the owner's; the coordinator may change a
+ *  `START` or `COORDINATOR` value without a card. */
+export type LandingCheckSetBy = 'OWNER' | 'CARD' | 'START' | 'COORDINATOR';
+
+/** A project's landing check as `project_get.integration.landingCheck` gives it (§12.16). */
+export interface ProjectLandingCheck<Instant = string> {
+  /** The command; `NONE` when the project runs no landing check, so a landing runs only the task's
+   *  own acceptance; null when it falls back to the merge check (§11 K1). */
+  command: string | 'NONE' | null;
+  /** Null when nobody has written it. */
+  setBy: LandingCheckSetBy | null;
+  /** The coordinator session behind a `COORDINATOR` write; null otherwise. */
+  setBySessionId: string | null;
+  /** When it was last written, whoever wrote it; null when nobody has, or for a value set before
+   *  the record existed. */
+  setAt: Instant | null;
 }
 
 /** An account's last choice of main branch for one repository (§1.2 L6). */
@@ -187,8 +221,11 @@ export interface ProjectIntegrationInFlight<Instant = string> {
   kind?: IntegrationJobKind;
   /** The runner's reported step; null before its first report, absent on older servers. */
   phase?: IntegrationJobPhase | null;
-  /** `RUNNING` while the runner performs the job; `QUEUED` while it waits its turn. */
-  state: 'RUNNING' | 'QUEUED';
+  /** `RUNNING` while the runner performs the job; `QUEUED` while it waits its turn; `PULL_REQUEST` while it waits for
+   *  GitHub (docs/design/protected-branch-landing.md §4.2). */
+  state: 'RUNNING' | 'QUEUED' | 'PULL_REQUEST';
+  /** With `PULL_REQUEST`: the pull request it waits on (§8). Absent from a server that predates it. */
+  pullRequest?: LandingPullRequestView | null;
   /** What "for how long" counts from: the claim for a running job, the enqueue for a queued one. */
   startedAt: Instant;
   /** Last report from the runner; absent on older servers and null before a claim. */
@@ -268,7 +305,10 @@ export const LAND_TASK_ROUNDS_PER_CLAIM = 3;
 export interface ProjectIntegrationJob<Instant = string> {
   jobId: string;
   kind: IntegrationJobKind;
-  state: 'RUNNING' | 'QUEUED';
+  /** `PULL_REQUEST`: the landing waits for GitHub (docs/design/protected-branch-landing.md §4.2); no runner holds it. */
+  state: 'RUNNING' | 'QUEUED' | 'PULL_REQUEST';
+  /** With `PULL_REQUEST`: the pull request it waits on (§8). Absent from a server that predates it. */
+  pullRequest?: LandingPullRequestView | null;
   /** The step it last reported, or the one a claim starts at; null before its first claim. */
   phase: IntegrationJobPhase | null;
   /** The task it lands; null for a promotion or a merge check, which land no single task. */
@@ -392,6 +432,9 @@ export interface SessionLandingTodo<Instant = string> {
   state: string;
   title: string;
   waitingSince: Instant;
+  /** The task's own work session that holds the item while it fixes it (revision 42, §12.7), or
+   *  null when the item is the coordinator's or the owner's. Absent from an older server. */
+  workSessionId?: string | null;
 }
 
 /** One generation (segment/round) of the landing subject. `sessionId` is the landing session's id —
@@ -428,7 +471,9 @@ export type IntegrationJobEventKind =
   | 'STOP_REQUESTED'
   | 'CANCELLED'
   | 'ABANDONED'
-  | 'TIMED_OUT';
+  | 'TIMED_OUT'
+  // The landing's pull request (docs/design/protected-branch-landing.md §14): `data.step` is PUSHED, OPENED or MERGED.
+  | 'PULL_REQUEST';
 
 /** A line read-time derived from another row rather than stored as its own event (LS4): a rerun's
  *  requester and reason (`retry_*`), an item being handled (`handling_*`), the owner's
@@ -441,12 +486,19 @@ export type DerivedTimelineKind =
   | 'CONFIRMATION'
   | 'RESULT_FALLBACK'
   | 'AUTOMATIC_ATTEMPT'
-  | 'FIX_TASK';
+  | 'FIX_TASK'
+  /** Revision 42 (§12.7): the failure was handed to the task's own work session, its fix landing
+   *  again, and the failure handed back to the coordinator, read off the item's `work_session_*`
+   *  columns and the next generation's `retry_*`. A RETURNED_TO_COORDINATOR line's `data.lastMessage` is the work
+   *  session's last words at the hand-back, or null when it said none. */
+  | 'HANDED_TO_SESSION'
+  | 'FIXED_BY_SESSION'
+  | 'RETURNED_TO_COORDINATOR';
 
 /** Who caused a timeline line. */
 export interface IntegrationTimelineActor {
-  type: 'OWNER' | 'COORDINATOR' | 'PLATFORM' | 'RUNNER' | 'AUTOMATIC';
-  /** The conversation that acted, when a coordinator did. */
+  type: 'OWNER' | 'COORDINATOR' | 'PLATFORM' | 'RUNNER' | 'AUTOMATIC' | 'TASK_SESSION';
+  /** The conversation that acted, when a coordinator — or the task's own work session (revision 42) — did. */
   sessionId?: string | null;
   /** The person that acted, when the owner did. */
   userId?: string | null;
@@ -510,6 +562,7 @@ export interface IntegrationTimelineSection<Instant = string> {
  * - `DONE`: the task was marked done and its branch handed over — `by` TASK, `sessionId` the work
  *   session.
  * - `RETRY`: a rerun — `by` COORDINATOR (its `sessionId`), OWNER, or ORBIT; `reason` is the one given.
+ *   A fix by the task's own work session landing again (revision 42, W7) is `by` TASK, its `sessionId`.
  *   The owner's skip of a landing still in flight is one too: `by` OWNER, `reason` the skip's.
  * - `BACKFILL` / `BEHIND_WORK`: Orbit queued it — the project started integrating, or the task's
  *   work ended on another branch.
@@ -596,6 +649,9 @@ export interface SessionLandingView<Instant = string> {
    *  decisions. Read-only, and bounded — `truncated` says the read returned less than the subject
    *  holds. Absent on servers that predate the timeline (contract §2.9: a new field is optional). */
   timeline?: SessionLandingTimeline<Instant>;
+  /** The subject's newest pull request, open or settled (docs/design/protected-branch-landing.md §8); null when it
+   *  never needed one. Absent from a server that predates it. */
+  pullRequest?: LandingPullRequestView | null;
 }
 
 /**
@@ -784,6 +840,10 @@ export interface ProjectManualReady {
  * line yet (§10.9): its agent pushes, so no job of the platform's carries it, and the view names the
  * commit it waits to see (`deliveredSha`). Once a receipt says it is there, the task reads
  * `ON_UPSTREAM` like any other.
+ *
+ * `FIXING` (revision 42, §12.7) is a landing that stopped on a conflict or a failed check and is in
+ * the hands of the task's own work session, which is fixing it on its branch: the row reads
+ * "Landing · fixing" and opens that session (`workSessionId`). Nobody else is asked to act on it.
  */
 export type TaskIntegrationState =
   | 'NOT_APPLICABLE'
@@ -792,6 +852,7 @@ export type TaskIntegrationState =
   | 'CONFLICT'
   | 'CHECK_FAILED'
   | 'ERROR'
+  | 'FIXING'
   | 'AWAITING_OWNER'
   | 'AWAITING_OBSERVATION'
   | 'ON_INTEGRATION_LINE'
@@ -828,7 +889,9 @@ export type TaskIntegrationHandler = 'COORDINATOR' | 'OWNER';
 export type LandTaskBlockingReasonCode =
   | 'CANCELLING' | 'WAITING_TASK_WORK' | 'WAITING_MAIN_SYNC' | 'WAITING_BASELINE' | 'WAITING_RUNNER'
   | 'WAITING_AUTOMATIC_RUNNER' | 'WAITING_SERIAL_SLOT' | 'WAITING_DISPATCH'
-  | 'WAITING_LOCAL_LOCK' | 'CONFLICT' | 'CHECK_FAILED' | 'ERROR';
+  | 'WAITING_LOCAL_LOCK' | 'CONFLICT' | 'CHECK_FAILED' | 'ERROR'
+  // A landing waiting on its pull request (docs/design/protected-branch-landing.md §8): the required checks, or a review.
+  | 'WAITING_FOR_CHECKS' | 'WAITING_FOR_REVIEW';
 
 /** Why any integration job — of any of the three kinds — waits or where it stopped. The shape
  *  `landTask.blockingReason` has always used, carried on `inFlightJobs` entries as well (§7.2 V6). */
@@ -843,6 +906,9 @@ export type IntegrationJobBlockingReason = LandTaskBlockingReason;
 export interface LandTaskIntegrationView<Instant = string> {
   jobId: string;
   state: IntegrationJobState;
+  /** The pull request this generation waits on or landed through (docs/design/protected-branch-landing.md §8); null
+   *  when it pushed directly. Absent from a server that predates it. */
+  pullRequest?: LandingPullRequestView | null;
   /**
    * The landing session this generation belongs to (§2.9): `project_landing.session_id`, which is
    * pre-generated when the subject opens, so it is present even before the session row is inserted
@@ -906,6 +972,11 @@ export interface TaskIntegrationView<Instant = string> {
    * older server.
    */
   deliveredSha?: string | null;
+  /**
+   * With `FIXING`: the task's own work session that holds the failure (revision 42, §12.7), which
+   * pressing the row opens. Absent in every other state and from an older server.
+   */
+  workSessionId?: string | null;
 }
 
 /**
@@ -1107,6 +1178,36 @@ export interface OpenItemFacts {
   } | null;
 }
 
+/** Why an item left its task's own work session's hands (§12.4 `work_session_return_reason`). */
+export type OpenItemWorkSessionReturnReason =
+  | 'NO_NEW_COMMIT'
+  | 'TURN_FAILED'
+  | 'SESSION_ENDED'
+  | 'ROUNDS_EXHAUSTED'
+  | 'TASK_MOVED_ON';
+
+/**
+ * The task's own work session a landing failure went to first (revision 42, §12.5 W4–W7, §12.7):
+ * which session, when it was offered, and — once it came back to the coordinator — when and why.
+ *
+ * While `returnedAt` is absent the item is in that session's hands: it is listed under
+ * `withWorkSession` ("Being fixed by its session"), counted in no one's Needs you or attention, and
+ * its only doors are the owner's stop and "Chat about this" (W9). `rounds` is how many landing
+ * generations that session has asked for in this task segment (W8 caps them at 2): 0 while it is
+ * fixing the first failure, 1 once its first fix failed to land again.
+ */
+export interface OpenItemWorkSession<Instant = string> {
+  sessionId: string;
+  offeredAt: Instant;
+  /** When it was handed back to the coordinator (W7); absent while the session still holds it. */
+  returnedAt?: Instant;
+  /** Why it was handed back; absent while the session still holds it. */
+  returnReason?: OpenItemWorkSessionReturnReason;
+  rounds: number;
+  /** The session's last words at the hand-back; null when it said none, absent while it still holds the item. */
+  lastMessage?: string | null;
+}
+
 /**
  * The coordinator's rerun of the failure an item is about, while that rerun is still in flight
  * (§4.7 H1): the item is being handled, not closed. It stays OPEN until the job the rerun queued
@@ -1306,6 +1407,10 @@ export interface ProjectOpenItemRow<Instant = string> {
   /** "Chat about this": where the item's handling stands, and whether a message about it can reach
    *  the project's coordinator conversation. Absent from a server that predates it. */
   chat?: OpenItemChat | null;
+  /** The task's own work session this failure was handed to first (revision 42, §12.7), whether it
+   *  still holds it or handed it back; null for an item never offered to one, and absent from a
+   *  server that predates it. */
+  workSession?: OpenItemWorkSession<Instant> | null;
   /** Whether the project's coordinator can be neither asked again nor messaged right now, as the
    *  server read it with the list. An escalated item's heading says so ("the coordinator can’t take
    *  messages") instead of "no one acted on this", because its doors already say it. Absent from a
@@ -1377,10 +1482,33 @@ export interface ProjectSignInWait {
   detailLine: string;
 }
 
+/**
+ * The project's tasks held because no account that could run them can run now
+ * (docs/routing-account-health-design.md §7.5, §8 item 3), as one Needs you row: "2 tasks wait for an account" over the
+ * provider's words and when the first account is tried again. Derived on every read: empty once an account can run them.
+ */
+export interface ProjectAccountWait<Instant = string> {
+  /** The held tasks, oldest first. */
+  taskIds: string[];
+  /** "2 tasks wait for an account". */
+  title: string;
+  /** The hold's own sentence: "Waiting for an account: Cursor said "Add a payment method to continue". Next try at 21:19." */
+  detailLine: string;
+  /** The earliest end among the accounts: the hold lifts then and the held task takes the trial. */
+  until: Instant;
+}
+
 /** The project's open exceptions, split by who is expected to act (§4.8). */
 export interface ProjectOpenItemsView<Instant = string> {
   needsYou: Array<ProjectOpenItemRow<Instant>>;
   withCoordinator: Array<ProjectOpenItemRow<Instant>>;
+  /**
+   * "Being fixed by its session" (revision 42, §12.7): landing failures in the hands of the task's own
+   * work session, which is fixing them on its branch. Kept out of `needsYou` and `withCoordinator` —
+   * nobody is waiting on the owner or the coordinator for them — and counted in no attention. Each row
+   * carries its `workSession`. Absent from a server that predates it.
+   */
+  withWorkSession?: Array<ProjectOpenItemRow<Instant>>;
   /**
    * The coordinator's questions that have ended — answered or withdrawn — newest first, at most 50
    * (§4.8, §5.2 R10, R12). Kept out of `needsYou`: nobody owes anything about them, and a
@@ -1425,6 +1553,8 @@ export interface ProjectOpenItemsView<Instant = string> {
    * Absent from a server that predates it.
    */
   signIns?: ProjectSignInWait[];
+  /** The held-for-an-account Needs you row (`ProjectAccountWait`), or null when no task is held so. Absent from a server that predates it. */
+  accountWait?: ProjectAccountWait<Instant> | null;
 }
 
 /**
@@ -1948,6 +2078,36 @@ export interface ProjectSidebarTaskCounts {
   total: number;
 }
 
+/** Who paused a project (`project.paused_reason`): Pause project, or the older Automatic switch. */
+export type ProjectPausedReason = 'OWNER' | 'LEGACY_AUTOMATIC_OFF';
+
+/**
+ * The project's open spend-fuse pause, as `GET /projects/sidebar` serves it: the daily limit paused
+ * its coordinator, and `POST /projects/:id/fuse/:episodeId/resume` lifts it.
+ *
+ * `observed` and `limit` are the reading the pause was taken on (`<observed>/<limit> today` on the
+ * row); all three are null when `paused` is false.
+ */
+export interface ProjectSidebarFuse {
+  paused: boolean;
+  episodeId: string | null;
+  observed: number | null;
+  limit: number | null;
+}
+
+/**
+ * The pause fields of a `GET /projects/sidebar` row (design §4.2 2a/2b, §4.3 Pause / Resume).
+ *
+ * Optional because a server that predates them sends none, and a row without them is a project
+ * that is not paused.
+ */
+export interface ProjectSidebarPause<Instant = string> {
+  /** When the project was paused; null when it is not. */
+  pausedAt?: Instant | null;
+  pausedReason?: ProjectPausedReason | null;
+  fuse?: ProjectSidebarFuse;
+}
+
 /**
  * What `GET /projects` says about who must act on a project, and how long they have had to — the
  * blockers the list has always aggregated plus the items behind them (§7.1 V1).
@@ -2024,9 +2184,7 @@ export interface SessionOwnerItem<Instant = string> {
  * close", over the "Is this project done?" card. `RECORD_AS_DONE` is a project that looks finished
  * and that its coordinator did not ask to have recorded done within the project's escalation window:
  * the row says "Record as done…". A row counting anything else (a blocked tool call, a proposal)
- * keeps the generic approval wording, and so does one counting two kinds at once. `OWNER_REQUEST`
- * is an owner request (`request_owner_action`) the conversation filed and the owner has not ended:
- * the row says "Waiting on you", over the request's card.
+ * keeps the generic approval wording, and so does one counting two kinds at once.
  */
 export type SessionWaitingKind =
   | 'OWNER_CONFIRMATION'
@@ -2034,4 +2192,76 @@ export type SessionWaitingKind =
   | 'START_REQUEST'
   | 'DONE_REQUEST'
   | 'RECORD_AS_DONE'
-  | 'OWNER_REQUEST';
+  | 'OWNER_REQUEST'
+  | 'MOVE_REQUEST';
+
+/**
+ * `OWNER_REQUEST`: everything counted is one or more open `request_owner_action` requests from this
+ * session, all of ONE kind (`ownerRequests`), and the row says that kind's word below. Requests of
+ * two kinds on one row are a mix, and the row keeps "Waiting for approval".
+ *
+ * `MOVE_REQUEST`: everything counted is PENDING task moves into or out of a project, on the session
+ * that asked for them and on the target project's coordinator (`taskMoves`). A group is one
+ * session's moves from one project into another; the row counts groups but says the moves.
+ */
+export type SessionOwnerRequestKind = 'DECISION' | 'SECRET' | 'MANUAL_STEP' | 'CONFIRM' | 'WIKI_CREATE';
+
+/** One open owner request on the session that asked it, oldest first. */
+export interface SessionOwnerRequest<Instant = string> {
+  ownerRequestId: string;
+  kind: SessionOwnerRequestKind;
+  title: string;
+  /** When it was filed. */
+  since: Instant;
+}
+
+/** One group of PENDING task moves: one session's moves out of one project into another. */
+export interface SessionTaskMoveGroup<Instant = string> {
+  requestedBySessionId: string;
+  fromProjectId: string;
+  /** null: the moves take their tasks out of every project (migration 0610). */
+  toProjectId: string | null;
+  /** How many moves are waiting in the group. Always ≥ 1. */
+  count: number;
+  /** The oldest move's request time. */
+  since: Instant;
+  /** The oldest move's title. */
+  title: string;
+  /** The waiting crossings, oldest first. */
+  handoffIds: string[];
+}
+
+/** The row's word for an open owner request of one kind. */
+export const OWNER_REQUEST_ROW_WORDS: Readonly<Record<SessionOwnerRequestKind, string>> = {
+  DECISION: 'Decision for you',
+  SECRET: 'Key needed',
+  MANUAL_STEP: 'Steps for you',
+  CONFIRM: 'Confirm for you',
+  // An agent asking for a wiki (4424f65ed): the card's own action, "Create wiki".
+  WIKI_CREATE: 'Create wiki',
+};
+
+/** The row's word for `moves` waiting task moves. */
+export function taskMovesRowWord(moves: number): string {
+  return moves === 1 ? 'Approve task move' : `Approve ${moves} task moves`;
+}
+
+/**
+ * The row's word for the two request kinds, or null when `waitingKind` is neither (or the lists
+ * it needs are missing, from an older control plane): the caller then says what it said before.
+ */
+export function ownerRequestRowWord(row: {
+  waitingKind?: SessionWaitingKind | null;
+  ownerRequests?: ReadonlyArray<{ kind: SessionOwnerRequestKind }>;
+  taskMoves?: ReadonlyArray<{ count: number }>;
+}): string | null {
+  if (row.waitingKind === 'OWNER_REQUEST') {
+    const kind = row.ownerRequests?.[0]?.kind;
+    return kind ? OWNER_REQUEST_ROW_WORDS[kind] : null;
+  }
+  if (row.waitingKind === 'MOVE_REQUEST') {
+    const moves = (row.taskMoves ?? []).reduce((sum, group) => sum + group.count, 0);
+    return moves > 0 ? taskMovesRowWord(moves) : null;
+  }
+  return null;
+}

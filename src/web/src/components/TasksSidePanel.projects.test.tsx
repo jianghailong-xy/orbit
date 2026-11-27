@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { encodeId } from '../lib/idCodec';
 import type { SidebarProject } from '../lib/projectAttention';
 import { TasksSidePanel } from './TasksSidePanel';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
  * The foot of the sidebar: the open projects, as the iPhone drawer closes its rail with them — the
@@ -195,7 +196,7 @@ describe('the sidebar’s Projects group', () => {
       // Nothing waiting, nothing in flight, last touched six days ago: still named, as the phones name it.
       { title: 'Postgres 性能与容量治理', working: false, needsYou: null, active: false },
     ]);
-    expect(container!.querySelector('.tp-count.needs-you')?.getAttribute('title')).toBe('2 waiting on you');
+    expect(await hoverTooltip(container!.querySelector('.tp-count.needs-you')!)).toBe('2 waiting on you');
   });
 
   it('no longer holds the task lists, and no longer reads them', async () => {
@@ -255,7 +256,7 @@ describe('the sidebar’s Tasks entry', () => {
     serve();
     await visit('/projects');
     const labels = [...container!.querySelectorAll('.tp-section .tp-item .tp-label')].map((l) => l.textContent);
-    expect(labels.slice(0, 5)).toEqual(['Projects', 'Tasks', 'Scheduled', 'Waiting on you', 'Wiki']);
+    expect(labels.slice(0, 4)).toEqual(['Projects', 'Tasks', 'Scheduled', 'Wiki']);
   });
 
   it.each([

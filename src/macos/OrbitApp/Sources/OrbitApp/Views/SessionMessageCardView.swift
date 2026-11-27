@@ -99,35 +99,12 @@ struct SessionMessageCardView: View {
     }
 
     /// The sending agent's words: whole, or their first lines fading out while the message is folded.
-    /// The text is laid out at its full height and measured there, then clipped, so opening it moves
-    /// nothing but the foot.
     private var messageBody: some View {
-        MarkdownView(source: text, base: .body, ink: .primary, fillWidth: false)
-            .font(.orbitProse)
-            .textSelection(.enabled)
-            .fixedSize(horizontal: false, vertical: true)
-            .background(GeometryReader { proxy in
-                Color.clear.preference(key: SessionMessageBodyHeightKey.self, value: proxy.size.height)
-            })
-            .background(alignment: .topLeading) {
-                // One line of the body's font, never shown: what "a line" is on this device and size.
-                Text(verbatim: "Ag").font(.orbitProse).fixedSize().hidden()
-                    .background(GeometryReader { proxy in
-                        Color.clear.preference(key: SessionMessageLineHeightKey.self, value: proxy.size.height)
-                    })
-            }
-            .onPreferenceChange(SessionMessageBodyHeightKey.self) { bodyHeight = $0 }
-            .onPreferenceChange(SessionMessageLineHeightKey.self) { lineHeight = $0 }
-            .frame(maxHeight: clamped ? lineHeight * CGFloat(SessionMessageCard.clampLines) : nil, alignment: .top)
-            .clipped()
-            .mask {
-                if clamped {
-                    LinearGradient(stops: [.init(color: .black, location: 0.55), .init(color: .clear, location: 1)],
-                                   startPoint: .top, endPoint: .bottom)
-                } else {
-                    Rectangle()
-                }
-            }
+        FoldedProse(bodyHeight: $bodyHeight, lineHeight: $lineHeight, clamped: clamped) {
+            MarkdownView(source: text, base: .body, ink: .primary, fillWidth: false)
+                .font(.orbitProse)
+                .textSelection(.enabled)
+        }
     }
 
     /// One of this card's links through the app's own link door, told whether the card is in a
@@ -248,12 +225,54 @@ struct HugWidthLayout: Layout {
 
 /// The widest an Orbit card in a conversation draws: on the agent's side, from the leading edge, and
 /// no wider than this however wide the window (docs/mocks/session-message-bubble, owner 2026-11-12;
-/// web's `max-width: 720px` on `.oic/.tsc/.psc/.crc` and `.smc-wrap`). A phone's column is narrower,
+/// web's `--chat-card-max: 720px` on `.oic/.tsc/.psc/.crc` and `.smc-wrap`). A phone's column is narrower,
 /// and there a card takes the column.
 extension View {
     func orbitCardWidth() -> some View {
-        frame(maxWidth: 720, alignment: .leading)
+        frame(maxWidth: ConversationCardWidth.max, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// A body of prose that folds by its rendered height (docs/mocks/session-message-clamp, approved
+/// 2026-11-11): taller than `SessionMessageCard.clampFrom` lines it shows its first `clampLines` and
+/// fades out, until its card opens it. The text is laid out at its full height and measured there,
+/// then clipped, so opening it moves nothing else. Shared by the "From" message card and the reply
+/// card, so the fold is one rule; whether it folds is the caller's to ask
+/// (`SessionMessageCard.folds(height:lineHeight:)`).
+struct FoldedProse<Content: View>: View {
+    /// The body's full height as laid out before the clip, and one line of its font.
+    @Binding var bodyHeight: CGFloat
+    @Binding var lineHeight: CGFloat
+    /// Whether it shows folded now: measured tall, neither opened by the reader nor revealed.
+    let clamped: Bool
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        content()
+            .fixedSize(horizontal: false, vertical: true)
+            .background(GeometryReader { proxy in
+                Color.clear.preference(key: SessionMessageBodyHeightKey.self, value: proxy.size.height)
+            })
+            .background(alignment: .topLeading) {
+                // One line of the body's font, never shown: what "a line" is on this device and size.
+                Text(verbatim: "Ag").font(.orbitProse).fixedSize().hidden()
+                    .background(GeometryReader { proxy in
+                        Color.clear.preference(key: SessionMessageLineHeightKey.self, value: proxy.size.height)
+                    })
+            }
+            .onPreferenceChange(SessionMessageBodyHeightKey.self) { bodyHeight = $0 }
+            .onPreferenceChange(SessionMessageLineHeightKey.self) { lineHeight = $0 }
+            .frame(maxHeight: clamped ? lineHeight * CGFloat(SessionMessageCard.clampLines) : nil, alignment: .top)
+            .clipped()
+            .mask {
+                if clamped {
+                    LinearGradient(stops: [.init(color: .black, location: 0.55), .init(color: .clear, location: 1)],
+                                   startPoint: .top, endPoint: .bottom)
+                } else {
+                    Rectangle()
+                }
+            }
     }
 }
 

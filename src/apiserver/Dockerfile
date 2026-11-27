@@ -39,7 +39,7 @@ RUN npm run build -w @orbit/shared \
 # install unpacks), and `codex` on PATH is its native binary. No match here fails the build: npm
 # only warns when an optional dependency — which is how the platform package arrives — is missing.
 FROM node:26-slim AS codex
-RUN npm install -g @openai/codex@0.170.0 \
+RUN npm install -g @openai/codex@0.172.0 \
  && mv /usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-*/vendor/*-unknown-linux-musl /opt/codex
 
 # ──────────────────────────────── runtime ────────────────────────────────

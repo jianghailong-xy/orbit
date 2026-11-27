@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { ConflictException } from '@nestjs/common';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { TasksService } from './tasks.service';
 import { fakeReceiptStore } from './task-run-receipt-fake';
@@ -135,9 +136,11 @@ function fixture(opts: {
         return opts.atDesiredId ?? null;
       },
       // The mid-flight dedup and the continue-a-paused-run read both come through here and both
-      // find nothing: this fixture is the race, where every caller saw a free claim.
+      // find nothing: this fixture is the race, where every caller saw a free claim. The holder is
+      // read by the claim index's own predicate (1426: task, not in the Trash, not released).
       findFirst: async ({ where }: any) =>
-        (where?.status?.in?.length === 4 ? (opts.holder ?? null) : null),
+        (where && Object.keys(where).sort().join() === 'deletedAt,finishedAt,taskId'
+          && where.deletedAt === null && where.finishedAt === null ? (opts.holder ?? null) : null),
     },
   } as never;
   const sessions = {
@@ -314,7 +317,7 @@ test('a duplicate on a unique key this unit does not own still reaches the calle
 // driver this deployment does not use, and every lost claim leaks a 500 in production.
 test('the execution claim as Prisma 7\'s pg adapter reports it is still classified', async () => {
   const f = fixture({
-    conflict: adapterConflict('session_task_execution_claim_idx', ['task_id']),
+    conflict: adapterConflict('session_task_execution_claim_idx_finished_at', ['task_id']),
     atDesiredId: { id: WINNER_ID, status: RunStatus.SUCCEEDED, taskId: TASK_ID, ownerId: OWNER_ID },
   });
 
@@ -343,7 +346,7 @@ test('the primary key as Prisma 7\'s pg adapter reports it is still classified',
 // the holder is what forces the insert, the P2002, and the decision about whether it is ours.
 test('the execution claim as prisma 7.10 reports it — index name, no column list — is classified', async () => {
   const f = fixture({
-    conflict: adapterConflict710('session_task_execution_claim_idx', 'session'),
+    conflict: adapterConflict710('session_task_execution_claim_idx_finished_at', 'session'),
     atDesiredId: null,
     holder: holderRow({ status: RunStatus.RUNNING }),
   });

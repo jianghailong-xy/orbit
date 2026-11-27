@@ -4,11 +4,13 @@ import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -117,8 +119,10 @@ fun rememberReaderLinkHandler(resources: ReaderResources, open: (OrbitRoute) -> 
     return handler
 }
 
+/** [inBubble]: one of the reader's own sent images (iOS `ChatAttachmentImage`): fitted to 300 × 360 dp on the trailing edge, rounded,
+ * with no caption or "Open image" — a tap opens it; [square], one of several, as a 96 dp cropped square (iOS `ChatAttachmentThumb`). */
 @Composable
-fun TranscriptImage(source: String, alt: String, open: (String) -> Unit) {
+fun TranscriptImage(source: String, alt: String, open: (String) -> Unit, inBubble: Boolean = false, square: Boolean = false) {
     val resources = LocalReaderResources.current
     var retry by remember { mutableIntStateOf(0) }
     var zoom by remember { mutableStateOf(false) }
@@ -144,19 +148,33 @@ fun TranscriptImage(source: String, alt: String, open: (String) -> Unit) {
         }
     }
     Column {
-        // Fixed preview bounds prevent a late decode from displacing the reader's anchor.
-        Box(Modifier.fillMaxWidth().height(240.dp), contentAlignment = androidx.compose.ui.Alignment.Center) {
+        // Fixed preview bounds prevent a late decode from displacing the reader's anchor. A sent image holds its cap's height
+        // while it loads, which is a portrait screenshot's: the common one keeps its place, a wider one comes in shorter.
+        val shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+        val bounds = when {
+            square -> Modifier.size(96.dp)
+            inBubble && bitmap == null && expired == null && !failed -> Modifier.size(200.dp, 360.dp)
+            inBubble && bitmap == null -> Modifier
+            inBubble -> Modifier.widthIn(max = 300.dp).heightIn(max = 360.dp)
+            else -> Modifier.fillMaxWidth().height(240.dp)
+        }
+        Box(bounds, contentAlignment = androidx.compose.ui.Alignment.Center) {
             val loaded = bitmap
             val gone = expired
             when {
+                loaded != null && inBubble -> Image(loaded.asImageBitmap(), alt.ifBlank { "Image" },
+                    (if (square) Modifier.fillMaxSize() else Modifier.aspectRatio(loaded.width.toFloat() / loaded.height)).clip(shape)
+                        .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), shape)
+                        .clickable { selected = source; zoom = true }.testTag("user-turn-image"),
+                    contentScale = if (square) ContentScale.Crop else ContentScale.Fit)
                 loaded != null -> Image(loaded.asImageBitmap(), alt.ifBlank { "Image" }, Modifier.fillMaxSize().clickable { selected = source; zoom = true }, contentScale = ContentScale.Fit)
                 gone != null -> ExpiredAttachmentFace(gone.at, Modifier.size(120.dp, 90.dp).testTag("attachment-expired"))
                 failed -> TextButton(onClick = { retry++ }) { Text("Image unavailable · Retry") }
                 else -> CircularProgressIndicator()
             }
         }
-        if (alt.isNotBlank()) Text(alt, style = MaterialTheme.typography.bodySmall)
-        if (!source.startsWith("data:") && expired == null) TextButton(onClick = { open(source) }) { Text("Open image") }
+        if (!inBubble && alt.isNotBlank()) Text(alt, style = MaterialTheme.typography.bodySmall)
+        if (!inBubble && !source.startsWith("data:") && expired == null) TextButton(onClick = { open(source) }) { Text("Open image") }
     }
     if (zoom && bitmap != null && resources?.available() == true) {
         val info = resources.metadata(selected)

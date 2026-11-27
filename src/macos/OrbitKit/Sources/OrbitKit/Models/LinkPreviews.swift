@@ -82,10 +82,15 @@ public struct LinkPreviewSession: Codable, Equatable, Sendable {
     public let title: String?
     public let status: RunStatus?
     public let runStatus: RunStatus?
+    @LenientSessionField public private(set) var phase: SessionPhase?
+    @LenientSessionField public private(set) var released: Bool?
+    @LenientSessionField public private(set) var workFinished: Bool?
+    @LenientSessionField public private(set) var lastTurnOutcome: SessionTurnOutcome?
+    @LenientSessionField public private(set) var waitingOn: SessionWaitingOn?
     public let runState: SessionRunState?
     public let sessionState: SessionState?
     public let lifecycleState: SessionLifecycleState?
-    public let endReason: String?
+    @LenientSessionField public private(set) var endReason: String?
     public let error: String?
     /// When an armed auto-retry re-sends the failed message; null when none is armed.
     public let retryAt: String?

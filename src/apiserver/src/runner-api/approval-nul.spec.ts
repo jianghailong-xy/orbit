@@ -35,6 +35,8 @@ function harness() {
         providerBuiltin: true,
         workspaceId: WORKSPACE,
       }),
+      // A raised card moves the session's row in its owner's list (session.listed_at, session-listed-at.ts).
+      updateMany: async () => ({ count: 1 }),
     },
     approval: {
       findUnique: async ({ where }: { where: unknown }) => {

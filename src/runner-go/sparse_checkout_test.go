@@ -475,7 +475,7 @@ func engineInstructions(t *testing.T, job *ClaimedSession) map[string]string {
 		"claude":                   strings.Join(claudeCommandArgs(job, t.TempDir(), true), "\n"),
 		"codex additional context": strings.Join(values, "\n"),
 		"codex user input":         fmt.Sprint(codexInput),
-		"kimi":                     fmt.Sprint(prepareKimiPrompt(context.Background(), nil, job, &RunInboxResponse{Content: "hi"}, nil).blocks),
+		"kimi":                     fmt.Sprint(prepareKimiPrompt(context.Background(), nil, job, &RunInboxResponse{Content: "hi"}, nil, nil).blocks),
 		"deepseek harness":         dshSessionAgentOverlay(job).AppendSystemPrompt,
 		"antigravity":              antigravityInstructions(job, "/usr/local/bin/orbit"),
 		"cursor":                   cursorAgentInstructions(job),

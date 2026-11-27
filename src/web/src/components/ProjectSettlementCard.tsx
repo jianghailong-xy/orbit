@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type JSX, type Ref } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { DoneRequest, OwnerCardTranslation, ProjectDoneCheck, ProjectDoneFinding, ProjectDoneRecord, ProjectOpenItemRow, SessionWaitingKind } from '@orbit/shared';
+import type { DoneRequest, OwnerCardTranslation, ProjectDoneCheck, ProjectDoneFinding, ProjectDoneRecord, ProjectOpenItemRow, SessionWaitingKind, ProjectTextTranslation } from '@orbit/shared';
 import { api } from '../api';
 import {
   acceptanceConfirmationKey,
@@ -51,6 +51,7 @@ import {
   landingReasonLabel,
   orbitCheckedOpenItemCount,
   projectDoneCardTally,
+  criteriaInFlightCount,
   projectDoneReceiptTally,
   projectWhyNotDoneTally,
   whyNotDoneNeedsCallDetail,
@@ -65,12 +66,13 @@ import { AppLink } from './AppLink';
 import { ConfirmCriterionDialog, type ConfirmCriterionSubject } from './ConfirmCriterionDialog';
 import { MovedOutLines } from './ProjectAcceptanceCard';
 import { MoveCriterionDialog, type MoveCriterionSubject } from './MoveCriterionDialog';
-import { RefusedAnswerFoot, useOwnerCardTranslation } from './TranslationParts';
+import { RefusedAnswerFoot, useOwnerCardFlip, useOwnerCardTranslation } from './TranslationParts';
 import { Alert } from './ui/Alert';
-import { answerRefusedUntranslated } from '../lib/translation';
+import { answerRefusedUntranslated, criterionTextIn } from '../lib/translation';
 import { Dialog } from './ui/Dialog';
 import { Textarea } from './ui/Textarea';
 import { streamPoll } from '../lib/listBudget';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * WHY this project is not DONE — the projection, rendered.
@@ -535,9 +537,11 @@ export function ProjectSettlementCard({
         <span className="project-settlement-heading">
           {settled ? SETTLEMENT_SETTLED_TITLE : SETTLEMENT_HEADING}
         </span>
-        <span className="criteria-provenance" title={PROVENANCE_TITLE}>
-          {PROVENANCE_LABEL}
-        </span>
+        <Tooltip content={PROVENANCE_TITLE} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="criteria-provenance">
+            {PROVENANCE_LABEL}
+          </span>
+        </Tooltip>
       </div>
       <div className="approval-body is-questions project-settlement-body">
         {settled ? (
@@ -835,7 +839,7 @@ export function SessionProjectSettlementCard({
         notYetRefusal={decline.error}
         notYetBusy={decline.isPending}
         openItemsCount={orbitCheckedOpenItemCount(openItemsRead.data)}
-        runningCount={doneProject.derivedDone?.counts?.byReason?.IN_FLIGHT ?? 0}
+        runningCount={criteriaInFlightCount(doneProject.derivedDone)}
         onRecordDone={() => done.mutate()}
         onNotYet={(note) => {
           if (doneRequestRow) decline.mutate({ note });
@@ -895,8 +899,9 @@ export interface ProjectDoneCardProps {
   runningCount?: number;
 }
 
-function doneCriterionText(project: ProjectDoneDocument, key: string): string {
-  return criterionForGap(project, key)?.text ?? key;
+function doneCriterionText(project: ProjectDoneDocument, key: string, words?: ProjectTextTranslation): string {
+  const item = criterionForGap(project, key);
+  return item ? criterionTextIn(words, item.id, item.text) : key;
 }
 
 function doneCriterionOrdinal(project: ProjectDoneDocument, key: string): number | null {
@@ -924,8 +929,11 @@ function orbitCheckedText(
 function DoneGaps({
   project,
   gaps,
+  words,
 }: {
   project: ProjectDoneDocument;
+  /** The project's translation while the card is drawn translated. */
+  words?: ProjectTextTranslation;
   gaps: readonly {
     criterionKey: string;
     title?: string;
@@ -951,7 +959,7 @@ function DoneGaps({
               <li className="project-done-gap" key={`${gap.criterionKey}:${index}`}>
                 <span className="project-done-gap-number">{ordinal ?? index + 1}</span>
                 <div className="project-done-gap-body">
-                  <div className="project-done-gap-title">{gap.title ?? doneCriterionText(project, gap.criterionKey)}</div>
+                  <div className="project-done-gap-title">{gap.title ?? doneCriterionText(project, gap.criterionKey, words)}</div>
                   {gap.whyNotProven ? <div className="project-done-gap-why">{gap.whyNotProven}</div> : null}
                   {gap.coordinatorChecked ? (
                     <div className="project-done-gap-checked">
@@ -981,10 +989,13 @@ const DONE_WHEN_OPEN_UP_TO = 12;
 function DoneWhenSummary({
   project,
   counts,
+  words,
   onConfirm,
 }: {
   project: ProjectDoneDocument;
   counts: ProjectDoneCounts | undefined;
+  /** The project's translation while the card is drawn translated. */
+  words?: ProjectTextTranslation;
   /** Opens the Confirm sheet for an unmet criterion met by confirmation. */
   onConfirm?: (definitionId: string) => void;
 }): JSX.Element {
@@ -1024,7 +1035,7 @@ function DoneWhenSummary({
               <li key={criterion.definitionId}>
                 <span className="project-done-gap-number">{item?.ordinal ?? index + 1}</span>
                 <span className="project-done-criterion-text">
-                  {item?.text ?? criterion.definitionId}
+                  {item ? criterionTextIn(words, item.id, item.text) : criterion.definitionId}
                   {confirmed ? <span className="project-done-criterion-confirmed">{confirmed}</span> : null}
                 </span>
                 <span className={`project-done-criterion-state${criterion.satisfied ? ' is-met' : ' is-unmet'}${state.warn ? ' is-warn' : ''}`}>
@@ -1185,9 +1196,14 @@ export function ProjectDoneCard({
   const [note, setNote] = useState('');
   const [moving, setMoving] = useState<MoveCriterionSubject | null>(null);
   const [confirming, setConfirming] = useState<ConfirmCriterionSubject | null>(null);
-  // The coordinator's judgment and gaps are the card's agent-written words (board 04-owner-cards.html).
-  const translated = useOwnerCardTranslation(doneRequest ? translation : null);
-  const t = translated.shown;
+  // The card's agent-written words (board 04-owner-cards.html): the coordinator's judgment and gaps, and the
+  // project's title and criteria, flipped together by one toggle. The receipt draws no judgment.
+  const recorded = receipt != null || project.status === 'DONE';
+  const requestTranslation = doneRequest && !recorded ? translation : null;
+  const flip = useOwnerCardFlip(requestTranslation, project.translation);
+  const t = flip.pick(requestTranslation);
+  const words = flip.pick(project.translation);
+  const title = words?.title || project.title;
   const gaps = (doneRequest?.gaps ?? []).map((gap, i) => {
     const tg = t?.gaps?.[i];
     if (!tg) return gap;
@@ -1234,11 +1250,10 @@ export function ProjectDoneCard({
   // `doneBy` outlives a reopen on the document, so it is the owner's record only while the
   // project is DONE; the receipt is the answer this card's own press just got.
   const ownerRecorded = receipt != null || (project.status === 'DONE' && project.doneBy === 'OWNER');
-  // The receipt is the project's status, not its derived read: an OPEN project is asked the
-  // question even while `derivedDone` says done or a leftover `doneBy` lingers.
-  const recorded = receipt != null || project.status === 'DONE';
   const canRecord = Boolean(onRecordDone) && !busy;
 
+  // The receipt is the project's status, not its derived read: an OPEN project is asked the
+  // question even while `derivedDone` says done or a leftover `doneBy` lingers.
   if (recorded) {
     return (
       <div ref={ref} className="approval-card project-settlement project-done-card is-receipt">
@@ -1248,7 +1263,7 @@ export function ProjectDoneCard({
         </div>
         <div className="approval-body is-questions project-settlement-body">
           <div className="project-settlement-meta">
-            {project.title} · {doneProvenance({ doneBy: receipt?.doneBy ?? project.doneBy, acceptedGaps: accepted })}
+            {title} · {doneProvenance({ doneBy: receipt?.doneBy ?? project.doneBy, acceptedGaps: accepted })}
             {receiptDate ? ` · ${receiptDate}` : ''}
           </div>
           <p className="project-done-receipt-line">
@@ -1262,9 +1277,10 @@ export function ProjectDoneCard({
           {accepted.length > 0 ? (
             <details className="project-done-accepted">
               <summary>{DONE_CARD_SEE_ACCEPTED}</summary>
-              <DoneGaps project={project} gaps={accepted as typeof gaps} />
+              <DoneGaps project={project} gaps={accepted as typeof gaps} words={words} />
             </details>
           ) : null}
+          {flip.foot}
         </div>
         <div className="approval-actions project-settlement-actions">
           <button type="button" className="card-action card-action--secondary" onClick={onReopen} disabled={!onReopen}>
@@ -1279,11 +1295,13 @@ export function ProjectDoneCard({
     <div ref={ref} className="approval-card project-settlement project-done-card">
       <div className="approval-head project-settlement-head">
         <span className="project-settlement-heading">{DONE_CARD_HEADING}</span>
-        <span className="criteria-provenance" title={PROVENANCE_TITLE}>FROM ORBIT</span>
+        <Tooltip content={PROVENANCE_TITLE} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="criteria-provenance">FROM ORBIT</span>
+        </Tooltip>
       </div>
       <div className="approval-body is-questions project-settlement-body">
         <div className="project-settlement-meta">
-          {project.title} · {doneRequest
+          {title} · {doneRequest
             ? [PROJECT_DONE_COPY.askedByCoordinator, doneRequestWaiting(requestWaitingSince, now)].filter(Boolean).join(' · ')
             : PROJECT_DONE_COPY.noRequestMeta}
         </div>
@@ -1294,9 +1312,9 @@ export function ProjectDoneCard({
           </div>
         ) : null}
         {nonCode ? <NonCodeBanner project={project} /> : null}
-        <DoneWhenSummary project={project} counts={counts} onConfirm={project.id ? startConfirm : undefined} />
-        {doneRequest ? <DoneGaps project={project} gaps={gaps} /> : null}
-        {translated.foot}
+        <DoneWhenSummary project={project} counts={counts} words={words} onConfirm={project.id ? startConfirm : undefined} />
+        {doneRequest ? <DoneGaps project={project} gaps={gaps} words={words} /> : null}
+        {flip.foot}
         <div className="project-done-orbit-checked">
           <span aria-hidden="true">✓</span>{' '}
           {orbitCheckedText(project, standing, openItemsCount, runningCount)}
@@ -1442,7 +1460,7 @@ export function ProjectDoneDialog({
   const request = row?.doneRequest ?? null;
   const standing = standingRead.data ?? null;
   const criteriaDigest = request?.criteriaDigest ?? standing?.currentVersion.digest;
-  const runningCount = project?.derivedDone?.counts.byReason.IN_FLIGHT ?? 0;
+  const runningCount = criteriaInFlightCount(project?.derivedDone);
   const openItemsCount = orbitCheckedOpenItemCount(openItemsRead.data);
   const submit = (): void => {
     if (!project || !criteriaDigest || record.isPending) return;
@@ -1559,6 +1577,8 @@ export function ProjectWhyNotDoneCard({
   const onlyInFlight = waiting.length > 0 && waiting.every((criterion) => criterion.landingReason === 'IN_FLIGHT');
   const coordinatorOnIt = onlyInFlight || (openItems?.withCoordinator?.length ?? 0) > 0;
   const hasGaps = waiting.length > 0 || needsCall.length > 0;
+  // Only the criterion rows below carry the project's words: the settled card draws none.
+  const translated = useOwnerCardTranslation(project.status !== 'DONE' && hasGaps ? project.translation : null);
   // A DONE project is done whatever its criteria still say: nothing is left to ask "why not".
   if (project.status === 'DONE' || (!hasGaps && project.derivedDone?.done === true)) {
     return (
@@ -1596,7 +1616,9 @@ export function ProjectWhyNotDoneCard({
             <li key={criterion.definitionId} className="project-why-item">
               <span className="project-done-gap-number">{item?.ordinal ?? '•'}</span>
               <div>
-                <div className="project-why-item-title">{item?.text ?? criterion.definitionId}</div>
+                <div className="project-why-item-title">
+                  {item ? criterionTextIn(translated.shown, item.id, item.text) : criterion.definitionId}
+                </div>
                 {/* An unmet criterion is work still to do: its landing lane (no receipt, no code)
                     describes work that has not happened yet, not work that finished elsewhere. */}
                 <div className="project-why-item-state">
@@ -1623,6 +1645,7 @@ export function ProjectWhyNotDoneCard({
       <div className="approval-body is-questions project-settlement-body">
         {group(PROJECT_DONE_COPY.waitingOnWork, waiting, true)}
         {group(PROJECT_DONE_COPY.needsYourCall, needsCall, false)}
+        {translated.foot}
         <p className="project-done-tally">{projectWhyNotDoneTally(project.derivedDone, main)}</p>
       </div>
       <div className="approval-actions project-settlement-actions">

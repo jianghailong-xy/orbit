@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
+import { useLiveTerminalRequests } from '../TerminalRequests';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -29,8 +30,10 @@ import {
   FolderOutlined,
   HolderOutlined,
   KeyOutlined,
+  LockOutlined,
   LeftOutlined,
   LinkOutlined,
+  OrderedListOutlined,
   PlusOutlined,
   SearchOutlined,
   SettingOutlined,
@@ -42,8 +45,10 @@ import { api } from '../../api';
 import { routeId } from '../../lib/idCodec';
 import { machineName } from '../../lib/machineSetup';
 import { MachineOsIcon } from '../../lib/machineOs';
+import { MANAGED_UPDATE_ROW_LABEL, MANAGED_UPDATE_ROW_TITLE } from '../../lib/runnerCopy';
 import { managedRowOf, useManagedRunner, useManagedRunnerId } from '../../lib/managedRunner';
 import { Spinner } from '../ui/Spinner';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from '../ui/Tooltip';
 import { publishedRunnerVersionQuery, runnersQuery, workspacesQuery } from '../../lib/queries';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../../lib/providerAdmin';
 import { providerPoolsQuery } from '../../lib/providerPools';
@@ -55,15 +60,18 @@ import {
 } from '../../lib/runnerAttention';
 import { settingsReturnPath } from '../../lib/settingsReturn';
 import { useToast } from '../../lib/toast';
+import { getWebPushConfig } from '../../lib/webPush';
 import { useMediaQuery } from '../../lib/useMediaQuery';
-import { INTEGRATION_PAGES, PERSONAL_PAGES } from '../../pages/settings/settingsIndex';
+import { INTEGRATION_PAGES, MODEL_ROUTING_PAGE, PERSONAL_PAGES } from '../../pages/settings/settingsIndex';
 import { ControlPlaneProvider } from '../../lib/useControlPlane';
 import { ImpersonationBanner } from '../ImpersonationBanner';
 import { HelpDrawer } from '../HelpDrawer';
 
 import type { Runner } from '../TasksSidePanel';
+import { SettingChangedLine, SettingChangedLineSlot } from './SettingChangedLine';
 import { around, searchSettings, type SettingsHit, type SettingsHitGroup } from './settingsSearch';
 import './Settings.css';
+import { sidebarWidthStyle } from '../../lib/sidebarWidth';
 
 /** Personal's rows' icons; the rows themselves, in the board's order, are the Settings index's pages. */
 const PERSONAL_ICONS: Record<(typeof PERSONAL_PAGES)[number]['path'], ReactNode> = {
@@ -71,10 +79,9 @@ const PERSONAL_ICONS: Record<(typeof PERSONAL_PAGES)[number]['path'], ReactNode>
   '/settings/notifications': <BellOutlined />,
   '/settings/appearance': <SunOutlined />,
   '/settings/profile': <UserOutlined />,
-  '/settings/storage': <DatabaseOutlined />,
   '/settings/shared-links': <LinkOutlined />,
   '/settings/access-tokens': <KeyOutlined />,
-  '/settings/terminals': <CodeOutlined />,
+  '/settings/secrets': <LockOutlined />,
 };
 
 /** Integrations' rows' icons, one per connected service. */
@@ -164,7 +171,9 @@ export function SettingsLayout() {
                   <span>Settings</span>
                 </button>
               )}
-              <Outlet />
+              <SettingChangedLineSlot.Provider value={SettingChangedLine}>
+                <Outlet />
+              </SettingChangedLineSlot.Provider>
             </div>
           </main>
         )}
@@ -231,10 +240,13 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
   const nowMs = Date.now();
   // The keys page is every key, or one vendor's (/settings/providers/:vendor); not a key's own pages.
   const { pathname } = useLocation();
-  const keysPage = /^\/settings\/providers(\/(?!(new|keys|pools)(\/|$))[^/]+)?\/?$/.test(pathname);
+  const keysPage = /^\/settings\/providers(\/(?!(new|keys|pools|routing)(\/|$))[^/]+)?\/?$/.test(pathname);
 
+  // A terminal on a machine asking to be approved lights that machine's dot (docs/mocks/waiting-on-you-removal/02 ①).
+  const terminalRequests = useLiveTerminalRequests();
   const stateOf = (runner: Runner): MachineState => {
     if (runnerIsOffline(runner, nowMs)) return 'offline';
+    if (terminalRequests.some((request) => routeId(request.runnerId) === routeId(runner.id))) return 'attention';
     const items = runnerAttention({
       runner,
       workspaces: workspaces.filter((workspace) => workspace.runnerId === runner.id),
@@ -244,6 +256,14 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
     });
     return items.length > 0 ? 'attention' : 'online';
   };
+
+  // Asked only once there is a query: the This browser row exists, and is found, only where the server sends web push.
+  const webPush = useQuery({
+    queryKey: ['push', 'web-config'],
+    queryFn: getWebPushConfig,
+    retry: false,
+    enabled: query.trim() !== '',
+  });
 
   const keyCount = providers.data?.length ?? 0;
   const poolCount = pools.data?.length ?? 0;
@@ -257,7 +277,7 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
   const addWorkspace = () => navigate(runners.length > 0 ? '/settings/workspaces/new' : '/settings/machines/new');
 
   return (
-    <nav className="settings-nav autohide-scrollbar" aria-label="Settings">
+    <nav className="settings-nav autohide-scrollbar" aria-label="Settings" style={sidebarWidthStyle()}>
       <button type="button" className="settings-back" onClick={() => navigate(settingsReturnPath())}>
         <LeftOutlined />
         <span>Back to Orbit</span>
@@ -271,6 +291,7 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
           managedRunnerId,
           keys: providers.data ?? [],
           workspaces: workspaces.map((workspace) => ({ ...workspace, machine: machineOf(workspace) })),
+          webPush: Boolean(webPush.data),
         })}
       />
       {/* While there is a query its results are the nav; the groups stay mounted, as they were left. */}
@@ -309,6 +330,7 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
               managedId={managedRunnerId}
               stateOf={stateOf}
               managedRowOf={managedRowFor}
+              cloudUpdate={managed?.status.update?.phase === 'available'}
             />
           )}
         </NavGroup>
@@ -320,7 +342,11 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
         >
           {keyCount === 0 && poolCount === 0 ? (
             // With no key and no pool at all, the group is the one way to connect a provider.
-            <NavRow to="/settings/providers/new" icon={<PlusOutlined />} label="Connect a provider" />
+            <>
+              <NavRow to="/settings/providers/new" icon={<PlusOutlined />} label="Connect a provider" />
+              {/* The built-in engines have model tiers with no key at all. */}
+              <NavRow to={MODEL_ROUTING_PAGE.path} icon={<OrderedListOutlined />} label={MODEL_ROUTING_PAGE.label} />
+            </>
           ) : (
             <>
               {/* Two rows however many vendors are connected (choice A, docs/mocks/settings-providers-compact):
@@ -338,6 +364,9 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
                 label="Account pools"
                 trailing={poolCount > 0 ? <span className="settings-nav-meta">{poolCount}</span> : undefined}
               />
+              {/* Every model's tier, keys' and built-in engines', beside how its runs went: Model tiers and the
+                  Routing report on one page. */}
+              <NavRow to={MODEL_ROUTING_PAGE.path} icon={<OrderedListOutlined />} label={MODEL_ROUTING_PAGE.label} />
             </>
           )}
         </NavGroup>
@@ -457,8 +486,11 @@ function MachineRows({
   managedId,
   stateOf,
   managedRowOf,
+  cloudUpdate = false,
 }: {
   runners: Runner[];
+  /** A newer build waits for Orbit Cloud (managed.status.update): its row carries the update dot. */
+  cloudUpdate?: boolean;
   /** Which runner is Orbit Cloud, if any. */
   managedId: string | null;
   stateOf: (runner: Runner) => MachineState;
@@ -516,7 +548,7 @@ function MachineRows({
             to={`/settings/machines/${cloud.id}`}
             icon={<CloudOutlined />}
             label={machineName(cloud, cloud.id)}
-            trailing={<MachineRowState state={stateOf(cloud)} managedRow={managedRowOf(cloud)} />}
+            trailing={<MachineRowState state={stateOf(cloud)} managedRow={managedRowOf(cloud)} update={cloudUpdate} />}
           />
           {runners.length > 0 && <div className="settings-nav-divider" role="separator" />}
         </div>
@@ -542,19 +574,22 @@ function MachineRows({
 function MachineRowState({
   state,
   managedRow,
+  update,
 }: {
   state: MachineState;
   managedRow: ManagedRunnerRow | null;
+  update?: boolean;
 }) {
   return managedRow ? (
-    <ManagedRowState row={managedRow} />
+    <ManagedRowState row={managedRow} update={update} />
   ) : (
-    <span
-      className={`settings-dot settings-dot--${state}`}
-      role="img"
-      aria-label={MACHINE_STATE_LABEL[state]}
-      title={MACHINE_STATE_LABEL[state]}
-    />
+    <Tooltip content={MACHINE_STATE_LABEL[state]} delay={TEXT_TOOLTIP_DELAY_MS}>
+      <span
+        className={`settings-dot settings-dot--${state}`}
+        role="img"
+        aria-label={MACHINE_STATE_LABEL[state]}
+      />
+    </Tooltip>
   );
 }
 
@@ -580,12 +615,20 @@ function MachineRow({
   const node = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!isDragging) return;
+    let giveUp: ReturnType<typeof setTimeout> | undefined;
+    const remove = () => {
+      clearTimeout(giveUp);
+      window.removeEventListener('click', swallow, true);
+    };
     const swallow = (event: MouseEvent) => {
+      remove();
       if (node.current?.contains(event.target as Node)) event.preventDefault();
     };
     window.addEventListener('click', swallow, true);
     return () => {
-      setTimeout(() => window.removeEventListener('click', swallow, true), 50);
+      // The click follows pointerup even when React's work between them is delayed. Keep a generous
+      // cap only so a synthetic or cancelled drag that produces no click cannot leave the listener.
+      giveUp = setTimeout(remove, 1000);
     };
   }, [isDragging]);
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
@@ -609,33 +652,47 @@ function MachineRow({
         label={name}
         trailing={<MachineRowState state={state} managedRow={managedRow} />}
       />
-      <button
-        ref={setActivatorNodeRef}
-        type="button"
-        className="settings-nav-grip"
-        title="Drag to reorder"
-        disabled={dragDisabled}
-        {...attributes}
-        aria-label={`Reorder ${name}`}
-        onKeyDown={(event) => listeners?.onKeyDown?.(event)}
-      >
-        <HolderOutlined />
-      </button>
+      <Tooltip content="Drag to reorder" disabled={isDragging}>
+        <button
+          ref={setActivatorNodeRef}
+          type="button"
+          className="settings-nav-grip"
+          disabled={dragDisabled}
+          {...attributes}
+          aria-label={`Reorder ${name}`}
+          onKeyDown={(event) => listeners?.onKeyDown?.(event)}
+        >
+          <HolderOutlined />
+        </button>
+      </Tooltip>
     </div>
   );
 }
 
 /** The managed runner's state on its machine row: a spinner while it moves, else a dot, and the short label. */
-export function ManagedRowState({ row }: { row: ManagedRunnerRow }) {
+export function ManagedRowState({ row, update }: { row: ManagedRunnerRow; update?: boolean }) {
+  // A newer build waits (managed.status.update): the same update dot and word a self-managed machine's row gets.
+  if (update && row.tone === 'ready') {
+    return (
+      <Tooltip content={MANAGED_UPDATE_ROW_TITLE} delay={TEXT_TOOLTIP_DELAY_MS}>
+        <span className="settings-managed-state" data-kind={row.kind} data-update>
+          <span className="settings-dot settings-dot--update" aria-hidden />
+          <span className="settings-nav-meta settings-nav-meta--update">{MANAGED_UPDATE_ROW_LABEL}</span>
+        </span>
+      </Tooltip>
+    );
+  }
   return (
-    <span className="settings-managed-state" data-kind={row.kind} title={row.detail ?? row.label}>
-      {row.tone === 'progress' ? (
-        <Spinner size="small" aria-hidden />
-      ) : (
-        <span className={`settings-dot settings-dot--${MANAGED_DOT[row.tone]}`} aria-hidden />
-      )}
-      <span className="settings-nav-meta">{row.label}</span>
-    </span>
+    <Tooltip content={row.detail ?? row.label} delay={TEXT_TOOLTIP_DELAY_MS}>
+      <span className="settings-managed-state" data-kind={row.kind}>
+        {row.tone === 'progress' ? (
+          <Spinner size="small" aria-hidden />
+        ) : (
+          <span className={`settings-dot settings-dot--${MANAGED_DOT[row.tone]}`} aria-hidden />
+        )}
+        <span className="settings-nav-meta">{row.label}</span>
+      </span>
+    </Tooltip>
   );
 }
 
@@ -692,9 +749,11 @@ export function NavGroup({
       <div className="settings-nav-heading">
         <span>{title}</span>
         {add && (
-          <button type="button" className="settings-nav-add" aria-label={add.label} title={add.label} onClick={add.onClick}>
-            <PlusOutlined />
-          </button>
+          <Tooltip content={add.label} align="end">
+            <button type="button" className="settings-nav-add" aria-label={add.label} onClick={add.onClick}>
+              <PlusOutlined />
+            </button>
+          </Tooltip>
         )}
       </div>
       {children}

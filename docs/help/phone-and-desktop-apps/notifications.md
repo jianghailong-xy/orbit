@@ -6,7 +6,7 @@ routes: [/settings/notifications]
 errors: []
 platforms: [web, macos, ios, android]
 common: false
-updated: 2026-11-14
+updated: 2026-11-17
 ---
 
 Agents often finish, or get stuck on a question, while you are elsewhere. Notifications tell your phone and computer.
@@ -38,6 +38,6 @@ If **Settings** shows **Notifications are off**, tap **Turn on** and allow notif
 
 - Check the phone's Focus or Do Not Disturb settings, and that notifications for Orbit are allowed in the system settings.
 - Check the two switches above. Only the always-sent kinds arrive with both off.
-- Look in [Waiting on you](orbit:/waiting): everything a notification would point at is listed there too.
+- Look where the request waits: a session's row in the session list shows an amber dot and what it wants, terminals to approve are on their machine's page under **Settings → Machines**, and scheduled runs that need you are on the [Scheduled](orbit:/scheduled) page.
 
-Full guide: [Waiting on you](orbit:/help/projects-and-tasks/waiting-on-you).
+Full guide: [Find what needs you](orbit:/help/projects-and-tasks/find-what-needs-you).

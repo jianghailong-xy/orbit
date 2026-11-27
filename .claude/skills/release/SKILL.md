@@ -54,8 +54,10 @@ Then:
    `origin/main` with nothing uncommitted. Read the notes, then merge the release commit into `main`.
 2. **Tag and watch**, in the background: `delegate({ description: "Tag and watch release <version>", size: "S",
    background: true, prompt: <the tag brief> })`. End the turn: Orbit wakes this session with the result.
-3. **Report** the tag, the run's link, each job's outcome, the TestFlight and Android state, and any job that
-   failed with its log lines. A failed job is reported, not retried: re-running or deleting a tag is the
+3. **Publish the Orbit Cloud runner image** on orbit-ws04, in the background, once the tag is pushed, then pull it
+   onto the k3s node through orbit-ws03 (see [Orbit Cloud runner image](#orbit-cloud-runner-image)).
+4. **Report** the tag, the run's link, each job's outcome, the TestFlight and Android state, the Orbit Cloud runner
+   image, and any job that failed with its log lines. A failed job is reported, not retried: re-running or deleting a tag is the
    session's decision (see Notes).
 
 The prepare brief: fill in `<version>` and `<previous tag>` (the newest `v*` tag, `git describe --tags --abbrev=0
@@ -102,6 +104,62 @@ and report at the first step that fails; do not retry, re-run, delete a tag or p
    lines.
 ```
 
+## Orbit Cloud runner image
+
+The tag also publishes the Orbit Cloud (managed) runners' image, `10.66.0.1:5000/orbit-cloud-runner:<version>`, whose
+runner reports the release version (docs/release-process.md, "Orbit Cloud runner image comes from the release tag").
+It is built and pushed on the build host, workspace **orbit-ws04** (wikova): the registry is reached only over
+WireGuard, so `release.yml` cannot. Once the tag is on `origin`, start it beside the tag brief, in the background:
+
+`delegate({ description: "Publish Orbit Cloud runner <version>", size: "S", workspace: "orbit-ws04", background: true,
+prompt: <the publish brief> })`
+
+It is idempotent: a tag whose image is in the registry already is skipped, so a failed or repeated run is simply run
+again. A two-stage deploy of the tag's commit, or of a later one, uses this image and builds none; until it is
+published, a deploy stops before changing anything and names the command. Report its result with the release's.
+
+The publish brief: fill in `<version>`.
+
+```text
+Publish the Orbit Cloud runner image of release tag v<version> on this host. Answer in English. Stop and report at
+the first step that fails; do not improvise around a guard. Never push to git, never tag, never deploy.
+
+1. The tag is on origin: `git -C /root/orbit fetch --quiet origin "refs/tags/v<version>:refs/tags/v<version>"`.
+2. W=/dev/shm/wkdir-publish-cloud-runner-<version>; `git -C /root/orbit worktree add --detach "$W" "v<version>"`.
+   Do not check out or change anything in /root/orbit itself.
+3. `cd "$W" && ORBIT_REGISTRY=10.66.0.1:5000 deploy/two-stage/publish-managed-runner.sh v<version>`. It builds from
+   the tag's commit (several minutes, about 4.4 GiB) and pushes, or says the image is in the registry already. It
+   must end with a line starting `✓ 10.66.0.1:5000/orbit-cloud-runner:<version> is in 10.66.0.1:5000`.
+4. `git -C /root/orbit worktree remove --force "$W"`.
+5. Hand back: whether it was built or already there, the digest it printed, and on failure the last 40 lines.
+```
+
+**Then pull it onto the node.** Once the publish brief hands back its `✓` line, take the reference by digest from it
+(`10.66.0.1:5000/orbit-cloud-runner@sha256:<64 hex>`, the one a deploy writes into the profile) and pull it onto
+production's k3s node, workspace **orbit-ws03** (`workstation`), in the background:
+`delegate({ description: "Pull Orbit Cloud runner <version> onto the node", size: "S", workspace: "orbit-ws03",
+background: true, prompt: <the pre-pull brief> })`. A runner's Pod pulls its image only as it starts, so without this
+the first runner to start after the deploy waits for the 1.5 GB pull first: 116 s on 2026-11-25, against about 9 s for
+the ones after it. The pull is bounded by the registry link, not by the image: on 2026-11-26 it took 1773 s (~30 min
+at 0.2–1 MB/s) and outlasted a 30-minute job limit. It is idempotent, and containerd keeps a partial ingest, so a
+same-command re-run resumes where the first stopped; a failed or killed pull costs nothing but that wait: report it
+with the release's result, and do not hold the release for it.
+
+The pre-pull brief: fill in `<version>` and `<ref>`.
+
+```text
+Pull the Orbit Cloud runner image of release v<version> onto this k3s node, so that the first runner to start on it
+does not wait for the pull. Answer in English. Run as root. Change nothing else on the node: no Pod, no other image,
+no k3s setting. Stop and report at the first step that fails.
+
+1. `git -C /root/orbit fetch --quiet origin "refs/tags/v<version>:refs/tags/v<version>"`.
+2. `git -C /root/orbit show "v<version>:deploy/managed-runner/prepull-runner-image.sh" | bash -s -- <ref>`. It usually
+   takes a minute or two, but a slow registry link can make it far longer (1773 s on 2026-11-26). containerd keeps a
+   partial ingest, so if the command is interrupted or a host limit kills it, run the same command again to resume —
+   that is not a failure. It must end with a line starting `✓ <ref> is on this node`.
+3. Hand back its last lines.
+```
+
 ## How to use
 
 1. **Pick the version.** `release.sh next` prints the one tag to cut next, resolved from the **package
@@ -141,7 +199,14 @@ and report at the first step that fails; do not retry, re-run, delete a tag or p
    .claude/skills/release/release.sh 0.2.0-beta.3    # the version package.json already carries
    ```
 
-4. **Watch the build and report the result.** All five jobs run in the one `release.yml` run:
+4. **Publish the Orbit Cloud runner image** on the build host (orbit-ws04), from the tag just pushed; from another
+   workspace through the SubAgent in [Orbit Cloud runner image](#orbit-cloud-runner-image):
+
+   ```bash
+   ORBIT_REGISTRY=10.66.0.1:5000 deploy/two-stage/publish-managed-runner.sh v0.2.0-beta.3
+   ```
+
+5. **Watch the build and report the result.** All five jobs run in the one `release.yml` run:
 
    ```bash
    gh run watch "$(gh run list --workflow release.yml -L 1 --json databaseId -q '.[0].databaseId')"

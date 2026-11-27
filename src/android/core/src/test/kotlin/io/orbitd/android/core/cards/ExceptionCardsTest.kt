@@ -26,7 +26,7 @@ class ExceptionCardsTest {
         detailLine: String = "the run ended with exit code 1", delivery: String? = null, facts: JsonElement = JsonNull,
         fuseEpisodeId: String? = null, title: String = "Task failed: P5.1 Route Handlers",
         landingSessionId: String? = null, integrationJobId: String? = null, lease: JsonElement = JsonNull,
-        coordinatorUnreachable: Boolean? = null) = buildJsonObject {
+        coordinatorUnreachable: Boolean? = null, handledByStates: List<String>? = null) = buildJsonObject {
         put("itemId", "01a0bb0b-b3fb-744c-b9a6-2fd68b4420b4"); put("kind", kind); put("title", title); put("detailLine", detailLine)
         put("assignee", assignee); put("assigneeReason", reason); put("waitingSince", waitingSince); put("escalatedAt", escalatedAt)
         put("taskId", taskId); put("sessionId", sessionId); put("promotionId", promotionId); put("fuseEpisodeId", fuseEpisodeId)
@@ -35,7 +35,7 @@ class ExceptionCardsTest {
         putJsonArray("actions") { actions.forEach { add(it) } }
         requiredAction?.let { put("requiredAction", it) }
         primaryAction?.let { put("primaryAction", it) }
-        handledBy?.let { titles -> putJsonArray("handledBy") { titles.forEachIndexed { i, t -> addJsonObject { put("taskId", "t$i"); put("title", t); put("state", "OPEN") } } } }
+        handledBy?.let { titles -> putJsonArray("handledBy") { titles.forEachIndexed { i, t -> addJsonObject { put("taskId", "t$i"); put("title", t); put("state", handledByStates?.get(i) ?: "OPEN") } } } }
         put("question", JsonNull); put("facts", facts); put("lease", lease)
         coordinatorUnreachable?.let { put("coordinatorUnreachable", it) }
     }
@@ -249,6 +249,41 @@ class ExceptionCardsTest {
         assertNull(ExceptionCards.handledByLine(row(handledBy = emptyList())))
         assertEquals("The coordinator is fixing this in Fix the branch. · The coordinator is fixing this in Re-check later.",
             ExceptionCards.handledByLine(row(handledBy = listOf("Fix the branch", "Re-check later"))))
+    }
+
+    /** Board card-ui-polish ① (OrbitKit `testALiveRepairIsOneLinkedLineAndQuietDoors`, web `liveRepairs`): any `handledBy` entry not DONE
+     * or CANCELLED — the server's own `hasLiveFix` — is a live repair, and turns the card into one linked line and quiet doors with no
+     * line under them. Once every repair has ended the card is the plain one again. The words are the browser's and OrbitKit's. */
+    @Test fun aLiveRepairIsOneLinkedLineAndQuietDoors() {
+        val live = row(kind = "INTEGRATION_CHECK_FAILED", actions = listOf("ASK_COORDINATOR_AGAIN", "RETRY", "OPEN_TASK_SESSION"),
+            handledBy = listOf("Fix the branch", "Re-check later"), handledByStates = listOf("IN_PROGRESS", "OPEN"))
+        assertEquals(listOf("Fix the branch", "Re-check later"), ExceptionCards.liveRepairs(live).map { it.text("title") })
+        assertTrue(ExceptionCards.fixing(live))
+        val ended = row(handledBy = listOf("Fix the branch", "Re-check later"), handledByStates = listOf("DONE", "CANCELLED"))
+        assertTrue(ExceptionCards.liveRepairs(ended).isEmpty())
+        assertFalse(ExceptionCards.fixing(ended))
+        assertFalse(ExceptionCards.fixing(row()))
+        val quiet = ExceptionCards.presses(live, quiet = true)
+        assertTrue(quiet.isNotEmpty())
+        assertTrue("a repair in flight asks nothing of the reader", quiet.all { it.tier == ExceptionCards.PressTier.LINK && it.consequence.isEmpty() })
+        assertTrue(ExceptionCards.presses(live).any { it.tier != ExceptionCards.PressTier.LINK && it.consequence.isNotEmpty() })
+        val web = File(root(), "src/web/src/components/ProjectProgressStatus.tsx").readText()
+        assertTrue(web.contains("export const FIXING_TAG = '${ExceptionCards.fixingTag}';"))
+        assertTrue(web.contains("export const BEING_FIXED_IN = '${ExceptionCards.beingFixedIn}';"))
+        assertTrue(web.contains("export const FIXING_NOTHING_FOR_YOU = '${ExceptionCards.fixingNothingForYou}';"))
+        assertTrue(web.contains("row.handledBy ?? []).filter((task) => task.state !== 'DONE' && task.state !== 'CANCELLED')"))
+        val swift = File(root(), "src/macos/OrbitKit/Sources/OrbitKit/App/OwnerItemCards.swift").readText()
+        assertTrue(swift.contains("public static let fixingTag = \"${ExceptionCards.fixingTag}\""))
+        assertTrue(swift.contains("public static let beingFixedIn = \"${ExceptionCards.beingFixedIn}\""))
+        assertTrue(swift.contains("public static let fixingNothingForYou = \"${ExceptionCards.fixingNothingForYou}\""))
+        assertTrue(swift.contains("\$0.state != \"DONE\" && \$0.state != \"CANCELLED\""))
+    }
+
+    /** The Into row names the branch a person knows, never the ref the server stores it under (OrbitKit `testTheIntoRowNamesTheBranchNotItsRef`). */
+    @Test fun theIntoRowNamesTheBranchNotItsRef() {
+        val facts = ExceptionCards.facts(row(facts = Wire.json.parseToJsonElement(
+            """{"targetRef":"refs/heads/main","targetSha":"928ed7e0000","nothingLanded":true}"""))) as ExceptionCards.Facts.Rows
+        assertEquals("main at 928ed7e · nothing landed", facts.rows.single { it.label == ExceptionCards.intoLabel }.value)
     }
 
     /** 2026-11-15: an escalated card said "no one acted on this" over doors and a chat that could not reach the coordinator. With the

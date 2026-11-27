@@ -400,7 +400,7 @@ test('Google linking on PostgreSQL: Connect Google end to end, the confirmation 
       assert.equal(me.status, 200, me.text);
       assert.deepEqual(
         Object.keys(me.json).sort(),
-        ['avatarUpdatedAt', 'createdAt', 'email', 'id', 'name', 'preferences', 'promptOptimizerAvailable', 'publicId', 'role', 'signInMethods', 'translationAvailable', 'translationUnavailableUntil'],
+        ['avatarUpdatedAt', 'changedBy', 'createdAt', 'email', 'id', 'name', 'preferences', 'promptOptimizerAvailable', 'publicId', 'role', 'signInMethods', 'translationAvailable', 'translationUnavailableUntil'],
       );
       assert.deepEqual(me.json.signInMethods, expected.get(user.id), user.email);
       assert.deepEqual(secret(me.text), [], user.email);

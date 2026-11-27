@@ -832,7 +832,7 @@ func TestSessionPoolActivationPublishesTheClaimsModeToTheRunsLiveMode(t *testing
 	}
 	// What a read-only Kimi SubAgent started by the run's job service (whose job is the first claim) now reads.
 	child := subagentChildJob(first, AgentExecConfig{Provider: providerKimi}, subagentDefinition{Name: "explore", Readonly: true}, "run1", providerKimi, "")
-	if kimiReadonlyShellFollowsParent(child, "Bash") {
+	if _, decided := readonlySubagentAnswer(child, "Bash"); decided {
 		t.Fatal("a read-only Kimi SubAgent of a session now in Default must file a card")
 	}
 }

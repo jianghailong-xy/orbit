@@ -10,6 +10,16 @@ public enum RunnerAgentFixState: Equatable, Sendable {
     case fixing(RunnerAgentFixing)
 }
 
+/// What the transcript's missing-bubblewrap warning draws (web's `SandboxFixView`): the button and
+/// where its session runs, the reason none can start, the agent at work, or the one that already
+/// finished with that row — a transcript is history, so it does not offer a second agent.
+public enum SandboxFixState: Equatable, Sendable {
+    case ready(hint: String?)
+    case blocked(reason: String)
+    case fixing(RunnerAgentFixing)
+    case handled(sessionId: String, workspaceName: String)
+}
+
 /// Which warning a press is about: its kind, and the engine for `engineNotUpdating` and `installFailed`.
 public struct RunnerAgentFixTarget: Equatable, Sendable {
     public let kind: RunnerAttentionFixKind
@@ -102,10 +112,31 @@ public enum RunnerAgentFixLogic {
         case .cannotSelfUpdate:
             let latest = latestVersion?.trimmingCharacters(in: .whitespacesAndNewlines)
             return RunnerAttentionFixRequest(latest: latest?.isEmpty == false ? latest : nil)
-        case .engineNotUpdating, .installFailed:
+        case .engineNotUpdating, .installFailed, .sandboxMissing:
             return RunnerAttentionFixRequest(engine: target.engine)
         case .engineUpdateFailed:
             return RunnerAttentionFixRequest()
         }
+    }
+
+    /// The engine whose sandbox names the missing package, in the transcript's warning.
+    public static let SANDBOX_FIX_ENGINE = "codex"
+
+    /// The transcript's missing-bubblewrap warning (docs/mocks/codex-sandbox-fix-with-agent): nil from
+    /// an older server, which sends no `agentFix`.
+    public static func sandboxState(_ fix: RunnerAgentFix?) -> SandboxFixState? {
+        guard let fix else { return nil }
+        let target = RunnerAgentFixTarget(kind: .sandboxMissing, engine: SANDBOX_FIX_ENGINE)
+        if let entry = fixing(fix, target) { return .fixing(entry) }
+        if let handled = (fix.handled ?? []).first(where: { $0.kind == target.kind.rawValue && $0.engine == target.engine }) {
+            return .handled(sessionId: handled.sessionId, workspaceName: handled.workspaceName)
+        }
+        let engineName = fix.engineName ?? fix.engine.map(RunnerPageFormat.engineName)
+        if let blocked = fix.blocked {
+            guard blocked.code == "engineSignedOut", let engineName else { return .blocked(reason: blocked.message) }
+            return .blocked(reason: blocked.message + RunnerPageCopy.agentFixSignInOnMachinePage(engine: engineName))
+        }
+        guard let workspace = fix.workspaceName, let engineName else { return .ready(hint: nil) }
+        return .ready(hint: RunnerPageCopy.agentFixStartsIn(workspace: workspace, engine: engineName))
     }
 }

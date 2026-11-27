@@ -41,8 +41,14 @@ import { HttpAdapterHost, NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaPg } from '@prisma/adapter-pg';
 import {
-  CreatorType, PrismaClient, RunnerStatus, RunStatus, SessionDispatchOrigin, TaskCompletionCriterion,
+  CreatorType,
+  PrismaClient,
+  RunnerStatus,
+  SessionDispatchOrigin,
+  TaskCompletionCriterion,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
+import { fixtureFacts } from '../test-support/session-word';
 import { RunEventType, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -59,6 +65,7 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
+import { LEGACY_STATUS_SELECT } from '../sessions/session-legacy-words';
 import { withSessionState } from '../sessions/session-state';
 import { SessionsService } from '../sessions/sessions.service';
 import { ViewerStreamService } from '../sessions/viewer-stream.service';
@@ -66,6 +73,8 @@ import { VIEWER_STREAM_CAPS, ViewerStreamCaps } from '../sessions/viewer-stream-
 import { RealtimeService } from '../realtime/realtime.service';
 import { openStream, type HeldStream } from '../test-support/sse-client';
 import { viewerStreamCrossings } from '../test-support/viewer-door-checks';
+import { DriveContentService } from '../drive/drive-content.service';
+import { DriveService } from '../drive/drive.service';
 import { ShareLinksController } from '../share-links/share-links.controller';
 import { ShareLinksService } from '../share-links/share-links.service';
 import { SharedRateLimiter } from './public-surface.guard';
@@ -94,7 +103,10 @@ const OLD_FIELDS = [
 const LINK_FIELDS = ['kind', 'include', 'sharedAt'];
 // Activity was added by the parked-session activity projection. The guest red line also requires
 // public roots and polling to carry waitingOnOwner as a boolean, never approval contents.
-const STATE_FIELDS = ['waitingOnOwner'];
+// phase, released, lastTurnOutcome and waitingOn (plan step 5.1, sessions/session-phase.ts) are the shared
+// header's as every session payload's: words about the state the root already shows, never what is asked.
+// endReason and workFinished (plan phase 5) likewise: the stored end word and one boolean, no cause and no error.
+const STATE_FIELDS = ['waitingOnOwner', 'phase', 'released', 'lastTurnOutcome', 'waitingOn', 'endReason', 'workFinished'];
 
 type Json = Record<string, any>;
 type Answer = { status: number; headers: IncomingHttpHeaders; body: Buffer; json: Json };
@@ -180,7 +192,7 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
     await db.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, title, prompt: title,
-        status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+        turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
         ...(extra.deletedAt ? { deletedAt: extra.deletedAt } : {}),
       },
     });
@@ -267,6 +279,9 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
       { provide: SessionsService, useValue: sessions },
       { provide: AttachmentsService, useValue: new AttachmentsService(prisma) },
       { provide: ShareLinksService, useValue: new ShareLinksService(prisma) },
+      // Drive file links, which nothing here shares or opens (share-links-drive-file.pg.spec.ts holds them).
+      { provide: DriveService, useValue: {} },
+      { provide: DriveContentService, useValue: {} },
       { provide: SharedRateLimiter, useValue: new SharedRateLimiter({ max: BUDGET, windowMs: 60_000 }) },
       { provide: ViewerStreamService, useValue: new ViewerStreamService(prisma, realtime, sessions) },
       { provide: ViewerStreamCaps, useValue: caps },
@@ -338,21 +353,24 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
   await t.test('(b) the transcript comes in pages; the root keeps its old fields', async () => {
     const row = await db.session.findUniqueOrThrow({
       where: { id: shared },
-      select: { status: true, endReason: true, completedAt: true, archivedAt: true, deletedAt: true, createdAt: true },
+      select: { ...LEGACY_STATUS_SELECT, completedAt: true, archivedAt: true, deletedAt: true, createdAt: true },
     });
     const state = withSessionState(row);
 
     // The root: every old field, then the tail page (200) and hasMore, and the link's own three
     // (kind, include, sharedAt), and activity (TURN, BACKGROUND_JOB, WAITING, or null;
-    // introduced by 29fc026c1). The guest red line also requires the public root to expose
-    // waitingOnOwner as a boolean, without approval contents — nothing else.
+    // introduced by 29fc026c1), with runningBgCount beside it (how many background jobs run, never
+    // which; contracts/session-state.contract.json, sharedHead, 20a337ad42). The guest red line also
+    // requires the public root to expose waitingOnOwner as a boolean, without approval contents —
+    // nothing else.
     const root = await visit(at(''));
     assert.equal(root.status, 200, root.body.toString());
     assert.deepEqual(
       Object.keys(root.json).sort(),
-      [...OLD_FIELDS, ...LINK_FIELDS, ...STATE_FIELDS, 'events', 'hasMore', 'agentName', 'activity'].sort(),
+      [...OLD_FIELDS, ...LINK_FIELDS, ...STATE_FIELDS, 'events', 'hasMore', 'agentName', 'activity', 'runningBgCount'].sort(),
     );
     assert.ok(root.json.activity === null || ['TURN', 'BACKGROUND_JOB', 'WAITING'].includes(root.json.activity));
+    assert.ok(Number.isInteger(root.json.runningBgCount), 'runningBgCount is a count');
     assert.equal(root.json.kind, 'SESSION');
     assert.equal(typeof root.json.waitingOnOwner, 'boolean');
     assert.equal(root.json.title, 'Draw the mock and show me');
@@ -514,8 +532,8 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
 
     // The header is the root's — its fields, as the root answers them, and nothing else.
     const root = await visit(at(''));
-    assert.deepEqual(Object.keys(rest.json).sort(), [...OLD_FIELDS, ...STATE_FIELDS, 'agentName', 'activity', 'events', 'after'].sort());
-    for (const field of [...OLD_FIELDS, ...STATE_FIELDS, 'agentName', 'activity']) assert.deepEqual(rest.json[field], root.json[field], field);
+    assert.deepEqual(Object.keys(rest.json).sort(), [...OLD_FIELDS, ...STATE_FIELDS, 'agentName', 'activity', 'runningBgCount', 'events', 'after'].sort());
+    for (const field of [...OLD_FIELDS, ...STATE_FIELDS, 'agentName', 'activity', 'runningBgCount']) assert.deepEqual(rest.json[field], root.json[field], field);
 
     // A conversation that moves on: the next read holds what it added and how it stands now.
     const liveToken = newToken();
@@ -525,7 +543,7 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
     const waiting = await visit(on('/events?after=1'));
     assert.deepEqual(seqs(waiting), []);
     assert.equal(waiting.json.runState, 'AWAITING_INPUT');
-    await db.session.update({ where: { id: live }, data: { status: RunStatus.RUNNING } });
+    await db.session.update({ where: { id: live }, data: { turnState: 'IN_FLIGHT' } });
     await event(live, 2, RunEventType.ASSISTANT, { text: 'going on' });
     const moved = await visit(on('/events?after=1'));
     assert.deepEqual(seqs(moved), [2]);
@@ -600,7 +618,7 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
     publish(0, RunEventType.TASK_PROGRESS, { toolUseId: 'toolu_live', description: OWNER_ONLY[2] });
     publish(0, 'tombstone', {});
     publish(0, RunEventType.STATUS, { status: 'RUNNING' });
-    await db.session.update({ where: { id: shared }, data: { status: RunStatus.RUNNING } });
+    await db.session.update({ where: { id: shared }, data: { turnState: 'IN_FLIGHT' } });
     publish(0, RunEventType.APPROVAL_RESOLVED, { id: randomUUID(), behavior: 'allow' });
     // A durable reply, stored first as the ingest stores it, with a tool body the bare link must not show.
     await event(shared, 607, RunEventType.TOOL_USE, { id: 'toolu_live', name: 'Bash', input: { command: LIVE_OUTPUT } });
@@ -718,6 +736,40 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
     // Every slot is given back when its stream ends.
     held.splice(0).forEach((s) => s.close());
     await settled(0, 'every stream closed');
+  });
+
+  await t.test('(j) an ended session\'s root, to a visitor with no sign-in: the end word and workFinished, nothing else', async () => {
+    // A task run that ended DONE, an End, and a failure release, each shared on a link of its own. Each row also
+    // holds an error the page must never show; the root's keys are (b)'s, whatever the end.
+    const secret = `engine exited: secret ${RUN}`;
+    const ends = [
+      { label: 'task done', row: { status: RunStatus.SUCCEEDED, endReason: 'task_done', lastTurnOutcome: 'ANSWERED' }, workFinished: true },
+      { label: 'ended', row: { status: RunStatus.CANCELLED, endReason: 'ended', lastTurnOutcome: 'ANSWERED' }, workFinished: false },
+      { label: 'failed', row: { status: RunStatus.FAILED, endReason: null, lastTurnOutcome: 'FAILED' }, workFinished: false },
+    ] as const;
+    for (const end of ends) {
+      const endToken = newToken();
+      const id = await conversation(`Ended: ${end.label}`, { shareToken: endToken });
+      await event(id, 1, RunEventType.USER, { text: 'hello' });
+      await db.session.update({ where: { id }, data: { ...fixtureFacts(end.row), finishedAt: new Date(), error: secret } });
+      const root = await visit(`${encodeURIComponent(endToken)}`);
+      assert.equal(root.status, 200, root.body.toString());
+      assert.deepEqual(
+        Object.keys(root.json).sort(),
+        [...OLD_FIELDS, ...LINK_FIELDS, ...STATE_FIELDS, 'events', 'hasMore', 'agentName', 'activity', 'runningBgCount'].sort(),
+        end.label,
+      );
+      assert.equal(root.json.endReason, end.row.endReason, end.label);
+      assert.equal(root.json.workFinished, end.workFinished, end.label);
+      assert.equal(root.json.released, true, end.label);
+      assert.equal(root.json.lastTurnOutcome, end.row.lastTurnOutcome, end.label);
+      assert.ok(!root.body.toString().includes(secret), `${end.label}: the root showed the row's error`);
+      assert.ok(!root.body.toString().includes(ownerId) && !root.body.toString().includes(pub(ownerId)), `${end.label}: the root named the owner`);
+      const after = await visit(`${encodeURIComponent(endToken)}/events?after=0`);
+      assert.equal(after.json.endReason, end.row.endReason, `${end.label}: the polled header`);
+      assert.equal(after.json.workFinished, end.workFinished, `${end.label}: the polled header`);
+      assert.ok(!after.body.toString().includes(secret), `${end.label}: the polled header showed the row's error`);
+    }
   });
 
   await t.test('(c) …and so did every other /shared answer this run received', () => {

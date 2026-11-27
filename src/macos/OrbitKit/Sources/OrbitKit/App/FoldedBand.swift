@@ -35,9 +35,9 @@ public enum FoldedBand {
 
     /// The Background row (`BackgroundRowRule`): what still runs, or, once nothing does, how many
     /// it still shows. Nil — no mark — when the rule shows no row.
-    public static func processes(_ procs: [BackgroundProc], lastUserMessageAt: String?,
+    public static func processes(_ procs: [BackgroundProc], clearedAt: String?,
                                  sessionLive: Bool) -> String? {
-        let shown = BackgroundRowRule.shown(BackgroundRowRule.inputs(procs), lastUserMessageAt: lastUserMessageAt,
+        let shown = BackgroundRowRule.shown(BackgroundRowRule.inputs(procs), clearedAt: clearedAt,
                                             sessionLive: sessionLive)
         if !shown.running.isEmpty { return "\(shown.running.count) running" }
         return shown.ended.isEmpty ? nil : "\(shown.ended.count)"

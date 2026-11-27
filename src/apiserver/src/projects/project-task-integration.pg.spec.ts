@@ -16,17 +16,18 @@
  *
  * Not destructive: every case owns freshly generated ids and asserts over its own project.
  */
+import { asLegacyMainSyncItem } from '../test-support/legacy-main-sync';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import {
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import {
@@ -56,6 +57,7 @@ import { ProjectOpenItemService } from './project-open-item.service';
 import { readTaskIntegrationViews } from './project-task-integration';
 import { ProjectsService } from './projects.service';
 import '../test-support/dequeue-under-lease';
+import { settleDeliveredIdentityAfterFinish } from './project-integration-job';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -230,7 +232,7 @@ async function doneTask(stack: Stack, w: World, label: string, finished = true):
       title,
       prompt: title,
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
@@ -273,9 +275,16 @@ async function doneTask(stack: Stack, w: World, label: string, finished = true):
 /** The runner finishing the work session: it commits the worktree and reports where HEAD ended. */
 async function finishWork(stack: Stack, sessionId: string, branch?: string) {
   const session = await stack.db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { branch: true } });
-  await stack.db.session.update({
-    where: { id: sessionId },
-    data: { finishedAt: new Date(), worktreeBranch: branch ?? session.branch, worktreeDirty: false },
+  await stack.db.$transaction(async (tx) => {
+    // The finish settles the DONE's delivered identity in the transaction that writes it, as every
+    // finish door does — and decides the route a DONE written while this work moved left to it
+    // (§10.5 O-L4 3, §12.15 P-M1).
+    const finished = await tx.session.update({
+      where: { id: sessionId },
+      data: { turnState: null, finishedAt: new Date(), worktreeBranch: branch ?? session.branch, worktreeDirty: false },
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
   });
 }
 
@@ -455,16 +464,13 @@ test('a DONE task’s landing through the heartbeat and result routes: every que
         'Waiting for a runner: the work’s workspace has no runner to land it');
       await stack.db.workspace.update({ where: { id: w.workspaceId }, data: { runnerId: w.runnerId } });
 
-      // A second task whose work session is still open: the claim leaves it alone.
+      // A second task whose work session is still open: its DONE queues nothing yet — the finish decides
+      // whether there is anything to land (§12.15 P-M1) — and its row keeps the existing reading of done
+      // code work on a started line that has no attempt yet.
       const second = await doneTask(stack, w, 'second', false);
-      const held = (await read(stack, w, second)).landTask!;
-      assert.equal(held.state, 'QUEUED');
-      assert.notEqual(held.landingSessionId, segment.sessionId,
-        'each task owns a segment, and so its own landing session');
-      assert.deepEqual(held.blockingReason, {
-        code: 'WAITING_TASK_WORK',
-        summary: 'Waiting to land: the task’s work session is still running, and its branch can still move',
-      });
+      const waiting = await read(stack, w, second);
+      assert.equal(waiting.state, 'QUEUED', 'Waiting to land: the landing has not been queued yet');
+      assert.equal(waiting.landTask, null, 'no attempt exists while the work moves');
 
       // ── RUNNING ───────────────────────────────────────────────────────────────────────────
       // A capable, leased beat claims the first — and only the first: the second's work is open.
@@ -482,12 +488,14 @@ test('a DONE task’s landing through the heartbeat and result routes: every que
       assert.equal(runningJob.waitMs, runningJob.startedAt.getTime() - runningJob.queuedAt.getTime(),
         'the queue wait stops at the claim');
       assert.equal(running.checksRunningForMs, null, 'fetching is not checking');
-      assert.equal((await read(stack, w, second)).landTask?.blockingReason?.code, 'WAITING_TASK_WORK',
-        'an open work session is named before the busy branch');
+      assert.equal((await read(stack, w, second)).landTask, null, 'the second still has no attempt while it moves');
 
-      // The second's work finishes: now only the running landing on the same branch holds it.
+      // The second's work finishes: its finish queues the landing, and now only the running landing on
+      // the same branch holds it.
       await finishWork(stack, second.sessionId);
       const serial = (await read(stack, w, second)).landTask!;
+      assert.notEqual(serial.landingSessionId, segment.sessionId,
+        'each task owns a segment, and so its own landing session');
       assert.deepEqual(serial.blockingReason, {
         code: 'WAITING_SERIAL_SLOT',
         summary: `Waiting to land: the landing of “${first.title}” is running on this branch first`,
@@ -533,7 +541,10 @@ test('a DONE task’s landing through the heartbeat and result routes: every que
       assert.equal((await read(stack, w, second)).landTask?.state, 'RUNNING');
       await report(stack, w, next[0]!, RED_MERGE_CHECK);
       const red = await read(stack, w, second);
-      assert.equal(red.state, 'CHECK_FAILED', 'the exception item still decides the row');
+      // Revision 42 (W4, §12.7): the failed check went first to the task's own work session, which the row names; the
+      // item still decides the row.
+      assert.equal(red.state, 'FIXING', 'the exception item still decides the row');
+      assert.equal(red.workSessionId, second.sessionId, 'the row does not name the session fixing it');
       assert.ok(red.openItemId);
       assert.equal(red.landTask?.state, 'CHECK_FAILED');
       assert.equal(red.landTask?.phase, 'CHECK');
@@ -579,7 +590,16 @@ test('an open MAIN_SYNC conflict holds the next landing as a project-line sync, 
       const conflicted = await doneTask(stack, w, 'conflicted');
       const claimed = await beat(stack, w);
       assert.equal(claimed.length, 1);
+      // Revision 42 (W4): a conflict goes first to its task's own work session while that session could take it. This
+      // case is about the coordinator's MAIN_SYNC item, so a person ended the work session first (W-T6).
+      await stack.db.session.update({
+        where: { id: conflicted.sessionId }, data: { endReason: 'ended', finishedAt: new Date() },
+      });
       await report(stack, w, claimed[0]!, SYNC_CONFLICT);
+      // Revision 45 opens the task-less line-sync item for this (line-sync-hold.pg.spec.ts). This case pins the LEGACY
+      // task-level item's rule, still in force for items opened before it (docs/design/project-line-upstream-sync.md
+      // §4.6 item 7): the conflicted task's own next generation is exempt.
+      await asLegacyMainSyncItem(stack.db, { projectId: w.projectId, taskId: conflicted.taskId });
       const stopped = await read(stack, w, conflicted);
       assert.equal(stopped.state, 'CONFLICT');
       assert.ok(stopped.openItemId, 'the conflict opened its item');

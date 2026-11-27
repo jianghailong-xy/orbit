@@ -103,6 +103,8 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
             TextRange(draft.selectionStart.coerceIn(0, draft.text.length), draft.selectionEnd.coerceIn(0, draft.text.length)))
     }
     var menu by remember { mutableStateOf(false) }
+    var drivePicker by remember { mutableStateOf(false) }
+    val driveOffered = io.orbitd.android.drive.driveShown(app, handle)
     var models by remember { mutableStateOf(false) }
     var preview by remember { mutableStateOf<StagedAttachment?>(null) }
     var queued by remember { mutableStateOf(false) }
@@ -123,6 +125,18 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
     }
     val clipboard = context.getSystemService(ClipboardManager::class.java)
     val detail = session?.snapshot?.detail ?: JsonObject(emptyMap())
+    if (drivePicker) {
+        // It opens on the session's project folder (D22), named as the project is.
+        val project = ((detail["projectMembership"] as? JsonObject)?.get("projectTitle") as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content
+        io.orbitd.android.drive.DrivePickerSheet(io.orbitd.android.drive.DriveStore.of(app, handle), project,
+            onDismiss = { drivePicker = false }) { paths ->
+            drivePicker = false
+            val text = draft.text
+            val added = (if (text.isNotEmpty() && !text.last().isWhitespace()) " " else "") + paths.joinToString(" ") + " "
+            val end = text.length + added.length
+            model.edit(text + added, end, end)
+        }
+    }
     val picked = JsonObject(detail + draft.resumeConfig)
     // A new session that names no model starts on its workspace's `lastModel` when it runs on the workspace's lastEngine and
     // lastProvider, while the runner still offers it (docs/workspace-default-model-design.md) — read once the workspace has one.
@@ -240,8 +254,10 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
     var modeMenu by remember { mutableStateOf(false) }
     val focused = inputFocused && imeUp
     // The band under the card is the page's own colour (iOS `ComposerBand`): a tonal elevation tinted it grey-blue apart from the page.
-    Surface {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp).testTag("session-composer")) {
+    // Not a Surface: a Surface clips to itself, and the card's light-mode shadow spreads over the page above the band, as on iOS.
+    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
+        Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 6.dp)
+            .testTag("session-composer")) {
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
                 state.error?.let { Text(it, color = MaterialTheme.colorScheme.error); TextButton(onClick = model::clearError) { Text("Dismiss error") } }
                 if (!state.loaded && !state.busy) TextButton(onClick = model::restore) { Text("Retry draft restore") }
@@ -268,7 +284,7 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
             }
             // The card: staged attachments, the text across its whole width, and the toolbar pinned to its foot. The text grows
             // upward and the toolbar never moves, so `+` and Send stay where the thumb left them however long the message gets.
-            Column(Modifier.weight(1f, fill = false).fillMaxWidth().clip(ComposerCardShape).background(composerCardColor())
+            Column(Modifier.weight(1f, fill = false).fillMaxWidth().composerCardLift().clip(ComposerCardShape).background(composerCardColor())
                 .border(1.dp, composerCardBorder(focused), ComposerCardShape).testTag("composer-card")) {
                 Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
                     // Decided 2026-11-19: inside the card, above the text, as iOS draws them.
@@ -349,6 +365,9 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                             DropdownMenu(menu, onDismissRequest = { menu = false }) {
                                 DropdownMenuItem(text = { Text("Image") }, onClick = { menu = false; photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) })
                                 DropdownMenuItem(text = { Text("File") }, onClick = { menu = false; files.launch(arrayOf("*/*")) })
+                                // From Drive (board 04-android ⑭, D21): a drive file's path goes in the message; nothing is uploaded again.
+                                if (driveOffered) DropdownMenuItem(text = { Text("Drive") }, onClick = { menu = false; drivePicker = true },
+                                    modifier = Modifier.testTag("composer-from-drive"))
                                 val clip = clipboard.primaryClip
                                 if (clip != null && clip.itemCount > 0 && clip.description.hasMimeType("image/*")) {
                                     DropdownMenuItem(text = { Text("Paste image") }, onClick = {
@@ -360,7 +379,7 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                                 }
                                 DropdownMenuItem(text = { Text("Shell command") }, onClick = {
                                     menu = false
-                                    if (dsh) model.refuse(DshRuntime.SHELL_REFUSAL) else if (!draft.text.startsWith("!")) model.edit("!${draft.text}", 1, 1)
+                                    if (!draft.text.startsWith("!")) model.edit("!${draft.text}", 1, 1)
                                 })
                                 if (target == null) DropdownMenuItem(text = { Text("Queued messages (${waiting.size})") }, onClick = { menu = false; queued = true })
                                 // A pick held for this session travels with the re-send, which would otherwise run on what it already has.
@@ -589,7 +608,7 @@ internal fun ModelChip(name: String, effort: String, smart: Boolean, enabled: Bo
 
 /** The permission mode the toolbar names: the one [detail] holds, else the one a session that names none runs in. */
 internal fun shownPermissionMode(detail: JsonObject, engine: String): String =
-    detail.text("permissionMode")?.takeIf { it.isNotEmpty() } ?: CursorRuntime.fallbackMode(engine)
+    detail.text("permissionMode")?.takeIf { it.isNotEmpty() } ?: CursorRuntime.unsetMode(engine)
 
 /**
  * The toolbar's permission mode menu (iOS `modeMenu`): the modes the engine offers for this model, ✓ on the one in use, each written

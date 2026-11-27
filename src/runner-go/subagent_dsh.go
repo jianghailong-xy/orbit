@@ -51,6 +51,8 @@ var prepareDshChildLaunch = func(ctx context.Context, child *ClaimedSession, cwd
 		return DshLaunchSpec{}, err
 	}
 	spec.Executable, spec.Args = dshCommand(node, spec.Executable, spec.Args...)
+	// On the Orbit Cloud runner with the browser on, a tool the agent runs opens its pages there (browser_opener.go).
+	spec.Env = browserOpenerEnv(spec.Env, child.BrowserEnabled)
 	return spec, nil
 }
 
@@ -68,11 +70,13 @@ func runDshChild(ctx context.Context, c subagentChild) (ExecResult, string, erro
 		engineSession = c.engineSession
 	}
 	child := subagentChildJob(c.parent, c.exec, c.def, c.runID, providerDsh, engineSession)
-	// DSH has no plan mode: a read-only SubAgent runs under DSH's read-only file policy without asking anyone
-	// (Don't Ask). Delegate is withheld by its `orbit mcp` itself (ORBIT_SUBAGENT_RUN_ID); a denylist the server
-	// or the definition asks for is refused, as a session's is (dshToolPolicyError).
+	// DSH has no plan mode: a read-only SubAgent runs under DSH's read-only file policy (Default), and each escalation
+	// it asks for is answered by the parent's mode (readonlySubagentAnswer): its edits refused, the rest allowed under
+	// an Auto parent and put on a card under one that asks. Delegate is withheld by its `orbit mcp` itself
+	// (ORBIT_SUBAGENT_RUN_ID); a denylist the server or the definition asks for is refused, as a session's is
+	// (dshToolPolicyError).
 	if c.def.Readonly {
-		child.Agent.PermissionMode = "dontAsk"
+		child.Agent.PermissionMode = "default"
 	}
 	policy, err := dshPermissionPolicyFor(child.Agent.PermissionMode)
 	if err == nil {
@@ -101,6 +105,9 @@ func runDshChild(ctx context.Context, c subagentChild) (ExecResult, string, erro
 			return bridgeDshPermission(withSubagentApprovals(askCtx, c.runID), c.t, c.parent.SessionID, ask)
 		}, emitFor)
 	permissions.workspace = spec.Cwd
+	// The parent's uploads directory, which the parent writes to unasked when it is Claude Code or Codex.
+	permissions.uploads = uploadsDir(c.parent.SessionID)
+	permissions.subagent = child
 	app, err := startDshACP(ctx, spec, mapper, permissions, c.emit)
 	if err != nil {
 		return ExecResult{Status: stFailed}, engineSession, fmt.Errorf("failed to start DeepSeek Harness: %w", err)

@@ -272,6 +272,33 @@ public struct ProjectSidebarTaskCounts: Codable, Equatable, Sendable {
     }
 }
 
+/// The project's open spend-fuse pause from `GET /projects/sidebar`: the daily limit paused its
+/// coordinator, and `POST /projects/:id/fuse/:episodeId/resume` lifts it. `observed` and `limit` are
+/// the reading the pause was taken on. Absent from an older server, which reads as not paused.
+public struct ProjectSidebarFuse: Codable, Equatable, Sendable {
+    public let paused: Bool
+    public let episodeId: String?
+    public let observed: Int?
+    public let limit: Int?
+
+    public static let notPaused = ProjectSidebarFuse(paused: false)
+
+    public init(paused: Bool, episodeId: String? = nil, observed: Int? = nil, limit: Int? = nil) {
+        self.paused = paused
+        self.episodeId = episodeId
+        self.observed = observed
+        self.limit = limit
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        paused = try c.decodeIfPresent(Bool.self, forKey: .paused) ?? false
+        episodeId = try c.decodeIfPresent(String.self, forKey: .episodeId)
+        observed = try c.decodeIfPresent(Int.self, forKey: .observed)
+        limit = try c.decodeIfPresent(Int.self, forKey: .limit)
+    }
+}
+
 /// One row of `GET /projects` or the slimmer `GET /projects/sidebar` read.
 public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
     public let id: String
@@ -305,6 +332,13 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
     /// The project's main branch by name, which the row's merge approval and landing line name. Nil
     /// with no repository bound and from an older server, and then it is main.
     public let mainBranch: String?
+    /// When the project was paused by Pause project (or the older Automatic switch), or nil when it
+    /// is not — `GET /projects/sidebar` carries it; the index and older servers do not.
+    public let pausedAt: String?
+    /// Who paused it: `OWNER` or `LEGACY_AUTOMATIC_OFF`; nil when it is not paused.
+    public let pausedReason: String?
+    /// The daily limit's pause, apart from ``pausedAt``; ``ProjectSidebarFuse/notPaused`` when absent.
+    public let fuse: ProjectSidebarFuse
 
     /// Whether the project has been started, read off `startedAt` as ``ProjectDocument/started``
     /// is. Nil for a read that did not carry the field, which no condition reads as either answer.
@@ -319,7 +353,9 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
                 coordinatorActivity: ProjectCoordinatorPulse? = nil,
                 taskCounts: ProjectSidebarTaskCounts? = nil, doneBy: ProjectDoneBy? = nil,
                 acceptedGaps: [AcceptedGap] = [],
-                startedAt: String? = nil, startedAtRead: Bool = false, mainBranch: String? = nil) {
+                startedAt: String? = nil, startedAtRead: Bool = false, mainBranch: String? = nil,
+                pausedAt: String? = nil, pausedReason: String? = nil,
+                fuse: ProjectSidebarFuse = .notPaused) {
         self.id = id
         self.title = title
         self.status = status
@@ -338,6 +374,9 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
         self.startedAt = startedAt
         self.startedAtRead = startedAtRead || startedAt != nil
         self.mainBranch = mainBranch
+        self.pausedAt = pausedAt
+        self.pausedReason = pausedReason
+        self.fuse = fuse
     }
 
     private struct Counts: Codable {
@@ -346,7 +385,8 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case id, title, status, goal, createdAt, updatedAt, buckets, lastActivityAt, attention,
-             integration, coordinatorActivity, taskCounts, doneBy, acceptedGaps, startedAt, mainBranch
+             integration, coordinatorActivity, taskCounts, doneBy, acceptedGaps, startedAt, mainBranch,
+             pausedAt, pausedReason, fuse
         case counts = "_count"
     }
 
@@ -370,6 +410,9 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
         startedAtRead = c.contains(.startedAt)
         startedAt = try c.decodeIfPresent(String.self, forKey: .startedAt)
         mainBranch = try? c.decodeIfPresent(String.self, forKey: .mainBranch)
+        pausedAt = try? c.decodeIfPresent(String.self, forKey: .pausedAt)
+        pausedReason = try? c.decodeIfPresent(String.self, forKey: .pausedReason)
+        fuse = ((try? c.decodeIfPresent(ProjectSidebarFuse.self, forKey: .fuse)) ?? nil) ?? .notPaused
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -391,6 +434,9 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
         if !acceptedGaps.isEmpty { try c.encode(acceptedGaps, forKey: .acceptedGaps) }
         if startedAtRead { try c.encode(startedAt, forKey: .startedAt) }
         try c.encodeIfPresent(mainBranch, forKey: .mainBranch)
+        try c.encodeIfPresent(pausedAt, forKey: .pausedAt)
+        try c.encodeIfPresent(pausedReason, forKey: .pausedReason)
+        if fuse != .notPaused { try c.encode(fuse, forKey: .fuse) }
     }
 
     /// What a DONE project's row says beside its status — who recorded it, and the gaps accepted —

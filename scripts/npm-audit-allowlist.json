@@ -1,9 +1,1 @@
-[
-  {
-    "advisory": "GHSA-fc5q-39xc-vjpf",
-    "package": "picomatch",
-    "range": "<=4.0.7",
-    "expires": "2026-12-18",
-    "reason": "ReDoS in picomatch with no patched release (4.0.7 is the latest). It reaches only build and test tooling (vite, vitest, tinyglobby, @nestjs/cli via @angular-devkit): `npm audit --omit=dev` finds nothing. Accepted by the account owner on 2026-11-18 until a patch ships or this entry expires."
-  }
-]
+[]

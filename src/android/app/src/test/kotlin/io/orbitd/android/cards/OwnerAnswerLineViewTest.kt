@@ -109,8 +109,7 @@ class OwnerAnswerLineViewTest {
     @Test fun whereTheConversationHoldsTheQuestionTheTurnIsItsAnsweredCard() {
         val record = record()
         val event = turn()
-        var opened: String? = null
-        answering(AnsweredQuestions(listOf(record), listOf(event)) { opened = it }) { TranscriptCardView(transcriptCards(event).single(), {}, event) }
+        answering(AnsweredQuestions(listOf(record), listOf(event))) { TranscriptCardView(transcriptCards(event).single(), {}, event) }
 
         compose.onNode(hasTestTag(record.key) and hasAnyAncestor(hasTestTag("record:9:ownerAnswer"))).assertIsDisplayed()
         compose.onNodeWithTag("${record.key}:heading", useUnmergedTree = true).assertTextEquals(CoordinatorQuestions.answeredHeading)
@@ -119,13 +118,23 @@ class OwnerAnswerLineViewTest {
         compose.onAllNodesWithText(told, useUnmergedTree = true).assertCountEquals(0)
         listOf("queued", "notice", "waiting").forEach { compose.onNodeWithTag("${record.key}:$it", useUnmergedTree = true).assertDoesNotExist() }
 
-        compose.onNodeWithTag(record.key).performClick()
-        assertEquals("View details opens the record's review", record.key, opened)
+        // Board card-ui-polish ③: View details unfolds the record in place — no sheet — with the words the coordinator was told folded
+        // at its foot, and Hide details folds it back.
+        compose.onNodeWithText(CoordinatorQuestions.viewDetails, useUnmergedTree = true).performClick()
+        compose.waitForIdle()
+        compose.onNode(hasTestTag("${record.key}:told") and hasAnyAncestor(hasTestTag("${record.key}:unfolded")), useUnmergedTree = true).assertExists()
+        compose.onNode(hasTestTag("${record.key}:footer") and hasAnyAncestor(hasTestTag("record:9:ownerAnswer")), useUnmergedTree = true).assertExists()
+        compose.onAllNodesWithText(CoordinatorQuestions.viewDetails, useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodes(isDialog()).assertCountEquals(0)
+        compose.onNodeWithText(CoordinatorQuestions.hideDetails, useUnmergedTree = true).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("${record.key}:unfolded", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithText(CoordinatorQuestions.viewDetails, useUnmergedTree = true).assertExists()
     }
 
     @Test fun itsReviewFoldsWhatTheCoordinatorWasToldAtTheFootOfTheReplay() {
         val record = record()
-        val handover = AnsweredQuestions(listOf(record), listOf(turn())) {}.told(record)
+        val handover = AnsweredQuestions(listOf(record), listOf(turn())).told(record)
         show { Box(Modifier.height(800.dp)) { QuestionRecordReview(record, handover) {} } }
         val fold = "${record.key}:told"
         compose.onNode(hasTestTag(fold) and hasAnyAncestor(hasTestTag("${record.key}:replay")), useUnmergedTree = true).assertExists()
@@ -136,14 +145,14 @@ class OwnerAnswerLineViewTest {
         compose.onNodeWithTag("$fold:words", useUnmergedTree = true).assertTextEquals(told)
 
         // A record no turn of the conversation told is replayed without them.
-        show { Box(Modifier.height(800.dp)) { QuestionRecordReview(record, AnsweredQuestions(listOf(record), emptyList()) {}.told(record)) {} } }
+        show { Box(Modifier.height(800.dp)) { QuestionRecordReview(record, AnsweredQuestions(listOf(record), emptyList()).told(record)) {} } }
         compose.onNodeWithTag(fold, useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test fun anUnconfirmedDeliveryIsSaidOnTheCard() {
         val record = record()
         val event = turn(delivery = "failed")
-        answering(AnsweredQuestions(listOf(record), listOf(event)) {}) { TranscriptCardView(transcriptCards(event).single(), {}, event) }
+        answering(AnsweredQuestions(listOf(record), listOf(event))) { TranscriptCardView(transcriptCards(event).single(), {}, event) }
 
         compose.onNodeWithTag("${record.key}:notice", useUnmergedTree = true).assertTextEquals(OwnerAnswerLine.undelivered)
         compose.onAllNodesWithText(OwnerAnswerLine.undelivered, useUnmergedTree = true).assertCountEquals(1)
@@ -156,7 +165,7 @@ class OwnerAnswerLineViewTest {
     @Test fun aQueuedAnswerIsTheCardSayingItWaitsWithNoWayOut() {
         val record = record()
         val turn = queuedTurn()
-        answering(AnsweredQuestions(listOf(record), listOf(turn.event)) {}) { QueuedTurnRow(turn, {}, cancelEnabled = true) {} }
+        answering(AnsweredQuestions(listOf(record), listOf(turn.event))) { QueuedTurnRow(turn, {}, cancelEnabled = true) {} }
 
         compose.onNodeWithTag("${record.key}:queued", useUnmergedTree = true).assertTextEquals(CoordinatorQuestions.queuedForCoordinator)
         compose.onNodeWithTag("${record.key}:heading", useUnmergedTree = true).assertTextEquals(CoordinatorQuestions.answeredHeading)
@@ -170,12 +179,12 @@ class OwnerAnswerLineViewTest {
     @Test fun aNotYetAndAQuestionTheConversationDoesNotHoldKeepTheLine() {
         val record = record()
         val notYet = turn(kind = "DONE_REQUEST")
-        answering(AnsweredQuestions(listOf(record), listOf(notYet)) {}) { TranscriptCardView(transcriptCards(notYet).single(), {}, notYet) }
+        answering(AnsweredQuestions(listOf(record), listOf(notYet))) { TranscriptCardView(transcriptCards(notYet).single(), {}, notYet) }
         compose.onNodeWithText(line, useUnmergedTree = true).assertIsDisplayed()
         compose.onNodeWithTag(record.key, useUnmergedTree = true).assertDoesNotExist()
 
         val event = turn()
-        answering(AnsweredQuestions(emptyList(), listOf(event)) {}) { TranscriptCardView(transcriptCards(event).single(), {}, event) }
+        answering(AnsweredQuestions(emptyList(), listOf(event))) { TranscriptCardView(transcriptCards(event).single(), {}, event) }
         compose.onNodeWithText(line, useUnmergedTree = true).assertIsDisplayed()
         compose.onNodeWithTag(record.key, useUnmergedTree = true).assertDoesNotExist()
     }
@@ -184,7 +193,7 @@ class OwnerAnswerLineViewTest {
     @Test fun theQuestionIsFoundWhicheverSpellingEachReadWasServed() {
         val record = record(ObjectId.toPublic(item))
         val event = turn()
-        answering(AnsweredQuestions(listOf(record), listOf(event)) {}) { TranscriptCardView(transcriptCards(event).single(), {}, event) }
+        answering(AnsweredQuestions(listOf(record), listOf(event))) { TranscriptCardView(transcriptCards(event).single(), {}, event) }
         compose.onNodeWithTag("${record.key}:heading", useUnmergedTree = true).assertTextEquals(CoordinatorQuestions.answeredHeading)
         compose.onAllNodesWithText(line, useUnmergedTree = true).assertCountEquals(0)
     }

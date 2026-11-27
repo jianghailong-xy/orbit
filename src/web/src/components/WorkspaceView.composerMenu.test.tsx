@@ -153,13 +153,18 @@ describe('the composer + menu', { timeout: 60_000 }, () => {
     return found;
   };
 
+  // What /auth/capabilities answers: the Documents switch (ORBIT_DRIVE_ENABLED).
+  let capabilities: unknown = { managedRunners: { enabled: false }, documents: { enabled: true } };
+
   beforeEach(() => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    capabilities = { managedRunners: { enabled: false }, documents: { enabled: true } };
     vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} });
     vi.stubGlobal('EventSource', FakeEventSource);
     apiMock.mockReset();
     apiMock.mockImplementation((path: string) => {
       const reply = (value: unknown) => Promise.resolve(value) as Promise<never>;
+      if (path === '/auth/capabilities') return reply(capabilities);
       if (path === '/users/me') {
         return reply({ id: 'user-1', email: 'reader@example.com', name: 'Reader', createdAt: '2026-01-01T00:00:00Z', preferences: {} });
       }
@@ -217,9 +222,22 @@ describe('the composer + menu', { timeout: 60_000 }, () => {
   it('draws the native menu: command group under the thumb, media group above the rule', async () => {
     const menu = await openMenu();
 
-    expect(drawn(menu)).toEqual(['File', 'Image', '─', 'Shell', 'Skill', 'Command']);
+    expect(drawn(menu)).toEqual(['File', 'Image', 'Drive', '─', 'Shell', 'Skill', 'Command']);
     // …in the variant that sizes it like the native one on a phone (below).
     expect(menu.dataset.variant).toBe('attachment');
+  });
+
+  it('offers Drive when the capability member is absent (a server from before the switch)', async () => {
+    capabilities = { managedRunners: { enabled: false } };
+    const menu = await openMenu();
+    expect(drawn(menu)).toContain('Drive');
+  });
+
+  it('leaves out Drive, and asks nothing of the drive, when Drive is off', async () => {
+    capabilities = { managedRunners: { enabled: false }, documents: { enabled: false } };
+    const menu = await openMenu();
+    expect(drawn(menu)).toEqual(['File', 'Image', '─', 'Shell', 'Skill', 'Command']);
+    expect(apiMock.mock.calls.filter(([path]) => /^\/(drive|documents)/.test(String(path)))).toEqual([]);
   });
 
   it('gives Command and Shell the glyphs the native menu gives them', async () => {

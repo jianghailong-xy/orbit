@@ -9,8 +9,7 @@ public enum NotificationEvent: Equatable, Sendable {
     /// A session's pending-approval count went 0 → >0 — the agent is blocked on you. A project ready
     /// to start is not counted (see `SessionDelta.diff`).
     case needsApproval(sessionID: String, title: String, count: Int)
-    /// A previously-live session reached a terminal state (status nil = it simply left the
-    /// Open list, so the exact terminal status is unknown).
+    /// A run finished or failed (status nil is an unclassified departure on an older server).
     case finished(sessionID: String, title: String, status: RunStatus?)
     /// A NOTIFY_USER watch matched: a condition you asked to be told about held. The generation is
     /// what, with the watch's id, names that one Match.
@@ -26,7 +25,8 @@ public enum SessionDelta {
     /// launch).
     public static func diff(previous: [Session], current: [Session],
                             focusedSessionID: String? = nil,
-                            filed: Set<String> = []) -> [NotificationEvent] {
+                            filed: Set<String> = [],
+                            finishedDepartures: Set<String> = []) -> [NotificationEvent] {
         let prevByID = Dictionary(previous.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         let curByID = Dictionary(current.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         let silent = filed.union([focusedSessionID].compactMap { $0 })
@@ -45,15 +45,18 @@ public enum SessionDelta {
             // retry for is an interruption it is about to undo by itself. `prev.retryAt` is what
             // carries the give-up, which moves no status at all — the row stays FAILED and only the
             // armed retry clearing turns it into the outcome worth announcing.
-            if let prev = prevByID[s.id], prev.effectiveRunStatus.isLive || prev.retryAt != nil,
-               isSettled(s) {
+            if let prev = prevByID[s.id], wasHeld(prev) || prev.retryAt != nil,
+               let outcome = settledOutcome(s) {
                 events.append(.finished(sessionID: s.id, title: s.title ?? "Session",
-                                        status: s.effectiveRunStatus))
+                                        status: outcome))
             }
         }
-        // Sessions that were live and dropped out of Open → finished (status unknown).
-        for p in previous where p.effectiveRunStatus.isLive && curByID[p.id] == nil && !silent.contains(p.id) {
-            events.append(.finished(sessionID: p.id, title: p.title ?? "Session", status: nil))
+        for p in previous where curByID[p.id] == nil && !silent.contains(p.id) {
+            if finishedDepartures.contains(p.id) && (wasHeld(p) || p.retryAt != nil) {
+                events.append(.finished(sessionID: p.id, title: p.title ?? "Session", status: .succeeded))
+            } else if p.released == nil && p.effectiveRunStatus.isLive {
+                events.append(.finished(sessionID: p.id, title: p.title ?? "Session", status: nil))
+            }
         }
         return events
     }
@@ -75,13 +78,23 @@ public enum SessionDelta {
     /// "not task_done" is the only read of it that holds.
     public static func announcesFinish(endReason: String?) -> Bool { endReason == "task_done" }
 
+    private static func wasHeld(_ s: Session) -> Bool {
+        s.released.map { !$0 } ?? s.effectiveRunStatus.isLive
+    }
+
     /// The run is over AND nothing is going to restart it — the only reading of a row that is an
     /// outcome. A quota-killed or 529'd turn settles as FAILED with `retryAt` armed, and the server
     /// re-sends the same message when the provider is back (`AutoRetryService`), so announcing that
     /// reports a failure the user never had. An older server sends no `retryAt` at all, which reads
     /// as "nothing armed" and keeps the pre-retry behaviour.
-    private static func isSettled(_ s: Session) -> Bool {
-        s.effectiveRunStatus.isTerminal && s.retryAt == nil
+    private static func settledOutcome(_ s: Session) -> RunStatus? {
+        guard s.retryAt == nil else { return nil }
+        if s.released == nil { return s.effectiveRunStatus.isTerminal ? s.effectiveRunStatus : nil }
+        switch s.releasedRunState {
+        case .succeeded: return .succeeded
+        case .failed: return .failed
+        default: return nil
+        }
     }
 }
 
@@ -137,14 +150,20 @@ public enum AppIntent: Equatable, Sendable {
     /// card is (owner decision 2026-10-06). A client without that page opens the coordinator
     /// conversation, which draws the merge as its line.
     case openProjectMerge(projectID: String, sessionID: String)
-    /// An owner request's push action — "Provide key", "Answer", "Mark done", "Review": the "Waiting
-    /// on you" inbox with that request's card open and its input focused (`OwnerRequestLink`). It
-    /// never answers the request: a secret has no reply path outside its card (secrets design §7.2).
+    /// An owner request's push action — "Provide key", "Answer", "Mark done", "Review" — and the
+    /// plain tap on its alert or its Later reminder: the conversation that asked, landed on that
+    /// request's card (`OwnerRequestLink`). It never answers the request: a secret has no reply path
+    /// outside its card (secrets design §7.2).
     case openOwnerRequest(requestID: String)
     /// An owner request's "Later": put off for `OwnerRequests.laterSeconds`, on this device only.
     case snoozeOwnerRequest(requestID: String)
-    /// A terminal asking to be approved (push kind `terminal-login`): the "Waiting on you" inbox, where its card is.
-    case openTerminalRequests
+    /// A terminal asking to be approved (push kind `terminal-login`): where its card is — the machine page's
+    /// Needs you section (docs/mocks/waiting-on-you-removal/02 ④). The id is the push's own when it
+    /// carries one, so that card is the one lit; nil opens the section on the oldest waiting.
+    case openTerminalRequests(requestID: String?)
+    /// A key or pool login that needs action (push kind `account-needs-action` without a `runnerID`): the
+    /// Providers page, where the key's and the pool's rows draw the block and Check again (contract §1).
+    case openProviders
     /// A scheduled task's alert (push kind `schedule`, apiserver `PushService.notifySchedule`): the run's session when
     /// it names one, else the schedule's detail on the Scheduled page (docs/scheduled-tasks-design.md §7.3).
     case openSchedule(scheduleID: String, sessionID: String?)
@@ -183,6 +202,10 @@ public enum Notifications {
         case .manualStep: return "Mark done"
         case .confirm:    return "Review"
         case .wikiCreate: return "Review"
+        case .settingsChange: return "Review"
+        case .browserSignIn: return BrowserSignInCopy.action
+        case .change: return "Review"
+        case .projectReopen: return "Review"
         }
     }
 
@@ -216,11 +239,14 @@ public enum Notifications {
     public static let keyProject = "projectID"
     /// `userInfo` key naming the runner a machine alert is about (apiserver `PushService.notifyRunnerDrainWaiting`).
     public static let keyRunner = "runnerID"
+    /// The terminal sign-in a `terminal-login` alert is about (apiserver `PushService.notifyTerminalLogin`).
+    public static let keyTerminalLogin = "terminalLoginID"
     /// A runner draining for its update with the owner's work waiting on it (D3): a tap opens its page,
     /// where Later and Update Now are.
     public static let runnerUpdatingKind = "runner-updating"
     /// The server's runner pushes that name a `runnerID` and no session; a tap opens that runner.
-    static let runnerKinds: Set<String> = [runnerUpdatingKind, "engine-signed-out", "claude-region-blocked"]
+    static let runnerKinds: Set<String> = [runnerUpdatingKind, "engine-signed-out", "claude-region-blocked",
+                                       AccountHealth.pushKind]
     /// The owner-item alert kind of a merge into main waiting on the owner (`OWNER_ITEM_PUSH_KINDS`).
     static let approveMergeKind = "approve-merge-to-main"
     /// An agent asking to take a task out of its project. A tap opens the conversation that draws
@@ -282,21 +308,27 @@ public enum Notifications {
             if let sid = userInfo[keySession] { return .open(.session(sid)) }
             return userInfo[keyProject].map { .openProject(projectID: $0) }
         }
-        if userInfo[keyKind] == "terminal-login" { return .openTerminalRequests }
+        if userInfo[keyKind] == "terminal-login" {
+            return .openTerminalRequests(requestID: userInfo[keyTerminalLogin])
+        }
         // A scheduled task's alert opens its run's session or the schedule; never the owner-request actions below.
         if userInfo[keyKind] == scheduleKind, let schedule = userInfo[keySchedule] {
             return .openSchedule(scheduleID: schedule, sessionID: userInfo[keySession])
         }
-        // An owner request's actions open its card or put it off; its plain tap opens the session below.
+        // An owner request's actions open its card or put it off; a plain tap — the alert itself or
+        // its Later reminder — opens the conversation that asked, on the same card. Everything it
+        // needs is the request's own id, which the app resolves to `askedBySessionId`.
         if let request = userInfo[keyOwnerRequest] {
-            if actionId == actionOwnerRequestOpen { return .openOwnerRequest(requestID: request) }
             if actionId == actionOwnerRequestLater { return .snoozeOwnerRequest(requestID: request) }
+            return .openOwnerRequest(requestID: request)
         }
         guard let sid = userInfo[keySession] else {
-            // The machine's alerts (updating, an engine signed out, Claude blocked in its region) open the runner.
+            // The machine's alerts (updating, an engine signed out, Claude blocked in its region, an account needing action) open the runner.
             if let kind = userInfo[keyKind], runnerKinds.contains(kind), let runner = userInfo[keyRunner] {
                 return .open(.runner(PublicID.toPublic(runner)))
             }
+            // A key or a pool login has no runner: its row is on Providers.
+            if userInfo[keyKind] == AccountHealth.pushKind { return .openProviders }
             // A watch's alert names no session and carries no actions: tapping it opens the watch.
             return userInfo[keyWatch].map { .open(.watch($0)) }
         }

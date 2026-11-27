@@ -25,6 +25,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.R
+import io.orbitd.android.reader.LandingPullRequestCard
 import io.orbitd.android.reader.LandingTarget
 import io.orbitd.android.reader.landingEntry
 import io.orbitd.android.ui.LocalOrbitColors
@@ -126,6 +127,7 @@ internal fun ProjectLandingCardView(card: LandingCard, onOpenJobs: (() -> Unit)?
             if (!several) TargetLine(card.target)
             if (!several) Sentence(card, showNothingToDo = actionError == null)
         }
+        card.pullRequest?.let { LandingPullRequestCard(it, card.target ?: "main", lead?.landingSessionId) }
         if (several) {
             // Each job in its own ink, so a queued job behind a running one does not wear the running one's colour; and each names
             // its own landing, except the merge job's, whose way in is the merge card.

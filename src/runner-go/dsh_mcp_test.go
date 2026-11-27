@@ -53,7 +53,7 @@ func TestDshMCPServers(t *testing.T) {
 	ask, _ := dshPermissionPolicyFor("default")
 	t.Run("orbit-server-and-session-identity", func(t *testing.T) {
 		job := dshTestJob("default")
-		job.AllowOrchestration, job.WikiDisabled, job.SpawnDepth = true, true, 2
+		job.AllowOrchestration, job.WikiDisabled, job.WorkflowsDisabled, job.SpawnDepth = true, true, true, 2
 		// The agent cannot replace Orbit's own server.
 		job.Agent.McpConfig = map[string]interface{}{"orbit": map[string]interface{}{"command": "/bin/false"}}
 		servers, err := dshMCPServers(job, ask)
@@ -69,7 +69,7 @@ func TestDshMCPServers(t *testing.T) {
 			t.Fatal("a stdio entry carries no type field (P0 mcp-stdio-injection)")
 		}
 		for key, want := range map[string]string{"ORBIT_SESSION_ID": publicID(job.SessionID), "ORBIT_AGENT_ID": "p4-agent",
-			"ORBIT_TASK_ID": "p4-task", envMCPOrchestration: "1", envWiki: "off", envMCPPermissionPrompt: "0",
+			"ORBIT_TASK_ID": "p4-task", envMCPOrchestration: "1", envWiki: "off", envWorkflows: "off", envMCPPermissionPrompt: "0",
 			envSpawnDepth: "2", "ORBIT_HOME": machineHome(), envMCPCallTimeout: "60"} {
 			if got, ok := dshEnvValue(entry, key); !ok || got != want {
 				t.Fatalf("%s = %q (%v), want %q", key, got, ok, want)
@@ -221,8 +221,31 @@ func TestDshAgentOverlay(t *testing.T) {
 	// environment hands the session's toolchains (runnerCacheEnv).
 	roots := inserts["orbit-sandbox-cache-root"]
 	pluginSource(roots, dshSandboxCacheRootPlugin)
-	if mapValue(roots["config"])["root"] != runnerCacheRoot() {
+	if mapValue(roots["config"])["root"] != runnerCacheRoot() || mapValue(roots["config"])["extra"] != nil {
 		t.Fatalf("cache root row = %+v", roots)
+	}
+	// A session's uploads directory rides the same plugin as an extra writable root.
+	uploads := t.TempDir()
+	withUploads, err := prepareDshAgentConfigAt(input, &DshAgentOverlay{Uploads: uploads}, exe, filepath.Join(t.TempDir(), "uploads"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var uploadRows []map[string]interface{}
+	uploadData, _ := os.ReadFile(withUploads.Args[5])
+	if err := json.Unmarshal(uploadData, &uploadRows); err != nil {
+		t.Fatal(err)
+	}
+	var extra interface{}
+	for _, row := range uploadRows {
+		list, _ := row["insert"].([]interface{})
+		for _, raw := range list {
+			if insert := mapValue(raw); insert["id"] == "orbit-sandbox-cache-root" {
+				extra = mapValue(insert["config"])["extra"]
+			}
+		}
+	}
+	if list, _ := extra.([]interface{}); len(list) != 1 || list[0] != uploads {
+		t.Fatalf("uploads root = %#v in %s", extra, uploadData)
 	}
 	bare, err := prepareDshAgentConfigAt(input, &DshAgentOverlay{}, exe, filepath.Join(t.TempDir(), "bare"))
 	if err != nil || len(bare.Args) != 6 {

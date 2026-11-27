@@ -24,15 +24,18 @@ import io.orbitd.android.R
 import io.orbitd.android.core.schedule.ConditionDisplay
 import io.orbitd.android.core.schedule.ConditionView
 import io.orbitd.android.core.schedule.ScheduleCard
+import io.orbitd.android.core.schedule.ScheduleChangeOpening
 import io.orbitd.android.core.schedule.ScheduleChangeRecord
 import io.orbitd.android.core.schedule.ScheduleCopy
 import io.orbitd.android.core.schedule.ScheduleCopy as SC
 import io.orbitd.android.core.schedule.ScheduleDisplay
 import io.orbitd.android.core.schedule.ScheduleFindingView
 import io.orbitd.android.core.schedule.ScheduleRule
+import io.orbitd.android.core.schedule.ScheduleRunStatusDisplay
 import io.orbitd.android.core.schedule.ScheduleRunView
 import io.orbitd.android.core.schedule.ScheduleView
 import io.orbitd.android.core.schedule.ScheduleWaitingItem
+import io.orbitd.android.core.schedule.scheduleChangeOpeningRows
 import java.time.Instant
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonPrimitive
@@ -230,9 +233,48 @@ fun ScheduleRecordLine(record: ScheduleChangeRecord, undo: (suspend () -> String
     }
 }
 
+/**
+ * A change conversation's head (§8.2, board 03-change ③): the strip naming the schedule, whose Open returns to the
+ * schedule's inspector, and Orbit's opening — the schedule as it was when the conversation was opened, and what can
+ * change at once or needs Allow. The draft change screen and the session draw the same view.
+ */
+@Composable
+fun ScheduleChangeOpeningView(opening: ScheduleChangeOpening, openSchedule: (String) -> Unit) {
+    val T = SC.ChangeConversation
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp).testTag("schedule-change-opening"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(painterResource(R.drawable.ic_calendar), null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+            Text(buildAnnotatedString {
+                withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(opening.title) }
+                append(SC.separator); append(opening.runsIn)
+            }, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            TextButton(onClick = { openSchedule(opening.scheduleId) }, contentPadding = PaddingValues(horizontal = 4.dp),
+                modifier = Modifier.testTag("schedule-change-open")) { Text(T.openSchedule) }
+        }
+        // Orbit's first message (§8.2): what should change, the schedule as it is, and what it can do at once.
+        Text(boldTitle(ScheduleDisplay.fill(T.lead, mapOf("title" to opening.title)), opening.title), style = MaterialTheme.typography.bodyMedium)
+        Column(Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f), RoundedCornerShape(10.dp))
+            .padding(12.dp).testTag("schedule-change-rows"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            scheduleChangeOpeningRows(opening).forEach { row -> FactRow(row.label) { Text(row.text, style = MaterialTheme.typography.bodyMedium) } }
+        }
+        Text(T.tail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** [text] with the first [title] in bold, as the boards bold the schedule's name in Orbit's lead. */
+private fun boldTitle(text: String, title: String): AnnotatedString {
+    val at = text.indexOf(title)
+    if (at < 0) return AnnotatedString(text)
+    return buildAnnotatedString {
+        append(text.substring(0, at))
+        withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(title) }
+        append(text.substring(at + title.length))
+    }
+}
+
 /** The run's timing and access in its conversation. */
 @Composable
-fun ScheduleRunStrip(schedule: ScheduleView, run: ScheduleRunView, condition: ConditionView? = null) {
+fun ScheduleRunStrip(schedule: ScheduleView, run: ScheduleRunView, condition: ConditionView? = null, notStarted: Boolean = false) {
     val zone = java.util.TimeZone.getDefault().id
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp).testTag("schedule-run-strip"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (run.trigger == "CONDITION") {
@@ -243,7 +285,9 @@ fun ScheduleRunStrip(schedule: ScheduleView, run: ScheduleRunView, condition: Co
             }
         } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Icon(painterResource(R.drawable.ic_calendar), null, Modifier.size(16.dp).padding(top = 2.dp), tint = MaterialTheme.colorScheme.primary)
-            Text(ScheduleDisplay.runStripText(run.plannedAt, run.startedAt, schedule.accessLevel, zone), style = MaterialTheme.typography.bodyMedium,
+            val text = if (notStarted) ScheduleRunStatusDisplay.strip(run, schedule.accessLevel, zone)
+                else ScheduleDisplay.runStripText(run.plannedAt, run.startedAt, schedule.accessLevel, zone)
+            Text(text, style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
@@ -281,6 +325,10 @@ sealed class ScheduleInsert {
     data class Record(val record: ScheduleChangeRecord) : ScheduleInsert() {
         override val at get() = record.createdAt; override val key get() = "schedule-record-${record.scheduleId}@${record.revision}"
     }
+    /** A change conversation's head (§8.2): Orbit's opening, ahead of every row (no moment of its own). */
+    data class ChangeOpening(val opening: ScheduleChangeOpening) : ScheduleInsert() {
+        override val at get() = ""; override val key get() = "schedule-change-opening-${opening.scheduleId}"
+    }
     data class RunStrip(val context: ScheduledStore.RunContext) : ScheduleInsert() {
         override val at get() = context.run.plannedAt; override val key get() = "schedule-run-strip-${context.run.id}"
     }
@@ -294,18 +342,21 @@ sealed class ScheduleInsert {
             val read = state.session(sessionId)
             val run = state.run(sessionId)
             val all = read?.cards.orEmpty().map { Card(it) } + read?.records.orEmpty().map { Record(it) } +
+                listOfNotNull(read?.change?.let { ChangeOpening(it) }) +
                 listOfNotNull(run?.let { RunStrip(it) }) +
                 listOfNotNull(run?.takeIf { ScheduleDisplay.runEnded(it.run.state) }?.run?.endedAt?.let { RunReport(run, it) })
             return all.sortedBy { ScheduleDisplay.parse(it.at) ?: Instant.MIN }
         }
 
         /** Where each goes in a conversation (as owner requests are placed): after the last row stamped at or before it, by the row's
-         * index, or -1 ahead of every row. One with no readable moment is left out. */
+         * index, or -1 ahead of every row. One with no readable moment is left out; one with no moment at all (a change conversation's
+         * opening) leads. */
         fun place(rowTimes: List<String?>, inserts: List<ScheduleInsert>): Map<Int, List<ScheduleInsert>> {
             val times = rowTimes.map { it?.let(ScheduleDisplay::parse) }
             return inserts.mapNotNull { insert ->
-                val at = ScheduleDisplay.parse(insert.at) ?: return@mapNotNull null
-                times.indexOfLast { it != null && !it.isAfter(at) } to insert
+                val at = if (insert.at.isEmpty()) null else ScheduleDisplay.parse(insert.at) ?: return@mapNotNull null
+                val anchor = at?.let { moment -> times.indexOfLast { it != null && !it.isAfter(moment) } } ?: -1
+                anchor to insert
             }.groupBy({ it.first }, { it.second })
         }
     }
@@ -337,6 +388,7 @@ fun ScheduleConversationInsert(insert: ScheduleInsert, store: ScheduledStore, se
                 store.loadSessionNow(sessionId)
                 said
             }, open = { openSchedule(insert.record.scheduleId) })
+        is ScheduleInsert.ChangeOpening -> ScheduleChangeOpeningView(insert.opening, openSchedule)
         is ScheduleInsert.RunStrip -> {
             val schedule = insert.context.schedule
             val conditionId = (schedule.rule as? ScheduleRule.When)?.conditionId ?: schedule.condition?.id

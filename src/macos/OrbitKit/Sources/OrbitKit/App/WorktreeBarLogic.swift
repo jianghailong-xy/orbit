@@ -162,7 +162,7 @@ public enum WorktreeBarLogic {
         switch status {
         case .pending, .running: return true
         case .awaitingInput, .interrupted: return sending || (runningSubagents ?? 0) > 0
-        case .succeeded, .failed, .cancelled: return false
+        case .succeeded, .failed, .cancelled, .unknown: return false
         }
     }
 
@@ -324,3 +324,19 @@ public enum WorktreeBarLogic {
         return text.isEmpty ? nil : text
     }
 }
+
+// MARK: - the Background list's bg_run jobs (job-card board, rulings R1 and R3 of 2026-11-21)
+
+extension WorktreeBarLogic {
+    /// A row the opened Background list scrolls to its Job card instead of opening in place: a bg_run
+    /// job's (web parity: `BackgroundShellsTray` `s.kind === 'job'`).
+    public static func jobRowScrollsToCard(_ proc: BackgroundProc) -> Bool { proc.kind == "job" }
+
+    /// A row that offers Stop: a running bg_run job its runner can stop. A job the list marks not
+    /// stoppable (an older runner) offers none (web parity: `s.kind === 'job' && s.status === 'running' &&
+    /// s.stoppable`).
+    public static func jobRowOffersStop(_ proc: BackgroundProc) -> Bool {
+        proc.kind == "job" && proc.status == "running" && proc.stoppable == true
+    }
+}
+

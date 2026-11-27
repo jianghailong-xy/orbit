@@ -1,21 +1,27 @@
 # syntax=docker/dockerfile:1.7.1@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 # Optional image only. Build from the repository root with an explicit source SHA.
+# ORBIT_RELEASE_VERSION, the release tag without its "v" (0.1.261-beta.83), is what a release's image is built with
+# (deploy/two-stage/publish-managed-runner.sh, from the tag's commit): its runner reports that version, as every other
+# runner of the release does. Without it, as a single host builds orbit-managed-runner:local from its checkout, the
+# runner reports managed-<source sha>.
 FROM golang:1.27.1-trixie@sha256:3b77fc618ec235a1ab412de7737f120dd507c57e8d87de4cbb7994fb94275ed5 AS orbit-build
 ARG ORBIT_SOURCE_SHA
+ARG ORBIT_RELEASE_VERSION=
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local
 WORKDIR /src/runner-go
 COPY src/runner-go/ ./
 RUN test "$(go env GOVERSION)" = go1.27.1 \
  && printf '%s\n' "$ORBIT_SOURCE_SHA" | grep -Eq '^[0-9a-f]{40}$' \
+ && { [ -z "$ORBIT_RELEASE_VERSION" ] || printf '%s\n' "$ORBIT_RELEASE_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; } \
  && go build -buildvcs=false -trimpath \
-      -ldflags="-s -w -X main.sourceSHA=$ORBIT_SOURCE_SHA -X main.version=managed-$ORBIT_SOURCE_SHA" \
+      -ldflags="-s -w -X main.sourceSHA=$ORBIT_SOURCE_SHA -X main.version=${ORBIT_RELEASE_VERSION:-managed-$ORBIT_SOURCE_SHA}" \
       -o /out/orbit .
 
 FROM node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1 AS codex
 # Preserve the whole native layout, including codex-path/rg and package resources.
 # Invoke its native binary directly so there is no npm wrapper in the signal path.
 RUN test "$(node --version)" = v26.10.0 \
- && npm install --global --ignore-scripts --no-audit --no-fund @openai/codex@0.170.0 \
+ && npm install --global --ignore-scripts --no-audit --no-fund @openai/codex@0.172.0 \
  && mv /usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-*/vendor/*-unknown-linux-musl /opt/codex \
  && test -x /opt/codex/bin/codex \
  && test -x /opt/codex/codex-path/rg
@@ -25,7 +31,7 @@ FROM node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb98
 # postinstall only copies its platform package's native binary over a stub: take that binary
 # directly, so no Node wrapper sits in the signal path either.
 RUN test "$(node --version)" = v26.10.0 \
- && npm install --global --ignore-scripts --no-audit --no-fund @anthropic-ai/claude-code@2.1.328 \
+ && npm install --global --ignore-scripts --no-audit --no-fund @anthropic-ai/claude-code@2.1.332 \
  && install -D -m 0755 \
       "/usr/local/lib/node_modules/@anthropic-ai/claude-code/node_modules/@anthropic-ai/claude-code-linux-$(node -p process.arch)/claude" \
       /opt/claude/bin/claude
@@ -71,18 +77,18 @@ ARG TARGETARCH
 # minutes at 81.7 MB of the Kimi binary until it was killed by hand.
 ARG FETCH="curl -fsSL --connect-timeout 30 --speed-limit 4096 --speed-time 60 --retry 5 --retry-delay 10 --retry-all-errors"
 RUN case "$TARGETARCH" in \
-      amd64) target=linux-x64 sum=5999b710b1a34c19e93989973c54a8f1c167df8f8bec2fbf3171bfc304f6bdb9 ;; \
-      arm64) target=linux-arm64 sum=4e97ef1e7c32abad5fd581a4884111e11348677aa51207490c0568e9af028eae ;; \
+      amd64) target=linux-x64 sum=88a9a7788fa4a6d6959b253de118446ec55ce9f106093a318a61bd369d242ad4 ;; \
+      arm64) target=linux-arm64 sum=7a467c3d7c765eda2d3277f7d156ca801fe35c0d44ea07b1f7d0e6f576145f16 ;; \
       *) exit 1 ;; esac \
- && $FETCH -o /tmp/kimi "https://code.kimi.com/kimi-code/binaries/2.6.3/kimi-code-$target" \
+ && $FETCH -o /tmp/kimi "https://code.kimi.com/kimi-code/binaries/2.8.1/kimi-code-$target" \
  && echo "$sum  /tmp/kimi" | sha256sum -c - \
  && install -D -m 0755 /tmp/kimi /opt/kimi-code/bin/kimi \
  && rm /tmp/kimi
 RUN case "$TARGETARCH" in \
-      amd64) path=linux-x64/cli_linux_x64.tar.gz sum=26de25fccb3fbf0b093e090ce14a14ac1df1ec3e90ef4ea6106887d3a81b0cc9edb0dadea7b9101d07f9606eba159062a6fb7b78e91b73f7520684a24db73428 ;; \
-      arm64) path=linux-arm/cli_linux_arm64.tar.gz sum=1030d89ce9e5cb39509e272cb89b71fde0e0d5d6527b7392525d5ef2683da54fb49230449107486d91c02ded39a678faaa649b2041304a6cf82a3a332d5819d9 ;; \
+      amd64) path=linux-x64/cli_linux_x64.tar.gz sum=ef379ec869719112f696e8c7cfddf776618712e58fc38e53df80801d6528abb4677782c7c8778f9c09c9123fa44c2c32675d228c06f2a8f7a8f4214e75f5bb26 ;; \
+      arm64) path=linux-arm/cli_linux_arm64.tar.gz sum=6c59cbce5a7632083dd4ef594296e52ce0abdc12f8b4ecb55523e093748cf178f8f8383d7e51e9ed7859ea6e46c83a43a7b46364b0e033dd13afb24d6bfbe4c8 ;; \
       *) exit 1 ;; esac \
- && $FETCH -o /tmp/agy.tar.gz "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.12-5281398513336320/$path" \
+ && $FETCH -o /tmp/agy.tar.gz "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.18-6386224290725888/$path" \
  && echo "$sum  /tmp/agy.tar.gz" | sha512sum -c - \
  && mkdir /tmp/agy && tar -xzf /tmp/agy.tar.gz -C /tmp/agy --no-same-owner \
  && install -D -m 0755 /tmp/agy/antigravity /opt/agy/bin/agy \
@@ -115,11 +121,13 @@ RUN mkdir -p /etc/ssl/certs \
       > /etc/apt/sources.list \
  && apt-get -o Acquire::https::CAInfo=/etc/ssl/certs/ca-certificates.crt update \
  && apt-get -o Acquire::https::CAInfo=/etc/ssl/certs/ca-certificates.crt install --no-install-recommends -y \
-      bash ca-certificates curl git openssh-client ripgrep sqlite3 python3 procps tini \
+      bash ca-certificates curl duperemove git openssh-client ripgrep sqlite3 python3 procps tini \
  && apt-get install --no-install-recommends -y \
       chromium=154.0.8037.57-1~deb13u1 chromium-common=154.0.8037.57-1~deb13u1 \
       xvfb=2:21.1.16-1.3+deb13u4 x11vnc=0.9.17-1 \
+      xclip=0.13-4 xdotool=1:3.20160805.1-5.1 \
       fonts-noto-cjk=1:20240730+repack1-1 fonts-noto-color-emoji=2.051-0+deb13u1 \
+      fonts-noto-core=20201225-2 \
  && rm -rf /var/lib/apt/lists/* \
  && groupadd --gid 10001 orbit \
  && useradd --uid 10001 --gid 10001 --home-dir /home/orbit --no-create-home --shell /bin/bash orbit \
@@ -135,6 +143,7 @@ COPY --from=downloads /opt/agy/ /opt/agy/
 COPY --from=downloads /opt/orbit-engines/ /opt/orbit-engines/
 COPY --from=dsh /opt/orbit-engines/engines/ /opt/orbit-engines/engines/
 COPY --chmod=0644 deploy/managed-runner/image/pins.json /usr/local/share/orbit/pins.json
+COPY --chmod=0644 deploy/managed-runner/image/orbit-browser-opener.sh /etc/profile.d/orbit-browser-opener.sh
 ENV PATH="/usr/local/go/bin:${PATH}" \
     HOME=/home/orbit \
     ORBIT_HOME=/home/orbit/.orbit \
@@ -152,6 +161,8 @@ ENV PATH="/usr/local/go/bin:${PATH}" \
 # The runner's commits (the autoInitGit baseline, finalize, checkpoints) need an identity, and
 # a fresh volume has none: give a neutral one at system level, the lowest precedence, so an
 # identity in the repository, the user's global config or the environment still wins.
+# Chromium's browser sign-in (BrowserSignin) is off: Debian's build cannot complete it ("Missing authorization code
+# due to OAuth outage in Dice"), and while it is on, Google signs out the web login at the browser's next start.
 RUN ln -s /opt/codex/bin/codex /usr/local/bin/codex \
  && ln -s /opt/claude/bin/claude /usr/local/bin/claude \
  && ln -s /opt/opencode/bin/opencode /usr/local/bin/opencode \
@@ -162,15 +173,25 @@ RUN ln -s /opt/codex/bin/codex /usr/local/bin/codex \
  && chmod -R go-w /opt/codex /opt/claude /opt/opencode /opt/kimi-code /opt/agy /opt/playwright-mcp /usr/local/go /usr/local/share/orbit \
  && chmod 0755 /usr/local/share/orbit \
  && git config --system user.name 'Orbit Runner' \
- && git config --system user.email runner@orbit.invalid
+ && git config --system user.email runner@orbit.invalid \
+ && install -d -m 0755 /etc/chromium/policies/managed \
+ && printf '{"BrowserSignin": 0}\n' > /etc/chromium/policies/managed/orbit.json \
+ && chmod 0644 /etc/chromium/policies/managed/orbit.json
+# An image before a944a7f362 kept home at /var/lib/orbit/home. The entrypoint moves such a volume's home to /home/orbit
+# (move_earlier_home); this link keeps the paths that home recorded inside itself (git worktree links, the runner's
+# session state) resolving there.
+RUN install -d -o root -g root -m 0755 /var/lib/orbit && ln -s /home/orbit /var/lib/orbit/home
 # What changes with every source commit comes after the slow steps above, so a new commit reuses
 # them and rebuilds only the runner binary, the entrypoint and the version record. A build argument
 # reaches every RUN after its ARG, so the source SHA must not be declared any earlier.
 COPY --from=orbit-build --chmod=0755 /out/orbit /usr/local/bin/orbit
 COPY --chmod=0755 deploy/managed-runner/image/entrypoint.py /usr/local/bin/orbit-container
 ARG ORBIT_SOURCE_SHA
+ARG ORBIT_RELEASE_VERSION=
+# The version label is empty on an image built without a release version, which the Docker channel reports as none.
 LABEL org.opencontainers.image.title="Orbit optional managed runner" \
-      org.opencontainers.image.revision="$ORBIT_SOURCE_SHA"
+      org.opencontainers.image.revision="$ORBIT_SOURCE_SHA" \
+      org.opencontainers.image.version="$ORBIT_RELEASE_VERSION"
 # Record actual build-time versions without a login, registration or model call.
 RUN <<'SH'
 set -eu
@@ -208,6 +229,8 @@ actual = {
     'ripgrep': version('rg', '--version'),
     'sqlite': version('sqlite3', '--version'),
     'tini': version('/usr/bin/tini', '--version'),
+    # The runner shares duplicate files on its volume with it while idle (src/runner-go/managed_dedupe.go).
+    'duperemove': package('duperemove', '/usr/bin/duperemove'),
     'opencode': version('opencode', '--version'),
     'kimi': version('kimi', '--version'),
     'agy': version('agy', '--version'),
@@ -215,8 +238,11 @@ actual = {
     'chromium': version('chromium', '--version'),
     'xvfb': package('xvfb', '/usr/bin/Xvfb'),
     'x11vnc': first_line('x11vnc', '-version'),
+    'xclip': package('xclip', '/usr/bin/xclip'),
+    'xdotool': package('xdotool', '/usr/bin/xdotool'),
     'fontsNotoCjk': package('fonts-noto-cjk'),
     'fontsNotoColorEmoji': package('fonts-noto-color-emoji'),
+    'fontsNotoCore': package('fonts-noto-core'),
     'playwrightMcp': version('playwright-mcp', '--version'),
 }
 # Cursor CLI and DeepSeek Harness are where the runner looks for them (ORBIT_ENGINE_STORE), on Linux x64 only.
@@ -224,20 +250,27 @@ store = Path(os.environ['ORBIT_ENGINE_STORE'])
 if platform.machine() == 'x86_64':
     actual['cursor'] = version(str(store / 'cursor/versions/2026.10.14-941492e/cursor-agent'), '--version')
     actual['dsh'] = version(str(store / 'engines/dsh/0.2.0-rc.2/node_modules/.bin/dsh'), '--version')
-expected_versions = {'go': 'go1.27.1', 'node': 'v26.10.0', 'codex': 'codex-cli 0.170.0',
-                     'claude': '2.1.328 (Claude Code)', 'opencode': '1.19.6', 'kimi': '2.6.3', 'agy': '1.5.12'}
+expected_versions = {'go': 'go1.27.1', 'node': 'v26.10.0', 'codex': 'codex-cli 0.172.0',
+                     'claude': '2.1.332 (Claude Code)', 'opencode': '1.19.6', 'kimi': '2.8.1', 'agy': '1.5.18'}
 expected_versions.update(chromium='Chromium 154.0.8037.57 built on Debian GNU/Linux 13 (trixie)',
                          xvfb='2:21.1.16-1.3+deb13u4', x11vnc='x11vnc: 0.9.17 lastmod: 2025-04-11',
+                         xclip='0.13-4', xdotool='1:3.20160805.1-5.1',
                          fontsNotoCjk='1:20240730+repack1-1', fontsNotoColorEmoji='2.051-0+deb13u1',
+                         fontsNotoCore='20201225-2',
                          playwrightMcp='Version 0.0.85')
 if platform.machine() == 'x86_64':
     expected_versions.update(cursor='2026.10.14-941492e', dsh='0.2.0-rc.2')
 for tool, expected in expected_versions.items():
     if actual[tool] != expected:
         raise SystemExit(f'{tool}: expected {expected}, got {actual[tool]}')
+if json.loads(Path('/etc/chromium/policies/managed/orbit.json').read_text()) != {'BrowserSignin': 0}:
+    raise SystemExit("Chromium's managed policy must turn browser sign-in off")
 orbit = json.loads(version('orbit', 'capabilities', '--json'))
 if orbit['sourceSha'] != os.environ['ORBIT_SOURCE_SHA']:
     raise SystemExit('Orbit source SHA did not reach the binary')
+expected_cli = os.environ.get('ORBIT_RELEASE_VERSION') or 'managed-' + os.environ['ORBIT_SOURCE_SHA']
+if orbit['cliVersion'] != expected_cli:
+    raise SystemExit(f"Orbit version: expected {expected_cli}, got {orbit['cliVersion']}")
 # The runner's autoInitGit baseline (src/runner-go/worktree.go initGitRepo) with no identity
 # configured anywhere but the image, then a repository identity, which must win over it.
 repo = Path('/tmp/orbit-version-check/identity')

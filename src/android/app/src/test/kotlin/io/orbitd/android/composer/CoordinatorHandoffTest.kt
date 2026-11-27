@@ -1,5 +1,6 @@
 package io.orbitd.android.composer
 
+import io.orbitd.android.core.net.HttpMethod
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
@@ -16,6 +17,38 @@ class CoordinatorHandoffTest {
     private fun obj(json: String) = Json.parseToJsonElement(json).jsonObject
     private fun coordinator(extra: String = "") = obj("""{"id":"S1","lifecycleState":"OPEN",
         "projectMembership":{"projectId":"P1","projectTitle":"Checkout redesign","projectStatus":"OPEN","role":"COORDINATOR"}$extra}""")
+
+    @Test fun startSkipAndRetrySendThePickedSuccessorOrAnEmptyObject() {
+        val pick = HandoffSuccessor("claude", "claude")
+        val expected = obj("""{"successor":{"engine":"claude","provider":"claude"}}""")
+        for (action in listOf(null, "skip", "retry")) {
+            val request = CoordinatorHandoffApi.postRequest("P1", action, pick)
+            assertEquals(HttpMethod.POST, request.method)
+            assertEquals(listOfNotNull("projects", "P1", "coordinator", "handoff", action), request.path)
+            assertEquals(expected, obj(request.body!!.decodeToString()))
+            assertEquals("{}", CoordinatorHandoffApi.postRequest("P1", action, null).body!!.decodeToString())
+        }
+    }
+
+    @Test fun sameAsThisOneSaidOnPurposeSendsANullSuccessorWhichClearsASavedPick() {
+        for (action in listOf("skip", "retry")) {
+            val body = CoordinatorHandoffApi.postRequest("P1", action, HandoffSuccessor.SAME).body!!.decodeToString()
+            assertEquals("""{"successor":null}""", body)
+        }
+    }
+
+    @Test fun outgoingHandoffReadsAnOptionalSuccessor() {
+        fun successor(fields: String = "") = CoordinatorHandoff.outgoing(
+            coordinator(""","coordinatorHandoff":{"state":"FAILED"$fields}"""),
+        )!!.successor
+
+        assertNull(successor())
+        assertNull(successor(""","successor":null"""))
+        assertEquals(HandoffSuccessor("claude", "claude", "claude-opus-5-5"),
+            successor(""","successor":{"engine":"claude","provider":"claude","model":"claude-opus-5-5"}"""))
+        assertEquals(HandoffSuccessor(null, "my-key"),
+            successor(""","successor":{"provider":"my-key"}"""))
+    }
 
     @Test fun compactIsOfferedOnlyWhereTheEngineAdvertisesIt() {
         val compact = obj("""{"name":"compact","type":"command","provider":"claude","builtin":true}""")

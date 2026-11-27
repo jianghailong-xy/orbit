@@ -90,7 +90,7 @@ public struct LandingsWindowCard: Equatable, Sendable, Identifiable {
     public let sessionId: String
     /// `TASK` or `PROMOTION`.
     public let subject: String
-    /// `IN_FLIGHT` or `AWAITING_DECISION`.
+    /// `IN_FLIGHT`, `AWAITING_DECISION` or `FIXING`.
     public let state: String
     /// The task's name (a round's own title), the line the card adds under its head.
     public let title: String
@@ -308,7 +308,8 @@ public enum SessionProjectLandings {
         if landings.isEmpty && !merges.contains(where: { $0.merged != nil }) { return nil }
         let window = window(landings, merges: merges, now: now, calendar: calendar)
         let waiting = window.now.filter { $0.state == "AWAITING_DECISION" }
-        let inFlight = window.now.filter { $0.state == "IN_FLIGHT" }
+        // A landing its task's own session is fixing (revision 42) waits on nobody: it is in flight.
+        let inFlight = window.now.filter { $0.state == "IN_FLIGHT" || $0.state == "FIXING" }
         let today = window.days.first { $0.title == SessionTimeGrouping.bucketTitles[0] }?.rows ?? []
         let lastSettled = window.days.flatMap(\.rows).map(\.at).max() ?? -.infinity
         let time: String?
@@ -455,7 +456,13 @@ public enum SessionProjectLandings {
         let branch = branchOf(ref)
         guard let membership, !membership.projectTitle.isEmpty else { return branch }
         let ids = [membership.projectId, PublicID.toPublic(membership.projectId)]
-        return ids.contains { branch == "project/\($0)" } ? membership.projectTitle : branch
+        if ids.contains(where: { branch == "project/\($0)" }) { return membership.projectTitle }
+        // The readable name: `project/<slug>-<8 chars of the public id>`, or the 8 chars alone.
+        let short = String(ids[1].prefix(8))
+        if branch == "project/\(short)" || (branch.hasPrefix("project/") && branch.hasSuffix("-\(short)")) {
+            return membership.projectTitle
+        }
+        return branch
     }
 
     private static func branchOf(_ ref: String?) -> String {

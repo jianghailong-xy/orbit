@@ -144,6 +144,8 @@ public enum CoordinatorQuestions {
     public static let yourNote = "Your note"
     /// The card's last row.
     public static let viewDetails = "View details"
+    /// The expanded card's last row, folding it back (board card-ui-polish ③).
+    public static let hideDetails = "Hide details"
 
     /// The records the read carries, as the conversation draws them: each at the moment it ended.
     public struct Receipt: Equatable, Sendable, Identifiable {
@@ -1249,7 +1251,9 @@ public enum ExceptionCards {
         var rows: [FactRow] = []
         if let task = facts.task { rows.append(FactRow(label: taskLabel, value: task.title)) }
         if let targetRef = facts.targetRef {
-            var into = targetRef
+            // The branch by its name: `refs/heads/main` is the server's spelling, not a person's.
+            var into = targetRef.hasPrefix("refs/heads/")
+                ? String(targetRef.dropFirst("refs/heads/".count)) : targetRef
             if let sha = facts.targetSha { into += " at \(String(sha.prefix(7)))" }
             if facts.nothingLanded { into += nothingLanded }
             rows.append(FactRow(label: intoLabel, value: into))
@@ -1680,18 +1684,22 @@ public enum ExceptionCards {
     /// what else would do it, and the ways in and out. Each press carries its own label and its one
     /// line of consequence, both the browser's.
     ///
+    /// `quiet` is a repair task already on the item (board card-ui-polish ①, D1 = A): every door is
+    /// a quiet link and none of them is the reader's next step, so no door carries a consequence line.
+    ///
     /// `Mark as handled` is NOT one of these: see `markable`.
     public static func presses(_ row: ProjectOpenItemRow,
-                               mergeCard: String? = nil) -> [CardPress] {
+                               mergeCard: String? = nil,
+                               quiet: Bool = false) -> [CardPress] {
         let actions = drawn(row, mergeCard: mergeCard)
         let leading = leadingDoors(row, actions)
         let primary = leading.first
         let secondary = leading.dropFirst().first
         return (leading + actions.filter { !leading.contains($0) }).map { action in
             CardPress(action: action,
-                      tier: action == primary ? .primary : action == secondary ? .secondary : .link,
+                      tier: quiet ? .link : action == primary ? .primary : action == secondary ? .secondary : .link,
                       label: actionLabel(row, action) ?? action.rawValue,
-                      consequence: actionConsequence(row, action))
+                      consequence: quiet ? "" : actionConsequence(row, action))
         }
     }
 
@@ -1921,6 +1929,33 @@ public enum ExceptionCards {
     public static func requiredAction(_ row: ProjectOpenItemRow) -> String {
         if let said = row.requiredAction { return said }
         return row.detailLine.isEmpty ? requiredActionFallback : row.detailLine
+    }
+
+    // MARK: - a live repair task (board card-ui-polish ①)
+
+    /// The tag an item wears while a repair task filed for it is still live — the browser's
+    /// `FIXING_TAG`, in the same tone the Handling tag has.
+    public static let fixingTag = "Fixing"
+    /// The one line that replaces the server's sentence and the handled-by sentences: the task and
+    /// where its title goes, with nothing for the reader to do under it.
+    public static let beingFixedIn = "Being fixed in"
+    public static let fixingNothingForYou = "In progress · nothing for you to do unless it fails."
+
+    /// The repair tasks still working on an item: any whose state is not DONE or CANCELLED — the
+    /// server's own test (`openItemRequiredAction`'s `hasLiveFix`), so the card and the sentence it
+    /// replaces agree.
+    public static func liveRepairs(_ row: ProjectOpenItemRow) -> [OpenItemFixTask] {
+        (row.handledBy ?? []).filter { $0.state != "DONE" && $0.state != "CANCELLED" }
+    }
+
+    public static func fixing(_ row: ProjectOpenItemRow) -> Bool {
+        !liveRepairs(row).isEmpty
+    }
+
+    /// Where a repair task's title leads: the app's own `orbit-task:` door, or nil for an id that
+    /// names no task — the title is then drawn as plain words rather than as a link that goes nowhere.
+    public static func repairLink(_ task: OpenItemFixTask) -> URL? {
+        link(task.taskId, scheme: "orbit-task")
     }
 
     /// What the card says about the tasks filed as this item's fixes (§4.7): one sentence per task,

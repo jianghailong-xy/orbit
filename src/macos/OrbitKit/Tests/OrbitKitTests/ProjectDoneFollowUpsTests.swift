@@ -216,7 +216,7 @@ final class ProjectDoneFollowUpsTests: XCTestCase {
         XCTAssertEqual(ProjectDone.waitingConfirmation(ProjectDerivedDone(criteria: criteria)), 3)
         let counts = ProjectDoneCounts(criteria: 6, met: 3, landed: 6, onMain: 6)
         XCTAssertEqual(ProjectDone.cardTally(counts, waitingConfirmation: 2),
-                       "3 met · 6 landed on main · 2 wait for confirmation")
+                       "3 met · 6 landed on main · 1 not met · 2 wait for confirmation")
         XCTAssertEqual(ProjectDone.cardTally(counts, nonCode: true, waitingConfirmation: 2),
                        "3 of 6 met · 2 wait for confirmation")
         XCTAssertEqual(ProjectDone.confirmLabel(criteria[3].confirmation), "Confirm again…")

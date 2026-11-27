@@ -1,5 +1,5 @@
 import {
-  CLONE_WORKDIR_CAPABILITY,
+  cloneRootFor,
   CREATE_WORKDIR_CAPABILITY,
   managedSetupState,
   type ManagedRunnerStatus,
@@ -8,7 +8,7 @@ import {
   type LoginEngine,
   type NewWorkspaceRequest,
   type RunnerEngineHealth,
-  newFolderRoot,
+  newFolderPath,
 } from '@orbit/shared';
 import { encodeId, routeId } from './idCodec';
 import { MANAGED_RUNNER_LABEL } from './runnerCopy';
@@ -71,7 +71,7 @@ export const makesNewFolders = (runner: { capabilities?: string[]; reposRoot?: s
 /** Whether a machine clones a GitHub repository on request (docs/github-workspace-design.md §6): it declares
  *  clone-workdir/v1 and has reported the Repos Folder the clone goes in. POST /sessions refuses either missing. */
 export const clonesRepositories = (runner: { capabilities?: string[]; reposRoot?: string | null }): boolean =>
-  !!runner.capabilities?.includes(CLONE_WORKDIR_CAPABILITY) && !!runner.reposRoot?.trim();
+  cloneRootFor(runner) !== null;
 
 /** A path as the board writes it: the home folder as `~` (`/Users/austin/orbit-repos/x` → `~/orbit-repos/x`). */
 export function homeShortPath(path: string): string {
@@ -83,11 +83,6 @@ export function repositoryFolder(fullName: string): string {
   const name = fullName.split('/').pop() ?? '';
   return isValidNewFolder(name) ? name : '';
 }
-
-/** The directory the folder step's name goes in: the machine's home on one that declares create-workdir/v2, its
- *  Repos Folder on an older one (@orbit/shared newFolderRoot, as the server joins it). */
-export const newFolderRootOf = (runner: { capabilities?: string[]; reposRoot?: string | null }): string =>
-  newFolderRoot(runner.reposRoot ?? '', runner.capabilities);
 
 /** Whether a machine too old to answer gets there by itself: not one that reports its updater off, or
  *  unable to write where it is installed. One too old to report anything still updates itself. */
@@ -112,10 +107,7 @@ export function isValidNewFolder(name: string): boolean {
 }
 
 /** Where a new folder lands: `<root>/<name>`, as the server joins it. */
-export function newFolderPath(root: string, name: string): string {
-  const separator = root.includes('\\') && !root.includes('/') ? '\\' : '/';
-  return `${root.replace(/[/\\]+$/, '')}${separator}${name}`;
-}
+export { newFolderPath };
 
 /** The workspace name a folder gives, as the server derives it (§3.2): its last segment. */
 export function folderName(path: string): string {
@@ -160,6 +152,17 @@ export function newFolderPick(probe: DirProbe, name: string, root: string, machi
   return probe.exists
     ? { kind: 'existing', path: probe.path, note: verdict.short }
     : { kind: 'new', name, path: newFolderPath(root, name) };
+}
+
+/** A folder field's text that names a whole path (`/srv/app`, `~/code/app`) rather than one folder in the machine's home
+ *  (docs/mocks/new-workspace-form, decision 2 A): the machine is asked about that path itself. */
+export const isFolderPath = (typed: string): boolean => /^[~/]/.test(typed);
+
+/** What Create workspace picks on a full path's answer: the directory as it stands. Nothing is made for a path outside
+ *  the machine's home, so one that isn't there is refused as any folder is. */
+export function folderPathPick(probe: DirProbe, machine: string): PickedFolder | null {
+  const verdict = folderVerdict(probe, machine);
+  return verdict.usable ? { kind: 'existing', path: probe.path, note: verdict.short } : null;
 }
 
 /** The folder step's answer, once the person has pressed Use this folder. */

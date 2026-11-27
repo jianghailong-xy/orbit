@@ -350,6 +350,29 @@ describe('runner and workspace delete approval', () => {
   });
 });
 
+describe('browser clear logins approval', () => {
+  // As the server files it (runner-api/runner-browser-clear-approval.ts): its own copy and the Orbit Cloud runner.
+  const card = {
+    id: 'b1', toolName: 'orbit_browser_clear_logins',
+    input: {
+      description: 'Clear saved logins on the Orbit Cloud runner: the browser stops, and every saved login on the runner is '
+        + 'removed. Every site signed in to there is signed out, for you and for every agent on the runner.',
+      runnerId: '019fe1dd-3f39-7610-8e5d-507e36a4ea9b',
+      runnerName: 'Orbit Cloud',
+    },
+  } as ApprovalInfo;
+
+  it('says the browser stops and every saved login on the runner is removed', () => {
+    expect(render(card)).toContain('the browser stops, and every saved login on the runner is removed');
+  });
+
+  it('offers no standing yes, and says what is kept when declined', () => {
+    expect(rememberRulesFor(card)).toEqual([]);
+    expect(render(card)).not.toContain('Always allow');
+    expect(decliningPrefix('orbit_browser_clear_logins')).toBe('Keeping the saved logins: ');
+  });
+});
+
 describe('workspace write approval', () => {
   const card = (toolName: string, input: Record<string, unknown>): ApprovalInfo =>
     ({ id: 'w1', sessionId: 's1', toolName, input, status: 'PENDING', createdAt: new Date(0).toISOString() }) as ApprovalInfo;
@@ -1105,8 +1128,13 @@ describe('one waiting completion decision on the session page', () => {
       if (path === `/projects/${PROJECT_ID}`) return reply({ id: PROJECT_ID, acceptanceCriteriaItems: [] });
       if (path.startsWith('/tasks/page')) return reply({ items: [], nextCursor: null });
       if (path.startsWith('/tasks')) return reply({ items: [], total: 0, counts: {} });
-      if (path === '/providers' || path === '/providers/pools' || path === '/providers/shared-pools' || path === '/session-tags' || path === '/session-folders' || path === '/task-lists' || path === '/runners' || path === '/watches' || path === '/watches?state=ACTIVE' || path === '/watches?state=PAUSED' || path === '/watches?needsAttention=true' || path === '/wiki/spaces') return reply([]);
+      if (path === '/auth/capabilities') return reply({ managedRunners: { enabled: false }, documents: { enabled: true } });
+      if (path === '/providers' || path === '/providers/pools' || path === '/providers/shared-pools' || path === '/session-tags' || path === '/session-folders' || path === '/task-lists' || path === '/runners' || path === '/watches' || path === '/watches?state=ACTIVE' || path === '/watches?state=PAUSED' || path === '/watches?needsAttention=true' || path === '/watches?following=true' || path === '/wiki/spaces') return reply([]);
+      // The session list's Needs you row reads the terminals asking to be approved: none here.
+      if (path === '/terminals/requests') return reply({ requests: [] });
       if (path.startsWith('/owner-requests')) return reply({ requests: [] });
+      // The managed-runner gate reads what the server offers: none here.
+      if (path === '/auth/capabilities') return reply({ managedRunners: { enabled: false } });
       unstubbed.push(path);
       return reply([]);
     });

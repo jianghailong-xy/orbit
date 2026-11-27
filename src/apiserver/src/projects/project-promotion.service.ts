@@ -13,7 +13,7 @@ import type { IntegrationJobPhase, PromotionTask, UpstreamMovedCommitsEnriched }
 import { PrismaService } from '../prisma/prisma.service';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { type MergeReceiptResult, resultLanded } from '../sessions/merge-receipt';
-import { MergeReceiptService } from '../sessions/merge-receipt.service';
+import { MergeReceiptService, type MergeReceiptPullRequest, type MergeReceiptPushedAs } from '../sessions/merge-receipt.service';
 import {
   IntegrationCheckResult,
   LandingRetryRequest,
@@ -57,6 +57,8 @@ import {
 
 import { readDerivedProjectDoneReading } from './project-done-derived';
 import { taskLanding } from './project-criterion-landing';
+import { landingDeferred } from './project-looks-finished';
+import { IN_FLIGHT_JOB_STATES } from './in-flight-job-states';
 
 const logger = new Logger('ProjectPromotion');
 
@@ -190,10 +192,14 @@ export class ProjectPromotionService {
       projectId,
     });
     const queued = await tx.projectIntegrationJob.count({
-      where: { serialKey, kind: 'LAND_TASK', state: { in: ['QUEUED', 'RUNNING'] } },
+      where: { serialKey, kind: 'LAND_TASK', state: { in: [...IN_FLIGHT_JOB_STATES] } },
     });
     // The queue is not empty, so the tip is not what the owner would be confirming.
     if (queued > 0) return null;
+    // Nor is it while a DONE task's landing is deferred (§12.15 P-M1): its DONE queued nothing because
+    // its work still moved, and the finish that freezes it queues the landing then — work moving towards
+    // the line exactly as a queued job is. That finish considers the candidate again (`routeSettledWork`).
+    if (await landingDeferred(tx, projectId)) return null;
 
     const landed = await tx.projectIntegrationJob.findFirst({
       where: { projectId, kind: 'LAND_TASK', state: 'LANDED', landedSha: { not: null } },
@@ -604,7 +610,7 @@ export class ProjectPromotionService {
     const job = await this.prisma.projectIntegrationJob.findFirst({
       where: {
         id: row.landJobId, projectId: row.projectId, promotionId: row.id,
-        kind: 'LAND_PROMOTION', state: { in: ['QUEUED', 'RUNNING'] },
+        kind: 'LAND_PROMOTION', state: { in: [...IN_FLIGHT_JOB_STATES] },
       },
       select: {
         state: true, phase: true, startedAt: true, createdAt: true, cancelRequestedAt: true,
@@ -900,15 +906,22 @@ async function resolveApprovalItem(
  * the card, so whichever runs first, the owner's answer on it stands.
  *
  * SUPERSEDED when a newer candidate took this one's place, RESOLVED for every other way out.
+ *
+ * `keepHandedOff`, for M-T6 (§12.5 W7): an item still in the hands of its task's own work session is the failure the
+ * newer candidate was made to answer, and stays OPEN for that candidate's check to close (W-T3, W-T4).
  */
 async function closePromotionItems(
   tx: Prisma.TransactionClient,
   projectId: string,
   promotionId: string,
   state: 'SUPERSEDED' | 'RESOLVED',
+  keepHandedOff = false,
 ): Promise<void> {
   await tx.projectOpenItem.updateMany({
-    where: { projectId, promotionId, state: 'OPEN', kind: { in: INTEGRATION_ITEM_KINDS } },
+    where: {
+      projectId, promotionId, state: 'OPEN', kind: { in: INTEGRATION_ITEM_KINDS },
+      ...(keepHandedOff ? { NOT: { workSessionOfferedAt: { not: null }, workSessionReturnedAt: null } } : {}),
+    },
     data: {
       state,
       resolution: 'PROMOTION_MOVED_ON',
@@ -934,6 +947,12 @@ export interface PromotionJobOutcome {
    * the relay opens no INTEGRATION_ERROR item for it.
    */
   requeuedUnderConfirmation?: boolean;
+  /**
+   * J-T17 (docs/design/protected-branch-landing.md §4.5): the landing's pull request fell behind its target and the
+   * next attempt is already on its way — a generation under the same confirmation, or, for an Automatic one, the
+   * check on the new main. Nobody has anything to fix, so the relay opens no item for it either.
+   */
+  caughtUp?: boolean;
   /**
    * A moved-main fact this transition produced, for the relay to write into the timeline AFTER the
    * job's own result lines: an automatic landing's recheck (M-T12) or the next generation under an
@@ -1097,14 +1116,15 @@ function storedChecks(promotion: PromotionRow): IntegrationCheckResult[] {
 
 /**
  * M-T6: retire the candidates standing on one source, their check jobs, their cards and the failures
- * they had open (§4.2, `closePromotionItems`).
+ * they had open (§4.2, `closePromotionItems`) — all but one still in its task's own work session's hands,
+ * which the candidate replacing them is there to answer (§12.5 W7, `landAgainAfterLandingFix`).
  *
  * `keepJobIds` names a job whose result is being applied right now: a terminal job row is written
  * once (`project_integration_job_terminal_guard`), so cancelling that one here would make the very
  * update that records what it answered fail — the whole result, and with it the retirement, would
  * roll back. Every other caller leaves it empty and takes the job out of the queue too.
  */
-async function supersedeLiveCandidates(
+export async function supersedeLiveCandidates(
   tx: Prisma.TransactionClient,
   projectId: string,
   sourceRef: string,
@@ -1146,7 +1166,7 @@ async function supersedeLiveCandidates(
         },
       });
     }
-    await closePromotionItems(tx, projectId, row.id, 'SUPERSEDED');
+    await closePromotionItems(tx, projectId, row.id, 'SUPERSEDED', true);
   }
 }
 
@@ -1466,6 +1486,19 @@ export async function applyPromotionJobResult(
     /** The sessions the relay locked up front for their merge recovery, when it did: a MERGED promotion's clear is
      *  limited to those (`MergeReceiptService.lockLandedRecoveries`). */
     recoveryHeld?: ReadonlySet<string>;
+    /** A landing GitHub merged as a pull request (docs/design/protected-branch-landing.md §4.2 J-T15), and the tree
+     *  its merge holds: the receipts say the server recorded it and name it. */
+    pullRequest?: MergeReceiptPullRequest;
+    landedTreeSha?: string | null;
+    /** The upstream push carried the owner's own token (Push as me, docs/design/protected-branch-landing.md §5.2). */
+    pushedAs?: MergeReceiptPushedAs;
+    /**
+     * J-T17: the job waited on a pull request whose target moved, and the pull request door ended it `ERROR /
+     * TARGET_MOVED` to catch up (docs/design/protected-branch-landing.md §4.5). `counted` is false for a catch-up —
+     * GitHub said the pull request is behind, or the base moved before Orbit merged — and true for a merge GitHub
+     * refused because the base moved, which counts toward J-T13's three and `AUTOMATIC_MERGE_ATTEMPTS`.
+     */
+    pullRequestCatchUp?: { counted: boolean };
   },
 ): Promise<PromotionJobOutcome | null> {
   const promotion = await tx.projectPromotion.findUnique({
@@ -1566,6 +1599,18 @@ export async function applyPromotionJobResult(
   if (input.state === 'READY' && promotion.confirmedAutomatically) {
     return automaticLandingCameBack(tx, promotion, input);
   }
+  // J-T17 (docs/design/protected-branch-landing.md §4.5): the landing's pull request fell behind main. The next attempt
+  // rebuilds on the new tip, runs Orbit's checks again (M5) and pushes to the same landing branch, so the same pull
+  // request updates: under the same confirmation for the owner's, through the check on the new main for Automatic.
+  if (input.state === 'ERROR' && input.errorCode === 'TARGET_MOVED' && input.pullRequestCatchUp) {
+    const counted = input.pullRequestCatchUp.counted;
+    const next = promotion.confirmedAutomatically
+      ? (counted
+        ? await automaticLandingCameBack(tx, promotion, input)
+        : await checkAgainOnMovedMain(tx, promotion, { endedJobId: input.jobId, moved: null, attempt: 0 }))
+      : await landAgainAfterMovedUpstream(tx, promotion, { ...input, counted });
+    return next.state === 'BLOCKED' || next.openApproval ? next : { ...next, caughtUp: true };
+  }
   // J-T13, the owner-confirmed half (owner decision 2026-10-19, option B): the first push that was
   // refused TARGET_MOVED ends this landing only. The candidate keeps the owner's confirmation, and
   // the next generation is queued in this same transaction under that confirmation — the same frozen
@@ -1587,6 +1632,8 @@ export async function applyPromotionJobResult(
       testedSha: input.testedSha,
       testedTreeSha: input.testedTreeSha,
       recoveryHeld: input.recoveryHeld,
+      ...(input.pullRequest ? { pullRequest: input.pullRequest, landedTreeSha: input.landedTreeSha ?? null } : {}),
+      ...(input.pushedAs ? { pushedAs: input.pushedAs } : {}),
     });
     await tx.projectPromotion.update({
       where: { id: promotion.id },
@@ -1761,7 +1808,12 @@ async function automaticLandingCameBack(
       promotionId: promotion.id,
       kind: 'LAND_PROMOTION',
       confirmedAutomatically: true,
-      state: 'READY',
+      OR: [
+        { state: 'READY' },
+        // A merge GitHub refused because main moved under the landing's pull request counts as one that found main
+        // moved (§4.5); a catch-up does not.
+        { state: 'ERROR', errorCode: 'TARGET_MOVED', errorDetail: { path: ['pullRequestMergeRefused'], equals: true } },
+      ],
       id: { not: input.jobId },
     },
   });
@@ -1862,6 +1914,8 @@ async function landAgainAfterMovedUpstream(
     conflicts: string[];
     sourceSha: string | null;
     movedCommits?: UpstreamMovedCommitsEnriched | null;
+    /** False for a pull request's catch-up (J-T17), which is not one of the three. */
+    counted?: boolean;
   },
 ): Promise<PromotionJobOutcome> {
   const blocked = () => blockPromotion(tx, promotion.id, input.checks as unknown as Prisma.InputJsonValue,
@@ -1874,18 +1928,19 @@ async function landAgainAfterMovedUpstream(
   // the instant the app writes `confirmed_at` a few statements later — so a `created_at` boundary
   // would leave out the first landing of the confirmation. The claim happens after that transaction
   // commits, on both counts.
-  const earlier = await tx.projectIntegrationJob.count({
-    where: {
-      promotionId: promotion.id,
-      kind: 'LAND_PROMOTION',
-      confirmedAutomatically: false,
-      state: 'ERROR',
-      errorCode: 'TARGET_MOVED',
-      id: { not: input.jobId },
-      ...(promotion.confirmedAt ? { claimedAt: { gte: promotion.confirmedAt } } : {}),
-    },
-  });
-  if (earlier + 1 >= PROMOTION_LAND_ATTEMPTS) return blocked();
+  const moved = {
+    promotionId: promotion.id,
+    kind: 'LAND_PROMOTION',
+    confirmedAutomatically: false,
+    state: 'ERROR',
+    errorCode: 'TARGET_MOVED',
+    id: { not: input.jobId },
+    ...(promotion.confirmedAt ? { claimedAt: { gte: promotion.confirmedAt } } : {}),
+  } satisfies Prisma.ProjectIntegrationJobWhereInput;
+  // A pull request's catch-up (J-T17) is none of the three, before or now (§4.5).
+  const earlier = await tx.projectIntegrationJob.count({ where: moved })
+    - await tx.projectIntegrationJob.count({ where: { ...moved, errorDetail: { path: ['pullRequestCatchUp'], equals: true } } });
+  if (input.counted !== false && earlier + 1 >= PROMOTION_LAND_ATTEMPTS) return blocked();
   const codebase = await tx.projectCodebase.findUnique({
     where: { id: promotion.codebaseId },
     select: { canonicalRepoUrl: true },
@@ -1918,7 +1973,9 @@ async function landAgainAfterMovedUpstream(
     // refused, after that attempt's answer.
     movedMain: {
       kind: 'NEXT_GENERATION',
-      text: movedMainText(input.movedCommits ?? null, 're-checking before merging'),
+      text: input.counted === false
+        ? 'main moved since the pull request was opened — catching up with main'
+        : movedMainText(input.movedCommits ?? null, 're-checking before merging'),
       data: {
         nextJobId,
         ...(input.movedCommits ? { upstreamMovedCommits: input.movedCommits } : {}),
@@ -2131,6 +2188,12 @@ async function writeUpstreamReceipts(
     /** The sessions the result locked up front for their merge recovery, when it did: the clears are limited to
      *  those (`MergeReceiptService.lockLandedRecoveries`). */
     recoveryHeld?: ReadonlySet<string>;
+    /** A merge GitHub made as a pull request (docs/design/protected-branch-landing.md §4.2 J-T15): the server records
+     *  the receipts, naming it, with the tree GitHub's merge actually holds. */
+    pullRequest?: MergeReceiptPullRequest;
+    landedTreeSha?: string | null;
+    /** The upstream push carried the owner's own token (Push as me, §5.2). */
+    pushedAs?: MergeReceiptPushedAs;
   },
 ): Promise<string[]> {
   // Both ids a receipt is written against are history references (0423, 0424), and both are foreign
@@ -2172,13 +2235,15 @@ async function writeUpstreamReceipts(
       landedSha: input.mergedSha,
       rebaseBaseSha: input.targetShaBefore,
       testedTreeSha: input.testedTreeSha,
-      landedTreeSha: input.testedTreeSha,
+      landedTreeSha: input.landedTreeSha ?? input.testedTreeSha,
       mainSyncSha: null,
       // The ledger's own copy of who merged it: a receipt read years later has to be able to say
       // "nobody pressed this" without the promotion row beside it.
       confirmedAutomatically: input.promotion.confirmedAutomatically,
       recoveredUnknownPush: input.recoveredUnknownPush,
       recoveryHeld: input.recoveryHeld,
+      ...(input.pullRequest ? { pullRequest: input.pullRequest } : {}),
+      ...(input.pushedAs ? { pushedAs: input.pushedAs } : {}),
     });
     receiptIds.push(...written);
   }

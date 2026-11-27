@@ -64,11 +64,12 @@ import { test } from 'node:test';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
+import { ModuleRef } from '@nestjs/core';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -105,6 +106,7 @@ import { TaskDispatchRefusalProducer } from './task-dispatch-refusal.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { TaskRunStoppedProducer } from './task-run-stopped.producer';
 import { WakeDispositionService } from './wake-disposition.service';
+import { sessionWord } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -189,6 +191,18 @@ function connect(url: string): Stack {
     [CoordinatorEvidenceQueueService, new CoordinatorEvidenceQueueService(prisma, producer)],
     [PushService, push],
   ]);
+  // The module graph, as the router finds what it may not import (`considerPromotionAfterSettledWork`):
+  // it resolves from these same collaborators, and a type none of them is fails naming it, so a router
+  // that asks for more than this file provides says so here too. No case below finishes settled work.
+  provided.set(ModuleRef, {
+    get(type: { name?: string }) {
+      assert.ok(
+        provided.has(type),
+        `the module graph was asked for ${type?.name ?? String(type)}, which this spec does not provide`,
+      );
+      return provided.get(type);
+    },
+  });
   return {
     db,
     evidence: new TaskCompletionEvidenceService(
@@ -265,7 +279,7 @@ async function fixture(stack: Stack, label: string): Promise<Fixture> {
       title: `协调：${label}`,
       prompt: `协调：${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
       startedAt: new Date(),
@@ -336,7 +350,7 @@ async function fixture(stack: Stack, label: string): Promise<Fixture> {
       title: `${label} 执行会话`,
       prompt: `${label} 执行会话`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
     },
@@ -369,10 +383,7 @@ function turnsOn(db: PrismaClient, f: Fixture): Promise<number> {
 
 /** Where the standing conversation is. A delivery appends a turn only to a parked one. */
 async function standingStatus(db: PrismaClient, f: Fixture): Promise<RunStatus> {
-  return (await db.session.findUniqueOrThrow({
-    where: { id: f.coordinatorSessionId },
-    select: { status: true },
-  })).status;
+  return (await sessionWord(db, f.coordinatorSessionId)) as RunStatus;
 }
 
 /** Turn the project's coordinator switch — the one thing (a) and (d) differ in. */
@@ -418,11 +429,15 @@ test('no owner-only question writes a coordinator turn; an Automatic project’s
   assertCoordinatorPgUrlIsIsolated(url);
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
   await sql.connect();
+  // Ended whatever happens next: a wiring that throws below would otherwise leave this client open,
+  // and the file would hang on it instead of failing with the assertion that names what is missing.
+  t.after(async () => {
+    await sql.end().catch(() => undefined);
+  });
   await verifyCoordinatorPgIdentity(sql);
   const stack = connect(url);
   t.after(async () => {
     await stack.db.$disconnect().catch(() => undefined);
-    await sql.end().catch(() => undefined);
   });
   const { db } = stack;
   const f = await fixture(stack, 'decision-facts');

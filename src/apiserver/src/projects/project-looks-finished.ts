@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { SETTLED_TASK_STATUSES, type CoordinatorWakeEvent } from './coordinator-wake';
 import { IN_FLIGHT_JOB_STATES, LANDING_JOB_KINDS } from './criterion-landing-reason';
+import { landingDeferredSql } from './project-criterion-landing';
 import {
   readDerivedProjectDoneReading,
   type DerivedProjectDoneReading,
@@ -63,7 +64,7 @@ export type ProjectFinish =
  * judgment alike: while it is, the work is still moving towards the upstream. One statement.
  */
 export async function landingInFlight(
-  prisma: Pick<PrismaService, 'projectIntegrationJob'>,
+  prisma: Pick<PrismaService, 'projectIntegrationJob' | '$queryRaw'>,
   projectId: string,
 ): Promise<boolean> {
   const job = await prisma.projectIntegrationJob.findFirst({
@@ -74,7 +75,27 @@ export async function landingInFlight(
     },
     select: { id: true },
   });
-  return job !== null;
+  return job !== null || landingDeferred(prisma, projectId);
+}
+
+/**
+ * Whether a DONE code task of this project has its landing still to be decided (§12.15 P-M1): its
+ * DONE was written while its work moved, so nothing is queued for it yet — the finish that freezes its
+ * identity queues it, or finds nothing to land — and no receipt says its work is on the line already. The work is still moving towards the line exactly as
+ * it is with a job queued, and that finish re-derives the settled fact once it has decided
+ * (`TasksService.dispatchDependentsOfSettledWork`). One statement.
+ */
+export async function landingDeferred(
+  prisma: Pick<PrismaService, '$queryRaw'>,
+  projectId: string,
+): Promise<boolean> {
+  const [row] = await prisma.$queryRaw<Array<{ deferred: boolean }>>(Prisma.sql`
+    SELECT EXISTS (
+      SELECT 1 FROM "task" t
+       WHERE t."project_id" = ${projectId}::uuid
+         AND ${Prisma.raw(landingDeferredSql('t'))}
+    ) AS "deferred"`);
+  return row?.deferred === true;
 }
 
 /** The delegates the guardrail reads: the projection's, and the four rows it asks before it. */
@@ -131,7 +152,7 @@ export async function readProjectFinish(
   if (open?.owed) return { state: 'NOT_FINISHED' };
 
   const reading = await readDerivedProjectDoneReading(prisma, project.ownerId, projectId);
-  if (reading.inFlight.length > 0) return { state: 'LANDING_IN_FLIGHT' };
+  if (reading.inFlight.length > 0 || await landingDeferred(prisma, projectId)) return { state: 'LANDING_IN_FLIGHT' };
   const { derived } = reading;
   // Facts that prove DONE are not a question for anybody: the projection stores it. That goes for a
   // project whose owner pressed Reopen too, which the facts prove and the press holds OPEN

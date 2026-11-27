@@ -56,7 +56,7 @@ public struct SessionStatusGlyph: Equatable, Sendable {
     /// session held for the Claude region says (see `SessionHeader.statusWord`).
     public static func make(for s: Session, watching: WatchSessionSummary? = nil,
                             now: Date = Date(), machine: String? = nil) -> SessionStatusGlyph {
-        make(runState: s.effectiveRunState,
+        make(runState: s.displayRunState,
              pendingApprovals: s.pendingApprovals,
              runningBgCount: s.runningBgCount,
              runningBgJobCount: s.runningBgJobCount,
@@ -68,7 +68,11 @@ public struct SessionStatusGlyph: Equatable, Sendable {
              watchingLabel: watching?.word ?? (s.resumesOnItsOwn ? SessionHeader.waitingToResume : nil),
              waitingKind: s.waitingKind,
              underReview: s.confirmationUnderReview != nil,
-             heldLabel: ClaudeRegion.heldWords(s, machine: machine))
+             // A session a runner update holds reads "On hold" on the wire too (`waitingOn`): the update's own
+             // words outrank it here, as in the row and the header (web `StatusIcon`'s `queuedTitle`).
+             heldLabel: ClaudeRegion.heldWords(s, machine: machine)
+                 ?? (RunnerUpdating.holds(s) ? RunnerUpdating.title(s) : s.queueWord),
+             successLabel: s.releasedRunState == .succeeded ? "Finished" : "Succeeded")
     }
 
     /// Compatibility overload for callers that hold legacy plain fields rather than a Session.
@@ -107,7 +111,8 @@ public struct SessionStatusGlyph: Equatable, Sendable {
                             watchingLabel: String? = nil,
                             waitingKind: SessionWaitingKind? = nil,
                             underReview: Bool = false,
-                            heldLabel: String? = nil) -> SessionStatusGlyph {
+                            heldLabel: String? = nil,
+                            successLabel: String = "Succeeded") -> SessionStatusGlyph {
         // Somebody waiting on YOU outranks everything else — first, and outside the generating gate,
         // exactly as it is in the word beside this glyph (`SessionHeader.statusWord`) and in the web
         // `StatusIcon` both mirror. The two are read together on one row: a pause glyph labelled
@@ -166,7 +171,7 @@ public struct SessionStatusGlyph: Equatable, Sendable {
             return .init(shape: .symbol("message"), tone: .neutral, label: "Waiting for your reply")
 
         case .succeeded:
-            return .init(shape: .symbol("checkmark.circle.fill"), tone: .success, label: "Succeeded")
+            return .init(shape: .symbol("checkmark.circle.fill"), tone: .success, label: successLabel)
 
         case .failed:
             // A failure the server is about to undo by itself is not red: the situation is

@@ -4,10 +4,10 @@ import { test } from 'node:test';
 
 import {
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { TaskStatus as DeclaredTaskStatus } from '@orbit/shared';
@@ -229,7 +229,7 @@ async function anotherFailedAttempt(
       title: `attempt ${round}`,
       prompt: 'do the work',
       provider: 'claude',
-      status: RunStatus.FAILED,
+      turnState: null, 
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       finishedAt: new Date(),

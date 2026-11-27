@@ -338,7 +338,10 @@ func TestCarryOverModelCapabilities(t *testing.T) {
 	}
 }
 
-func TestReclaimStatusOpenRejectsTerminalAndUnknownRows(t *testing.T) {
+// The seven words this binary knows answer exactly as before the lease was consulted: the four open
+// words (and a legacy server's empty status) are open, the three terminal words are closed even when
+// the takeover holds the lease, as an older server's answered takeover of a terminal row does.
+func TestReclaimStatusOpenKnownWordsAreUnchanged(t *testing.T) {
 	for _, tc := range []struct {
 		status string
 		open   bool
@@ -351,10 +354,29 @@ func TestReclaimStatusOpenRejectsTerminalAndUnknownRows(t *testing.T) {
 		{stSucceeded, false},
 		{stFailed, false},
 		{stCancelled, false},
-		{"FUTURE_TERMINAL", false},
 	} {
-		if got := reclaimStatusOpen(tc.status); got != tc.open {
-			t.Errorf("reclaimStatusOpen(%q) = %v, want %v", tc.status, got, tc.open)
+		for _, leaseHeld := range []bool{true, false} {
+			if got := reclaimStatusOpen(tc.status, leaseHeld); got != tc.open {
+				t.Errorf("reclaimStatusOpen(%q, %v) = %v, want %v", tc.status, leaseHeld, got, tc.open)
+			}
+		}
+		if got := reclaimStatusEnded(tc.status); got == tc.open {
+			t.Errorf("reclaimStatusEnded(%q) = %v, want %v", tc.status, got, !tc.open)
+		}
+	}
+}
+
+// A word this binary does not know is open exactly when the server's answer says the lease is held.
+func TestReclaimStatusOpenUnknownWordFollowsTheLease(t *testing.T) {
+	for _, word := range []string{"IDLE", "FUTURE_TERMINAL"} {
+		if !reclaimStatusOpen(word, true) {
+			t.Errorf("reclaimStatusOpen(%q, true) = false, want an unknown word with the lease held open", word)
+		}
+		if reclaimStatusOpen(word, false) {
+			t.Errorf("reclaimStatusOpen(%q, false) = true, want an unknown word without the lease closed", word)
+		}
+		if reclaimStatusEnded(word) {
+			t.Errorf("reclaimStatusEnded(%q) = true, want an unknown word left to its takeover", word)
 		}
 	}
 }
@@ -362,9 +384,9 @@ func TestReclaimStatusOpenRejectsTerminalAndUnknownRows(t *testing.T) {
 // A reclaimed session's engine is spawned from its reclaim row, so the two rollout switches the
 // apiserver says there must reach the engine's environment exactly as a claim's do: a runner
 // restart must not hand the wiki or watch tools back to an account they are switched off for.
-func TestReclaimCarriesTheWatchAndWikiSwitchesToTheSpawn(t *testing.T) {
+func TestReclaimCarriesTheWatchWikiAndWorkflowSwitchesToTheSpawn(t *testing.T) {
 	var resp ReclaimResponse
-	wire := `{"sessions":[{"sessionId":"off","watchesDisabled":true,"wikiDisabled":true},{"sessionId":"on"}]}`
+	wire := `{"sessions":[{"sessionId":"off","watchesDisabled":true,"wikiDisabled":true,"workflowsDisabled":true},{"sessionId":"on"}]}`
 	if err := json.Unmarshal([]byte(wire), &resp); err != nil {
 		t.Fatal(err)
 	}
@@ -375,9 +397,13 @@ func TestReclaimCarriesTheWatchAndWikiSwitchesToTheSpawn(t *testing.T) {
 	if got := watchesEnv(off.WatchesDisabled); got != "off" {
 		t.Errorf("reclaimed with watchesDisabled: %s=%s, want off", envWatches, got)
 	}
+	if got := workflowsEnv(off.WorkflowsDisabled); got != "off" {
+		t.Errorf("reclaimed with workflowsDisabled: %s=%s, want off", envWorkflows, got)
+	}
 	on := claimedSessionFromReclaim(resp.Sessions[1])
-	if wikiEnv(on.WikiDisabled) != "on" || watchesEnv(on.WatchesDisabled) != "on" {
-		t.Errorf("reclaimed with neither field: wiki=%s watches=%s, want both on", wikiEnv(on.WikiDisabled), watchesEnv(on.WatchesDisabled))
+	if wikiEnv(on.WikiDisabled) != "on" || watchesEnv(on.WatchesDisabled) != "on" || workflowsEnv(on.WorkflowsDisabled) != "on" {
+		t.Errorf("reclaimed with no field: wiki=%s watches=%s workflows=%s, want all on",
+			wikiEnv(on.WikiDisabled), watchesEnv(on.WatchesDisabled), workflowsEnv(on.WorkflowsDisabled))
 	}
 }
 
@@ -1144,7 +1170,7 @@ func TestUnstartedWorktreeCommands(t *testing.T) {
 // TestBackgroundScansReadOnlyAgentWorkDirs: a runner registered from ~/Desktop keeps that directory
 // as its own workDir, but the scans it repeats in the background — repo health every minute, slash
 // assets every five — read only its agents' workDirs and the user's ~/.claude. On a Mac every read
-// in ~/Desktop, ~/Documents or ~/Downloads has macOS ask the user, in the runner's name, for access.
+// in ~/Desktop, ~/Drive or ~/Downloads has macOS ask the user, in the runner's name, for access.
 func TestBackgroundScansReadOnlyAgentWorkDirs(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

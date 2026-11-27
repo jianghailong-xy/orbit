@@ -90,7 +90,7 @@ class QueuedTailTest {
         }, "t5")
         assertEquals(transcriptCards(echo).map { it.title to it.source }, turn.cards.map { it.title to it.source })
         val record = records("01a0d6a9-d763-70e1-b4cf-8793e971b511").single()
-        val answered = AnsweredQuestions(listOf(record), listOf(turn.event)) {}
+        val answered = AnsweredQuestions(listOf(record), listOf(turn.event))
         assertSame("the queued turn draws its question's card", record, answered.record(card.source))
         assertTrue("so the rail does not draw it again", answered.leftToItsTurn(record))
         assertSame("and its review folds what this turn told the coordinator", turn.event, answered.told(record))
@@ -112,7 +112,7 @@ class QueuedTailTest {
         val queued = queuedTail(rows("""[{"turnId":"t7","kind":"message","content":"told","attachments":[],"ownerAnswer":${ownerAnswer(queuedItem)},
             "authoredByOrbit":true},{"turnId":"t8","kind":"message","content":"plain","attachments":[]}]"""), emptyList())
         val answered = AnsweredQuestions(held, listOf(turn("user", ownerAnswer(echoed)), turn("user", ownerAnswer(notYet, "DONE_REQUEST")),
-            turn("assistant", ownerAnswer(agents))) + queued.map { it.event }) {}
+            turn("assistant", ownerAnswer(agents))) + queued.map { it.event })
         val byItem = held.associateBy { it.objectId }
         assertEquals(setOf(ObjectId.toPublic(echoed), queuedItem), held.filter(answered::leftToItsTurn).map { it.objectId }.toSet())
         assertSame(byItem[ObjectId.toPublic(echoed)], answered.record(Wire.json.parseToJsonElement(ownerAnswer(echoed)).jsonObject))
@@ -256,5 +256,22 @@ class QueuedTailTest {
         }), emptyList()).single()
         assertEquals("waiting for CI run 4242", turn.wake?.let { io.orbitd.android.core.cards.BackgroundWakeCard.lineName(it) })
         assertTrue(turn.cancelable)
+    }
+
+    /** Cancel beside `Queued · runner full` (web `cancellableHeldTurn`): only on the accepted head — the last, with a turn id and no
+     * echo yet — and never on the session's opening prompt. Its words are the reader's own: a translation's original. */
+    @Test fun onlyTheAcceptedHeadWithAnIdNotTheOpeningIsCancellableUnderTheHeldTag() {
+        fun accepted(turnId: String?, extra: String = "") = """{${turnId?.let { "\"turnId\":\"$it\"," } ?: ""}"kind":"message",
+            "placement":"accepted","content":"Why is task 6 still queued?","attachments":[]$extra}"""
+        val listed = rows("[${accepted("t2")}]")
+        assertEquals(HeldCancel("t2", "Why is task 6 still queued?"), cancellableHeldTurn(listed, emptyList()))
+        assertNull("the opening prompt, which the server keeps", cancellableHeldTurn(rows("""[${accepted("t2", ""","opening":true""")}]"""), emptyList()))
+        assertNull("a placeholder with no id yet", cancellableHeldTurn(rows("[${accepted(null)}]"), emptyList()))
+        val echo = RunEvent("user", 4, buildJsonObject { put("text", "Why is task 6 still queued?") }, "t2")
+        assertNull("a message a runner has echoed", cancellableHeldTurn(listed, listOf(echo)))
+        assertNull("a message only queued is the tail's, with its own Cancel",
+            cancellableHeldTurn(rows("""[{"turnId":"t3","kind":"message","placement":"queued","content":"x","attachments":[]}]"""), emptyList()))
+        val translated = rows("[${accepted("t2", ""","translation":{"state":"DONE","from":"zh-Hans","original":"任务 6 为什么还在排队？"}""")}]")
+        assertEquals("任务 6 为什么还在排队？", cancellableHeldTurn(translated, emptyList())?.words)
     }
 }

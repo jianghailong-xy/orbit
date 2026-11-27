@@ -6,10 +6,10 @@ import {
   CreatorType,
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -23,6 +23,7 @@ import { executableAcceptanceFailureReason } from './executable-acceptance-round
 import { AUTO_RUN_RETRY_BACKOFF_MS } from './task-retry-policy';
 import { TASK_RUN_TRIGGER } from './task-run-identity';
 import { TasksService } from './tasks.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * P3 of model routing (docs/model-routing-design.md §3.3): after a run that failed for anything but
@@ -102,14 +103,14 @@ interface Fixture {
 }
 
 /**
- * An owner, a runner reporting Opus and Sonnet, and its Agent — smart selection on unless `routing`
- * says otherwise, turned on through the user API as the owner turns it on. The project has no
- * coordinator; `started` makes it one the sweep starts tasks in.
+ * An owner with smart selection on, a runner reporting Opus and Sonnet, and its Agent (which has no
+ * switch of its own any more: owner, 2026-11-20). The project has no coordinator; `started` makes it
+ * one the sweep starts tasks in.
  */
 async function fixture(
   services: Services,
   label: string,
-  { routing = true, started = false }: { routing?: boolean; started?: boolean } = {},
+  { started = false }: { started?: boolean } = {},
 ): Promise<Fixture> {
   const { db } = services;
   const target = {
@@ -143,7 +144,6 @@ async function fixture(
   await db.workspace.create({
     data: { id: agentId, ownerId, runnerId, name: `${label}-agent`, enabled: true, effort: AGENT_EFFORT },
   });
-  if (routing) await services.workspaces.update(ownerId, agentId, { modelRouting: true });
   // LEGACY dispatch authority: no coordinator.
   await db.project.create({
     data: {
@@ -182,10 +182,13 @@ async function runNow(services: Services, target: Fixture, taskId: string): Prom
 async function end(
   db: PrismaClient,
   sessionId: string,
-  status: RunStatus,
+  status: typeof RunStatus.SUCCEEDED | typeof RunStatus.FAILED,
   data: { error?: string | null; model?: string } = {},
 ) {
-  await db.session.update({ where: { id: sessionId }, data: { status, finishedAt: new Date(), ...data } });
+  // A failure is on the turn the run cut off, copied to lastTurnOutcome (removal step R2): what reads it as one since R7.
+  await db.session.update({ where: { id: sessionId }, data: {
+    turnState: turnStateOfWord(status), finishedAt: new Date(), ...(status === RunStatus.FAILED ? { lastTurnOutcome: 'FAILED' } : {}), ...data,
+  } });
 }
 
 const decisionOf = (db: PrismaClient, sessionId: string) =>
@@ -539,31 +542,30 @@ test('a task with no suggestion still escalates; with no tier on record, the mod
     }
   });
 
-test('the last tier is the one its decision named, a shadow one included, not the model the run happened to use',
+test('the last tier is the one its decision named, not the model the run happened to use',
   { skip, timeout: 120_000 }, async () => {
     assertCoordinatorPgUrlIsIsolated(URL!);
     const services = connect();
     try {
       const { db } = services;
-      const target = await fixture(services, 'shadow', { routing: false });
+      const target = await fixture(services, 'named');
       const taskId = await taskIn(db, target);
-      // Smart selection is off: run 1 was decided at M in shadow and ran the baseline, which its first
-      // claim resolved to the runtime default, Opus — tier L by its family.
+      // Run 1 was decided at M and created on Sonnet, but its run reports Opus — tier L by its family
+      // (as a shadow run from before 2026-11-20, which ran the runtime default, does).
       const run1 = await runNow(services, target, taskId);
-      assert.deepEqual(await sessionOf(db, run1), { provider: 'claude', model: null, effort: AGENT_EFFORT });
+      assert.deepEqual(await sessionOf(db, run1), { provider: 'claude', model: SONNET, effort: 'medium' });
       await end(db, run1, RunStatus.FAILED, { error: CRASH, model: OPUS });
 
       const run2 = await runNow(services, target, taskId);
 
       const row = await decisionOf(db, run2);
       assert.deepEqual(routed(row), {
-        level: 'L', applied: false, model: OPUS, effort: 'high',
+        level: 'L', applied: true, model: OPUS, effort: 'high',
         lastRun: { ordinal: 1, level: 'M', model: OPUS, outcome: 'FAILED' },
         escalatedFrom: 'M',
       });
       assert.deepEqual(row.reasons, ['[escalate] Tier L — raised after run 1 (M) failed', ...AT.L], 'one above M, not above Opus\'s L');
-      assert.deepEqual(await sessionOf(db, run2), { provider: 'claude', model: null, effort: AGENT_EFFORT },
-        'and in shadow the run is still the baseline');
+      assert.deepEqual(await sessionOf(db, run2), { provider: 'claude', model: OPUS, effort: 'high' });
     } finally {
       await services.db.$disconnect();
     }

@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.Bundle
 import io.orbitd.android.core.auth.AuthSession
 import io.orbitd.android.core.auth.AuthState
+import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.realtime.RealtimeStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -17,6 +18,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonObject
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import java.io.File
@@ -190,7 +192,7 @@ class PushController(
         val active = notifications.active().distinctBy { it.notificationKey }
         if (active.isEmpty()) return true
         val authority = PushAuthority(session, handle)
-        val needsYou = if (!readOpen) null else try { authority.needsYou() } catch (cancel: CancellationException) { throw cancel }
+        val needsYou = if (!readOpen) null else try { authority.needsYou(openRows(handle)) } catch (cancel: CancellationException) { throw cancel }
             catch (_: Exception) { null }
         var complete = true
         for (message in active) {
@@ -205,6 +207,10 @@ class PushController(
         }
         return complete
     }
+
+    /** The Open rows by one `since=` read on the store's cursor, whether or not the stream is up: a SYNC push arrives while the Activity is
+     * stopped and the stream closed, and still has to clear the reminders the owner answered elsewhere. */
+    private suspend fun openRows(handle: SessionHandle): List<JsonObject> = realtime.readOpen(handle)
 
     private fun remove(message: PushMessage) = notifications.cancel(message)
 
@@ -223,4 +229,5 @@ class PushController(
     override fun onActivityPaused(activity: Activity) = Unit
     override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
     override fun onActivityDestroyed(activity: Activity) = Unit
+
 }

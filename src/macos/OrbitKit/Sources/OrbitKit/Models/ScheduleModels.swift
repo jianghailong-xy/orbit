@@ -11,11 +11,15 @@ public enum ScheduleRule: Equatable, Hashable, Sendable, Codable {
     case once(at: String)
     case daily(time: String)
     case weekly(time: String, weekdays: [String])
+    /// Sub-daily: a slot every `minutes` from `time` through `until` (inclusive; nil for the end of the day) on
+    /// `weekdays`. The server always writes `time` and `weekdays` too, so a build that predates EVERY reads the same
+    /// JSON as a weekly rule (design §9.3).
+    case every(minutes: Int, time: String, until: String?, weekdays: [String])
     /// A WHEN rule: starts a run each time its condition fires. `conditionId` is nil on a create card, before Create
     /// writes the condition.
     case when(conditionId: String?, runsPerWeek: Int, condition: ScheduleWhenCondition)
 
-    private enum CodingKeys: String, CodingKey { case kind, at, time, weekdays, conditionId, runsPerWeek, condition }
+    private enum CodingKeys: String, CodingKey { case kind, at, time, weekdays, minutes, until, conditionId, runsPerWeek, condition }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -26,6 +30,11 @@ public enum ScheduleRule: Equatable, Hashable, Sendable, Codable {
             self = .when(conditionId: try? c.decodeIfPresent(String.self, forKey: .conditionId),
                          runsPerWeek: (try? c.decode(Int.self, forKey: .runsPerWeek)) ?? 0,
                          condition: try c.decode(ScheduleWhenCondition.self, forKey: .condition))
+        case "EVERY":
+            self = .every(minutes: try c.decode(Int.self, forKey: .minutes),
+                          time: try c.decode(String.self, forKey: .time),
+                          until: try? c.decodeIfPresent(String.self, forKey: .until),
+                          weekdays: (try? c.decode([String].self, forKey: .weekdays)) ?? [])
         default:
             self = .weekly(time: try c.decode(String.self, forKey: .time),
                            weekdays: (try? c.decode([String].self, forKey: .weekdays)) ?? [])
@@ -45,6 +54,12 @@ public enum ScheduleRule: Equatable, Hashable, Sendable, Codable {
             try c.encode("WEEKLY", forKey: .kind)
             try c.encode(time, forKey: .time)
             try c.encode(weekdays, forKey: .weekdays)
+        case .every(let minutes, let time, let until, let weekdays):
+            try c.encode("EVERY", forKey: .kind)
+            try c.encode(minutes, forKey: .minutes)
+            try c.encode(time, forKey: .time)
+            try c.encodeIfPresent(until, forKey: .until)
+            try c.encode(weekdays, forKey: .weekdays)
         case .when(let conditionId, let runsPerWeek, let condition):
             try c.encode("WHEN", forKey: .kind)
             try c.encode(conditionId, forKey: .conditionId)
@@ -63,7 +78,7 @@ public enum ScheduleRule: Equatable, Hashable, Sendable, Codable {
     public var time: String? {
         switch self {
         case .once, .when: return nil
-        case .daily(let time), .weekly(let time, _): return time
+        case .daily(let time), .weekly(let time, _), .every(_, let time, _, _): return time
         }
     }
 
@@ -328,6 +343,10 @@ public struct ScheduleView: Codable, Equatable, Hashable, Sendable, Identifiable
     public let revision: Int
     public let startAt: String?
     public let endAt: String?
+    /// The planned end by count of started runs (§8.5); nil for none or from a server before it.
+    public let maxRuns: Int?
+    /// maxRuns minus the runs started, at least 0; nil without maxRuns.
+    public let runsLeft: Int?
     public let nextDueAt: String?
     public let consecutiveFailures: Int
     public let createdFromSessionId: String?
@@ -345,7 +364,8 @@ public struct ScheduleView: Codable, Equatable, Hashable, Sendable, Identifiable
                 accessLevel: String = "CHECK_ONLY", runLimitMinutes: Int = 30, runsPerWeek: Int = 7,
                 envelope: ScheduleEnvelope? = nil, state: String = "ACTIVE", heldReason: String? = nil,
                 endedReason: String? = nil, note: String? = nil, revision: Int = 1, startAt: String? = nil,
-                endAt: String? = nil, nextDueAt: String? = nil, consecutiveFailures: Int = 0,
+                endAt: String? = nil, maxRuns: Int? = nil, runsLeft: Int? = nil, nextDueAt: String? = nil,
+                consecutiveFailures: Int = 0,
                 createdFromSessionId: String? = nil, createdAt: String = "2026-11-10T00:00:00.000Z",
                 endedAt: String? = nil, lastRun: ScheduleRunView? = nil) {
         self.id = id
@@ -369,6 +389,8 @@ public struct ScheduleView: Codable, Equatable, Hashable, Sendable, Identifiable
         self.revision = revision
         self.startAt = startAt
         self.endAt = endAt
+        self.maxRuns = maxRuns
+        self.runsLeft = runsLeft
         self.nextDueAt = nextDueAt
         self.consecutiveFailures = consecutiveFailures
         self.createdFromSessionId = createdFromSessionId
@@ -380,7 +402,7 @@ public struct ScheduleView: Codable, Equatable, Hashable, Sendable, Identifiable
     private enum CodingKeys: String, CodingKey {
         case id, title, intent, prompt, rule, timezone, workspaceId, workspaceName, agentId, agentName, engine, accessLevel
         case runLimitMinutes, runsPerWeek, envelope, state, heldReason, endedReason, note, revision, startAt, endAt
-        case nextDueAt, consecutiveFailures, createdFromSessionId, createdAt, endedAt, lastRun, pausedAt, condition
+        case maxRuns, runsLeft, nextDueAt, consecutiveFailures, createdFromSessionId, createdAt, endedAt, lastRun, pausedAt, condition
     }
 
     public init(from decoder: Decoder) throws {
@@ -409,6 +431,8 @@ public struct ScheduleView: Codable, Equatable, Hashable, Sendable, Identifiable
         revision = (try? c.decode(Int.self, forKey: .revision)) ?? 1
         startAt = try? c.decodeIfPresent(String.self, forKey: .startAt)
         endAt = try? c.decodeIfPresent(String.self, forKey: .endAt)
+        maxRuns = try? c.decodeIfPresent(Int.self, forKey: .maxRuns)
+        runsLeft = try? c.decodeIfPresent(Int.self, forKey: .runsLeft)
         nextDueAt = try? c.decodeIfPresent(String.self, forKey: .nextDueAt)
         consecutiveFailures = (try? c.decode(Int.self, forKey: .consecutiveFailures)) ?? 0
         createdFromSessionId = try? c.decodeIfPresent(String.self, forKey: .createdFromSessionId)
@@ -509,6 +533,8 @@ public struct ScheduleChangeRecord: Codable, Equatable, Sendable, Identifiable {
     public let after: [String: JSONValue]
     public let undoOfRevision: Int?
     public let undoneByRevision: Int?
+    /// The person's words that asked for it, when it came from the schedule's change conversation (§8.2).
+    public let askedText: String?
     public let createdAt: String
     public let undo: ScheduleUndoDoor?
 
@@ -516,7 +542,8 @@ public struct ScheduleChangeRecord: Codable, Equatable, Sendable, Identifiable {
 
     public init(scheduleId: String, title: String, revision: Int, changedBy: String, sessionId: String? = nil,
                 before: [String: JSONValue]?, after: [String: JSONValue], undoOfRevision: Int? = nil,
-                undoneByRevision: Int? = nil, createdAt: String = "2026-11-14T10:00:00.000Z",
+                undoneByRevision: Int? = nil, askedText: String? = nil,
+                createdAt: String = "2026-11-14T10:00:00.000Z",
                 undo: ScheduleUndoDoor? = nil) {
         self.scheduleId = scheduleId
         self.title = title
@@ -527,13 +554,14 @@ public struct ScheduleChangeRecord: Codable, Equatable, Sendable, Identifiable {
         self.after = after
         self.undoOfRevision = undoOfRevision
         self.undoneByRevision = undoneByRevision
+        self.askedText = askedText
         self.createdAt = createdAt
         self.undo = undo
     }
 
     private enum CodingKeys: String, CodingKey {
         case scheduleId, title, revision, changedBy, sessionId, before, after, undoOfRevision, undoneByRevision
-        case createdAt, undo
+        case askedText, createdAt, undo
     }
 
     public init(from decoder: Decoder) throws {
@@ -547,8 +575,95 @@ public struct ScheduleChangeRecord: Codable, Equatable, Sendable, Identifiable {
         after = (try? c.decode([String: JSONValue].self, forKey: .after)) ?? [:]
         undoOfRevision = try? c.decodeIfPresent(Int.self, forKey: .undoOfRevision)
         undoneByRevision = try? c.decodeIfPresent(Int.self, forKey: .undoneByRevision)
+        askedText = try? c.decodeIfPresent(String.self, forKey: .askedText)
         createdAt = (try? c.decode(String.self, forKey: .createdAt)) ?? ""
         undo = try? c.decodeIfPresent(ScheduleUndoDoor.self, forKey: .undo)
+    }
+}
+
+/// Orbit's opening of a change conversation (§8.2, board 03-change): the schedule as it was when the
+/// conversation was opened, drawn by every client from `ScheduleCopy.ChangeConversation`. Kept on the session,
+/// so it still reads as the start of the conversation after the schedule has changed.
+public struct ScheduleChangeOpening: Codable, Equatable, Hashable, Sendable {
+    public let scheduleId: String
+    public let title: String
+    public let revision: Int
+    /// The read-back ("What it does").
+    public let does: String
+    /// "Every day at 09:00 · Asia/Shanghai".
+    public let when: String
+    public let runsIn: String
+    public let may: String
+    public let costs: String
+
+    public init(scheduleId: String, title: String, revision: Int = 1, does: String, when: String,
+                runsIn: String, may: String, costs: String) {
+        self.scheduleId = scheduleId
+        self.title = title
+        self.revision = revision
+        self.does = does
+        self.when = when
+        self.runsIn = runsIn
+        self.may = may
+        self.costs = costs
+    }
+
+    private enum CodingKeys: String, CodingKey { case scheduleId, title, revision, does, when, runsIn, may, costs }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        scheduleId = try c.decode(String.self, forKey: .scheduleId)
+        title = (try? c.decode(String.self, forKey: .title)) ?? ""
+        revision = (try? c.decode(Int.self, forKey: .revision)) ?? 1
+        does = (try? c.decode(String.self, forKey: .does)) ?? ""
+        when = (try? c.decode(String.self, forKey: .when)) ?? ""
+        runsIn = (try? c.decode(String.self, forKey: .runsIn)) ?? ""
+        may = (try? c.decode(String.self, forKey: .may)) ?? ""
+        costs = (try? c.decode(String.self, forKey: .costs)) ?? ""
+    }
+}
+
+/// `GET /schedules/:id/change`: the schedule's open change conversation if it has one, and the opening a new one
+/// would start with.
+public struct ScheduleChangeConversationResponse: Decodable, Sendable, Equatable {
+    public let sessionId: String?
+    public let opening: ScheduleChangeOpening
+
+    public init(sessionId: String?, opening: ScheduleChangeOpening) {
+        self.sessionId = sessionId
+        self.opening = opening
+    }
+
+    private enum CodingKeys: String, CodingKey { case sessionId, opening }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        sessionId = try? c.decodeIfPresent(String.self, forKey: .sessionId)
+        opening = try c.decode(ScheduleChangeOpening.self, forKey: .opening)
+    }
+}
+
+/// `POST /schedules/:id/change {text}`: the person's first words.
+public struct ScheduleChangeBody: Encodable, Sendable {
+    public let text: String
+    public init(text: String) { self.text = text }
+}
+
+/// Its answer: the change conversation, and whether this press opened it (`false` when another device opened one
+/// meanwhile and the words were said there).
+public struct ScheduleChangeAnswer: Decodable, Sendable, Equatable {
+    public let sessionId: String
+    public let created: Bool
+
+    public init(sessionId: String, created: Bool) {
+        self.sessionId = sessionId
+        self.created = created
+    }
+
+    private enum CodingKeys: String, CodingKey { case sessionId, created }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        sessionId = try c.decode(String.self, forKey: .sessionId)
+        created = (try? c.decode(Bool.self, forKey: .created)) ?? false
     }
 }
 
@@ -820,7 +935,7 @@ public struct ScheduleControlAnswer: Decodable, Sendable {
     public let record: ScheduleChangeRecord?
 }
 
-/// `POST /schedules/:id/undo`: APPLIED, UNCHANGED or PENDING (a card, when undoing would widen).
+/// `POST /schedules/:id/undo` and `…/rename`: APPLIED, UNCHANGED or PENDING (a card, when undoing would widen).
 public struct ScheduleUpdateAnswer: Decodable, Sendable {
     public let outcome: String
     public let schedule: ScheduleView?
@@ -830,6 +945,11 @@ public struct ScheduleUpdateAnswer: Decodable, Sendable {
 public struct ScheduleUndoBody: Encodable, Sendable {
     public let revision: Int
     public init(revision: Int) { self.revision = revision }
+}
+
+public struct ScheduleRenameBody: Encodable, Sendable {
+    public let title: String
+    public init(title: String) { self.title = title }
 }
 
 public struct ScheduleRequestsResponse: Decodable, Sendable {
@@ -864,25 +984,98 @@ public struct ScheduleDraftAnswer: Decodable, Sendable {
     public let sessionId: String
 }
 
+/// One try of a run: the session it opened, and how far that session got.
+public struct ScheduleRunTry: Decodable, Sendable, Equatable {
+    public let sessionId: String
+    public let startedAt: String
+    /// Whether a runner claimed the session (its engine was started, or tried to be).
+    public let claimed: Bool
+    /// Whether the session's first turn reached its engine.
+    public let reachedEngine: Bool
+
+    public init(sessionId: String, startedAt: String, claimed: Bool, reachedEngine: Bool) {
+        self.sessionId = sessionId
+        self.startedAt = startedAt
+        self.claimed = claimed
+        self.reachedEngine = reachedEngine
+    }
+}
+
+/// The full runner, run or batch a run's current session waits behind.
+public struct ScheduleRunQueueGate: Decodable, Sendable, Equatable {
+    public let queuedReason: String
+    public let queuedActive: Int?
+    public let queuedLimit: Int?
+    public let queuedHeldByJobs: Int?
+    /// When the session went PENDING: what the wait counts from.
+    public let since: String
+    /// The run's catch-up deadline: past it, the run is MISSED.
+    public let deadline: String
+
+    public init(queuedReason: String, queuedActive: Int? = nil, queuedLimit: Int? = nil,
+                queuedHeldByJobs: Int? = nil, since: String, deadline: String) {
+        self.queuedReason = queuedReason
+        self.queuedActive = queuedActive
+        self.queuedLimit = queuedLimit
+        self.queuedHeldByJobs = queuedHeldByJobs
+        self.since = since
+        self.deadline = deadline
+    }
+}
+
+/// `runStatus` beside a run on `GET /sessions/:id/schedule-cards`: where the run stands for this session.
+public struct ScheduleRunSessionStatus: Decodable, Sendable, Equatable {
+    /// Every try the run made, oldest first.
+    public let tries: [ScheduleRunTry]
+    /// Which of `tries` this session is, from 1; nil when it is none of them.
+    public let thisTry: Int?
+    /// When a run that ended with no try reaching its engine gave up.
+    public let gaveUpAt: String?
+    public let notBeforeAt: String?
+    /// The schedule's next run.
+    public let nextDueAt: String?
+    public let queue: ScheduleRunQueueGate?
+
+    public init(tries: [ScheduleRunTry], thisTry: Int?, gaveUpAt: String? = nil, notBeforeAt: String? = nil,
+                nextDueAt: String? = nil, queue: ScheduleRunQueueGate? = nil) {
+        self.tries = tries
+        self.thisTry = thisTry
+        self.gaveUpAt = gaveUpAt
+        self.notBeforeAt = notBeforeAt
+        self.nextDueAt = nextDueAt
+        self.queue = queue
+    }
+}
+
 /// `GET /sessions/:id/schedule-cards`: the cards a conversation asked and the changes it made.
 public struct SessionScheduleCardsResponse: Decodable, Sendable, Equatable {
     /// A scheduled run's session: the run it serves, however old; nil for any other session.
     public let run: ScheduleRunView?
+    /// Beside `run`: where it stands for this session; nil from a server before it.
+    public let runStatus: ScheduleRunSessionStatus?
     public let cards: [ScheduleCard]
     public let records: [ScheduleChangeRecord]
+    /// A schedule's change conversation (§8.2): Orbit's opening, as the schedule was when it was opened, for its
+    /// strip and its first message. Nil on every other session (and on servers before it).
+    public let change: ScheduleChangeOpening?
 
-    public init(run: ScheduleRunView? = nil, cards: [ScheduleCard], records: [ScheduleChangeRecord]) {
+    public init(run: ScheduleRunView? = nil, runStatus: ScheduleRunSessionStatus? = nil, cards: [ScheduleCard],
+                records: [ScheduleChangeRecord], change: ScheduleChangeOpening? = nil) {
         self.run = run
+        self.runStatus = runStatus
         self.cards = cards
         self.records = records
+        self.change = change
     }
 
-    private enum CodingKeys: String, CodingKey { case run, cards, records }
+    private enum CodingKeys: String, CodingKey { case run, runStatus, cards, records, change }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         run = try? c.decodeIfPresent(ScheduleRunView.self, forKey: .run)
+        runStatus = try? c.decodeIfPresent(ScheduleRunSessionStatus.self, forKey: .runStatus)
         cards = ((try? c.decode([ScheduleLenient<ScheduleCard>].self, forKey: .cards)) ?? []).compactMap(\.value)
         records = ((try? c.decode([ScheduleLenient<ScheduleChangeRecord>].self, forKey: .records)) ?? []).compactMap(\.value)
+        change = try? c.decodeIfPresent(ScheduleChangeOpening.self, forKey: .change)
     }
 }
 

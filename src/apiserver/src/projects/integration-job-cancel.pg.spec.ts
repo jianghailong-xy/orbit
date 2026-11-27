@@ -5,7 +5,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, TaskStatus } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import {
@@ -33,8 +34,7 @@ import { ProjectHandoffService } from './project-handoff.service';
 import {
   INTEGRATION_JOB_CLAIM,
   enqueueForDoneTask,
-  integrationSerialKey,
-} from './project-integration-job';
+  integrationSerialKey, settleDeliveredIdentityAfterFinish } from './project-integration-job';
 import {
   configureProjectIntegration,
   readInFlightJobs,
@@ -235,7 +235,7 @@ async function doneTask(
       branch,
       isolationStatus: 'worktree',
       baseSha: 'b'.repeat(40),
-      status: RunStatus.SUCCEEDED,
+      turnState: null, 
       startsTaskWork: true,
       finishedAt: new Date(Date.now() - 60_000),
       worktreeBranch: branch,
@@ -666,12 +666,13 @@ test('a stop is a fact: QUEUED jobs end now, RUNNING ones are asked or ended, an
     await reopenAndRedo(stack, w, work.taskId);
 
     // The work starts moving again after the claim, so the answer is too early (J-T1e).
-    await stack.db.session.create({
+    const stillWorking = await stack.db.session.create({
+      select: { id: true },
       data: {
         ownerId: w.ownerId, creatorId: w.ownerId, taskId: work.taskId, workspaceId: w.workspaceId,
         assignedRunnerId: w.runnerId, title: 'still working', prompt: 'still working',
         branch: `orbit/still-${randomUUID().slice(0, 6)}`, isolationStatus: 'worktree',
-        status: RunStatus.RUNNING, startsTaskWork: true, startedAt: new Date(),
+        turnState: 'IN_FLIGHT', startsTaskWork: true, startedAt: new Date(),
       },
     });
     const early = await report(stack, w, first, {
@@ -683,8 +684,26 @@ test('a stop is a fact: QUEUED jobs end now, RUNNING ones are asked or ended, an
       where: { taskId: work.taskId, kind: 'LAND_TASK' },
       orderBy: { generation: 'asc' },
     });
-    assert.deepEqual(rows.map((job) => [job.generation, job.state]), [[1, 'CANCELLED'], [2, 'QUEUED']],
-      'the DONE after the reopen is queued in the too-early branch too');
+    // §12.15 P-M1: the DONE after the reopen has work still moving, so the result transaction's re-run
+    // of it decides nothing yet and keeps the reopen marker; the finish of that work queues it.
+    assert.deepEqual(rows.map((job) => [job.generation, job.state]), [[1, 'CANCELLED']],
+      'the DONE after the reopen waits for its moving work, not for this answer');
+    assert.ok(await stack.db.taskReopenIntent.findUnique({ where: { taskId: work.taskId } }),
+      'and its reopen marker is kept for the finish that queues it');
+    await stack.db.$transaction(async (tx) => {
+      const finished = await tx.session.update({
+        where: { id: stillWorking.id },
+        data: { turnState: null, finishedAt: new Date()},
+        select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+      });
+      await settleDeliveredIdentityAfterFinish(tx, finished);
+    });
+    const after = await stack.db.projectIntegrationJob.findMany({
+      where: { taskId: work.taskId, kind: 'LAND_TASK' },
+      orderBy: { generation: 'asc' },
+    });
+    assert.deepEqual(after.map((job) => [job.generation, job.state]), [[1, 'CANCELLED'], [2, 'QUEUED']],
+      'the finish queues the next generation, so the too-early branch loses none');
     assert.equal(await stack.db.taskReopenIntent.findUnique({ where: { taskId: work.taskId } }), null);
   });
 
@@ -883,7 +902,7 @@ test('a stop is a fact: QUEUED jobs end now, RUNNING ones are asked or ended, an
         ownerId: w.ownerId, creatorId: w.ownerId, taskId: work.taskId, workspaceId: w.workspaceId,
         assignedRunnerId: w.runnerId, title: 'still working', prompt: 'still working',
         branch: `orbit/still-${randomUUID().slice(0, 6)}`, isolationStatus: 'worktree',
-        status: RunStatus.RUNNING, startsTaskWork: true, startedAt: new Date(),
+        turnState: 'IN_FLIGHT', startsTaskWork: true, startedAt: new Date(),
       },
     });
     const tooEarly = await report(stack, w, job, { state: 'ALREADY_LANDED', phase: 'FETCH', sourceSha: sha('a') });

@@ -1,7 +1,6 @@
 package io.orbitd.android.reader
 
 import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.runtime.staticCompositionLocalOf
 import io.orbitd.android.core.realtime.RunEvent
 import io.orbitd.android.wiki.RelativeTime
 import io.orbitd.android.wiki.WikiRunsLogic
@@ -22,7 +21,17 @@ internal data class SubagentRun(val toolUseId: String, val type: String, val bac
     /** Every candidate the router removed, with its reason: the rest of what the Why line's Details open to. */
     val removed: List<Removed> = emptyList(),
     /** The workspace a remote SubAgent ran on; null on the parent's machine. */
-    val workspaceName: String? = null) {
+    val workspaceName: String? = null,
+    /** Paths the child's edit tools wrote: what an ended run left uncommitted in the working tree. */
+    val changedFiles: List<String> = emptyList(),
+    /** The Orbit workflow this run is a call of: its [WorkflowRun.id]. Such a run's `toolUseId` is `<the workflow call's tool_use
+     * id>#<callIndex>`. Null, as are the three below, on a `delegate` call's run and from a server before it sent them. */
+    val workflowRunId: String? = null,
+    /** The call's place in the script, from 0 in the order the script made its `agent()` calls. */
+    val callIndex: Int? = null,
+    /** The `agent()` call's `label` and `phase`, as the script gave them. */
+    val label: String? = null,
+    val phase: String? = null) {
     /** A background call answers at once, so its card's own status cannot say whether the work still goes on. */
     val isRunning: Boolean get() = status == "RUNNING"
 
@@ -41,7 +50,9 @@ internal data class SubagentRun(val toolUseId: String, val type: String, val bac
                     val provider = c.string("provider") ?: return@mapNotNull null
                     Removed(provider, c.string("engine"), c.string("model"), c.string("effort"), c.string("reason").orEmpty())
                 },
-                row.string("workspaceName"))
+                row.string("workspaceName"),
+                (row["changedFiles"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.ifEmpty { null } },
+                row.string("workflowRunId"), (row["callIndex"] as? JsonPrimitive)?.intOrNull, row.string("label"), row.string("phase"))
         }
 
         /** The list by `delegate` call; the later row wins a repeated id, as on iOS. */
@@ -154,25 +165,3 @@ internal object SubagentRuns {
 
 /** The session's SubAgent runs by `delegate` call, as the reader last read them. */
 internal val LocalSubagentRuns = compositionLocalOf<Map<String, SubagentRun>> { emptyMap() }
-
-/**
- * Each SubAgent run by the `delegate` call it was started from: run id → that call's seq, read off the call's result (a foreground call's
- * end or a background call's launch receipt both name `runId`; web `delegateRunId`).
- */
-internal fun delegateCallsByRun(events: List<RunEvent>): Map<String, Long> {
-    val calls = events.filter { it.type == "tool_use" && it.parent() == null &&
-        (it.fields.string("name") ?: it.fields.string("toolName")) == SubagentBlock.TOOL_NAME }.mapNotNull { e -> e.toolId()?.let { it to e.seq } }.toMap()
-    if (calls.isEmpty()) return emptyMap()
-    return buildMap {
-        events.forEach { event ->
-            if (event.type != "tool_result") return@forEach
-            val seq = event.toolId()?.let(calls::get) ?: return@forEach
-            val text = contentText(event.fields["content"]) ?: event.fields.string("result") ?: return@forEach
-            val runId = runCatching { (Json.parseToJsonElement(text.trim()) as? JsonObject)?.string("runId") }.getOrNull()
-            if (!runId.isNullOrEmpty()) put(runId, seq)
-        }
-    }
-}
-
-/** The way back from a SubAgent's finished line to the card its run was started from, when that card is drawn; null where it is not. */
-internal val LocalSubagentCardJump = staticCompositionLocalOf<(String) -> (() -> Unit)?> { { null } }

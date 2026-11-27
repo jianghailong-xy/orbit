@@ -760,10 +760,10 @@ final class WikiWiringTests: XCTestCase {
         let app = code(try source("AppModel.swift"))
         let apply = try slice(app, from: "private func apply(_ ev: ControlEvent) {", to: "private func mergeSessionSummary")
         let arm = try slice(apply, from: "case .wiki:\n", to: "case .folders:")
-        XCTAssertTrue(arm.contains("wiki?.nudge()"))
+        XCTAssertTrue(arm.contains("whenSeen(\"wiki\")") && arm.contains("$0.wiki?.nudge()"))
         XCTAssertFalse(arm.contains("scheduleControlRefresh"), "a wiki event is not a session event")
         XCTAssertTrue(apply.contains("switch ControlEventRoute.of(ev) {"), "its own route, never the Open list's")
-        let connected = try slice(app, from: "private func reconcileOnConnect() async {", to: "\n    }\n")
+        let connected = try slice(app, from: "private func alignOnScreenAfterConnect() async {", to: "\n    }\n")
         XCTAssertTrue(connected.contains("if selectedSection == .wiki {\n            if let wiki { Task { await wiki.reloadLoaded() } }"),
                       "a reconnect re-reads the Wiki while it is on screen")
         XCTAssertTrue(connected.contains("} else if let wiki, wiki.spacesState.hasLoaded {\n            Task { await wiki.loadSpaces() }"),

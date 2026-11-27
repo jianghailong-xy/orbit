@@ -207,13 +207,14 @@ class MachineSetupTest {
     @Test fun aRunnersNewFolderRootIsReadFromWhatItReports() {
         assertEquals(
             "/root",
-            MachineSetup.newFolderRootOf(
-                json("""{"id":"r","name":"m","capabilities":["create-workdir/v1","create-workdir/v2"],"reposRoot":"/root/orbit-repos"}""")
+            MachineSetup.setupFolderRoot(
+                json("""{"id":"r","name":"m","capabilities":["create-workdir/v1","create-workdir/v2"],"reposRoot":"/root/orbit-repos"}"""),
+                managedSetup = false,
             ),
         )
         assertEquals(
             "/root/orbit-repos",
-            MachineSetup.newFolderRootOf(json("""{"id":"r","name":"m","capabilities":["create-workdir/v1"],"reposRoot":"/root/orbit-repos"}""")),
+            MachineSetup.setupFolderRoot(json("""{"id":"r","name":"m","capabilities":["create-workdir/v1"],"reposRoot":"/root/orbit-repos"}"""), managedSetup = false),
         )
     }
 

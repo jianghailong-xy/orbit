@@ -86,7 +86,7 @@ final class OrbitEventTests: XCTestCase {
         let generic = try at("} else if queued == nil, OrbitEvent.draws(b) {")
         for known in ["} else if let wake = WatchWakeText.parse(b.text) {",
                       "} else if let subagent = SubagentFinishedText.parse(wakeNote) {",
-                      "} else if let background = BackgroundWakeText.parse(wakeNote) {"] {
+                      "} else if let jobNews = BackgroundWakeText.parse(wakeNote) {"] {
             XCTAssertLessThan(try at(known), generic, "\(known) is asked after the generic line")
         }
         XCTAssertLessThan(generic, try at("} else if let sender = b.externalSender {"))

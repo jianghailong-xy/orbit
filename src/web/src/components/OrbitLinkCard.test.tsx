@@ -19,6 +19,7 @@ import { orbitLinkStateWord, statusLabel } from './WorkspaceView';
 import { SharedSessionPage } from '../pages/SharedSessionPage';
 import type { OrbitLinkKind, OrbitLinkRef } from '../lib/orbitLink';
 import { decodeId } from '../lib/idCodec';
+import { hoverTooltip } from '../test/tooltipHover';
 
 // The export inlines its stylesheets through Vite's `?raw`, and a worktree cannot read one of them
 // (it lives in node_modules, outside this checkout's root). What this case is about is the markup
@@ -224,7 +225,7 @@ describe('the cards, one per kind', () => {
     expect(text('.olc-line')[0]).toBe('Codex 多账户：一台机器上登录多个 Codex');
     // The relative time is `relTime`'s (the transcript's own), so only what precedes it is pinned
     // here; the sentences themselves are asserted whole in their own case below.
-    expect(text('.olc-line')[1]).toContain('orbit · 2 runs · last Succeeded, 93 turns');
+    expect(text('.olc-line')[1]).toContain('orbit · 2 runs · last Finished, 93 turns');
     expect(text('.status-pill')).toEqual(['Done']);
   });
 
@@ -257,7 +258,11 @@ describe('the cards, one per kind', () => {
     expect(text('.olc-state')).toEqual([error]);
     expect(container.querySelector('.olc-state')?.className).toContain('is-failed');
     // The pill truncates where the row runs out, so the whole error is kept for the hover.
-    expect(container.querySelector('.olc-state')?.getAttribute('title')).toBe(error);
+    const pill = container.querySelector('.olc-state')!;
+    // jsdom lays nothing out: give the label a cut-off box so its tip opens.
+    Object.defineProperty(pill, 'scrollWidth', { value: 500, configurable: true });
+    Object.defineProperty(pill, 'clientWidth', { value: 200, configurable: true });
+    expect(await hoverTooltip(pill)).toBe(error);
 
     // An armed retry says the glyph's sentence too, and a coordinator's failure reaches the project
     // card's foot in the same words.

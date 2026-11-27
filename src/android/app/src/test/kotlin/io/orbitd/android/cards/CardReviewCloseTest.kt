@@ -174,18 +174,21 @@ class CardReviewCloseTest : ComposerShellTest() {
         assertTrue(up())
     }
 
+    /** A record tapped in the conversation unfolds in place (board card-ui-polish ③) — no review opens — and stays unfolded to be read. */
     @Test fun aRecordOpenedFromTheConversationStaysToBeRead() {
         readsAnswered = true
         coordinatorAsks()
         signIn(); openSession()
         await { has(hasTestTag("item:q1")) }
         openFromConversation("item:q1")
-        await { has(hasTestTag("item:q1:footer-line")) }
+        await { has(hasTestTag("item:q1:unfolded"), unmerged = true) && has(hasTestTag("item:q1:footer-line")) }
         advance(5_000)
-        assertTrue(up())
+        assertTrue(has(hasTestTag("item:q1:unfolded"), unmerged = true))
+        assertFalse(up())
     }
 
-    /** Answered here and closed by hand, it is a record like any other: the press belonged to the review that made it. */
+    /** Answered here and closed by hand, it is a record like any other: the press belonged to the review that made it, and tapping the
+     * record again unfolds it where it is. */
     @Test fun aRecordOfAnAnswerGivenHereOpenedAgainStaysToBeRead() {
         coordinatorAsks()
         signIn(); openSession()
@@ -193,8 +196,9 @@ class CardReviewCloseTest : ComposerShellTest() {
         await { has(hasTestTag("item:q1:footer-line")) }
         closeByHand()
         openFromConversation("item:q1")
-        await { has(hasTestTag("item:q1:footer-line")) }
+        await { has(hasTestTag("item:q1:unfolded"), unmerged = true) && has(hasTestTag("item:q1:footer-line")) }
         advance(5_000)
-        assertTrue(up())
+        assertTrue(has(hasTestTag("item:q1:unfolded"), unmerged = true))
+        assertFalse(up())
     }
 }

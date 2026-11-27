@@ -30,6 +30,8 @@ public enum RunnerPageCopy {
     // MARK: Resources
 
     public static let RUNNER_RESOURCES = "Resources"
+    /// A managed runner that has not reported yet (preparing, waiting): its Resources and Engines say only this.
+    public static let MANAGED_RUNNER_NOT_REPORTED = "Available once the runner is ready."
     public static let RUNNER_RESOURCES_CPU = "CPU"
     public static let RUNNER_RESOURCES_MEMORY = "Memory"
     public static let RUNNER_RESOURCES_LIVE = "Live · every 30 s · last hour"
@@ -38,8 +40,6 @@ public enum RunnerPageCopy {
     public static let RUNNER_RESOURCES_UPDATE = "Update runner"
     public static let RUNNER_RESOURCES_NO_READING = "No reading yet"
     public static let RUNNER_RESOURCES_MEMORY_FULL = "Nearly full — new sessions may be slow to start."
-    /// A managed runner that has not reported yet: its Resources and Engines say only this.
-    public static let MANAGED_RUNNER_NOT_REPORTED = "Available once the runner is ready."
 
     /// The header of an offline machine's Resources: when its last reading came, as `ago` says it (`14m ago`).
     public static func runnerResourcesLastReading(ago: String) -> String { "Offline · last reading \(ago)" }
@@ -159,13 +159,46 @@ public enum RunnerPageCopy {
     /// A managed runner's version, when it reports none that is a release (its image is `managed-<sha>`).
     public static let MANAGED_RUNNER_KEPT_UP_TO_DATE = "Kept up to date by Orbit"
     /// About's Version note on a managed runner: Orbit rolls its image, so it neither updates itself nor needs to.
-    public static let MANAGED_RUNNER_UPDATED_BY_ORBIT = "Orbit updates this machine for you."
+    public static let MANAGED_RUNNER_UPDATED_BY_ORBIT = "Orbit moves it to each new build."
     public static let RUNNER_RUNS_AS_ROOT = "root"
     public static let RUNNER_RUNS_AS_REGULAR_USER = "regular user"
     public static let RUNNER_ROOT_NO_BYPASS =
         "Runs as root, so sessions here can’t use Bypass permissions."
     public static func runnerUpdatedFromTo(from: String, to: String) -> String { "\(from) → \(to)" }
     public static func runnerVersionUpdatingTo(version: String) -> String { "updating to \(version)" }
+
+    // MARK: Orbit Cloud's Update card (docs/managed-runner-update-now-design.md), the web's managed* sentences
+
+    /// About's Version on Orbit Cloud: the build it runs, with the day it was built when known.
+    public static func managedBuildLine(sha: String) -> String { "Build \(sha)" }
+    public static func managedBuildLineBuilt(sha: String, built: String) -> String { "Build \(sha) · \(built)" }
+    /// A build named by the day it was built: `the Nov 18 build`.
+    public static func managedBuildNamed(name: String) -> String { "the \(name) build" }
+    /// `build` is the build's name with its first letter capital: `The Nov 18 build`.
+    public static func managedUpdateAvailableTitle(build: String) -> String { "\(build) is available" }
+    /// Orbit Cloud's machine row while a newer build waits: the update dot's word and its tooltip.
+    public static let MANAGED_UPDATE_ROW_LABEL = "Update"
+    public static let MANAGED_UPDATE_ROW_TITLE = "A new build is available"
+    public static let MANAGED_UPDATE_AVAILABLE_BODY =
+        "It moves the next time this runner is idle. Update Now restarts it on the new build now — usually under a minute. Your files, sign-ins and sessions stay."
+    public static func managedUpdateRestartingTitle(build: String) -> String { "Restarting on \(build)…" }
+    public static func managedUpdateUpdatedTitle(build: String) -> String { "Updated to \(build)" }
+    public static let MANAGED_UPDATE_TAG_UPDATED = "Updated"
+    public static func managedUpdateNowBodyNone(build: String) -> String {
+        "No turn is running. It restarts on \(build) — usually under a minute. Your files, sign-ins and sessions stay."
+    }
+    public static func managedUpdateNowBodyOne(build: String) -> String {
+        "It stops this turn and restarts on \(build) — usually under a minute. It then continues where it stopped, with a note that the update interrupted it."
+    }
+    public static func managedUpdateNowBodyMany(build: String) -> String {
+        "It stops these turns and restarts on \(build) — usually under a minute. Each one then continues where it stopped, with a note that the update interrupted it."
+    }
+    /// Below the turns: a new container ends background jobs and the services they started.
+    public static func managedUpdateNowJobs(jobs: Int, noun: String) -> String {
+        "\(jobs) \(noun) in these sessions stop, and so do the services they started. Waiting work starts once it is back."
+    }
+    public static let MANAGED_UPDATE_NOW_SERVICES =
+        "Services started in these sessions stop. Waiting work starts once it is back."
 
     // MARK: the Update card (docs/runner-update-drain-design.md, board 4)
 
@@ -467,6 +500,8 @@ public enum RunnerPageCopy {
     public static let AGENT_FIX_BUTTON = "Fix with an agent"
     /// In place of the button while that session is open; the link after it opens it.
     public static func agentFixFixing(workspace: String) -> String { "An agent is fixing this in \(workspace) · " }
+    /// A transcript's history row, after the agent it was handed to finished; the link opens it.
+    public static func agentFixFixed(workspace: String) -> String { "Fixed by an agent in \(workspace) · " }
     public static let AGENT_FIX_OPEN_SESSION = "Open session"
     /// Under the button on an Install failed panel: where the session would run.
     public static func agentFixStartsIn(workspace: String, engine: String) -> String {
@@ -476,6 +511,10 @@ public enum RunnerPageCopy {
     public static func agentFixSignInAbove(engine: String) -> String { " Sign in to \(engine) above to use this." }
     /// The same, after a signed-out reason on the web's Update engines report, which sits above its engine rows.
     public static func agentFixSignInBelow(engine: String) -> String { " Sign in to \(engine) below to use this." }
+    /// The same, after a signed-out reason in a transcript, which has no engine list of its own.
+    public static func agentFixSignInOnMachinePage(engine: String) -> String {
+        " Sign in to \(engine) on the machine page to use this."
+    }
     /// The head of what a press that didn't start a session says, before the server's own sentence.
     public static let AGENT_FIX_FAILED = "Couldn’t start the agent"
     /// The Needs Attention card's second action, beside Update Engines Now; `engine` is the CLI's own name.

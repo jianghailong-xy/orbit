@@ -1,0 +1,61 @@
+# Where alerts go (docs/self-hosting.md, "Monitoring", "Alerts"). Values come from the environment docker-compose.yml
+# passes to Grafana; .env.example describes each. orbit-ntfy is the default phone contact point. orbit-email and
+# orbit-webhook are the alternatives, chosen with ORBIT_ALERT_CONTACT. orbit-watchdog takes the Watchdog alone.
+# orbit-app ("Orbit app") pushes to the account owner's Orbit apps through POST /api/notify, beside the one above, once
+# ORBIT_NOTIFY_TOKEN is set.
+apiVersion: 1
+contactPoints:
+  - orgId: 1
+    name: orbit-ntfy
+    receivers:
+      - uid: orbit-ntfy
+        type: webhook
+        disableResolveMessage: false
+        settings:
+          # ntfy takes a JSON publish at the server's root: the topic is in the body.
+          url: $ORBIT_NTFY_SERVER
+          httpMethod: POST
+          payload:
+            template: '{{ template "orbit.ntfy" . }}'
+            vars:
+              topic: $ORBIT_NTFY_TOPIC
+  - orgId: 1
+    name: orbit-email
+    receivers:
+      - uid: orbit-email
+        type: email
+        settings:
+          addresses: $ORBIT_ALERT_EMAIL
+          singleEmail: true
+  - orgId: 1
+    name: orbit-webhook
+    receivers:
+      - uid: orbit-webhook
+        type: webhook
+        settings:
+          url: $ORBIT_ALERT_WEBHOOK_URL
+          httpMethod: POST
+  - orgId: 1
+    name: orbit-watchdog
+    receivers:
+      - uid: orbit-watchdog
+        type: webhook
+        disableResolveMessage: true
+        settings:
+          url: $ORBIT_ALERT_HEARTBEAT_URL
+          httpMethod: POST
+  - orgId: 1
+    name: orbit-app
+    receivers:
+      - uid: orbit-app
+        type: webhook
+        disableResolveMessage: false
+        settings:
+          # Over this project's network, by the alias every apiserver answers to (apiserver-next during a two-stage
+          # handover too), never the public origin. The token is a personal access token holding only `notify`.
+          url: http://orbit-apiservers:3000/api/notify
+          httpMethod: POST
+          authorization_scheme: Bearer
+          authorization_credentials: $ORBIT_NOTIFY_TOKEN
+          payload:
+            template: '{{ template "orbit.app" . }}'

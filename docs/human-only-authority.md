@@ -111,8 +111,8 @@ channel all stay refused 403 `TERMINAL_ROUTE_NOT_ALLOWED` before anything is rea
 `terminal.approval.decided` with `credential_kind = TERMINAL` whose payload names the session, the approval,
 the answer, the terminal, its runner and the machine name. The credential is minted only by the owner's tap
 in the app, never by a token or a runner; it is bound to one machine, kept in the OS keychain (or a `0600`
-file under `ORBIT_HOME`, never the environment), ends 30 days after the tap, and is listed in Settings →
-Terminals with Revoke.
+file under `ORBIT_HOME`, never the environment), ends 30 days after the tap, and is listed on its machine's page in Settings, under
+Terminals, with Revoke.
 
 **Accepted risk (owner-accepted, D7 = B):** an agent running as the same OS user can read the stored
 credential and call the approval route itself, approving its own requests on that machine's sessions. It is
@@ -156,6 +156,16 @@ pointing a task at a criterion or moving one off. The same value from any other 
 the runner credential with no session header still writes the column, which the projection then
 answers on its next edge. As everywhere on this page, the record says a signed-in owner credential
 sent it, not that a person did.
+
+That press can also be made from a card (`docs/project-reopen-request-design.md` §4). **Ask to reopen a
+project** is any session's, and it is filing only: a session whose write was refused `PROJECT_REOPEN_REQUIRED`
+calls `project_request_reopen`, which files one `PROJECT_REOPEN` owner request per project
+(`POST /runner/projects/:id/reopen-requests`; later askers join it) and writes nothing to the project. The
+card's **Reopen** is `POST /owner-requests/:id/reopen-project` through the owner REST row, and it writes
+exactly the press above: `status: OPEN` with the same 0469 record, under the project's lock, settling every
+pending `PROJECT_REOPEN` of the project in the same transaction. It is refused to a request carrying an acting
+session (403 `REOPEN_OWNER_CHANNEL_ONLY`, so a session never answers its own card, even with the owner's login)
+and to a token (`OWNER_INTERACTIVE`). The **Reopen project** row itself is unchanged.
 
 The project standard-set confirmation row is the N22 addition, and since migration 0245 gave the
 action its one writer, the rule it states is no longer about a role.

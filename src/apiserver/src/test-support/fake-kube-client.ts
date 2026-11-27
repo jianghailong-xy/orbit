@@ -41,7 +41,8 @@ import { TEST_MANAGER_USERNAME } from './managed-runner-profile.fixture';
  * reached — consumed in order by the matching call.
  */
 
-type Kind = 'persistentvolumeclaims' | 'secrets' | 'pods' | 'configmaps';
+/** `drivesecrets`: the Secrets of the files namespace, where the manager writes mount credentials (`driveSecrets`). */
+type Kind = 'persistentvolumeclaims' | 'secrets' | 'drivesecrets' | 'pods' | 'configmaps';
 export type FakeKubeOp =
   | 'get'
   | 'create'
@@ -78,6 +79,8 @@ export interface FakeKubeCall {
   op: FakeKubeOp;
   kind?: Kind;
   name?: string;
+  /** A delete's grace, when it gave one. */
+  gracePeriodSeconds?: number;
 }
 
 const clone = <T>(value: T): T => structuredClone(value);
@@ -111,6 +114,7 @@ export class FakeKubeCluster {
   private readonly stores: Record<Kind, Map<string, KubeObject>> = {
     persistentvolumeclaims: new Map(),
     secrets: new Map(),
+    drivesecrets: new Map(),
     pods: new Map(),
     configmaps: new Map(),
   };
@@ -118,7 +122,8 @@ export class FakeKubeCluster {
   private version = 1;
   private readonly watchers: Array<{ kind: Kind; selector?: string; onEvent: (event: KubeWatchEvent<KubeObject>) => void }> = [];
 
-  constructor(readonly namespace = 'orbit-cloud-test') {}
+  /** The files namespace, where a profile with the drive writes mount Secrets; none unless given. */
+  constructor(readonly namespace = 'orbit-cloud-test', readonly filesNamespace?: string) {}
 
   /**
    * A client of this cluster, as one manager replica holds it. `delayMs` interleaves concurrent
@@ -134,6 +139,7 @@ export class FakeKubeCluster {
       namespace: this.namespace,
       persistentVolumeClaims: this.resource<PersistentVolumeClaim>('persistentvolumeclaims', pause, username),
       secrets: this.resource<Secret>('secrets', pause, username),
+      ...(this.filesNamespace ? { driveSecrets: this.resource<Secret>('drivesecrets', pause, username) } : {}),
       pods: this.pods(pause, username),
       configMaps: { get: configMaps.get },
       getPersistentVolume: async (name) => {
@@ -176,6 +182,18 @@ export class FakeKubeCluster {
   /** The kubelet reports every container of a stored Pod stopped: a terminal phase it vouches for (`reason` the runner's, e.g. OOMKilled). */
   stopPod(name: string, exitCode = 0, reason = exitCode ? 'Error' : 'Completed'): void {
     this.mutate<Pod>('pods', name, (pod) => reportStopped(pod, exitCode, reason));
+    this.settleDeletion(name);
+  }
+
+  /**
+   * The kubelet evicts a stored Pod: its containers killed (137) and the Pod Failed with reason Evicted and the
+   * kubelet's sentence, e.g. "Usage of EmptyDir volume \"tmp\" exceeds the limit \"1Gi\"." for a full /tmp.
+   */
+  evictPod(name: string, message: string): void {
+    this.mutate<Pod>('pods', name, (pod) => {
+      reportStopped(pod, 137, 'Error');
+      pod.status = { ...pod.status, phase: 'Failed', reason: 'Evicted', message };
+    });
     this.settleDeletion(name);
   }
 
@@ -297,7 +315,7 @@ export class FakeKubeCluster {
   /** The ResourceQuota's admission of one more object of `kind`, in the words the API server refuses with. */
   private enforceQuota(kind: Kind, name: string): void {
     const quota = this.resourceQuota;
-    const hard = quota && kind !== 'configmaps' ? quota.hard[kind] : undefined;
+    const hard = quota && kind !== 'configmaps' && kind !== 'drivesecrets' ? quota.hard[kind] : undefined;
     if (hard === undefined) return;
     const counted = [...this.stores[kind].values()].filter((object) => {
       const phase = kind === 'pods' ? (object as unknown as Pod).status?.phase : undefined;
@@ -313,7 +331,10 @@ export class FakeKubeCluster {
 
   private store<T extends KubeObject>(kind: Kind, object: T): T {
     object.metadata.uid ??= randomUUID();
-    object.metadata.namespace ??= this.namespace;
+    if (kind === 'drivesecrets' && object.metadata.namespace !== undefined && object.metadata.namespace !== this.filesNamespace) {
+      throw new KubeApiError(400, 'BadRequest', 'the namespace of the provided object does not match the namespace sent on the request');
+    }
+    object.metadata.namespace ??= kind === 'drivesecrets' ? this.filesNamespace : this.namespace;
     object.metadata.resourceVersion = String(this.version++);
     object.metadata.creationTimestamp ??= new Date().toISOString();
     if (kind === 'pods') {
@@ -385,7 +406,8 @@ export class FakeKubeCluster {
         const found = objects.get(name) as Pod | undefined;
         if (!found || (found.metadata.finalizers ?? []).length === 0) return base.delete(name, options);
         await pause();
-        this.calls.push({ op: 'delete', kind: 'pods', name });
+        const grace = options?.gracePeriodSeconds;
+        this.calls.push({ op: 'delete', kind: 'pods', name, ...(grace !== undefined ? { gracePeriodSeconds: grace } : {}) });
         this.fault('delete', 'pods');
         if (options?.uid && found.metadata.uid !== options.uid) {
           throw new KubeApiError(409, 'Conflict', `Precondition failed: UID in precondition: ${options.uid}, UID in object meta: ${found.metadata.uid}`);
@@ -478,7 +500,8 @@ export class FakeKubeCluster {
       },
       delete: async (name, options) => {
         await pause();
-        this.calls.push({ op: 'delete', kind, name });
+        const grace = options?.gracePeriodSeconds;
+        this.calls.push({ op: 'delete', kind, name, ...(grace !== undefined ? { gracePeriodSeconds: grace } : {}) });
         this.fault('delete', kind);
         const found = objects.get(name);
         if (!found) return;
@@ -521,8 +544,10 @@ function reportStopped(pod: Pod, exitCode: number, reason: string): void {
       name: c.name,
       state: { terminated: key === 'initContainers' ? { exitCode: 0, reason: 'Completed', finishedAt } : { exitCode, reason, finishedAt } },
     }));
+  // A stop is no eviction: an earlier one's reason and sentence (evictPod) are not carried over.
+  const { reason: _reason, message: _message, ...status } = pod.status ?? {};
   pod.status = {
-    ...pod.status,
+    ...status,
     phase: exitCode ? 'Failed' : 'Succeeded',
     initContainerStatuses: statuses('initContainers'),
     containerStatuses: statuses('containers'),

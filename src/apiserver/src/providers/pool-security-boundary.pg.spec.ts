@@ -59,7 +59,8 @@ import { Module, RequestMethod, ValidationPipe } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { HttpAdapterHost, NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import { PrismaClient, RunStatus, RunnerStatus, type ModelProvider, type Prisma } from '@prisma/client';
+import { PrismaClient, RunnerStatus, type ModelProvider, type Prisma } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { toUuid, uuidToBase62, type ClaimedSession } from '@orbit/shared';
 import { json, urlencoded } from 'express';
 import { Client } from 'pg';
@@ -112,6 +113,7 @@ import { SharedPoolsController } from './shared-pools.controller';
 import { SharedPoolsService } from './shared-pools.service';
 import '../test-support/dequeue-under-lease';
 import '../test-support/daemon-routes-over-http';
+import { fixtureFacts, withWord, WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 // The spec encrypts keys and the code under test decrypts them; both only need the same secret.
@@ -233,7 +235,7 @@ async function sessionOn(
     data: {
       title: 'pool security',
       prompt: 'hello',
-      status,
+      ...fixtureFacts({ status }),
       ownerId,
       creatorId: ownerId,
       workspaceId: at.workspaceId,
@@ -630,11 +632,13 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     throw new Error('the inbox never handed out the reload');
   }
   const token = (env: Record<string, string> | undefined) => env?.ANTHROPIC_AUTH_TOKEN;
-  const recorded = (sessionId: string) =>
-    db.session.findUniqueOrThrow({
+  const recorded = async (sessionId: string) => {
+    const row = await db.session.findUniqueOrThrow({
       where: { id: sessionId },
-      select: { provider: true, status: true, poolMemberProviderId: true },
+      select: { provider: true, poolMemberProviderId: true, ...WORD_SELECT },
     });
+    return { provider: row.provider, status: wordOf(row), poolMemberProviderId: row.poolMemberProviderId };
+  };
 
   const alice = await person(db, 'alice');
   const bob = await person(db, 'bob');
@@ -814,7 +818,7 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
       assert.deepEqual(herKeysIn(offered), [], 'her key is in what his runner was handed');
       assert.equal(offered, null, `his runner was handed his session on ${label}`);
       assert.deepEqual(
-        await db.session.findUniqueOrThrow({ where: { id: session }, select: { status: true, error: true, poolMemberProviderId: true } }),
+        withWord(await db.session.findUniqueOrThrow({ where: { id: session }, select: { ...WORD_SELECT, error: true, poolMemberProviderId: true } })),
         { status: RunStatus.PENDING, error: PROVIDER_UNAVAILABLE_ERROR, poolMemberProviderId: null },
       );
     }
@@ -903,7 +907,7 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     const codexSession = async (who: string, at: Machine, provider: string, status: RunStatus, naming: string | null) =>
       (await db.session.create({
         data: {
-          title: 'codex pool', prompt: 'hello', status, ownerId: who, creatorId: who,
+          title: 'codex pool', prompt: 'hello', ...fixtureFacts({ status }), ownerId: who, creatorId: who,
           workspaceId: at.workspaceId, assignedRunnerId: at.runnerId,
           provider, providerBuiltin: provider === 'codex', model: 'gpt-5.5', permissionMode: 'default',
           usesRuntimeDefaultModel: true, poolCodexAccountId: naming,
@@ -1074,6 +1078,10 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     await ask(bob, 'PATCH', 'providers/mine/:id/model-tier', { id: tieredId }, tier, 404);
     await ask(alice, 'PATCH', 'providers/mine/:id/model-tier', { id: sharedId }, tier, 404);
     await ask(alice, 'PATCH', 'providers/mine/:id/model-tier', { id: uuidToBase62(alicePool.id) }, tier, 404);
+    // Her tier for a model of a built-in engine's catalogue: a clear is always taken, and the answer
+    // carries no key (the set path is checked in its own spec).
+    await ask(alice, 'PATCH', 'providers/builtin/:engine/model-tier', { engine: 'claude' },
+      { model: 'claude-opus-5', tier: null }, 200);
     assert.deepEqual(
       (await db.modelProvider.findUniqueOrThrow({ where: { id: toUuid(tieredId) }, select: { modelTiers: true } })).modelTiers,
       { 'her-model': 'M' },
@@ -1340,6 +1348,9 @@ exec sleep 300
       await ask(bearer, 'POST', 'providers/mine/:id/key-check', at, undefined, 404);
       await ask(bearer, 'PATCH', 'providers/mine/:id', at, { label: 'Renamed' }, 404);
       await ask(bearer, 'PATCH', 'providers/mine/:id/model-tier', at, { model: 'gpt-5.5-codex', tier: 'M' }, 404);
+      // Her tier for a built-in engine's catalogue: taken for either of them, and keyless.
+      await ask(bearer, 'PATCH', 'providers/builtin/:engine/model-tier', { engine: 'codex' },
+        { model: 'gpt-5.5-codex', tier: null }, 200);
       await ask(bearer, 'DELETE', 'providers/mine/:id', at, undefined, 404);
       await ask(bearer, 'POST', 'providers/pools/:id/members', at, { providerId: at.id }, 404);
       await ask(bearer, 'DELETE', 'providers/pools/:id/members/:providerId', { ...at, providerId: at.id }, undefined, by(404, 200));
@@ -1500,7 +1511,7 @@ exec sleep 300
     // Rotated, the next claim carries the new key: decrypted from the row at the claim, kept nowhere.
     const rotated = subscription();
     await providers.update(alice, personal.row.id, { apiKey: rotated });
-    await db.session.update({ where: { id: session }, data: { status: RunStatus.PENDING } });
+    await db.session.update({ where: { id: session }, data: { turnState: 'QUEUED', finishedAt: null} });
     assert.equal(token((await claim(at.runnerId, session)).agent.env), rotated);
 
     // Every agent this spec made holds exactly the env it was configured with, after every door above.

@@ -16,8 +16,9 @@ import (
 // loses nothing. `orbit watch`, `orbit task await` and `orbit session await` (watch_cli.go) send the same
 // requests from flags.
 
-// watchPredicateVersion is the grammar of every predicate this binary writes by itself: the await presets
-// and session_create(wait) are all version-1 terms, which every Watch server accepts.
+// watchPredicateVersion is the oldest grammar, which every Watch server accepts: the CLI's --predicate-version
+// default. The predicates this binary writes by itself (the await presets, session_create(wait)) go out under
+// the lowest grammar each one needs (minimalWatchPredicateVersion), so the older presets stay version 1.
 const watchPredicateVersion = 1
 
 // watchPredicateVersions are the grammars watch_create and watch_update describe and send
@@ -26,7 +27,7 @@ const watchPredicateVersion = 1
 // (minimalWatchPredicateVersion). So a version-1 predicate stays version 1, which a server older than the
 // later grammars still takes, and one that needs a later grammar is sent under it, which such a server
 // refuses by name (PREDICATE_VERSION_UNSUPPORTED) instead of reading it under a grammar it was not written in.
-var watchPredicateVersions = []int{1, 2, 3}
+var watchPredicateVersions = []int{1, 2, 3, 4}
 
 // watchLeafSinceVersion is the grammar each leaf first appears in (contract leaves[].sinceVersion).
 var watchLeafSinceVersion = map[string]int{
@@ -40,6 +41,7 @@ var watchLeafSinceVersion = map[string]int{
 	"TASK_PROGRESS_AT_LEAST":     2,
 	"TASK_NO_PROGRESS_FOR":       2,
 	"SESSION_JOB_NO_OUTPUT_FOR":  3,
+	"SESSION_QUIESCENT":          4,
 }
 
 // The contract's limits, repeated so a schema states the bounds a request would be refused against.
@@ -123,7 +125,7 @@ func watchComposite(kind string, operands ...map[string]interface{}) map[string]
 }
 
 // watchAwaitPreset is one `until` an await tool offers: a name for a condition agents ask for all the time,
-// and the v1 predicate it stands for. contracts/watch.contract.json agentSurface.awaitPresets holds the same
+// and the predicate it stands for. contracts/watch.contract.json agentSurface.awaitPresets holds the same
 // table, and watch_tools_test.go keeps the two equal.
 type watchAwaitPreset struct {
 	until       string
@@ -160,7 +162,29 @@ var taskAwaitPresets = []watchAwaitPreset{
 	},
 }
 
+// sessionQuiescentProse is what SESSION_QUIESCENT means, in the words every surface that offers it uses.
+const sessionQuiescentProse = "its turn is over and nothing it started still runs (no background job, subagent " +
+	"or turn the engine started itself) and nothing is set to wake it (a watch it waits on, a scheduled wake-up, " +
+	"an automatic retry)"
+
 var sessionAwaitPresets = []watchAwaitPreset{
+	{
+		until: "ALL_QUIESCENT_OR_ANY_NEEDS_ATTENTION",
+		predicate: watchComposite("ANY_OF",
+			watchAggregate("ALL", "SESSION_QUIESCENT"), watchAggregate("ANY", "SESSION_NEEDS_ATTENTION")),
+		description: "every session has finished all its work: " + sessionQuiescentProse + "; or any one of them is " +
+			"waiting on a person to answer an approval, whichever comes first",
+	},
+	{
+		until:       "ALL_QUIESCENT",
+		predicate:   watchAggregate("ALL", "SESSION_QUIESCENT"),
+		description: "every session has finished all its work",
+	},
+	{
+		until:       "ANY_QUIESCENT",
+		predicate:   watchAggregate("ANY", "SESSION_QUIESCENT"),
+		description: "the first session to finish all its work",
+	},
 	{
 		until: "ALL_SETTLED_OR_ANY_NEEDS_ATTENTION",
 		predicate: watchComposite("ANY_OF",
@@ -170,7 +194,7 @@ var sessionAwaitPresets = []watchAwaitPreset{
 	{
 		until:       "ALL_SETTLED",
 		predicate:   watchAggregate("ALL", "SESSION_TURN_SETTLED"),
-		description: "every session's turn has settled: it is waiting for input, or its run is over",
+		description: "every session's turn has settled: it is waiting for input, or its run is over, even while a job or subagent it started still runs",
 	},
 	{
 		until:       "ANY_SETTLED",
@@ -233,7 +257,7 @@ func awaitWatchBody(kind string, ids []string, preset watchAwaitPreset, ttlSecon
 		targets = append(targets, watchTargetRef{Kind: kind, ID: id})
 	}
 	body := map[string]interface{}{
-		"predicateVersion": watchPredicateVersion,
+		"predicateVersion": minimalWatchPredicateVersion(preset.predicate),
 		"predicate":        preset.predicate,
 		"targets":          targets,
 		"action":           "RESUME_SESSION",
@@ -270,7 +294,10 @@ var watchPredicateGrammar = "The condition, in Orbit's closed grammar: no shell,
 	"that resumes this session cannot name this session as a target: for this session's own job, start it with bg_run's " +
 	"wakeOnStall instead. To catch an external system (CI, a deploy, a queue) stalling, there is no shell leaf: run a " +
 	"polling script with bg_run that prints a line only when the state it polls changes, with wakeOnStall, so its " +
-	"silence is the stall. \"All terminal or any failed\" is " +
+	"silence is the stall. " +
+	"Version 4 adds SESSION_QUIESCENT: the session's turn has settled, " + sessionQuiescentProse + ". It is what " +
+	"session_await and session_create(wait) wait for by default; SESSION_TURN_SETTLED is still only the turn. " +
+	"\"All terminal or any failed\" is " +
 	"{\"kind\":\"ANY_OF\",\"operands\":[{\"kind\":\"ALL\",\"over\":\"ALL_TARGETS\",\"leaf\":\"TASK_TERMINAL\"}," +
 	"{\"kind\":\"ANY\",\"over\":\"ALL_TARGETS\",\"leaf\":\"TASK_FAILED\"}]}."
 

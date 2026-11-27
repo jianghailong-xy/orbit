@@ -34,7 +34,7 @@ class QueuedOpeningShellTest : ComposerShellTest() {
         signIn(); openSession()
         await { has(drawn) }
         assertTrue("the person's own message", has(hasText(words) and hasAnyAncestor(drawn)))
-        assertTrue(has(hasText("You") and hasAnyAncestor(drawn)))
+        assertTrue("the person's bubble", has(hasTestTag("user-bubble") and hasAnyAncestor(drawn), unmerged = true))
         assertFalse("the opening is no follow-up to withdraw", has(hasText("Cancel")))
         assertEquals(1, copies())
     }

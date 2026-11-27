@@ -8,7 +8,7 @@
   height: var(--orbit-control-height);
   padding: 0 var(--orbit-control-padding-inline);
   border: 1px solid var(--border);
-  border-radius: var(--orbit-radius);
+  border-radius: 10px;
   color: var(--text-1);
   background: var(--bg-raised);
   font-family: var(--orbit-font-family);
@@ -24,8 +24,8 @@
   outline: none;
   transition: color .2s, background-color .2s, border-color .2s, opacity .2s;
 }
-.orbit-button-small { height: var(--orbit-control-height-sm); padding-inline: var(--orbit-control-padding-inline-sm); border-radius: var(--orbit-radius-sm); }
-.orbit-button-large { height: var(--orbit-control-height-lg); border-radius: var(--orbit-radius-popup); font-size: 16px; line-height: 1.5714285714; }
+.orbit-button-small { height: var(--orbit-control-height-sm); padding-inline: var(--orbit-control-padding-inline-sm); border-radius: 6px; }
+.orbit-button-large { height: var(--orbit-control-height-lg); border-radius: 12px; font-size: 16px; line-height: 1.5714285714; }
 .orbit-button-icon-only { width: var(--orbit-control-height); padding-inline: 0; }
 .orbit-button-icon-only.orbit-button-small { width: var(--orbit-control-height-sm); }
 .orbit-button-icon-only.orbit-button-large { width: var(--orbit-control-height-lg); }

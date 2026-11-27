@@ -12,7 +12,7 @@ import (
 // ended, answered in the conversation and stopped: the person heard nothing until they opened it. notify was
 // the tool for it, but nothing the agent read named it -- the instructions did not, and Claude Code kept its
 // description behind ToolSearch. Both now do, for every shape of session.
-func TestNotifyIsLoadedUpFrontAndNamedInTheInstructions(t *testing.T) {
+func TestNotifyIsNamedInTheInstructionsNotLoadedUpFront(t *testing.T) {
 	srv := &mcpServer{}
 	resp, _ := srv.handle(&rpcRequest{JSONRPC: "2.0", ID: []byte("1"), Method: "tools/list"})
 	found := false
@@ -22,8 +22,9 @@ func TestNotifyIsLoadedUpFrontAndNamedInTheInstructions(t *testing.T) {
 		}
 		found = true
 		meta, _ := tool["_meta"].(map[string]interface{})
-		if meta["anthropic/alwaysLoad"] != true {
-			t.Errorf("notify is deferred behind ToolSearch: _meta = %#v", tool["_meta"])
+		// Not alwaysLoad since design D2: I2 passed 10/10 without it, on the instructions' one line.
+		if meta["anthropic/alwaysLoad"] == true {
+			t.Errorf("notify is loaded up front again: _meta = %#v", tool["_meta"])
 		}
 	}
 	if !found {
@@ -32,8 +33,10 @@ func TestNotifyIsLoadedUpFrontAndNamedInTheInstructions(t *testing.T) {
 	for _, form := range []struct{ inside, watches, delegates bool }{
 		{false, true, true}, {true, true, true}, {false, false, true}, {true, false, false},
 	} {
-		if text := orbitCLIInstructions("/usr/local/bin/orbit", form.inside, form.watches, form.delegates); !strings.Contains(text, orbitNotifyInstructions) {
-			t.Errorf("instructions %+v do not say when to notify", form)
+		// A SubAgent has no person to tell: its parent hears from it, and notify is not in its instructions.
+		text := orbitCLIInstructions("/usr/local/bin/orbit", form.inside, form.watches, form.delegates, true)
+		if got := strings.Contains(text, orbitNotifyInstructions); got != form.delegates {
+			t.Errorf("instructions %+v: say when to notify = %v, want %v", form, got, form.delegates)
 		}
 	}
 }

@@ -1,6 +1,6 @@
 package io.orbitd.android.schedule
 
-import io.orbitd.android.navigation.Destination
+import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.navigation.OrbitLinks
 import io.orbitd.android.push.PushMessage
 import io.orbitd.android.push.PushPayload
@@ -37,12 +37,14 @@ class ConditionPushTest {
         assertFalse("a condition item is not an owner request's push", message.payload.isOwnerRequest)
     }
 
-    @Test fun aCantReadPushWithNoConversationOpensItsCardInWaitingOnYou() {
+    /** With no conversation named, the push carries the item's owner-request link, which opens the conversation that filed it on
+     * its card (there is no Waiting on you inbox, docs/mocks/waiting-on-you-removal). */
+    @Test fun aCantReadPushWithNoConversationOpensItsCardByTheOwnerRequestLink() {
         val data = sample("condition-unknown")
         val payload = Json.parseToJsonElement(data.getValue("payload")).jsonObject - "sessionID"
         val message = PushMessage.parse(data + ("payload" to JsonObject(payload).toString()))!!
         assertEquals("orbit://owner-request/019a0000-0000-7000-8000-000000000022", message.link)
-        assertEquals(Destination.WAITING_ON_YOU, OrbitLinks.parse(message.link!!)!!.destination)
+        assertEquals(ObjectId.canonical("019a0000-0000-7000-8000-000000000022"), OrbitLinks.ownerRequest(message.link!!))
     }
 
     @Test fun aConditionPushWithoutItsConditionIsRefused() {

@@ -32,7 +32,11 @@ import (
 // of the canonical catalogue and is emitted with `orbit capabilities --json`, so a client can tell
 // which catalogue answered it.
 
-const operationCatalogVersion = "1.9.0"
+const operationCatalogVersion = "1.12.0"
+
+// sessionStateFieldsNote is how an agent reads the session-state fields session_list and session_get
+// return beside `status` (Agent Contract 1.12.0). They are additive: `status` and its values are unchanged.
+const sessionStateFieldsNote = " Beside `status` it carries `phase` (PENDING, RUNNING, IDLE), `released` (true: the session is over), `lastTurnOutcome` (ANSWERED, FAILED, INTERRUPTED, CANCELLED or null) and `waitingOn` (PERSON, HOLD, WAKE or null: what stands between it and its next turn). It failed when released with lastTurnOutcome FAILED and no endReason; it is working when phase is RUNNING. A server that does not send them leaves them out: then read `status`."
 
 // operationObject is the Orbit object an operation acts on (docs/orbit-agent-contract.md §1.1),
 // plus the auxiliary resources (watch, wiki, file) and the two doors that are not writes at all
@@ -43,6 +47,7 @@ const (
 	objectTask          operationObject = "task"
 	objectTaskList      operationObject = "task_list"
 	objectProject       operationObject = "project"
+	objectSubagent      operationObject = "subagent"
 	objectSession       operationObject = "session"
 	objectAgent         operationObject = "agent"
 	objectRunner        operationObject = "runner"
@@ -56,6 +61,7 @@ const (
 	objectPermission    operationObject = "permission"
 	objectMergeReceipt  operationObject = "merge_receipt"
 	objectSchedule      operationObject = "schedule"
+	objectBrowser       operationObject = "browser"
 	// The catalogue itself: what the guide reads to say which operation answers a request.
 	objectCatalog operationObject = "catalog"
 )
@@ -238,7 +244,6 @@ var catalogCLIExemptions = map[string]string{
 	"bg_list":                         "runner-hosted background jobs: a per-session socket call, not a control-plane API call",
 	"schedule_wakeup":                 "wakes the calling session: there is no session to wake at a terminal outside one",
 	"ask_owner":                       "asks as the project's coordinator session: a terminal outside one is refused by the server",
-	"request_owner_action":            "files as the calling session and answers it with a turn: a terminal outside one is refused by the server",
 	"withdraw_owner_request":          "withdraws as the calling session what it filed: a terminal outside one is refused by the server",
 	"schedule_create":                 "proposes a schedule in the calling session's workspace, on its engine: a terminal outside a session has neither",
 	"schedule_update":                 "changes a schedule as the calling session, which the envelope rule judges: a terminal outside one is refused by the server",
@@ -334,11 +339,13 @@ var catalogPlanRunsWrites = map[string]string{
 	"watch_create":           "waits on Orbit's own work for this session; a wait changes no work",
 	"watch_update":           "changes what this session waits for, and nothing else",
 	"watch_cancel":           "stops a wait of this session's own",
+	"subagent_rate":          "records what this session made of a SubAgent's result; it changes no work",
 	"schedule_wakeup":        "schedules this session's own next turn; it changes no work",
 	"notify":                 "puts a line in front of the owner; a message is not work",
 	"ask_owner":              "puts a question to the owner; a question is not work",
 	"project_ruling_record":  "records what the owner already said; a record of a ruling is not work",
 	"request_owner_action":   "asks the owner for an action that is theirs to take; a question is not work",
+	"settings_propose":       "puts a settings card in front of the owner; nothing is written until they save it",
 	"withdraw_owner_request": "takes back a question this session asked",
 	"schedule_create":        "puts a create card in front of the owner; nothing is scheduled until they press Create",
 	"schedule_update":        "changes a schedule inside what the owner allowed, or asks them on a card; it changes no code",
@@ -867,26 +874,27 @@ func buildOperationCatalog() []*operation {
 	}
 	// SR5's escape hatch (`codeless`), on the three task doors. Stated here once per door so what it
 	// costs to declare cannot drift between task_create, the batch items and task_update: nothing at
-	// creation, and on an existing task a reason — and never for one that already has commits.
+	// creation, and on an existing task a reason — and never for one that already has commits. Since
+	// contract revision 42 (§12.15 P-M3) it no longer decides landing; it only shapes the checkout.
 	createCodelessProp := map[string]interface{}{
 		"type": "boolean",
 		"description": "Declare that this task produces no code — a rollout, a walkthrough, a verification, " +
 			"research — even though its project is bound to a codebase. A codeless task resolves no source " +
-			"and takes no part in its acceptance criterion's landing: the criterion does not wait for its " +
-			"work to reach main, where a task with no commit to land would hold it off LANDED, and the project " +
-			"off done. Omit it for work that commits code. No reason is needed here; turning an existing task " +
-			"codeless later is task_update with codeless and codelessReason, and is refused for a task that " +
-			"already has commits of its own.",
+			"and its run gets a checkout with no branch until it has something to commit. It does not decide " +
+			"landing: Orbit measures whether work lands from its commits, so a task that commits nothing has " +
+			"nothing to land whether or not it is codeless, and one that commits lands like any other. No " +
+			"reason is needed here; turning an existing task codeless later is task_update with codeless and " +
+			"codelessReason, and is refused for a task that already has commits of its own.",
 	}
 	updateCodelessProp := map[string]interface{}{
 		"type": "boolean",
-		"description": "true declares that this task produces no code, so it takes no part in its " +
-			"acceptance criterion's landing and the criterion stops waiting for its work to reach main. It " +
-			"needs codelessReason in the same call (refused TASK_CODELESS_REASON_REQUIRED without it), and " +
-			"is refused TASK_CODELESS_HAS_COMMITS for a task that already has commits of its own — a merge " +
-			"that moved a target, or a work session that reported changes on its branch: that work has to " +
-			"land. false takes the declaration back and needs no reason. Omit to leave it; re-sending the " +
-			"value the task already has changes nothing.",
+		"description": "true declares that this task produces no code, so it resolves no source and its run " +
+			"gets a checkout with no branch until it has something to commit. It does not decide landing: " +
+			"Orbit measures whether work lands from its commits. It needs codelessReason in the same call " +
+			"(refused TASK_CODELESS_REASON_REQUIRED without it), and is refused TASK_CODELESS_HAS_COMMITS " +
+			"for a task that already has commits of its own — a merge that moved a target, or a work session " +
+			"that reported changes on its branch: that work lands. false takes the declaration back and needs " +
+			"no reason. Omit to leave it; re-sending the value the task already has changes nothing.",
 	}
 	codelessReasonProp := map[string]interface{}{
 		"type":      "string",
@@ -894,6 +902,34 @@ func buildOperationCatalog() []*operation {
 		"description": "Why this task produces no code, in a sentence. Required exactly when this call " +
 			"turns the task codeless; stored on the task beside the declaration (task_get returns it as " +
 			"codelessReason) and cleared when the declaration is taken back. Ignored on any other call.",
+	}
+	// §12.15 P-C2: one task exempt from its project's landing check, on the three task doors. One
+	// description per door, so who may write it and what it skips cannot drift between them.
+	landingCheckExemptRule := "Only on a project whose line lands on a project branch (refused 409 " +
+		"LANDING_CHECK_EXEMPT_NEEDS_PROJECT_BRANCH on a MAIN line, or for a task in no project), and only from the " +
+		"project's current coordinator session or the owner (refused 403 LANDING_CHECK_EXEMPT_COORDINATOR_ONLY from " +
+		"any other session). It skips the project's landing check alone: the task's own acceptance still runs on the " +
+		"combined tree, and the merge check before main is untouched. The landing records the skip as TASK_EXEMPT " +
+		"with the reason."
+	createLandingCheckExemptProp := map[string]interface{}{
+		"type": "boolean",
+		"description": "true: when this task lands on its project's branch, do not run the project's landing check. " +
+			"Needs landingCheckExemptReason in the same call (refused LANDING_CHECK_EXEMPT_REASON_REQUIRED without " +
+			"it). " + landingCheckExemptRule + " Omit it for ordinary work.",
+	}
+	updateLandingCheckExemptProp := map[string]interface{}{
+		"type": "boolean",
+		"description": "true exempts this task from its project's landing check when it lands, and needs " +
+			"landingCheckExemptReason in the same call (refused LANDING_CHECK_EXEMPT_REASON_REQUIRED without it); " +
+			"false takes the exemption back and clears the reason. " + landingCheckExemptRule +
+			" Omit to leave it.",
+	}
+	landingCheckExemptReasonProp := map[string]interface{}{
+		"type":      "string",
+		"maxLength": 280,
+		"description": "Why the project's landing check has nothing to say about this task, in a sentence of at " +
+			"most 280 characters. Required with landingCheckExempt true; on task_update it alone replaces the " +
+			"reason of a task that is already exempt. Refused beside landingCheckExempt false.",
 	}
 	// The verifier to write BESIDE this subject, in the same call. Deliberately not part of
 	// taskCreateProps: the batch door pairs its own items with verifiesRef, the server refuses this
@@ -945,11 +981,13 @@ func buildOperationCatalog() []*operation {
 					"The item must be in the same project and assigned to the owner or coordinating session; " +
 					"an item may have multiple fixing tasks.",
 			},
-			"handoff":            handoffProp,
-			"parentTaskId":       parentTaskIDProp,
-			"acceptanceCriteria": acceptanceCriteriaProp,
-			"criterionKey":       criterionKeyProp,
-			"codeless":           createCodelessProp,
+			"handoff":                  handoffProp,
+			"parentTaskId":             parentTaskIDProp,
+			"acceptanceCriteria":       acceptanceCriteriaProp,
+			"criterionKey":             criterionKeyProp,
+			"codeless":                 createCodelessProp,
+			"landingCheckExempt":       createLandingCheckExemptProp,
+			"landingCheckExemptReason": landingCheckExemptReasonProp,
 			"completionCriterion": map[string]interface{}{
 				"type":        "string",
 				"enum":        []string{"EXECUTABLE", "VERIFICATION", "EVIDENCE_JUDGMENT", "OWNER_CONFIRMED"},
@@ -985,7 +1023,7 @@ func buildOperationCatalog() []*operation {
 			},
 			"autoRunWhenReady": map[string]interface{}{
 				"type":        "boolean",
-				"description": "Start this task without a manual start once it is ready (default true): once all its prerequisites are DONE, and — for a task in a project — once the project has started, even with no prerequisites at all. " + autoRunUnfiledNoPrerequisites + " " + autoRunIsNotStartNow + " Needs an assignee bound to a runner. Set false to leave it OPEN for a human/agent to start.",
+				"description": "Start this task without a manual start once it is ready (required: true starts it by itself, false holds it): once all its prerequisites are DONE, and — for a task in a project — once the project has started, even with no prerequisites at all. " + autoRunUnfiledNoPrerequisites + " " + autoRunIsNotStartNow + " Needs an assignee bound to a runner. Set false to leave it OPEN for a human/agent to start.",
 			},
 			"completionPolicy": map[string]interface{}{
 				"type":        "string",
@@ -1174,14 +1212,22 @@ func buildOperationCatalog() []*operation {
 				"in flight carries `landingSessionId`, and a criterion waiting on a landing says so " +
 				"through its landing reason; that id is the LANDING session recording the attempt — " +
 				"open it with session_get rather than reading the integration tables yourself. " +
+				"`integration.landingCheck` says what runs before a task lands on the project branch — " +
+				"command (a command, NONE for no landing check, or null to fall back to the merge check) " +
+				"— and who set it last and when: setBy OWNER, CARD, START (the owner started the project " +
+				"with the value its coordinator proposed) or COORDINATOR, setAt, and setBySessionId for a " +
+				"coordinator's cardless write. " +
 				"Returns the " +
 				"shape of the project, not its tasks: use task_list for those. Reads the projects " +
 				"of the account this runner belongs to; write these same fields with " +
 				"project_create and project_update.",
 			"inputSchema": obj(map[string]interface{}{
+				// Where the id comes from: Codex answered E5-read-only-project with project_get on an id made from the project's
+				// name (C.no_invented_ids) in 57 of 160 runs on the step-0 commit and 82 of 120 after the delegate fix; with this
+				// wording it passed 30/30, against 19/30 for step 0 beside it (2026-11-25).
 				"projectId": map[string]interface{}{
 					"type":        "string",
-					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
+					"description": "The project to read: a task's projectId (task_get with no taskId reads this session's own task) or the id in its web UI URL (/projects/<id>), never one made from its name.",
 				},
 			}, "projectId"),
 		},
@@ -1197,7 +1243,9 @@ func buildOperationCatalog() []*operation {
 				"do NOT query the production database directly — these are the same facts, served by the " +
 				"interface that is allowed to serve them. Read only. The acting session must belong to " +
 				"the project (its coordinator, a session of one of its tasks, or a child of one); another " +
-				"project's session is refused, and another account's project answers 404. jobId names " +
+				"project's session is refused, and another account's project answers 404. A task's own " +
+				"work session reads its own task's landing here — including one handed to it to fix — " +
+				"as a session of the project. jobId names " +
 				"one attempt and serves what its checks printed under `log` and its timeline under " +
 				"`timeline`; claim, round and check narrow either page, cursor continues the log " +
 				"page and timelineCursor continues the timeline page. Without jobId the line is " +
@@ -1371,7 +1419,10 @@ func buildOperationCatalog() []*operation {
 				"plan is still there and whoever picks it up next does not have to re-derive it. " +
 				"This call is how you ask: it puts a confirmation card in front of the user and BLOCKS " +
 				"until they answer, and nothing is created if they decline — then a task is the right " +
-				"record, and do not ask twice about the same body of work. The " +
+				"record, and do not ask twice about the same body of work. The card is the only yes: " +
+				"never create a project another way, and call this from this same session rather than " +
+				"switching or opening one for it. Inside a task's run, work you discover is a task of " +
+				"that task's project; propose a project only for a separate undertaking. The " +
 				"project starts OPEN and holds no tasks — file them afterwards with task_create / " +
 				"task_create_batch passing its projectId, which is what connects the work to what " +
 				"it is for. Created from inside a session, the project is bound to THIS session " +
@@ -1491,8 +1542,10 @@ func buildOperationCatalog() []*operation {
 					"description": "Where this project's finished tasks land, and what is " +
 						"checked before they do, as {line: MAIN | PROJECT_BRANCH, " +
 						"projectBranchName, upstreamRef, mergeCheckCommand, " +
-						"mergeCheckTimeoutSeconds, landingCheckCommand, landingCheckTimeoutSeconds}. " +
-						"Landing settings fall back to the merge settings when null. The two halves are not the same decision. " +
+						"mergeCheckTimeoutSeconds, landingCheckCommand, landingCheckTimeoutSeconds, landingCheck, landingCheckReason}. " +
+						"Landing settings fall back to the merge settings when null; landingCheck: NONE runs no landing " +
+						"check at all, so a task landing on the project branch runs only its own acceptance, and sending " +
+						"landingCheckCommand later (a command, or null) lifts it. The two halves are not the same decision. " +
 						"THE LINE — line, projectBranchName, upstreamRef — is the account owner's " +
 						"to choose, and a request carrying one is refused whenever this tool is " +
 						"called from inside a session, which is every call you make: read it back " +
@@ -1505,27 +1558,38 @@ func buildOperationCatalog() []*operation {
 						"if they approve it. Nothing is written if they decline, and a second " +
 						"change is a second question — an approval covers the exact command and " +
 						"timeout it named and nothing else. Send mergeCheckCommand: null to remove " +
-						"the check. Once a project has started integrating the line is locked, and " +
+						"the check. One exception needs no card: when this session is the project's " +
+						"coordinator, the line is PROJECT_BRANCH and a merge check is configured, a " +
+						"request whose integration names only landingCheckCommand, " +
+						"landingCheckTimeoutSeconds or landingCheck is written at once, because the " +
+						"merge check still guards main. It still needs the card on a MAIN line, with no " +
+						"merge check, from any other session, and once the owner has set the landing " +
+						"check themselves or through a card; project_get shows who set it last as " +
+						"integration.landingCheck {command, setBy: OWNER | CARD | START | COORDINATOR, " +
+						"setBySessionId, setAt}: a value the owner confirmed on the start card as you " +
+						"proposed it (START) stays yours to change, one they wrote themselves (OWNER) or " +
+						"approved on a card (CARD) does not. A card-less write also needs landingCheckReason, at most 280 " +
+						"characters: Orbit records it with the old and new value, your session and the time, " +
+						"project_get lists the records newest first as settingChanges, and the owner can put one " +
+						"back, after which that field needs the card again. The merge check itself always needs the card. Once a project has started integrating the line is locked, and " +
 						"a request to move it is refused even from the owner: to change it, its " +
 						"project branch reaches main first.",
 				},
 				"nonCode": map[string]interface{}{
 					"type": "boolean",
-					"description": "Mark this project non-code (true) or clear the mark (false). A project is " +
-						"non-code only by this explicit mark, never inferred: set it when the project's goal is " +
-						"met by work that changes no code in this repository (a filing, an approval, research). " +
-						"A marked project reads no landing — its criteria carry no landingReason, the done check " +
-						"reports nothing unlanded, and recording it done stores no landing gaps — while whether " +
-						"each criterion is met is unchanged. Only the conversation this project is coordinated " +
-						"from may write it; project_get returns it with nonCodeSetBy (OWNER or COORDINATOR), " +
-						"nonCodeSetBySessionId, nonCodeSetAt and nonCodeReason.",
+					"description": "No longer decides anything; you do not need to send it. Orbit measures whether " +
+						"work lands from its commits: a project none of whose tasks delivered a commit has nothing " +
+						"to land — its criteria read landed and the done check reports nothing unlanded — and a " +
+						"task that commits lands whether or not the project is marked. The write is still " +
+						"accepted (true marks, false clears) and stored, from the conversation this project is " +
+						"coordinated from or the owner, and project_get returns it with nonCodeSetBy (OWNER or " +
+						"COORDINATOR), nonCodeSetBySessionId, nonCodeSetAt and nonCodeReason.",
 				},
 				"nonCodeReason": map[string]interface{}{
 					"type": "string",
 					"description": "Optional, sent only with nonCode: one short sentence (at most 280 characters) " +
-						"saying why, e.g. \"All work is documents and vendor accounts; no repository.\" The owner " +
-						"sees it under \"Marked by the coordinator\" on the project page and the done card. Each " +
-						"nonCode write replaces it; omit it to store none.",
+						"saying why. Stored and returned by project_get, and like nonCode it decides nothing: " +
+						"Orbit measures landing from commits. Each nonCode write replaces it; omit it to store none.",
 				},
 				"expectedConfigRevision": map[string]interface{}{
 					"type": "string",
@@ -1660,14 +1724,18 @@ func buildOperationCatalog() []*operation {
 				"wiki, only from a workspace whose repository has no wiki, and only when the owner asked for " +
 				"one or this session has something worth a wiki. Never file WIKI_CREATE because a wiki_search " +
 				"found no wiki: carry on without it. For WIKI_CREATE Orbit fills in the title and the " +
-				"repository, so give only why and ifUnanswered. options and recommendedOption are " +
-				"only for DECISION, steps only for MANUAL_STEP and secretSpec only for SECRET; any other " +
-				"mix is refused. " +
+				"repository, so give only why and ifUnanswered. CHANGE to propose a setting of one of the " +
+				"owner's runners (change: its runnerId and the maxConcurrent you want); the owner applies it " +
+				"with one press, and you never write the setting yourself. When the outcome arrives, read " +
+				"`applied`, not `requested`: the owner may choose a different number. A DECLINED, EXPIRED or " +
+				"WITHDRAWN outcome has no `applied`, and the setting was not changed. options and " +
+				"recommendedOption are only for DECISION, steps only for MANUAL_STEP, secretSpec only for " +
+				"SECRET and change only for CHANGE; any other mix is refused. " +
 				"Do NOT file what you can read or do yourself: a request costs a person's attention.",
 			"inputSchema": obj(map[string]interface{}{
 				"kind": map[string]interface{}{
 					"type":        "string",
-					"enum":        []string{"DECISION", "SECRET", "MANUAL_STEP", "CONFIRM", "WIKI_CREATE"},
+					"enum":        []string{"DECISION", "SECRET", "MANUAL_STEP", "CONFIRM", "WIKI_CREATE", "CHANGE"},
 					"description": "What you need from the owner. Use SECRET for any credential.",
 				},
 				"title": map[string]interface{}{
@@ -1735,6 +1803,17 @@ func buildOperationCatalog() []*operation {
 					"type":        "integer",
 					"description": "DECISION only: index into options of the one you recommend.",
 				},
+				"change": map[string]interface{}{
+					"type": "object",
+					"description": "CHANGE only, and required there: the one setting you propose. maxConcurrent is " +
+						"how many sessions the runner may run at once. The runner must be the owner's, and the " +
+						"value must differ from the one it has now.",
+					"properties": map[string]interface{}{
+						"runnerId":      map[string]interface{}{"type": "string", "description": "The runner's id, from runner_list."},
+						"maxConcurrent": map[string]interface{}{"type": "integer", "minimum": 1, "description": "The Max Concurrent you propose (1 or more)."},
+					},
+					"required": []string{"runnerId", "maxConcurrent"},
+				},
 				"expiresIn": map[string]interface{}{
 					"type": "integer",
 					"description": fmt.Sprintf("Seconds from now after which the request expires if still "+
@@ -1771,12 +1850,9 @@ func buildOperationCatalog() []*operation {
 				"assignee is not on a runner, a project branch asked for with no repository to hold it. " +
 				"Fix them all and call again. If it is ready, the request is filed and this returns AT " +
 				"ONCE — it does not wait for the owner — with the request's itemId and any warnings: " +
-				"a criterion served only by work that looks like it produces no code (OWNER_CONFIRMED, or " +
-				"EVIDENCE_JUDGMENT with no acceptance command) and does not declare codeless; tasks set " +
-				"to start by hand (autoRunWhenReady=false); and Automatic on a project branch with no " +
-				"merge check. The warnings are yours: the owner's card does not show them, so act on " +
-				"the ones that are right and leave the rest — declare the work that commits nothing " +
-				"codeless, and the first goes away. The owner then sees a \"Start this project?\" card " +
+				"tasks set to start by hand (autoRunWhenReady=false), and Automatic on a project " +
+				"branch with no merge check. The warnings are yours: the owner's card does not show " +
+				"them, so act on the ones that are right and leave the rest. The owner then sees a \"Start this project?\" card " +
 				"with your settings as suggestions — Automatic on whatever you send — may change any of " +
 				"them, and presses Start; you are told when the project starts. Suggest what you would " +
 				"choose and say why in one sentence. Asking " +
@@ -1794,7 +1870,9 @@ func buildOperationCatalog() []*operation {
 					"description": "Where its finished tasks land. PROJECT_BRANCH: on the project's own " +
 						"branch first, where tasks that depend on each other are checked together before " +
 						"main. MAIN: directly into main, for a single task or an urgent fix — every merge " +
-						"into main then asks the owner.",
+						"into main then asks the owner. Leave it out to start the project with no line and " +
+						"no repository: nothing about the line or the checks is written, and the project " +
+						"lands on its own branch once a task commits.",
 				},
 				"projectBranchName": map[string]interface{}{
 					"type": "string",
@@ -1852,7 +1930,25 @@ func buildOperationCatalog() []*operation {
 					"description": "One sentence on why the plan is ready and why these settings, shown " +
 						"to the owner on the card as written.",
 				},
-			}, "projectId", "line", "maxConcurrentTasks", "why"),
+			}, "projectId", "maxConcurrentTasks", "why"),
+		},
+		{
+			"name":        "project_request_reopen",
+			"description": "Ask the account owner to reopen a DONE or CANCELLED project. Run it when a write was refused with PROJECT_REOPEN_REQUIRED and the work changes that project's acceptance criteria. It returns at once. When the owner answers you are told: on Reopen, retry your write; on a decline, do not ask again; tell the person.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The DONE or CANCELLED project to reopen, as shown in its web UI URL (/projects/<id>).",
+				},
+				"why": map[string]interface{}{
+					"type":        "string",
+					"description": "Why the project should be reopened, in your own words — shown to the owner on the card.",
+				},
+				"plannedWork": map[string]interface{}{
+					"type":        "string",
+					"description": "What you will do once it is reopened, and how it changes the project's acceptance criteria — shown to the owner under its own label.",
+				},
+			}, "projectId", "why", "plannedWork"),
 		},
 		{
 			"name": "project_request_done",
@@ -1868,7 +1964,7 @@ func buildOperationCatalog() []*operation {
 				"a merge into main queued or running. Fix them all and call again. If it is ready, the " +
 				"request is filed and this returns AT ONCE — it does not wait for the owner — with the " +
 				"request's itemId and a warning for every criterion not landed on main, with why (in " +
-				"flight, on the project branch, nothing to land, no receipt, codeless), which the owner " +
+				"flight, on the project branch, nothing to land, no receipt, work in another repository), which the owner " +
 				"reads beside your gaps. The owner then sees an \"Is this project done?\" card and " +
 				"records the project done on it, and your conversation shows Ready to close. Asking " +
 				"again replaces the open request, and the project moving before the owner answers — its " +
@@ -2135,10 +2231,13 @@ func buildOperationCatalog() []*operation {
 				"was repaired, the check timed out, the machinery failed). A red that belongs to the " +
 				"delivery is sent back (task_reopen) or replaced instead, and a CONFLICT is refused here: " +
 				"only a branch that changed answers one. A conflict at MAIN_SYNC (absorbing the upstream " +
-				"into the project branch) is the project line's, not the delivery's: absorb the upstream on " +
-				"the project line first, by having the task's run put a merge commit of the project branch " +
-				"tip and the upstream tip, conflicts resolved, into its source branch and do nothing else " +
-				"(task_reopen) — with both tips in it, its next landing lands by MERGE. Queues exactly " +
+				"into the project branch) is the project line's, not the delivery's, and there is nothing " +
+				"to rerun or reopen: it opens one line-sync item about the project branch that names no " +
+				"task, every DONE task stays DONE, and the landings on that line wait behind the item and " +
+				"go ahead by themselves once it closes. Resolve it by filing one sync task with task_create, " +
+				"fixesOpenItemId: that item — it starts from the project branch tip, merges the upstream, " +
+				"resolves the conflicting files and commits only that merge; its landing is the one let " +
+				"through and closes the item. Queues exactly " +
 				"one new job, which carries your reason and the failure class it reruns, and answers with " +
 				"`landingSessionId` — the LANDING session that records the new attempt, readable with " +
 				"session_get; your open items " +
@@ -2342,7 +2441,7 @@ func buildOperationCatalog() []*operation {
 		},
 		{
 			"name":        "task_create",
-			"description": "Create ONE task (attributed to this agent). Creating is not starting, but `autoRunWhenReady` defaults to true: a task with an assignee starts by itself once it is ready — every prerequisite DONE and, in a project, the project started — so if the person said it must not run until they say so, pass `autoRunWhenReady: false`; leaving it out is not \"do not start\". When the person wants the work run now, pass `startNow: true`: one approval then covers the create and the start, so do not ask them a second time and do not call task_start after; `runAt` has the server start it once at a set time instead, and `startWhen` once something outside Orbit becomes true (a condition whose command you ran once, passing what it read as its baseline; refused without one). When a person answers a question with \"wait until X\", propose this card with startWhen instead of writing a note to yourself. It first puts a confirmation card in front of the user and BLOCKS until they answer: nothing is written if they decline, so do not create it another way. The exception is a session's first few tasks: while this session's creates, counted with this call's, stay within the account's allowance (8 unless the owner set another number; 0 cards every create), the card is answered at once with no one asked, unless the session runs in a narrower mode than the account default; the create that would go past it, and every one after it, waits for the person. Always declare completionCriterion explicitly; EVIDENCE_JUDGMENT is available but never inferred by this runner write. A row declaring VERIFICATION with completionPolicy VERIFICATION_PASSED is a pure gate: it is NOT dispatchable — a manual execute is refused with 409 and auto-dispatch passes over it — and the server never files its verifier, so pass `verification: {title, assigneeId}` in this same call. Write `description` as a self-contained prompt an agent can act on without prior context. Ask the person what would settle THIS task before you call, and pass their answer as `acceptanceCriteria`: the criteria are theirs to state, so if they have not said, ask and end your turn with the question. Where one command decides it, pass `acceptanceCommand` with `acceptanceExpectedExitCode` and the exit code settles the task; filed with neither, its run ends at ATTEMPT_ENDED_WITHOUT_JUDGMENT_PATH and a person judges it by hand. assigneeId defaults to this agent (null leaves it unassigned); assigneeId, listId, projectId and parentTaskId must be owned by the caller. Whether the work is one task, a batch or a project, how its evidence is judged, and how to order and nest it: call guide with topic task-create.",
+			"description": "Create ONE task (attributed to this agent). Creating is not starting, and `autoRunWhenReady` is required: `true` means a task with an assignee starts by itself once it is ready — every prerequisite DONE and, in a project, the project started — and `false` keeps it recorded until someone starts it, which is what you pass when the person said it must not run until they say so; a call without it is refused. When the person wants the work run now, pass `startNow: true`: one approval then covers the create and the start, so do not ask them a second time and do not call task_start after; `runAt` has the server start it once at a set time instead, and `startWhen` once something outside Orbit becomes true (a condition whose command you ran once, passing what it read as its baseline; refused without one). When a person answers a question with \"wait until X\", propose this card with startWhen instead of writing a note to yourself. It first puts a confirmation card in front of the user and BLOCKS until they answer: nothing is written if they decline, so do not create it another way. The exception is a session's first few tasks: while this session's creates, counted with this call's, stay within the account's allowance (8 unless the owner set another number; 0 cards every create), the card is answered at once with no one asked, unless the session runs in a narrower mode than the account default; the create that would go past it, and every one after it, waits for the person. Before a project starts, its coordinator's creates into it are never asked and take nothing from that allowance, however many there are: every item names that projectId, and the start card reviews them all. Always declare completionCriterion explicitly; EVIDENCE_JUDGMENT is available but never inferred by this runner write. A row declaring VERIFICATION with completionPolicy VERIFICATION_PASSED is a pure gate: it is NOT dispatchable — a manual execute is refused with 409 and auto-dispatch passes over it — and the server never files its verifier, so pass `verification: {title, assigneeId}` in this same call. Write `description` as a self-contained prompt an agent can act on without prior context. Ask the person what would settle THIS task before you call, and pass their answer as `acceptanceCriteria`: the criteria are theirs to state, so if they have not said, ask and end your turn with the question. Where one command decides it, pass `acceptanceCommand` with `acceptanceExpectedExitCode` and the exit code settles the task; filed with neither, its run ends at ATTEMPT_ENDED_WITHOUT_JUDGMENT_PATH and a person judges it by hand. assigneeId defaults to this agent (null leaves it unassigned, so nothing can start it, even the person's own start: to hold a task, keep the assignee and pass `autoRunWhenReady: false`); assigneeId, listId, projectId and parentTaskId must be owned by the caller. Whether the work is one task, a batch or a project, how its evidence is judged, and how to order and nest it: call guide with topic task-create.",
 			"inputSchema": func() map[string]interface{} {
 				props := taskCreateProps()
 				// On the single door only: see verificationProp.
@@ -2359,7 +2458,7 @@ func buildOperationCatalog() []*operation {
 		},
 		{
 			"name":        "task_create_batch",
-			"description": fmt.Sprintf("Create up to %d tasks in one atomic call (attributed to this agent) — the batch form of task_create, and the right tool whenever a plan already worked out produces more than one task. Nothing is written unless every item is valid, and each item takes the same fields as task_create, `projectId` and `acceptanceCriteria` included. Ask the person, per item, what would settle it before you write the batch, and put their answer in that item's `acceptanceCriteria`: the criteria are theirs to state, so if they have not said it for every item, ask and end your turn. An item a single command decides takes `acceptanceCommand` with `acceptanceExpectedExitCode`, and the exit code settles it; one filed with neither ends at ATTEMPT_ENDED_WITHOUT_JUDGMENT_PATH. Creating is not starting, but each item's `autoRunWhenReady` defaults to true, as on task_create: give an item the person wants held `autoRunWhenReady: false`. Every item declares completionCriterion explicitly. An item declaring VERIFICATION with completionPolicy VERIFICATION_PASSED is a pure gate: it is NOT dispatchable — a manual execute is refused with 409 and auto-dispatch passes over it — and the server never files its verifier for you, so `verifiesRef` from a later item of this same call is what pairs it; unpaired, that row can never complete. A later item depends on an earlier one WITHOUT knowing its id: give the earlier item a `ref` and list that ref in the later item's `dependsOnRefs`; `parentRef` names an earlier item as its PARENT, and `dependsOnTaskIds` / `parentTaskId` still name tasks that already exist. Returns the created tasks in input order, each echoing its `ref`. Tasks are only recorded, except an item carrying `startNow: true`, which the server's once-a-minute scan starts within the minute without asking again. This BLOCKS until a human approves the batch on one card, which shows how much of it starts running: send the batch you actually mean — a rejected one costs the whole call, not one item. The exception is a session's first few tasks: while this session's creates, counted with this call's, stay within the account's allowance (8 unless the owner set another number; 0 cards every create), the card is answered at once with no one asked, unless the session runs in a narrower mode than the account default; the create that would go past it, and every one after it, waits for the person. How to judge a plan with dryRun first, and nest and order it: call guide with topic task-batch.", maxTaskBatchCreate),
+			"description": fmt.Sprintf("Create up to %d tasks in one atomic call (attributed to this agent) — the batch form of task_create, and the right tool whenever a plan already worked out produces more than one task. Nothing is written unless every item is valid, and each item takes the same fields as task_create, `projectId` and `acceptanceCriteria` included. Ask the person, per item, what would settle it before you write the batch, and put their answer in that item's `acceptanceCriteria`: the criteria are theirs to state, so if they have not said it for every item, ask and end your turn. An item a single command decides takes `acceptanceCommand` with `acceptanceExpectedExitCode`, and the exit code settles it; one filed with neither ends at ATTEMPT_ENDED_WITHOUT_JUDGMENT_PATH. Creating is not starting, and each item's `autoRunWhenReady` is required, as on task_create: `true` starts the item by itself once it is ready, `false` holds it until someone starts it; an item without it refuses the whole call. Every item declares completionCriterion explicitly. An item declaring VERIFICATION with completionPolicy VERIFICATION_PASSED is a pure gate: it is NOT dispatchable — a manual execute is refused with 409 and auto-dispatch passes over it — and the server never files its verifier for you, so `verifiesRef` from a later item of this same call is what pairs it; unpaired, that row can never complete. A later item depends on an earlier one WITHOUT knowing its id: give the earlier item a `ref` and list that ref in the later item's `dependsOnRefs`; `parentRef` names an earlier item as its PARENT, and `dependsOnTaskIds` / `parentTaskId` still name tasks that already exist. Returns the created tasks in input order, each echoing its `ref`. Tasks are only recorded, except an item carrying `startNow: true`, which the server's once-a-minute scan starts within the minute without asking again. This BLOCKS until a human approves the batch on one card, which shows how much of it starts running: send the batch you actually mean — a rejected one costs the whole call, not one item. The exception is a session's first few tasks: while this session's creates, counted with this call's, stay within the account's allowance (8 unless the owner set another number; 0 cards every create), the card is answered at once with no one asked, unless the session runs in a narrower mode than the account default; the create that would go past it, and every one after it, waits for the person. Before a project starts, its coordinator's creates into it are never asked and take nothing from that allowance, however many there are: every item names that projectId, and the start card reviews them all. How to judge a plan with dryRun first, and nest and order it: call guide with topic task-batch.", maxTaskBatchCreate),
 			"inputSchema": obj(map[string]interface{}{
 				"tasks": map[string]interface{}{
 					"type":     "array",
@@ -2412,7 +2511,7 @@ func buildOperationCatalog() []*operation {
 		},
 		{
 			"name":        "task_update",
-			"description": "Update a task's fields. Direct status DONE is refused for every actor; the refusal names the declared EXECUTABLE, VERIFICATION, EVIDENCE_JUDGMENT, or OWNER_CONFIRMED path, and an OWNER_CONFIRMED task is confirmed only by the account owner in the Orbit app. A write that lands a task on OWNER_CONFIRMED in no project, or in a project whose Automatic is off — by changing the criterion, the project or the criterion it serves — needs ownerConfirmationReason (stored or sent), or it is refused 409 OWNER_CONFIRMATION_REASON_REQUIRED and nothing is written. FAILED remains writable as a run's conservative self-report. A run, or a conversation a run opened, may not write completionCriterion, acceptanceCommand, acceptanceExpectedExitCode, completionPolicy or acceptanceCriteria on another task unless it filed that task itself and the task serves no acceptance criterion of its project: it is refused with COMPLETION_STANDARD_FROM_RUN_REFUSED, and the account owner, the project's coordinator or a judgment session can make the edit. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps) — what would PROVE the task done goes in `acceptanceCriteria`, not into the prompt. `acceptanceCriteria` is editable for the whole life of the task, which is where it usually gets written: omit it to leave the current criteria untouched, pass a string to replace them, pass null to clear them. It states what settles THIS task, not the project it is filed under (project_get). `parentTaskId` moves this task under another one you own (same project, never itself or one of its own subtasks) — membership only, with no effect on when it runs. `projectId` re-files this task under another project, or null takes it out of every project — how a mis-filing is corrected. The account owner writes it directly; a session acting under a project scope is refused UNMAPPED_PROJECT_WORK for null and PROJECT_SCOPE_MISMATCH for another project unless it asks for either with `handoff`: the server then files a move request, answers CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING and leaves the task where it is, and the account owner's confirmation moves the task at once, with nothing to send again (read the request with project_crossings; `handoff` says who may ask and which moves are refused). Pass null for assigneeId/listId/parentTaskId/projectId/dueDate/runAt/engine/provider/model/modelHint/modelHintReason to clear them. `codeless: true` declares that the task produces no code, which takes it out of its acceptance criterion's landing: it needs `codelessReason` in the same call, and is refused for a task that already has commits of its own.",
+			"description": "Update a task's fields. Direct status DONE is refused for every actor; the refusal names the declared EXECUTABLE, VERIFICATION, EVIDENCE_JUDGMENT, or OWNER_CONFIRMED path, and an OWNER_CONFIRMED task is confirmed only by the account owner in the Orbit app. A write that lands a task on OWNER_CONFIRMED in no project, or in a project whose Automatic is off — by changing the criterion, the project or the criterion it serves — needs ownerConfirmationReason (stored or sent), or it is refused 409 OWNER_CONFIRMATION_REASON_REQUIRED and nothing is written. FAILED remains writable as a run's conservative self-report. A run, or a conversation a run opened, may not write completionCriterion, acceptanceCommand, acceptanceExpectedExitCode, completionPolicy or acceptanceCriteria on another task unless it filed that task itself and the task serves no acceptance criterion of its project: it is refused with COMPLETION_STANDARD_FROM_RUN_REFUSED, and the account owner, the project's coordinator or a judgment session can make the edit. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps) — what would PROVE the task done goes in `acceptanceCriteria`, not into the prompt. `acceptanceCriteria` is editable for the whole life of the task, which is where it usually gets written: omit it to leave the current criteria untouched, pass a string to replace them, pass null to clear them. It states what settles THIS task, not the project it is filed under (project_get). `parentTaskId` moves this task under another one you own (same project, never itself or one of its own subtasks) — membership only, with no effect on when it runs. `projectId` re-files this task under another project, or null takes it out of every project — how a mis-filing is corrected. The account owner writes it directly; a session acting under a project scope is refused UNMAPPED_PROJECT_WORK for null and PROJECT_SCOPE_MISMATCH for another project unless it asks for either with `handoff`: the server then files a move request, answers CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING and leaves the task where it is, and the account owner's confirmation moves the task at once, with nothing to send again (read the request with project_crossings; `handoff` says who may ask and which moves are refused). Pass null for assigneeId/listId/parentTaskId/projectId/dueDate/runAt/engine/provider/model/modelHint/modelHintReason to clear them. `codeless: true` declares that the task produces no code, so it resolves no source and its run gets a checkout with no branch until it has something to commit; it does not decide landing. It needs `codelessReason` in the same call, and is refused for a task that already has commits of its own.",
 			"inputSchema": obj(map[string]interface{}{
 				"taskId":      taskIDProp,
 				"title":       str,
@@ -2424,20 +2523,22 @@ func buildOperationCatalog() []*operation {
 					"type":        []string{"string", "null"},
 					"description": "Attach this task to an OPEN integration or TASK_FAILED item as its concrete fix. Omit to preserve the current link; pass null to detach it. The item must be in the same project and assigned to the owner or coordinating session.",
 				},
-				"handoff":            updateHandoffProp,
-				"assigneeId":         map[string]interface{}{"type": []string{"string", "null"}},
-				"parentTaskId":       updateParentTaskIDProp,
-				"dueDate":            map[string]interface{}{"type": []string{"string", "null"}},
-				"runAt":              updateRunAtProp,
-				"engine":             engineProp,
-				"provider":           providerProp,
-				"model":              modelProp,
-				"modelHint":          modelHintProp,
-				"modelHintReason":    modelHintReasonProp,
-				"acceptanceCriteria": updateAcceptanceCriteriaProp,
-				"criterionKey":       updateCriterionKeyProp,
-				"codeless":           updateCodelessProp,
-				"codelessReason":     codelessReasonProp,
+				"handoff":                  updateHandoffProp,
+				"assigneeId":               map[string]interface{}{"type": []string{"string", "null"}},
+				"parentTaskId":             updateParentTaskIDProp,
+				"dueDate":                  map[string]interface{}{"type": []string{"string", "null"}},
+				"runAt":                    updateRunAtProp,
+				"engine":                   engineProp,
+				"provider":                 providerProp,
+				"model":                    modelProp,
+				"modelHint":                modelHintProp,
+				"modelHintReason":          modelHintReasonProp,
+				"acceptanceCriteria":       updateAcceptanceCriteriaProp,
+				"criterionKey":             updateCriterionKeyProp,
+				"codeless":                 updateCodelessProp,
+				"codelessReason":           codelessReasonProp,
+				"landingCheckExempt":       updateLandingCheckExemptProp,
+				"landingCheckExemptReason": landingCheckExemptReasonProp,
 				"completionCriterion": map[string]interface{}{
 					"type":        "string",
 					"enum":        []string{"EXECUTABLE", "VERIFICATION", "EVIDENCE_JUDGMENT", "OWNER_CONFIRMED"},
@@ -2703,10 +2804,8 @@ func buildOperationCatalog() []*operation {
 		},
 		{
 			"name": "notify",
-			// Loaded up front, like delegate (subagent.go): deferred behind ToolSearch, an agent sees only the name,
-			// never the "when" below, and on 2026-11-17 one asked "tell me when the upgrade is done" answered in the
-			// conversation instead. About 330 o200k tokens per request.
-			"_meta": map[string]interface{}{"anthropic/alwaysLoad": true},
+			// Not alwaysLoad since design D2 (step 6): I2 passed 10/10 without the mark, on the strength of the one-line rule
+			// (it had cost about 330 o200k tokens per request).
 			"description": "In a task run of an Automatic project this goes to the project's coordinator, not to the owner's devices. " +
 				"Read recipient in the result to see who got it: coordinator, or owner when Orbit fell back. " +
 				"Tell the human this session belongs to that something happened, on their phone and Mac, " +
@@ -2729,6 +2828,23 @@ func buildOperationCatalog() []*operation {
 					"description": "The line to show. The session's title is already the alert's heading, so don't restate it — say only what happened.",
 				},
 			}, "message"),
+		},
+		{
+			"name":        "subagent_rate",
+			"description": subagentRateDescription,
+			"inputSchema": obj(map[string]interface{}{
+				"runId": map[string]interface{}{
+					"type": "string", "description": "The runId returned by delegate.",
+				},
+				"score": map[string]interface{}{
+					"type": "integer", "minimum": 1, "maximum": 5,
+					"description": "How useful the result was, from 1 (discarded or redone) to 5 (used as-is).",
+				},
+				"note": map[string]interface{}{
+					"type": "string", "maxLength": maxSubagentRatingNoteChars,
+					"description": "A short reason for the score.",
+				},
+			}, "runId", "score"),
 		},
 		{
 			"name": "schedule_wakeup",
@@ -2839,13 +2955,13 @@ func buildOperationCatalog() []*operation {
 						"description": strings.TrimSpace("How much the sub-session may do without a human: \"plan\" investigates and proposes without touching anything, \"default\" asks before each unapproved action, \"acceptEdits\" pre-approves file edits only, \"auto\" lets the model decide when to ask and is the mode for unattended work that has to run commands, \"dontAsk\" never asks but refuses anything not already approved, commands and background jobs included, \"bypassPermissions\" never asks and allows everything. Omit to use the owner's account default. It can never be wider than this session's own mode: a wider mode is refused, and when the default is wider the sub-session runs in this session's own mode. A mode that asks parks the sub-session on an approval card until a human answers, so pick one only if someone is watching. "),
 					},
 					"worktree":  map[string]interface{}{"type": "boolean", "description": "Pass false to run the session in the agent's own checkout, with no branch and no worktree, even when the agent isolates each session in a worktree. For work that changes no code (investigating, reading logs, answering a question, read-only queries): it leaves no unmerged branch behind. Not for code changes: the session edits the checkout every other non-isolated session shares, and has no branch to merge. Omit it to follow the agent's own setting; true cannot turn isolation on for an agent that has it off."},
-					"wait":      map[string]interface{}{"type": "boolean", "description": "Wait for the new session's first turn to settle and return its full state inline: up to about 10 minutes, less when this session was itself spawned by a wait. The wait is recorded on Orbit's server as a watch before it starts, so when that time runs out or the connection drops, the call returns the session as last seen with the watch under \"watch\", and the watch wakes this session when the turn settles; end your turn then instead of polling. If the server does not record the watch, the result says no server-held watch backs the wait, and a refused watch returns at once. Default false: returns immediately. Whatever happens while waiting, the session is created: an answer that has not settled names it under \"wait\" with session_get as the next step, never session_create."},
+					"wait":      map[string]interface{}{"type": "boolean", "description": "Wait for the new session to finish all its work and return its full state inline: its first turn settled and nothing it started still runs (no background job, subagent or turn the engine started itself) or is set to wake it. Up to about 10 minutes, less when this session was itself spawned by a wait. The wait is recorded on Orbit's server as a watch before it starts, so when that time runs out or the connection drops, the call returns the session as last seen with the watch under \"watch\", and the watch wakes this session when it has; end your turn then instead of polling. If the server does not record the watch, the result says no server-held watch backs the wait, and a refused watch returns at once. Default false: returns immediately. Whatever happens while waiting, the session is created: an answer that has not settled names it under \"wait\" with session_get as the next step, never session_create."},
 					"requestId": map[string]interface{}{"type": "string", "description": "Leave it out on a first call. When a call failed with an UNKNOWN outcome and its answer named a requestId, send the same arguments again with that requestId: Orbit answers with what that request created, or creates it once, so a lost answer never becomes a duplicate. The same requestId with different arguments is refused."},
 				}, "prompt"),
 			},
 			map[string]interface{}{
 				"name":        "session_list",
-				"description": "List this owner's sessions (optionally filter by status or parentSessionId). Use to see what other sessions are doing and to collect the children you spawned (pass your own session id as parentSessionId).",
+				"description": "List this owner's sessions (optionally filter by status or parentSessionId). Use to see what other sessions are doing and to collect the children you spawned (pass your own session id as parentSessionId)." + sessionStateFieldsNote,
 				"inputSchema": obj(map[string]interface{}{"status": sessionStatus, "parentSessionId": str}),
 			},
 			map[string]interface{}{
@@ -2858,7 +2974,7 @@ func buildOperationCatalog() []*operation {
 			},
 			map[string]interface{}{
 				"name":        "session_get",
-				"description": fmt.Sprintf("Get one session's current status and latest output (to collect a spawned sub-task's result). To wait for a session, call session_await instead of calling this in a loop. A record over %d characters is shortened to fit: the prompt first, then changedFiles, lastToolUse, lastUserText and error; lastAssistantText and result stay whole unless nothing else is left to shorten. What was shortened is named in truncatedFields; summary=false returns the full record.", toolResultBudget),
+				"description": fmt.Sprintf("Get one session's current status and latest output (to collect a spawned sub-task's result). To wait for a session, call session_await instead of calling this in a loop. A record over %d characters is shortened to fit: the prompt first, then changedFiles, lastToolUse, lastUserText and error; lastAssistantText and result stay whole unless nothing else is left to shorten. What was shortened is named in truncatedFields; summary=false returns the full record. A landing session id (task_get's integration.landTask.landingSessionId, or the landing a landing-fix turn names) returns that landing's view: its attempts, timeline and open items. A task's own work session may read its own task's landing this way."+sessionStateFieldsNote, toolResultBudget),
 				"inputSchema": obj(map[string]interface{}{
 					"sessionId": sessionIDProp,
 					"summary":   map[string]interface{}{"type": "boolean", "description": "Default true: the record held under the budget. false returns it in full."},
@@ -3108,6 +3224,13 @@ func buildOperationCatalog() []*operation {
 	// (wiki_tools.go; they are left out entirely when the wiki is off).
 	add(gateAlways, wikiToolDescriptors(obj)...)
 	add(gateAlways, fileToolDescriptors(obj)...)
+	add(gateAlways, driveToolDescriptors(obj)...)
+	// The owner's own Settings (settings_tools.go): listed whether or not Session orchestration is on, since they fix
+	// ordinary settings and turning orchestration off is itself a proposal (docs/settings-from-conversation-design.md §7).
+	add(gateAlways, settingsToolDescriptors(obj)...)
+	// The Orbit Cloud browser (browser_tools.go): any session of the account may read it, and the tools are left out
+	// entirely while the server's browser switch is off.
+	add(gateAlways, browserToolDescriptors(obj)...)
 	// Always advertised: an agent that cannot see the tool falls back to
 	// Bash(run_in_background), and a session without the runner socket gets a
 	// refusal that says why rather than a silently engine-owned process.
@@ -3139,7 +3262,7 @@ func watchToolDescriptors(obj func(map[string]interface{}, ...string) map[string
 	predicateVersionProp := map[string]interface{}{
 		"type": "integer",
 		"enum": watchPredicateVersions,
-		"description": "The grammar version the predicate is written in: 1, 2 or 3, as described under predicate. Omit it " +
+		"description": "The grammar version the predicate is written in: 1, 2, 3 or 4, as described under predicate. Omit it " +
 			"and the lowest version that has every term the predicate uses is sent.",
 	}
 	keyProp := map[string]interface{}{"type": "string", "minLength": 1, "maxLength": 200, "description": watchIdempotencyKeyDescription}
@@ -3239,7 +3362,9 @@ func watchToolDescriptors(obj func(map[string]interface{}, ...string) map[string
 				"DONE, CANCELLED or FAILED, or as soon as any of them fails\": it asks Orbit's server to watch exactly these " +
 				"tasks for this session and returns at once, so end your turn then. When the condition holds, Orbit starts a " +
 				"turn here saying which tasks changed, with a snapshot of all of them; if the watch expires first, one turn " +
-				"says so. Use it instead of polling task_get or task_list, sleeping, or looping in Bash. The result names the " +
+				"says so. Use it instead of polling task_get or task_list, sleeping, looping in Bash, a background job or " +
+				"schedule_wakeup: Orbit holds the watch on its server, so it wakes this session even if this engine was " +
+				"recycled in the meantime. The result names the " +
 				"watch: watch_get reads it and watch_cancel stops it.",
 			"inputSchema": obj(map[string]interface{}{
 				"taskIds": map[string]interface{}{
@@ -3270,11 +3395,14 @@ func watchToolDescriptors(obj func(map[string]interface{}, ...string) map[string
 func sessionAwaitDescriptor(obj func(map[string]interface{}, ...string) map[string]interface{}) map[string]interface{} {
 	return map[string]interface{}{
 		"name": "session_await",
-		"description": "Be woken when other Orbit sessions finish their turn, need a person, or end: the sub-sessions you " +
-			"started with session_create, for instance. It asks Orbit's server to watch exactly these sessions for this " +
+		"description": "Be woken when other Orbit sessions finish their work, need a person, or end: the sub-sessions you " +
+			"started with session_create, for instance. By default it waits until each one's turn is over and nothing " +
+			"it started still runs or is set to wake it, so a session that ended its turn to wait for its own " +
+			"background job or subagent is not reported finished. It asks Orbit's server to watch exactly these sessions for this " +
 			"session and returns at once, so end your turn then. When the condition holds, Orbit starts a turn here with " +
 			"each session's state; if the watch expires first, one turn says so. Use it instead of polling session_get, " +
-			"sleeping, or looping in Bash. A session cannot await itself.",
+			"sleeping, looping in Bash, a background job or schedule_wakeup: Orbit holds the watch on its server, so it " +
+			"wakes this session even if this engine was recycled in the meantime. A session cannot await itself.",
 		"inputSchema": obj(map[string]interface{}{
 			"sessionIds": map[string]interface{}{
 				"type":        "array",
@@ -3575,6 +3703,34 @@ func wikiToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
 		},
 		{
+			"name":        "wiki_read",
+			"description": wikiReadDescription,
+			"inputSchema": obj(map[string]interface{}{
+				"q":       map[string]interface{}{"type": "string", "description": "A search: the sections whose title, covers and sentences hold every word of it."},
+				"doc":     map[string]interface{}{"type": "string", "description": "A document's slug: its whole definition in the confirmed plan, and its written sentences with their footnotes."},
+				"section": map[string]interface{}{"type": "string", "description": "With doc: one section's key, so the answer holds that section alone."},
+				"draft":   map[string]interface{}{"type": "string", "description": "A card of this chat, by its id: its state and result, and the sections it rewrote before and now."},
+				"more":    map[string]interface{}{"type": "string", "description": "The cursor an earlier answer ended with, sent back with the same other arguments for the next part."},
+			}),
+			"outputSchema": obj(map[string]interface{}{
+				"view":        map[string]interface{}{"type": "string", "enum": []string{"contents", "search", "doc", "section", "draft"}, "description": "What was read."},
+				"planVersion": map[string]interface{}{"type": []string{"integer", "null"}, "description": "The confirmed plan's version, or null with none."},
+				"planDraft": map[string]interface{}{
+					"type":        []string{"object", "null"},
+					"description": "A draft of the plan that waits for the owner, { version }, or null. While there is one, wiki_draft refuses a plan card (WIKI_PLAN_STALE).",
+				},
+				"writerJobs": map[string]interface{}{
+					"type":        "array",
+					"description": "The space's jobs that write documents, queued, waiting or running, oldest first.",
+					"items":       map[string]interface{}{"type": "object"},
+				},
+				"text": map[string]interface{}{"type": "string", "description": "The view, at most 60,000 characters, opening with the header that says it is a view and not a source."},
+				"more": map[string]interface{}{"type": []string{"string", "null"}, "description": "The cursor for the next part, or null on the last part."},
+			}, "view", "planVersion", "planDraft", "writerJobs", "text", "more"),
+			// A view of the wiki: it writes nothing and records no card.
+			"annotations": map[string]interface{}{"readOnlyHint": true},
+		},
+		{
 			"name":        "wiki_draft",
 			"description": wikiDraftDescription,
 			"inputSchema": obj(map[string]interface{}{
@@ -3646,8 +3802,8 @@ func fileToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 				"path": map[string]interface{}{
 					"type": "string",
 					"description": "The file or directory, absolute or relative to the working directory. Its real " +
-						"location, links resolved, has to be inside this session's checkout or its uploads directory, " +
-						"as with a file a reply links; anywhere else is refused, so copy a file there first.",
+						"location, links resolved, has to be inside this session's checkout, its uploads directory, " +
+						"or the mounted Drive on Orbit Cloud.",
 				},
 				"taskId": map[string]interface{}{
 					"type": "string",
@@ -3752,11 +3908,7 @@ func bgToolDescriptors(obj func(map[string]interface{}, ...string) map[string]in
 				" accepts a message mid-turn; new output and silence always wait for your next turn. Whether a job" +
 				" may start follows this session's permission mode: Plan and Don't Ask refuse it, Default and Accept" +
 				" Edits show the owner a card first, in which case this may answer that the job is waiting for them" +
-				" (status waiting_for_owner), and Auto and Bypass start it. CPU and memory limits (cpus, memoryMb) are" +
-				" off unless the machine's owner has turned them on; then the owner's ceiling applies to every job, and" +
-				" you may ask for less, never more. The result's limits say what the job runs under, and limitsNote why" +
-				" an ask was lowered or not applied. A job running under limits does not count against this machine's" +
-				" capacity, as a watch does not.",
+				" (status waiting_for_owner), and Auto and Bypass start it.",
 			"inputSchema": obj(map[string]interface{}{
 				"command": map[string]interface{}{
 					"type":        "string",
@@ -3817,16 +3969,6 @@ func bgToolDescriptors(obj func(map[string]interface{}, ...string) map[string]in
 				"env": map[string]interface{}{
 					"type":        "object",
 					"description": "Extra environment variables, layered over the agent's own.",
-				},
-				"cpus": map[string]interface{}{
-					"type": "number",
-					"description": "Most CPUs' worth of time the job may use, fractions allowed (0.5, 2). Applied only where" +
-						" the owner has turned limits on, and never above their ceiling; see the tool description.",
-				},
-				"memoryMb": map[string]interface{}{
-					"type": "integer",
-					"description": fmt.Sprintf("Most memory the job may hold, in megabytes (at least %d). Past it the whole job"+
-						" is killed and its output ends with a line saying so. Applied as cpus is.", bgMemoryMBMin),
 				},
 			}, "command", "kind"),
 		},
@@ -4057,8 +4199,9 @@ var projectCLICapabilities = []cliCapabilitySpec{
 	{Tool: "project_blocker_resolve", Argv: []string{"orbit", "project", "resolve-blocker"}, Usage: "orbit project resolve-blocker PROJECT_ID --blocker-id ID --reason TEXT [--json]", Arguments: []string{"[project-id] (required)", "--blocker-id <id> (required; as 'orbit project get' spells it in blockers.open[].id)", "--reason <text> (required; why this no longer blocks)", "--json"}, Description: "End one of a project's open blockers, saying why it no longer blocks — the write half of what `orbit project get` shows in blockers.open. Run from inside a session it first puts the blocker and your reason on a confirmation card and waits for the account owner's answer: nothing is written if they decline, and the reason they give says what they want instead. Typed at a terminal outside a session there is nobody to ask and the resolution is written straight away, because that caller is the owner. Resolve one when you can say what changed — the work landed, the question was answered elsewhere, the condition no longer holds — and not to get past a wait you disagree with: a HUMAN_DECISION_REQUIRED blocker is the project asking for a judgment, and the card is where you argue for it rather than a formality around it. An agent's resolution records resolved_by = COORDINATOR with the reason it gave; a resolution is final, so an already-resolved blocker is refused rather than restated, and a condition that returns raises a new episode.", Mutates: true},
 	{Tool: "integration_request_promotion", Argv: []string{"orbit", "project", "request-promotion"}, Usage: "orbit project request-promotion PROJECT_ID --reason TEXT [--json]", Arguments: []string{"[project-id] (required)", "--reason <text> (required; why this promotion is needed now)", "--json"}, Description: "Request a promotion as the project's current coordinator conversation. Consumed once a candidate is created; normal checks and merge authorization still apply.", Mutates: true, SessionOnly: true},
 	{Tool: "integration_skip_merge_check", Argv: []string{"orbit", "project", "skip-merge-check"}, Usage: "orbit project skip-merge-check PROJECT_ID TASK_ID --reason TEXT [--json]", Arguments: []string{"[project-id] (required)", "[task-id] (required; the DONE task whose failed landing should go on without the project's merge check)", "--reason <text> (required; why this check should not hold up this landing)", "--json"}, Description: "Queue ONE landing of a DONE task again with the project's merge check NOT RUN — skipped, never passed — and only with the account owner's yes. For the red that is about the check rather than the delivery: a command that cannot pass where the runner runs it. Every other door is wrong for that red: integration_retry runs the same command against the same machine and is red again by construction, task_reopen sends back work that is not at fault, and the check COMMAND is the owner's to change. Inside a session it first puts the project, the task, the check command and your reason on a confirmation card and waits for the owner's answer: a decline queues nothing and the landing stands as it failed. Typed at a terminal as yourself (`orbit login`) there is no card, because you are the person it would ask, and the row records you as the one who approved it. Only a landing that stopped on a check qualifies; a conflict is the branch's and an integration error is the machinery's (integration_retry answers those). The project's mergeCheckCommand setting is untouched: the next landing and every merge into main are checked as before, and the generation this queues records the skipped check, the reason and who approved it. Only the conversation the project is coordinated from may ask, and only where the failure is still the coordinator's to decide.", Mutates: true},
-	{Tool: "project_request_start", Argv: []string{"orbit", "project", "request-start"}, Usage: "orbit project request-start PROJECT_ID --line LINE [--automatic[=BOOL]] --max-concurrent-tasks N --why TEXT [options]", Arguments: []string{"[project-id] (required)", "--line <PROJECT_BRANCH|MAIN> (required)", "--project-branch-name <ref> (PROJECT_BRANCH only; a full refs/heads/... ref)", "--upstream-ref <ref> (the project's main branch, a full refs/heads/... ref and a suggestion: leave it out when project get shows integration.lastMainBranch; when that is null, read `git symbolic-ref --short refs/remotes/origin/HEAD` and pass origin/<name> as refs/heads/<name>)", "--automatic[=BOOL] (default on)", "--max-concurrent-tasks <n> (required, 1-100)", "--merge-check-command <text>", "--merge-check-timeout-seconds <n> (that check's budget in seconds; leave it out for the one-hour default)", "--landing-check-command <text>", "--landing-check-timeout-seconds <n>", "--why <text> (required; shown to the owner on the card)", "--json"}, Description: "Ask the account owner to start the project this session coordinates. Until they start it, task_start is refused for its tasks; run this once the plan is written — the criteria stated, the work filed as tasks under the project, and every acceptance criterion served by at least one task. Orbit checks the plan first: a plan that is not ready is refused (START_REQUEST_NOT_READY) with every reason at once and what to do about each — no criteria or no tasks, a criterion no task serves, a task whose assignee is not on a runner, a project branch with no repository — and nothing is filed. A ready plan is filed and the command returns at once with the request's itemId and any warnings (a criterion served only by work that looks like it produces no code and does not declare codeless, tasks set to start by hand, Automatic on a project branch with no merge check) — the coordinator's to act on, which the owner's card does not show; the owner sees a \"Start this project?\" card with the settings as suggestions and Automatic on, and the coordinator is told when the project starts. Asking again replaces the open request; changing the plan before the start voids it. Acts for the session it runs in: only the project's coordinating conversation may ask.", Mutates: true, SessionOnly: true},
+	{Tool: "project_request_start", Argv: []string{"orbit", "project", "request-start"}, Usage: "orbit project request-start PROJECT_ID [--line LINE] [--automatic[=BOOL]] --max-concurrent-tasks N --why TEXT [options]", Arguments: []string{"[project-id] (required)", "--line <PROJECT_BRANCH|MAIN> (leave it out to start with no line and no repository; the project lands on its own branch once a task commits)", "--project-branch-name <ref> (PROJECT_BRANCH only; a full refs/heads/... ref)", "--upstream-ref <ref> (the project's main branch, a full refs/heads/... ref and a suggestion: leave it out when project get shows integration.lastMainBranch; when that is null, read `git symbolic-ref --short refs/remotes/origin/HEAD` and pass origin/<name> as refs/heads/<name>)", "--automatic[=BOOL] (default on)", "--max-concurrent-tasks <n> (required, 1-100)", "--merge-check-command <text>", "--merge-check-timeout-seconds <n> (that check's budget in seconds; leave it out for the one-hour default)", "--landing-check-command <text>", "--landing-check-timeout-seconds <n>", "--why <text> (required; shown to the owner on the card)", "--json"}, Description: "Ask the account owner to start the project this session coordinates. Until they start it, task_start is refused for its tasks; run this once the plan is written — the criteria stated, the work filed as tasks under the project, and every acceptance criterion served by at least one task. Orbit checks the plan first: a plan that is not ready is refused (START_REQUEST_NOT_READY) with every reason at once and what to do about each — no criteria or no tasks, a criterion no task serves, a task whose assignee is not on a runner, a project branch with no repository — and nothing is filed. A ready plan is filed and the command returns at once with the request's itemId and any warnings (tasks set to start by hand, Automatic on a project branch with no merge check) — the coordinator's to act on, which the owner's card does not show; the owner sees a \"Start this project?\" card with the settings as suggestions and Automatic on, and the coordinator is told when the project starts. Asking again replaces the open request; changing the plan before the start voids it. Acts for the session it runs in: only the project's coordinating conversation may ask.", Mutates: true, SessionOnly: true},
 	{Tool: "project_request_done", Argv: []string{"orbit", "project", "request-done"}, Usage: "orbit project request-done PROJECT_ID --judgment TEXT (--gaps JSON | --gaps-file -) [--json]", Arguments: []string{"[project-id] (required)", "--judgment <text> (required; your call, shown first on the card)", "--gaps <json array> | --gaps-file - (required; one {criterionKey, title, whyNotProven, coordinatorChecked, evidenceRefs} per thing Orbit cannot prove, [] for none)", "--json"}, Description: "Ask the account owner to record the project this session coordinates done. Orbit records a project done by itself when it can prove every criterion; run this when it cannot and you have checked the project is done anyway, with your call in a sentence or two and one gap per thing Orbit cannot prove — the criterion's key, why Orbit cannot prove it, what you checked instead, and where that evidence is. Orbit checks the project first: one that is not ready is refused (DONE_REQUEST_NOT_READY) with every reason at once and what to do about each — a criterion its work has not met, a task running, queued or IN_PROGRESS, an item waiting on the owner, a landing or a merge into main in flight — and nothing is filed. A ready project is filed and the command returns at once with the request's itemId and a warning for every criterion not landed on main, with why; the owner sees an \"Is this project done?\" card and records the project done on it. Asking again replaces the open request; the project moving before the owner answers voids it. Acts for the session it runs in: only the project's coordinating conversation may ask.", Mutates: true, SessionOnly: true},
+	{Tool: "project_request_reopen", Argv: []string{"orbit", "project", "request-reopen"}, Usage: "orbit project request-reopen PROJECT_ID --why TEXT --planned-work TEXT [--json]", Arguments: []string{"[project-id] (required)", "--why <text> (required; why the project should be reopened, shown on the card)", "--planned-work <text> (required; what you will do once it is reopened)", "--json"}, Description: "Ask the account owner to reopen a DONE or CANCELLED project. Run it when a write was refused with PROJECT_REOPEN_REQUIRED and the work changes that project's acceptance criteria. It returns at once. When the owner answers you are told: on Reopen, retry your write; on a decline, do not ask again; tell the person.", Mutates: true, SessionOnly: true},
 	{Tool: "project_merge_evidence", Argv: []string{"orbit", "project", "merge-evidence"}, Usage: "orbit project merge-evidence PROJECT_ID --requirement-id ID --target-branch REF --content-hash SHA256 [options]", Arguments: []string{"[project-id] (required)", "--requirement-id <text> (required)", "--target-branch <ref> (required)", "--content-hash <sha256> (required, 64 hex characters)", "--source <text>", "--detail <json> | --detail-file -", "--json"}, Description: "Record what a target branch was observed to CONTAIN — the merge half of a project's acceptance evidence. Hash the content you actually read (a normalized `git grep` result, a blob or tree digest, a rendered diff), never `git branch --contains`: after a squash merge that answer is a guaranteed false negative while the content is plainly there. Same content as the last observation and only the observation time moves; different content writes a new row one refGeneration up and advances the evidence version automatically. Nothing judges the observation: migration 0229 removed the project acceptance judgment, so this records what was seen and stops there.", Mutates: true},
 	{Tool: "project_create", Argv: []string{"orbit", "project", "create"}, Usage: "orbit project create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--goal <text> | --goal-file - (what the work is trying to achieve; max 4,000 characters)", "--acceptance-criteria-items <json array> | --acceptance-criteria-items-file - (every item requires text + verificationMethod)", "--instructions <text> | --instructions-file - (how the work is to be done; max 10,000 characters)", "--workspace-id <id> (open the coordinator in this workspace instead of in the calling session; needs orchestration enabled)", "--integration-line <MAIN|PROJECT_BRANCH>", "--project-branch <ref>", "--upstream-ref <ref>", "--merge-check-command <text>", "--merge-check-timeout-seconds <n>", "--landing-check-command <text>", "--landing-check-timeout-seconds <n>", "--escalate-after-seconds <n>", "--request-id <id> (only to repeat a create whose answer you never saw: the id its failure named)", "--json"}, Description: "Create a project under this runner's owner — the durable context a body of work is carried out from, as opposed to a task, which is one piece of that work. Use --acceptance-criteria-items for project outcomes; each item requires assertion text and a reader-facing verificationMethod. Nothing in Orbit evaluates them: migration 0229 removed the project acceptance judgment, so a criterion is a stated condition and no more. Inside a session it first puts a confirmation card in front of the user and waits for the answer: nothing is created if they decline. The project starts OPEN and holds no tasks; file them with `orbit task create --project-id <id>` afterwards. Inside a session the project is also bound to that session as its coordinator, and to the workspace it runs in, in the same write that creates it — so opening the coordinator later returns to this conversation rather than starting another; one session coordinates at most one project — record a second from the same conversation and it is refused ALREADY_COORDINATING, naming the project this session coordinates and carrying childSessionPrompt: unless that project is the one being created, ask the user, and on a yes `orbit session create --prompt-file -` with that prompt opens the child that records it and coordinates it (without session create, the user starts that session by hand) — and headless there is no session and so no such binding. --workspace-id says the coordinator belongs elsewhere: it OPENS the conversation there, since a project that names a coordination workspace has a coordinator, and it needs orchestration enabled because it names a workspace rather than inheriting one. The whole integration object — the line (where this project's finished tasks land, with the project branch and upstream as full refs), the merge check run on the combined tree before a landing, and the window an exception waits on the coordinator — is the account owner's at creation, so it is accepted at a terminal and refused for an agent session: a merge-check card names the project it changes and this one does not exist yet, and the line is decided at the first integration and locked from then on. A session sets the merge check afterwards with `orbit project update --merge-check-command`, which asks the owner first.", Mutates: true},
 	{Tool: "project_update", Argv: []string{"orbit", "project", "update"}, Usage: "orbit project update PROJECT_ID [options]", Arguments: []string{"[project-id] (required)", "--title <text>", "--goal <text> | --goal-file - | --clear-goal", "--acceptance-criteria-items <json array> | --acceptance-criteria-items-file - (structured whole replacement; text + verificationMethod required; only a tightening lands immediately, and [] drops every criterion, which is held)", "--instructions <text> | --instructions-file - | --clear-instructions", "--status <OPEN|DONE|CANCELLED>", "--integration-line <MAIN|PROJECT_BRANCH>", "--project-branch <ref>", "--upstream-ref <ref>", "--merge-check-command <text>", "--merge-check-timeout-seconds <n>", "--landing-check-command <text>", "--landing-check-timeout-seconds <n>", "--delivery-mode <PLATFORM|AGENT_PUSH>", "--non-code <true|false>", "--non-code-reason <text>", "--expected-config-revision <n>", "--json"}, Description: "Update a project you own. The integration settings are two decisions in one object. THE LINE — --integration-line, --project-branch, --upstream-ref — is where this project's finished tasks land (MAIN, or a project branch that reaches main later), and it is the account owner's to choose: accepted at a terminal, refused for an agent session. Unchosen, it is decided at the first integration (code tasks that depend on one another go through a project branch) and locked from then on. --delivery-mode (PLATFORM: Orbit lands finished work; AGENT_PUSH: the agents push it to main themselves, MAIN line only) is the owner's in the same way, and stays changeable after the line locks. THE MERGE CHECK — --merge-check-command, --merge-check-timeout-seconds — is what runs on the combined tree before a landing, and inside a session it is yours to PROPOSE: this command first puts the project, the check as it stands and the check you are asking for on a confirmation card and waits for the account owner, and the change takes effect only if they approve it; nothing is written if they decline, and a second change is a second question, because an approval covers the exact command and timeout it named. At a terminal there is nobody to ask and the write goes straight through. Structured acceptance items are a whole-collection replacement, and only a tightening edit lands immediately — adding an item, reordering, or stepping an item's verificationMethod up the HUMAN → VERIFICATION → EXECUTABLE ladder. Any other edit (dropping an item, rewriting an item's text, or rewording verificationMethod any other way) is held as a proposal for the account owner to decide, reported as acceptanceCriteriaHold with the criteria left as they were; so [] drops every criterion rather than clearing the collection, and is held whenever there is one to drop. Every item requires text and verificationMethod; preserve ids from project_get to retain identity, omit id to add. Nothing evaluates them. At least one flag is required, and --expected-config-revision does not count as one. Only one --*-file flag per invocation, since they all read the same stdin.", Mutates: true},
@@ -4073,6 +4216,20 @@ var notifyCLICapabilities = []cliCapabilitySpec{
 		Arguments:   []string{"--message <text> (required)", "--json"},
 		Description: "In a task run of an Automatic project this goes to the project's coordinator, not to the owner's devices. Read recipient in the result to see who got it: coordinator, or owner when Orbit fell back. Alert the human this runs for on their devices, with a line you write. For when you need something only they can give and are otherwise stuck, or the thing they were waiting for is done — not for progress updates. Inside a session they can reply from the notification. At most one per session per minute; read the result, which says whether anybody was actually alerted.",
 		Mutates:     true,
+	},
+}
+
+var ownerRequestCLICapabilities = []cliCapabilitySpec{
+	{
+		Tool:  "request_owner_action",
+		Argv:  []string{"orbit", "owner-request"},
+		Usage: "orbit owner-request --kind KIND --title TEXT --why TEXT [options] [--json]",
+		Arguments: []string{"--kind <DECISION|SECRET|MANUAL_STEP|CONFIRM|WIKI_CREATE|CHANGE> (required)", "--title <text> (required for every kind but WIKI_CREATE)", "--why <text> (required)",
+			"--runner <id|name> --max-concurrent <n> (CHANGE only: the runner's Max Concurrent you propose, n of 1 or more; a runner name is looked up in the runner list)",
+			"--blocks-task-id <id> (repeatable)", "--if-unanswered <text>", "--steps <json array>", "--secret-spec <json object>", "--options <json array>", "--recommended-option <n>", "--expires-in <seconds>", "--client-request-id <id>", "--json"},
+		Description: "Ask the account owner for something only they can do or provide; the same request as the request_owner_action tool, filed as the session it runs in. It returns once the request is filed, and the outcome arrives later as a turn in the conversation. kind CHANGE proposes a runner's Max Concurrent: the owner applies it with one press and you never write the setting yourself; read `applied` in the outcome, not `requested`, because the owner may choose a different number.",
+		Mutates:     true,
+		SessionOnly: true,
 	},
 }
 
@@ -4127,10 +4284,10 @@ var runnerCLICapabilities = []cliCapabilitySpec{
 // watchCLICapabilities are listed inside a session only (SessionOnly). session_await is not here: it sits
 // with the session commands, behind the orchestration gate session_get is behind.
 var watchCLICapabilities = []cliCapabilitySpec{
-	{Tool: "watch_create", Argv: []string{"orbit", "watch", "create"}, Usage: "orbit watch create --target KIND:ID [--target KIND:ID ...] (--predicate JSON | --predicate-file -) [options]", Arguments: []string{"--target <TASK|SESSION>:<id> (targets; repeatable, at least one)", "--predicate <json> | --predicate-file - (required; grammar versions 1 to 3)", "--predicate-version <n> (predicateVersion 1, 2 or 3; default: the lowest the predicate needs)", "--action <RESUME_SESSION|NOTIFY_USER> (default RESUME_SESSION)", "--ttl-seconds <n> (60-2592000; default 86400)", "--idempotency-key <key>", "--json"}, Mutates: true, SessionOnly: true},
+	{Tool: "watch_create", Argv: []string{"orbit", "watch", "create"}, Usage: "orbit watch create --target KIND:ID [--target KIND:ID ...] (--predicate JSON | --predicate-file -) [options]", Arguments: []string{"--target <TASK|SESSION>:<id> (targets; repeatable, at least one)", "--predicate <json> | --predicate-file - (required; grammar versions 1 to 4)", "--predicate-version <n> (predicateVersion 1 to 4; default: the lowest the predicate needs)", "--action <RESUME_SESSION|NOTIFY_USER> (default RESUME_SESSION)", "--ttl-seconds <n> (60-2592000; default 86400)", "--idempotency-key <key>", "--json"}, Mutates: true, SessionOnly: true},
 	{Tool: "watch_get", Argv: []string{"orbit", "watch", "get"}, Usage: "orbit watch get WATCH_ID [--json]", Arguments: []string{"[watch-id] (required)", "--json"}, SessionOnly: true},
 	{Tool: "watch_list", Argv: []string{"orbit", "watch", "list"}, Usage: "orbit watch list [--state STATE] [--json]", Arguments: []string{"--state <" + strings.Join(watchStates, "|") + ">", "--json"}, SessionOnly: true},
-	{Tool: "watch_update", Argv: []string{"orbit", "watch", "update"}, Usage: "orbit watch update WATCH_ID [--predicate JSON | --predicate-file -] [--ttl-seconds N] [--json]", Arguments: []string{"[watch-id] (required)", "--predicate <json> | --predicate-file -", "--predicate-version <n> (predicateVersion 1, 2 or 3; default: the lowest the predicate needs)", "--ttl-seconds <n> (60-2592000, counted from now)", "--json"}, Mutates: true, SessionOnly: true},
+	{Tool: "watch_update", Argv: []string{"orbit", "watch", "update"}, Usage: "orbit watch update WATCH_ID [--predicate JSON | --predicate-file -] [--ttl-seconds N] [--json]", Arguments: []string{"[watch-id] (required)", "--predicate <json> | --predicate-file -", "--predicate-version <n> (predicateVersion 1 to 4; default: the lowest the predicate needs)", "--ttl-seconds <n> (60-2592000, counted from now)", "--json"}, Mutates: true, SessionOnly: true},
 	{Tool: "watch_cancel", Argv: []string{"orbit", "watch", "cancel"}, Usage: "orbit watch cancel WATCH_ID [--json]", Arguments: []string{"[watch-id] (required)", "--json"}, Mutates: true, SessionOnly: true},
 	{Tool: "task_await", Argv: []string{"orbit", "task", "await"}, Usage: "orbit task await --task-id ID[,ID...] [--until PRESET] [--ttl-seconds N] [--idempotency-key KEY] [--json]", Arguments: awaitCLIArguments("task-id", "taskIds", taskAwaitPresets), Mutates: true, SessionOnly: true},
 }
@@ -4190,6 +4347,20 @@ var wikiCLICapabilities = []cliCapabilitySpec{
 			"--json",
 		},
 		Mutates:     true,
+		SessionOnly: true,
+	},
+	{
+		Tool:  "wiki_read",
+		Argv:  []string{"orbit", "wiki", "read"},
+		Usage: "orbit wiki read [--q WORDS | --doc SLUG [--section KEY] | --draft ID] [--more CURSOR] [--json]",
+		Arguments: []string{
+			"--q <words> (a search; at most one of q, doc and draft)",
+			"--doc <slug> (a document's whole definition and its sentences)",
+			"--section <key> (with doc: that one section)",
+			"--draft <card id> (a card of this chat)",
+			"--more <cursor> (the cursor an earlier answer ended with, with the same other arguments)",
+			"--json",
+		},
 		SessionOnly: true,
 	},
 	{
@@ -4398,12 +4569,12 @@ var baseCLICapabilities = withTaskCompletionCapabilityArgs([]cliCapabilitySpec{
 	{Tool: "task_get", Argv: []string{"orbit", "task", "get"}, Usage: "orbit task get [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}},
 	{Tool: "task_evidence_list", Argv: []string{"orbit", "task", "evidence-list"}, Usage: "orbit task evidence-list [task-id] [--summary [--before N]] [--revision N] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--summary (the newest 10 revisions in summary form under 20,000 characters; what the MCP tool answers by default, where summary=false asks for the whole ledger)", "--before <n> (with --summary: the page of revisions older than n)", "--revision <n> (one revision in full)", "--json"}, Description: "List immutable structured completion-evidence revisions in task-local order. Reads no comments and depends on no Session lifecycle state."},
 	{Tool: "task_evidence_submit", Argv: []string{"orbit", "task", "evidence-submit"}, Usage: "orbit task evidence-submit [task-id] (--evidence JSON | --evidence-file -) [--source-session-id ID] [--idempotency-key KEY] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--evidence <JSON object> | --evidence-file - (required)", "--source-session-id <id> (defaults to ORBIT_SESSION_ID)", "--idempotency-key <key> (max 200 characters)", "--json"}, Description: "Submit an explicit structured completion-evidence fact from a task Session. It appends or replays a revision without changing Task or Session state and without adding a comment.", Mutates: true},
-	{Tool: "task_create", Argv: []string{"orbit", "task", "create"}, Usage: "orbit task create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--description <text> | --description-file -", "--assignee-id <id> | --unassigned", "--list-id <id>", "--project-id <id> (file the task under this project; orthogonal to --list-id, must be owned by the caller)", "--handoff-reason <text> (handoff: DECLARE that this create crosses into the project --project-id names, and why. Only meaningful beside an explicit --project-id — a crossing has to name where it is going — and it carries no authority: it makes the crossing askable, and the ACCOUNT OWNER answers. Undeclared, a write into another project is refused PROJECT_SCOPE_MISMATCH; declared, it waits as CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING, read back with `orbit project crossings`)", "--parent-task-id <id> (create it as a subtask of this existing task; must be owned by the caller and in the same project)", "--verifies-task-id <id> (file it as a verification of this existing task: what makes a check a structured relation, and the precondition for a verdict; same project, not itself, and not itself a verification)", "--supersedes-task-id <id> (record in this same write that the new task REPLACES that stopped attempt: the predecessor must be CANCELLED or FAILED, owned by you and in the same project, and must not already have been replaced)", "--acceptance-criteria <text> | --acceptance-criteria-file - (what would settle that this task is done; max 4,000 characters)", "--criterion-key <key> (criterionKey: which of the PROJECT's stated acceptance criteria this work serves, as a key from project_get; required of a project's judgment session and optional for everybody else)", "--codeless[=true|false] (codeless: this work produces no code — a rollout, a walkthrough, research — so it takes no part in its acceptance criterion's landing; no reason is needed at creation)", "--due-date <ISO date>", "--run-at <ISO 8601 date-time> (runAt: a one-time scheduled start, not a deadline — the server's once-a-minute scan starts the task once the time has come, whether or not --auto-run-when-ready is set, and only while it is OPEN, not held, with an assignee bound to a runner, its prerequisites satisfied and no session occupying it; the run it starts clears it)", "--start-now (startNow: start the task as soon as it is created, for work the person wants run now — one approval covers the create and the start, so do not ask them again or run orbit task start after; it writes a --run-at of now, so it cannot be combined with --run-at, and a refused start leaves the task created with the start deferred to the server's once-a-minute scan)", "--start-when <json> (startWhen: start the task once, when something outside Orbit becomes true — {text, command, compare, holdSeconds?, intervalSeconds?, timeoutSeconds?, unit?, baseline}; the command is a read-only probe the assignee's runner runs unattended and the card shows verbatim, with no secret in it; baseline is what it read when you ran it, and a condition without one is refused; not with --run-at or --start-now)", "--fork-from-session (forkFromSession: start the task from this session's work, its uncommitted edits included, on this machine and in its own checkout; refused with FORK_SUBMODULE_NOT_SHAREABLE when a submodule has work the snapshot cannot carry)", "--idempotency-key <key> (idempotencyKey: " + taskCreateIdempotencyKeyDescription + ")", engineArgument() + " (pin the CLI its runs use)", "--provider <slug> (pin where their credential comes from: an engine's own sign-in, opencode, an account pool or an API key; named alone it pins the engine it runs on by default too)", "--model <model>", "--depends-on <id[,id...]> (repeatable)", "--attachment-id <id[,id...]> (repeatable; attachmentIds: copy uploaded attachments you own as task inputs, preserving the originals)", "--label <labels[,labels...]> (repeatable)", "--auto-run-when-ready[=true|false] (autoRunWhenReady: start the task without a manual start once it is ready. " + taskAutoRunUnfiledNoPrerequisites + ")", "--completion-policy <MANUAL|ALL_CHILDREN_DONE|VERIFICATION_PASSED> (how this task's own completion is decided once it has subtasks; MANUAL, the default, never completes it automatically)", "--json"}, Description: "Create a task. Creating is not starting, but --auto-run-when-ready defaults to true: a task with an assignee starts by itself once it is ready — every prerequisite DONE and, in a project, the project started — so if the person said it must not run until they say so, pass --auto-run-when-ready=false; leaving it out is not \"do not start\". Inside a session it is attributed to this agent (ORBIT_AGENT_ID), the same as the MCP task tools; the runner's machine credential has no card-free form of this write, so a headless process must act as the account owner with a personal access token (`ORBIT_USER_TOKEN`) or `orbit login`, which writes through the user route and is recorded as the person. ORBIT_AGENT_ID is also the default assignee. Nothing runs in this call unless --start-now is passed; otherwise call task_start when it should run. Inside a session it first puts a confirmation card in front of the user and waits for the answer: nothing is written if they decline. The exception is a session's first few tasks: while this session's creates, counted with this call's, stay within the account's allowance (8 unless the owner set another number; 0 cards every create), the card is answered at once with no one asked, unless the session runs in a narrower mode than the account default; the create that would go past it, and every one after it, waits for the person. Every runner task creation requires --completion-criterion explicitly; EVIDENCE_JUDGMENT remains available when intended but is never inferred from omission, and verifier, executable, or policy flags do not replace the declaration. --project-id files the task under a project you own, which is orthogonal to --list-id: the project says what the work is for, the list decides how it is dispatched. --parent-task-id makes it a subtask of an existing task, which must be in the same project as this one — pass both flags for a subtask under a project's task, since the project is not inherited from the parent. --acceptance-criteria states what would settle that this task is done — the observable, verifiable result, as opposed to --description, which says what work to perform, and to the project's own acceptance criteria, which settle the whole goal; the server accepts up to 4,000 characters. --acceptance-criteria-file reads it from stdin ('-' only) and cannot be combined with --description-file, which reads the same stream. --supersedes-task-id records, in the same transaction that creates this task, that it replaces an attempt that already stopped: the predecessor keeps the CANCELLED or FAILED it ended with and gains a pointer to this task plus terminalReason SUPERSEDED. Use it instead of creating the replacement and remembering to link it afterwards — the link is what every downstream reader actually consults, and an attempt that never got one is re-dispatched by the control loop as an ordinary unfinished failure.", Mutates: true},
+	{Tool: "task_create", Argv: []string{"orbit", "task", "create"}, Usage: "orbit task create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--description <text> | --description-file -", "--assignee-id <id> | --unassigned", "--list-id <id>", "--project-id <id> (file the task under this project; orthogonal to --list-id, must be owned by the caller)", "--handoff-reason <text> (handoff: DECLARE that this create crosses into the project --project-id names, and why. Only meaningful beside an explicit --project-id — a crossing has to name where it is going — and it carries no authority: it makes the crossing askable, and the ACCOUNT OWNER answers. Undeclared, a write into another project is refused PROJECT_SCOPE_MISMATCH; declared, it waits as CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING, read back with `orbit project crossings`)", "--parent-task-id <id> (create it as a subtask of this existing task; must be owned by the caller and in the same project)", "--verifies-task-id <id> (file it as a verification of this existing task: what makes a check a structured relation, and the precondition for a verdict; same project, not itself, and not itself a verification)", "--supersedes-task-id <id> (record in this same write that the new task REPLACES that stopped attempt: the predecessor must be CANCELLED or FAILED, owned by you and in the same project, and must not already have been replaced)", "--acceptance-criteria <text> | --acceptance-criteria-file - (what would settle that this task is done; max 4,000 characters)", "--criterion-key <key> (criterionKey: which of the PROJECT's stated acceptance criteria this work serves, as a key from project_get; required of a project's judgment session and optional for everybody else)", "--codeless[=true|false] (codeless: this work produces no code — a rollout, a walkthrough, research — so it resolves no source and its run gets a checkout with no branch until it has something to commit; it does not decide landing; no reason is needed at creation)", "--landing-check-exempt[=true|false] (landingCheckExempt: when this task lands on its project's branch, skip the project's landing check; its own acceptance still runs and the merge check before main is untouched. Needs --landing-check-exempt-reason; refused LANDING_CHECK_EXEMPT_NEEDS_PROJECT_BRANCH on a MAIN line and LANDING_CHECK_EXEMPT_COORDINATOR_ONLY from a session that does not coordinate the project)", "--landing-check-exempt-reason <text> (landingCheckExemptReason: why the project's landing check has nothing to say about this task; at most 280 characters)", "--due-date <ISO date>", "--run-at <ISO 8601 date-time> (runAt: a one-time scheduled start, not a deadline — the server's once-a-minute scan starts the task once the time has come, whether or not --auto-run-when-ready is set, and only while it is OPEN, not held, with an assignee bound to a runner, its prerequisites satisfied and no session occupying it; the run it starts clears it)", "--start-now (startNow: start the task as soon as it is created, for work the person wants run now — one approval covers the create and the start, so do not ask them again or run orbit task start after; it writes a --run-at of now, so it cannot be combined with --run-at, and a refused start leaves the task created with the start deferred to the server's once-a-minute scan)", "--start-when <json> (startWhen: start the task once, when something outside Orbit becomes true — {text, command, compare, holdSeconds?, intervalSeconds?, timeoutSeconds?, unit?, baseline}; the command is a read-only probe the assignee's runner runs unattended and the card shows verbatim, with no secret in it; baseline is what it read when you ran it, and a condition without one is refused; not with --run-at or --start-now)", "--fork-from-session (forkFromSession: start the task from this session's work, its uncommitted edits included, on this machine and in its own checkout; refused with FORK_SUBMODULE_NOT_SHAREABLE when a submodule has work the snapshot cannot carry)", "--idempotency-key <key> (idempotencyKey: " + taskCreateIdempotencyKeyDescription + ")", engineArgument() + " (pin the CLI its runs use)", "--provider <slug> (pin where their credential comes from: an engine's own sign-in, opencode, an account pool or an API key; named alone it pins the engine it runs on by default too)", "--model <model>", "--depends-on <id[,id...]> (repeatable)", "--attachment-id <id[,id...]> (repeatable; attachmentIds: copy uploaded attachments you own as task inputs, preserving the originals)", "--label <labels[,labels...]> (repeatable)", "--auto-run-when-ready[=true|false] (autoRunWhenReady: start the task without a manual start once it is ready. " + taskAutoRunUnfiledNoPrerequisites + ")", "--completion-policy <MANUAL|ALL_CHILDREN_DONE|VERIFICATION_PASSED> (how this task's own completion is decided once it has subtasks; MANUAL, the default, never completes it automatically)", "--json"}, Description: "Create a task. Creating is not starting, and --auto-run-when-ready is required: =true means a task with an assignee starts by itself once it is ready — every prerequisite DONE and, in a project, the project started — and =false keeps it recorded until someone starts it, which is what you pass when the person said it must not run until they say so; a call without it is refused. Inside a session it is attributed to this agent (ORBIT_AGENT_ID), the same as the MCP task tools; the runner's machine credential has no card-free form of this write, so a headless process must act as the account owner with a personal access token (`ORBIT_USER_TOKEN`) or `orbit login`, which writes through the user route and is recorded as the person. ORBIT_AGENT_ID is also the default assignee. Nothing runs in this call unless --start-now is passed; otherwise call task_start when it should run. Inside a session it first puts a confirmation card in front of the user and waits for the answer: nothing is written if they decline. The exception is a session's first few tasks: while this session's creates, counted with this call's, stay within the account's allowance (8 unless the owner set another number; 0 cards every create), the card is answered at once with no one asked, unless the session runs in a narrower mode than the account default; the create that would go past it, and every one after it, waits for the person. Before a project starts, its coordinator's creates into it are never asked and take nothing from that allowance, however many there are: every item names that projectId, and the start card reviews them all. Every runner task creation requires --completion-criterion explicitly; EVIDENCE_JUDGMENT remains available when intended but is never inferred from omission, and verifier, executable, or policy flags do not replace the declaration. --project-id files the task under a project you own, which is orthogonal to --list-id: the project says what the work is for, the list decides how it is dispatched. --parent-task-id makes it a subtask of an existing task, which must be in the same project as this one — pass both flags for a subtask under a project's task, since the project is not inherited from the parent. --acceptance-criteria states what would settle that this task is done — the observable, verifiable result, as opposed to --description, which says what work to perform, and to the project's own acceptance criteria, which settle the whole goal; the server accepts up to 4,000 characters. --acceptance-criteria-file reads it from stdin ('-' only) and cannot be combined with --description-file, which reads the same stream. --supersedes-task-id records, in the same transaction that creates this task, that it replaces an attempt that already stopped: the predecessor keeps the CANCELLED or FAILED it ended with and gains a pointer to this task plus terminalReason SUPERSEDED. Use it instead of creating the replacement and remembering to link it afterwards — the link is what every downstream reader actually consults, and an attempt that never got one is re-dispatched by the control loop as an ordinary unfinished failure.", Mutates: true},
 	{Tool: "task_evidence_decide", Argv: []string{"orbit", "task", "evidence-decide"}, Usage: "orbit task evidence-decide [task-id] --decision CONFIRM|SEND_BACK --evidence-revision N [--note TEXT] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--decision <CONFIRM|SEND_BACK> (required)", "--evidence-revision <N> (required, as evidence-list returns it)", "--note <text> (required for SEND_BACK, max 4000 characters)", "--json"}, Description: "Record this session's decision about ONE version of a task's completion evidence, as one row and nothing else — no task status, no session state, no comment. The revision answered must still be the task's latest, the criterion the evidence quotes must still be worded the way the project states it today, the deciding session must not have done the work, a session acting for one project may not decide a task in another — a moved task's evidence is decided by the project it is in now — and a run of another task may not decide evidence that is not addressed to it: each refusal carries its code and the action that would clear it. SEND_BACK carries a note saying what the next revision must show and leaves the task OPEN. The deciding Session is ORBIT_SESSION_ID, never a flag.", Mutates: true},
 	{Tool: "task_attribution", Argv: []string{"orbit", "task", "attribution"}, Usage: "orbit task attribution [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Description: "Read one task's attribution boundary — where this work COUNTS (the project's title, Base62 id and status: the only authoritative attribution there is), where it was NOTICED (the discovery project, trigger event, source task and source session — evidence, and labelled as evidence, because finding work somewhere grants nothing about where it may be filed), the declared cross-project crossing that touches it with the stable code and required action a writer meeting it is given, and the attribution blocker holding it up. The acceptance lane went with migration 0229, which removed the project acceptance judgment: the criteria are still stated, and nothing judges them. Every absent fact is null beside a reason, so \"nothing is holding this up\" and \"this build cannot tell you\" read differently. Read it BEFORE writing where you are not certain the work belongs: the alternative is learning it from the refusal, which is after the decision was made."},
-	{Tool: "task_create_batch", Argv: []string{"orbit", "task", "create-batch"}, Usage: "orbit task create-batch (--tasks JSON | --tasks-file -) [--json]", Arguments: []string{"--tasks <json array> | --tasks-file - (required; every item requires explicit completionCriterion, an item that crosses into another project carries \"handoff\": {\"reason\": \"...\"} beside its own projectId, and an OWNER_CONFIRMED item outside an Automatic project carries \"ownerConfirmationReason\")", "--dry-run (judge the plan and write nothing; report where each item would land)", "--idempotency-key <key> (idempotencyKey: " + taskBatchIdempotencyKeyDescription + ")", "--json"}, Description: "Create several tasks in one atomic call — the batch form of task_create. JSON is an array of task objects taking the same fields as task_create, including \"attachmentIds\" (copy uploaded attachments you own as task inputs, preserving the originals) \"runAt\" (an item's one-time scheduled start, as --run-at is on task create) and \"startNow\" (the item's runAt becomes now, so the server's once-a-minute scan starts it after the create; not with \"runAt\") among them; nothing is written unless every item is valid. Creating is not starting, but each item's \"autoRunWhenReady\" defaults to true, as --auto-run-when-ready does on task create: give an item the person wants held \"autoRunWhenReady\": false. Every item declares completionCriterion explicitly; EVIDENCE_JUDGMENT is available but never inferred, and verifier, executable, or policy fields do not replace the declaration. An item may carry \"ref\", and a later item may list that ref in \"dependsOnRefs\" to depend on it without knowing its id yet, or name it in \"parentRef\" to be created as a subtask of it — so a plan lands as a tree in one call. The two answer different questions: dependsOnRefs is when an item may run, parentRef is what it is a part of. \"parentTaskId\" is the same link to a task that already exists (same project as the item); one item cannot carry both. Attribution matches task_create: this agent inside a session. Inside a session a real write (not --dry-run) first puts the batch on a confirmation card and waits for the user's answer; nothing is written if they decline. The exception is a session's first few tasks: while this session's creates, counted with this call's, stay within the account's allowance (8 unless the owner set another number; 0 cards every create), the card is answered at once with no one asked, unless the session runs in a narrower mode than the account default; the create that would go past it, and every one after it, waits for the person. The runner's machine credential has no card-free form of this write — a headless process must act as the account owner with a personal access token (`ORBIT_USER_TOKEN`) or `orbit login`. ORBIT_AGENT_ID is also each item's default assignee. --dry-run judges the plan and writes none of it — not one task, and not even the approval question a declared cross-project crossing would otherwise file — answering instead with where every item WOULD land (project id, title and status), every finding that refuses or warns, and how many rows the real call would add. Use it before filing a plan whose attribution you are not certain of: a refusal tells you which item is wrong, and a dry run tells you where the ones that are RIGHT would go.", Mutates: true},
+	{Tool: "task_create_batch", Argv: []string{"orbit", "task", "create-batch"}, Usage: "orbit task create-batch (--tasks JSON | --tasks-file -) [--json]", Arguments: []string{"--tasks <json array> | --tasks-file - (required; every item requires explicit completionCriterion, an item that crosses into another project carries \"handoff\": {\"reason\": \"...\"} beside its own projectId, and an OWNER_CONFIRMED item outside an Automatic project carries \"ownerConfirmationReason\")", "--dry-run (judge the plan and write nothing; report where each item would land)", "--idempotency-key <key> (idempotencyKey: " + taskBatchIdempotencyKeyDescription + ")", "--json"}, Description: "Create several tasks in one atomic call — the batch form of task_create. JSON is an array of task objects taking the same fields as task_create, including \"attachmentIds\" (copy uploaded attachments you own as task inputs, preserving the originals) \"runAt\" (an item's one-time scheduled start, as --run-at is on task create) and \"startNow\" (the item's runAt becomes now, so the server's once-a-minute scan starts it after the create; not with \"runAt\") among them; nothing is written unless every item is valid. Creating is not starting, but each item's \"autoRunWhenReady\" defaults to true, as --auto-run-when-ready does on task create: give an item the person wants held \"autoRunWhenReady\": false. Every item declares completionCriterion explicitly; EVIDENCE_JUDGMENT is available but never inferred, and verifier, executable, or policy fields do not replace the declaration. An item may carry \"ref\", and a later item may list that ref in \"dependsOnRefs\" to depend on it without knowing its id yet, or name it in \"parentRef\" to be created as a subtask of it — so a plan lands as a tree in one call. The two answer different questions: dependsOnRefs is when an item may run, parentRef is what it is a part of. \"parentTaskId\" is the same link to a task that already exists (same project as the item); one item cannot carry both. Attribution matches task_create: this agent inside a session. Inside a session a real write (not --dry-run) first puts the batch on a confirmation card and waits for the user's answer; nothing is written if they decline. The exception is a session's first few tasks: while this session's creates, counted with this call's, stay within the account's allowance (8 unless the owner set another number; 0 cards every create), the card is answered at once with no one asked, unless the session runs in a narrower mode than the account default; the create that would go past it, and every one after it, waits for the person. Before a project starts, its coordinator's creates into it are never asked and take nothing from that allowance, however many there are: every item names that projectId, and the start card reviews them all. The runner's machine credential has no card-free form of this write — a headless process must act as the account owner with a personal access token (`ORBIT_USER_TOKEN`) or `orbit login`. ORBIT_AGENT_ID is also each item's default assignee. --dry-run judges the plan and writes none of it — not one task, and not even the approval question a declared cross-project crossing would otherwise file — answering instead with where every item WOULD land (project id, title and status), every finding that refuses or warns, and how many rows the real call would add. Use it before filing a plan whose attribution you are not certain of: a refusal tells you which item is wrong, and a dry run tells you where the ones that are RIGHT would go.", Mutates: true},
 	{Tool: "task_batch_pin", Argv: []string{"orbit", "task", "batch-pin"}, Usage: "orbit task batch-pin (--task-id ID | --project ID | --list-id ID | --label L) (--engine ENGINE | --clear-engine) (--provider SLUG | --clear-provider) (--model MODEL | --clear-model) [--json]", Arguments: []string{"--task-id <id[,id...]> (repeatable; narrows rather than excludes — naming it beside a filter re-pins the intersection)", "--project <id> (taskIds: re-pin every task filed under this project — the selector this command exists for, since a project of a hundred thousand tasks cannot be spelled as an id list)", "--list-id <id>", "--label <labels[,labels...]> (repeatable; matches tasks carrying ALL of them)", engineArgument() + " | --clear-engine (an engine named alone is checked against every provider pin the selection holds, and the whole batch is refused when one cannot run on it)", "--provider <slug> | --clear-provider (named alone it pins the engine it runs on by default too)", "--model <model> | --clear-model", "--json"}, Description: "Re-pin many tasks at once: set engine, provider and/or model on every task a selector matches, in ONE request that writes only the rows whose pin really changes. The door for \"change the model of every task in this project\", which task_update can only spell as one call per task — a hundred thousand round trips and as many non-HOT rewrites, of the rows whose model did not change included. A row already carrying the target value is not written at all, so its updated_at is not bumped; that column's one reader is the project list's lastActivityAt, so this makes it more accurate, not less. At least one selector is required (a request naming none is refused rather than read as \"every task this owner has\"), and at least one of engine/provider/model (naming none writes nothing). Tasks with a run in flight are re-pinned like any other: a session already holding the task keeps the model it started on, and the disagreement is reported when the NEXT attempt starts, as TASK_RUN_PIN_CONFLICT. Prints {\"changed\": N}.", Mutates: true},
-	{Tool: "task_update", Argv: []string{"orbit", "task", "update"}, Usage: "orbit task update [task-id] [options]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--title <text>", "--description <text> | --description-file -", "--status <OPEN|IN_PROGRESS|DONE|CANCELLED|FAILED> (DONE is refused; satisfy the task's declared criterion instead)", "--assignee-id <id> | --clear-assignee", "--list-id <id> | --clear-list", "--project <id> | --no-project (projectId: which project this task is filed under — how a mis-filing is corrected once the task exists. --no-project takes it out of every project, --project files it under another one. The ACCOUNT OWNER writes either directly; a session acting under a project scope is refused UNMAPPED_PROJECT_WORK for the first and PROJECT_SCOPE_MISMATCH for the second unless it asks for either with --handoff-reason, which files a request, answers CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING and leaves the task where it is. The owner's confirmation moves the task at once, with nothing to send again; read the request with `orbit project crossings` — no agent answers it)", "--handoff-reason <text> (handoff: ASK for the move --project or --no-project names, and why. Needs one of the two — a move has to say where it is going, and --no-project asks for the task to be taken out of every project, from the project it is in and with no --criterion-key — and carries no authority: it files a MOVE_TASK request, and the task stays where it is until the ACCOUNT OWNER confirms it, which moves the task at once with nothing to send again. Only a session whose own project is the move's source or its target may ask, any other is refused PROJECT_SCOPE_MISMATCH; the request carries --project, --handoff-reason and optionally --criterion-key, a criterion of the TARGET project that the task declares once moved, while what it declares in its current project is withdrawn. Out of a settled (DONE or CANCELLED) project only a task serving none of that project's acceptance criteria may move; into a settled project nothing may (PROJECT_REOPEN_REQUIRED))", "--parent-task-id <id> | --clear-parent (move this task under that task, or detach it; same project, never itself or one of its own subtasks)", "--verifies-task-id <id> | --clear-verifies (point this task at the task it verifies, or detach it; refused once this verification has concluded anything)", "--due-date <ISO date> | --clear-due-date", "--run-at <ISO 8601 date-time> | --clear-run-at (runAt: set or move this task's one-time scheduled start, or cancel it; passing neither leaves it as it is)", engineArgument() + " | --clear-engine (pin the CLI its runs use, or clear only that pin; named alone it keeps the provider pin, which then has to run on it)", "--provider <slug> | --clear-provider (pin where their credential comes from, or clear only that pin; named alone it pins the engine it runs on by default too)", "--model <model> | --clear-model", "--acceptance-criteria <text> | --acceptance-criteria-file - | --clear-acceptance-criteria (replaces what would settle that this task is done; max 4,000 characters)", "--criterion-key <key> | --clear-criterion-key (criterionKey: which of the PROJECT's stated acceptance criteria this task serves, as a key from project_get; re-sending the same key re-records that criterion's CURRENT revision, which is how work declared against wording that has since moved is brought up to date, and clearing takes the declaration back without touching the task)", "--codeless[=true|false] (codeless: declare that this task produces no code, which takes it out of its acceptance criterion's landing, or take the declaration back with =false; declaring needs --codeless-reason and is refused for a task that already has commits of its own)", "--codeless-reason <text> (codelessReason: why this task produces no code; required when the call turns the task codeless, stored on the task beside the declaration)", "--depends-on <id[,id...]> (repeatable; replaces all)", "--clear-dependencies", "--label <labels[,labels...]> | --clear-labels (repeatable; replaces all)", "--auto-run-when-ready[=true|false] (autoRunWhenReady: start the task without a manual start once it is ready. " + taskAutoRunUnfiledNoPrerequisites + ")", "--priority <int> | --clear-priority (priority: where this task stands in its list's queue — when the list has more ready tasks than free slots, the server's automatic dispatch gives the next slot to the highest priority first; 0 is the default and equal priorities keep the order they had, a negative value goes after everything left at 0; it starts nothing and gets past no gate, and --clear-priority returns it to 0)", "--completion-policy <MANUAL|ALL_CHILDREN_DONE|VERIFICATION_PASSED> (how this task's completion is decided once it has subtasks)", "--verdict <PASS|FAIL|INCONCLUSIVE> | --clear-verdict (this VERIFICATION task's conclusion about the task it verifies; revoking a PASS reopens a subject VERIFICATION_PASSED had completed)", "--superseded-by-task-id <id> | --clear-superseded ( the later attempt that replaced this one; only a CANCELLED or FAILED task may name one, and it must be in the same project)", "--terminal-reason <SUPERSEDED|ABANDONED> | --clear-terminal-reason (terminalReason: why this task stopped, when its status alone does not say)", "--json"}, Description: "Update a task. Only the flags you pass are sent, so a partial edit never blanks the rest of the task. --project with --handoff-reason asks for a move rather than making one: the request waits for the account owner, and their confirmation moves the task, with nothing to send again. Direct status DONE is refused for every actor; the structured refusal names the declared EXECUTABLE, VERIFICATION, or EVIDENCE_JUDGMENT path. FAILED remains writable as a run's conservative self-report. --parent-task-id moves the task under another task you own and --clear-parent detaches it, which is how a decomposition is corrected once the tasks exist rather than by deleting and recreating them; the parent must be in the same project, and neither a task itself nor one of its own subtasks may be named (both close a loop). It is membership, not ordering — when a task runs is --depends-on. --acceptance-criteria replaces what would settle that this task is done — the observable, verifiable result, as opposed to --description, which says what work to perform, and to the project's own acceptance criteria, which settle the whole goal rather than this one task. It is a whole-field replacement: omitting it preserves the task's current criteria, text replaces them (\"\" records that there are none worth stating), and --clear-acceptance-criteria removes them, which is why clearing cannot be combined with either form. Expect to use it after creation — what proves a task done is often only clear once the work is understood. The server accepts up to 4,000 characters. --acceptance-criteria-file reads the replacement from stdin ('-' only) and cannot be combined with --description-file, which reads the same stream.", Mutates: true},
+	{Tool: "task_update", Argv: []string{"orbit", "task", "update"}, Usage: "orbit task update [task-id] [options]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--title <text>", "--description <text> | --description-file -", "--status <OPEN|IN_PROGRESS|DONE|CANCELLED|FAILED> (DONE is refused; satisfy the task's declared criterion instead)", "--assignee-id <id> | --clear-assignee", "--list-id <id> | --clear-list", "--project <id> | --no-project (projectId: which project this task is filed under — how a mis-filing is corrected once the task exists. --no-project takes it out of every project, --project files it under another one. The ACCOUNT OWNER writes either directly; a session acting under a project scope is refused UNMAPPED_PROJECT_WORK for the first and PROJECT_SCOPE_MISMATCH for the second unless it asks for either with --handoff-reason, which files a request, answers CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING and leaves the task where it is. The owner's confirmation moves the task at once, with nothing to send again; read the request with `orbit project crossings` — no agent answers it)", "--handoff-reason <text> (handoff: ASK for the move --project or --no-project names, and why. Needs one of the two — a move has to say where it is going, and --no-project asks for the task to be taken out of every project, from the project it is in and with no --criterion-key — and carries no authority: it files a MOVE_TASK request, and the task stays where it is until the ACCOUNT OWNER confirms it, which moves the task at once with nothing to send again. Only a session whose own project is the move's source or its target may ask, any other is refused PROJECT_SCOPE_MISMATCH; the request carries --project, --handoff-reason and optionally --criterion-key, a criterion of the TARGET project that the task declares once moved, while what it declares in its current project is withdrawn. Out of a settled (DONE or CANCELLED) project only a task serving none of that project's acceptance criteria may move; into a settled project nothing may (PROJECT_REOPEN_REQUIRED))", "--parent-task-id <id> | --clear-parent (move this task under that task, or detach it; same project, never itself or one of its own subtasks)", "--verifies-task-id <id> | --clear-verifies (point this task at the task it verifies, or detach it; refused once this verification has concluded anything)", "--due-date <ISO date> | --clear-due-date", "--run-at <ISO 8601 date-time> | --clear-run-at (runAt: set or move this task's one-time scheduled start, or cancel it; passing neither leaves it as it is)", engineArgument() + " | --clear-engine (pin the CLI its runs use, or clear only that pin; named alone it keeps the provider pin, which then has to run on it)", "--provider <slug> | --clear-provider (pin where their credential comes from, or clear only that pin; named alone it pins the engine it runs on by default too)", "--model <model> | --clear-model", "--acceptance-criteria <text> | --acceptance-criteria-file - | --clear-acceptance-criteria (replaces what would settle that this task is done; max 4,000 characters)", "--criterion-key <key> | --clear-criterion-key (criterionKey: which of the PROJECT's stated acceptance criteria this task serves, as a key from project_get; re-sending the same key re-records that criterion's CURRENT revision, which is how work declared against wording that has since moved is brought up to date, and clearing takes the declaration back without touching the task)", "--codeless[=true|false] (codeless: declare that this task produces no code, so it resolves no source and its run gets a checkout with no branch until it has something to commit; it does not decide landing, or take the declaration back with =false; declaring needs --codeless-reason and is refused for a task that already has commits of its own)", "--codeless-reason <text> (codelessReason: why this task produces no code; required when the call turns the task codeless, stored on the task beside the declaration)", "--landing-check-exempt[=true|false] (landingCheckExempt: exempt this task from its project's landing check, or take it back with =false; its own acceptance still runs and the merge check before main is untouched. Exempting needs --landing-check-exempt-reason; refused LANDING_CHECK_EXEMPT_NEEDS_PROJECT_BRANCH on a MAIN line and LANDING_CHECK_EXEMPT_COORDINATOR_ONLY from a session that does not coordinate the project)", "--landing-check-exempt-reason <text> (landingCheckExemptReason: why the project's landing check has nothing to say about this task, at most 280 characters; alone it replaces the reason of a task that is already exempt)", "--depends-on <id[,id...]> (repeatable; replaces all)", "--clear-dependencies", "--label <labels[,labels...]> | --clear-labels (repeatable; replaces all)", "--auto-run-when-ready[=true|false] (autoRunWhenReady: start the task without a manual start once it is ready. " + taskAutoRunUnfiledNoPrerequisites + ")", "--priority <int> | --clear-priority (priority: where this task stands in its list's queue — when the list has more ready tasks than free slots, the server's automatic dispatch gives the next slot to the highest priority first; 0 is the default and equal priorities keep the order they had, a negative value goes after everything left at 0; it starts nothing and gets past no gate, and --clear-priority returns it to 0)", "--completion-policy <MANUAL|ALL_CHILDREN_DONE|VERIFICATION_PASSED> (how this task's completion is decided once it has subtasks)", "--verdict <PASS|FAIL|INCONCLUSIVE> | --clear-verdict (this VERIFICATION task's conclusion about the task it verifies; revoking a PASS reopens a subject VERIFICATION_PASSED had completed)", "--superseded-by-task-id <id> | --clear-superseded ( the later attempt that replaced this one; only a CANCELLED or FAILED task may name one, and it must be in the same project)", "--terminal-reason <SUPERSEDED|ABANDONED> | --clear-terminal-reason (terminalReason: why this task stopped, when its status alone does not say)", "--json"}, Description: "Update a task. Only the flags you pass are sent, so a partial edit never blanks the rest of the task. --project with --handoff-reason asks for a move rather than making one: the request waits for the account owner, and their confirmation moves the task, with nothing to send again. Direct status DONE is refused for every actor; the structured refusal names the declared EXECUTABLE, VERIFICATION, or EVIDENCE_JUDGMENT path. FAILED remains writable as a run's conservative self-report. --parent-task-id moves the task under another task you own and --clear-parent detaches it, which is how a decomposition is corrected once the tasks exist rather than by deleting and recreating them; the parent must be in the same project, and neither a task itself nor one of its own subtasks may be named (both close a loop). It is membership, not ordering — when a task runs is --depends-on. --acceptance-criteria replaces what would settle that this task is done — the observable, verifiable result, as opposed to --description, which says what work to perform, and to the project's own acceptance criteria, which settle the whole goal rather than this one task. It is a whole-field replacement: omitting it preserves the task's current criteria, text replaces them (\"\" records that there are none worth stating), and --clear-acceptance-criteria removes them, which is why clearing cannot be combined with either form. Expect to use it after creation — what proves a task done is often only clear once the work is understood. The server accepts up to 4,000 characters. --acceptance-criteria-file reads the replacement from stdin ('-' only) and cannot be combined with --description-file, which reads the same stream.", Mutates: true},
 	{Tool: "task_reopen", Argv: []string{"orbit", "task", "reopen"}, Usage: "orbit task reopen [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Description: "Take a stopped task — DONE, CANCELLED or FAILED — back to OPEN in place, so this same task carries the next attempt instead of a new one being filed. History is kept (evidence, comments, dependencies, the project it is filed under, its criterion declaration); the run's progress is not, because reopening starts a new lifecycle epoch. A SUPERSEDED/ABANDONED retirement is cleared in the same write, which is what makes a replaced attempt runnable again — Run refuses one while that record stands. Refusals are the server's own and pass through unread: a verification task carrying a verdict is told to revoke it first.", Mutates: true},
 	{Tool: "task_delete", Argv: []string{"orbit", "task", "delete"}, Usage: "orbit task delete [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Mutates: true},
 	{Tool: "task_start", Argv: []string{"orbit", "task", "start"}, Usage: "orbit task start [task-id] [--trigger-id ID] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--trigger-id <id> (only to replay a start whose answer was lost: the triggerId its answer or error named; omitted, a new one is drawn and printed)", "--json"}, Mutates: true},
@@ -4491,6 +4662,7 @@ func finishOperationCatalog(ops []*operation) []*operation {
 		{"provider", providerCLICapabilities},
 		{"project", projectCLICapabilities},
 		{"notify", notifyCLICapabilities},
+		{"owner-request", ownerRequestCLICapabilities},
 		{"session", sessionCLICapabilities},
 		{"merge", mergeReceiptCLICapabilities},
 		{"agent", agentCLICapabilities},
@@ -4499,6 +4671,10 @@ func finishOperationCatalog(ops []*operation) []*operation {
 		{"wiki", wikiCLICapabilities},
 		{"wiki", wikiImportCLICapabilities},
 		{"file", fileCLICapabilities},
+		{"drive", driveCLICapabilities},
+		{"subagent", subagentCLICapabilities},
+		{"settings", settingsCLICapabilities},
+		{"browser", browserCLICapabilities},
 		{"account", userCLICapabilities},
 		{"guide", guideCLICapabilities},
 	}
@@ -4921,6 +5097,11 @@ var catalogMetadata = map[string]operationMeta{
 		Intent:   "Ask the account owner to settle a project as done.",
 		Approval: approvalKindOwner,
 	},
+	"project_request_reopen": {
+		Object:   objectProject,
+		Intent:   "Ask the account owner to reopen a settled project.",
+		Approval: approvalKindOwner,
+	},
 	"project_delete": {
 		Object:      objectProject,
 		Intent:      "Delete an empty project permanently.",
@@ -5093,6 +5274,14 @@ var catalogMetadata = map[string]operationMeta{
 		Intent:          "Be woken when sessions finish their turn, need a person, or end.",
 		SuccessEvidence: "The watch id and when it will next be evaluated.",
 		NextStep:        "End the turn; the watch wakes this session.",
+	},
+	"subagent_rate": {
+		Object:          objectSubagent,
+		Intent:          "Rate how useful a SubAgent's result was.",
+		Retry:           "Resending the same score and note replaces the rating with the same values and a new timestamp.",
+		Returns:         "The run id, score, note, rating timestamp, rater identity and whether the rating replaced an earlier one (JSON).",
+		SuccessEvidence: "The server recorded the rating for the returned run id.",
+		Example:         map[string]interface{}{"score": 4},
 	},
 	"schedule_wakeup": {
 		Object: objectSession,
@@ -5277,6 +5466,10 @@ var catalogMetadata = map[string]operationMeta{
 		Intent:          "Record one claim or pitfall in the shared wiki.",
 		SuccessEvidence: "The note's id and where it was filed.",
 	},
+	"wiki_read": {
+		Object: objectWiki,
+		Intent: "Read the wiki's documents from a wiki chat.",
+	},
 	"wiki_draft": {
 		Object:          objectWiki,
 		Intent:          "Draft a wiki page section for review.",
@@ -5308,6 +5501,31 @@ var catalogMetadata = map[string]operationMeta{
 		Object: objectFile,
 		Intent: "See the files this session keeps.",
 	},
+	"drive_put": {
+		Object: objectFile,
+		Intent: "Copy a local file into the owner's Drive.",
+	},
+	"drive_get": {
+		Object: objectFile,
+		Intent: "Download a drive file into this session's uploads directory.",
+	},
+	"drive_list": {
+		Object: objectFile,
+		Intent: "See the contents of a drive folder.",
+	},
+	"drive_move": {
+		Object: objectFile,
+		Intent: "Move or rename an entry on the drive.",
+	},
+	"drive_delete": {
+		Object:      objectFile,
+		Intent:      "Move an entry to the owner's Trash.",
+		Destructive: true,
+	},
+	"drive_sync": {
+		Object: objectFile,
+		Intent: "Copy a local directory into a Drive folder in the background.",
+	},
 	"bg_run": {
 		Object: objectBackgroundJob,
 		Intent: "Run a command in the background on this runner.",
@@ -5326,6 +5544,23 @@ var catalogMetadata = map[string]operationMeta{
 	"bg_list": {
 		Object: objectBackgroundJob,
 		Intent: "See this session's background jobs.",
+	},
+
+	// ── the owner's own Settings (settings_tools.go) ──
+	"settings_get": {
+		Object: objectAccount,
+		Intent: "Read the owner's Settings a conversation can propose a change to, with their tiers.",
+	},
+	"settings_propose": {
+		Object:          objectAccount,
+		Intent:          "Propose a change to the owner's own Settings, on a card only they can save.",
+		Approval:        approvalKindOwner,
+		SuccessEvidence: "The SETTINGS_CHANGE request's id and status PENDING.",
+		NextStep:        "End the turn: the owner's answer arrives as a turn in this conversation.",
+		Example: map[string]interface{}{
+			"changes": map[string]interface{}{"translationEnabled": true},
+			"why":     "You asked to read replies in your own language.",
+		},
 	},
 
 	// ── the engine's own bridge, and the person's account ──
@@ -5350,6 +5585,35 @@ var catalogMetadata = map[string]operationMeta{
 		Object: objectAccount,
 		Intent: "Call any user REST route with the person's own token.",
 		Risk:   riskHigh,
+	},
+
+	// ── the Orbit Cloud browser ──
+	"browser_status": {
+		Object:          objectBrowser,
+		Intent:          "Read the state of the account's Orbit Cloud browser.",
+		SuccessEvidence: "Whether the browser is running, the session holding it, the viewers and whether saved logins exist.",
+		Returns:         "The browser's status (JSON): enabled, runnerId, state, running, holderSessionId, holderTitle, viewers, savedLogins, reportedAt.",
+	},
+	"browser_clear_logins": {
+		Object:          objectBrowser,
+		Intent:          "Stop the account's Orbit Cloud browser and delete its saved logins, after the owner confirms.",
+		Approval:        approvalKindCard,
+		ApprovalKey:     "orbit_browser_clear_logins",
+		Destructive:     true,
+		SuccessEvidence: "outcome CONFIRMED with the requestedAt the clear was sent to the runner at; DECLINED or EXPIRED cleared nothing.",
+		Returns:         "The outcome (JSON): outcome (CONFIRMED, DECLINED or EXPIRED), cleared, runnerId, requestedAt, approvalId, message.",
+	},
+	"browser_open": {
+		Object:          objectBrowser,
+		Intent:          "Start the account's Orbit Cloud browser and get its tab's address, optionally opening a page in it.",
+		SuccessEvidence: "The browser tab's address, and the runner reporting the browser running.",
+		Returns:         "The open (JSON): enabled, runnerId, tabUrl, url, requestedAt, running, message.",
+	},
+	"browser_request_sign_in": {
+		Object:          objectBrowser,
+		Intent:          "Ask the account owner to sign in to a site in the Orbit Cloud runner's browser, and wait for their answer.",
+		SuccessEvidence: "A Waiting-on-you card the owner answered: signed in, or not now.",
+		Returns:         "The answer (JSON): requestId, site, answer (SIGNED_IN, NOT_NOW, EXPIRED or WITHDRAWN), leaseReleased, leaseRetaken, message.",
 	},
 
 	// ── the guide ──
@@ -5417,6 +5681,8 @@ func catalogSurfaceSwitch(parts []string, op *operation) []string {
 		parts = append(parts, "watch_switch")
 	case op.CLIFamily == "wiki":
 		parts = append(parts, "wiki_switch")
+	case op.CLIFamily == "browser":
+		parts = append(parts, "browser_switch")
 	}
 	if len(parts) > 1 && parts[0] == "always" {
 		return parts[1:]

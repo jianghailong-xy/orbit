@@ -31,6 +31,9 @@ struct LandingStatusCardView: View {
     let waitDoors: [LandingMenuAction]
     let acting: Bool
     let act: (LandingMenuAction) -> Void
+    /// The files the landing's failure item names (`OpenItemFacts.files`), which the Fixing and hand-back
+    /// cards' failure line counts (board landing-fix-own-session 02 c, d); nil where nobody read them.
+    var failureFiles: [String]? = nil
     /// Whether what the card carries is open under its line: its caret's turn.
     var open: Bool = true
     @Environment(AppModel.self) private var app
@@ -58,6 +61,10 @@ struct LandingStatusCardView: View {
         let card = LandingPageCopy.attemptCard(landing, now: now, updatedAt: readAt,
                                                failed: readFailed, facts: facts)
         let outcome = LandingPageCopy.outcomeCard(landing, promotion: promotion)
+        // Revision 42 (board landing-fix-own-session 02 c, d): the failure in the task's own session's
+        // hands, or handed back from it to the coordinator.
+        let fixing = outcome == nil && LandingFix.isFixing(landing)
+        let handBack = outcome == nil ? LandingFix.handBack(landing) : nil
         // A round's word (Merge check, Merge to main) says which of its jobs this is.
         let word = landing.subject == "PROMOTION" && card?.rightIsClock == false ? card?.word : nil
         // No card of its own: the line, and what it carries hung under the line's mark, as the chat
@@ -65,6 +72,8 @@ struct LandingStatusCardView: View {
         VStack(alignment: .leading, spacing: 6) {
             if let outcome {
                 line(kind: outcome.ok ? .ok : .quiet, title: outcome.title, status: outcome.right)
+            } else if fixing {
+                line(kind: .fixing, title: LandingFixCopy.fixing)
             } else if let card {
                 line(kind: card.stoppedOnFailure || card.timedOut ? .failed : .running,
                      title: card.rightIsClock ? card.word : card.right, word: word,
@@ -93,7 +102,11 @@ struct LandingStatusCardView: View {
                         Text(treeLine).font(.orbitMeta).foregroundStyle(.secondary)
                     }
                 } else if let card {
-                    if !card.detail.isEmpty {
+                    if fixing {
+                        Text(LandingFix.fixingDetail(landing)).font(.orbitMeta).foregroundStyle(.tertiary)
+                    } else if handBack != nil {
+                        Text(LandingFix.handBackDetail(landing)).font(.orbitMeta).foregroundStyle(.tertiary)
+                    } else if !card.detail.isEmpty {
                         Text(card.detail).font(.orbitMeta).foregroundStyle(.tertiary)
                     }
                     if let budget = card.budget {
@@ -125,15 +138,31 @@ struct LandingStatusCardView: View {
                             Text(push).font(.orbitMeta).foregroundStyle(.secondary)
                         }
                     }
-                    if let failure = card.failure {
+                    // With the task's session, or handed back from it: the board's own failure line, once.
+                    if let failure = (fixing || handBack != nil)
+                        ? LandingFix.failureLine(landing, files: failureFiles) ?? card.failure : card.failure {
                         Text(failure).font(.orbitMeta).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("landing-failure")
                     }
                     if card.timedOut {
                         timedOutDoors(landing)
                     }
                 }
-                if !waitDoors.isEmpty {
-                    waitingDoors
+                if let pullRequest = landing.pullRequest {
+                    LandingPullRequestBlock(
+                        pullRequest: pullRequest,
+                        main: landing.currentAttempt.map { TaskLandingLogic.branch($0.targetRef) } ?? facts.mainBranch)
+                }
+                if fixing {
+                    LandingFixingDoors(landing: landing, now: now, act: act)
+                } else {
+                    if let handBack {
+                        LandingFixHandBackView(handBack: handBack)
+                    }
+                    if !waitDoors.isEmpty {
+                        waitingDoors(handBack: handBack)
+                    }
                 }
             }
             .padding(.leading, LandingLineView.indent)
@@ -221,23 +250,35 @@ struct LandingStatusCardView: View {
 
     /// The doors a landing that waits for a decision carries (board 02 d): the first is the solid
     /// one, as the board draws Open Coordinator beside a plain Open Task.
-    private var waitingDoors: some View {
+    private func waitingDoors(handBack: LandingFixHandBack?) -> some View {
         VStack(alignment: .leading, spacing: 9) {
-            if waitDoors.contains(.openCoordinator) {
+            if let handBack, waitDoors.contains(.openCoordinator) {
+                // Handed back (board 02 d): who has it now, and since when.
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: "person").foregroundStyle(Color.accentColor)
+                    (Text(LandingFixCopy.coordinator).fontWeight(.semibold)
+                     + Text(" ") + Text(LandingFix.coordinatorHasIt(handBack, now: now)).foregroundColor(.secondary))
+                }
+                .font(.orbitMeta)
+            } else if waitDoors.contains(.openCoordinator) {
                 Label(LandingPageCopy.decisionsTheCoordinator, systemImage: "person")
                     .font(.orbitMeta).foregroundStyle(.secondary)
             }
-            HStack(spacing: 8) {
-                ForEach(Array(waitDoors.enumerated()), id: \.offset) { index, action in
-                    if index == 0 {
-                        Button(Self.doorLabel(action)) { act(action) }
-                            .buttonStyle(.borderedProminent).controlSize(.small)
-                    } else {
-                        Button(Self.doorLabel(action)) { act(action) }
-                            .buttonStyle(.bordered).controlSize(.small)
+            // Two to a row, as the board draws the hand-back's three (02 d): no door's word wraps.
+            ForEach(Array(stride(from: 0, to: waitDoors.count, by: 2)), id: \.self) { start in
+                HStack(spacing: 8) {
+                    ForEach(Array(waitDoors.enumerated()).filter { $0.offset >= start && $0.offset < start + 2 },
+                            id: \.offset) { index, action in
+                        if index == 0 {
+                            Button(Self.doorLabel(action)) { act(action) }
+                                .buttonStyle(.borderedProminent).controlSize(.small)
+                        } else {
+                            Button(Self.doorLabel(action)) { act(action) }
+                                .buttonStyle(.bordered).controlSize(.small)
+                        }
                     }
+                    Spacer(minLength: 0)
                 }
-                Spacer(minLength: 0)
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 10)
@@ -249,6 +290,7 @@ struct LandingStatusCardView: View {
         switch action {
         case .openCoordinator: return LandingPageCopy.openCoordinator
         case .openTask: return LandingPageCopy.openTask
+        case .openSourceSession: return LandingFixCopy.openSession
         default: return LandingPageCopy.reviewCard
         }
     }
@@ -311,10 +353,31 @@ struct LandingTimelineView: View {
             }
             ForEach(Array(steps.enumerated()), id: \.element.key) { index, step in
                 let last = index == steps.count - 1
-                let status: StepStatus = LandingSteps.failed(step, kind: section.kind) ? .failed
-                    : last && live ? .running
-                    : last && current && landing.currentAttempt?.state == "QUEUED" ? .pending : .ok
+                // A task exempt from the landing check (P-C2, board 04 b): Skipped, with its reason.
+                let status = LandingStepStatus.of(step, kind: section.kind, isLast: last, live: live,
+                                                  queued: current && landing.currentAttempt?.state == "QUEUED")
                 stepRow(step, status: status, section: section)
+            }
+            // Revision 42's rows under the attempt whose failure they are about (board
+            // landing-fix-own-session 02 c ②, d ②): the hand-off, the fix landing again, the hand-back.
+            if let sections = landing.timeline?.sections,
+               let at = sections.firstIndex(where: { $0.jobId == section.jobId }) {
+                ForEach(LandingFix.rows(after: at, in: sections)) { row in
+                    LandingFixRowView(row: row)
+                }
+            }
+            // A task exempt from the landing check (board 04 b, D5): the merge check still runs on the
+            // way into main, said under the list.
+            if steps.contains(where: { LandingCheckSkip.taskExempt($0) != nil }) {
+                HStack(spacing: 7) {
+                    Image(systemName: "figure.walk").font(.orbitMeta).foregroundStyle(.secondary)
+                        .frame(width: 20, height: 20)
+                    Text(LandingProvenanceCopy.mergeCheckStillRuns).font(.orbitMono.weight(.semibold))
+                    Text(LandingProvenanceCopy.stillRuns).font(.orbitLabel).foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }
+                .padding(.leading, 28).padding(.vertical, 6)
+                .accessibilityElement(children: .combine)
             }
             // A check streaming before its attempt wrote any line has no step to sit in.
             if steps.isEmpty, live, let attempt = landing.currentAttempt, attempt.check != nil {
@@ -331,8 +394,6 @@ struct LandingTimelineView: View {
         .padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
-
-    enum StepStatus { case ok, failed, running, pending }
 
     private static func icon(_ key: String) -> String {
         switch key {
@@ -356,7 +417,7 @@ struct LandingTimelineView: View {
     /// One step as the chat's tool row (`ToolCardView`'s row): the tone bar, the caret, the icon tile,
     /// its name in the mono face, its summary line and its mark. No time on a phone's row; the lines it
     /// opens to carry theirs.
-    @ViewBuilder private func stepRow(_ step: LandingStep, status: StepStatus,
+    @ViewBuilder private func stepRow(_ step: LandingStep, status: LandingStepStatus,
                                       section: IntegrationTimelineSection) -> some View {
         let key = "\(section.jobId)|\(step.key)"
         let open = pressed[key] ?? (status == .failed || status == .running)
@@ -370,10 +431,10 @@ struct LandingTimelineView: View {
                     .font(.orbitMeta).foregroundStyle(tone)
                     .frame(width: 20, height: 20)
                     .background(tone.opacity(0.14), in: RoundedRectangle(cornerRadius: 5))
-                Text(step.name)
-                    .font(.orbitMono.weight(.semibold)).foregroundStyle(.primary)
+                Text(LandingStepStatus.name(step, status))
+                    .font(.orbitMono.weight(.semibold)).foregroundStyle(status == .skipped ? .orange : .primary)
                     .lineLimit(1).fixedSize()
-                Text(LandingCheckCopy.timelineText(step.summary))
+                Text(LandingStepStatus.summary(step, status))
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.tail)
                 Spacer(minLength: 4)
@@ -382,6 +443,7 @@ struct LandingTimelineView: View {
                 case .running: ProgressView().controlSize(.mini)
                 case .pending: Image(systemName: "clock").foregroundStyle(.secondary)
                 case .ok: Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                case .skipped: Image(systemName: "arrow.right.circle.fill").foregroundStyle(.orange)
                 }
             }
             .contentShape(Rectangle())
@@ -450,9 +512,9 @@ struct LandingTimelineView: View {
                openLog.check == check.index {
                 LandingCheckLogView(sessionID: sessionID, selectors: openLog)
                     .padding(.leading, 24)
-            } else if entry.kind == "CHECK_FINISHED", let check = entry.check, !entry.checkPassed {
+            } else if LandingCheckSkip.showsInlineOutput(entry), let check = entry.check {
                 // A check that failed shows the tail it died on, inline (mockup 05 g); a passed
-                // one keeps its `Log ›` and stays one line.
+                // one keeps its `Log ›` and stays one line, and one its exempt task skipped has none.
                 LandingInlineOutput(
                     sessionID: sessionID,
                     selectors: LandingLogSelectors(jobId: section.jobId, claim: entry.claim,
@@ -470,7 +532,8 @@ struct LandingTimelineView: View {
     /// What a timeline mark says, and the ink it says it in (mockups 05 a/e/i).
     private func glyph(_ entry: IntegrationTimelineEntry, jobKind: String,
                        entries: [IntegrationTimelineEntry], index: Int) -> Mark {
-        if entry.data?["skipped"]?.stringValue == "PATHS_EXEMPT" { return Mark(glyph: "≡", color: .secondary) }
+        if entry.data?["skipped"]?.stringValue == "TASK_EXEMPT" { return Mark(glyph: "→", color: .orange) }
+        if LandingCheckSkip.isSkip(entry) { return Mark(glyph: "≡", color: .secondary) }
         switch entry.kind {
         case "TAKEN_OVER":
             return Mark(glyph: "↗", color: .accentColor)
@@ -741,7 +804,9 @@ final class LandingPromotionSource: PromotionReviewSource {
 /// `Details ›`; under them the task's name, up to two lines. Web: `LandingLine` in
 /// ProjectLandingsWindow.tsx, one line on a wide window.
 struct LandingLineView: View {
-    enum Kind { case ok, merge, quiet, failed, running }
+    /// `fixing` (revision 42, board landing-fix-own-session 02 c): the task's own session has the failure —
+    /// the board's blue circling arrows, and the word in blue.
+    enum Kind { case ok, merge, quiet, failed, running, fixing }
 
     /// Where what a line carries hangs: under its title, off its mark.
     static let indent: CGFloat = 22
@@ -758,7 +823,7 @@ struct LandingLineView: View {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 mark.frame(width: 16)
                 Text(title)
-                    .foregroundStyle(kind == .failed ? Color.red : Color.secondary)
+                    .foregroundStyle(kind == .failed ? Color.red : kind == .fixing ? Color.accentColor : Color.secondary)
                     .lineLimit(1)
                 if let status, !status.isEmpty {
                     Text(status)
@@ -802,6 +867,7 @@ struct LandingLineView: View {
         case .failed: Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
         case .quiet: Image(systemName: "minus.circle").foregroundStyle(.secondary)
         case .running: Image(systemName: "clock").foregroundStyle(.secondary)
+        case .fixing: Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(Color.accentColor)
         case .merge: Text("⇢").fontWeight(.semibold).foregroundStyle(Color.accentColor)
         }
     }

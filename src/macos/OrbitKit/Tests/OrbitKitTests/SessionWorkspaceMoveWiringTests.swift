@@ -217,7 +217,7 @@ final class SessionWorkspaceMoveWiringTests: XCTestCase {
                              to: "\n    }\n")
         let steps = try positions(["SessionWorkspaceMove.run(", "endingFirst: endingFirst,",
                                    "end: { try await api.endSession(id) },",
-                                   "status: { try await api.session(id).effectiveRunStatus },",
+                                   "session: { try await api.session(id) },",
                                    "move: { try await api.moveSession(id, toWorkspace: target.workspaceId, folderID: folderID) },",
                                    "phase: { phase($0) })",
                                    "defer { Task { await reloadSessionLists() } }",

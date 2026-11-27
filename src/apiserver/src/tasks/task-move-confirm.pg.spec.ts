@@ -167,8 +167,8 @@ test('unit L4: the account owner confirms a move, and the task moves', { skip, c
       [worker, 'a run in A']]) {
       await admin.query(
         `INSERT INTO "session" ("id","owner_id","workspace_id","title","prompt","creator_id",
-           "provider","status","dispatch_origin","updated_at")
-         VALUES ($1,$2,$3,$4,'fixture',$2,'claude','RUNNING'::"run_status",
+           "provider","turn_state","dispatch_origin","updated_at")
+         VALUES ($1,$2,$3,$4,'fixture',$2,'claude','IN_FLIGHT',
            'USER'::"session_dispatch_origin",now())`,
         [id, ownerId, workspaceId, `${label}: ${name}`],
       );
@@ -268,11 +268,13 @@ test('unit L4: the account owner confirms a move, and the task moves', { skip, c
     // The target's coordinator pulls the task over and names the criterion it will serve there —
     // the shape of the 2026-10-06 request this project started from.
     const question = await asked(w, w.coordB, { criterionKey: criterionKeyOf(w.criterionB) });
-    // Its card is drawn in the TARGET's coordinator conversation, and that row waits on the owner.
+    // Its card is drawn in the TARGET's coordinator conversation, and that row waits on the owner
+    // (here the asker too): one task move, `MOVE_REQUEST`.
     assert.equal(await handoffs.cardSessionOf(w.ownerId, question.id), w.coordB);
     assert.deepEqual((await readOwnerDecisionSignals(prisma as never, w.ownerId))
-      .filter((signal) => signal.kind === 'CROSSING_REQUEST'), [{
-      sessionId: w.coordB, projectId: w.projectB, count: 1, kind: 'CROSSING_REQUEST',
+      .filter((signal) => signal.kind === 'MOVE_REQUEST' || signal.kind === 'CROSSING_REQUEST')
+      .map(({ sessionId, projectId, count, kind }) => ({ sessionId, projectId, count, kind })), [{
+      sessionId: w.coordB, projectId: w.projectB, count: 1, kind: 'MOVE_REQUEST',
     }]);
     // B rewords that criterion while the question waits: the move declares it as it reads when the
     // owner answers, not as it read when the agent asked.
@@ -777,11 +779,13 @@ test('unit L4: the account owner confirms a move, and the task moves', { skip, c
 
     // Filed once, so told once; asking again filed nothing and told nobody.
     assert.deepEqual(changes.filter((c) => c.id === question.id), [{ id: question.id, filed: true }]);
-    // And that conversation's row is waiting on the owner while it stands.
+    // And that conversation's row is waiting on the owner while it stands: a task move (`MOVE_REQUEST`),
+    // on the source's coordinator, which both asked and answers it.
     const crossingSignals = async () => (await readOwnerDecisionSignals(prisma as never, w.ownerId))
-      .filter((signal) => signal.kind === 'CROSSING_REQUEST');
+      .filter((signal) => signal.kind === 'MOVE_REQUEST' || signal.kind === 'CROSSING_REQUEST')
+      .map(({ sessionId, projectId, count, kind }) => ({ sessionId, projectId, count, kind }));
     assert.deepEqual(await crossingSignals(), [{
-      sessionId: w.coordA, projectId: w.projectA, count: 1, kind: 'CROSSING_REQUEST',
+      sessionId: w.coordA, projectId: w.projectA, count: 1, kind: 'MOVE_REQUEST',
     }]);
 
     const answer = await card.decideHandoff(owner(w), w.projectA, question.id, {

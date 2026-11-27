@@ -5,6 +5,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  BUMP_MISSED_RUN,
+  BUMP_QUEUED_RUN,
+  BUMP_STARTED_RUN,
+  BUMP_TRY_SESSIONS,
+  bumpMissedStatus,
+  bumpQueuedStatus,
+  bumpStartedStatus,
   CODEX_NOV13_RUN,
   CODEX_TIME_RECORD,
   CREATE_CARD,
@@ -242,8 +249,9 @@ describe('the change line (board 2/2 ② ③ ⑤)', () => {
 });
 
 function RunSession({ sessionId }: { sessionId: string }) {
-  const of = cards.useScheduleRunOfSession(sessionId);
-  const inserts = cards.useSessionScheduleInserts(null, [], of);
+  const read = cards.useSessionScheduleCards(sessionId);
+  const of = cards.useScheduleRunOfSession(sessionId, read);
+  const inserts = cards.useSessionScheduleInserts(null, undefined, [], of);
   if (!of) return null;
   return (
     <>
@@ -319,7 +327,8 @@ describe('a run’s session (board 2/2 ⑤ ⑥)', () => {
 describe('a conversation’s scheduled-task inserts', () => {
   function Inserts({ sessionId }: { sessionId: string }) {
     const events = [{ seq: 1, ts: '2025-11-14T04:00:00.000Z' }, { seq: 2, ts: '2025-11-14T04:22:00.000Z' }];
-    const inserts = cards.useSessionScheduleInserts(sessionId, events, null);
+    const read = cards.useSessionScheduleCards(sessionId);
+    const inserts = cards.useSessionScheduleInserts(sessionId, read, events, null);
     return <>{inserts.map((insert) => <div key={insert.key} data-anchor={String(insert.anchor)}>{insert.element}</div>)}</>;
   }
 
@@ -334,5 +343,114 @@ describe('a conversation’s scheduled-task inserts', () => {
     ]);
     // The change line (12:19) was made before the access card (12:20); the create card (12:01) first of all.
     expect(drawn).toEqual([['1', 'create'], ['1', 'record'], ['1', 'envelope']]);
+  });
+});
+
+// ── board docs/mocks/scheduled-run-not-started ②③④ (owner's B1) ─────────────────────────────────────
+
+/** A run's session page as the transcript draws its head: every insert the session's schedule read gives it. */
+function RunHead({ sessionId }: { sessionId: string }) {
+  const read = cards.useSessionScheduleCards(sessionId);
+  const of = cards.useScheduleRunOfSession(sessionId, read);
+  const inserts = cards.useSessionScheduleInserts(sessionId, read, [{ seq: 1 }], of, { runner: 'HPC', engine: 'Claude Code' });
+  return <>{inserts.map((insert) => <div key={insert.key}>{insert.element}</div>)}</>;
+}
+
+function serveRunStatus(sessionId: string, run: unknown, runStatus: unknown, writes: (path: string) => unknown = () => ({})) {
+  serve((path, method) => {
+    if (method === 'POST') return writes(path);
+    if (path === `/sessions/${sessionId}/schedule-cards`) return { run, runStatus, cards: [], records: [] };
+    return undefined;
+  });
+}
+
+const runCard = () => host.querySelector<HTMLElement>('[data-schedule-run-card]');
+const runCardParts = () => {
+  const card = runCard()!;
+  return {
+    kind: card.dataset.scheduleRunCard,
+    title: card.querySelector('.sched-run-title')!.textContent,
+    body: card.querySelector('.sched-run-body')!.textContent,
+    chips: [...card.querySelectorAll('.sched-run-chip')].map((el) => el.textContent),
+    meta: [...card.querySelectorAll('.sched-run-meta')].map((el) => el.textContent),
+    doors: [...card.querySelectorAll('button')].map((el) => el.textContent),
+  };
+};
+const press = (label: string) => click([...runCard()!.querySelectorAll('button')].find((b) => b.textContent === label)!);
+
+describe('a run’s session where the run did not get under way (board scheduled-run-not-started)', () => {
+  it('② Didn’t run: why, each try, when it gave up and the next run, with Run now and Open schedule, and no report', async () => {
+    serveRunStatus(BUMP_TRY_SESSIONS[4]!, BUMP_MISSED_RUN, bumpMissedStatus(), () => ({ run: { sessionId: 'sess-bump-now' } }));
+    await render(<RunHead sessionId={BUMP_TRY_SESSIONS[4]!} />);
+    expect(host.querySelector('[data-schedule-strip]')!.textContent).toBe(
+      'Scheduled run · planned 03:32 · access Edit and land on main',
+    );
+    expect(runCardParts()).toEqual({
+      kind: 'DIDNT_RUN',
+      title: "Didn't run",
+      body: "HPC didn't pick it up on any of 5 tries, so the run never started. Nothing was changed.",
+      chips: ['03:32', '03:43', '03:58', '04:23', '05:34'],
+      meta: ['gave up 05:44', 'Next run: tomorrow 06:00'],
+      doors: ['Run now', 'Open schedule'],
+    });
+    expect(host.querySelector('[data-schedule-report]'), 'no red "Found no runner online" card').toBeNull();
+    expect(host.textContent).not.toContain('Found no runner online');
+    await press('Run now');
+    expect(calls.find((c) => c.method === 'POST')?.path).toBe('/schedules/sch-bump/run');
+    expect(host.querySelector('[data-where]')!.textContent).toBe('/sessions/sess-bump-now');
+  });
+
+  it('② reads the same from an earlier try, and says a full runner was full', async () => {
+    serveRunStatus(BUMP_TRY_SESSIONS[0]!, { ...BUMP_MISSED_RUN, failureReason: 'RUNNER_FULL' }, bumpMissedStatus(1));
+    await render(<RunHead sessionId={BUMP_TRY_SESSIONS[0]!} />);
+    expect(runCardParts().body).toBe('HPC was full the whole time, so the run never started. Nothing was changed.');
+    await press('Open schedule');
+    expect(host.querySelector('[data-where]')!.textContent).toBe('/scheduled?id=sch-bump');
+  });
+
+  it('③ Queued · runner full: the queue’s sentence said of the run, the wait and the deadline, with Cancel run', async () => {
+    serveRunStatus(BUMP_TRY_SESSIONS[0]!, BUMP_QUEUED_RUN, bumpQueuedStatus());
+    await render(<RunHead sessionId={BUMP_TRY_SESSIONS[0]!} />);
+    expect(runCardParts()).toEqual({
+      kind: 'QUEUED_FULL',
+      title: 'Queued · runner full',
+      body: 'HPC is running 20 of 20 sessions. The run starts as soon as one finishes.',
+      chips: [],
+      meta: ['Waiting 1 h 12 min · gives up at 03:32 tomorrow'],
+      doors: ['Cancel run', 'Open schedule'],
+    });
+    await press('Cancel run');
+    expect(calls.find((c) => c.method === 'POST')?.path).toBe('/schedule-runs/run-bump-nov14/stop');
+  });
+
+  it('④ Started on try 3: why this try stopped, and Open the run to the session it went on in', async () => {
+    serveRunStatus(BUMP_TRY_SESSIONS[1]!, BUMP_STARTED_RUN, bumpStartedStatus(2));
+    await render(<RunHead sessionId={BUMP_TRY_SESSIONS[1]!} />);
+    expect(runCardParts()).toEqual({
+      kind: 'STARTED_ON',
+      title: 'Started on try 3',
+      body: 'This try stopped before its engine started (Claude Code exited). Try 3 started at 03:58.',
+      chips: [],
+      meta: [],
+      doors: ['Open the run →'],
+    });
+    await press('Open the run →');
+    expect(host.querySelector('[data-where]')!.textContent).toBe('/sessions/sess-bump-try-3');
+  });
+
+  it('draws no card in the session the run went on in, nor from a server that predates the run status', async () => {
+    serveRunStatus(BUMP_TRY_SESSIONS[2]!, BUMP_STARTED_RUN, bumpStartedStatus(3));
+    await render(<RunHead sessionId={BUMP_TRY_SESSIONS[2]!} />);
+    expect(host.querySelector('[data-schedule-strip]')!.textContent).toBe(
+      'Scheduled run · planned 03:32, started 03:58 · access Edit and land on main',
+    );
+    expect(runCard()).toBeNull();
+    act(() => root?.unmount());
+    root = null;
+    host.remove();
+    serveRunStatus(BUMP_TRY_SESSIONS[4]!, BUMP_MISSED_RUN, undefined);
+    await render(<RunHead sessionId={BUMP_TRY_SESSIONS[4]!} />);
+    expect(runCard()).toBeNull();
+    expect(host.querySelector('[data-schedule-report]')!.textContent).toBe('Found no runner online');
   });
 });

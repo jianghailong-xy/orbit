@@ -130,7 +130,8 @@ fun NewSessionComposer(
 
 /**
  * A machine with no workspace (owner 2026-11-16, docs/mocks/new-folder-in-home/workspace-card-with-name): its page is the setup card
- * alone, which makes the workspace with `POST /workspaces`, and then moves on to the new workspace's new session page.
+ * alone, which makes the workspace with `POST /workspaces`, and then moves on to the new workspace's new session page. Opened as New
+ * workspace on a machine that has one ([addsWorkspace]), the same card makes one more.
  */
 @Composable
 private fun MachineDraftComposer(
@@ -166,8 +167,11 @@ private fun MachineDraftComposer(
     }
 
     val online = runner != null && !RunnerPage.isOffline(runner, nowMs)
+    // Opened as New workspace on a machine that has one (docs/mocks/new-workspace-form/02-apple-entry): the page makes one more, so it
+    // neither moves on to the first nor greets a new account.
+    val addsWorkspace = route.addsWorkspace
     val existingWorkspace = data.workspaces.firstOrNull { ObjectId.same(it.runnerId, runnerId) }
-    val bare = data.ready && existingWorkspace == null
+    val bare = data.ready && existingWorkspace == null && !addsWorkspace
     // A new account's first machine: the setup card greets it (docs/mocks/new-user-onboarding).
     val machineWelcome = rememberNewAccount(managementApi, bare) && bare
     val welcomeName = rememberAccountName(managementApi, machineWelcome)
@@ -175,7 +179,7 @@ private fun MachineDraftComposer(
     // The machine has a workspace (made here, or elsewhere meanwhile): on to its new session page.
     LaunchedEffect(existingWorkspace?.id, creating) {
         val ws = existingWorkspace ?: return@LaunchedEffect
-        if (creating) return@LaunchedEffect
+        if (creating || addsWorkspace) return@LaunchedEffect
         land(ws.id, OrbitRoute(Destination.DRAFT, workspaceId = ws.id, origin = route.origin))
     }
 
@@ -216,6 +220,7 @@ private fun MachineDraftComposer(
                 welcomeName = welcomeName,
                 github = remember(managementApi) { ManagementGithub(managementApi) },
                 onOpenGithubSettings = { open(OrbitRoute(Destination.SETTINGS, "github")) },
+                addsWorkspace = addsWorkspace,
             )
         } else if (data.ready) {
             Text("This runner is no longer on your account.", color = MaterialTheme.colorScheme.onSurfaceVariant)

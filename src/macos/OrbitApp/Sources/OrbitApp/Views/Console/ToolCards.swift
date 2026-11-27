@@ -209,6 +209,9 @@ struct ToolCardView: View {
     /// Settings › Translation: the question cards' owner-language text, by call (ConsoleModel).
     @Environment(\.questionTranslations) private var questionTranslations
     @Environment(\.translationActions) private var translationActions
+    /// A SubAgent's end turns, joined to their cards by run id (`SubagentCardEnd`).
+    @Environment(\.subagentWakes) private var subagentWakes
+    @Environment(\.subagentQueuedWakes) private var subagentQueuedWakes
 
     init(card: ToolCard, fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil, showsHeader: Bool = true) {
         self.card = card
@@ -235,7 +238,9 @@ struct ToolCardView: View {
     }
     private var hasResult: Bool { card.result?.isEmpty == false || !card.resultImages.isEmpty || card.resultHasImage }
     private var hasDetail: Bool {
-        if isDelegate { return subagentResultText != nil || !nestedItems.isEmpty || subagent?.why != nil }
+        if isDelegate {
+            return subagentResultText != nil || !nestedItems.isEmpty || subagent?.why != nil || endedRun != nil
+        }
         return d.hasBody || hasResult || !nestedItems.isEmpty || taskProgress != nil
     }
 
@@ -252,6 +257,15 @@ struct ToolCardView: View {
         return SubagentBlock.describe(input: card.input, run: subagentRun, status: card.status,
                                       parentEngine: taskActivity?.parentEngine,
                                       result: SubagentResult.text(callResult: result, run: subagentRun))
+    }
+    /// A background SubAgent that has ended: its card draws the end (`SubagentCardEnd`), joined to its end
+    /// turn by the run its call's receipt names.
+    private var endedRun: SubagentRunView? { isDelegate ? SubagentCardEnd.ended(subagentRun) : nil }
+    private var subagentRunId: String? { isDelegate ? SubagentFinishedText.delegateRunId(result) : nil }
+    /// Its end turn still on the queue: the agent has not read it, and the reader can keep it back.
+    private var dontSend: (@MainActor () -> Void)? {
+        guard endedRun != nil, let runId = subagentRunId else { return nil }
+        return subagentQueuedWakes?.dontSend[runId]
     }
     private var taskProgress: TaskProgress? { isBackgroundTask ? taskActivity?.progress(card.id) : nil }
     /// The call returned the moment its work started, so its own ✓ would sit on work just begun.
@@ -298,7 +312,12 @@ struct ToolCardView: View {
     private var liveActivity: String? {
         guard (isBackgroundTask || isDelegate), !isOpen else { return nil }
         guard taskRunning || card.status == .running else { return nil }
-        for item in nestedItems.reversed() {
+        return Self.liveActivity(in: nestedItems)
+    }
+    /// The last thing a sub-agent's transcript relayed, as one line; the Agents sheet's running row
+    /// says the same.
+    static func liveActivity(in items: [TranscriptItem]) -> String? {
+        for item in items.reversed() {
             switch item {
             case .toolCall(let child):
                 let last = ToolDisplay.describe(name: child.name, input: child.input, status: child.status, id: child.id)
@@ -399,13 +418,15 @@ struct ToolCardView: View {
     var body: some View {
         Group {
             if let payload = sessionCreate {
-                SessionCreateCardView(payload: payload)
+                SessionCreateCardView(payload: payload).orbitCardWidth()
             } else if let draft = wikiDraftID {
                 WikiDraftCardSlot(draftID: draft)
             } else if card.resultTruncated, needsWholeResult, fullResult == nil {
                 EmptyView()   // nothing to show until the untrimmed JSON lands
             } else if showsHeader {
-                defaultBody
+                // An answered question is a card (its record), so it ends where the cards end;
+                // every other tool call is tool output and keeps the column.
+                if questions.isEmpty { defaultBody } else { defaultBody.orbitCardWidth() }
             } else {
                 detail
             }
@@ -453,8 +474,14 @@ struct ToolCardView: View {
                 // An Agent's second and third lines (board docs/mocks/subagent-ios-highlight ①): who did
                 // the work and where, then what came of it — or, while it runs, what it is on.
                 AgentBlockLines(block: subagent, live: liveActivity,
-                                steps: SubagentBlock.steps(taskActivity?.subagentItems(card.id) ?? []))
+                                steps: SubagentBlock.steps(taskActivity?.subagentItems(card.id) ?? []),
+                                endsOnCard: endedRun != nil)
                     .padding(.leading, 42)
+                // Ended: the ending, where the live line was, until the card is opened on its end block.
+                if let endedRun, !isOpen {
+                    SubagentFoldedEnd(run: endedRun) { manualOpen = true }
+                        .padding(.leading, 42)
+                }
             } else if let liveActivity {
                 // Indented to the row's label; folded BackgroundTaskViews draw this same line.
                 Text(liveActivity)
@@ -470,6 +497,10 @@ struct ToolCardView: View {
                 QuestionFoldedLines(questions: shownQuestions, outcome: questionOutcome)
                     .contentShape(Rectangle())
                     .onTapGesture { manualOpen = !expanded }
+            }
+            // Folded and opened alike, until a runner takes the end turn.
+            if let dontSend {
+                SubagentWakeQueuedLine(onDontSend: dontSend).padding(.leading, 42)
             }
         }
         .padding(.leading, 11)
@@ -565,6 +596,10 @@ struct ToolCardView: View {
         if case .replied? = questionOutcome {
             // The engine files "Chat about this" as the call's error; it is the person's reply.
             Image(systemName: "bubble.left.fill").font(.orbitLabel).foregroundStyle(.secondary)
+        } else if isDelegate, let run = subagentRun, !run.isRunning {
+            // A SubAgent's end is its run's, not its call's: a background call's receipt is ✓ the moment it
+            // starts. ✓ alone for DONE; the mark and a word for every other end, grey for a stop.
+            SubagentEndStatus(status: run.status)
         } else {
             ToolStatusGlyph(status: taskRunning ? .running : card.status)
         }
@@ -613,7 +648,8 @@ struct ToolCardView: View {
                 ToolBodyView(kind: d.body)
             }
             if !nestedItems.isEmpty { SubagentTranscriptView(items: nestedItems, fullPayload: fullPayload) }
-            if let files = subagent?.changedFiles, !files.isEmpty { AgentChangedFiles(paths: files) }
+            // An ended background run lists the files it left in its end block instead.
+            if endedRun == nil, let files = subagent?.changedFiles, !files.isEmpty { AgentChangedFiles(paths: files) }
             if card.name != "Workflow", let taskProgress { TaskProgressView(progress: taskProgress) }
             // Inline tool-result images (Read on a .png, an MCP screenshot) — above any text output,
             // mirroring web's `ToolResult`, which renders images before the monospace panel.
@@ -641,9 +677,10 @@ struct ToolCardView: View {
             // the work, and always for an agent's ack. A workflow before any progress keeps it. A
             // question's result, once read, is only the replay above said again. A SubAgent's own
             // receipt is a receipt too; `displayResult` already resolved it to the run's result.
+            // An interrupted run's result is only the runner saying it was interrupted: its end says that, once.
             if let result = displayResult, !result.isEmpty,
                !(isLaunchReceipt && (taskProgress != nil || card.name != "Workflow")),
-               questionOutcome == nil {
+               endedRun?.status != "INTERRUPTED", questionOutcome == nil {
                 let isErr = card.status == .error
                 // Mirrors web `.chat-result`: a tinted panel (red on error, neutral otherwise) with a
                 // small uppercase label. The output text itself stays muted even on error (only the
@@ -658,6 +695,11 @@ struct ToolCardView: View {
                 .padding(.horizontal, 9).padding(.vertical, 6)
                 .background(isErr ? Color.red.opacity(0.10) : Color.secondary.opacity(0.08),
                             in: RoundedRectangle(cornerRadius: 6))
+            }
+            // A background SubAgent's end closes the opened card: how it ended, the files it left, what
+            // the agent read, the run.
+            if let endedRun {
+                SubagentEndBlock(run: endedRun, runId: subagentRunId, wake: subagentRunId.flatMap { subagentWakes[$0] })
             }
         }
         // Outside the console only (in it, the session's viewer opens instead): hosted on the detail
@@ -820,7 +862,8 @@ private struct ToolResultImagePlaceholder: View {
     }
 }
 
-private extension ToolTone {
+/// A tool row's tone, as its rail and icon draw it; the Job card (`JobCardView`) draws the shell's.
+extension ToolTone {
     var color: Color {
         switch self {
         case .read:  return .blue

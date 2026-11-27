@@ -44,9 +44,9 @@ type startRequestFinding struct {
 // round trip; what the plan itself lacks is the server's to say.
 func projectStartRequestBody(args map[string]interface{}) (map[string]interface{}, error) {
 	line := strings.TrimSpace(getString(args, "line"))
-	if line != "PROJECT_BRANCH" && line != "MAIN" {
+	if line != "" && line != "PROJECT_BRANCH" && line != "MAIN" {
 		return nil, errors.New("line must be PROJECT_BRANCH (tasks land on the project's own branch " +
-			"first) or MAIN (directly into main)")
+			"first) or MAIN (directly into main); leave it out to start with no line")
 	}
 	// Left out is on — the owner's card opens with Automatic on whatever is sent — but a value that is
 	// not a boolean is a mistake, not a suggestion.
@@ -73,10 +73,12 @@ func projectStartRequestBody(args map[string]interface{}) (map[string]interface{
 			"owner on the card")
 	}
 	body := map[string]interface{}{
-		"line":               line,
 		"automatic":          automatic,
 		"maxConcurrentTasks": maxConcurrent,
 		"why":                why,
+	}
+	if line != "" {
+		body["line"] = line
 	}
 	if branch := strings.TrimSpace(getString(args, "projectBranchName")); branch != "" {
 		if line == "MAIN" {

@@ -35,9 +35,8 @@ Usage:
 
 Options:
   [path]                   The file or directory, absolute or relative to here. Required. Its real
-                           location, links resolved, has to be inside this session's checkout or its
-                           uploads directory, as with a file a reply links; anywhere else is refused,
-                           so copy a file there first
+                           location, links resolved, has to be inside this session's checkout, its
+                           uploads directory, or the mounted Drive on Orbit Cloud
   --task-id ID             The task this session is running; leaving it out means the same. A file
                            stays with the session that uploads it and counts as that session's task,
                            so any other task's id is refused: to give a file to another task as an

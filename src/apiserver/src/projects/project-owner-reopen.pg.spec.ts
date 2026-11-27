@@ -39,11 +39,11 @@ import { JwtService } from '@nestjs/jwt';
 import {
   CreatorType,
   ProjectStatus,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   type PrismaClient,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -295,7 +295,7 @@ test('the owner’s Reopen project stands until the facts it was pressed over ch
         title,
         prompt: title,
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
         runtimeSessionId: randomUUID(),
@@ -325,7 +325,11 @@ test('the owner’s Reopen project stands until the facts it was pressed over ch
         taskId,
         title: `ran ${taskId}`,
         prompt: 'do the work',
-        status: RunStatus.SUCCEEDED,
+        turnState: null,
+        // Finished, as the runner's /finalize writes SUCCEEDED: a work session with no `finished_at`
+        // is work still moving, and a DONE over it has its landing deferred to the finish (§12.15
+        // P-M1), which the closing guardrail reads as LANDING_IN_FLIGHT.
+        finishedAt: new Date(), 
         branch: `orbit/${taskId}`,
         isolationStatus: 'worktree',
       },

@@ -1,0 +1,27 @@
+# The words of a phone alert (ntfy's title and message, and the Orbit app's). Plain text: both show it as it is.
+apiVersion: 1
+templates:
+  - orgId: 1
+    name: orbit
+    template: |
+      {{ define "orbit.title" -}}
+      [{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}
+      {{- end }}
+      {{ define "orbit.message" -}}
+      {{ range $i, $a := .Alerts }}{{ if $i }}
+      {{ end }}{{ $a.Annotations.summary }}{{ if $a.Labels.mountpoint }} ({{ $a.Labels.mountpoint }}){{ end }}{{ end }}
+      {{- end }}
+      {{ define "orbit.ntfy" -}}
+      {{ if eq .Status "firing" -}}
+      {{ coll.Dict "topic" .Vars.topic "title" (tmpl.Exec "orbit.title" .) "message" (tmpl.Exec "orbit.message" .) "priority" 4 "tags" (coll.Slice "rotating_light") | data.ToJSON }}
+      {{- else -}}
+      {{ coll.Dict "topic" .Vars.topic "title" (tmpl.Exec "orbit.title" .) "message" (tmpl.Exec "orbit.message" .) "priority" 3 "tags" (coll.Slice "white_check_mark") | data.ToJSON }}
+      {{- end }}
+      {{- end }}
+      {{ define "orbit.app" -}}
+      {{ if eq .Status "firing" -}}
+      {{ coll.Dict "title" (tmpl.Exec "orbit.title" .) "message" (tmpl.Exec "orbit.message" .) "priority" "high" | data.ToJSON }}
+      {{- else -}}
+      {{ coll.Dict "title" (tmpl.Exec "orbit.title" .) "message" (tmpl.Exec "orbit.message" .) "priority" "normal" | data.ToJSON }}
+      {{- end }}
+      {{- end }}

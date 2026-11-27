@@ -2276,3 +2276,42 @@ func TestCursorAutoSandboxReads(t *testing.T) {
 		}
 	}
 }
+
+// Auto and Accept Edits write in the session's uploads directory unasked, as a Claude Code parent does (--add-dir):
+// a SubAgent on Cursor CLI asked about every edit of a file there. Elsewhere outside the checkout still asks, as does
+// a link out of the uploads directory, and every other mode still asks.
+func TestCursorUploadsEditsFollowTheMode(t *testing.T) {
+	uploads := t.TempDir()
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(uploads, "out")); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		mode, path string
+		unasked    bool
+	}{
+		{"auto", filepath.Join(uploads, "bench", "_check.py"), true},
+		{"acceptEdits", filepath.Join(uploads, "a.txt"), true},
+		{"auto", filepath.Join(outside, "a.txt"), false},
+		{"auto", filepath.Join(uploads, "out", "a.txt"), false},
+		{"auto", filepath.Join(uploads, "..", filepath.Base(outside), "a.txt"), false},
+		{"bypassPermissions", filepath.Join(uploads, "a.txt"), false},
+	} {
+		t.Run(tc.mode+" "+tc.path, func(t *testing.T) {
+			rig := newCursorBridgeRig(tc.mode, nil)
+			rig.bridge.uploads = uploads
+			if err := rig.mapper.begin("turn"); err != nil {
+				t.Fatal(err)
+			}
+			rig.bridge.begin("turn")
+			call := map[string]interface{}{"toolCallId": "call", "kind": "edit", "title": "Edit `" + tc.path + "`",
+				"status": "pending", "rawInput": map[string]interface{}{"path": tc.path},
+				"content": []interface{}{map[string]interface{}{"type": "diff", "path": tc.path, "oldText": "a\n", "newText": "b\n"}}}
+			rig.bridge.permission(1, cursorPermissionParams(call))
+			rig.bridge.wait()
+			if (len(rig.cards) == 0) != tc.unasked {
+				t.Fatalf("cards = %v, want unasked = %v", rig.cards, tc.unasked)
+			}
+		})
+	}
+}

@@ -128,7 +128,9 @@ Options:
                            even when the agent isolates each session: for work that changes
                            no code. The session shares that checkout and has no branch to merge
   --wait[=BOOL]            Wait until the first turn settles. Inside a session the wait is first
-                           recorded as a watch that wakes this session when the turn settles: if
+                           recorded as a watch that wakes this session when the session has
+                           finished all its work, no job or subagent of its own still running,
+                           and the inline answer waits for that watch too: if
                            the wait runs out or the server stops answering, the output carries
                            that watch under "watch" instead of losing it. If no watch could be
                            recorded, a session that has not settled carries why under "watch"
@@ -165,7 +167,9 @@ Usage:
   orbit session get SESSION_ID [--summary] [--json]
 
 Reports status, numTurns and lastTurnAt, so a headless poller can tell whether a
-long-lived session has finished the turn it was given.
+long-lived session has finished the turn it was given. When the server sends them it also reports
+phase (PENDING, RUNNING, IDLE), released (true: the session is over), lastTurnOutcome and waitingOn
+(PERSON, HOLD, WAKE or null); status and its values are unchanged.
 
 --summary prints what the session_get tool answers by default: a record over 20,000 characters is
 shortened to fit, the prompt first, then changedFiles, lastToolUse, lastUserText and error;

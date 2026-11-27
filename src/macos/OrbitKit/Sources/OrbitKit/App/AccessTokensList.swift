@@ -81,22 +81,31 @@ public enum AccessTokensList {
         ScopeGroup(resource: "Events", read: "events:read", write: nil),
     ]
 
+    /// Files (the Drive) is one grant that reads and changes it, so Read-only leaves it out and Read & write
+    /// includes it; Notifications (POST /api/notify) sends a push to the owner's own apps and reaches nothing else.
+    /// Both as the web's accessTokens.ts has them (FILES_SCOPE, NOTIFY_SCOPE).
+    static let filesScope = "drive"
+    static let notifyScope = "notify"
+    static let filesGroup = ScopeGroup(resource: "Drive", read: filesScope, write: filesScope)
+
     static var readScopes: [String] { scopeGroups.map(\.read) }
-    static var allScopes: [String] { scopeGroups.flatMap { group in group.write.map { [group.read, $0] } ?? [group.read] } }
+    static var allScopes: [String] {
+        scopeGroups.flatMap { group in group.write.map { [group.read, $0] } ?? [group.read] } + [filesScope, notifyScope]
+    }
 
     /// A token's scopes in a few words: a preset's name, or what it can do resource by resource —
     /// "Read-only · everything", "Tasks: read & write · Sessions: read".
     public static func scopeSummary(_ scopes: [String]) -> String {
         if sameSet(scopes, allScopes) { return "Read & write · everything" }
         if sameSet(scopes, readScopes) { return "Read-only · everything" }
-        let parts = scopeGroups.compactMap { group -> String? in
+        let parts = (scopeGroups + [filesGroup]).compactMap { group -> String? in
             let read = scopes.contains(group.read)
             let write = group.write.map(scopes.contains) ?? false
             if read && write { return "\(group.resource): read & write" }
             if read { return "\(group.resource): read" }
             if write { return "\(group.resource): write" }
             return nil
-        }
+        } + (scopes.contains(notifyScope) ? ["Notifications: send"] : [])
         // Scopes newer than this build are still what the token holds: name them rather than
         // draw an empty line.
         return parts.isEmpty ? scopes.joined(separator: ", ") : parts.joined(separator: " · ")

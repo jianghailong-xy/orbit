@@ -6,6 +6,7 @@ import { SettledCriterionReport, WakeFact } from './coordinator-wake';
 import type { CriterionLandingReason } from './criterion-landing-reason';
 import { criterionKeyOf } from './project-acceptance';
 import type { DerivedProjectDoneReading } from './project-done-derived';
+import { spanInWords } from './evidence-undecided';
 
 /**
  * What a coordinator is TOLD about a committed fact — in either of the two places one can be told.
@@ -171,6 +172,48 @@ export function describeWakeFact(fact: WakeFact): string {
       );
     }
     case 'TASK_RUN_STOPPED':
+      if (detail.blockedLine && typeof detail.blockedLine === 'object') {
+        const line = detail.blockedLine as {
+          itemId?: unknown; itemTitle?: unknown; heldSince?: unknown; escalationSeconds?: unknown;
+          held?: Array<{ taskId?: unknown; title?: unknown }>;
+        };
+        const held = Array.isArray(line.held) ? line.held : [];
+        const named = held.map((task) => `“${String(task.title ?? '')}” (${uuidToBase62(String(task.taskId))})`);
+        const span = typeof line.escalationSeconds === 'number' ? spanInWords(line.escalationSeconds * 1_000) : null;
+        if (detail.awaitingSyncTask === true) {
+          // The line-sync item (docs/design/project-line-upstream-sync.md §4.1) before any sync task was filed.
+          return (
+            `Integration item “${String(line.itemTitle ?? '')}” (${uuidToBase62(String(line.itemId))}) has held the `
+            + `queued landings of ${held.length === 1 ? '1 task' : `${held.length} tasks`} on this line since `
+            + `${String(line.heldSince ?? 'unknown')}${named.length > 0 ? `: ${named.join(', ')}` : ''}. The project branch `
+            + 'could not absorb the upstream, and no sync task has been filed against the item, so no run is working on '
+            + `it. File one with task_create, fixesOpenItemId: ${uuidToBase62(String(line.itemId))}, or settle the item `
+            + `yourself. If the item still holds the line ${
+              span === null ? 'past the project\'s escalation window' : span} after this notice, the `
+            + 'account owner is told as well.'
+          );
+        }
+        return (
+          `Integration item “${String(line.itemTitle ?? '')}” (${uuidToBase62(String(line.itemId))}) has held the `
+          + `queued landings of ${held.length === 1 ? '1 other task' : `${held.length} other tasks`} on this line since `
+          + `${String(line.heldSince ?? 'unknown')}${named.length > 0 ? `: ${named.join(', ')}` : ''}. The run that must `
+          + `act on it, task “${String(detail.title ?? '')}” (${uuidToBase62(fact.subjectId)}), session `
+          + `${uuidToBase62(String(detail.sessionId))}, has been idle since ${String(detail.idleSince)} with no new `
+          + `evidence and no progress. Its last progress: ${
+            typeof detail.lastProgress === 'string' ? detail.lastProgress : 'none reported'}. Nudge that session or `
+          + `settle the item yourself. If the item still holds the line ${
+            span === null ? 'past the project\'s escalation window' : span} after this notice, the `
+          + 'account owner is told as well.'
+        );
+      }
+      if (typeof detail.idleSince === 'string') {
+        return (
+          `The run of task “${String(detail.title ?? '')}” (${uuidToBase62(fact.subjectId)}) has been idle since `
+          + `${detail.idleSince}: session ${uuidToBase62(String(detail.sessionId))} ended its turn, no evidence was `
+          + `submitted and no progress was reported since. Its last progress: ${
+            typeof detail.lastProgress === 'string' ? detail.lastProgress : 'none reported'}. Nudge that session.`
+        );
+      }
       return (
         `The run of task “${String(detail.title ?? '')}” (${uuidToBase62(fact.subjectId)}) has stopped working: `
         + `session ${uuidToBase62(String(detail.sessionId))} ended its turn with nothing left to wake it, the task `
@@ -864,9 +907,9 @@ const LANDING_REASON_SENTENCES: Readonly<Record<CriterionLandingReason, string>>
     + 'prove the branch tip is already on main either — with nothing to merge, there will be no receipt',
   NO_RECEIPT: 'no receipt proves its work is on the project branch or on main: it may have been merged outside '
     + 'Orbit, or not merged yet',
-  NO_BRANCH: 'its tasks did no work on a worktree branch and did not declare codeless — they may have changed '
-    + 'code, but with no branch to land there will never be a receipt, so Orbit cannot see whether it reached main',
-  CODELESS: 'its tasks were declared codeless or worked in another repository, so nothing of it lands here',
+  NO_BRANCH: 'its tasks reported changes but did no work on a worktree branch — with no branch to land there '
+    + 'will never be a receipt, so Orbit cannot see whether it reached main',
+  CODELESS: 'its tasks worked in another repository, so nothing of it lands here',
 };
 
 /** The counts line, from the projection's own counts: the one place they are added up. */

@@ -149,7 +149,8 @@ final class SubagentBlockTests: XCTestCase {
             let block = SubagentBlock.describe(input: call, run: run(status: status, changedFiles: ["a.ts"]),
                                                status: .ok, result: "partial")
             XCTAssertEqual(block.outcome, word)
-            XCTAssertTrue(block.outcomeIsFailure)
+            // A stop is no failure: grey, not red (board docs/mocks/subagent-card-and-end-line D1).
+            XCTAssertEqual(block.outcomeIsFailure, status != "STOPPED")
         }
     }
 
@@ -258,30 +259,26 @@ final class SubagentBlockTests: XCTestCase {
         XCTAssertEqual(SubagentSessionSummary.make([done, older, one])?.band, "2 running · \(deploy)", "the newest running one")
         XCTAssertEqual(SubagentSessionSummary.make([done, run(status: "RUNNING", endedAt: nil)])?.band, "2 · 1 running",
                        "no description keeps the counts")
-        XCTAssertEqual(SubagentSessionSummary.make([done, one])?.failed, 0)
         let broke = run(status: "FAILED", createdAt: "2026-11-11T07:00:00.000Z", description: "Audit")
         let both = try XCTUnwrap(SubagentSessionSummary.make([broke, one]))
-        XCTAssertEqual(both.failed, 1, "a failure still counts while another run is going")
-        XCTAssertEqual(both.spoken, "Agents: \(deploy), 1 failed")
+        XCTAssertEqual(both.spoken, "Agents: \(deploy)", "a failure is not counted: the owner can do nothing about it")
         XCTAssertEqual(SubagentSessionSummary.make([done, one])?.current?.description, " \(deploy) ")
     }
 
-    func testTheIdleBandSaysTheCountAndHowManyFailed() throws {
+    func testTheIdleBandSaysTheCountAlone() throws {
         let older = run(status: "DONE", createdAt: "2026-11-11T07:00:00.000Z", endedAt: "2026-11-11T07:01:00.000Z",
                         description: "Audit")
         let newest = run(status: "DONE", createdAt: "2026-11-11T08:00:00.000Z", endedAt: "2026-11-11T08:00:50.000Z",
                          description: "Deploy dacad7403 to production")
         let idle = try XCTUnwrap(SubagentSessionSummary.make([older, newest]))
         XCTAssertEqual(idle.band, "2", "the newest run's title is on its row, not the band")
-        XCTAssertEqual(idle.failed, 0, "no check when all succeeded")
         XCTAssertNil(idle.current)
 
         let failed = run(status: "FAILED", createdAt: "2026-11-11T09:00:00.000Z", endedAt: "2026-11-11T09:04:12.000Z",
                          description: "Run the OrbitKit test suite")
         let red = try XCTUnwrap(SubagentSessionSummary.make([older, newest, failed]))
         XCTAssertEqual(red.band, "3")
-        XCTAssertEqual(red.failed, 1)
-        XCTAssertTrue(red.spoken.hasSuffix("1 failed"))
+        XCTAssertFalse(red.spoken.contains("failed"), "a failure is not counted on the band")
     }
 
     func testTheBandCountsModelsAndMachines() throws {
@@ -513,5 +510,14 @@ final class SubagentBlockTests: XCTestCase {
         }
         XCTAssertEqual(grep.name, "Grep")
         XCTAssertEqual(words.text, "Three callers, all in quota/.")
+    }
+
+    func testTheSheetNamesAModelWithoutItsBuildNumber() {
+        XCTAssertEqual(SubagentSessionSummary.sheetModelLabel(run(modelLabel: "DeepSeek V4.1 Flash 1017")),
+                       "DeepSeek V4.1 Flash")
+        XCTAssertEqual(SubagentSessionSummary.sheetModelLabel(run(modelLabel: "Kimi K3")), "Kimi K3")
+        XCTAssertEqual(SubagentSessionSummary.sheetModelLabel(run(modelLabel: "Opus 5.5")), "Opus 5.5")
+        XCTAssertEqual(SubagentSessionSummary.sheetModelLabel(run(modelLabel: "GPT-6.2-Sol")), "GPT-6.2-Sol")
+        XCTAssertEqual(SubagentSessionSummary.sheetModelLabel(run(modelLabel: "Qwen 235")), "Qwen 235")
     }
 }

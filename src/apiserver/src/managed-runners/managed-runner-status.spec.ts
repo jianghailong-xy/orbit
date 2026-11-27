@@ -19,6 +19,7 @@ function mapping(change: Partial<ManagedRunner> = {}): ManagedRunner {
     defaultWorkspaceId: 'w',
     desiredState: 'RUNNING',
     managementState: 'READY',
+    concurrencyCap: null,
     generation: 1,
     revision: 7,
     backend: 'kubernetes',
@@ -38,9 +39,17 @@ function mapping(change: Partial<ManagedRunner> = {}): ManagedRunner {
     lastDemandAt: null,
     capacityRevision: null,
     drainDemandRevision: null,
+    sleepRequestedAt: null,
     stopRequestedAt: null,
     stopAcknowledgedAt: null,
     imageRollTo: null,
+    imageOutdatedSince: null,
+    currentImageSha: null,
+    currentImageVersion: null,
+    updateRequestedAt: null,
+    updateRequestedBy: null,
+    updateCompletedAt: null,
+    updateInterruptTurns: false,
     initialProvider: null,
     resourceProfileId: 'p',
     resourceOperationId: null,
@@ -232,4 +241,94 @@ test('status never exposes a workspace, even for a legacy mapping that still nam
     assert.equal(status.workspaceId, null);
     assert.equal(status.runnerId, 'r');
   }
+});
+
+test('update: an outdated READY runner names both builds; draining for a roll is updating; otherwise none', () => {
+  const outdated = { imageOutdatedSince: NOW, currentImageSha: 'a800ca3973' };
+  const status = (change: Partial<ManagedRunner>, version: string | null = 'managed-95884b154f', ownerDisabled = false) =>
+    managedRunnerStatus({
+      enabled: true, available: true, ownerDisabled, mapping: mapping(change), runner: { ...beat(1000), version }, now: NOW, heartbeatFreshMs: FRESH,
+    }).update;
+  assert.deepEqual(status(outdated), { running: { sha: '95884b154f' }, current: { sha: 'a800ca3973' }, phase: 'available' });
+  assert.deepEqual(status({ ...outdated, managementState: 'DRAINING', imageRollTo: 'sha256:x' })?.phase, 'updating');
+  // Draining to sleep, asleep, failed or being provisioned: none.
+  for (const managementState of ['DRAINING', 'SLEEPING', 'FAILED', 'PROVISIONING', 'STARTING'] as const) {
+    assert.equal(status({ ...outdated, managementState }), undefined, managementState);
+  }
+  // Nothing recorded, a build the runner does not report, or the same commit abbreviated: none.
+  assert.equal(status({}), undefined);
+  assert.equal(status(outdated, null), undefined);
+  assert.equal(status(outdated, '0.42.0'), undefined);
+  assert.equal(status(outdated, 'managed-a800ca3'), undefined);
+  assert.equal(status(outdated, 'managed-95884b154f', true), undefined, 'a disabled account is never offered an update');
+});
+
+test('update: release versions are compared by version, and managed-<sha> by commit, in every mix', () => {
+  const C = 'a800ca3973b1c2d3e4f5a800ca3973b1c2d3e4f5';
+  const status = (change: Partial<ManagedRunner>, version: string | null) =>
+    managedRunnerStatus({
+      enabled: true, available: true, mapping: mapping({ imageOutdatedSince: NOW, currentImageSha: C, ...change }),
+      runner: { ...beat(1000), version }, now: NOW, heartbeatFreshMs: FRESH,
+    }).update;
+  const release = { currentImageVersion: '0.1.261-beta.84' };
+  // A release runner against a newer release image: both versions, and the current commit.
+  assert.deepEqual(status(release, '0.1.261-beta.83'), {
+    running: { sha: '', version: '0.1.261-beta.83' }, current: { sha: C, version: '0.1.261-beta.84' }, phase: 'available',
+  });
+  // A runner already on the current release: none, whatever the record says of the image.
+  assert.equal(status(release, '0.1.261-beta.84'), undefined);
+  // An old managed-<sha> runner against a release image: by commit, and the current side keeps its version.
+  assert.deepEqual(status(release, 'managed-95884b154f'), {
+    running: { sha: '95884b154f' }, current: { sha: C, version: '0.1.261-beta.84' }, phase: 'available',
+  });
+  // The release image's own commit, reported as managed-<sha>: the same build, none.
+  assert.equal(status(release, `managed-${C.slice(0, 10)}`), undefined);
+  // A Docker self-host's image built from its checkout (no version label): managed-<sha> against the commit, as before.
+  assert.deepEqual(status({ currentImageVersion: null }, 'managed-95884b154f'), {
+    running: { sha: '95884b154f' }, current: { sha: C }, phase: 'available',
+  });
+  assert.equal(status({ currentImageVersion: null }, `managed-${C}`), undefined);
+  // A release runner against an image with no version (a rollback to a checkout's build): no commit to compare, none.
+  assert.equal(status({ currentImageVersion: null }, '0.1.261-beta.83'), undefined);
+  // A version that is neither shape names no build.
+  assert.equal(status(release, 'dev'), undefined);
+  // Draining for a roll onto the release: updating, with both versions.
+  assert.deepEqual(status({ ...release, managementState: 'DRAINING', imageRollTo: 'sha256:x' }, '0.1.261-beta.83')?.running,
+    { sha: '', version: '0.1.261-beta.83' });
+  assert.equal(status({ ...release, managementState: 'DRAINING', imageRollTo: 'sha256:x' }, '0.1.261-beta.83')?.phase, 'updating');
+});
+
+test('update: the owner\'s Update Now reads updating until the next generation is READY', () => {
+  const asked = { imageOutdatedSince: NOW, currentImageSha: 'a800ca3973', updateRequestedAt: NOW, updateRequestedBy: 'owner' };
+  const status = (change: Partial<ManagedRunner>, version = 'managed-95884b154f') =>
+    managedRunnerStatus({ enabled: true, available: true, mapping: mapping(change), runner: { ...beat(1000), version }, now: NOW, heartbeatFreshMs: FRESH }).update;
+  for (const managementState of ['READY', 'DRAINING', 'SLEEPING', 'PROVISIONING', 'STARTING'] as const) {
+    assert.equal(status({ ...asked, managementState })?.phase, 'updating', managementState);
+  }
+  assert.equal(status({ ...asked, managementState: 'FAILED' }), undefined, 'a failed runner is not updating');
+  // Ended by the next generation's READY: an older outdated record is available again, and the current build is none.
+  const done = { ...asked, updateCompletedAt: new Date(NOW.getTime() + 1) };
+  assert.equal(status(done)?.phase, 'available');
+  assert.equal(status(done, 'managed-a800ca3973'), undefined);
+});
+
+test('update: a busy runner\'s Update Now waits for idle where the backend cannot stop it, and says so', () => {
+  const asked = { imageOutdatedSince: NOW, currentImageSha: 'a800ca3973', updateRequestedAt: NOW, updateRequestedBy: 'owner', updateInterruptTurns: true };
+  const status = (change: Partial<ManagedRunner>, stopsInstances?: boolean) =>
+    managedRunnerStatus({
+      enabled: true, available: true, mapping: mapping(change), runner: { ...beat(1000), version: 'managed-95884b154f' },
+      now: NOW, heartbeatFreshMs: FRESH, stopsInstances,
+    }).update;
+  // Kubernetes: READY, it waits for the runner to be idle.
+  assert.deepEqual(status(asked, false), { running: { sha: '95884b154f' }, current: { sha: 'a800ca3973' }, phase: 'updating', waitsForIdle: true });
+  // Draining or on its way up, it no longer waits.
+  for (const managementState of ['DRAINING', 'SLEEPING', 'REQUESTED', 'STARTING'] as const) {
+    assert.equal(status({ ...asked, managementState, imageRollTo: 'registry.invalid/next' }, false)?.waitsForIdle, undefined, managementState);
+  }
+  // Docker stops it; an idle runner's request never waited; a server that cannot tell says nothing.
+  assert.equal(status(asked, true)?.waitsForIdle, undefined);
+  assert.equal(status({ ...asked, updateInterruptTurns: false }, false)?.waitsForIdle, undefined);
+  assert.equal(status(asked)?.waitsForIdle, undefined);
+  // Not in progress: nothing to wait for.
+  assert.equal(status({ ...asked, updateCompletedAt: new Date(NOW.getTime() + 1) }, false)?.waitsForIdle, undefined);
 });

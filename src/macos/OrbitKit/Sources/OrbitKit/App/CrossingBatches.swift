@@ -31,14 +31,19 @@ public struct CrossingBatch: Equatable, Sendable, Identifiable {
     public let kind: String
     /// The rows, oldest first. Never empty.
     public let rows: [ProjectCrossing]
+    /// Whether this card is drawn in the conversation that answers it (the TARGET project's, or for
+    /// a move out the source's). False in the session that asked: there "here" is not the project
+    /// the work goes into, and the copy names it instead.
+    public let inTarget: Bool
     /// A batch of moves that take their tasks out of the source project, answered in the source
-    /// project's coordinator conversation. False for work moving into the conversation's project.
+    /// project's coordinator conversation. False for work moving into a project.
     public let out: Bool
 
-    public init(id: String, kind: String, rows: [ProjectCrossing], out: Bool = false) {
+    public init(id: String, kind: String, rows: [ProjectCrossing], inTarget: Bool = true, out: Bool = false) {
         self.id = id
         self.kind = kind
         self.rows = rows
+        self.inTarget = inTarget
         self.out = out
     }
 
@@ -107,7 +112,10 @@ public enum CrossingBatches {
             } else {
                 continue
             }
-            let key = "\(direction)\u{1F}\(row.fromProjectId)\u{1F}\(row.kind)"
+            // The move card is answered through the session's batch door, which takes one asker's
+            // moves out of one project into another; grouping by asker keeps one card = one answer.
+            let asker = row.kind == ProjectCrossings.moveKind ? (row.requestedBySession?.id ?? "") : ""
+            let key = "\(direction)\u{1F}\(row.fromProjectId)\u{1F}\(row.kind)\u{1F}\(asker)"
             if groups[key] == nil { groupOrder.append(key) }
             groups[key, default: []].append(row)
         }
@@ -139,13 +147,30 @@ public enum CrossingBatches {
             .map(\.element)
     }
 
+    /// The same card for a batch a session is served directly (`GET /sessions/:id/task-moves`):
+    /// the moves it asked for, or the moves into a project it coordinates. Nil for a read with no
+    /// rows, and for a batch that is not a move.
+    ///
+    /// The id is the first row's door, the same spelling the project read gives the same batch, so
+    /// the two reads draw ONE card when a session is both ends of it.
+    public static func batch(from read: TaskMoveBatch,
+                             inTarget: Bool = true) -> CrossingBatch? {
+        guard let first = read.moves.first, first.kind == ProjectCrossings.moveKind else { return nil }
+        let rows = read.moves.enumerated()
+            .sorted { isEarlier($0.element.requestedAt, $1.element.requestedAt)
+                || ($0.element.requestedAt == $1.element.requestedAt && $0.offset < $1.offset) }
+            .map(\.element)
+        return CrossingBatch(id: idPrefix + ProjectCrossings.doorID(first), kind: first.kind,
+                             rows: rows, inTarget: inTarget, out: first.isToNoProject)
+    }
+
     private static func batch(_ rows: [ProjectCrossing], out: Bool) -> CrossingBatch {
         CrossingBatch(id: idPrefix + ProjectCrossings.doorID(rows[0]), kind: rows[0].kind, rows: rows,
                       out: out)
     }
 
     /// `a` before `b`: by the instant when both parse, by the ISO string otherwise.
-    static func isEarlier(_ a: String, _ b: String) -> Bool {
+    public static func isEarlier(_ a: String, _ b: String) -> Bool {
         if let x = ThinkingSummary.date(a), let y = ThinkingSummary.date(b) { return x < y }
         return a < b
     }
@@ -178,14 +203,57 @@ public enum CrossingBatches {
 
     // MARK: the words
 
+    /// The heading: the question while it asks, what happened once it is answered.
     public static func title(_ batch: CrossingBatch) -> String {
         let one = batch.rows.count == 1
+        if let verdict = batch.verdict { return answeredTitle(batch, verdict) }
         if batch.out { return one ? takeOutTitle : takeOutManyTitle }
+        if batch.kind == ProjectCrossings.moveKind, !batch.inTarget {
+            return one ? "Move this task into \(targetTitle(batch))?"
+                       : "Move these tasks into \(targetTitle(batch))?"
+        }
         switch batch.kind {
         case ProjectCrossings.moveKind: return one ? "Move this task here?" : "Move these tasks here?"
         case dependKind: return one ? "Allow this dependency?" : "Allow these dependencies?"
         default: return one ? "File this task here?" : "File these tasks here?"
         }
+    }
+
+    /// An answered card's heading, in the past tense; a mixed answer says only that.
+    public static func answeredTitle(_ batch: CrossingBatch, _ verdict: CrossingBatch.Verdict) -> String {
+        let one = batch.rows.count == 1
+        let noun = batch.kind == dependKind ? (one ? "Dependency" : "Dependencies") : (one ? "Task" : "Tasks")
+        switch verdict {
+        case .mixed: return one ? "Request answered" : "Requests answered"
+        case .refused:
+            if batch.out { return "\(noun) kept in the project" }
+            switch batch.kind {
+            case ProjectCrossings.moveKind: return one ? "Move refused" : "Moves refused"
+            case dependKind: return "\(noun) refused"
+            default: return one ? "Filing refused" : "Filings refused"
+            }
+        case .approved:
+            if batch.out { return "\(noun) taken out of the project" }
+            switch batch.kind {
+            case ProjectCrossings.moveKind:
+                return batch.inTarget ? "\(noun) moved here" : "\(noun) moved into \(targetTitle(batch))"
+            case dependKind: return "\(noun) allowed"
+            default: return "\(noun) filed here"
+            }
+        }
+    }
+
+    /// The project the batch goes into, by name — what the asking session's card says where the
+    /// target's conversation says "this project".
+    public static func targetTitle(_ batch: CrossingBatch) -> String {
+        batch.rows.first?.toProject?.title ?? ProjectCrossings.unnamedProject
+    }
+
+    /// "this project" in the target's conversation; the target's name in the asking session; "No
+    /// project" for a move out.
+    public static func toText(_ batch: CrossingBatch) -> String {
+        if batch.out { return toNoProject }
+        return batch.inTarget ? toThisProject : targetTitle(batch)
     }
 
     /// The live badge: what is being asked.
@@ -226,29 +294,51 @@ public enum CrossingBatches {
     }
 
     /// `8 tasks from Runner v1 · for criteria 4–11`; a move out says what it takes out and from where.
+    /// Criteria are named by their number — the one a person reads on the project page — and a
+    /// server too old to send one falls back to the criterion's words, never its opaque key.
     public static func summary(_ batch: CrossingBatch) -> String {
         let n = batch.rows.count
-        if batch.out { return "\(n) \(noun(batch.kind, count: n)) to take out of \(batch.sourceTitle)" }
+        if batch.out {
+            let what = "\(n) \(noun(batch.kind, count: n))"
+            switch batch.verdict {
+            case nil: return "\(what) to take out of \(batch.sourceTitle)"
+            case .approved?: return "\(what) taken out of \(batch.sourceTitle)"
+            case .refused?: return "\(what) kept in \(batch.sourceTitle)"
+            case .mixed?: return "\(what) from \(batch.sourceTitle)"
+            }
+        }
         let head = "\(n) \(noun(batch.kind, count: n)) from \(batch.sourceTitle)"
-        guard let range = criteriaRange(batch.rows.compactMap { $0.requestedCriterion?.key }) else { return head }
-        return "\(head) · \(range)"
+        var seen = Set<String>()
+        let criteria = batch.rows.compactMap(\.requestedCriterion).filter { seen.insert($0.key).inserted }
+        let ordinals = criteria.compactMap(\.ordinal)
+        let texts = criteria.filter { $0.ordinal == nil }
+            .compactMap { criterionName($0).map { "“\($0)”" } }
+        let named = Set(ordinals).count + texts.count
+        guard named > 0 else { return head }
+        var parts: [String] = []
+        if let range = criteriaRange(ordinals) { parts.append(range) }
+        parts.append(contentsOf: texts)
+        return "\(head) · for \(named == 1 ? "criterion" : "criteria") \(parts.joined(separator: ", "))"
     }
 
-    /// `for criterion 4`, `for criteria 4–11`, `for criteria 4, 6, 9`; nil for no keys.
-    public static func criteriaRange(_ keys: [String]) -> String? {
-        var seen = Set<String>()
-        let distinct = keys.filter { !$0.isEmpty && seen.insert($0).inserted }
-        guard !distinct.isEmpty else { return nil }
-        if distinct.count == 1 { return "for criterion \(distinct[0])" }
-        let numbers = distinct.compactMap { Int($0) }
-        if numbers.count == distinct.count {
-            let sorted = numbers.sorted()
-            if sorted.last! - sorted.first! == sorted.count - 1 {
-                return "for criteria \(sorted.first!)–\(sorted.last!)"
-            }
-            return "for criteria " + sorted.map(String.init).joined(separator: ", ")
+    /// `4–11` when the numbers are a run, else `4, 6, 9`; nil for none.
+    public static func criteriaRange(_ ordinals: [Int]) -> String? {
+        let numbers = Array(Set(ordinals)).sorted()
+        guard !numbers.isEmpty else { return nil }
+        let contiguous = numbers.enumerated().allSatisfy { index, number in
+            index == 0 || number == numbers[index - 1] + 1
         }
-        return "for criteria " + distinct.sorted().joined(separator: ", ")
+        if numbers.count > 1, contiguous { return "\(numbers.first!)–\(numbers.last!)" }
+        return numbers.map(String.init).joined(separator: ", ")
+    }
+
+    /// What a person calls a criterion: `Criterion 4`, or its words from a server that sends no
+    /// number. Never its key, which is an opaque id. Nil when it has neither (deleted).
+    public static func criterionName(_ criterion: ProjectCrossing.Criterion) -> String? {
+        if let ordinal = criterion.ordinal { return "Criterion \(ordinal)" }
+        guard let text = criterion.text?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !text.isEmpty else { return nil }
+        return text
     }
 
     /// `move · 8 waiting`, while live.
@@ -256,7 +346,8 @@ public enum CrossingBatches {
         "\(liveBadge(batch.kind)) · \(ProjectCrossings.waiting(batch.pending.count))"
     }
 
-    public static let provenance = "From Orbit — not the requesting agent."
+    /// Who wrote the card, not where the tasks come from: the From/To lines under it say that.
+    public static let provenance = "Written by Orbit — not the requesting agent."
     public static let fromLabel = "From"
     public static let toLabel = "To"
     public static let toThisProject = "this project"
@@ -278,10 +369,10 @@ public enum CrossingBatches {
     public static let takeOutManyRefuse = "Keep them here"
     /// The badge an answered move out earns, in place of an into-move's `moved`.
     public static let takenOutBadge = "taken out"
-    public static let takeOutConsequence =
-        "Confirming takes the task out of this project as soon as you answer, and nobody has to send the request again."
+    /// The project page's confirm prompt says the same of one task.
+    public static let takeOutConsequence = ProjectCrossings.moveOutApproveConsequence
     public static let takeOutManyConsequence =
-        "Confirming takes the tasks out of this project as soon as you answer, and nobody has to send the request again."
+        "Confirming takes the tasks out of this project as soon as you answer; no project's acceptance counts them any more."
 
     /// The approve button's words: a move out takes its task(s) out, a batch into the project keeps
     /// `Approve`.
@@ -308,17 +399,32 @@ public enum CrossingBatches {
 
     public static func requestedLine(_ row: ProjectCrossing) -> String? {
         guard let criterion = row.requestedCriterion else { return nil }
-        let line = "\(ProjectCrossings.moveRequestedCriterionLabel): \(criterion.key)"
-        return criterion.text == nil ? "\(line) — \(ProjectCrossings.moveCriterionGone)" : line
+        let name = criterionName(criterion) ?? ProjectCrossings.moveCriterionGone
+        return "\(ProjectCrossings.moveRequestedCriterionLabel): \(name)"
     }
 
     public static func withdrawnLine(_ row: ProjectCrossing) -> String? {
-        row.withdrawnCriterion.map { "\(ProjectCrossings.moveWithdrawnCriterionLabel): \($0.key)" }
+        guard let criterion = row.withdrawnCriterion, let name = criterionName(criterion) else { return nil }
+        return "\(ProjectCrossings.moveWithdrawnCriterionLabel): \(name)"
     }
 
     /// A row already answered names its state; a waiting one names nothing.
     public static func stateLine(_ row: ProjectCrossing) -> String? {
         ProjectCrossings.isAnswerable(row.state) ? nil : ProjectCrossings.label(row.state)
+    }
+
+    /// A row's state line in its batch: once every row went the same way the receipt says it, so
+    /// only a batch still asking or answered both ways names each row's state.
+    public static func stateLine(_ row: ProjectCrossing, in batch: CrossingBatch) -> String? {
+        switch batch.verdict {
+        case .approved?, .refused?: return nil
+        case nil, .mixed?: return stateLine(row)
+        }
+    }
+
+    /// The label over the quoted reasons: they are the agent's words, under a card Orbit wrote.
+    public static func reasonsHead(_ count: Int) -> String {
+        count == 1 ? "Reason given by the requesting agent" : "Reasons given by the requesting agent"
     }
 
     /// Each distinct reason given, once, quoted, in the order first given.
@@ -357,7 +463,7 @@ public enum CrossingBatches {
         switch standing {
         case .live: return nil
         case .recorded(let verdict, let at):
-            return "✓ \(verdictWord(verdict)) by you at \(at.map(CriteriaDecisions.receiptClock) ?? "")"
+            return "✓ \(verdictWord(verdict)) by you at \(at.map { CriteriaDecisions.receiptClock($0) } ?? "")"
         case .elsewhere(let verdict):
             return "\(verdictWord(verdict)) at another end"
         }

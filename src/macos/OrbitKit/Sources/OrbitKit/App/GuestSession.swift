@@ -54,6 +54,21 @@ public enum GuestTone: String, Sendable, Equatable {
 }
 
 extension GuestSessionState {
+    public var displayFacts: SessionDisplayFacts {
+        SessionDisplayFacts(phase: phase, released: released, lastTurnOutcome: lastTurnOutcome,
+                            waitingOn: waitingOn, endReason: endReason, workFinished: workFinished,
+                            activity: activity, pendingApprovals: pendingApprovals,
+                            runningBgCount: runningBgCount)
+    }
+
+    /// The state and its marks as Shared with me writes them (web `sharedWithMeStateText`): "Idle · Finished",
+    /// then Completed for a filed session. From an older server, `word`.
+    public var line: String {
+        guard let state = SessionDisplay.state(displayFacts) else { return word }
+        let shown = SessionDisplay.written(state, SessionDisplay.marks(displayFacts) ?? [])
+        return completed ? "\(shown) \u{00B7} Completed" : shown
+    }
+
     /// The run state, resolved the way every other surface resolves it: the new field first, then the
     /// raw run status, then the legacy mixed state. Nothing at all reads as Ended.
     public var resolvedRunState: SessionRunState {
@@ -70,7 +85,7 @@ extension GuestSessionState {
 
     /// The agent is still in a run — and the conversation is not filed away — so a message joins it
     /// rather than restarting it.
-    public var live: Bool { resolvedRunState.isLive && !completed }
+    public var live: Bool { (released.map { !$0 } ?? resolvedRunState.isLive) && !completed }
 
     /// Waiting on its owner — a permission card or a question pending — which only the owner answers.
     public var waiting: Bool { live && waitingOnOwner }
@@ -78,12 +93,36 @@ extension GuestSessionState {
     /// Queued or running: the conversation is moving now.
     public var busy: Bool { resolvedRunState == .queued || resolvedRunState == .running }
 
-    /// The status word (web `sessionStateWord`): `Completed` once filed, else the run's own word.
-    public var word: String { completed ? "Completed" : ShareMarkdown.runLabel(resolvedRunState) }
+    /// Guest payloads historically omitted the end reason. Until they carry the release outcome
+    /// facts, keep their terminal wording on the legacy path.
+    private var releasedRunState: SessionRunState? {
+        guard released == true, workFinished != nil || endReason != nil else { return nil }
+        return .afterRelease(endReason: endReason, lastTurnOutcome: lastTurnOutcome,
+                             workFinished: workFinished)
+    }
+
+    private var displayRunState: SessionRunState {
+        if let releasedRunState { return releasedRunState }
+        if released == false && endReason != nil && lastTurnOutcome == .interrupted { return .interrupted }
+        return resolvedRunState
+    }
+
+    /// The status word (web `sessionStateWord`): with the session facts, the state word from `phase`
+    /// (`SessionDisplay`), a filed session's Completed drawn after it by the caller; from an older server,
+    /// `Completed` once filed, else the run's own word.
+    public var word: String {
+        if let state = SessionDisplay.state(displayFacts) { return state.word }
+        if completed { return "Completed" }
+        if releasedRunState == .succeeded { return "Finished" }
+        if displayRunState == .queued && waitingOn == .hold { return "On hold" }
+        // A payload without the release facts keeps its old word; the task panel's run label now says Finished.
+        if displayRunState == .succeeded { return "Succeeded" }
+        return ShareMarkdown.runLabel(displayRunState)
+    }
 
     public var tone: GuestTone {
         if completed { return .done }
-        switch resolvedRunState {
+        switch displayRunState {
         case .queued: return .queued
         case .running: return .running
         case .awaitingInput: return .awaiting
@@ -114,8 +153,10 @@ public enum GuestFollow {
     /// new; nil once the conversation has stopped and gone quiet. `expecting`: a message was just
     /// sent and the run it starts has not been seen yet, so a quiet session is still asked.
     public static func delay(_ state: GuestSessionState, moved: Bool, expecting: Bool = false) -> TimeInterval? {
-        if moved || state.busy { return workingInterval }
-        if state.resolvedRunState.isLive && !state.completed { return waitingInterval }
+        // PENDING on a wake is an armed retry, which can be hours out on a spent quota: it waits, as an idle one does.
+        let busy = state.phase.map { $0 == .running || ($0 == .pending && state.waitingOn != .wake) } ?? state.busy
+        if moved || (state.released != true && busy) { return workingInterval }
+        if state.live { return waitingInterval }
         return expecting ? workingInterval : nil
     }
 }
@@ -218,7 +259,7 @@ public enum SharedWithMe {
 
     /// The row's second line: who shared it and how it stands, `Ana · Running`.
     public static func subtitle(_ session: GuestSessionSummary) -> String {
-        "\(session.ownerName) \u{00B7} \(session.state.word)"
+        "\(session.ownerName) \u{00B7} \(session.state.line)"
     }
 
     /// The row's title: the first non-blank line of the session's title (web `titleFirstLine`).

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """A07 loopback contract fixture. Records authenticated requests and accepted state, not a deployment."""
+import base64
 import argparse, hashlib, json, re, socket, threading, time, uuid
 from email.parser import BytesParser
 from email.policy import default
@@ -20,9 +21,13 @@ class State:
         self.rows=[]; self.turns={}; self.attachments={}; self.calls=[]; self.attempts={}; self.controls=[]
         self.losses=0; self.uploadFailures=0; self.uploadDelay=0; self.denial=0; self.config={}; self.expired=False; self.rotation=0
         self.status='AWAITING_INPUT'; self.revision=0; self.creations=[]; self.downloads=[]; self.discussion=False
-        self.rejectTurnOnce=False; self.rejectTurnStatus=409
+        self.rejectTurnOnce=False; self.rejectTurnStatus=409; self.sendEvents=[]
         # A07c scenarios: fields over the session, the runner, the account's providers/pools, the retry door's answer.
         self.extraDetail={}; self.runnerExtra={}; self.providers=None; self.pools=[]; self.retryMessage={'text':'last failed message'}
+        # GET /users/me, for a scenario that needs the account's preferences (translation): None answers as before.
+        self.me=None
+        # Rows the turns listing carries as the server placed them (`placement` accepted/queued), beside the turns this fixture took.
+        self.queuedTurns=[]
     def detail(self):
         return {'id':SESSION,'title':'Composer conversation','workspaceId':WORKSPACE,'assignedRunnerId':RUNNER,
             'status':self.status,'runState':self.status,'lifecycleState':'OPEN','provider':'codex','model':'fixture-model',
@@ -60,11 +65,13 @@ class Handler(BaseHTTPRequestHandler):
             with state.lock:
                 if body.get('reset'): state.reset()
                 for k in ['losses','uploadFailures','uploadDelay','denial','status','expired','discussion','rejectTurnOnce','rejectTurnStatus',
-                          'extraDetail','runnerExtra','providers','pools','retryMessage','rows']:
+                          'extraDetail','runnerExtra','providers','pools','retryMessage','rows','me','queuedTurns']:
                     if k in body: setattr(state,k,body[k])
+                # Account events (a clone's `agent.changed` frame) to relay once on the next poll of /api/events.
+                state.sendEvents=state.sendEvents+body.get('events',[])
                 # Files a scenario's transcript links to, served as the attachments the app downloads.
                 for key,f in body.get('files',{}).items():
-                    data=f['text'].encode()
+                    data=base64.b64decode(f['base64']) if 'base64' in f else f['text'].encode()
                     state.attachments[key]={'name':f['name'],'mime':f['mime'],'size':len(data),'sha256':hashlib.sha256(data).hexdigest(),
                         'sessionId':SESSION,'bytes':data,'references':[]}
             return self.reply({'ok':True})
@@ -121,11 +128,19 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply({'turnId':answer['turnId'],'status':'PENDING','kind':answer['kind']})
         if path.endswith('/config') or path.endswith('/account'):
             state.config.update(body); return self.reply({'ok':True})
+        # Run now (docs/mocks/queued-run-now): the queued message starts over the limit, and the row says so while it runs.
+        if path.endswith('/run-now'):
+            state.controls.append({'action':'run-now','method':method})
+            turn=state.queuedTurns.pop(0)
+            state.rows.append({'seq':len(state.rows)+1,'type':'user','turnId':turn['turnId'],'payload':{'text':turn['content']}})
+            state.status='RUNNING'; state.extraDetail={'runState':'RUNNING','runningOverLimit':{'active':17,'limit':16,'runnerName':'HPC'}}
+            return self.reply({'ok':True,'turnId':turn['turnId'],'alreadyPassed':False})
         if path.endswith('/interrupt'):
             state.status='AWAITING_INPUT'; state.controls.append({'action':'interrupt'}); return self.reply({'ok':True})
         if '/turns/' in path and method=='DELETE':
             turn=path.split('/')[-1]; state.controls.append({'action':'withdraw','turnId':turn})
-            state.turns={k:v for k,v in state.turns.items() if v['turnId']!=turn}; return self.reply({'ok':True})
+            state.turns={k:v for k,v in state.turns.items() if v['turnId']!=turn}
+            state.queuedTurns=[t for t in state.queuedTurns if t.get('turnId')!=turn]; return self.reply({'ok':True})
         if path.endswith('/retry-message') or path.endswith('/auto-retry'):
             state.controls.append({'action':path.split('/')[-1],'method':method,'body':body})
             # The armed retry is the session's: turning it off clears it, putting it back arms it at the moment sent.
@@ -154,18 +169,22 @@ class Handler(BaseHTTPRequestHandler):
                         for row in list(state.rows):
                             if row['seq']>last_seq:
                                 self.wfile.write(b'data: '+encoded(row)+b'\n\n'); last_seq=row['seq']
+                    if path=='/api/events':
+                        with state.lock: pending,state.sendEvents=state.sendEvents,[]
+                        for event in pending: self.wfile.write(b'data: '+encoded(event)+b'\n\n')
                     value={'type':'session.updated','sessionId':SESSION,'data':{}} if path=='/api/events' and revision!=state.revision else {'type':'ping','seq':9007199254740991,'payload':{}}
                     revision=state.revision
                     self.wfile.write(b'data: '+encoded(value)+b'\n\n'); self.wfile.flush(); time.sleep(1)
             except (BrokenPipeError,ConnectionResetError): pass
             self.close_connection=True; return
+        if path=='/api/users/me' and state.me is not None: return self.reply(state.me)
         if path=='/api/workspaces': return self.reply([{'id':WORKSPACE,'name':'Composer fixture','runnerId':RUNNER,'enabled':True}])
         if path==f'/api/workspaces/{WORKSPACE}': return self.reply({'id':WORKSPACE,'name':'Composer fixture','runnerId':RUNNER,'provider':'codex','model':'fixture-model'})
         if path=='/api/sessions': return self.reply([state.detail()] if parse_qs(url.query).get('view',['open'])[0]=='open' else [])
         if path==f'/api/sessions/{SESSION}': return self.reply(state.detail())
         if path==f'/api/sessions/{CREATED}': return self.reply({**state.detail(),'id':CREATED,'title':'Created conversation'})
         if path.endswith('/events/page'): return self.reply({'events':state.rows[-200:],'hasMore':False})
-        if path.endswith('/turns'): return self.reply([{'id':v['turnId'],'turnId':v['turnId'],'content':v['request']['content'],'kind':v['kind']} for v in state.turns.values() if v['kind']!='steer'])
+        if path.endswith('/turns'): return self.reply(state.queuedTurns+[{'id':v['turnId'],'turnId':v['turnId'],'content':v['request']['content'],'kind':v['kind']} for v in state.turns.values() if v['kind']!='steer'])
         if path.endswith('/retry-message'): return self.reply(state.retryMessage)
         if path==f'/api/runners/{RUNNER}/codex-rate-limit-reset': return self.reply({'active':None,'latest':None})
         if path.startswith(f'/api/runners/{RUNNER}/codex-rate-limit-reset/'): return self.reply({'id':'a07c-reset-1','runnerId':RUNNER,

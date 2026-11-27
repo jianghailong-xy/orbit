@@ -1372,7 +1372,7 @@ func TestKimiPlanReviewBecomesStructuredQuestion(t *testing.T) {
 
 func TestKimiPromptCarriesAgentAndOrbitInstructions(t *testing.T) {
 	agent := AgentExecConfig{SystemPrompt: "Review carefully", AppendSystemPrompt: "Keep it short"}
-	got := kimiPromptText(agent, "/opt/orbit", "hello", false, true)
+	got := kimiPromptTextOf(agent, "/opt/orbit", "hello", false, true, true)
 	for _, want := range []string{"<orbit-agent-instructions>", "Review carefully", "Keep it short", "/opt/orbit", "hello"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("prompt %q missing %q", got, want)
@@ -1582,9 +1582,9 @@ func TestKimiPermissionToolInputMissesUnknownCall(t *testing.T) {
 	}
 }
 
-// A read-only Kimi SubAgent runs in plan mode, which asks about every shell call. Its shell requests follow the
-// parent's mode, read when each is asked: no card under Auto or Bypass, a card under any other mode. Its edit
-// tools stay with plan, and a Kimi child that is not read-only is untouched.
+// A read-only Kimi SubAgent runs in plan mode, which asks about every shell call. Its requests follow the parent's
+// mode, read when each is asked: no card under Auto or Bypass, refused under Don't Ask, a card under any other mode.
+// Its edits are refused, and a Kimi child that is not read-only is untouched.
 func TestKimiReadonlySubagentShellFollowsParentMode(t *testing.T) {
 	options := []interface{}{
 		map[string]interface{}{"optionId": "approve_once", "kind": "allow_once"},
@@ -1607,8 +1607,11 @@ func TestKimiReadonlySubagentShellFollowsParentMode(t *testing.T) {
 			t.Fatalf("%s under an Auto parent = %q, %t; want approve_once, true", toolName, got, decided)
 		}
 	}
-	if got, decided := kimiAutomaticPermissionOption(child, "Edit", map[string]interface{}{"file_path": "a.go"}, options, ""); decided {
-		t.Fatalf("Edit under an Auto parent = %q; a read-only child's edits are never answered here", got)
+	if got, decided := kimiAutomaticPermissionOption(child, "Edit", map[string]interface{}{"file_path": "a.go"}, options, ""); got != "reject" || !decided {
+		t.Fatalf("Edit under an Auto parent = %q, %t; a read-only child's edits are refused", got, decided)
+	}
+	if got, decided := kimiAutomaticPermissionOption(child, "WebFetch", map[string]interface{}{"url": "https://go.dev"}, options, ""); got != "approve_once" || !decided {
+		t.Fatalf("WebFetch under an Auto parent = %q, %t; want approve_once, true", got, decided)
 	}
 
 	// The parent moves to Default mid-run: the next shell call files a card.
@@ -1616,8 +1619,8 @@ func TestKimiReadonlySubagentShellFollowsParentMode(t *testing.T) {
 	if got, decided := ask("Bash"); decided {
 		t.Fatalf("Bash under a Default parent = %q; want a card", got)
 	}
-	// The child's own mode is plan, so a Don't Ask parent files a card too.
-	for mode, want := range map[string]bool{"bypassPermissions": true, "plan": false, "acceptEdits": false, "dontAsk": false} {
+	// A Don't Ask parent refuses unasked, as it would its own request.
+	for mode, want := range map[string]bool{"bypassPermissions": true, "plan": false, "acceptEdits": false, "dontAsk": true} {
 		live.mode = mode
 		if _, decided := ask("Bash"); decided != want {
 			t.Fatalf("Bash under a %s parent decided = %t; want %t", mode, decided, want)

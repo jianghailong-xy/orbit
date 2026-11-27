@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # /upgrade's two-stage release (.claude/skills/upgrade/SKILL.md, "Two-stage release"). The build stage runs here: it
 # builds the apiserver, web and link gateway images from this checkout, boots the apiserver and web images as CI does,
-# and pushes all three to ORBIT_REGISTRY, each tagged by the commit it was built from, with the hosted runners' image
-# (deploy/managed-runner/image) whenever the runner's sources changed. The deploy stage runs on
+# and pushes all three to ORBIT_REGISTRY, each tagged by the commit it was built from. The hosted runners' image
+# (deploy/managed-runner/image) is not built here: /release publishes it when it creates a release tag
+# (deploy/two-stage/publish-managed-runner.sh), and a deploy takes the image of the newest release tag at or behind the
+# commit it deploys, or stops before changing anything when that image is not in the registry. The deploy stage runs on
 # ORBIT_DEPLOY_HOST, driven from here over ssh: deploy/two-stage/deploy-stage.sh pulls those images there and recreates
 # what changed, and builds nothing. That host holds no checkout: this script ships it the release's Compose file and the
 # few files it mounts, taken from the commit, never from the working tree.
@@ -63,11 +65,10 @@ DIR="${ORBIT_DEPLOY_DIR:-/root/orbit}"
 # they mount: deploy/postgres-pinned.yml, the only pin of postgres and pgbackup, and deploy/db-proxy.yml, the database
 # entry. test/upgrade-two-stage.test.mjs holds this list to those files.
 RELEASE_FILES=(docker-compose.yml gateway scripts/pg-archive-wal.sh scripts/pg-backup.sh src/link-gateway/nats.conf deploy/runner-link
-  deploy/postgres-pinned.yml deploy/db-proxy.yml deploy/db-proxy)
-# What the hosted runners' image is built from, as deploy/managed-runner/image/Dockerfile.dockerignore admits it: the
-# runner's Go sources but its tests, its module files, DeepSeek Harness's lockfile, and the image's own directory.
-MANAGED_RUNNER_INPUTS=(':(glob)src/runner-go/*.go' ':(glob,exclude)src/runner-go/*_test.go' src/runner-go/go.mod src/runner-go/go.sum
-  src/runner-go/dsh-install/package.json src/runner-go/dsh-install/package-lock.json deploy/managed-runner/image)
+  deploy/postgres-pinned.yml deploy/db-proxy.yml deploy/db-proxy deploy/monitoring scripts/pg-monitor-role.sh)
+# in_registry, registry_digest, push_preflight, and the release tag that names the hosted runners' image.
+# shellcheck source=deploy/two-stage/registry.sh
+. "$REPO_ROOT/deploy/two-stage/registry.sh"
 
 # Every value that reaches the other host's shell is one of these shapes, so none of them needs quoting there.
 if ! [[ "$REGISTRY" =~ ^[A-Za-z0-9.-]+(:[0-9]+)?$ ]]; then
@@ -124,16 +125,26 @@ release_of() {
     exit 1
   fi
   LINK_IMAGE="$REGISTRY/orbit-link-gateway:$LINK_TAG"
-  # The hosted runners' image is named by the last commit that changed what it is built from, so a release that did not
-  # change the runner builds none and moves no hosted runner. A commit without deploy/managed-runner/image has none.
-  MR_TAG=""
+  # The hosted runners' image is the newest release tag's at or behind the commit, as the downloadable runner is, so a
+  # deploy between two releases moves no hosted runner (managed_runner_of_tag sets MR_IMAGE, MR_REVISION, MR_VERSION).
+  # None for a commit without deploy/managed-runner/image, with no release tag behind it, or whose newest tag predates
+  # release-built images: the hosted runners' profile is then left as it is.
+  MR_RELEASE_TAG=""
+  MR_REVISION=""
+  MR_VERSION=""
   MR_IMAGE=""
+  MR_WHY=""
   if git cat-file -e "$1:deploy/managed-runner/image/Dockerfile" 2>/dev/null; then
-    MR_TAG="$(git log -1 --format=%H "$1" -- "${MANAGED_RUNNER_INPUTS[@]}")"
-    MR_IMAGE="$REGISTRY/orbit-cloud-runner:$MR_TAG"
+    local tag
+    tag="$(release_tag_at "$1")"
+    if [ -z "$tag" ]; then
+      MR_WHY="no release tag (v*) is at or behind $1"
+    elif ! managed_runner_of_tag "$tag"; then
+      MR_WHY="$tag, the newest release tag at or behind $1, predates release-built hosted runner images"
+    fi
   fi
   base="$(git show "$1:deploy/two-stage/base-images.env")"
-  for name in ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE; do
+  for name in ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE ORBIT_PROMETHEUS_IMAGE ORBIT_NODE_EXPORTER_IMAGE ORBIT_POSTGRES_EXPORTER_IMAGE ORBIT_GRAFANA_IMAGE ORBIT_LOKI_IMAGE ORBIT_ALLOY_IMAGE; do
     value="$(printf '%s\n' "$base" | sed -n "s/^$name=//p" | tail -n 1)"
     if ! [[ "$value" =~ ^[a-z0-9._/-]+@sha256:[0-9a-f]{64}$ ]]; then
       echo "error: $1's deploy/two-stage/base-images.env does not pin $name as <repository>@sha256:<64 hex>" >&2
@@ -143,39 +154,19 @@ release_of() {
   done
 }
 
-# Whether the registry has an image: yes or no, and anything else stops the run rather than being taken for a no.
-in_registry() {
-  local out
-  if out="$(docker manifest inspect --insecure "$1" 2>&1 >/dev/null)"; then return 0; fi
-  case "$out" in
-    *"no such manifest"*|*"manifest unknown"*|*"not found"*) return 1 ;;
-  esac
-  echo "error: could not ask $REGISTRY about $1: $out" >&2
-  exit 1
-}
-
-# The image by the digest the registry serves it under, <repository>@sha256:<64 hex>: how a hosted runner's profile names
-# it (runner.image is pinned by digest), and what the node pulls.
-registry_digest() {
-  local digest
-  digest="$(docker manifest inspect -v --insecure "$1" | grep -m1 -oE '"digest": *"sha256:[0-9a-f]{64}"' | grep -oE 'sha256:[0-9a-f]{64}' || true)"
-  if ! [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-    echo "error: $REGISTRY did not say which digest $1 has" >&2
-    exit 1
+# Stops the run before anything is changed when the hosted runners' image of this release is not in the registry. Only
+# /release publishes it, from the tag, on this host.
+managed_runner_published() {
+  if [ -n "$MR_WHY" ]; then
+    echo "warning: the hosted runners' image is left as it is: $MR_WHY." >&2
+    return 0
   fi
-  printf '%s@%s\n' "${1%:*}" "$digest"
-}
-
-# A registry served over plain HTTP, as one reached only over a private network may be, takes a push from a Docker
-# daemon that lists it among its insecure-registries, and from no other. Checked before a build it would come too late for.
-push_preflight() {
-  case "$REGISTRY" in localhost:*|127.*) return 0 ;; esac
-  curl -fsS -m 10 -o /dev/null "http://$REGISTRY/v2/" 2>/dev/null || return 0
-  if ! docker info --format '{{range $name, $config := .RegistryConfig.IndexConfigs}}{{$name}} {{$config.Secure}}{{println}}{{end}}' \
-    | grep -x "$REGISTRY false" >/dev/null; then
-    echo "error: $REGISTRY serves plain HTTP, and this host's Docker does not list it among its insecure-registries, so" >&2
-    echo "       nothing could be pushed there. Add \"insecure-registries\": [\"$REGISTRY\"] to /etc/docker/daemon.json and" >&2
-    echo "       run systemctl reload docker (running containers stay up), then this again. Nothing was built." >&2
+  [ -n "$MR_IMAGE" ] || return 0
+  if ! in_registry "$MR_IMAGE"; then
+    echo "error: $MR_IMAGE, the hosted runners' image of $MR_RELEASE_TAG (the newest release tag at or behind $COMMIT)," >&2
+    echo "       is not in $REGISTRY. /release publishes it when it creates the tag; publish it on this host with:" >&2
+    echo "       ORBIT_REGISTRY=$REGISTRY deploy/two-stage/publish-managed-runner.sh $MR_RELEASE_TAG" >&2
+    echo "       Nothing was built or changed." >&2
     exit 1
   fi
 }
@@ -267,7 +258,9 @@ build_stage() {
   local absent=() image flags=()
   release_of "$COMMIT"
   echo "==> Build stage, on $(hostname): release $COMMIT for $REGISTRY"
-  for image in "$APISERVER_IMAGE" "$WEB_IMAGE" "$LINK_IMAGE" ${MR_IMAGE:+"$MR_IMAGE"}; do
+  # A release that goes on to be deployed is refused here already, before its build, rather than after it.
+  if [ "$MODE" = release ]; then managed_runner_published; fi
+  for image in "$APISERVER_IMAGE" "$WEB_IMAGE" "$LINK_IMAGE"; do
     if in_registry "$image"; then
       echo "    $image is in the registry already, and a tag names one build: it is kept"
     else
@@ -295,12 +288,6 @@ build_stage() {
     echo "==> Building $LINK_IMAGE from src/link-gateway"
     docker build ${flags[@]+"${flags[@]}"} --provenance=false --build-arg "ORBIT_SOURCE_SHA=$LINK_TAG" -t "$LINK_IMAGE" src/link-gateway
   fi
-  if [ -n "$MR_IMAGE" ] && [[ " ${absent[*]} " == *" $MR_IMAGE "* ]]; then
-    # From this checkout, whose runner sources are those of the commit that names it. The runner reports managed-<tag>.
-    echo "==> Building $MR_IMAGE, the hosted runners' image, from deploy/managed-runner/image"
-    docker build ${flags[@]+"${flags[@]}"} --provenance=false -f deploy/managed-runner/image/Dockerfile \
-      --build-arg "ORBIT_SOURCE_SHA=$MR_TAG" -t "$MR_IMAGE" .
-  fi
   for image in "${absent[@]}"; do
     echo "==> Pushing $image"
     docker push "$image"
@@ -320,22 +307,28 @@ deploy_stage() {
   else
     echo "==> Deploy stage, on $HOST in $DIR: release $COMMIT"
   fi
-  for image in "$APISERVER_IMAGE" "$WEB_IMAGE" "$LINK_IMAGE" ${MR_IMAGE:+"$MR_IMAGE"}; do
+  for image in "$APISERVER_IMAGE" "$WEB_IMAGE" "$LINK_IMAGE"; do
     if ! in_registry "$image"; then
       echo "error: $image is not in $REGISTRY. Build the release first, on a checkout of $COMMIT:" >&2
       echo "       upgrade.sh --build-only. Nothing was changed on $HOST." >&2
       exit 1
     fi
   done
-  # A hosted runner's profile on the target names this image by digest, and its runners move onto it once idle.
+  managed_runner_published
+  # A hosted runner's profile on the target names this image by digest, with the tag's commit and release version, and
+  # its runners move onto it once idle.
   MR_REF=""
-  if [ -n "$MR_IMAGE" ]; then MR_REF="$(registry_digest "$MR_IMAGE")"; fi
+  if [ -n "$MR_IMAGE" ]; then
+    MR_REF="$(registry_digest "$MR_IMAGE")"
+    echo "==> The hosted runners' image is $MR_RELEASE_TAG's: $MR_IMAGE ($MR_REVISION)"
+  fi
   echo "==> Shipping $COMMIT's Compose file and the files it mounts (${RELEASE_FILES[*]}), and the deploy stage"
   git archive --format=tar --prefix="$stage/" "$COMMIT" -- "${RELEASE_FILES[@]}" \
     | on_target "mkdir -p $DIR/.upgrade && cd $DIR && rm -rf $stage && tar -x"
   on_target "cat > $DIR/.upgrade/deploy-stage.sh" <deploy/two-stage/deploy-stage.sh
   on_target "ORBIT_DEPLOY_DIR=$DIR ORBIT_RELEASE_COMMIT=$COMMIT ORBIT_REGISTRY=$REGISTRY ORBIT_LINK_GATEWAY_TAG=$LINK_TAG \
-ORBIT_NGINX_IMAGE=$ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE=$ORBIT_NATS_IMAGE ORBIT_MANAGED_RUNNER_IMAGE=$MR_REF \
+ORBIT_NGINX_IMAGE=$ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE=$ORBIT_NATS_IMAGE \
+ORBIT_PROMETHEUS_IMAGE=$ORBIT_PROMETHEUS_IMAGE ORBIT_NODE_EXPORTER_IMAGE=$ORBIT_NODE_EXPORTER_IMAGE ORBIT_POSTGRES_EXPORTER_IMAGE=$ORBIT_POSTGRES_EXPORTER_IMAGE ORBIT_GRAFANA_IMAGE=$ORBIT_GRAFANA_IMAGE ORBIT_LOKI_IMAGE=$ORBIT_LOKI_IMAGE ORBIT_ALLOY_IMAGE=$ORBIT_ALLOY_IMAGE ORBIT_MANAGED_RUNNER_IMAGE=$MR_REF ORBIT_MANAGED_RUNNER_REVISION=$MR_REVISION ORBIT_MANAGED_RUNNER_VERSION=$MR_VERSION \
 ORBIT_DEPLOY_PULL_BASE=$PULL_BASE ORBIT_DEPLOY_PRUNE=$PRUNE ORBIT_DEPLOY_PLAN=$plan ORBIT_DEPLOY_STOP_THEN_START=$STOP_THEN_START \
 bash $DIR/.upgrade/deploy-stage.sh" || status=$?
   if [ "$status" -eq 255 ]; then

@@ -11,7 +11,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.scale
@@ -50,12 +53,25 @@ internal enum class AgentBrand(val from: Long, val to: Long, val mark: String?) 
             "kimi", "moonshot" -> KIMI
             "glm", "zai", "z.ai" -> GLM
             "minimax" -> MINIMAX
-            "qwen", "dashscope" -> QWEN
+            "qwen", "qwen-coding-plan", "dashscope" -> QWEN
             "antigravity" -> ANTIGRAVITY
             "cursor", "cursor-api" -> CURSOR
             else -> GENERIC
         }
     }
+}
+
+/**
+ * A soft shadow of [color] behind the node's rounded rectangle, blurred by [blur] and dropped by [dy] (SwiftUI's `.shadow(color:
+ * radius:y:)`), drawn with the platform's shadow layer so it keeps its colour. The node draws over the shape it is cast from.
+ */
+internal fun Modifier.glow(color: Color, blur: Dp, dy: Dp, corner: Dp): Modifier = drawBehind {
+    val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        this.color = color.copy(alpha = 1f).toArgb()
+        setShadowLayer(blur.toPx(), 0f, dy.toPx(), color.toArgb())
+    }
+    val r = corner.toPx()
+    drawIntoCanvas { it.nativeCanvas.drawRoundRect(0f, 0f, size.width, size.height, r, r, paint) }
 }
 
 /** [brand]'s tile at [size]: corner radius 0.26 and glyph 0.56 of the tile (24-unit viewBox), lifted on its own colour from 40 dp. */
@@ -65,7 +81,9 @@ internal fun ProviderMark(brand: AgentBrand, label: String, size: Dp = 68.dp, mo
     val to = Color(brand.to)
     val path = remember(brand) { brand.mark?.let { PathParser().parsePathString(it).toPath() } }
     Box(modifier
-        .then(if (size >= 40.dp) Modifier.shadow(size * 0.16f, shape, ambientColor = to.copy(alpha = 0.34f), spotColor = to.copy(alpha = 0.34f)) else Modifier)
+        // iOS lifts a hero-sized tile on a glow in its own brand colour (`shadow(color: to.opacity(0.34), radius: size * 0.16,
+        // y: size * 0.10)`); Compose's elevation shadow comes out grey, so the glow is drawn.
+        .then(if (size >= 40.dp) Modifier.glow(to.copy(alpha = 0.34f), blur = size * 0.16f, dy = size * 0.10f, corner = size * 0.26f) else Modifier)
         .size(size)
         .background(Brush.linearGradient(listOf(Color(brand.from), to)), shape)
         .border(1.dp, Color.White.copy(alpha = 0.16f), shape),

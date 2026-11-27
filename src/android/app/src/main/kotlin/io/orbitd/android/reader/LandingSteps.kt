@@ -96,8 +96,20 @@ internal object LandingSteps {
 
     /** A step stopped short: one of its lines is a stop or a refusal, or a check or result that did not end well. */
     fun failed(step: LandingStep, kind: String): Boolean = step.entries.any { (_, entry) ->
-        entry.data?.text("skipped") != "PATHS_EXEMPT" && (entry.kind in FAILURES || (entry.kind in setOf("CHECK_FINISHED", "RESULT", "RESULT_FALLBACK") && !LandingSessionModel.entryOk(entry, kind)))
+        !skippedCheck(entry) && (entry.kind in FAILURES || (entry.kind in setOf("CHECK_FINISHED", "RESULT", "RESULT_FALLBACK") && !LandingSessionModel.entryOk(entry, kind)))
     }
+
+    /** A check line that says the check was not run: only exempt paths changed (§11 K2), or its task is exempt (§12.15 P-C2). Neither
+     *  is a failure. */
+    fun skippedCheck(entry: LandingEntry) = entry.data?.text("skipped") in setOf("PATHS_EXEMPT", "TASK_EXEMPT")
+
+    /** The line of a step that says its task is exempt from the landing check (§12.15 P-C2, board docs/mocks/landing-measured ④), or
+     *  null: the step reads "Landing check · Skipped" with the reason. */
+    fun taskExempt(step: LandingStep): LandingEntry? =
+        step.entries.map { it.value }.lastOrNull { it.kind == "CHECK_FINISHED" && it.data?.text("skipped") == "TASK_EXEMPT" }
+
+    /** Why a task-exempt landing check was skipped: the reason the line carries. */
+    fun exemptReason(entry: LandingEntry): String? = entry.data?.text("reason")?.takeIf { it.isNotBlank() } ?: entry.reason?.takeIf { it.isNotBlank() }
 
     /** How long a landing's checks took together; null when none recorded a duration. */
     fun checksDurationMs(durations: List<Int?>): Int? = durations.sumOf { it ?: 0 }.takeIf { it > 0 }

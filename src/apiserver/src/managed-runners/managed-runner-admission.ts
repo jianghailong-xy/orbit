@@ -2,7 +2,10 @@ import type { ManagedRunnerManagementState } from '@prisma/client';
 
 import type { Pod } from './kube-client';
 import {
+  DRIVE_CSI_DRIVER,
+  DRIVE_MOUNT,
   GENERATION_ANNOTATION,
+  LEGACY_DRIVE_MOUNTS,
   OWNER_ANNOTATION,
   PVC_UID_ANNOTATION,
   RUNNER_ANNOTATION,
@@ -38,8 +41,16 @@ import {
  *   - its owner, runner, PVC UID and generation annotations are the mapping's, and that generation
  *     is reserved: the mapping is STARTING with no Pod recorded and a CREATE_POD pending;
  *   - every container runs the profile's pinned image, it has no ephemeral containers, and its
- *     volumes are only that claim, emptyDirs and its own bootstrap Secret — no host namespaces,
- *     host paths or privileged containers.
+ *     volumes are only that claim, emptyDirs, its own bootstrap Secret and at most one Drive
+ *     volume — no host namespaces, host paths or privileged containers. The drive volume
+ *     (docs/drive-technical-design.md §6.1, B13) is a `csi` volume of `drive.orbit.dev`
+ *     whose attributes are exactly `{ runnerId }` of this mapping, mounted only by the `runner`
+ *     container, only at /run/orbit-drive, only with HostToContainer, writable. While Pods of the
+ *     older drivers drain, `documents.orbit.dev` mounted at /run/orbit-documents and
+ *     `files.orbit.dev` mounted at /run/orbit-files are accepted the same way (each driver only at
+ *     its own path). Outside this namespace the cluster-wide policy `orbit-drive-driver` refuses the
+ *     driver (deploy/managed-runner/drive-csi/admission-policy.yaml), and the plugin checks the
+ *     namespace too.
  *
  * Concurrent creates under the fixed name are left to the API server, which stores one object per
  * name; a create under any other name, or by anyone else, or for a generation that is not reserved,
@@ -136,6 +147,42 @@ export function podImages(pod: Pod | null | undefined): string[] {
   return [...containersOf(pod, 'initContainers'), ...containersOf(pod, 'containers')].map((c) => String(c.image ?? ''));
 }
 
+/** Where each driver the guard accepts is mounted: the Drive driver, and the older ones while their Pods drain. */
+const DRIVE_MOUNT_OF_DRIVER: Readonly<Record<string, string>> = {
+  [DRIVE_CSI_DRIVER]: DRIVE_MOUNT,
+  ...LEGACY_DRIVE_MOUNTS,
+};
+
+/** The mount path of this mapping's drive if `volume` is it (the one CSI volume, naming only its runner), else null. */
+function driveVolumeMount(volume: PodVolume, mapping: PodAdmissionMapping): string | null {
+  const csi = volume.csi as { driver?: unknown; volumeAttributes?: unknown; readOnly?: unknown; fsType?: unknown; nodePublishSecretRef?: unknown } | undefined;
+  if (!csi || typeof csi !== 'object' || typeof csi.driver !== 'string' || !Object.hasOwn(DRIVE_MOUNT_OF_DRIVER, csi.driver)) return null;
+  if (Object.keys(csi).some((key) => key !== 'driver' && key !== 'volumeAttributes')) return null;
+  const attributes = csi.volumeAttributes as Record<string, unknown> | undefined;
+  return !!attributes && typeof attributes === 'object'
+    && Object.keys(attributes).length === 1 && attributes.runnerId === mapping.runnerId
+    ? DRIVE_MOUNT_OF_DRIVER[csi.driver] : null;
+}
+
+
+/** Why the drive volume `name` is mounted somewhere it may not be, or null: only the runner, at its driver's path, as a slave. */
+function driveMountProblem(pod: Pod, name: string, mountPath: string): string | null {
+  for (const key of ['initContainers', 'containers'] as const) {
+    for (const container of containersOf(pod, key)) {
+      const mounts = Array.isArray(container.volumeMounts) ? (container.volumeMounts as Array<Record<string, unknown>>) : [];
+      for (const mount of mounts.filter((m) => m.name === name)) {
+        if (key !== 'containers' || container.name !== 'runner') return `the drive is mounted in ${JSON.stringify(container.name)}, not only the runner`;
+        const extra = Object.keys(mount).filter((k) => !['name', 'mountPath', 'mountPropagation', 'readOnly'].includes(k));
+        if (extra.length > 0) return `the drive mount sets ${extra.join(', ')}`;
+        if (mount.mountPath !== mountPath) return `the drive is mounted at ${JSON.stringify(mount.mountPath)}, not ${mountPath}`;
+        if (mount.mountPropagation !== 'HostToContainer') return 'the drive is not mounted with HostToContainer propagation';
+        if (mount.readOnly === true) return 'the drive is mounted read-only';
+      }
+    }
+  }
+  return null;
+}
+
 /** Why the Pod is not the manager's runner template, or null when it is. */
 function templateProblem(pod: Pod, mapping: PodAdmissionMapping, policy: PodAdmissionPolicy): string | null {
   const spec = pod.spec as Record<string, unknown>;
@@ -145,15 +192,21 @@ function templateProblem(pod: Pod, mapping: PodAdmissionMapping, policy: PodAdmi
   const all = [...containersOf(pod, 'initContainers'), ...containersOf(pod, 'containers')];
   if (all.length === 0 || all.some((c) => c.image !== policy.image)) return 'a container does not run the pinned runner image';
   if (all.some((c) => (c.securityContext as Record<string, unknown> | undefined)?.privileged === true)) return 'a container is privileged';
+  let drive: { name: string; mountPath: string } | null = null;
   for (const volume of volumesOf(pod)) {
     const kinds = Object.keys(volume).filter((key) => key !== 'name');
     const kind = kinds.length === 1 ? kinds[0] : null;
     if (kind === 'persistentVolumeClaim' && volume.persistentVolumeClaim?.claimName === mapping.pvcName) continue;
     if (kind === 'emptyDir') continue;
     if (kind === 'secret' && (volume.secret as { secretName?: unknown } | undefined)?.secretName === managedSecretName(mapping.runnerId)) continue;
+    const driveMount: string | null = kind === 'csi' && !drive ? driveVolumeMount(volume, mapping) : null;
+    if (driveMount) {
+      drive = { name: volume.name, mountPath: driveMount };
+      continue;
+    }
     return `volume ${JSON.stringify(volume.name)} is not one a managed runner Pod may have`;
   }
-  return null;
+  return drive === null ? null : driveMountProblem(pod, drive.name, drive.mountPath);
 }
 
 /** Same identity, same volumes, same images, before and after an update. */

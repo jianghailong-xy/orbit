@@ -116,7 +116,15 @@ final class WikiChatCardLookTests: XCTestCase {
             ("not applied", ["state": "not_applied"], "Not applied", .grey, [], nil, true),
             ("undone", ["state": "undone"], "Undone", .grey, [], nil, true),
             ("a rewrite drafted", ["kind": "rewrite", "label": "Rewrite from main", "state": "draft"], "Draft · Rewrite from main",
-             .accent, [.rewrite, .discard], nil, false),
+             .accent, [.apply, .discard], nil, false),
+            // Option A (design §7.2): a rewrite card held for a press says why; one written without a press is never confirmed.
+            ("a rewrite held: the chat read the web", ["kind": "rewrite", "label": "Rewrite from main", "state": "draft", "held": "web"],
+             "Draft · Rewrite from main", .accent, [.apply, .discard], "Apply to write: this chat read web content", false),
+            ("a rewrite held: the day's automatic rewrites used up", ["kind": "rewrite", "label": "Rewrite from main", "state": "draft", "held": "budget"],
+             "Draft · Rewrite from main", .accent, [.apply, .discard], "Apply to write: today's automatic rewrites are used up", false),
+            ("a rewrite written from main", ["kind": "rewrite", "label": "Rewrite from main", "state": "rewritten", "undoable": true,
+                                             "autoQueuedAt": "2026-11-24T10:00:00.000Z"],
+             "Rewritten from main", .green, [.undo], nil, true),
             // Its Undo holds until main moves what the section draws on (design §8.4, owner 11-07, C15).
             ("a rewrite undone", ["kind": "rewrite", "label": "Rewrite from main", "state": "undone"], "Undone", .grey, [],
              "If main has changed the files this section draws on, the next maintenance run writes it from main again.", true),

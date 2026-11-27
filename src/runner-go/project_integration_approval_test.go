@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Changing a project's merge check from a session is a PROPOSAL the account owner answers, and these
@@ -35,8 +36,17 @@ const mergeCheckProjectRead = `{
 }`
 
 // mergeCheckServer answers the project read, the approval poll with `decision`, and the update
-// itself. Every request is recorded in order, and the body of the last update is kept.
+// itself. Every request is recorded in order, and the body of the last update is kept. Its project is
+// on a MAIN line, so, as the server does, it refuses a landing-check-only update that no card was
+// filed for (403 INTEGRATION_SETTINGS_OWNER_ONLY, recorded as "PATCH-REFUSED").
 func mergeCheckServer(t *testing.T, decision string) (*httptest.Server, *[]string, *map[string]interface{}, *map[string]interface{}) {
+	return integrationServer(t, decision, false)
+}
+
+// integrationServer is mergeCheckServer, with cardless saying whether the server takes a
+// landing-check-only update with no card — what it does for a project's coordinator on a project
+// branch with a merge check (contract §12.15 P-C1).
+func integrationServer(t *testing.T, decision string, cardless bool) (*httptest.Server, *[]string, *map[string]interface{}, *map[string]interface{}) {
 	t.Helper()
 	var hits []string
 	filed := map[string]interface{}{}
@@ -50,7 +60,16 @@ func mergeCheckServer(t *testing.T, decision string) (*httptest.Server, *[]strin
 			_ = json.NewDecoder(r.Body).Decode(&filed)
 			_, _ = w.Write([]byte(`{"id":"ap1","status":"PENDING"}`))
 		case r.Method == http.MethodPatch:
-			_ = json.NewDecoder(r.Body).Decode(&written)
+			body := map[string]interface{}{}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			settings, _ := body["integration"].(map[string]interface{})
+			if !cardless && len(filed) == 0 && landingCheckOnly(settings) {
+				hits[len(hits)-1] = "PATCH-REFUSED " + r.URL.Path
+				w.WriteHeader(http.StatusForbidden)
+				_, _ = w.Write([]byte(`{"statusCode":403,"code":"INTEGRATION_SETTINGS_OWNER_ONLY","message":"needs the card"}`))
+				return
+			}
+			written = body
 			_, _ = w.Write([]byte(`{"id":"proj-1","title":"Checkout rewrite"}`))
 		default:
 			_, _ = w.Write([]byte(mergeCheckProjectRead))
@@ -424,5 +443,81 @@ func TestCLIProjectUpdateLandingCheckUsesExactApprovalProposal(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// The project's coordinator writes the landing check of a project branch with a merge check without a
+// card (§12.15 P-C1): the update is tried first with none, and when the server takes it nobody is asked.
+func TestMCPProjectUpdateLandingCheckTheServerTakesAsksNobody(t *testing.T) {
+	for _, integration := range []map[string]interface{}{
+		{"landingCheckCommand": "npm run build"},
+		{"landingCheckTimeoutSeconds": float64(900)},
+		{"landingCheck": "NONE"},
+	} {
+		srv, hits, filed, written := integrationServer(t, `{"status":"DENIED"}`, true)
+		mcp := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv.URL, "tok")}
+
+		res := mcp.callTool("project_update", map[string]interface{}{"projectId": "proj-1", "integration": integration})
+
+		if res["isError"] == true {
+			t.Fatalf("%v: %#v", integration, res["content"])
+		}
+		if len(*filed) != 0 || len(*hits) != 1 || (*hits)[0] != "PATCH /api/runner/projects/proj-1" {
+			t.Fatalf("%v: asked or read before writing: %v", integration, *hits)
+		}
+		if got, _ := (*written)["integration"].(map[string]interface{}); fmt.Sprint(got) != fmt.Sprint(integration) {
+			t.Fatalf("written integration = %#v", (*written)["integration"])
+		}
+	}
+}
+
+// Under an engine deadline a call that may wait for the owner is handed to a job; one the server
+// takes with no card is written in the call itself instead, because there is nobody to wait for.
+func TestMCPProjectUpdateCardlessLandingCheckIsNotHandedOff(t *testing.T) {
+	t.Setenv(envBgSocket, "")
+	t.Setenv(envBgToken, "")
+	srv, hits, filed, _ := integrationServer(t, `{"status":"DENIED"}`, true)
+	mcp := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv.URL, "tok"), callTimeout: time.Minute}
+
+	res := mcp.callTool("project_update", map[string]interface{}{
+		"projectId": "proj-1", "integration": map[string]interface{}{"landingCheck": "NONE"},
+	})
+
+	if res["isError"] == true || len(*filed) != 0 || !updatedProject(*hits) {
+		t.Fatalf("result %#v, hits %v", res["content"], *hits)
+	}
+}
+
+// A landing-check update the server refuses without a card goes to the card as before; the refused
+// try wrote nothing. The merge check never tries without one.
+func TestMCPProjectUpdateLandingCheckTheServerRefusesAsksTheOwner(t *testing.T) {
+	srv, hits, filed, written := mergeCheckServer(t, `{"status":"ALLOWED"}`)
+	mcp := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv.URL, "tok")}
+
+	res := mcp.callTool("project_update", map[string]interface{}{
+		"projectId": "proj-1", "integration": map[string]interface{}{"landingCheck": "NONE"},
+	})
+
+	if res["isError"] == true {
+		t.Fatalf("project_update returned an error: %#v", res["content"])
+	}
+	if len(*hits) < 4 || (*hits)[0] != "PATCH-REFUSED /api/runner/projects/proj-1" ||
+		(*hits)[len(*hits)-1] != "PATCH /api/runner/projects/proj-1" {
+		t.Fatalf("call order = %v", *hits)
+	}
+	if input, _ := (*filed)["input"].(map[string]interface{}); input["landingCheck"] != "NONE" {
+		t.Fatalf("card input = %#v", (*filed)["input"])
+	}
+	if integration, _ := (*written)["integration"].(map[string]interface{}); integration["landingCheck"] != "NONE" {
+		t.Fatalf("written integration = %#v", (*written)["integration"])
+	}
+
+	srv2, hits2, _, _ := mergeCheckServer(t, `{"status":"ALLOWED"}`)
+	mcp2 := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv2.URL, "tok")}
+	mcp2.callTool("project_update", map[string]interface{}{
+		"projectId": "proj-1", "integration": map[string]interface{}{"mergeCheckCommand": "npm test", "landingCheckCommand": "x"},
+	})
+	if (*hits2)[0] != "GET /api/runner/projects/proj-1" {
+		t.Fatalf("a merge-check update was tried without its card: %v", *hits2)
 	}
 }

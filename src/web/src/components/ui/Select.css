@@ -1,7 +1,7 @@
 .orbit-select {
   position: relative; display: inline-flex; align-items: center; box-sizing: border-box;
   height: var(--orbit-control-height); padding: 4px 11px; color: var(--text-1); background: var(--bg-raised); border: 1px solid var(--border);
-  border-radius: var(--orbit-radius); font-family: var(--orbit-font-family); font-size: 14px; line-height: 22px;
+  border-radius: 10px; font-family: var(--orbit-font-family); font-size: 14px; line-height: 22px;
   transition: border-color .2s, box-shadow .2s;
 }
 .orbit-select:hover { border-color: var(--orbit-control-primary-hover); }
@@ -21,7 +21,7 @@
 }
 .orbit-choice-clear:hover { color: var(--text-2); }
 .orbit-choice-clear:focus-visible { outline: 2px solid var(--orbit-focus-color); outline-offset: 2px; }
-.orbit-select[data-size='small'] { height: 24px; padding: 0 7px; border-radius: 4px; }
+.orbit-select[data-size='small'] { height: 24px; padding: 0 7px; border-radius: 6px; }
 .orbit-select[data-size='small'] .orbit-choice-clear { right: 7px; }
 .orbit-select[data-variant='borderless'] { background: transparent; border-color: transparent; box-shadow: none; }
 /* The replaced borderless select showed focus, and its open list, as a 1px outline inside its box. */
@@ -32,9 +32,10 @@
 /* The exact field width (Base UI snaps --anchor-width to whole pixels), as the replaced list used. */
 .orbit-choice-positioner[data-match-width='true'] { width: var(--orbit-choice-anchor-width, var(--anchor-width)); }
 .orbit-choice-positioner { min-width: var(--orbit-choice-anchor-width, var(--anchor-width)); max-width: var(--orbit-dropdown-room, var(--available-width)); }
-.orbit-select-popup { position: relative; left: var(--orbit-dropdown-subpixel, 0px); padding: 4px; }
-.orbit-select-list { max-height: min(256px, var(--available-height)); overflow-y: auto; overscroll-behavior: contain; outline: none; }
-.orbit-select-option { padding: 5px 12px; min-height: 32px; border-radius: 4px; cursor: pointer; outline: none; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The dropdown is drawn as the menus are: a rounder card with a hairline edge and roomy rows (Floating.css). */
+.orbit-select-popup { position: relative; left: var(--orbit-dropdown-subpixel, 0px); padding: 8px; border: 1px solid var(--border-subtle); border-radius: 18px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04); }
+.orbit-select-list { max-height: min(304px, var(--available-height)); overflow-y: auto; overscroll-behavior: contain; outline: none; }
+.orbit-select-option { padding: 7px 12px; min-height: 38px; font-size: 15px; border-radius: 10px; cursor: pointer; outline: none; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .orbit-select-option-label { display: block; overflow: hidden; text-overflow: ellipsis; }
 .orbit-select-option[data-highlighted] { background: var(--orbit-control-hover-bg); }
 .orbit-select-option[data-selected] { background: var(--orbit-menu-selected-bg); font-weight: 600; }
@@ -43,7 +44,7 @@
 .orbit-select-option[data-selected] + .orbit-select-option[data-selected] { border-top-left-radius: 0; border-top-right-radius: 0; }
 .orbit-select-option[data-disabled] { background: transparent; color: var(--orbit-control-disabled-text); cursor: not-allowed; }
 .orbit-select-option[data-disabled][data-selected] { background: var(--orbit-control-disabled-bg); }
-.orbit-select-group-label { padding: 5px 12px; color: var(--text-3); font-size: 12px; }
+.orbit-select-group-label { padding: 5px 12px; color: var(--text-3); font-size: 13px; }
 .orbit-select-group-label:has(.orbit-select-group-note) { display: flex; align-items: center; gap: 8px; }
 .orbit-select-group-note { margin-left: auto; flex: none; font-weight: 600; background: var(--fill-muted); border-radius: 5px; padding: 0 6px; }
 .orbit-select-empty { text-align: center; color: var(--text-3); }

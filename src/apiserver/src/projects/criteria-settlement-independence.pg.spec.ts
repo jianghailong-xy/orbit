@@ -52,7 +52,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { ProjectStatus, RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { ProjectStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -190,7 +191,7 @@ test('a criterion written by the session producing its evidence does not count, 
         title,
         prompt: 'do the work',
         provider: 'claude',
-        status: RunStatus.SUCCEEDED,
+        turnState: null, finishedAt: new Date(), 
         branch,
         isolationStatus: 'worktree',
         dispatchOrigin: SessionDispatchOrigin.USER,

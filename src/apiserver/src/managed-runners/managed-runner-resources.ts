@@ -22,6 +22,13 @@ import type { ManagedRunnerProfile } from './managed-runner-profile';
  * ORBIT_MANAGED_RUNNER_POD_UID, which the image entrypoint checks against the Secret and the runner
  * sends with every request (managed-runner-instance.ts).
  *
+ * With the profile's `files` section the Pod also receives the Drive (docs/drive-technical-design.md
+ * §6.1): one inline CSI volume of the `drive.orbit.dev` node plugin, naming only the runner, mounted in the runner
+ * container at /run/orbit-drive with HostToContainer propagation. Nothing else of the Pod changes: the runner
+ * container's security context is the same with or without it. The plugin reads that generation's mount credential
+ * from Secret `mrf-<runner uuid>` in the files namespace, which the manager writes (`buildDriveMountSecret`) and the
+ * runner never sees.
+ *
  * The Pod carries one finalizer, MANAGED_STOP_REPORT_FINALIZER: deleted by anyone — an operator's
  * `kubectl delete`, an eviction, a drain — it stays, terminal, with its kubelet's report of the stop,
  * until the manager has recorded that report and takes the finalizer off. Without it the kubelet's
@@ -46,6 +53,13 @@ export const MANAGED_STOP_REPORT_FINALIZER = 'orbit.dev/managed-runner-stop-repo
 /** The Pod example's grace: beyond the 170-second supervisor/lease/event envelope. */
 export const MANAGED_POD_TERMINATION_GRACE_SECONDS = 240;
 export const BOOTSTRAP_MOUNT = '/run/orbit-bootstrap';
+/**
+ * The data volume's directory mounted at /tmp, on both backends (docker-channel/channel.py says the same).
+ * Filled, /tmp gives the writer ENOSPC like the rest of the volume: an emptyDir's sizeLimit was enforced by
+ * evicting the whole Pod. The image's init-volume makes it mode 1777; the runner empties it at start and
+ * after sessions (runner-go managed_tmp.go).
+ */
+export const TMP_SUBPATH = '.orbit-tmp';
 export const BOOTSTRAP_KEY = 'token';
 /** The bootstrap Secret's second key: the generation its credential was issued for. */
 export const BOOTSTRAP_GENERATION_KEY = 'generation';
@@ -53,6 +67,19 @@ export const CREDENTIAL_FILE_ENV = 'ORBIT_RUNNER_CREDENTIAL_FILE';
 /** The instance identity the runner sends (runner-go managed_instance.go), from the Downward API. */
 export const GENERATION_ENV = 'ORBIT_MANAGED_RUNNER_GENERATION';
 export const POD_UID_ENV = 'ORBIT_MANAGED_RUNNER_POD_UID';
+/** The Drive CSI driver, and where the runner container receives the drive's plain parent directory. */
+export const DRIVE_CSI_DRIVER = 'drive.orbit.dev';
+export const DRIVE_VOLUME = 'orbit-drive';
+export const DRIVE_MOUNT = '/run/orbit-drive';
+/**
+ * The drivers of Pods created under the drive's earlier names, each with where it mounts: `documents.orbit.dev` at
+ * /run/orbit-documents and, before that, `files.orbit.dev` at /run/orbit-files. The manager creates none; admission
+ * still accepts them while such Pods drain (deploy/managed-runner/drive-csi/README.md, "Moving from an older driver").
+ */
+export const LEGACY_DRIVE_MOUNTS: Readonly<Record<string, string>> = {
+  'documents.orbit.dev': '/run/orbit-documents',
+  'files.orbit.dev': '/run/orbit-files',
+};
 
 function canonical(runnerId: string): string {
   const id = runnerId.toLowerCase();
@@ -63,6 +90,8 @@ function canonical(runnerId: string): string {
 export const managedPodName = (runnerId: string): string => `mr-${canonical(runnerId)}`;
 export const managedPvcName = (runnerId: string): string => `mr-data-${canonical(runnerId)}`;
 export const managedSecretName = (runnerId: string): string => `mr-boot-${canonical(runnerId)}`;
+/** The mount credential's Secret, in the files namespace (never the runner's). */
+export const driveMountSecretName = (runnerId: string): string => `mrf-${canonical(runnerId)}`;
 /** The ConfigMap an operator writes a fencing receipt into (managed-runner-fencing.ts). */
 export const managedFencingReceiptName = (runnerId: string): string => `mr-fence-${canonical(runnerId)}`;
 /** A dry-run Pod the admission guard must refuse: proof the guard is in force before a real create. */
@@ -127,6 +156,33 @@ export function buildManagedSecret(identity: ManagedRunnerIdentity, credential: 
   };
 }
 
+/**
+ * The mount credential of `identity.generation`, for the CSI plugin in `namespace` (§4.3, §6.1): the same keys and
+ * identity annotations as the bootstrap Secret, immutable, replaced when the generation advances.
+ */
+export function buildDriveMountSecret(identity: ManagedRunnerIdentity, namespace: string, credential: string): Secret {
+  return {
+    apiVersion: 'v1',
+    kind: 'Secret',
+    type: 'Opaque',
+    immutable: true,
+    metadata: {
+      name: driveMountSecretName(identity.runnerId),
+      namespace,
+      labels: { 'app.kubernetes.io/name': 'orbit-drive-mount' },
+      annotations: {
+        [OWNER_ANNOTATION]: identity.ownerId,
+        [RUNNER_ANNOTATION]: identity.runnerId,
+        [GENERATION_ANNOTATION]: String(identity.generation),
+      },
+    },
+    data: {
+      [BOOTSTRAP_KEY]: Buffer.from(credential, 'utf8').toString('base64'),
+      [BOOTSTRAP_GENERATION_KEY]: Buffer.from(String(identity.generation), 'utf8').toString('base64'),
+    },
+  };
+}
+
 /** The generation a bootstrap Secret says it was issued for, or null when it says none. */
 export function secretGeneration(secret: Secret): number | null {
   const said = secret.metadata.annotations?.[GENERATION_ANNOTATION];
@@ -146,7 +202,7 @@ export function buildManagedPod(identity: ManagedRunnerIdentity, pvcUid: string,
   const runner = profile.runner;
   const stateMounts = [
     { name: 'user-state', mountPath: '/home/orbit' },
-    { name: 'temporary', mountPath: '/tmp' },
+    { name: 'user-state', mountPath: '/tmp', subPath: TMP_SUBPATH },
   ];
   return {
     apiVersion: 'v1',
@@ -217,12 +273,17 @@ export function buildManagedPod(identity: ManagedRunnerIdentity, pvcUid: string,
             { name: POD_UID_ENV, valueFrom: { fieldRef: { fieldPath: 'metadata.uid' } } },
           ],
           resources: runner.resources.runner,
-          volumeMounts: [...stateMounts, { name: 'bootstrap', mountPath: BOOTSTRAP_MOUNT, readOnly: true }],
+          volumeMounts: [
+            ...stateMounts,
+            { name: 'bootstrap', mountPath: BOOTSTRAP_MOUNT, readOnly: true },
+            // The plugin's plain per-runner directory; the drive's FUSE mount sits below it at drive/, and a
+            // remount there reaches this container through HostToContainer.
+            ...(profile.files ? [{ name: DRIVE_VOLUME, mountPath: DRIVE_MOUNT, mountPropagation: 'HostToContainer' }] : []),
+          ],
         },
       ],
       volumes: [
         { name: 'user-state', persistentVolumeClaim: { claimName: managedPvcName(identity.runnerId) } },
-        { name: 'temporary', emptyDir: { sizeLimit: runner.tmpSizeLimit } },
         {
           name: 'bootstrap',
           // Readable by the runner's UID without fsGroup, whose recursive mode changes could widen
@@ -236,6 +297,7 @@ export function buildManagedPod(identity: ManagedRunnerIdentity, pvcUid: string,
             ],
           },
         },
+        ...(profile.files ? [{ name: DRIVE_VOLUME, csi: { driver: DRIVE_CSI_DRIVER, volumeAttributes: { runnerId: identity.runnerId } } }] : []),
       ],
     },
   };
@@ -287,13 +349,14 @@ export function pvIdentityProblem(
   return null;
 }
 
-export function secretIdentityProblem(secret: Secret, identity: ManagedRunnerIdentity): string | null {
-  const annotated = annotationProblem('the bootstrap Secret', secret.metadata, identity);
+/** Why a credential Secret is not the mapping generation's: the bootstrap Secret, or (`kind`) the mount Secret. */
+export function secretIdentityProblem(secret: Secret, identity: ManagedRunnerIdentity, kind = 'the bootstrap Secret'): string | null {
+  const annotated = annotationProblem(kind, secret.metadata, identity);
   if (annotated) return annotated;
   if (secret.metadata.annotations?.[GENERATION_ANNOTATION] !== String(identity.generation)) {
-    return 'the bootstrap Secret is for another generation';
+    return `${kind} is for another generation`;
   }
-  if (!bootstrapCredentialOf(secret)) return 'the bootstrap Secret carries no credential';
+  if (!bootstrapCredentialOf(secret)) return `${kind} carries no credential`;
   return null;
 }
 

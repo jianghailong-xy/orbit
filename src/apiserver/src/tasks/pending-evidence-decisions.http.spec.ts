@@ -52,12 +52,15 @@ const lookedUp: string[] = [];
  *  the status code the door returned. */
 const decided: unknown[][] = [];
 
+/** What a read's clock and the queue's content are, so a probe can move one without the other. */
+const queueState = { tickSeconds: 0, claim: 'the suite passed' };
+
 const evidenceService = {
   pending: async (ownerId: string, decidingSessionId: string) => ({
-    readAt: new Date('2026-09-04T12:00:00.000Z'),
+    readAt: new Date(Date.parse('2026-09-04T12:00:00.000Z') + queueState.tickSeconds * 1000),
     decidingSessionId,
     count: 1,
-    oldestAgeSeconds: 5_400,
+    oldestAgeSeconds: 5_400 + queueState.tickSeconds,
     pending: [{
       taskId: TASK_ID,
       title: 'the derived pending queue',
@@ -66,8 +69,8 @@ const evidenceService = {
       criterion: { key: 'a-criterion-key', text: 'the rail is derived from the facts' },
       evidenceRevision: '2',
       submittedAt: new Date('2026-09-04T10:30:00.000Z'),
-      ageSeconds: 5_400,
-      claim: 'the suite passed',
+      ageSeconds: 5_400 + queueState.tickSeconds,
+      claim: queueState.claim,
       gaps: ['iOS is out of scope'],
       citations: [],
       decidability: { decidable: true, refusal: null, requiredAction: null },
@@ -211,6 +214,35 @@ test('GET /api/tasks/evidence-decisions/pending reaches the queue and not the ta
     ]]);
     assert.equal(body.count, 1);
   });
+
+test('an unchanged pending queue answers 304 to its ETag, and a changed one answers 200', async (t) => {
+  const base = await boot(t);
+  const url = `${base}/api/tasks/evidence-decisions/pending?decidingSessionId=${uuidToBase62(SESSION_ID)}`;
+  t.after(() => { queueState.tickSeconds = 0; queueState.claim = 'the suite passed'; });
+
+  const first = await fetch(url, { headers: AUTH });
+  assert.equal(first.status, 200);
+  const etag = first.headers.get('etag');
+  assert.ok(etag, 'the answer names an ETag');
+
+  // Only the clock moved, within the minute: `readAt` and the seconds of every age differ, no question does.
+  queueState.tickSeconds = 30;
+  const unchanged = await fetch(url, { headers: { ...AUTH, 'if-none-match': etag } });
+  assert.equal(unchanged.status, 304);
+
+  // A row's age crossed a minute: clients draw it, so the answer is a 200 with the new age.
+  queueState.tickSeconds = 60;
+  const aged = await fetch(url, { headers: { ...AUTH, 'if-none-match': etag } });
+  assert.equal(aged.status, 200);
+  assert.notEqual(aged.headers.get('etag'), etag);
+  queueState.tickSeconds = 30;
+
+  queueState.claim = 'the suite failed';
+  const changed = await fetch(url, { headers: { ...AUTH, 'if-none-match': etag } });
+  assert.equal(changed.status, 200);
+  assert.equal(((await changed.json()) as { pending: Array<{ claim: string }> }).pending[0].claim, 'the suite failed');
+  assert.notEqual(changed.headers.get('etag'), etag);
+});
 
 test('the queue refuses to be read for nobody', async (t) => {
   const base = await boot(t);

@@ -1,6 +1,8 @@
 package io.orbitd.android.cards
 
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
@@ -20,3 +22,7 @@ internal fun Modifier.dashedBorder(color: Color, radius: Dp = 8.dp) = drawBehind
 /** How far each steer has got, by its turn: the `delivery` the latest `user_delivery` said, read by the reader off its window
  * (iOS `SteerDelivery`). Empty outside a conversation. */
 val LocalSteerDeliveries = compositionLocalOf<Map<String, String>> { emptyMap() }
+
+/** A card in a conversation: [io.orbitd.android.core.cards.ConversationCardWidth.DP] at most, the whole column when that is narrower. */
+internal fun Modifier.conversationCard(): Modifier =
+    widthIn(max = io.orbitd.android.core.cards.ConversationCardWidth.DP.dp).fillMaxWidth()

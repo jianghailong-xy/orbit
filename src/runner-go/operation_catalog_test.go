@@ -36,6 +36,9 @@ func catalogFullestCLIContext(t *testing.T) {
 	t.Setenv(envOrchestrationToken, "catalog-test-token")
 	t.Setenv(envWatches, "on")
 	t.Setenv(envWiki, "on")
+	t.Setenv(envBrowser, "on")
+	// On the Orbit Cloud runner: browser_request_sign_in is offered only there (browser_tools.go).
+	t.Setenv(envManagedRunnerGeneration, "3")
 	t.Setenv("ORBIT_USER_TOKEN", "")
 	t.Setenv("ORBIT_SERVICE_TOKEN", "")
 }
@@ -197,7 +200,7 @@ func TestEveryOperationHasCatalogMetadata(t *testing.T) {
 		objectAgent: true, objectRunner: true, objectProvider: true, objectWatch: true,
 		objectWiki: true, objectFile: true, objectOwner: true, objectAccount: true,
 		objectBackgroundJob: true, objectPermission: true, objectMergeReceipt: true, objectSchedule: true,
-		objectCatalog: true,
+		objectCatalog: true, objectSubagent: true, objectBrowser: true,
 	}
 	validRisks := map[operationRisk]bool{riskLow: true, riskMedium: true, riskHigh: true}
 	validApprovals := map[operationApproval]bool{approvalKindNone: true, approvalKindCard: true, approvalKindOwner: true}
@@ -416,6 +419,8 @@ func TestEveryAdvertisedArgvAndHelpArgvRuns(t *testing.T) {
 			t.Setenv("ORBIT_SERVICE_TOKEN", "")
 			t.Setenv(envWatches, "on")
 			t.Setenv(envWiki, "on")
+			t.Setenv(envBrowser, "on")
+			t.Setenv(envManagedRunnerGeneration, "3")
 			for key, value := range tc.env {
 				t.Setenv(key, value)
 			}
@@ -569,7 +574,7 @@ func TestCatalogCoversTheContractBaselineGap(t *testing.T) {
 		"ask_owner", "bg_kill", "bg_list", "bg_output", "bg_run", "condition_get", "criterion_check_report",
 		"criterion_check_start", "criterion_confirm", "criterion_confirmation_withdraw",
 		"integration_abandon", "integration_observe", "integration_retry", "open_item_hand_over",
-		"open_item_resolve", "permission_prompt", "project_ruling_record", "request_owner_action", "schedule_create",
+		"open_item_resolve", "permission_prompt", "project_ruling_record", "schedule_create",
 		"schedule_delete", "schedule_end", "schedule_get", "schedule_list", "schedule_pause",
 		"schedule_resume", "schedule_run_now", "schedule_run_report", "schedule_run_stop",
 		"schedule_update", "schedule_wakeup", "withdraw_owner_request",

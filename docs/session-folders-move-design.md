@@ -60,8 +60,11 @@ iOS 会话详情右上角使用 `⋯` 菜单：Share… / Copy Link；Rename… 
 
 - 标题是文件夹名，下面一行小字是 Workspace 名；返回回到这个 Workspace 的列表。
 - 右上角 `⋯` 里是 `Rename…`、`Delete Folder…`；`✎` 新建的会话直接落在这个文件夹（新建请求带 `folderId`）。
+- `⋯` 左边是和 Workspace 列表同一个范围菜单（触发器写当前视图，如 `Open ▾`）：Open / Completed 在页内切换，仍停在这个文件夹页；Trash 没有文件夹，选它就回到 Workspace 的 Trash；Filter by Tag、Group by Tag 只作用于这个文件夹的会话（平铺，不显示项目行）；没有 `New Folder…`（文件夹不嵌套）。owner 2026-11-22，`docs/mocks/session-folder-page-filter`。
+- 标签筛选开着时，搜索框下面有一个标签 chip，点一下清掉；空页写清范围，如 `No completed sessions with “runner” in this folder.`，下面一个 `Clear filter`。
+- 标签筛选和 Group by Tag 属于设置它的那一页：进文件夹页时没有，返回 Workspace 列表时清掉（列表照旧显示文件夹）；Open / Completed 两边共用。
 - 列表和外面一样：Pinned 在前，然后按时间分组；行、左右滑、长按都相同。
-- 文件夹页沿用打开它时列表的范围：从 Open 进来看 Open 的会话，从 Completed 进来看已完成的。
+- 文件夹页沿用打开它时列表的范围：从 Open 进来看 Open 的会话，从 Completed 进来看已完成的；之后可以用页头的范围菜单切换。
 - iPhone：推到 Agents 那一栏的导航栈上（`NavNode` 新增一种页面），系统返回键和左缘右滑返回都可用；在文件夹页里点开会话，返回时回到文件夹页。
 - iPad（三栏）：中间栏现在没有自己的导航栈。进文件夹时中间栏换成这个文件夹的列表，栏顶有返回按钮；右侧详情栏照旧跟着选中的会话走。中间栏和 iPhone 用同一个列表视图，只是进出方式不同。
 - 被选中的会话搬出了当前文件夹（或文件夹被删）时，页面不跳走，列表里那一行消失即可；文件夹被删时退回 Workspace 列表。
@@ -70,8 +73,9 @@ iOS 会话详情右上角使用 `⋯` 菜单：Share… / Copy Link；Rename… 
 其他规则：
 
 - Open 显示全部文件夹（包括空的）；Completed 只显示里面有已完成会话的文件夹；Trash 平铺，不显示文件夹。
-- 按标签筛选或 Group by Tag 时不显示文件夹，列表平铺，避免两套分组叠在一起。
-- 搜索结果本来就是跨 Workspace 平铺的，不变。
+- Workspace 列表按标签筛选或 Group by Tag 时不显示文件夹，列表平铺，避免两套分组叠在一起。文件夹页里没有文件夹行，所以标签在文件夹页里照常可用（见上）。
+- 搜索结果跨 Workspace 平铺。从文件夹页打开 ⌘K 时，搜索框里先带一个 `In <folder>` chip，只搜这个文件夹的会话（`GET /sessions/search?folderId=`，Wiki 不搜）；点 chip 的 ✕、在空输入框里按 Backspace、或空结果里的 `Search everywhere`，都会去掉范围、回到全局搜索。
+- 以上文件夹页的范围菜单、标签和带范围的搜索先在 web 上做；iOS / Android 跟进。
 - 文件夹的分组在客户端算：Open / Completed 列表本来就是整页拉取再按 Workspace 过滤（`AgentsModel.loadSessions`），按 `folderId` 再分一次即可。纯函数放 OrbitKit，带单测。
 
 ### 3.4 管理
@@ -186,7 +190,7 @@ iOS 会话详情右上角使用 `⋯` 菜单：Share… / Copy Link；Rename… 
 
 - **列表要拉全。** web 的会话列表原本分页（每页 40 条，滚到底再拉）。文件夹在客户端分组，文件夹的数量、状态标记和文件夹页都需要看到里面的每个会话，所以 Workspace 有文件夹时，这个视图一次拉整个列表（不带 `limit`，和原生客户端每次的请求一样）；没有文件夹的 Workspace 照旧分页。
 - **文件夹行。** 排在 Pinned 和时间分组上面，行高比会话行矮。标记沿用 web 侧栏里 Workspace 行的做法：有会话在跑时，文件夹图标上是静止的蓝点，只剩后台任务时是呼吸的蓝点；有会话等你时，行尾显示琥珀色数字。iOS 这里用转圈，web 的转圈只给会话行。文件夹图标用靛蓝色（Move 的颜色），和侧栏里灰色的 Workspace 文件夹区分开。
-- **文件夹页。** 会话栏原地换成文件夹的列表：‹ 回到 Workspace 的列表，标题是文件夹名，下面一行小字是 Workspace 名，⋯ 里是 Rename… 和 Delete Folder…。右边的对话不动。文件夹记在地址的 `?folder=<id>` 上，浏览器后退和刷新都对；在文件夹页里打开会话时这个参数跟着走。文件夹页里点 New session，新会话直接建在这个文件夹（新建请求带 `folderId`）。手机上进出文件夹用和打开会话一样的左右滑动。
+- **文件夹页。** 会话栏原地换成文件夹的列表：‹ 回到 Workspace 的列表，标题是文件夹名，下面一行小字是 Workspace 名，⋯ 里是 Rename… 和 Delete Folder…。右边的对话不动。列表自己的地址（`/workspaces/<id>`、它的 New session）把文件夹记在 `?folder=<id>` 上，浏览器后退和刷新都对。会话的地址不带它（owner 2026-11-25）：复制出去的 `/sessions/<id>` 在哪儿打开都一样，列表停在会话所在的地方——它的文件夹页，定时运行的会话是 Scheduled runs，否则是 Workspace 的列表；从当前页里打开的会话不挪列表，在会话开着时进出文件夹只改控制台自己的状态。旧链接带的 `?folder=` 读一次后从地址上去掉。文件夹页里点 New session，新会话直接建在这个文件夹（新建请求带 `folderId`）。手机上进出文件夹用和打开会话一样的左右滑动。
 - **管理。** New Folder… 放在列表顶部的 Open ▾ 菜单最下面，只在显示文件夹的视图里出现；Move 对话框里也有一个。新建和改名都直接在行内输入名字：Enter 保存，Esc 取消，离开输入框时有名字就保存；重名（409）的提示写在输入框下面。鼠标移到文件夹行上，› 换成 ⋯；删除用 web 现有的确认框。手机没有悬停，用文件夹页的 ⋯。
 - **Move 的入口。** Open 行鼠标悬停时，Pin、Complete 前面多一个 Move；会话页 ⋯ 菜单里，Move… 在 Complete 或 Move to Open 下面；Completed 行的 ⋯ 菜单里，Move… 在 Move to Open 下面；Trash 没有。手机左滑是 Share · Move · Delete，Share 打开会话页 ⋯ 里的同一个 Share… 对话框。
 - **Move 对话框。** 内容同第 4 节。第一组的会话数取 `move-targets` 返回的 `folders[].sessionCount`。搬到其他 Workspace 失败时，弹 web 的错误提示，内容是服务端给的原因。搬走的如果是右边正开着的会话，对话不关，控制台跟着它到新 Workspace 的列表：web 的会话栏本来就显示打开着的会话所在的 Workspace。

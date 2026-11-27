@@ -221,7 +221,7 @@ private struct NoMachineWelcomeCard: View {
             } else if runners.loadState.hasLoaded, !runners.loadState.lastLoadFailed {
                 baseline = RunnerPageFormat.onlineIDs(runners.runners)
             }
-            try? await Task.sleep(for: .seconds(5))
+            await VisibilityGate.app.pause(5)   // not while the app cannot be seen (§4 R3)
             guard !Task.isCancelled else { return }
             await runners.load()
         }

@@ -106,6 +106,8 @@ func TestAntigravityApprovalPolicyDecides(t *testing.T) {
 		{"write workspace in accept edits", "acceptEdits", "write_to_file", write(filepath.Join(w.work, "pkg", "new.go")), "allow", ""},
 		{"edit workspace in accept edits", "acceptEdits", "replace_file_content", map[string]interface{}{"TargetFile": filepath.Join(w.work, "a.go")}, "allow", ""},
 		{"write outside in accept edits", "acceptEdits", "write_to_file", write(filepath.Join(w.outside, "x")), "ask", ""},
+		{"write uploads in accept edits", "acceptEdits", "write_to_file", write(filepath.Join(w.uploads, "bench", "x.py")), "allow", ""},
+		{"write uploads in default", "default", "write_to_file", write(filepath.Join(w.uploads, "x")), "ask", ""},
 		{"write hooks.json", "acceptEdits", "write_to_file", write(filepath.Join(w.gemini, "config", "hooks.json")), "deny", "Orbit's own configuration"},
 		// agy loads a checkout's .agents/ as it goes: a hook written there would run before every call.
 		{"write checkout hooks in accept edits", "acceptEdits", "write_to_file", write(filepath.Join(w.work, ".agents", "hooks.json")), "ask", ""},

@@ -38,7 +38,7 @@ export type ScheduleRunState = (typeof SCHEDULE_RUN_STATES)[number];
 
 /** §7.2, plus OVER_BUDGET, which S2d adds for a MISSED run. */
 export const SCHEDULE_FAILURE_REASONS = [
-  'RUNNER_UNAVAILABLE', 'QUOTA', 'ENGINE_CRASHED_BEFORE_START', 'REPORTED_FAILED', 'NO_REPORT', 'ENGINE_CRASHED',
+  'RUNNER_UNAVAILABLE', 'RUNNER_FULL', 'QUOTA', 'ENGINE_CRASHED_BEFORE_START', 'REPORTED_FAILED', 'NO_REPORT', 'ENGINE_CRASHED',
   'APPROVAL_TIMEOUT', 'RUN_LIMIT', 'CANCELLED_BY_OWNER', 'OVER_BUDGET', 'LANDING_FAILED',
 ] as const;
 export type ScheduleFailureReason = (typeof SCHEDULE_FAILURE_REASONS)[number];
@@ -194,6 +194,7 @@ export const SCHEDULE_COPY = {
   /** Why a run failed, as a clause ("The last run ended without a report"); a run's own reasonText wins. */
   failureReasons: {
     RUNNER_UNAVAILABLE: 'found no runner online',
+    RUNNER_FULL: 'waited for a full runner until its window closed',
     QUOTA: "hit the engine's usage limit",
     ENGINE_CRASHED_BEFORE_START: 'stopped before its engine started',
     REPORTED_FAILED: 'reported a failure',
@@ -207,7 +208,7 @@ export const SCHEDULE_COPY = {
   },
   /** A run's reasonText as the server writes it (ScheduleRunView.reasonText), for the reasons whose sentence is shared. */
   runReasonTexts: {
-    OVER_BUDGET: 'Not started: it had already started as many runs in the past 7 days as you allowed.',
+    OVER_BUDGET: 'Not started: it had already started as many scheduled runs in the past 7 days as you allowed.',
   },
   /** A failure that reported what went wrong says it, in the failure card and its push (one line, 120 characters). */
   failureReasonsWithSummary: {
@@ -277,6 +278,7 @@ export const SCHEDULE_COPY = {
     pause: 'Pause',
     resume: 'Resume',
     change: 'Change…',
+    rename: 'Rename…',
     delete: 'Delete',
     undo: 'Undo',
     open: 'Open',
@@ -302,6 +304,13 @@ export const SCHEDULE_COPY = {
     confirm: 'Delete',
     cancel: 'Cancel',
   },
+  /** The phone's Rename… (§8.4 *Rename*): an alert with one text field. Web and macOS edit the title in place. */
+  renameAlert: {
+    title: 'Rename Schedule',
+    body: 'Only the name changes. When it runs and what it does stay the same.',
+    cancel: 'Cancel',
+    save: 'Save',
+  },
   /** The phone's Stop on a run under way: asks first, as Delete does. */
   stopConfirm: {
     title: 'Stop this run?',
@@ -317,6 +326,31 @@ export const SCHEDULE_COPY = {
     WORKSPACE: 'Keep in {workspace}',
     other: 'Keep as it is',
   },
+  every: {
+    minutes: 'Every {count} min',
+    hour: 'Every hour',
+    hours: 'Every {count} hours',
+    window: '{interval}, {time}–{until}',
+    from: '{interval} from {time}',
+    days: '{rule}, {days}',
+    workweek: 'Mon–Fri',
+    weekend: 'weekends',
+  },
+  /** The planned end (§8.5) and the line a run of missed slots collapses into. */
+  end: {
+    until: 'until {when}',
+    today: '{time} today',
+    tomorrow: '{time} tomorrow',
+    runLeft: '1 run left',
+    runsLeft: '{count} runs left',
+    missed: '{count} slots missed, {from}–{to}',
+    missedDated: '{count} slots missed, {fromDate}, {from}–{toDate}, {to}',
+    endLabel: 'Ends',
+    extend: 'Extend the end',
+    remove: 'Remove the end',
+    extendAsk: '{title}: extend the end',
+    removeAsk: '{title}: remove the end',
+  },
   history: {
     who: { USER: 'You', SESSION: 'Session', RUN: 'Run', ALLOWED: 'You allowed' },
     fields: {
@@ -327,6 +361,7 @@ export const SCHEDULE_COPY = {
       rule: 'Time',
       timezone: 'Time zone',
       endAt: 'Ends',
+      maxRuns: 'Runs',
       accessLevel: 'Access',
       runLimitMinutes: 'Run limit',
       workspaceId: 'Workspace',
@@ -339,8 +374,26 @@ export const SCHEDULE_COPY = {
     paused: 'Paused',
     resumed: 'Resumed',
     ended: 'Ended: {reason}',
+    renamed: 'Renamed from “{title}”',
     minutes: '{minutes} min',
     noEnd: 'no end',
+  },
+  /** A schedule's change conversation (§8.2, board 03-change): Orbit's opening, its strip, its input. */
+  changeConversation: {
+    title: 'Change {title}',
+    lead: 'What should change about {title}? This is what it does now:',
+    does: 'Does',
+    when: 'When',
+    runsIn: 'Runs in',
+    may: 'May',
+    costs: 'Costs',
+    tail:
+      'I can change the time, the days, what it checks and how it reports right away, and you can undo it. More runs, '
+      + 'longer runs, more access or another workspace need your Allow.',
+    placeholder: 'Say what to change…',
+    openSchedule: 'Open',
+    openInScheduled: 'Open in Scheduled',
+    conversation: 'conversation',
   },
   record: {
     changed: 'Changed {title}: {change}',
@@ -410,6 +463,13 @@ export const SCHEDULE_COPY = {
   push: {
     failedBody: 'The last run {reason}. It keeps running until you pause it.',
     goalReachedTitle: '{title} ended itself',
+    /**
+     * §7.1: a run failed NO_REPORT or ENGINE_CRASHED that reported after the owner wrote to its session; replaces the
+     * failure banner.
+     */
+    reportedLateTitle: '{title} reported after all',
+    /** §8.5: a planned end (endAt or maxRuns) reached; also the ENDED row's read. */
+    stoppedAsPlanned: 'Stopped as planned after {runs}',
   },
   empty: {
     lead: 'Nothing scheduled. Say what should happen and when; an agent sets it up and asks you once.',
@@ -512,6 +572,12 @@ export type ScheduleRule =
   | { kind: 'ONCE'; at: string }
   | { kind: 'DAILY'; time: string }
   | { kind: 'WEEKLY'; time: string; weekdays: ScheduleWeekday[] }
+  /**
+   * Sub-daily: slots every `minutes` (30, 60, 120, 180, 240, 360, 480 or 720) from `time` through `until`
+   * (inclusive) or the end of the day, on `weekdays`, on the local wall clock. The server always writes `time` and
+   * `weekdays`, so a client that predates EVERY reads it as a weekly rule.
+   */
+  | { kind: 'EVERY'; minutes: number; time: string; weekdays: ScheduleWeekday[]; until?: string }
   /** Starts when its condition fires; `conditionId` is null on a create card, before Create writes the condition. */
   | { kind: 'WHEN'; conditionId: string | null; runsPerWeek: number; condition: ScheduleWhenCondition };
 
@@ -591,7 +657,14 @@ export interface ScheduleView {
   note: string | null;
   revision: number;
   startAt: string;
+  /** The planned end by time (§8.5); null for none. */
   endAt: string | null;
+  /** The planned end by count of started runs (§8.5); null for none. Absent from servers before it. */
+  maxRuns?: number | null;
+  /** The runs it has started in all, counted as the weekly budget counts them. Absent from servers before it. */
+  runsStarted?: number;
+  /** maxRuns minus runsStarted, at least 0; null without maxRuns. Absent from servers before it. */
+  runsLeft?: number | null;
   nextDueAt: string | null;
   consecutiveFailures: number;
   createdFromSessionId: string | null;
@@ -677,8 +750,53 @@ export interface ScheduleChangeRecord {
   after: Record<string, unknown>;
   undoOfRevision: number | null;
   undoneByRevision: number | null;
+  /** The person's words that asked for it, when it came from the schedule's change conversation (§8.2). */
+  askedText: string | null;
   createdAt: string;
   undo: ScheduleUndoDoor | null;
+}
+
+/**
+ * Orbit's opening of a change conversation (§8.2): the schedule as it was when the conversation was opened, drawn
+ * by every client from `SCHEDULE_COPY.changeConversation`. Kept on the session, so it still reads as the start of
+ * the conversation after the schedule has changed.
+ */
+export interface ScheduleChangeOpening {
+  scheduleId: string;
+  title: string;
+  revision: number;
+  /** The read-back ("What it does"). */
+  does: string;
+  /** "Every day at 09:00 · Asia/Shanghai". */
+  when: string;
+  /** "apiserver · Codex agent". */
+  runsIn: string;
+  /** "Open a PR · edits in its own worktree and opens a PR; can't merge or deploy". */
+  may: string;
+  /** "Up to 7 runs a week, 30 min each". */
+  costs: string;
+}
+
+/**
+ * `GET /api/schedules/:id/change`: the schedule's open change conversation if it has one, and the opening a new one
+ * would start with. `POST /api/schedules/:id/change {text}` opens one with the person's first words and answers
+ * `{ sessionId }`.
+ */
+export interface ScheduleChangeConversationResponse {
+  sessionId: string | null;
+  opening: ScheduleChangeOpening;
+}
+
+/** The opening's rows, in order, as label and text. */
+export function scheduleChangeOpeningRows(opening: ScheduleChangeOpening): Array<{ label: string; text: string }> {
+  const T = C.changeConversation;
+  return [
+    { label: T.does, text: opening.does },
+    { label: T.when, text: opening.when },
+    { label: T.runsIn, text: opening.runsIn },
+    { label: T.may, text: opening.may },
+    { label: T.costs, text: opening.costs },
+  ];
 }
 
 export interface ScheduleCardDecision {
@@ -729,7 +847,20 @@ export interface ScheduleCreateCard extends ScheduleCardBase, ScheduleEnvelopeLi
   };
   today: { key: string; summary: string | null; text: string } | null;
   notice: string;
+  /** The Ends line (§8.5); null when the card names no end. Absent from servers before it. */
+  ends?: ScheduleCardEnds | null;
   envelope: null;
+}
+
+/**
+ * A create card's planned end (§8.5): the end the agent named, or on an EVERY rule that named none the server's
+ * suggestion 7 days out. A PENDING card's suggestion offers No end (`ScheduleAllowBody.dropSuggestedEnd`); once
+ * allowed, the card reads the end Create wrote, still `suggested`, or null after No end.
+ */
+export interface ScheduleCardEnds {
+  endAt: string | null;
+  maxRuns: number | null;
+  suggested: boolean;
 }
 
 /** The envelope card (§4): *Now* and *Asked*. */
@@ -813,17 +944,70 @@ export interface ScheduleDraftAnswer {
   session: unknown;
 }
 
+/** One try of a run (§7.2): the session it opened, and how far that session got. */
+export interface ScheduleRunTry {
+  sessionId: string;
+  /** When the try's session was opened. */
+  startedAt: string;
+  /** Whether a runner claimed the session (its engine was started, or tried to be). */
+  claimed: boolean;
+  /** Whether the session's first turn reached its engine. */
+  reachedEngine: boolean;
+}
+
+/** The full runner, run or batch a run's current session waits behind (sessions/queued-reason-sql.ts). */
+export interface ScheduleRunQueueGate {
+  queuedReason: 'runner_at_capacity' | 'tree_at_capacity' | 'batch_at_capacity' | (string & {});
+  queuedActive: number | null;
+  queuedLimit: number | null;
+  queuedHeldByJobs: number | null;
+  /** When the session went PENDING: what the wait counts from. */
+  since: string;
+  /** The run's catch-up deadline: past it, the run is MISSED (RUNNER_FULL). */
+  deadline: string;
+}
+
+/**
+ * What a run's session shows of the run it serves beside `run` (board docs/mocks/scheduled-run-not-started ②③④):
+ * its tries, when it gave up, its next try, the schedule's next run, and the queue its session waits in.
+ */
+export interface ScheduleRunSessionStatus {
+  /** Every try the run made, oldest first. */
+  tries: ScheduleRunTry[];
+  /** Which of `tries` this session is, from 1; null when it is none of them. */
+  thisTry: number | null;
+  /** When a run that ended with no try reaching its engine gave up; null otherwise. */
+  gaveUpAt: string | null;
+  /** A QUEUED run's next try. */
+  notBeforeAt: string | null;
+  /** The schedule's next run. */
+  nextDueAt: string | null;
+  /** The gate holding the run's current session while a full runner, run or batch does; null otherwise. */
+  queue: ScheduleRunQueueGate | null;
+}
+
 /** `GET /api/sessions/:id/schedule-cards`. */
 export interface SessionScheduleCardsResponse {
   /** A scheduled run's session (runSource SCHEDULE): the run it serves, however old; null for any other session. */
   run: ScheduleRunView | null;
+  /** Beside `run`: where it stands for this session. Null when `run` is; absent from servers before it. */
+  runStatus?: ScheduleRunSessionStatus | null;
   cards: ScheduleCard[];
   records: ScheduleChangeRecord[];
+  /**
+   * A schedule's change conversation (§8.2): Orbit's opening, as the schedule was when it was opened, for its strip
+   * and its first message. Null on every other session (and on servers before it).
+   */
+  change?: ScheduleChangeOpening | null;
 }
 
-/** `POST /api/schedule-requests/:id/allow`: a zone only for a CREATE card that names none. */
+/**
+ * `POST /api/schedule-requests/:id/allow`: a zone only for a CREATE card that names none; `dropSuggestedEnd` is the
+ * create card's No end (§8.5), so Create writes no end instead of the suggested one.
+ */
 export interface ScheduleAllowBody {
   timezone?: string;
+  dropSuggestedEnd?: boolean;
 }
 
 /** `POST /api/schedule-requests/:id/{allow,decline}`. */
@@ -946,6 +1130,7 @@ export function scheduleRuleText(rule: ScheduleRule, form: 'short' | 'long' = 's
     return scheduleFill(CC.rules[form], { condition: form === 'long' ? lowerFirst(rule.condition.text) : rule.condition.text });
   }
   if (rule.kind === 'DAILY') return scheduleFill(t.daily, { time: rule.time });
+  if (rule.kind === 'EVERY') return everyRuleText(rule);
   const days = SCHEDULE_WEEKDAYS.filter((d) => rule.weekdays.includes(d));
   if (days.length === 7) return scheduleFill(t.daily, { time: rule.time });
   if (days.length === 5 && WORKWEEK.every((d) => days.includes(d))) return scheduleFill(t.weekdays, { time: rule.time });
@@ -956,6 +1141,114 @@ export function scheduleRuleText(rule: ScheduleRule, form: 'short' | 'long' = 's
       : scheduleFill(C.rules.long.weekday, { weekday: C.weekdays[d], time: rule.time });
   }
   return scheduleFill(t.days, { days: days.map((d) => C.weekdaysShort[d]).join(C.rules.daysSeparator), time: rule.time });
+}
+
+/** An EVERY rule's sentence, the same in both forms (design §9.2): "Every 30 min, 09:00–18:00, Mon–Fri", "Every hour". */
+function everyRuleText(rule: Extract<ScheduleRule, { kind: 'EVERY' }>): string {
+  const e = C.every;
+  const interval = rule.minutes < 60
+    ? scheduleFill(e.minutes, { count: rule.minutes })
+    : rule.minutes === 60 ? e.hour : scheduleFill(e.hours, { count: rule.minutes / 60 });
+  const text = rule.until
+    ? scheduleFill(e.window, { interval, time: rule.time, until: rule.until })
+    : rule.time === '00:00' ? interval : scheduleFill(e.from, { interval, time: rule.time });
+  const days = SCHEDULE_WEEKDAYS.filter((d) => rule.weekdays.includes(d));
+  if (days.length === 7) return text;
+  const named = days.length === 5 && WORKWEEK.every((d) => days.includes(d))
+    ? e.workweek
+    : days.length === 2 && days.includes('SAT') && days.includes('SUN')
+      ? e.weekend
+      : days.map((d) => C.weekdaysShort[d]).join(C.rules.daysSeparator);
+  return scheduleFill(e.days, { rule: text, days: named });
+}
+
+/**
+ * A schedule's planned end as one line: "until 18:00 today", "until Nov 25", "3 runs left", or both joined by the
+ * separator when it has an end by time and one by count. Null when it has no end.
+ */
+export function scheduleEndText(
+  schedule: Pick<ScheduleView, 'endAt' | 'maxRuns' | 'runsLeft'>,
+  now: Date,
+  timezone: string,
+): string | null {
+  const e = C.end;
+  const parts: string[] = [];
+  if (schedule.endAt) {
+    const at = new Date(schedule.endAt);
+    const day = scheduleDayText(at, now, timezone);
+    const time = localParts(at, timezone).time;
+    const when = day === C.dates.today ? scheduleFill(e.today, { time })
+      : day === C.dates.tomorrow ? scheduleFill(e.tomorrow, { time })
+        : scheduleDateText(at, timezone);
+    parts.push(scheduleFill(e.until, { when }));
+  }
+  if (schedule.maxRuns != null) {
+    const left = schedule.runsLeft ?? schedule.maxRuns;
+    parts.push(left === 1 ? e.runLeft : scheduleFill(e.runsLeft, { count: left }));
+  }
+  return parts.length ? parts.join(C.separator) : null;
+}
+
+/** "16 slots missed, 01:00–08:30", or with dates when the range spans days: "…, Nov 19, 22:00–Nov 20, 06:30". */
+export function scheduleMissedText(runs: readonly Pick<ScheduleRunView, 'plannedAt'>[], timezone: string): string {
+  const times = runs.map((r) => Date.parse(r.plannedAt));
+  const first = localParts(new Date(Math.min(...times)), timezone);
+  const last = localParts(new Date(Math.max(...times)), timezone);
+  if (first.month === last.month && first.day === last.day) {
+    return scheduleFill(C.end.missed, { count: runs.length, from: first.time, to: last.time });
+  }
+  const date = (p: typeof first) => scheduleFill(C.dates.day, { month: C.months[p.month - 1]!, day: p.day });
+  return scheduleFill(C.end.missedDated, {
+    count: runs.length, fromDate: date(first), from: first.time, toDate: date(last), to: last.time,
+  });
+}
+
+/**
+ * Collapses consecutive MISSED runs of one schedule into one item (two or more; a single one stays a run). A
+ * schedule's streak ends at any other run of it between two missed ones. The collapsed item takes the place of the
+ * first member in the list and the time of its last.
+ */
+export interface ScheduleMissedItem {
+  kind: 'MISSED';
+  schedule: ScheduleListRow;
+  runs: ScheduleRunView[];
+  at: string;
+}
+export function scheduleCollapseMissed(items: ScheduleTimelineItem[]): Array<ScheduleTimelineItem | ScheduleMissedItem> {
+  const runItems = items.filter((i): i is Extract<ScheduleTimelineItem, { kind: 'RUN' }> => i.kind === 'RUN');
+  const streakOf = new Map<ScheduleTimelineItem, ScheduleTimelineItem[]>();
+  const bySchedule = new Map<string, typeof runItems>();
+  for (const item of runItems) {
+    const list = bySchedule.get(item.schedule.id) ?? [];
+    list.push(item);
+    bySchedule.set(item.schedule.id, list);
+  }
+  for (const list of bySchedule.values()) {
+    list.sort((a, b) => Date.parse(a.run.plannedAt) - Date.parse(b.run.plannedAt));
+    let streak: typeof runItems = [];
+    const close = () => {
+      if (streak.length > 1) for (const m of streak) streakOf.set(m, streak);
+      streak = [];
+    };
+    for (const item of list) {
+      if (item.run.state === 'MISSED') streak.push(item);
+      else close();
+    }
+    close();
+  }
+  const out: Array<ScheduleTimelineItem | ScheduleMissedItem> = [];
+  const done = new Set<ScheduleTimelineItem[]>();
+  for (const item of items) {
+    const streak = item.kind === 'RUN' ? (streakOf.get(item) as typeof runItems | undefined) : undefined;
+    if (!streak || item.kind !== 'RUN') {
+      out.push(item);
+      continue;
+    }
+    if (done.has(streak)) continue;
+    done.add(streak);
+    out.push({ kind: 'MISSED', schedule: item.schedule, runs: streak.map((m) => m.run), at: streak[streak.length - 1]!.at });
+  }
+  return out;
 }
 
 /** Whether a row shows the repeat mark (↻) before its rule: a one-off does not. */
@@ -1601,7 +1894,7 @@ export function scheduleHistoryWho(record: Pick<ScheduleChangeRecord, 'changedBy
 }
 
 function fieldValueText(field: string, value: unknown, names: Record<string, string>): string {
-  if (value === null || value === undefined) return field === 'endAt' ? C.history.noEnd : '';
+  if (value === null || value === undefined) return field === 'endAt' || field === 'maxRuns' ? C.history.noEnd : '';
   if (field === 'accessLevel') return C.access[value as ScheduleAccessLevel]?.label ?? String(value);
   if (field === 'runLimitMinutes') return scheduleFill(C.history.minutes, { minutes: Number(value) });
   if (field === 'workspaceId') return names[String(value)] ?? String(value);
@@ -1609,7 +1902,10 @@ function fieldValueText(field: string, value: unknown, names: Record<string, str
 }
 
 function ruleChangeText(before: ScheduleRule | undefined, after: ScheduleRule): { field: string | null; text: string } {
-  if (before && before.kind !== 'ONCE' && after.kind !== 'ONCE' && before.kind !== 'WHEN' && after.kind !== 'WHEN') {
+  if (
+    before && before.kind !== 'ONCE' && after.kind !== 'ONCE' && before.kind !== 'WHEN' && after.kind !== 'WHEN'
+    && before.kind !== 'EVERY' && after.kind !== 'EVERY'
+  ) {
     const sameShape = before.kind === after.kind
       && (before.kind !== 'WEEKLY' || after.kind !== 'WEEKLY' || before.weekdays.join() === after.weekdays.join());
     if (sameShape && before.time !== after.time) {
@@ -1677,6 +1973,16 @@ export function scheduleRecordParts(
   }
   if (key === 'accessLevel') return { field: label, text: scheduleFill(C.history.changeTo, { field: label, after: a }) };
   return { field: label, text: scheduleFill(C.history.change, { field: label, before: fieldValueText(key, before[key], names), after: a }) };
+}
+
+/**
+ * A person's rename as the history says it (§8.4 *Rename*): "Renamed from “Codex check”". Null for any other record,
+ * an agent's new title included, which reads as every change does ("Name: Codex check → Codex stable check").
+ */
+export function scheduleRenamedText(record: Pick<ScheduleChangeRecord, 'changedBy' | 'before' | 'after'>): string | null {
+  const keys = Object.keys(record.after ?? {});
+  if (record.changedBy !== 'USER' || !record.before || keys.length !== 1 || keys[0] !== 'title') return null;
+  return scheduleFill(C.history.renamed, { title: String(record.before.title) });
 }
 
 export function scheduleRecordText(
@@ -1773,6 +2079,16 @@ export function scheduleGoalReachedPushTitle(title: string): string {
   return scheduleFill(C.push.goalReachedTitle, { title });
 }
 
+/** A run failed NO_REPORT or ENGINE_CRASHED that reported late, once the owner stepped in: "Nightly audit reported after all". */
+export function scheduleReportedLatePushTitle(title: string): string {
+  return scheduleFill(C.push.reportedLateTitle, { title });
+}
+
+/** §8.5: "Stopped as planned after 12 runs", "after 1 run": the planned-end push and an ENDED row's read. */
+export function scheduleStoppedAsPlannedText(runs: number): string {
+  return scheduleFill(C.push.stoppedAsPlanned, { runs: `${runs} ${runs === 1 ? 'run' : 'runs'}` });
+}
+
 /** A held schedule's card: "Weekly dependency audit is held". */
 export function scheduleHeldWaiting(input: {
   title: string;
@@ -1854,4 +2170,194 @@ export function scheduleReportedText(
   if (run.key) parts.push(run.key);
   if (opts.notified) parts.push(C.row.notified);
   return parts.join(C.separator);
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// A run's session when the run did not get under way in it (board docs/mocks/scheduled-run-not-started ②③④)
+// ---------------------------------------------------------------------------------------------------------------
+
+/**
+ * The card a run's session shows in place of its report and composer when the run never reached its engine there
+ * (owner's B1): it did not run, it waits on a full runner, or it started on a later try. In
+ * contracts/schedule.contract.json as `runStatusCopy`, which OrbitKit and Android pin.
+ */
+export const SCHEDULE_RUN_STATUS_COPY = {
+  /** The strip of a run that did not start in this session: no start time to name. */
+  strip: 'Scheduled run · planned {planned} · access {access}',
+  didntRun: {
+    title: "Didn't run",
+    /** RUNNER_UNAVAILABLE: the runner was there and did not take it. */
+    notPickedUp: "{runner} didn't pick it up on any of {tries} tries, so the run never started.",
+    notPickedUpOnce: "{runner} didn't pick it up, so the run never started.",
+    /** RUNNER_FULL: it waited in the runner's queue until its window closed. */
+    full: '{runner} was full the whole time, so the run never started.',
+    /** ENGINE_CRASHED_BEFORE_START. */
+    engineFailed: "{runner} couldn't start the engine on any of {tries} tries, so the run never started.",
+    engineFailedOnce: "{runner} couldn't start the engine, so the run never started.",
+    quota: "The engine's usage limit was reached, so the run never started.",
+    cancelled: 'You cancelled the run before it started.',
+    nothingChanged: 'Nothing was changed.',
+    gaveUp: 'gave up {time}',
+    nextRun: 'Next run: {when}',
+  },
+  queued: {
+    /** `Queued · runner full`; the gate's own tag for a full run or batch. */
+    title: 'Queued · {tag}',
+    waited: '{waited} · gives up at {deadline}',
+    givesUp: 'Gives up at {deadline}',
+  },
+  startedOn: {
+    title: 'Started on try {try}',
+    body: 'This try stopped before its engine started ({why}). Try {try} started at {time}.',
+    engineExited: '{engine} exited',
+    notPickedUp: "{runner} didn't pick it up",
+  },
+  actions: {
+    runNow: 'Run now',
+    openSchedule: 'Open schedule',
+    cancelRun: 'Cancel run',
+    openRun: 'Open the run →',
+  },
+} as const;
+
+const RS = SCHEDULE_RUN_STATUS_COPY;
+
+/** Which card a run's session shows, if any: ② `DIDNT_RUN`, ③ `QUEUED_FULL`, ④ `STARTED_ON`. */
+export type ScheduleRunStatusKind = 'DIDNT_RUN' | 'QUEUED_FULL' | 'STARTED_ON';
+
+const GAVE_UP_STATES: readonly ScheduleRunState[] = ['MISSED', 'CANCELLED', 'SKIPPED'];
+
+/**
+ * The card for this session of the run, or null when its run reached its engine here (its report and composer are
+ * the session's own then), or is between tries with nothing to say yet.
+ *
+ *   * ② the run ended with no try reaching its engine: from any of its tries' sessions;
+ *   * ③ the run's current session waits on a full runner, run or batch: from it and from earlier tries;
+ *   * ④ this try did not reach its engine, and the run's current session did.
+ */
+export function scheduleRunStatusKind(
+  run: Pick<ScheduleRunView, 'state' | 'sessionId'>,
+  status: ScheduleRunSessionStatus | null | undefined,
+): ScheduleRunStatusKind | null {
+  if (!status || status.thisTry === null) return null;
+  const mine = status.tries[status.thisTry - 1];
+  if (!mine || mine.reachedEngine) return null;
+  if (status.gaveUpAt && GAVE_UP_STATES.includes(run.state)) return 'DIDNT_RUN';
+  if (status.queue && run.state === 'RUNNING') return 'QUEUED_FULL';
+  const current = run.sessionId ? status.tries.find((t) => t.sessionId === run.sessionId) : undefined;
+  if (current && current.sessionId !== mine.sessionId && current.reachedEngine) return 'STARTED_ON';
+  return null;
+}
+
+/** "Scheduled run · planned 03:32 · access Edit and land on main". */
+export function scheduleRunNotStartedStripText(
+  run: Pick<ScheduleRunView, 'plannedAt'>,
+  accessLevel: ScheduleAccessLevel,
+  timezone: string,
+): string {
+  return scheduleFill(RS.strip, { planned: localParts(new Date(run.plannedAt), timezone).time, access: C.access[accessLevel].label });
+}
+
+/** "tomorrow 06:00", "Monday 06:00", "Nov 24 06:00": a time inside a sentence. */
+function inlineWhenText(at: Date, now: Date, timezone: string): string {
+  return lowerDay(scheduleWhenText(at, now, timezone));
+}
+
+function lowerDay(text: string): string {
+  for (const [day, lower] of [[C.dates.today, C.dates.todayLower], [C.dates.tomorrow, C.dates.tomorrowLower]] as const) {
+    if (text.startsWith(day)) return lower + text.slice(day.length);
+  }
+  return text;
+}
+
+/** ② The reason a run did not run, as one sentence, then "Nothing was changed.". */
+export function scheduleDidntRunReasonText(
+  run: Pick<ScheduleRunView, 'failureReason'>,
+  tries: number,
+  runner: string,
+): string {
+  const n = { runner, tries };
+  let reason: string;
+  switch (run.failureReason) {
+    case 'RUNNER_FULL':
+      reason = scheduleFill(RS.didntRun.full, n);
+      break;
+    case 'CANCELLED_BY_OWNER':
+      reason = RS.didntRun.cancelled;
+      break;
+    case 'QUOTA':
+      reason = RS.didntRun.quota;
+      break;
+    case 'ENGINE_CRASHED_BEFORE_START':
+      reason = scheduleFill(tries > 1 ? RS.didntRun.engineFailed : RS.didntRun.engineFailedOnce, n);
+      break;
+    default:
+      reason = scheduleFill(tries > 1 ? RS.didntRun.notPickedUp : RS.didntRun.notPickedUpOnce, n);
+  }
+  return `${reason} ${RS.didntRun.nothingChanged}`;
+}
+
+/** ② The card's words: its title, reason, each try's time, when it gave up and the next run. */
+export function scheduleDidntRunText(input: {
+  run: Pick<ScheduleRunView, 'failureReason'>;
+  status: Pick<ScheduleRunSessionStatus, 'tries' | 'gaveUpAt' | 'nextDueAt'>;
+  runner: string;
+  now: Date;
+  timezone: string;
+}): { title: string; reason: string; tries: string[]; gaveUp: string | null; next: string | null } {
+  const { status, timezone } = input;
+  return {
+    title: RS.didntRun.title,
+    reason: scheduleDidntRunReasonText(input.run, status.tries.length, input.runner),
+    tries: status.tries.map((t) => localParts(new Date(t.startedAt), timezone).time),
+    gaveUp: status.gaveUpAt
+      ? scheduleFill(RS.didntRun.gaveUp, { time: localParts(new Date(status.gaveUpAt), timezone).time })
+      : null,
+    next: status.nextDueAt
+      ? scheduleFill(RS.didntRun.nextRun, { when: inlineWhenText(new Date(status.nextDueAt), input.now, timezone) })
+      : null,
+  };
+}
+
+/**
+ * ③ The card's title and its foot: "Queued · runner full", "Waiting 1 h 12 min · gives up at 03:32 tomorrow". The
+ * sentence between them is the queued message's own (web queuedCapacity `capacityHeldMessageText`), said of the run.
+ */
+export function scheduleQueuedFullText(input: {
+  tag: string;
+  waited: string | null;
+  deadline: string;
+  now: Date;
+  timezone: string;
+}): { title: string; waited: string } {
+  const at = new Date(input.deadline);
+  const time = localParts(at, input.timezone).time;
+  const day = scheduleDayText(at, input.now, input.timezone);
+  const deadline = day === C.dates.today ? time : `${time} ${lowerDay(day)}`;
+  return {
+    title: scheduleFill(RS.queued.title, { tag: input.tag }),
+    waited: scheduleFill(input.waited ? RS.queued.waited : RS.queued.givesUp, { waited: input.waited ?? '', deadline }),
+  };
+}
+
+/** ④ "Started on try 3", and why this try stopped: "This try stopped before its engine started (Claude Code exited)…". */
+export function scheduleStartedOnText(input: {
+  run: Pick<ScheduleRunView, 'sessionId'>;
+  status: Pick<ScheduleRunSessionStatus, 'tries' | 'thisTry'>;
+  engine: string;
+  runner: string;
+  timezone: string;
+}): { title: string; body: string } | null {
+  const { tries } = input.status;
+  const index = tries.findIndex((t) => t.sessionId === input.run.sessionId);
+  const mine = input.status.thisTry === null ? undefined : tries[input.status.thisTry - 1];
+  if (index < 0 || !mine) return null;
+  const n = index + 1;
+  const why = mine.claimed
+    ? scheduleFill(RS.startedOn.engineExited, { engine: input.engine })
+    : scheduleFill(RS.startedOn.notPickedUp, { runner: input.runner });
+  return {
+    title: scheduleFill(RS.startedOn.title, { try: n }),
+    body: scheduleFill(RS.startedOn.body, { why, try: n, time: localParts(new Date(tries[index]!.startedAt), input.timezone).time }),
+  };
 }

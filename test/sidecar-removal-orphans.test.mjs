@@ -39,7 +39,7 @@ function walk(dir, out = []) {
 
 // Only the `services:` section — the top-level `volumes:` keys sit at the same indentation.
 const composeServices = new Set(
-  [...(read('docker-compose.yml').match(/^services:\n([\s\S]*?)(?=^\S|\Z)/m)?.[1] ?? '')
+  [...(read('docker-compose.yml').match(/^services:\n([\s\S]*?)(?=^\S|(?![\s\S]))/m)?.[1] ?? '')
     .matchAll(/^ {2}([a-z][a-z0-9_-]*):$/gm)].map((match) => match[1]),
 );
 

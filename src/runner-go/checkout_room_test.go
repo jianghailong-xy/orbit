@@ -376,13 +376,13 @@ func TestUnderAStorageBudgetsFloorARestingCheckoutGoesWithoutTheTwoWeeks(t *test
 	}
 }
 
-// Without a budget, a resting checkout younger than two weeks stays however short the disk is, as it always has, while
-// a fortnight-idle one beside it goes; and a budget over its floor takes nothing at all.
-func TestWithoutABudgetsFloorARestingCheckoutWaitsOutTheTwoWeeks(t *testing.T) {
+// Under the machine's own floor, as under a budget's, a resting checkout goes however recently it was written; a budget
+// over its floor takes nothing at all.
+func TestUnderEveryFloorARestingCheckoutGoesHoweverRecentlyWritten(t *testing.T) {
 	for _, c := range []struct {
 		name     string
 		pressure func() worktreeGCPressure
-		oldGoes  bool
+		theyGo   bool
 	}{
 		{"no budget, under the machine's floor", diskUnderTheFloor, true},
 		{"a budget over its floor", func() worktreeGCPressure { return measureWorktreePressure(0, budgetLeaving(32*oneMiB)) }, false},
@@ -395,12 +395,12 @@ func TestWithoutABudgetsFloorARestingCheckoutWaitsOutTheTwoWeeks(t *testing.T) {
 
 			gcResumableCheckouts(f.transport, f.pool, c.pressure())
 
-			requireCheckoutOnDisk(t, thirteen, "thirteen days unwritten is not two weeks")
-			requireCheckoutOnDisk(t, fresh, "written just now")
-			if c.oldGoes {
-				requireCheckoutReclaimed(t, old, "two weeks unwritten, it goes, so the sweep did run")
-			} else {
-				requireCheckoutOnDisk(t, old, "a budget over its floor takes nothing")
+			for _, path := range []string{thirteen, fresh, old} {
+				if c.theyGo {
+					requireCheckoutReclaimed(t, path, "under the machine's floor, nothing but what it holds keeps a resting checkout")
+				} else {
+					requireCheckoutOnDisk(t, path, "a budget over its floor takes nothing")
+				}
 			}
 		})
 	}
@@ -409,8 +409,8 @@ func TestWithoutABudgetsFloorARestingCheckoutWaitsOutTheTwoWeeks(t *testing.T) {
 // A resting session whose work is on its own branch and nowhere else, as every session that did work has it: a commit
 // of its own, and the park checkpoint its last turn ended on. Under a storage budget's floor its checkout goes, both
 // commits staying on the branch, and on its next claim the checkout comes back on that branch with the checkpoint
-// undone, its work uncommitted again as on any resume. Without a budget the checkout stays: a commit no remote has
-// keeps it, however long it has been idle.
+// undone, its work uncommitted again as on any resume. Under the machine's own floor the same, since 2026-11-23: a
+// commit no remote has once kept it there however long it had been idle.
 func TestUnderAStorageBudgetsFloorACheckoutWhoseWorkIsOnlyOnItsBranchGoesAndComesBack(t *testing.T) {
 	for _, underABudget := range []bool{true, false} {
 		name := "under a storage budget's floor"
@@ -436,7 +436,7 @@ func TestUnderAStorageBudgetsFloorACheckoutWhoseWorkIsOnlyOnItsBranchGoesAndCome
 			if only := mustGit(t, path, "rev-list", "--count", "HEAD", "--not", "--remotes"); only != "2" {
 				t.Fatalf("two commits only its branch has, got %s", only)
 			}
-			// Under a budget, younger than two weeks; without one, older, so that only the commits can keep it.
+			// Under a budget, younger than two weeks; without one, older.
 			days := 3
 			pressure := measureWorktreePressure(0, smallBudgetUnderItsFloor())
 			if !underABudget {
@@ -453,10 +453,6 @@ func TestUnderAStorageBudgetsFloorACheckoutWhoseWorkIsOnlyOnItsBranchGoesAndCome
 			gcResumableCheckouts(f.transport, f.pool, pressure)
 
 			requireCheckoutReclaimed(t, neighbour, "a pushed fortnight-idle neighbour goes, so the sweep did run")
-			if !underABudget {
-				requireCheckoutOnDisk(t, path, "without a budget, a commit no remote has keeps the checkout")
-				return
-			}
 			requireCheckoutReclaimed(t, path, "its work is on its branch, which stays")
 			if got := mustGit(t, f.repo, "rev-parse", branch); got != checkpoint {
 				t.Fatalf("the branch keeps both commits, its tip at the checkpoint %s, got %s", checkpoint, got)

@@ -581,6 +581,18 @@ func TestBgGateDshAutoAsksUnlessRoutine(t *testing.T) {
 		t.Fatalf("a command naming a path outside the workspace = %+v", outside)
 	}
 
+	// The session's uploads directory counts as the workspace does (a path outside the temp areas, which are
+	// writable already): a job writing there asks without it and starts with it.
+	upload := map[string]interface{}{"command": "printf x > /srv/orbit-gate-uploads-probe/a.txt", "kind": bgKindJob}
+	f.svc.extraDirs = nil
+	if asked, err := f.run(upload); err != nil || asked.Status != bgStatusWaitingForOwner {
+		t.Fatalf("a job writing a directory that is not the session's = %+v, %v", asked, err)
+	}
+	f.svc.extraDirs = []string{"/srv/orbit-gate-uploads-probe"}
+	if started, err := f.run(upload); err != nil || started.Status == bgStatusWaitingForOwner {
+		t.Fatalf("a job writing the session's uploads directory asked: %+v, %v", started, err)
+	}
+
 	// The rule reads a command line, and these change what the line does.
 	withEnv, err := f.run(map[string]interface{}{"command": "go test ./...", "kind": bgKindJob, "env": map[string]interface{}{"BASH_ENV": "./x"}})
 	if err != nil {

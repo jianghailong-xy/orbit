@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState, type JSX } from 'react';
+import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ReviewCard } from './ReviewCard';
 import { useOwnerCardFlip } from './TranslationParts';
 import { CardActionButton, CardActions } from './CardAction';
 import { decideCrossing } from './ProjectCrossingsCard';
 import type { TranscriptInsert } from './Transcript';
-import { projectCrossingsQuery } from '../lib/queries';
+import { api } from '../api';
+import { projectCrossingsQuery, sessionTaskMovesQuery } from '../lib/queries';
 import { streamPoll } from '../lib/listBudget';
 import { decisionReceiptAnchor } from '../lib/decisionReceipt';
 import { CROSSING_STATE_LABEL, labelFor, type ProjectCrossingRow } from '../lib/attribution';
@@ -20,6 +21,7 @@ import {
   CROSSING_TO_THIS_PROJECT,
   anotherEndLine,
   answeredBadge,
+  answeredTitle,
   approveConsequence,
   batchDecidedAt,
   batchReasons,
@@ -31,8 +33,11 @@ import {
   crossingTitle,
   decisionLabels,
   isLive,
+  moveBatchAnswer,
+  moveBatches,
   notRecordedNote,
   pendingRows,
+  reasonsHead,
   receiptVerdict,
   requestedCriterionLine,
   showMore,
@@ -47,9 +52,15 @@ import './CrossingDecisionCard.css';
  * A batch of cross-project requests into the project this conversation coordinates, as ONE decision
  * card in the criteria card's shape (board docs/mocks/handoff-in-chat): a compact preview — the swap
  * mark, the question, its kind, how many from which project for which criteria — that opens the
- * review, where the owner answers every crossing of the batch with one press. Each crossing still
- * goes through the existing decision door with its own crossing key (`decideCrossing`); a crossing
- * the door refuses keeps its reason on its row, and the ones it took are not undone.
+ * review, where the owner answers every crossing of the batch with one press.
+ *
+ * Task moves come from the session's own read (`GET /sessions/:id/task-moves`), so the card is drawn
+ * both in the session that asked for them and in the target project's coordinator, and one press
+ * is ONE `POST /sessions/:id/task-moves/decision` with every move and its crossing key: the server
+ * writes nothing if any move no longer matches, and its refusal is shown on the card. Filings and
+ * dependencies still come from the project's crossings read and go through the existing decision
+ * door one crossing at a time (`decideCrossing`); a crossing that door refuses keeps its reason on
+ * its row, and the ones it took are not undone.
  */
 
 /** How an answered batch is receipted. */
@@ -65,7 +76,7 @@ function refusalText(error: Error): string {
   return typeof code === 'string' ? `${code} ${error.message}` : error.message;
 }
 
-function CrossingItem({ row, refusal }: { row: ProjectCrossingRow; refusal: Error | undefined }) {
+function CrossingItem({ row, refusal, showState }: { row: ProjectCrossingRow; refusal: Error | undefined; showState: boolean }) {
   const requested = requestedCriterionLine(row);
   const withdrawn = withdrawnCriterionLine(row);
   return (
@@ -73,7 +84,7 @@ function CrossingItem({ row, refusal }: { row: ProjectCrossingRow; refusal: Erro
       <span className="crossing-decision-item-title">{subjectTitle(row)}</span>
       {requested ? <span className="crossing-decision-item-crit">{requested}</span> : null}
       {withdrawn ? <span className="crossing-decision-item-crit">{withdrawn}</span> : null}
-      {row.state === 'PENDING' ? null : (
+      {!showState || row.state === 'PENDING' ? null : (
         <span className="crossing-decision-item-crit">{labelFor(CROSSING_STATE_LABEL, row.state)}</span>
       )}
       {refusal ? (
@@ -95,7 +106,7 @@ function ReceiptLine({ batch, receipt }: { batch: CrossingBatch; receipt: Crossi
           <span className="crossing-decision-verdict">{receiptVerdict(verdict, receipt.at)}</span>
         </>
       ) : (
-        anotherEndLine(verdict)
+        `${CROSSING_RECORDED} · ${anotherEndLine(verdict)}`
       )}
     </p>
   );
@@ -106,6 +117,7 @@ export function CrossingDecisionCard({
   receipt = null,
   busy = false,
   refusals = {},
+  batchRefusal = null,
   onDecide,
 }: {
   batch: CrossingBatch;
@@ -113,6 +125,8 @@ export function CrossingDecisionCard({
   receipt?: CrossingReceipt | null;
   busy?: boolean;
   refusals?: CrossingRefusals;
+  /** The server's refusal of a whole batch answer (task moves): nothing of it was written. */
+  batchRefusal?: Error | null;
   onDecide: (decision: 'APPROVE' | 'DENY') => void;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
@@ -136,8 +150,14 @@ export function CrossingDecisionCard({
     }),
   };
   const live = isLive(batch);
-  const title = crossingTitle(batch.kind, batch.rows.length, batch.out);
-  const badge = live ? crossingBadge(batch.kind) : answeredBadge(batch.kind, batchVerdict(batch), batch.out);
+  const verdict = batchVerdict(batch);
+  const title = live
+    ? crossingTitle(batch.kind, batch.rows.length, batch.targetTitle, batch.out)
+    : answeredTitle(batch.kind, batch.rows.length, verdict, batch.targetTitle, batch.out);
+  const badge = live ? crossingBadge(batch.kind) : answeredBadge(batch.kind, verdict, batch.out);
+  // Once every row went the same way the receipt says it; a row's own state only tells a mixed or
+  // still-open batch apart.
+  const rowStates = live || verdict === 'MIXED';
   const labels = decisionLabels(batch);
   const summary = crossingSummary(batch);
   const refused = batch.rows.filter((row) => refusals[row.id]).length;
@@ -153,6 +173,7 @@ export function CrossingDecisionCard({
       </span>
       <span className="crossing-decision-summary">{summary}</span>
       {refused > 0 ? <span className="crossing-decision-refused-note">{notRecordedNote(refused)}</span> : null}
+      {batchRefusal ? <span className="crossing-decision-refused-note">{CROSSING_NOT_RECORDED}</span> : null}
       <span className="crossing-decision-link">
         <span>{live ? CROSSING_LINK_LIVE : CROSSING_LINK_ANSWERED}</span>
         <span aria-hidden="true">›</span>
@@ -175,11 +196,11 @@ export function CrossingDecisionCard({
             {live ? <p className="crossing-decision-waiting">{waitingLine(batch)}</p> : null}
             <p className="crossing-decision-provenance">{CROSSING_PROVENANCE}</p>
             <p className="crossing-decision-route"><span>From</span> {batch.sourceTitle}</p>
-            <p className="crossing-decision-route"><span>To</span> {batch.out ? CROSSING_NO_PROJECT : CROSSING_TO_THIS_PROJECT}</p>
+            <p className="crossing-decision-route"><span>To</span> {batch.out ? CROSSING_NO_PROJECT : batch.targetTitle ?? CROSSING_TO_THIS_PROJECT}</p>
             <p className="crossing-decision-label">{crossingListHead(batch.kind, batch.out)}</p>
             <ul className="crossing-decision-list">
               {shown.map((row) => (
-                <CrossingItem key={row.id} row={row} refusal={refusals[row.id]} />
+                <CrossingItem key={row.id} row={row} refusal={refusals[row.id]} showState={rowStates} />
               ))}
               {hidden > 0 ? (
                 <li className="crossing-decision-item">
@@ -189,11 +210,17 @@ export function CrossingDecisionCard({
                 </li>
               ) : null}
             </ul>
+            {reasons.length > 0 ? <p className="crossing-decision-label">{reasonsHead(reasons.length)}</p> : null}
             {reasons.map((reason) => (
               <p key={reason} className="crossing-decision-quote">{`“${reason}”`}</p>
             ))}
             {flip.foot}
-            <p className="crossing-decision-note">{approveConsequence(batch)}</p>
+            {live ? <p className="crossing-decision-note">{approveConsequence(batch)}</p> : null}
+            {batchRefusal ? (
+              <p className="crossing-decision-item-refused" role="alert">
+                <strong>{CROSSING_NOT_RECORDED}</strong> {refusalText(batchRefusal)}
+              </p>
+            ) : null}
             {receipt ? <ReceiptLine batch={batch} receipt={receipt} /> : null}
           </div>
           {live ? (
@@ -220,15 +247,33 @@ export interface CrossingPointer {
   ageSeconds: number | null;
 }
 
+/** Answer a batch of task moves in one call, every move with its crossing key. */
+export function decideTaskMoveBatch(
+  sessionId: string,
+  batch: CrossingBatch,
+  decision: 'APPROVE' | 'DENY',
+): Promise<unknown> {
+  return api(`/sessions/${encodeURIComponent(sessionId)}/task-moves/decision`, {
+    method: 'POST',
+    body: moveBatchAnswer(batch, decision),
+  });
+}
+
 /**
- * The wired cards for one coordinator conversation: the project's crossings read, the batches it
- * makes, each drawn into the transcript where its first request was asked, and the pointers the
- * pinned strip counts. What this window saw waiting and what it pressed are kept in-process: the
- * one fact the read cannot carry is whether the answer was given here or at another end.
+ * The wired cards for one conversation: the task moves it asked for or that go into the project it
+ * coordinates (the session's task-moves read), the filings and dependencies into that project (the
+ * project's crossings read), each batch drawn into the transcript where its first request was
+ * asked, and the pointers the pinned strip counts. What this window saw waiting and what it pressed
+ * are kept in-process: the one fact the reads cannot carry is whether the answer was given here or
+ * at another end. `moveSignal` is what the session's row says is waiting (`taskMoveSignal`): no
+ * realtime event names this read, so it is re-asked the moment that changes — a move asked, or
+ * answered at the other end.
  */
 export function useCrossingDecisionCards(
+  sessionId: string | null | undefined,
   projectId: string | null | undefined,
   events: ReadonlyArray<{ seq: number; ts?: string }>,
+  moveSignal = '',
 ): { inserts: TranscriptInsert[]; pointers: CrossingPointer[] } {
   const qc = useQueryClient();
   const read = useQuery({
@@ -236,14 +281,34 @@ export function useCrossingDecisionCards(
     enabled: Boolean(projectId),
     refetchInterval: streamPoll(20_000),
   });
+  const moves = useQuery({
+    ...sessionTaskMovesQuery(sessionId ?? ''),
+    enabled: Boolean(sessionId),
+    refetchInterval: streamPoll(20_000),
+  });
+  const signalRead = useRef(moveSignal);
+  const refetchMoves = moves.refetch;
+  useEffect(() => {
+    if (signalRead.current === moveSignal) return;
+    signalRead.current = moveSignal;
+    if (sessionId) void refetchMoves();
+  }, [moveSignal, sessionId, refetchMoves]);
   const [seenLive, setSeenLive] = useState<ReadonlySet<string>>(() => new Set());
   const [pressed, setPressed] = useState<Readonly<Record<string, string>>>({});
   const [refusals, setRefusals] = useState<CrossingRefusals>({});
+  const [batchRefusals, setBatchRefusals] = useState<CrossingRefusals>({});
   const [busy, setBusy] = useState<string | null>(null);
 
   const batches = useMemo(
-    () => (projectId && read.data ? crossingBatches(read.data, projectId) : []),
-    [projectId, read.data],
+    () => [
+      // Task moves are drawn from the session's read alone, so both ends draw the same batches.
+      ...(projectId && read.data
+        ? crossingBatches(read.data, projectId).filter((batch) => batch.kind !== 'MOVE_TASK')
+        : []),
+      // An older control plane has no such read; an answer that is not a list draws no moves.
+      ...(sessionId && Array.isArray(moves.data) ? moveBatches(moves.data) : []),
+    ].sort((a, b) => a.moment.localeCompare(b.moment)),
+    [projectId, read.data, sessionId, moves.data],
   );
 
   useEffect(() => {
@@ -258,14 +323,26 @@ export function useCrossingDecisionCards(
   const answer = useMutation({
     mutationFn: async ({ batch, decision }: { batch: CrossingBatch; decision: 'APPROVE' | 'DENY' }) => {
       const rows = pendingRows(batch);
+      if (batch.kind === 'MOVE_TASK') {
+        // One answer for the whole batch: the server takes all of it or none of it.
+        const [result] = await Promise.allSettled([decideTaskMoveBatch(sessionId ?? '', batch, decision)]);
+        return { batch, rows: [], results: [], refusal: result.status === 'rejected' ? result.reason : null };
+      }
       const results = await Promise.allSettled(
         rows.map((row) => decideCrossing(projectId ?? '', row, decision)),
       );
-      return { batch, rows, results };
+      return { batch, rows, results, refusal: null };
     },
     onMutate: ({ batch }) => setBusy(batch.id),
-    onSuccess: ({ batch, rows, results }) => {
-      setPressed((previous) => ({ ...previous, [batch.id]: new Date().toISOString() }));
+    onSuccess: ({ batch, rows, results, refusal }) => {
+      setBatchRefusals((previous) => {
+        const next: Record<string, Error> = { ...previous };
+        if (refusal) next[batch.id] = refusal instanceof Error ? refusal : new Error(String(refusal));
+        else delete next[batch.id];
+        return next;
+      });
+      // Nothing was written: the card stays waiting, and this window did not answer it.
+      if (!refusal) setPressed((previous) => ({ ...previous, [batch.id]: new Date().toISOString() }));
       setRefusals((previous) => {
         const next: Record<string, Error> = { ...previous };
         results.forEach((result, index) => {
@@ -278,14 +355,16 @@ export function useCrossingDecisionCards(
         });
         return next;
       });
-      // Returned, so the card stays busy until the read has caught up with the presses.
-      return qc.invalidateQueries({ queryKey: ['project', projectId ?? ''] });
+      // Returned, so the card stays busy until the reads have caught up with the presses.
+      return Promise.all([
+        qc.invalidateQueries({ queryKey: ['project', projectId ?? ''] }),
+        qc.invalidateQueries({ queryKey: ['session-task-moves', sessionId ?? ''] }),
+      ]);
     },
     onSettled: () => setBusy(null),
   });
 
   const inserts = useMemo(() => {
-    if (!projectId) return [];
     return batches.flatMap((batch): TranscriptInsert[] => {
       const anchor = decisionReceiptAnchor(events, batch.moment);
       if (anchor === null) return [];
@@ -306,6 +385,7 @@ export function useCrossingDecisionCards(
             receipt={receipt}
             busy={busy === batch.id}
             refusals={refusals}
+            batchRefusal={batchRefusals[batch.id] ?? null}
             onDecide={(decision) => answer.mutate({ batch, decision })}
           />
         ),
@@ -313,7 +393,7 @@ export function useCrossingDecisionCards(
     });
     // `answer.mutate` is stable; the mutation object itself is not.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, batches, events, pressed, seenLive, refusals, busy]);
+  }, [batches, events, pressed, seenLive, refusals, batchRefusals, busy]);
 
   const pointers = useMemo(
     () =>
@@ -321,7 +401,7 @@ export function useCrossingDecisionCards(
         const at = Date.parse(batch.moment);
         return {
           id: batch.id,
-          label: crossingTitle(batch.kind, batch.rows.length, batch.out),
+          label: crossingTitle(batch.kind, batch.rows.length, batch.targetTitle, batch.out),
           ageSeconds: Number.isFinite(at) ? Math.max(0, Math.floor((Date.now() - at) / 1000)) : null,
         };
       }),
@@ -329,4 +409,11 @@ export function useCrossingDecisionCards(
   );
 
   return { inserts, pointers };
+}
+
+/** What a session's row says is waiting in task moves: the read is re-asked when it changes. */
+export function taskMoveSignal(
+  row: { taskMoves?: ReadonlyArray<{ handoffIds?: readonly string[] }> } | null | undefined,
+): string {
+  return (row?.taskMoves ?? []).flatMap((group) => group.handoffIds ?? []).join(',');
 }

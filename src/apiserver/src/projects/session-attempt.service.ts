@@ -33,6 +33,7 @@ import {
   hypothesisDigest,
   planAttemptClose,
 } from './attempt-budget';
+import { isReleased } from '../common/session-release';
 
 /**
  * `[K3]`: the attempt, written down.
@@ -264,12 +265,12 @@ export class SessionAttemptService {
     reason: string,
     closedAt: Date,
   ): Promise<AttemptRow | null> {
-    const [live] = await this.prisma.$queryRaw<Array<{ status: string }>>(Prisma.sql`
-      SELECT "status"::text AS "status" FROM "session"
+    const [live] = await this.prisma.$queryRaw<Array<{ finishedAt: Date | null }>>(Prisma.sql`
+      SELECT "finished_at" AS "finishedAt" FROM "session"
        WHERE "id" = ${sessionId}::uuid AND "owner_id" = ${ownerId}::uuid
     `);
     if (!live) throw new NotFoundException('session not found');
-    if (!TERMINAL_RUN_STATUS.includes(live.status)) return null;
+    if (!isReleased(live)) return null;
     const attempt = await this.bySessionId(this.prisma, ownerId, sessionId, true);
     if (!attempt) return null;
     return this.close(
@@ -563,8 +564,6 @@ export class SessionAttemptService {
     return row ? toAttempt(row) : null;
   }
 }
-
-const TERMINAL_RUN_STATUS: readonly string[] = ['SUCCEEDED', 'FAILED', 'CANCELLED'];
 
 export interface AttemptRow {
   id: string;

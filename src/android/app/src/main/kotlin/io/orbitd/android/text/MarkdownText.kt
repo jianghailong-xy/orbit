@@ -2,6 +2,7 @@ package io.orbitd.android.text
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import io.orbitd.android.core.cards.SettingsFromConversation
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -89,6 +90,10 @@ private fun MarkdownNode(node: Node, open: (String) -> Unit) {
         }
         is HtmlBlock -> Text(node.literal, style = MaterialTheme.typography.bodyLarge)
         else -> {
+            // A paragraph that is nothing but an `orbit-settings:` link is the Open in Settings row (design §6).
+            val settingsRow = ((node as? org.commonmark.node.Paragraph)?.children()?.singleOrNull() as? Link)?.destination
+                ?.takeIf { it.startsWith("orbit-settings:") }?.removePrefix("orbit-settings:")?.let(SettingsFromConversation::place)
+            if (settingsRow != null) { io.orbitd.android.cards.SettingsLinkRow(settingsRow, open); return }
             // Split images out of inline prose so they remain visible, including images inside links,
             // and a link to an image file the session can serve (a saved screenshot) as its file row.
             val sessionId = LocalReaderResources.current?.sessionId

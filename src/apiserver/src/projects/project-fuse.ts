@@ -142,6 +142,33 @@ export async function openFuseEpisodeId(
   return row?.id ?? null;
 }
 
+/** A project's open pause as the session list's row reads it: which one, and the reading it took. */
+export interface OpenFuseEpisode {
+  id: string;
+  observed: number;
+  limit: number;
+}
+
+/**
+ * The open pause of each of these projects, in ONE statement for the whole page.
+ *
+ * `GET /projects/sidebar` is polled every 15 seconds by every open tab, so this is never a query
+ * per project. A project with no open episode is absent from the map. At most one is open per
+ * project (the partial unique index over open episodes).
+ */
+export async function readOpenFuseEpisodes(
+  db: PrismaService | Prisma.TransactionClient,
+  projectIds: string[],
+): Promise<Map<string, OpenFuseEpisode>> {
+  if (projectIds.length === 0) return new Map();
+  const rows = await db.$queryRaw<Array<OpenFuseEpisode & { projectId: string }>>(Prisma.sql`
+    SELECT "project_id" AS "projectId", "id", "observed", "limit_value" AS "limit"
+      FROM "project_fuse_episode"
+     WHERE "project_id" = ANY(${projectIds}::uuid[]) AND "resumed_at" IS NULL
+  `);
+  return new Map(rows.map(({ projectId, ...episode }) => [projectId, episode]));
+}
+
 /**
  * The pause's one refusal (§6.3 F-T3), wrapped around the authorizer whose fact it is.
  *

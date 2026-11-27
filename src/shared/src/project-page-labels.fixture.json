@@ -1,0 +1,82 @@
+{
+  "about": [
+    "Project page and coordinator cards: iOS/web/Android parity (board docs/mocks/ios-project-page-and-coordinator-cards/,",
+    "owner decisions D2 A and D4 A, gaps G3-G5). One set of cases every client is proved against; a rule change starts here.",
+    "Web reads it in src/web/src/components/ProjectPageLabels.fixture.test.tsx.",
+    "",
+    "`landing`: a criterion's landing half-sentence on the project page, chosen from `landingReason` in the Done card's words",
+    "(web `landingReasonLabel`). `expected` is null where no half-sentence is drawn: an unmet criterion shows none.",
+    "`landing` (the older three-valued field) is carried as the server sends it, and does not decide the words.",
+    "",
+    "`receiptTime`: a conversation receipt's moment (web `receiptClock`, iOS `OwnerConfirmations.receiptTime`): the short",
+    "clock when the moment is today in `timeZone`, else `M/D` then the clock. Read at `now`, in `timeZone`, for `locale`.",
+    "en-GB keeps the clock 24-hour, so no AM/PM (whose space differs between platforms) enters the text.",
+    "",
+    "`taskRows`: a project task row's label (web `projectTaskWorkLabel`) and its run-queue row's label (web",
+    "`ProjectReadyToRun`; null when the task has no run-queue row in the case), for a stalled running task (`runStalled`)",
+    "and tasks set to start by hand (`autoRunWhenReady: false`)."
+  ],
+  "landing": {
+    "main": "main",
+    "cases": [
+      { "name": "met, in flight", "criterion": { "satisfied": true, "landing": "UNKNOWN", "landingReason": "IN_FLIGHT" }, "expected": "In flight" },
+      { "name": "met, on the project branch", "criterion": { "satisfied": true, "landing": "ON_INTEGRATION_LINE", "landingReason": "ON_PROJECT_BRANCH" }, "expected": "On the project branch" },
+      { "name": "met, nothing to land", "criterion": { "satisfied": true, "landing": "LANDED", "landingReason": "NOTHING_TO_LAND" }, "expected": "nothing to land" },
+      { "name": "met, no receipt", "criterion": { "satisfied": true, "landing": "UNKNOWN", "landingReason": "NO_RECEIPT" }, "expected": "Merged outside Orbit" },
+      { "name": "met, ran without a branch", "criterion": { "satisfied": true, "landing": "UNKNOWN", "landingReason": "NO_BRANCH" }, "expected": "Ran without a branch" },
+      { "name": "met, codeless", "criterion": { "satisfied": true, "landing": "LANDED", "landingReason": "CODELESS" }, "expected": "No code to land" },
+      { "name": "met, landed on main", "criterion": { "satisfied": true, "landing": "LANDED", "landingReason": null }, "expected": "Landed on main" },
+      { "name": "unmet, codeless", "criterion": { "satisfied": false, "landing": "LANDED", "landingReason": "CODELESS" }, "expected": null }
+    ]
+  },
+  "receiptTime": {
+    "now": "2026-11-20T08:00:00Z",
+    "timeZone": "Asia/Shanghai",
+    "locale": "en-GB",
+    "cases": [
+      { "name": "today", "at": "2026-11-20T01:30:00Z", "expected": "09:30" },
+      { "name": "today, a different day in UTC", "at": "2026-11-19T16:30:00Z", "expected": "00:30" },
+      { "name": "yesterday", "at": "2026-11-19T15:45:00Z", "expected": "11/19 23:45" },
+      { "name": "another year", "at": "2025-12-31T02:05:00Z", "expected": "12/31 10:05" }
+    ]
+  },
+  "taskRows": {
+    "cases": [
+      {
+        "name": "running, stalled",
+        "task": { "status": "IN_PROGRESS", "workState": "RUNNING", "runReason": "BACKGROUND_JOB", "runStalled": true, "autoRunWhenReady": true },
+        "runQueue": { "runState": "RUNNING", "runReason": "BACKGROUND_JOB", "runStalled": true },
+        "taskRow": "Running · no output 10+ min",
+        "runQueueRow": "Running · Background job · no output 10+ min"
+      },
+      {
+        "name": "running, not stalled",
+        "task": { "status": "IN_PROGRESS", "workState": "RUNNING", "runReason": "BACKGROUND_JOB", "runStalled": false, "autoRunWhenReady": true },
+        "runQueue": { "runState": "RUNNING", "runReason": "BACKGROUND_JOB", "runStalled": false },
+        "taskRow": "Running",
+        "runQueueRow": "Running · Background job"
+      },
+      {
+        "name": "held, waiting on prerequisites",
+        "task": { "status": "OPEN", "workState": "BLOCKED", "autoRunWhenReady": false },
+        "runQueue": null,
+        "taskRow": "Blocked · set to start by hand",
+        "runQueueRow": null
+      },
+      {
+        "name": "held, ready",
+        "task": { "status": "OPEN", "workState": "READY", "autoRunWhenReady": false },
+        "runQueue": null,
+        "taskRow": "Ready · set to start by hand",
+        "runQueueRow": null
+      },
+      {
+        "name": "automatic, ready",
+        "task": { "status": "OPEN", "workState": "READY", "autoRunWhenReady": true },
+        "runQueue": null,
+        "taskRow": "Ready · automatic dispatch",
+        "runQueueRow": null
+      }
+    ]
+  }
+}

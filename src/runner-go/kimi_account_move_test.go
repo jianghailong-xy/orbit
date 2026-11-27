@@ -796,7 +796,7 @@ func TestKimiTurnOutcomeIsReadFromTheTurnsOwnRecord(t *testing.T) {
 	ctx := context.Background()
 
 	wire, from := wireWith(t, kimiQuotaTurnRecords)
-	if got := readKimiTurnOutcome(ctx, wire, from, nil); got != (kimiTurnOutcome{read: true, ran: true, failure: kimiQuotaSentence}) {
+	if got := readKimiTurnOutcome(ctx, wire, from, nil); got != (kimiTurnOutcome{read: true, ran: true, failure: kimiQuotaSentence, classified: kimiQuotaClassified}) {
 		t.Fatalf("a turn ended on the usage limit is reported as %+v", got)
 	}
 	if !strings.HasPrefix(strings.ToLower(kimiQuotaSentence), "you've hit your usage limit") {
@@ -854,7 +854,7 @@ func TestKimiTurnOutcomeIsReadFromTheTurnsOwnRecord(t *testing.T) {
 			_ = f.Close()
 		}
 	}()
-	if got := readKimiTurnOutcome(ctx, wire, from, nil); got != (kimiTurnOutcome{read: true, ran: true, failure: kimiQuotaSentence}) {
+	if got := readKimiTurnOutcome(ctx, wire, from, nil); got != (kimiTurnOutcome{read: true, ran: true, failure: kimiQuotaSentence, classified: kimiQuotaClassified}) {
 		t.Fatalf("an end written after the answer is reported as %+v", got)
 	}
 

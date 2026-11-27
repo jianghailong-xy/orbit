@@ -1,4 +1,5 @@
-import { Injectable, Optional } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 
 import type { CoordinatorWakeEvent, WakeFact } from './coordinator-wake';
 import {
@@ -87,6 +88,8 @@ const ALLOW_COMMITTED_INPUT: WakeAuthorizer = async () => ({ allowed: true });
  */
 @Injectable()
 export class CompletionInputRouter {
+  private readonly logger = new Logger(CompletionInputRouter.name);
+
   constructor(
     private readonly wakes: CoordinatorWakeService,
     private readonly settled: ProjectTasksSettledProducer,
@@ -123,6 +126,16 @@ export class CompletionInputRouter {
      * router built by hand without it, a run that stops tells nobody, as it always did.
      */
     @Optional() private readonly stoppedRuns?: TaskRunStoppedProducer,
+    /**
+     * Finds the service that offers a project branch's tip to its owner (M-F1), asked again after a
+     * finish that decided a deferred landing (§12.15 P-M1). Found at the call and imported there, as
+     * the session end's `routeSettledFacts` finds this router: a value import of that service's file
+     * closes a ring back to this one (through `MergeReceiptService` and `ProjectFuseService`), and
+     * ProjectsModule, which provides it, imports this module. `@Optional()` and last, for the reason
+     * the seventh gives: a router built by hand without it logs an error naming the projects it
+     * could not ask about (`considerPromotionAfterSettledWork`).
+     */
+    @Optional() private readonly moduleRef?: ModuleRef,
   ) {}
 
   /**
@@ -271,6 +284,56 @@ export class CompletionInputRouter {
     projectIds: ReadonlyArray<string | null | undefined>,
   ): Promise<SettledProjectDelivery[]> {
     return this.settled.afterCommit(projectIds);
+  }
+
+  /**
+   * §12.15 P-M1, for a finish that cannot reach `TasksService` (the reaper, the session end): the
+   * project facts a DONE task's settled work re-derives once its landing is decided — the settled
+   * fact the deferred landing held (`landingDeferred`), then the two criterion facts. Each step
+   * reads committed rows and is idempotent on the wake ledger; failures are logged, since the
+   * finish is already committed and the next delivery derives the same facts.
+   */
+  async routeSettledWork(
+    projectIds: ReadonlyArray<string | null | undefined>,
+  ): Promise<void> {
+    await this.considerPromotionAfterSettledWork(projectIds);
+    for (const [name, door] of [
+      ['settled-project', () => this.routeSettledProjects(projectIds)],
+      ['ready-criteria', () => this.routeReadyCriteria(projectIds)],
+      ['unlanded-criteria', () => this.routeUnlandedCriteria(projectIds)],
+    ] as const) {
+      await door().catch((e) =>
+        this.logger.warn(`${name} delivery after settled work failed: ${e?.message ?? e}`));
+    }
+  }
+
+  /**
+   * §12.15 P-M1, M-F1: a deferred landing held the project's promotion candidate back
+   * (`landingDeferred`), and the finish that decided it may have queued nothing — an empty branch — so
+   * no landing result would ever ask again. Asked here, after that finish commits and before the
+   * settled facts, which must read the check this may queue as work still in flight (the order
+   * `afterIntegrationResult` keeps). A finish that queued a landing makes no candidate here: its
+   * landing's result asks once it lands. The service logs and swallows its own failures; a service
+   * this router cannot find is logged as an error naming the projects.
+   */
+  async considerPromotionAfterSettledWork(
+    projectIds: ReadonlyArray<string | null | undefined>,
+  ): Promise<void> {
+    const ids = [...new Set(projectIds.filter((id): id is string => !!id))];
+    if (ids.length === 0) return;
+    // A lookup that does not resolve leaves the project with no candidate and nothing that would ask
+    // again, so it is an error naming the projects, never a quiet return.
+    let promotions: { considerCandidate(projectId: string): Promise<unknown> };
+    try {
+      if (!this.moduleRef) throw new Error('this router was built without a module graph');
+      const { ProjectPromotionService } = await import('./project-promotion.service.js');
+      promotions = this.moduleRef.get(ProjectPromotionService, { strict: false });
+    } catch (e) {
+      this.logger.error(`promotion candidate not considered after settled work for project ${ids.join(', ')}: `
+        + `ProjectPromotionService not found (${(e as Error)?.message ?? e})`);
+      return;
+    }
+    for (const projectId of ids) await promotions.considerCandidate(projectId);
   }
 
   /**

@@ -40,6 +40,10 @@ import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.net.ApiRequest
+import io.orbitd.android.directory.SessionDisplay
+import io.orbitd.android.directory.SessionDisplayState
+import io.orbitd.android.directory.SessionMarkChips
+import io.orbitd.android.directory.SessionStateGlyph
 import io.orbitd.android.directory.orderedWorkspaceRows
 import io.orbitd.android.composer.ComposerCatalog
 import io.orbitd.android.composer.CredentialKind
@@ -92,6 +96,8 @@ private class TaskDetailData {
     /** Every runner of the account: whether Cursor CLI is offered as a pin at all (ProviderEngines.androidShowsEngine). */
     var runners by mutableStateOf<List<JsonObject>>(emptyList())
     var providers by mutableStateOf<List<JsonObject>>(emptyList())
+    /** The project's recorded landing-check changes, read while the task is exempt: who exempted it, and when (§12.15 P-R1). */
+    var settingChanges by mutableStateOf<List<io.orbitd.android.projects.ProjectSettingChanges.Change>?>(null)
     var busy by mutableStateOf(false)
     /** A refusal of what an open sheet sent, said on the sheet: the page's banner is behind it. */
     var sheetError by mutableStateOf<String?>(null)
@@ -187,6 +193,14 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
     val landingEvery = if (busyRun) null else TaskLandingLogic.refetchInterval(TaskIntegrationView.of(data.task))
     LaunchedEffect(handle, id, landingEvery) { while (landingEvery != null) { delay(landingEvery); load() } }
     LaunchedEffect(data.notice) { if (data.notice != null) { delay(3000); data.notice = null } }
+    // Who exempted the task and when is the project's record: read while the task is exempt, again when the task changes.
+    val exemptIn = data.task?.takeIf { it.flag("landingCheckExempt") == true }?.text("projectId")
+    LaunchedEffect(handle, exemptIn, data.task?.text("updatedAt")) {
+        if (exemptIn == null) return@LaunchedEffect
+        val projects = io.orbitd.android.projects.ProjectApi(app.session, handle)
+        try { data.settingChanges = io.orbitd.android.projects.ProjectSettingChanges.of(projects.document(exemptIn)) }
+        catch (cancel: CancellationException) { throw cancel } catch (_: Exception) {}
+    }
 
     /** A write belongs to the app, not to this page (iOS's model-owned Task): leaving does not cancel it,
      * so a Run's resends and a comment still go out. A sheet that sent it closes only once it is taken, and its
@@ -335,6 +349,8 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
                         conflict.taskId?.let { { patch(buildJsonObject { put("provider", JsonNull); put("model", JsonNull) }) } }) { data.conflict = null } }
                     // A task that starts when its condition holds says so where a task says why it has not started
                     // (docs/condition-triggers-design.md §6.2): "Waiting for: 3 or more OSDs are in", and the newest reading.
+                    // No account that could run it can run now: the fuller block, with the way to the account.
+                    TaskAccountHold.of(task)?.takeIf { task["hold"].let { h -> h == null || h is JsonNull } }?.let { TaskAccountHoldNote(it, open) }
                     io.orbitd.android.schedule.TaskWaitingLine(io.orbitd.android.core.schedule.TaskStartWhenView.parse(task["startWhen"]))
                     ActionRow(row, canStart, enabled, task, assigneeHasRunner, open, run = ::runTask,
                         confirmDone = { mutate { api.confirmOwner(id, revisionOf(task)) } })
@@ -354,8 +370,19 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
             TaskDetailLogic.liveRun(task)?.let { live -> item(key = "now") { NowSection(task, live, data, open) } }
             data.evidence.lastOrNull()?.let { latest -> item(key = "evidence") { EvidenceSection(task, latest) } }
             // Where the task's work stands after DONE (§2.7a): the newest landing attempt and why it waits or where it stopped.
-            TaskLandingLogic.status(TaskIntegrationView.of(task))?.let { landing ->
-                item(key = "landing") { LandingSection(landing, open) }
+            // A task exempt from its project's landing check says so in the same section, landed or not (board
+            // docs/mocks/landing-measured ④, ruling D5).
+            val landing = TaskLandingLogic.status(TaskIntegrationView.of(task))
+            val exemption = io.orbitd.android.projects.TaskLandingExemption.of(task)
+            if (landing != null || exemption != null) item(key = "landing") {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (landing != null) LandingSection(landing, open) else TaskSectionHeader(TaskLandingCopy.landingSection)
+                    exemption?.let {
+                        if (landing != null) HorizontalDivider()
+                        io.orbitd.android.projects.TaskExemptionRow(it, io.orbitd.android.projects.ProjectSettingChanges.latestExemption(data.settingChanges, id),
+                            java.time.Instant.now(), enabled) { patch(buildJsonObject { put("landingCheckExempt", false) }) }
+                    }
+                }
             }
             // What "done" means for this task, and who decides it. Before the brief: it is the contract the run and its reader are
             // both held to. Unset, the command pair is not drawn: its "a person decides" contradicted a task judged by evidence.
@@ -447,7 +474,11 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
             items(TaskDetailLogic.activity(task, data.evidence), key = { "activity:${it.key}" }) { entry ->
                 when (entry) {
                     is TaskActivityItem.Filed -> FiledRow(task, entry.at, workspaces, open)
-                    is TaskActivityItem.Run -> RunRow(entry.session, task, data, open) { sheet = "why:${entry.session.text("id")}" }
+                    is TaskActivityItem.Run -> {
+                        RunRow(entry.session, task, data, open) { sheet = "why:${entry.session.text("id")}" }
+                        // A pinned task that ran elsewhere says which pin, where it ran and why.
+                        entry.session.obj("route")?.text("relaxedRun")?.takeIf { it.isNotEmpty() }?.let { RelaxedRunNote(it, Modifier.padding(start = 18.dp, bottom = 4.dp)) }
+                    }
                     is TaskActivityItem.Comment -> CommentRow(entry.comment, link)
                     else -> Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(TaskDetailLogic.activityText(entry).orEmpty(), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
@@ -600,6 +631,7 @@ private fun LandingSection(status: TaskLandingStatus, open: (OrbitRoute) -> Unit
         }
         status.noReport?.let { Text(it, Modifier.testTag("task-landing-no-report"), style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold, color = LocalOrbitColors.current.needsYou) }
+        status.pullRequest?.let { io.orbitd.android.reader.LandingPullRequestCard(it, TaskLandingLogic.branch(status.targetRef).ifEmpty { "main" }, status.landingSessionId) }
         status.reason?.let { Text(it, Modifier.testTag("task-landing-reason"), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant) }
         status.receipt?.let { Text(it, Modifier.testTag("task-landing-receipt"), style = MaterialTheme.typography.bodySmall,
@@ -671,7 +703,7 @@ private class RunPins(val task: JsonObject, val data: TaskDetailData, assignee: 
     val runProvider = pinnedProvider ?: pinnedEngine?.let { engine -> if (engine == ProviderEngines.DSH) firstDeepSeekKey?.id ?: engine else engine }
         ?: assigneeProvider
     val models = catalog?.models(runEngine, runProvider).orEmpty()
-    val unpinned = if (smartSelection && assignee?.flag("modelRouting") == true) TaskDetailCopy.smartSelectionPlaceholder else TaskDetailCopy.providerDefault
+    val unpinned = if (smartSelection) TaskDetailCopy.smartSelectionPlaceholder else TaskDetailCopy.providerDefault
     val modelValue = task.text("model")?.let { m -> models.firstOrNull { it.text("value") == m }?.text("label") ?: m } ?: unpinned
 }
 
@@ -955,14 +987,18 @@ private fun modelName(id: String, task: JsonObject, data: TaskDetailData): Strin
 @Composable
 private fun RunRow(run: JsonObject, task: JsonObject, data: TaskDetailData, open: (OrbitRoute) -> Unit, why: () -> Unit) {
     val state = resolvedRunState(run)
-    val color = when (state) { "RUNNING" -> LocalOrbitColors.current.running; "QUEUED", "AWAITING_INPUT" -> LocalOrbitColors.current.needsYou
-        "SUCCEEDED" -> LocalOrbitColors.current.success; "FAILED" -> MaterialTheme.colorScheme.error; else -> MaterialTheme.colorScheme.onSurfaceVariant }
+    // With the session facts, the state from `phase` and the marks beside it (the board); from an older server, today's dot and word.
+    val shown = SessionDisplay.state(SessionDisplay.facts(run))
+    val color = if (shown != null) (if (shown == SessionDisplayState.RUNNING) LocalOrbitColors.current.running else MaterialTheme.colorScheme.onSurfaceVariant)
+        else when (state) { "RUNNING" -> LocalOrbitColors.current.running; "QUEUED", "AWAITING_INPUT" -> LocalOrbitColors.current.needsYou
+        "SUCCEEDED", "FINISHED" -> LocalOrbitColors.current.success; "FAILED" -> MaterialTheme.colorScheme.error; else -> MaterialTheme.colorScheme.onSurfaceVariant }
     val smartSelection = LocalSmartSelection.current
     val route = TaskDetailLogic.runRoute(run, smartSelection)
     val name: (String) -> String = { modelName(it, task, data) }
     Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { run.text("id")?.let { open(OrbitRoute(Destination.SESSION, it)) } }.padding(vertical = 6.dp)
         .testTag("task-run:${run.text("id")}"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (state == "RUNNING") CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp) else Box(Modifier.size(8.dp).background(color, CircleShape))
+        if (shown != null) SessionStateGlyph(shown)
+        else if (state == "RUNNING") CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp) else Box(Modifier.size(8.dp).background(color, CircleShape))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row {
                 Text(run.obj("agent")?.text("name") ?: run.text("title") ?: TaskDetailCopy.untitledSession, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -970,7 +1006,8 @@ private fun RunRow(run: JsonObject, task: JsonObject, data: TaskDetailData, open
                     Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(TaskDetailLogic.runLabel(run), style = MaterialTheme.typography.bodySmall, color = color)
+                Text(shown?.word ?: TaskDetailLogic.runLabel(run), Modifier.testTag("task-run-state:${run.text("id")}"), style = MaterialTheme.typography.bodySmall, color = color)
+                if (shown != null) SessionMarkChips(SessionDisplay.marks(SessionDisplay.facts(run)))
                 TaskDetailLogic.runModelLine(run, smartSelection, name)?.let { Text("· $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false)) }
                 if (route?.flag("applied") == true) Text(TaskDetailLogic.routeTierTag(route), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold,

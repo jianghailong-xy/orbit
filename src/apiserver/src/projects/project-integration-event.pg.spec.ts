@@ -5,11 +5,11 @@ import { test } from 'node:test';
 
 import {
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import {
@@ -53,6 +53,7 @@ import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
 import '../test-support/dequeue-under-lease';
+import { landingFixWorkSession, settleDeliveredIdentityAfterFinish } from './project-integration-job';
 
 /**
  * The landing timeline (docs/project-integration-line-contract.md §2.9 LS2/LS4, migration 0438), on
@@ -104,6 +105,7 @@ interface Stack {
   ownerRetry: ProjectIntegrationRetryController;
   promotions: ProjectPromotionService;
   receipts: MergeReceiptService;
+  sessions: SessionsService;
 }
 
 async function connect(): Promise<Stack> {
@@ -164,6 +166,7 @@ async function connect(): Promise<Stack> {
     ownerRetry,
     promotions: new ProjectPromotionService(prisma),
     receipts: new MergeReceiptService(prisma),
+    sessions,
   };
 }
 
@@ -223,7 +226,7 @@ async function world(
       title: `coordinator: ${label}`,
       prompt: `coordinator: ${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
       numTurns: 1,
@@ -292,7 +295,12 @@ async function answerTurn(stack: Stack, w: World, sessionId: string, turnId: str
 }
 
 /** One code task carried to DONE through its own acceptance command, with the work session finished. */
-async function doneTask(stack: Stack, w: World, label: string): Promise<Attempt> {
+async function doneTask(
+  stack: Stack,
+  w: World,
+  label: string,
+  options: { personEndsWorkSession?: boolean } = {},
+): Promise<Attempt> {
   const title = `${label} ${randomUUID().slice(0, 8)}`;
   const branch = `orbit/${label}-${randomUUID().slice(0, 6)}`;
   const declared = await stack.tasks.create(w.ownerId, {
@@ -315,7 +323,7 @@ async function doneTask(stack: Stack, w: World, label: string): Promise<Attempt>
       title,
       prompt: title,
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
@@ -343,6 +351,10 @@ async function doneTask(stack: Stack, w: World, label: string): Promise<Attempt>
   });
   const acceptance = await dequeue(stack, sessionId, w.runnerId);
   assert.equal(acceptance?.kind, 'shell', 'the acceptance command was queued for this task');
+  // W4 false on purpose (§12.3 condition 1), for the cases about the coordinator's and the owner's doors: a person
+  // ends the work session while its acceptance command runs, so it ends `ended`, not with its task's DONE
+  // (`task_done`), and is never handed the failure (as integration-retry.pg.spec.ts does).
+  if (options.personEndsWorkSession) await stack.sessions.end(w.ownerId, sessionId);
   await stack.api.turnComplete({ id: w.runnerId }, sessionId, {
     turnId: acceptance!.turnId,
     status: SharedRunStatus.SUCCEEDED,
@@ -351,9 +363,22 @@ async function doneTask(stack: Stack, w: World, label: string): Promise<Attempt>
     shellOutput: '',
   });
   assert.equal(await taskStatus(stack.db, declared.id), TaskStatus.DONE, 'the acceptance command agreed');
-  await stack.db.session.update({
-    where: { id: sessionId },
-    data: { finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false },
+  if (options.personEndsWorkSession) {
+    assert.equal(
+      (await stack.db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { endReason: true } })).endReason,
+      'ended', 'CONTROL: the work session is one a person ended, which W4 does not hand a failure',
+    );
+  }
+  await stack.db.$transaction(async (tx) => {
+    // The finish settles the DONE's delivered identity in the transaction that writes it, as every
+    // finish door does — and decides the route a DONE written while this work moved left to it
+    // (§10.5 O-L4 3, §12.15 P-M1).
+    const finished = await tx.session.update({
+      where: { id: sessionId },
+      data: { turnState: null, finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false },
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
   });
   return { taskId: declared.id, title, sessionId, branch };
 }
@@ -497,6 +522,33 @@ async function claimLanding(
 
 /** One attempt's stored facts, in the order the reader draws them: claim, round (none first),
  *  the fact's instant, the ledger's sequence. */
+/**
+ * The CONTROL an (a) case carries: W4 (§12.3) is false for this job, read through W4's own function from the rows
+ * as they stand, so the failure it is about to report opens the coordinator's item exactly as before revision 42.
+ */
+async function assertW4False(db: PrismaClient, jobId: string): Promise<void> {
+  const job = await db.projectIntegrationJob.findUniqueOrThrow({
+    where: { id: jobId },
+    select: { kind: true, sessionId: true, taskId: true, landingId: true, promotionId: true },
+  });
+  const candidate = job.promotionId
+    ? await db.projectPromotion.findUniqueOrThrow({
+      where: { id: job.promotionId }, select: { sourceKind: true, taskId: true },
+    })
+    : null;
+  for (const failureClass of ['CONFLICT', 'CHECK_FAILED'] as const) {
+    const handedTo = await db.$transaction((tx) => landingFixWorkSession(tx, {
+      jobKind: job.kind,
+      sessionId: job.sessionId,
+      taskId: job.kind === 'LAND_TASK' ? job.taskId : candidate?.taskId ?? null,
+      landingId: job.landingId,
+      failureClass,
+      candidateSourceKind: candidate?.sourceKind ?? null,
+    }));
+    assert.equal(handedTo, null, `CONTROL: W4 is false for job ${jobId}, so its ${failureClass} is the coordinator's`);
+  }
+}
+
 async function eventsOf(db: PrismaClient, jobId: string) {
   return db.projectIntegrationJobEvent.findMany({
     where: { jobId },
@@ -621,8 +673,11 @@ test('a failure, the coordinator rerun and the owner rerun each sign their own l
     const stack = await connect();
     try {
       const w = await world(stack, 'timeline-rerun');
-      const task = await doneTask(stack, w, 'timeline-rerun');
+      // (a) The failure is handed to the coordinator and re-run by the coordinator and by the owner, so W4 is false on
+      // purpose: a person ended the work session.
+      const task = await doneTask(stack, w, 'timeline-rerun', { personEndsWorkSession: true });
       const first = await claimLanding(stack, w, 'lease-1', 'LAND_TASK');
+      await assertW4False(stack.db, first.jobId);
       const { landing } = await subjectOfJob(stack.db, first.jobId);
       assert.equal((await report(stack, w, first, RED)).accepted, true);
 
@@ -1209,7 +1264,7 @@ test('an answer asked before the work settled is recorded: requeued, or stopped 
       });
       await stack.db.session.update({
         where: { id: task.sessionId },
-        data: { finishedAt: new Date(Date.now() + 1_000), worktreeBranch: task.branch },
+        data: { turnState: null, finishedAt: new Date(Date.now() + 1_000), worktreeBranch: task.branch },
       });
       const requeued = await report(stack, w, first, early());
       assert.equal(requeued.accepted, true);
@@ -1227,7 +1282,7 @@ test('an answer asked before the work settled is recorded: requeued, or stopped 
       )).state, 'CANCELLING');
       await stack.db.session.update({
         where: { id: task.sessionId },
-        data: { finishedAt: new Date(Date.now() + 2_000) },
+        data: { turnState: null, finishedAt: new Date(Date.now() + 2_000) },
       });
       const cancelled = await report(stack, w, second, early());
       assert.equal(cancelled.accepted, true);
@@ -1256,7 +1311,7 @@ test('a candidate check that answered before its task work settled goes back to 
       // could still move, so its READY is the same question asked too early.
       await stack.db.session.update({
         where: { id: task.sessionId },
-        data: { finishedAt: new Date(Date.now() + 1_000) },
+        data: { turnState: null, finishedAt: new Date(Date.now() + 1_000) },
       });
       const early = await report(stack, w, check, promotionReady('1'.repeat(40)));
       assert.equal(early.accepted, true);

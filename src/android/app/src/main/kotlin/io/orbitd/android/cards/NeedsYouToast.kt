@@ -45,7 +45,11 @@ import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.OwnerRequests
 import io.orbitd.android.core.cards.obj
 import io.orbitd.android.core.cards.text
+import io.orbitd.android.core.cards.TerminalRequest
 import io.orbitd.android.directory.TrashingSessions
+import io.orbitd.android.management.TerminalNeedsYou
+import io.orbitd.android.management.TerminalRequestStore
+import io.orbitd.android.management.rememberLiveTerminalRequests
 import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.OrbitRoute
 import io.orbitd.android.navigation.Origin
@@ -61,6 +65,8 @@ import kotlin.math.roundToInt
  * `docs/mocks/needs-you-capsule/12-once`): each wait not seen at the last look becomes one notice. The first look — after sign-in,
  * or back in the foreground ([retake]) — only takes stock. A notice whose conversation stopped waiting goes. It replaced a resident
  * needs-you bar ("2 sessions need you") and the approval push's bottom snackbar: "if it is a toast, it is a notice that happened once".
+ * A terminal asking to be approved is noticed the same way (the owner, 2026-11-16, in place of the bar's line of board
+ * waiting-on-you-removal 02 ③): once per request id, never again for that id, and gone when the request is answered or expires.
  */
 internal class NeedsYouNotices {
     val toasts = mutableStateListOf<NeedsYouToast>()
@@ -68,6 +74,9 @@ internal class NeedsYouNotices {
     var more by mutableIntStateOf(0)
         private set
     private var seen: Set<String>? = null
+    private var seenTerminals: Set<String>? = null
+    /** Every terminal request already noticed or taken stock of: one notice per request id, whatever the looks after. */
+    private val known = mutableSetOf<String>()
 
     /** A look at the Open rows, [focused] the conversation on screen. */
     fun look(open: List<JsonObject>, focused: String?) {
@@ -78,12 +87,27 @@ internal class NeedsYouNotices {
         if (before != null) NeedsYouLogic.newlyWaiting(waiting, before, focused).forEach { notice ->
             if (toasts.size < NeedsYouLogic.toastLimit) toasts += notice else more++
         }
-        toasts.removeAll { it.id !in keys }
+        toasts.removeAll { it.terminalRequest == null && it.id !in keys }
+        if (toasts.isEmpty()) more = 0
+    }
+
+    /** A look at the terminal requests still answerable ([live], oldest first, after the store's first answer). The first look takes
+     * stock; a request not known before is noticed once, at the head of the column, and its notice goes when it is answered. */
+    fun lookTerminals(live: List<TerminalRequest>) {
+        val ids = live.map { it.id }.toSet()
+        val before = seenTerminals
+        seenTerminals = ids
+        if (before == null) known += ids
+        else live.filter { it.id !in known }.forEach { request ->
+            known += request.id
+            if (toasts.size < NeedsYouLogic.toastLimit) toasts.add(0, TerminalNeedsYou.toast(request)) else more++
+        }
+        toasts.removeAll { it.terminalRequest != null && it.terminalRequest !in ids }
         if (toasts.isEmpty()) more = 0
     }
 
     /** Back in the foreground: what waits now is taken as it stands, not announced. */
-    fun retake() { seen = null }
+    fun retake() { seen = null; seenTerminals = null }
 
     /** Flicked away, pressed, or its time is up. */
     fun dismiss(id: String) {
@@ -114,6 +138,12 @@ internal fun NeedsYouToasts(app: OrbitApplication, handle: SessionHandle, open: 
         val (rows, focused) = look ?: return@LaunchedEffect
         notices.look(TrashingSessions.without(rows, trashing) { it.text("id") }, focused)
     }
+    // Terminals asking to be approved: the store Machines & models reads, read every 20 s while this is drawn and again on each
+    // terminals.changed (MainActivity).
+    val terminalStore = remember(app, handle) { TerminalRequestStore.of(app.session, handle, app.processScope) }
+    val liveTerminals = rememberLiveTerminalRequests(terminalStore)
+    val terminalsRead by terminalStore.loaded.collectAsState()
+    LaunchedEffect(notices, liveTerminals, terminalsRead) { if (terminalsRead) notices.lookTerminals(liveTerminals) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle, notices) {
         val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) notices.retake() }
@@ -135,7 +165,10 @@ internal fun NeedsYouToasts(app: OrbitApplication, handle: SessionHandle, open: 
                     exit = slideOutVertically { -it / 2 } + fadeOut() + shrinkVertically()) {
                     NeedsYouToastCard(notice, dismiss = { notices.dismiss(notice.id) }) {
                         notices.dismiss(notice.id)
-                        openNeedsYou(notice.target, notice.ownerItem, requests.state.value, open)
+                        // A terminal's opens its machine's Terminals to approve, its card lit.
+                        val terminal = notice.terminalRequest?.let { id -> liveTerminals.firstOrNull { it.id == id } }
+                        if (terminal != null) open(TerminalNeedsYou.machineRoute(terminal))
+                        else if (notice.terminalRequest == null) openNeedsYou(notice.target, notice.ownerItem, requests.state.value, open)
                     }
                 }
             }
@@ -144,16 +177,17 @@ internal fun NeedsYouToasts(app: OrbitApplication, handle: SessionHandle, open: 
     }
 }
 
-/** A press on a notice: one of the five owner items opens the card it names; an owner request its card in the Waiting on you
- * inbox, as its push does (in the conversation it sits where it was asked, under every turn taken since); anything else the
+/** A press on a notice: one of the five owner items opens the card it names; an owner request the conversation that asked, at
+ * its oldest pending request's card, as its push does (docs/mocks/waiting-on-you-removal: there is no inbox); anything else the
  * session. */
 private fun openNeedsYou(target: JsonObject, item: OwnerItem?, requests: OwnerRequestStore.State, open: (OrbitRoute) -> Unit) {
     val id = target.text("id") ?: return
     val workspace = target.obj("agent")?.text("id") ?: target.text("agentId") ?: target.text("workspaceId")
     if (item == null && target.text("waitingKind") == "OWNER_REQUEST") {
-        // Not read on this device yet: the inbox, whose Open tab reads it and holds its card.
-        val request = OwnerRequests.oldestPending(id, requests.list(OwnerRequestStore.ALL), requests.open)
-        open(OrbitRoute(Destination.WAITING_ON_YOU, request?.id, origin = Origin.LINK)); return
+        // Not read on this device yet: the conversation alone, whose reader reads its requests and draws the card.
+        OwnerRequests.oldestPending(id, requests.list(OwnerRequestStore.ALL), requests.open)
+            ?.let { CardFocus.request(id, CardFocus.ownerRequest(it.id)) }
+        open(OrbitRoute(Destination.SESSION, id, workspace)); return
     }
     // A merge into main waiting on the reader is answered on its project's sessions page, where its card is (iOS 6b4bef713).
     val project = target.obj("projectMembership")?.text("projectId")
@@ -182,7 +216,11 @@ internal fun NeedsYouToastCard(notice: NeedsYouToast, dismiss: () -> Unit, press
         }
         .surface(CardShape, colors.surface, colors.onSurface)
         .border(1.5.dp, amber.copy(alpha = 0.7f), CardShape)
-        .clickable(onClickLabel = if (notice.ownerItem == null) NeedsYouLogic.sessionHint else NeedsYouLogic.itemHint, role = Role.Button) {
+        .clickable(onClickLabel = when {
+            notice.terminalRequest != null -> TerminalNeedsYou.hint
+            notice.ownerItem == null -> NeedsYouLogic.sessionHint
+            else -> NeedsYouLogic.itemHint
+        }, role = Role.Button) {
             haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); press()
         }
         .semantics { customActions = listOf(CustomAccessibilityAction(NeedsYouLogic.dismissLabel) { dismiss(); true }) }
@@ -244,4 +282,5 @@ internal val NeedsYouGlyph.drawable: Int get() = when (this) {
     NeedsYouGlyph.WARNING -> R.drawable.ic_warning
     NeedsYouGlyph.PAUSE -> R.drawable.ic_pause
     NeedsYouGlyph.HAND -> R.drawable.ic_permission
+    NeedsYouGlyph.TERMINAL -> R.drawable.ic_terminal
 }

@@ -7,9 +7,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { assertEngineSession } from '../sessions/engine-session';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
+import { sessionOfRemoteSubagent } from './subagent-remote';
 
 /**
- * What `file_list`, `file_fetch` and a folder's `file_upload` call (docs/orbit-files-design.md §2.2, §2.3): the agent
+ * What `file_list`, `file_fetch` and a folder's `file_upload` call (docs/drive-design.md §2.2, §2.3): the agent
  * tool API, so it speaks public ids and stays on HTTPS (D14). The upload of a file itself is
  * RunnerApiController's, beside the other upload, and a file's bytes are read from the attachment route.
  *
@@ -55,8 +56,9 @@ export class RunnerFilesController {
     @CurrentRunner() runner: Runner,
     @Param('id', PublicIdPipe) sessionId: string,
     @Param('fileId', PublicIdPipe) fileId: string,
+    @Query('subagentRunId', PublicIdPipe) subagentRunId?: string,
   ) {
-    return this.setPinned(runner, sessionId, fileId, true);
+    return this.setPinned(runner, sessionId, fileId, true, subagentRunId);
   }
 
   /** `file_pin` with `unpin`: the file goes back to the date its references give it. */
@@ -65,12 +67,13 @@ export class RunnerFilesController {
     @CurrentRunner() runner: Runner,
     @Param('id', PublicIdPipe) sessionId: string,
     @Param('fileId', PublicIdPipe) fileId: string,
+    @Query('subagentRunId', PublicIdPipe) subagentRunId?: string,
   ) {
-    return this.setPinned(runner, sessionId, fileId, false);
+    return this.setPinned(runner, sessionId, fileId, false, subagentRunId);
   }
 
-  private async setPinned(runner: Runner, sessionId: string, fileId: string, pinned: boolean) {
-    const session = await this.hostedSession(runner, sessionId);
+  private async setPinned(runner: Runner, sessionId: string, fileId: string, pinned: boolean, subagentRunId?: string) {
+    const session = await this.hostedSession(runner, sessionId, subagentRunId);
     const file = await this.files.setPinned(await this.files.readableInSession(session, fileId), pinned);
     if (!file) throw new NotFoundException('file not found in this session');
     return file;
@@ -82,12 +85,18 @@ export class RunnerFilesController {
     @CurrentRunner() runner: Runner,
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: CreateFileBundleDto,
+    @Query('subagentRunId', PublicIdPipe) subagentRunId?: string,
   ) {
-    return this.files.createBundle(await this.hostedSession(runner, sessionId), dto);
+    return this.files.createBundle(await this.hostedSession(runner, sessionId, subagentRunId), dto);
   }
 
-  /** A session this runner hosts, answered as RunnerApiController answers any other: the same whoever's it is. */
-  private async hostedSession(runner: Runner, sessionId: string) {
+  /**
+   * A session this runner hosts, answered as RunnerApiController answers any other: the same whoever's it is. Or the
+   * parent session of a remote SubAgent this runner is running, named by its run (sessionOfRemoteSubagent).
+   */
+  private async hostedSession(runner: Runner, sessionId: string, subagentRunId?: string) {
+    const parent = await sessionOfRemoteSubagent(this.prisma, runner, sessionId, subagentRunId);
+    if (parent) return parent;
     const session = await this.prisma.session.findFirst({
       where: { id: sessionId, ownerId: runner.ownerId, deletedAt: null },
       select: { id: true, ownerId: true, taskId: true, assignedRunnerId: true, sessionKind: true },

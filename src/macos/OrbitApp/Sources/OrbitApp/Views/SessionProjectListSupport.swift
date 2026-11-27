@@ -1,16 +1,18 @@
 import OrbitKit
 
 extension SessionProjectEntry {
-    /// Only the existing recency grouper reads these records. A project's row is drawn from its
-    /// SessionProjectRow, never from this date/pin projection, so member statuses stay intact.
+    /// Only the section grouper reads these records. A project's row is drawn from its
+    /// SessionProjectRow, never from this projection, so member statuses stay intact; the
+    /// projection carries just what picks its section: the pin, the list-order key, and whether
+    /// it needs you or is working.
     var timeGroupingSession: Session {
         switch self {
         case .session(let session): return session
         case .project(let row):
-            return Session(id: row.id, title: row.title, status: .awaitingInput,
-                           agentId: nil, assignedRunnerId: nil, pendingApprovals: nil,
+            return Session(id: row.id, title: row.title, status: row.running ? .running : .awaitingInput,
+                           agentId: nil, assignedRunnerId: nil, pendingApprovals: row.needsYou ? 1 : nil,
                            branch: nil, updatedAt: nil, pinnedAt: row.pinnedAt,
-                           createdAt: row.createdAt, lastTurnAt: row.lastTurnAt)
+                           createdAt: row.createdAt, lastTurnAt: row.lastTurnAt, listedAt: row.listedAt)
         }
     }
 }

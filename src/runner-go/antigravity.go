@@ -31,6 +31,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -300,6 +301,9 @@ func antigravityEnv(job *ClaimedSession, execDir string) []string {
 		"ORBIT_ALLOW_ORCHESTRATION": orchestrationEnv(job.AllowOrchestration),
 		envWatches:                  watchesEnv(job.WatchesDisabled),
 		envWiki:                     wikiEnv(job.WikiDisabled),
+		envDocuments:                documentsEnv(job.DocumentsDisabled),
+		envBrowser:                  browserEnv(job.BrowserEnabled),
+		envWorkflows:                workflowsEnv(job.WorkflowsDisabled),
 		envScheduleRun:              scheduleRunEnv(job.ScheduleRun),
 		envMCPPermissionPrompt:      "0",
 		envSpawnDepth:               strconv.Itoa(job.SpawnDepth),
@@ -311,7 +315,8 @@ func antigravityEnv(job *ClaimedSession, execDir string) []string {
 	// Runner-hosted background jobs (mcp__orbit__bg_run): `orbit mcp` inherits these through agy.
 	// agy's own run_command can also leave a command running past its call (WaitMsBeforeAsync); that
 	// one is agy's, and stops with agy.
-	return append(env, bgJobEnvPairs(job.SessionID)...)
+	// On the Orbit Cloud runner with the browser on, a tool the agent runs opens its pages there (browser_opener.go).
+	return browserOpenerEnv(append(env, bgJobEnvPairs(job.SessionID)...), job.BrowserEnabled)
 }
 
 // startAgyProcess starts agy and the goroutines that read it. The process leads its own process
@@ -360,7 +365,7 @@ func startAgyProcess(ctx context.Context, job *ClaimedSession, execDir, geminiDi
 		return nil, err
 	}
 	p.stdin = stdin
-	if err := startSessionProcess(cmd); err != nil {
+	if err := startSessionEngine(cmd, job.SessionID); err != nil {
 		_ = stdin.Close()
 		cancel()
 		return nil, err
@@ -434,10 +439,17 @@ type agyTurn struct {
 	contextTokens int
 	errorStep     bool
 	interrupted   bool
+	// failure is what agy's error says the turn failed with (antigravityTurnFailureOf), once settleTurn has read it.
+	failure engineFailure
 }
 
 type agyToolResult struct {
 	id, rawName, output, errText string
+}
+
+// admission is §5.2's measurement of the turn: no text, no tool step, no billed token.
+func (turn *agyTurn) admission() *bool {
+	return turnAdmission(strings.TrimSpace(turn.all.String()) != "" || len(turn.toolsOpen) > 0 || len(turn.toolsDone) > 0, &turn.usage, 0)
 }
 
 func newAgyTurn(turnID string) *agyTurn {
@@ -674,6 +686,37 @@ func antigravityErrorText(report *agyErrorReport, resultError string) string {
 		}
 	}
 	return text
+}
+
+// antigravityFailureRules is agy's table (§5.3), matched on the error's own words (short_error, else result.error);
+// each row's recorded sample is in antigravity_failure_test.go. Not mapped, for want of a recorded report: a 401 or
+// UNAUTHENTICATED (antigravityErrorText still words it as a sign-in), a 403.
+var antigravityFailureRules = []failureRule{
+	{Prefix: "agent executor error: generating and executing: Error 400, Message: API key not valid.", Kind: failureCredentialRefused},
+	{Prefix: "agent executor error: generating and executing: Error 402, Message: ", Kind: failureAccountAction},
+	{Prefix: "agent executor error: generating and executing: Error 429, Message: You exceeded your current quota", Kind: failureUsageLimit},
+}
+
+// agyRetryDelay is the wait Google's RetryInfo names in agy's error ("retryDelay:40s").
+var agyRetryDelay = regexp.MustCompile(`retryDelay:(\d+(?:\.\d+)?)s\b`)
+
+// antigravityTurnFailureOf is what agy's error says a turn failed with; its Text is antigravityErrorText's. A spent
+// quota that names its RetryInfo delay can run again that long after now.
+func antigravityTurnFailureOf(report *agyErrorReport, resultError string, now time.Time) engineFailure {
+	said := strings.TrimSpace(resultError)
+	if report != nil && strings.TrimSpace(report.ShortError) != "" {
+		said = strings.TrimSpace(report.ShortError)
+	}
+	failure := matchFailure(antigravityFailureRules, said, "")
+	failure.Text = antigravityErrorText(report, resultError)
+	if failure.Kind == failureUsageLimit {
+		if m := agyRetryDelay.FindStringSubmatch(said); m != nil {
+			if seconds, err := strconv.ParseFloat(m[1], 64); err == nil {
+				failure.Until = now.Add(time.Duration(seconds * float64(time.Second)))
+			}
+		}
+	}
+	return failure
 }
 
 // agyDriver is the session loop's state: the process of the moment and the turn it is running.
@@ -1006,7 +1049,7 @@ func (d *agyDriver) finishTurn(result map[string]interface{}, failure string) {
 		BranchSha:        effectiveBranchSha(d.job.WT), BranchCommits: branchCommits(d.job.WT),
 		BranchMerged:   branchMergedInto(d.job.WT),
 		WorktreeBranch: currentBranch(d.job.WT),
-	}); err != nil {
+	}.withFailure(turn.failure, turn.admission())); err != nil {
 		logln("turn-complete failed for", d.job.SessionID+":", err)
 	}
 	d.turn = nil
@@ -1031,7 +1074,8 @@ func (d *agyDriver) settleTurn(turn *agyTurn, result map[string]interface{}, fai
 		if d.proc != nil {
 			report, _ = d.proc.errorReport()
 		}
-		status, subtype, errText = stFailed, "error", antigravityErrorText(report, resultError)
+		turn.failure = antigravityTurnFailureOf(report, resultError, time.Now())
+		status, subtype, errText = stFailed, "error", turn.failure.Text
 	case agySoftDenied(turn, result):
 		status, subtype = stFailed, "permission_denied"
 		errText = "This turn stopped at a tool that was not allowed to run: " + agyRefusal(turn.lastTool.rawName) +
@@ -1131,6 +1175,7 @@ func runAntigravitySessionProcess(ctx context.Context, shutdownCtx context.Conte
 	// The generation's inbox: what fetches its turns, and the turnIds already taken on, which a
 	// redelivery of one is dropped against for the generation's whole life.
 	inbox := newInboxPoller(t, job.SessionID, leaseGeneration)
+	inbox.holdTurns(waitTurnPermit, job, completeTurn) // a turn waiting for its permit does not stop the inbox being read
 	defer inbox.close()
 	inboxCh := make(chan agyInboxResult, 16)
 	go func() {

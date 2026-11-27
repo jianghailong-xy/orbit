@@ -11,6 +11,7 @@ import { tildePath } from './RunnerEngines';
 import { EngineRows } from './RunnerEngines.test-rows';
 import { clickRunnerMenuItem, openAccountGroups, runnerMenuItem } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
  * More than one Codex account on one runner, on the Providers page.
@@ -174,7 +175,7 @@ describe('a runner with two Codex accounts', () => {
     expect(tags(engineRows[3])).toEqual(['Signed in']);
   });
 
-  it('names each account by what the user called it and where it lives, never by who it is', () => {
+  it('names each account by what the user called it and where it lives, never by who it is', async () => {
     const page = mount([runner({ accounts: [DEFAULT, WORK] })]);
     const [defaultRow, workRow] = rows(page, '.re-acct');
 
@@ -183,7 +184,10 @@ describe('a runner with two Codex accounts', () => {
     expect(defaultRow.querySelector('.re-name')?.textContent).toBe('DefaultNEXT');
     expect(defaultRow.querySelector('.re-chip')?.textContent).toBe('NEXT');
     expect(defaultRow.querySelector('.re-meta')?.textContent).toBe('~/.codex · account cxa1_9f3a41c7…');
-    expect(defaultRow.querySelector('.re-meta')?.getAttribute('title')).toBe('/root/.codex');
+    const meta = defaultRow.querySelector('.re-meta')!;
+    Object.defineProperty(meta, 'clientWidth', { value: 200, configurable: true });
+    Object.defineProperty(meta, 'scrollWidth', { value: 500, configurable: true });
+    expect(await hoverTooltip(meta)).toBe('/root/.codex');
 
     expect(workRow.querySelector('.re-name')?.textContent).toBe('Work');
     expect(workRow.querySelector('.re-chip')).toBeNull();
@@ -254,8 +258,8 @@ describe('a runner with two Codex accounts', () => {
     const page = mount([runner({ accounts: [DEFAULT, WORK] })]);
 
     await click(button(rows(page, '.re-acct')[1], 'Sign in'));
-    await click(button(page, 'Sign in to Codex'));
-    expect(loginPosts()).toEqual([{ engine: 'codex', account: '3fa91c2e' }]);
+    // The row's press starts it: there is no second button to press.
+    await vi.waitFor(() => expect(loginPosts()).toEqual([{ engine: 'codex', account: '3fa91c2e' }]));
   });
 
   it("starts an account's panel where its name does, clear of the tree's rail", () => {
@@ -273,8 +277,8 @@ describe('a runner with two Codex accounts', () => {
     const page = mount([runner({ accounts: [DEFAULT, WORK] })]);
 
     await clickRunnerMenuItem(rows(page, '.re-acct')[0], 'Re-sign in');
-    await click(button(page, 'Sign in to Codex'));
-    expect(loginPosts()).toEqual([{ engine: 'codex', account: 'default' }]);
+    // The row's press starts it: there is no second button to press.
+    await vi.waitFor(() => expect(loginPosts()).toEqual([{ engine: 'codex', account: 'default' }]));
   });
 
   it('adds an account the moment Add account is pressed, under a name it picks, and never under none', async () => {
@@ -349,8 +353,8 @@ describe('a runner with one Codex account', () => {
     const codexRow = rows(page, '.re-row').find((row) => row.querySelector('.re-name')?.textContent === 'Codex')!;
 
     await clickRunnerMenuItem(codexRow, 'Re-sign in');
-    await click(button(page, 'Sign in to Codex'));
-    expect(loginPosts()).toEqual([{ engine: 'codex' }]);
+    // The row's press starts it: there is no second button to press.
+    await vi.waitFor(() => expect(loginPosts()).toEqual([{ engine: 'codex' }]));
   });
 });
 

@@ -71,7 +71,9 @@ final class LandingViewsWiringTests: XCTestCase {
                      ".contextMenu { menu(landing: landing, row: row, sessionID: row.sessionId, model: model) }",
                      ".contextMenu { menu(landing: landing, row: nil, sessionID: id, model: model) }",
                      "SessionLandingsCopy.orbitRunsTheseLandings",
-                     "LandingPageCopy.decisionsTheCoordinator",
+                     // Revision 42 (board landing-fix-own-session 02 c ③): who decides, the task's own
+                     // session first, then the coordinator.
+                     "LandingFixCopy.decisionsTheTasksSessionFirst",
                      "dayChip(SessionLandingsCopy.now, now: true)",
                      "Button(LandingPageCopy.openCoordinator) { open(\"orbit-session\", coordinator) }",
                      "Button(SessionProjectCopy.openProject) { open(\"orbit-project\", projectID) }"] {
@@ -125,10 +127,17 @@ final class LandingViewsWiringTests: XCTestCase {
         // The bar stands below the scroller on the Mac, so it counts toward the window's minimum, which
         // AppKit measures at zero width: a vertically fixed sentence there stands one glyph to a line and
         // pushes the whole window past the screen's edge.
-        let footer = try XCTUnwrap(window.range(of: "private var footer: some View {"))
-        let bar = String(window[footer.lowerBound...].prefix(1_400))
+        // Two bars since revision 42 (board landing-fix-own-session 02 c ③): today's one line, and the ruled
+        // sentence whole while a landing is with its task's session — capped at three lines, never fixed.
+        let oneLine = try XCTUnwrap(window.range(of: "private var oneLineFooter: some View {"))
+        let bar = String(window[oneLine.lowerBound...].prefix(1_400))
         XCTAssertTrue(bar.contains(".lineLimit(1)"), "the bar's sentence is capped")
         XCTAssertFalse(bar.contains(".fixedSize("), "nothing in the bar is vertically fixed")
+        let sessionFirst = try XCTUnwrap(window.range(of: "private var sessionFirstFooter: some View {"))
+        let ruled = String(window[sessionFirst.lowerBound..<oneLine.lowerBound])
+        XCTAssertTrue(ruled.contains("Label(LandingFixCopy.footerSessionFirst, systemImage: \"lock\")"))
+        XCTAssertTrue(ruled.contains(".lineLimit(3)"), "the ruled sentence is capped")
+        XCTAssertFalse(ruled.contains(".fixedSize("), "nothing in the ruled bar is vertically fixed")
         // The line: the mark and its facts on one line, the task's name under them on up to two — a
         // Chinese name wraps rather than being cut to one character.
         let page = code(try appSource("Views/LandingSessionPageView.swift"))
@@ -204,7 +213,8 @@ final class LandingViewsWiringTests: XCTestCase {
         let page = code(try appSource("Views/LandingSessionPageView.swift"))
         XCTAssertTrue(page.contains("line(kind: card.stoppedOnFailure || card.timedOut ? .failed : .running,"),
                       "the status card's line takes the attempt's failure")
-        XCTAssertTrue(page.contains(".foregroundStyle(kind == .failed ? Color.red : Color.secondary)"),
+        // Revision 42's Fixing line (board landing-fix-own-session 02 c) wears the accent; a failed one stays red.
+        XCTAssertTrue(page.contains(".foregroundStyle(kind == .failed ? Color.red : kind == .fixing ? Color.accentColor : Color.secondary)"),
                       "a failed line's word is red")
         let head = code(try appSource("Views/ProjectLandingRow.swift"))
         guard let start = head.range(of: "struct ProjectLandingHead: View {"),
@@ -283,8 +293,10 @@ final class LandingViewsWiringTests: XCTestCase {
     /// reread while the attempt is live.
     func testTheTaskPageDrawsItsLandingSection() throws {
         let tasks = code(try appSource("Views/TasksView.swift"))
-        XCTAssertTrue(tasks.contains("if let landing = TaskLandingLogic.status(task.integration, taskStatus: task.status.rawValue) {"))
-        XCTAssertTrue(tasks.contains("private func landingSection(_ status: TaskLandingStatus) -> some View {"))
+        XCTAssertTrue(tasks.contains("let landing = TaskLandingLogic.status(task.integration, taskStatus: task.status.rawValue)"))
+        // Drawn for a landing, or for a task exempt from the landing check (board 04 b, D5).
+        XCTAssertTrue(tasks.contains("private func landingSection(_ landing: TaskLandingStatus?, exemption: TaskLandingCheckExemption?,"))
+        XCTAssertTrue(tasks.contains("TaskExemptionRow(exemption: exemption"))
         XCTAssertTrue(tasks.contains("LandingEntryLink(entry: .link(sessionID), compact: false)"))
         XCTAssertTrue(tasks.contains("TaskLandingCopy.refetchInterval(tasks.detail?.integration)"))
         XCTAssertTrue(tasks.contains("private func pollLanding() async {"))
@@ -332,7 +344,9 @@ final class LandingViewsWiringTests: XCTestCase {
     /// READY is a pass, a merge to main's is not).
     func testTheTimelinesMarksReadTheLinesFields() throws {
         let page = code(try appSource("Views/LandingSessionPageView.swift"))
-        XCTAssertTrue(page.contains("} else if entry.kind == \"CHECK_FINISHED\", let check = entry.check, !entry.checkPassed {"))
+        // The inline output's rule reads `checkPassed` and the exempt task's skip
+        // (`LandingCheckSkip.showsInlineOutput`, held in TaskLandingExemptTests).
+        XCTAssertTrue(page.contains("} else if LandingCheckSkip.showsInlineOutput(entry), let check = entry.check {"))
         XCTAssertTrue(page.contains("let mark = glyph(entry, jobKind: section.kind, entries: entries, index: index)"),
                       "a line's mark is read with its section's job kind")
         XCTAssertTrue(page.contains("return entry.succeeded(in: jobKind) ? Mark(glyph: \"✓\", color: .green) : Mark(glyph: \"✗\", color: .red)"))

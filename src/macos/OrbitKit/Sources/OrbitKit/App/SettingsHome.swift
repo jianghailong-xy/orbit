@@ -6,7 +6,7 @@ import CoreGraphics   // CGSize/CGRect's Swift members on Apple platforms; Found
 /// A page Settings opens from its list, each one a frame of Settings' own stack
 /// (`NavNode.settingsPage`). Change password is the one opened from a page rather than the list: Profile's.
 public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
-    case general, notifications, profile, sharedLinks, accessTokens, terminals, github, machines, providers, changePassword
+    case general, notifications, profile, sharedLinks, accessTokens, github, machines, providers, changePassword
 
     /// The page's navigation title — the same words as the row that opens it.
     public var title: String {
@@ -16,7 +16,6 @@ public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
         case .profile:        return SettingsHome.title(.profile)
         case .sharedLinks:    return SettingsHome.title(.sharedLinks)
         case .accessTokens:   return SettingsHome.title(.accessTokens)
-        case .terminals:      return SettingsHome.title(.terminals)
         case .github:         return SettingsHome.title(.github)
         case .machines:       return SettingsHome.title(.machines)
         case .providers:      return SettingsHome.title(.providers)
@@ -31,9 +30,11 @@ public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
 /// and nothing of its own.
 ///
 /// The groups and rows are the web Settings nav's (`SettingsLayout.tsx`, `settingsIndex.ts`), in its
-/// order: Personal — General, Notifications, Appearance, Profile, Shared links, Access tokens,
-/// Terminals — then Integrations' GitHub (docs/github-workspace-design.md §8), then Machines, then
-/// Providers. The web's pages the app has no page for yet (Storage, Feishu, Workspaces) are left out; a phone shows each of Machines and Providers as one row
+/// order: Personal — General, Notifications, Appearance, Profile, Shared links, Access tokens —
+/// then Integrations' GitHub (docs/github-workspace-design.md §8), then Machines, then
+/// Providers. Terminals has no row on either: an approved terminal lives on its machine's page
+/// (docs/mocks/terminals-on-machine-page). The web's pages the app has no page for yet (Storage,
+/// Feishu, Workspaces) are left out; a phone shows each of Machines and Providers as one row
 /// opening its page, where the web lists their items in the nav itself.
 public enum SettingsHome {
     public enum Group: String, CaseIterable, Sendable {
@@ -41,7 +42,7 @@ public enum SettingsHome {
     }
 
     public enum Row: String, CaseIterable, Sendable {
-        case general, notifications, appearance, profile, sharedLinks, accessTokens, terminals
+        case general, notifications, appearance, profile, sharedLinks, accessTokens
         /// Settings → GitHub (docs/github-workspace-design.md §8): the web's Integrations group's GitHub page.
         case github
         case machines
@@ -62,7 +63,7 @@ public enum SettingsHome {
     /// The rows a group shows, in order.
     public static func rows(_ group: Group) -> [Row] {
         switch group {
-        case .personal:  return [.general, .notifications, .appearance, .profile, .sharedLinks, .accessTokens, .terminals]
+        case .personal:  return [.general, .notifications, .appearance, .profile, .sharedLinks, .accessTokens]
         case .integrations: return [.github]
         case .machines:  return [.machines]
         case .providers: return [.providers]
@@ -78,7 +79,6 @@ public enum SettingsHome {
         case .profile:       return "Profile"
         case .sharedLinks:   return "Shared links"
         case .accessTokens:  return AccessTokensList.title
-        case .terminals:     return Terminals.title
         case .github:        return GithubCopy.TITLE
         case .machines:      return MachinesAndModels.machines
         case .providers:     return "Providers"
@@ -94,7 +94,6 @@ public enum SettingsHome {
         case .profile:       return "person"
         case .sharedLinks:   return "link"
         case .accessTokens:  return "key.horizontal"
-        case .terminals:     return "terminal"
         case .github:        return "chevron.left.forwardslash.chevron.right"
         case .machines:      return AppSection.runners.systemImage
         case .providers:     return "cloud"
@@ -110,7 +109,6 @@ public enum SettingsHome {
         case .profile:       return .profile
         case .sharedLinks:   return .sharedLinks
         case .accessTokens:  return .accessTokens
-        case .terminals:     return .terminals
         case .github:        return .github
         case .machines:      return .machines
         case .providers:     return .providers
@@ -345,12 +343,12 @@ public enum SettingsCopy {
 
     /// The account's master switch for smart model selection, on unless turned off. On iOS' Sessions
     /// page the row is the switch and the hint its footer.
-    public static let smartModelSelection = "Smart model selection"
-    public static let smartModelSelectionHint = "Coordinators suggest a tier for each task, and a SubAgent's size sets its own. Every SubAgent, and the task runs of Agents you turn this on for, run on a model of that tier from your providers. Off: tasks keep their Agent's model and SubAgents their parent session's."
+    public static let smartModelSelection = "Route by tier"
+    public static let smartModelSelectionHint = "Coordinators suggest a tier for each task, and a SubAgent's size sets its own. Task runs and SubAgents run on a model of that tier from your providers. Off: tasks keep their Agent's model and SubAgents their parent session's."
 
     // MARK: Optimize For (board docs/mocks/routing-mode-account, approved 2026-11-19)
 
-    /// The account's one routing pick, directly under Smart model selection on Settings → General.
+    /// The account's one routing pick, directly under Route by tier (Smart model selection until 2026-11-22).
     public static let optimizeFor = "Optimize For"
     public static let optimizeForHint = "What to favour when a model is picked at a tier."
 

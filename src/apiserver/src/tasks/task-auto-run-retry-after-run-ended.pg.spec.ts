@@ -5,11 +5,11 @@ import test from 'node:test';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -22,6 +22,7 @@ import { AUTO_RUN_RETRY_BACKOFF_MS, MAX_AUTO_RUN_FAILURES } from './task-retry-p
 import { TASK_RUN_TRIGGER } from './task-run-identity';
 import { TASK_RUN_ACTION } from './task-run-receipt';
 import { TasksService } from './tasks.service';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 /**
  * An auto-run task whose run ended while the task stayed OPEN is retried at a NEW dispatch moment:
@@ -153,14 +154,17 @@ const workRuns = (db: PrismaClient, taskId: string) =>
   db.session.findMany({
     where: { taskId, startsTaskWork: true },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-    select: { id: true, status: true, dispatchOrigin: true, createdAt: true },
+    select: { id: true, ...WORD_SELECT, dispatchOrigin: true, createdAt: true },
   });
 
-/** The run ends FAILED as the runner's /finalize leaves it: `error` is whatever the runner sent. */
+/**
+ * The run ends FAILED as the runner's /finalize leaves it: `error` is whatever the runner sent, and the failure is on
+ * the turn it cut off, copied to lastTurnOutcome (removal step R2).
+ */
 async function failRun(db: PrismaClient, sessionId: string, error: string | null): Promise<void> {
   await db.session.update({
     where: { id: sessionId },
-    data: { status: RunStatus.FAILED, error, finishedAt: new Date() },
+    data: { turnState: null, error, finishedAt: new Date(), lastTurnOutcome: 'FAILED' },
   });
 }
 
@@ -297,7 +301,7 @@ test('a FAILED auto-run is retried once its backoff window has passed: one new S
     const runs = await workRuns(s.db, task);
     assert.equal(runs.length, 2, `expected exactly one retry: ${JSON.stringify(past)}`);
     const retry = runs.find((r) => r.id !== run.id)!;
-    assert.equal(retry.status, RunStatus.PENDING);
+    assert.equal(wordOf(retry), RunStatus.PENDING);
     assert.equal(retry.dispatchOrigin, SessionDispatchOrigin.LEGACY_SWEEP);
     assert.equal(await epochOf(s.db, task), moment + 1n, 'the retry was not given a new moment');
     assert.deepEqual(await answerOf(s.db, ids.ownerId, task, moment + 1n),
@@ -324,7 +328,7 @@ test('retries stop at MAX_AUTO_RUN_FAILURES, one new Session per backoff window 
     assert.equal((await workRuns(s.db, task)).length, 1, 'the first sweep did not start the task');
 
     for (let failed = 1; failed <= MAX_AUTO_RUN_FAILURES; failed += 1) {
-      const current = (await workRuns(s.db, task)).find((r) => r.status === RunStatus.PENDING);
+      const current = (await workRuns(s.db, task)).find((r) => wordOf(r) === RunStatus.PENDING);
       assert.ok(current, `attempt ${failed} has no run to fail`);
       await failRun(s.db, current.id, `attempt ${failed}: the engine exited before the work was done`);
       if (failed === MAX_AUTO_RUN_FAILURES) break;
@@ -345,7 +349,7 @@ test('retries stop at MAX_AUTO_RUN_FAILURES, one new Session per backoff window 
 
     const runs = await workRuns(s.db, task);
     assert.equal(runs.length, MAX_AUTO_RUN_FAILURES);
-    assert.ok(runs.every((r) => r.status === RunStatus.FAILED), JSON.stringify(runs));
+    assert.ok(runs.every((r) => wordOf(r) === RunStatus.FAILED), JSON.stringify(runs));
     const moment = await epochOf(s.db, task);
     const answer = await answerOf(s.db, ids.ownerId, task, moment) as { sessionId: string };
     const last = runs.find((r) => r.id === answer.sessionId);
@@ -404,15 +408,15 @@ test('a run somebody stopped is not retried, a CANCELLED run nobody asked for is
     // a cancel it reports on its own, with no end reason and no filing.
     await s.db.session.update({
       where: { id: droppedRun.id },
-      data: { status: RunStatus.CANCELLED, finishedAt: new Date() },
+      data: { turnState: null, finishedAt: new Date() },
     });
     const ended = new Map((await s.db.session.findMany({
       where: { id: { in: [stoppedRun.id, filedRun.id, droppedRun.id] } },
-      select: { id: true, status: true, endReason: true, completedAt: true },
+      select: { id: true, ...WORD_SELECT, endReason: true, completedAt: true },
     })).map((row) => [row.id, row]));
     assert.deepEqual(
       [stoppedRun, filedRun, droppedRun].map((run) =>
-        [ended.get(run.id)?.status, ended.get(run.id)?.endReason, ended.get(run.id)?.completedAt != null]),
+        [wordOf(ended.get(run.id)!), ended.get(run.id)?.endReason, ended.get(run.id)?.completedAt != null]),
       [
         [RunStatus.CANCELLED, 'cancelled', false],
         [RunStatus.CANCELLED, 'completed', true],
@@ -520,7 +524,7 @@ test('a run the provider quota killed waits for the reset, and quota failures do
     const runs = await workRuns(s.db, task);
     assert.equal(runs.length, MAX_AUTO_RUN_FAILURES + 2,
       `not retried once the quota reset: ${JSON.stringify(reset)}`);
-    const retry = runs.find((r) => r.status === RunStatus.PENDING);
+    const retry = runs.find((r) => wordOf(r) === RunStatus.PENDING);
     assert.ok(retry, 'no retry is waiting for the runner');
     assert.equal(await epochOf(s.db, task), moment + 1n);
     assert.deepEqual(await answerOf(s.db, ids.ownerId, task, moment + 1n), { ok: true, sessionId: retry.id });

@@ -74,8 +74,10 @@ import {
   type SharedCase,
   type SharedLinkKind,
 } from './tenant-isolation-runner-cases';
+import { DriveService } from '../drive/drive.service';
 import '../test-support/daemon-routes-over-http';
 import { sessionLease } from '../test-support/dequeue-under-lease';
+import { fixtureFacts } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -104,7 +106,7 @@ test('tenant isolation: past the runner gate and through the share links, anothe
   await sql.connect();
   const db: PrismaClient = prismaClientFor(url);
   let server: Apiserver | undefined;
-  // Where the server keeps the files it is sent (ORBIT_FILES_DIR, files/file-store.ts): this run's own directory, so an
+  // Where the server keeps the files it is sent (ORBIT_DRIVE_DIR, files/file-store.ts): this run's own directory, so an
   // owner's upload is kept and a refused one is seen removed, whatever the host's /var/lib allows.
   const filesDir = mkdtempSync(path.join(tmpdir(), 'tenant-isolation-files-'));
   t.after(async () => {
@@ -123,7 +125,7 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     PROVIDER_SECRET_KEY,
     // No reaching models.dev from a spec: the catalogue keeps the lists this build shipped.
     MODEL_CATALOG_URL: 'http://127.0.0.1:9/',
-    ORBIT_FILES_DIR: filesDir,
+    ORBIT_DRIVE_DIR: filesDir,
   });
   const fixtures = censusFixtures({ run: RUN, db, sql, server, jwt });
   const { account, tenant, ok, idOf } = fixtures;
@@ -161,7 +163,7 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     /** A session of the machine's, open and waiting, with anything more of its row set. */
     const open = async (title: string, data: Record<string, unknown> = {}) => {
       const id = await fixtures.session(ownerId, of.workspaceId, of.runnerId, `${name} ${title}`);
-      if (Object.keys(data).length > 0) await db.session.update({ where: { id }, data });
+      if (Object.keys(data).length > 0) await db.session.update({ where: { id }, data: fixtureFacts(data) });
       return id;
     };
     const turnOf = async (sessionId: string, data: Record<string, unknown>) => {
@@ -465,7 +467,25 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     await eventOf(sharedProjectRunSessionId);
     const sharedProjectAttachmentId = await fileOf({ taskId: sharedProjectTaskId });
 
+    // ── the drive door: a staging of this machine's holding one chunk of content no other account has, an empty one a
+    // commit names, a commit's answer, and two files to move and to delete. The chunk's bytes are not kept: its
+    // owner is answered 410 for them, which is the route's own answer and not a refusal.
+    const driveChunkSha256 = createHash('sha256').update(`census drive chunk of ${name} ${ownerId}`).digest('hex');
+    await db.fileBlob.upsert({ where: { sha256: driveChunkSha256 }, create: { sha256: driveChunkSha256, sizeBytes: 6, storage: 'local' }, update: {} });
+    const driveStagingOf = async () =>
+      (await db.driveStaging.create({ data: { ownerId, source: 'TOOL', entryId: of.driveFileId, runnerId: of.runnerId } })).id;
+    const driveStagingId = await driveStagingOf();
+    await db.driveStagingChunk.create({ data: { stagingId: driveStagingId, idx: 0, ownerId, sha256: driveChunkSha256, sizeBytes: 6 } });
+    const driveCommitStagingId = await driveStagingOf();
+    const driveCommitId = `census-commit-${name}-${randomUUID()}`;
+    await db.driveCommit.create({ data: { ownerId, commitId: driveCommitId, entryId: of.driveFileId, result: { census: true } } });
+    const drive = new DriveService(db as never);
+    const driveMoveFileId = (await drive.createFile(ownerId, { parentId: of.driveFolderId, name: 'census to move.txt' })).id;
+    const driveDeleteFileId = (await drive.createFile(ownerId, { parentId: of.driveFolderId, name: 'census to delete.txt' })).id;
+    const driveSyncId = (await db.driveSync.create({ data: { ownerId, runnerId: of.runnerId, sourceName: 'census', destPath: '/census' } })).id;
+
     return {
+      driveStagingId, driveCommitStagingId, driveChunkSha256, driveCommitId, driveMoveFileId, driveDeleteFileId, driveSyncId,
       callingSessionId, coordinatorSessionId, newCoordinatorSessionId, machineSessionId, runtimeSessionId, orphanSessionId,
       landingSessionId,
       takeoverSessionId, activateSessionId, leaseOwner, leaseGeneration, inboxSessionId, inboxLeaseGeneration, turnSessionId, shellTurnId,
@@ -543,6 +563,18 @@ test('tenant isolation: past the runner gate and through the share links, anothe
   const userB2 = await account('b2', 'MEMBER');
   const b2 = await runnerTenant(userB2, 'b2');
   const [holderA, holderB, holderB2] = [await holder(userA, a), await holder(userB, b), await holder(userB2, b2)];
+
+  // Each account's confirmation review is delivered to its reviewer by the server's own minute tick
+  // (tasks.service.ts, confirmationReviews.deliverPendingFor), a write of that account's nobody asks for. It is
+  // let happen here, before the trap, so that it cannot land inside whichever phase the tick falls in; a review
+  // already delivered is not delivered again (owner-confirmation-review.service.ts, deliver).
+  const reviews = [a, b, b2].map((x) => x.runner.confirmRequestId);
+  for (const deadline = Date.now() + 90_000; ;) {
+    const delivered = await db.taskOwnerConfirmationReview.count({ where: { requestId: { in: reviews }, delivery: 'DELIVERED' } });
+    if (delivered === reviews.length) break;
+    assert.ok(Date.now() < deadline, `the server's tick delivered ${delivered} of ${reviews.length} confirmation reviews in 90 s`);
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
 
   // ── the write trap ─────────────────────────────────────────────────────────────────────────
   await sql.query(WRITE_TRAP);

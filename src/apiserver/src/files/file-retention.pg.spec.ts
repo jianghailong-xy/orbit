@@ -1,5 +1,5 @@
 /**
- * Orbit Files' retention (docs/orbit-files-design.md §2.8, §2.10; migration 0466; files/file-retention.ts,
+ * Drive' retention (docs/drive-design.md §2.8, §2.10; migration 0466; files/file-retention.ts,
  * files/file-retention-sweep.ts), walked with a fake clock: uploads, citations, decisions and pins go through the production
  * apiserver — `build/main.js`, every guard and pipe in front of the routes — and the sweep is the real one, over the same
  * database and files directory, told what time it is:
@@ -84,7 +84,7 @@ const fresh = (name: string) => `${name} ${randomBytes(12).toString('hex')}\n`;
 
 const SAMPLES = path.resolve(__dirname, '../../src/files/test-report-samples');
 
-test('Orbit Files retention', { skip: !URL, concurrency: 1, timeout: 900_000 }, async (t) => {
+test('Documents retention', { skip: !URL, concurrency: 1, timeout: 900_000 }, async (t) => {
   const url = URL!;
   assertCoordinatorPgUrlIsIsolated(url);
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
@@ -102,11 +102,11 @@ test('Orbit Files retention', { skip: !URL, concurrency: 1, timeout: 900_000 }, 
   });
   const jwtSecret = `file-retention-${randomUUID()}`;
   const QUOTA = 1000;
-  const environment = { PROVIDER_SECRET_KEY, MODEL_CATALOG_URL: 'http://127.0.0.1:9/', ORBIT_FILES_BACKEND: 'local', ORBIT_FILES_DIR: dir };
+  const environment = { PROVIDER_SECRET_KEY, MODEL_CATALOG_URL: 'http://127.0.0.1:9/', ORBIT_DRIVE_BACKEND: 'local', ORBIT_DRIVE_DIR: dir };
   const api = await startApiserver(url, jwtSecret, environment);
   servers.push(api);
 
-  const config = filesConfigFrom({ ORBIT_FILES_DIR: dir });
+  const config = filesConfigFrom({ ORBIT_DRIVE_DIR: dir });
   const files = new FilesService(db as never, config);
   const sweep = new FileRetentionSweep(db as never, files);
   /** The real sweep, told the time. */
@@ -117,7 +117,7 @@ test('Orbit Files retention', { skip: !URL, concurrency: 1, timeout: 900_000 }, 
     const runnerId = randomUUID();
     const workspaceId = randomUUID();
     const token = `${runnerId}-${RUN}`;
-    const email = `${name}-${RUN}@orbit-files.invalid`;
+    const email = `${name}-${RUN}@orbit-documents.invalid`;
     await db.user.create({ data: { id: ownerId, email, name, passwordHash: 'x' } });
     await db.runner.create({
       data: {
@@ -140,7 +140,7 @@ test('Orbit Files retention', { skip: !URL, concurrency: 1, timeout: 900_000 }, 
     await db.session.create({
       data: {
         id, title, prompt: title, ownerId: who.ownerId, creatorId: who.ownerId, workspaceId: who.workspaceId,
-        assignedRunnerId: who.runnerId, status: 'AWAITING_INPUT', startedAt: new Date(), runtimeSessionId: `runtime-${id}`,
+        assignedRunnerId: who.runnerId, turnState: null, startedAt: new Date(), runtimeSessionId: `runtime-${id}`,
         provider: 'claude', taskId, startsTaskWork: taskId !== undefined,
       },
     });
@@ -289,11 +289,11 @@ test('Orbit Files retention', { skip: !URL, concurrency: 1, timeout: 900_000 }, 
     assert.equal(fileGraceMs(filesConfigFrom({ ORBIT_BASE_BACKUP_KEEP: '10' })), 11 * DAY);
     assert.equal(fileGraceMs(filesConfigFrom({ ORBIT_BASE_BACKUP_INTERVAL: '604800', ORBIT_BASE_BACKUP_KEEP: '4' })), 35 * DAY);
     assert.throws(() => filesConfigFrom({ ORBIT_BASE_BACKUP_KEEP: 'two' }), /ORBIT_BASE_BACKUP_KEEP must be a whole number/);
-    assert.throws(() => filesConfigFrom({ ORBIT_FILES_QUOTA_BYTES: '-1' }), /ORBIT_FILES_QUOTA_BYTES must be a whole number/);
+    assert.throws(() => filesConfigFrom({ ORBIT_DRIVE_QUOTA_BYTES: '-1' }), /ORBIT_DRIVE_QUOTA_BYTES must be a whole number/);
 
     const session = await sessionOf('a conversation');
     const file = await kept(session);
-    const longer = new FileRetentionSweep(db as never, new FilesService(db as never, filesConfigFrom({ ORBIT_FILES_DIR: dir, ORBIT_BASE_BACKUP_KEEP: '10' })));
+    const longer = new FileRetentionSweep(db as never, new FilesService(db as never, filesConfigFrom({ ORBIT_DRIVE_DIR: dir, ORBIT_BASE_BACKUP_KEEP: '10' })));
     const tombstone = (await row(file.id)).expiresAt!;
     await longer.sweep(tombstone);
     const released = (await blob(file.sha256)).releasedAt!;
@@ -963,7 +963,7 @@ test('Orbit Files retention', { skip: !URL, concurrency: 1, timeout: 900_000 }, 
   });
 
   await t.test('(18) past its quota an upload is refused, with a code and a sentence', async () => {
-    const limited = await startApiserver(url, jwtSecret, { ...environment, ORBIT_FILES_QUOTA_BYTES: String(QUOTA) });
+    const limited = await startApiserver(url, jwtSecret, { ...environment, ORBIT_DRIVE_QUOTA_BYTES: String(QUOTA) });
     servers.push(limited);
     const who = await accountOf('limited');
     const session = await sessionOf('a conversation', undefined, who);
@@ -1399,5 +1399,52 @@ test('Orbit Files retention', { skip: !URL, concurrency: 1, timeout: 900_000 }, 
     await sweepAt(later(decades, 1));
     await purgeTrash();
     assert.equal(await sessionStays(kept2.runId), false);
+  });
+
+  await t.test('(27) the off-host date of an s3 blob is set only when the bucket is mirrored, and a local blob always gets it', async () => {
+    const s3Env = {
+      ORBIT_DRIVE_DIR: dir,
+      ORBIT_DRIVE_BACKEND: 's3',
+      ORBIT_DRIVE_S3_ENDPOINT: 'http://127.0.0.1:9',
+      ORBIT_DRIVE_S3_BUCKET: 'orbit',
+      ORBIT_DRIVE_S3_ACCESS_KEY_ID: 'key',
+      ORBIT_DRIVE_S3_SECRET_ACCESS_KEY: 'secret',
+    };
+    // A bucket that answers every delete, standing in for the real one: this case is about the date, not the transport.
+    const sweepWith = (env: NodeJS.ProcessEnv) => {
+      const service = new FilesService(db as never, filesConfigFrom(env));
+      const removed: string[] = [];
+      const realStoreOf = service.storeOf.bind(service);
+      service.storeOf = (storage: string) => {
+        if (storage !== 's3') return realStoreOf(storage);
+        return { remove: async (sha256: string) => { removed.push(sha256); } } as unknown as FileStore;
+      };
+      return { sweep: new FileRetentionSweep(db as never, service), removed };
+    };
+    const released = new Date(Date.now() - 400 * DAY);
+    const blobRow = async (storage: 'local' | 's3', name: string) => {
+      const sha256 = sha256Of(fresh(name));
+      await db.fileBlob.create({ data: { sha256, sizeBytes: 1, storage, lastReferencedAt: released, releasedAt: released } });
+      return sha256;
+    };
+    const end = new Date();
+
+    for (const [label, env, expectS3] of [
+      ['mirror declared', { ...s3Env, ORBIT_DRIVE_S3_MIRROR: '1' }, true],
+      ['no mirror declared', s3Env, false],
+      ['mirror switched off', { ...s3Env, ORBIT_DRIVE_S3_MIRROR: '0' }, false],
+    ] as const) {
+      const s3 = await blobRow('s3', `an s3 blob, ${label}`);
+      const local = await blobRow('local', `a local blob, ${label}`);
+      const { sweep: swept, removed } = sweepWith(env);
+      await swept.sweep(end);
+      assert.ok(removed.includes(s3), `${label}: the bucket's bytes go`);
+      const gone = await blob(s3);
+      assert.deepEqual(gone.bytesDeletedAt, end, `${label}: and the row says so`);
+      assert.deepEqual(gone.offHostPruneAt, expectS3 ? later(end, GRACE) : null, `${label}: the s3 blob's off-host date`);
+      const goneLocal = await blob(local);
+      assert.deepEqual(goneLocal.bytesDeletedAt, end);
+      assert.deepEqual(goneLocal.offHostPruneAt, later(end, GRACE), `${label}: a local blob's off-host date is the same either way`);
+    }
   });
 });

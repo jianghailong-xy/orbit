@@ -39,6 +39,10 @@ describe('eventsToPersist', () => {
   it('writes nothing when the window has not moved', () => {
     expect(eventsToPersist(page(3, 7), { min: 3, max: 7 })).toEqual([]);
   });
+
+  it('rewrites a stored event that changed in place, such as a reply a translation was folded into', () => {
+    expect(eventsToPersist(page(3, 9), { min: 3, max: 7 }, new Set([5])).map((e) => e.seq)).toEqual([5, 8, 9]);
+  });
 });
 
 describe('rangeOf', () => {

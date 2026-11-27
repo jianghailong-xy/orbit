@@ -4,11 +4,11 @@ import test from 'node:test';
 
 import {
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -20,6 +20,7 @@ import { TasksService } from '../tasks/tasks.service';
 import { assertCoordinatorPgUrlIsIsolated } from './coordinator-pg-test-safety';
 import { ProjectsService } from './projects.service';
 import { readProjectReadyToRun } from './project-ready-to-run';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * The other half of `6198ca4ac`: §13.3 DEP's epoch, as the graph's tally spelling reads it.
@@ -192,7 +193,7 @@ async function workSession(stack: Stack, ids: World, taskId: string, label: stri
       title: label,
       prompt: label,
       provider: 'claude',
-      status: RunStatus.SUCCEEDED,
+      turnState: null, finishedAt: new Date(), 
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       isolationStatus: 'worktree',
@@ -271,7 +272,8 @@ async function checkRun(
       title: label,
       prompt: label,
       provider: 'claude',
-      status: shape.settled ? RunStatus.SUCCEEDED : RunStatus.RUNNING,
+      turnState: turnStateOfWord(shape.settled ? RunStatus.SUCCEEDED : RunStatus.RUNNING),
+      ...(shape.settled ? { finishedAt: new Date()} : {}),
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       // §4.2: only a natural `task_done` run that reached COMPLETED is evidence a check concluded.
@@ -285,7 +287,7 @@ async function checkRun(
 async function settleRun(stack: Stack, checkId: string): Promise<void> {
   const ended = await stack.db.session.updateMany({
     where: { taskId: checkId, deletedAt: null },
-    data: { status: RunStatus.SUCCEEDED, endReason: 'task_done', completedAt: new Date() },
+    data: { turnState: null, finishedAt: new Date(), endReason: 'task_done', completedAt: new Date() },
   });
   assert.equal(ended.count, 1, 'the check had no live run to settle');
 }

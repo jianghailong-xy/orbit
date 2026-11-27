@@ -77,7 +77,8 @@ const ASK_MODES: ReadonlySet<string> = new Set([
  * where one falls short its session note says so:
  *  - CLAUDE: Claude Code's Auto mode and its classifier.
  *  - CODEX: a workspace-write sandbox without network; codexAutoApproval allows routine requests,
- *    the rest go to Codex's reviewer and then to the card.
+ *    the rest go to Codex's reviewer and then to the card. On an Orbit Cloud runner whose sandbox
+ *    cannot start, the sandbox is off and the session's semantics say so (codexSandboxUnavailable).
  *  - DSH: a workspace-write file sandbox; dshAutoRoutineEscalation allows routine escalations, the
  *    rest reach the card, as do commands its tool gate names (dshToolGateRules) and third-party MCP
  *    tools. Other commands that write no files, network ones included, are not reviewed.
@@ -87,6 +88,10 @@ const ASK_MODES: ReadonlySet<string> = new Set([
  *  - KIMI, OPENCODE, ANTIGRAVITY: the CLI's own allow-everything mode; nothing is reviewed.
  * A runtime that offers Auto states its line here.
  */
+/** What Codex Auto says when its sandbox could not start on the session's Orbit Cloud runner. */
+export const CODEX_CLOUD_SANDBOX_OFF_NOTE =
+  "Codex's own sandbox cannot start on Orbit Cloud, so it is off: your Cloud runner's container isolates its commands instead.";
+
 const ALLOW_MODES: ReadonlySet<string> = new Set([PermissionMode.AUTO, PermissionMode.BYPASS]);
 
 /**
@@ -105,9 +110,12 @@ const ALLOW_MODES: ReadonlySet<string> = new Set([PermissionMode.AUTO, Permissio
 export const AUTO_CAPABLE_CLAUDE_MODELS: ReadonlySet<string> = new Set([
   'claude-opus-5-5',
   'claude-opus-5',
+  'claude-fable-5-2',
   'claude-fable-5-1',
   'claude-fable-5',
+  'claude-sonnet-5-5',
   'claude-sonnet-5',
+  'claude-haiku-5-5',
 ]);
 
 /**
@@ -206,6 +214,10 @@ export function permissionModeAvailableOnRunner(
  *
  * `modelCatalog` is that same runner's, and is what makes the Auto answer follow the CLI actually
  * installed on it rather than a table in this repo. Omit it on the same terms as `runsAsRoot`.
+ *
+ * `codexSandboxUnavailable` is the session's own report from its runner: Codex's sandbox could not
+ * start on that Orbit Cloud runner, so Auto runs with it off (runner-go codex_cloud_sandbox.go). It
+ * only changes the answer for Codex Auto.
  */
 export function derivePermissionSemantics(
   provider: string,
@@ -213,6 +225,7 @@ export function derivePermissionSemantics(
   model?: string,
   runsAsRoot?: boolean | null,
   modelCatalog?: RunnerModelCatalog | null,
+  codexSandboxUnavailable?: boolean | null,
 ): PermissionSemantics {
   const mode = (permissionMode ?? PermissionMode.DONT_ASK) as string;
   const approvalSupport = runtimeApprovalSupport(provider);
@@ -405,6 +418,22 @@ export function derivePermissionSemantics(
         'Auto is not available on this model. The session runs as Default instead, so you are ' +
         'asked before an action nobody pre-approved.',
       shortNote: 'not available on this model, runs as Default',
+    };
+  }
+
+  // Codex Auto on an Orbit Cloud runner whose sandbox probe failed: the runner starts it with
+  // danger-full-access and keeps Auto's approval policy, so there is no workspace-write sandbox to
+  // claim; the runner's container is the boundary. Same words as the runner's report
+  // (codexCloudSandboxPermissionSemantics).
+  if (provider === AgentProvider.CODEX && mode === PermissionMode.AUTO && codexSandboxUnavailable === true) {
+    return {
+      mode,
+      unapproved: 'allow',
+      approvalSupport,
+      honored: false,
+      sandbox: 'off',
+      note: CODEX_CLOUD_SANDBOX_OFF_NOTE,
+      shortNote: "Codex sandbox off, the Cloud runner's container isolates commands",
     };
   }
 

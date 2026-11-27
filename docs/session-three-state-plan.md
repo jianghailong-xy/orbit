@@ -129,6 +129,37 @@ The largest phase: 93 server rows and 14 database objects marked `MOVE` in the a
 Step 4.5 is the one that can double-run a task if it is wrong. It gets its own task, its own
 review and a rehearsal on a production copy.
 
+**Step 4.5, release B.** Release A is migration 1426 and the readers that state `finished_at IS NULL`. It shipped
+in deploy 2 (`a7f28ff0ac`). Release B is migration 1444, `DROP INDEX CONCURRENTLY IF EXISTS
+"session_task_execution_claim_idx"`, alone in its file because Prisma sends a file holding that statement as
+one string (the header says why). It changes no server code that reads the claim, and it rides deploy 3.
+
+The rehearsal is `apiserver/src/sessions/session-claim-index-release-b.pg.spec.ts`. It runs on a database at
+deploy 2's migration state, populated with more than 2,000 synthetic sessions. It drives the auto-run sweep,
+manual start, resume and the auto-retry revive from two service stacks at once, before and after the drop.
+Every statement is watched at the pg driver, and it counts 42P10 errors and tasks with two unreleased
+sessions. It also drills an interrupted drop: INVALID index, P3009, `migrate resolve --rolled-back`, redeploy.
+
+Before deploy 3, confirm that no running replica states the old predicate. Two checks, both read-only:
+
+1. **The containers.** On the deploy host, list every running container of the apiserver image:
+   `docker ps --format '{{.Names}} {{.Image}}' | grep orbit-apiserver`. That covers the
+   apiserver, any `-next` left by a deploy and the wiki-worker, which runs the same image. Each tag must be
+   `a7f28ff0ac` or a commit that contains it (`git merge-base --is-ancestor a7f28ff0ac <tag>`). A deploy-1
+   image (`45c327a903`) means the drop must wait.
+2. **The database.** Run `psql "$DATABASE_URL" -X -f scripts/session-claim-index-drop-precheck.sql` twice, at
+   least five minutes apart. It must show 1426 applied, 1426's index valid and unique, no INVALID index on
+   `session`, and no task with two live runs. `old_carrier_calls` must not grow between the two runs.
+   `old_carrier_calls` counts calls in `pg_stat_statements` to deploy 1's form of the task carrier:
+   `deleted_at IS NULL` followed directly by the status list, with no `finished_at IS NULL` between them.
+   Deploy 1's capacity counts, ready-to-run reads and project rollups send that form; release A sends none of
+   it. The spec proves the fingerprint against both.
+
+No statement names either index's predicate in `ON CONFLICT ... WHERE` (none since `2133b988ed`, which deploy 1
+already contains), so no server can raise 42P10 from the drop. A deploy-2 server serving beside the deploy-3 one
+during the hand-over sees the new index alone. Its inserts and revives are refused by that index, its P2002
+classifiers match the new name (it begins with the old one), and its claim reads are planned through it.
+
 ## 8. Phase 5: wire and clients
 
 | Step | Work | Done when |
@@ -148,6 +179,67 @@ need the owner's look at mocks before 5.2.
 |---|---|---|
 | 6.1 | Server: turn-complete accepts an outcome without ending the run, and a separate release call carries the cause. The old calls keep working | both protocols pass the runner-API specs |
 | 6.2 | Runner: a failed turn is reported as an outcome; release is its own call with a cause, which also decides permanent commit or undoable checkpoint (`src/runner-go/worktree.go:1071`) | Go suite; a real-stack walk with an old and a new runner against one server |
+
+Step 6.1 as built (2026-11-22, the coordinator's ruling on the failed turn). Under D9 there is no cause, so the
+release carries none.
+
+- **Declaration.** The runner sends the capability token `session-release/v1` (`SESSION_RELEASE_V1`,
+  `src/shared/src/dto.ts`) in `X-Orbit-Runner-Capabilities`. The server reads it on each request. Without it, the
+  old protocol applies unchanged.
+- **Turn-complete.** `status` is still the turn's outcome word. With the token, a FAILED turn does everything the
+  old failed-turn write does except release the session:
+  - it records the turn outcome and error and copies them to `last_turn_outcome` and the session error;
+  - it drains the queue, arms any retry and settles the checks;
+  - the session stays held (RUNNING, on the runner's slot), with `cancel_requested_at` set as the teardown signal
+    and no `end_reason`;
+  - the answer is RUNNING, where the old protocol answers FAILED.
+
+  Status FAILED, `finished_at`, the cleared running work, the inbox generation retirement, the delivered-identity
+  settlement and the task's reclaim with its comment all wait for the release. The reclaim has to wait:
+  `reclaimStalledTask` reclaims nothing while a session of the task is held.
+- **Release.** `POST /runner/sessions/:id/release` takes the finalize body with no status word. The server reads the
+  release from the locked row (`runner-api/run-release.ts`):
+
+  | Reading | When | Result |
+  |---|---|---|
+  | `FAILED_TURN` | the hold above | FAILED; the task is told as the old failed turn tells it; nothing is armed again |
+  | `END_ASKED` | an end reason, or a cancel without a failed turn | settles as the old finalize settles a cancel |
+  | `FAILED_CUT_OFF` | `cutOffTurnOutcome: 'FAILED'` with no end asked (an engine that died before any turn it could report) | the old finalize's W6 FAILED |
+  | `STOPPED` | none of the above | CANCELLED; the turn it cuts off ends CANCELLED |
+
+  The old finalize reads the hold as `FAILED_TURN` too, so a runner that mixes the two protocols still ends failed.
+- **Backstop.** If no release follows a failed turn, the reaper's cancel-grace sweep releases the session FAILED and
+  keeps `last_turn_outcome` FAILED and the session's error (the failure's own words, since step 6.2), so the row reads
+  as a failure and an armed retry fires. With no retry armed,
+  the sweep sets the task FAILED with the run-failure comment.
+- **Commit or checkpoint.** The runner chooses from what it knows itself: a failure it reported gets the permanent
+  commit, and a stop it was told to make gets the undoable checkpoint.
+- **Version skew.**
+  - A new runner against an older server is answered FAILED on its failed turn (the old release) and 404 on
+    `/release`. It should read both as the old protocol and finalize.
+  - An older server meeting a held row (deploy skew of the apiserver itself): its finalize reads the cancel and
+    settles CANCELLED. `releaseWasFailure` still reads the row as a failure through `last_turn_outcome`, and the
+    status bridge does not.
+
+Step 6.2 as built (2026-11-22, the coordinator's choice A).
+
+- **How a runner learns the server offers it.** The apiserver's switch `ORBIT_SESSION_RELEASE_V1=on` is off by default.
+  While it is on, every heartbeat answer carries `sessionReleaseV1: true`, the full answer and the link's quiet answer
+  alike. A runner declares the protocol only while its latest successful heartbeat answer says so. It declares on
+  nothing before its first answer, and it stops at the first answer without the word. The operator turns the switch on
+  once every replica serves the protocol, and off before rolling back past that release (`docs/configuration.md`,
+  `docs/self-hosting.md` "The runner protocol switch").
+- **Where it is declared.** In the body, as `releaseProtocol: 'session-release/v1'`, because the runner link carries no
+  request header. It goes only on a failed turn's report that ends the run, and on the release. A turn reported
+  SUCCEEDED can still fail its session at the server (an acceptance mismatch, a swallowed delivery), and its RUNNING
+  answer could not be told from a permit handed to a follow-up. Those stay on the old path.
+- **A hold ends by the release alone.** It is sent again past a replica without the route, for a window longer than the
+  cancel grace, and never as the old finalize, which a replica without the protocol would read as a stop. A failed
+  turn's report whose answer never came is ended the same way, with `cutOffTurnOutcome: 'FAILED'`.
+- **Commit or checkpoint** follows the runner's own status: a failed turn it reported keeps FAILED (the permanent
+  commit), even though the hold's teardown cancel ends its context. A stop it was told to make gets the checkpoint.
+- **Proof.** Go: `session_release_test.go`. The walk: `scripts/acceptance/session-release/`, one server with an old
+  and a new runner, the switch on and off.
 
 ## 10. Risks
 

@@ -69,6 +69,12 @@ export function controlTypeFor(t: RunEventType): ControlEventType | null {
       return ControlEventType.TERMINALS_CHANGED;
     case RunEventType.TRANSLATION_STATUS_CHANGED:
       return ControlEventType.TRANSLATION_STATUS_CHANGED;
+    case RunEventType.DRIVE_CHANGED:
+      return ControlEventType.DRIVE_CHANGED;
+    case RunEventType.DRIVE_SYNC:
+      return ControlEventType.DRIVE_SYNC;
+    case RunEventType.SCHEDULE_CARDS_CHANGED:
+      return ControlEventType.SCHEDULE_CARDS_CHANGED;
     default:
       return null;
   }
@@ -92,7 +98,10 @@ export function isUserScopedType(t: ControlEventType): boolean {
     t === ControlEventType.WATCH_CHANGED ||
     t === ControlEventType.WIKI_CHANGED ||
     t === ControlEventType.TERMINALS_CHANGED ||
-    t === ControlEventType.TRANSLATION_STATUS_CHANGED
+    t === ControlEventType.TRANSLATION_STATUS_CHANGED ||
+    t === ControlEventType.DRIVE_CHANGED ||
+    t === ControlEventType.DRIVE_SYNC ||
+    t === ControlEventType.SCHEDULE_CARDS_CHANGED
   );
 }
 
@@ -117,13 +126,19 @@ export function errorPayloadOf(payload: Record<string, unknown>): ControlSession
 }
 
 /** `data` for `background.task`. The runner's BACKGROUND_TASK payload names the process via
- *  `command` (see the transcript reducer); fall back to `name`. */
+ *  `command` (see the transcript reducer); fall back to `name`. `toolUseId` and `kind` ride along when
+ *  the runner sent them: a runner-hosted job re-reports itself `running` once a minute (runner-go
+ *  heartbeatJobs), and only those two say whether a report is a job starting or the same job again, and
+ *  whether it is a `service`, which no tally counts. */
 export function backgroundPayloadOf(payload: Record<string, unknown>): ControlBackgroundTask {
   const exit = payload.exitCode ?? payload.exit_code;
+  const { toolUseId, kind } = payload;
   return {
     name: String(payload.command ?? payload.name ?? 'background task'),
     status: String(payload.status ?? 'unknown'),
     ...(typeof exit === 'number' ? { exitCode: exit } : {}),
+    ...(typeof toolUseId === 'string' && toolUseId ? { toolUseId } : {}),
+    ...(typeof kind === 'string' && kind ? { kind } : {}),
   };
 }
 

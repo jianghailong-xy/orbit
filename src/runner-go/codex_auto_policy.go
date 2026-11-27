@@ -21,7 +21,7 @@ type codexAutoApprovalContext struct {
 
 func codexAutoApprovalContextFor(execDir, upDir string, readOnlyRoots ...string) codexAutoApprovalContext {
 	return codexAutoApprovalContext{
-		workspaceRoots: []string{execDir, upDir},
+		workspaceRoots: append([]string{execDir, upDir}, driveGrantRoots()...),
 		tempRoots:      []string{upDir},
 		readOnlyRoots:  append([]string(nil), readOnlyRoots...),
 	}
@@ -30,6 +30,14 @@ func codexAutoApprovalContextFor(execDir, upDir string, readOnlyRoots ...string)
 func codexRuntimeWorkspaceRoots(permissionMode string, job *ClaimedSession, execDir, upDir string) []string {
 	roots := []string{execDir, upDir}
 	if permissionMode == "auto" {
+		// Only the drive's own path, never the /run/orbit-drive parent or the ~/Drive link: Codex's command sandbox
+		// (bwrap) is built per command, so it needs no parent to follow a remount, and it fails the command outright
+		// on a parent the agent cannot write ("Can't create file .../.git") or on a root that is a symlink ("crosses
+		// writable symlink"). Measured live in drive-mount.pg.e2e.ts row 56. The approval classifier below still knows
+		// the other spellings.
+		if driveMounted() {
+			roots = append(roots, driveMountPath)
+		}
 		if job != nil && job.WT != nil && job.WT.RepoDir != "" {
 			// A linked worktree stores its index and worktree metadata in the shared repository's
 			// .git directory. Grant that metadata directory alone so local git commands do not
@@ -46,6 +54,10 @@ func codexRuntimeWorkspaceRoots(permissionMode string, job *ClaimedSession, exec
 }
 
 func codexSandboxPolicy(permissionMode string, job *ClaimedSession, execDir, upDir string) map[string]interface{} {
+	if codexCloudSandboxOff(job, permissionMode) {
+		// Codex's sandbox cannot start in this Orbit Cloud Pod (codex_cloud_sandbox.go).
+		return map[string]interface{}{"type": "dangerFullAccess"}
+	}
 	if permissionMode == "auto" {
 		return map[string]interface{}{
 			"type":          "workspaceWrite",
@@ -57,6 +69,15 @@ func codexSandboxPolicy(permissionMode string, job *ClaimedSession, execDir, upD
 		return map[string]interface{}{"type": "readOnly", "networkAccess": false}
 	}
 	return map[string]interface{}{"type": "dangerFullAccess"}
+}
+
+// codexThreadSandboxMode is codexSandboxMode for this claim: Auto with the sandbox off on an Orbit
+// Cloud runner whose Codex sandbox cannot start (codex_cloud_sandbox.go).
+func codexThreadSandboxMode(job *ClaimedSession, permissionMode string) string {
+	if codexCloudSandboxOff(job, permissionMode) {
+		return "danger-full-access"
+	}
+	return codexSandboxMode(permissionMode)
 }
 
 func codexSandboxMode(permissionMode string) string {

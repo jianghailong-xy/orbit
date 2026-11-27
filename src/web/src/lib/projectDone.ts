@@ -1,4 +1,4 @@
-import type { CriterionLandingReason, DoneRequest, ProjectDoneFinding, ProjectDoneBy, ProjectOpenItemsView, ProjectOpenItemRow } from '@orbit/shared';
+import type { CriterionLandingReason, DoneRequest, ProjectDoneFinding, ProjectDoneBy, ProjectOpenItemsView, ProjectOpenItemRow, ProjectTextTranslation } from '@orbit/shared';
 import { api } from '../api';
 import { DEFAULT_MAIN_BRANCH } from './projectStart';
 import { formatSpan } from './watches';
@@ -27,6 +27,7 @@ export const DONE_CHECK_TASKS = '{n} tasks are still running';
 export const DONE_CHECK_TASK = '1 task is still running';
 export const DONE_CHECK_OWNER_ITEMS = 'Open owner items: {n}';
 export const DONE_CHECK_LANDINGS = 'Landings in flight: {n}';
+export const DONE_CHECK_DEFERRED_LANDINGS = 'Landings waiting for work sessions to finish: {n}';
 export const DONE_CARD_FINDINGS_HEADING = 'Orbit can’t prove {n} things';
 export const DONE_CARD_FINDINGS_ACCEPTED = 'These will be kept as the gaps you accepted.';
 export const DONE_CARD_RECORD_ANYWAY = 'Record as done anyway';
@@ -58,9 +59,9 @@ export const NON_CODE_CHANGE = 'Change';
 export const NON_CODE_ANCHOR = 'delivers';
 export const RUN_DELIVERS = 'Delivers';
 export const RUN_DELIVERS_CODE = 'Code';
-export const RUN_DELIVERS_CODE_HINT = 'Tasks land on a branch, and the done card checks the work reached {main}.';
+export const RUN_DELIVERS_CODE_HINT = 'The default. Landing follows the commits each task delivers.';
 export const RUN_DELIVERS_NOT_CODE = 'Not code';
-export const RUN_DELIVERS_NOT_CODE_HINT = 'Documents, accounts, approvals. Orbit checks the criteria only; nothing lands.';
+export const RUN_DELIVERS_NOT_CODE_HINT = 'A label only: Orbit no longer reads it. Landing follows the commits each task delivers.';
 export const RUN_LANDING = 'Landing';
 export const RUN_LANDING_OFF_HINT = 'Off for a non-code project: Tasks land on, Delivery, Main branch and Merge check don’t apply. Switch Delivers to Code to bring them back.';
 export const RUN_TO_NOT_CODE = 'The done card stops reading where work landed. Work already on {branch} stays there.';
@@ -351,6 +352,7 @@ export function doneFindingLine(
     case 'DONE_TASKS_IN_FLIGHT': return finding.tasks.length === 1 ? DONE_CHECK_TASK : DONE_CHECK_TASKS.replace('{n}', String(finding.tasks.length));
     case 'DONE_OWNER_ITEMS_OPEN': return DONE_CHECK_OWNER_ITEMS.replace('{n}', String(finding.items.length));
     case 'DONE_INTEGRATION_IN_FLIGHT': return DONE_CHECK_LANDINGS.replace('{n}', String(finding.jobs.length));
+    case 'DONE_LANDING_DEFERRED': return DONE_CHECK_DEFERRED_LANDINGS.replace('{n}', String(finding.tasks.length));
     default: return finding.message;
   }
 }
@@ -455,6 +457,8 @@ export type ProjectDoneDocument = {
   doneBy?: ProjectDoneBy | null;
   doneAt?: string | null;
   acceptedGaps?: readonly Record<string, unknown>[] | null;
+  /** `title` and the criteria's text in the owner's language (Settings › Translation). */
+  translation?: ProjectTextTranslation | null;
   /** The project's main branch, which the cards' "on main" names. */
   integration?: { upstreamRef?: string | null } | null;
   /** The explicit non-code mark (migration 0535) and who set it, when. */
@@ -546,15 +550,30 @@ function nothingToLandCount(counts: ProjectDoneCounts): number {
   return (counts.byReason?.NOTHING_TO_LAND ?? 0) + (counts.byReason?.CODELESS ?? 0);
 }
 
+/** How many criteria are not met. The server tallies only met criteria by where their work is
+ *  (`onMain`, `byReason`), so an unmet one is counted here and never under a landing reason. */
+function notMetCount(counts: ProjectDoneCounts): number {
+  return Math.max(0, counts.criteria - counts.met);
+}
+
+/** How many criteria are landing right now, met or not: the "N items running" of the done card.
+ *  Read off the criteria, since `counts.byReason` tallies met criteria only. */
+export function criteriaInFlightCount(derivedDone: Pick<ProjectDerivedDone, 'criteria'> | undefined): number {
+  return derivedDone?.criteria.filter((criterion) => criterion.landingReason === 'IN_FLIGHT').length ?? 0;
+}
+
 /** Counts are deliberately read from `derivedDone.counts`; this function never inspects tasks. The
- *  tallies say where work landed on `main`, the project's main branch by name. */
+ *  tallies say where met work landed on `main`, the project's main branch by name, and count the
+ *  unmet criteria apart. */
 export function projectDoneTally(counts: ProjectDoneCounts | undefined, main: string = DEFAULT_MAIN_BRANCH): string {
   if (!counts) return '';
+  const notMet = notMetCount(counts);
   return [
     `${counts.criteria} criteria`,
     `${counts.met} met`,
     `${counts.onMain} ${landedOn(main)}`,
     ...reasonParts(counts),
+    ...(notMet > 0 ? [`${notMet} ${PROJECT_DONE_COPY.notMet}`] : []),
   ].join(' · ');
 }
 
@@ -576,11 +595,15 @@ export function projectDoneCardTally(
   }
   const noBranch = counts.byReason?.NO_BRANCH ?? 0;
   const nothing = nothingToLandCount(counts);
+  // The unmet criteria, apart from any landing reason; those waiting for a confirmation are said by
+  // their own part, so they are not counted twice.
+  const notMet = Math.max(0, notMetCount(counts) - waiting);
   return [
     `${counts.met} met`,
     `${counts.onMain} ${landedOn(main)}`,
     ...(noBranch > 0 ? [`${noBranch} ${REASON_LABELS.NO_BRANCH}`] : []),
     ...(nothing > 0 ? [`${nothing} ${PROJECT_DONE_COPY.nothingToLand}`] : []),
+    ...(notMet > 0 ? [`${notMet} ${PROJECT_DONE_COPY.notMet}`] : []),
     ...waitPart,
   ].join(' · ');
 }
@@ -715,6 +738,16 @@ export function landingReasonLabel(reason: CriterionLandingReason | null, main: 
     case 'CODELESS': return LANDING_NO_CODE_TO_LAND;
     default: return `Landed on ${main}`;
   }
+}
+
+/** A criterion's landing half-sentence on the project page (decision D2 A): the Done card's words for
+ *  its `landingReason`, and none for a criterion its work has not met — that work has not landed
+ *  anywhere yet, whatever the landing lane says (src/shared/src/project-page-labels.fixture.json). */
+export function criterionLandingHalfSentence(
+  criterion: { satisfied?: boolean; landingReason: CriterionLandingReason | null },
+  main: string = DEFAULT_MAIN_BRANCH,
+): string | null {
+  return criterion.satisfied ? landingReasonLabel(criterion.landingReason, main) : null;
 }
 
 export function isWaitingOnWork(reason: CriterionLandingReason | null): boolean {

@@ -13,8 +13,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 /**
- * An owner request notification's Later (web Remind me later, for an hour): the request is put off on this device — out of the waiting
- * count, its card folded — its notification goes, and an alarm brings the notification back when the hour is up. Nothing is sent to
+ * An owner request notification's Later (web Remind me later, for an hour): the request is put off on this device — its card folded in
+ * the conversation that asked — its notification goes, and an alarm brings the notification back when the hour is up. Nothing is sent to
  * the server and the request is not ended. The intent carries the push's own routing data, which holds no secret.
  */
 class OwnerRequestLaterReceiver : BroadcastReceiver() {

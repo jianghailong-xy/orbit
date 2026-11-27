@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { SessionsService } from './sessions.service';
+import { isSessionPhaseFactsQuery, noAnswersOwed, sessionPhaseFactsAnswer } from '../test-support/session-phase-facts';
 
 /**
  * A session detail names the project it coordinates.
@@ -54,7 +55,7 @@ function sessionRow(
 function serviceFor(row: ReturnType<typeof sessionRow>) {
   const calls: any[] = [];
   const prisma = {
-    $queryRaw: async () => [{
+    $queryRaw: async (query: unknown) => isSessionPhaseFactsQuery(query) ? sessionPhaseFactsAnswer(query, { [row.id]: row }) : [{
       projectMembership: row.coordinatorForProject ? {
         projectId: row.coordinatorForProject.id,
         projectTitle: row.coordinatorForProject.title,
@@ -67,7 +68,9 @@ function serviceFor(row: ReturnType<typeof sessionRow>) {
         calls.push(args);
         return row;
       },
+      findMany: async () => [],
     },
+    ...noAnswersOwed(),
     // The derived landing label (0436): this row produced no landing work.
     projectIntegrationJob: { findFirst: async () => null },
     coordinatorHandoff: { findFirst: async () => null },

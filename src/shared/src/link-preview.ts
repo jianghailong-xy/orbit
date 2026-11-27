@@ -10,6 +10,7 @@
  * string values, which is what both a Prisma row and a decoded response hold.
  */
 import type { ProjectIntegrationBuckets, SessionWaitingKind } from './project-progress';
+import type { SessionPhase, SessionTurnOutcome, SessionWaitingOn } from './session-phase';
 import type { SessionActivity } from './task-run-reason';
 import type {
   ProjectStatus,
@@ -77,6 +78,13 @@ export interface LinkPreviewSession<Instant = string> {
   engineTurnActive: boolean;
   /** What a parked session is still doing (SessionActivity), as the list row says it. */
   activity: SessionActivity | null;
+  /** The three-state field and the facts beside it (session-phase.ts, contracts/session-state.contract.json).
+   *  Absent from an older control plane. */
+  phase?: SessionPhase;
+  released?: boolean;
+  lastTurnOutcome?: SessionTurnOutcome | null;
+  waitingOn?: SessionWaitingOn | null;
+  workFinished?: boolean;
   pendingApprovals: number;
   waitingKind: SessionWaitingKind | null;
   runningBgCount: number;

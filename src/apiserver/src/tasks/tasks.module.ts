@@ -23,6 +23,7 @@ import { SessionCreatedTasksController } from './session-created-tasks.controlle
 import { SessionCreatedTasksService } from './session-created-tasks.service';
 import { TaskModelRoutingReportController } from './task-model-routing-report.controller';
 import { TaskModelRoutingReportService } from './task-model-routing-report.service';
+import { SubagentRoutingReportService } from './subagent-routing-report.service';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { TaskModelRoutingReportService } from './task-model-routing-report.servi
     TaskProgressService,
     SessionCreatedTasksService,
     TaskModelRoutingReportService,
+    SubagentRoutingReportService,
     // Rides TasksService's reconcile timer; provided here, once, for the reason the `exports` note gives.
     ProjectOrphanSweepService,
   ],

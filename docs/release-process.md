@@ -53,6 +53,35 @@ from `main` between releases without publishing new runner code under the last r
 - A checkout with no `v*` tag behind HEAD (a fork, a shallow clone) builds the runner from itself and warns.
   So does a plain `docker compose build` or `docker build`, which pass no runner source.
 
+### Orbit Cloud runner image comes from the release tag
+
+The Orbit Cloud (managed) runners run `10.66.0.1:5000/orbit-cloud-runner:<version>`, published when the tag is
+created, not by a deploy. Right after /release pushes `vX.Y.Z[-beta.N]`, it publishes the image on the build host
+(workspace orbit-ws04, the only host that reaches the registry, over WireGuard; GitHub Actions cannot):
+
+```bash
+ORBIT_REGISTRY=10.66.0.1:5000 deploy/two-stage/publish-managed-runner.sh vX.Y.Z-beta.N
+```
+
+- The image is built from the tag's commit (`deploy/managed-runner/image/Dockerfile`, with `ORBIT_SOURCE_SHA` the
+  tag's commit and `ORBIT_RELEASE_VERSION` the version), so its runner reports the release version, as every other
+  runner of the release does. Its labels carry `org.opencontainers.image.revision` (the commit) and
+  `org.opencontainers.image.version` (the version), which the script checks, with the version the runner reports,
+  before it pushes.
+- It is idempotent: a tag whose image is in the registry already is skipped. Running it again after a failure is
+  safe.
+- Then /release pulls the published image onto the production k3s node, through workspace orbit-ws03
+  (`deploy/managed-runner/prepull-runner-image.sh <registry>/orbit-cloud-runner@sha256:<digest>`). A runner's Pod
+  pulls its image only as it starts, so otherwise the first runner to start after the deploy waits for the 1.5 GB pull.
+- A two-stage deploy builds no runner image. It uses the newest `v*` tag's image at or behind the commit it deploys,
+  writing `runner.image` (by digest), `runner.imageRevision` and `runner.imageVersion` into the hosted runners'
+  profile, and stops before changing anything when that image is not in the registry, naming the command above. So
+  hosted runners move only when a release is tagged and deployed, like the downloadable runner.
+- A tag from before release-built images (its Dockerfile takes no `ORBIT_RELEASE_VERSION`) has no image: the deploy
+  leaves the hosted runners' image as it is and says so.
+- A single host that builds its own managed runner image (`orbit-cloud-runner:local`, upgrade skill) still builds it
+  from its checkout, and its runner reports `managed-<sha>`.
+
 ## Version and channels
 
 - Versions are SemVer: `X.Y.Z`, or `X.Y.Z-beta.N` on the beta channel. Only the `beta` prerelease channel

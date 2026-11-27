@@ -37,7 +37,7 @@ import kotlinx.serialization.json.jsonObject
  * one keeps what was read before.
  */
 @Stable
-internal class MachinesAndModelsModel(private val api: ManagementApi) {
+internal class MachinesAndModelsModel(val api: ManagementApi) {
     val machines = RunnersModel(api)
     var keys by mutableStateOf<List<JsonObject>>(emptyList()); private set
     /** Why the last read of the keys failed, while none has been read. */
@@ -107,10 +107,18 @@ internal enum class MachinesAndModelsPart { ALL, MACHINES, PROVIDERS }
  */
 @Composable
 internal fun MachinesAndModelsPage(api: ManagementApi, revision: Long, open: (OrbitRoute) -> Unit,
-    part: MachinesAndModelsPart = MachinesAndModelsPart.ALL) {
+    part: MachinesAndModelsPart = MachinesAndModelsPart.ALL, record: String? = null) {
     val machinesHalf = part != MachinesAndModelsPart.PROVIDERS
     val providersHalf = part != MachinesAndModelsPart.MACHINES
     val model = remember(api) { MachinesAndModelsModel(api) }
+    // Terminals asking to be approved head Needs you (docs/mocks/waiting-on-you-removal/02 ①); opened from the push
+    // ([record] `terminal:<id>`), the page is at its top with that card lit.
+    val terminalStore = remember(api) { TerminalRequestStore.of(api) }
+    // Terminals are machines' business: the Providers half draws none.
+    val terminals = if (machinesHalf) rememberLiveTerminalRequests(terminalStore) else emptyList()
+    val litTerminal = TerminalNeedsYou.requestOf(record)
+    val scroll = rememberScrollState()
+    LaunchedEffect(litTerminal) { if (litTerminal != null) scroll.animateScrollTo(0) }
     val machines = model.machines
     val resumed = rememberResumed()
     val now = rememberNow()
@@ -147,7 +155,7 @@ internal fun MachinesAndModelsPage(api: ManagementApi, revision: Long, open: (Or
     fun runner(id: String) = open(OrbitRoute(Destination.RUNNER, id))
     fun page(record: String) = open(OrbitRoute(Destination.SETTINGS, "machines-and-models", recordId = record))
     Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(horizontal = 16.dp, vertical = 8.dp)) {
             if (machinesHalf) when {
                 !machines.loaded && machines.failed -> Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -165,10 +173,12 @@ internal fun MachinesAndModelsPage(api: ManagementApi, revision: Long, open: (Or
                     }
                 }
             }
-            if (model.settled) {
-                val attention = model.attention(machines.runners, machines.workspaces, now, managedRow?.let { managedRunnerId })
-                    .filter { part == MachinesAndModelsPart.ALL || it.isMachine == machinesHalf }
-                if (attention.isNotEmpty()) NeedsYouSection(attention) { item ->
+            if (model.settled || terminals.isNotEmpty()) {
+                val attention = if (model.settled) model.attention(machines.runners, machines.workspaces, now, managedRow?.let { managedRunnerId })
+                    .filter { part == MachinesAndModelsPart.ALL || it.isMachine == machinesHalf } else emptyList()
+                if (attention.isNotEmpty() || terminals.isNotEmpty()) NeedsYouSection(attention, {
+                    TerminalRequestCards(terminals, terminalStore, litTerminal, notice::show)
+                }) { item ->
                     when (val kind = item.kind) {
                         is MachinesAndModels.Kind.Offline -> runner(kind.runnerId)
                         is MachinesAndModels.Kind.NoCliSignedIn -> runner(kind.runnerId)
@@ -241,10 +251,14 @@ internal fun ManagedRunnerSetupConfirm(onDismiss: () -> Unit, onConfirm: () -> U
         dismissButton = { TextButton(onClick = onDismiss) { Text(ManagedRunner.Confirm.CANCEL) } })
 }
 
-/** A line for each thing that waits on a person, in the web's words, each with its way out: a machine's record, a pool's page. */
+/** A line for each thing that waits on a person, in the web's words, each with its way out: a machine's record, a pool's page; the
+ * terminals asking to be approved above them, as their cards. */
 @Composable
-private fun NeedsYouSection(items: List<MachinesAndModels.Attention>, open: (MachinesAndModels.Attention) -> Unit) {
+private fun NeedsYouSection(items: List<MachinesAndModels.Attention>, terminals: @Composable () -> Unit,
+    open: (MachinesAndModels.Attention) -> Unit) {
     FormSection(MachinesAndModels.NEEDS_YOU) {
+        // Terminals first: a request lives ten minutes. Each is the whole card, its own way out.
+        terminals()
         items.forEachIndexed { index, item ->
             if (index > 0) HorizontalDivider()
             Row(Modifier.fillMaxWidth().padding(vertical = 8.dp).testTag("needs-you:${item.id}"), verticalAlignment = Alignment.CenterVertically,
@@ -337,6 +351,8 @@ private fun KeysSection(model: MachinesAndModelsModel, page: (String) -> Unit) {
                     }
                     // Every engine it runs on: one key, under each engine that can spend it.
                     KeyEngines.line(key)?.let { Text(it, Modifier.testTag("key-engines"), style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
+                    // A key an account refused runs on: the provider's words, the next trial, Check again (§8).
+                    key.str("id")?.takeIf { it.isNotEmpty() }?.let { AccountHealthProviderLine(model.api, it) }
                 }
                 if (key.bool("enabled") == false) Text(MachinesAndModels.DISABLED, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
                 else if (deepSeek != null) DeepSeekBalance.rowValue(DeepSeekBalance.state(model.balances[deepSeek]))?.let {

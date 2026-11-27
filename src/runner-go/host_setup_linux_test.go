@@ -62,14 +62,20 @@ func TestHostSetupWithoutRootExitsOne(t *testing.T) {
 	if exit.ExitCode() != 1 {
 		t.Errorf("exit code %d, want 1:\n%s", exit.ExitCode(), out)
 	}
-	// Invoked as a bare `orbit`, which sudo would look up only on its secure_path: the line to
-	// re-run names the binary by its own path instead, links resolved.
+	// Run from a copy other than /usr/local/bin/orbit, the refusal names the root-owned copy to
+	// put in place and the setup to run from it, since re-running this copy under sudo would only
+	// be refused next.
 	self, err := filepath.EvalSymlinks(binary)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "re-run: sudo " + self + " host setup --server https://orbit.example.com\n"; !strings.Contains(string(out), want) {
-		t.Errorf("the CLI must print the command to re-run, %q, got:\n%s", want, out)
+	for _, want := range []string{
+		"sudo install -o 0 -g 0 -m 0755 " + self + " " + machineBinaryPath + "\n",
+		"sudo " + machineBinaryPath + " host setup --server https://orbit.example.com\n",
+	} {
+		if !strings.Contains(string(out), want) {
+			t.Errorf("the CLI must print %q, got:\n%s", want, out)
+		}
 	}
 	// Refusing early is the whole point: the machine must be exactly as it was.
 	for _, change := range unitFileChanges(before, snapshotUnitFiles(t, unitPaths)) {

@@ -1,8 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -239,5 +243,111 @@ func TestDelegateCallLogKeepsToolsApart(t *testing.T) {
 	}
 	if got := log.take("s1", delegateToolName, "p", "", 0); got != "" {
 		t.Fatalf("a workflow call was taken as a delegate call: %q", got)
+	}
+}
+
+// The Agent's Workflows switch, from the claim to the tool list (docs/subagent-workflow-design.md §9 D2, board
+// docs/mocks/subagent-workflow part 5): a session claimed with `workflowsDisabled` is spawned with ORBIT_WORKFLOWS=off,
+// and the real `orbit mcp` it starts lists no workflow tool while it still lists delegate; a claim without the field
+// lists both. Both ways a spawn hands `orbit mcp` its session are read: Codex's exported environment and the
+// declaration Cursor and DeepSeek Harness write into their MCP config.
+func TestWorkflowToolIsListedOnlyWhenTheClaimSaysWorkflowsOn(t *testing.T) {
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	home := t.TempDir()
+	config, _ := json.Marshal(RunnerConfig{ServerURL: "http://127.0.0.1:1", RunnerID: "workflows-switch", RunnerToken: "workflows-switch-token", Name: "workflows-switch"})
+	if err := os.WriteFile(filepath.Join(home, "config.json"), config, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// This process's own home names the config a declared spawn carries (orbitMCPDeclaredEnv appends
+	// ORBIT_HOME=<machineHome>), and the last duplicate in cmd.Env is the one the child sees. Without
+	// this the declared case read the machine's real ~/.orbit, which a CI runner does not have: the
+	// child's `orbit mcp` found no config and exited 1.
+	t.Setenv("ORBIT_HOME", home)
+	// What this binary serves as `orbit mcp` (TestMain), started the way an engine starts it: nothing of this test's
+	// own ORBIT_ environment, only what the spawn hands it.
+	listed := func(t *testing.T, spawnEnv []string) map[string]bool {
+		t.Helper()
+		cmd := exec.Command(self, "mcp")
+		cmd.Dir = t.TempDir()
+		for _, pair := range os.Environ() {
+			if !strings.HasPrefix(pair, "ORBIT_") {
+				cmd.Env = append(cmd.Env, pair)
+			}
+		}
+		cmd.Env = append(cmd.Env, testOrbitMCPEnv+"=1", "ORBIT_HOME="+home)
+		cmd.Env = append(cmd.Env, spawnEnv...)
+		cmd.Stdin = strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}` + "\n" +
+			`{"jsonrpc":"2.0","id":2,"method":"tools/list"}` + "\n")
+		out, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("orbit mcp: %v\n%s", err, out)
+		}
+		names := map[string]bool{}
+		scanner := bufio.NewScanner(strings.NewReader(string(out)))
+		scanner.Buffer(make([]byte, 0, 1<<20), 64<<20)
+		for scanner.Scan() {
+			var frame struct {
+				ID     int `json:"id"`
+				Result struct {
+					Tools []struct {
+						Name string `json:"name"`
+					} `json:"tools"`
+				} `json:"result"`
+			}
+			if json.Unmarshal(scanner.Bytes(), &frame) != nil || frame.ID != 2 {
+				continue
+			}
+			for _, tool := range frame.Result.Tools {
+				names[tool.Name] = true
+			}
+		}
+		if len(names) == 0 {
+			t.Fatalf("orbit mcp answered tools/list with nothing:\n%s", out)
+		}
+		return names
+	}
+	declared := func(job *ClaimedSession) []string {
+		var pairs []string
+		for _, entry := range orbitMCPDeclaredEnv(job, time.Minute) {
+			pairs = append(pairs, entry["name"]+"="+entry["value"])
+		}
+		return pairs
+	}
+	for _, c := range []struct {
+		name  string
+		claim string
+		want  bool
+	}{
+		{"Workflows off", `{"sessionId":"11111111-1111-4111-8111-111111111111","workflowsDisabled":true}`, false},
+		{"Workflows on (no field, as every claim had before the switch)", `{"sessionId":"11111111-1111-4111-8111-111111111111"}`, true},
+	} {
+		var job ClaimedSession
+		if err := json.Unmarshal([]byte(c.claim), &job); err != nil {
+			t.Fatal(err)
+		}
+		for spawn, env := range map[string][]string{"codex": codexOrbitSessionEnv(&job), "declared": declared(&job)} {
+			names := listed(t, env)
+			if names[workflowToolName] != c.want {
+				t.Errorf("%s, %s spawn: workflow listed = %v, want %v", c.name, spawn, names[workflowToolName], c.want)
+			}
+			if !names[delegateToolName] {
+				t.Errorf("%s, %s spawn: delegate is not listed; the Workflows switch must leave it alone", c.name, spawn)
+			}
+		}
+	}
+
+	// A model that calls it anyway (a name from before a restart) is refused here, and nothing is started.
+	refused := (&mcpServer{workflowsOff: true}).callWorkflow(map[string]interface{}{"description": "x", "script": "return 1"}, "toolu_1")
+	if refused["isError"] != true || !strings.Contains(toolText(t, refused), "ORBIT_WORKFLOWS=off") {
+		t.Fatalf("a workflow call with Workflows off answered %v", refused)
+	}
+	for value, want := range map[string]bool{"": true, "on": true, "off": false, " OFF ": false, "0": false, "garbage": true} {
+		t.Setenv(envWorkflows, value)
+		if got := workflowsEnabledFromEnv(); got != want {
+			t.Errorf("ORBIT_WORKFLOWS=%q reads as enabled=%v, want %v", value, got, want)
+		}
 	}
 }

@@ -18,6 +18,7 @@ import {
   type AgentParent,
   type SubagentSessionSummary,
 } from "../lib/subagentRuns";
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from "./ui/Tooltip";
 
 /** The `delegate` block a run was started from, where it is on the page (ToolView marks it). */
 const delegateBlockOf = (toolUseId: string): HTMLElement | null =>
@@ -32,8 +33,8 @@ const delegateBlockOf = (toolUseId: string): HTMLElement | null =>
  * branch bar: Apple's `AgentsBandRow` and `AgentsSheet` (docs/mocks/agents-band-models; no cost, as the Apple
  * clients dropped it). Folded, it says what the running one is doing and where it runs: its machine and its
  * model, when either is not the session's own. With none running it says where the work went: how many
- * machines, then each model with how many runs took it. Failures are counted in red at its right edge in
- * every state, before the spinner while one runs. Always
+ * machines, then each model with how many runs took it. A failed run is not counted on the line: the reader
+ * can do nothing about it (the agent that started it was told); its row in the list keeps its red ✕. Always
  * one line: narrower, the models after the first fold into "+n", then the words give way to the marks. It
  * opens in place, as Background processes does, to every run, the running ones first, in one list with no
  * headings. A row folds the list, scrolls the conversation to the run's block and opens it. Absent until the
@@ -72,13 +73,13 @@ export function SessionAgentsStrip({
           <RunGlyph
             running={run.status === "RUNNING"}
             failed={subagentRunFailed(run)}
+            stopped={run.status === "STOPPED"}
           />
-          <span
-            className="bg-shell-cmd ag-title"
-            title={run.description ?? run.type}
-          >
-            {run.description ?? run.type}
-          </span>
+          <Tooltip content={run.description ?? run.type} truncatedOnly>
+            <span className="bg-shell-cmd ag-title">
+              {run.description ?? run.type}
+            </span>
+          </Tooltip>
           {facts}
           <span className="bg-shell-caret">
             <RightOutlined />
@@ -97,16 +98,13 @@ export function SessionAgentsStrip({
       >
         <span className="bg-tray-ico chat-subagent-icon ag-mark">✦</span>
         <span className="bg-tray-title ag-head">Agents</span>
-        <span className="bg-tray-count ag-band" title={summary.band}>
-          {summary.band}
-        </span>
+        <Tooltip content={summary.band} truncatedOnly>
+          <span className="bg-tray-count ag-band">
+            {summary.band}
+          </span>
+        </Tooltip>
         <Spread summary={summary} parent={parent} />
         <span className="wt-spacer" />
-        {summary.failed > 0 && (
-          <span className="ag-failed">
-            <CloseCircleFilled /> {summary.failed} failed
-          </span>
-        )}
         {summary.running > 0 && <RunGlyph running failed={false} />}
         <button
           type="button"
@@ -129,11 +127,12 @@ export function SessionAgentsStrip({
   );
 }
 
-/** Running, failed or done, in the tool cards' own marks. */
-function RunGlyph({ running, failed }: { running: boolean; failed: boolean }) {
+/** Running, failed, stopped or done, in the tool cards' own marks. */
+function RunGlyph({ running, failed, stopped = false }: { running: boolean; failed: boolean; stopped?: boolean }) {
   if (running)
     return <LoadingOutlined spin className="chat-tool-status running" />;
   if (failed) return <CloseCircleFilled className="chat-tool-status err" />;
+  if (stopped) return <span className="chat-tool-status stopped" role="img" aria-label="stopped" />;
   return <CheckCircleFilled className="chat-tool-status ok" />;
 }
 
@@ -199,15 +198,16 @@ function AgentChip({
 }) {
   const name = engine ? agentShortName(engine) : null;
   return (
-    <span
-      className={`ag-chip${extra ? " ag-chip-extra" : ""}`}
-      data-engine={engine ?? undefined}
-      title={name && !label.startsWith(name) ? `${name} · ${label}` : label}
-    >
-      {name && <i className="ag-chip-mark">{name.charAt(0)}</i>}
-      <span className="ag-chip-name">{label}</span>
-      {count !== undefined && <span className="ag-chip-n">×{count}</span>}
-    </span>
+    <Tooltip content={name && !label.startsWith(name) ? `${name} · ${label}` : label} delay={TEXT_TOOLTIP_DELAY_MS}>
+      <span
+        className={`ag-chip${extra ? " ag-chip-extra" : ""}`}
+        data-engine={engine ?? undefined}
+      >
+        {name && <i className="ag-chip-mark">{name.charAt(0)}</i>}
+        <span className="ag-chip-name">{label}</span>
+        {count !== undefined && <span className="ag-chip-n">×{count}</span>}
+      </span>
+    </Tooltip>
   );
 }
 
@@ -222,11 +222,13 @@ function MachineFact({
   title?: string;
 }) {
   return (
-    <span className="ag-fact" title={title}>
-      <DesktopOutlined />
-      {text}
-      {word && <span className="ag-word">{word}</span>}
-    </span>
+    <Tooltip content={title} delay={TEXT_TOOLTIP_DELAY_MS}>
+      <span className="ag-fact">
+        <DesktopOutlined />
+        {text}
+        {word && <span className="ag-word">{word}</span>}
+      </span>
+    </Tooltip>
   );
 }
 
@@ -258,7 +260,7 @@ function RowFacts({ run }: { run: SubagentRunView }) {
   );
 }
 
-/** What a screen reader hears for the folded line: `Agents: 12, 4 machines, Opus 5.5 9 runs, 1 failed`. */
+/** What a screen reader hears for the folded line: `Agents: 12, 4 machines, Opus 5.5 9 runs`. */
 function spokenLine(summary: SubagentSessionSummary): string {
   const parts = [`Agents: ${summary.band}`];
   const current = summary.current;
@@ -271,6 +273,5 @@ function spokenLine(summary: SubagentSessionSummary): string {
         parts.push(`${m.label} ${m.count === 1 ? "1 run" : `${m.count} runs`}`);
     }
   }
-  if (summary.failed > 0) parts.push(`${summary.failed} failed`);
   return parts.join(", ");
 }

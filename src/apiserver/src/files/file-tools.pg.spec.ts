@@ -1,5 +1,5 @@
 /**
- * The doors behind `file_upload`, `file_fetch` and `file_list` (docs/orbit-files-design.md §2.2, §2.3; migration 0464),
+ * The doors behind `file_upload`, `file_fetch` and `file_list` (docs/drive-design.md §2.2, §2.3; migration 0464),
  * held against the production apiserver — `build/main.js`, multer and every guard and pipe in front of the routes — over
  * a real PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty:
  *
@@ -27,6 +27,9 @@
  *       it looks like and where, and never repeat it, and no row, bytes or temporary file are left. What ordinary test
  *       logs hold and binary files are kept byte for byte, and the bytes, not the declared type, say which is which. A
  *       folder's other files are kept and bundle as usual.
+ *  (11) a remote SubAgent's runner, which does not host the parent session, keeps a file, a folder and a pin under it by
+ *       naming its run while that run is RUNNING (docs/subagent-design.md §10.2); its run ended, another runner, or a
+ *       run of another session is refused as before, writing nothing.
  *
  * Not destructive: every row belongs to users this run creates.
  */
@@ -121,8 +124,8 @@ test('the doors behind file_upload, file_fetch and file_list', { skip: !URL, con
   server = await startApiserver(url, jwtSecret, {
     PROVIDER_SECRET_KEY,
     MODEL_CATALOG_URL: 'http://127.0.0.1:9/',
-    ORBIT_FILES_BACKEND: 'local',
-    ORBIT_FILES_DIR: dir,
+    ORBIT_DRIVE_BACKEND: 'local',
+    ORBIT_DRIVE_DIR: dir,
   });
   const api = server;
   const tempFiles = () => {
@@ -136,7 +139,7 @@ test('the doors behind file_upload, file_fetch and file_list', { skip: !URL, con
   // An owner with two machines, and on the first a session with no task, one running a task, and one that has ended
   // its share of a task but stays the owner's; a task nobody here runs; and a stranger.
   const ownerId = randomUUID();
-  const email = `file-tools-${RUN}@orbit-files.invalid`;
+  const email = `file-tools-${RUN}@orbit-documents.invalid`;
   await db.user.create({ data: { id: ownerId, email, name: 'file tools', passwordHash: 'x' } });
   const bearer = await new JwtService({ secret: jwtSecret }).signAsync({ sub: ownerId, email });
   const machineOf = async (name: string, owner = ownerId) => {
@@ -159,7 +162,7 @@ test('the doors behind file_upload, file_fetch and file_list', { skip: !URL, con
     await db.session.create({
       data: {
         id, title, prompt: title, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: machine.id,
-        status: 'AWAITING_INPUT', startedAt: new Date(), runtimeSessionId: `runtime-${id}`, taskId,
+        turnState: null, startedAt: new Date(), runtimeSessionId: `runtime-${id}`, taskId,
       },
     });
     return id;
@@ -230,7 +233,7 @@ test('the doors behind file_upload, file_fetch and file_list', { skip: !URL, con
     created(await upload(api, `/api/runner/sessions/${b62(firstRun)}/attachments`, machine.token, { name: 'reply.png' }), 'a reply image');
     const kept = created(await upload(api, door(firstRun), machine.token, { name: 'kept.png' }), 'a file_upload');
     // One run of a task at a time: the second starts when the first has ended.
-    await db.session.update({ where: { id: firstRun }, data: { status: 'SUCCEEDED' } });
+    await db.session.update({ where: { id: firstRun }, data: { turnState: null, finishedAt: new Date()} });
     await copyInto(await sessionOf('the second run', inputTaskId));
     const { json } = await list(`?taskId=${b62(inputTaskId)}`);
     assert.deepEqual(
@@ -462,6 +465,34 @@ test('the doors behind file_upload, file_fetch and file_list', { skip: !URL, con
     assert.equal(file.sha256, sha256(bytes), `${what} is kept as it was sent`);
     return file;
   };
+
+  await t.test('(11) a remote SubAgent keeps files under its parent session by naming its running run', async () => {
+    const runOf = async (session: string, targetRunnerId: string) => (await db.subagentRun.create({ data: {
+      ownerId, sessionId: session, toolUseId: `toolu_${randomUUID()}`, type: 'general', definitionSource: 'builtin',
+      decision: {}, targetRunnerId,
+    } })).id;
+    const run = await runOf(sessionId, otherMachine.id);
+    const named = (route: string, id: string) => `${route}?subagentRunId=${b62(id)}`;
+    const bytes = randomBytes(96);
+    const file = kept(bytes, await upload(api, named(door(sessionId), run), otherMachine.token, { bytes, name: 'ios-shot.png' }), 'the remote upload');
+    const row = await db.attachment.findUniqueOrThrow({ where: { id: file.id } });
+    assert.equal(row.sessionId, sessionId, 'kept under the parent session');
+    const pinned = await call(api, 'PUT', named(`${door(sessionId)}/${file.publicId}/pin`, run), otherMachine.token);
+    assert.equal(pinned.status, 200, pinned.text);
+    const part = created(await upload(api, named(door(sessionId), run), otherMachine.token, { name: 'dark.png' }), 'a folder\'s file');
+    const bundle = await call(api, 'POST', named(bundleDoor(sessionId), run), otherMachine.token, { name: 'shots', files: [{ path: 'dark.png', id: part.publicId }] });
+    assert.equal(bundle.status, 201, bundle.text);
+
+    const before = await rowsOf({});
+    assert.equal((await upload(api, door(sessionId), otherMachine.token)).status, 403, 'no run named');
+    assert.equal((await upload(api, named(door(otherSessionId), run), otherMachine.token)).status, 403, 'a run of another session');
+    const third = await machineOf('file-tools-third');
+    assert.equal((await upload(api, named(door(sessionId), run), third.token)).status, 403, 'a runner the run was not handed to');
+    await db.subagentRun.update({ where: { id: run }, data: { status: 'DONE', endedAt: new Date() } });
+    assert.equal((await upload(api, named(door(sessionId), run), otherMachine.token)).status, 403, 'the run has ended');
+    assert.equal(await rowsOf({}), before, 'nothing refused was kept');
+    assert.deepEqual(tempFiles(), [], 'no temporary file is left');
+  });
 
   await t.test('(10) a file holding a credential is refused for every shape, says what and where, and leaves nothing', async () => {
     const before = { rows: await rowsOf({}), blobs: await db.fileBlob.count() };

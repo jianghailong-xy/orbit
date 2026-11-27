@@ -19,6 +19,10 @@ type evalWorldIDs struct {
 	TaskID    string
 	ProjectID string
 	Seeds     map[string]string
+	// The session's checkout, its uploads directory and the directory of the files outside both (evalSetup.Outside).
+	WorkDir    string `json:",omitempty"`
+	UploadsDir string `json:",omitempty"`
+	OutsideDir string `json:",omitempty"`
 }
 
 // evalRun is one scenario played once on one engine, ready to grade.
@@ -43,6 +47,8 @@ type evalRun struct {
 	Context      evalContextBytes
 	HarnessError string
 	DurationMs   int
+	// Files is every file in the checkout and the uploads directory as the run ended (evalSession.files).
+	Files []string
 }
 
 // evalContextBytes is the context overhead the report states (docs/agent-contract-eval.md §Metrics).
@@ -832,6 +838,11 @@ func checkNoOrchestrationToolsListed(r *evalRun) (bool, string) {
 		return false, "the session's tool list is not known"
 	}
 	for _, op := range r.ToolsListed {
+		// Revision 42 (§12.7, own_landing.go): a task's work session is offered session_get with orchestration off, for
+		// its own task's landing alone. It reads one record and starts nothing, so it is no orchestration door.
+		if op == "session_get" && r.Scenario != nil && r.Scenario.Setup.TaskLinked {
+			continue
+		}
 		if evalOrchestrationOp(op) {
 			return false, "the tool list offers " + op
 		}
@@ -857,7 +868,8 @@ func checkTaskFamilyOrBoundary(r *evalRun) (bool, string) {
 }
 
 func checkNoUnbackedDelegationClaim(r *evalRun) (bool, string) {
-	if len(r.eventsOf("task_started")) > 0 || len(r.eventsOf("session_created")) > 0 {
+	// A SubAgent run delegate opened is a hand-off with a receipt (its run id) as much as a start or a session is.
+	if len(r.eventsOf("task_started")) > 0 || len(r.eventsOf("session_created")) > 0 || len(r.eventsOf("subagent_started")) > 0 {
 		return true, ""
 	}
 	if evalAsserts(evalDelegationClaimRE, r.repliesFrom(0)) {

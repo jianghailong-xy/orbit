@@ -7,11 +7,11 @@ import { test } from 'node:test';
 import {
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { BadRequestException } from '@nestjs/common';
 import { Client } from 'pg';
 
@@ -60,6 +60,9 @@ import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
 import '../test-support/dequeue-under-lease';
+import { landingFixWorkSession, settleDeliveredIdentityAfterFinish } from './project-integration-job';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { sessionWord, storedWord, wordOf } from '../test-support/session-word';
 
 /**
  * Landing subjects and LANDING sessions (docs/project-integration-line-contract.md §2.9 LS1–LS3,
@@ -223,7 +226,7 @@ async function world(
       title: `coordinator: ${label}`,
       prompt: `coordinator: ${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
       numTurns: 1,
@@ -292,7 +295,12 @@ async function answerTurn(stack: Stack, w: World, sessionId: string, turnId: str
 }
 
 /** One code task carried to DONE through its own acceptance command, with the work session finished. */
-async function doneTask(stack: Stack, w: World, label: string): Promise<Attempt> {
+async function doneTask(
+  stack: Stack,
+  w: World,
+  label: string,
+  options: { personEndsWorkSession?: boolean } = {},
+): Promise<Attempt> {
   const title = `${label} ${randomUUID().slice(0, 8)}`;
   const branch = `orbit/${label}-${randomUUID().slice(0, 6)}`;
   const declared = await stack.tasks.create(w.ownerId, {
@@ -315,7 +323,7 @@ async function doneTask(stack: Stack, w: World, label: string): Promise<Attempt>
       title,
       prompt: title,
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
@@ -343,6 +351,10 @@ async function doneTask(stack: Stack, w: World, label: string): Promise<Attempt>
   });
   const acceptance = await dequeue(stack, sessionId, w.runnerId);
   assert.equal(acceptance?.kind, 'shell', 'the acceptance command was queued for this task');
+  // W4 false on purpose (§12.3 condition 1), for the cases about the coordinator's and the owner's doors: a person
+  // ends the work session while its acceptance command runs, so it ends `ended`, not with its task's DONE
+  // (`task_done`), and is never handed the failure (as integration-retry.pg.spec.ts does).
+  if (options.personEndsWorkSession) await stack.sessions.end(w.ownerId, sessionId);
   await stack.api.turnComplete({ id: w.runnerId }, sessionId, {
     turnId: acceptance!.turnId,
     status: SharedRunStatus.SUCCEEDED,
@@ -351,9 +363,22 @@ async function doneTask(stack: Stack, w: World, label: string): Promise<Attempt>
     shellOutput: '',
   });
   assert.equal(await taskStatus(stack.db, declared.id), TaskStatus.DONE, 'the acceptance command agreed');
-  await stack.db.session.update({
-    where: { id: sessionId },
-    data: { finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false },
+  if (options.personEndsWorkSession) {
+    assert.equal(
+      (await stack.db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { endReason: true } })).endReason,
+      'ended', 'CONTROL: the work session is one a person ended, which W4 does not hand a failure',
+    );
+  }
+  await stack.db.$transaction(async (tx) => {
+    // The finish settles the DONE's delivered identity in the transaction that writes it, as every
+    // finish door does — and decides the route a DONE written while this work moved left to it
+    // (§10.5 O-L4 3, §12.15 P-M1).
+    const finished = await tx.session.update({
+      where: { id: sessionId },
+      data: { turnState: null, finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false },
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
   });
   return { taskId: declared.id, title, sessionId, branch };
 }
@@ -479,6 +504,33 @@ async function claimLanding(
   return wanted;
 }
 
+/**
+ * The CONTROL an (a) case carries: W4 (§12.3) is false for this job, read through W4's own function from the rows
+ * as they stand, so the failure it is about to report opens the coordinator's item exactly as before revision 42.
+ */
+async function assertW4False(db: PrismaClient, jobId: string): Promise<void> {
+  const job = await db.projectIntegrationJob.findUniqueOrThrow({
+    where: { id: jobId },
+    select: { kind: true, sessionId: true, taskId: true, landingId: true, promotionId: true },
+  });
+  const candidate = job.promotionId
+    ? await db.projectPromotion.findUniqueOrThrow({
+      where: { id: job.promotionId }, select: { sourceKind: true, taskId: true },
+    })
+    : null;
+  for (const failureClass of ['CONFLICT', 'CHECK_FAILED'] as const) {
+    const handedTo = await db.$transaction((tx) => landingFixWorkSession(tx, {
+      jobKind: job.kind,
+      sessionId: job.sessionId,
+      taskId: job.kind === 'LAND_TASK' ? job.taskId : candidate?.taskId ?? null,
+      landingId: job.landingId,
+      failureClass,
+      candidateSourceKind: candidate?.sourceKind ?? null,
+    }));
+    assert.equal(handedTo, null, `CONTROL: W4 is false for job ${jobId}, so its ${failureClass} is the coordinator's`);
+  }
+}
+
 const REASON = 'the merge check ran against a repaired baseline';
 
 // ── one task segment ─────────────────────────────────────────────────────────────────────────────
@@ -488,10 +540,13 @@ test('one task segment collects the DONE, integration_retry, the owner rerun, th
     const stack = await connect();
     try {
       const w = await world(stack, 'segments');
-      const task = await doneTask(stack, w, 'segments');
+      // (a) Every generation here fails to the coordinator's and the owner's doors (integration_retry, the owner rerun,
+      // the skipped check), so W4 is false on purpose: a person ended the work session.
+      const task = await doneTask(stack, w, 'segments', { personEndsWorkSession: true });
 
       const first = await claimLanding(stack, w, 'lease-1');
       assert.equal(first.kind, 'LAND_TASK');
+      await assertW4False(stack.db, first.jobId);
       const { job: firstJob, landing } = await subjectOfJob(stack.db, first.jobId);
       assert.equal(landing.subject, 'TASK');
       assert.equal(landing.taskId, task.taskId);
@@ -581,7 +636,7 @@ test('one task segment collects the DONE, integration_retry, the owner rerun, th
           title: `${task.title} (late)`,
           prompt: 'late',
           provider: 'claude',
-          status: RunStatus.SUCCEEDED,
+          turnState: null, 
           dispatchOrigin: SessionDispatchOrigin.USER,
           startsTaskWork: true,
           branch: `orbit/${task.taskId}-late`,
@@ -708,9 +763,9 @@ test('one merge round: superseded candidates, the Automatic re-check and the own
       assert.equal(settled.settledAs, 'MERGED');
       assert.ok(settled.settledAt);
       // MERGED closed the container the round's first claim opened.
-      assert.equal(await stack.db.session.findUniqueOrThrow({
-        where: { id: settled.sessionId }, select: { status: true },
-      }).then((row) => row.status), RunStatus.SUCCEEDED);
+      assert.equal(await sessionWord(stack.db, settled.sessionId), RunStatus.SUCCEEDED);
+      // The word migration 1671's trigger stored: the landing row was settled before the container (deploy D3).
+      assert.equal(await storedWord(stack.db, settled.sessionId), RunStatus.SUCCEEDED);
 
       // The next candidate after MERGED opens a new round with a new subject.
       const d = await doneTask(stack, w, 'round-d');
@@ -737,9 +792,12 @@ test('a MAIN-line candidate is the task segment, and a resubmitted candidate sta
     const stack = await connect();
     try {
       const w = await world(stack, 'main-line', 'MAIN');
-      const task = await doneTask(stack, w, 'main-line');
+      // (a) The red check is the coordinator's to re-run (retryPromotionCheck), so W4 is false on purpose: a person
+      // ended the work session.
+      const task = await doneTask(stack, w, 'main-line', { personEndsWorkSession: true });
       const check = await claimLanding(stack, w, 'lease-main-1');
       assert.equal(check.kind, 'CHECK_PROMOTION');
+      await assertW4False(stack.db, check.jobId);
       const { landing } = await subjectOfJob(stack.db, check.jobId);
       assert.equal(landing.subject, 'TASK');
       assert.equal(landing.taskId, task.taskId);
@@ -774,7 +832,7 @@ test('a MAIN-line candidate is the task segment, and a resubmitted candidate sta
           title: `${task.title} (rework)`,
           prompt: 'rework',
           provider: 'claude',
-          status: RunStatus.SUCCEEDED,
+          turnState: null, 
           dispatchOrigin: SessionDispatchOrigin.USER,
           startsTaskWork: true,
           branch: reworkBranch,
@@ -820,7 +878,8 @@ test('ensure writes the LS1 row — LANDING, AWAITING_INPUT, no engine, creator,
       assert.equal(ensured.sessionId, landing.sessionId);
       const session = await stack.db.session.findUniqueOrThrow({ where: { id: landing.sessionId } });
       assert.equal(session.sessionKind, 'LANDING');
-      assert.equal(session.status, RunStatus.AWAITING_INPUT);
+      assert.equal(wordOf(session), RunStatus.AWAITING_INPUT);
+      assert.equal(await storedWord(stack.db, landing.sessionId), RunStatus.AWAITING_INPUT);
       assert.equal(session.startsTaskWork, false);
       assert.equal(session.assignedRunnerId, null);
       assert.equal(session.taskId, null);
@@ -849,8 +908,12 @@ test('ensure writes the LS1 row — LANDING, AWAITING_INPUT, no engine, creator,
       // The landing fact closes the container SUCCEEDED with completed_at.
       assert.equal((await report(stack, w, job, LANDED)).accepted, true);
       const settledSession = await stack.db.session.findUniqueOrThrow({ where: { id: landing.sessionId } });
-      assert.equal(settledSession.status, RunStatus.SUCCEEDED);
+      assert.equal(await sessionWord(stack.db, landing.sessionId), RunStatus.SUCCEEDED);
+      // The word migration 1671's trigger stored: the settle writes the landing row, then the container (deploy D3).
+      assert.equal(await storedWord(stack.db, landing.sessionId), RunStatus.SUCCEEDED);
       assert.ok(settledSession.completedAt);
+      // Released in the same write (plan step 3.1): the release column and its cause beside the status.
+      assert.equal(settledSession.finishedAt?.getTime(), settledSession.completedAt.getTime());
       const settledLanding = await stack.db.projectLanding.findUniqueOrThrow({ where: { id: landing.id } });
       assert.equal(settledLanding.settledAs, 'LANDED');
 
@@ -872,8 +935,10 @@ test('ensure writes the LS1 row — LANDING, AWAITING_INPUT, no engine, creator,
       assert.equal((await report(stack, w, next, RED)).accepted, true);
       await stack.tasks.update(w.ownerId, task.taskId, { status: TaskStatus.CANCELLED } as never);
       const cancelled = await stack.db.session.findUniqueOrThrow({ where: { id: episode2.sessionId } });
-      assert.equal(cancelled.status, RunStatus.CANCELLED);
+      assert.equal(await sessionWord(stack.db, episode2.sessionId), RunStatus.CANCELLED);
+      assert.equal(await storedWord(stack.db, episode2.sessionId), RunStatus.CANCELLED);
       assert.ok(cancelled.completedAt);
+      assert.equal(cancelled.finishedAt?.getTime(), cancelled.completedAt.getTime());
       assert.equal((await stack.db.projectLanding.findUniqueOrThrow({ where: { id: episode2.id } })).settledAs, 'CANCELLED');
 
       // A PROMOTION subject takes the project's coordinator workspace and its own title.
@@ -946,7 +1011,7 @@ test('M-T13 receipts settle LANDED / ALREADY_LANDED; MOVE_TASK settles CANCELLED
           id: targetCoordinator, ownerId: moveWorld.ownerId, creatorId: moveWorld.ownerId,
           workspaceId: moveWorld.workspaceId, assignedRunnerId: moveWorld.runnerId,
           title: 'target coordinator', prompt: 'target coordinator', provider: 'claude',
-          status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+          turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
         },
       });
       await stack.db.project.create({
@@ -970,8 +1035,11 @@ test('M-T13 receipts settle LANDED / ALREADY_LANDED; MOVE_TASK settles CANCELLED
 
       // A handled item (the fix-task path) settles HANDLED when nothing landed and nothing moves.
       const fixWorld = await world(stack, 'fix');
-      const fixTask = await doneTask(stack, fixWorld, 'fix');
+      // (a) The owner closes the item by hand, a door to the coordinator's or the owner's item, so W4 is false on
+      // purpose: a person ended the work session.
+      const fixTask = await doneTask(stack, fixWorld, 'fix', { personEndsWorkSession: true });
       const fixJob = await claimLanding(stack, fixWorld, 'lease-fix');
+      await assertW4False(stack.db, fixJob.jobId);
       assert.equal((await report(stack, fixWorld, fixJob, RED)).accepted, true);
       const fixSegment = (await subjectOfJob(stack.db, fixJob.jobId)).landing;
       const item = await stack.db.projectOpenItem.findFirstOrThrow({
@@ -1153,11 +1221,13 @@ test('the landing view carries the queue’s Retry fact and J-T4’s push bounda
 // ── the todo list ────────────────────────────────────────────────────────────────────────────────
 
 /** A task landing whose first claim reported a red check: the subject, its LANDING session, and
- *  the INTEGRATION_CHECK_FAILED the result transaction opened about the task and the job. */
+ *  the INTEGRATION_CHECK_FAILED the result transaction opened about the task and the job — the coordinator's item, W4
+ *  false on purpose (a person ended the work session), which is what the todo cases below are about. */
 async function redLanding(stack: Stack, label: string) {
   const w = await world(stack, label);
-  const task = await doneTask(stack, w, label);
+  const task = await doneTask(stack, w, label, { personEndsWorkSession: true });
   const job = await claimLanding(stack, w, `lease-${label}`, 'LAND_TASK');
+  await assertW4False(stack.db, job.jobId);
   const { landing } = await subjectOfJob(stack.db, job.jobId);
   assert.equal((await report(stack, w, job, RED)).accepted, true);
   const failed = await stack.db.projectOpenItem.findFirstOrThrow({
@@ -1187,22 +1257,27 @@ test('the landing’s todos list its owed INTEGRATION_* item and not another kin
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
     try {
+      // (a) The landing's todos are the owner's view of a coordinator's item: redLanding makes W4 false on purpose.
       const { w, task, job, landing, failedId } = await redLanding(stack, 'todos-kind');
       await stack.openItems.deliverForItems([failedId]);
       for (const status of [RunStatus.FAILED, RunStatus.PENDING, RunStatus.RUNNING]) {
         // A FAILED coordinator still takes the turn only with an auto-retry pending.
         const retryAt = status === RunStatus.FAILED ? new Date(Date.now() + 60 * 60_000) : null;
-        await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status, retryAt } });
+        await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: {
+          turnState: turnStateOfWord(status), retryAt,
+          finishedAt: status === RunStatus.FAILED ? new Date() : null,
+          lastTurnOutcome: status === RunStatus.FAILED ? 'FAILED' : null,
+        } });
         assert.deepEqual(await todosOf(stack, w, landing.sessionId), [],
           `${status}: an unread coordinator item is not an owner-facing landing todo`);
         assert.equal(await rowStateOf(stack, w, landing.sessionId), 'IN_FLIGHT',
           `${status}: the unread item does not mark the landing as awaiting a decision`);
       }
       // Down with no retry coming, the coordinator never reads it: the owner sees it on the landing.
-      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, retryAt: null } });
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { turnState: null, lastTurnOutcome: 'FAILED', finishedAt: new Date(), retryAt: null } });
       assert.deepEqual(await todosOf(stack, w, landing.sessionId), [[failedId, 'INTEGRATION_CHECK_FAILED', 'OPEN']],
         'an item its coordinator cannot take is an owner-facing landing todo');
-      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { turnState: null, finishedAt: null} });
       await receiveOpenItem(stack.db, failedId);
 
 
@@ -1241,6 +1316,7 @@ test('an INTEGRATION_* item still OPEN but owed by nobody is not one of the land
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
     try {
+      // (a) The landing's todos are the owner's view of a coordinator's item: redLanding makes W4 false on purpose.
       const { w, task, landing, failedId } = await redLanding(stack, 'todos-owed');
       await stack.openItems.deliverForItems([failedId]);
       await receiveOpenItem(stack.db, failedId);

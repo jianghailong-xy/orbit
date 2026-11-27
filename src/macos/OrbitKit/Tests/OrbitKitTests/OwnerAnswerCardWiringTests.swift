@@ -60,7 +60,8 @@ final class OwnerAnswerCardWiringTests: XCTestCase {
 
     /// The turn asks the records the conversation holds, and is the question's card where one is held:
     /// dashed while queued, or saying its delivery went unconfirmed — and with no Cancel, which would
-    /// leave the coordinator never told. Its press opens the record's own review.
+    /// leave the coordinator never told. The card unfolds itself in place, so the turn hands it no
+    /// review target (board card-ui-polish ③: no sheet).
     func testTheTurnIsTheQuestionsCardWhereTheConversationHoldsItsRecord() throws {
         let line = try source(Self.linePath)
         XCTAssertTrue(statements(line).contains("@Environment(\\.answeredQuestions) private var answered"))
@@ -68,7 +69,6 @@ final class OwnerAnswerCardWiringTests: XCTestCase {
         for code in ["if let record = OwnerAnswer.record(of: card, in: answered) {",
                      "CoordinatorQuestionRecordView(record: record, queued: queued && !undelivered,",
                      "notice: undelivered ? OwnerAnswerCard.undelivered : nil)",
-                     ".delivered(DeliveredDecisionCard(kind: .coordinatorQuestionRecord(record: record))))",
                      "} else {", "line"] {
             XCTAssertTrue(body.contains(code), "the turn's body no longer reads \(code)")
         }
@@ -76,6 +76,8 @@ final class OwnerAnswerCardWiringTests: XCTestCase {
                                           to: "} else {")).joined(separator: "\n")
         XCTAssertFalse(card.contains("onCancelQueued"), "the card hands the queue's Cancel on")
         XCTAssertFalse(card.contains("Cancel"), "the card offers a Cancel")
+        XCTAssertFalse(card.contains("approvalReviewTarget"),
+                       "the record opens in place; nothing hands it a sheet to open")
     }
 
     /// One list holds the transcript and the queued tail, so the records handed to it reach a turn in
@@ -117,8 +119,8 @@ final class OwnerAnswerCardWiringTests: XCTestCase {
 
         let open = try section(cards, from: "private struct CoordinatorQuestionCardView: View {",
                                to: "private var previewSummary: String {")
-        XCTAssertTrue(open.contains("symbol: \"questionmark.bubble.fill\", tone: open ? .orange : .blue,"),
-                      "the open question card is no longer orange while it waits, blue once it does not")
+        XCTAssertTrue(open.contains("symbol: \"questionmark.bubble.fill\", tone: .blue,"),
+                      "the open question card no longer wears the brand tone while it waits")
         XCTAssertTrue(open.contains("dimmed: !open, emphasized: open)"),
                       "the open question card no longer draws its heavier edge while it waits")
     }

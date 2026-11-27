@@ -83,11 +83,12 @@ function claudeCheckOnly(level: AccessLevel | null | undefined, provider: string
  *     schedule the run serves and to its envelope (§8.3), and read the condition a WHEN rule's run was started by
  *     (`condition_get`, docs/condition-triggers-design.md §8);
  *   * `notify`, a line in front of the owner;
- *   * reads: tasks, sessions, projects, the wiki and Orbit Files;
+ *   * reads: tasks, sessions, projects, the wiki and Documents;
  *   * the guide, which reads the operation catalogue and asks the server nothing.
  *
  * Absent on purpose: `bg_run` (a shell outside Claude's check), `session_merge`, `task_start`, `task_update`,
- * `session_send`, the create doors and every other Orbit write; `file_upload`, since a report carries links, not files.
+ * `session_send`, the create doors and every other Orbit write; `file_upload`, since a report carries links, not files;
+ * and the Files drive's tools, which a check has no use for.
  */
 export const CHECK_ONLY_CLAUDE_ALLOWED_TOOLS: readonly string[] = [
   'mcp__orbit__schedule_run_report',
@@ -104,8 +105,10 @@ export const CHECK_ONLY_CLAUDE_ALLOWED_TOOLS: readonly string[] = [
   'mcp__orbit__project_get',
   'mcp__orbit__wiki_search',
   'mcp__orbit__wiki_get',
+  'mcp__orbit__wiki_read',
   'mcp__orbit__file_fetch',
   'mcp__orbit__file_list',
+  'mcp__orbit__browser_status',
   'mcp__orbit__guide',
   'WebFetch',
   'WebSearch',
@@ -119,8 +122,11 @@ export const CHECK_ONLY_CLAUDE_ALLOWED_TOOLS: readonly string[] = [
  */
 export const CHECK_ONLY_CLAUDE_DENIED_ORBIT_TOOLS: readonly string[] = [
   'mcp__orbit__agent_create', 'mcp__orbit__agent_delete', 'mcp__orbit__agent_list', 'mcp__orbit__agent_update',
+  'mcp__orbit__browser_clear_logins',
   'mcp__orbit__ask_owner', 'mcp__orbit__bg_kill', 'mcp__orbit__bg_list', 'mcp__orbit__bg_output',
-  'mcp__orbit__bg_run', 'mcp__orbit__criterion_check_report', 'mcp__orbit__criterion_check_start',
+  'mcp__orbit__drive_delete', 'mcp__orbit__drive_get', 'mcp__orbit__drive_list', 'mcp__orbit__drive_move',
+  'mcp__orbit__drive_put', 'mcp__orbit__drive_sync',
+  'mcp__orbit__bg_run', 'mcp__orbit__browser_open', 'mcp__orbit__criterion_check_report', 'mcp__orbit__criterion_check_start',
   'mcp__orbit__criterion_confirm', 'mcp__orbit__criterion_confirmation_withdraw', 'mcp__orbit__file_pin',
   'mcp__orbit__file_upload', 'mcp__orbit__integration_abandon', 'mcp__orbit__integration_observe',
   'mcp__orbit__integration_request_promotion', 'mcp__orbit__integration_retry',
@@ -128,7 +134,8 @@ export const CHECK_ONLY_CLAUDE_DENIED_ORBIT_TOOLS: readonly string[] = [
   'mcp__orbit__open_item_hand_over', 'mcp__orbit__open_item_resolve', 'mcp__orbit__project_blocker_resolve',
   'mcp__orbit__project_create', 'mcp__orbit__project_crossings', 'mcp__orbit__project_delete',
   'mcp__orbit__project_ensure_coordinator', 'mcp__orbit__project_integration_get',
-  'mcp__orbit__project_merge_evidence', 'mcp__orbit__project_request_done', 'mcp__orbit__project_request_start',
+  'mcp__orbit__project_merge_evidence', 'mcp__orbit__project_request_done', 'mcp__orbit__project_request_reopen',
+  'mcp__orbit__project_request_start',
   'mcp__orbit__project_ruling_record',
   'mcp__orbit__project_send', 'mcp__orbit__project_update', 'mcp__orbit__provider_create',
   'mcp__orbit__provider_delete', 'mcp__orbit__provider_list', 'mcp__orbit__provider_update',
@@ -139,7 +146,7 @@ export const CHECK_ONLY_CLAUDE_DENIED_ORBIT_TOOLS: readonly string[] = [
   'mcp__orbit__session_await', 'mcp__orbit__session_complete', 'mcp__orbit__session_create',
   'mcp__orbit__session_delete', 'mcp__orbit__session_end', 'mcp__orbit__session_interrupt',
   'mcp__orbit__session_list', 'mcp__orbit__session_merge', 'mcp__orbit__session_move', 'mcp__orbit__session_reply',
-  'mcp__orbit__session_send',
+  'mcp__orbit__session_send', 'mcp__orbit__settings_get', 'mcp__orbit__settings_propose', 'mcp__orbit__subagent_rate',
   'mcp__orbit__task_attribution', 'mcp__orbit__task_await', 'mcp__orbit__task_batch_pin', 'mcp__orbit__task_comment',
   'mcp__orbit__task_confirmation_return', 'mcp__orbit__task_confirmation_review', 'mcp__orbit__task_create',
   'mcp__orbit__task_create_batch', 'mcp__orbit__task_delete', 'mcp__orbit__task_dependency_add',
@@ -155,6 +162,8 @@ export const CHECK_ONLY_CLAUDE_DENIED_ORBIT_TOOLS: readonly string[] = [
   'mcp__orbit__delegate',
   // Served beside it (runner-go subagent_workflow.go): it starts SubAgents from a script, work outside this check.
   'mcp__orbit__workflow',
+  // Puts a sign-in card in front of the owner and waits for it (runner-go browser_tools.go): not a check's to ask.
+  'mcp__orbit__browser_request_sign_in',
 ];
 
 /**

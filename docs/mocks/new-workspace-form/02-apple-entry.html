@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>New workspace · 02 iPhone / Mac：已有 workspace 的机器从哪里新建</title>
+<link rel="stylesheet" href="../github-workspace/board.css">
+<style>
+/* Hand-drawn iOS / macOS frames: system fonts, the apps' own tints. Not captures. */
+.ios, .mac { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; color: #1c1c1e; }
+.phone { position: relative; width: 340px; height: 690px; border-radius: 46px; background: #fff; overflow: hidden;
+  box-shadow: 0 0 0 9px #1c1c1e, 0 0 0 10px #48484a, 0 10px 30px rgba(0,0,0,.18); margin: 14px auto 18px; }
+.phone .status { height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 30px; font-size: 14px; font-weight: 600; }
+.drawer { position: absolute; inset: 0; background: #f9f9f9; }
+.drawer .dh { padding: 4px 18px 8px; display: flex; align-items: center; gap: 10px; }
+.drawer .dh b { font-size: 22px; flex: 1; }
+.chip { width: 34px; height: 34px; border-radius: 50%; background: #ececee; display: inline-flex; align-items: center; justify-content: center; color: #3a3a3c; font-size: 15px; }
+.row { display: flex; align-items: center; gap: 12px; padding: 8px 12px; margin: 0 8px; border-radius: 12px; font-size: 15.5px; }
+.row .g { width: 24px; text-align: center; color: #3a3a3c; }
+.row .sub { color: #8e8e93; font-size: 12.5px; }
+.row.sel { background: #e8e8ed; font-weight: 600; }
+.row.tint { color: #0a84ff; }
+.row.tint .g { color: #0a84ff; }
+.grp { display: flex; align-items: center; gap: 8px; color: #8e8e93; font-size: 13.5px; font-weight: 600; padding: 14px 22px 4px; }
+.grp .sp { flex: 1; }
+.rule { height: 1px; background: #e2e2e6; margin: 8px 18px 0 22px; }
+.plus { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: #0a84ff; font-size: 19px; font-weight: 500; }
+.menu { position: absolute; z-index: 5; width: 230px; background: rgba(250,250,252,.98); border-radius: 14px;
+  box-shadow: 0 0 0 .5px rgba(0,0,0,.12), 0 12px 32px rgba(0,0,0,.22); padding: 4px 0; font-size: 15px; }
+.menu .mh { color: #8e8e93; font-size: 12.5px; padding: 6px 14px 4px; }
+.menu .mi { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-top: .5px solid #e3e3e8; }
+.menu .mi .r { margin-left: auto; color: #8e8e93; font-size: 12.5px; }
+.menu .mi .dot { width: 7px; height: 7px; border-radius: 50%; background: #34c759; }
+.menu .mi .dot.off { background: #c7c7cc; }
+.navbar { display: flex; align-items: center; gap: 10px; padding: 2px 16px 10px; }
+.navbar .t b { display: block; font-size: 16px; }
+.navbar .t span { display: block; font-size: 12.5px; color: #8e8e93; }
+.page { background: #f2f2f7; position: absolute; inset: 0; }
+.card { background: #fff; border-radius: 18px; margin: 6px 14px; padding: 14px 14px 10px; box-shadow: 0 0 0 .5px rgba(0,0,0,.12), 0 2px 5px rgba(0,0,0,.05); font-size: 14.5px; }
+.card .lbl { font-weight: 600; margin-bottom: 3px; }
+.card .fld { display: flex; align-items: center; gap: 4px; }
+.card .pre { font: 12.5px "JetBrains Mono", monospace; color: #8e8e93; }
+.card .in { flex: 1; border: 1px solid #d1d1d6; border-radius: 7px; padding: 4px 8px; font: 12.5px "JetBrains Mono", monospace; color: #c7c7cc; min-width: 0; background: #fff; }
+.card .in.typed { color: #1c1c1e; }
+.card .in.name { font-family: inherit; font-size: 13.5px; }
+.card .meta { color: #8e8e93; font-size: 12.5px; margin-top: 3px; line-height: 1.4; }
+.card .ok { color: #1a7f37; font-size: 12.5px; margin-top: 3px; }
+.card .bad { color: #ff3b30; font-size: 12.5px; margin-top: 3px; }
+.card .cap { background: #0a84ff; color: #fff; border-radius: 999px; padding: 4px 11px; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.card .cap.dis { background: #e5e5ea; color: #aeaeb2; }
+.card .orr { display: flex; align-items: center; gap: 8px; color: #8e8e93; font-size: 12.5px; margin: 10px 0 6px; }
+.card .orr i { flex: 1; height: 1px; background: #e5e5ea; }
+.card .gh { background: rgba(120,120,128,.1); border-radius: 10px; padding: 9px 10px; font-size: 13.5px; }
+.card .gh span { display: block; color: #8e8e93; font-size: 12px; line-height: 1.35; margin-top: 2px; }
+.card .gh .ntag, .card .ntag { display: inline; color: #0a84ff; background: rgba(10,132,255,.12); border-radius: 999px; font-size: 10.5px; font-weight: 700; padding: 0 5px; margin-left: 4px; }
+.card .head { display: flex; gap: 10px; padding-bottom: 12px; border-bottom: 1px solid #e5e5ea; margin-bottom: 11px; }
+.card .head .ico { width: 30px; height: 30px; border-radius: 7px; background: rgba(10,132,255,.12); color: #0a84ff; display: flex; align-items: center; justify-content: center; flex: none; }
+.card .head b { display: block; font-size: 15px; }
+.card .head span { display: block; color: #8e8e93; font-size: 12.5px; line-height: 1.4; }
+.ins { background: #f2f2f7; position: absolute; inset: 0; }
+.ins .sh { color: #6d6d72; font-size: 12.5px; text-transform: uppercase; padding: 14px 32px 6px; display: flex; }
+.ins .sh .sp { flex: 1; }
+.ins .lst { background: #fff; border-radius: 12px; margin: 0 16px; font-size: 15px; }
+.ins .li { display: flex; align-items: center; gap: 10px; padding: 11px 16px; border-top: .5px solid #e3e3e8; }
+.ins .li:first-child { border-top: 0; }
+.ins .li .r { margin-left: auto; color: #8e8e93; font-size: 13.5px; }
+.ins .li.tint { color: #0a84ff; }
+.ins .ft { color: #6d6d72; font-size: 12.5px; padding: 6px 32px; }
+/* Mac */
+.mac { width: 100%; height: 470px; border-radius: 11px; overflow: hidden; display: flex; flex-direction: column; background: #fff;
+  box-shadow: 0 0 0 .5px rgba(0,0,0,.25), 0 12px 32px rgba(0,0,0,.16); margin: 10px 0 14px; position: relative; }
+.mac .tb { height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: #ececec; border-bottom: 1px solid #d6d6d6; flex: none; }
+.mac .tb i { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+.mac .body { flex: 1; display: flex; min-height: 0; }
+.mac .side { width: 230px; background: #e9e7ee; padding: 8px 8px; font-size: 13px; flex: none; }
+.mac .side .sr { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 6px; }
+.mac .side .sr .g { width: 18px; text-align: center; color: #0a84ff; }
+.mac .side .sr.sel { background: rgba(0,0,0,.09); }
+.mac .side .sr.tint { color: #0a84ff; }
+.mac .side .sr .sub { color: #8e8e93; font-size: 11.5px; margin-left: auto; }
+.mac .side .sh { display: flex; align-items: center; color: #8e8e93; font-size: 11px; font-weight: 700; padding: 10px 8px 3px; }
+.mac .side .sh .sp { flex: 1; }
+.mac .side .sh .plus { width: 18px; height: 18px; font-size: 15px; }
+.mac .main { flex: 1; background: #fff; padding: 22px; overflow: hidden; }
+.mac .card { margin: 0 auto; max-width: 520px; }
+.mac .menu { width: 220px; font-size: 13px; border-radius: 8px; }
+.mac .menu .mi { padding: 5px 12px; border-top: 0; }
+.mac .menu .mi.hov { background: #0a84ff; color: #fff; border-radius: 5px; margin: 0 5px; padding: 5px 7px; }
+.mac .menu .mi.hov .r { color: #dbeaff; }
+.mac .menu .mh { font-size: 11.5px; padding: 4px 12px 3px; }
+.hl2 { outline: 2.5px dashed #e5372b; outline-offset: 2px; border-radius: 8px; }
+.newstr { background: #fff3c4; border-radius: 3px; padding: 0 2px; }
+.flow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 14px; margin: 4px 0 10px; }
+.step { background: #fff; border: 1px solid #dcdce3; border-radius: 8px; padding: 4px 10px; }
+.step.on { border-color: #3c6fd8; background: #eef3ff; }
+.arrow { color: #8a8a94; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 22px; align-items: start; }
+.b-pick { display: inline-block; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 0 9px; margin-right: 6px; }
+.b-pick.rec { background: #d9e6ff; color: #14428f; }
+.b-pick.alt { background: #ececf1; color: #4a4a54; }
+.tile.dec > .tile-title { font-size: 17px; }
+.dim { opacity: .45; }
+</style>
+<body>
+<div class="board">
+<h1>New workspace · 02 iPhone / Mac：已经有 workspace 的机器，从哪里新建一个</h1>
+<div class="lede">
+接 <code>01-shared-form</code>（所有者 11-20 选了 A / A / A）。Web 的入口是 Settings → Workspaces 的 +，选机器，再出设置卡；
+<b>iPhone 和 Mac 没有 Settings → Workspaces 这一页</b>（<code>SettingsHome</code> 只有 General … GitHub、Machines、Providers），
+workspace 只列在两个地方：抽屉 / 侧栏的 <b>Workspaces</b> 组（全部 workspace 一列，机器是每行的附注），和机器页（Settings → Machines &amp; models → 某台机器）的 <b>Workspaces</b> 段。
+今天卡片（<code>MachineSetupCard.swift</code>）只在机器一个 workspace 都没有时出现（抽屉 / 侧栏末尾那行蓝色的 <i>Set up &lt;machine&gt;</i>）；机器一旦有了 workspace，就<b>没有任何地方能再建一个</b>。
+帧是手画的（系统字体、app 的蓝色），不是截图。界面文案英文，<span class="newstr">黄底</span>是新加的句子。机器 orbit@austin（home <code>/Users/austin</code>），还有 build-box 和 Orbit Cloud。
+</div>
+
+<div class="section"><span class="sec now">今天</span><span class="sec-sub">两处列着 workspace，都没有「新建」</span></div>
+<div class="grid3">
+  <div class="tile">
+    <div class="tile-title">iPhone · 抽屉</div>
+    <div class="phone ios"><div class="drawer">
+      <div class="status"><span>9:41</span><span>●●●</span></div>
+      <div class="dh"><b>Orbit</b><span class="chip">⌕</span></div>
+      <div class="row"><span class="g">◫</span>Projects</div>
+      <div class="row"><span class="g">☑</span>Tasks</div>
+      <div class="row"><span class="g">◷</span>Scheduled</div>
+      <div class="rule"></div>
+      <div class="grp">Workspaces</div>
+      <div class="row sel"><span class="g">▣</span>orbit<span class="sub" style="margin-left:auto">orbit@austin</span></div>
+      <div class="row"><span class="g">▣</span>tea-cli<span class="sub" style="margin-left:auto">orbit@austin</span></div>
+      <div class="row"><span class="g">▣</span>wiki-site<span class="sub" style="margin-left:auto">build-box</span></div>
+      <div class="row tint"><span class="g">⊕</span>Set up Orbit Cloud</div>
+    </div></div>
+    <ul class="notes"><li><span class="num">1</span><span class="t">只有<b>没有 workspace</b>的机器有一行 <i>Set up …</i>；orbit@austin 和 build-box 已经有了，没有入口。</span></li></ul>
+  </div>
+  <div class="tile">
+    <div class="tile-title">iPhone · Settings → Machines &amp; models → orbit@austin</div>
+    <div class="phone ios"><div class="ins">
+      <div class="status"><span>9:41</span><span>●●●</span></div>
+      <div class="navbar"><span class="chip">‹</span><div class="t"><b>orbit@austin</b></div></div>
+      <div class="sh"><span>Engines</span></div>
+      <div class="lst"><div class="li">Claude Code<span class="r">Signed in</span></div><div class="li">Codex<span class="r">Signed in</span></div></div>
+      <div class="sh"><span class="sp">Workspaces</span><span>2</span></div>
+      <div class="lst">
+        <div class="li">orbit<span class="r">~/orbit · 1 running</span></div>
+        <div class="li">tea-cli<span class="r">~/tea-cli</span></div>
+      </div>
+      <div class="ft">Tap a workspace to open its sessions.</div>
+      <div class="sh"><span>About</span></div>
+      <div class="lst"><div class="li">Name<span class="r">orbit@austin</span></div></div>
+    </div></div>
+    <ul class="notes"><li><span class="num">2</span><span class="t">机器页列着这台机器的 workspace（一个都没有时只有 <i>Start a session</i>），不能新建。</span></li></ul>
+  </div>
+  <div class="tile">
+    <div class="tile-title">Mac · 侧栏</div>
+    <div class="mac"><div class="tb"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+      <div class="body"><div class="side">
+        <div class="sr"><span class="g">◫</span>Projects</div>
+        <div class="sr"><span class="g">☑</span>Tasks</div>
+        <div class="sh"><span class="sp">Workspaces</span><span>⌄</span></div>
+        <div class="sr sel"><span class="g">▣</span>orbit</div>
+        <div class="sr"><span class="g">▣</span>tea-cli</div>
+        <div class="sr"><span class="g">▣</span>wiki-site</div>
+        <div class="sr tint"><span class="g">⊕</span>Set up Orbit Cloud</div>
+      </div><div class="main" style="color:#8e8e93;font-size:13px">（orbit 的会话列表）</div></div>
+    </div>
+    <ul class="notes"><li><span class="num">3</span><span class="t">同抽屉：右键一个 workspace 有 New Session / Settings / Show Machine，没有新建 workspace。</span></li></ul>
+  </div>
+</div>
+
+<div class="section"><span class="sec after">方案 · 推荐 A</span><span class="sec-sub">两处都加，打开同一页：Workspaces 组标题右边一个 +，和机器页 Workspaces 段末尾一行 New workspace</span></div>
+<div class="grid3">
+  <div class="tile">
+    <div class="tile-title">① iPhone 抽屉：组标题的 +，点开选机器</div>
+    <div class="phone ios"><div class="drawer">
+      <div class="status"><span>9:41</span><span>●●●</span></div>
+      <div class="dh"><b>Orbit</b><span class="chip">⌕</span></div>
+      <div class="row"><span class="g">◫</span>Projects</div>
+      <div class="row"><span class="g">☑</span>Tasks</div>
+      <div class="row"><span class="g">◷</span>Scheduled</div>
+      <div class="rule"></div>
+      <div class="grp"><span class="sp">Workspaces</span><span class="plus hl2">+</span></div>
+      <div class="row sel"><span class="g">▣</span>orbit<span class="sub" style="margin-left:auto">orbit@austin</span></div>
+      <div class="row"><span class="g">▣</span>tea-cli<span class="sub" style="margin-left:auto">orbit@austin</span></div>
+      <div class="row"><span class="g">▣</span>wiki-site<span class="sub" style="margin-left:auto">build-box</span></div>
+      <div class="row tint"><span class="g">⊕</span>Set up Orbit Cloud</div>
+      <div class="menu" style="left:96px; top:236px">
+        <div class="mh"><span class="newstr">New workspace on</span></div>
+        <div class="mi"><span class="dot"></span>orbit@austin<span class="r">2</span></div>
+        <div class="mi"><span class="dot"></span>build-box<span class="r">1</span></div>
+        <div class="mi"><span class="dot off"></span>Orbit Cloud<span class="r">0</span></div>
+      </div>
+    </div></div>
+    <ul class="notes">
+      <li><span class="num">1</span><span class="t">+ 弹出系统菜单，列账号里的每台机器（圆点 = 在线，数字 = 已有几个 workspace）；<b>只有一台机器时不弹菜单</b>，直接进那台的页面。</span></li>
+      <li><span class="num">2</span><span class="t">没有 workspace 的机器也在菜单里，去的就是今天 <i>Set up …</i> 那一页，同一张卡。</span></li>
+    </ul>
+  </div>
+  <div class="tile">
+    <div class="tile-title">② iPhone：新页面（无卡头，标题栏写机器）</div>
+    <div class="phone ios"><div class="page">
+      <div class="status"><span>9:41</span><span>●●●</span></div>
+      <div class="navbar"><span class="chip">≡</span><div class="t"><b class="newstr">New workspace</b><span>orbit@austin</span></div></div>
+      <div class="card">
+        <div class="lbl">Folder</div>
+        <div class="fld"><span class="pre">/Users/austin/</span><span class="in">name</span></div>
+        <div class="meta"><span class="newstr">A name in /Users/austin, or a full path. Uses the folder if it exists, otherwise creates it.</span></div>
+        <div class="lbl" style="margin-top:11px">Name</div>
+        <div class="fld" style="gap:8px"><span class="in name">Same as the folder</span><span class="cap dis">Create workspace</span></div>
+        <div class="meta">Same as the folder unless you change it. Shown in the sidebar.</div>
+        <div class="orr"><i></i>or<i></i></div>
+        <div class="gh"><b> From GitHub</b><span class="ntag">NEW</span><span>Clone a repository you can reach on GitHub. Orbit signs in for the clone and when it lands your work — nothing is saved on the machine.</span></div>
+      </div>
+      <div class="card">
+        <div class="lbl">Folder</div>
+        <div class="fld"><span class="in typed">/srv/app</span></div>
+        <div class="ok">Found · git repository · main</div>
+        <div class="lbl" style="margin-top:9px">Name</div>
+        <div class="fld" style="gap:8px"><span class="in name" style="color:#1c1c1e">app</span><span class="cap">Create workspace</span></div>
+      </div>
+    </div></div>
+    <ul class="notes">
+      <li><span class="num">3</span><span class="t">卡和今天 <i>Set up</i> 页同一张，去掉卡头（标题栏已经写了机器，同 web 的 Settings 帧）；提示换成 web 的 <code>setupFolderOrPathHint</code>。</span></li>
+      <li><span class="num">4</span><span class="t">下面那张是同一张卡输了完整路径：前缀消失、名字跟最后一段走；不存在则 <i>No such directory on orbit@austin.</i>。Create 后进新 workspace 的新会话页（GitHub clone 进度在那里画）。</span></li>
+    </ul>
+  </div>
+  <div class="tile">
+    <div class="tile-title">③ iPhone 机器页：Workspaces 段末尾一行</div>
+    <div class="phone ios"><div class="ins">
+      <div class="status"><span>9:41</span><span>●●●</span></div>
+      <div class="navbar"><span class="chip">‹</span><div class="t"><b>orbit@austin</b></div></div>
+      <div class="sh"><span>Engines</span></div>
+      <div class="lst"><div class="li">Claude Code<span class="r">Signed in</span></div><div class="li">Codex<span class="r">Signed in</span></div></div>
+      <div class="sh"><span class="sp">Workspaces</span><span>2</span></div>
+      <div class="lst">
+        <div class="li">orbit<span class="r">~/orbit · 1 running</span></div>
+        <div class="li">tea-cli<span class="r">~/tea-cli</span></div>
+        <div class="li tint hl2">⊕ <span class="newstr">New workspace</span></div>
+      </div>
+      <div class="ft">Tap a workspace to open its sessions.</div>
+      <div class="sh"><span>About</span></div>
+      <div class="lst"><div class="li">Name<span class="r">orbit@austin</span></div></div>
+    </div></div>
+    <ul class="notes">
+      <li><span class="num">5</span><span class="t">机器已经定了，不用选：关掉 Settings，打开 ② 那一页（同今天的 <i>Start a session</i> 按钮的走法）。</span></li>
+    </ul>
+  </div>
+</div>
+
+<div class="tile wide">
+  <div class="tile-title">④ Mac：侧栏 Workspaces 标题右边的 +，选机器；内容栏是带卡头的卡（Mac 内容栏没有标题栏写机器，卡头 <i>New workspace on orbit@austin</i> 就是那句话）</div>
+  <div class="frs">
+    <div>
+      <div class="mac"><div class="tb"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+        <div class="body"><div class="side">
+          <div class="sr"><span class="g">◫</span>Projects</div>
+          <div class="sr"><span class="g">☑</span>Tasks</div>
+          <div class="sh"><span class="sp">Workspaces</span><span class="plus hl2">+</span></div>
+          <div class="sr"><span class="g">▣</span>orbit</div>
+          <div class="sr"><span class="g">▣</span>tea-cli</div>
+          <div class="sr"><span class="g">▣</span>wiki-site</div>
+          <div class="sr tint"><span class="g">⊕</span>Set up Orbit Cloud</div>
+          <div class="menu" style="left:70px; top:96px; width:168px">
+            <div class="mh"><span class="newstr">New workspace on</span></div>
+            <div class="mi hov">orbit@austin<span class="r">2</span></div>
+            <div class="mi">build-box<span class="r">1</span></div>
+            <div class="mi">Orbit Cloud<span class="r">0</span></div>
+          </div>
+        </div><div class="main">
+          <div class="card">
+            <div class="head"><span class="ico">▭</span><div><b>New workspace on orbit@austin</b><span>Pick the folder on orbit@austin this workspace works in. Its sessions can read and change everything in it.</span></div></div>
+            <div class="lbl">Folder</div>
+            <div class="fld"><span class="in typed">~/code/missing</span></div>
+            <div class="bad">No such directory on orbit@austin.</div>
+            <div class="lbl" style="margin-top:11px">Name</div>
+            <div class="fld" style="gap:8px"><span class="in name" style="color:#1c1c1e">missing</span><span class="cap dis">Create workspace</span></div>
+            <div class="meta">Same as the folder unless you change it. Shown in the sidebar.</div>
+            <div class="orr"><i></i>or<i></i></div>
+            <div class="gh"><b> From GitHub</b><span class="ntag">NEW</span><span>Clone a repository you can reach on GitHub. Orbit signs in for the clone and when it lands your work — nothing is saved on the machine.</span></div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+    <ul class="notes" style="columns:1; flex:.7">
+      <li><span class="num">6</span><span class="t">Mac 的侧栏是 <code>List(.sidebar)</code>，组标题右边放一个 + 按钮（Mail / Notes 侧栏的写法），点开同样是机器菜单；一台机器时直接进去。</span></li>
+      <li><span class="num">7</span><span class="t">Mac 的机器页在 Settings 窗口里：Workspaces 段末尾同样一行 <i>New workspace</i>，回主窗口打开这一页。</span></li>
+      <li><span class="num">8</span><span class="t">这一帧的 Folder 提示同样是 <code>setupFolderOrPathHint</code>（打字之后变成判定，这里画的是不存在的完整路径）。只有今天的 <i>Set up …</i>（没有 workspace 的机器）保留 <code>SETUP_FOLDER_HINT</code> 和原样的卡，同 web 的机器页。</span></li>
+      <li><span class="num">9</span><span class="t">页面上不放 <i>Change machine</i>：换机器就回去 + 重选（iPhone 标题栏已经写着机器）。web 的 Change machine 是因为它的页面先选机器后出卡，在同一页里。</span></li>
+    </ul>
+  </div>
+</div>
+
+<div class="section"><span class="sec now">待你定</span><span class="sec-sub">一项，第一个是推荐</span></div>
+<div class="tile dec">
+  <div class="tile-title">入口放哪</div>
+  <div class="flow"><span class="b-pick rec">A 推荐</span><b>两处都放</b>：抽屉 / 侧栏 Workspaces 标题的 + （选机器），和机器页 Workspaces 段的 <i>New workspace</i> 行。两处打开同一页。</div>
+  <div class="flow"><span class="step">Workspaces +</span><span class="arrow">→</span><span class="step">选机器（一台就跳过）</span><span class="arrow">→</span><span class="step on">New workspace · 卡</span><span class="arrow">→</span><span class="step">Create</span><span class="arrow">→</span><span class="step">新 workspace 的新会话页</span></div>
+  <div class="flow"><span class="step">Settings → Machines &amp; models → 机器</span><span class="arrow">→</span><span class="step">Workspaces · New workspace</span><span class="arrow">→</span><span class="step on">同一页</span></div>
+  <ul class="notes"><li><span class="num">a</span><span class="t">+ 在用户看 workspace 的地方，一眼能找到；机器页那行是「我正在看这台机器」时顺手的入口，web 机器页空态的 <i>or add one here</i> 也就有了着落。代码上两处只是同一个 <code>openNewWorkspace(runnerID)</code>。</span></li></ul>
+  <div class="flow" style="margin-top:14px"><span class="b-pick alt">B</span><b>只放 +</b>（抽屉 / 侧栏）。少一处，但站在机器页时要退出 Settings 去找。</div>
+  <div class="flow"><span class="b-pick alt">C</span><b>只放机器页</b>的那一行。最贴 web（web 也在 Settings 里），但 iPhone 上要 Settings → Machines &amp; models → 机器，三层，不好找。</div>
+</div>
+</div>
+</body>
+</html>

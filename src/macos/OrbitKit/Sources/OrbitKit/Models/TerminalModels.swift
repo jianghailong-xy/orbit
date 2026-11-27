@@ -2,7 +2,8 @@ import Foundation
 
 // The owner's terminals (docs/terminal-session-design.md, "The terminal credential"): a machine where `orbit` asked to
 // be approved, and the terminals approved since. Mirrors `src/web/src/lib/terminals.ts` and what
-// `TerminalLoginService.pending` / `.list` answer — never a credential, only what the card and Settings → Terminals show.
+// `TerminalLoginService.pending` / `.list` answer — never a credential, only what the card and each machine page's
+// Terminals section show.
 
 /// A terminal sign-in waiting for the owner: what the approve card shows. `GET /terminals/requests`.
 public struct TerminalRequest: Codable, Equatable, Sendable, Identifiable {

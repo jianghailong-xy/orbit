@@ -8,7 +8,7 @@ import {
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { escalatesAt } from './open-item-escalation.service';
-import { openItemOwed, openItemVisible, ownerItemKind } from './project-open-item';
+import { openItemInWorkSessionHands, openItemOwed, openItemVisible, ownerItemKind } from './project-open-item';
 import { DONE_REQUEST_KIND } from './project-done-request';
 import { START_REQUEST_KIND } from './project-start-request';
 
@@ -236,7 +236,8 @@ async function readBlockers(
  * A start request counts only while its project has not been started: the start answers it in the
  * same transaction, and a request somehow left open beside a start asks nobody anything. Any item
  * counts only while it is owed (`openItemOwed`), for the same reason: one about a candidate or a
- * task that has moved on asks nobody anything either, whether or not anything has closed it yet.
+ * task that has moved on asks nobody anything either, whether or not anything has closed it yet. And
+ * an item in its task's own work session's hands (revision 42) counts for nobody until it is handed back.
  */
 async function readOpenItems(
   prisma: PrismaService,
@@ -258,6 +259,10 @@ async function readOpenItems(
        AND (item.kind <> 'START_REQUEST' OR proj.started_at IS NULL)
        AND ${openItemOwed('item')}
        AND ${openItemVisible('item')}
+       -- Revision 42 (§12.7): an item in its task's own work session's hands waits on nobody — not the owner, and
+       -- not the coordinator until it is handed back — so it is no one's attention, whether or not the coordinator
+       -- could take it.
+       AND NOT ${openItemInWorkSessionHands('item')}
        AND (item.kind <> 'DONE_REQUEST' OR proj."status" = 'OPEN')
      GROUP BY item.project_id, item.kind, item.assignee, item.assignee_reason`);
 }

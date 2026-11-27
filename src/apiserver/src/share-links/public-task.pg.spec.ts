@@ -18,7 +18,8 @@
  *       page of events, one event); a session that is not one of its runs, and a run in the Trash,
  *       answer the one 404; none of it counts a view;
  *   (5) dependencies inside the task's project are named, those in another project only counted;
- *   (6) the owner's dialog read counts what each layer holds.
+ *   (6) the owner's dialog read counts what each layer holds;
+ *   (7) a run that ended because its task was done (`task_done`) reads SUCCEEDED, on the task page and its own.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/share-links/public-task.pg.spec.ts
  *
@@ -36,15 +37,18 @@ import {
   CreatorType,
   PrismaClient,
   RunnerStatus,
-  RunStatus,
   SessionDispatchOrigin,
   TaskCommentMentionDeliveryStatus,
   TaskCompletionCriterion,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
+import { fixtureFacts } from '../test-support/session-word';
 import { RunEventType, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
+import { DriveContentService } from '../drive/drive-content.service';
+import { DriveService } from '../drive/drive.service';
 import { AttachmentsService } from '../attachments/attachments.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { publicIdHeaders } from '../common/public-id-headers';
@@ -194,7 +198,7 @@ test('a shared task: an explicit projection, the red line, its layers and its ru
     await db.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, title, prompt: title,
-        status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER, ...extra,
+        turnState: null, dispatchOrigin: SessionDispatchOrigin.USER, ...fixtureFacts(extra),
       } as never,
     });
     return id;
@@ -287,9 +291,11 @@ test('a shared task: an explicit projection, the red line, its layers and its ru
   })).id;
 
   // Its runs: one that succeeded (with a transcript and an image), one in the Trash, one running.
+  // The first is an old SUCCEEDED row with no end reason: kind C4 of docs/session-status-retirement-plan.md §3.4,
+  // accepted by the owner, so the page reads it ENDED.
   const RUN_FIELDS = { taskId: shared, provider: SECRET.provider, model: SECRET.model, branch: SECRET.branch, baseSha: SECRET.sha, costUsd: 12.5 };
   const succeeded = await session(`Run of ${TITLE}`, {
-    ...RUN_FIELDS, status: RunStatus.SUCCEEDED,
+    ...RUN_FIELDS, status: RunStatus.SUCCEEDED, endReason: null,
     createdAt: new Date('2026-09-20T10:00:00Z'), startedAt: new Date('2026-09-20T10:00:05Z'),
     finishedAt: new Date('2026-09-20T11:11:05Z'),
   });
@@ -322,6 +328,9 @@ test('a shared task: an explicit projection, the red line, its layers and its ru
     providers: [
       // SharedController's streams, which nothing here opens.
       { provide: ViewerStreamService, useValue: {} },
+      // Drive file links, which nothing here shares or opens (share-links-drive-file.pg.spec.ts holds them).
+      { provide: DriveService, useValue: {} },
+      { provide: DriveContentService, useValue: {} },
       { provide: SessionsService, useValue: sessions },
       { provide: TasksService, useValue: tasks },
       { provide: AttachmentsService, useValue: new AttachmentsService(prisma) },
@@ -412,7 +421,7 @@ test('a shared task: an explicit projection, the red line, its layers and its ru
     assert.deepEqual(root.runs, [
       { state: 'RUNNING', startedAt: '2026-09-22T09:00:02.000Z', endedAt: null, durationMs: null },
       {
-        state: 'SUCCEEDED', startedAt: '2026-09-20T10:00:05.000Z', endedAt: '2026-09-20T11:11:05.000Z',
+        state: 'ENDED', startedAt: '2026-09-20T10:00:05.000Z', endedAt: '2026-09-20T11:11:05.000Z',
         durationMs: 71 * 60_000,
       },
     ]);
@@ -545,7 +554,7 @@ test('a shared task: an explicit projection, the red line, its layers and its ru
     const page = await visit(`/sessions/${pub(succeeded)}?limit=3`);
     assert.equal(page.status, 200, page.text);
     assert.equal(page.json.title, `Run of ${TITLE}`);
-    assert.equal(page.json.runState, 'SUCCEEDED');
+    assert.equal(page.json.runState, 'ENDED'); // C4, as in (1)
     assert.deepEqual(page.json.events.map((e: Json) => e.seq), [2, 3, 4]);
     assert.equal(page.json.hasMore, true);
     // The task it is a run of, and the task's runs a visitor may open — for the breadcrumb and links.
@@ -599,5 +608,26 @@ test('a shared task: an explicit projection, the red line, its layers and its ru
     assert.equal(read.json.link.token, token);
     // Two comments and one input file; two runs to read — the one in the Trash is not counted.
     assert.deepEqual(read.json.counts, { comments: 2, files: 1, transcripts: 2 });
+  });
+
+  await t.test('(7) a run that ended with its task done reads SUCCEEDED, on the task page and its own', async () => {
+    const done = await task(`A task its run finished ${RUN}`, { status: TaskStatus.DONE });
+    const finished = await session(`Run that finished ${RUN}`, {
+      taskId: done, status: RunStatus.SUCCEEDED, endReason: 'task_done', startsTaskWork: false,
+      createdAt: new Date('2026-09-23T10:00:00Z'), startedAt: new Date('2026-09-23T10:00:05Z'),
+      finishedAt: new Date('2026-09-23T10:30:05Z'),
+    });
+    const shared = await owner('PUT', `/tasks/${pub(done)}/share`, { include: { conversations: true } });
+    assert.equal(shared.status, 200, shared.text);
+    const at = `/api/shared/${encodeURIComponent(shared.json.token)}`;
+    const page = await send(base, 'GET', at);
+    assert.equal(page.status, 200, page.text);
+    assert.deepEqual(page.json.root.runs, [{
+      state: 'SUCCEEDED', startedAt: '2026-09-23T10:00:05.000Z', endedAt: '2026-09-23T10:30:05.000Z',
+      durationMs: 30 * 60_000, sessionId: pub(finished), sessionPublicId: pub(finished),
+    }]);
+    const own = await send(base, 'GET', `${at}/sessions/${pub(finished)}`);
+    assert.equal(own.status, 200, own.text);
+    assert.equal(own.json.runState, 'SUCCEEDED');
   });
 });

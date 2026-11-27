@@ -477,6 +477,23 @@ test('ordinary Android PR verification never receives release signing secrets', 
   }
 });
 
+test('Android CI runs every share of verify.sh, and its one check passes only when all of them did', () => {
+  const verify = readFileSync(path.join(repo, 'src/android/scripts/verify.sh'), 'utf8');
+  const shares = [...verify.matchAll(/^  ([\w-]+)\)$/gm)].map((match) => match[1]);
+  assert.deepEqual(shares, ['all', 'unit-debug', 'unit-release', 'lint-apk']);
+  assert.match(ci, /^        part: \[unit-debug, unit-release, lint-apk\]$/m);
+  assert.match(ci, /bash src\/android\/scripts\/verify\.sh --part "\$\{\{ matrix\.part \}\}"/);
+  const check = block(block(ci, 'jobs', 0), 'android', 2);
+  assert.match(check, /^    name: Android \(test \+ lint \+ debug APK\)$/m);
+  assert.match(check, /^    needs: \[verify\]$/m);
+  assert.match(check, /^    if: \$\{\{ !cancelled\(\) \}\}$/m);
+  assert.match(check, /test "\$RESULT" = success/);
+  // Only main writes the dependency cache that every other run reads.
+  assert.match(ci, /if: success\(\) && github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/);
+  // The release build still runs every share in one job.
+  assert.match(release, /run: bash src\/android\/scripts\/verify\.sh "\$RUNNER_TEMP\/android-verification"/);
+});
+
 // ---- github-release.py: the release-history rules, against a stand-in for GitHub -------------------
 
 const script = path.join(repo, 'src/android/scripts/github-release.py');

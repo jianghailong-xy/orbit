@@ -23,11 +23,11 @@ import test from 'node:test';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   TaskCompletionPolicy,
   TaskVerdict,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 // The status enum comes from @orbit/shared rather than from Prisma: it is what the DTOs are typed
 // against, and the two spell the same values.
@@ -327,7 +327,7 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
         taskId: formerlyDone.id,
         title: 'evidence source',
         prompt: 'record what this task produced',
-        status: 'AWAITING_INPUT',
+        turnState: null,
         startsTaskWork: true,
       },
     }).then(async (session) => {
@@ -523,7 +523,7 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
         taskId: subject.id,
         title: 'dev run',
         prompt: 'do the work',
-        status: RunStatus.SUCCEEDED,
+        turnState: null, finishedAt: new Date(), 
       },
     });
     const ownRun = await db.session.create({
@@ -534,7 +534,7 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
         taskId: check.id,
         title: 'verification run',
         prompt: 'check the work',
-        status: RunStatus.RUNNING,
+        turnState: 'IN_FLIGHT',
       },
     });
 

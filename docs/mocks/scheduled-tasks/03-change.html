@@ -1,0 +1,297 @@
+<!-- DESIGN MOCK (2026-11-19, rev 2). A schedule's Change…: today it leaves for a blank composer; proposed, a
+     conversation bound to the schedule where the agent asks first and the person replies. Demo data throughout.
+     Render: node render.mjs $PWD/03-change.html $PWD/03-change.png -->
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<title>定时任务：Change…</title>
+<style>
+  :root { --brand:#3E69F6; --brand-bg:#EAF0FF; --t1:#111114; --t2:#8a8a90; --t3:#b4b4ba; --sep:#e4e4e8;
+          --grp:#f2f2f7; --green:#23a15a; --green-bg:#e3f5ea; --red:#e0453a; --red-bg:#fde8e6;
+          --amber:#b86e00; --amber-bg:#FFF4E0; --grey-bg:#efeff2; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#ececef; }
+  .board { padding:36px 40px 48px; width:1500px; background:#ececef; color:var(--t1);
+         font:14px/1.5 -apple-system,Inter,"Noto Sans SC",sans-serif; -webkit-font-smoothing:antialiased; }
+  h1 { font-size:25px; margin:0 0 6px; } .lede { color:#55555e; margin:0 0 24px; max-width:1400px; }
+  h2 { font-size:18px; margin:34px 0 12px; }
+  .grid { display:grid; grid-template-columns:repeat(3, 440px); gap:30px 30px; align-items:start; }
+  .fh { font-weight:700; font-size:15px; margin:0 0 8px; display:flex; gap:8px; align-items:center; }
+  .fh small { font-weight:400; color:#6b6b75; font-size:12.5px; }
+  .tag { font:600 11.5px/1 sans-serif; padding:4px 7px; border-radius:5px; background:#dcf3e5; color:#17683b; }
+  .tag.today { background:#fde8e6; color:#b3261e; }
+  .note { font-size:12.5px; color:#55555e; margin:8px 2px 0; line-height:1.65; } .note b { color:var(--t1); }
+  code { font:12px "JetBrains Mono",monospace; }
+  .mk { display:inline-flex; width:20px; height:20px; border-radius:50%; background:#d93025; color:#fff;
+        font:700 12px/20px Inter,sans-serif; justify-content:center; flex:none; }
+  .pin { position:absolute; right:-9px; }
+
+  .ph { width:430px; background:var(--grp); border-radius:22px; box-shadow:0 1px 0 #d5d5da, 0 6px 24px rgba(0,0,0,.06);
+        font-size:15px; position:relative; padding-bottom:16px; overflow:visible; }
+  .ph.white { background:#fff; }
+  .dim { background:#9a9aa2; border-radius:22px 22px 0 0; height:46px; }
+  .sheet { background:var(--grp); border-radius:14px 14px 22px 22px; margin-top:-10px; position:relative; padding-bottom:14px; }
+  .grab { width:38px; height:5px; border-radius:3px; background:#c7c7cc; margin:7px auto 4px; }
+  .sh { display:flex; align-items:center; padding:4px 16px 2px; }
+  .sh .tt { flex:1; font-size:20px; font-weight:700; }
+  .sh .done { color:var(--brand); font-weight:600; font-size:16px; }
+  .meta { color:var(--t2); font-size:13px; padding:0 16px 8px; }
+  .meta b { color:var(--t1); font-weight:600; background:#fff6c8; border-radius:4px; padding:0 2px; }
+  .nav { display:flex; align-items:center; padding:12px 16px 6px; gap:8px; min-height:44px; }
+  .nav .back { color:var(--brand); font-size:16px; white-space:nowrap; }
+  .nav .tt { flex:1; text-align:center; font-weight:600; font-size:16px; }
+  .nav .act { color:var(--brand); font-size:16px; font-weight:600; }
+  .gh { font-size:12.5px; color:var(--t2); text-transform:uppercase; letter-spacing:.02em; padding:12px 32px 6px; }
+  .grp { background:#fff; border-radius:12px; margin:0 16px; }
+  .hero { background:#fff; border-radius:12px; margin:4px 16px 0; padding:12px 16px; }
+  .hero .k { color:var(--t2); font-size:12.5px; } .hero .n { font-size:20px; font-weight:700; }
+  .acts { display:flex; gap:8px; margin:10px 16px 0; }
+  .btn { flex:1; text-align:center; background:#fff; border-radius:10px; padding:8px 0; font-weight:600; color:var(--brand); font-size:14.5px; position:relative; }
+  .btn.pri { background:var(--brand); color:#fff; } .btn.sm { flex:none; padding:8px 14px; }
+  .btn.hl { outline:2px solid var(--brand); outline-offset:1px; }
+  .text { padding:10px 14px; font-size:14.5px; line-height:1.45; }
+  .hrow { display:flex; gap:10px; padding:9px 14px; border-top:1px solid var(--sep); font-size:13.5px; align-items:flex-start; }
+  .hrow:first-child { border-top:0; }
+  .hrow .w { color:var(--t2); width:74px; flex:none; }
+  .hrow .b { flex:1; min-width:0; }
+  .hrow .s { color:var(--t2); font-size:12.5px; margin-top:1px; }
+  .who { font-size:11.5px; font-weight:600; border-radius:999px; padding:1px 7px; background:var(--grey-bg); color:#55555e; flex:none; }
+  .who.you { background:var(--brand-bg); color:#2546b8; }
+  .undo { color:var(--brand); font-weight:600; flex:none; }
+  .lnk { color:var(--brand); }
+  .hl-row { background:#f5f8ff; }
+
+  /* the change line */
+  .cl { margin:12px 16px 0; background:#fff; border-radius:12px; padding:10px 12px; border:1.5px solid var(--brand); position:relative; }
+  .cl .lab { font-size:12px; color:var(--t2); margin-bottom:4px; }
+  .cl .in { display:flex; gap:8px; align-items:flex-end; }
+  .cl .in .tx { flex:1; font-size:15px; min-height:22px; }
+  .cl .in .tx.ph-t { color:var(--t3); }
+  .send { width:30px; height:30px; border-radius:50%; background:var(--brand); color:#fff; font-weight:700; display:flex; align-items:center; justify-content:center; flex:none; }
+  .send.off { background:#d6d6dc; }
+  .caret { display:inline-block; width:2px; height:18px; background:var(--brand); vertical-align:-3px; }
+  .kb { margin-top:12px; height:150px; background:#d1d3d9; border-radius:0 0 22px 22px; display:grid; grid-template-columns:repeat(10,1fr); gap:6px; padding:10px 6px; }
+  .kb i { background:#fff; border-radius:5px; height:38px; box-shadow:0 1px 0 #8e9097; }
+  .pend { margin:12px 16px 0; background:#fff; border-radius:12px; padding:10px 14px; position:relative; }
+  .pend .q { font-size:14.5px; }
+  .pend .st { display:flex; gap:8px; align-items:center; color:var(--t2); font-size:13px; margin-top:6px; }
+  .spin { width:14px; height:14px; border-radius:50%; border:2px solid #d6dcf5; border-top-color:var(--brand); flex:none; }
+  .ok { margin:12px 16px 0; background:var(--green-bg); border-radius:12px; padding:10px 14px; position:relative; font-size:14px; color:#14532d; }
+  .ok .r { display:flex; gap:10px; align-items:flex-start; } .ok .r span:first-child { flex:1; }
+  .card { margin:12px 16px 0; background:#fff; border-radius:12px; border:1.5px solid #f0c27a; position:relative; }
+  .card .hd { padding:10px 14px 4px; font-weight:700; color:#7a4a00; }
+  .kv { display:grid; grid-template-columns:56px 1fr; gap:3px 10px; padding:2px 14px 8px; font-size:13.5px; }
+  .kv .k { color:var(--t2); }
+  .card .ft { display:flex; gap:8px; padding:8px 12px; background:#fafafb; border-top:1px solid var(--sep); justify-content:flex-end; border-radius:0 0 11px 11px; }
+  .ask { margin:12px 16px 0; background:#fff; border-radius:12px; padding:10px 14px; position:relative; }
+  .ask .q { font-size:14.5px; } .ask .q b { font-weight:600; }
+  .ask .opts { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+  .chip { border:1px solid #cdd6f6; color:#2546b8; background:var(--brand-bg); border-radius:999px; padding:3px 10px; font-size:13px; }
+
+  /* today: composer */
+  .comp { margin:10px 16px 0; background:#fff; border-radius:16px; padding:12px 14px; min-height:110px; position:relative; }
+  .comp .tx { font-size:15px; color:var(--t3); }
+  .comp .bar { display:flex; justify-content:space-between; color:var(--t2); font-size:13px; margin-top:44px; }
+  .x { position:relative; }
+  .empty { text-align:center; color:var(--t2); padding:70px 30px 10px; font-size:14px; }
+  .empty b { display:block; color:var(--t1); font-size:17px; margin-bottom:4px; }
+
+  /* web inspector */
+  .web { width:760px; background:#fff; border-radius:12px; box-shadow:0 1px 0 #d5d5da, 0 6px 24px rgba(0,0,0,.06); display:flex; overflow:hidden; font-size:14px; }
+  .web .list { flex:1; color:var(--t1); padding:22px 26px; border-right:1px solid var(--sep); color:var(--t2); }
+  .web .list .h { font-size:28px; color:var(--brand); font-weight:700; margin-bottom:12px; }
+  .web .list .r { padding:9px 0; border-top:1px solid var(--sep); color:var(--t1); }
+  .web .list .r small { display:block; color:var(--t2); font-size:12.5px; }
+  .web .list .r.sel { background:var(--brand-bg); margin:0 -10px; padding:9px 10px; border-radius:8px; border:0; }
+  .web .insp { width:400px; background:#fafafb; padding:20px 20px 24px; }
+  .web .insp .t { font-size:19px; font-weight:700; } .web .insp .m { color:var(--t2); font-size:12.5px; margin:2px 0 10px; }
+  .wbtns { display:flex; gap:6px; margin-top:10px; }
+  .wb { border:1px solid #d6d6dc; border-radius:7px; padding:5px 12px; font-size:13.5px; background:#fff; }
+  .wb.pri { background:var(--brand); color:#fff; border-color:var(--brand); } .wb.on { border-color:var(--brand); color:var(--brand); background:var(--brand-bg); }
+  .web .cl, .web .ok, .web .pend { margin:12px 0 0; }
+  .wl { font-size:11.5px; color:var(--t2); text-transform:uppercase; letter-spacing:.03em; margin:16px 0 6px; }
+  .wbox { background:#fff; border:1px solid var(--sep); border-radius:10px; padding:9px 12px; font-size:13.5px; }
+
+  .bind { display:flex; gap:6px; align-items:center; margin:2px 16px 8px; padding:7px 11px; border-radius:9px; background:var(--brand-bg); font-size:13px; color:#55555e; position:relative; }
+  .bind b { color:var(--t1); } .bind .r { margin-left:auto; color:var(--brand); font-weight:600; }
+  .ans { margin:10px 18px 0; font-size:14.5px; line-height:1.5; position:relative; }
+  .bub { margin:12px 16px 0 90px; background:var(--brand); color:#fff; border-radius:18px 18px 4px 18px; padding:9px 13px; font-size:14.5px; }
+  .sum { margin:8px 16px 0; border:1px solid var(--sep); border-radius:10px; padding:8px 0 0; }
+  .line { display:flex; gap:8px; align-items:center; margin:10px 16px 0; padding:9px 12px; border-radius:10px; background:var(--grp); font-size:13.5px; color:#55555e; position:relative; }
+  .line b { color:var(--t1); } .line .r { margin-left:auto; color:var(--brand); font-weight:600; white-space:nowrap; }
+  .cmp { display:flex; gap:8px; align-items:center; margin:14px 16px 0; border:1px solid #d6d6dc; border-radius:18px; padding:8px 8px 8px 14px; position:relative; }
+  .cmp .tx { flex:1; font-size:15px; } .ph-t { color:var(--t3); }
+  table { border-collapse:collapse; width:100%; background:#fff; border-radius:10px; overflow:hidden; font-size:13.5px; }
+  td, th { text-align:left; vertical-align:top; padding:9px 12px; border-top:1px solid var(--sep); }
+  th { background:#f6f6f8; font-weight:600; border-top:0; }
+  td:first-child { white-space:nowrap; font-weight:600; width:60px; }
+  .rec { color:#17683b; font-weight:600; }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:30px; }
+</style>
+<div class="board">
+<h1>定时任务 · Change…（修改）</h1>
+<p class="lede">今天三个客户端的 <b>Change…</b> 都是离开 Scheduled 页，跳到该工作区的新会话输入框（Web 预填 <code>"Codex stable check: "</code>，iOS / macOS / Android 什么都不填）。设计文档 §8.2 说的「带上这个定时任务」并没有做：agent 只能按标题去 <code>schedule_list</code> 里猜是哪一个；改完的结果（变更行、Allow 卡）留在那个会话里，人得自己回 Scheduled 页确认。<br>
+提议：<b>Change… 进入一个绑定了这个任务的会话，agent 先发第一句</b>——说清它现在是什么、哪些能直接改、哪些要你 Allow——然后你回复。结果（变更行 + Undo、信封卡）用会话里现有的组件。没有表单，信封规则（§4）不变。iOS 为准，Web / macOS / Android 跟随。</p>
+
+<h2>① 今天</h2>
+<div class="grid">
+  <div>
+    <div class="fh">1 · 详情面板 <span class="tag today">今天</span></div>
+    <div class="ph"><div class="dim"></div><div class="sheet">
+      <div class="grab"></div>
+      <div class="sh"><span class="tt">Codex stable check</span><span class="done">Done</span></div>
+      <div class="meta">↻ Every day at 09:00 · apiserver · Codex agent · Open a PR</div>
+      <div class="hero"><div class="k">Next run</div><div class="n">Tomorrow 09:00</div></div>
+      <div class="acts"><span class="btn pri">Run now</span><span class="btn">Pause</span><span class="btn hl">Change…<span class="mk pin" style="top:-10px">1</span></span><span class="btn sm">⋯</span></div>
+      <div class="gh">What it does</div>
+      <div class="grp"><div class="text">Every day at 09:00 Beijing time I check the latest stable Codex against the version the apiserver pins…</div></div>
+    </div></div>
+  </div>
+  <div>
+    <div class="fh">2 · 跳到 apiserver 的新会话 <span class="tag today">今天</span></div>
+    <div class="ph white">
+      <div class="nav"><span class="back">‹ apiserver</span><span class="tt">New session</span><span class="act" style="opacity:0">x</span></div>
+      <div class="empty"><b>What should we work on?</b>Codex agent · apiserver</div>
+      <div class="comp x"><div class="tx">Message…</div><div class="bar"><span>＋ · Default</span><span>claude-opus-5</span></div><span class="mk pin" style="top:-10px">2</span></div>
+      <div style="height:180px"></div>
+    </div>
+  </div>
+  <div>
+    <div class="fh">问题 <small>都来自「跳走」</small></div>
+    <div class="note" style="font-size:13.5px">
+      <span class="mk">1</span> <b>离开了正在看的东西。</b>人是在看这个任务的历史、备注时想到要改的，按下去页面换掉了，改完还得从左侧抽屉回来找。<br><br>
+      <span class="mk">2</span> <b>agent 不知道改哪个。</b>输入框是空的（Web 只有标题前缀）。同一工作区里有「Codex stable check」和「Codex release watch」时只能猜，或者反问一句，多一轮。<br><br>
+      <b>结果不在任务上。</b>变更行和 Allow 卡只画在那个会话里；人关掉会话后，详情面板的 History 才有一条 “Session · Undo”，看不出是哪句话改的。<br><br>
+      <b>会话列表多一条。</b>一句「改成 8 点」在 apiserver 的会话列表里留下一个会话，和第 3 版「定时任务的东西不进工作区会话列表」的意思相反（见 D1）。
+    </div>
+  </div>
+</div>
+
+<h2>② 提议：Change… 进会话，agent 先问</h2>
+<div class="grid">
+  <div>
+    <div class="fh">3 · 打开即是 agent 的第一句</div>
+    <div class="ph white" style="padding-bottom:0">
+      <div class="nav"><span class="back">‹ Scheduled</span><span class="tt">Change Codex stable check</span><span class="act">⋯</span></div>
+      <div class="bind x">📅 <b>Codex stable check</b> · apiserver · Codex agent<span class="r">Open</span><span class="mk pin" style="top:-10px">3</span></div>
+      <div class="ans">What should change about <b>Codex stable check</b>? Right now it:</div>
+      <div class="sum">
+        <div class="kv"><span class="k">Does</span><span>Checks the latest stable Codex against the version the apiserver pins, opens a PR when there is a new one</span>
+        <span class="k">When</span><span>Every day at 09:00 · Asia/Shanghai</span>
+        <span class="k">May</span><span>Open a PR</span>
+        <span class="k">Costs</span><span>Up to 7 runs a week, 30 min each</span></div>
+      </div>
+      <div class="ans x">I can change the time, the days, what it checks and how it reports right away, and you can undo it. More runs, longer runs, more access or another workspace need your Allow.<span class="mk pin" style="top:-4px;right:-4px">4</span></div>
+      <div class="cmp x"><span class="tx ph-t">Say what to change…<span class="caret"></span></span><span class="send off">↑</span><span class="mk pin" style="top:-10px">5</span></div>
+      <div class="kb"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    </div>
+    <div class="note"><span class="mk">3</span> 顶部一条绑定条：这个会话改的是哪个任务，<b>Open</b> 回到它的详情面板。<span class="mk">4</span> 第一句由 Orbit 按任务当前状态写好，立刻出现，<b>不启动模型、不花钱</b>（D1）；内容就是「现在是什么」+「哪些直接改、哪些要你 Allow」，即信封规则（§4）用人话说一遍。<span class="mk">5</span> 输入框已聚焦，键盘弹起。</div>
+  </div>
+  <div>
+    <div class="fh">4 · 你回一句，信封内：直接改好</div>
+    <div class="ph white">
+      <div class="nav"><span class="back">‹ Scheduled</span><span class="tt">Change Codex stable check</span><span class="act">⋯</span></div>
+      <div class="bind">📅 <b>Codex stable check</b> · apiserver · Codex agent<span class="r">Open</span></div>
+      <div class="ans" style="color:var(--t2)">What should change about <b>Codex stable check</b>? …</div>
+      <div class="bub">改成工作日早上 8 点</div>
+      <div class="ans" style="color:var(--t2);font-size:12.5px;margin-top:12px">Worked for 4s</div>
+      <div class="ans" style="margin-top:2px">Done: it now runs every weekday at 08:00. The next run is Monday 08:00.</div>
+      <div class="line x">📅 <span>Changed <b>Codex stable check</b>: every day 09:00 → every weekday 08:00</span><span class="r">Undo</span><span class="mk pin" style="top:-10px">6</span></div>
+      <div class="cmp"><span class="tx ph-t">Reply…</span><span class="send off">↑</span></div>
+    </div>
+    <div class="note"><span class="mk">6</span> 你回复后才启动 agent，它拿到的提示里已带任务 id、当前 revision 和 read-back，不用去猜。结果是会话里现有的变更行（<code>ScheduleCards.tsx</code> 那条），<b>Undo</b> 就在这里。还想再改（“还是 7 点吧”）就接着说，同一个会话。</div>
+  </div>
+  <div>
+    <div class="fh">5 · 超出信封：卡在会话里</div>
+    <div class="ph white">
+      <div class="nav"><span class="back">‹ Scheduled</span><span class="tt">Change Codex stable check</span><span class="act">⋯</span></div>
+      <div class="bind">📅 <b>Codex stable check</b> · apiserver · Codex agent<span class="r">Open</span></div>
+      <div class="bub">每周跑两次就行，另外每次给它 1 小时</div>
+      <div class="ans" style="margin-top:12px">Twice a week is fewer runs, so that's done. A 1-hour run is longer than the 30 minutes you allowed, so that part waits for you.</div>
+      <div class="line">📅 <span>Changed <b>Codex stable check</b>: every day → Mon, Thu</span><span class="r">Undo</span></div>
+      <div class="card x"><div class="hd">⚠ Let Codex stable check run for up to 1 hour?</div>
+        <div class="kv"><span class="k">Now</span><span>Up to 2 runs a week, 30 min each</span><span class="k">Asked</span><span>Up to 2 runs a week, <b>1 hour each</b></span></div>
+        <div class="ft"><span class="wb">Keep 30 min</span><span class="wb pri">Allow</span></div>
+        <span class="mk pin" style="top:-10px">7</span></div>
+      <div class="cmp"><span class="tx ph-t">Reply…</span><span class="send off">↑</span></div>
+    </div>
+    <div class="note"><span class="mk">7</span> 信封卡和今天一样（同一个 <code>ScheduleChangeRequest</code>）；人在会话里，不推送。没按就离开的话，照常进 <b>Waiting on you</b>。</div>
+  </div>
+
+  <div>
+    <div class="fh">6 · 回到详情面板</div>
+    <div class="ph"><div class="dim"></div><div class="sheet">
+      <div class="grab"></div>
+      <div class="sh"><span class="tt">Codex stable check</span><span class="done">Done</span></div>
+      <div class="meta">↻ <b>Every weekday at 08:00</b> · apiserver · Codex agent · Open a PR</div>
+      <div class="hero"><div class="k">Next run</div><div class="n">Monday 08:00</div></div>
+      <div class="acts"><span class="btn pri">Run now</span><span class="btn">Pause</span><span class="btn">Change…</span><span class="btn sm">⋯</span></div>
+      <div class="gh">History</div>
+      <div class="grp x">
+        <div class="hrow hl-row"><span class="w">Today 15:02</span><span class="b">Every day 09:00 → every weekday 08:00<div class="s">“改成工作日早上 8 点” · <span class="lnk">conversation</span></div></span><span class="who you">You</span><span class="undo">Undo</span></div>
+        <div class="hrow"><span class="w">Today 10:00</span><span class="b">Known 0.49.0 · <span class="lnk">session</span></span></div>
+        <span class="mk pin" style="top:-10px">8</span></div>
+    </div></div>
+    <div class="note"><span class="mk">8</span> History 记下你的原话和 <b>conversation</b> 链接，标 <b>You</b>（D4）。改动还在进行中（agent 在跑、卡没按）时再按 Change…，回到同一个会话，不再开新的（D2）。</div>
+  </div>
+  <div>
+    <div class="fh">7 · 说不清时 agent 追问</div>
+    <div class="ph white">
+      <div class="nav"><span class="back">‹ Scheduled</span><span class="tt">Change Codex stable check</span><span class="act">⋯</span></div>
+      <div class="bind">📅 <b>Codex stable check</b> · apiserver · Codex agent<span class="r">Open</span></div>
+      <div class="bub">改成每周一次</div>
+      <div class="ans" style="margin-top:12px">Which day of the week, and still at 09:00?</div>
+      <div class="bub">周一，时间不变</div>
+      <div class="ans" style="margin-top:12px">Done: it now runs every Monday at 09:00.</div>
+      <div class="line">📅 <span>Changed <b>Codex stable check</b>: every day → every Monday</span><span class="r">Undo</span></div>
+      <div class="cmp"><span class="tx ph-t">Reply…</span><span class="send off">↑</span></div>
+    </div>
+    <div class="note">普通对话，没有新组件。agent 只该问人才能定的（哪天、多久一次），和创建时一样（§8.1）。</div>
+  </div>
+  <div>
+    <div class="fh">规则</div>
+    <table>
+      <tr><td>入口</td><td>Change…（详情面板、行左滑、长按菜单、macOS 右键）打开这个会话。在任意会话里直接说「把 Codex 检查改成 8 点」照旧可用。</td></tr>
+      <tr><td>开场</td><td><code>POST /api/schedules/:id/change</code> 在任务的工作区、用任务的 agent 建会话，写入第一条消息（agent 角色，Orbit 生成），不启动引擎。</td></tr>
+      <tr><td>绑定</td><td>会话记住 <code>scheduleId</code>：绑定条、导航标题都从它来；你第一次回复时，发给 agent 的提示带上任务 id、revision、read-back。</td></tr>
+      <tr><td>结果</td><td>沿用会话里现有的变更行 + Undo、信封卡（<code>GET /api/sessions/:id/schedule-cards</code>）。</td></tr>
+      <tr><td>放弃</td><td>打开了却一句没说就离开：会话不留下，任务不变。</td></tr>
+    </table>
+  </div>
+</div>
+
+<h2>③ Web（macOS 同此布局）</h2>
+<div class="web">
+  <div class="list"><div class="h" style="font-size:20px;color:var(--t1)">Change Codex stable check</div>
+    <div class="bind x" style="margin:0 0 14px">📅 <b>Codex stable check</b> · apiserver · Codex agent<span style="margin-left:auto;color:var(--brand);font-weight:600">Open in Scheduled</span><span class="mk pin" style="top:-10px">9</span></div>
+    <div class="ans" style="margin:0;color:var(--t1)">What should change about <b>Codex stable check</b>? Right now it:</div>
+    <div class="sum" style="margin:8px 0"><div class="kv"><span class="k">Does</span><span>Checks the latest stable Codex against the pinned version, opens a PR when there is a new one</span><span class="k">When</span><span>Every day at 09:00 · Asia/Shanghai</span><span class="k">May</span><span>Open a PR</span><span class="k">Costs</span><span>Up to 7 runs a week, 30 min each</span></div></div>
+    <div class="ans" style="margin:0;color:var(--t1)">I can change the time, the days, what it checks and how it reports right away, and you can undo it. More runs, longer runs, more access or another workspace need your Allow.</div>
+    <div class="cmp" style="margin:22px 0 0"><span class="tx ph-t">Say what to change…<span class="caret"></span></span><span class="send off">↑</span></div>
+  </div>
+</div>
+<p class="note" style="max-width:910px"><span class="mk">9</span> Web 上 Change… 跳到 <code>/sessions/&lt;id&gt;</code>（今天是 <code>/workspaces/&lt;id&gt;/new</code> 加预填）；绑定条的 <b>Open in Scheduled</b> 回到列表并选中这个任务。</p>
+
+<div class="two">
+<div>
+<h2>已定（2026-11-19，全部按推荐 A）</h2>
+<table>
+  <tr><th></th><th>问题</th><th>选项</th></tr>
+  <tr><td>D1</td><td>第一句谁写？</td><td><span class="rec">A（推荐）</span>Orbit 按模板写，立刻出现、不花钱，三端文案一致。<br>B 真的跑一轮 agent 来问：措辞更自然，但每次打开要等几秒、算一次运行，打开不说话也花了钱。</td></tr>
+  <tr><td>D2</td><td>改动没完时再按 Change…？</td><td><span class="rec">A（推荐）</span>回到同一个会话。<br>B 每次开新会话。</td></tr>
+  <tr><td>D3</td><td>这个会话放哪？</td><td><span class="rec">A（推荐）</span>不进工作区会话列表，从绑定条、History 的 conversation、Waiting on you 进入。<br>B 普通会话，留在工作区列表里（同 quick-add）。</td></tr>
+  <tr><td>D4</td><td>History 怎么标？</td><td><span class="rec">A（推荐）</span>这个会话里改的标 <b>You</b> 并显示原话；别的会话里改的仍标 Session。<br>B 都标 Session。</td></tr>
+</table>
+</div>
+<div>
+<h2>会动的文件</h2>
+<table>
+  <tr><th>端</th><th>文件</th></tr>
+  <tr><td>服务</td><td><code>schedules.controller.ts</code> 新 <code>POST schedules/:id/change</code>；会话建时写入 Orbit 生成的第一条、记 <code>scheduleId</code>，首次回复时拼进绑定提示；revision 记 <code>askedText</code>（D4）；migration；pg spec</td></tr>
+  <tr><td>共享</td><td><code>src/shared/src/schedule.ts</code> 开场文案 + <code>contracts/schedule.contract.json</code></td></tr>
+  <tr><td>Web</td><td><code>pages/ScheduledPage.tsx</code> 的 <code>change</code>；会话页绑定条；<code>WorkspaceView.tsx</code> 的 <code>composerText</code> 预填可删</td></tr>
+  <tr><td>Apple</td><td><code>AppModel.openChangeConversation</code>、<code>ScheduledPage.swift</code>、<code>ScheduleRowActions.swift</code>、会话页绑定条</td></tr>
+  <tr><td>Android</td><td><code>MainActivity.kt</code> 的 <code>change =</code>、会话页绑定条</td></tr>
+  <tr><td>文档</td><td><code>docs/scheduled-tasks-design.md</code> §8.2、§9</td></tr>
+</table>
+</div>
+</div>
+</div>

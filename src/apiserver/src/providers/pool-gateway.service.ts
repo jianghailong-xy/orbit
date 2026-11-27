@@ -6,7 +6,7 @@ import type { LookupFunction } from 'node:net';
 import { AgentProvider } from '@orbit/shared';
 import { ACCOUNT_DISABLED, DisabledAccounts } from '../auth/disabled-accounts';
 import { sha256 } from '../common/crypto.util';
-import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
+import { isHeld } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
 import { poolPauseBlocksRequest } from './pool-pause';
 import { responseCostMicros } from './openai-prices';
@@ -336,7 +336,7 @@ export class PoolGatewayService {
         person: { select: { pool: { select: { slug: true, label: true, engine: true, ownerId: true } } } },
         session: {
           select: {
-            status: true, ownerId: true, provider: true, poolKeyId: true, poolCodexAccountId: true,
+            finishedAt: true, ownerId: true, provider: true, poolKeyId: true, poolCodexAccountId: true,
             completedAt: true, deletedAt: true, owner: { select: { disabledAt: true } },
           },
         },
@@ -345,7 +345,7 @@ export class PoolGatewayService {
     if (!row || row.revokedAt || row.expiresAt.getTime() <= Date.now()) return null;
     const { pool } = row.person;
     const { session } = row;
-    const open = OPEN_SESSION_STATUSES.includes(session.status) && !session.completedAt;
+    const open = isHeld(session) && !session.completedAt;
     const current =
       pool.engine === AgentProvider.CODEX &&
       !session.deletedAt &&

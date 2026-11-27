@@ -250,7 +250,7 @@ struct MainCheckoutResultRow: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityIdentifier("main-checkout-result")
-        .sheet(isPresented: $showingDiff) { DiffSheet(console: console) }
+        .sheet(isPresented: $showingDiff) { DiffSheet(console: console, startOnAllChanges: true) }
     }
 
     private func attributed(_ line: MainCheckoutCopy.ResultLine) -> AttributedString {

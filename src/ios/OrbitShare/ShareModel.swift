@@ -10,9 +10,9 @@ import OrbitKit
 
 /// The Share Extension's state: what was shared, where it goes, and the hand-off to the app
 /// (docs/share-to-orbit-design.md §3.1). Nothing here holds a credential or touches the network:
-/// the picker reads the app's snapshot and Add writes one inbox entry, then hands off: a local
-/// notification on iOS, opening the app with the link on macOS (§3.3). The macOS Share-menu
-/// extension hosts this same model and view.
+/// the picker reads the app's snapshot and Add writes one inbox entry, then hands off: on iOS it
+/// opens the app with the link if `openApp` can, else posts a local notification; on macOS it
+/// opens the app with the link (§3.3). The macOS Share-menu extension hosts this same model and view.
 @MainActor
 @Observable
 final class ShareModel {
@@ -42,6 +42,8 @@ final class ShareModel {
         /// Added. `notified` says whether the hand-off reached the person: the "tap to finish"
         /// notification was posted (iOS), or the app was opened on the entry (macOS).
         case done(title: String, notified: Bool)
+        /// Added, and Orbit was opened on the entry (iOS): the sheet closes at once.
+        case opened
         case failed(String)
     }
 
@@ -60,6 +62,8 @@ final class ShareModel {
     var destination: Destination?
     var workspace: RecentSessionsSnapshot.Workspace?
     private(set) var phase: Phase = .loading
+    /// iOS: opens the containing app on a link; false when it could not. Set by the host controller.
+    var openApp: ((URL) async -> Bool)?
 
     private let container: URL?
     private let scratch: URL
@@ -166,9 +170,9 @@ final class ShareModel {
 
     // MARK: Add
 
-    /// Writes the inbox entry, then posts "N files ready … tap to finish" (iOS) or opens Orbit on
-    /// it (macOS). Nothing is uploaded or sent: the app stages the items in the composer and the
-    /// person sends from there.
+    /// Writes the inbox entry, then opens Orbit on it; on iOS, where that is not a supported API and
+    /// may fail, it posts "N files ready … tap to finish" instead. Nothing is uploaded or sent: the
+    /// app stages the items in the composer and the person sends from there.
     func add() async {
         guard canAdd, let destination, let container else { return }
         phase = .adding
@@ -194,6 +198,10 @@ final class ShareModel {
         #if os(macOS)
         let notified = NSWorkspace.shared.open(ShareHandoffLink.url(target: entry.target, entryID: entry.id))
         #else
+        if let openApp, await openApp(ShareHandoffLink.url(target: entry.target, entryID: entry.id)) {
+            phase = .opened
+            return
+        }
         let notified = await Self.notify(entry: entry, title: destination.title)
         #endif
         phase = .done(title: destination.title, notified: notified)

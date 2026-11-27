@@ -95,6 +95,17 @@ describe('the Open list read as a delta', () => {
     second.forEach((row, i) => expect(row).toBe(first[i]));
   });
 
+  it('asks once for a read the server answers unchanged, the body a 304 hands back', async () => {
+    const asked: string[] = [];
+    const unchanged = async (since: string): Promise<OpenListAnswer<{ id: string }>> => {
+      asked.push(since);
+      return since ? { full: false, upserts: [], removedIds: [], cursor: since } : { full: true, sessions: [{ id: 'a' }], cursor: 'c1' };
+    };
+    await readOpenList('scope', unchanged);
+    for (let n = 0; n < 3; n += 1) await readOpenList('scope', unchanged);
+    expect(asked, 'an unchanged answer asked the server again').toEqual(['', 'c1', 'c1', 'c1']);
+  });
+
   it('applies a delta to the list the server sent, not to a copy edited since', async () => {
     const server = new FakeServer();
     server.list = [{ id: 'a', title: 'A', status: 'IDLE' }, { id: 'b', title: 'B', status: 'IDLE' }];

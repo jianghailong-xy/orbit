@@ -10,7 +10,9 @@ and [runner troubleshooting](runner-troubleshooting.md) when enrollment or execu
 
 ## Requirements
 
-- Docker Engine with the Compose plugin
+- Docker Engine with the Compose and buildx plugins. Ubuntu's and Debian's `docker.io` packages leave buildx out:
+  `scripts/install-server.sh` installs `docker-buildx` with apt where it is missing, and without it Compose warns
+  on every build and falls back to its own builder
 - Enough CPU, memory, and disk to build the images and retain Postgres data
 - A Linux host for the server deployment
 - One or more runner machines with a supported runtime installed and authenticated, or room on this host for
@@ -37,8 +39,9 @@ cd orbit
 ```
 
 For a new deployment, `scripts/install-server.sh` does the rest of this section and the next: it writes `.env`
-with two independently generated secrets, prepares [managed runners](#managed-runners), firewalls their network on
-this host, sets up the [runner link](#runner-link), and starts the stack. Give it the external origin when you serve
+with two independently generated secrets, sets up the [runner link](#runner-link), and starts the stack. With
+`--managed-runners` it also prepares [managed runners](#managed-runners) (Orbit Cloud) and firewalls their network on
+this host; without it they are off. Give it the external origin when you serve
 Orbit on a domain or at an address of its own:
 
 ```bash
@@ -243,10 +246,11 @@ Each session works in a checkout of its own, under `<ORBIT_HOME>/worktrees` (`~/
 Three things keep them from filling the runner's disk:
 
 - **Keep Free.** Set on the runner's page (Capacity), it is the free space below which the runner reclaims
-  checkouts: finished sessions' first, then those of resting sessions left unwritten for two weeks, when nothing
-  in them would be lost. With none set, a registered runner reclaims only finished sessions' checkouts beyond the
-  32 most recent. Set it at least as high as whatever else guards that disk. A managed runner has a default floor,
-  and takes resting sessions' checkouts sooner ([Their storage](#their-storage)).
+  checkouts: finished sessions' first, then resting sessions' least recently worked in, when nothing in them would
+  be lost (their work stays on their branch and the checkout comes back from it). Whatever the floor, a runner
+  keeps no more than the 32 most recent finished sessions' checkouts and the 64 most recent resting sessions'. Set
+  it at least as high as whatever else guards that disk. A managed runner has a default floor
+  ([Their storage](#their-storage)).
 - **Cloned checkouts.** Where the filesystem can clone files, on APFS, XFS made with `reflink=1`, btrfs, or
   OpenZFS 2.2 or later with block cloning enabled, a session's checkout is cloned from the workspace's own
   checkout and costs next to nothing on disk until its files change. The workspace's checkout has to be on the
@@ -272,7 +276,7 @@ base backups and archived WAL to `./data/pg-archive`.
   anything else there. A same-disk backup does not protect against disk or host loss.
 - The same setting copies `./data/files` to the directory beside the target, `<target>-files`, leaving out `tmp/`.
   With no target, `./data/files` is the only copy of those bytes: they are not in Postgres or
-  in any local backup. With `ORBIT_FILES_BACKEND=s3` the bucket holds them, and its versioning or replication is what
+  in any local backup. With `ORBIT_DRIVE_BACKEND=s3` the bucket holds them, and its versioning or replication is what
   protects them. See [Attachment files](postgres-backup-restore.md#attachment-files).
 - The sidecar reads the target before mirroring, and refuses one holding another cluster's archive, with the reason in
   its log, rather than replace it: [The off-host mirror](postgres-backup-restore.md#the-off-host-mirror).
@@ -286,7 +290,8 @@ base backups and archived WAL to `./data/pg-archive`.
   restore the archive before the first `docker compose up -d`, or you have a new, empty cluster to move aside first:
   [Restore on a replacement host](postgres-backup-restore.md#restore-on-a-replacement-host).
 - Periodically perform the verification procedure in the [backup and restore runbook](postgres-backup-restore.md).
-- Monitor container health, free disk, failed backups, runner heartbeat status, and HTTP error rates.
+- Monitor container health, free disk, failed backups, runner heartbeat status, and HTTP error rates: the
+  [monitoring profile](#monitoring) collects the metrics for it.
 - Decide an attachment/artifact retention policy appropriate for your deployment.
 
 ### File retention and quota
@@ -316,10 +321,380 @@ takes the session and its rows, an expired file's included, though that file's b
 Deleting a session from Trash by hand takes its files with it, pinned or cited. Whichever way a row goes, evidence that cited it
 keeps only the sha256 it recorded, and its card shows an expired placeholder: the name and test summary went with the row.
 
-Settings shows an account's storage, its largest projects and tasks, and what each week added. Set `ORBIT_FILES_QUOTA_BYTES` in
+Settings shows an account's storage, its largest projects and tasks, and what each week added. Set `ORBIT_DRIVE_QUOTA_BYTES` in
 `.env` to limit what one account may keep; past it an upload is refused with `413` and the code `FILE_QUOTA_EXCEEDED`. A
 self-hosted deployment needs no limit, and has none unless you set one. Each content counts once, an expired file no longer
 counts, and uploads racing at the limit can pass it by at most 25 MiB each.
+
+### Monitoring
+
+The `monitoring` Compose profile runs Prometheus beside the stack, with two exporters, and collects the metrics of
+every apiserver, the link gateway, PostgreSQL and the host; [Grafana](#grafana) shows them. Loki keeps the stack's
+container logs, which Alloy ships to it ([Logs](#logs)). The only port it publishes on the host is Grafana's, on
+`127.0.0.1`, and no monitoring container is given the Docker socket.
+
+**It is on by default.** A fresh install (`scripts/install-server.sh`) writes `ORBIT_MONITORING=on`, a generated
+`GRAFANA_ADMIN_PASSWORD` and a last `COMPOSE_PROFILES` line that repeats the profiles above it with `monitoring`, then
+starts the six services. The first upgrade (`/upgrade`'s script) of a deployment whose `.env` has no `ORBIT_MONITORING`
+does the same, the way it adds the [runner link](#runner-link): it appends those lines at the end of `.env`, leaves every
+line already there as it was, and starts the services. postgres-exporter's password is not in `.env`: the `pg-monitor-role`
+service makes it into a volume. An upgrade that finds `ORBIT_MONITORING` in `.env` never adds the profile, whatever
+`COMPOSE_PROFILES` says, so it happens once. A deployment that already lists `monitoring` has only `ORBIT_MONITORING=on`
+recorded. A two-stage release (`ORBIT_REGISTRY`) leaves `.env` alone, as it does for the runner link: add the profile by hand.
+The upgrade also warns when the disk is over 90% full, since Loki refuses every write past that, and Alloy reads each
+container's log file from its start the first time it runs, dropping lines older than an hour.
+
+To turn it on by hand, add `monitoring` to `COMPOSE_PROFILES` in `.env`, then start it:
+
+```bash
+COMPOSE_PROFILES=runner-link,monitoring      # keep the profiles the line already names
+docker compose up -d --wait prometheus node-exporter postgres-exporter grafana loki alloy
+```
+
+**What it runs.** Every image is pinned by version and digest; set the variable to use another
+([configuration reference](configuration.md#images-and-the-two-stage-release)).
+
+| Service | What it does | Memory limit |
+| --- | --- | --- |
+| `prometheus` | Scrapes the targets below every 15 seconds and keeps the series in the `prometheus-data` volume. | 1 GB |
+| `node-exporter` | The host's CPU, memory, load and disks, from the host's `/proc`, `/sys` and `/` mounted read-only, and [the backup metrics](#the-backup-metrics) `pgbackup` writes. | 128 MB |
+| `postgres-exporter` | PostgreSQL's statistics, read as the `orbit_monitor` role. | 128 MB |
+| `grafana` | The dashboards, on `127.0.0.1` only ([below](#grafana)). | 384 MB |
+| `pg-monitor-role` | Runs once each time the profile comes up and exits: it makes `orbit_monitor` and sets its password. | 64 MB |
+| `loki` | Keeps the log lines Alloy sends, in the `loki-data` volume ([Logs](#logs)). | 512 MB |
+| `alloy` | Reads this project's container logs from `/var/lib/docker/containers`, mounted read-only, and sends them to Loki. | 256 MB |
+
+**What it costs.** Measured on a test stack (postgres and one apiserver idle, no runners, no traffic) with the whole profile
+up for about 15 minutes. Memory is `docker stats` in MiB; disk is `du -sb` of the volume, taken three times over 20 minutes.
+
+| Service | Idle memory (MiB) | Limit (MiB) | Disk |
+| --- | --- | --- | --- |
+| `prometheus` | 26.3 | 1024 | About 296 MiB a day measured (736 samples a second, 11,085 series, 0.4 MiB a minute while the data sits in the write-ahead log). At 15 days that exceeds the 4 GB size cap, so the cap is what bounds it |
+| `node-exporter` | 13.1 | 128 | None |
+| `postgres-exporter` | 14.0 | 128 | None |
+| `grafana` | 24.9 | 384 | 50 MiB, fixed (`grafana-data`) |
+| `loki` | 20.9 | 512 | Follows the logs: about 7 MiB a day in, so about 48 MiB for 7 days if Loki compressed nothing, and about 5 MiB at the 10x gzip measured on these logs (estimate; see below). Under 1 MiB on an idle stack |
+| `alloy` | 21.6 | 256 | Under 1 MiB (`alloy-data`) |
+| `pg-monitor-role` | 0 (exited after it runs) | 64 | None |
+| **Total** | **120.7** | | |
+
+Loki's figure is an estimate from the json-file logs of Compose stacks on one host that had run for about a day
+(`du` of each container's `*-json.log`, divided by its age): the web gateway wrote 0.7 to 4.0 MiB a day, the link gateway
+0.1 to 6.3 MiB, PostgreSQL 0.14 MiB, so one stack is about 7 MiB a day. Those logs compress 7 to 26 times with gzip, 13 times
+in the median; Loki's own ratio was not measured, so the table's upper figure assumes none. The apiserver's log, which
+dominates on a loaded deployment, had no steady-state window and is not in it. Multiply by your own traffic.
+
+A busy stack costs more: memory with more series and logs, and Loki's disk with the log volume. The Prometheus figure is the
+write-ahead log before compaction, so it is an upper bound on the daily growth.
+
+**What Prometheus scrapes** (`deploy/monitoring/prometheus.yml`):
+
+| Job | Target | Found by |
+| --- | --- | --- |
+| `apiserver` | Every apiserver, on its internal metrics listener (port 9091) | DNS on `orbit-apiservers`, the name every apiserver answers to: `apiserver`, `apiserver-2` and on from [an override](#several-apiservers), and a two-stage release's `apiserver-next` while it runs |
+| `link-gateway` | The link gateway's `/metrics` (port 9464) | DNS on `link-gateway`, which resolves only while the `runner-link` profile runs it. Without the link the job has no target, rather than one that is down |
+| `node` | `node-exporter:9100` | Its name |
+| `postgres` | `postgres-exporter:9187` | Its name |
+| `prometheus` | Prometheus itself | `localhost:9090` |
+
+The names are looked up every 15 seconds, so an apiserver that starts or stops is scraped, or dropped, within that.
+A target that stops before the next lookup can be scraped as down once in between, and its series go stale a minute or
+so after it is dropped: on a stack whose link gateway was removed, `up{job="link-gateway"}` had no series 60 seconds
+later, and none at all in a Prometheus started while the link was off.
+Each apiserver is a target of its own, labelled by its address in the project network, which changes when the
+container is recreated.
+
+**What the apiserver reports.** Beside the database-conflict, Watch and wiki counters it always served, each
+apiserver's `/metrics` carries these. Every label comes from a closed set; none names a runner, a user, a session or a
+task.
+
+| Metric | What it is |
+| --- | --- |
+| `orbit_http_request_duration_seconds` | A histogram of the time from a request reaching the apiserver to its answer being written, labelled `route` (the template, such as `/api/sessions/:id`, never the URL; `unmatched` when no route matched), `method` (`GET`, `POST` and the other five, or `other`) and `status` (`2xx` to `5xx`, or `other`). Recorded when the answer is written, so the status is the one sent, 500s from a failed handler included. Past 1,024 label combinations, new ones are counted in one `overflow` series. |
+| `orbit_runners{state}` | Runners by state: `online` and `draining` were heard from in the last 90 seconds, `draining` taking no new work; `silent` were not, and did not sign off; `offline` signed off. |
+| `orbit_runner_oldest_heartbeat_age_seconds` | Seconds since the least recently heard of the `online` and `draining` runners last beat, 0 with none. Runners beat every 30 seconds, so it sits near 30 and climbs to 90 as beats stop; a runner past that is counted `silent`. |
+| `orbit_sessions{state}` | Sessions not in the Trash whose turn is `queued` for a runner or `running` on one. |
+| `orbit_tasks{state}` | Tasks a session is working on, as the task list shows them: `queued` while its turn waits for a runner, `running` otherwise, which includes a session waiting for something that will wake it. |
+| `orbit_fleet_gauges_up` | 1 when the four above could be read from the database, 0 when they could not; they are then absent. |
+
+The histogram leaves out the requests that are held open on purpose, because their time is what they wait for: the
+event streams (`/api/events`, `/api/sessions/:id/events` and the share-link and guest streams), the approval
+`orbit mcp` waits on for up to 25 seconds, and the model gateways under `/api/gw/`. The browser viewer's WebSocket
+never reaches it. A request whose client left before the answer was written is not counted either; the web gateway's
+access log has it, as a 499. Two routes can still hold for a while when asked to: a merge with `waitSeconds`, and the
+Cursor key check. They are counted under their own routes, so they move only those routes' quantiles.
+
+The runner, session and task gauges are read from the database at most once every 30 seconds by each apiserver, and
+scrapes in between are answered from that read. Every apiserver reads the same rows, so combine them across
+apiservers with `max`, never `sum`; the histogram is each apiserver's own requests, so `sum` it.
+
+#### The backup metrics
+
+`pgbackup` writes `./data/pg-archive/metrics/pgbackup.prom` on every poll, which is at least every 15 minutes, and
+node-exporter serves it from that directory alone, mounted read-only; it does not see the rest of the archive. The
+off-host mirror leaves that directory out.
+
+| Metric | What it is |
+| --- | --- |
+| `orbit_backup_base_last_success_timestamp_seconds` | When the newest completed base backup was finished, in Unix seconds; 0 with none. |
+| `orbit_backup_base_interval_seconds` | `ORBIT_BASE_BACKUP_INTERVAL`, so that a rule can say "older than its interval" without repeating the setting: `time() - orbit_backup_base_last_success_timestamp_seconds > orbit_backup_base_interval_seconds + 3600`. The hour covers the poll and the backup's own run time. |
+| `orbit_backup_wal_archive_failures_total` | Failed WAL archive attempts, `pg_stat_archiver.failed_count`. Postgres retries a failed segment about once a minute, so it keeps climbing while archiving is broken. It restarts from 0 when Postgres's statistics are reset. |
+| `orbit_backup_wal_archive_failing` | 1 while archiving is failing (its last failure is newer than its last success), the state the sidecar logs `ERROR: WAL archiving is failing` in. |
+| `orbit_backup_mirror_failures_total{copy}` | Polls whose off-host copy failed since the sidecar started, by `copy`: `archive`, `files` and `bucket`. A mirror the sidecar refuses counts as failed. Always 0 with no `ORBIT_BACKUP_SYNC_TARGET`. |
+
+The two WAL lines are left out of a poll that could not read `pg_stat_archiver`. node-exporter adds
+`node_textfile_mtime_seconds{file="/textfile/pgbackup.prom"}`, the file's own time: if it stops moving, the sidecar
+has stopped. The sidecar picks up a new `scripts/pg-backup.sh` only when its container is recreated, so after an
+upgrade that changes it, check that the file exists.
+
+**Reading it.** Prometheus is reached inside the project network only. Ask it from its own container:
+
+```bash
+docker compose exec prometheus wget -qO- 'http://127.0.0.1:9090/api/v1/targets?state=active' | head -c 2000
+docker compose exec prometheus wget -qO- 'http://127.0.0.1:9090/api/v1/query?query=up'
+```
+
+**The apiserver's metrics listener.** Each apiserver serves its metrics to Prometheus on a listener of its own, port
+9091 (`METRICS_INTERNAL_PORT`), beside its API. It answers `GET /metrics` with the same body as `GET /api/metrics`,
+without a token, and refuses every other path with 404 and every other method with 405; no request on it reaches the
+API. It binds every interface of the container, so Prometheus reaches it over the project network, and it is
+published nowhere. It opens whether or not the profile is on, and it stops with the API when the apiserver stops.
+`GET /api/metrics` through the web gateway is unchanged and still needs a bearer token.
+
+It carries no token because nothing outside the project network can reach it. A [managed runner](#managed-runners)
+runs on a network of its own, `orbit-cloud-runners`, and Docker keeps traffic between two bridge networks apart, with
+or without `managed-runner-firewall`: from a network made the way the install makes that one, with no firewall rules,
+a connection to the listener's port fails on the apiserver's address, on the project network's gateway address and on
+the host's own address, while the same port answers from inside the project network. Two things would undo that:
+attaching a managed runner, or any container you do not trust, to the project network, and running Docker with
+`"iptables": false`, which turns off that separation. Do neither.
+
+**postgres-exporter's role.** `pg-monitor-role` connects over the Postgres socket, as `pgbackup` does, and makes
+`orbit_monitor`: a login role in `pg_monitor`, which reads PostgreSQL's statistics views and settings and none of the
+application's tables, with no other right and a connection limit of 3, which the
+[connection budget](#database-connections) counts. Its password is 64 random hex digits that `pg-monitor-role`
+generates the first time and keeps in the `pg-monitor-secret` volume, which postgres-exporter reads it from. It is not
+in `.env` or in any environment. Every run sets the role's rights and password again. To replace the password:
+
+```bash
+docker compose rm -sf postgres-exporter pg-monitor-role
+docker volume rm "$(docker compose config --format json | jq -r .name)_pg-monitor-secret"
+docker compose up -d --wait postgres-exporter
+```
+
+**The host's disks.** node-exporter reports every filesystem the host mounts, under the host's own mount point. The
+one that holds `./data`, where the database, its archive and the attachments are, is the mount point `df` names:
+
+```bash
+df --output=target ./data | tail -1     # for example /, or /mnt/data
+```
+
+Its free space is `node_filesystem_avail_bytes{mountpoint="<that mount point>"}`. node-exporter runs in the project
+network rather than the host's, so that its port is reached by Prometheus alone; its network counters are therefore its
+own container's, not the host's. The host's `/` shows it the path of the Docker socket too, which it cannot open: it
+runs as `nobody`, with every capability dropped, and the socket belongs to root and the `docker` group.
+
+#### Grafana
+
+Grafana shows what Prometheus collects, in four dashboards that ship in the repository
+(`deploy/monitoring/grafana/dashboards/`) and load by themselves. Prometheus and [Loki](#logs) are its data sources,
+provisioned (`deploy/monitoring/grafana/provisioning/`); none of these can be changed or deleted from Grafana's UI. To change a dashboard,
+edit its file: Grafana picks the change up within a minute.
+
+**It is never on the Orbit origin.** Grafana is published as `127.0.0.1:3030` (`GRAFANA_PORT`) and nowhere else, and
+neither the web gateway nor `gateway/nginx.conf` has a location for it. That is on purpose: the web app keeps its login
+token in the browser's `localStorage`, and a script served from the same origin can read it. Grafana can run scripts
+of its own making (panels and plugins), so it must not share an origin with Orbit. Do not add a `location /grafana`
+to either nginx configuration.
+
+**Reach it** from the host itself at `http://127.0.0.1:3030`, or from your own machine through an SSH tunnel:
+
+```bash
+ssh -L 3030:127.0.0.1:3030 you@your-server      # then open http://localhost:3030
+```
+
+Or serve it from a hostname of its own, one that is not the Orbit origin (not a subdomain's path, not a route of it), with
+a reverse proxy on the host that forwards to `127.0.0.1:3030`, and set `GRAFANA_ROOT_URL` in `.env` to that address.
+Put your own authentication or an IP allow-list in front of it as well: Grafana's login is its only lock.
+
+**Signing in.** The user is `admin`. The password is `GRAFANA_ADMIN_PASSWORD` in `.env`, which a fresh install
+(`scripts/install-server.sh`) generates (32 hex digits), and the upgrade script adds where it turns `monitoring` on or `.env` lists it and has none; neither replaces one.
+Without one the `grafana` container refuses to start, so it can never come up on Grafana's own default password.
+Sign-up, creating organizations and anonymous access are off. Grafana stores the password in its database the first
+time it starts, and changing the line later does not change it; to set a new one:
+
+```bash
+docker compose exec grafana grafana cli admin reset-admin-password "$GRAFANA_ADMIN_PASSWORD"
+```
+
+##### The dashboards
+
+| Dashboard | What it answers |
+| --- | --- |
+| Orbit overview | Are the targets up; requests per second, 5xx ratio and p95 latency; the slowest routes; queued work; the fullest disk. |
+| Orbit runners & sessions | Runners by state and the oldest heartbeat; sessions and tasks, queued and running; whether the gauges could be read. |
+| Orbit database | PostgreSQL's connections, transactions, rows, cache hit ratio and size; the apiservers' transaction counters and p95 time; base backup age and WAL-archive failures. |
+| Orbit host | CPU, memory, load, disk space and throughput of the host, and the exporter container's network. |
+
+The runner, session and task gauges are read from the database by every apiserver, so their panels combine them with
+`max`; counters and histograms that each apiserver keeps for its own requests are combined with `sum`. Query the
+same way when you build a panel of your own.
+
+Grafana's own data is in the `grafana-data` volume (a few MB). Its image is pinned like the others
+(`ORBIT_GRAFANA_IMAGE`).
+
+**Retention.** Prometheus keeps 15 days (`ORBIT_PROMETHEUS_RETENTION`) and never more than 4 GB on disk
+(`ORBIT_PROMETHEUS_RETENTION_SIZE`), whichever comes first; the oldest data goes first. It lives in the
+`prometheus-data` volume, in Docker's data root rather than in `./data`, and is not backed up.
+
+#### Alerts
+
+Grafana's own alerting watches the metrics and sends to your phone. There is no Alertmanager. Every rule, contact point
+and routing choice is a file in `deploy/monitoring/grafana/provisioning/alerting/`, loaded when Grafana starts and not
+editable from its UI; to change a threshold, edit `rules.yml` and restart `grafana`.
+
+| Alert | Fires when | For |
+| --- | --- | --- |
+| Apiserver down | No apiserver target is up. Judged across all of them, so a two-stage handover, where `apiserver-next` runs beside `apiserver` and one or the other is briefly gone, does not fire it. | 2 min |
+| High HTTP 5xx rate | More than 5% of the answers of the last 5 minutes were 5xx. | 5 min |
+| High p95 latency | The p95 of the last 5 minutes is over 2.5 s. The merge routes and provider key checks, which can hold for minutes on request, are left out. | 10 min |
+| Work queued with no runner online | Sessions are queued, no runner is `online`, and the gauges could be read. | 10 min |
+| Disk over 85% | Any filesystem the host mounts (tmpfs, overlay and the like left out) is over 85% full. | 5 min |
+| Base backup older than its interval | The newest base backup is older than `ORBIT_BASE_BACKUP_INTERVAL` plus an hour. | 10 min |
+| WAL archiving failing | `pg_stat_archiver`'s last failure is newer than its last success. | 5 min |
+| Off-host backup mirror failing | A poll's off-host copy failed in the last hour. | at once |
+| Postgres conflict spike | Conflict 503s plus PostgreSQL deadlocks exceed 0.1 per second. | 5 min |
+| Watchdog | Always. See [the Watchdog](#the-watchdog). | |
+
+A rule that cannot read Prometheus raises a "DatasourceError" alert of its own, so a broken Prometheus is not silent.
+
+**Where alerts go.** Set these in `.env`, then `docker compose up -d grafana`:
+
+| Variable | Meaning |
+| --- | --- |
+| `ORBIT_ALERT_CONTACT` | `orbit-ntfy` (the default), `orbit-email` or `orbit-webhook`. |
+| `ORBIT_NTFY_SERVER` | The ntfy server; `https://ntfy.sh` by default. |
+| `ORBIT_NTFY_TOPIC` | The topic your phone subscribes to. With none, ntfy refuses every alert and Grafana's contact point shows the error. |
+| `ORBIT_ALERT_EMAIL` | `orbit-email`: the addresses, separated by `;`. Also set `GF_SMTP_ENABLED=true`, `GF_SMTP_HOST`, `GF_SMTP_USER`, `GF_SMTP_PASSWORD` and `GF_SMTP_FROM_ADDRESS`. |
+| `ORBIT_ALERT_WEBHOOK_URL` | `orbit-webhook`: Grafana POSTs its standard webhook JSON here. |
+| `ORBIT_NOTIFY_TOKEN` | Also push every alert but the Watchdog to your Orbit app. See [the Orbit app](#alerts-in-the-orbit-app). |
+
+**ntfy, the default.** Install the ntfy app on your phone, subscribe to a topic name, and put the same name in
+`ORBIT_NTFY_TOPIC`. Pick a long random one (`openssl rand -hex 16`): on the public `ntfy.sh` service the topic is the
+only secret, and anyone who knows it can read your alerts and send you fake ones. The service also sees the alert text
+(the alert's name and summary, and a mount point for a disk alert); nothing else leaves the host. To keep alerts off a
+public service, run your own ntfy server and set `ORBIT_NTFY_SERVER` to it, or choose email or a webhook.
+
+<a id="alerts-in-the-orbit-app"></a>**Alerts in the Orbit app.** Grafana can also push each alert to the Orbit app on your
+iPhone or Android phone, through the "Orbit app" contact point (`orbit-app`). It calls this server's
+[`POST /api/notify`](api-reference.md#sending-a-notification) over the project's own network, at
+`http://orbit-apiservers:3000`, never through the public origin, and Orbit pushes the alert to the devices signed in to
+the account that owns the token. To turn it on:
+
+1. Sign in to Orbit as the account whose phone should ring, open Settings → Access tokens → New token, name it (for
+   example "Grafana alerts"), choose Custom, untick every Read box, tick Notifications: Send, and create it. The token
+   can send notifications to that account's apps and do nothing else.
+2. Put it in `.env` as `ORBIT_NOTIFY_TOKEN=orbit_pat_…`, then `docker compose up -d grafana`.
+
+Every alert but the Watchdog then goes to the Orbit app as well as to `ORBIT_ALERT_CONTACT`; firing alerts are sent at
+high priority, resolved ones at normal. ntfy (or email, or the webhook) keeps receiving all of them, and has to: when the
+apiserver is down there is nothing to send the push, so "Apiserver down" reaches you only there. With
+`ORBIT_NOTIFY_TOKEN` empty, the route to the Orbit app matches nothing and alerts go to `ORBIT_ALERT_CONTACT` alone.
+
+Orbit pushes only with this server's own Apple and Firebase keys (`APNS_*`, `FCM_*`, see
+[configuration](configuration.md)). A server without them still accepts the call and answers
+`{"delivered": false, "reason": "PUSH_NOT_CONFIGURED"}`: Grafana counts that as sent, nothing reaches the phone, and the
+alert still goes to ntfy. `NO_DEVICES` means no Orbit app is signed in to the token's account. A token may send 20
+notifications a minute, far more than Grafana sends; revoking it in Settings → Access tokens stops the pushes at once.
+
+<a id="the-watchdog"></a>**The Watchdog.** The Watchdog is an alert that always fires. Grafana sends it to `ORBIT_ALERT_HEARTBEAT_URL` once a minute (a ping every 60 seconds, give or take a second), as
+a POST with the webhook JSON. It reads no data source, so it stops only when Grafana, or the host, stops. Give the URL
+of a dead-man's-switch service (healthchecks.io, Uptime Kuma's push monitor, Better Stack and the like) and let it
+alert you when the pings stop; set its period to 1 minute and its grace to 3 to 5 minutes. With no URL the heartbeat goes to Prometheus on this host, and nothing leaves it.
+
+**A whole-host outage cannot alert from the host.** If the machine, its network or Docker is down, Grafana is down with
+it and sends nothing, so none of the alerts above can reach you. The only way to hear of it is the off-host Watchdog
+check: the heartbeat service notices the silence. Without `ORBIT_ALERT_HEARTBEAT_URL` pointing at one, a dead host is silent.
+
+**Turn it off.** Remove `monitoring` from `COMPOSE_PROFILES` in `.env` (the last `COMPOSE_PROFILES` line is the one
+Compose takes), and keep the `ORBIT_MONITORING` line: it is the record that makes a later upgrade leave monitoring off.
+Then stop and remove its containers. The apiserver's listener stays open, reached by nothing. The volumes stay until you remove them:
+
+```bash
+docker compose --profile monitoring rm -sf grafana prometheus node-exporter postgres-exporter pg-monitor-role loki alloy
+docker volume rm "$(docker compose config --format json | jq -r .name)_prometheus-data"   # only to drop the history
+docker volume rm "$(docker compose config --format json | jq -r .name)_loki-data"         # only to drop the logs
+```
+
+#### Logs
+
+Loki keeps the container logs of this Compose project, and Grafana searches them (**Explore**, data source **Loki**).
+`docker compose logs` and `docker logs` read the same lines as before, from Docker's own files.
+
+**What is collected.** Alloy reads Docker's json-file logs from `/var/lib/docker/containers`, mounted read-only. It
+has no Docker socket, so it cannot ask Docker which container is which. Every 5 seconds it reads each container's
+`config.v2.json` in that directory instead and keeps a container only when Compose's `com.docker.compose.project`
+label names this project. It leaves out any container with an `orbit.managed-runner.*` label, which the Docker channel
+puts on every [managed runner](#managed-runners) it makes, even when another label matches. A runner's log file, or
+another project's on the same host, is therefore never opened, and nothing of a runner's reaches Loki. The list it
+writes is in `deploy/monitoring/alloy/log-targets.sh`, the pipeline in `deploy/monitoring/alloy/config.alloy`. Lines a
+container wrote more than an hour before Alloy read them are dropped, so that its first start sends no backlog. Docker
+in another data root than `/var/lib/docker` needs that mount changed.
+
+**Labels.** Every stream has `service` (the Compose service: `apiserver`, `gateway`, `postgres`…), `container` and
+`stream` (`stdout` or `stderr`); an apiserver's also has `level` (`log`, `warn`, `error`…). The request id is not a
+label, since there is one per request: it is carried as structured metadata named `request_id`.
+
+**The request id.** The web gateway makes a 32-hex-digit id for every request (nginx's `$request_id`), writes it as
+the last field of its access-log line and sends it to the apiserver as `X-Request-Id`, replacing any header of that
+name a client sent. The apiserver writes its log as one JSON object a line (`ORBIT_LOG_FORMAT=json`, which Compose
+sets), with `level`, `timestamp` (Unix milliseconds), `message` and `context`, a `stack` for an error, and
+`requestId` on each line written while it served that request. The apiserver writes lines for few requests: slow
+ones, failures and the events it logs anyway. One request's gateway line and apiserver lines are found together with:
+
+```logql
+{service=~"gateway|apiserver.*"} | request_id="3f1c9a0b5d7e4f2a8c6b1d0e9f8a7b6c"
+```
+
+And, for instance, an apiserver's errors: `{service=~"apiserver.*", level="error"}`.
+
+**Reading logs with grep.** Each apiserver message is the text it always was, inside the JSON line, so every
+`docker compose logs apiserver | grep …` in these docs matches as before. A line that is not JSON, such as the
+migration's at boot, is written as it was. Set `ORBIT_LOG_FORMAT=text` in `.env` and recreate the apiserver to get
+Nest's text lines back; their messages carry no request id.
+
+**Who can read them.** The logs hold what the containers print: the web gateway's access log has every client's
+address, user agent and request line (a query's `access_token` is removed first, as before), and the apiserver's lines
+name ids of accounts, sessions and runners, and error messages. They are not credentials, but they are not public.
+
+- Anyone signed in to Grafana with a role that can query a data source, which is `admin` unless you add users. Give
+  others Grafana access only as you would give them the host's `docker logs`.
+- Anyone who can run `docker` on the host, as before: root and the `docker` group.
+- Any container on this project's network can query Loki, which has no login and publishes no port. Do not attach a
+  container you do not trust to that network.
+
+Alloy runs as root, which reading `/var/lib/docker/containers` takes, with every capability dropped. That directory
+also holds each container's settings, environment included, so treat Alloy as you treat Docker itself.
+
+**Retention.** Loki keeps 7 days (`ORBIT_LOKI_RETENTION`, in hours: `168h`) in the `loki-data` volume, in Docker's
+data root rather than in `./data`, and it is not backed up. Its compactor deletes older lines every 10 minutes, at
+most two hours after they expire. Alloy keeps where it has read each file to in the `alloy-data` volume. Loki has no
+size limit, so its disk use grows with traffic until lines start to expire. It does stop at a full disk: while the disk
+its volume is on is more than 90% full, Loki refuses every line (it logs `disk usage exceeded threshold`, and Alloy
+logs pushes answered `500 … Ingester is shutting down`). Logs therefore never take the last tenth of the disk that
+`./data` and the database usually share; what arrives meanwhile is lost to Loki, and stays in `docker logs`. Free
+space and it accepts lines again by itself.
+
+**When disk is tight,** shorten the retention: set `ORBIT_LOKI_RETENTION` in `.env` to fewer hours (`72h` keeps 3 days, `24h` one),
+then `docker compose up -d loki`. The compactor deletes the older lines within two hours. Prometheus has its own
+setting: lower `ORBIT_PROMETHEUS_RETENTION_SIZE`.
+
+**Check it.** Both stay inside the project network. Ask from Grafana's container:
+
+```bash
+docker compose exec grafana wget -qO- 'http://loki:3100/loki/api/v1/labels'
+docker compose exec grafana wget -qO- 'http://loki:3100/loki/api/v1/label/service/values'
+```
 
 ## Google sign-in
 
@@ -534,6 +909,30 @@ pasted again.
 The apiserver logs a `401` or `403` from Resend under `EmailOutbox`
 (`docker compose logs apiserver | grep EmailOutbox`). The line names the account's id and Resend's message,
 never the key.
+
+## Drive
+
+Drive is the drive every account keeps files in, which its agents read and write with the drive tools. A
+self-deployed server has it **off** until you turn it on:
+
+```sh
+# in .env
+ORBIT_DRIVE_ENABLED=true
+```
+
+then `docker compose up -d apiserver`. Turning it off again hides it: the drive's routes answer
+`404 DOCUMENTS_DISABLED`, share links to drive files stop opening, the clients show no Drive entry and new
+sessions are started without the drive tools. What the drive holds stays on disk and in the database, and is all
+there again when you turn it back on.
+
+**Renamed settings.** While the drive was called Documents its settings were `ORBIT_DOCUMENTS_*`, and before that
+`ORBIT_FILES_*`. Every `ORBIT_DRIVE_*` setting (the switch, the bucket and key pair, the quotas, the files directory, the
+mount credential) reads the older names, newest first, whenever it is unset or empty, and Compose, the backup sidecar
+and the mount daemon do the same, so an `.env` written under either old name keeps working through an upgrade with no
+edit. Rename the lines when it suits you. If a new and an older name are both set, the new one wins.
+
+A fresh install writes `ORBIT_DRIVE_ENABLED=false`, and an upgrade never writes the line: a deployment that
+predates the switch has Drive off after its upgrade, with what its drive held kept, until you set it to `true`.
 
 ## Wiki System model
 
@@ -1245,8 +1644,9 @@ Each apiserver process opens at most 12 connections to PostgreSQL:
 
 The wiki worker opens as many: its pool of ten, and a listener for each of its two queues.
 
-So N apiservers and the wiki worker need up to 12 × (N + 1) connections, and the backup sidecar and anyone working
-in `psql` a few more. The default `max_connections` is 100, which is reached at about seven apiservers. Raise it,
+So N apiservers and the wiki worker need up to 12 × (N + 1) connections. With the [monitoring profile](#monitoring)
+on, postgres-exporter's role `orbit_monitor` adds at most 3, its connection limit: 12 × (N + 1) + 3. The backup sidecar
+and anyone working in `psql` need a few more. The default `max_connections` is 100, which is reached at about seven apiservers. Raise it,
 then restart PostgreSQL:
 
 ```bash
@@ -1277,7 +1677,8 @@ optimization left. Only statements whose text is fixed can be named:
 
 ## Managed runners
 
-A new deployment gives every account a runner of its own, so nobody has to register a machine before a first
+Managed runners (Orbit Cloud) are off in a new deployment unless it is installed with `--managed-runners`, or an
+administrator switches them on later (below). Where they are on, every account gets a runner of its own, so nobody has to register a machine before a first
 session. It is a container on this host's Docker, given when the account signs in, with a data volume that keeps
 its checkouts, sessions and engine sign-ins. After an hour with nothing to do it sleeps: the container stops and
 the volume stays. A new message, a task that can run or a scheduled wakeup starts it again, on the same volume.
@@ -1290,7 +1691,7 @@ Runners that people register themselves keep working beside it.
 
 ### What the install sets up
 
-`scripts/install-server.sh` prepares managed runners, then writes three lines into `.env`:
+`scripts/install-server.sh --managed-runners` prepares managed runners, then writes three lines into `.env`:
 
 ```dotenv
 ORBIT_MANAGED_RUNNERS_ENABLED=true
@@ -1339,7 +1740,8 @@ COMPOSE_PROFILES=managed-runners-docker,managed-runner-firewall
 
 The first account, the administrator created at `/setup`, is given its runner when it signs in. The runner takes
 sessions once a runtime is signed in on it; until then it reports that none is installed and signed in.
-`--no-managed-runners` installs with `ORBIT_MANAGED_RUNNERS_ENABLED=false` and prepares none of the above.
+Without `--managed-runners` the install writes `ORBIT_MANAGED_RUNNERS_ENABLED=false` and prepares none of the above
+(`--no-managed-runners` says the same explicitly).
 `--no-managed-runner-firewall` installs managed runners without their firewall and leaves this host's firewall alone:
 `COMPOSE_PROFILES` then names `managed-runners-docker` alone, `.env` carries a note that the firewall is off, and the
 install says so as it starts and as it ends. Read [Isolation and its limits](#isolation-and-its-limits) before
@@ -1426,7 +1828,7 @@ Managed runners are switched in `.env`, and only there. An upgrade never writes 
   that is running keeps running, every volume stays, and switching them on again carries on from where they were.
 - **On again:** set `ORBIT_MANAGED_RUNNERS_ENABLED=true` and run `docker compose up -d apiserver`.
 - **On, for a deployment installed without them:** every deployment installed before managed runners existed, and
-  one installed with `--no-managed-runners`. Upgrade it first, then, from its checkout:
+  one installed without `--managed-runners`. Upgrade it first, then, from its checkout:
 
   ```bash
   scripts/install-server.sh --enable-managed-runners
@@ -1774,6 +2176,16 @@ Run without root, it changes nothing and says what to run instead:
 orbit host: setup writes machine-wide systemd units and must run as root — re-run: sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
 ```
 
+Run without root from any other copy, such as the account's own one where install.sh put it, it names the copy to put
+in place first, since setup would refuse to run from that copy under sudo too:
+
+```text
+orbit host: setup writes machine-wide systemd units, so it must run as root and from /usr/local/bin/orbit, the one binary the host broker runs, rather than /home/alice/.orbit/bin/orbit.
+Put a root-owned copy in place, then set the host up from it:
+  sudo install -o 0 -g 0 -m 0755 /home/alice/.orbit/bin/orbit /usr/local/bin/orbit
+  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
+```
+
 Setup refuses any binary other than `/usr/local/bin/orbit` before it writes or runs anything. Root's own copy, where
 install.sh puts it, is one:
 
@@ -1821,7 +2233,7 @@ A machine set up by an earlier release, whose runners are `orbit-runner@<uid>`, 
 Each account registers its own runner, as itself:
 
 ```bash
-orbit register --server https://orbit.example.com --name build-01-alice
+orbit register --server https://orbit.example.com --name test-user-e2e
 ```
 
 `--server` can be left off when the binary came from this deployment, whose origin is then its default. The name
@@ -1853,15 +2265,15 @@ register from the account's own copy there.
 The broker enables and starts the account's instance, nothing asks for a password, and the command ends with:
 
 ```text
-    ✓ Approved — build-01-alice is now a runner.
+    ✓ Approved — test-user-e2e is now a runner.
     ✓ Put this account's own copy of orbit at /home/alice/.orbit/bin/orbit, which its runner runs and updates.
     Waiting for the runner to reach https://orbit.example.com (up to 2m0s)…
     ✓ Background service started as alice (runs at boot).
       Stop or remove it later with `orbit unregister`.
 
-✓ Setup complete — build-01-alice is online.
+✓ Setup complete — test-user-e2e is online.
 
-    Machine  build-01-alice (build-01)
+    Machine  test-user-e2e (build-01)
     Next     Start a session
              https://orbit.example.com/runners/30tWePD4IYjCW1G8zmKpO/new
     orbit status · orbit doctor · orbit unregister
@@ -1917,8 +2329,8 @@ config is removed. Its own copy of orbit stays. Every other account's runner kee
 
 ```text
 ✓ removed the orbit-runner@alice.service runner service
-✓ deleted "build-01-alice" from the control plane
-✓ unregistered "build-01-alice"
+✓ deleted "test-user-e2e" from the control plane
+✓ unregistered "test-user-e2e"
 ```
 
 ### Moving a machine set up by an earlier release
@@ -2175,10 +2587,28 @@ docker compose up -d --wait --no-deps --force-recreate apiserver
 docker compose up -d --wait --no-deps --force-recreate docker-channel
 ```
 
+### The runner protocol switch
+
+`ORBIT_SESSION_RELEASE_V1` ([configuration](configuration.md)) is off by default. While it is off, runners report a
+failed turn and the end of a run as they always have. When it is `on`, runners from a release that knows the protocol
+report a failed turn as the turn's outcome, and the session's release as a report of its own. Nothing turns it on for
+you: no install, upgrade or Compose default sets it.
+
+- **When to turn it on.** Only after the release that brought it is live on every apiserver. With
+  [several apiservers](#several-apiservers), that means all of them have been recreated on it. Then set
+  `ORBIT_SESSION_RELEASE_V1=on` in `.env` and run `docker compose up -d --no-deps apiserver` (and the same for each
+  further apiserver). An apiserver without the protocol would release a session held by a failed turn as a stop. The
+  failure would be lost, along with any retry armed for it.
+- **Apiservers that disagree** (one on, one off, or one recreated without it) do no harm. A runner declares the
+  protocol only while its latest heartbeat answer says so, and stops at the first answer that does not. A session that
+  is already held still ends through its release, which every apiserver from that release onward serves.
+- **Going back.** Turn it off, recreate the apiservers, and only then go back to a release older than the one that
+  brought it.
+
 ### Moving old attachments out of Postgres
 
 Attachments uploaded before the `./data/files` mount existed keep their bytes in Postgres. They move to the file store
-(`./data/files`, or the bucket with `ORBIT_FILES_BACKEND=s3`) in two steps: a copy that runs by itself and can be undone,
+(`./data/files`, or the bucket with `ORBIT_DRIVE_BACKEND=s3`) in two steps: a copy that runs by itself and can be undone,
 and a clear that you run yourself and cannot undo. Attachments stay readable and uploads keep working during both, so
 neither needs downtime.
 
@@ -2270,7 +2700,7 @@ to the host, run `VACUUM FULL attachment` in `psql` at a quiet time. Attachments
 ### Going back to an older version
 
 An apiserver with the `./data/files` mount keeps each new attachment's bytes there (or in the bucket, with
-`ORBIT_FILES_BACKEND=s3`), and Postgres only names them. An older apiserver reads attachment bytes from Postgres alone,
+`ORBIT_DRIVE_BACKEND=s3`), and Postgres only names them. An older apiserver reads attachment bytes from Postgres alone,
 so what it can read after you go back depends on where the bytes are:
 
 - **Until the clear, attachments from before the upgrade work on both versions**, whether or not the copy has reached
@@ -2312,4 +2742,5 @@ has no certificate to start with and restarts over and over, which harms nothing
       deliberate choice and this host's services and private networks are firewalled otherwise.
 - [ ] Backups are copied off-host and a restore has been tested.
 - [ ] Container health, disk space, backup failures, and runner availability are monitored.
+- [ ] [Monitoring](#monitoring) is on or off by a deliberate choice; where it is on, you can sign in to Grafana, `ORBIT_NTFY_TOPIC` (or another alert contact) is set and a test alert reached you, `ORBIT_ALERT_HEARTBEAT_URL` points at an off-host dead-man's-switch, and the disk has room for the retention above.
 - [ ] The deployment is pinned to a known release or commit and has a documented upgrade cadence.

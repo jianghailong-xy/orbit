@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { ProjectStatus, uuidToBase62 } from '@orbit/shared';
 import { everyPrerequisiteDoneOrRetiredSql } from '../tasks/task-dependencies';
 import { criterionKeyOf } from './project-acceptance';
+import { IN_FLIGHT_JOB_STATES } from './in-flight-job-states';
 import { ProjectsService } from './projects.service';
 
 const { PrismaClientKnownRequestError } = Prisma;
@@ -223,7 +224,8 @@ test('the index is owner-scoped and newest first, and narrows only when asked', 
     // The coordinator's conversation, for what it is doing — its state columns and nothing else.
     coordinatorSession: {
       select: {
-        status: true,
+        finishedAt: true,
+        turnState: true,
         engineTurnActive: true,
         runningSubagents: true,
         lastTurnAt: true,
@@ -359,10 +361,11 @@ test('the sidebar reads queued and running integration work once for the whole p
       findMany: async (args: any) => {
         bindingReads += 1;
         assert.deepEqual(args.where, { projectId: { in: ids }, slot: 'primary' });
-        // An observation is not an integration attempt (§10.6, A-Q23): it is not counted as in flight.
+        // An observation is not an integration attempt (§10.6, A-Q23): it is not counted as in flight. A landing
+        // waiting on its pull request is (docs/design/protected-branch-landing.md §4.2).
         assert.deepEqual(args.select._count, {
           select: { integrationJobs: {
-            where: { state: { in: ['QUEUED', 'RUNNING'] }, kind: { not: 'OBSERVE_LANDING' } },
+            where: { state: { in: [...IN_FLIGHT_JOB_STATES] }, kind: { not: 'OBSERVE_LANDING' } },
           } },
         });
         return [{ projectId: ids[0], upstreamRef: 'main', integrationRef: 'refs/heads/project/bg',
@@ -375,8 +378,8 @@ test('the sidebar reads queued and running integration work once for the whole p
   });
   const rows = await service.listSidebar(OWNER_ID);
   assert.equal(bindingReads, 1);
-  assert.equal(rawQueries, 4,
-    'the sidebar keeps its page-wide task/attention readers and adds the one in-flight read');
+  assert.equal(rawQueries, 5,
+    'the sidebar keeps its page-wide task/attention readers, the one in-flight read and the one fuse read');
   assert.deepEqual(rows[0].integration,
     { line: 'PROJECT_BRANCH', ref: 'project/bg', activeJobCount: 1 });
   assert.deepEqual(rows[0].buckets, { running: 0 }, 'integration work is not a task session');
@@ -445,13 +448,13 @@ test('the index says whether each coordinator is working, exactly when the sessi
     ...over,
   });
   const cases: Array<[string, unknown, boolean | null]> = [
-    ['dispatched turn', conversation({ status: 'RUNNING' }), true],
+    ['dispatched turn', conversation({ turnState: 'IN_FLIGHT', status: 'RUNNING' }), true],
     ['turn the runtime started for itself', conversation({ engineTurnActive: true }), true],
     ['sub-agent still going', conversation({ runningSubagents: ['agent-1'] }), true],
     ['waiting for a reply', conversation({}), false],
-    ['queued, not yet dispatched', conversation({ status: 'PENDING' }), false],
+    ['queued, not yet dispatched', conversation({ turnState: 'QUEUED', status: 'PENDING' }), false],
     ['finished', conversation({ status: 'SUCCEEDED' }), false],
-    ['asking somebody mid-turn', conversation({ status: 'RUNNING', _count: { approvals: 1 } }), false],
+    ['asking somebody mid-turn', conversation({ turnState: 'IN_FLIGHT', status: 'RUNNING', _count: { approvals: 1 } }), false],
     ['no coordinator bound', null, null],
   ];
   const service = serviceWith({
@@ -531,7 +534,8 @@ test('the index asks the cheap prerequisite guard before it walks a dependency c
   const rollup = statements.find((sql) => sql.includes('AS "workState"'));
   assert.ok(rollup, 'the task rollup was read');
   const end = rollup.indexOf("THEN 'READY'");
-  const ready = rollup.slice(rollup.lastIndexOf('WHEN ', end), end);
+  // From the WHEN after the arm before it: the arm's own predicates may hold a CASE WHEN (the turn state's).
+  const ready = rollup.slice(rollup.indexOf('WHEN ', rollup.lastIndexOf("THEN '", end - 1)), end);
   const guard = ready.indexOf(everyPrerequisiteDoneOrRetiredSql('t'));
   const walk = ready.indexOf('task_dependency_tail_id');
   assert.notEqual(guard, -1, 'the READY lane is narrowed by the guard');
@@ -563,6 +567,8 @@ test('the detail read reports progress without loading the project’s tasks', a
     // The tally is the maintained one (0282): rows read by primary key, not a groupBy over this
     // project's tasks. A read that went back to the groupBy would find no delegate here.
     projectRuling: { findMany: async () => [] },
+    projectSettingChange: { findMany: async () => [] },
+    projectTextTranslation: { findUnique: async () => null },
     projectTaskStatusCount: {
       findMany: async (args: any) => {
         tallyArgs = args;
@@ -638,6 +644,8 @@ test('the detail read serves the authored criteria and no second representation 
     task: { groupBy: async () => assert.fail('the detail read must not tally the project’s tasks') },
     projectTaskStatusCount: { findMany: async () => [] },
     projectRuling: { findMany: async () => [] },
+    projectSettingChange: { findMany: async () => [] },
+    projectTextTranslation: { findUnique: async () => null },
     projectAcceptanceCriterionDefinition: {
       findMany: async () => [{ id: CRITERION_A_ID, ordinal: 1, revision: 1, servingTasks: [] }],
     },
@@ -680,6 +688,7 @@ test('the detail item is the authored declaration, with no derived verdict besid
     project: {
       findFirst: async () => ({
         id: PROJECT_ID,
+        title: 'LFS',
         acceptanceCriterionDefinitions: [definition],
         _count: { tasks: 0 },
         members: [],
@@ -689,6 +698,8 @@ test('the detail item is the authored declaration, with no derived verdict besid
     task: { groupBy: async () => assert.fail('the detail read must not tally the project’s tasks') },
     projectTaskStatusCount: { findMany: async () => [] },
     projectRuling: { findMany: async () => [] },
+    projectSettingChange: { findMany: async () => [] },
+    projectTextTranslation: { findUnique: async () => null },
     projectAcceptanceCriterionDefinition: {
       findMany: async () => [{ id: CRITERION_A_ID, ordinal: 1, revision: 2, servingTasks: [] }],
     },
@@ -777,13 +788,14 @@ test('the detail item is the authored declaration, with no derived verdict besid
     withheld: ['CRITERION_UNSATISFIED', 'CRITERION_UNLANDED'],
   }]);
   // And every number a card prints, counted once from those same answers: on main plus each reason
-  // adds up to the criteria, so no two numbers on one card can disagree.
+  // adds up to the MET criteria, so no two numbers on one card can disagree — and this unmet one is
+  // counted in `criteria` alone, never as "no receipt" (project page parity G1, 2026-11-19).
   assert.deepEqual(project.derivedDone.counts, {
     criteria: 1,
     met: 0,
     landed: 0,
     onMain: 0,
-    byReason: { IN_FLIGHT: 0, ON_PROJECT_BRANCH: 0, NOTHING_TO_LAND: 0, NO_RECEIPT: 1, NO_BRANCH: 0, CODELESS: 0 },
+    byReason: { IN_FLIGHT: 0, ON_PROJECT_BRANCH: 0, NOTHING_TO_LAND: 0, NO_RECEIPT: 0, NO_BRANCH: 0, CODELESS: 0 },
   });
 });
 
@@ -1039,6 +1051,13 @@ function removableProject(tasks: number, calls: string[] = []) {
             updateMany: async () => assert.fail('deleting a project must not write to any task'),
             deleteMany: async () => assert.fail('deleting a project must not delete any task'),
           },
+          // The delete withdraws the project's waiting PROJECT_REOPEN cards in the same transaction.
+          ownerRequest: {
+            updateManyAndReturn: async (args: any) => {
+              calls.push(`settleReopens:${args.data.state}`);
+              return [];
+            },
+          },
           project: {
             delete: async () => {
               calls.push('deleteProject');
@@ -1062,6 +1081,7 @@ test('an empty project is deleted, under the lock that makes the count binding',
   assert.deepEqual(calls, [
     'lock',
     `count:{"projectId":"${PROJECT_ID}"}`,
+    'settleReopens:WITHDRAWN',
     'deleteProject',
   ]);
 });
@@ -1091,6 +1111,7 @@ test('the database’s RESTRICT is reported as the same 409 the check raises', a
         $queryRaw: async () => [{ id: PROJECT_ID }],
         // The count is honest at the moment it runs; the FK is not, a moment later.
         task: { count: async () => 0 },
+        ownerRequest: { updateManyAndReturn: async () => [] },
         project: {
           delete: async () => {
             throw Object.assign(

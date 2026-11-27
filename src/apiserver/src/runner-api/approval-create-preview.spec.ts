@@ -47,6 +47,8 @@ function harness(previewCreateMany: (ownerId: string, dto: unknown) => Promise<u
         workspaceId: WORKSPACE,
         provider: AgentProvider.CLAUDE,
       }),
+      // A raised card moves the session's row in its owner's list (session.listed_at, session-listed-at.ts).
+      updateMany: async () => ({ count: 1 }),
     },
     approval: {
       findUnique: async () => null,
@@ -274,6 +276,7 @@ test('a controller built without a tasks service files the card unchanged', asyn
         id: SESSION, assignedRunnerId: RUNNER_ID, ownerId: OWNER,
         providerBuiltin: true, workspaceId: WORKSPACE, provider: AgentProvider.CLAUDE,
       }),
+      updateMany: async () => ({ count: 1 }),
     },
     approval: {
       findUnique: async () => null,

@@ -1,5 +1,6 @@
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
+import { sessionReportedWork } from './landing-source-branch';
 
 /**
  * "Did the work land?" — a fourth fact about a stated criterion, read from merge receipts and
@@ -84,8 +85,9 @@ import type { PrismaService } from '../prisma/prisma.service';
  *
  * §2.5 J9 already exempts the very same tasks from a dependent's wait, in SR27's words: a "write the
  * docs" prerequisite must not make the task after it demand a checkpoint that was never going to
- * exist. This lane reads the same declaration through `taskHasNothingToLand`, and the line's answer
- * beside it, and lets such work out of the roll-up. Neither is a way round the landing judgment: a
+ * exist. This lane reads the same facts through `taskHasNothingToLand`, and the line's answer
+ * beside it, and lets such work out of the roll-up. Since revision 42 (§12.15 P-M3) the declaration
+ * itself is no longer read: what keeps such work out is that it ran no branch or committed nothing. Neither is a way round the landing judgment: a
  * task that ran a branch and HAS commits of its own keeps participating, whatever its newest session
  * looks like and whatever its title says, and work on the project branch keeps reading
  * ON_INTEGRATION_LINE. `taskHasNothingToLand` is the whole of what gets anything out.
@@ -299,19 +301,24 @@ export interface LandingJobSessionFacts {
  * identity on purpose — a task is named here only when something can be said about it, and "has no
  * receipt" is not something that can be said.
  *
- * `codeless` is §1.1 `isCodeTask`'s first half, and `taskHasNothingToLand` below is what reads it,
- * together with the repository condition revision 29 added to that same half (O-L7).
+ * `taskHasNothingToLand` below reads it; no label the task carries takes part (§12.15 P-M3).
  */
 export interface LandingServingTask {
-  codeless: boolean;
+  /** The task's status: only a DONE task has delivered, so only a DONE one can have delivered
+   *  nothing (`ranNoBranch`). A reader that did not select it reads as one that has not. */
+  status?: string;
   mergeReceipts: ReadonlyArray<LandingReceiptFacts>;
   integrationJobs: ReadonlyArray<LandingJobFacts>;
   /** §1.1's repository condition (revision 29, O-L7) as this lane reads it: the task's newest work
    *  session — the workspace whose `repo_url` it ran in — and the binding of the project the task is
    *  filed under (`workInAnotherRepository`). A reader that did not select them has nothing to say
    *  about the repository, which reads as work in the project's own. */
-  sessions?: ReadonlyArray<{ workspace?: { repoUrl: string | null } | null }>;
+  sessions?: ReadonlyArray<{ workspace?: { repoUrl: string | null } | null } & WorkReport>;
   project?: { codebases: ReadonlyArray<{ canonicalRepoUrl: string }> } | null;
+  /** §12.15 P-M1's facts (`deliveredNothingOfItsOwn`). A reader that did not select them reads as a
+   *  task that delivered something. */
+  deliveredSha?: string | null;
+  deliveredBaseSha?: string | null;
 }
 
 /** The rows the fold needs: one criterion's identity and its serving work's receipts. */
@@ -510,7 +517,8 @@ export function taskLandingSql(alias: string): string {
  * `isCodeTask` (§1.1) as SQL: work that has a commit to land at all.
  *
  * Its newest work session ran in a worktree on a branch, in no repository known to differ from the
- * one the project's line is bound to (revision 29, §10.5 O-L7), and the row is not declared codeless. The negation of the
+ * one the project's line is bound to (revision 29, §10.5 O-L7). The `codeless` flag is not read (revision 42,
+ * §12.15 P-M3): a codeless task with commits lands like any other. The negation of the
  * middle two disjuncts of `prerequisiteLandedSql`, stated positively because this asks the question
  * the other way round — that one asks "is there nothing left to wait for", this asks "is this the
  * kind of work that lands".
@@ -518,7 +526,6 @@ export function taskLandingSql(alias: string): string {
 export function isCodeTaskSql(alias: string): string {
   return `(
       ${alias}."project_id" IS NOT NULL
-      AND ${alias}."codeless" = false
       AND EXISTS (
         SELECT 1 FROM "session" code_work
           LEFT JOIN "workspace" code_workspace ON code_workspace."id" = code_work."workspace_id"
@@ -587,6 +594,270 @@ export function lineStartedSql(alias: string): string {
        WHERE started_line."project_id" = ${alias}."project_id"
          AND started_line."slot" = 'primary'
          AND started_line."integration_started_at" IS NOT NULL
+    )`;
+}
+
+/** One work session of a task, as the landing readers select it. */
+export interface WorkReport {
+  id?: string;
+  isolationStatus?: string | null;
+  branch?: string | null;
+  /** The branch the checkout's HEAD ended on, as the finalize reported it. */
+  worktreeBranch?: string | null;
+  /** When the runner finished with the checkout; null while the session can still commit. */
+  finishedAt?: Date | null;
+  changedFiles?: Prisma.JsonValue | null;
+  /** The tip of the session's own branch, as the runner last reported it (migration 0370). */
+  branchSha?: string | null;
+  /** The commit that branch forked from. */
+  baseSha?: string | null;
+  /** Whether the runner last found the checkout holding changes no commit carries. */
+  worktreeDirty?: boolean | null;
+}
+
+/** The work-session columns `sessionHoldsWorkOfItsOwn` reads, as a Prisma `select`. */
+export const WORK_OF_ITS_OWN_SELECT = {
+  isolationStatus: true, branch: true, branchSha: true, baseSha: true, worktreeDirty: true,
+} as const;
+
+/**
+ * Whether one work session holds work of its own (§12.15 P-M1, owner's ruling of 2026-11-20 on the
+ * regression P-M1 shipped with): its own branch has a commit past its own base (`branch_sha` and
+ * `base_sha` both reported, and different), or its checkout was left with changes no commit carries
+ * (`worktree_dirty`).
+ *
+ * BOTH ARE ABOUT THE SESSION'S OWN BRANCH AND CHECKOUT, AND `changed_files` IS NOT
+ * ------------------------------------------------------------------------------
+ * The runner's finalize (runner-go `finalizeWorktree`) stages and commits whatever the checkout holds
+ * onto HEAD, then reports `changed_files` as `git diff <base>..HEAD` — wherever HEAD is. A run told to
+ * `git checkout --detach origin/project/<id>` and to commit nothing reports the whole diff from its base
+ * to the commit it checked out: on 2026-11-20 one verification task reported 61 files nobody had
+ * changed, and P-M1 read that as work somewhere else and held a settled project's criteria. `branch_sha`
+ * is the tip of the session's own branch (`effectiveBranchSha`: the branch HEAD is on, else the branch
+ * the session started on), so a detached checkout leaves it at the base, and that run measures empty.
+ *
+ * The finalize commit can fail. It then reports `capture_error`, no diff, and `worktree_dirty = true`,
+ * and the runner keeps the checkout (`checkoutWorkIsCaptured`): that work is on no branch, and it is
+ * not nothing. A file the finalize held back on purpose — one holding a runner-held secret, or a path
+ * a stopped SubAgent was writing — leaves the checkout dirty the same way, and holds the task for a
+ * person to look at; that cost was chosen over reading a failed capture as nothing.
+ *
+ * A session that never reported a tip or a base (an older runner) says nothing either way, as a
+ * session that never reported `changed_files` said nothing under the old reading.
+ */
+export function sessionHoldsWorkOfItsOwn(session: WorkReport): boolean {
+  if (session.isolationStatus !== 'worktree' || !session.branch) return false;
+  if (session.worktreeDirty === true) return true;
+  return typeof session.branchSha === 'string' && typeof session.baseSha === 'string'
+    && session.branchSha !== session.baseSha;
+}
+
+/** The facts §12.15 P-M1 reads about one DONE task, as the readers select them. */
+export interface DeliveredNothingFacts {
+  /** Only a DONE task has delivered (`unnamedIdentityMeasuresNothing`). */
+  status?: string;
+  /** The frozen delivered identity (§10.5 O-L4): the commit, and the commit it forked from. */
+  deliveredSha?: string | null;
+  deliveredBaseSha?: string | null;
+  /** EVERY work session of the task (`WORK_SESSIONS_NEWEST_FIRST`), with what it reported. */
+  sessions?: ReadonlyArray<WorkReport>;
+  /** The merges recorded against the task: a MERGED one says a target moved with its work. */
+  mergeReceipts?: ReadonlyArray<{ result: string }>;
+}
+
+/**
+ * §12.15 P-M1, the fact itself: this task delivered no commit of its own, and nothing of its work
+ * is anywhere else either — so it has nothing to land, and was given no route to a line.
+ *
+ * Both halves are committed rows. `delivered_sha = delivered_base_sha` is the branch with no commit
+ * past its base, frozen when the work settled (O-L4; NULL until then, and cleared when the task
+ * leaves DONE). And no work session of the task holds work of its own (`sessionHoldsWorkOfItsOwn`):
+ * one that does means the task's work is somewhere it was not delivered from, which is
+ * `WORK_ELSEWHERE` and not nothing.
+ *
+ * The delivered session is asked too. The freeze copies that session's `branch_sha` and `base_sha`
+ * once, after every work session has finished (`readDeliveredIdentity`), so an empty identity always
+ * comes from a session whose own branch was empty at that moment. The session row goes on: a session
+ * revived after the DONE, or committed from its own Commit action, moves `branch_sha` past the
+ * identity, which is never frozen again while the task stays DONE. Measured on 2026-11-20: a task frozen
+ * empty on 10-29 at 07:20 whose delivered session finished again at 07:42 with a commit on its branch.
+ *
+ * Read off the task's work sessions rather than counted in SQL: a filtered relation count is an
+ * aggregate over the whole session table in the statement Prisma writes for it. A reader that did not
+ * select the session columns cannot tell, and gets `false` — the withholding answer.
+ *
+ * The enqueue (`enqueueForDoneTask`), the dependency predicate (§2.5 J9), and the landing fold
+ * (`taskHasNothingToLand`) all read this, in this spelling or `deliveredNothingOfItsOwnSql`.
+ */
+export function deliveredNothingOfItsOwn(task: DeliveredNothingFacts): boolean {
+  return frozenIdentityMeasuresNothing(task) || unnamedIdentityMeasuresNothing(task);
+}
+
+/** The frozen half: an identity with no commit past its base, and no work session holding work of its own. */
+function frozenIdentityMeasuresNothing(task: DeliveredNothingFacts): boolean {
+  if (typeof task.deliveredSha !== 'string' || task.deliveredSha !== task.deliveredBaseSha) return false;
+  const sessions = task.sessions;
+  if (!sessions || sessions.some((session) => !('branchSha' in session) || !('baseSha' in session)
+    || !('worktreeDirty' in session))) {
+    return false;
+  }
+  return !sessions.some(sessionHoldsWorkOfItsOwn);
+}
+
+/**
+ * The half for an identity Orbit cannot name (owner's ruling of 2026-11-20): a DONE task whose identity
+ * was never frozen because the work session that finished last reported no tip (`branch_sha`, recorded
+ * from 0370 on; `readDeliveredIdentity` answers UNKNOWN) — work finished before the runner reported one,
+ * and code work only since §12.15 P-M3 stopped reading the `codeless` flag. Such a task measures nothing
+ * of its own when every work session has finished, holds nothing of its own (`sessionHoldsWorkOfItsOwn`),
+ * and reported `changed_files` as an EMPTY list, and no receipt says a target moved with its work.
+ *
+ * WHY AN EMPTY LIST IS A MEASUREMENT WHEN A FULL ONE IS NOT
+ * --------------------------------------------------------
+ * The list is `git diff <base>..HEAD` of the checkout (runner-go `finalizeWorktree`), sent explicitly as
+ * `[]` whenever the finalize has a base (since 2026-08-29), and the server never writes `[]` itself. A
+ * non-empty list does not prove work of its own — HEAD may be a commit the run only checked out — but an
+ * empty one is the runner saying the checkout held nothing past its base. NULL, or a list with anything
+ * in it, leaves the identity unknown, and unknown is not nothing.
+ *
+ * WHAT IT CANNOT SEE, said rather than left to be discovered: a run that committed on its own branch and
+ * then moved HEAD back to a tree equal to its base before the finalize; and a finalize whose staging or
+ * commit failed on a runner older than 2026-09-16, which reported `[]` for a checkout still holding
+ * uncommitted work and no `worktree_dirty`. No row shows either.
+ */
+export function unnamedIdentityMeasuresNothing(task: DeliveredNothingFacts): boolean {
+  if (task.status !== 'DONE' || !('deliveredSha' in task) || task.deliveredSha != null) return false;
+  const sessions = task.sessions;
+  if (!sessions || sessions.length === 0 || !task.mergeReceipts) return false;
+  if (sessions.some((session) => !('id' in session) || !('finishedAt' in session) || !('worktreeBranch' in session)
+    || !('changedFiles' in session) || !('branchSha' in session) || !('baseSha' in session)
+    || !('worktreeDirty' in session))) {
+    return false;
+  }
+  if (task.mergeReceipts.some((receipt) => receipt.result === 'MERGED')) return false;
+  const measuredEmpty = sessions.every((session) => session.finishedAt != null
+    && Array.isArray(session.changedFiles) && session.changedFiles.length === 0
+    && !sessionHoldsWorkOfItsOwn(session));
+  if (!measuredEmpty) return false;
+  // The session the work ended on (`workBranchEndedOn`): the last to finish on a branch, ties by id.
+  let ended: WorkReport | null = null;
+  for (const session of sessions) {
+    if ((session.worktreeBranch ?? session.branch) == null) continue;
+    const at = session.finishedAt!.getTime();
+    const best = ended?.finishedAt?.getTime() ?? -Infinity;
+    if (ended === null || at > best || (at === best && (session.id ?? '') > (ended.id ?? ''))) ended = session;
+  }
+  return ended !== null && ended.branchSha == null;
+}
+
+/** `sessionHoldsWorkOfItsOwn` as SQL, over a SESSION alias. */
+export function sessionHoldsWorkOfItsOwnSql(alias: string): string {
+  return `(
+      ${alias}."isolation_status" = 'worktree'
+      AND ${alias}."branch" IS NOT NULL
+      AND ${alias}."branch" <> ''
+      AND (
+        ${alias}."worktree_dirty" = true
+        OR (${alias}."branch_sha" IS NOT NULL AND ${alias}."base_sha" IS NOT NULL
+            AND ${alias}."branch_sha"::text <> ${alias}."base_sha")
+      )
+    )`;
+}
+
+/** `deliveredNothingOfItsOwn` as SQL, correlated to a TASK alias. */
+export function deliveredNothingOfItsOwnSql(alias: string): string {
+  return `(${frozenIdentityMeasuresNothingSql(alias)} OR ${unnamedIdentityMeasuresNothingSql(alias)})`;
+}
+
+/** The frozen half of `deliveredNothingOfItsOwnSql`. */
+export function frozenIdentityMeasuresNothingSql(alias: string): string {
+  return `(
+      ${alias}."delivered_sha" IS NOT NULL
+      AND ${alias}."delivered_sha" = ${alias}."delivered_base_sha"
+      AND NOT EXISTS (
+        SELECT 1 FROM "session" own_work
+         WHERE own_work."task_id" = ${alias}."id"
+           AND own_work."starts_task_work" = true
+           AND own_work."deleted_at" IS NULL
+           AND ${sessionHoldsWorkOfItsOwnSql('own_work')}
+      )
+    )`;
+}
+
+/** `unnamedIdentityMeasuresNothing` as SQL, correlated to a TASK alias. */
+export function unnamedIdentityMeasuresNothingSql(alias: string): string {
+  return `(
+      ${alias}."status" = 'DONE'
+      AND ${alias}."delivered_sha" IS NULL
+      AND EXISTS (
+        SELECT 1 FROM "session" any_work
+         WHERE any_work."task_id" = ${alias}."id"
+           AND any_work."starts_task_work" = true
+           AND any_work."deleted_at" IS NULL
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM "session" unmeasured_work
+         WHERE unmeasured_work."task_id" = ${alias}."id"
+           AND unmeasured_work."starts_task_work" = true
+           AND unmeasured_work."deleted_at" IS NULL
+           AND (unmeasured_work."finished_at" IS NULL
+             OR jsonb_typeof(unmeasured_work."changed_files") IS DISTINCT FROM 'array'
+             OR unmeasured_work."changed_files" <> '[]'::jsonb
+             OR ${sessionHoldsWorkOfItsOwnSql('unmeasured_work')})
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM "session_merge_receipt" moved_target
+         WHERE moved_target."task_id" = ${alias}."id"
+           AND moved_target."result" = 'MERGED'
+      )
+      AND EXISTS (
+        SELECT 1 FROM (
+          SELECT ended_work."branch_sha" FROM "session" ended_work
+           WHERE ended_work."task_id" = ${alias}."id"
+             AND ended_work."starts_task_work" = true
+             AND ended_work."deleted_at" IS NULL
+             AND COALESCE(ended_work."worktree_branch", ended_work."branch") IS NOT NULL
+           ORDER BY ended_work."finished_at" DESC, ended_work."id" DESC
+           LIMIT 1
+        ) ended WHERE ended."branch_sha" IS NULL
+      )
+    )`;
+}
+
+/**
+ * Code work of this line that delivered something to land: `isCodeTaskSql` without the tasks §12.15
+ * P-M1 gave no route (`deliveredNothingOfItsOwnSql`). What the task row and the project's buckets
+ * read as "this task integrates": a DONE that measured no commit of its own reads as nothing to land
+ * (`NOT_APPLICABLE`, `doneNotIntegrated`) rather than as a landing that never comes.
+ */
+export function hasWorkToLandSql(alias: string): string {
+  return `(${isCodeTaskSql(alias)} AND NOT ${deliveredNothingOfItsOwnSql(alias)})`;
+}
+
+/**
+ * Whether a task's work is still moving: a work session of it has not finished (the negation of
+ * `landingWorkHasSettled`, J-T1e). Its delivered identity is not frozen yet, and the finish that
+ * freezes it is where its landing is decided (§12.15 P-M1), so a DONE in this state has queued
+ * nothing and started no line yet.
+ */
+export function workStillMovingSql(alias: string): string {
+  return `EXISTS (
+      SELECT 1 FROM "session" moving_work
+       WHERE moving_work."task_id" = ${alias}."id"
+         AND moving_work."starts_task_work" = true
+         AND moving_work."deleted_at" IS NULL
+         AND moving_work."finished_at" IS NULL
+    )`;
+}
+
+/** A DONE code task whose finish still has to decide its landing (§12.15 P-M1). */
+export function landingDeferredSql(alias: string): string {
+  return `(
+      ${alias}."status" = 'DONE'
+      AND ${alias}."delivered_at" IS NULL
+      AND ${isCodeTaskSql(alias)}
+      AND ${workStillMovingSql(alias)}
+      AND (${taskLandingSql(alias)}) = 'NOT_KNOWN'
     )`;
 }
 
@@ -817,76 +1088,80 @@ export function lineSawNothingToLand(task: LandingServingTask): boolean {
 }
 
 /**
- * Whether this work has nothing to land at all — and there are three ways for that to be true: the
- * task DECLARES it needs no code, its work was done in another repository than the one its line is
- * bound to (`workInAnotherRepository`), or the line's own record says it never had a commit of its
- * own.
+ * Whether this work has nothing to land at all — and there are four ways for that to be true, each a
+ * fact Orbit measured rather than a label somebody wrote: no work session of the task ever ran a
+ * branch (`ranNoBranch`), its work was done in another repository than the one its line is bound to
+ * (`workInAnotherRepository`), the line's own record says it never had a commit of its own, or its
+ * DONE measured that (§12.15 P-M1, `deliveredNothingOfItsOwn`) and so queued nothing for the line to
+ * answer.
  *
- * §1.1 `isCodeTask` has two halves and the first is the declaration: a task that declares itself
- * `codeless` "needs no code, even though its project is bound to a codebase", which is SR5's escape
- * hatch for the research, documentation and evidence work inside an otherwise code-bearing project.
- * Its schema comment says what that buys here: "a codeless task resolves no SOURCE" — so it has no
- * branch, no commit of its own, and no receipt can ever put its work on `main`. A criterion that
- * demanded a landing from one would be demanding something that was never going to exist, which is
- * SR27's rule one contract over: "a 'write the docs' prerequisite must not make the task after it
- * demand a checkpoint that was never going to exist". §2.5 J9 exempts the very same tasks from a
- * dependent's wait, and `ProjectIntegrationBuckets.doneNotIntegrated` already calls them "DONE work
- * with nothing to land". This is that same answer arriving at §1.4.
+ * NO LABEL DECIDES IT (revision 42, §12.15 P-M3, P-M4)
+ * ---------------------------------------------------
+ * Until revision 42 the first way was a declaration: a task flagged `codeless` left the conjunction
+ * whatever it did, and a project marked `non_code` read no landing at all. Both were labels, and a
+ * label can disagree with the work — a codeless task with commits left work on its branch that no
+ * criterion asked after. Neither is read now. A codeless run that changed nothing never makes a
+ * branch (its checkout is detached until it has something to commit, design §3 B2), so it is out by
+ * `ranNoBranch`; one that committed has commits, and is in like any other. A project whose tasks
+ * never ran a branch reads every criterion LANDED for the same reason, with no mark needed.
  *
- * THE SECOND WAY, AND WHY IT HAD TO BE ADDED
- * ------------------------------------------
- * The declaration is a fact about an intention, and it is the ONLY fact of its kind: `codeless` was
- * written only when a task was created, so a task created without it could never gain it (0346 gave
- * the edit doors it too — with a reason, and never for a task that has commits of its own). On
- * 2026-09-22 that cost a project of 48 finished tasks its DONE a second time: its criterion 12 was
- * served by a finished acceptance task that ran a branch, committed nothing to it and declared
- * nothing, and no receipt could ever put its work on `main` — the same deadlock the declaration had
- * just been taught to break, one task over, with no declaration anywhere to read.
- *
- * What that task has instead is the line's own answer, and it is the better fact of the two: the
+ * THE LINE'S OWN ANSWER
+ * ---------------------
+ * On 2026-09-22 a project of 48 finished tasks could not reach DONE: its criterion 12 was served by
+ * a finished acceptance task that ran a branch, committed nothing to it and declared nothing, and no
+ * receipt could ever put its work on `main`. What that task has is the line's own answer: the
  * task's branch was offered to the line after its session had finished with it, and the line replied
  * that the tip was already on the upstream (`jobFoundNothingOfItsOwn`). A task whose whole record at
  * the line is that answer has no commit of its own — see `lineSawNothingToLand` for why that is the
  * whole of the claim and not a guess from it.
  *
- * WHY §1.1's SECOND HALF IS STILL NOT READ HERE
- * ---------------------------------------------
- * `isCodeTask`'s other half — whether the NEWEST work session ran in a worktree on a branch — is
- * deliberately NOT read, and the difference is what this lane is FOR. §1.1 asks it to decide
- * dispatch and closure, where "the latest attempt is not a branch-bearing one" is the right input.
- * This lane is an audit of where work IS, and a receipt is attached to the TASK rather than to the
- * session it was recorded against: a task that landed from one attempt and then ran another without
- * a worktree is a task whose work is really on the integration line, and reading it as "nothing to
- * land" would say LANDED over it. That is the false green this lane exists to break up.
+ * WHY §1.1's NEWEST-SESSION HALF IS NOT READ HERE
+ * -----------------------------------------------
+ * `isCodeTask` asks whether the NEWEST work session ran in a worktree on a branch, and that is the
+ * right input for dispatch and closure. This lane is an audit of where work IS, and a receipt is
+ * attached to the TASK rather than to the session it was recorded against: a task that landed from
+ * one attempt and then ran another without a worktree is a task whose work is really on the
+ * integration line, and reading it as "nothing to land" would say LANDED over it. That is the false
+ * green this lane exists to break up — which is why `ranNoBranch` asks about EVERY work session, and
+ * about the receipts and the line's answers beside them, not about the newest one.
  *
- * The line's answer has no such gap, and the guard is where the difference shows. That same task —
- * landed from one attempt, then run again — has a MERGED receipt, because the landing it did is a
- * target that moved, and that alone keeps it in the roll-up whatever its sessions look like. And it
- * has commits of its own in every other sense this lane can see: a branch the line was handed and
- * found something on answers `LANDED`, `CONFLICT`, `CHECK_FAILED`, `ERROR` or `READY`, none of which
- * is `ALREADY_LANDED`-on-the-upstream, and none of which this exemption overlooks. Only work whose
- * whole record is "there was nothing of it to land" gets anything out — and a declaration, which is
- * §1.1's first half and authoritative wherever this lane reads it.
- *
- * The sessions this does read are not that half either. `jobSawTheFinishedBranch` looks at the
- * session a landing was queued FOR, never at which session is newest, and it can only keep a task in.
- * `workInAnotherRepository` reads the newest work session for its REPOSITORY alone (O-L7), never
- * for whether it ran a branch, and it takes a task out as the declaration does. It reads the newest
- * session because §1.1 does, and no receipt overrides it: a task that landed on the project branch
- * from one attempt and ran its newest attempt in another repository leaves the conjunction, MERGED
- * receipt and all.
+ * `workInAnotherRepository` reads the newest work session for its REPOSITORY alone (O-L7), because
+ * §1.1 does, and no receipt overrides it: a task that landed on the project branch from one attempt
+ * and ran its newest attempt in another repository leaves the conjunction, MERGED receipt and all.
  */
 export function taskHasNothingToLand(task: LandingServingTask): boolean {
-  return task.codeless || workInAnotherRepository(task) || lineSawNothingToLand(task);
+  return ranNoBranch(task) || workInAnotherRepository(task) || lineSawNothingToLand(task)
+    // §12.15 P-M1: the DONE measured no commit of its own and queued nothing, so there is no job for
+    // the line's answer to come from; the fact the DONE decided on is read instead.
+    || deliveredNothingOfItsOwn(task);
+}
+
+/**
+ * Whether a DONE task's work sessions never ran a branch or reported changed files, and nothing at the
+ * line or in a receipt says otherwise: such work delivered no commit Orbit can see, and so has none
+ * to land (§12.15 P-M3). A task that is not DONE has delivered nothing yet, which is not the same as
+ * delivering nothing, and stays in — which is what a project with no repository, or one whose work is documents
+ * and accounts, is made of. A session with no branch that DID report changed files is work Orbit
+ * knows of and cannot place, and keeps the task in (it reads NO_BRANCH). A reader that did not select
+ * the sessions' `isolationStatus` and `branch` cannot tell, and gets `false` — the withholding answer.
+ */
+export function ranNoBranch(task: LandingServingTask): boolean {
+  const sessions = task.sessions;
+  if (task.status !== 'DONE' || !sessions
+    || sessions.some((session) => !('isolationStatus' in session) || !('branch' in session))) {
+    return false;
+  }
+  return task.mergeReceipts.length === 0 && task.integrationJobs.length === 0
+    && !sessions.some((session) => (session.isolationStatus === 'worktree' && !!session.branch)
+      || sessionReportedWork({ changedFiles: session.changedFiles ?? null }));
 }
 
 /**
  * Whether the task's work was done in another repository than the one its project's line is bound to
  * (§1.1 `isCodeTask`'s repository condition, revision 29 §10.5 O-L7), read off the NEWEST work
  * session as §1.1 reads it. No commit of such work can ever be on this line, and the task cannot be
- * declared codeless either — it has commits (`TASK_CODELESS_HAS_COMMITS`) — so without this a criterion
- * it serves would wait for a landing that never comes. It leaves the conjunction exactly as codeless
- * work does (§1.4 "有提交可落"). A task with no work session, one whose newest work session names no
+ * left out by any label either — it has commits — so without this a criterion it serves would wait for
+ * a landing that never comes. It leaves the conjunction exactly as work with no branch does (§1.4). A task with no work session, one whose newest work session names no
  * repository (no workspace, or no `repo_url`), or one in a project with no binding has none KNOWN to
  * differ, and stays in.
  */
@@ -960,9 +1235,8 @@ export async function readLandingBranches(
  * rather than borrowing the work side's, which keeps this lane genuinely bolted on: the three clauses
  * are untouched, and nothing here can change the answer they fold.
  *
- * `codeless` rides along as a scalar on the same `task` row the receipts hang off, so reading what
- * `taskHasNothingToLand` needs costs this read no statement at all — which is why the project detail
- * page's fixed cost does not move for it. The jobs are the second read rather than a nested relation
+ * The work sessions ride along one relation below the same `task` row the receipts hang off, so
+ * reading what `taskHasNothingToLand` needs costs this read no statement of its own. The jobs are the second read rather than a nested relation
  * because `task_id` is a history reference with no foreign key (0423) and Prisma has nothing to nest;
  * they and the sessions they were queued for still cost one statement each for the whole project's
  * serving tasks (`project-get-query-count.pg.spec.ts` carries the number and the argument).
@@ -995,12 +1269,18 @@ export async function readCriterionLandingFacts(
   }));
 }
 
-/** The newest session that started a task's work, with the repository its workspace names (O-L7). */
-export const NEWEST_WORK_REPOSITORY = {
+/**
+ * Every session that started a task's work, newest first: the first is §1.1's newest work session,
+ * with the repository its workspace names (O-L7); all of them carry what they reported — `changed_files`
+ * for `ranNoBranch`, and their own branch and checkout for §12.15 P-M1's `deliveredNothingOfItsOwn`.
+ */
+export const WORK_SESSIONS_NEWEST_FIRST = {
   where: { startsTaskWork: true, deletedAt: null },
   orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-  take: 1,
-  select: { workspace: { select: { repoUrl: true } } },
+  select: {
+    ...WORK_OF_ITS_OWN_SELECT, id: true, worktreeBranch: true, finishedAt: true, changedFiles: true,
+    workspace: { select: { repoUrl: true } },
+  },
 } satisfies Prisma.Task$sessionsArgs;
 
 /**
@@ -1010,8 +1290,9 @@ export const NEWEST_WORK_REPOSITORY = {
  * shows, the facts the coordinator is woken for, the settled card, and the mirror those are asserted
  * against. A reader that wrote its own copy would be a second author of the fold's input, and the
  * copy that drifts is the one that quietly keeps answering a question the fold stopped asking —
- * which is what these facts are: SR5's escape hatch, the merges recorded against the task, and
- * where its newest work ran beside where its project's line is bound (O-L7).
+ * which is what these facts are: the merges recorded against the task, whether any of its work
+ * sessions ran a branch, and where its newest work ran beside where its project's line is bound
+ * (O-L7).
  *
  * The last one, the answers the line gave about its branches (§2.2 J-T5), is not here: it is about
  * the task rather than ON it, and it is read beside this select by `readLandingJobsByTask`. An empty
@@ -1020,12 +1301,16 @@ export const NEWEST_WORK_REPOSITORY = {
  * function that ran the select.
  */
 export const LANDING_SERVING_WORK_SELECT = {
-  codeless: true,
+  // Only a DONE task has delivered (`ranNoBranch`).
+  status: true,
   mergeReceipts: { select: { result: true, targetBranch: true, sourceSha: true, createdAt: true, detail: true, targetShaAfter: true } },
   // §1.1's repository condition (O-L7): where the newest work session ran, and where the project's
   // line is bound. Two relation levels each, not a statement per task (`workInAnotherRepository`).
-  sessions: NEWEST_WORK_REPOSITORY,
+  sessions: WORK_SESSIONS_NEWEST_FIRST,
   project: { select: { codebases: { where: { slot: 'primary' }, select: { canonicalRepoUrl: true } } } },
+  // §12.15 P-M1 (`deliveredNothingOfItsOwn`): the frozen identity, beside the sessions above.
+  deliveredSha: true,
+  deliveredBaseSha: true,
 } as const;
 
 /**

@@ -7,6 +7,7 @@ import {
   BACKGROUND_ROW_ROTATE_CHANGE_MS,
   BACKGROUND_ROW_ROTATE_PER_NAME_MS,
   backgroundRow,
+  backgroundRowClearedAt,
   type BackgroundRow,
   type BackgroundRowInput,
 } from './index';
@@ -17,7 +18,7 @@ interface RowCase {
   list: BackgroundRowInput[];
   lastUserMessageAt: string | null;
   sessionLive: boolean;
-  wakeTurnStartedAt?: string;
+  lastAgentTurnStartedAt?: string | null;
   expect: BackgroundRow;
 }
 
@@ -29,7 +30,7 @@ const fixture = JSON.parse(readFileSync(path.join(__dirname, 'background-row.fix
 
 describe('background-row.fixture.json', () => {
   it.each(fixture.cases.map((c) => [c.case, c] as const))('%s', (_name, c) => {
-    expect(backgroundRow(c.list, c.lastUserMessageAt, c.sessionLive)).toEqual(c.expect);
+    expect(backgroundRow(c.list, backgroundRowClearedAt(c.lastUserMessageAt, c.lastAgentTurnStartedAt ?? null), c.sessionLive)).toEqual(c.expect);
   });
 
   it('has at least one case for every rule, and tags only known rules', () => {
@@ -52,13 +53,20 @@ describe('background-row.fixture.json', () => {
     }
   });
 
-  it('a wake case ends after the last user message and before the wake', () => {
-    const wakes = fixture.cases.filter((c) => c.wakeTurnStartedAt);
+  it('a wake case ends after the last user message and before the agent turn that clears it', () => {
+    const wakes = fixture.cases.filter((c) => c.covers.includes('wakeTurnClears'));
     expect(wakes.length).toBeGreaterThan(0);
     for (const c of wakes) {
       const ends = c.list.map((s) => Date.parse(s.endedAt ?? ''));
-      expect(ends.every((e) => e > Date.parse(c.lastUserMessageAt!) && e < Date.parse(c.wakeTurnStartedAt!))).toBe(true);
-      expect(c.expect.hidden).toBe(false);
+      expect(ends.every((e) => e > Date.parse(c.lastUserMessageAt!) && e < Date.parse(c.lastAgentTurnStartedAt!))).toBe(true);
+      expect(c.expect.hidden).toBe(true);
     }
+  });
+
+  it('the cut-off is the later of the two', () => {
+    expect(backgroundRowClearedAt(null, null)).toBeNull();
+    expect(backgroundRowClearedAt('2026-11-16T02:40:00.000Z', null)).toBe('2026-11-16T02:40:00.000Z');
+    expect(backgroundRowClearedAt(null, '2026-11-16T02:41:00.000Z')).toBe('2026-11-16T02:41:00.000Z');
+    expect(backgroundRowClearedAt('2026-11-16T02:42:00.000Z', '2026-11-16T02:41:00.000Z')).toBe('2026-11-16T02:42:00.000Z');
   });
 });

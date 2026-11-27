@@ -25,6 +25,7 @@ import {
   CreateEnrollmentTokenDto,
   RenameAccountDto,
   ReorderRunnersDto,
+  SignOutDefaultDto,
   StartInstallDto,
   StartLoginDto,
   SubmitLoginCodeDto,
@@ -188,6 +189,20 @@ export class RunnersController {
     return this.runners.setDefaultAccount(user.userId, id, engine, account);
   }
 
+  // Dismissing a Set as default that failed, so its reason stops showing under the account. Orbit's own
+  // record, so the runner need not be online; owner-scoped in the service like the swap.
+  @PatForbidden('RUNNER_CONTROL')
+  @Delete(':id/accounts/:engine/:account/set-default')
+  dismissSetDefaultFailure(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('engine') engine: string,
+    @Param('account') account: string,
+  ) {
+    if (!isLoginEngine(engine)) throw new BadRequestException('Unknown engine');
+    return this.runners.dismissSetDefaultFailure(user.userId, id, engine, account);
+  }
+
   // Bringing back a Default the removal above took out of Orbit. Orbit's own record again, so the
   // runner need not be online; owner-scoped in the service like the removal.
   @PatForbidden('RUNNER_CONTROL')
@@ -199,6 +214,22 @@ export class RunnersController {
   ) {
     if (!isLoginEngine(engine)) throw new BadRequestException('Unknown engine');
     return this.runners.restoreDefault(user.userId, id, engine);
+  }
+
+  // Signing an engine's Default out on a runner (docs/default-sign-out-design.md): the runner deletes
+  // Default's login credential, and the account stays. Unlike removing Default this changes the
+  // machine, so it is relayed to the runner like an added account's removal and owner-scoped in the
+  // service the same way; refused on a runner that cannot sign out, or one that is offline.
+  @PatForbidden('RUNNER_CONTROL')
+  @Post(':id/accounts/:engine/default/sign-out')
+  signOutDefault(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('engine') engine: string,
+    @Body() dto: SignOutDefaultDto,
+  ) {
+    if (!isLoginEngine(engine)) throw new BadRequestException('Unknown engine');
+    return this.runners.signOutDefault(user.userId, id, engine, dto?.force === true);
   }
 
   // Renaming one account of `engine` on a runner — Default included. Only a label, and Orbit's own:

@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import type { ExternalTurnSender } from '../sessions/session-message';
+import { sessionTurnStateSql } from '../sessions/session-turn-state';
 import { SessionsService } from '../sessions/sessions.service';
 import { feishuDerivedUuid, feishuTurnKey, refusalWords } from './feishu-direct.service';
 import { FEISHU_GROUP_REPLIES } from './feishu-chat-route.service';
@@ -221,6 +222,8 @@ export class FeishuGroupService {
     try {
       await this.sessions.createTurn(route.ownerId, sessionId, { clientTurnId: feishuTurnKey(app.appId, message.eventId), content: message.text }, {
         senderClient: { client: 'feishu' },
+        // A group member's message is a person's: the row moves to the top of the list.
+        listed: true,
         ...(sender ? { externalSender: sender } : {}),
         // Written with the turn, so a replay of this clientTurnId records nothing again.
         onTurnWritten: async (tx, turn) => {
@@ -264,7 +267,7 @@ export class FeishuGroupService {
     const [held] = await tx.$queryRaw<Array<{ running: number; today: number }>>`
       SELECT
         count(*) FILTER (WHERE (s."id" IS NULL AND t."created_at" > now() - ${RESERVATION_HOLD}::interval)
-                            OR (s."status" IN ('PENDING', 'RUNNING') AND s."deleted_at" IS NULL))::int AS "running",
+                            OR (${sessionTurnStateSql('s')} IN ('QUEUED', 'IN_FLIGHT') AND s."deleted_at" IS NULL))::int AS "running",
         count(*) FILTER (WHERE t."created_at" >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
                            AND (s."id" IS NOT NULL OR t."created_at" > now() - ${RESERVATION_HOLD}::interval))::int AS "today"
       FROM "feishu_thread" t

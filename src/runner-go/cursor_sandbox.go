@@ -39,6 +39,10 @@ func detectCursorSandbox(ctx context.Context, job *ClaimedSession, workspace str
 		return nil, "Cursor sandbox binary is unavailable: " + err.Error()
 	}
 	roots := []string{workspace, "/tmp", os.TempDir(), runnerCacheRoot()}
+	if driveMounted() {
+		// The parent, never the resolved drive/: a bind of the mount itself would keep it after a remount (§7.2).
+		roots = append(roots, driveParentPath)
+	}
 	if job != nil && job.WT != nil && job.WT.RepoDir != "" {
 		roots = append(roots, filepath.Join(job.WT.RepoDir, ".git"))
 	}

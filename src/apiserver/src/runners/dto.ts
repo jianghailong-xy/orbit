@@ -1,9 +1,9 @@
 import {
   ArrayUnique,
   IsArray,
+  IsBoolean,
   IsIn,
   IsInt,
-  IsNumber,
   IsOptional,
   IsString,
   Matches,
@@ -12,7 +12,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { KIMI_REGIONS, type InstallEngine, type KimiRegion, type LoginEngine, type RelayMode } from '@orbit/shared';
+import { KIMI_REGIONS, RUNNER_BURST_CONCURRENT_MAX, type InstallEngine, type KimiRegion, type LoginEngine, type RelayMode } from '@orbit/shared';
 import { IsPublicId } from '../common/public-id';
 
 export class CreateEnrollmentTokenDto {
@@ -26,19 +26,14 @@ export class UpdateRunnerDto {
   // Max sessions the runner runs at once; the claim queue gates on this. Floor of
   // 1 (0 would stall the runner); no ceiling — a runner defaults to its CPU core count.
   @IsOptional() @IsInt() @Min(1) maxConcurrent?: number;
+  // Extra sessions on demand: how many turns past maxConcurrent the owner's Run now may start on this runner at
+  // once (docs/mocks/queued-run-now decision C). 0 turns Run now off; the ceiling keeps a typo from unbounding it.
+  @IsOptional() @IsInt() @Min(0) @Max(RUNNER_BURST_CONCURRENT_MAX) burstConcurrent?: number;
   // Free-space floor in MB: below it, the auto-run sweep dispatches nothing onto this machine.
   // null clears the floor (no gate), and 0 is spelled that way rather than accepted as a
   // disabling value, so "gate at zero bytes" can never be typed by accident. No ceiling — the
   // right reserve on a 30TB archive volume is not the right one on a laptop.
   @IsOptional() @IsInt() @Min(1) minFreeDiskMb?: number | null;
-  // Limits on each background job this machine runs; null clears one (no limit on that dimension), and
-  // both null is limits off. CPUs may be fractional (0.5 is half a core).
-  @IsOptional() @IsNumber({ allowNaN: false, allowInfinity: false }, { message: 'bgJobCpus must be a number' })
-  @Min(Number.MIN_VALUE, { message: 'bgJobCpus must be greater than 0' }) @Max(1024, { message: 'bgJobCpus must not be more than 1024' })
-  bgJobCpus?: number | null;
-  @IsOptional() @IsInt({ message: 'bgJobMemoryMb must be an integer' })
-  @Min(16, { message: 'bgJobMemoryMb must not be less than 16' }) @Max(2147483647, { message: 'bgJobMemoryMb must not be more than 2147483647' })
-  bgJobMemoryMb?: number | null;
 }
 
 // The requested runner order, in the public ids GET /runners hands out — decoded to the UUIDs the
@@ -78,6 +73,12 @@ export class StartLoginDto {
  *  is added under (StartLoginDto.accountName). */
 export class RenameAccountDto {
   @IsString() @MaxLength(60) name!: string;
+}
+
+/** Sign out of an engine's Default on a runner (docs/default-sign-out-design.md). `force` goes ahead
+ *  although sessions are running on Default: the person confirmed after a refusal named them. */
+export class SignOutDefaultDto {
+  @IsOptional() @IsBoolean() force?: boolean;
 }
 
 /** Which CLI to install on the runner. Required — there is no historical default here. Cursor CLI's

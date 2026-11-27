@@ -438,6 +438,88 @@ export function taskRunStoppedFact(stopped: {
 }
 
 /**
+ * `TASK_RUN_STOPPED`, the timed form (`task-run-idle.ts`): a run has sat parked, with no evidence and
+ * no progress, for longer than the idle threshold. Keyed on when its idle period began, so one period
+ * is one fact and any activity that moves `idleSince` starts a new one. The event is the stop's, so
+ * no migration is needed; `detail.idle` is what the message is rendered from.
+ */
+export function taskRunIdleFact(idle: {
+  projectId: string;
+  taskId: string;
+  taskTitle: string;
+  sessionId: string;
+  idleSince: Date;
+  lastProgress: string | null;
+  lastWords: string | null;
+}): WakeFact {
+  return {
+    event: 'TASK_RUN_STOPPED',
+    projectId: idle.projectId,
+    subjectType: 'TASK',
+    subjectId: idle.taskId,
+    subjectVersion: `${idle.sessionId}:idle:${idle.idleSince.getTime()}`,
+    detail: {
+      title: idle.taskTitle,
+      sessionId: idle.sessionId,
+      idleSince: idle.idleSince.toISOString(),
+      lastProgress: idle.lastProgress,
+      ...(idle.lastWords ? { lastWords: idle.lastWords } : {}),
+    },
+  };
+}
+
+/**
+ * `TASK_RUN_STOPPED`, the blocked-line form (`project-line-blocked.ts`): an open integration item has
+ * held other tasks' queued landings, and the run that must act on it has sat idle, for longer than the
+ * blocked-line threshold. Keyed on the item and the run's idle period, so one period is one notice per
+ * item, and a run that moved and went idle again is a new one. `detail.blockedLine` is what the message
+ * is rendered from.
+ */
+export function lineBlockedFact(
+  idle: {
+    projectId: string;
+    taskId: string;
+    taskTitle: string;
+    sessionId: string;
+    idleSince: Date;
+    lastProgress: string | null;
+    lastWords: string | null;
+    /** The line-sync item with no sync task filed: the task and session are the conflict's, and no run is idle. */
+    awaitingSyncTask?: boolean;
+  },
+  line: {
+    itemId: string;
+    itemTitle: string;
+    heldSince: Date;
+    held: ReadonlyArray<{ taskId: string; title: string }>;
+    escalationSeconds: number;
+  },
+): WakeFact {
+  return {
+    event: 'TASK_RUN_STOPPED',
+    projectId: idle.projectId,
+    subjectType: 'TASK',
+    subjectId: idle.taskId,
+    subjectVersion: `${idle.sessionId}:line:${line.itemId}:${idle.idleSince.getTime()}`,
+    detail: {
+      title: idle.taskTitle,
+      sessionId: idle.sessionId,
+      idleSince: idle.idleSince.toISOString(),
+      lastProgress: idle.lastProgress,
+      ...(idle.lastWords ? { lastWords: idle.lastWords } : {}),
+      ...(idle.awaitingSyncTask ? { awaitingSyncTask: true } : {}),
+      blockedLine: {
+        itemId: line.itemId,
+        itemTitle: line.itemTitle,
+        heldSince: line.heldSince.toISOString(),
+        held: line.held.map((task) => ({ taskId: task.taskId, title: task.title })),
+        escalationSeconds: line.escalationSeconds,
+      },
+    },
+  };
+}
+
+/**
  * `TASK_DISPATCH_REFUSED` — a start of this task never became a run: the runner refused the
  * checkout its pinned commit would have been.
  *

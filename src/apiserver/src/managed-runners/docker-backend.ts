@@ -54,6 +54,9 @@ import { isByteCount, type VolumeFigures } from './managed-runner-storage';
  * the image ID the channel reports against the profile's) that a link-only server has long stopped
  * hearing. Asking is never the proof: the gate still waits for Docker's report of the exit and the
  * container's removal.
+ *
+ * A READY container of a previous image that is idle is drained as for sleep and woken at once on the
+ * current image (`rollImage`, the manager's image roll), as on Kubernetes; demand calls that roll off.
  */
 
 const TERMS: ManagedRunnerBackendTerms = {
@@ -88,7 +91,10 @@ function units(quantity: string, scale: 'unit' | 'milli' = 'unit'): number {
   return value;
 }
 
-/** One runner's compute share: its container's limits (Docker reserves nothing below them), one container, one volume, one user. */
+/**
+ * One runner's compute share: its container's limits (Docker reserves nothing below them), `runner.tmpSizeLimit` of the
+ * ephemeral budget, one container, one volume, one user.
+ */
 export function dockerComputeShare(profile: Pick<DockerRunnerProfile, 'runner'>): ComputeAmounts {
   return {
     cpuMillis: units(profile.runner.resources.cpu, 'milli'),
@@ -105,7 +111,8 @@ export function dockerComputeShare(profile: Pick<DockerRunnerProfile, 'runner'>)
  * channel reports, less a reserve for everything else running there.
  *
  *   CPU, memory     the host's, less `reserve.cpu` / `reserve.memory` (a quarter each by default)
- *   /tmp            a tmpfs, held in the containers' memory: bounded by the memory budget
+ *   ephemeral       `runner.tmpSizeLimit` a runner, against the memory budget unless stated; /tmp itself is a
+ *                   directory of each runner's data volume, held to that volume's disk limit
  *   containers      as many runners as CPU and memory both fit; the same number of volume slots and users.
  *                   Never more than the channel will make (`channelMaxContainers`, the `maxContainers` its
  *                   /v1/info reports): it refuses a container past that, so the pool admits no runner it
@@ -183,6 +190,9 @@ export class DockerBackend implements ManagedRunnerBackend {
   readonly location: { readonly clusterKey: string; readonly namespace: string };
   /** The image the channel reported, on a profile that adopts it (D2), and when it was read. */
   private adopted?: { image: string; at: number };
+  /** The revision and version labels of the image the channel serves (`imageRevision`, `imageVersion`, each null when it
+   *  has none), and when they were read. */
+  private revision?: { value: string | null; version: string | null; at: number };
   private channelUnreachable = false;
   /** When `recheckReachability` last asked the channel. */
   private rechecked?: number;
@@ -245,6 +255,11 @@ export class DockerBackend implements ManagedRunnerBackend {
       );
     }
     if (adopt) this.adopted = { image: info.image, at: this.now() };
+    this.revision = {
+      value: typeof info.imageRevision === 'string' && info.imageRevision ? info.imageRevision : null,
+      version: typeof info.imageVersion === 'string' && info.imageVersion ? info.imageVersion : null,
+      at: this.now(),
+    };
     return info;
   }
 
@@ -257,6 +272,24 @@ export class DockerBackend implements ManagedRunnerBackend {
     if (this.profile.runner.image !== DOCKER_IMAGE_FROM_CHANNEL) return this.profile.runner.image;
     if (fresh || !this.adopted || this.now() - this.adopted.at > ADOPTED_IMAGE_TTL_MS) await this.checkedInfo();
     return this.adopted!.image;
+  }
+
+  /**
+   * The image a READY instance of a previous image is moved onto once it is idle (the manager's image roll): the one
+   * new containers are made from now — the profile's, or on a profile that adopts the channel's, the one last read
+   * from the channel (`readInstance` reads it on every pass before the roll is considered). Absent until that first
+   * reading, so nothing rolls on an image the backend has not seen.
+   */
+  get rollImage(): string | undefined {
+    return this.profile.runner.image === DOCKER_IMAGE_FROM_CHANNEL ? this.adopted?.image : this.profile.runner.image;
+  }
+
+  /** The source commit the image new containers are made from was built from, and the release it was published for,
+   *  as the channel reports them: read afresh once the last reading is older than ADOPTED_IMAGE_TTL_MS. Each null when
+   *  the channel does not say. */
+  private async imageBuild(): Promise<{ revision: string | null; version: string | null }> {
+    if (!this.revision || this.now() - this.revision.at > ADOPTED_IMAGE_TTL_MS) await this.checkedInfo();
+    return { revision: this.revision!.value, version: this.revision!.version };
   }
 
   computeShare(): ComputeAmounts {
@@ -303,9 +336,8 @@ export class DockerBackend implements ManagedRunnerBackend {
   }
 
   /**
-   * The channel's latest measurement of the volume: its limit, and what Docker last measured it holding, which the
-   * channel takes every `diskCheckSeconds` to enforce the limit and keeps. Reading the view walks nothing. None
-   * until the channel has measured the volume, or for one with no limit.
+   * The volume's limit and latest usage from the channel, measured every `diskCheckSeconds`.
+   * Reading the view walks nothing. None until the channel has measured the volume, or for one with no limit.
    */
   volumeMeasurement(volume: DockerVolume): VolumeFigures | null {
     const { limitBytes, usageBytes } = volume.view;
@@ -346,7 +378,14 @@ export class DockerBackend implements ManagedRunnerBackend {
 
   async readInstance(mapping: ManagedRunner): Promise<DockerInstance | null> {
     const view = await this.channel.readContainer(managedPodName(mapping.runnerId));
-    return view ? instanceOf(view, await this.image()) : null;
+    if (!view) return null;
+    const instance = instanceOf(view, await this.image());
+    if (!instance.previousImage) return instance;
+    // Only the status reads it: a channel not reached, or not yet restarted on the profile's image, cannot name the
+    // current build, which is no reason to fail the pass that read the container.
+    const build = await this.imageBuild().catch(() => null);
+    if (!build?.revision) return instance;
+    return { ...instance, currentImageRevision: build.revision, ...(build.version ? { currentImageVersion: build.version } : {}) };
   }
 
   /**

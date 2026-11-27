@@ -6,6 +6,7 @@ import io.orbitd.android.projects.failureReason
 import io.orbitd.android.toast.OrbitToasts
 import io.orbitd.android.toast.ToastGlyph
 import io.orbitd.android.toast.ToastTone
+import io.orbitd.android.toast.ToastUndo
 import io.orbitd.android.toast.toastTitle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -44,6 +45,40 @@ internal class SessionActions(private val api: DirectoryApi, private val scope: 
             OrbitToasts.show("Couldn't complete the project's sessions", toastTitle(title), detail = toastDetail(failure), tone = ToastTone.ERROR)
         }
         changed()
+    }
+
+    /** Pause on a running project's row (design §4.3; iOS `AppModel.pauseProject`): no confirmation, since it can be undone — the
+     * toast says what still moves and its Undo is Resume. Runs already going finish. */
+    fun pauseProject(row: SessionProjectRow) = scope.launch {
+        try {
+            api.pauseProject(row.projectId)
+            OrbitToasts.show(ProjectPauseCopy.pausedTitle, toastTitle(row.title), detail = ProjectPauseCopy.pausedDetail(row.runningCount),
+                undo = ToastUndo(ProjectPauseCopy.undoDescription) { resumeProject(row.copy(pause = ProjectPause.NONE)) })
+        } catch (cancel: CancellationException) { throw cancel }
+        catch (failure: Exception) { refused(row, false, failure) }
+        ProjectSidebarNudge.nudge()
+        changed()
+    }
+
+    /** Resume on a paused row: the daily limit's door when that pause holds (never raising the limit, and saying so), else the
+     * project's own. A resume of yours leaves no toast and no Undo; pausing again is one swipe. */
+    fun resumeProject(row: SessionProjectRow) = scope.launch {
+        try {
+            val episode = row.pause.fuseEpisodeId?.takeIf { row.pause.fusePaused }
+            if (episode != null) {
+                api.resumeFuse(row.projectId, episode)
+                OrbitToasts.show(ProjectPauseCopy.resumedTitle, toastTitle(row.title), detail = ProjectPauseCopy.limitNotRaised)
+            } else api.resumeProject(row.projectId)
+        } catch (cancel: CancellationException) { throw cancel }
+        catch (failure: Exception) { refused(row, true, failure) }
+        ProjectSidebarNudge.nudge()
+        changed()
+    }
+
+    private fun refused(row: SessionProjectRow, resume: Boolean, failure: Exception) {
+        val error = failure as? ApiError
+        OrbitToasts.show(ProjectPauseCopy.couldNot(resume), toastTitle(row.title), tone = ToastTone.ERROR,
+            detail = ProjectPauseCopy.refusal(resume, error?.status, error?.code, error?.messages?.joinToString("\n")) ?: toastDetail(failure))
     }
 
     /** Also every Undo: the server's `restore` clears both completion and trash. An Undo can come while the move to Trash is still

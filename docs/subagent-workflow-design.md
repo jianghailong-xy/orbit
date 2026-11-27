@@ -236,7 +236,7 @@ runner 重启时在跑的 workflow 记 `INTERRUPTED` 并唤醒父会话，唤醒
 | P1 | `workflow` 工具、goja 沙箱、`agent` / `parallel` / `pipeline` / `phase` / `log`、走 SubAgent 路径、后台 + 唤醒、可选的 `maxCostUsd`、`subagentsMaxRunning` 默认改 8、停止与停放 | 一个 Claude 会话跑 §2.2 的脚本，12 个调用、跨两种引擎，结束只唤醒父会话一次；会话停止时全部调用被停掉 |
 | P2 | `schema` + `return_result`（各引擎）、服务端日志、`resumeFrom` 重放 | 同一脚本中途重启 runner 后 `resumeFrom`，已完成的调用全部 cached、花费 0 |
 | P3 | `isolation: 'worktree'`、补丁、`applyPatch` | 4 个并行调用改同一文件的不同函数，补丁依次应用无冲突；有冲突时返回冲突列表 |
-| P4 | 三端界面（效果图定稿后）、SubAgents 报告里的 Workflow 视图 | — |
+| P4 | 三端界面（效果图定稿后）、SubAgents 报告里的 Workflow 视图（设置 → Routing report，效果图 `08-report.html`，见 `subagent-design.md` §7） | — |
 
 P1 不带 schema 也能用（返回文本），先验证编排和生命周期这一最难的部分。
 

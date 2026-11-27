@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException } from '@nestjs/common';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
+import { isReleasedStatus } from '../common/session-release';
 import { SessionsService } from './sessions.service';
 
 /**
@@ -33,6 +34,8 @@ function makeService(overrides: Record<string, unknown> = {}) {
     commitStatus: null,
     commitOperationId: null,
     commitOperationOwner: null,
+    // A terminal row carries its release column (session_release_fact_chk).
+    ...(isReleasedStatus(String(overrides.status ?? RunStatus.FAILED)) ? { finishedAt: now } : {}),
     ...overrides,
   };
   // One log for both effects, because the only thing worth asserting is their ORDER: a charge

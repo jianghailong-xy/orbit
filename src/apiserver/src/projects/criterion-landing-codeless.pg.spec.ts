@@ -1,7 +1,8 @@
 /**
- * Work that has nothing to land stops holding its criterion off LANDED — on a declaration the task
- * doors can now make, or on the runner's own measurement — and nothing else lets it out (project-close
- * redo, D1).
+ * Work that has nothing to land stops holding its criterion off LANDED — on the runner's own
+ * measurement, or because it ran no branch at all — and nothing else lets it out (project-close redo,
+ * D1). Since revision 42 (§12.15 P-M3) the `codeless` declaration is stored but no longer lets
+ * anything out.
  *
  * WHAT THIS IS FOR
  * ----------------
@@ -19,10 +20,11 @@
  *
  * THE CASES
  * ---------
- *  (1) a task created codeless — through task_create and through a batch item — does not hold LANDED;
- *  (2) a task that ran a branch and committed nothing, declared codeless afterwards: refused without
- *      a reason, then let out with one; the reason is stored, and taking the declaration back puts the
- *      task back in the roll-up and clears it;
+ *  (1) a task created codeless — through task_create and through a batch item — that ran no branch
+ *      does not hold LANDED: it delivered no commit;
+ *  (2) a task that ran a branch, declared codeless afterwards: refused without a reason, then stored
+ *      with one, and taking the declaration back clears it. Since revision 42 (§12.15 P-M3) the
+ *      declaration decides nothing about landing: the criterion reads the same before and after;
  *  (3) a task with commits of its own — a merge that moved a target, or a session that reported work —
  *      cannot be declared codeless, and the refusal writes nothing;
  *  (4) NOTHING_TO_LAND with the tip measured ON main, on a line AHEAD of main: LANDED;
@@ -33,8 +35,9 @@
  *      its work sat on another branch, and a task whose session died and never finished;
  *  (8) `project_request_start`'s ready check warns about a criterion served only by work that looks
  *      codeless and does not say so, and stops once it says so;
- *  (9) end to end: the owner has confirmed, the one thing withholding DONE is a zero-commit task's
- *      landing, and declaring it codeless lets the projection record the project done — by Orbit.
+ *  (9) end to end: the owner has confirmed, the one thing withholding DONE is a task's landing that
+ *      Orbit never measured, and declaring it codeless no longer lets the project be recorded done
+ *      (§12.15 P-M3) — only a measurement or a receipt does.
  *
  * Every fact is produced the way the product produces it: tasks through `TasksService` (the service
  * both the user API and the runner API call), DONE through 0193/0230's fence, a merge an agent made
@@ -51,11 +54,12 @@ import { test } from 'node:test';
 
 import { HttpException } from '@nestjs/common';
 import {
-  RunStatus,
+  Prisma,
   RunnerStatus,
   SessionDispatchOrigin,
   type PrismaClient,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type {
   IntegrationJobResultRequest,
   ProjectStartFinding,
@@ -118,7 +122,12 @@ interface StatedCriterion {
   landing?: string;
 }
 
-/** How a work session's finalize left it. Omitted fields are a clean finish on its own branch. */
+/**
+ * How a work session's finalize left it. Omitted fields are a clean finish on its own branch by a runner
+ * too old to report a tip or a diff (both NULL): nothing measured the branch, so only the line's answer
+ * can say whether it held anything. An EMPTY list beside a missing tip is a measurement since the owner's
+ * ruling of 2026-11-20 (`unnamedIdentityMeasuresNothing`), which is not what these cases are about.
+ */
 interface Finish {
   worktreeBranch?: string;
   changedFiles?: unknown[];
@@ -304,13 +313,13 @@ test('work with nothing to land stops holding its criterion — on a declaration
         branch,
         isolationStatus: 'worktree',
         ...(finish === 'DIED'
-          ? { status: RunStatus.FAILED }
+          ? { turnState: 'IN_FLIGHT' }
           : {
-            status: RunStatus.SUCCEEDED,
+            turnState: null, 
             finishedAt: new Date(Date.now() - 60_000),
             worktreeBranch: finish.worktreeBranch ?? branch,
             worktreeDirty: false,
-            changedFiles: (finish.changedFiles ?? []) as never,
+            changedFiles: finish.changedFiles === undefined ? Prisma.DbNull : finish.changedFiles as never,
           }),
       },
     });
@@ -471,12 +480,13 @@ test('work with nothing to land stops holding its criterion — on a declaration
         'a refused declaration leaves the row exactly as it was');
     });
 
-  await t.test('(2b) with a reason it is declared, stored, and the criterion is LANDED', async () => {
+  await t.test('(2b) with a reason it is declared and stored, and the criterion reads as before', async () => {
     await tasks.update(ownerId, rollout, { codeless: true, codelessReason: `  ${REASON}  ` } as never);
     assert.deepEqual(await declarationOf(rollout), { codeless: true, reason: REASON },
       'the reason is stored beside the declaration, trimmed');
-    assert.equal(await landingOf(projectId, DECLARED_LATER), 'LANDED',
-      'the rollout is out of the conjunction, and the two pieces that had commits are on main');
+    assert.equal(await landingOf(projectId, DECLARED_LATER), 'UNKNOWN',
+      'the declaration decides nothing about landing (§12.15 P-M3): the rollout ran a branch and '
+        + 'nothing has measured what is on it');
 
     // Re-sending what the task already has changes nothing, and is not asked why.
     await tasks.update(ownerId, rollout, { codeless: true } as never);
@@ -489,9 +499,9 @@ test('work with nothing to land stops holding its criterion — on a declaration
     assert.deepEqual(await declarationOf(rollout), { codeless: false, reason: null },
       'a reason left behind would be explaining a declaration the task no longer makes');
     assert.equal(await landingOf(projectId, DECLARED_LATER), 'UNKNOWN');
-    // ...and it is the edit door's to make again, at the same price.
+    // ...and it is the edit door's to make again, at the same price — still deciding nothing.
     await tasks.update(ownerId, rollout, { codeless: true, codelessReason: REASON } as never);
-    assert.equal(await landingOf(projectId, DECLARED_LATER), 'LANDED');
+    assert.equal(await landingOf(projectId, DECLARED_LATER), 'UNKNOWN');
   });
 
   // ═══ (3) a task with commits of its own cannot be declared codeless ══════════════════════════
@@ -604,11 +614,12 @@ test('work with nothing to land stops holding its criterion — on a declaration
     await twoPiecesOnMain(projectId, sessionDiedAt.key, 'died');
     const died = await settledTask(projectId, 'the work whose session died', sessionDiedAt.key);
     await workSession(died, 'orbit/session-died', 'DIED');
-    const jobId = await queuedFor(died);
-
-    assert.equal((await heartbeat('died')).find((command) => command.jobId === jobId), undefined,
+    // §12.15 P-M1: a DONE whose work has not finished decides nothing yet — the finish that freezes its
+    // identity does — so no landing is queued and there is nothing for the line to be handed.
+    const queued = await prisma.$transaction((tx) => enqueueForDoneTask(tx, ownerId, died));
+    assert.deepEqual(queued, { enqueued: false, reason: 'WORK_MOVING', projectId },
       'a branch whose session never finished is not handed to the line: it may still grow');
-    assert.deepEqual((await jobsOf(died)).map((job) => job.state), ['QUEUED']);
+    assert.deepEqual(await jobsOf(died), []);
     assert.equal(await landingOf(projectId, SESSION_DIED), 'UNKNOWN',
       'no answer, no measurement, no declaration: nothing lets this task out, and no session or task '
         + 'status stands in for one');
@@ -629,7 +640,7 @@ test('work with nothing to land stops holding its criterion — on a declaration
         title: 'the coordinator',
         prompt: 'coordinate',
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
         runtimeSessionId: randomUUID(),
@@ -683,16 +694,12 @@ test('work with nothing to land stops holding its criterion — on a declaration
 
     const first = await ask('the plan is written and every criterion is served');
     assert.equal(first.state, 'OPEN', 'a warning does not refuse the request');
-    const codelessWarnings = first.warnings.filter((finding) =>
-      finding.code === 'START_CRITERION_CODELESS_UNDECLARED');
-    assert.equal(codelessWarnings.length, 1,
-      `exactly one criterion rests only on undeclared codeless-looking work: ${JSON.stringify(first.warnings)}`);
-    const [warning] = codelessWarnings;
-    assert.equal(warning.severity, 'WARN');
-    assert.deepEqual(warning.criterion, { key: rolloutAt.key, ordinal: 1, text: ROLLOUT });
-    assert.deepEqual(warning.tasks, [{ taskId: rolloutTask, title: 'roll it out' }]);
-    assert.match(warning.message, /codeless/);
-    assert.match(warning.requiredAction, /codelessReason/);
+    // P-M2: the codeless-look warning is gone; nothing is warned about the shape of the work.
+    assert.deepEqual(
+      first.warnings.filter((finding) => finding.code === 'START_CRITERION_CODELESS_UNDECLARED'), [],
+      `no codeless warning is produced: ${JSON.stringify(first.warnings)}`,
+    );
+    assert.ok(rolloutTask);
 
     // The coordinator declares it, and asks again: the warning is gone.
     await tasks.update(ownerId, rolloutTask, { codeless: true, codelessReason: REASON } as never);
@@ -705,8 +712,8 @@ test('work with nothing to land stops holding its criterion — on a declaration
   });
 
   // ═══ (9) end to end: the project is recorded done by Orbit ═══════════════════════════════════
-  await t.test('(9) once the zero-commit task is declared codeless, the confirmed project is derived '
-    + 'done — recorded by Orbit', async () => {
+  await t.test('(9) declaring the unmeasured task codeless no longer derives the confirmed project done',
+    async () => {
     const shipped = await projectOnALine('The project whose rollout committed nothing');
     const [only] = await stateCriteria(shipped, ['it is built, and it is live']);
     const built = await settledTask(shipped, 'build it', only.key);
@@ -720,15 +727,15 @@ test('work with nothing to land stops holding its criterion — on a declaration
     await acceptance.confirmStandardSet(ownerId, shipped, { criteriaDigest: standing.currentVersion.digest });
     const before = await readDerivedProjectDone(db, ownerId, shipped);
     assert.deepEqual(before.withheld, ['CRITERION_UNLANDED'],
-      'every criterion is met and confirmed: the zero-commit task’s landing is the only thing left');
+      'every criterion is met and confirmed: the unmeasured task’s landing is the only thing left');
 
     await tasks.update(ownerId, live, { codeless: true, codelessReason: REASON } as never);
 
     const { rows } = await sql.query<{ status: string; done_by: string | null }>(
       `SELECT "status"::text, "done_by" FROM "project" WHERE "id" = $1::uuid`, [shipped],
     );
-    assert.deepEqual(rows, [{ status: 'DONE', done_by: 'DERIVED' }],
-      'the declaration is a task write, and the projection it re-runs records the project done by '
-        + 'itself — nobody had to record it by hand');
+    assert.deepEqual(rows, [{ status: 'OPEN', done_by: null }],
+      'the declaration decides nothing about landing (§12.15 P-M3), so the projection still withholds it');
+    assert.deepEqual((await readDerivedProjectDone(db, ownerId, shipped)).withheld, ['CRITERION_UNLANDED']);
   });
 });

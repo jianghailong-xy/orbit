@@ -131,6 +131,34 @@ export function isWiderThanParent(parent: SessionModeStarter, mode: string, engi
   return (runsAsBypass(mode, engine) ? PermissionMode.BYPASS : mode) === PermissionMode.BYPASS;
 }
 
+/**
+ * The mode a SubAgent runs in (docs/subagent-design.md §5.3): the one its definition names when that is not wider
+ * than the parent's, else the parent's — on every engine, read-only or not. A read-only child is not narrowed to
+ * Plan: the runner keeps it read-only on its engine and answers what it asks the way the parent's mode does. An
+ * engine that cannot hold the mode gets the nearest one it holds that is not wider: DeepSeek Harness has no Plan,
+ * Accept Edits or Bypass, and Cursor CLI no Default (assertDshPermissionMode, assertCursorPermissionMode).
+ */
+export function subagentChildMode(
+  parentMode: PermissionMode,
+  child: { readonly?: boolean; asked?: string | null },
+  engine: string,
+): PermissionMode {
+  const mode = !child.readonly && child.asked ? (child.asked as PermissionMode) : parentMode;
+  return SUBAGENT_NEAREST_MODE[engine]?.[mode] ?? mode;
+}
+
+/** Per engine, the mode it cannot hold and the nearest one it holds that is not wider. */
+const SUBAGENT_NEAREST_MODE: Readonly<Record<string, Partial<Record<string, PermissionMode>>>> = {
+  [AgentProvider.DSH]: {
+    [PermissionMode.PLAN]: PermissionMode.DONT_ASK,
+    [PermissionMode.ACCEPT_EDITS]: PermissionMode.DEFAULT,
+    [PermissionMode.BYPASS]: PermissionMode.AUTO,
+  },
+  [AgentProvider.CURSOR]: {
+    [PermissionMode.DEFAULT]: PermissionMode.PLAN,
+  },
+};
+
 /** What a SubAgent of this parent may run in on this engine (isWiderThanParent), in the pickers' order. */
 export function modesASubagentMayRunIn(parent: SessionModeStarter, engine: string | null): PermissionMode[] {
   return Object.values(PermissionMode).filter((mode) => !isWiderThanParent(parent, mode, engine));

@@ -404,6 +404,8 @@ struct ProjectDetailView: View {
     @State private var goalExpanded = false
     @State private var instructionsExpanded = false
     @State private var criteriaExpanded = false
+    /// Settings › Translation: the criteria list flipped back to the words they were written in.
+    @State private var criteriaShowOriginal = false
     /// Criteria whose "How it's checked" is open.
     @State private var openMethods: Set<String> = []
     /// Folds of the task graph the reader opened.
@@ -522,12 +524,13 @@ struct ProjectDetailView: View {
                     switch row {
                     case .header:
                         Section {
+                            projectReopenRows(document)
                             header(store, document, now: now)
                                 .onAppear { headerOnScreen = true }
                                 .onDisappear { headerOnScreen = false }
                         }
                         .listRowBackground(Color.clear)
-                    case .openItems:      openItemsAttention(store, document, now: now)
+                    case .openItems:      openItemsPageSection(store, document, now: now)
                     case .overview:       overviewSection(store, document)
                     case .coordinator:    coordinatorSection(store, document, now: now)
                     case .runSettings:    runSettingsSection(store, document, now: now)
@@ -566,6 +569,16 @@ struct ProjectDetailView: View {
                             withAnimation { proxy.scrollTo(ProjectDone.nonCodeAnchor, anchor: .center) }
                         }
                     })
+                case .coordinatorChanges:
+                    CoordinatorChangesPage(
+                        projectTitle: document.title,
+                        changes: store.document?.settingChanges ?? [],
+                        taskTitles: Dictionary(store.tasks.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first }),
+                        revert: { changeID in try await store.revertSettingChange(changeID) },
+                        openTask: { taskID in
+                            pageSheet = nil
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { openTask(taskID) }
+                        })
                 case .landingCheck:
                     if let view = store.integration {
                         MergeCheckEditor(store: store, view: view,
@@ -631,8 +644,7 @@ struct ProjectDetailView: View {
         } message: { nonCode in
             Text(nonCode
                  ? ProjectDone.runToNotCode.replacingOccurrences(of: "{branch}", with: RunSettings.shortBranch(
-                    store.integration?.line == .projectBranch ? (store.integration?.ref ?? "project/\(document.id)")
-                                                               : "project/\(document.id)"))
+                    store.integration?.projectBranchName(projectID: document.id) ?? "project/\(document.id)"))
                  : ProjectDone.runToCode)
         }
         // Held on the list rather than beside the page's own alert: one view, one alert.
@@ -671,6 +683,17 @@ struct ProjectDetailView: View {
             }
         } message: { pick in
             Text(changeParagraphs(pick, store).joined(separator: "\n\n"))
+        }
+    }
+
+    /// Above the DONE header: one row for each agent request to reopen this project, with Reopen and Chat about this
+    /// (docs/project-reopen-request-design.md §6.2). The same card the conversation draws; it is not drawn twice here.
+    @ViewBuilder
+    private func projectReopenRows(_ document: ProjectDocument) -> some View {
+        if let requests = model.ownerRequests, document.status != .open {
+            ForEach(OwnerRequests.pendingReopens(requests.known, projectID: document.id)) { request in
+                ProjectReopenCardView(model: requests, request: request, onProjectPage: true)
+            }
         }
     }
 
@@ -780,31 +803,33 @@ struct ProjectDetailView: View {
         .accessibilityValue(summary?.subtitle ?? (store.openItemsUnread ? "Couldn't load open items" : "Loading"))
     }
 
+    /// Open items on the page itself, at all times (D3 A), where web's mobile page draws them: after
+    /// the title area, before Work overview — the header's "N need you · oldest first", then the Needs
+    /// you rows (the owner's own Record as done… · not asked yet among them). The toolbar's Open items stays, a way here from anywhere.
     @ViewBuilder
-    private func openItemsAttention(_ store: ProjectDetailModel, _ document: ProjectDocument,
-                                    now: Date) -> some View {
-        let summary = ProjectPage.openItemsSummary(status: document.status, started: document.started,
-                                                  items: store.openItems)
-        if let attention = summary?.attention {
+    private func openItemsPageSection(_ store: ProjectDetailModel, _ document: ProjectDocument,
+                                      now: Date) -> some View {
+        if let section = ProjectPage.openItemsSection(status: document.status, started: document.started,
+                                                      derivedDone: document.derivedDone, items: store.openItems) {
             Section {
-                Button { pageSheet = .openItems } label: {
-                    HStack(spacing: 8) {
-                        Label(attention, systemImage: "exclamationmark.circle")
-                        Spacer(minLength: 8)
-                        Image(systemName: "chevron.forward").font(.orbitMeta.weight(.semibold))
-                    }
-                    .font(.orbitLabel.weight(.semibold))
-                    .foregroundStyle(Color.orange)
-                    .padding(.vertical, 4)
-                    .contentShape(Rectangle())
+                if section.drawsNeedsYou {
+                    groupLabel(ProjectPage.needsYouGroup)
+                    if let start = section.start { startItem(start, store: store, now: now) }
+                    if let done = section.done { doneItem(done, store: store, now: now) }
+                    ForEach(section.needsYou) { row in openItem(row, store: store, now: now) }
                 }
-                .buttonStyle(.plain)
+                beingFixedGroup(section.beingFixed, store: store, now: now)
+            } header: {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(ProjectPage.openItemsHeading)
+                    Text(section.hint)
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .textCase(nil)
             }
-            .listRowBackground(Color.orange.opacity(0.1))
-        } else if let start = StartProject.pageRow(status: document.status, started: document.started,
-                                                   openItems: store.openItems), start.request == nil {
-            // Starting an unstarted project remains discoverable even with no pending request.
-            Section { startItem(start, store: store, now: now) }
+            .id(ProjectPage.openItemsHeading)
         }
     }
 
@@ -895,6 +920,30 @@ struct ProjectDetailView: View {
                 groupLabel(ProjectPage.needsYouGroup)
             }
         }
+        if let beingFixed = store.openItems?.withWorkSession, !beingFixed.isEmpty {
+            Section {
+                beingFixedGroup(beingFixed, store: store, now: now, labelled: false)
+            } header: {
+                beingFixedLabel(beingFixed.count)
+            }
+        }
+    }
+
+    /// "Being fixed by its session · N" (revision 42, §12.7; web board landing-fix-own-session 06 d):
+    /// landing failures in their task's own session's hands, under Needs you and counted in nobody's.
+    @ViewBuilder
+    private func beingFixedGroup(_ rows: [ProjectOpenItemRow], store: ProjectDetailModel, now: Date,
+                                 labelled: Bool = true) -> some View {
+        if !rows.isEmpty {
+            if labelled {
+                beingFixedLabel(rows.count)
+            }
+            ForEach(rows) { row in
+                BeingFixedItemRow(row: row, taskTitle: row.taskId.flatMap { id in
+                    store.tasks.first { $0.id == id }?.title
+                }, now: now)
+            }
+        }
     }
 
     /// The start's row. The coordinator's request says "Start this project?" over what it suggests,
@@ -976,6 +1025,14 @@ struct ProjectDetailView: View {
     /// Answer's own door, with the start card as what it lands on.
     private func reviewStart(_ store: ProjectDetailModel) {
         openCoordinator(store, focus: nil, startCard: true)
+    }
+
+    /// The group's heading in the board's violet: `BEING FIXED BY ITS SESSION · 1`.
+    private func beingFixedLabel(_ count: Int) -> some View {
+        Text(ProjectPage.beingFixedHeading(count).uppercased())
+            .font(.orbitMeta.weight(.semibold))
+            .foregroundStyle(Color.purple)
+            .accessibilityIdentifier("being-fixed-heading")
     }
 
     private func groupLabel(_ text: String) -> some View {
@@ -1159,7 +1216,7 @@ struct ProjectDetailView: View {
     /// read, and its Retry goes through the page's store, which reads the landing again.
     @ViewBuilder
     private func landingRow(_ store: ProjectDetailModel) -> some View {
-        if let integration = store.integration, integration.inFlight != nil {
+        if let integration = store.integration, integration.inFlight != nil, !ProjectPage.noLineYet(integration) {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 // The Work overview draws every job in flight, a merge job included: the merge
                 // card lives on the project's sessions page, which this page does not have, and
@@ -1430,6 +1487,7 @@ struct ProjectDetailView: View {
         if RunSettings.shown(started: document.started) {
             Section {
                 if let view = store.integration {
+                    runSettingsSummary(store, view, document: document)
                     // First, because it decides whether the landing settings under it mean anything.
                     deliversSetting(store, view, document: document)
                     if document.nonCode {
@@ -1448,15 +1506,21 @@ struct ProjectDetailView: View {
                                 Text(LandingCheckCopy.label)
                                 Text(LandingCheckCopy.main).font(.orbitLabel).foregroundStyle(.secondary)
                             } else {
-                                Button { pageSheet = .landingCheck } label: {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(LandingCheckCopy.label)
-                                        Text(view.landingCheckCommand ?? LandingCheckCopy.inheritedCommand(view.mergeCheckCommand)).font(.orbitMono)
-                                        Text(view.landingCheckTimeoutSeconds.map { "\($0) seconds" }
-                                             ?? LandingCheckCopy.inheritedTimeout(view.mergeCheckTimeoutSeconds)).font(.orbitLabel)
-                                        Text(LandingCheckCopy.hint).font(.orbitLabel).foregroundStyle(.secondary)
-                                    }.frame(maxWidth: .infinity, alignment: .leading)
-                                }.buttonStyle(.plain).disabled(store.busy)
+                                // Board 03 b, c (D3, D4, D9): the three values, the command, who
+                                // set it and when.
+                                LandingCheckSettingRow(
+                                    view: view, busy: store.busy,
+                                    onEditCommand: { pageSheet = .landingCheck },
+                                    onChoose: { mode in
+                                        Task { notice = await store.updateIntegration(LandingCheckSetting.write(mode)) }
+                                    })
+                            }
+                        }
+                        // Board 03 b (D6): the coordinator's changes, one row into their page —
+                        // from a server that keeps them.
+                        if view.line == .projectBranch, let changes = document.settingChanges {
+                            CoordinatorChangesEntryRow(count: CoordinatorChanges.count(changes)) {
+                                pageSheet = .coordinatorChanges
                             }
                         }
                         mergeCheckSetting(store, view, document: document)
@@ -1475,6 +1539,31 @@ struct ProjectDetailView: View {
                 sectionHeader(StartProject.howItRuns, detail: RunSettings.appliesFromNextTask)
             }
         }
+    }
+
+    /// How it runs opens with web's one-line summary (`project-run-settings-summary`): "Automatic On"
+    /// over the line, its branch and how many tasks run at once.
+    private func runSettingsSummary(_ store: ProjectDetailModel, _ view: ProjectIntegrationView,
+                                    document: ProjectDocument) -> some View {
+        let summary = RunSettings.summary(view, projectID: document.id,
+                                          automatic: document.coordinatorEnabled ?? false,
+                                          maxConcurrentTasks: store.pendingConcurrency ?? document.maxConcurrentTasks,
+                                          nonCode: document.nonCode)
+        return HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Circle().fill(Color.accentColor).frame(width: 8, height: 8)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(summary.title).font(.orbitSubtext.weight(.semibold))
+                if !summary.line.isEmpty {
+                    Text(summary.line)
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("project-run-settings-summary")
     }
 
     /// Delivers (board 01 A–C): Code or Not code, each with what choosing it means, and — on a marked
@@ -1553,7 +1642,7 @@ struct ProjectDetailView: View {
     @ViewBuilder
     private func lineSetting(_ store: ProjectDetailModel, _ view: ProjectIntegrationView,
                              document: ProjectDocument, now: Date) -> some View {
-        let branch = view.line == .projectBranch ? (view.ref ?? "project/\(document.id)") : "project/\(document.id)"
+        let branch = view.projectBranchName(projectID: document.id)
         let main = RunSettings.storedMainBranch(view) ?? RunSettings.defaultMainBranch
         if view.locked {
             VStack(alignment: .leading, spacing: 4) {
@@ -2120,6 +2209,7 @@ struct ProjectDetailView: View {
         let criteria = document.acceptanceCriteriaItems
         let shown = criteriaExpanded ? criteria : Array(criteria.prefix(criteriaLimit))
         let confirmed = criteria.filter { $0.satisfiedBy == .confirmation }.count
+        let owner = OwnerCardTranslations.ownerLanguage(model.user)
         return Section {
             if criteria.isEmpty {
                 Text(ProjectPage.noCriteria).font(.orbitLabel).foregroundStyle(.secondary)
@@ -2130,8 +2220,14 @@ struct ProjectDetailView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 ForEach(shown) { criterion in
-                    criterionRow(store, criterion, ref: document.integration?.ref,
+                    criterionRow(store, criterion,
+                                 text: document.criterionText(criterion, owner: owner, showOriginal: criteriaShowOriginal),
+                                 ref: document.integration?.ref,
                                  main: RunSettings.mainBranchName(document.integration?.upstreamRef))
+                }
+                TranslationFootView(parts: document.criteriaTranslationFoot(owner: owner,
+                                                                            showOriginal: criteriaShowOriginal)) { _ in
+                    criteriaShowOriginal.toggle()
                 }
                 if let disclosure = ProjectPage.criteriaDisclosure(total: criteria.count, limit: criteriaLimit,
                                                                    expanded: criteriaExpanded, compact: compact) {
@@ -2164,13 +2260,14 @@ struct ProjectDetailView: View {
         }
     }
 
-    /// `main` is the project's main branch by name, which where met work landed says.
-    private func criterionRow(_ store: ProjectDetailModel, _ criterion: ProjectCriterion, ref: String?,
+    /// `main` is the project's main branch by name, which where met work landed says. `text` is the
+    /// criterion's words as drawn (`ProjectDocument.criterionText`); everything pressed reads `criterion`.
+    private func criterionRow(_ store: ProjectDetailModel, _ criterion: ProjectCriterion, text: String, ref: String?,
                               main: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
             ordinalMark(criterion)
             VStack(alignment: .leading, spacing: 4) {
-                Text(criterion.text).font(.orbitSubtext).fixedSize(horizontal: false, vertical: true)
+                Text(text).font(.orbitSubtext).fixedSize(horizontal: false, vertical: true)
                 if let moved = criterion.movedFrom {
                     // Board 02 I: where it came from.
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
@@ -2432,7 +2529,14 @@ struct ProjectDetailView: View {
                          group: ProjectPage.TaskGroup) -> some View {
         let tags = ProjectPage.rowTags(task, heading: group.heading, ref: document.integration?.ref,
                                        upstreamRef: document.integration?.upstreamRef)
-        return Button { openTask(task.id) } label: {
+        return Button {
+            // `Landing · fixing` (revision 42, §12.7): the row opens the task's own session, which has it.
+            if let session = ProjectPage.fixingSessionID(task) {
+                model.route(to: .session(session))
+            } else {
+                openTask(task.id)
+            }
+        } label: {
             HStack(spacing: 10) {
                 ProjectGlyphMark(glyph: ProjectPage.taskGlyph(task), size: 9)
                 VStack(alignment: .leading, spacing: 3) {
@@ -2440,6 +2544,11 @@ struct ProjectDetailView: View {
                         .font(.orbitSubtext)
                         .lineLimit(2)
                         .foregroundStyle(group.settled ? .secondary : .primary)
+                    if TaskAccountHoldCopy.showsOnRow(task.accountHold, signInHold: task.hold,
+                                                      running: task.workState == "RUNNING", queued: false),
+                       let hold = task.accountHold {
+                        TaskAccountHoldLine(hold: hold)
+                    }
                     if !tags.isEmpty || task.unmetCount > 0 || task.blocksCount > 0 {
                         HStack(spacing: 6) {
                             ForEach(Array(tags.enumerated()), id: \.offset) { _, tag in
@@ -2655,11 +2764,7 @@ struct ProjectDetailView: View {
     private func confirmMessage(_ store: ProjectDetailModel) -> String {
         switch confirmingStatus {
         case .done?:
-            let criteria = store.document?.acceptanceCriteriaItems ?? []
-            let settled = criteria.filter { $0.satisfied == true }.count
-            let noReceipt = criteria.filter { $0.landing == "UNKNOWN" }.count
-            let noun = criteria.count == 1 ? "criterion" : "criteria"
-            return "\(criteria.count) stated \(noun) · \(settled) settled by the work filed under them · \(noReceipt) with no merge receipt"
+            return ProjectDone.recordAsDoneTally(store.document)
         case .cancelled?:
             var unfinished = 0
             if let b = store.panorama?.buckets {
@@ -2743,6 +2848,8 @@ private enum ProjectPageSheet: String, Identifiable {
     case landingJobs
     /// Change workspace: where the project is coordinated from.
     case coordinatorChange
+    /// Coordinator's changes (board 05): the coordinator's landing-check writes, and Revert.
+    case coordinatorChanges
 
     var id: String { rawValue }
 }
@@ -2856,7 +2963,8 @@ private struct ProjectDoneSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var record: ProjectDoneRecord?
     @State private var error: String?
-    /// Settings › Translation: the coordinator's judgment and gaps flip back to its own words.
+    /// Settings › Translation: the project's title and criteria, and the coordinator's judgment and
+    /// gaps, flip back to the words they were written in.
     @State private var showOriginal = false
 
     var body: some View {
@@ -2887,8 +2995,8 @@ private struct ProjectDoneSheet: View {
             let digest = store.confirmation?.currentVersion.digest
             let owner = OwnerCardTranslations.ownerLanguage(model.user)
             ProjectDoneCard(
-                subject: subject,
                 // Drawn translated; Record as done sends `row`'s own request, as written.
+                subject: subject.shown(owner: owner, showOriginal: showOriginal),
                 request: row?.shownDoneRequest(owner: owner, showOriginal: showOriginal),
                 askedAt: row?.waitingSince,
                 confirmedAt: store.confirmation?.confirmation?.confirmedAt,
@@ -2910,7 +3018,8 @@ private struct ProjectDoneSheet: View {
                     upload: { data, name, mime in
                         try await store.uploadConfirmationShot(data, filename: name, mimeType: mime)
                     }),
-                translationFoot: row?.translationFoot(owner: owner, showOriginal: showOriginal) ?? [],
+                translationFoot: OwnerCardTranslations.doneCardFoot(subject: subject, request: row, owner: owner,
+                                                                    showOriginal: showOriginal),
                 onFlipTranslation: { showOriginal.toggle() },
                 notYetRefused: store.doneDeclineRefusedUntranslated,
                 onNotYetAsWritten: notYet(row, sendAsWritten: true))

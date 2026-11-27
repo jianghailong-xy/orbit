@@ -86,10 +86,11 @@ class ComposerToolbarTest : ComposerShellTest() {
         compose.onNodeWithTag("composer-input").assertTextEquals("Here is the file")
     }
 
-    /** As iOS: a session that names no mode still shows the one it runs in. */
-    @Test fun aSessionWithNoModeNamedShowsDefault() {
+    /** A session that names no mode still shows the one it runs in: Auto, the server's floor when the account names no default
+     *  (c3dc2aa83e, CursorRuntime.unsetMode). */
+    @Test fun aSessionWithNoModeNamedShowsAuto() {
         signIn(); openSession()
-        compose.onNodeWithTag("composer-mode").assertTextEquals("Default")
+        compose.onNodeWithTag("composer-mode").assertTextEquals("Auto")
     }
 
     /** As iOS's ByteCountFormatter (file style): decimal units. */

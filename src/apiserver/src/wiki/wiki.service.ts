@@ -20,6 +20,7 @@ import {
   validateWikiSources,
   toUuid,
   uuidToBase62,
+  wikiCallReadsWiki,
   wikiEvidenceClass,
   wikiReviewEffect,
   wikiSpaceSettings,
@@ -121,6 +122,7 @@ import { enqueueWikiVerifyJob, wikiVerifyJobNeeded } from './wiki-verify-jobs';
 import { entryAppliedBy } from './wiki-run-reads';
 import { listWikiTrash, moveWikiSpaceToTrash, requestWikiSpacePurge, restoreWikiSpace } from './wiki-trash';
 import { wikiChatChoices, wikiSpaceWorkspaces, wikiWorkspacesOfSpaces } from './wiki-workspaces';
+import { releasedFilter } from '../common/session-release';
 
 /** `Prisma.TransactionClient`, named once: every write below takes one, never the unmanaged client. */
 type Tx = Prisma.TransactionClient;
@@ -4941,6 +4943,15 @@ export class WikiService {
           [{ path: source.ref === undefined ? `${at}.session` : `${at}.ref`, message: `names no ${source.kind} of this account's` }],
         );
       }
+      if (found.readsWiki) {
+        // Read and cite are apart: a call that reads the wiki holds what the wiki says, which is no record of what happened.
+        const at = `${options.path ?? 'sources'}[${index}]`;
+        return refuse(
+          'WIKI_SOURCE_UNRESOLVED',
+          `${at} is a call that reads the wiki (wiki_search, wiki_get, wiki_read, orbit wiki read): what the wiki says is not a source; cite the record it came from`,
+          [{ path: `${at}.ref`, message: 'a call that reads the wiki cannot be cited' }],
+        );
+      }
       const quote = source.quote ?? null;
       let verified = false;
       let pending = found.pending === true;
@@ -5027,6 +5038,12 @@ export class WikiService {
      * it: `text` is its input alone, and a quote not in it may be in the result (`ResolvedSource.pending`).
      */
     resultPending?: boolean;
+    /**
+     * The record is a call that reads the wiki (`wikiCallReadsWiki`), or the tool_use / tool_result of one: what the wiki
+     * said is no evidence of what it says. `resolveSources` refuses it and a docs material leaves it out; the other readers
+     * of `text` read it as ever, so an entry recorded before keeps its source.
+     */
+    readsWiki?: boolean;
   } | null> {
     if (!(WIKI_SOURCE_KINDS as readonly string[]).includes(source.kind)) return null;
     const ownerScoped = { session: { ownerId: principal.ownerId } };
@@ -5083,6 +5100,11 @@ export class WikiService {
           select: { id: true, type: true, payload: true, sessionId: true },
         });
         if (!event) return null;
+        const calledBy = await this.calledBy(tx, event);
+        // A background task has no call row, but its payload names the command it ran: one that reads the wiki is covered too.
+        const bgCommand = event.type === 'background_task' && event.payload !== null && typeof event.payload === 'object'
+          ? (event.payload as { command?: unknown }).command
+          : undefined;
         return {
           ref: event.id,
           // The one text of the record, for the quote check and the verifier alike (contract
@@ -5092,7 +5114,8 @@ export class WikiService {
           tainted: await this.sessionWasTainted(tx, event.sessionId),
           ownerWords: false,
           sessionId: event.sessionId,
-          evidenceClass: wikiEvidenceClass({ kind: 'event', eventType: event.type, ...(await this.calledBy(tx, event)) }),
+          evidenceClass: wikiEvidenceClass({ kind: 'event', eventType: event.type, ...calledBy }),
+          ...(wikiCallReadsWiki(calledBy.toolName, typeof bgCommand === 'string' ? bgCommand : calledBy.command) ? { readsWiki: true } : {}),
         };
       }
       case 'tool_call': {
@@ -5121,6 +5144,7 @@ export class WikiService {
           sessionId: call.sessionId,
           evidenceClass: wikiEvidenceClass({ kind: 'tool_call', toolName: call.name, command: callCommand(call.input) }),
           ...(resultPending ? { resultPending: true } : {}),
+          ...(wikiCallReadsWiki(call.name, callCommand(call.input)) ? { readsWiki: true } : {}),
         };
       }
       case 'task': {
@@ -6106,7 +6130,7 @@ function proposerScope(principal: WikiPrincipal): Prisma.WikiChangesetWhereInput
  * nobody's to verify but a maintenance run's that adopts it.
  */
 const ENDED_SESSION: Prisma.SessionWhereInput = {
-  OR: [{ status: { in: ['SUCCEEDED', 'FAILED', 'CANCELLED'] } }, { completedAt: { not: null } }, { deletedAt: { not: null } }],
+  OR: [releasedFilter(), { completedAt: { not: null } }, { deletedAt: { not: null } }],
 };
 
 /**

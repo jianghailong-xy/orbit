@@ -8,11 +8,11 @@ import { test } from 'node:test';
 
 import {
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { RunStatus as SharedRunStatus, uuidToBase62, type TaskDispatchRefusal } from '@orbit/shared';
@@ -45,6 +45,7 @@ import { SessionsService } from '../sessions/sessions.service';
 import { PREREQUISITE_NOT_LANDED_MESSAGE } from './task-dependencies';
 import { DISPATCH_REFUSED_SIGNAL_CODE, dispatchRefusalNextStep } from './task-dispatch-refusal';
 import { TasksService } from './tasks.service';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 /**
  * A start the runner refuses before its run can begin is a fact somebody can see.
@@ -257,7 +258,7 @@ async function fixture(
     data: {
       id: coordinatorSessionId, ownerId, creatorId: ownerId, workspaceId,
       assignedRunnerId: runnerId, title: `协调：${label}`, prompt: `协调：${label}`,
-      provider: 'claude', status: RunStatus.AWAITING_INPUT,
+      provider: 'claude', turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER, titleManagedByProject: true,
     },
   });
@@ -332,7 +333,7 @@ async function prerequisite(
     data: {
       id: sessionId, ownerId: f.ownerId, creatorId: f.ownerId, taskId,
       workspaceId: f.workspaceId, assignedRunnerId: f.runnerId, title, prompt: title,
-      provider: 'claude', status: RunStatus.SUCCEEDED,
+      provider: 'claude', turnState: null, finishedAt: new Date(), 
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       isolationStatus: 'worktree', branch, completedAt: new Date(),
     },
@@ -396,7 +397,7 @@ async function start(stack: Stack, f: Fixture, taskId: string): Promise<string> 
 async function claimWrite(stack: Stack, sessionId: string): Promise<void> {
   await stack.db.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
-    await tx.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+    await tx.session.update({ where: { id: sessionId }, data: { turnState: 'IN_FLIGHT' } });
   });
 }
 
@@ -574,9 +575,9 @@ test('(a) a start whose pinned commit lacks the prerequisite\'s landed commit is
       assert.deepEqual(outcome.missing, [p.landedSha], 'the runner admitted a checkout it should have refused');
       assert.equal(outcome.checkout, null);
       const run = await stack.db.session.findUniqueOrThrow({
-        where: { id: sessionId }, select: { status: true, sourceBaseSha: true, error: true },
+        where: { id: sessionId }, select: { ...WORD_SELECT, sourceBaseSha: true, error: true },
       });
-      assert.equal(run.status, RunStatus.FAILED, 'the refused run is over');
+      assert.equal(wordOf(run), RunStatus.FAILED, 'the refused run is over');
       assert.equal(run.sourceBaseSha, outcome.pin);
 
       // The task says so: code, time, the commit it stood on, what that commit lacked and whose
@@ -894,7 +895,7 @@ test('a start refused for a task in no project records the refusal and opens no 
           id: sessionId, ownerId: f.ownerId, creatorId: f.ownerId, taskId: orphan.id,
           workspaceId: f.workspaceId, assignedRunnerId: f.runnerId,
           title: 'refused-without-a-project', prompt: 'do the thing', provider: 'claude',
-          providerBuiltin: true, status: RunStatus.PENDING,
+          providerBuiltin: true, turnState: 'QUEUED',
           dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
           // The frozen selector a run of a code task carries (SR28) — the one part of this row the
           // fixture has to state, because no door resolves a SOURCE for a task in no project.
@@ -1048,7 +1049,7 @@ test('a checkout refusal for a task in no project records the refusal and opens 
           id: sessionId, ownerId: f.ownerId, creatorId: f.ownerId, taskId: orphan.id,
           workspaceId: f.workspaceId, assignedRunnerId: f.runnerId,
           title: 'refused-at-checkout-without-a-project', prompt: 'do the thing', provider: 'claude',
-          providerBuiltin: true, status: RunStatus.RUNNING,
+          providerBuiltin: true, turnState: 'IN_FLIGHT',
           dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
           // The other half of the fixture the resolution case states: a checkout refusal is decided
           // AFTER the pin froze (G4/G5/G6), so the row carries the pin this run stood on. That is

@@ -16,7 +16,6 @@ import {
 import { branchName } from './project-criterion-landing';
 import {
   DEFAULT_UPSTREAM_REF,
-  projectBranchRef,
   projectRepository,
 } from './project-integration-line';
 
@@ -66,11 +65,6 @@ export interface StartPlanTask {
   verifiesTaskId: string | null;
   parentTaskId: string | null;
   assignee: { runnerId: string | null; enabled: boolean } | null;
-  /** What the codeless warning reads: the declaration, and the two fields that make a task LOOK
-   *  like work that produces no code (`looksCodeless`). */
-  codeless: boolean;
-  completionCriterion: string;
-  acceptanceCommand: string | null;
 }
 
 /** Everything the check and the digests read: the project's plan as it stands. */
@@ -122,9 +116,6 @@ export async function readStartPlan(
       verifiesTaskId: true,
       parentTaskId: true,
       assignee: { select: { runnerId: true, enabled: true } },
-      codeless: true,
-      completionCriterion: true,
-      acceptanceCommand: true,
     },
   });
   const edges = tasks.length === 0 ? [] : await tx.taskDependency.findMany({
@@ -172,17 +163,6 @@ function runsWork(task: StartPlanTask, parents: ReadonlySet<string>): boolean {
 
 const taskRefs = (tasks: readonly StartPlanTask[]) =>
   tasks.map((task) => ({ taskId: task.id, title: task.title }));
-
-/**
- * Whether a task LOOKS like work that produces no code: settled by the owner's confirmation, or by
- * an evidence judgment with no command to run — a rollout, a walkthrough, a review. A guess, which
- * is why what reads it only warns: an EVIDENCE_JUDGMENT task can be UI work whose evidence is
- * screenshots of the code it wrote.
- */
-function looksCodeless(task: StartPlanTask): boolean {
-  return task.completionCriterion === 'OWNER_CONFIRMED'
-    || (task.completionCriterion === 'EVIDENCE_JUDGMENT' && !task.acceptanceCommand);
-}
 
 const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
@@ -235,26 +215,6 @@ export function startReadiness(
         { criterion: { key: criterion.key, ordinal: criterion.ordinal, text: criterion.text } });
     }
   }
-  // A criterion whose landing rests only on work that looks codeless and does not say so. Work
-  // declared codeless leaves the landing conjunction (§1.4); work that is not, and never has a
-  // commit, can hold the criterion off LANDED — and the project off done — after everything is met,
-  // which is how the rollout task of 2026-10-01 held its project. Only warned: the look is a guess.
-  for (const criterion of plan.criteria) {
-    const landing = plan.tasks.filter((task) =>
-      task.criterionDefinitionId === criterion.definitionId && !task.codeless);
-    if (landing.length === 0 || !landing.every(looksCodeless)) continue;
-    finding('WARN', 'START_CRITERION_CODELESS_UNDECLARED',
-      `criterion ${criterion.ordinal} is served only by work that looks like it produces no code `
-        + '(OWNER_CONFIRMED, or EVIDENCE_JUDGMENT with no acceptance command) and none of it '
-        + 'declares codeless: work with no commit to land can hold the criterion off LANDED, and '
-        + 'the project off done',
-      'Declare the tasks that produce no code codeless — codeless on task_create, or task_update '
-        + 'with codeless and a codelessReason — and leave the ones that will commit code as they are.',
-      {
-        criterion: { key: criterion.key, ordinal: criterion.ordinal, text: criterion.text },
-        tasks: taskRefs(landing),
-      });
-  }
   const parents = new Set(plan.tasks.flatMap((task) => (task.parentTaskId ? [task.parentTaskId] : [])));
   const running = plan.tasks.filter((task) => runsWork(task, parents));
   const unrunnable = running.filter((task) => !task.assignee?.runnerId || !task.assignee.enabled);
@@ -271,7 +231,10 @@ export function startReadiness(
   // has none to write. Refused here so the coordinator hears it before the owner's card is filed.
   const checkNamed = mergeCheck !== null || settings.mergeCheckTimeoutSeconds != null
     || settings.landingCheckCommand != null || settings.landingCheckTimeoutSeconds != null;
-  const needsRepository = settings.line === 'PROJECT_BRANCH' || checkNamed || settings.upstreamRef;
+  // No line named (P-M2): nothing about the line or the landing check is written, and the merge
+  // check waits in the start's own record until the line starts (D8), so no repository is needed.
+  const needsRepository = settings.line !== undefined
+    && (settings.line === 'PROJECT_BRANCH' || checkNamed || settings.upstreamRef);
   if (!plan.repository && needsRepository) {
     finding('REFUSE', 'START_REPOSITORY_UNKNOWN',
       settings.line === 'PROJECT_BRANCH'
@@ -306,12 +269,16 @@ export function startReadiness(
 }
 
 /** The line under the item's title: the settings the coordinator suggests, in the card's words —
- *  "main" being the main branch it suggests, by its name, or main when it suggests none. */
-export function startRequestDetailLine(projectId: string, request: ProjectStartRequest): string {
+ *  "main" being the main branch it suggests, by its name, or main when it suggests none, and the
+ *  project branch the one it names, or the project's default (`defaultProjectBranchOf`). */
+export function startRequestDetailLine(
+  request: ProjectStartRequest,
+  defaultProjectBranchName: string,
+): string {
   const { settings } = request;
   const line = settings.line === 'MAIN'
     ? `Directly into ${branchName(settings.upstreamRef ?? DEFAULT_UPSTREAM_REF)}`
-    : branchName(settings.projectBranchName ?? projectBranchRef(projectId));
+    : branchName(settings.projectBranchName ?? defaultProjectBranchName);
   return [
     line,
     `Automatic ${settings.automatic ? 'on' : 'off'}`,

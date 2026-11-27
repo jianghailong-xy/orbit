@@ -126,8 +126,16 @@ func hostSetup(env hostSetupEnv, server string) error {
 		return errors.New("setup needs --server <url>: the control plane this host's runners register against")
 	}
 	if env.geteuid() != 0 {
-		// The only root step in the whole design. Print the exact line to re-run rather
-		// than leaving the operator to reconstruct it from the error.
+		// The only root step in the whole design. Print the exact lines to run rather than
+		// leaving the operator to reconstruct them from the error. Setup runs only from the
+		// machine's binary (checkBinary), so a run from any other copy, an account's own
+		// included, is told to put a root-owned copy in place first: re-running that copy under
+		// sudo would only be refused next.
+		if exe, err := env.executable(); err == nil && exe != machineBinaryPath {
+			how, fix, rerun := machineCopy(exe, server)
+			return fmt.Errorf("setup writes machine-wide systemd units, so it must run as root and from %s, the one binary the host broker runs, rather than %s.\n"+
+				"%s\n  %s\n  %s", machineBinaryPath, exe, how, fix, rerun)
+		}
 		return fmt.Errorf("setup writes machine-wide systemd units and must run as root — re-run: sudo %s host setup --server %s",
 			env.sudoName(), server)
 	}
@@ -171,8 +179,7 @@ func hostSetup(env hostSetupEnv, server string) error {
 		"  Runners: orbit-runner@<user>.service, one instance per Linux user,\n"+
 		"           each running that user's own ~/.orbit/bin/orbit\n"+
 		"  Server:  %s\n\n"+
-		"  Every user on this host can now run `orbit register` without root.\n"+
-		"  Runners already running get background job limits (Delegate=yes) when they next restart.\n",
+		"  Every user on this host can now run `orbit register` without root.\n",
 		hostdSocketUnit, hostdSocketPath, exe, server)
 
 	// After the template is written and systemd has read it: a host set up before instances
@@ -344,9 +351,6 @@ TimeoutStopSec=180
 # runner's cgroup — must not stop the runner. systemd's default, stop, would drain and tear down
 # every running turn, and the restart would install a deferred release past the turn gate.
 OOMPolicy=continue
-# The runner limits the CPU and memory of background jobs with a cgroup each, below its own
-# (bg_cgroup_linux.go); a stop still ends everything in the unit, those cgroups included.
-Delegate=yes
 # No Environment= lines here, deliberately. One template serves every instance, and the
 # home, the runner state dir and the login PATH each belong to the instance's own
 # account — while the specifiers that would fill them in (%h, %s) expand in a *system*

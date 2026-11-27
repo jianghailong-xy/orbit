@@ -1,6 +1,6 @@
 ---
 name: upgrade
-description: Upgrade the Orbit Docker Compose deployment — rebuild the apiserver and web images from the current source and recreate only the services that changed (apiserver applies DB migrations on boot); an unchanged postgres is left running. Refreshing the postgres/gateway base images is opt-in via --pull-base. With ORBIT_REGISTRY set it is a two-stage release instead: build, boot-check and push here, tagged by commit, then pull and recreate on ORBIT_DEPLOY_HOST, which builds nothing, handing the apiserver and web over without a gap; a rollback deploys an earlier commit (--deploy). From a session on another workspace, production is deployed through SubAgents: orbit-op builds and deploys, then orbit-prod checks the host and moves its checkout to the release. Use whenever someone wants to deploy the latest code, update/upgrade the running containers, bring a Compose deployment up to date, or roll one back.
+description: Upgrade the Orbit Docker Compose deployment — rebuild the apiserver and web images from the current source and recreate only the services that changed (apiserver applies DB migrations on boot); an unchanged postgres is left running. Refreshing the postgres/gateway base images is opt-in via --pull-base. With ORBIT_REGISTRY set it is a two-stage release instead: build, boot-check and push here, tagged by commit, then pull and recreate on ORBIT_DEPLOY_HOST, which builds nothing, handing the apiserver and web over without a gap; a rollback deploys an earlier commit (--deploy). From a session on another workspace, production is deployed through SubAgents: orbit-ws04 builds and deploys, then orbit-prod checks the host and moves its checkout to the release. Use whenever someone wants to deploy the latest code, update/upgrade the running containers, bring a Compose deployment up to date, or roll one back.
 ---
 
 # Upgrade the Orbit stack
@@ -204,7 +204,7 @@ f="$(find data/files -type f -not -path 'data/files/tmp/*' | tail -1)"
 ssh root@backup-host ls -l "/data/backup/orbit-pg-archive-files/${f#data/files/}"
 ```
 
-With no `ORBIT_BACKUP_SYNC_TARGET`, or with `ORBIT_FILES_BACKEND=s3`, the last two have nothing to
+With no `ORBIT_BACKUP_SYNC_TARGET`, or with `ORBIT_DRIVE_BACKEND=s3`, the last two have nothing to
 show: see the [backup and restore runbook](../../../docs/postgres-backup-restore.md#attachment-files).
 
 ## Two-stage release
@@ -235,13 +235,18 @@ runs: this host's own containers, `.env` and runner link are left as they are.
 **Build stage, on this host.** A release is named by the commit it was built from:
 `<registry>/orbit-apiserver:<commit>`, which `wiki-worker` runs too, `<registry>/orbit-web:<commit>`, and
 `<registry>/orbit-link-gateway:<commit>`, where that commit is the last one under `src/link-gateway`, its
-whole build context, so that a release which does not change the gateway recreates nothing, and
-`<registry>/orbit-cloud-runner:<commit>`, the hosted runners' image, where that commit is the last one that
-changed what `deploy/managed-runner/image` builds it from (the runner's Go sources but its tests, its module
-files, DeepSeek Harness's lockfile, and the image's directory), so that a release which does not change the
-runner builds none and moves no hosted runner. A commit without `deploy/managed-runner/image` has none. A tag names one
+whole build context, so that a release which does not change the gateway recreates nothing. A tag names one
 build: one that is in the registry already is kept and never pushed again (to rebuild it, delete it from the
-registry first). For each image that is not there yet:
+registry first).
+
+The hosted runners' image is **not** built here. It is `<registry>/orbit-cloud-runner:<version>`, published from a
+release tag when /release creates it (`deploy/two-stage/publish-managed-runner.sh <tag>`, below), and its runner
+reports that version. A release uses the image of the newest `v*` tag at or behind its commit, so a deploy between
+two releases moves no hosted runner. Where that image is not in the registry, a release stops before its build and a
+deploy or plan before it changes anything, naming the command that publishes it. A commit without
+`deploy/managed-runner/image`, with no release tag behind it, or whose newest tag predates release-built images (its
+Dockerfile takes no `ORBIT_RELEASE_VERSION`) names none: the deploy says so and leaves the hosted runners' profile as it
+is. For each other image that is not there yet:
 
 0. Room first. A build needs `ORBIT_BUILD_MIN_FREE_GB` (15 unless set) free on the disk that holds Docker's data.
    Below that, before anything is built, it removes this registry's earlier release images on this host
@@ -256,10 +261,21 @@ registry first). For each image that is not there yet:
    passed as `PREVIOUS_RELEASE_IMAGE`. Before the target serves any, this host's own `orbit-web` is.
 2. `scripts/image-boot-check.sh` boots the apiserver and web images, as CI does, before either is pushed.
 3. The link gateway: `docker build --provenance=false`, as a single host builds it.
-4. The hosted runners' image: `docker build --provenance=false -f deploy/managed-runner/image/Dockerfile`, with
-   `ORBIT_SOURCE_SHA` its tag, so its runner reports `managed-<tag>`. It is about 4.4 GiB, and takes several
-   minutes the first time.
-5. `docker push` of each.
+4. `docker push` of each.
+
+**Publishing the hosted runners' image of a release tag**, on this host (/release does it right after it pushes the
+tag; docs/release-process.md, "Orbit Cloud runner image comes from the release tag"):
+
+```bash
+ORBIT_REGISTRY=10.66.0.1:5000 deploy/two-stage/publish-managed-runner.sh v0.1.261-beta.83
+```
+
+It fetches the tag from origin if this checkout lacks it, checks that the tag's `package.json` names that version, and
+skips a tag whose image is in the registry already. Otherwise it builds `deploy/managed-runner/image/Dockerfile` from
+the tag's commit (`git archive`, never the working tree; the checkout is not moved) with `ORBIT_SOURCE_SHA` the tag's
+commit and `ORBIT_RELEASE_VERSION` the version, checks the image's `org.opencontainers.image.revision` and
+`org.opencontainers.image.version` labels and the version its runner reports, and pushes it. The image is about 4.4 GiB
+and takes several minutes the first time. `--no-cache` applies to the build.
 
 **Deploy stage, on the target, driven from here over ssh.** The deploy stage needs no checkout and no runner on the
 target, and reads neither: `10.66.0.4` has both, for orbit-prod (see
@@ -268,7 +284,8 @@ build host ships it what the deployment's Compose reads from its directory, take
 with `git archive`, never from the working tree: `docker-compose.yml`, `gateway/`,
 `scripts/pg-archive-wal.sh`, `scripts/pg-backup.sh`, `src/link-gateway/nats.conf`, `deploy/runner-link/`, and
 the two Compose files a target lists beside `docker-compose.yml`, `deploy/postgres-pinned.yml` and
-`deploy/db-proxy.yml`, with `deploy/db-proxy/`. They are staged under `.upgrade/release-<commit>/` there, beside
+`deploy/db-proxy.yml`, with `deploy/db-proxy/`, and the monitoring profile's config, `deploy/monitoring/` and
+`scripts/pg-monitor-role.sh`. They are staged under `.upgrade/release-<commit>/` there, beside
 `deploy/two-stage/deploy-stage.sh`, which then, on the target:
 
 1. takes the target's upgrade lock, `/tmp/orbit-upgrade.lock`, as a single host's upgrade takes its own: one
@@ -288,15 +305,22 @@ the two Compose files a target lists beside `docker-compose.yml`, `deploy/postgr
    the reason ([Without a gap](#without-a-gap), below). Where the target runs managed runners on Kubernetes (its
    `.env` sets `ORBIT_MANAGED_RUNNERS_ENABLED=true`, and `profile.json` in `ORBIT_MANAGED_RUNNERS_DIR` says
    `"backend": "kubernetes"`), it also prints the hosted runners' image: `unchanged`, or the profile's
-   `runner.image` and the release's image by digest, `<registry>/orbit-cloud-runner@sha256:<64 hex>`;
+   `runner.image` and the release's image by digest, `<registry>/orbit-cloud-runner@sha256:<64 hex>`, then an
+   `imageRevision` line: `unchanged`, or the profile's `runner.imageRevision` (`(none)` if missing) and the release
+   tag's commit, which the image was built from (`ORBIT_SOURCE_SHA`), and an `imageVersion` line the same way for
+   `runner.imageVersion` and the release version its runner reports;
 5. stops, having changed nothing, if an image the release runs does not come from the registry: `postgres` and
    `pgbackup` have theirs only from `deploy/postgres-pinned.yml`, so a target whose `COMPOSE_FILE` does not
    list it is refused. `--plan` stops here in any case, with every file put back;
 6. pulls every image the release runs, and stops if one is missing;
 7. writes the release's names into `.env` (below), and, where the plan printed a new hosted runners' image, sets
-   the profile's `runner.image` to it, by a rename, keeping the profile it replaces beside it as
-   `profile.json.bak-<time>-before-<commit>`. The apiserver reads the profile only as it starts, so one the release
-   does not otherwise replace is replaced for it. Once it runs, its manager moves each hosted runner onto the new
+   the profile's `runner.image` to it, `runner.imageRevision` to the tag's commit and `runner.imageVersion` to the
+   release version, in the same rename, keeping the profile it replaces beside it as
+   `profile.json.bak-<time>-before-<commit>`. Kubernetes learns a runner's target build only from
+   `runner.imageRevision` and `runner.imageVersion`, and offers Update Now only with them. An unchanged image whose
+   revision or version is missing or different gets it written the same way (a backfill); with all three right
+   nothing is written. The apiserver reads the profile only as it starts, so one the release does not otherwise
+   replace is replaced for any write. Once it runs, its manager moves each hosted runner onto the new
    image as soon as that runner is idle: drained like a sleep, and woken at once as the next generation, on the same
    volume (`rollPreviousImage` in `src/apiserver/src/managed-runners/managed-runner-manager.ts`). A busy runner moves
    later, and nothing in flight is cut short;
@@ -334,7 +358,8 @@ back. Make it once, before the first deploy; for the move to `10.66.0.4`, a copy
 `COMPOSE_FILE=docker-compose.yml:deploy/postgres-pinned.yml:deploy/db-proxy.yml`, its `ORBIT_REGISTRY` and its
 pgbackup's `ORBIT_BACKUP_*` (docs/postgres-standby.md). A deploy writes only the block between
 `# >>> The release this host runs` and `# <<< The release this host runs` at its end: `ORBIT_REGISTRY`,
-`ORBIT_IMAGE_TAG`, `ORBIT_LINK_GATEWAY_TAG`, `ORBIT_NGINX_IMAGE` and `ORBIT_NATS_IMAGE` (docs/configuration.md,
+`ORBIT_IMAGE_TAG`, `ORBIT_LINK_GATEWAY_TAG`, `ORBIT_NGINX_IMAGE`, `ORBIT_NATS_IMAGE` and the monitoring profile's six
+images, `ORBIT_PROMETHEUS_IMAGE` to `ORBIT_ALLOY_IMAGE` (docs/configuration.md,
 "Images and the two-stage release"). It replaces the whole file by a rename, every other line as it was, so that
 any later `docker compose` there renders the release that runs, and never builds anything. `COMPOSE_FILE` lists
 `docker-compose.yml` and `deploy/postgres-pinned.yml` on every target, and `deploy/db-proxy.yml` where the
@@ -345,7 +370,8 @@ with each release; a service it adds is left as it is. Its `./data` stays where 
 **Base images.** Each runs by digest, pulled from the registry, which holds them under Docker Hub's own path,
 `library/<name>`. `postgres` and `pgbackup` run PostgreSQL 16.14 as `deploy/postgres-pinned.yml` pins it, never
 the floating `16-alpine` tag, which has moved on, and `db-proxy` the HAProxy `deploy/db-proxy.yml` pins; the
-release's `deploy/two-stage/base-images.env` pins `gateway` (nginx) and `nats`. Each pin is in one file only,
+release's `deploy/two-stage/base-images.env` pins `gateway` (nginx), `nats` and the monitoring profile's Prometheus,
+node-exporter, postgres-exporter, Grafana, Loki and Alloy (their paths in the registry are Docker Hub's, such as `prom/prometheus`). Each pin is in one file only,
 and changes in a commit, so a release and its rollback both name the base images they ran with. A new digest has
 to be copied to the registry, as `base-images.env` says, before a release names it.
 
@@ -442,20 +468,20 @@ at it, and `<name>` runs on.
 
 Orbit's production spans two workspaces, each with its own git checkout of this repository at `/root/orbit`:
 
-- **orbit-op** is wikova, the build host. Other sessions share its `/root/orbit`, so a release is never built there
+- **orbit-ws04** is wikova, the build host. Other sessions share its `/root/orbit`, so a release is never built there
   and nothing is checked out or merged in it. Each release is built and driven from a fresh detached worktree of it,
   `/dev/shm/wkdir-release-main-<first 9 characters of the commit>`. That worktree gets the small build-only `.env`
   (`PUBLIC_ORIGIN`, `JWT_SECRET`, `PROVIDER_SECRET_KEY`, `RUNNER_LINK_SIGNING_KEY`), copied from the newest earlier one.
 - **orbit-prod** is `10.66.0.4`, where the release runs. Its `/root/orbit` is the deploy directory. It is also a git
   checkout, detached at the commit production runs, so that a SubAgent can run there. The deploy stage does not read
-  it as a checkout: it ships the release's files from orbit-op, and nothing is built on `10.66.0.4`. Its
+  it as a checkout: it ships the release's files from orbit-ws04, and nothing is built on `10.66.0.4`. Its
   `.git/info/exclude` keeps the host's own files out of git: `.env*` (the secrets and their backups), `.upgrade/` and
   `docker-compose.override.yml`. `data/` is in `.gitignore`.
 
 A session on another workspace, such as orbit-develop on HPC or orbit-macos, runs nothing locally, because its checkout
-deploys nothing. It coordinates the two through cross-workspace SubAgents (docs/subagent-design.md §10): orbit-op
+deploys nothing. It coordinates the two through cross-workspace SubAgents (docs/subagent-design.md §10): orbit-ws04
 builds and deploys, then orbit-prod checks production on the host itself and moves its checkout to the release. A
-session on orbit-op runs step 2's work itself, as in [Two-stage release](#two-stage-release), and still delegates step
+session on orbit-ws04 runs step 2's work itself, as in [Two-stage release](#two-stage-release), and still delegates step
 4 to orbit-prod. Either kind of SubAgent runs on its workspace's default engine, in a temporary worktree of that
 workspace's `/root/orbit`, which is deleted when it ends, so each brief works by absolute path. A
 SubAgent cannot ask anyone anything, so each brief settles every choice in advance, and any case the brief does not
@@ -465,9 +491,9 @@ Deploying is the owner's decision. Delegate only when the owner asked for this d
 
 1. **Name the commit.** `git fetch origin main && git rev-parse origin/main` gives the 40-character commit to deploy,
    unless the owner named another one. Both SubAgents work on exactly that commit, even if main moves on meanwhile.
-2. **Deploy through orbit-op**, in the background, because the build takes about 12 minutes and the deploy 1 to 2
-   more: `delegate({ description: "Deploy <short commit> to production", workspace: "orbit-op", background: true,
-   size: "M", prompt: <the orbit-op brief> })`. End the turn: Orbit wakes this session with the result.
+2. **Deploy through orbit-ws04**, in the background, because the build takes about 12 minutes and the deploy 1 to 2
+   more: `delegate({ description: "Deploy <short commit> to production", workspace: "orbit-ws04", background: true,
+   size: "M", prompt: <the orbit-ws04 brief> })`. End the turn: Orbit wakes this session with the result.
 3. A result without `✓ Release <commit> runs on root@10.66.0.4` is not a deploy. Report what it stopped at, and stop
    there: do not delegate again before you have read why.
 4. **Check through orbit-prod**: `delegate({ description: "Check production runs <short commit>", workspace:
@@ -475,11 +501,11 @@ Deploying is the owner's decision. Delegate only when the owner asked for this d
 5. **Report** both results: the commit, the plan table, how the apiserver and web were replaced, the target's
    `docker compose ps`, the history line, where orbit-prod's checkout now is, and the log path.
 
-The orbit-op brief: fill in `<commit>`, and `<c9>`, its first 9 characters. Add `--stop-then-start` or `--pull-base` to
+The orbit-ws04 brief: fill in `<commit>`, and `<c9>`, its first 9 characters. Add `--stop-then-start` or `--pull-base` to
 the `--deploy` command in step 6 only when the owner asked for it.
 
 ```text
-You are on wikova, workspace orbit-op. Deploy Orbit commit <commit> to production (10.66.0.4) with the two-stage
+You are on wikova, workspace orbit-ws04. Deploy Orbit commit <commit> to production (10.66.0.4) with the two-stage
 release, as .claude/skills/upgrade/SKILL.md describes under "Two-stage release". You run in a temporary worktree that
 is deleted when you end: work by absolute path. Stop and report at the first step that fails, and do not improvise
 around a guard. Do not retry, and do not roll back. Answer in English.
@@ -569,8 +595,8 @@ the checkout's files named in step 4. Stop and report at the first step that fai
 ## Notes
 
 - Managed runners stay as the deployment's `.env` has them: the script never writes `.env`. A
-  deployment installed before them, or with `--no-managed-runners`, keeps them off; only a fresh
-  install (`scripts/install-server.sh`) or an administrator switches them on (docs/self-hosting.md,
+  deployment installed before them, or without `--managed-runners`, keeps them off; only a fresh
+  install with `--managed-runners` (`scripts/install-server.sh`) or an administrator switches them on (docs/self-hosting.md,
   "Managed runners"). Where `.env` does not turn on the `managed-runners-docker` Compose profile,
   Compose does not list `docker-channel`, and the script builds, recreates and writes exactly what it
   did before managed runners existed: nothing under `data/`, no managed runner image.

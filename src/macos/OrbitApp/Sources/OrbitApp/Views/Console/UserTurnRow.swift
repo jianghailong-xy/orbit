@@ -53,6 +53,9 @@ struct UserTurnRow: View {
     /// The words of a message that never reached the engine, back in the composer: nil unless
     /// `SteerDelivery.offersPutBack` says so and there is a console to act through.
     var putBack: (() -> Void)? = nil
+    /// Scrolls a delivery card to the item's own card in this conversation; nil where there is no
+    /// console to scroll (board card-ui-polish ②).
+    var revealItemCard: ((String) -> Bool)? = nil
     /// The item a record link or a search hit asked for: this turn's long message opens if it is that one.
     @Environment(\.revealedItemID) private var revealedItemID
 
@@ -90,7 +93,8 @@ struct UserTurnRow: View {
             // Nobody typed this turn: draw the delivery card rather than the reader's own bubble.
             OpenItemDeliveryCardView(card: card, text: b.text, ts: b.ts,
                                      undelivered: undelivered,
-                                     onCancelQueued: cancel)
+                                     onCancelQueued: cancel,
+                                     revealItemCard: revealItemCard)
         } else if let card = b.ownerAnswer, b.sessionReplies?.isEmpty ?? true {
             // The owner's answer handed to the coordinator is the platform's message too: the question
             // replayed in full and the answer, written for the AGENT — as a bubble, the reader's own
@@ -155,16 +159,24 @@ struct UserTurnRow: View {
             // note once delivered and the turn's own words while it waits, folded at the card's foot.
             EvidenceToReviewCardView(card: card, told: told(b), ts: b.ts,
                                      undelivered: undelivered, onCancelQueued: cancel)
+                .orbitCardWidth()
         } else if let card = b.evidenceSendBack {
             EvidenceSentBackCardView(card: card, text: b.text, ts: b.ts,
                                      undelivered: undelivered,
                                      onCancelQueued: cancel)
+                .orbitCardWidth()
         } else if let card = b.runQuestion {
             RunQuestionCardView(card: card, told: told(b), ts: b.ts,
                                 undelivered: undelivered, onCancelQueued: cancel)
+                .orbitCardWidth()
         } else if let card = b.runNotice {
             RunNoticeCardView(card: card, told: told(b), ts: b.ts,
                               undelivered: undelivered, onCancelQueued: cancel)
+                .orbitCardWidth()
+        } else if let card = LandingFix.parse(clientTurnId: b.clientTurnId, text: b.text) {
+            // A failed landing handed to the task's own session (revision 42, §12.5 W6; board
+            // landing-fix-own-session 02 b): Orbit's turn, read back from its own words into the card.
+            LandingFixCardView(card: card, ts: b.ts, undelivered: undelivered, onCancelQueued: cancel)
         } else if let card = b.sessionOpening {
             // The opening of a session Orbit opened with a brief of its own: one row saying why.
             SessionOpeningRowView(card: card, text: b.text,
@@ -188,7 +200,9 @@ struct UserTurnRow: View {
                     }
                 }
                 SessionReplyCardsView(replies: replies, ts: b.ts,
-                                      undelivered: undelivered, onCancelQueued: cancel)
+                                      undelivered: undelivered, onCancelQueued: cancel,
+                                      revealed: revealedItemID == b.id)
+                .orbitCardWidth()
             }
         } else if let line = RunnerUpdateNow.resumeLine(b.text) {
             // The turn Orbit sent to continue a turn the owner's Update Now cut (D4): nobody typed it,
@@ -224,41 +238,54 @@ struct UserTurnRow: View {
             WatchWakeCardView(wake: wake, text: b.text, ts: b.ts,
                               undelivered: undelivered, onWithdraw: cancel,
                               queued: queued != nil)
-        } else if let subagent = SubagentFinishedText.parse(wakeNote) {
-            // A SubAgent's end is the same kind of turn, in a block of its own: one line in the
-            // agent's stream (web parity: `SubagentFinishedCard.tsx`). A note that carries a
-            // background job's news beside it draws that line too, after the SubAgent's, as the
-            // control plane wrote them; the job's line then says how the turn went, once.
-            let steerState = BackgroundWakeCard.steerState(steer: b.steer, delivery: b.delivery,
-                                                           undelivered: b.undelivered)
+        } else if queued == nil, let workflow = WorkflowFinishedText.parse(wakeNote) {
+            // An Orbit workflow's end: one pale purple strip (board subagent-workflow part 4 ②); the
+            // parent's answer follows as its own reply. Anything else the note carried keeps its line.
             VStack(alignment: .leading, spacing: 6) {
-                if let jobs = BackgroundWakeText.parse(subagent.rest) {
-                    SubagentFinishedLineView(wake: subagent, ts: b.ts, queued: queued != nil)
-                    BackgroundWakeCardView(wake: jobs, ts: b.ts,
+                WorkflowFinishedStripView(wake: workflow)
+                // A SubAgent's end the note carries draws nothing here either: its card shows it (see below).
+                // A job's news draws nothing either (its card says it, `BgJobCard`): a wakeup keeps its line.
+                if let wakeups = BgJobCard.wakeupsOnly(BackgroundWakeText.parse(
+                    SubagentFinishedText.parse(workflow.rest)?.rest ?? workflow.rest)) {
+                    BackgroundWakeCardView(wake: wakeups, ts: b.ts)
+                }
+                if undelivered {
+                    Text(BackgroundWakeCard.undelivered).font(.orbitMeta).foregroundStyle(.orange)
+                }
+                if BackgroundWakeCard.drawsBubble(text: b.text) { UserBubbleView(bubble: b) }
+            }
+        } else if let subagent = SubagentFinishedText.parse(wakeNote) {
+            // A SubAgent's end is the same kind of turn, in a block of its own, and it draws NOTHING: like
+            // Claude Code's built-in Agent, the SubAgent is one card from start to end, and that card draws
+            // how it ended (`SubagentCardEnd`, joined by run id). The rows leave such a turn out
+            // (`SubagentCardEnd.drawsNothing`); what is left here is a wakeup that came due beside it, which
+            // keeps its line (a job's news is its card's, `BgJobCard`), and words somebody typed, which keep
+            // their bubble (web parity: NodeView).
+            VStack(alignment: .leading, spacing: 6) {
+                if let wakeups = BgJobCard.wakeupsOnly(BackgroundWakeText.parse(subagent.rest)) {
+                    BackgroundWakeCardView(wake: wakeups, ts: b.ts,
                                            undelivered: undelivered,
                                            onCancelQueued: cancel,
-                                           steerState: steerState,
+                                           steerState: BackgroundWakeCard.steerState(
+                                               steer: b.steer, delivery: b.delivery,
+                                               undelivered: b.undelivered),
                                            queued: queued != nil)
-                } else {
-                    SubagentFinishedLineView(wake: subagent, ts: b.ts,
-                                             undelivered: undelivered,
-                                             onCancelQueued: cancel,
-                                             steerState: steerState,
-                                             queued: queued != nil)
                 }
                 if queued == nil, BackgroundWakeCard.drawsBubble(text: b.text) {
                     UserBubbleView(bubble: b)
                 }
             }
-        } else if let background = BackgroundWakeText.parse(wakeNote) {
+        } else if let jobNews = BackgroundWakeText.parse(wakeNote) {
             // A turn the control plane opened for a background job's news, or for a wakeup
             // coming due, is nobody's message either: the block IS the turn, so it is read off
-            // the recorded note rather than the person's words, which are empty. Only the wake
-            // blocks become the card. A job that ended while a turn ran was written
-            // into that turn as a steer: the same line, where its echo landed inside the running
-            // turn, saying how far it got (web parity: `Transcript.tsx`'s `steer=`) — and, while
-            // it waits for the runner, with no Cancel: a steer is taken back only by its own
-            // Withdraw, and only when somebody typed it.
+            // the recorded note rather than the person's words, which are empty. A job's end, new
+            // output or stall draws NOTHING (board C1): like a SubAgent, the job is one card from
+            // start to end (`JobCardView`, joined by job id), and the agent still reads the block
+            // unchanged; the rows leave such a turn out (`BgJobCard.drawsNothing`). A wakeup that came
+            // due beside it keeps its line. One written into the running turn as a steer says how far
+            // it got (web parity: `Transcript.tsx`'s `steer=`) — and, while it waits for the runner,
+            // with no Cancel: a steer is taken back only by its own Withdraw.
+            if let background = BgJobCard.wakeupsOnly(jobNews) {
             VStack(alignment: .leading, spacing: 6) {
                 BackgroundWakeCardView(wake: background, ts: b.ts,
                                        undelivered: undelivered,
@@ -270,6 +297,9 @@ struct UserTurnRow: View {
                 if queued == nil, BackgroundWakeCard.drawsBubble(text: b.text) {
                     UserBubbleView(bubble: b)
                 }
+            }
+            } else if queued == nil, BackgroundWakeCard.drawsBubble(text: b.text) {
+                UserBubbleView(bubble: b)
             }
         } else if queued == nil, OrbitEvent.draws(b) {
             // Nothing typed and only Orbit's blocks in the note, none of which a line above knew: still

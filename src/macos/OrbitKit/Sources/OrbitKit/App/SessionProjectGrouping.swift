@@ -16,6 +16,8 @@ public struct SessionProjectRow: Identifiable, Equatable, Sendable {
     public let pinnedAt: String?
     public let lastTurnAt: String?
     public let createdAt: String?
+    /// The newest member's list-order key (`listedAt`, else `createdAt`): where the row sits.
+    public var listedAt: String? = nil
     public let needsYou: Bool
     public let running: Bool
     public let jobs: Bool
@@ -24,6 +26,10 @@ public struct SessionProjectRow: Identifiable, Equatable, Sendable {
     public let target: Target
     public let taskCounts: ProjectSidebarTaskCounts?
     public let runningCount: Int
+    /// Whether the project has been started; false for one nobody has, and for a read that did not say.
+    public let started: Bool
+    /// How the project is paused, or nil. The daily limit wins when both hold (design §4.2).
+    public let pause: SessionProjectPause?
 
     public var id: String { projectId }
 
@@ -31,6 +37,71 @@ public struct SessionProjectRow: Identifiable, Equatable, Sendable {
     /// CANCELLED project, and only in Open, where there is something left to move to Completed.
     public func offersComplete(in view: SessionView) -> Bool {
         view == .open && (status == .done || status == .cancelled)
+    }
+
+    /// The row's one state action (§4.3): Complete for a finished project in Open; otherwise, for a
+    /// started OPEN one, Pause or — when paused either way — Resume. None for one not started.
+    public func stateAction(in view: SessionView) -> SessionProjectRowAction? {
+        if offersComplete(in: view) { return .complete }
+        guard status == .open, started else { return nil }
+        return pause == nil ? .pause : .resume
+    }
+
+    /// A swipe right, first slot outermost: the state action, then Pin (a coordinator's).
+    public func leadingActions(in view: SessionView) -> [SessionProjectRowAction] {
+        [stateAction(in: view)].compactMap { $0 } + (coordinator == nil ? [] : [.pin])
+    }
+
+    /// A swipe left.
+    public func trailingActions() -> [SessionProjectRowAction] { coordinator == nil ? [] : [.move] }
+
+    /// A full swipe fires nothing, in every state: dragging to the end only stretches the row.
+    public static let allowsFullSwipe = false
+
+    /// The Pin and Move group of the long-press menu, state action first. Complete leads the whole
+    /// menu instead, so it is not here.
+    public func menuGroup(in view: SessionView) -> [SessionProjectRowAction] {
+        let state = stateAction(in: view).flatMap { $0 == .complete ? nil : $0 }
+        return [state].compactMap { $0 } + (coordinator == nil ? [] : [.pin, .move])
+    }
+
+    /// What Resume calls, in order: the daily limit's episode, then the owner's pause — both lifted
+    /// when both hold. Neither ever raises the limit.
+    public var resumeCalls: [SessionProjectResumeCall] {
+        var calls: [SessionProjectResumeCall] = []
+        if case .fuse(let episode, _, _, let alsoOwner)? = pause {
+            if let episode { calls.append(.fuse(episodeId: episode)) }
+            if alsoOwner { calls.append(.owner) }
+        } else if pause != nil {
+            calls.append(.owner)
+        }
+        return calls
+    }
+}
+
+public enum SessionProjectRowAction: Hashable, Sendable { case pause, resume, complete, pin, move }
+
+public enum SessionProjectResumeCall: Equatable, Sendable {
+    case fuse(episodeId: String)
+    case owner
+}
+
+/// How a project is paused (design §4.2): the daily limit's fuse, or the owner's Pause project
+/// (`pausedAt`, which a legacy Automatic-off pause also writes).
+public enum SessionProjectPause: Equatable, Sendable {
+    case fuse(episodeId: String?, observed: Int?, limit: Int?, alsoOwner: Bool)
+    case owner(since: String)
+
+    public init?(_ summary: ProjectSummary?) {
+        guard let summary else { return nil }
+        if summary.fuse.paused {
+            self = .fuse(episodeId: summary.fuse.episodeId, observed: summary.fuse.observed,
+                         limit: summary.fuse.limit, alsoOwner: summary.pausedAt != nil)
+        } else if let at = summary.pausedAt {
+            self = .owner(since: at)
+        } else {
+            return nil
+        }
     }
 }
 
@@ -66,6 +137,13 @@ public enum SessionProjectEntry: Identifiable, Equatable, Sendable {
         switch self {
         case .session(let session): return session.lastTurnAt
         case .project(let project): return project.lastTurnAt
+        }
+    }
+    /// The list-order key: a session's `listedAt`, a project row's newest member's.
+    public var listedAt: String? {
+        switch self {
+        case .session(let session): return session.listedAt
+        case .project(let project): return project.listedAt
         }
     }
     public var createdAt: String? {
@@ -129,14 +207,25 @@ public enum SessionProjectGrouping {
             if groups[id] == nil { projectIDs.append(id) }
             groups[id, default: []].append(session)
         }
-        // Folder rows count all local sessions under the coordinator's folder, ignoring member moves.
+        // Folder rows hold all local members under the coordinator's folder, ignoring member moves.
         let assigned = sessions.map { session -> Session in
             guard let id = heldBy(session) else { return session }
             return session.settingFolder(coordinatorByProject[id]?.folderId)
         }
-        let folderListing = SessionFolderGrouping.listing(assigned, folders: folders, view: view,
-                                                         byTag: byTag, runnerOffline: runnerOffline,
-                                                         watching: watching)
+        let grouped = SessionFolderGrouping.listing(assigned, folders: folders, view: view,
+                                                    byTag: byTag, runnerOffline: runnerOffline,
+                                                    watching: watching)
+        // A folder's count is the rows its page lists: a project is one row, however many members it holds.
+        var rowsByFolder: [String: Set<String>] = [:]
+        for session in assigned {
+            guard let id = session.folderId else { continue }
+            rowsByFolder[id, default: []].insert(heldBy(session).map { "project:\($0)" } ?? session.id)
+        }
+        let folderListing = SessionFolderListing(
+            folders: grouped.folders.map {
+                SessionFolderRow(folder: $0.folder, sessionCount: rowsByFolder[$0.folder.id]?.count ?? 0, status: $0.status)
+            },
+            sessions: grouped.sessions)
         let knownFolders = Set(folders.map(\.id))
         func inScope(_ id: String?) -> Bool {
             if let folderID { return id == folderID }
@@ -208,6 +297,20 @@ public enum SessionProjectGrouping {
                                                                                   title: lead.title ?? ""),
                                            tone: .approval)
                 target = .session(lead.id)
+            } else if let pause = SessionProjectPause(summary) {
+                switch pause {
+                case .fuse(_, let observed, let limit, _):
+                    selectedLine = SessionLine(text: SessionProjectCopy.pausedAtLimit(observed: observed, limit: limit),
+                                               tone: .warning, pauseGlyph: true)
+                case .owner(let since):
+                    let running = summary?.buckets.running ?? 0
+                    selectedLine = SessionLine(
+                        text: running > 0
+                            ? SessionProjectCopy.pausedRuns(running)
+                            : SessionProjectCopy.pausedAgo(ProjectAttention.elapsedLabel(since, now: now)),
+                        tone: .preview, pauseGlyph: true)
+                }
+                target = coordinator.map { .session($0.id) } ?? .project(projectID)
             } else if let coordinator, let held = summary?.attention?.coordinatorItems {
                 let copy = SessionProjectCopy.coordinatorLead(held.leadKind)
                 let age = ProjectAttention.elapsedLabel(held.oldestWaitingSince, now: now)
@@ -247,17 +350,24 @@ public enum SessionProjectGrouping {
                 sessionCount: content.count, coordinator: coordinator, folderId: folderID,
                 pinnedAt: coordinator?.pinnedAt, lastTurnAt: latest.lastTurnAt ?? latest.createdAt,
                 createdAt: coordinator?.createdAt ?? latest.createdAt,
+                listedAt: members.map { $0.listedAt ?? $0.createdAt }
+                    .max { instant($0) < instant($1) } ?? nil,
                 needsYou: needsYou, running: running, jobs: jobs,
                 indicator: needsYou ? .needsYou : running ? .running : jobs ? .jobs : nil,
                 line: selectedLine, target: target, taskCounts: summary?.taskCounts,
-                runningCount: summary?.buckets.running ?? runningCount))
+                runningCount: summary?.buckets.running ?? runningCount,
+                started: summary?.started == true, pause: SessionProjectPause(summary)))
         }
+        // The shared list order (contracts/session-list-order.fixtures.json): `listedAt` (`createdAt`
+        // when null), then `createdAt`, then id. `lastTurnAt` is liveness and never moves a row.
         // Each entry's time is parsed once, not twice per comparison.
         let entries = (loose.map(SessionProjectEntry.session) + rows.map(SessionProjectEntry.project))
-            .map { ($0, instant($0.lastTurnAt ?? $0.createdAt)) }
+            .map { ($0, instant($0.listedAt ?? $0.createdAt), instant($0.createdAt)) }
             .sorted { a, b in
                 if view == .open, (a.0.pinnedAt != nil) != (b.0.pinnedAt != nil) { return a.0.pinnedAt != nil }
-                return a.1 > b.1
+                if a.1 != b.1 { return a.1 > b.1 }
+                if a.2 != b.2 { return a.2 > b.2 }
+                return a.0.id < b.0.id
             }
             .map(\.0)
         return SessionProjectListing(folders: folderID == nil ? folderListing.folders : [],

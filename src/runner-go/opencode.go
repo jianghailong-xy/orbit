@@ -59,6 +59,7 @@ func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context,
 	// The generation's inbox: what fetches its turns, and the turnIds already taken on, which a
 	// redelivery of one is dropped against for the generation's whole life.
 	inbox := newInboxPoller(t, job.SessionID, leaseGeneration)
+	inbox.holdTurns(waitTurnPermit, job, completeTurn) // a turn waiting for its permit does not stop the inbox being read
 	defer inbox.close()
 	inboxCh := make(chan openCodeInboxResult, 16)
 	go func() {
@@ -488,6 +489,9 @@ func runOpenCodeTurn(ctx context.Context, job *ClaimedSession, execDir, scratchD
 		"ORBIT_ALLOW_ORCHESTRATION":       orchestrationEnv(job.AllowOrchestration),
 		envWatches:                        watchesEnv(job.WatchesDisabled),
 		envWiki:                           wikiEnv(job.WikiDisabled),
+		envDocuments:                      documentsEnv(job.DocumentsDisabled),
+		envBrowser:                        browserEnv(job.BrowserEnabled),
+		envWorkflows:                      workflowsEnv(job.WorkflowsDisabled),
 		envScheduleRun:                    scheduleRunEnv(job.ScheduleRun),
 		envOrchestrationToken:             job.OrchestrationToken,
 		envMCPPermissionPrompt:            "0",
@@ -507,6 +511,8 @@ func runOpenCodeTurn(ctx context.Context, job *ClaimedSession, execDir, scratchD
 	// its shell tool with detached:true (its own process group), which is the case
 	// terminateSessionProcessTree's ppid walk exists to catch. Stage 4 verdict.
 	cmd.Env = append(cmd.Env, bgJobEnvPairs(job.SessionID)...)
+	// On the Orbit Cloud runner with the browser on, a tool the agent runs opens its pages there (browser_opener.go).
+	cmd.Env = browserOpenerEnv(cmd.Env, job.BrowserEnabled)
 	cmd.Stdin = strings.NewReader(prompt)
 	configureSessionProcessTree(cmd)
 	stdout, err := cmd.StdoutPipe()
@@ -517,7 +523,7 @@ func runOpenCodeTurn(ctx context.Context, job *ClaimedSession, execDir, scratchD
 	if err != nil {
 		return failedOpenCodeSpawn("stderr", err, emit)
 	}
-	if err := startSessionProcess(cmd); err != nil {
+	if err := startSessionEngine(cmd, job.SessionID); err != nil {
 		if ctx.Err() != nil {
 			return cancelledOpenCodeTurn(ctx, result.RuntimeSessionID)
 		}
@@ -888,7 +894,7 @@ func openCodeConfigContent(job *ClaimedSession, scratchDir, agentName string, es
 	}
 	appendPrompt := strings.TrimSpace(strings.Join(nonEmptyStrings(
 		job.appendSystemPrompt(),
-		openCodeOrbitCLIInstructions(executable, job.insideRecordedWork(), job.watchesOn(), agentDelegates(job.Agent)),
+		compose(job.sessionShape(executable), openCodeProfile).System,
 	), "\n\n"))
 	if appendPrompt != "" {
 		instructionsPath := filepath.Join(scratchDir, "opencode-instructions.txt")
@@ -923,6 +929,9 @@ func openCodeConfigContent(job *ClaimedSession, scratchDir, agentName string, es
 			"ORBIT_ALLOW_ORCHESTRATION": orchestrationEnv(job.AllowOrchestration),
 			envWatches:                  watchesEnv(job.WatchesDisabled),
 			envWiki:                     wikiEnv(job.WikiDisabled),
+			envDocuments:                documentsEnv(job.DocumentsDisabled),
+			envBrowser:                  browserEnv(job.BrowserEnabled),
+			envWorkflows:                workflowsEnv(job.WorkflowsDisabled),
 			envScheduleRun:              scheduleRunEnv(job.ScheduleRun),
 			envOrchestrationToken:       job.OrchestrationToken,
 			envMCPPermissionPrompt:      "0",
@@ -936,6 +945,10 @@ func openCodeConfigContent(job *ClaimedSession, scratchDir, agentName string, es
 		// A SubAgent's `orbit mcp` neither offers nor serves delegate (subagentChildJob).
 		if runID := strings.TrimSpace(job.Agent.Env[envSubagentRunID]); runID != "" {
 			environment[envSubagentRunID] = runID
+		}
+		// A remote SubAgent's mode, which its Plan gate reads (sessionPermissionMode).
+		if mode := strings.TrimSpace(job.Agent.Env[envSubagentRemoteMode]); mode != "" {
+			environment[envSubagentRemoteMode] = mode
 		}
 		// Where `orbit mcp` reaches the runner to start a background job the runner
 		// owns. Written here as well as into the OpenCode process env, because this
@@ -971,10 +984,6 @@ func nonEmptyStrings(values ...string) []string {
 		}
 	}
 	return out
-}
-
-func openCodeOrbitCLIInstructions(executable string, insideRecordedWork, watches, delegates bool) string {
-	return strings.Replace(orbitCLIInstructions(executable, insideRecordedWork, watches, delegates), "mcp__orbit__*", "orbit_*", 1)
 }
 
 func appendConfigString(value interface{}, addition string) []string {
@@ -1087,6 +1096,19 @@ func applyOpenCodePermissions(permission map[string]interface{}, agent AgentExec
 		// Non-interactive OpenCode rejects an "ask" decision, preserving plan mode
 		// even for shell commands that could otherwise mutate the checkout.
 		permission["bash"] = "ask"
+	}
+
+	// The drive is a workspace root: outside the checkout, so its external-directory check is told. Plan
+	// keeps its denial of every edit above, so there the drive is only read (design §7.2).
+	if guarded {
+		if roots := driveGrantRoots(); len(roots) > 0 {
+			external := map[string]interface{}{"*": permission["*"]}
+			for _, root := range roots {
+				external[root] = "allow"
+				external[root+"/**"] = "allow"
+			}
+			permission["external_directory"] = external
+		}
 	}
 
 	// A workspace symlink whose target resolves outside the checkout: OpenCode's lexical

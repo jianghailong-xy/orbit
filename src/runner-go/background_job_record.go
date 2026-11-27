@@ -50,10 +50,6 @@ type bgJobRecord struct {
 	WakeOnStallSeconds int       `json:"wakeOnStallSeconds,omitempty"`
 	StallWakes         int       `json:"stallWakes,omitempty"`
 	StallWokenFor      time.Time `json:"stallWokenFor"`
-	// The limits the job runs under, so the image that adopts it still reports them, notes an OOM kill
-	// and removes the job's cgroup (adoptBgJobCgroup).
-	Limits     *bgJobLimits `json:"limits,omitempty"`
-	LimitsNote string       `json:"limitsNote,omitempty"`
 }
 
 func bgJobRecordPath(sessionID, jobID string) string {

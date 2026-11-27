@@ -106,18 +106,21 @@ const (
 var receiptEntityTypes = map[string]operationObject{"task_start": objectSession}
 
 type toolReceipt struct {
-	ReceiptVersion int                `json:"receiptVersion"`
-	OK             bool               `json:"ok"`
-	Outcome        string             `json:"outcome"`
-	Operation      string             `json:"operation"`
-	Action         string             `json:"action"`
-	EntityType     string             `json:"entityType"`
-	ID             *string            `json:"id"`
-	Status         *string            `json:"status"`
-	ChangedFields  []string           `json:"changedFields"`
-	Approval       receiptApproval    `json:"approval"`
-	Idempotency    receiptIdempotency `json:"idempotency"`
-	Error          *receiptError      `json:"error,omitempty"`
+	ReceiptVersion int     `json:"receiptVersion"`
+	OK             bool    `json:"ok"`
+	Outcome        string  `json:"outcome"`
+	Operation      string  `json:"operation"`
+	Action         string  `json:"action"`
+	EntityType     string  `json:"entityType"`
+	ID             *string `json:"id"`
+	Status         *string `json:"status"`
+	// Link is the entity as a reply names it, orbit-<kind>:<id> (receiptLink): set when the answer is a task, a
+	// session, a project or a task list the clients open by that link.
+	Link          string             `json:"link,omitempty"`
+	ChangedFields []string           `json:"changedFields"`
+	Approval      receiptApproval    `json:"approval"`
+	Idempotency   receiptIdempotency `json:"idempotency"`
+	Error         *receiptError      `json:"error,omitempty"`
 	// Start is what became of the start a create asked for (startNow, or the owner's "Create and
 	// start"): the started session, or why it was deferred.
 	Start *receiptStart `json:"start,omitempty"`
@@ -181,6 +184,7 @@ type receiptItem struct {
 	Ref    string  `json:"ref,omitempty"`
 	ID     *string `json:"id"`
 	Status *string `json:"status"`
+	Link   string  `json:"link,omitempty"`
 }
 
 // answersWithReceipt says whether a tool's answer is the receipt. permission_prompt answers the
@@ -212,7 +216,7 @@ func (op *operation) action() string {
 	}
 	tool := op.Tool
 	for _, prefix := range []string{"tasklist_", "task_", "project_", "session_", "agent_", "provider_", "runner_",
-		"watch_", "wiki_", "file_", "bg_", "integration_", "criterion_", "open_item_"} {
+		"watch_", "wiki_", "file_", "bg_", "integration_", "criterion_", "open_item_", "settings_"} {
 		if strings.HasPrefix(tool, prefix) && len(tool) > len(prefix) {
 			tool = strings.TrimPrefix(tool, prefix)
 			break
@@ -224,7 +228,7 @@ func (op *operation) action() string {
 // The arguments that address an entity or steer the call rather than writing a field, in the order a
 // receipt falls back to for its id when the answer names none.
 var receiptAddressArguments = []string{"taskId", "listId", "projectId", "sessionId", "agentId", "runnerId",
-	"providerId", "watchId", "jobId", "entryId", "attachmentId", "fileId", "itemId", "criterionId", "promotionId"}
+	"providerId", "watchId", "jobId", "entryId", "attachmentId", "fileId", "itemId", "criterionId", "promotionId", "runId"}
 
 var receiptControlArguments = map[string]bool{"idempotencyKey": true, "clientTurnId": true, "dryRun": true,
 	"wait": true, "summary": true, "handoff": true, "expectedConfigRevision": true, "expectedRevision": true,
@@ -441,6 +445,7 @@ func (rec *callRecord) receipt(text string, isErr bool) toolReceipt {
 		if decision != nil {
 			r.Text = ownerChatReply(decision.Message)
 		}
+		r.Notes = []string{chatNote}
 		return r
 	case decision != nil && decision.Status != "ALLOWED", !isErr && strings.HasPrefix(text, "the human rejected"):
 		r.Outcome = outcomeDeclined
@@ -451,6 +456,7 @@ func (rec *callRecord) receipt(text string, isErr bool) toolReceipt {
 		if r.Approval.Message == "" {
 			r.Approval.Message = r.Error.Message
 		}
+		r.Notes = []string{declinedNote}
 		return r
 	case rec.pending != "":
 		r.Outcome = outcomePending
@@ -458,9 +464,11 @@ func (rec *callRecord) receipt(text string, isErr bool) toolReceipt {
 		r.Approval.Outcome = approvalOutcomePending
 		r.Error = &receiptError{Code: errorCodeAwaitingOwner, Message: text, Retry: retryWait}
 		r.Entity = rec.entity
+		r.Notes = []string{pendingCardNote}
 		return r
 	case isErr:
 		r.Error, r.Outcome = rec.failure(text)
+		r.Notes = rec.recoveryNotes(r.Error)
 		if r.Approval.Outcome == approvalOutcomeNotRequired && op.Approval == approvalKindCard && decision == nil {
 			r.Approval.Outcome = approvalOutcomeNotAsked
 		}
@@ -500,6 +508,9 @@ func (rec *callRecord) receipt(text string, isErr bool) toolReceipt {
 		r.ID, r.Status = entityIdentity(doc)
 	}
 	if items, ok := batchItems(doc); ok && op.Mutates && r.Outcome != outcomeDryRun {
+		for i := range items {
+			items[i].Link = receiptLink(op, r.EntityType, items[i].ID)
+		}
 		r.Items = items
 		count := len(items)
 		r.Count = &count
@@ -507,6 +518,7 @@ func (rec *callRecord) receipt(text string, isErr bool) toolReceipt {
 	if r.ID == nil {
 		r.ID = rec.addressedID()
 	}
+	r.Link = receiptLink(op, r.EntityType, r.ID)
 	if op.Mutates && r.Outcome == outcomeWritten {
 		r.ChangedFields = rec.changedFields()
 	}
@@ -515,6 +527,7 @@ func (rec *callRecord) receipt(text string, isErr bool) toolReceipt {
 		// The call filed a question only the account owner answers; it is the answer that is pending.
 		r.Approval.Required = true
 		r.Approval.Outcome = approvalOutcomePending
+		r.Notes = append(r.Notes, ownerAnswersNote)
 	}
 	return r
 }
@@ -692,6 +705,92 @@ func requestNeverLeft(err error) bool {
 	return errors.As(err, &dnsErr)
 }
 
+// The recovery notes (docs/agent-instructions-design.md §3, kind D): what an answer means and what to do next, said
+// in the receipt of the call that met it rather than in the instructions every session carries. Each is the advice
+// the primer's cards, receipts and progress paragraphs give, and the orchestration paragraph's, so those can shrink.
+const (
+	declinedNote = "The person said no, and that is final on every surface: do not make this write another way " +
+		"(the CLI, another tool, the same call reworded). Tell them it was not done."
+	chatNote = "Not a no: nothing was written and the proposal is still open. Answer the owner's message in the " +
+		"conversation, then call the tool again, changed as agreed."
+	pendingCardNote = "A card still waiting is not a no: do not call this again, make the write another way or " +
+		"answer the card yourself. If there is nothing else to do, end your turn; the owner's answer comes back to this session."
+	ownerAnswersNote = "Only the owner answers this: never answer it yourself or act as if they had. Their answer " +
+		"comes back to this session."
+	orchestrationOffNote = "Do not try `orbit session` or another door. task_start the work if task_list shows it " +
+		"recorded, else record it with task_create; tell the user the switch is in Settings -> Session orchestration, " +
+		"and never claim a delegation."
+	progressConflictNote = "The progress moved after the revision you sent: read it again (task_progress_report " +
+		"with none of its fields), then report against the revision it shows."
+	settingOwnerOnlyNote = "Only the owner can make this change. Put the row's link in your reply for them to " +
+		"open, instead of describing where it is: "
+	settingsChangeDeclinedNote = "The owner declined this same change from this session: do not propose it " +
+		"again; ask the person instead."
+)
+
+// The server's refusal codes a recovery note is written for.
+const (
+	errorCodeProgressRevisionConflict = "PROGRESS_REVISION_CONFLICT"
+	errorCodeSettingOwnerOnly         = "SETTING_OWNER_ONLY"
+	errorCodeSettingsChangeDeclined   = "SETTINGS_CHANGE_DECLINED"
+)
+
+// recoveryNotes is what a failed call's receipt says to do next, by its error's code.
+func (rec *callRecord) recoveryNotes(e *receiptError) []string {
+	if e == nil {
+		return nil
+	}
+	switch e.Code {
+	case errorCodeOrchestrationOff:
+		return []string{orchestrationOffNote}
+	case errorCodeProgressRevisionConflict:
+		return []string{progressConflictNote}
+	case errorCodeSettingsChangeDeclined:
+		return []string{settingsChangeDeclinedNote}
+	case errorCodeSettingOwnerOnly:
+		var body struct {
+			Settings []struct {
+				Title string `json:"title"`
+				Link  string `json:"link"`
+			} `json:"settings"`
+		}
+		var httpErr *transportHTTPError
+		if failed := rec.lastFailedRequest(); failed != nil && errors.As(failed.Err, &httpErr) {
+			_ = json.Unmarshal([]byte(httpErr.body), &body)
+		}
+		links := make([]string, 0, len(body.Settings))
+		for _, row := range body.Settings {
+			if row.Title != "" && row.Link != "" {
+				links = append(links, "["+row.Title+"]("+row.Link+")")
+			}
+		}
+		if len(links) == 0 {
+			return []string{settingOwnerOnlyNote + "[title](orbit-settings:<key>), for each key the refusal names."}
+		}
+		return []string{settingOwnerOnlyNote + strings.Join(links, ", ") + "."}
+	}
+	return nil
+}
+
+// receiptLinkSchemes are the objects a reply links, with the scheme the clients open each by.
+var receiptLinkSchemes = map[string]string{string(objectTask): "orbit-task:", string(objectSession): "orbit-session:",
+	string(objectProject): "orbit-project:", string(objectTaskList): "orbit-list:"}
+
+// receiptLink is the ready-made link to the entity a receipt names, orbit-<kind>:<id>, and "" when the answer is not
+// that entity itself. Only an operation whose answer is the object it names carries one: its create, batch create,
+// update, get or start. task_comment acts on a task and answers with a comment, so its id is no task's.
+func receiptLink(op *operation, entityType string, id *string) string {
+	scheme := receiptLinkSchemes[entityType]
+	if scheme == "" || id == nil || *id == "" {
+		return ""
+	}
+	switch action := op.action(); {
+	case action == "create", action == "update", action == "start", strings.HasSuffix(op.Tool, "_get"):
+		return scheme + *id
+	}
+	return ""
+}
+
 func declineMessage(text string, decision *ApprovalDecisionResponse) string {
 	if strings.HasPrefix(text, "the human rejected") {
 		return text
@@ -793,14 +892,14 @@ func compactReceiptJSON(text string) string {
 }
 
 // entityIdentity is a document's own id and status: `id` (or `publicId`, or a background job's
-// `jobId`), and `status` (or `state`) when it is a string. An array, or a document that names
+// `jobId` or SubAgent `runId`), and `status` (or `state`) when it is a string. An array, or a document that names
 // neither, has none.
 func entityIdentity(doc json.RawMessage) (id, status *string) {
 	var m map[string]interface{}
 	if len(doc) == 0 || json.Unmarshal(doc, &m) != nil {
 		return nil, nil
 	}
-	for _, key := range []string{"id", "publicId", "jobId"} {
+	for _, key := range []string{"id", "publicId", "jobId", "runId"} {
 		if s, ok := m[key].(string); ok && s != "" {
 			id = &s
 			break
@@ -993,6 +1092,7 @@ func toolReceiptOutputSchema() map[string]interface{} {
 			"entityType":     str,
 			"id":             nullableStr,
 			"status":         nullableStr,
+			"link":           str,
 			"changedFields":  strList,
 			"approval": map[string]interface{}{
 				"type": "object",
@@ -1075,6 +1175,8 @@ func (s *mcpServer) invokeTool(name string, args map[string]interface{}) map[str
 	if !op.answersWithReceipt() {
 		return s.callTool(name, args)
 	}
+	// A create that carries no key is given one before the record is made, so its receipt reports the key it was sent under (D4).
+	args = s.withDerivedCreateKey(name, args)
 	rec := newCallRecord(op, args)
 	rec.defaultTaskID = s.taskID
 	stop := s.t.watch(rec.observe)

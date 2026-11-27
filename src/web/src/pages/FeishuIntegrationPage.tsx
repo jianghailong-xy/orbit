@@ -39,6 +39,7 @@ import { useToast } from '../lib/toast';
 import { workspacesQuery } from '../lib/queries';
 import { useManagedRunnerId } from '../lib/managedRunner';
 import { FEISHU_GROUP_MODES, feishuChatsQuery, modeLabel, runnerName, type WorkspaceRow } from './FeishuConnectGroupPage';
+import { Tooltip } from '../components/ui/Tooltip';
 
 /** `GET /integrations/feishu` (docs/feishu-bot-design.md §4.1, §10): never the App Secret, only whether one is saved and readable. */
 export const feishuIntegrationQuery = () =>
@@ -67,9 +68,9 @@ export const FEISHU_SCOPE_PURPOSES: Readonly<Record<(typeof FEISHU_APP_SCOPES)[n
 
 /** §6.4: what the detail switch says, off (the default) and on. Feishu keeps whatever a card carries. */
 export const MESSAGE_DETAIL_HINT =
-  "Off by default: alerts carry only the session or project title, the kind of event and a tool's name. "
-  + "On, they also carry tool inputs, recaps, failure reasons, the agent's messages and questions, and owner item text, "
-  + "and all of it is stored on Feishu's servers.";
+  "On by default: alerts carry tool inputs, recaps, failure reasons, the agent's messages and questions, and owner item text, "
+  + "and all of it is stored on Feishu's servers. "
+  + "Off, they carry only the session or project title, the kind of event and a tool's name.";
 
 /** §7.2, decision 1: what the approvals switch says. "Always allow" stays in Orbit either way. */
 export const APPROVALS_IN_FEISHU_HINT =
@@ -378,9 +379,14 @@ function OwnerSection({ app }: { app: FeishuAppSettings }) {
               }
             />
           )}
-          <Button disabled={!owner} loading={test.isPending} title={owner ? undefined : 'Connect your Feishu account first'} onClick={() => test.mutate()}>
-            {SEND_TEST}
-          </Button>
+          {/* The span takes the pointer while the button is disabled, so the reason still shows. */}
+          <Tooltip content={owner ? undefined : 'Connect your Feishu account first'}>
+            <span style={{ display: 'inline-flex' }}>
+              <Button disabled={!owner} loading={test.isPending} onClick={() => test.mutate()}>
+                {SEND_TEST}
+              </Button>
+            </span>
+          </Tooltip>
           <Button variant={owner ? 'default' : 'primary'} loading={generate.isPending} onClick={() => generate.mutate()}>
             {owner ? (shown ? 'Generate another code' : 'Connect a different account') : shown ? 'Generate another code' : CONNECT_ACCOUNT}
           </Button>

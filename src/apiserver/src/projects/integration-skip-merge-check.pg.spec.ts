@@ -5,11 +5,11 @@ import { test } from 'node:test';
 import {
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import {
@@ -52,6 +52,7 @@ import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
 import '../test-support/dequeue-under-lease';
+import { settleDeliveredIdentityAfterFinish } from './project-integration-job';
 
 /**
  * `integration_skip_merge_check` (docs/project-integration-line-contract.md §2.4 J-S5): a project's
@@ -214,7 +215,7 @@ async function world(stack: Stack, label: string, automatic = true): Promise<Wor
         title: title!,
         prompt: title!,
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         titleManagedByProject: id === coordinatorSessionId,
         numTurns: 1,
@@ -312,7 +313,7 @@ async function doneTask(stack: Stack, w: World, label: string): Promise<Attempt>
       title,
       prompt: title,
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
@@ -340,6 +341,13 @@ async function doneTask(stack: Stack, w: World, label: string): Promise<Attempt>
   });
   const acceptance = await dequeue(stack, sessionId, w.runnerId);
   assert.equal(acceptance?.taskAcceptance, true, 'the acceptance command was queued for this task');
+  // W4 false on purpose (§12.3 condition 1): every case in this file is about the coordinator's and the
+  // owner's skip door to a failed landing, so its failure must go to the coordinator as before revision 42.
+  // A person ends the work session while its acceptance command runs; the command passes and writes DONE,
+  // but the session ended with `end_reason = 'ended'`, not with its task's DONE, so it is never handed the
+  // failure. Left to its DONE's own end (`task_done`), the failure would be the session's, the landing-fix
+  // turn would revive it, and J-T1e would hold every later generation until it finished again.
+  await stack.sessions.end(w.ownerId, sessionId);
   await stack.api.turnComplete({ id: w.runnerId }, sessionId, {
     turnId: acceptance!.turnId,
     status: SharedRunStatus.SUCCEEDED,
@@ -348,9 +356,20 @@ async function doneTask(stack: Stack, w: World, label: string): Promise<Attempt>
     shellOutput: '',
   });
   assert.equal(await taskStatus(stack.db, declared.id), TaskStatus.DONE, 'the acceptance command agreed');
-  await stack.db.session.update({
-    where: { id: sessionId },
-    data: { finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false },
+  assert.equal(
+    (await stack.db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { endReason: true } })).endReason,
+    'ended', 'CONTROL: the work session is one a person ended, which W4 does not hand a failure',
+  );
+  await stack.db.$transaction(async (tx) => {
+    // The finish settles the DONE's delivered identity in the transaction that writes it, as every
+    // finish door does — and decides the route a DONE written while this work moved left to it
+    // (§10.5 O-L4 3, §12.15 P-M1).
+    const finished = await tx.session.update({
+      where: { id: sessionId },
+      data: { turnState: null, finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false },
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
   });
   return { taskId: declared.id, title, sessionId, turnId, branch };
 }

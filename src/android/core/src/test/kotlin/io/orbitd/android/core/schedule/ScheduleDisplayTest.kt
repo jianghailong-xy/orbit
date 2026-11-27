@@ -13,6 +13,7 @@ import java.time.Instant
 import java.time.OffsetDateTime
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -50,6 +51,7 @@ class ScheduleDisplayTest {
                 is TimelineItem.Run -> item.schedule.title
                 is TimelineItem.Draft -> item.card.title ?: ""
                 is TimelineItem.Task -> item.task.title
+                is TimelineItem.Missed -> item.schedule.title
             }
         }
         "${g.title}|${g.subtitle ?: "nil"}|${items.joinToString(",")}"
@@ -408,5 +410,63 @@ class ScheduleDisplayTest {
             {"id":"o3","kind":"SOMETHING_ELSE","state":"PENDING","title":"t","why":"w","askedBySessionId":"s","createdAt":"2025-11-14T02:41:00.000Z"}]}"""))
         assertEquals(listOf("o1"), items.map { it.id })
         assertEquals("R1", items.first().scheduleRunId)
+    }
+
+    @Test fun everySentenceEndLineAndMissedRow() {
+        val workdays = listOf("MON", "TUE", "WED", "THU", "FRI")
+        val all = listOf("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
+        fun text(rule: ScheduleRule) = ScheduleDisplay.ruleText(rule)
+        assertEquals("Every 30 min, 09:00–18:00, Mon–Fri", text(ScheduleRule.Every(30, "09:00", workdays, "18:00")))
+        assertEquals("Every hour", text(ScheduleRule.Every(60, "00:00", all)))
+        assertEquals("Every 2 hours from 08:00, weekends", text(ScheduleRule.Every(120, "08:00", listOf("SAT", "SUN"))))
+        assertEquals("Every 6 hours, Mon, Thu", text(ScheduleRule.Every(360, "00:00", listOf("MON", "THU"))))
+        assertEquals(text(ScheduleRule.Every(30, "09:00", workdays)), ScheduleDisplay.ruleText(ScheduleRule.Every(30, "09:00", workdays), ScheduleDisplay.RuleForm.long))
+
+        val now = java.time.Instant.parse("2026-11-20T10:00:00Z")
+        val rule = ScheduleRule.Every(30, "09:00", workdays)
+        fun view(endAt: String? = null, maxRuns: Int? = null, runsLeft: Int? = null) =
+            ScheduleView("s", "Poll", rule = rule, timezone = "UTC", workspaceId = "w", endAt = endAt, maxRuns = maxRuns, runsLeft = runsLeft)
+        assertEquals("until 18:00 today", ScheduleDisplay.endText(view(endAt = "2026-11-20T18:00:00Z"), now, "UTC"))
+        assertEquals("until 09:00 tomorrow", ScheduleDisplay.endText(view(endAt = "2026-11-21T09:00:00Z"), now, "UTC"))
+        assertEquals("until Nov 25", ScheduleDisplay.endText(view(endAt = "2026-11-25T09:00:00Z"), now, "UTC"))
+        assertEquals("3 runs left", ScheduleDisplay.endText(view(maxRuns = 5, runsLeft = 3), now, "UTC"))
+        assertEquals("1 run left", ScheduleDisplay.endText(view(maxRuns = 5, runsLeft = 1), now, "UTC"))
+        assertEquals("until 18:00 today${ScheduleCopy.separator}1 run left",
+            ScheduleDisplay.endText(view(endAt = "2026-11-20T18:00:00Z", maxRuns = 2, runsLeft = 1), now, "UTC"))
+        assertNull(ScheduleDisplay.endText(view(), now, "UTC"))
+
+        fun missed(id: String, at: String) = ScheduleRunView(id, "s", plannedAt = at, state = "MISSED")
+        val runs = listOf(missed("r1", "2026-11-20T01:00:00Z"), missed("r2", "2026-11-20T01:30:00Z"), missed("r3", "2026-11-20T08:30:00Z"))
+        assertEquals("3 slots missed, 01:00–08:30", ScheduleDisplay.missedText(runs, "UTC"))
+        assertEquals("2 slots missed, Nov 19, 22:00–Nov 20, 06:30",
+            ScheduleDisplay.missedText(listOf(missed("x1", "2026-11-19T22:00:00Z"), missed("x2", "2026-11-20T06:30:00Z")), "UTC"))
+        val groups = ScheduleDisplay.timeline(listOf(view()), runs + missed("r4", "2026-11-20T09:00:00Z").copy(state = "CHANGED"),
+            showPastRuns = true, now = now, timezone = "UTC")
+        val items = groups.flatMap { it.items }
+        val collapsed = items.filterIsInstance<ScheduleDisplay.TimelineItem.Missed>().single()
+        assertEquals(3, collapsed.runs.size)
+        assertEquals(1, items.filterIsInstance<ScheduleDisplay.TimelineItem.Run>().size)
+    }
+
+    // Rename (§8.4)
+
+    @Test fun aRenameSavesTheTrimmedTitleAndNothingWhenEmptyOrUnchanged() {
+        assertEquals("New name", ScheduleDisplay.renameTitle("  New name \n", "Old name"))
+        assertNull(ScheduleDisplay.renameTitle("", "Old name"))
+        assertNull(ScheduleDisplay.renameTitle("   ", "Old name"))
+        assertNull(ScheduleDisplay.renameTitle("Old name", "Old name"))
+        assertNull(ScheduleDisplay.renameTitle(" Old name ", "Old name"))
+    }
+
+    @Test fun aPersonsRenameSaysWhatItWasCalled() {
+        fun record(changedBy: String, before: String?, after: String) = ScheduleChangeRecord("s", "t", revision = 2, changedBy = changedBy,
+            before = before?.let { Json.parseToJsonElement(it) as JsonObject }, after = Json.parseToJsonElement(after) as JsonObject)
+        val old = """{"title":"Codex check"}"""
+        val new = """{"title":"Codex stable check"}"""
+        assertEquals("Renamed from “Codex check”", ScheduleDisplay.renamedText(record("USER", old, new)))
+        assertNull(ScheduleDisplay.renamedText(record("SESSION", old, new)))
+        assertNull(ScheduleDisplay.renamedText(record("RUN", old, new)))
+        assertNull(ScheduleDisplay.renamedText(record("USER", null, new)))
+        assertNull(ScheduleDisplay.renamedText(record("USER", old, """{"title":"Codex stable check","note":"n"}""")))
     }
 }

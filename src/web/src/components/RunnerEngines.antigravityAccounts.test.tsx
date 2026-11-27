@@ -87,7 +87,7 @@ const envKey = (accounts: RunnerEngineAccount[]): RunnerEngineHealth =>
     },
   });
 
-const LOGIN_CAPABILITIES = ['antigravity-google-login/v1', 'antigravity-account-login/v1', 'antigravity-account-remove/v1'];
+const LOGIN_CAPABILITIES = ['antigravity-google-login/v1', 'antigravity-account-login/v1', 'antigravity-account-remove/v1', 'antigravity-default-sign-out/v1'];
 
 const runner = (engine: RunnerEngineHealth = antigravity(), over: Partial<Runner> = {}): Runner => ({
   id: RUNNER_ID,
@@ -261,11 +261,12 @@ describe('two Google accounts on one runner', () => {
     expect(tags(workRow)).toEqual(['Signed out']);
     expect(workRow.querySelector('.re-quota')?.textContent).toBe('Sign in to see quota');
     await click(button(workRow, 'Sign in'));
-    expect(workRow.querySelector('.rsi')?.textContent).toContain('Google terms');
+    // The terms stay in view above the panel, on the engine's row, while its sign-in starts.
+    expect(engineRow(page).querySelector('.re-login-note')?.textContent).toContain('Google terms');
     const popup = { document: { write: vi.fn(), close: vi.fn() }, location: { replace: vi.fn() }, close: vi.fn() };
     const open = vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window);
-    await click(button(workRow, 'Sign in with Google'));
-    expect(loginPosts()).toEqual([{ engine: 'antigravity', account: WORK.id }]);
+    // The row's press starts it: there is no second button to press.
+    await vi.waitFor(() => expect(loginPosts()).toEqual([{ engine: 'antigravity', account: WORK.id }]));
     open.mockRestore();
   });
 
@@ -275,7 +276,8 @@ describe('two Google accounts on one runner', () => {
     expect(buttons(defaultRow)).toEqual(['More actions']);
     const items = async (row: HTMLElement) =>
       all(await openRunnerMenu(row), '[role="menuitem"]').map((item) => item.textContent?.trim());
-    expect(await items(defaultRow)).toEqual(['Rename', 'Re-sign in', 'Pause account…', 'Remove account']);
+    // Sign out… is Default's alone: an added account's login goes with the account.
+    expect(await items(defaultRow)).toEqual(['Rename', 'Re-sign in', 'Pause account…', 'Sign out…', 'Remove account']);
     expect(await items(workRow)).toEqual(['Rename', 'Re-sign in', 'Pause account…', 'Remove account']);
 
     await clickRunnerMenuItem(workRow, 'Remove account');
@@ -321,7 +323,7 @@ describe('one Google account', () => {
     [
       'a macOS runner',
       { antigravity: { supported: true, installed: true, version: '1.3.0', envKeyAvailable: true, authSource: 'google', googleLogin: 'unsupported_platform' } },
-      'Google sign-in is not supported on macOS runners yet. Use a Gemini API key.',
+      "Google sign-in is not supported on this runner's operating system. Use a Gemini API key.",
     ],
     [
       'an older runner',

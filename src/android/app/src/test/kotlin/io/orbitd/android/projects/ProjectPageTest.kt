@@ -323,6 +323,27 @@ class ProjectPageTest {
         put("integratingCount", 1); put("queuedCount", 0); put("inFlight", job); put("inFlightJobs", JsonArray(listOf(job)))
     }
 
+    /** 2026-11-19: a merge waiting for its runner's local lock read "fetching · no output for 78m". It is waiting, behind the job
+     * the server names, on the wait's own clock (web and iOS: the same case). */
+    @Test fun aJobWaitingForTheRunnersLocalLockSaysSoAndNamesTheHolder() {
+        val holder = "Waiting for runner workstation-gpu’s repository lock: the merge check of project “Wiki” holds it"
+        fun waiting(liveness: String, heartbeat: Long = 0) = buildJsonObject {
+            v6Job(liveness, kind = "LAND_PROMOTION", title = null, phase = "FETCH", checkCount = null,
+                stepStarted = 78 * 60, outputMoved = 78 * 60, heartbeat = heartbeat).forEach { (k, v) -> put(k, v) }
+            put("runner", "workstation-gpu"); put("runnerName", "workstation-gpu")
+            put("blockingReason", Json.parseToJsonElement("""{"code":"WAITING_LOCAL_LOCK","summary":"$holder","jobId":"j-holder"}"""))
+        }
+        val line = ProjectPage.landingLine(v6View(waiting("QUIET")), now, now, false)!!
+        assertEquals(ProjectPage.landingWaiting, line.state)
+        assertEquals(LandingHead("78m 0s", true, "waiting · $holder · claim 1 · round 1"), line.head)
+        val job = ProjectPage.landingJobLines(v6View(waiting("QUIET")), now, now, false).single()
+        assertEquals("waiting", job.line.state)
+        assertEquals("waiting · $holder · claim 1 · round 1", job.line.head.detail)
+        // A runner gone silent is the runner's fact, not the lock's.
+        val silent = ProjectPage.landingLine(v6View(waiting("SILENT", heartbeat = 9 * 60)), now, now, false)!!
+        assertEquals("fetching · no word from runner workstation-gpu for 9m · claim 1 · round 1", silent.head.detail)
+    }
+
     @Test fun theHeadDrawsTheStepClockAgainstItsBudgetAndTheServersLiveness() {
         // LIVE and QUIET: the local clock runs; the step's own clock against its budget is the main number.
         val live = ProjectPage.landingLine(v6View(v6Job("LIVE")), now, now, false)!!
@@ -719,8 +740,16 @@ class ProjectPageTest {
         assertEquals("project/34Wvw…", RunSettings.shortBranch("refs/heads/project/$project"))
         assertEquals("release/next", RunSettings.shortBranch("refs/heads/release/next"))
         assertEquals("project/short", RunSettings.shortBranch("project/short"))
-        assertEquals("project/$project", StartProjectCopy.branch(null, project))
-        assertEquals("project/34Wzv", StartProjectCopy.branch("refs/heads/project/34Wzv", project))
+        assertEquals("project/$project", StartProjectCopy.branch(null, null, project))
+        assertEquals("project/34Wzv", StartProjectCopy.branch("refs/heads/project/34Wzv", null, project))
+        assertEquals("project/foo-352xNyEH", StartProjectCopy.branch(null, "refs/heads/project/foo-352xNyEH", project))
+        assertEquals("project/mine", StartProjectCopy.branch("refs/heads/project/mine", "refs/heads/project/foo-352xNyEH", project))
+        assertEquals("project/foo-352xNyEH", RunSettings.shortBranch("project/foo-352xNyEH"))
+        assertEquals("project/foo-352xNyEH", RunSettings.shortBranch("refs/heads/project/foo-352xNyEH"))
+        assertEquals("project/352xNyEH", RunSettings.shortBranch("project/352xNyEH"))
+        assertEquals("project/352xNyEHabcdefghijkl…".replace("352xNyEHabcdefghijkl", "352xN"), RunSettings.shortBranch("project/352xNyEHabcdefghijkl"))
+        assertEquals("project/34Wvw…", RunSettings.shortBranch("project/$project"))
+        assertEquals("project/ab\ncdefghijklmnopqrstuvw", RunSettings.shortBranch("project/ab\ncdefghijklmnopqrstuvw"))
         assertEquals(RunSettings.automaticHintProjectBranch, RunSettings.automaticHint("PROJECT_BRANCH"))
         assertEquals(RunSettings.automaticHintMain, RunSettings.automaticHint("MAIN"))
         assertTrue(RunSettings.mergeCheckMissing("PROJECT_BRANCH", true, "   "))

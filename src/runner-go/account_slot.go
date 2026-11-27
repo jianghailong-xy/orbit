@@ -94,6 +94,9 @@ type accountDirSessions map[string][]string
 type accountInUseError struct {
 	engine, id string
 	Sessions   []string
+	// signOut words the refusal for a Default sign-out (signOutDefault), which the person can
+	// confirm and send again with force.
+	signOut bool
 }
 
 // Error says first how to keep the sessions, then what else frees the account. A session between
@@ -106,6 +109,13 @@ func (e *accountInUseError) Error() string {
 	who, keep, move, end := "a session", "to keep the session", "switch it to another account", "end it"
 	if !one {
 		who, keep, move, end = fmt.Sprintf("%d sessions", len(e.Sessions)), "to keep them", "switch each to another account", "end them"
+	}
+	if e.signOut {
+		fail := "it fails on its next turn"
+		if !one {
+			fail = "they fail on their next turn"
+		}
+		return fmt.Sprintf("%s account %s is in use by %s on this machine — sign out anyway and %s", e.engine, e.id, who, fail)
 	}
 	if e.engine == providerCursor {
 		return fmt.Sprintf("%s account %s is in use by %s on this machine — %s, then remove the account", e.engine, e.id, who, end)

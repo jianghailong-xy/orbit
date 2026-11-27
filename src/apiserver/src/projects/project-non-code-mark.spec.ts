@@ -10,6 +10,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PublicIdInterceptor } from '../common/public-id.interceptor';
 import { PrismaService } from '../prisma/prisma.service';
 import { RunnerProjectsController } from '../runner-api/runner-projects.controller';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { derivedDoneFromLanes } from './project-done-derived';
 import { ProjectFuseService } from './project-fuse.service';
@@ -23,9 +24,12 @@ import { TaskCheckpointService } from './task-checkpoint.service';
 /**
  * A project is non-code only by an explicit mark (owner decision 2026-11-11), set or cleared by the
  * account owner (PATCH /projects/:id) or by the conversation the project is coordinated from
- * (project_update → PATCH /runner/projects/:id), and each write records who and when. A marked
- * project reads no landing: its done check finds nothing unlanded, and recording it done stores no
- * landing gaps. Clearing the mark brings them back — as NO_BRANCH for work that ran without one.
+ * (project_update → PATCH /runner/projects/:id), and each write records who and when.
+ *
+ * Since revision 42 (§12.15 P-M3) the mark is still accepted, stored and returned, but nothing reads
+ * it: landing follows from the commits a project's tasks delivered. Work that ran no branch and
+ * reported nothing has nothing to land, marked or not; work that reported changes it cannot place
+ * reads NO_BRANCH, marked or not.
  *
  * The services are the real ones; only the database underneath them is a double, holding one
  * project row the writes land on and the reads read back.
@@ -219,10 +223,14 @@ test('the coordinator sets and clears the mark through project_update’s runner
 
 /**
  * The done side's database: one met criterion served by one DONE task whose work ran in shared
- * isolation — no branch, no landing job, no receipt (the CBAI shape) — and the mark as `marked`
- * says. `written` collects what Record as done stores.
+ * isolation — no branch, no landing job, no receipt (the CBAI shape) — `changedFiles` as `reported`
+ * says, and the mark as `marked` says. `written` collects what Record as done stores.
  */
-function doneDouble(marked: { nonCode: boolean }, written: Array<Record<string, unknown>>) {
+function doneDouble(
+  marked: { nonCode: boolean },
+  written: Array<Record<string, unknown>>,
+  reported: string[] | null = null,
+) {
   const definition = {
     id: DEFINITION_ID,
     ordinal: 1,
@@ -245,7 +253,7 @@ function doneDouble(marked: { nonCode: boolean }, written: Array<Record<string, 
       completionEvidence: [],
       codeless: false,
       mergeReceipts: [],
-      sessions: [{ isolationStatus: 'shared', branch: null, workspace: null }],
+      sessions: [{ isolationStatus: 'shared', branch: null, changedFiles: reported, workspace: null }],
       project: { codebases: [] },
     }],
   };
@@ -271,7 +279,11 @@ function doneDouble(marked: { nonCode: boolean }, written: Array<Record<string, 
     },
     session: { findMany: async () => [] },
     projectOpenItem: { findMany: async () => [], updateMany: async () => ({ count: 0 }) },
-    $queryRaw: async () => [{ status: 'OPEN', non_code: marked.nonCode }],
+    // The project row lock answers its row; the deferred-landing read (FROM "task") finds no work
+    // still moving, as Postgres would here.
+    $queryRaw: async (...args: unknown[]) => (renderRawQuery(args).text.includes('FROM "task"')
+      ? []
+      : [{ status: 'OPEN', non_code: marked.nonCode }]),
   };
   return {
     ...client,
@@ -279,57 +291,64 @@ function doneDouble(marked: { nonCode: boolean }, written: Array<Record<string, 
   };
 }
 
-test('a marked project’s done check finds nothing unlanded and Record as done stores no landing gap; clearing the mark brings NO_BRANCH back', async () => {
-  const marked = { nonCode: true };
+test('work that ran no branch and reported nothing has nothing to land, marked or not: the mark is not read', async () => {
+  const marked = { nonCode: false };
   const written: Array<Record<string, unknown>> = [];
   const acceptance = new ProjectAcceptanceService(doneDouble(marked, written) as never);
 
-  // Marked: the criterion is met, carries no landing reason, and nothing is found unlanded.
-  const check = await acceptance.readProjectDoneCheck(OWNER_ID, PROJECT_ID);
-  assert.equal(check.nonCode, true);
-  assert.equal(check.criteria[0].satisfied, true, 'whether the criterion is met is unchanged');
-  assert.equal(check.criteria[0].reason, null);
-  assert.deepEqual(check.criteria[0].heldOffLanded, []);
-  assert.deepEqual(check.findings.filter((finding) => finding.code === 'DONE_CRITERION_UNLANDED'), []);
-  assert.deepEqual(check.findings, [], 'and nothing else stands in the way of this one');
-
-  const done = await acceptance.recordProjectDone(OWNER_ID, PROJECT_ID, {
-    criteriaDigest: check.criteriaDigest,
-    // A card read before the mark was set may still send the landing gap it showed then.
-    acceptedGaps: [{
-      criterionKey: check.criteria[0].stated.key,
-      title: 'ran without a branch',
-      finding: { code: 'DONE_CRITERION_UNLANDED' } as never,
-    }],
-  });
-  assert.deepEqual(done.acceptedGaps, [], 'a marked project stores no landing gap');
-  assert.deepEqual(written.at(-1)?.acceptedGaps, []);
-  assert.equal(written.at(-1)?.status, 'DONE');
-
-  // Cleared: the same work is reported unlanded again — NO_BRANCH, the honest reason for it.
-  marked.nonCode = false;
   const unmarked = await acceptance.readProjectDoneCheck(OWNER_ID, PROJECT_ID);
   assert.equal(unmarked.nonCode, false);
-  assert.equal(unmarked.criteria[0].reason, 'NO_BRANCH');
-  assert.deepEqual(
-    unmarked.findings.map((finding) => `${finding.code} ${finding.reason}`),
-    ['DONE_CRITERION_UNLANDED NO_BRANCH'],
-  );
-  assert.notEqual(unmarked.stateDigest, check.stateDigest, 'the mark is part of what a request was made about');
+  assert.equal(unmarked.criteria[0].satisfied, true);
+  assert.equal(unmarked.criteria[0].landing, 'LANDED', 'no commit was delivered, so there is nothing to land');
+  assert.equal(unmarked.criteria[0].reason, null);
+  assert.deepEqual(unmarked.criteria[0].heldOffLanded, []);
+  assert.deepEqual(unmarked.findings, []);
 
-  const recorded = await acceptance.recordProjectDone(OWNER_ID, PROJECT_ID, {
-    criteriaDigest: unmarked.criteriaDigest,
-    acceptedGaps: [],
+  marked.nonCode = true;
+  const check = await acceptance.readProjectDoneCheck(OWNER_ID, PROJECT_ID);
+  assert.equal(check.nonCode, false, 'the field is kept for clients and always reads false');
+  assert.deepEqual(check.criteria, unmarked.criteria);
+  assert.deepEqual(check.findings, []);
+  assert.equal(check.stateDigest, unmarked.stateDigest, 'the mark is no part of what a request is made about');
+
+  // The gaps the owner accepted are stored as given: the mark filters nothing out.
+  const gap = {
+    criterionKey: check.criteria[0].stated.key,
+    title: 'ran without a branch',
+    finding: { code: 'DONE_CRITERION_UNLANDED' } as never,
+  };
+  const done = await acceptance.recordProjectDone(OWNER_ID, PROJECT_ID, {
+    criteriaDigest: check.criteriaDigest,
+    acceptedGaps: [gap],
   });
-  assert.deepEqual(
-    recorded.acceptedGaps.map((gap) => (gap.finding as { code: string; reason: string }).code
-      + ' ' + (gap.finding as { reason: string }).reason),
-    ['DONE_CRITERION_UNLANDED NO_BRANCH'],
-    'an unmarked project records its landing gap as before',
-  );
+  assert.equal(done.acceptedGaps.length, 1);
+  assert.equal(written.at(-1)?.status, 'DONE');
 });
 
-test('derivedDone: a marked project is not withheld for landing, carries no landing reason and no landing tally', () => {
+test('branchless work that reported changes reads NO_BRANCH whether or not the project is marked', async () => {
+  for (const nonCode of [false, true]) {
+    const written: Array<Record<string, unknown>> = [];
+    const acceptance = new ProjectAcceptanceService(doneDouble({ nonCode }, written, ['filing.pdf']) as never);
+    const check = await acceptance.readProjectDoneCheck(OWNER_ID, PROJECT_ID);
+    assert.equal(check.nonCode, false);
+    assert.equal(check.criteria[0].reason, 'NO_BRANCH', `marked: ${nonCode}`);
+    assert.deepEqual(
+      check.findings.map((finding) => `${finding.code} ${finding.reason}`),
+      ['DONE_CRITERION_UNLANDED NO_BRANCH'],
+    );
+    const recorded = await acceptance.recordProjectDone(OWNER_ID, PROJECT_ID, {
+      criteriaDigest: check.criteriaDigest,
+      acceptedGaps: [],
+    });
+    assert.deepEqual(
+      recorded.acceptedGaps.map((gap) => (gap.finding as { code: string; reason: string }).code
+        + ' ' + (gap.finding as { reason: string }).reason),
+      ['DONE_CRITERION_UNLANDED NO_BRANCH'],
+    );
+  }
+});
+
+test('derivedDone reads landing alone: an unlanded criterion is withheld, and nonCode is always false', () => {
   const satisfaction = [
     { definitionId: 'met', satisfied: true },
     { definitionId: 'unmet', satisfied: false },
@@ -339,27 +358,14 @@ test('derivedDone: a marked project is not withheld for landing, carries no land
     { definitionId: 'unmet', landing: 'UNKNOWN', landingReason: 'NO_RECEIPT' },
   ] as never;
 
-  const unmarked = derivedDoneFromLanes(satisfaction, landing, [], 'CONFIRMED');
-  assert.equal(unmarked.nonCode, false);
-  assert.deepEqual(unmarked.withheld, ['CRITERION_UNSATISFIED', 'CRITERION_UNLANDED']);
-  assert.deepEqual(unmarked.criteria.map((c) => c.landingReason), ['NO_BRANCH', 'NO_RECEIPT']);
-  assert.equal(unmarked.counts.byReason.NO_BRANCH, 1);
+  const derived = derivedDoneFromLanes(satisfaction, landing, [], 'CONFIRMED');
+  assert.equal(derived.nonCode, false);
+  assert.deepEqual(derived.withheld, ['CRITERION_UNSATISFIED', 'CRITERION_UNLANDED']);
+  assert.deepEqual(derived.criteria.map((c) => c.landingReason), ['NO_BRANCH', 'NO_RECEIPT']);
+  assert.equal(derived.counts.byReason.NO_BRANCH, 1);
 
-  const marked = derivedDoneFromLanes(satisfaction, landing, [], 'CONFIRMED', true);
-  assert.equal(marked.nonCode, true);
-  assert.deepEqual(marked.withheld, ['CRITERION_UNSATISFIED'], 'only what is not met holds it');
-  assert.deepEqual(marked.criteria.map((c) => c.withheld), [[], ['CRITERION_UNSATISFIED']]);
-  assert.deepEqual(marked.criteria.map((c) => c.landingReason), [null, null]);
-  assert.deepEqual(marked.criteria.map((c) => c.satisfied), [true, false], 'satisfaction is unchanged');
-  assert.equal(marked.counts.criteria, 2);
-  assert.equal(marked.counts.met, 1);
-  assert.equal(marked.counts.landed, 0);
-  assert.equal(marked.counts.onMain, 0);
-  assert.ok(Object.values(marked.counts.byReason).every((n) => n === 0));
-
-  // With every criterion met, the marked project derives DONE where the unmarked one would not.
   const allMet = [{ definitionId: 'met', satisfied: true }] as never;
-  const oneLanding = [{ definitionId: 'met', landing: 'UNKNOWN', landingReason: 'NO_BRANCH' }] as never;
-  assert.equal(derivedDoneFromLanes(allMet, oneLanding, [], 'CONFIRMED', true).done, true);
-  assert.equal(derivedDoneFromLanes(allMet, oneLanding, [], 'CONFIRMED').done, false);
+  const nothingToLand = [{ definitionId: 'met', landing: 'LANDED', landingReason: 'NOTHING_TO_LAND' }] as never;
+  assert.equal(derivedDoneFromLanes(allMet, nothingToLand, [], 'CONFIRMED').done, true,
+    'a criterion whose work delivered no commit is LANDED, and holds nothing back');
 });

@@ -15,7 +15,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { AgentProvider } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -30,6 +31,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { ANTIGRAVITY_RUNNER_UPGRADE_ERROR, PROVIDER_UNAVAILABLE_ERROR } from '../runner-api/runner-provider-support';
 import { QueueService } from './queue.service';
+import { withWord, WORD_SELECT } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 // The spec encrypts the row's key and the claim decrypts it; both only need the same secret.
@@ -105,7 +107,7 @@ suite('a Gemini key at claim time, on real PostgreSQL', async (t) => {
       data: {
         title: 'gemini',
         prompt: 'hello',
-        status: RunStatus.PENDING,
+        turnState: 'QUEUED',
         ownerId,
         creatorId: ownerId,
         workspaceId,
@@ -118,8 +120,8 @@ suite('a Gemini key at claim time, on real PostgreSQL', async (t) => {
     });
     return session.id;
   }
-  const row = (id: string) =>
-    db.session.findUniqueOrThrow({ where: { id }, select: { status: true, error: true } });
+  const row = async (id: string) =>
+    withWord(await db.session.findUniqueOrThrow({ where: { id }, select: { ...WORD_SELECT, error: true } }));
   /** The runner's claim, as the controller answers it. */
   const claimed = (providerHeader: string) => runnerApi.claim(runner, providerHeader);
 

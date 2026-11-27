@@ -47,7 +47,8 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, type Runner } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin, type Runner } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -71,6 +72,7 @@ import {
   type OwnerRequestState,
 } from './owner-request';
 import { readOwnerDecisionsBySession, sessionWaitingKind } from '../projects/owner-decision-signal';
+import { ownerRequestRowWord } from '@orbit/shared';
 import { OwnerRequestsController } from './owner-requests.controller';
 import { WikiRefusalError, WikiService } from '../wiki/wiki.service';
 import { wikiSpaceSettings } from '@orbit/shared';
@@ -446,7 +448,7 @@ test('owner requests: WIKI_CREATE asks the owner for a wiki, and only the owner 
     await db.session.create({
       data: {
         id: sessionId, ownerId: a.ownerId, creatorId: a.ownerId, workspaceId, assignedRunnerId: a.runner.id,
-        title: label, prompt: label, provider: 'claude', status: RunStatus.RUNNING,
+        title: label, prompt: label, provider: 'claude', turnState: 'IN_FLIGHT',
         dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(),
       },
     });
@@ -594,12 +596,20 @@ test('owner requests: a pending request lights the session that filed it', {
 
   const prisma = db as unknown as PrismaService;
   const redrawn: string[] = [];
-  const realtime = { publishSessionUpdated: (id: string) => { redrawn.push(id); } } as unknown as RealtimeService;
+  const realtime = {
+    publishOwnerSignalChanged: (_owner: string, ids: Iterable<string>) => { redrawn.push(...ids); },
+    publishSessionCreated: () => undefined,
+  } as unknown as RealtimeService;
   const service = new OwnerRequestsService(prisma, new OwnerSecretsService(prisma), undefined, undefined, realtime);
   const a = await account(db, 'needs-you');
   const lit = async () => {
     const folded = await readOwnerDecisionsBySession(db, a.ownerId);
     return [...folded].map(([sessionId, d]) => ({ sessionId, count: d.count, kind: sessionWaitingKind(0, d) }));
+  };
+  // The row's word is the request kind's own (`OWNER_REQUEST_ROW_WORDS`), never "Waiting on you".
+  const word = async (sessionId: string) => {
+    const d = (await readOwnerDecisionsBySession(db, a.ownerId)).get(sessionId);
+    return ownerRequestRowWord({ waitingKind: d ? sessionWaitingKind(0, d) : null, ownerRequests: d?.ownerRequests });
   };
 
   // The paired negative: nothing filed, nothing lit.
@@ -609,6 +619,7 @@ test('owner requests: a pending request lights the session that filed it', {
   const first = await service.file(a.ownerId, a.workerSessionId, steps);
   assert.deepEqual(redrawn, [a.workerSessionId]);
   assert.deepEqual(await lit(), [{ sessionId: a.workerSessionId, count: 1, kind: 'OWNER_REQUEST' }]);
+  assert.equal(await word(a.workerSessionId), 'Steps for you');
 
   const second = await service.file(a.ownerId, a.workerSessionId, { ...steps, title: 'And another' });
   assert.deepEqual(await lit(), [{ sessionId: a.workerSessionId, count: 2, kind: 'OWNER_REQUEST' }]);
@@ -660,7 +671,7 @@ async function account(db: PrismaClient, label: string): Promise<Account> {
         title,
         prompt: title,
         provider: 'claude',
-        status: RunStatus.RUNNING,
+        turnState: 'IN_FLIGHT',
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
       },

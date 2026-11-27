@@ -6,6 +6,7 @@ import { type INestApplication, Module } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { type PrismaClient, Prisma, ProjectStatus } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import { ControlEventType, type SessionProjectMembership, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 import { filter, firstValueFrom, timeout } from 'rxjs';
@@ -23,6 +24,8 @@ import { MergeReceiptService } from './merge-receipt.service';
 import { sessionInProjectSql, sessionProjectMembershipSql } from './session-project-membership';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
+import type { SessionFixture } from '../test-support/session-word';
+import { turnStateOfWord } from './session-turn-state';
 
 /**
  * The membership contract in docs/session-list-projects-design.md §2/§3.1/§3.2, against the migrated
@@ -144,11 +147,15 @@ async function world(label: string): Promise<World> {
   return { h, ownerId, bearer, project };
 }
 
-async function session(w: World, fields: Partial<Prisma.SessionUncheckedCreateInput> = {}): Promise<string> {
+async function session(w: World, fields: SessionFixture = {}): Promise<string> {
+  const { status: fixtureStatus = 'AWAITING_INPUT', ...fieldsFacts } = fields;
   const row = await w.h.db.session.create({
     data: {
       ownerId: w.ownerId, creatorId: w.ownerId, title: 'membership session', prompt: 'p',
-      status: 'AWAITING_INPUT', dispatchOrigin: 'USER', ...fields,
+      turnState: turnStateOfWord(fixtureStatus), dispatchOrigin: 'USER', ...fieldsFacts,
+      ...(isReleasedStatus(fixtureStatus) ? {
+        finishedAt: fields.finishedAt ?? new Date(),
+      } : {}),
     },
   });
   return row.id;
@@ -532,7 +539,7 @@ test('a LANDING member is in no workspace tally', { skip }, async () => {
   // in an ordinary session is its row, and LS6 says a landing is in no workspace tally at all.
   await w.h.db.session.update({
     where: { id: sessionId },
-    data: { workspaceId: workspace.id, engineTurnActive: true, status: 'AWAITING_INPUT' },
+    data: { workspaceId: workspace.id, engineTurnActive: true, turnState: null },
   });
   const counts = await w.h.sessions.workspaceSessionCounts(w.ownerId);
   const row = counts.find((entry) => entry.workspaceId === workspace.id);
@@ -542,6 +549,27 @@ test('a LANDING member is in no workspace tally', { skip }, async () => {
   const withConversation = await w.h.sessions.workspaceSessionCounts(w.ownerId);
   const counted = withConversation.find((entry) => entry.workspaceId === workspace.id);
   assert.equal(counted?.running, 1, `the ordinary session was not counted: ${JSON.stringify(counted)}`);
+});
+
+test('a failed project member counts in its workspace tally only where the list shows it as a row', { skip }, async () => {
+  const w = await world('failed-member-counts');
+  const here = await w.h.db.workspace.create({ data: { ownerId: w.ownerId, name: 'failed member workspace' } });
+  const elsewhere = await w.h.db.workspace.create({ data: { ownerId: w.ownerId, name: 'coordinator elsewhere' } });
+  const failed = { workspaceId: here.id, status: 'FAILED' as const, lastTurnOutcome: 'FAILED', retryAt: null };
+  const needsYou = async () =>
+    (await w.h.sessions.workspaceSessionCounts(w.ownerId)).find((entry) => entry.workspaceId === here.id)?.needsYou ?? 0;
+  // A failed task run, its project's coordinator in the same workspace: folded into the project's row,
+  // which a failure does not light, so it is no Needs you row and the tally leaves it out.
+  const coordinator = await session(w, { workspaceId: here.id });
+  await w.h.db.project.update({ where: { id: w.project.id }, data: { coordinatorSessionId: coordinator } });
+  await session(w, { ...failed, taskId: await task(w) });
+  assert.equal(await needsYou(), 0, 'a failed member folded into its project row was counted');
+  // The same member with its coordinator in another workspace is a row of its own here, and counts.
+  await w.h.db.session.update({ where: { id: coordinator }, data: { workspaceId: elsewhere.id } });
+  assert.equal(await needsYou(), 1, 'a failed member listed as its own row was not counted');
+  // And a failed session in no project counts beside it, as it always did.
+  await session(w, failed);
+  assert.equal(await needsYou(), 2);
 });
 
 for (const lowerRole of ['TASK', 'CONTEXT', 'JUDGMENT'] as const) {

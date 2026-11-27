@@ -329,9 +329,6 @@ TimeoutStopSec=180
 # runner's cgroup — must not stop the runner. systemd's default, stop, would drain and tear down
 # every running turn, and the restart would install a deferred release past the turn gate.
 OOMPolicy=continue
-# The runner limits the CPU and memory of background jobs with a cgroup each, below its own
-# (bg_cgroup_linux.go); a stop still ends everything in the unit, those cgroups included.
-Delegate=yes
 Environment=HOME=%s
 Environment=ORBIT_HOME=%s
 Environment=PATH=%s

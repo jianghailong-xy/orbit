@@ -10,6 +10,8 @@ class LandingCheckTest {
         val root = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
             .firstOrNull { File(it, "src/web/src/lib/landingCheck.ts").isFile } ?: error("Missing web copy")
         val web = File(root, "src/web/src/lib/landingCheck.ts").readText()
+        // Web's landingCheck.ts holds five copy objects. This module's own is LANDING_CHECK_COPY; the other four are revision 42 part
+        // two's words, which the app module declares once (`LandingMeasuredCopy`) and LandingMeasuredCopyParityTest holds whole.
         val pairs = mapOf(
             "LABEL" to LandingCheckCopy.label,
             "CONFIRM_TITLE" to LandingCheckCopy.confirmTitle,
@@ -33,9 +35,14 @@ class LandingCheckTest {
             "BASELINE" to LandingCheckCopy.baseline,
             "VIEW_HELD" to LandingCheckCopy.viewHeld
         )
-        val keys = Regex("(?m)^  ([A-Z_]+): '([^']*)',").findAll(web).map { it.groupValues[1] }.toSet()
-        assertEquals("A missing counterpart must fail", keys, pairs.keys)
-        pairs.forEach { (key, value) -> assertTrue(key, web.contains("$key: '$value'")) }
+        val block = Regex("""export const LANDING_CHECK_COPY = \{\n(.*?)\n\} as const;""", RegexOption.DOT_MATCHES_ALL)
+        val body = block.find(web)?.groupValues?.get(1) ?: error("landingCheck.ts no longer declares LANDING_CHECK_COPY")
+        val entries = Regex("""(?m)^  ([A-Z_]+): '([^']*)',""").findAll(body).toList()
+        assertEquals("A missing counterpart or duplicate must fail", pairs.keys.sorted(), entries.map { it.groupValues[1] }.sorted())
+        entries.forEach { match ->
+            val (key, value) = match.destructured
+            assertEquals("LANDING_CHECK_COPY.$key", value, pairs[key])
+        }
         assertEquals("Uses merge check: make all", LandingCheckCopy.inheritedCommand("make all"))
         assertEquals("Uses merge check timeout: 900 seconds", LandingCheckCopy.inheritedTimeout(900))
     }

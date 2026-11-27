@@ -54,7 +54,7 @@ test('F1 dsh usage is unknown in the routing report and attempt budget', {
   async function run(subject: Task, seconds: number, data: Partial<Prisma.SessionUncheckedCreateInput>) {
     const session = await db.session.create({ data: {
       ownerId: owner, creatorId: owner, title: 'dsh usage run', prompt: 'run', taskId: subject.id, workspaceId: agent.id,
-      startsTaskWork: true, provider: 'claude', model: 'm', effort: 'low', status: 'SUCCEEDED', numTurns: 2,
+      startsTaskWork: true, provider: 'claude', model: 'm', effort: 'low', turnState: null, numTurns: 2,
       createdAt: at(seconds), finishedAt: at(seconds + 10), ...data,
     } });
     await db.taskRouteDecision.create({ data: {

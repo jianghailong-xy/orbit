@@ -6,11 +6,11 @@ import { HttpException } from '@nestjs/common';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { uuidToBase62 } from '@orbit/shared';
@@ -48,6 +48,7 @@ import { TaskCompletionEvidenceService } from './task-completion-evidence.servic
 import { CRITERION_MOVED_CODE, TASK_IN_ANOTHER_PROJECT_CODE } from './task-evidence-decision';
 import { TasksService } from './tasks.service';
 import { standardDigest, undecidableEvidenceTurnId } from './undecidable-evidence';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * A CONFIRMED MOVE HANDS THE EVIDENCE NOBODY HAS DECIDED TO THE PROJECT THE TASK MOVED INTO.
@@ -195,7 +196,10 @@ async function conversation(
       title,
       prompt: title,
       provider: 'claude',
-      status: options.status ?? RunStatus.AWAITING_INPUT,
+      turnState: turnStateOfWord(options.status ?? RunStatus.AWAITING_INPUT),
+      ...(['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(options.status ?? RunStatus.AWAITING_INPUT)
+        ? { finishedAt: new Date()}
+        : {}),
       dispatchOrigin: SessionDispatchOrigin.USER,
       ...(options.taskId === undefined ? { titleManagedByProject: true } : {}),
       ...(options.ended ? { completedAt: new Date() } : {}),

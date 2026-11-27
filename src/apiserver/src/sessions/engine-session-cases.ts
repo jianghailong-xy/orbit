@@ -111,6 +111,11 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
     snippet: '// Stopping a turn — or stopping one and replacing it — is an engine door (§2.9 LS6).',
     note: 'POST /interrupt and the runner interruption door',
   },
+  'SessionsService.stopBackgroundJob': {
+    file: 'sessions/sessions.service.ts',
+    snippet: "// Stopping a job is an engine door (§2.9 LS6): the platform's landing container runs no bg_run job.\n    assertEngineSessionRow(session);",
+    note: 'POST /background/jobs/:jobId/stop',
+  },
   'SessionsService.getSendable': {
     file: 'sessions/sessions.service.ts',
     snippet: '// A LANDING row is never sendable: the composer, End and the queued-turn doors all reach this',
@@ -182,6 +187,11 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
     snippet: "assertEngineSessionRow(session);\n      if (session.isolationStatus !== 'worktree') {",
     note: 'POST /adopt-branch',
   },
+  'SessionsService.dismissMergeFailure': {
+    file: 'sessions/sessions.service.ts',
+    snippet: "assertEngineSessionRow(session);\n    const { count } =",
+    note: 'POST /merge-failure/dismiss',
+  },
   'SessionsService.decideApproval': {
     file: 'sessions/sessions.service.ts',
     snippet: '// Answering a tool-permission card is an engine door (§2.9 LS6).',
@@ -229,6 +239,12 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
       'async pin(ownerId: string, id: string) {\n    assertEngineSessionRow(await this.get(ownerId, id)); // ownership check (404s otherwise)',
     note: 'POST /pin',
   },
+  'SessionsService.runNow': {
+    file: 'sessions/sessions.service.ts',
+    snippet:
+      "assertEngineSessionRow(await this.get(ownerId, id)); // ownership check (404s otherwise); a landing is the platform's",
+    note: 'POST /run-now',
+  },
   'SessionsService.unpin': {
     file: 'sessions/sessions.service.ts',
     snippet:
@@ -259,6 +275,11 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
     file: 'share-links/share-links.service.ts',
     snippet: '// A landing session is not a conversation anyone can share (§2.9 LS6).',
     note: 'POST and PUT /sessions/:id/share',
+  },
+  'ProjectHandoffService.decideBatch': {
+    file: 'projects/project-handoff.service.ts',
+    snippet: "// A move card is drawn in a conversation, never in the platform's landing container (§2.9 LS6).\n    assertEngineSession(session);",
+    note: 'POST /sessions/:id/task-moves/decision',
   },
   'SessionGuestsService.ownedSession': {
     file: 'session-guests/session-guests.service.ts',
@@ -319,7 +340,7 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
 
 /** Every derived door and the guard site that refuses a LANDING for it. */
 export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
-  // ── the user door (33) ────────────────────────────────────────────────────────────────────────
+  // ── the user door (37) ────────────────────────────────────────────────────────────────────────
   'PATCH /sessions/:id': 'SessionsService.rename',
   'DELETE /sessions/:id': 'SessionsService.transitionEnd',
   'DELETE /sessions/:id/purge': 'SessionsService.purge',
@@ -338,6 +359,7 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'PATCH /sessions/:id/settings': 'SessionsService.updateSettings',
   'POST /sessions/:id/restart': 'SessionsService.restart',
   'POST /sessions/:id/interrupt': 'SessionsService.interrupt',
+  'POST /sessions/:id/background/jobs/:jobId/stop': 'SessionsService.stopBackgroundJob',
   'POST /sessions/:id/end': 'SessionsService.getSendable',
   'POST /sessions/:id/merge': 'SessionsService.mergeToMain',
   'POST /sessions/:id/merge-repair': 'SessionsService.startMergeRepair',
@@ -345,6 +367,7 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'POST /sessions/:id/commit': 'SessionsService.commitWorktree',
   'POST /sessions/:id/checkout/discard': 'SessionsService.discardCheckout',
   'POST /sessions/:id/adopt-branch': 'SessionsService.adoptWorktreeBranch',
+  'POST /sessions/:id/merge-failure/dismiss': 'SessionsService.dismissMergeFailure',
   'POST /sessions/:id/retry-message': 'AutoRetryService.resendRetryMessage',
   'POST /sessions/:id/auto-retry': 'SessionsService.armAutoRetry',
   'DELETE /sessions/:id/auto-retry': 'SessionsService.cancelAutoRetry',
@@ -352,6 +375,7 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'POST /sessions/:id/archive': 'SessionsService.transitionEnd',
   'POST /sessions/:id/restore': 'SessionsService.restore',
   'POST /sessions/:id/pin': 'SessionsService.pin',
+  'POST /sessions/:id/run-now': 'SessionsService.runNow',
   'DELETE /sessions/:id/pin': 'SessionsService.unpin',
   'POST /sessions/:id/move': 'SessionsService.move',
   'PUT /sessions/:id/tags': 'SessionTagsService.setForSession',
@@ -359,14 +383,16 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'POST /sessions/:id/share': 'ShareLinksService.put',
   'PUT /sessions/:id/share': 'ShareLinksService.put',
   'DELETE /sessions/:id/share': 'ShareLinksService.turnOff',
+  'POST /sessions/:id/task-moves/decision': 'ProjectHandoffService.decideBatch',
   'POST /sessions/:id/guests': 'SessionGuestsService.ownedSession',
   'DELETE /sessions/:id/guests/:userId': 'SessionGuestsService.ownedSession',
 
-  // ── the runner door (32) ──────────────────────────────────────────────────────────────────────
+  // ── the runner door (33) ──────────────────────────────────────────────────────────────────────
   'POST /runner/sessions/:id/source/pin': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/takeover-leases': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/activate-leases': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/release-leases': 'RunnerApiController.assertEngineSessionById',
+  'POST /runner/sessions/:id/return-slot': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/orchestration-credential': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/attachments': 'RunnerApiController.assertSessionOwnership',
   'POST /runner/sessions/:id/files': 'RunnerApiController.assertSessionOwnership',
@@ -387,6 +413,7 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'POST /runner/sessions/:id/turn-complete': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/events': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/finalize': 'RunnerApiController.assertEngineSessionById',
+  'POST /runner/sessions/:id/release': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/import-result': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/merge-result': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/commit-result': 'RunnerApiController.assertEngineSessionById',

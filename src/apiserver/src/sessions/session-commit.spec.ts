@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException } from '@nestjs/common';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
+import { isReleasedStatus } from '../common/session-release';
 import { SessionsService } from './sessions.service';
 
 function makeService(
@@ -20,6 +21,8 @@ function makeService(
     commitStatus: null,
     runningSubagents: [],
     runningBgShells: [],
+    // A terminal row carries its release column (session_release_fact_chk).
+    ...(isReleasedStatus(String(overrides.status ?? RunStatus.AWAITING_INPUT)) ? { finishedAt: new Date() } : {}),
     ...overrides,
   };
   const updates: unknown[] = [];
@@ -58,7 +61,7 @@ test('a commit request that queued nothing wakes no runner', async () => {
   await pending.service.commitWorktree('owner-1', 'session-1');
   const raced = makeService({}, 0, { commitStatus: 'pending' });
   await raced.service.commitWorktree('owner-1', 'session-1');
-  const running = makeService({ status: RunStatus.RUNNING });
+  const running = makeService({ turnState: 'IN_FLIGHT', status: RunStatus.RUNNING });
   await assert.rejects(() => running.service.commitWorktree('owner-1', 'session-1'));
 
   assert.deepEqual([...pending.wakes, ...raced.wakes, ...running.wakes], []);
@@ -72,14 +75,17 @@ test('commit queues atomically only while a session is truly idle', async () => 
   assert.equal(updates.length, 1);
   const update = updates[0] as {
     where: {
-      status: RunStatus;
+      finishedAt: null;
+      OR: unknown[];
       cancelRequestedAt: null;
       runningSubagents: { isEmpty: boolean };
       runningBgShells?: { isEmpty: boolean };
     };
     data: { commitStatus: string };
   };
-  assert.equal(update.where.status, RunStatus.AWAITING_INPUT);
+  // Parked (turnStateFilter([null])): held, with no turn state.
+  assert.equal(update.where.finishedAt, null);
+  assert.deepEqual(update.where.OR, [{ turnState: null }]);
   assert.equal(update.where.cancelRequestedAt, null);
   assert.deepEqual(update.where.runningSubagents, { isEmpty: true });
   // Background shells are not part of the compare-and-set: a left-up dev server never exits, so
@@ -89,7 +95,7 @@ test('commit queues atomically only while a session is truly idle', async () => 
 });
 
 test('commit rejects a RUNNING turn before touching commit state', async () => {
-  const { service, updates } = makeService({ status: RunStatus.RUNNING });
+  const { service, updates } = makeService({ turnState: 'IN_FLIGHT', status: RunStatus.RUNNING });
 
   await assert.rejects(
     () => service.commitWorktree('owner-1', 'session-1'),
@@ -101,7 +107,7 @@ test('commit rejects a RUNNING turn before touching commit state', async () => {
 });
 
 test('commit rejects an interrupted session that is not at a settled turn boundary', async () => {
-  const { service, updates } = makeService({ status: RunStatus.INTERRUPTED });
+  const { service, updates } = makeService({ turnState: 'ABANDONED', status: RunStatus.INTERRUPTED });
 
   await assert.rejects(
     () => service.commitWorktree('owner-1', 'session-1'),
@@ -152,7 +158,7 @@ test('a concurrent identical commit request remains idempotent', async () => {
 test('a pending commit does not hide a turn that started after the compare-and-set lost', async () => {
   const { service } = makeService({}, 0, {
     commitStatus: 'pending',
-    status: RunStatus.RUNNING,
+    turnState: 'IN_FLIGHT', status: RunStatus.RUNNING,
   });
 
   await assert.rejects(
@@ -182,12 +188,12 @@ test('an ended session whose checkout still holds work may commit it', async () 
 
   assert.equal(updates.length, 1);
   const update = updates[0] as {
-    where: { status: { notIn: RunStatus[] }; worktreeDirty: boolean };
+    where: { OR: unknown[]; worktreeDirty: boolean };
     data: { commitStatus: string };
   };
   // Still ended and still holding work is the compare-and-set: the race an ended session has is
-  // being RESUMED, which would put a turn back in the checkout.
-  assert.ok(update.where.status.notIn.includes(RunStatus.AWAITING_INPUT));
+  // being RESUMED, which would put a turn back in the checkout. Not live: released, or queued.
+  assert.deepEqual(update.where.OR[0], { finishedAt: { not: null } });
   assert.equal(update.where.worktreeDirty, true);
   assert.equal(update.data.commitStatus, 'pending');
 });
@@ -223,7 +229,7 @@ test('an ended session resumed under a lost compare-and-set is rejected', async 
   const { service } = makeService(
     { status: RunStatus.SUCCEEDED, worktreeDirty: true },
     0,
-    { status: RunStatus.RUNNING, commitStatus: 'pending' },
+    { turnState: 'IN_FLIGHT', status: RunStatus.RUNNING, finishedAt: null, commitStatus: 'pending' },
   );
 
   await assert.rejects(

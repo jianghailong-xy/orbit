@@ -200,7 +200,7 @@ final class TailPinningWiringTests: XCTestCase {
         let layout = try section(source, from: "private func transcriptAndBand(", to: "private func composerBand(")
         XCTAssertTrue(layout.contains("if #available(iOS 26.0, *) {\n"
                                       + "            transcript.safeAreaBar(edge: .bottom, spacing: 0) {\n"
-                                      + "                composerBand(console)"),
+                                      + "                AnyView(composerBand(console)"),
                       "on iOS 26 the band floats over the transcript")
         let tracker = try section(source, from: "private struct ScrollTracker",
                                   to: "/// Publishes the id of the item currently under")

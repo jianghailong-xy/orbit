@@ -293,3 +293,73 @@ func TestBoundSessionRecordShortensTheReplyOnlyWhenNothingElseIsLeft(t *testing.
 		}
 	}
 }
+
+// The session-state fields (Agent Contract 1.12.0) come through session_get in both views: the bounded
+// one clips only its named free-text fields, so a record shortened to fit still carries all four.
+func TestMCPSessionGetKeepsTheSessionStateFieldsInBothViews(t *testing.T) {
+	srv := fakeSession(t, map[string]interface{}{
+		"id": "sess1", "status": "FAILED", "prompt": strings.Repeat("p", 42200),
+		"phase": "IDLE", "released": true, "lastTurnOutcome": "FAILED", "waitingOn": nil,
+	})
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "caller", allowOrchestration: true}
+	for name, args := range map[string]map[string]interface{}{
+		"bounded": {"sessionId": "sess1"},
+		"full":    {"sessionId": "sess1", "summary": false},
+	} {
+		var got map[string]interface{}
+		text := boundedToolText(t, mcp.callTool("session_get", args))
+		if i := strings.Index(text, "{"); i >= 0 {
+			text = text[i:]
+		}
+		if err := json.Unmarshal([]byte(text), &got); err != nil {
+			t.Fatalf("%s view is not JSON: %v", name, err)
+		}
+		if got["phase"] != "IDLE" || got["released"] != true || got["lastTurnOutcome"] != "FAILED" {
+			t.Errorf("%s view lost a session-state field: %v", name, got)
+		}
+		if v, ok := got["waitingOn"]; !ok || v != nil {
+			t.Errorf("%s view lost waitingOn: %v", name, got)
+		}
+	}
+}
+
+// session_list returns the server's rows as they are, the new fields included.
+func TestMCPSessionListReturnsTheSessionStateFields(t *testing.T) {
+	body := `[{"id":"s1","status":"AWAITING_INPUT","phase":"IDLE","released":false,"lastTurnOutcome":"ANSWERED","waitingOn":"PERSON"}]`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(body)) }))
+	t.Cleanup(srv.Close)
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "caller", allowOrchestration: true}
+	text := boundedToolText(t, mcp.callTool("session_list", map[string]interface{}{}))
+	for _, want := range []string{`"phase": "IDLE"`, `"released": false`, `"lastTurnOutcome": "ANSWERED"`, `"waitingOn": "PERSON"`} {
+		if !strings.Contains(text, want) {
+			t.Errorf("session_list lost %s: %s", want, text)
+		}
+	}
+}
+
+// The tool descriptions name the fields, and the status filter keeps its seven values.
+func TestSessionToolDescriptionsNameTheSessionStateFields(t *testing.T) {
+	for _, tool := range []string{"session_list", "session_get"} {
+		desc := ""
+		for _, d := range toolDescriptors(false, true) {
+			if d["name"] == tool {
+				desc, _ = d["description"].(string)
+			}
+		}
+		for _, field := range []string{"phase", "released", "lastTurnOutcome", "waitingOn"} {
+			if !strings.Contains(desc, field) {
+				t.Errorf("%s description does not name %s", tool, field)
+			}
+		}
+	}
+	for _, d := range toolDescriptors(false, true) {
+		if d["name"] != "session_list" {
+			continue
+		}
+		body, _ := json.Marshal(d["inputSchema"])
+		want := `"status":{"enum":["PENDING","RUNNING","AWAITING_INPUT","SUCCEEDED","FAILED","CANCELLED","INTERRUPTED"],"type":"string"}`
+		if !strings.Contains(string(body), want) {
+			t.Errorf("session_list's status enum changed: %s", body)
+		}
+	}
+}

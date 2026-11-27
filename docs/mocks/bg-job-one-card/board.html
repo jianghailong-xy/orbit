@@ -1,0 +1,171 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Background job: one card</title><style>
+@font-face{font-family:Inter;src:url(/var/tmp/landing-mock-render/fonts/Inter.ttf)}
+@font-face{font-family:Mono;src:url(/var/tmp/landing-mock-render/fonts/JetBrainsMono.ttf)}
+@font-face{font-family:SC;src:url(/var/tmp/landing-mock-render/fonts/NotoSansSC.ttf)}
+/* light tokens copied from src/web/src/index.css :root */
+:root{--bg-base:#fff;--bg-sunken:#f7f8fa;--border:#dee0e3;--border-subtle:#eceef1;--text-1:#1f2329;--text-2:#646a73;--text-3:#8f959e;--text-4:#a8acb3;
+--success-solid:#2ea121;--error:#cf3b35;--error-solid:#d4380d;--error-bg:#fdeceb;--fill-muted:#eff0f1;--fill-inset:#f2f3f5;--brand:#3370ff;--purple:#7b3fe4;--purple-bg:#f3edfd;--warning:#d46b08;
+--font-mono:Mono,ui-monospace,monospace}
+*{box-sizing:border-box}
+body{margin:0;padding:24px;background:#fff;font-family:Inter,SC,sans-serif;color:var(--text-1);width:1500px}
+.sec{display:flex;align-items:center;gap:12px;margin:8px 0 14px;font-size:17px;font-weight:600;color:var(--text-2)}
+.sec b{background:#e8efff;color:#1d4fd8;padding:3px 12px;border-radius:6px;font-size:15px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:26px}
+.pane{border:1px solid var(--border);border-radius:12px;padding:18px 26px 22px;position:relative}
+.pane h4{margin:0 0 12px;font-size:13px;font-weight:600;color:var(--text-3);letter-spacing:.02em}
+.pane.bad h4{color:var(--error)} .pane.good h4{color:#1a7f37}
+.say{font-size:15px;line-height:1.65;margin:8px 0}
+code{font-family:var(--font-mono);font-size:.88em;background:var(--fill-inset);padding:0 4px;border-radius:4px}
+/* "today" reproduction */
+.today-chip{float:right;border:2px solid var(--brand);border-radius:8px;padding:3px 10px;font-size:13px;color:var(--text-2)}
+.today-pre{clear:both;margin-top:10px;background:#ececee;border-radius:10px;padding:12px 14px;font-family:var(--font-mono);font-size:11px;line-height:1.6;white-space:pre-wrap;color:#333;max-height:none}
+/* proposed: .bgwake grammar + .subwake */
+.bgwake{margin:6px 0;font-size:13px;color:var(--text-3)}
+.bgwake-row{display:flex;align-items:baseline;gap:6px;padding:3px 4px;border-radius:6px}
+.bgwake-row.hover{background:var(--bg-sunken)}
+.bgwake-mark{flex:none;align-self:center;display:inline-flex;width:18px;height:18px;border-radius:5px;background:var(--purple-bg);color:var(--purple);font-size:11px;align-items:center;justify-content:center}
+.is-failed .bgwake-mark{background:var(--error-bg);color:var(--error-solid)}
+.bgwake-title{flex:none;color:var(--text-2)} .is-failed .bgwake-title{color:var(--error)}
+.bgwake-name{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--text-2)}
+.bgwake-status{flex:none;padding:0 6px;border-radius:5px;background:var(--fill-muted);color:var(--text-2);font-family:var(--font-mono);font-size:11px}
+.is-failed .bgwake-status{background:var(--error-bg);color:var(--error)}
+.bgwake-time{flex:none;font-size:12px}
+.bgwake-details-label{flex:none;font-size:12px;display:inline-flex;gap:5px}
+.subwake-result{margin:4px 0 6px 26px;padding:9px 12px;border:1px solid var(--border-subtle);border-left:3px solid #c9b3f5;border-radius:6px;background:var(--bg-sunken);font-size:13.5px;line-height:1.6;color:var(--text-1)}
+.is-failed .subwake-result{border-left-color:var(--error-border,#ffccc7)}
+.subwake-result .why{color:var(--error);font-size:12.5px;margin-bottom:4px}
+.clamp{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+.subwake-result code{font-size:11.5px}
+.more{display:inline-block;margin-top:6px;color:var(--brand);font-size:12px}
+.bgwake-body{margin:2px 0 6px 26px;padding:6px 10px;border-left:2px solid var(--border-subtle);font-size:12px;color:var(--text-3);line-height:1.7}
+.bgwake-body .k{color:var(--text-2)} .bgwake-body a{color:var(--brand);text-decoration:none}
+.mono{font-family:var(--font-mono);font-size:11px}
+.warn{color:var(--warning)}
+.steer{margin:0 0 0 26px;font-size:12px;color:var(--text-3)}
+/* numbered pins */
+.pin{position:absolute;width:24px;height:24px;border-radius:50%;background:#f08c00;color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.ring{outline:2px dashed #f5a524;outline-offset:4px;border-radius:8px;position:relative}
+.ring>.pin{right:-16px;top:-14px}
+.notes{background:#f5f6f8;border-radius:12px;padding:16px 22px;font-size:14.5px;line-height:2}
+.notes .n{display:inline-flex;width:22px;height:22px;border-radius:50%;background:#f08c00;color:#fff;font-size:12px;font-weight:700;align-items:center;justify-content:center;margin-right:8px}
+.dec{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:10px}
+.dec>div{border:1px solid var(--border);border-radius:12px;padding:14px 18px;font-size:14px;line-height:1.75}
+.dec h5{margin:0 0 6px;font-size:15px}
+.rec{color:#1a7f37;font-weight:600}
+
+.chat-tool-card{--tone:#7c3aed;--tone-bg:#f1eafe;margin:6px 0;border-left:3px solid var(--tone)}
+.chat-tool-card.is-open{border:1px solid var(--border);border-left:3px solid var(--tone);border-radius:8px}
+.chat-tool-row{display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:12.5px;background:#faf8ff}
+.chat-tool-caret{flex:none;width:1em;color:var(--text-4);font-size:10px}
+.chat-tool-icon{flex:none;display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:var(--tone-bg);color:var(--tone);font-size:13px}
+.chat-tool-name{flex:none;font-weight:600;font-family:var(--font-mono)}
+.chat-tool-summary{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-2)}
+.chat-tool-tag{flex:none;font-size:11.5px;font-weight:600;color:var(--tone);background:var(--tone-bg);border-radius:5px;padding:0 6px}
+.chat-tool-meta{flex:none;font-family:var(--font-mono);font-size:11px;color:var(--text-3);background:var(--fill-muted);border-radius:5px;padding:0 6px}
+.st{flex:none;width:15px;height:15px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:700}
+.st.ok{background:var(--success-solid)} .st.err{background:var(--error)} .st.stop{background:#a8acb3}
+.st.run{border:2px solid var(--brand);border-right-color:transparent;background:none}
+.end-chip{flex:none;font-family:var(--font-mono);font-size:11px;border-radius:5px;padding:0 6px;background:var(--error-bg);color:var(--error)}
+.end-chip.stop{background:var(--fill-muted);color:var(--text-2)}
+.chat-tool-live{padding:0 10px 6px 58px;font-family:var(--font-mono);font-size:11px;color:var(--text-3);background:#faf8ff}
+.card-end{padding:2px 10px 8px 58px;font-size:12.5px;line-height:1.55;color:var(--text-2);background:#faf8ff}
+.card-end .why{color:var(--error)} .card-end .grey{color:var(--text-3);font-size:12px}
+.card-end .files{font-family:var(--font-mono);font-size:11px;color:var(--text-3)}
+.card-end .clamp2{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;color:var(--text-1)}
+.card-end a{color:var(--brand)}
+.detail{padding:8px 14px 12px 34px;font-size:12.5px;line-height:1.7;color:var(--text-2);border-top:1px solid var(--border-subtle)}
+.detail .step{color:var(--text-3)} .detail .msg{color:var(--text-1);margin:2px 0}
+.endblock{margin-top:8px;padding:8px 12px;border-left:3px solid #ffccc7;background:var(--bg-sunken);border-radius:6px}
+.endblock .why{color:var(--error)} .endblock summary{color:var(--text-3);font-size:12px;margin-top:4px;list-style:none}
+.prose{font-size:14px;line-height:1.6;margin:8px 0}
+.dim{color:var(--text-3)}
+.gap{margin:10px 0;padding:8px 12px;border:1px dashed var(--border);border-radius:8px;font-size:12px;color:var(--text-4);text-align:center}
+.nothing{margin:8px 0;padding:6px 12px;border:2px dashed #b7e4c0;border-radius:8px;font-size:12px;color:#1a7f37;text-align:center}
+.turnline{font-size:13px;color:var(--text-3);margin:8px 0}
+.strip{margin-top:14px;border:1px solid var(--border);border-radius:10px;padding:7px 12px;font-size:12.5px;display:flex;gap:10px;align-items:center;color:var(--text-2)}
+.strip .red{color:var(--error);margin-left:auto}
+.composer{margin-top:6px;border:1px solid var(--border);border-radius:12px;padding:12px;color:var(--text-4);font-size:13px}
+.states{display:grid;grid-template-columns:1fr 1fr;gap:14px 20px}
+.states h6{margin:0 0 2px;font-size:12.5px;color:var(--text-3);font-weight:600}
+.dec{grid-template-columns:repeat(3,minmax(0,1fr))}
+.cols{grid-template-columns:minmax(0,1fr) minmax(0,1fr)} .states{grid-template-columns:minmax(0,1fr) minmax(0,1fr)} .pane{min-width:0} .stack{display:grid;grid-template-columns:minmax(0,1fr);gap:20px;margin-bottom:26px} .chat-tool-row{overflow:hidden} .chat-tool-card{overflow:hidden}
+
+.chat-tool-card.job{--tone:#0f766e;--tone-bg:#e6f4f1}
+.job .chat-tool-row,.job .chat-tool-live,.job .card-end{background:#f6fbfa}
+.chat-tool-card.mcp{--tone:#d6d9de;--tone-bg:#eff0f1}
+.mcp .chat-tool-row{background:transparent}
+.tail{font-family:var(--font-mono);font-size:11.5px;line-height:1.55;color:var(--text-2);white-space:pre-wrap}
+.tail.err{color:var(--error)}
+.end-chip.warn{background:#fff4e5;color:#b45309}
+.st.warn{background:#d97706}
+.trayrow{display:flex;gap:10px;align-items:center;border:1px solid var(--border);border-radius:10px;padding:7px 12px;font-size:12.5px;color:var(--text-2);margin-top:12px}
+.trayrow .red{color:var(--error)} .trayrow .r{margin-left:auto;display:flex;gap:10px}
+.traylist{border:1px solid var(--border);border-top:none;border-radius:0 0 10px 10px;margin-top:-6px;padding:6px 12px 8px;font-size:12px}
+.traylist div{display:flex;gap:8px;align-items:center;padding:3px 0;color:var(--text-2)}
+.traylist .k{font-size:11px;font-weight:600;color:#0f766e;background:#e6f4f1;border-radius:4px;padding:0 5px}
+.traylist .k.sh{color:var(--text-3);background:var(--fill-muted)}
+.traylist .age{margin-left:auto;color:var(--text-4)}
+.kv{font-family:var(--font-mono);font-size:11.5px;color:var(--text-2);line-height:1.7}
+</style></head><body>
+<div class="sec"><b>① 今天 vs 建议</b> 照 SubAgent 的做法：一个后台 job（bg_run）从开始到结束只有一张卡</div>
+<div class="cols"><div class="pane bad"><h4>TODAY · 发起是通用工具卡（回执一到就绿 ✓），结束是另一行红色事件</h4>
+<div class="ring"><div class="chat-tool-card mcp"><div class="chat-tool-row"><span class="chat-tool-caret">›</span><span class="chat-tool-icon">⌁</span><span class="chat-tool-name">orbit · bg_run</span><span class="chat-tool-summary" style="font-family:var(--font-mono);font-size:11.5px">command=gh run watch … description=Wait for CI JavaScript job on 4c8f5a8a1b kind=watch wakeOnExit=true</span><span class="st ok">✓</span></div></div><span class="pin">1</span></div>
+<div class="gap">… Agent 继续干别的，约 12 分钟 …</div>
+<div class="ring"><div class="bgwake is-failed"><div class="bgwake-row"><span class="bgwake-mark">✕</span><span class="bgwake-title">Background job failed</span><span class="bgwake-name">Wait for CI JavaScript job on 4c8f5a8a1b</span><span class="bgwake-status">exit 1</span><span class="bgwake-time">just now</span><span class="bgwake-details-label">Job details ›</span></div>
+<div class="subwake-result"><div style="color:var(--text-3);font-size:12px;margin-bottom:4px">Output tail</div><div class="tail">run ended before JavaScript finished: completed cancelled</div><span class="more">Show full output ⌄</span></div></div><span class="pin">2</span></div>
+<div class="prose dim" style="font-size:13px">Working for 18s</div>
+<div class="ring"><div class="trayrow">&gt;_ Background processes <span style="color:var(--text-4)">— 只列 Claude 自己的 Bash(run_in_background)，bg_run 的 job 不在里面</span></div><span class="pin">3</span></div>
+</div><div class="pane good"><h4>PROPOSED · 一张 Job 卡：运行中转圈，结束在原地变；唤醒那一轮什么都不画</h4>
+<div class="ring"><div class="chat-tool-card job chat-tool-task "><div class="chat-tool-row"><span class="chat-tool-caret">›</span><span class="chat-tool-icon" style="font-family:var(--font-mono);font-size:11px">&gt;_</span><span class="chat-tool-name">Job</span><span class="chat-tool-summary">Wait for CI JavaScript job on 4c8f5a8a1b</span><span class="chat-tool-tag">watch</span><span class="chat-tool-meta">12m 40s</span><span class="end-chip ">exit 1</span><span class="st err">✕</span></div><div class="card-end"><div class="tail err">run ended before JavaScript finished: completed cancelled</div><a>Show full output</a></div></div><span class="pin">a</span></div>
+<div class="gap">… 同样的 12 分钟 …</div>
+<div class="ring"><div class="nothing">job 结束（或有新输出、变安静）开出的那一轮：不画任何东西</div><span class="pin">b</span></div>
+<div class="prose">CI's JavaScript job was cancelled, not failed: I'll re-run it.</div>
+<div class="ring"><div class="trayrow">&gt;_ Background processes <span>2</span><span class="r"><span class="red">✕ 1 failed</span><span>›</span></span></div>
+<div class="traylist"><div><span class="k">Job</span>Wait for CI JavaScript job on 4c8f5a8a1b<span class="red">exit 1</span><span class="age">12m</span></div><div><span class="k sh">Shell</span>npm run dev<span style="color:var(--brand)">running</span><span class="age">40m</span></div></div><span class="pin">c</span></div>
+<div class="composer">Message the agent…</div>
+</div></div>
+<div class="notes">
+<span class="n">1</span><b>发起卡是通用 MCP 卡</b>：名字 "orbit · bg_run"，摘要是 key=value 原文；bg_run 当场返回 running 回执，所以立刻绿 ✓ 且永远不变——job 后来失败了这里也是 ✓（和 SubAgent 修之前同一个 bug）。<br>
+<span class="n">2</span><b>结束是另一行</b>：画在 Agent 被叫醒的地方，离发起卡可能隔几屏；有新输出（wakeOnOutput）、变安静（wakeOnStall）也各画一行，一个 job 可以有好几行。<br>
+<span class="n">3</span><b>底部托盘看不到 bg_run</b>：Background processes 只列 Claude 自己的后台 shell。<br>
+<span class="n" style="background:#1a7f37">a</span><b>一张 Job 卡</b>：标题用 description，命令收进展开里；转圈 → 退出码 / killed / quiet，原地变；折叠时露最新 1–2 行输出（失败红）。<br>
+<span class="n" style="background:#1a7f37">b</span><b>唤醒那一轮不画</b>：结束、新输出、变安静都一样；Agent 读到的内容一字不改，协议不动。和 SubAgent 的决定（11-20）一致。<br>
+<span class="n" style="background:#1a7f37">c</span><b>bg_run 进托盘</b>：和后台 shell 一个列表，失败红字计数，点一下滚到那张卡——卡在很上面时靠它。<br>
+<span style="color:var(--text-3)">定时唤醒（schedule_wakeup，没有 job）不在这次范围：没有在跑的东西可挂，那一行照旧。</span>
+</div>
+<div class="sec" style="margin-top:24px"><b>② 这张卡</b> 折叠时的每个状态，和展开后的样子</div>
+<div class="stack"><div class="pane"><h4>一张卡的所有状态（折叠时）</h4><div class="states">
+<div><h6>RUNNING · 转圈 + 最新一行输出</h6><div class="chat-tool-card job chat-tool-task "><div class="chat-tool-row"><span class="chat-tool-caret">›</span><span class="chat-tool-icon" style="font-family:var(--font-mono);font-size:11px">&gt;_</span><span class="chat-tool-name">Job</span><span class="chat-tool-summary">Full web test suite</span><span class="chat-tool-tag">job</span><span class="chat-tool-meta">3m 10s</span><span class="st run"></span></div><div class="card-end"><div class="tail">✓ src/components/Transcript.test.tsx (412 tests) 9.8s</div></div></div></div>
+<div><h6>EXIT 0 · ✓ 不加词，输出尾 2 行（灰）</h6><div class="chat-tool-card job chat-tool-task "><div class="chat-tool-row"><span class="chat-tool-caret">›</span><span class="chat-tool-icon" style="font-family:var(--font-mono);font-size:11px">&gt;_</span><span class="chat-tool-name">Job</span><span class="chat-tool-summary">Full web test suite</span><span class="chat-tool-tag">job</span><span class="chat-tool-meta">4m 02s</span><span class="st ok">✓</span></div><div class="card-end"><div class="tail"> Test Files  641 passed (641)
+      Tests  8723 passed (8723)</div><a>Show full output</a></div></div></div>
+<div><h6>EXIT ≠ 0 · 红 chip + ✕，输出尾 2 行（红）</h6><div class="chat-tool-card job chat-tool-task "><div class="chat-tool-row"><span class="chat-tool-caret">›</span><span class="chat-tool-icon" style="font-family:var(--font-mono);font-size:11px">&gt;_</span><span class="chat-tool-name">Job</span><span class="chat-tool-summary">Build apiserver image</span><span class="chat-tool-tag">job</span><span class="chat-tool-meta">1m 10s</span><span class="end-chip ">exit 1</span><span class="st err">✕</span></div><div class="card-end"><div class="tail err">npm error network ECONNRESET
+ERROR: process "/bin/sh -c npm ci" did not complete: exit code 1</div><a>Show full output</a></div></div></div>
+<div><h6>QUIET（wakeOnStall）· 琥珀 chip，仍在跑</h6><div class="chat-tool-card job chat-tool-task "><div class="chat-tool-row"><span class="chat-tool-caret">›</span><span class="chat-tool-icon" style="font-family:var(--font-mono);font-size:11px">&gt;_</span><span class="chat-tool-name">Job</span><span class="chat-tool-summary">Deploy 5dd308afd</span><span class="chat-tool-tag">job</span><span class="chat-tool-meta">22m</span><span class="end-chip warn">quiet 10m</span><span class="st run"></span></div><div class="card-end"><div class="tail">Waiting for apiserver-next to pass its health check…</div></div></div></div>
+<div><h6>KILLED · 灰 ■，写被谁停</h6><div class="chat-tool-card job chat-tool-task "><div class="chat-tool-row"><span class="chat-tool-caret">›</span><span class="chat-tool-icon" style="font-family:var(--font-mono);font-size:11px">&gt;_</span><span class="chat-tool-name">Job</span><span class="chat-tool-summary">Android unit tests</span><span class="chat-tool-tag">job</span><span class="chat-tool-meta">6m</span><span class="end-chip stop">killed</span><span class="st stop">■</span></div><div class="card-end"><div class="tail" style="color:var(--text-3)">Killed by the agent.</div></div></div></div>
+<div><h6>SERVICE · 不会结束，一直 running</h6><div class="chat-tool-card job chat-tool-task "><div class="chat-tool-row"><span class="chat-tool-caret">›</span><span class="chat-tool-icon" style="font-family:var(--font-mono);font-size:11px">&gt;_</span><span class="chat-tool-name">Job</span><span class="chat-tool-summary">npm run dev</span><span class="chat-tool-tag">service</span><span class="chat-tool-meta">40m</span><span class="st run"></span></div><div class="card-end"><div class="tail">  ➜  Local:   http://localhost:5173/</div></div></div></div>
+<div><h6>结束了但 Agent 还没读到（同 SubAgent E1）</h6><div class="chat-tool-card job chat-tool-task "><div class="chat-tool-row"><span class="chat-tool-caret">›</span><span class="chat-tool-icon" style="font-family:var(--font-mono);font-size:11px">&gt;_</span><span class="chat-tool-name">Job</span><span class="chat-tool-summary">Wait for CI JavaScript job on 4c8f5a8a1b</span><span class="chat-tool-tag">watch</span><span class="chat-tool-meta">12m 40s</span><span class="end-chip ">exit 1</span><span class="st err">✕</span></div><div class="card-end"><div class="tail err">run ended before JavaScript finished: completed cancelled</div><div style="font-size:12px;color:var(--text-3)">Waiting for the agent to read it · <a>Don't send</a></div></div></div></div>
+<div><h6>NEW OUTPUT（wakeOnOutput）· 仍在跑，尾巴刷新，不加 chip</h6><div class="chat-tool-card job chat-tool-task "><div class="chat-tool-row"><span class="chat-tool-caret">›</span><span class="chat-tool-icon" style="font-family:var(--font-mono);font-size:11px">&gt;_</span><span class="chat-tool-name">Job</span><span class="chat-tool-summary">Watch PR #212 checks</span><span class="chat-tool-tag">watch</span><span class="chat-tool-meta">8m</span><span class="st run"></span></div><div class="card-end"><div class="tail">check "Swift" → success (3 of 6 done)</div></div></div></div>
+</div></div></div>
+<div class="stack"><div class="pane"><h4>展开：命令、跑在哪、输出（最后 40 行，可看全部）、它叫醒 Agent 的每一次</h4>
+<div class="chat-tool-card job chat-tool-task is-open"><div class="chat-tool-row"><span class="chat-tool-caret">⌄</span><span class="chat-tool-icon" style="font-family:var(--font-mono);font-size:11px">&gt;_</span><span class="chat-tool-name">Job</span><span class="chat-tool-summary">Wait for CI JavaScript job on 4c8f5a8a1b</span><span class="chat-tool-tag">watch</span><span class="chat-tool-meta">12m 40s</span><span class="end-chip ">exit 1</span><span class="st err">✕</span></div><div class="detail">
+<div class="kv">$ gh run watch 19632123456 --exit-status --interval 30</div>
+<div class="dim" style="font-size:12px;margin:4px 0 8px">bgj_9f3a… · watch · started 10:20 · ran 12m 40s · on workstation</div>
+<div class="tail" style="background:var(--bg-sunken);border-radius:6px;padding:8px 10px">Refreshing run status every 30 seconds.
+✓ Swift in 6m12s
+✓ Android in 9m40s
+X JavaScript in 11m58s — cancelled
+<span style="color:var(--error)">run ended before JavaScript finished: completed cancelled</span></div>
+<a style="color:var(--brand);font-size:12px">Show all 214 lines</a>
+<div class="endblock" style="margin-top:10px;border-left-color:#ffccc7"><div class="dim" style="font-size:12px">Woke the agent 1 time</div><div style="font-size:12.5px">10:32 · exit 1 · read by the agent at 10:32</div><details><summary>› What the agent read</summary></details></div>
+</div></div>
+</div></div>
+<div class="sec" style="margin-top:8px"><b>③ 待你拍板</b> 手绘，类名和颜色取自 index.css（.chat-tool-card / .bgwake / .bg-tray）；代码未动</div>
+<div class="dec">
+<div><h5>A · 卡长什么样</h5><span class="rec">A1 "Job" 卡（建议）</span>：终端图标，标题用 description，kind 做标签，命令/输出在展开里。<br>A2 保留 "orbit · bg_run" 通用卡，只修状态图标。</div>
+<div><h5>B · 不是结束的唤醒</h5><span class="rec">B1 只在卡上变（建议）</span>：quiet 给琥珀 chip，新输出只刷新尾巴，都不画行。<br>B2 这两种留一条灰色细线（结束仍不画）。</div>
+<div><h5>C · 结束开出的那一轮</h5><span class="rec">C1 什么都不画（建议）</span>，同 SubAgent。<br>C2 留一条不带输出的灰色细线 "↑"。<br><b>两者都撤掉 BackgroundWakeCard 的 job 行</b>（三端已上线）。</div>
+<div><h5>D · 底部托盘</h5><span class="rec">D1 bg_run 进 Background processes（建议）</span>：失败红字计数，点击跳到卡。<br>D2 不进，只靠卡。</div>
+<div><h5>E · 排队还没读到</h5><span class="rec">E1 同 SubAgent（建议）</span>："Waiting for the agent to read it · Don't send" 在卡上，底部队列不再为它画一条。<br>E2 留在底部队列。</div>
+<div><h5>F · 范围</h5><span class="rec">F1 三端（建议）</span>：先 Web，macOS/iOS、Android 照着做。旧会话按显示时解析，一起变。<br>F2 只做 Web。</div>
+</div>
+</body></html>

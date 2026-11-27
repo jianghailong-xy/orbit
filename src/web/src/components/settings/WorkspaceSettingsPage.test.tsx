@@ -3,7 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from '../TasksSidePanel';
 import { SettingsWorkspacePage } from './WorkspaceSettingsPage';
 
@@ -20,10 +20,18 @@ vi.mock('../../api', async (original) => ({
   getClaudeHistory: vi.fn(),
   importClaudeHistory: vi.fn(),
   revokeWorkspacePermissionRule: vi.fn(),
+  askDirProbe: vi.fn(),
+  readDirProbe: vi.fn(),
 }));
-const { api, askClaudeHistory, getClaudeHistory, importClaudeHistory, revokeWorkspacePermissionRule } = await import(
-  '../../api'
-);
+const {
+  api,
+  askClaudeHistory,
+  askDirProbe,
+  getClaudeHistory,
+  importClaudeHistory,
+  readDirProbe,
+  revokeWorkspacePermissionRule,
+} = await import('../../api');
 const apiMock = vi.mocked(api);
 
 // What the page says when a row saves, or fails to.
@@ -46,7 +54,21 @@ const RUNNER: Runner = {
   modelCatalog: { claude: [{ value: 'claude-opus-5-5', label: 'Opus 5.5' }] },
   runtimeDefaultModels: { claude: 'claude-opus-5-5' },
 };
-const OTHER: Runner = { id: OTHER_RUNNER_ID, name: 'studio-mac', online: true, lastHeartbeatAt: new Date().toISOString() };
+// A machine that checks folders and makes them in its home, as New workspace's card needs.
+const OTHER = {
+  id: OTHER_RUNNER_ID,
+  name: 'studio-mac',
+  online: true,
+  lastHeartbeatAt: new Date().toISOString(),
+  reposRoot: '/Users/me/orbit-repos',
+  capabilities: ['dir-probe/v1', 'create-workdir/v1', 'create-workdir/v2'],
+} as Runner;
+/** What studio-mac finds at a path: one repository, nothing anywhere else. */
+const AT_OTHER: Record<string, { exists: boolean; isDir: boolean; isGit: boolean; branch: string | null }> = {
+  '/Users/me/src/app': { exists: true, isDir: true, isGit: true, branch: 'main' },
+};
+/** What GET /integrations/github answers: by default a deployment with no GitHub App. */
+let github: unknown = { available: false, connected: false, login: null, installations: null };
 
 const workspace = (id: string, name: string, over: Record<string, unknown> = {}) => ({
   id,
@@ -149,6 +171,7 @@ async function mount(
       return {};
     }
     if (url === '/runners') return [RUNNER, OTHER];
+    if (url === '/integrations/github') return github;
     if (url === '/workspaces') return rows;
     const one = rows.find((w) => url === `/workspaces/${w.id}`);
     if (one) return { ...one, sessionCount: 37, lastActiveAt: new Date(Date.now() - 2 * 3600_000).toISOString() };
@@ -285,18 +308,14 @@ describe('a workspace’s Settings page', () => {
     expect($$('button').some((b) => text(b) === 'Save')).toBe(false);
   });
 
-  it('shows smart selection and its engines only while the account has it on; Optimize For is not here', async () => {
+  it('has no smart selection row or engine list of its own, with the account switch on or off; Optimize For is not here', async () => {
     await mount(`/settings/workspaces/${ORBIT}`, undefined, { preferences: { modelRouting: false } });
     expect($$('.settings-row-title', section('Sessions')).map(text)).toEqual(['Worktree isolation', 'Model']);
     act(() => root?.unmount());
     host?.remove();
     await mount(`/settings/workspaces/${ORBIT}`, undefined, { preferences: {} });
-    expect($$('.settings-row-title', section('Sessions')).map(text)).toEqual([
-      'Worktree isolation',
-      'Smart model selection for tasks',
-      'Model',
-    ]);
-    expect(text(section('Sessions').querySelector('.rd-engines-label'))).toBe('Engines it may use');
+    expect($$('.settings-row-title', section('Sessions')).map(text)).toEqual(['Worktree isolation', 'Model']);
+    expect(section('Sessions').textContent).not.toContain('Engines it may use');
   });
 
   it('says so for a workspace that does not exist', async () => {
@@ -331,17 +350,6 @@ describe('every edit is one PATCH carrying only that field', () => {
     expect(only(sent)).toEqual([{ method: 'PATCH', path: `/workspaces/${ORBIT}`, body: { enableWorktree: false } }]);
     expect(toggle('Worktree isolation').getAttribute('aria-checked')).toBe('false');
     expect(toast.success).toHaveBeenCalledWith('Setting saved');
-  });
-
-  it('a switch when it changes, and each engine ticked', async () => {
-    const { sent } = await mount(`/settings/workspaces/${ORBIT}`, undefined, { preferences: { modelRouting: true } });
-    await click(toggle('Smart model selection for tasks'));
-    const codex = $$('.rd-engines-list [role="checkbox"]').find((c) => text(c.closest('label')) === 'Codex')!;
-    await click(codex);
-    expect(only(sent)).toEqual([
-      { method: 'PATCH', path: `/workspaces/${ORBIT}`, body: { modelRouting: true } },
-      { method: 'PATCH', path: `/workspaces/${ORBIT}`, body: { modelRoutingProviders: ['codex'] } },
-    ]);
   });
 
   it('a text field on blur, and on Enter — once, though the blur follows the Enter', async () => {
@@ -499,41 +507,115 @@ describe('Import Claude Code history', () => {
   }, 15_000);
 });
 
-describe('New workspace', () => {
-  it('picks the machine first, then takes today’s create form, then opens the new workspace’s page', async () => {
+describe('New workspace: the machine first, then the setup card (docs/mocks/new-workspace-form)', () => {
+  beforeEach(() => {
+    github = { available: false, connected: false, login: null, installations: null };
+    vi.mocked(askDirProbe).mockReset();
+    vi.mocked(askDirProbe).mockImplementation(async (_runner, path) => ({ path, status: 'pending' }));
+    vi.mocked(readDirProbe).mockReset();
+    vi.mocked(readDirProbe).mockImplementation(async (_runner, path) => ({
+      path,
+      status: 'done',
+      result: {
+        path,
+        isHome: false,
+        freeBytes: null,
+        ...(AT_OTHER[path] ?? { exists: false, isDir: false, isGit: false, branch: null }),
+      },
+    }));
+    vi.mocked(askClaudeHistory).mockRejectedValue(new Error('no history here'));
+  });
+
+  /** A folder typed into the card and left long enough for studio-mac to be asked about it. */
+  const folder = async (value: string) => {
+    await type(field('Folder'), value);
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 450)));
+    await settle(5);
+  };
+
+  it('picks the machine, then makes a folder in its home and opens the new workspace’s conversation', async () => {
     const { sent } = await mount('/settings/workspaces/new');
     expect(text(document.querySelector('.settings-header-title'))).toBe('New workspace');
     expect($$('.workspace-machine-choice .settings-row-title').map(text)).toEqual(['gpu-box', 'studio-mac']);
-    expect(document.querySelector('input[aria-label="Name"]')).toBeNull();
+    expect(field('Folder')).toBeNull();
 
     await click($$('.workspace-machine-choice')[1]);
     expect(location).toBe(`/settings/workspaces/new?machine=${OTHER_RUNNER_ID}`);
     expect(text(document.querySelector('.settings-header-description'))).toBe('On studio-mac · Change machine');
-    const create = () => button('Create');
-    expect(create().disabled).toBe(true);
-    await type(field('Name'), 'website');
-    // Enter in the name creates nothing while the folder is missing.
-    await enter(field('Name'));
-    expect(create().disabled).toBe(true);
-    await type(field('Working directory'), '~/code/website');
-    await type(field('Repository URL'), 'github.com/acme/website');
+    // The machine page's card, without the head this page's own header stands in for.
+    expect(document.querySelector('.workspace-new .msc')).not.toBeNull();
+    expect(document.querySelector('.msc-head')).toBeNull();
+    expect(text(document.querySelector('[data-field="folder"] .msc-line'))).toBe(
+      'A name in /Users/me, or a full path. Uses the folder if it exists, otherwise creates it.',
+    );
+    expect(field('Working directory')).toBeNull();
+    expect(field('Repository URL')).toBeNull();
+
+    await folder('website');
+    expect(vi.mocked(askDirProbe)).toHaveBeenCalledWith(OTHER_RUNNER_ID, '/Users/me/website');
+    expect(field('Name').value).toBe('website');
     expect(sent).toEqual([]);
-    await click(create());
+    await click(button('Create workspace'));
     expect(sent).toEqual([
-      {
-        method: 'POST',
-        path: '/workspaces',
-        body: { name: 'website', workDir: '~/code/website', repoUrl: 'github.com/acme/website', runnerId: OTHER_RUNNER_ID },
-      },
+      { method: 'POST', path: '/workspaces', body: { name: 'website', runnerId: OTHER_RUNNER_ID, newFolder: 'website' } },
     ]);
     await settle(3);
-    expect(location).toBe(`/settings/workspaces/${MADE}`);
+    expect(location).toBe(`/workspaces/${MADE}`);
   });
 
-  it('opens on the create form when the machine is named', async () => {
+  it('takes a full path to a folder already there, and imports the history picked under it', async () => {
+    vi.mocked(askClaudeHistory).mockReset();
+    vi.mocked(askClaudeHistory).mockResolvedValue(undefined as never);
+    vi.mocked(getClaudeHistory).mockResolvedValue({ status: 'done', result: HISTORY } as never);
+    vi.mocked(importClaudeHistory).mockResolvedValue({ imported: 1 } as never);
+    const { sent } = await mount(`/settings/workspaces/new?machine=${OTHER_RUNNER_ID}`);
+    await folder('/Users/me/src/app');
+    expect(text(document.querySelector('[data-field="folder"] .msc-verdict'))).toBe('Found · git repository · main');
+    expect(field('Name').value).toBe('app');
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 3200)));
+    await settle(3);
+    expect(vi.mocked(askClaudeHistory)).toHaveBeenCalledWith(OTHER_RUNNER_ID, '/Users/me/src/app');
+    await click($$('[data-field="history"] [role="radio"]')[1]);
+    await click(button('Create workspace'));
+    expect(sent).toEqual([
+      { method: 'POST', path: '/workspaces', body: { name: 'app', runnerId: OTHER_RUNNER_ID, workDir: '/Users/me/src/app' } },
+    ]);
+    await settle(3);
+    expect(vi.mocked(importClaudeHistory)).toHaveBeenCalledWith({
+      workspaceId: MADE,
+      transcripts: HISTORY.transcripts.slice(0, 1),
+    });
+    expect(location).toBe(`/workspaces/${MADE}`);
+  }, 15_000);
+
+  it('says on the card why a Create was refused, and stays', async () => {
+    await mount(`/settings/workspaces/new?machine=${OTHER_RUNNER_ID}`);
+    const answer = apiMock.getMockImplementation()!;
+    apiMock.mockImplementation(async (url: string, options?: { method?: string; body?: unknown }) => {
+      if (options?.method === 'POST' && url === '/workspaces') throw new Error('a workspace already works in that folder');
+      return answer(url, options as never);
+    });
+    await folder('website');
+    await click(button('Create workspace'));
+    expect(text(document.querySelector('[data-field="folder"] .msc-line'))).toBe(
+      'Couldn’t create the workspace: a workspace already works in that folder',
+    );
+    expect(location).toBe(`/settings/workspaces/new?machine=${OTHER_RUNNER_ID}`);
+  });
+
+  it('offers From GitHub only where the deployment has the App', async () => {
+    await mount(`/settings/workspaces/new?machine=${OTHER_RUNNER_ID}`);
+    expect(document.querySelector('[data-field="github"]')).toBeNull();
+    act(() => root!.unmount());
+    host!.remove();
+    github = { available: true, connected: false, login: null, installations: null };
+    await mount(`/settings/workspaces/new?machine=${OTHER_RUNNER_ID}`);
+    expect(text(document.querySelector('[data-field="github"] .msc-github-title'))).toBe('From GitHubNEW');
+  });
+
+  it('Change machine goes back to the list', async () => {
     await mount(`/settings/workspaces/new?machine=${RUNNER_ID}`);
     expect(text(document.querySelector('.settings-header-description'))).toBe('On gpu-box · Change machine');
-    expect(field('Working directory').placeholder).toBe('/path/to/project on the runner');
     await click(button('Change machine'));
     expect(location).toBe('/settings/workspaces/new');
   });

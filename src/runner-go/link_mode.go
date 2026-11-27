@@ -524,6 +524,8 @@ var linkDaemonRoutes = []string{
 	"POST /runner/sessions/takeover-leases",
 	"POST /runner/sessions/:id/activate-leases",
 	"POST /runner/sessions/:id/release-leases",
+	"POST /runner/sessions/:id/return-slot",
+	"POST /runner/sessions/:id/release",
 	"POST /runner/sessions/:id/orchestration-credential",
 	linkRouteInbox,
 	"GET /runner/sessions/:id/attachments/:id",

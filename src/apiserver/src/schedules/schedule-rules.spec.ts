@@ -61,7 +61,7 @@ test('instantOfLocal and parseRule refuse what is not a rule or a zone', () => {
   assert.throws(() => parseRule({ kind: 'DAILY', time: '24:00' }), /HH:mm/);
   assert.throws(() => parseRule({ kind: 'WEEKLY', time: '10:00', weekdays: [] }), /WEEKLY/);
   assert.throws(() => parseRule({ kind: 'ONCE', at: '2026-02-30T10:00' }), /calendar/);
-  assert.throws(() => parseRule({ kind: 'CRON', expr: '* * * * *' }), /ONCE, DAILY, WEEKLY or WHEN/);
+  assert.throws(() => parseRule({ kind: 'CRON', expr: '* * * * *' }), /ONCE, DAILY, WEEKLY, EVERY or WHEN/);
   assert.throws(() => nextDueAt(parseRule({ kind: 'DAILY', time: '10:00' }), 'Mars/Olympus', new Date()), /IANA/);
 });
 
@@ -91,6 +91,152 @@ test('a WHEN rule: defaults written out, no slot, its runs a week, a change merg
   assert.throws(() => mergeRule(rule, { kind: 'DAILY', time: '10:00' }), /cannot take a time/);
   assert.notEqual(ruleCommandHash(rule), ruleCommandHash(merged));
   assert.equal(ruleCommandHash(parseRule({ kind: 'DAILY', time: '10:00' })), null);
+});
+
+// ----- EVERY (design §3, §4, §5.1) -----
+
+/** Every slot of `rule` from `from` up to `to`, by walking nextDueAt as the worker does. */
+function slotsBetween(rule: ScheduleRule, timezone: string, from: string, to: string): Date[] {
+  const out: Date[] = [];
+  let at = new Date(from);
+  for (;;) {
+    const next = nextDueAt(rule, timezone, at);
+    if (!next || next.getTime() > new Date(to).getTime()) return out;
+    out.push(next);
+    at = next;
+  }
+}
+
+/** A slot as the schedule's zone reads it: "Mon 09:30". */
+function local(t: Date, timezone: string): string {
+  return new Intl.DateTimeFormat('en-US', { timeZone: timezone, weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+    .format(t).replace(',', '');
+}
+
+const WORKDAY_HALF_HOURS = Array.from({ length: 19 }, (_, i) => {
+  const m = 9 * 60 + i * 30;
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+});
+
+test('EVERY 30 from 09:00 until 18:00 on Mon-Fri: :00 and :30 inside the window on weekdays, none elsewhere', () => {
+  const rule = parseRule({ kind: 'EVERY', minutes: 30, time: '09:00', until: '18:00', weekdays: ['MON', 'TUE', 'WED', 'THU', 'FRI'] });
+  const tz = 'Asia/Shanghai';
+  // Sat 2026-11-14 00:00 local through Sun 2026-11-22 23:59 local: one whole week and both weekends around it.
+  const slots = slotsBetween(rule, tz, '2026-11-13T16:00:00Z', '2026-11-22T15:59:00Z');
+  const expected = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].flatMap((d) => WORKDAY_HALF_HOURS.map((t) => `${d} ${t}`));
+  assert.deepEqual(slots.map((t) => local(t, tz)), expected);
+  assert.equal(slots.length, 95, '19 a day × 5 days');
+  // The window edges: until is inclusive, nothing before time, and Friday 18:00:01 waits for Monday 09:00 (§5.1).
+  assert.equal(iso(nextDueAt(rule, tz, new Date('2026-11-20T09:40:00Z'))), '2026-11-20T10:00:00.000Z', 'Fri 17:40 → 18:00');
+  assert.equal(iso(nextDueAt(rule, tz, new Date('2026-11-20T10:00:01Z'))), '2026-11-23T01:00:00.000Z', 'Fri 18:00:01 → Mon 09:00');
+  assert.equal(iso(nextDueAt(rule, tz, new Date('2026-11-16T00:59:00Z'))), '2026-11-16T01:00:00.000Z', 'Mon 08:59 → 09:00');
+  assert.equal(iso(nextDueAt(rule, tz, new Date('2026-11-16T01:10:00Z'))), '2026-11-16T01:30:00.000Z', 'Mon 09:10 → 09:30');
+  // Inside startAt / endAt like every rule.
+  assert.equal(nextDueAt(rule, tz, new Date('2026-11-20T10:00:01Z'), { endAt: new Date('2026-11-22T00:00:00Z') }), null);
+});
+
+test('EVERY without until runs round the clock from time, and every day starts again at time', () => {
+  const hourly = parseRule({ kind: 'EVERY', minutes: 60 });
+  assert.deepEqual(hourly, { kind: 'EVERY', minutes: 60, time: '00:00', weekdays: ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] });
+  const day = slotsBetween(hourly, 'UTC', '2026-11-15T23:59:00Z', '2026-11-16T23:59:00Z');
+  assert.equal(day.length, 24);
+  assert.equal(iso(day[0]!), '2026-11-16T00:00:00.000Z');
+  assert.equal(iso(day[23]!), '2026-11-16T23:00:00.000Z');
+  // "Every 3 hours from 10:00" is 10, 13, 16, 19, 22, then 10:00 the next day (§3).
+  const threes = parseRule({ kind: 'EVERY', minutes: 180, time: '10:00' });
+  assert.deepEqual(
+    slotsBetween(threes, 'Europe/Berlin', '2026-11-15T23:00:00Z', '2026-11-17T09:00:00Z').map((t) => local(t, 'Europe/Berlin')),
+    ['Mon 10:00', 'Mon 13:00', 'Mon 16:00', 'Mon 19:00', 'Mon 22:00', 'Tue 10:00'],
+  );
+});
+
+test('EVERY across DST: wall-clock slots, a skipped hour moves to the jump once, a repeated hour fires once', () => {
+  const tz = 'America/New_York';
+  // Spring forward, Sun 2026-03-08: 02:00 EST jumps to 03:00 EDT. 02:00 and 02:30 move to 03:00 and run once there.
+  const round = parseRule({ kind: 'EVERY', minutes: 30 });
+  const spring = slotsBetween(round, tz, '2026-03-08T05:00:00Z', '2026-03-09T03:59:00Z'); // local Sun 00:00 EST .. 23:59 EDT
+  assert.equal(spring.length, 48 - 1 - 2, 'the 00:00 slot is the starting instant itself, and that day has two runs fewer');
+  assert.deepEqual(spring.slice(0, 5).map((t) => local(t, tz)), ['Sun 00:30', 'Sun 01:00', 'Sun 01:30', 'Sun 03:00', 'Sun 03:30']);
+  assert.equal(iso(spring[3]!), '2026-03-08T07:00:00.000Z');
+  assert.ok(spring.every((t) => t.getUTCMinutes() % 30 === 0));
+  // Fall back, Sun 2026-11-01: 02:00 EDT falls back to 01:00 EST. 01:00 and 01:30 fire once, on their first occurrence.
+  const fall = slotsBetween(round, tz, '2026-11-01T04:00:00Z', '2026-11-02T04:59:00Z'); // local Sun 00:00 .. 23:59
+  assert.equal(fall.length, 47, '48 wall-clock slots, the 00:00 one is the starting instant itself');
+  const labels = fall.map((t) => local(t, tz));
+  assert.deepEqual(labels.slice(0, 4), ['Sun 00:30', 'Sun 01:00', 'Sun 01:30', 'Sun 02:00']);
+  assert.equal(new Set(labels).size, labels.length, 'one slot per wall-clock time, never one per elapsed half hour');
+  assert.equal(iso(fall[1]!), '2026-11-01T05:00:00.000Z', '01:00 EDT, the first occurrence');
+  assert.equal(iso(fall[3]!), '2026-11-01T07:00:00.000Z', '02:00 EST, an hour of elapsed time after 01:30 EDT');
+
+  // The project's rule on a DST transition: 09:00-18:00 Mon-Fri in Europe/London across the Sunday 2026-10-25
+  // fall back and Sunday 2026-03-29 spring forward. The weekday window keeps its wall-clock slots either side.
+  const work = parseRule({ kind: 'EVERY', minutes: 30, time: '09:00', until: '18:00', weekdays: ['MON', 'TUE', 'WED', 'THU', 'FRI'] });
+  for (const [from, to, days] of [
+    ['2026-10-23T00:00:00Z', '2026-10-27T00:00:00Z', ['Fri', 'Mon']], // BST Friday, GMT Monday
+    ['2026-03-27T00:00:00Z', '2026-03-31T00:00:00Z', ['Fri', 'Mon']], // GMT Friday, BST Monday
+  ] as const) {
+    const got = slotsBetween(work, 'Europe/London', from, to);
+    assert.deepEqual(got.map((t) => local(t, 'Europe/London')), days.flatMap((d) => WORKDAY_HALF_HOURS.map((x) => `${d} ${x}`)));
+  }
+  assert.equal(iso(nextDueAt(work, 'Europe/London', new Date('2026-10-23T17:00:01Z'))), '2026-10-26T09:00:00.000Z', 'Fri 18:00:01 BST → Mon 09:00 GMT');
+  assert.equal(iso(nextDueAt(work, 'Europe/London', new Date('2026-03-27T18:00:01Z'))), '2026-03-30T08:00:00.000Z', 'Fri 18:00:01 GMT → Mon 09:00 BST');
+  // A window that straddles the jump itself, on the transition day: every slot is :00 or :30 local, none repeated.
+  const night = parseRule({ kind: 'EVERY', minutes: 30, time: '00:00', until: '04:00', weekdays: ['SUN'] });
+  assert.deepEqual(
+    slotsBetween(night, tz, '2026-11-01T03:00:00Z', '2026-11-02T03:00:00Z').map((t) => local(t, tz)),
+    ['Sun 00:00', 'Sun 00:30', 'Sun 01:00', 'Sun 01:30', 'Sun 02:00', 'Sun 02:30', 'Sun 03:00', 'Sun 03:30', 'Sun 04:00'],
+  );
+  assert.deepEqual(
+    slotsBetween(night, tz, '2026-03-08T04:00:00Z', '2026-03-09T04:00:00Z').map((t) => local(t, tz)),
+    ['Sun 00:00', 'Sun 00:30', 'Sun 01:00', 'Sun 01:30', 'Sun 03:00', 'Sun 03:30', 'Sun 04:00'],
+  );
+});
+
+test('EVERY: invalid minutes, until and weekdays are refused', () => {
+  for (const minutes of [15, 45, 90, 1440, 0, -30, '30', null, undefined]) {
+    assert.throws(() => parseRule({ kind: 'EVERY', minutes, time: '09:00' }), /minutes is one of 30, 60, 120, 180, 240, 360, 480, 720/);
+  }
+  assert.throws(() => parseRule({ kind: 'EVERY', minutes: 30, time: '9:00' }), /HH:mm/);
+  assert.throws(() => parseRule({ kind: 'EVERY', minutes: 30, time: '09:00', until: '09:00' }), /until is later than its time/);
+  assert.throws(() => parseRule({ kind: 'EVERY', minutes: 30, time: '09:00', until: '08:00' }), /until is later than its time/);
+  assert.throws(() => parseRule({ kind: 'EVERY', minutes: 30, time: '22:00', until: '02:00' }), /until is later than its time/, 'never across midnight');
+  assert.throws(() => parseRule({ kind: 'EVERY', minutes: 30, time: '09:00', until: '24:00' }), /HH:mm/);
+  assert.throws(() => parseRule({ kind: 'EVERY', minutes: 30, time: '09:00', weekdays: [] }), /weekdays/);
+  assert.throws(() => parseRule({ kind: 'EVERY', minutes: 30, time: '09:00', weekdays: ['MON', 'FUNDAY'] }), /weekdays/);
+  assert.throws(() => parseRule({ kind: 'EVERY', minutes: 30, time: '09:00', weekdays: 'MON' }), /weekdays/);
+});
+
+test('a written EVERY rule always has time and weekdays, in canonical order', () => {
+  for (const raw of [
+    { kind: 'EVERY', minutes: 60 },
+    { kind: 'EVERY', minutes: 120, time: null, weekdays: null },
+    { kind: 'EVERY', minutes: 30, time: '09:00', until: '18:00', weekdays: ['FRI', 'MON', 'MON'] },
+  ]) {
+    const rule = parseRule(raw);
+    assert.equal(rule.kind, 'EVERY');
+    const written = JSON.parse(JSON.stringify(rule)) as Record<string, unknown>;
+    assert.match(String(written.time), /^\d\d:\d\d$/, 'shipped Apple clients throw without time');
+    assert.ok(Array.isArray(written.weekdays) && written.weekdays.length > 0, 'shipped clients read it as weekly on weekdays');
+  }
+  assert.deepEqual(
+    parseRule({ kind: 'EVERY', minutes: 30, time: '09:00', until: '18:00', weekdays: ['FRI', 'MON', 'MON'] }),
+    { kind: 'EVERY', minutes: 30, time: '09:00', until: '18:00', weekdays: ['MON', 'FRI'] },
+  );
+  // Parsing a written rule again gives the same rule: what the worker reads back is what was written.
+  const rule = parseRule({ kind: 'EVERY', minutes: 240, time: '06:00' });
+  assert.deepEqual(parseRule(JSON.parse(JSON.stringify(rule))), rule);
+  // A timed schedule may change to EVERY and back.
+  assert.deepEqual(parseRule(mergeRule(parseRule({ kind: 'DAILY', time: '10:00' }), { kind: 'EVERY', minutes: 60 })).kind, 'EVERY');
+});
+
+test('runsPerWeek(EVERY) is slots per day × distinct weekdays', () => {
+  const r = (raw: object) => runsPerWeek(parseRule({ kind: 'EVERY', ...raw }));
+  assert.equal(r({ minutes: 30, time: '09:00', until: '18:00', weekdays: ['MON', 'TUE', 'WED', 'THU', 'FRI'] }), 95, '19 × 5');
+  assert.equal(r({ minutes: 60 }), 168, '24 × 7');
+  assert.equal(r({ minutes: 30 }), 336, '48 × 7');
+  assert.equal(r({ minutes: 720, time: '09:00' }), 14, '2 × 7');
+  assert.equal(r({ minutes: 180, time: '10:00' }), 35, '10, 13, 16, 19, 22 × 7');
+  assert.equal(r({ minutes: 60, time: '09:00', until: '17:30', weekdays: ['SAT', 'SUN', 'SAT'] }), 18, '9 × 2');
 });
 
 const env = (over: Partial<Envelope> = {}): Envelope => ({

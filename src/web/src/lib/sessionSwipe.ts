@@ -40,7 +40,7 @@ export const sessionMovable = (session: { projectMembership?: { role: string } |
 
 /** One edge's actions in the order they sit on screen, left to right: the leading edge's outermost
  *  is at the row's left end, the trailing edge's at its right end. */
-export const swipeActionsOnScreen = (side: SwipeSide, actions: readonly SwipeAction[]): SwipeAction[] =>
+export const swipeActionsOnScreen = <T = SwipeAction>(side: SwipeSide, actions: readonly T[]): T[] =>
   side === 'leading' ? [...actions] : [...actions].reverse();
 
 export interface SwipeWidths {
@@ -55,11 +55,26 @@ export interface SwipeGeometry extends SwipeWidths {
   maxOffset: number;
 }
 
-export function swipeWidths(view: SessionListView, movable = true): SwipeWidths {
-  const { leading, trailing } = sessionSwipeActions(view, movable);
+/** How wide each edge's revealed actions are: one button's width per action. Any row's action set —
+ *  a session's (`sessionSwipeActions`) or a project's Pin and Move. */
+export function actionWidths(actions: Record<SwipeSide, readonly unknown[]>): SwipeWidths {
   return {
-    leadingWidth: leading.length * SWIPE_ACTION_WIDTH,
-    trailingWidth: trailing.length * SWIPE_ACTION_WIDTH,
+    leadingWidth: actions.leading.length * SWIPE_ACTION_WIDTH,
+    trailingWidth: actions.trailing.length * SWIPE_ACTION_WIDTH,
+  };
+}
+
+export function swipeWidths(view: SessionListView, movable = true): SwipeWidths {
+  return actionWidths(sessionSwipeActions(view, movable));
+}
+
+/** A row's swipe geometry from the widths of its action set. `canFullSwipe` is whether the first
+ *  leading action can run now. */
+export function actionGeometry(widths: SwipeWidths, rowWidth: number, canFullSwipe: boolean): SwipeGeometry {
+  return {
+    ...widths,
+    fullSwipeAt: canFullSwipe ? rowWidth * FULL_SWIPE_FRACTION : null,
+    maxOffset: canFullSwipe ? rowWidth : widths.leadingWidth + OVERDRAG,
   };
 }
 
@@ -70,12 +85,7 @@ export function swipeGeometry(
   canFullSwipe: boolean,
   movable = true,
 ): SwipeGeometry {
-  const widths = swipeWidths(view, movable);
-  return {
-    ...widths,
-    fullSwipeAt: canFullSwipe ? rowWidth * FULL_SWIPE_FRACTION : null,
-    maxOffset: canFullSwipe ? rowWidth : widths.leadingWidth + OVERDRAG,
-  };
+  return actionGeometry(swipeWidths(view, movable), rowWidth, canFullSwipe);
 }
 
 /** Where a row's content rests (px; positive = slid right) with `side` held open. */

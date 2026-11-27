@@ -44,11 +44,11 @@ import { JwtService } from '@nestjs/jwt';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import {
   IntegrationCheckResult,
   IntegrationJobCommand,
@@ -78,7 +78,7 @@ import { establishProjectContractForPgTest } from '../projects/project-contract-
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { ProjectHandoffService } from '../projects/project-handoff.service';
-import { INTEGRATION_JOB_CLAIM, PROMOTION_AUTOMATIC_LAND } from '../projects/project-integration-job';
+import { INTEGRATION_JOB_CLAIM, PROMOTION_AUTOMATIC_LAND, settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
 import { configureProjectIntegration } from '../projects/project-integration-line';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { ProjectPromotionService } from '../projects/project-promotion.service';
@@ -503,7 +503,7 @@ async function failFirstRuns(
   for (const run of [heldRun, twinRun]) {
     await s.db.session.update({
       where: { id: run.id },
-      data: { status: RunStatus.FAILED, error: null, finishedAt: new Date() },
+      data: { turnState: null, error: null, finishedAt: new Date() },
     });
   }
   return {
@@ -741,7 +741,7 @@ test('(4b) a prerequisite finishing starts no more of a project\'s tasks than it
       where: { taskId: { in: three.dependents }, startsTaskWork: true }, select: { id: true },
     });
     await s.db.session.update({
-      where: { id: running!.id }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
+      where: { id: running!.id }, data: { turnState: null, finishedAt: new Date() },
     });
     await sweep(s.tasks);
     assert.deepEqual(await Promise.all(three.dependents.map((id) => runs(s.db, id))), [1, 1],
@@ -874,7 +874,7 @@ async function lineWorld(stack: Stack, label: string): Promise<LineWorld> {
     data: {
       id: coordinatorSessionId, ownerId: ids.ownerId, creatorId: ids.ownerId,
       workspaceId: ids.workspaceId, assignedRunnerId: ids.runnerId, title: `coordinator: ${label}`,
-      prompt: `coordinator: ${label}`, provider: 'claude', status: RunStatus.AWAITING_INPUT,
+      prompt: `coordinator: ${label}`, provider: 'claude', turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER, titleManagedByProject: true, numTurns: 1,
       startedAt: new Date(), runtimeSessionId: `runtime-${coordinatorSessionId}`,
     },
@@ -913,13 +913,14 @@ async function doneCodeTask(stack: Stack, w: LineWorld): Promise<string> {
   });
   const sessionId = randomUUID();
   const turnId = randomUUID();
+  const branch = `orbit/${w.label}`;
   await db.session.create({
     data: {
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId: declared.id,
       workspaceId: w.workspaceId, assignedRunnerId: w.runnerId, title, prompt: title,
-      provider: 'claude', status: RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER,
-      startsTaskWork: true, startedAt: new Date(), finishedAt: new Date(Date.now() - 60_000),
-      branch: `orbit/${w.label}`, isolationStatus: 'worktree', baseSha: 'b'.repeat(40),
+      provider: 'claude', turnState: 'IN_FLIGHT', dispatchOrigin: SessionDispatchOrigin.USER,
+      startsTaskWork: true, startedAt: new Date(),
+      branch, isolationStatus: 'worktree', baseSha: 'b'.repeat(40),
     },
   });
   await db.conversationTurn.create({
@@ -946,6 +947,17 @@ async function doneCodeTask(stack: Stack, w: LineWorld): Promise<string> {
   });
   const task = await db.task.findUniqueOrThrow({ where: { id: declared.id }, select: { status: true } });
   assert.equal(task.status, TaskStatus.DONE, 'the acceptance command agreed');
+  await db.$transaction(async (tx) => {
+    const finished = await tx.session.update({
+      where: { id: sessionId },
+      data: {
+        turnState: null, finishedAt: new Date(Date.now() - 60_000), 
+        branchSha: TASK_BRANCH_TIP, worktreeBranch: branch, worktreeDirty: false,
+      },
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
+  });
   return declared.id;
 }
 

@@ -25,6 +25,11 @@ func runAntigravityChild(ctx context.Context, c subagentChild) (ExecResult, stri
 		conversation = c.engineSession
 	}
 	child := subagentChildJob(c.parent, c.exec, c.def, c.runID, providerAntigravity, conversation)
+	if c.def.Readonly {
+		// agy's plan mode refuses every command itself, so a read-only SubAgent runs under Orbit's approval hook, as
+		// Default does: its writes refused, and the rest answered by the parent's mode (decideAntigravityToolCall).
+		child.Agent.PermissionMode = "default"
+	}
 	if err := guardAntigravityProjectConfig(c.cwd, child.Agent.PermissionMode); err != nil {
 		return ExecResult{Status: stFailed}, conversation, err
 	}
@@ -70,7 +75,11 @@ func runAntigravityChild(ctx context.Context, c subagentChild) (ExecResult, stri
 		}
 		usage := turn.usage
 		// agy reports no cost.
-		return subagentChildResult(status, text, errText, 0, &usage), child.RuntimeSessionID, nil
+		res := subagentChildResult(status, text, errText, 0, &usage)
+		if status == stFailed {
+			res.Failure, res.Admission = turn.failure.wire(), turn.admission()
+		}
+		return res, child.RuntimeSessionID, nil
 	}
 	for {
 		select {

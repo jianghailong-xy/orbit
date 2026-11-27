@@ -480,19 +480,13 @@ class CardsDeviceTest {
         capture("session-tasks-open")
     }
 
-    /** A08-11: a wake turn is one line; it opens into what the job did, and a failed job's output tail folds on its own. */
-    @Test fun aWakeTurnIsOneLineThatOpens() = journey("wake") {
+    /** A08-11 under board C1 (file 350t1lTONlrPMjilBdXx7): a background job's wake turn draws no line of its own — the job's card says
+     * it — and the block the agent read never reaches the transcript as text. */
+    @Test fun aJobsWakeTurnDrawsNoLine() = journey("wake") {
         login("wake", ready = "Review the Orbit card below.")
-        compose.onNodeWithTag("transcript-list").performScrollToNode(hasTestTag("background-wake"))
-        await("Background job failed"); await("watch main CI 34997433169")
+        compose.onAllNodesWithText("Background job failed").assertCountEquals(0)
         compose.onAllNodesWithText("<background-job-wake>", substring = true).assertCountEquals(0)
-        capture("wake-line")
-        compose.onNodeWithTag("background-wake:line").performClick()
-        compose.waitUntil(15_000) { exists("background-wake:fold") }
-        capture("wake-fold")
-        compose.onNodeWithTag("background-wake:toggle-output").performScrollTo().performClick()
-        compose.onNodeWithTag("background-wake:toggle-output").assertTextEquals(BackgroundWakeCard.collapseOutput)
-        capture("wake-output-open")
+        capture("wake-turn-draws-nothing")
     }
 
     /** A08-8: a merge-check change offers no standing yes, and saying no is a conversation the server records with its words. */

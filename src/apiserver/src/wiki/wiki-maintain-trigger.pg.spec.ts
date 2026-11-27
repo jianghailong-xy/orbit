@@ -104,7 +104,7 @@ async function fixture(h: Harness, over: { settings?: Record<string, unknown> } 
   await h.prisma.session.create({
     data: {
       id: sessionId, title: 'a settled session', prompt: 'p', ownerId: h.ownerId, creatorId: h.ownerId,
-      dispatchOrigin: 'USER', status: 'SUCCEEDED', workspaceId, assignedRunnerId: runnerId, lastTurnAt: settled,
+      dispatchOrigin: 'USER', turnState: null, finishedAt: new Date(), workspaceId, assignedRunnerId: runnerId, lastTurnAt: settled,
     },
   });
   return { spaceId, workspaceId, runnerId, sessionId };
@@ -268,7 +268,7 @@ async function busySpace(h: Harness, sessions: number): Promise<{ spaceId: strin
     await h.prisma.session.create({
       data: {
         id, title: `a settled session ${i}`, prompt: 'p', ownerId: h.ownerId, creatorId: h.ownerId, dispatchOrigin: 'USER',
-        status: 'SUCCEEDED', workspaceId: fx.workspaceId, assignedRunnerId: fx.runnerId, lastTurnAt: new Date(Date.now() - (60 - i) * 60_000),
+        turnState: null, finishedAt: new Date(), workspaceId: fx.workspaceId, assignedRunnerId: fx.runnerId, lastTurnAt: new Date(Date.now() - (60 - i) * 60_000),
       },
     });
     sessionIds.push(id);

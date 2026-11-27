@@ -1,4 +1,4 @@
-import { type MouseEvent as ReactMouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { ExclamationCircleFilled, FullscreenExitOutlined, FullscreenOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { BranchCommit, RunnerRepoHealth, MergeRecoveryAction } from '@orbit/shared';
@@ -18,7 +18,7 @@ import { Drawer } from './ui/Drawer';
 import { Input } from './ui/Input';
 import { Menu, type MenuItem } from './ui/Menu';
 import { Segmented } from './ui/Segmented';
-import { Tooltip } from './ui/Tooltip';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 import { WorktreeFilePreview } from './WorktreeFilePreview';
 import {
   CommitHead,
@@ -89,6 +89,7 @@ export function SessionOutputs({
   resolvingCommit,
   onAdopt,
   adopting,
+  onDismissMergeFailure,
   turnActive,
   repoHealth,
   onCleanUpRepo,
@@ -145,6 +146,9 @@ export function SessionOutputs({
    *  re-points the session to that branch so Merge/diff act on the real work. */
   onAdopt?: () => void;
   adopting?: boolean;
+  /** Provided by the parent (owns the mutation); puts a ✕ on a failed merge's strip. Closing it
+   *  clears the stored failure on the server, so the bar shows Merge (or "✓ In main") again. */
+  onDismissMergeFailure?: () => void;
   /** Heartbeat-reported state of the shared checkout this session's workspace works in. Null when the
    *  runner is older than the report or the workDir isn't a git repo — both read as "unknown", so
    *  nothing is shown. A half-finished merge left in there blocks every merge on the machine, which
@@ -177,7 +181,11 @@ export function SessionOutputs({
   const [noticeHiddenFor, setNoticeHiddenFor] = useState<string | null>(null);
   const firstChanged = detail?.changedFiles?.[0]?.path ?? null;
   useEffect(() => {
-    if (openDiffSignal && firstChanged) setOpenFile(firstChanged);
+    // An open that names no commit is the whole branch: All changes, never the commit last looked at.
+    if (openDiffSignal && firstChanged) {
+      setOpenCommit(null);
+      setOpenFile(firstChanged);
+    }
     // Only a new signal opens it; a file list that changes underneath must not reopen a closed drawer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openDiffSignal]);
@@ -319,18 +327,19 @@ export function SessionOutputs({
         onClick={() => (commits ? toggleCommits() : firstFile && setOpenFile(firstFile))}
         aria-expanded={commits ? commitsOpen : undefined}
       >
-        <button
-          type="button"
-          className="wt-branch"
-          title="Copy branch name"
-          onClick={(e) => {
-            e.stopPropagation();
-            copy(displayBranch, 'branch');
-          }}
-        >
-          <span className="wt-branch-ico">⎇</span>
-          <BranchLabel branch={displayBranch} />
-        </button>
+        <Tooltip content="Copy branch name">
+          <button
+            type="button"
+            className="wt-branch"
+            onClick={(e) => {
+              e.stopPropagation();
+              copy(displayBranch, 'branch');
+            }}
+          >
+            <span className="wt-branch-ico">⎇</span>
+            <BranchLabel branch={displayBranch} />
+          </button>
+        </Tooltip>
         {commits ? (
           <>
             <CommitSummary commits={commits} dirty={dirtyNow} fileCount={files.length} />
@@ -428,7 +437,22 @@ export function SessionOutputs({
         waitingForTurn={!!turnActive}
         failed={detail.mergeStatus === 'error' || detail.mergeStatus === 'conflict'} />}
       {failed && (!detail.mergeRecovery || detail.commitStatus === 'error') && (
-        <div className={`wt-merge wt-bar-fail${mergeFailShown ? ' wt-merge-inset' : ''}`}>
+        <div className={`wt-merge wt-bar-fail${mergeFailShown ? ' wt-merge-inset' : ''}${mergeFailShown && onDismissMergeFailure ? ' wt-merge-closable' : ''}`}>
+          {mergeFailShown && onDismissMergeFailure && (
+            <Tooltip content="Dismiss">
+              <button
+                type="button"
+                className="wt-notice-close wt-merge-dismiss"
+                aria-label="Dismiss"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDismissMergeFailure();
+                }}
+              >
+                ✕
+              </button>
+            </Tooltip>
+          )}
           {detail.commitStatus === 'error' ? (
             <CommitFailure
               key={detail.commitError ?? ''}
@@ -439,10 +463,12 @@ export function SessionOutputs({
             />
           ) : detail.mergeStatus === 'conflict' ? (
             <div className="wt-merge-manual">
-              <div className="wt-merge-head" title={detail.mergeError ?? undefined}>
-                <ExclamationCircleFilled className="wt-commit-fail-icon" aria-hidden="true" />
-                Merge conflict with {mergeTargetName}
-              </div>
+              <Tooltip content={detail.mergeError ?? undefined} delay={TEXT_TOOLTIP_DELAY_MS}>
+                <div className="wt-merge-head">
+                  <ExclamationCircleFilled className="wt-commit-fail-icon" aria-hidden="true" />
+                  Merge conflict with {mergeTargetName}
+                </div>
+              </Tooltip>
               <div className="wt-merge-why">
                 The merge was aborted and nothing changed.{' '}
                 {onResolveInSession ? (
@@ -457,18 +483,22 @@ export function SessionOutputs({
                 <li>
                   <span className="wt-merge-step-n" aria-hidden="true">1</span>
                   <span className="wt-merge-where">In the session’s worktree</span>
-                  <code className="wt-merge-cmd" title="Copy" onClick={() => copy(manualRebaseCmd, 'command')}>
-                    {manualRebaseCmd}
-                    <span className="wt-merge-cmd-copy" aria-hidden="true">Copy</span>
-                  </code>
+                  <Tooltip content="Copy">
+                    <code className="wt-merge-cmd" onClick={() => copy(manualRebaseCmd, 'command')}>
+                      {manualRebaseCmd}
+                      <span className="wt-merge-cmd-copy" aria-hidden="true">Copy</span>
+                    </code>
+                  </Tooltip>
                 </li>
                 <li>
                   <span className="wt-merge-step-n" aria-hidden="true">2</span>
                   <span className="wt-merge-where">Then in the repo</span>
-                  <code className="wt-merge-cmd" title="Copy" onClick={() => copy(manualFfCmd, 'command')}>
-                    {manualFfCmd}
-                    <span className="wt-merge-cmd-copy" aria-hidden="true">Copy</span>
-                  </code>
+                  <Tooltip content="Copy">
+                    <code className="wt-merge-cmd" onClick={() => copy(manualFfCmd, 'command')}>
+                      {manualFfCmd}
+                      <span className="wt-merge-cmd-copy" aria-hidden="true">Copy</span>
+                    </code>
+                  </Tooltip>
                 </li>
               </ol>
             </div>
@@ -476,17 +506,19 @@ export function SessionOutputs({
             // A precondition failure, not a conflict: no git command run here would help, and the
             // old copyable rebase actively misled (it can't run against a checkout it can't have).
             // The runner's message names what is in the way — that IS the next step.
-            <span className="wt-merge-err" title={detail.mergeError ?? undefined}>
-              {detail.mergeError || 'Merge failed — nothing was changed.'}
-              {mainCheckout?.actionsSupported && isFfClash(detail.mergeError) && (
-                <>
-                  {' '}
-                  <button type="button" className="mck-link" onClick={() => mainCheckout.openReview()}>
-                    {MAIN_CHECKOUT_COPY.reviewMainCheckout}
-                  </button>
-                </>
-              )}
-            </span>
+            <Tooltip content={detail.mergeError ?? undefined} truncatedOnly>
+              <span className="wt-merge-err">
+                {detail.mergeError || 'Merge failed — nothing was changed.'}
+                {mainCheckout?.actionsSupported && isFfClash(detail.mergeError) && (
+                  <>
+                    {' '}
+                    <button type="button" className="mck-link" onClick={() => mainCheckout.openReview()}>
+                      {MAIN_CHECKOUT_COPY.reviewMainCheckout}
+                    </button>
+                  </>
+                )}
+              </span>
+            </Tooltip>
           )}
         </div>
       )}
@@ -498,7 +530,11 @@ export function SessionOutputs({
         committed={committed}
         openPath={openFile}
         onSelect={setOpenFile}
-        onClose={() => setOpenFile(null)}
+        onClose={() => {
+          // The drawer opens again on All changes unless a commit is chosen.
+          setOpenFile(null);
+          setOpenCommit(null);
+        }}
         commits={commits}
         openCommit={openCommit}
         onSelectCommit={(sha) => (sha ? openCommitDiff(sha) : openAll())}
@@ -750,9 +786,11 @@ function MergeButton({
     // Annotate the target only when it's an unusual one — keep the common main/master merge clean.
     const elsewhere = mergeTarget && mergeTarget !== 'main' && mergeTarget !== 'master';
     return (
-      <span className="wt-merge-done" title={`Merged into ${mergeTarget || 'main'}`}>
-        ✓ Merged{elsewhere ? ` → ${mergeTarget}` : ''}
-      </span>
+      <Tooltip content={`Merged into ${mergeTarget || 'main'}`} delay={TEXT_TOOLTIP_DELAY_MS}>
+        <span className="wt-merge-done">
+          ✓ Merged{elsewhere ? ` → ${mergeTarget}` : ''}
+        </span>
+      </Tooltip>
     );
   }
   // The branch already landed in its target (merged out-of-band — a command-line push, or an
@@ -764,9 +802,11 @@ function MergeButton({
     const landed =
       mergeTarget || (targets.includes('main') ? 'main' : targets.includes('master') ? 'master' : 'main');
     return (
-      <span className="wt-merge-done" title={`This branch is already in ${landed}`}>
-        ✓ In {landed}
-      </span>
+      <Tooltip content={`This branch is already in ${landed}`} delay={TEXT_TOOLTIP_DELAY_MS}>
+        <span className="wt-merge-done">
+          ✓ In {landed}
+        </span>
+      </Tooltip>
     );
   }
   // The server's resolved target includes a project task's integration line. Fall back to the
@@ -843,19 +883,19 @@ function MergeButton({
         e.stopPropagation();
         onMerge(primaryTarget);
       }}
-      title={failed ? undefined : `Merge this branch into ${effectiveTarget ?? 'main'}`}
     >
       {primaryLabel}
     </button>
   );
-  // On failure, hover surfaces the real reason via a Tooltip (native title cleared above); otherwise
-  // the plain button with its native title is enough.
+  // Hover says where it merges, or on failure the real reason, in the app's tooltip.
   const mainBtnEl = failed ? (
     <Tooltip content={failureHint} side="top">
       {mainBtn}
     </Tooltip>
   ) : (
-    mainBtn
+    <Tooltip content={`Merge this branch into ${effectiveTarget ?? 'main'}`} side="top">
+      {mainBtn}
+    </Tooltip>
   );
   // Older runner (no reported targets) or mid-merge → the plain button, no caret.
   if (!hasMenu) return mainBtnEl;
@@ -912,12 +952,12 @@ function MergeButton({
             </>
           )
         }
+        tooltip="Merge into another branch"
         trigger={
           <button
             type="button"
             className={`wt-merge-caret${failed ? ' wt-merge-btn-failed' : ''}`}
             aria-label="Choose a branch to merge into"
-            title="Merge into another branch"
             onClick={(e) => e.stopPropagation()}
           >
             ▾
@@ -1007,26 +1047,29 @@ function CommitButton({
   if (!onCommit) return null;
   const pending = busy || status === 'pending';
   const failed = status === 'error';
+  const tip = turnActive && !pending
+    ? 'Wait for the current turn to finish before committing'
+    : failed
+      ? 'Commit failed — try again'
+      : 'Commit the worktree changes onto this branch';
+  // The span takes the pointer while the button is disabled for a running turn, so the reason still shows.
   return (
-    <button
-      type="button"
-      className={`wt-merge-btn${failed ? ' wt-merge-btn-failed' : ''}`}
-      disabled={pending || turnActive}
-      onClick={(e) => {
-        // Don't let the click bubble to the row's toggle — committing shouldn't expand the panel.
-        e.stopPropagation();
-        onCommit();
-      }}
-      title={
-        turnActive && !pending
-          ? 'Wait for the current turn to finish before committing'
-          : failed
-            ? 'Commit failed — try again'
-            : 'Commit the worktree changes onto this branch'
-      }
-    >
-      {pending ? 'Committing…' : failed ? 'Retry commit' : 'Commit'}
-    </button>
+    <Tooltip content={tip} side="top">
+      <span style={{ display: 'inline-flex' }}>
+        <button
+          type="button"
+          className={`wt-merge-btn${failed ? ' wt-merge-btn-failed' : ''}`}
+          disabled={pending || turnActive}
+          onClick={(e) => {
+            // Don't let the click bubble to the row's toggle — committing shouldn't expand the panel.
+            e.stopPropagation();
+            onCommit();
+          }}
+        >
+          {pending ? 'Committing…' : failed ? 'Retry commit' : 'Commit'}
+        </button>
+      </span>
+    </Tooltip>
   );
 }
 
@@ -1049,6 +1092,10 @@ const WT_DIFF_WIDTH_MIN = 560;
 const WT_DIFF_WIDTH_DEFAULT = 'min(1400px, 94vw)';
 const WT_DIFF_MODE_KEY = 'wt-diff-mode';
 const WT_DIFF_MAX_KEY = 'wt-diff-max';
+const WT_DIFF_LIST_WIDTH_KEY = 'wt-diff-list-width';
+const WT_DIFF_LIST_WIDTH_MIN = 160;
+// The diff pane keeps at least this much room when the file list is dragged wider.
+const WT_DIFF_PANE_MIN = 320;
 // Render at most this many rows of a single file's diff up front; a giant file (e.g. a
 // 2k-line new file) then offers a "show more" button rather than laying out everything at once.
 const DIFF_ROW_CAP = 600;
@@ -1218,27 +1265,28 @@ function TreeNodes({
           />
         ) : (
           <div key={node.path} className="wt-tree-dir">
-            <button
-              type="button"
-              className="wt-diff-group-head"
-              style={{ paddingLeft: 8 + depth * 16 }}
-              onClick={() => toggle(node)}
-              title={node.path}
-            >
-              <span className="wt-diff-group-caret">{collapsed(node) ? '▸' : '▾'}</span>
-              <span className="wt-diff-group-dir">{node.name}/</span>
-              <span className="wt-diff-group-meta">
-                <span className="wt-diff-group-n">{node.fileCount}</span>
-                {node.binaryOnly ? (
-                  <span className="session-file-bin">binary</span>
-                ) : (
-                  <>
-                    <span className="add">+{node.add}</span>
-                    <span className="del">−{node.del}</span>
-                  </>
-                )}
-              </span>
-            </button>
+            <Tooltip content={node.path} truncatedOnly mono>
+              <button
+                type="button"
+                className="wt-diff-group-head"
+                style={{ paddingLeft: 8 + depth * 16 }}
+                onClick={() => toggle(node)}
+              >
+                <span className="wt-diff-group-caret">{collapsed(node) ? '▸' : '▾'}</span>
+                <span className="wt-diff-group-dir">{node.name}/</span>
+                <span className="wt-diff-group-meta">
+                  <span className="wt-diff-group-n">{node.fileCount}</span>
+                  {node.binaryOnly ? (
+                    <span className="session-file-bin">binary</span>
+                  ) : (
+                    <>
+                      <span className="add">+{node.add}</span>
+                      <span className="del">−{node.del}</span>
+                    </>
+                  )}
+                </span>
+              </button>
+            </Tooltip>
             {!collapsed(node) && (
               <TreeNodes
                 nodes={node.children}
@@ -1276,29 +1324,32 @@ function FileRow({
   const status = (file.status || 'M').slice(0, 1).toUpperCase();
   const { dir, name } = splitPath(file.path);
   return (
-    <button
-      type="button"
-      className={`session-file session-file-btn${active ? ' active' : ''}`}
-      style={indent != null ? { paddingLeft: 8 + indent * 16 } : undefined}
-      onClick={onClick}
-      title={`View diff · ${file.path}`}
-    >
-      <span className={`session-file-status st-${status.toLowerCase()}`} title={status}>
-        {status}
-      </span>
-      <span className="session-file-path">
-        {display === 'full' && dir && <span className="session-file-dir">{dir}</span>}
-        <span className="session-file-name">{name}</span>
-      </span>
-      {binary ? (
-        <span className="session-file-bin">binary</span>
-      ) : (
-        <span className="session-file-stat">
-          <span className="add">+{file.additions}</span>
-          <span className="del">−{file.deletions}</span>
+    <Tooltip content={`View diff · ${file.path}`}>
+      <button
+        type="button"
+        className={`session-file session-file-btn${active ? ' active' : ''}`}
+        style={indent != null ? { paddingLeft: 8 + indent * 16 } : undefined}
+        onClick={onClick}
+      >
+        <Tooltip content={status} truncatedOnly>
+          <span className={`session-file-status st-${status.toLowerCase()}`}>
+            {status}
+          </span>
+        </Tooltip>
+        <span className="session-file-path">
+          {display === 'full' && dir && <span className="session-file-dir">{dir}</span>}
+          <span className="session-file-name">{name}</span>
         </span>
-      )}
-    </button>
+        {binary ? (
+          <span className="session-file-bin">binary</span>
+        ) : (
+          <span className="session-file-stat">
+            <span className="add">+{file.additions}</span>
+            <span className="del">−{file.deletions}</span>
+          </span>
+        )}
+      </button>
+    </Tooltip>
   );
 }
 
@@ -1408,6 +1459,50 @@ export function WorktreeDiffDrawer({
     localStorage.removeItem(WT_DIFF_WIDTH_KEY);
   };
 
+  // Drag the line between the file list and the diff to widen or narrow the list; the width
+  // persists, and a double-click on the line resets it. null → the CSS default (248px).
+  const [listWidth, setListWidth] = useState<number | null>(() => {
+    const s = Number(localStorage.getItem(WT_DIFF_LIST_WIDTH_KEY));
+    return s >= WT_DIFF_LIST_WIDTH_MIN ? s : null;
+  });
+  const [listResizing, setListResizing] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
+  const startListResize = (e: ReactPointerEvent<HTMLDivElement>): void => {
+    e.preventDefault();
+    const handle = e.currentTarget;
+    const pointerId = e.pointerId;
+    handle.setPointerCapture(pointerId);
+    const startX = e.clientX;
+    const startW = listRef.current?.getBoundingClientRect().width ?? 248;
+    const bodyW = bodyRef.current?.getBoundingClientRect().width ?? 1100;
+    const maxW = Math.max(WT_DIFF_LIST_WIDTH_MIN, bodyW - WT_DIFF_PANE_MIN);
+    let latest = startW;
+    setListResizing(true);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    const onMove = (ev: PointerEvent): void => {
+      latest = Math.min(maxW, Math.max(WT_DIFF_LIST_WIDTH_MIN, startW + ev.clientX - startX));
+      setListWidth(latest);
+    };
+    const onUp = (): void => {
+      handle.removeEventListener('pointermove', onMove);
+      handle.removeEventListener('pointerup', onUp);
+      handle.removeEventListener('pointercancel', onUp);
+      if (handle.hasPointerCapture(pointerId)) handle.releasePointerCapture(pointerId);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      setListResizing(false);
+      localStorage.setItem(WT_DIFF_LIST_WIDTH_KEY, String(Math.round(latest)));
+    };
+    handle.addEventListener('pointermove', onMove);
+    handle.addEventListener('pointerup', onUp);
+    handle.addEventListener('pointercancel', onUp);
+  };
+  const resetListWidth = (): void => {
+    setListWidth(null);
+    localStorage.removeItem(WT_DIFF_LIST_WIDTH_KEY);
+  };
+
   // Split (default) vs unified rendering of the diff, remembered across reloads.
   const [viewMode, setViewMode] = useState<'unified' | 'split'>(() =>
     localStorage.getItem(WT_DIFF_MODE_KEY) === 'unified' ? 'unified' : 'split',
@@ -1503,27 +1598,25 @@ export function WorktreeDiffDrawer({
         )
       }
       headerActions={
-        <button
-          type="button"
-          className="wt-diff-max-btn"
-          onClick={toggleMax}
-          title={maximized ? 'Restore to side panel' : 'Maximize to full screen'}
-        >
-          {maximized ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
-          {maximized ? 'Restore' : 'Maximize'}
-        </button>
+        <Tooltip content={maximized ? 'Restore to side panel' : 'Maximize to full screen'} side="bottom" align="end">
+          <button type="button" className="wt-diff-max-btn" onClick={toggleMax}>
+            {maximized ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
+            {maximized ? 'Restore' : 'Maximize'}
+          </button>
+        </Tooltip>
       }
     >
       <div className="wt-diff-body" ref={bodyRef}>
         {!maximized && (
-          <div
-            className={`wt-diff-resizer${resizing ? ' resizing' : ''}`}
-            onMouseDown={startResize}
-            onDoubleClick={resetWidth}
-            title="Drag to resize · double-click to reset"
-          />
+          <Tooltip content="Drag to resize · double-click to reset" side="right" delay={TEXT_TOOLTIP_DELAY_MS}>
+            <div
+              className={`wt-diff-resizer${resizing ? ' resizing' : ''}`}
+              onMouseDown={startResize}
+              onDoubleClick={resetWidth}
+            />
+          </Tooltip>
         )}
-        <div className="wt-diff-list">
+        <div className="wt-diff-list" ref={listRef} style={listWidth != null ? { width: listWidth } : undefined}>
           {source ? (
             <>
               {source.listHead}
@@ -1559,6 +1652,16 @@ export function WorktreeDiffDrawer({
             <FileTree files={files} activePath={openPath} onSelect={onSelect} />
           )}
         </div>
+        <Tooltip content="Drag to resize · double-click to reset" side="right" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <div
+            className={`wt-diff-list-resizer${listResizing ? ' resizing' : ''}`}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize file list"
+            onPointerDown={startListResize}
+            onDoubleClick={resetListWidth}
+          />
+        </Tooltip>
         <div className="wt-diff-pane">
           {commit && <CommitHead commit={commit} mixed={mixed} />}
           {active ? (
@@ -1618,13 +1721,17 @@ function DiffPane({
   const head = (
     <>
       <span className="wt-diff-nav">
-        <button type="button" onClick={onPrev} disabled={!onPrev} aria-label="Previous file" title="Previous file">
-          ‹
-        </button>
+        <Tooltip side="bottom" content="Previous file">
+          <button type="button" onClick={onPrev} disabled={!onPrev} aria-label="Previous file">
+            ‹
+          </button>
+        </Tooltip>
         <span className="wt-diff-nav-pos">{pos}</span>
-        <button type="button" onClick={onNext} disabled={!onNext} aria-label="Next file" title="Next file">
-          ›
-        </button>
+        <Tooltip side="bottom" content="Next file">
+          <button type="button" onClick={onNext} disabled={!onNext} aria-label="Next file">
+            ›
+          </button>
+        </Tooltip>
       </span>
       <span className="wt-diff-pane-path">{file.path}</span>
     </>

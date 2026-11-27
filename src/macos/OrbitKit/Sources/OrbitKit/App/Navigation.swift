@@ -129,6 +129,16 @@ public enum NavNode: Hashable, Sendable {
     case wikiPlanDoc(slug: String, version: Int?)
     /// One of its sections — what it covers and where its material comes from (mock 22 ④⑤): 0-based.
     case wikiPlanSection(slug: String, index: Int, version: Int?)
+    /// A folder of Drive on a phone (docs/mocks/drive, 01-ios ③), pushed from its row; its name rides along
+    /// so the title is there before the folder's read.
+    case driveFolder(entryID: String, name: String)
+    /// A file's page: its preview, who last wrote it and what can be done with it (01-ios ④⑤).
+    case driveFile(entryID: String)
+    /// A file's earlier versions, each kept in Trash (D17), pushed from its page's Earlier versions row.
+    case driveVersions(entryID: String)
+    /// Trash and Storage, the last rows of the drive's top level (01-ios ②, ⑪, ⑬).
+    case driveTrash
+    case driveStorage
     /// A session someone else owns and invited this account to reply in: the guest view
     /// (docs/session-guests-design.md §4). Its Shared with me row is its destination, so it leads like
     /// a list — the drawer's hamburger, not back — and a 404 from the owner's read of a session id
@@ -746,6 +756,25 @@ public struct SessionFolderAddress: Hashable, Sendable {
         guard let agentID = session.agent?.id ?? session.agentId else { return nil }
         let view = SessionView.allCases.first { $0.lifecycleState == session.effectiveLifecycleState } ?? .open
         return scheduledRuns(agentID: agentID, view: view)
+    }
+
+    /// The folder page a session opened by its id from outside its folder's page — a link, a
+    /// notification, a search result — should show, because that is where its row is: the
+    /// workspace's top level lists no filed session, so the open conversation would have none and
+    /// nothing would point to its folder. Nil when the session is in no folder, its folder is not
+    /// one of `folders` for its own workspace, the list is not drawing folders at all
+    /// (`listShowsFolders`: the view's tag filter, Group by Tag or search on top of the scope's
+    /// own rule — Trash draws none), or a folder's page is already showing (`alreadyShowing`), which
+    /// an address that names one keeps rather than moves.
+    public static func forOpening(_ session: Session, folders: [SessionFolder],
+                                  listShowsFolders: Bool, alreadyShowing: Bool) -> Self? {
+        guard listShowsFolders, !alreadyShowing,
+              let folderID = session.folderId,
+              let agentID = session.agent?.id ?? session.agentId,
+              folders.contains(where: { $0.id == folderID && $0.workspaceId == agentID }) else { return nil }
+        let view = SessionView.allCases.first { $0.lifecycleState == session.effectiveLifecycleState } ?? .open
+        guard SessionFolderGrouping.listShowsFolders(view: view, byTag: false) else { return nil }
+        return Self(folderID: folderID, agentID: agentID, view: view)
     }
 
     public init(folderID: String, agentID: String, view: SessionView) {

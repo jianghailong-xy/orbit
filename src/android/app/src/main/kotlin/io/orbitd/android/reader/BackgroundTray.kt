@@ -45,6 +45,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.orbitd.android.R
 import io.orbitd.android.core.cards.BackgroundRow
+import io.orbitd.android.core.cards.BgJob
 import io.orbitd.android.core.cards.text
 import io.orbitd.android.core.cards.transcriptCards
 import io.orbitd.android.core.realtime.RunEvent
@@ -80,6 +81,16 @@ internal object BackgroundTrayLogic {
         e.type == "user" && e.ts != null && transcriptCards(e).let { cards -> StickySummary.isAnchor(e, cards) && !StickySummary.isOrbits(cards) }
     }?.ts
 
+    /**
+     * When the agent's latest turn started (web `lastAgentTurnStartedAt`): the earliest event of the turn the newest non-user event
+     * belongs to, so a wake's turn counts from its recorded note. Null while no agent event carries a turn.
+     */
+    fun lastAgentTurnStartedAt(events: List<RunEvent>): String? {
+        val turnId = events.lastOrNull { it.type != "user" && it.turnId != null && it.ts != null }?.turnId ?: return null
+        return events.filter { it.turnId == turnId && it.ts != null }
+            .minByOrNull { runCatching { java.time.Instant.parse(it.ts!!) }.getOrDefault(java.time.Instant.MAX) }?.ts
+    }
+
     /** The open list's header count (iOS `countText`): "N running · N total". */
     fun countText(procs: List<JsonObject>, sessionLive: Boolean): String {
         val running = procs.count { status(it, sessionLive) == "running" }
@@ -91,6 +102,10 @@ internal object BackgroundTrayLogic {
         val status = proc.text("status") ?: "unknown"
         return if (status == "running" && !sessionLive) "unknown" else status
     }
+
+    /** Whether a row takes Stop (R3): a bg_run job still running on a live session, which the list marks stoppable. */
+    fun stoppable(proc: JsonObject, sessionLive: Boolean): Boolean =
+        proc.text("kind") == "job" && status(proc, sessionLive) == "running" && proc["stoppable"] == kotlinx.serialization.json.JsonPrimitive(true)
 
     /** A list row's name: its description, else its command (iOS `BackgroundRow`). */
     fun name(proc: JsonObject): String =
@@ -114,8 +129,9 @@ internal object BackgroundTrayLogic {
  * processes · N running · N total", each row (status · name · age) opening to that process's output tail.
  */
 @Composable
-internal fun BackgroundTray(procs: List<JsonObject>, lastUserMessageAt: String?, sessionLive: Boolean, folded: Boolean = false) {
-    val row = remember(procs, lastUserMessageAt, sessionLive) { BackgroundRow.rowOf(procs, lastUserMessageAt, sessionLive) } ?: return
+internal fun BackgroundTray(procs: List<JsonObject>, clearedAt: String?, sessionLive: Boolean, folded: Boolean = false,
+    jumpToJob: (String) -> (() -> Unit)? = { null }) {
+    val row = remember(procs, clearedAt, sessionLive) { BackgroundRow.rowOf(procs, clearedAt, sessionLive) } ?: return
     var open by rememberSaveable { mutableStateOf(false) }
     // Which rotating name shows: kept here, above the folded row, so a pause holds it and it goes on from there.
     val names = (row.name as? BackgroundRow.Name.Rotate)?.items?.takeIf { it.size > 1 }
@@ -132,7 +148,6 @@ internal fun BackgroundTray(procs: List<JsonObject>, lastUserMessageAt: String?,
     }
     val item = when (val name = row.name) {
         is BackgroundRow.Name.One -> name.item
-        is BackgroundRow.Name.Pinned -> name.item
         is BackgroundRow.Name.Rotate -> name.items[turn % name.items.size]
     }
     val shape = RoundedCornerShape(8.dp)
@@ -147,7 +162,12 @@ internal fun BackgroundTray(procs: List<JsonObject>, lastUserMessageAt: String?,
                 procs.forEachIndexed { index, proc ->
                     val id = proc.text("shellId").orEmpty()
                     if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
-                    ProcRow(proc, sessionLive, expanded == id) { expanded = if (expanded == id) null else id }
+                    // A bg_run job's row goes to its Job card, as the Agents list goes to a run's block (R1); one whose card is not
+                    // drawn opens to its output as any row does.
+                    val jump = if (proc.text("kind") == "job") jumpToJob(id) else null
+                    ProcRow(proc, sessionLive, expanded == id) {
+                        if (jump != null) { open = false; jump() } else expanded = if (expanded == id) null else id
+                    }
                 }
             }
         } else {
@@ -196,18 +216,20 @@ private fun FoldedRow(row: BackgroundRow.Row, item: BackgroundRow.Item, open: ()
                 color = MaterialTheme.colorScheme.primary, maxLines = 1,
                 overflow = if (shown.truncate == BackgroundRow.Truncate.MIDDLE) TextOverflow.MiddleEllipsis else TextOverflow.Ellipsis)
         }
-        Mark(item.mark)
+        // The count, then the mark, at the right edge before the chevron, as the web and Apple Agents rows end.
         if (row.countParts.isNotEmpty()) Text(buildAnnotatedString {
             row.countParts.forEachIndexed { i, part ->
                 if (i > 0) withStyle(SpanStyle(color = secondary)) { append(" · ") }
-                withStyle(SpanStyle(color = if (part.kind == "failed") MaterialTheme.colorScheme.error else secondary)) { append(part.text) }
+                withStyle(SpanStyle(color = secondary)) { append(part.text) }
             }
         }, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+        Mark(item.mark)
         Icon(WatchIcons.chevronRight, null, Modifier.size(14.dp), tint = secondary)
     }
 }
 
-/** The folded row's mark: the list row's own spinner and icons. */
+/** The folded row's mark: the list row's own spinner and icons. The spinner is drawn as iOS draws it (`SpinnerGlyph`: 13pt, a
+ * 2pt stroke, the accent), the app's running mark, not a quieter grey of its own. */
 @Composable
 private fun Mark(mark: BackgroundRow.Mark) = StatusIcon(mark.name.lowercase())
 
@@ -216,7 +238,7 @@ private fun StatusIcon(status: String) {
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     Box(Modifier.size(18.dp).testTag("background-status:$status"), contentAlignment = Alignment.Center) {
         when (status) {
-            "running" -> CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp, color = secondary)
+            "running" -> CircularProgressIndicator(Modifier.size(13.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
             "done" -> Icon(painterResource(R.drawable.ic_check_circle), null, Modifier.size(14.dp), tint = LocalOrbitColors.current.success)
             "failed" -> Icon(painterResource(R.drawable.ic_x_circle), null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.error)
             "killed" -> Icon(painterResource(R.drawable.ic_stop), null, Modifier.size(14.dp), tint = secondary)
@@ -244,6 +266,8 @@ private fun OpenHeader(procs: List<JsonObject>, sessionLive: Boolean, close: () 
 private fun ProcRow(proc: JsonObject, sessionLive: Boolean, expanded: Boolean, toggle: () -> Unit) {
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     val id = proc.text("shellId").orEmpty()
+    var confirming by remember { mutableStateOf(false) }
+    if (confirming) StopJobDialog(id) { confirming = false }
     Column(Modifier.fillMaxWidth().testTag("background-proc:$id")) {
         Row(Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = if (expanded) "Hides the output" else "Shows the output", onClick = toggle)
             .heightIn(min = 48.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically,
@@ -257,6 +281,12 @@ private fun ProcRow(proc: JsonObject, sessionLive: Boolean, expanded: Boolean, t
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
             proc.text("startedTs")?.let { TaskTime.relative(it) }?.let {
                 Text(it, style = MaterialTheme.typography.labelSmall, color = secondary, maxLines = 1)
+            }
+            // A running bg_run job its runner can stop (R3): Stop, behind the Job card's own confirmation.
+            if (BackgroundTrayLogic.stoppable(proc, sessionLive) && LocalJobCards.current.stop != null) {
+                TextButton(onClick = { confirming = true }, Modifier.testTag("background-proc:$id:stop")) {
+                    Text(BgJob.stop, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                }
             }
             Icon(if (expanded) WatchIcons.chevronDown else WatchIcons.chevronRight, null, Modifier.size(12.dp), tint = secondary.copy(alpha = 0.6f))
         }

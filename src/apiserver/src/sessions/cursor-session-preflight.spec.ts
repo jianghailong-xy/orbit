@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { AgentProvider, PermissionMode } from '@orbit/shared';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
+import { isReleasedStatus } from '../common/session-release';
 import { CURSOR_RUNNER_UPGRADE_ERROR } from '../runner-api/runner-provider-support';
 import { MOVE_REFUSAL, sessionMoveVerdict } from './session-move';
 import { SessionsService } from './sessions.service';
@@ -36,6 +37,8 @@ function fixture(options: {
     model: 'default[]', permissionMode: options.permissionMode ?? PermissionMode.ACCEPT_EDITS, usesRuntimeDefaultModel: true,
     runtimeSessionId: '55555555-5555-4555-8555-555555555555', numTurns: 3,
     startedAt: new Date(), status: options.status ?? RunStatus.FAILED,
+    // A terminal row carries its release column (session_release_fact_chk).
+    ...(isReleasedStatus(options.status ?? RunStatus.FAILED) ? { finishedAt: new Date() } : {}),
     assignedRunnerId: runner.id, assignedRunner: runner, owner: { preferences: {} },
     workspace: null, cancelRequestedAt: null, completedAt: null, archivedAt: null,
     deletedAt: null, mergeStatus: null, commitStatus: null,

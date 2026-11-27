@@ -1,5 +1,5 @@
 /**
- * Evidence that cites a file (docs/orbit-files-design.md §2.4, §2.7), held against the production apiserver — `build/main.js`
+ * Evidence that cites a file (docs/drive-design.md §2.4, §2.7), held against the production apiserver — `build/main.js`
  * and every guard and pipe in front of the routes — over a real PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty:
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/tasks/file-evidence.pg.spec.ts
@@ -22,7 +22,7 @@
  *   (6) the coordinator is told each cited file and the call that fetches it, and evidence with no FILE check reads as ever;
  *   (7) in no project the dispatching session judges: it reads the files, and its review block lists them;
  *   (8) `file_list` by evidence version answers what that version cites, for an older version too, and a bundle as one row;
- *   (9) a row from before Orbit Files is given its sha256 when it is cited, and a task's input may be cited;
+ *   (9) a row from before Drive is given its sha256 when it is cited, and a task's input may be cited;
  *  (10) the app's door saves evidence the same way.
  *
  * Not destructive: every row belongs to users this run creates.
@@ -36,7 +36,8 @@ import { test } from 'node:test';
 
 import { JwtService } from '@nestjs/jwt';
 import { toUuid, uuidToBase62 } from '@orbit/shared';
-import type { Prisma, PrismaClient, RunStatus } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
+import type { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-test-apiserver';
@@ -44,6 +45,7 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { evidenceReviewBlock } from './evidence-review';
 import { completionDigest } from './task-completion-evidence.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -118,8 +120,8 @@ test('evidence that cites a file', { skip: !URL, concurrency: 1, timeout: 600_00
   server = await startApiserver(url, jwtSecret, {
     PROVIDER_SECRET_KEY,
     MODEL_CATALOG_URL: 'http://127.0.0.1:9/',
-    ORBIT_FILES_BACKEND: 'local',
-    ORBIT_FILES_DIR: dir,
+    ORBIT_DRIVE_BACKEND: 'local',
+    ORBIT_DRIVE_DIR: dir,
   });
   const api = server;
 
@@ -149,12 +151,15 @@ test('evidence that cites a file', { skip: !URL, concurrency: 1, timeout: 600_00
   const secondMachine = await accountOf('second-machine');
   await db.runner.update({ where: { id: secondMachine.runnerId }, data: { ownerId: owner.ownerId } });
 
-  const sessionOf = async (title: string, taskId?: string, who: Account = owner, status: RunStatus = 'AWAITING_INPUT') => {
+  const sessionOf = async (title: string, taskId?: string, who: Account = owner, status: `${RunStatus}` = 'AWAITING_INPUT') => {
     const id = randomUUID();
     await db.session.create({
       data: {
         id, title, prompt: title, ownerId: who.ownerId, creatorId: who.ownerId, workspaceId: who.workspaceId,
-        assignedRunnerId: who.runnerId, status, startedAt: new Date(), runtimeSessionId: `runtime-${id}`,
+        assignedRunnerId: who.runnerId, turnState: turnStateOfWord(status), startedAt: new Date(), runtimeSessionId: `runtime-${id}`,
+        ...(status === 'SUCCEEDED' || status === 'FAILED'
+          ? { finishedAt: new Date()}
+          : status === 'CANCELLED' ? { finishedAt: new Date()} : {}),
         provider: 'claude', taskId, startsTaskWork: taskId !== undefined,
       },
     });
@@ -369,6 +374,15 @@ test('evidence that cites a file', { skip: !URL, concurrency: 1, timeout: 600_00
     assert.deepEqual({ status: theirs.status, json: theirs.json }, { status: nothing.status, json: nothing.json }, 'another account\'s file is a file that is not there');
     const malformed = await submit(work, [work.tool, { kind: 'FILE', ref: 'not an id' }]);
     assert.deepEqual({ status: malformed.status, json: malformed.json }, { status: nothing.status, json: nothing.json });
+    // A drive file (docs/drive-technical-design.md §4.5) by any spelling: its content changes under its name, so
+    // it is refused by name, pointing at file_upload, which makes the evidence copy.
+    for (const ref of ['/home/orbit/Documents/Proj/report.md', '~/Documents/Proj/report.md', '/home/orbit/Files/Proj/report.md', '~/Files/Proj/report.md', '/run/orbit-drive/drive/Proj/report.md', '/run/orbit-documents/drive/Proj/report.md', '/run/orbit-files/drive/Proj/report.md', 'orbit-document:3bXk9sQ2a', 'orbit-drive:3bXk9sQ2a']) {
+      const drive = await submit(work, [work.tool, { kind: 'FILE', ref }]);
+      assert.equal(drive.status, 400, `${ref}: ${drive.text}`);
+      assert.equal(drive.json.code, 'EVIDENCE_FILE_IS_A_DRIVE_PATH', ref);
+      assert.equal(drive.json.requiredAction, 'UPLOAD_THE_FILE_AND_CITE_ITS_ID', ref);
+      assert.match(drive.json.message, /file_upload/, ref);
+    }
 
     for (const field of [{ sha256: 'a'.repeat(64) }, { width: 1, height: 1 }]) {
       const written = await submit(work, [work.tool, { ...asFile(shot), ...field }]);
@@ -478,7 +492,7 @@ test('evidence that cites a file', { skip: !URL, concurrency: 1, timeout: 600_00
     created(await submit(moving, [asFile(picture)]), 'the evidence');
     await reads(project.coordinator, picture, 'its coordinator, before it moves');
     // A task moves once its run has ended: a live claim holds it where it is.
-    await db.session.update({ where: { id: moving.sessionId }, data: { status: 'SUCCEEDED' } });
+    await db.session.update({ where: { id: moving.sessionId }, data: { turnState: null, finishedAt: new Date()} });
     const elsewhere = await projectOf('the project it moved to');
     await db.task.update({ where: { id: moving.taskId }, data: { projectId: elsewhere.id, criterionDefinitionId: elsewhere.definitionId } });
     await readsNothing(project.coordinator, picture, 'the coordinator of the project it left');
@@ -555,7 +569,7 @@ test('evidence that cites a file', { skip: !URL, concurrency: 1, timeout: 600_00
     assert.equal(ownReads.status, 404, 'another account\'s version names nothing');
   });
 
-  await t.test('(9) a row from before Orbit Files is hashed when it is cited, and a task\'s input may be cited', async () => {
+  await t.test('(9) a row from before Documents is hashed when it is cited, and a task\'s input may be cited', async () => {
     const old = await workOf('work citing an old file', project);
     const bytes = png(320, 200);
     const legacy = await db.attachment.create({

@@ -139,6 +139,43 @@ class PushControllerTest {
         assertTrue("the notification was checked against its own record: $after", "sessions/$sid/approvals?status=PENDING" in after)
     }
 
+    /** Criterion 4: no push, resume or reconcile sends a plain flat `GET /sessions`: every read of the sessions list, whoever asks, is the
+     * store's `since=` delta. A burst of SYNC pushes and two resumes, with a notification showing, each reconcile against that read. */
+    @Test fun syncPushesAndResumesSendNoPlainFlatSessionsRead() = runBlocking {
+        fixture.push.start()
+        val activity = Activity()
+        fixture.push.onActivityStarted(activity)
+        fixture.signIn()
+        assertTrue(fixture.push.receive(fixture.data()))
+        fixture.realtime.setNetwork(true, "wifi"); fixture.realtime.setForeground(true)
+        withTimeout(30_000) { fixture.realtime.state.first { it.directoryFresh && it.controlConnection == ConnectionState.CONNECTED } }
+        fixture.quiet()
+        val before = fixture.requests.size
+        repeat(5) { assertTrue(fixture.push.receive(fixture.sync("badge-sync-$it"))) }
+        fixture.push.onActivityResumed(activity); fixture.push.onActivityResumed(activity)
+        fixture.push.reconcile()
+        fixture.quiet()
+        val flat = fixture.requests.drop(before).filter { it.path == listOf("sessions") }
+        assertTrue("the store read the Open list for them", flat.isNotEmpty())
+        assertTrue("every sessions read is a since= delta: ${flat.map { it.query }}", flat.all { r -> r.query.any { it.first == "since" } })
+    }
+
+    /** A SYNC push arrives with the Activity stopped and the stream closed. The reminder of an item that left needs-you still clears, by one
+     * `since=` read on the store's cursor — never a plain flat read, and not depending on the stream being up. */
+    @Test fun aSyncPushWithTheStreamClosedClearsAnAnsweredReminderBySinceRead() = runBlocking {
+        fixture.signIn()
+        assertTrue(fixture.push.receive(fixture.data()))
+        assertEquals(1, fixture.active().size)
+        assertTrue("the stream is not connected", fixture.realtime.state.value.controlConnection != ConnectionState.CONNECTED)
+        val before = fixture.requests.size
+        fixture.leftOpen = true
+        assertTrue(fixture.push.receive(fixture.sync("badge-sync-closed")))
+        assertTrue("the reminder left with the item", fixture.active().isEmpty())
+        val flat = fixture.requests.drop(before).filter { it.path == listOf("sessions") }
+        assertEquals("one Open read: $flat", 1, flat.size)
+        assertTrue("it is a since= read: ${flat.map { it.query }}", flat.all { r -> r.query.any { it.first == "since" } })
+    }
+
     @Test fun permissionAnswerIsRecordedInTheBackgroundAndAnUnwritableStoreDoesNotThrow() = runBlocking {
         val directory = File(app.noBackupFilesDir, "push")
         fixture.close()
@@ -253,6 +290,8 @@ class PushControllerTest {
             while (seen != requests.size) { seen = requests.size; delay(1_500) }
         }
         var pending = true
+        /** The Open list no longer holds the session (answered elsewhere), though its approval record still says PENDING. */
+        var leftOpen = false
         /** The owner request an `owner-request` push names, as its read says it stands. */
         var ownerRequestState = "PENDING"
         var unavailable = false
@@ -284,7 +323,7 @@ class PushControllerTest {
             put("kind", "owner-request"); put("title", "Key needed"); put("body", "Staging Stripe key"); put("sessionID", sid)
             put("ownerRequestID", ownerRequestId); put("ownerRequestKind", "SECRET"); put("category", "ORBIT_OWNER_REQUEST_SECRET")
         }, "owner-request-$ownerRequestId")
-        fun sync() = envelope("sync", buildJsonObject { put("badge", 0); put("clearSessions", JsonArray(listOf(JsonPrimitive(sid)))) }, "badge-sync")
+        fun sync(key: String = "badge-sync") = envelope("sync", buildJsonObject { put("badge", 0); put("clearSessions", JsonArray(listOf(JsonPrimitive(sid)))) }, key)
         private fun envelope(type: String, payload: JsonObject, key: String) = mapOf("version" to "1", "type" to type,
             "registrationKey" to push.registration.activeBinding()!!.registrationKey, "eventId" to UUID.randomUUID().toString(),
             "notificationKey" to key, "sentAt" to "2026-10-04T00:00:00.000Z", "payload" to payload.toString())
@@ -297,7 +336,7 @@ class PushControllerTest {
                 path.firstOrNull() in setOf("push", "auth") -> "{}"
                 unavailable -> return@HttpTransport ApiResponse(503, "{}".encodeToByteArray())
                 denied -> return@HttpTransport ApiResponse(403, "{}".encodeToByteArray())
-                path == listOf("sessions") -> if (pending) """[{"id":"$sid","status":"RUNNING","lifecycleState":"OPEN","pendingApprovals":1}]""" else "[]"
+                path == listOf("sessions") -> if (pending && !leftOpen) """[{"id":"$sid","status":"RUNNING","lifecycleState":"OPEN","pendingApprovals":1}]""" else "[]"
                 path == listOf("sessions", sid, "approvals") -> if (pending) """[{"id":"1","status":"PENDING"}]""" else "[]"
                 path == listOf("sessions", sid) -> """{"id":"$sid","status":"RUNNING","lifecycleState":"OPEN"}"""
                 path == listOf("sessions", settled) -> """{"id":"$settled","status":"SUCCEEDED","lifecycleState":"OPEN"}"""

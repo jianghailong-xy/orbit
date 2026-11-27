@@ -131,10 +131,17 @@ public enum AgentListLogic {
     /// `scheduled` (the server serves scheduled tasks) adds Scheduled right under Tasks, as the drawer does
     /// (`DrawerWorkLogic.rows(scheduled:)`, board docs/mocks/scheduled-tasks/web/01-board.png ①), its count the
     /// schedules failing or held (`scheduledNeedsYou`). Account-wide: it is never a row of a workspace's list.
+    ///
+    /// Documents (`documents`, the server's switch) goes right under the Wiki, or where the Wiki would be, with no
+    /// count (docs/mocks/drive, 03-mac ①).
     public static func sidebarSections(_ sections: [AppSection], wiki: Bool,
                                        projectsWaiting: Int, wikiWaiting: Int,
-                                       scheduled: Bool = false, scheduledNeedsYou: Int = 0) -> [SidebarSectionRow] {
-        sections.filter { $0 != .wiki || wiki }.flatMap { section -> [SidebarSectionRow] in
+                                       scheduled: Bool = false, scheduledNeedsYou: Int = 0,
+                                       drive: Bool = false) -> [SidebarSectionRow] {
+        let shown = sections.contains(.wiki) && drive && !sections.contains(.drive)
+            ? sections.flatMap { $0 == .wiki ? [$0, .drive] : [$0] }
+            : sections
+        return shown.filter { ($0 != .wiki || wiki) && ($0 != .drive || drive) }.flatMap { section -> [SidebarSectionRow] in
             let waiting: Int
             switch section {
             case .projects: waiting = projectsWaiting
@@ -186,5 +193,33 @@ public enum AgentListLogic {
         if let currentAgentID { return .workspace(currentAgentID) }
         guard list == .empty else { return nil }
         return firstOnlineMachine.map(NewSessionTarget.machine) ?? .machines
+    }
+}
+
+/// A machine the Workspaces group's + offers a new workspace on (docs/mocks/new-workspace-form/02-apple-entry, owner A
+/// 2026-11-20): every machine of the account, whatever it already holds, with how many workspaces it has.
+public struct NewWorkspaceMachine: Equatable, Sendable, Identifiable {
+    public let id: String
+    public let name: String
+    public let online: Bool
+    public let workspaces: Int
+
+    public init(id: String, name: String, online: Bool, workspaces: Int) {
+        self.id = id
+        self.name = name
+        self.online = online
+        self.workspaces = workspaces
+    }
+}
+
+extension AgentListLogic {
+    /// The + menu's machines, in the rail's runner order with the account's managed runner first.
+    public static func newWorkspaceMachines(runners: [Runner], agents: [Agent],
+                                            managedStatus: ManagedRunnerStatus? = nil) -> [NewWorkspaceMachine] {
+        let managedID = ManagedRunnerLogic.display(managedStatus) == nil ? nil : managedStatus?.runnerId
+        return RunnerPageFormat.managedFirst(runners, managedRunnerID: managedID).map { runner in
+            NewWorkspaceMachine(id: runner.id, name: RunnerPageFormat.displayName(runner, managedRunnerID: managedID),
+                                online: isOnline(runner), workspaces: agents.filter { $0.runnerId == runner.id }.count)
+        }
     }
 }

@@ -352,7 +352,8 @@ extension ProjectPage {
     /// "List paused · Backlog".
     public static func queueRowState(_ item: ProjectReadyToRun.Item) -> String {
         switch item.runState {
-        case .running: return "Work in progress"
+        case .running:
+            return runningLabel(runReason: item.runReason, runStalled: item.runStalled) ?? "Work in progress"
         case .queued: return "Waiting for runner"
         case .paused:
             guard let title = item.pausedList?.title, !title.isEmpty else { return "List paused" }

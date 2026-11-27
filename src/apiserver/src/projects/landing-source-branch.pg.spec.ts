@@ -49,7 +49,8 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { RunStatus, RunnerStatus, type PrismaClient } from '@prisma/client';
+import { Prisma, RunnerStatus, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { IntegrationJobCommand, IntegrationJobResultRequest } from '@orbit/shared';
 import { Client } from 'pg';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -65,6 +66,7 @@ import {
   INTEGRATION_JOB_STATES,
   enqueueForDoneTask,
 } from './project-integration-job';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -76,7 +78,7 @@ const sha = (nibble: string) => nibble.repeat(40);
 interface Finish {
   changedFiles?: unknown[];
   baseSha?: string;
-  status?: RunStatus;
+  status?: typeof RunStatus.SUCCEEDED | typeof RunStatus.FAILED;
 }
 
 /** The diff summary a session that delivered something reports. */
@@ -219,9 +221,13 @@ async function harness(t: { after(fn: () => Promise<void> | void): void }) {
         prompt: 'do the work',
         branch,
         isolationStatus: 'worktree',
-        status: finish.status ?? RunStatus.SUCCEEDED,
+        turnState: turnStateOfWord(finish.status ?? RunStatus.SUCCEEDED),
         baseSha: finish.baseSha ?? sha('1'),
-        changedFiles: (finish.changedFiles ?? []) as never,
+        // A session that reported no work is written as one that reported no list at all: J8 reads the
+        // two alike, and these cases are about what the LINE answers for such a branch. An EMPTY list
+        // beside a missing tip is, since the owner's ruling of 2026-11-20, the runner measuring nothing of
+        // the task's own, which its DONE decides without asking the line (`unnamedIdentityMeasuresNothing`).
+        changedFiles: finish.changedFiles?.length ? finish.changedFiles as never : Prisma.DbNull,
         createdAt: new Date(Date.now() - minutesAgo * 60_000),
         finishedAt: new Date(Date.now() - minutesAgo * 60_000),
       },
@@ -399,15 +405,16 @@ test('a branch with nothing of the task\'s own on it is not written down as a la
   assert.equal(landed.receiptIds.length, 1, 'the receipt for a real landing was withheld');
 
   // ── the closed set, and the migration that holds it ─────────────────────────────────────────────
-  // The state these cases are about is in the CHECK the newest migration wrote, and in the list the
-  // API server validates a result against. The two are one set: a state the database refuses is a
-  // result the runner reports and this process cannot record.
+  // The state these cases are about is in the CHECK the newest migration wrote (1527 added
+  // PULL_REQUEST, docs/design/protected-branch-landing.md §4.2), and in the list the API server
+  // validates a result against. The two are one set: a state the database refuses is a result the
+  // runner reports and this process cannot record.
   const migration = readFileSync(
-    path.resolve(__dirname, '../../prisma/migrations/0453_landing_observation_delivery_mode/migration.sql'),
+    path.resolve(__dirname, '../../prisma/migrations/1527_pull_request_landing/migration.sql'),
     'utf8',
   );
   const check = /"state" IN \(([\s\S]*?)\)\)/.exec(migration);
-  assert.ok(check, 'migration 0453 no longer constrains the state column');
+  assert.ok(check, 'migration 1527 no longer constrains the state column');
   assert.deepEqual(
     [...check![1].matchAll(/'([A-Z_]+)'/g)].map((hit) => hit[1]).sort(),
     [...INTEGRATION_JOB_STATES].sort(),

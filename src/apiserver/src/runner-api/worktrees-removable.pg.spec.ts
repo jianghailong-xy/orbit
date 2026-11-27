@@ -19,7 +19,9 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { PrismaClient, RunnerStatus, RunStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
+import { fixtureFacts } from '../test-support/session-word';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -87,7 +89,7 @@ test('worktrees-removable: what is kept, and what of that is resumable', {
           numTurns: 1,
           runtimeSessionId: randomUUID(),
           branch: `orbit/${title.replace(/\W+/g, '-')}-${RUN}`,
-          ...columns,
+          ...fixtureFacts(columns),
         } as never,
       })
     ).id;

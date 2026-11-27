@@ -216,7 +216,7 @@ class TranscriptDeviceTest {
         capture("a06c-image-file-viewer")
         compose.onNodeWithText("Close image").performClick()
         // The worktree bar and its merge (baseline): the fixture's runner answers a second later.
-        compose.onNodeWithText("Jump to latest").performClick()
+        compose.onNodeWithContentDescription("Jump to latest").performClick()
         awaitText("Merge to main")
         capture("a06c-worktree-bar")
         compose.onNodeWithText("Merge to main").performClick()
@@ -243,7 +243,7 @@ class TranscriptDeviceTest {
         // script's 360×640 dp that is only possible because the chrome folds away while the composer holds the
         // keyboard (iOS `ConsoleView.foldsChrome`): the bar, the rows under it and the cards above the composer.
         awaitText("Latest answer A06C", substring = true)
-        if (compose.onAllNodesWithText("Jump to latest").fetchSemanticsNodes().isNotEmpty()) compose.onNodeWithText("Jump to latest").performClick()
+        if (compose.onAllNodesWithContentDescription("Jump to latest").fetchSemanticsNodes().isNotEmpty()) compose.onNodeWithContentDescription("Jump to latest").performClick()
         compose.waitForIdle()
         compose.onNodeWithText("Context:", substring = true).assertExists()
         compose.onNodeWithTag("composer-input").performClick()
@@ -360,7 +360,7 @@ class TranscriptDeviceTest {
         File(evidence, "recreated-position.txt").writeText("beforePx=$after\nfirstAvailablePx=$firstAvailable\nsettledPx=$restored\ndensity=$density\n")
         assertTrue("Rotation/recreation preserves saved seq+offset", kotlin.math.abs(restored-after)/density <= 8f)
         // Rich message, image and object links use the product's one return stack.
-        compose.onNodeWithText("Jump to latest").performClick()
+        compose.onNodeWithContentDescription("Jump to latest").performClick()
         awaitText("Latest answer 9999", true)
         scrollHistory()
         compose.onNodeWithTag("transcript-list").performScrollToNode(hasText("Reading fixture"))
@@ -375,7 +375,7 @@ class TranscriptDeviceTest {
         compose.waitUntil(10_000) { compose.onAllNodesWithTag("event:4899").fetchSemanticsNodes().isNotEmpty() }
         capture("record-anchor")
         compose.onNodeWithTag("event:4899").assertIsDisplayed()
-        assertTrue("Around endpoint must preserve the gap", compose.onAllNodesWithText("Jump to latest").fetchSemanticsNodes().isNotEmpty())
+        assertTrue("Around endpoint must preserve the gap", compose.onAllNodesWithContentDescription("Jump to latest").fetchSemanticsNodes().isNotEmpty())
         // A05 toolbar/system back must return to the original reader, then the directory.
         instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
         awaitActions()
@@ -465,7 +465,7 @@ class TranscriptDeviceTest {
         compose.onNodeWithTag("event:18").assertIsDisplayed()
         capture("long-markdown")
         scrollHistory()
-        compose.onNodeWithText("Jump to latest").performClick()
+        compose.onNodeWithContentDescription("Jump to latest").performClick()
         awaitText("Latest answer 9999", true)
     }
 
@@ -484,7 +484,7 @@ class TranscriptDeviceTest {
         try {
             for (second in 0 until duration) {
                 if (second % 20 == 5) scrollHistory()
-                if (second % 20 == 12) compose.onAllNodesWithText("Jump to latest").fetchSemanticsNodes().takeIf { it.isNotEmpty() }?.let { compose.onNodeWithText("Jump to latest").performClick() }
+                if (second % 20 == 12) compose.onAllNodesWithContentDescription("Jump to latest").fetchSemanticsNodes().takeIf { it.isNotEmpty() }?.let { compose.onNodeWithContentDescription("Jump to latest").performClick() }
                 SystemClock.sleep(1_000)
                 val sample = Debug.MemoryInfo().also(Debug::getMemoryInfo)
                 memory += "${SystemClock.elapsedRealtime()-started},${sample.totalPss}"
@@ -548,7 +548,7 @@ class TranscriptDeviceTest {
             assertTrue("Switch $it: anchor $expected -> $actual", kotlin.math.abs(actual-expected)/app.resources.displayMetrics.density <= 8f)
         }
         File(evidence, "extreme-switches.txt").writeText("10 directory/session switches; seq=96001; drift <= 8dp\n")
-        compose.onNodeWithText("Jump to latest").performClick()
+        compose.onNodeWithContentDescription("Jump to latest").performClick()
         awaitText("Message 99999", true)
     }
 

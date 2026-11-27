@@ -23,7 +23,8 @@ import java.time.Instant
 /**
  * Why the owner's words were not sent (policy board docs/ux/translation-failure-policy.html, frames 4B and 5, and frame 7's B column),
  * drawn by the production composables: a held message's foot ([UserTranslationFoot]) and a card answer's line ([AnswerNotTranslated]),
- * each the exact sentence for its reason followed by Retry and Send as written, and today's generic line without a reason. Plus the
+ * each the exact sentence for its reason followed by Retry and Send as written (and Cancel, where the held message can be
+ * withdrawn), and today's generic line without a reason. Plus the
  * composer tag's words while translation is unavailable (frame 6).
  */
 @RunWith(RobolectricTestRunner::class)
@@ -65,24 +66,29 @@ class TranslationFailureLinesTest {
         assertNull(TranslationFailureCopy.message(FailureReason.HTTP, null))
     }
 
-    @Test fun aHeldMessageDrawsItsReasonThenRetryAndSendAsWritten() {
+    @Test fun aHeldMessageDrawsItsReasonThenRetrySendAsWrittenAndCancel() {
         table.forEach { (why, message, _) ->
-            var retried = 0; var sent = 0
+            var retried = 0; var sent = 0; var cancelled = 0
             show {
                 UserTranslationFoot(Translation.Turn(Translation.TurnState.FAILED, "zh-Hans", "再跑一遍全部测试", why.first, why.second),
-                    flipped = false, onFlip = {}, retry = { retried++ }, sendAsWritten = { sent++ })
+                    flipped = false, onFlip = {}, retry = { retried++ }, sendAsWritten = { sent++ }, cancel = { cancelled++ })
             }
             assertTrue("$why: $message", has(message))
             table.map { it.second }.filter { it != message }.forEach { other -> assertFalse("$why draws only its own line: $other", has(other)) }
-            // The line, then "· Retry · Send as written", in that order.
+            // The line, then "· Retry · Send as written · Cancel", in that order.
             val drawn = compose.onNodeWithTag("translation-foot", useUnmergedTree = true).onChildren().fetchSemanticsNodes()
                 .flatMap { it.config.getOrElse(androidx.compose.ui.semantics.SemanticsProperties.Text) { emptyList() }.map { t -> t.text } }
-            assertEquals(listOf(message, "·", TranslationCopy.RETRY, "·", TranslationCopy.SEND_AS_WRITTEN), drawn.filter { it.isNotBlank() })
+            assertEquals(listOf(message, "·", TranslationCopy.RETRY, "·", TranslationCopy.SEND_AS_WRITTEN, "·", TranslationCopy.CANCEL), drawn.filter { it.isNotBlank() })
             compose.onNodeWithTag("translation-action:${TranslationCopy.RETRY}", useUnmergedTree = true).performClick()
             compose.onNodeWithTag("translation-action:${TranslationCopy.SEND_AS_WRITTEN}", useUnmergedTree = true).performClick()
+            compose.onNodeWithTag("translation-action:${TranslationCopy.CANCEL}", useUnmergedTree = true).performClick()
             compose.waitForIdle()
-            assertEquals("$why: Retry", 1, retried); assertEquals("$why: Send as written", 1, sent)
+            assertEquals("$why: Retry", 1, retried); assertEquals("$why: Send as written", 1, sent); assertEquals("$why: Cancel", 1, cancelled)
         }
+        // Nothing to withdraw it with (a session's opening prompt): no Cancel.
+        show { UserTranslationFoot(Translation.Turn(Translation.TurnState.FAILED, "zh-Hans", "再跑一遍全部测试"), flipped = false, onFlip = {},
+            retry = {}, sendAsWritten = {}) }
+        assertTrue(has(TranslationCopy.SEND_AS_WRITTEN)); assertFalse(has(TranslationCopy.CANCEL))
     }
 
     @Test fun aCardAnswerNamesYourAnswerThenRetryAndSendAsWritten() {

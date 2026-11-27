@@ -8,10 +8,10 @@ import { ConflictException } from '@nestjs/common';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -28,6 +28,9 @@ import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from './tasks.service';
 import { taskRunDesiredSessionId, taskRunRequestKey, taskRunResumeTurnId } from './task-run-identity';
 import { TASK_RUN_ACTION } from './task-run-receipt';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordOf, WORD_SELECT } from '../test-support/session-word';
+import { fixtureFacts } from '../test-support/session-word';
 
 /**
  * H2F — a legacy run request is a COMMAND WITH A RECEIPT, on a real PostgreSQL, through the public
@@ -163,10 +166,7 @@ async function moveTo(db: PrismaClient, sessionId: string, status: RunStatus) {
     await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
     await tx.session.update({
       where: { id: sessionId },
-      data: {
-        status,
-        finishedAt: (TERMINAL as RunStatus[]).includes(status) ? new Date() : null,
-      },
+      data: { finishedAt: null, ...fixtureFacts({ status }) },
     });
   });
 }
@@ -364,9 +364,9 @@ test('a press that woke a PAUSED run delivers one turn, however many times it is
       // The delivery woke the run, which is exactly the state a repeat arrives in — and the state
       // in which the Session's id belongs to a DIFFERENT press than the one repeating.
       const woken = await opening.db.session.findUniqueOrThrow({
-        where: { id: paused }, select: { status: true },
+        where: { id: paused }, select: { ...WORD_SELECT },
       });
-      assert.ok(([RunStatus.PENDING, RunStatus.RUNNING] as RunStatus[]).includes(woken.status));
+      assert.ok(([RunStatus.PENDING, RunStatus.RUNNING] as RunStatus[]).includes(wordOf(woken) as RunStatus));
     } finally {
       await opening.db.$disconnect();
     }
@@ -653,7 +653,7 @@ test('a real live-claim duplicate is classified and answered structurally',
           id: randomUUID(), ownerId: target.ownerId, creatorId: target.ownerId,
           taskId: target.taskId, workspaceId: target.agentId, assignedRunnerId: target.runnerId,
           title: 'a conversation', prompt: 'about the task', provider: 'claude',
-          status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+          turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
           startsTaskWork: false,
         },
       });
@@ -696,7 +696,7 @@ test('a real primary-key duplicate on the derived id is classified, and never ad
           id: desiredIdFor(target, press), ownerId: stranger.ownerId, creatorId: stranger.ownerId,
           taskId: stranger.taskId, workspaceId: stranger.agentId,
           assignedRunnerId: stranger.runnerId, title: 'not yours', prompt: 'not yours',
-          provider: 'claude', status: RunStatus.SUCCEEDED, finishedAt: new Date(),
+          provider: 'claude', turnState: null, finishedAt: new Date(),
           dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
         },
       });
@@ -766,7 +766,7 @@ test('the duplicate shapes the unit tests construct are the ones this server pro
       const row = (id: string, status: RunStatus) => ({
         id, ownerId: target.ownerId, creatorId: target.ownerId, taskId: target.taskId,
         workspaceId: target.agentId, assignedRunnerId: target.runnerId, title: 's', prompt: 'p',
-        provider: 'claude', status, dispatchOrigin: SessionDispatchOrigin.USER,
+        provider: 'claude', turnState: turnStateOfWord(status), dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: true,
         finishedAt: (TERMINAL as RunStatus[]).includes(status) ? new Date() : null,
       });
@@ -776,13 +776,14 @@ test('the duplicate shapes the unit tests construct are the ones this server pro
       const claim = await services.db.session.create({ data: row(randomUUID(), RunStatus.PENDING) })
         .catch((e: unknown) => e) as { code?: string; meta?: Record<string, unknown> };
       await services.db.session.update({
-        where: { id: first }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
+        where: { id: first }, data: { turnState: null, finishedAt: new Date() },
       });
       const pkey = await services.db.session.create({ data: row(first, RunStatus.PENDING) })
         .catch((e: unknown) => e) as { code?: string; meta?: Record<string, unknown> };
 
       for (const [name, error, constraint, field] of [
-        ['claim index', claim, 'session_task_execution_claim_idx', 'task_id'],
+        // Since 1444 (release B) the claim is 1426's index alone, and it is the one PostgreSQL names.
+        ['claim index', claim, 'session_task_execution_claim_idx_finished_at', 'task_id'],
         ['primary key', pkey, 'session_pkey', 'id'],
       ] as const) {
         assert.equal(error.code, 'P2002', name);
@@ -1420,9 +1421,9 @@ test('a revive that loses the claim to a re-dispatched run is a 409, not a raw P
         where: {
           taskId: target.taskId,
           deletedAt: null,
-          status: { in: [RunStatus.PENDING, RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED] },
+          finishedAt: null,
         },
-        select: { id: true, status: true },
+        select: { id: true, ...WORD_SELECT },
       });
       let raised: unknown;
       await services.sessions.resume(
@@ -1447,7 +1448,7 @@ test('a revive that loses the claim to a re-dispatched run is a 409, not a raw P
 
       // And the refused revive wrote nothing: the row is where it was, with no turn behind it.
       const after = await services.db.session.findUniqueOrThrow({ where: { id: failed } });
-      assert.equal(after.status, RunStatus.FAILED, 'the failed run is still the record of what it did');
+      assert.equal(wordOf(after), RunStatus.FAILED, 'the failed run is still the record of what it did');
       assert.equal(
         await services.db.conversationTurn.count({ where: { sessionId: failed } }), before,
         'and the message the person pressed for was not delivered anywhere',

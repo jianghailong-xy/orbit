@@ -12,7 +12,7 @@ sends it from the app. Nothing is sent on their behalf.
 Owner decisions (2026-11-16):
 
 - Destination: **choose a session; the items become attachments in its composer draft**. Not a one-shot send,
-  not Orbit Files, not a task.
+  not Documents, not a task.
 - Platforms: **iOS, Android, macOS**.
 
 ## 2. Today
@@ -53,7 +53,9 @@ Share sheet ─▶ Orbit share target ─▶ picker: recent sessions + "New sess
   to the App Group whenever its session list loads. The extension reads it, so the extension needs **no
   token and makes no network call** (decision D2).
 - **Getting back to the app**: an extension cannot open its containing app through a supported API. After
-  *Add*, the extension posts a local notification ("2 files ready in "Fix login redirect" — tap to finish"),
+  *Add*, the extension first opens Orbit on `orbit-session://<id>?share=<entryId>` the way other share
+  extensions do: it walks the responder chain to `UIApplication` and calls `open(_:options:completionHandler:)`
+  (owner request, 2026-11-22). Apple can close that path in any release, so when it fails the extension posts a local notification ("2 files ready in "Fix login redirect" — tap to finish"),
   which deep-links `orbit-session://<id>?share=<entryId>`. Opening Orbit any other way within 10 minutes also routes to
   the newest unconsumed entry. Notification permission already exists for push. If it is denied, the
   extension's done state says "Open Orbit to finish".

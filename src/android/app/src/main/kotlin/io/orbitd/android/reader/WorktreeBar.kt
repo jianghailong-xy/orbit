@@ -8,7 +8,9 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,14 +40,15 @@ import androidx.compose.ui.window.DialogProperties
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.*
+import java.time.Instant
 
 private fun JsonObject.strings(key: String) = (get(key) as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
 private fun JsonObject.flag(key: String) = (get(key) as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
 
 /**
  * The worktree bar above the composer (iOS `WorktreeBar`, web's `SessionOutputs`): the branch this session's
- * work lives on — a coordinator's project integration line (A06-8) — with its `+/−` summary opening the
- * changed files, and the git-state-driven action on the right: Commit while the tree is dirty, Merge once
+ * work lives on — a coordinator's project integration line (A06-8) — with its summary opening the
+ * commits or changed files, and the git-state-driven action on the right: Commit while the tree is dirty, Merge once
  * it is clean, then the runner's answer (Merging…, ✓ Merged, ✓ In main, Resolve in session, Retry merge).
  * A session without a worktree, which edits its workspace's folder directly, gets the amber notice instead. [sending] is the
  * composer's message on its way, which holds Merge back before the record says the turn is queued (A06-14).
@@ -55,11 +58,14 @@ internal fun WorktreeBar(model: WorktreeModel, sending: Boolean = false, open: (
     val state by model.state.collectAsState()
     val d = state.detail ?: return
     val files = ChangedFile.of(d)
+    val commits = remember(d["branchCommits"]) { BranchCommit.of(d) }
+    val dirty = d.flag("worktreeDirty")
     val recovery = (d["mergeRecovery"] as? JsonObject)?.let { MergeRecovery.of(it) }
-    when (WorktreeBarLogic.mode(d.string("isolationStatus"), d.string("branch"), files.size, d.string("mergeStatus"), d.string("commitStatus"), recovery != null)) {
+    when (WorktreeBarLogic.mode(d.string("isolationStatus"), d.string("branch"), files.size, d.string("mergeStatus"),
+        d.string("commitStatus"), recovery != null, hasCommitWork = commits != null && (commits.isNotEmpty() || dirty == true))) {
         WorktreeBarLogic.Mode.HIDDEN -> Unit
         WorktreeBarLogic.Mode.NOT_ISOLATED -> SharedFolderNotice(model, state, d)
-        WorktreeBarLogic.Mode.WORKTREE -> Pill(model, state, d, d.string("branch")!!, files, recovery, sending, open)
+        WorktreeBarLogic.Mode.WORKTREE -> Pill(model, state, d, d.string("branch")!!, files, commits, dirty, recovery, sending, open)
     }
 }
 
@@ -127,7 +133,7 @@ private fun InitializeGitDialog(path: String?, workspace: String?, confirm: () -
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun Pill(model: WorktreeModel, state: WorktreeState, d: JsonObject, branch: String, files: List<ChangedFile>,
-    recovery: MergeRecovery?, sending: Boolean, open: (String) -> Unit) {
+    commits: List<BranchCommit>?, dirty: Boolean?, recovery: MergeRecovery?, sending: Boolean, open: (String) -> Unit) {
     val clipboard = LocalClipboardManager.current
     var sheet by rememberSaveable { mutableStateOf<String?>(null) }
     var menu by remember { mutableStateOf(false) }
@@ -137,17 +143,20 @@ private fun Pill(model: WorktreeModel, state: WorktreeState, d: JsonObject, bran
     val mainCheckout = LocalMainCheckout.current
     val mainCheckoutSheet = mainCheckout?.state?.collectAsState()?.value?.sheet
     LaunchedEffect(mainCheckoutSheet) {
-        if (mainCheckoutSheet == MainCheckoutState.Sheet.WORKTREE_CHANGES) { sheet = "diff"; mainCheckout.open(null) }
+        if (mainCheckoutSheet == MainCheckoutState.Sheet.WORKTREE_CHANGES) { sheet = "diff-all"; mainCheckout.open(null) }
     }
     val displayBranch = WorktreeBarLogic.displayBranch(d, branch)
     val runStatus = d.string("runStatus") ?: d.string("status")
-    val committed = runStatus !in setOf("RUNNING", "AWAITING_INPUT", "INTERRUPTED")
+    val committed = WorktreeBarLogic.committed(d, runStatus)
     // The session's authoritative run status gates Commit and Merge: a clean mid-turn tree is a checkpoint, not finished work.
     // A queued turn, a message on its way and a parked session's running sub-agents count too; the recovery review reads the same gate.
     val turnActive = WorktreeBarLogic.turnActive(runStatus, WorktreeBarLogic.runningSubagents(d), sending)
-    val primary = WorktreeBarLogic.primary(d.flag("worktreeDirty"), committed, turnActive)
+    val primary = WorktreeBarLogic.primary(dirty, committed, turnActive)
     val add = files.sumOf { maxOf(0, it.additions) }
     val del = files.sumOf { maxOf(0, it.deletions) }
+    val canOpen = commits != null || files.isNotEmpty()
+    val summary = if (commits == null) statText(add, del, files.size, primary == WorktreeBarLogic.Primary.MERGE)
+        else commitStatText(commits.size, files.size, dirty == true, add, del)
     val commitFailure = WorktreeBarLogic.commitFailure(d.string("commitStatus"), d.string("commitError"), d.string("commitResultMessage"))
     val conflict = if (commitFailure != null) null else WorktreeBarLogic.mergeConflict(d.string("mergeStatus"), d.string("mergeError"),
         d.string("mergeTarget"), branch)
@@ -160,11 +169,11 @@ private fun Pill(model: WorktreeModel, state: WorktreeState, d: JsonObject, bran
             Row(Modifier.heightIn(min = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 // The branch and its summary open the diff; copying is the long press, so a tap never copies by surprise.
                 Box(Modifier.weight(1f)) {
-                    BranchSummary(Modifier.combinedClickable(enabled = true, onClickLabel = if (files.isNotEmpty()) "View diff" else null,
+                    BranchSummary(Modifier.combinedClickable(enabled = true, onClickLabel = if (canOpen) "View diff" else null,
                         onLongClickLabel = "Copy branch name", onLongClick = { menu = true },
-                        onClick = { if (files.isNotEmpty()) sheet = "diff" else menu = true })) {
+                        onClick = { if (canOpen) sheet = "diff" else menu = true }), prioritizeSummary = commits != null) {
                         BranchPill(displayBranch, copied)
-                        Text(statText(add, del, files.size, primary == WorktreeBarLogic.Primary.MERGE), fontFamily = FontFamily.Monospace,
+                        Text(summary, fontFamily = FontFamily.Monospace,
                             style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     DropdownMenu(menu, { menu = false }) {
@@ -183,8 +192,11 @@ private fun Pill(model: WorktreeModel, state: WorktreeState, d: JsonObject, bran
         // A failed merge is its own section under the row, inset from the bar's edges (web's `.wt-merge-inset`).
         if (recovery == null && (conflict != null || failure != null)) {
             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-            Column(Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, top = 9.dp, bottom = 10.dp)) {
-                if (conflict != null) key(d.string("mergeError")) { MergeConflictView(conflict) } else if (failure != null) FailureLine(failure)
+            Row(Modifier.fillMaxWidth().padding(start = 10.dp, end = 4.dp, top = 9.dp, bottom = 10.dp), verticalAlignment = Alignment.Top) {
+                Column(Modifier.weight(1f)) {
+                    if (conflict != null) key(d.string("mergeError")) { MergeConflictView(conflict) } else if (failure != null) FailureLine(failure)
+                }
+                DismissButton(enabled = !state.busy) { model.dismissMergeFailure() }
             }
         }
         // A merge held for target recovery: what holds it, one line, and the review behind it.
@@ -194,30 +206,38 @@ private fun Pill(model: WorktreeModel, state: WorktreeState, d: JsonObject, bran
         }
     }
     when (sheet) {
-        "diff" -> WorktreeChanges(model, displayBranch) { sheet = null }
+        "diff" -> WorktreeChanges(model, state, displayBranch, files, commits, dirty == true) { sheet = null }
+        // Opened from the main checkout, which names no commit: the whole branch, as the web drawer opens.
+        "diff-all" -> WorktreeChanges(model, state, displayBranch, files, commits, dirty == true, startOnAllChanges = true) { sheet = null }
         // Once the recovery is gone — merged, or cleared — its review closes itself.
         "recovery" -> if (recovery != null) MergeRecoveryReview(model, d, recovery, turnActive, open) { sheet = null } else LaunchedEffect(Unit) { sheet = null }
     }
 }
 
 /**
- * The branch and its summary share the row as iOS's HStack shares it: the shorter is offered half and takes what
- * it needs, the other gets the rest, so on a phone both truncate rather than the branch leaving the summary none.
+ * Commit summaries take their width first. The legacy summary continues sharing space with the branch.
  */
 @Composable
-private fun BranchSummary(modifier: Modifier, content: @Composable () -> Unit) = Layout(content, modifier) { measurables, constraints ->
+private fun BranchSummary(modifier: Modifier, prioritizeSummary: Boolean, content: @Composable () -> Unit) = Layout(content, modifier) { measurables, constraints ->
     val (branch, summary) = measurables
     val gap = 8.dp.roundToPx()
-    val room = (constraints.maxWidth - gap).coerceAtLeast(0)
-    val branchFirst = branch.maxIntrinsicWidth(constraints.maxHeight) <= summary.maxIntrinsicWidth(constraints.maxHeight)
     val loose = constraints.copy(minWidth = 0)
-    val first = (if (branchFirst) branch else summary).measure(loose.copy(maxWidth = room / 2))
-    val second = (if (branchFirst) summary else branch).measure(loose.copy(maxWidth = room - first.width))
-    val (left, right) = if (branchFirst) first to second else second to first
+    val (left, right, spacing) = if (prioritizeSummary) {
+        val stat = summary.measure(loose)
+        val remaining = (constraints.maxWidth - stat.width - gap).coerceAtLeast(0)
+        val pill = branch.measure(loose.copy(maxWidth = remaining))
+        Triple(pill, stat, if (pill.width > 0) gap else 0)
+    } else {
+        val room = (constraints.maxWidth - gap).coerceAtLeast(0)
+        val branchFirst = branch.maxIntrinsicWidth(constraints.maxHeight) <= summary.maxIntrinsicWidth(constraints.maxHeight)
+        val first = (if (branchFirst) branch else summary).measure(loose.copy(maxWidth = room / 2))
+        val second = (if (branchFirst) summary else branch).measure(loose.copy(maxWidth = room - first.width))
+        if (branchFirst) Triple(first, second, gap) else Triple(second, first, gap)
+    }
     val height = maxOf(left.height, right.height)
-    layout(left.width + gap + right.width, height) {
-        left.place(0, (height - left.height) / 2)
-        right.place(left.width + gap, (height - right.height) / 2)
+    layout(left.width + spacing + right.width, height) {
+        if (!prioritizeSummary || left.width > 0) left.place(0, (height - left.height) / 2)
+        right.place(left.width + spacing, (height - right.height) / 2)
     }
 }
 
@@ -253,6 +273,21 @@ private fun statText(add: Int, del: Int, count: Int, committed: Boolean): Annota
         withStyle(SpanStyle(color = semantic.success)) { append("+$add") }
         withStyle(SpanStyle(color = error)) { append(" −$del") }
         withStyle(SpanStyle(color = secondary)) { append(" · $count ${if (count == 1) "file" else "files"}${if (committed) " · committed" else ""}") }
+    }
+}
+
+@Composable
+private fun commitStatText(count: Int, fileCount: Int, dirty: Boolean, add: Int, del: Int): AnnotatedString {
+    val success = LocalOrbitColors.current.success
+    val error = MaterialTheme.colorScheme.error
+    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    return buildAnnotatedString {
+        append(CommitsLogic.barLabel(count, fileCount, dirty))
+        if (count > 0) {
+            withStyle(SpanStyle(color = secondary)) { append(" · ") }
+            withStyle(SpanStyle(color = success)) { append("+$add") }
+            withStyle(SpanStyle(color = error)) { append(" −$del") }
+        }
     }
 }
 
@@ -406,6 +441,15 @@ private fun FailureLine(message: String) {
     } }
 }
 
+/** The ✕ that closes a failed merge's section (web's `.wt-merge-dismiss`), in its top corner, clear of the message. */
+@Composable
+private fun DismissButton(enabled: Boolean, dismiss: () -> Unit) {
+    Box(Modifier.offset(y = (-6).dp).size(32.dp).clip(CircleShape).clickable(enabled = enabled, onClickLabel = "Dismiss", onClick = dismiss)
+        .semantics { contentDescription = "Dismiss"; role = Role.Button }.testTag("merge-failure-dismiss"), contentAlignment = Alignment.Center) {
+        Text("✕", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
 /** A merge conflict (web's conflict panel): what happened, then the by-hand recipe as two steps, each command a tap to copy. */
 @Composable
 private fun MergeConflictView(conflict: WorktreeBarLogic.MergeConflict) {
@@ -466,34 +510,161 @@ internal fun PillButton(title: String, tint: Color = MaterialTheme.colorScheme.p
 private fun Chip(title: String) = Text(title, color = LocalOrbitColors.current.success, style = MaterialTheme.typography.labelLarge,
     fontWeight = FontWeight.SemiBold, maxLines = 1)
 
-/** The changed files and each one's diff (iOS `DiffSheet`): a text file's patch, coloured, or a binary file's current bytes (A06-7). */
+/** Branch history and the changed files share the same branch-wide patches and binary previews. */
 @Composable
-private fun WorktreeChanges(model: WorktreeModel, branch: String, close: () -> Unit) {
-    val state by model.state.collectAsState()
+private fun WorktreeChanges(model: WorktreeModel, state: WorktreeState, branch: String, files: List<ChangedFile>,
+    commits: List<BranchCommit>?, dirty: Boolean, initialFile: String? = null, startOnAllChanges: Boolean = false,
+    close: () -> Unit) {
     val clipboard = LocalClipboardManager.current
-    val files = ChangedFile.of(state.detail)
-    var file by rememberSaveable { mutableStateOf<String?>(null) }
+    var tab by rememberSaveable {
+        mutableStateOf(if (startOnAllChanges) CommitsLogic.Tab.ALL_CHANGES else CommitsLogic.initialTab(commits?.size, initialFile))
+    }
+    var sha by rememberSaveable { mutableStateOf<String?>(null) }
+    var file by rememberSaveable { mutableStateOf(initialFile) }
     var copied by remember { mutableStateOf(false) }
+    val commit = commits?.firstOrNull { it.sha == sha }
+    // Use the branch's status for its diff (for example, a binary file removed by a later commit).
+    val shown = file?.let { path ->
+        files.firstOrNull { it.path == path } ?: commit?.files?.firstOrNull { it.path == path }
+    }
+    val allFilesScroll = rememberLazyListState()
+    val commitsScroll = rememberLazyListState()
+    val commitFilesScroll = key(commit?.sha) { rememberLazyListState() }
+    val back: () -> Unit = {
+        when {
+            shown != null -> file = null
+            commit != null -> { file = null; sha = null }
+            else -> close()
+        }
+    }
     LaunchedEffect(copied) { if (copied) { delay(1_500); copied = false } }
     val live = (state.detail?.string("runStatus") ?: state.detail?.string("status")) in setOf("RUNNING", "AWAITING_INPUT", "INTERRUPTED")
     // Re-read when a heartbeat changes the file summary while the sheet stays open.
     LaunchedEffect(files) { model.loadDiff(live) }
-    Dialog({ if (file != null) file = null else close() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    Dialog(back, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize().safeDrawingPadding()) { Column {
-            val shown = files.firstOrNull { it.path == file }
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (shown != null) TextButton(onClick = { file = null }) { Text("‹ Worktree changes") }
-                else TextButton(onClick = { clipboard.setText(AnnotatedString(branch)); copied = true }) { Text(if (copied) "✓ Copied" else "Copy branch") }
-                Text(shown?.path?.substringAfterLast('/') ?: "Worktree changes", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium,
+                when {
+                    commit != null -> {
+                        val label = if (shown != null) "Back to commit" else "Back to Commits"
+                        IconButton(onClick = back, modifier = Modifier.semantics { contentDescription = label }) {
+                            Text("←", Modifier.clearAndSetSemantics {}, style = MaterialTheme.typography.titleLarge)
+                        }
+                    }
+                    shown != null -> TextButton(onClick = back) { Text("‹ Worktree changes") }
+                    else -> TextButton(onClick = { clipboard.setText(AnnotatedString(branch)); copied = true }) {
+                        Text(if (copied) "✓ Copied" else "Copy branch")
+                    }
+                }
+                Text(shown?.path?.substringAfterLast('/') ?: commit?.let { CommitsLogic.shortSha(it.sha) } ?: "Worktree changes",
+                    Modifier.weight(1f), style = MaterialTheme.typography.titleMedium,
                     maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
                 TextButton(onClick = close) { Text("Done") }
             }
             HorizontalDivider()
-            if (shown == null) LazyColumn(Modifier.fillMaxSize().testTag("worktree-files")) {
-                items(files, key = { it.path }) { f -> DiffFileRow(f) { file = f.path }; HorizontalDivider() }
-            } else if (shown.binary) key(shown.path) { WorktreeFilePreview(model, shown) }
-            else DiffFileView(state, shown)
+            when {
+                shown != null -> if (shown.binary) key(shown.path) { WorktreeFilePreview(model, shown) }
+                    else DiffFileView(state, shown)
+                commit != null && commits != null -> CommitDetails(commit, commits, dirty, commitFilesScroll) { file = it }
+                else -> {
+                    val showingCommits = !commits.isNullOrEmpty() &&
+                        (tab ?: CommitsLogic.initialTab(commits.size, initialFile)) == CommitsLogic.Tab.COMMITS
+                    if (!commits.isNullOrEmpty()) {
+                        PrimaryTabRow(selectedTabIndex = if (showingCommits) 0 else 1) {
+                            Tab(showingCommits, { tab = CommitsLogic.Tab.COMMITS },
+                                text = { Text("Commits ${CommitsLogic.count(commits.size)}") })
+                            Tab(!showingCommits, { tab = CommitsLogic.Tab.ALL_CHANGES },
+                                text = { Text("All changes ${files.size}") })
+                        }
+                    }
+                    if (showingCommits && commits != null) {
+                        CommitList(commits, dirty, state.detail, commitsScroll, selectTab = { tab = it }) {
+                            tab = CommitsLogic.Tab.COMMITS
+                            sha = it
+                            file = null
+                        }
+                    } else LazyColumn(Modifier.fillMaxSize().testTag("worktree-files"), state = allFilesScroll) {
+                        items(files, key = { it.path }) { f -> DiffFileRow(f) { file = f.path }; HorizontalDivider() }
+                    }
+                }
+            }
         } }
+    }
+}
+
+@Composable
+private fun CommitList(commits: List<BranchCommit>, dirty: Boolean, detail: JsonObject?, scroll: LazyListState,
+    selectTab: (CommitsLogic.Tab) -> Unit, open: (String) -> Unit) {
+    val base = detail?.string("baseSha")?.takeIf { it.isNotEmpty() }
+    val target = detail?.string("mergeTarget")?.takeIf { it.isNotEmpty() } ?: "main"
+    val now = Instant.now()
+    LazyColumn(Modifier.fillMaxSize(), state = scroll) {
+        CommitsLogic.pendingRowTarget(dirty)?.let { pendingTab ->
+            item {
+                CommitListRow("Uncommitted changes", "Not committed yet",
+                    dot = LocalOrbitColors.current.needsYou) { selectTab(pendingTab) }
+                HorizontalDivider()
+            }
+        }
+        items(commits, key = { it.sha }) { entry ->
+            val meta = "${CommitsLogic.shortSha(entry.sha)} · ${CommitsLogic.age(entry.committedAt, now)} · " +
+                CommitsLogic.filesLabel(entry.files.size, entry.filesTruncated)
+            val saved = CommitsLogic.savedByLabel(entry.savedBy)
+            CommitListRow(entry.subject.ifEmpty { "(no message)" }, meta, saved) { open(entry.sha) }
+            HorizontalDivider()
+        }
+        if (base != null) item {
+            Text("Based on $target @ ${CommitsLogic.shortSha(base)}", Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CommitListRow(subject: String, meta: String, saved: String? = null,
+    dot: Color = MaterialTheme.colorScheme.onSurfaceVariant, open: () -> Unit) {
+    ListItem(
+        headlineContent = { Text(subject, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        modifier = Modifier.clickable(onClick = open, role = Role.Button),
+        supportingContent = {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(meta, style = MaterialTheme.typography.bodySmall)
+                if (saved != null) Text(saved,
+                    Modifier.background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(4.dp))
+                        .padding(horizontal = 4.dp),
+                    color = MaterialTheme.colorScheme.onSecondaryContainer, style = MaterialTheme.typography.labelSmall)
+            }
+        },
+        leadingContent = { Box(Modifier.size(8.dp).background(dot, CircleShape)) },
+    )
+}
+
+@Composable
+private fun CommitDetails(commit: BranchCommit, commits: List<BranchCommit>, dirty: Boolean,
+    scroll: LazyListState, open: (String) -> Unit) {
+    LazyColumn(Modifier.fillMaxSize(), state = scroll) {
+        item {
+            val add = commit.files.sumOf { maxOf(0, it.additions) }
+            val del = commit.files.sumOf { maxOf(0, it.deletions) }
+            val age = CommitsLogic.age(commit.committedAt, Instant.now())
+            val count = CommitsLogic.filesLabel(commit.files.size, commit.filesTruncated)
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(commit.subject.ifEmpty { "(no message)" }, style = MaterialTheme.typography.titleLarge)
+                Text("$age · +$add −$del · $count", color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall)
+                if (!commit.body.isNullOrBlank()) Text(commit.body, style = MaterialTheme.typography.bodyMedium)
+            }
+            if (commit.files.isNotEmpty()) Text("Files", Modifier.padding(horizontal = 16.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
+        }
+        items(commit.files, key = { it.path }) { f -> DiffFileRow(f) { open(f.path) }; HorizontalDivider() }
+        CommitsLogic.mixedNote(commit, commits, dirty)?.let { note ->
+            item {
+                Text(note, Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall)
+            }
+        }
     }
 }
 

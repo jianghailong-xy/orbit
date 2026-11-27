@@ -3,7 +3,9 @@ package io.orbitd.android.composer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -78,6 +80,9 @@ internal object CoordinatorHandoffCopy {
     const val TRY_AGAIN = "Try again"
     const val HAND_OVER_WITHOUT_NOTE = "Hand over without a note"
     const val KEEP_THIS_COORDINATOR = "Keep this coordinator"
+    const val SUCCESSOR_ROW_TITLE = "New coordinator runs on"
+    const val SUCCESSOR_KEEP = "Same as this one"
+    const val SUCCESSOR_ROW_DETAIL = "Pick another if this one's model or provider has stopped working."
     /** A handoff press the server refused (`refused`): web's toast title, this line's lead. */
     const val REFUSED = "Couldn't hand over"
     fun refusal(reason: String) = "$REFUSED: $reason"
@@ -88,6 +93,7 @@ internal object CoordinatorHandoffCopy {
         "TIMED_OUT" to "the turn timed out.",
         "EMPTY_NOTE" to "the reply was empty.",
         "REPLACE_FAILED" to "the new coordinator could not be opened.",
+        "COORDINATOR_CANT_RUN" to "the model of this coordinator could not start. Pick another model and hand over without a note.",
     )
     fun failureSentence(code: String?) = "The handoff note wasn't written: ${FAILURE_REASONS[code] ?: FAILURE_REASONS.getValue("TURN_FAILED")}"
     /** The first line of the platform turn that asks for the note (`COORDINATOR_HANDOFF_PROMPT_HEAD`): Orbit's, never drawn. */
@@ -96,8 +102,15 @@ internal object CoordinatorHandoffCopy {
 
 /** The handoff on a session (`coordinatorHandoff`, on the outgoing coordinator); [compacting] is the session's `enginePhase`. */
 internal data class OutgoingHandoff(val state: String, val startedAt: String?, val failureCode: String?, val failureReason: String?,
-    val handedOverTo: String?, val compacting: Boolean = false) {
+    val handedOverTo: String?, val compacting: Boolean = false, val successor: HandoffSuccessor? = null) {
     val locksComposer get() = state == "WRITING" || state == "HANDING_OVER"
+}
+
+internal data class HandoffSuccessor(val engine: String?, val provider: String?, val model: String? = null) {
+    companion object {
+        /** "Same as this one" said on purpose: sent as `"successor": null`, which clears a pick saved earlier. */
+        val SAME = HandoffSuccessor(null, null, null)
+    }
 }
 
 /** One wait as the handoff names it (`CoordinatorPendingWait`). [kind] is the server's, null from a server without it. */
@@ -144,8 +157,11 @@ internal object CoordinatorHandoff {
 
     fun outgoing(detail: JsonObject?): OutgoingHandoff? = (detail?.get("coordinatorHandoff") as? JsonObject)?.let { h ->
         val state = h.text("state") ?: return null
+        val successor = (h["successor"] as? JsonObject)?.let {
+            HandoffSuccessor(it.text("engine"), it.text("provider"), it.text("model"))
+        }
         OutgoingHandoff(state, h.text("startedAt"), h.text("failureCode"), h.text("failureReason"), h.text("handedOverToSessionId"),
-            compacting = detail.text("enginePhase") == "compacting")
+            compacting = detail.text("enginePhase") == "compacting", successor = successor)
     }
 
     /** The in-hand row's words: WRITING's, or "Compacting…" while the engine compacts first (board 02 ⑥); null for any other state. */
@@ -224,8 +240,78 @@ internal class CoordinatorHandoffApi(private val auth: AuthSession, private val 
     suspend fun pendingWaits(projectId: String): List<HandoffWait> = CoordinatorHandoff.waits(
         Wire.decode(auth.request(handle, ApiRequest(listOf("projects", projectId, "coordinator", "pending-waits"))).body, JsonElement.serializer()))
     /** [action]: null starts it (Hand over); `skip`, `cancel` or `retry`. */
-    suspend fun post(projectId: String, action: String? = null) {
-        auth.request(handle, ApiRequest(listOfNotNull("projects", projectId, "coordinator", "handoff", action), HttpMethod.POST))
+    suspend fun post(projectId: String, action: String? = null, successor: HandoffSuccessor? = null) {
+        auth.request(handle, postRequest(projectId, action, successor))
+    }
+
+    companion object {
+        fun postRequest(projectId: String, action: String?, successor: HandoffSuccessor?): ApiRequest {
+            val body = buildJsonObject {
+                if (successor == HandoffSuccessor.SAME) put("successor", JsonNull)
+                else successor?.let { pick ->
+                    put("successor", buildJsonObject {
+                        pick.engine?.let { put("engine", it) }
+                        pick.provider?.let { put("provider", it) }
+                        pick.model?.let { put("model", it) }
+                    })
+                }
+            }
+            return ApiRequest(listOfNotNull("projects", projectId, "coordinator", "handoff", action),
+                HttpMethod.POST, body = if (action == "cancel") null else body.toString().encodeToByteArray())
+        }
+    }
+}
+
+@Composable
+private fun HandoffSuccessorPicker(model: ComposerModel, state: ComposerState, detail: JsonObject, busy: Boolean,
+    successor: HandoffSuccessor?, onPick: (HandoffSuccessor?) -> Unit) {
+    LaunchedEffect(model) {
+        if (model.state.value.let { it.catalog == null && !it.catalogLoading }) model.loadCatalog()
+    }
+    val catalog = state.catalog
+    val antigravityKey = catalog?.antigravityKeyAvailable(detail) == true
+    val choices = catalog?.engines(listOf(successor?.engine to successor?.provider), antigravityKey).orEmpty()
+    val selectedLabel = successor?.let {
+        val engine = it.engine
+        val provider = it.provider
+        val providerLabel = provider?.let { id ->
+            engine?.let { catalog?.current(it, id, antigravityKey)?.label } ?: id
+        }
+        listOfNotNull(engine?.let(ProviderEngines::cliName), providerLabel, it.model).joinToString(" · ")
+    }
+    var expanded by remember { mutableStateOf(false) }
+    Column {
+        Text(CoordinatorHandoffCopy.SUCCESSOR_ROW_TITLE, style = MaterialTheme.typography.labelLarge)
+        Text(CoordinatorHandoffCopy.SUCCESSOR_ROW_DETAIL, style = MaterialTheme.typography.bodySmall)
+        Box {
+            OutlinedButton(enabled = !busy, onClick = { expanded = true }, modifier = Modifier.testTag("handoff-successor")) {
+                Text(selectedLabel ?: CoordinatorHandoffCopy.SUCCESSOR_KEEP)
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                DropdownMenuItem(text = { Text(CoordinatorHandoffCopy.SUCCESSOR_KEEP) }, onClick = {
+                    onPick(null)
+                    expanded = false
+                })
+                for (option in choices) {
+                    val landing = option.landing ?: continue
+                    if (option.unavailable != null) continue
+                    DropdownMenuItem(text = {
+                        Column {
+                            Text(ProviderEngines.cliName(option.engine))
+                            Text(landing.label, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }, onClick = {
+                        onPick(HandoffSuccessor(option.engine, landing.id))
+                        expanded = false
+                    })
+                }
+                if (state.catalogLoading) CircularProgressIndicator(Modifier.padding(12.dp).size(20.dp), strokeWidth = 2.dp)
+                state.catalogError?.let { error ->
+                    DropdownMenuItem(text = { Text("Retry model catalog") }, onClick = model::loadCatalog)
+                    Text(error, Modifier.padding(horizontal = 12.dp), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
     }
 }
 
@@ -246,11 +332,12 @@ internal fun ContextActionRow(icon: Int, title: String, detail: String, enabled:
 /** Board 02 ① as board 03 draws it for a phone (iOS 2): the title and one body, the waits a count inside it — iOS's words. */
 @Composable
 internal fun HandoverConfirm(running: Boolean, waits: List<HandoffWait>?, busy: Boolean, error: String?,
-    onHandOver: () -> Unit, onCancel: () -> Unit) {
+    model: ComposerModel, state: ComposerState, detail: JsonObject, onHandOver: (HandoffSuccessor?) -> Unit, onCancel: () -> Unit) {
+    var successor by remember { mutableStateOf<HandoffSuccessor?>(null) }
     AlertDialog(onDismissRequest = onCancel, modifier = Modifier.testTag("handoff-confirm"),
         title = { Text(CoordinatorHandoffCopy.CONFIRM_TITLE) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 // No count while the waits are still being read, as when there are none.
                 Text(CoordinatorHandoffCopy.phoneConfirmBody(waits?.size ?: 0, running))
                 // Once any wait is more than a watch, each one on its own line with its kind (handoff v2 §1), as iOS's Alert;
@@ -258,10 +345,11 @@ internal fun HandoverConfirm(running: Boolean, waits: List<HandoffWait>?, busy: 
                 if (waits.orEmpty().any { it.kindLabel != null }) Column(Modifier.testTag("handoff-confirm-waits")) {
                     waits.orEmpty().forEach { Text("•  ${it.shownLabel}", style = MaterialTheme.typography.bodySmall) }
                 }
+                HandoffSuccessorPicker(model, state, detail, busy, successor) { successor = it }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             }
         },
-        confirmButton = { TextButton(enabled = !busy, onClick = onHandOver, modifier = Modifier.testTag("handoff-confirm-hand-over")) {
+        confirmButton = { TextButton(enabled = !busy, onClick = { onHandOver(successor) }, modifier = Modifier.testTag("handoff-confirm-hand-over")) {
             Text(CoordinatorHandoffCopy.HAND_OVER, fontWeight = FontWeight.SemiBold) } },
         dismissButton = { TextButton(onClick = onCancel) { Text(CoordinatorHandoffCopy.CANCEL) } })
 }
@@ -272,7 +360,8 @@ internal fun HandoverConfirm(running: Boolean, waits: List<HandoffWait>?, busy: 
  * ([HandedOverBanner]); nothing at all for a session with no handoff.
  */
 @Composable
-internal fun HandoffStatus(handoff: OutgoingHandoff?, act: (String) -> Unit, busy: Boolean) {
+internal fun HandoffStatus(handoff: OutgoingHandoff?, model: ComposerModel, state: ComposerState, detail: JsonObject,
+    act: (String, HandoffSuccessor?) -> Unit, busy: Boolean) {
     when (handoff?.state) {
         "WRITING", "HANDING_OVER" -> {
             val writing = CoordinatorHandoff.showsTimer(handoff)
@@ -290,8 +379,8 @@ internal fun HandoffStatus(handoff: OutgoingHandoff?, act: (String) -> Unit, bus
                             color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                     }
                     if (writing) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(enabled = !busy, onClick = { act("skip") }, contentPadding = PaddingValues(horizontal = 12.dp)) { Text(CoordinatorHandoffCopy.SKIP_NOTE) }
-                        OutlinedButton(enabled = !busy, onClick = { act("cancel") }, contentPadding = PaddingValues(horizontal = 12.dp)) { Text(CoordinatorHandoffCopy.CANCEL_HANDOVER) }
+                        OutlinedButton(enabled = !busy, onClick = { act("skip", null) }, contentPadding = PaddingValues(horizontal = 12.dp)) { Text(CoordinatorHandoffCopy.SKIP_NOTE) }
+                        OutlinedButton(enabled = !busy, onClick = { act("cancel", null) }, contentPadding = PaddingValues(horizontal = 12.dp)) { Text(CoordinatorHandoffCopy.CANCEL_HANDOVER) }
                     }
                 }
             }
@@ -301,13 +390,16 @@ internal fun HandoffStatus(handoff: OutgoingHandoff?, act: (String) -> Unit, bus
             horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Icon(painterResource(R.drawable.ic_info), null, Modifier.size(18.dp).padding(top = 2.dp), tint = MaterialTheme.colorScheme.error)
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                var successor by remember(model, handoff.startedAt, handoff.successor) { mutableStateOf(handoff.successor) }
                 Text(handoff.failureReason ?: CoordinatorHandoffCopy.failureSentence(handoff.failureCode), color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodyMedium)
+                HandoffSuccessorPicker(model, state, detail, busy, successor) { successor = it }
                 @OptIn(ExperimentalLayoutApi::class)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CoordinatorHandoff.failureActions(handoff.failureCode).forEach { label ->
                         val action = when (label) { CoordinatorHandoffCopy.TRY_AGAIN -> "retry"; CoordinatorHandoffCopy.KEEP_THIS_COORDINATOR -> "cancel"; else -> "skip" }
-                        OutlinedButton(enabled = !busy, onClick = { act(action) }, contentPadding = PaddingValues(horizontal = 12.dp)) { Text(label) }
+                        OutlinedButton(enabled = !busy, onClick = { act(action, if (action == "cancel") null else successor ?: HandoffSuccessor.SAME) },
+                            contentPadding = PaddingValues(horizontal = 12.dp)) { Text(label) }
                     }
                 }
             }

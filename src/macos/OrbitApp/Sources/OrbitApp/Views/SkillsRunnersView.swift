@@ -99,6 +99,8 @@ struct RunnersListView: View {
     var part: Part = .all
     @State private var addingRunner = false
     @State private var pendingRemoval: Runner?
+    /// The clock the waiting terminals are filtered against, so a card folds at its deadline.
+    @State private var terminalNow = Date()
 
     var body: some View {
         @Bindable var model = model
@@ -110,6 +112,7 @@ struct RunnersListView: View {
             let managed = runners.loadState.hasLoaded
                 ? ManagedRunnerLogic.onboarding(model.managedRunner?.display, runnerCount: runners.runners.count)
                 : nil
+            let terminals = Terminals.liveRequests(lists.terminalRequests, now: terminalNow)
             // Runners' stack projection — the record on top — and only where there is a detail
             // column to select into.
             List(selection: rowNavigation == .selection ? $model.selectedRunnerID : nil) {
@@ -121,12 +124,14 @@ struct RunnersListView: View {
                     }
                 }
                 #endif
-                if lists.settled {
+                if !terminals.isEmpty || lists.settled {
                     // The managed runner's heartbeat "offline" is not said of it: its shared state is.
-                    let attention = lists.attention.filter { !isManagedOffline($0) && shows($0) }
-                    if !attention.isEmpty {
-                        MachinesAndModelsNeedsYouSection(items: attention, opensPools: opensPools,
-                                                      open: openAttention)
+                    let attention = lists.settled ? lists.attention.filter { !isManagedOffline($0) && shows($0) } : []
+                    if !attention.isEmpty || !terminals.isEmpty {
+                        MachinesAndModelsNeedsYouSection(
+                            items: attention, terminals: terminals, ownerRequests: model.ownerRequests,
+                            lit: model.terminalRequestToLight, onSaid: { model.showToast($0) },
+                            opensPools: opensPools, open: openAttention)
                     }
                 }
                 if part != .providers {
@@ -162,7 +167,7 @@ struct RunnersListView: View {
                                                open: opensPools ? push : nil)
                     MachinesAndModelsKeysSection(keys: lists.keys, balances: model.agents?.deepSeekBalances ?? [:],
                                               cursorModel: MachinesAndModels.cursorModel(lists.runners.filter { $0.online == true }),
-                                              open: opensPools ? push : nil)
+                                              open: opensPools ? push : nil, health: AccountHealthRows(runners))
                     if let agents = model.agents {
                         InfrastructureModelTiersSection(agents: agents)
                     }
@@ -177,6 +182,11 @@ struct RunnersListView: View {
             .modifier(RunnerListEditing(runners: runners, addingRunner: $addingRunner,
                                         pendingRemoval: $pendingRemoval))
             .navigationTitle(title)
+            #if os(iOS)
+            // The board's phone page under Settings' back button: a centred title, and the Needs
+            // you section — the first thing on the page — fully visible under it.
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
             // Each list is its own read, so they are asked for side by side. A machine checks in every
             // 30s: the machines are read again while the page is up, so where each one stands — its row,
             // and what needs you — moves with it, as a machine's own page does. No event reports a
@@ -194,6 +204,8 @@ struct RunnersListView: View {
             .task(id: MachinesAndModelsLists.codexPoolIDs(model)) {
                 for id in MachinesAndModelsLists.codexPoolIDs(self.model) { await self.model.sharedPools?.loadAccess(id) }
             }
+            // The terminals asking to be approved: read every 20 s, and again at their deadline.
+            .modifier(TerminalRequestsCurrent(now: $terminalNow))
         } else {
             ProgressView()
         }
@@ -207,7 +219,10 @@ struct RunnersListView: View {
             RunnerRow(runner: r, workspaces: model.runners?.agents(forRunner: r.id) ?? [],
                       latestVersion: model.runners?.latestVersion,
                       managed: ManagedRunnerLogic.row(runnerID: r.id, status: model.managedRunner?.status),
-                      isManaged: isManaged, disclosure: rowNavigation == .push)
+                      isManaged: isManaged,
+                      updateAvailable: ManagedRunnerLogic.row(runnerID: r.id, status: model.managedRunner?.status) != nil
+                          && ManagedRunnerUpdateLogic.showsDot(model.managedRunner?.status),
+                      disclosure: rowNavigation == .push)
             if separates { Divider() }
         }
         switch rowNavigation {
@@ -443,6 +458,8 @@ struct RunnerRow: View {
     /// and with the feature off.
     var managed: ManagedRunnerRow? = nil
     var isManaged = false
+    /// A newer build is available for the managed runner (`ManagedRunnerUpdateLogic.showsDot`).
+    var updateAvailable = false
     /// Whether the row draws the disclosure a pushing row needs; a selection row has none.
     var disclosure = false
     var now = Date()
@@ -473,6 +490,14 @@ struct RunnerRow: View {
                         Text(RunnerPageFormat.displayName(runner))
                             .fontWeight(isManaged ? .semibold : nil)
                             .lineLimit(1)
+                        if updateAvailable {
+                            // An older build is running: the machine row's update dot.
+                            Circle()
+                                .fill(Color.accentColor)
+                                .frame(width: 7, height: 7)
+                                .accessibilityLabel(RunnerPageCopy.MANAGED_UPDATE_ROW_TITLE)
+                                .accessibilityIdentifier("runner-update-dot")
+                        }
                         Spacer(minLength: 8)
                         if let managed {
                             Text(managed.label)
@@ -639,6 +664,8 @@ struct RunnerDetailContent: View {
     @State private var fixPressing = false
     /// The token a rotation just minted: shown on this page once, and gone with it.
     @State private var rotatedToken: String?
+    /// The approved terminal whose Revoke is up: its own row asks, so only that one's question is ever open.
+    @State private var pendingRevokeTerminal: Terminal?
     @State private var notice: String?
 
     var body: some View {
@@ -665,9 +692,14 @@ struct RunnerDetailContent: View {
                     ManagedRunnerBanner(display: managedDisplay, runnerID: runner.id)
                 }
             }
+            // The terminals asking to be approved on this machine (board ①): its own cards under
+            // the title, drawn from the same read as Machines & models' Needs you section.
+            TerminalRequestsSection(runnerID: runner.id, onSaid: show)
             // A managed runner that has not reported yet has no release, readings or engines to show:
             // no Update card, and one quiet line where Resources and Engines would be.
-            if !managedWaiting, let card = RunnerPageFormat.updateCard(runner, now: now) {
+            if managed != nil, let managedRunner = model.managedRunner {
+                ManagedRunnerUpdateSection(managedRunner: managedRunner, onNotice: show)
+            } else if !managedWaiting, let card = RunnerPageFormat.updateCard(runner, now: now) {
                 updateSection(card)
             }
             if !items.isEmpty {
@@ -683,6 +715,7 @@ struct RunnerDetailContent: View {
                 enginesSection(offline: offline, now: now)
             }
             workspacesSection(workspaces)
+            terminalsSection(now: now)
             aboutSection(now: now)
             rotateSection
             removeSection
@@ -706,6 +739,9 @@ struct RunnerDetailContent: View {
             await runners.loadReleaseVersion()
             await runners.loadSessionCounts()
         }
+        // The machine's approved terminals: read when the page opens, and again when the server says
+        // they changed (`terminals.changed`) — an approval or a revoke lands on this section at once.
+        .task { await model.terminals?.load() }
         // A machine checks in every 30s: read it again while its page is up, so the page moves with it
         // — while the app can be seen (`ViewPoll`).
         .task(id: runner.id) {
@@ -1093,6 +1129,17 @@ struct RunnerDetailContent: View {
                 }
                 .runnerRowButtonStyle()
             }
+            // One more workspace on this machine (docs/mocks/new-workspace-form/02-apple-entry, owner A). With none yet,
+            // Start a session above is the way to its first.
+            if !workspaces.isEmpty {
+                Button { newWorkspace() } label: {
+                    Label(NewWorkspaceCopy.NEW_WORKSPACE, systemImage: "plus.circle")
+                        .foregroundStyle(Color.accentColor)
+                        .contentShape(Rectangle())
+                }
+                .runnerRowButtonStyle()
+                .accessibilityIdentifier("machine-new-workspace")
+            }
         } header: {
             RunnerSectionHeader(RunnerPageCopy.RUNNER_WORKSPACES,
                                 trailing: workspaces.isEmpty ? nil : "\(workspaces.count)")
@@ -1100,6 +1147,71 @@ struct RunnerDetailContent: View {
             if !workspaces.isEmpty {
                 Text(MachineSetupCopy.RUNNER_WORKSPACES_TAP)
             }
+        }
+    }
+
+    /// This machine's approved terminals (docs/mocks/terminals-on-machine-page/01-board.html ②③): the account's
+    /// live terminals filtered to it, newest approval first, each with Revoke, which asks first in main's words.
+    /// Nothing at all while it has none.
+    @ViewBuilder private func terminalsSection(now: Date) -> some View {
+        let terminals = Terminals.machineTerminals(model.terminals?.terminals ?? [], on: runner.id)
+        if !terminals.isEmpty {
+            Section {
+                ForEach(terminals) { terminal in
+                    terminalRow(terminal, now: now)
+                }
+            } header: {
+                VStack(alignment: .leading, spacing: 4) {
+                    RunnerSectionHeader(Terminals.title)
+                    Text(Terminals.machineHint)
+                        .font(.orbitListSubtitle)
+                        .foregroundStyle(Color.secondary)
+                        .textCase(nil)
+                }
+            }
+        }
+    }
+
+    /// One approved terminal: when it was approved, last used · expires, and Revoke. No machine name —
+    /// the page is the machine.
+    private func terminalRow(_ terminal: Terminal, now: Date) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(Terminals.approvedLine(terminal))
+                Text(Terminals.usedAndExpiresLine(terminal, now: now))
+                    .font(.orbitListSubtitle)
+                    .foregroundStyle(Color.secondary)
+            }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: 8)
+            Button(Terminals.revoke, role: .destructive) { pendingRevokeTerminal = terminal }
+                .controlSize(.small)
+                .disabled(model.terminals?.revokingID == terminal.id)
+                .orbitConfirmation(Terminals.revokeTitle(terminal),
+                                   isPresented: revokeTerminalAsked(terminal)) {
+                    Button(Terminals.revoke, role: .destructive) { Task { await revokeTerminal(terminal) } }
+                    Button(SharePanelCopy.cancel, role: .cancel) {}
+                } message: {
+                    Text(Terminals.revokeDetail)
+                }
+                .accessibilityIdentifier("terminal-revoke-\(terminal.id)")
+        }
+        .padding(.vertical, 2)
+        .opacity(model.terminals?.revokingID == terminal.id ? 0.5 : 1)
+    }
+
+    private func revokeTerminalAsked(_ terminal: Terminal) -> Binding<Bool> {
+        Binding(get: { pendingRevokeTerminal?.id == terminal.id },
+                set: { if !$0 { pendingRevokeTerminal = nil } })
+    }
+
+    /// Revoke it, and say what came of it in the page's notice — exactly as main's Settings page did.
+    private func revokeTerminal(_ terminal: Terminal) async {
+        guard let terminals = model.terminals else { return }
+        if let reason = await terminals.revoke(terminal) {
+            show(Terminals.notRevoked(reason))
+        } else {
+            show(Terminals.revoked)
         }
     }
 
@@ -1428,6 +1540,11 @@ struct RunnerDetailContent: View {
     private func openWorkspace(_ id: String) {
         model.settingsPresented = false
         model.openAgent(id)
+    }
+
+    /// New workspace on this machine: its new session page with the setup card, after the Settings sheet comes down.
+    private func newWorkspace() {
+        model.openNewWorkspace(runner.id)
     }
 
     /// Start a session: this machine's new session page, after the Settings sheet comes down.

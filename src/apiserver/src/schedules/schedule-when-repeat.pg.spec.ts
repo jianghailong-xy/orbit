@@ -185,6 +185,26 @@ const firedOf = (conditionId: string) =>
 
 /** The run's session has done its work: it ended with no change (the report path is the schedule's own). */
 async function ended(runId: string) {
+  // Its first turn reached the engine: a run that never did does not count toward the budget (§4).
+  const run = await db.scheduleRun.findUniqueOrThrow({ where: { id: runId } });
+  if (run.sessionId) {
+    // The session door is a stub here, so the run's session is written as its first turn reached the engine.
+    const schedule = await db.schedule.findUniqueOrThrow({ where: { id: run.scheduleId } });
+    await db.session.upsert({
+      where: { id: run.sessionId },
+      create: {
+        id: run.sessionId, ownerId: schedule.ownerId, creatorId: schedule.ownerId, workspaceId: schedule.workspaceId, title: 'run',
+        prompt: 'p', provider: 'claude', engine: 'claude', providerBuiltin: true, dispatchOrigin: SessionDispatchOrigin.USER,
+        permissionMode: PermissionMode.DEFAULT, scheduleRunId: run.id,
+      },
+      update: {},
+    });
+    await db.conversationTurn.upsert({
+      where: { sessionId_clientTurnId: { sessionId: run.sessionId, clientTurnId: `initial-${run.sessionId}` } },
+      create: { sessionId: run.sessionId, seq: 1, clientTurnId: `initial-${run.sessionId}`, content: 'x', status: 'IN_FLIGHT', deliveredAt: clockNow },
+      update: { deliveredAt: clockNow },
+    });
+  }
   await db.scheduleRun.update({ where: { id: runId }, data: { state: 'NO_CHANGE', endedAt: clockNow } });
 }
 

@@ -5,11 +5,11 @@ import { test } from 'node:test';
 import {
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -33,6 +33,7 @@ import { criterionLandingWithReasons } from './project-done-derived';
 import { canonicalRepoUrl, isCodeTask } from './project-integration-line';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { TaskCheckpointService } from './task-checkpoint.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * The delivered identity (`docs/project-integration-line-contract.md` §10.4, §10.5 O-L4 and O-L7,
@@ -188,7 +189,7 @@ async function world(
     data: {
       id: coordinatorSessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
       title: `coordinator: ${label}`, prompt: `coordinator: ${label}`, provider: 'claude',
-      status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+      turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true, numTurns: 1, startedAt: new Date(),
       runtimeSessionId: `runtime-${coordinatorSessionId}`,
     },
@@ -247,12 +248,12 @@ async function workSession(stack: Stack, w: World, taskId: string, s: WorkSessio
       id, ownerId: w.ownerId, creatorId: w.ownerId, taskId,
       workspaceId: s.workspaceId === undefined ? w.workspaceId : s.workspaceId,
       assignedRunnerId: w.runnerId, title: `work ${s.branch}`, prompt: 'work', provider: 'claude',
-      status: finished ? RunStatus.SUCCEEDED : RunStatus.AWAITING_INPUT,
+      turnState: turnStateOfWord(finished ? RunStatus.SUCCEEDED : RunStatus.AWAITING_INPUT),
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true, isolationStatus: 'worktree',
       branch: s.branch, worktreeBranch: s.worktreeBranch ?? null, branchSha: s.branchSha ?? null,
       baseSha: s.baseSha ?? null, numTurns: 1, startedAt: minutesAgo(s.createdMinutesAgo),
       createdAt: minutesAgo(s.createdMinutesAgo),
-      ...(finished ? { finishedAt: minutesAgo(s.finishedMinutesAgo!) } : {}),
+      ...(finished ? { finishedAt: minutesAgo(s.finishedMinutesAgo!)} : {}),
     },
   });
   return id;
@@ -539,7 +540,7 @@ test('(3) O-L4 3: a DONE written while the work still moves freezes nothing, and
         data: {
           id: pending, ownerId: w.ownerId, creatorId: w.ownerId, taskId: queuedTask, workspaceId: w.workspaceId,
           assignedRunnerId: w.runnerId, title: 'still queued', prompt: 'queued', provider: 'claude',
-          status: RunStatus.PENDING, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+          turnState: 'QUEUED', dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
           createdAt: minutesAgo(50),
         },
       });

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   COORDINATOR_HANDOFF_COPY as COPY,
@@ -6,15 +6,20 @@ import {
   COORDINATOR_HANDOFF_SECTIONS,
   coordinatorHandoffFailureSentence,
   coordinatorPendingWaitLine,
+  type CoordinatorHandoffRequest,
+  type CoordinatorHandoffSuccessor,
   type CoordinatorHandoffView,
   type CoordinatorPendingWait,
   type SessionCoordinatorHandoff,
   type SessionCoordinatorHandoffReceived,
 } from '@orbit/shared';
 import { api } from '../api';
+import type { EngineChoice } from '../lib/sessionProviderChoices';
+import { BrandMark } from './NewSessionProviderHero';
 import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
 import { Popover } from './ui/Popover';
+import { Select } from './ui/Select';
 import './CoordinatorHandoff.css';
 
 /**
@@ -37,9 +42,15 @@ export const COMPACT_LEAD_PCT = 75;
 
 export type CoordinatorHandoffAction = 'handoff' | 'skip' | 'cancel' | 'retry';
 
-export function coordinatorHandoffRequest(projectId: string, action: CoordinatorHandoffAction): Promise<CoordinatorHandoffView> {
+export function coordinatorHandoffRequest(
+  projectId: string,
+  action: CoordinatorHandoffAction,
+  /** Left out keeps what the handoff has; null is "Same as this one" and clears an earlier pick. */
+  successor?: CoordinatorHandoffSuccessor | null,
+): Promise<CoordinatorHandoffView> {
   const base = `/projects/${encodeURIComponent(projectId)}/coordinator/handoff`;
-  return api<CoordinatorHandoffView>(action === 'handoff' ? base : `${base}/${action}`, { method: 'POST', body: {} });
+  const body: CoordinatorHandoffRequest = successor !== undefined && action !== 'cancel' ? { successor } : {};
+  return api<CoordinatorHandoffView>(action === 'handoff' ? base : `${base}/${action}`, { method: 'POST', body });
 }
 
 export function coordinatorPendingWaits(projectId: string): Promise<CoordinatorPendingWait[]> {
@@ -119,18 +130,85 @@ function confirmBody(projectTitle: string, running: boolean): ReactNode {
   return <>{before}<b>{projectTitle}</b>{after}</>;
 }
 
+function SuccessorPicker({ engines, successor, stored, onChange, disabled }: {
+  engines: readonly EngineChoice[];
+  successor: CoordinatorHandoffSuccessor | undefined;
+  stored?: CoordinatorHandoffSuccessor | null;
+  onChange: (successor?: CoordinatorHandoffSuccessor) => void;
+  disabled?: boolean;
+}) {
+  const id = useId();
+  const choices = engines.map<{
+    value: string;
+    label: string;
+    disabled: boolean;
+    engine?: EngineChoice;
+    pick?: CoordinatorHandoffSuccessor;
+  }>((engine) => {
+    const credential = engine.provider;
+    const label = credential && credential.slug !== engine.slug ? `${engine.label} via ${credential.label}` : engine.label;
+    return {
+      value: engine.slug,
+      label: engine.unavailable ? `${label} · ${engine.unavailable}` : label,
+      disabled: !!engine.unavailable || !credential,
+      engine,
+      pick: credential ? { engine: engine.slug, provider: credential.slug } : undefined,
+    };
+  });
+  const valueOf = (target?: CoordinatorHandoffSuccessor | null) => choices.find(({ pick }) => pick && target &&
+    pick.engine === target.engine && pick.provider === target.provider && (pick.model ?? null) === (target.model ?? null))?.value;
+  if (stored && !valueOf(stored)) {
+    const engine = engines.find((choice) => choice.slug === stored.engine);
+    const provider = engine?.providers.find((choice) => choice.slug === stored.provider);
+    const unavailable = provider?.unavailable ?? (stored.provider && !provider ? 'Unavailable' : undefined);
+    const label = [
+      engine?.label ?? stored.engine,
+      stored.provider !== stored.engine ? provider?.label ?? stored.provider : undefined,
+      stored.model,
+      unavailable,
+    ].filter(Boolean).join(' · ');
+    choices.push({ value: 'stored', label, disabled: !!unavailable, engine, pick: stored });
+  }
+  const renderChoice = (key: string, label: string) => {
+    const engine = choices.find((choice) => choice.value === key)?.engine;
+    return engine ? <span className="handoff-successor-choice"><BrandMark choice={engine} size={16} />{label}</span> : label;
+  };
+  return (
+    <div className="handoff-successor">
+      <b id={id}>{COPY.successorRowTitle}</b>
+      <span id={`${id}-detail`} className="sub">{COPY.successorRowDetail}</span>
+      <Select
+        aria-labelledby={id}
+        aria-describedby={`${id}-detail`}
+        size="small"
+        disabled={disabled}
+        options={[{ value: 'keep', label: COPY.successorKeep }, ...choices]}
+        value={valueOf(successor) ?? 'keep'}
+        onValueChange={(key) => {
+          const pick = choices.find((choice) => choice.value === key)?.pick;
+          if (key === 'keep' || pick) onChange(pick);
+        }}
+        renderOption={(option) => renderChoice(option.value, option.label)}
+        renderValue={(key, option) => renderChoice(key, option?.label ?? key)}
+      />
+    </div>
+  );
+}
+
 export function CoordinatorHandoffConfirm({
   projectId,
   projectTitle,
   running,
+  engines,
   onClose,
   onHandOver,
 }: {
   projectId: string;
   projectTitle: string;
   running: boolean;
+  engines: readonly EngineChoice[];
   onClose: () => void;
-  onHandOver: () => Promise<unknown>;
+  onHandOver: (successor?: CoordinatorHandoffSuccessor) => Promise<unknown>;
 }) {
   const waitsQ = useQuery({
     queryKey: ['project', projectId, 'coordinator', 'pending-waits'],
@@ -139,13 +217,14 @@ export function CoordinatorHandoffConfirm({
     staleTime: 0,
   });
   const [busy, setBusy] = useState(false);
+  const [successor, setSuccessor] = useState<CoordinatorHandoffSuccessor>();
   const [error, setError] = useState<string | null>(null);
   const waits = Array.isArray(waitsQ.data) ? waitsQ.data : [];
   const handOver = async () => {
     setBusy(true);
     setError(null);
     try {
-      await onHandOver();
+      await onHandOver(successor);
       onClose();
     } catch (cause) {
       // The same lead as the toast a refused Skip / Cancel / Try again shows, and the phones' and the Mac's line.
@@ -186,6 +265,7 @@ export function CoordinatorHandoffConfirm({
           </li>
         )}
       </ul>
+      <SuccessorPicker engines={engines} successor={successor} onChange={setSuccessor} disabled={busy} />
       {error && <div className="orbit-confirm-error" role="alert">{error}</div>}
     </Dialog>
   );
@@ -245,31 +325,37 @@ export function CoordinatorHandoffProgress({
 
 export function CoordinatorHandoffFailure({
   handoff,
+  engines,
   busy,
   onRetry,
   onSkip,
   onKeep,
 }: {
   handoff: SessionCoordinatorHandoff;
+  engines: readonly EngineChoice[];
   busy?: boolean;
-  onRetry: () => void;
-  onSkip: () => void;
+  /** null: "Same as this one", which clears the handoff's saved pick. */
+  onRetry: (successor: CoordinatorHandoffSuccessor | null) => void;
+  onSkip: (successor: CoordinatorHandoffSuccessor | null) => void;
   onKeep: () => void;
 }) {
   // The new coordinator could not be opened, and this one is already completed: only the handover
   // without a note can still work.
   const replaceFailed = handoff.failureCode === 'REPLACE_FAILED';
+  const [pick, setPick] = useState<CoordinatorHandoffSuccessor | null>();
+  const successor = (pick === undefined ? handoff.successor : pick) ?? null;
   return (
     <div className="handoff-sys err" role="alert" data-handoff-state="FAILED">
       <ErrorIcon />
-      <span className="grow">
+      <div className="grow">
         {handoff.failureReason ?? coordinatorHandoffFailureSentence(handoff.failureCode ?? 'TURN_FAILED')}
+        <SuccessorPicker engines={engines} successor={successor ?? undefined} stored={handoff.successor} onChange={(next) => setPick(next ?? null)} disabled={busy} />
         <span className="row">
-          {!replaceFailed && <Button size="small" disabled={busy} onClick={onRetry}>{COPY.tryAgain}</Button>}
-          <Button size="small" disabled={busy} onClick={onSkip}>{COPY.handOverWithoutNote}</Button>
+          {!replaceFailed && <Button size="small" disabled={busy} onClick={() => onRetry(successor)}>{COPY.tryAgain}</Button>}
+          <Button size="small" disabled={busy} onClick={() => onSkip(successor)}>{COPY.handOverWithoutNote}</Button>
           {!replaceFailed && <Button size="small" disabled={busy} onClick={onKeep}>{COPY.keepThisCoordinator}</Button>}
         </span>
-      </span>
+      </div>
     </div>
   );
 }

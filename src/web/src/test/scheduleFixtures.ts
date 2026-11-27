@@ -12,6 +12,7 @@ import type {
   ScheduleListResponse,
   ScheduleListRow,
   ScheduleRule,
+  ScheduleRunSessionStatus,
   ScheduleRunView,
   ScheduleTimelineRun,
   ScheduleView,
@@ -175,7 +176,70 @@ const gateway = schedule({
   id: 'sch-gateway', title: 'Gateway CSP report digest', rule: { kind: 'DAILY', time: '08:00' }, ws: WS.web, state: 'PAUSED',
 });
 
+// An EVERY rule with a planned end by time, and one with an end by count; the second has missed slots overnight.
+const sweep = schedule({
+  id: 'sch-sweep', title: 'Queue depth sweep', rule: { kind: 'EVERY', minutes: 30, time: '09:00', until: '18:00', weekdays: ['MON', 'TUE', 'WED', 'THU', 'FRI'] },
+  ws: WS.apiserver, endAt: sh(14, '18:00'), nextDueAt: sh(14, '13:00'),
+});
+const burst = schedule({
+  id: 'sch-burst', title: 'Canary burst watch', rule: { kind: 'EVERY', minutes: 60, time: '00:00', weekdays: ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] },
+  ws: WS.web, maxRuns: 6, runsStarted: 3, runsLeft: 3, nextDueAt: sh(14, '14:00'),
+});
+const burstMissed = ['01:00', '02:00', '03:00', '04:00'].map((t, i) => run({
+  id: `run-burst-missed-${i}`, scheduleId: burst.id, plannedAt: sh(14, t), startedAt: null, state: 'MISSED',
+}));
+
+// ── a run that never reached its engine (board docs/mocks/scheduled-run-not-started ②③④) ────────────────
+
+/** Engine version bump, the board's Run now: planned 03:32, five tries on HPC, given up at 05:44. */
+const bump = schedule({
+  id: 'sch-bump', title: 'Engine version bump', rule: { kind: 'DAILY', time: '06:00' }, ws: WS.apiserver, accessLevel: 'LAND',
+  engine: 'claude', nextDueAt: sh(15, '06:00'),
+});
+export const BUMP_SCHEDULE = bump;
+/** The sessions of its five tries, oldest first. */
+export const BUMP_TRY_SESSIONS = ['sess-bump-try-1', 'sess-bump-try-2', 'sess-bump-try-3', 'sess-bump-try-4', 'sess-bump-try-5'];
+const BUMP_TRY_TIMES = ['03:32', '03:43', '03:58', '04:23', '05:34'];
+const bumpTries = (reached: number | null = null) => BUMP_TRY_SESSIONS.map((sessionId, i) => ({
+  sessionId, startedAt: sh(14, BUMP_TRY_TIMES[i]!), claimed: true, reachedEngine: reached === i + 1,
+}));
+/** ② Didn't run: MISSED after five tries HPC did not pick up. */
+export const BUMP_MISSED_RUN = run({
+  id: 'run-bump-nov14', scheduleId: bump.id, plannedAt: sh(14, '03:32'), trigger: 'MANUAL', startedAt: sh(14, '05:34'),
+  endedAt: sh(14, '05:44'), state: 'MISSED', attempt: 5, failureReason: 'RUNNER_UNAVAILABLE', sessionId: BUMP_TRY_SESSIONS[4]!,
+});
+export function bumpMissedStatus(thisTry = 5): ScheduleRunSessionStatus {
+  return { tries: bumpTries(), thisTry, gaveUpAt: sh(14, '05:44'), notBeforeAt: null, nextDueAt: sh(15, '06:00'), queue: null };
+}
+/** ③ Queued · runner full: one try, waiting 1 h 12 min behind HPC's 20 sessions, until 03:32 tomorrow. */
+export const BUMP_QUEUED_RUN = run({
+  id: 'run-bump-nov14', scheduleId: bump.id, plannedAt: sh(14, '03:32'), trigger: 'MANUAL', startedAt: sh(14, '11:18'),
+  state: 'RUNNING', sessionId: BUMP_TRY_SESSIONS[0]!,
+});
+export function bumpQueuedStatus(): ScheduleRunSessionStatus {
+  return {
+    tries: [{ sessionId: BUMP_TRY_SESSIONS[0]!, startedAt: sh(14, '11:18'), claimed: false, reachedEngine: false }],
+    thisTry: 1, gaveUpAt: null, notBeforeAt: null, nextDueAt: sh(15, '06:00'),
+    queue: {
+      queuedReason: 'runner_at_capacity', queuedActive: 20, queuedLimit: 20, queuedHeldByJobs: 0,
+      since: sh(14, '11:18'), deadline: sh(15, '03:32'),
+    },
+  };
+}
+/** ④ Started on try 3: try 2's session, whose engine exited; try 3 reached its engine at 03:58. */
+export const BUMP_STARTED_RUN = run({
+  id: 'run-bump-nov14', scheduleId: bump.id, plannedAt: sh(14, '03:32'), trigger: 'MANUAL', startedAt: sh(14, '03:58'),
+  state: 'RUNNING', attempt: 3, sessionId: BUMP_TRY_SESSIONS[2]!,
+});
+export function bumpStartedStatus(thisTry = 2): ScheduleRunSessionStatus {
+  return { tries: bumpTries(3).slice(0, 3), thisTry, gaveUpAt: null, notBeforeAt: null, nextDueAt: sh(15, '06:00'), queue: null };
+}
+
 export const SCHEDULES: Record<string, ScheduleView> = { pg, audit, docs, notes, deploy, codex, claude, cost, gateway };
+/** The EVERY schedules above, kept out of SCHEDULES so the older specs' rows and counts stay as they were. */
+export const EVERY_SCHEDULES = { sweep, burst };
+export const EVERY_ROWS: ScheduleListRow[] = [sweep, burst].map((s) => ({ ...s, lastRun: null }));
+export const BURST_MISSED_RUNS = burstMissed;
 
 const LAST: Record<string, ScheduleRunView | null> = {
   [pg.id]: pgFailed, [codex.id]: codexToday, [claude.id]: claudeToday,
@@ -194,8 +258,9 @@ function record(over: Partial<ScheduleChangeRecord> & { scheduleId: string; titl
     before: {},
     undoOfRevision: null,
     undoneByRevision: null,
+    askedText: null,
     createdAt: sh(14, '12:19'),
-    undo: { method: 'POST', path: `/schedules/${over.scheduleId}/undo`, body: { revision: over.revision } },
+    undo: { method: 'POST', path: `/api/schedules/${over.scheduleId}/undo`, body: { revision: over.revision } },
     ...over,
   };
 }
@@ -245,8 +310,8 @@ const READ_BACK: Record<string, string> = {
 };
 
 export function scheduleDetail(id: string): ScheduleDetailResponse {
-  const s = Object.values(SCHEDULES).find((row) => row.id === id)!;
-  const runs = RUNS[id] ?? [];
+  const s = [...Object.values(SCHEDULES), sweep, burst, bump].find((row) => row.id === id)!;
+  const runs = id === burst.id ? burstMissed : RUNS[id] ?? [];
   return {
     schedule: s,
     readBack: READ_BACK[id] ?? s.intent,
@@ -267,7 +332,7 @@ export function listAnswer(rows: ScheduleListRow[] = LIST_ROWS): ScheduleListRes
   const since = Date.parse(SCHEDULE_NOW) - 24 * 60 * 60_000;
   const under = ['QUEUED', 'RUNNING', 'AWAITING_APPROVAL'];
   const ids = new Set(rows.map((r) => r.id));
-  const runs: ScheduleTimelineRun[] = Object.values(RUNS).flat()
+  const runs: ScheduleTimelineRun[] = [...Object.values(RUNS).flat(), ...burstMissed]
     .filter((r) => ids.has(r.scheduleId) && (under.includes(r.state) || Date.parse(r.plannedAt) >= since))
     .map((r) => {
       const f = (FINDINGS[r.scheduleId] ?? []).find((x) => x.firstRunId === r.id && x.key === r.key);

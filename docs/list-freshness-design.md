@@ -27,7 +27,7 @@
 
 ### 2.2 服务端读
 - 只有平铺 Open 列表有版本判断（`sessions.controller.ts:434-447` + `open-list-version.ts`）：命中时不构建。
-- `since=` 在版本判断之前返回，**每次都完整构建**；游标快照只在单进程内，换副本或重启就回 `full:true`（`open-list-delta.ts:19-21`）。
+- `since=` 在版本判断之前返回，**每次都完整构建**；游标快照只在单进程内，换副本或重启就回 `full:true`（`open-list-delta.ts:19-21`）。（已由 S1 与 P4 改变：版本仍在的读回空 delta；版本变了的读只构建变动的行。）
 - `/sessions/counts`、`/projects`、`/projects/sidebar`、`/tasks/page`、`/watches`、带 `projectId` 的会话读：**每次都完整构建**，只有 Express 的整包哈希 ETag（只省字节）。
 - 0484/0487 的计数器：29 张源表的每次写入都会给账户的 `(owner, source)` 计数加一。**这是一个完整的"Open 列表的源数据变了"信号**，只差没有送到客户端。
 
@@ -78,7 +78,7 @@
 适用于 Open 列表，也适用于第 2.3 节里的其它列表（counts、projects、sidebar、watches、tasks、项目页、Landings、Completed/Trash）：
 
 - **R1 流在线**：不做定时全量读。只在收到相关提示时读，合并窗口 ≥ 1 s、同一列表同时最多一个读在途；另有 60 s 的条件兜底读。
-  - **逐项目读算一个列表**（W4，协调者 2026-11-07）：一个标签页的逐项目读（`GET /sessions?projectId=…`，服务端每次都构建）合起来算一个列表。成员会话的事件在合并窗口内只读它自己的项目；流在线时，这个列表的兜底每分钟读 ceil(N/10) 个项目（N 为该标签页的项目读数，至少 1 个），上次读得最早的先读，半分钟内刚读过的跳过，所以每个项目至多约 10 分钟重读一次。N = 75 时每分钟 8 次，原来是每个项目每分钟一次（生产 2026-11-07：一个标签页 30 分钟 1,340 次）。流重新打开时对齐全部 N 个（同时最多 4 个）；回到前台时读隐藏期间事件点名的项目，外加到期的那一份 ceil(N/10)；流断开时每个读各自走 R2 的共享退避；隐藏的标签页不读。
+  - **项目行的放置是一个读**（W4，协调者 2026-11-07；2026-11-21 改）：工作区列表不再逐项目读（`GET /sessions?projectId=…` 先读 Open、没找到协调者再读 Completed，30 个项目一次加载约 60 个请求，服务端每次都构建），而是一个 `GET /sessions/project-placement?projectIds=…&view=…`：一次答出每个项目的协调者（Open 或 Completed，含工作区）、本视图里在等你的成员和会话数，语句数固定、与项目数无关，带 ETag（无变化答 304）。列表上的项目或其成员会话的事件在 1 s 合并窗口内至多读它一次（窗口不因后续事件顺延）；流在线时另有 60 s 兜底读；流断开时走 R2 的共享退避；隐藏的标签页不读，回到前台读一次。逐项目读保留给项目页（同时最多两个优先读）和旧客户端，形状不变。
   - **例外：没有实时事件的状态**：LANDING 会话按契约不发实时事件（[project-integration-line-contract.md](./project-integration-line-contract.md) LS6），合并检查也不发。Landings 窗口与落地日志，以及项目页的合并与落地读（合并卡片、待合并候选、集成线），只在可见且有落地或合并作业在途时保留原有节奏；其余时候按 R1–R3，隐藏的标签页不读。
 - **R2 流断开**：所有列表一起退避，4 → 8 → 16 → 30 s 封顶，带抖动；收到第一条消息后才重置。
 - **R3 不可见/后台**：不做定时读（macOS 隐藏、最小化、遮挡、关窗；Web 标签页隐藏，TanStack 已默认；Android Activity 停止）。回到前台做一次条件读。
@@ -96,5 +96,10 @@
   - Android：D1–D3（事件读合并、只读受影响的列表、页面轮询看流并随生命周期停止）。
 - **P2**（依赖 P1 的服务端项）：服务端 `sessions.list_changed` 提示 + 按版本共享构建 + 事件摘要每事件只算一次（S2）；随后 Apple 撤掉 4 s 地板（A1），Web 与 Android 改用 `since=` 增量读 + 提示驱动。
 - **P3**：其它列表端点的条件读（S3）；收窄版本（S4：把心跳时间戳移出列表行，不可见列不计数）；若度量显示运行中会话的预览更新仍是读的大头，再让事件携带预览字段。
+- **P4（since= 只构建变动的行，任务 350QmELfyepZLNtXEsWQz）**：版本是整个账户的，忙碌时几乎每秒都变，所以 P2 之后的 `since=` 读仍几乎每次整表构建（生产 2026-11-19：一个 workspace 列约 550 行，每次只变 1–3 行）。游标快照现在还保存版本的各部分（每个源的计数、runner 的名称/状态/在线、已过的期限）和每行一个标记；版本变了而变动的源都能逐行判断时，先做一次轻量探测（每行自身的 ctid/xmin、它读的任务与根会话的值、在途轮次，以及几张账户级小表），只构建标记变了的行和排队行。行的附加部分（审批卡、待决事项、回复对象、评审）只在它自己的源、期限或协调者挂起的问题变化时才逐行全读，否则只读变动行、已有内容的行和协调者行。标签、定时唤醒或新加的源变化时仍整表构建。写路径不变，没有迁移。
+- **P5 (design only, 2026-11-22; task 351lKeumGIjTw8S8IoUzt)**: hints per scope, so that an Open list reads only when its own scope may have moved. The design is in [list-freshness-scope-hints.md](./list-freshness-scope-hints.md).
+  - Measured, most empty reads come from heartbeat writes that no list draws: the workspace rows' directory probes, and the presence rows the clock tick hashes.
+  - So it recommends, first, a hint token without heartbeats and an end to hints from landing-only sources.
+  - It fully specifies per-workspace counter keys with `hints=list_scopes`, but builds them only if a re-measure after those fixes still shows hints from outside the list's own workspace.
 
 每一步都用同一组生产数据度量：`pg_stat_statements` 区间增量（列表构建与版本探测的调用数和总耗时），以及网关日志中 `/api/sessions` 按客户端类型、按 200/304/空 delta 的请求数。

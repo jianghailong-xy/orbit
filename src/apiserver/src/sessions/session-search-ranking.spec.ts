@@ -41,7 +41,8 @@ test('the three conversation fields carry one weight, not three ranks', async ()
   assert.match(sql, /WHEN 'prompt' THEN 2 WHEN 'reply' THEN 2 WHEN 'message' THEN 2/);
   // And the ordering must not reintroduce the ranking it replaced.
   assert.ok(!/ORDER BY CASE/.test(sql), 'ordering fell back to a lexicographic bucket');
-  assert.match(sql, /ORDER BY score DESC, "lastTurnAt" DESC NULLS LAST, "createdAt" DESC LIMIT/);
+  // Ties go by the list's own clock (session.listed_at, session-listed-at.ts), never the liveness one.
+  assert.match(sql, /ORDER BY score DESC, "listedAt" DESC, "createdAt" DESC LIMIT/);
 });
 
 test('recency is summed into the score, so it can outweigh a staler but better-placed match', async () => {
@@ -98,10 +99,12 @@ test('the match count is taken before the quota and the limit', async () => {
 
 test('an empty query answers with recents and reports its own length as the total', async () => {
   const prisma = {
-    $queryRaw: async () => [
+    // The recents statement answers two rows; the session facts read beside them (readSessionPhaseFields,
+    // readSessionBackgroundFields) find neither, and the hits carry the facts as absent.
+    $queryRaw: async (sql: Prisma.Sql) => (sql.sql.includes('"matchField"') ? [
       { id: 'a', matchField: 'recent' },
       { id: 'b', matchField: 'recent' },
-    ],
+    ] : []),
   };
   const service = new SessionsService(prisma as never, {} as never, {} as never);
   const res = await service.search(OWNER_ID, '', 20);

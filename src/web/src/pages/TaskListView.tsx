@@ -27,6 +27,7 @@ import { encodeId, routeId } from '../lib/idCodec';
 import { TaskDetailPanel } from '../components/TaskDetailPanel';
 import { WaitingOnYouTaskBadge } from '../components/OwnerRequestCard';
 import { TaskSignInHoldNote } from '../components/TaskSignInHold';
+import { TaskAccountHoldLine } from '../components/TaskAccountHold';
 import { reportTaskRunConflict } from '../components/TaskRunHandoffNotice';
 import { taskRunEntry } from '../lib/taskRunHandoff';
 import { TaskStatusPill } from '../components/TaskStatusPill';
@@ -80,7 +81,8 @@ import { NumberInput } from '../components/ui/NumberInput';
 import { Popconfirm } from '../components/ui/Popconfirm';
 import { Segmented } from '../components/ui/Segmented';
 import { Spinner } from '../components/ui/Spinner';
-import { Tooltip } from '../components/ui/Tooltip';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from '../components/ui/Tooltip';
+import type { SessionReach } from '../lib/sessionReach';
 import '../components/ui/Badge.css';
 
 // A checkbox is focusable but is not text entry, and clicking a row's checkbox leaves the
@@ -318,31 +320,31 @@ function BatchesTable({
         const donePct = (row.done / row.total) * 100;
         const runPct = (row.inProgress / row.total) * 100;
         return (
-          <div
-            key={row.label}
-            className="batch-row clickable"
-            onClick={() => onPick(row.label)}
-            title={`Show the ${row.total.toLocaleString()} tasks labelled ${row.label}`}
-          >
-            <div className="batch-name">{row.label}</div>
-            <div className="batch-meter">
-              <div className="task-progress-track">
-                {/* A zero-width segment renders nothing at all — no sliver, and no gap either. */}
-                {donePct > 0 && (
-                  <span className="task-progress-seg done" style={{ width: `${donePct}%` }} />
-                )}
-                {runPct > 0 && (
-                  <span
-                    className="task-progress-seg ongoing"
-                    style={{ width: `${runPct}%`, marginLeft: donePct > 0 ? 2 : 0 }}
-                  />
-                )}
+          <Tooltip key={row.label} content={`Show the ${row.total.toLocaleString()} tasks labelled ${row.label}`} align="start" delay={TEXT_TOOLTIP_DELAY_MS}>
+            <div
+              className="batch-row clickable"
+              onClick={() => onPick(row.label)}
+            >
+              <div className="batch-name">{row.label}</div>
+              <div className="batch-meter">
+                <div className="task-progress-track">
+                  {/* A zero-width segment renders nothing at all — no sliver, and no gap either. */}
+                  {donePct > 0 && (
+                    <span className="task-progress-seg done" style={{ width: `${donePct}%` }} />
+                  )}
+                  {runPct > 0 && (
+                    <span
+                      className="task-progress-seg ongoing"
+                      style={{ width: `${runPct}%`, marginLeft: donePct > 0 ? 2 : 0 }}
+                    />
+                  )}
+                </div>
               </div>
+              <div className="batch-num strong">{row.done.toLocaleString()}</div>
+              <div className="batch-num">{row.total.toLocaleString()}</div>
+              <div className="batch-num muted">{(row.total - row.done).toLocaleString()}</div>
             </div>
-            <div className="batch-num strong">{row.done.toLocaleString()}</div>
-            <div className="batch-num">{row.total.toLocaleString()}</div>
-            <div className="batch-num muted">{(row.total - row.done).toLocaleString()}</div>
-          </div>
+          </Tooltip>
         );
       })}
       {truncated && (
@@ -553,8 +555,9 @@ export function TaskListView() {
     ],
     // A row's pill is `running` / `queued` from the session carrying the task, and page one's
     // `counts` counts those same session-derived states — neither moves when only the task row is
-    // written, and both move on every run that starts or ends.
-    meta: { entities: ['task', 'session'] },
+    // written, and both move on every run that starts or ends: a task run's events read it, no other session's
+    // (lib/sessionReach).
+    meta: { entities: ['task', 'session'], sessionReach: { taskRuns: scopeProjectId ?? null } satisfies SessionReach },
     queryFn: ({ pageParam }) =>
       api<TaskPage>(
         taskPagePath({
@@ -1200,15 +1203,19 @@ export function TaskListView() {
           />
         </div>
         <div className="task-status-cell">
-          <TaskStatusPill status={r.status} running={r.running} queued={r.queued} />
+          <TaskStatusPill status={r.status} running={r.running} queued={r.queued} queuedOnHold={r.queuedOnHold} runReason={r.runReason} />
         </div>
-        <div className="task-title-cell">
-          <span className="task-title" title={r.title}>
-            {r.title ?? ''}
-          </span>
+        <div className={`task-title-cell${r.accountHold && !r.hold && !r.running && !r.queued ? ' has-hold' : ''}`}>
+          <Tooltip content={r.title} truncatedOnly>
+            <span className="task-title">
+              {r.title ?? ''}
+            </span>
+          </Tooltip>
           <WaitingOnYouTaskBadge taskId={r.id} />
           {/* The sweep holds it for a sign-in (the server's `hold`): Held, why, and Sign in. */}
           {r.hold && !r.running && !r.queued ? <TaskSignInHoldNote hold={r.hold} /> : null}
+          {/* No account that could run it can run now (the server's `accountHold`): the provider's words and the next try. */}
+          {r.accountHold && !r.hold && !r.running && !r.queued ? <TaskAccountHoldLine hold={r.accountHold} /> : null}
           {r.blocked ? (
             <Tooltip
               content={r.dependencyState === 'BLOCKED_FAILED' ? 'Prerequisite cancelled — resolve it' : 'Waiting for prerequisites'}
@@ -1239,17 +1246,18 @@ export function TaskListView() {
                   content has no such caveat. Name-from-content concatenates the element's text in
                   order, so the suffix only adds what is missing — that it fires ONCE, and whose
                   clock the time is written on — instead of repeating the words above it.
-              `title` stays for a sighted reader hovering, where it can also afford the exact
+              The tooltip stays for a sighted reader hovering, where it can also afford the exact
               instant a to-the-minute local rendering rounds off. */}
           {starts ? (
-            <time
-              className="task-run-at"
-              dateTime={starts.iso}
-              title={`Starts once, at ${starts.local} in your own time zone (${starts.iso})`}
-            >
-              Starts {starts.local}
-              <span className="task-run-at-note">, once, in your own time zone</span>
-            </time>
+            <Tooltip content={`Starts once, at ${starts.local} in your own time zone (${starts.iso})`} delay={TEXT_TOOLTIP_DELAY_MS}>
+              <time
+                className="task-run-at"
+                dateTime={starts.iso}
+              >
+                Starts {starts.local}
+                <span className="task-run-at-note">, once, in your own time zone</span>
+              </time>
+            </Tooltip>
           ) : null}
         </div>
         {showAssigneeCol && (
@@ -1351,8 +1359,9 @@ export function TaskListView() {
                     scopePath,
                     (path) => navigate(path),
                   )}
+                  tooltip="Choose which tasks to show"
                   trigger={
-                    <button type="button" className="tasks-scope-trigger" title="Choose which tasks to show">
+                    <button type="button" className="tasks-scope-trigger">
                       {pageTitle}
                       <CaretDownOutlined className="tasks-scope-caret" />
                     </button>
@@ -1360,14 +1369,15 @@ export function TaskListView() {
                 />
               </h1>
               {isListView && (
-                <Button
-                  size="small"
-                  onClick={openConsole}
-                  loading={openingConsole}
-                  title="Open the conversation this list is steered from"
-                >
-                  Steering session ›
-                </Button>
+                <Tooltip content="Open the conversation this list is steered from" side="bottom" align="end">
+                  <Button
+                    size="small"
+                    onClick={openConsole}
+                    loading={openingConsole}
+                  >
+                    Steering session ›
+                  </Button>
+                </Tooltip>
               )}
             </div>
 
@@ -1534,27 +1544,26 @@ export function TaskListView() {
                   {createdIn && (
                     // The replaced closable tag: the chip, its text cut to fit, and its close mark,
                     // itself the button.
-                    <span
-                      className="orbit-badge orbit-badge-default tasks-createdin"
-                      title={`${SESSION_CREATED_TASKS_COPY.createdInChip}${createdInTitle}`}
-                    >
-                      <span className="tasks-createdin-text">
-                        {SESSION_CREATED_TASKS_COPY.createdInChip}
-                        {createdInTitle}
+                    <Tooltip content={`${SESSION_CREATED_TASKS_COPY.createdInChip}${createdInTitle}`} truncatedOnly>
+                      <span className="orbit-badge orbit-badge-default tasks-createdin">
+                        <span className="tasks-createdin-text">
+                          {SESSION_CREATED_TASKS_COPY.createdInChip}
+                          {createdInTitle}
+                        </span>
+                        <CloseOutlined
+                          role="button"
+                          tabIndex={0}
+                          aria-label="Remove this filter"
+                          className="tasks-createdin-close"
+                          onClick={() => setParam('createdIn', '', '')}
+                          onKeyDown={(e) => {
+                            if (e.key !== 'Enter' && e.key !== ' ') return;
+                            e.preventDefault();
+                            if (!e.repeat) e.currentTarget.click();
+                          }}
+                        />
                       </span>
-                      <CloseOutlined
-                        role="button"
-                        tabIndex={0}
-                        aria-label="Remove this filter"
-                        className="tasks-createdin-close"
-                        onClick={() => setParam('createdIn', '', '')}
-                        onKeyDown={(e) => {
-                          if (e.key !== 'Enter' && e.key !== ' ') return;
-                          e.preventDefault();
-                          if (!e.repeat) e.currentTarget.click();
-                        }}
-                      />
-                    </span>
+                    </Tooltip>
                   )}
                   {uniformAssignee?.name && (
                     <span className="task-assignee-chip" style={{ marginLeft: 'auto' }}>

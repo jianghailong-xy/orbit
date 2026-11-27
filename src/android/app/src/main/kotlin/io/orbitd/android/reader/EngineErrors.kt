@@ -39,8 +39,10 @@ internal object EngineErrors {
      * clears on its own, so the text is retried. */
     internal val edgeBlockMarkers = listOf("attention required", "cloudflare")
     internal val connectionDroppedMarkers = listOf("econnreset")
+    /** A provider's gateway that timed out on its own upstream and passed Go's transport error on under a 406 (DashScope). */
+    internal val connectionTimedOutMarkers = listOf("read: connection timed out")
 
-    internal val connectionFailureMarkers = listOf(edgeBlockMarkers, connectionDroppedMarkers)
+    internal val connectionFailureMarkers = listOf(edgeBlockMarkers, connectionDroppedMarkers, connectionTimedOutMarkers)
 
     /** Mirrors `isConnectionFailureText` in @orbit/shared and the runner's `isConnectionFailure`. Anchored at
      * the start, like the other classifications: a reply that merely quotes one is an ordinary reply. */
@@ -170,6 +172,9 @@ internal object EngineStderr {
             put("component", component); phase?.let { put("phase", it) }; put("severity", "WARN"); put("impact", "degraded")
             put("recoverable", true); put("code", code)
         }
+        // Codex's sandbox setup asks for the system bubblewrap and falls back to its bundled copy (docs/mocks/codex-sandbox-fix-with-agent).
+        // A current runner sends this structured; events stored before it did are recognized here so the warning and its action survive.
+        if (lower.contains("could not find bubblewrap on path")) return degraded("sandbox", "bubblewrap_missing", "startup")
         if (lower.contains("codex_models_manager") && lower.contains("failed to refresh available models")) {
             if (lower.contains("401") && tokenInvalidated) return degraded("model_catalog", "token_invalidated", "startup")
             // A failed refresh is non-fatal whatever its cause: Codex keeps the catalog it had. It also runs mid-turn, so no phase.
@@ -185,7 +190,8 @@ internal object EngineStderr {
      * A recoverable diagnostic: what it is about, as web labels it ("model_catalog · timeout"; empty when it names none of it), the
      * engine's line, and the key its repeats fold on ([diagnosticFoldKey]).
      */
-    internal data class Diagnostic(val label: String, val line: String, val key: String)
+    internal data class Diagnostic(val label: String, val line: String, val key: String,
+        val component: String? = null, val code: String? = null)
 
     /**
      * A structured diagnostic that says it is recoverable or degraded, read for its own row. Nil keeps the old error path: the runner
@@ -202,10 +208,12 @@ internal object EngineStderr {
         if (recoverable != true && severity != "warn" && severity != "warning" &&
             impact !in setOf("recoverable", "degraded", "warning", "warn", "non-fatal", "nonfatal")) return null
         val phase = field("phase")?.let { if (it == "startup") "Startup" else it }
-        val label = listOfNotNull(phase, field("component"), field("code")).joinToString(" · ")
-        val key = diagnosticFoldKey(field("component"), field("phase"), field("severity"), field("impact"), recoverable, field("code"),
+        val component = field("component")
+        val code = field("code")
+        val label = listOfNotNull(phase, component, code).joinToString(" · ")
+        val key = diagnosticFoldKey(component, field("phase"), field("severity"), field("impact"), recoverable, code,
             field("message") ?: message)
-        return Diagnostic(label, message, key)
+        return Diagnostic(label, message, key, component, code)
     }
 
     /** A tracing-style logger's whole preamble — stamp, level, the module that logged it — and the words after it (web's `TRACING_LINE`). */

@@ -14,7 +14,9 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
-import { RunStatus, RunnerStatus } from '@prisma/client';
+import { RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
+import { isReleasedStatus } from '../common/session-release';
 import { AgentProvider, SESSION_CODEX_STEER_V1 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -35,6 +37,8 @@ import { MOVE_REFUSAL } from '../sessions/session-move';
 import { SessionsService } from '../sessions/sessions.service';
 import { QueueService } from './queue.service';
 import '../test-support/dequeue-under-lease';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 process.env.PROVIDER_SECRET_KEY ??= 'session-engine-foundation-spec';
@@ -134,11 +138,15 @@ test('T2 provider-engine foundation on PostgreSQL', { timeout: 600_000 }, async 
       model?: string | null; taskId?: string; startsTaskWork?: boolean; effort?: string | null; numTurns?: number;
     } = {},
   ) {
+    const status = opts.status ?? RunStatus.PENDING;
     return (await db.session.create({ data: {
       title: 'engine', prompt: '', ownerId: on.ownerId, creatorId: on.ownerId, workspaceId: on.workspaceId,
       assignedRunnerId: on.id, provider, providerBuiltin: opts.providerBuiltin ?? false,
       ...(opts.engine !== undefined ? { engine: opts.engine } : {}),
-      status: opts.status ?? RunStatus.PENDING, usesRuntimeDefaultModel: true,
+      turnState: turnStateOfWord(status), usesRuntimeDefaultModel: true,
+      ...(isReleasedStatus(status) ? {
+        finishedAt: new Date(),
+      } : {}),
       model: opts.model === undefined ? 'pinned-model' : opts.model,
       runtimeSessionId: opts.runtimeSessionId ?? null,
       // A session that ran a turn was claimed once: resume refuses one that never was.
@@ -175,7 +183,7 @@ test('T2 provider-engine foundation on PostgreSQL', { timeout: 600_000 }, async 
     }
   }
   const claimRaw = (id: string, settings: Record<string, string> = {}) =>
-    raw(`UPDATE "session" SET status = 'RUNNING' WHERE id = $1 AND status = 'PENDING'`, [id], settings);
+    raw(`UPDATE "session" SET "turn_state" = 'IN_FLIGHT' WHERE id = $1 AND "turn_state" = 'QUEUED'`, [id], settings);
   const reads = { 'orbit.claim_reads_session_engine': '1' };
 
   await t.test('T2 backfill records built-in sign-ins, OpenCode own config and the built-in dsh as themselves', async () => {
@@ -351,7 +359,7 @@ test('T2 provider-engine foundation on PostgreSQL', { timeout: 600_000 }, async 
         'orbit.runner_supports_opencode': '1', 'orbit.runner_supports_antigravity': '1', 'orbit.runner_supports_dsh': '1',
       };
       assert.equal(await claimRaw(id, capable), 0, `an older replica claimed a ${engine} session`);
-      assert.equal((await row(id)).status, RunStatus.PENDING);
+      assert.equal(wordOf((await row(id))), RunStatus.PENDING);
       assert.equal(await claimRaw(id, { ...capable, ...reads }), 1);
     }
     // A session an older replica created itself has no engine, and stays its to claim.
@@ -374,9 +382,9 @@ test('T2 provider-engine foundation on PostgreSQL', { timeout: 600_000 }, async 
     assert.equal(await raw('UPDATE "session" SET inbox_lease_owner = $2 WHERE id = $1', [recorded, owner2], reads), 1);
     assert.equal(await raw('UPDATE "session" SET inbox_lease_generation = $2 WHERE id = $1', [recorded, randomUUID()], reads), 1);
     assert.equal(await raw('UPDATE "session" SET inbox_lease_owner = NULL, inbox_lease_generation = NULL WHERE id = $1', [recorded]), 1, 'release stays open');
-    assert.equal(await raw(`UPDATE "session" SET status = 'CANCELLED' WHERE id = $1`, [recorded]), 1);
+    assert.equal(await raw(`UPDATE "session" SET "turn_state" = NULL, finished_at = now() WHERE id = $1`, [recorded]), 1);
     assert.equal(
-      await raw(`UPDATE "session" SET status = 'PENDING', inbox_lease_owner = $2 WHERE id = $1`, [recorded, newTerminalResumeHandoffOwner()]),
+      await raw(`UPDATE "session" SET "turn_state" = 'QUEUED', finished_at = NULL, inbox_lease_owner = $2 WHERE id = $1`, [recorded, newTerminalResumeHandoffOwner()]),
       1, 'a server terminal revive only reserves its handoff marker',
     );
     // Harness on a DeepSeek key, whose runtime an older replica reads as Claude: it never declares
@@ -450,11 +458,11 @@ test('T2 provider-engine foundation on PostgreSQL', { timeout: 600_000 }, async 
     const run = await session(at, ds.slug, { taskId: pinned });
     assert.equal(await engineOf(run), AgentProvider.DSH);
     assert.equal(await claimRaw(run, { 'orbit.runner_supports_dsh': '1' }), 0, 'so that replica cannot run it as Claude');
-    await db.session.update({ where: { id: run }, data: { status: RunStatus.CANCELLED } });
+    await db.session.update({ where: { id: run }, data: { turnState: null, finishedAt: new Date()} });
     const other = await key(owner);
     const elsewhere = await session(at, other.slug, { taskId: pinned });
     assert.equal(await engineOf(elsewhere), null, 'a run on another credential is not the pin');
-    await db.session.update({ where: { id: elsewhere }, data: { status: RunStatus.CANCELLED } });
+    await db.session.update({ where: { id: elsewhere }, data: { turnState: null, finishedAt: new Date()} });
     const conversation = await session(at, ds.slug, { taskId: pinned, startsTaskWork: false });
     assert.equal(await engineOf(conversation), null, 'a conversation about the task is not its run');
   });
@@ -509,7 +517,7 @@ test('T2 provider-engine foundation on PostgreSQL', { timeout: 600_000 }, async 
     const id = await session(at, k.slug, { engine: AgentProvider.CLAUDE, model: 'glm-5' });
     await db.modelProvider.update({ where: { slug: k.slug }, data: { runtime: 'codex' } });
     assert.equal(await queue.claimSessionForRunner({ id: at.id, supportedProviders: ALL }), null, 'not run as Codex');
-    assert.equal((await row(id)).status, RunStatus.PENDING);
+    assert.equal(wordOf((await row(id))), RunStatus.PENDING);
     assert.equal((await row(id)).error, engineIncompatibleMessage(k.slug, AgentProvider.CLAUDE, [AgentProvider.CODEX, AgentProvider.OPENCODE]));
     assert.equal(await engineOf(id), AgentProvider.CLAUDE);
     await db.modelProvider.update({ where: { slug: k.slug }, data: { runtime: 'claude' } });

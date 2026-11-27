@@ -76,7 +76,7 @@ func runCodexChild(ctx context.Context, c subagentChild) (ExecResult, string, er
 		return ExecResult{Status: stFailed}, resumeID, errors.New("failed to start codex thread: " + err.Error())
 	}
 	if resumeID == "" && app.currentInstructionMode() == codexInstructionsInjectItems {
-		if err := app.injectAgentContext(ctx, threadID, child.Agent, child.insideRecordedWork(), child.watchesOn()); err != nil {
+		if err := app.injectAgentContext(ctx, threadID, child.Agent, child.sessionShape(app.orbitExecutable)); err != nil {
 			app.setInstructionMode(codexInstructionsUserInput)
 		}
 	}
@@ -126,14 +126,14 @@ func runCodexChild(ctx context.Context, c subagentChild) (ExecResult, string, er
 
 	select {
 	case result := <-ended:
-		return subagentChildResult(result.Status, result.Result, result.Error, 0, result.Usage), threadID, nil
+		return codexChildResult(result), threadID, nil
 	case <-ctx.Done():
 		return ExecResult{Status: stCancelled}, threadID, nil
 	case <-app.done:
 		// A last notification may still be on its way to finalize.
 		select {
 		case result := <-ended:
-			return subagentChildResult(result.Status, result.Result, result.Error, 0, result.Usage), threadID, nil
+			return codexChildResult(result), threadID, nil
 		default:
 		}
 		if ctx.Err() != nil {
@@ -170,5 +170,16 @@ func mergeCodexChildResult(result codexTurnResult, snapshot codexAppTurnSnapshot
 	if result.Status == "" {
 		result.Status = stSucceeded
 	}
+	result = mergeCodexFailure(result, snapshot)
+	result.admission = codexTurnAdmission(result, snapshot)
 	return result
+}
+
+// codexChildResult is a child turn's end as an ExecResult, with what it failed with when it failed.
+func codexChildResult(result codexTurnResult) ExecResult {
+	res := subagentChildResult(result.Status, result.Result, result.Error, 0, result.Usage)
+	if result.Status == stFailed {
+		res.Failure, res.Admission = codexTurnFailureOf(result).wire(), result.admission
+	}
+	return res
 }

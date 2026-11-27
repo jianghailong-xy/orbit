@@ -199,6 +199,11 @@ func (s *bgJobService) serveConn(conn net.Conn) {
 		s.serveSecretLease(conn, req.Args)
 		return
 	}
+	if req.Op == memoryToolExitOp {
+		s.reportMemoryToolExit(conn, req.Args)
+		writeBgResponse(conn, bgSocketResponse{OK: true})
+		return
+	}
 	writeBgResponse(conn, s.handle(req))
 }
 
@@ -229,11 +234,6 @@ func (s *bgJobService) handle(req bgSocketRequest) bgSocketResponse {
 		if err != nil {
 			return bgSocketResponse{Error: err.Error()}
 		}
-		asked, err := bgLimitArgs(args)
-		if err != nil {
-			return bgSocketResponse{Error: err.Error()}
-		}
-		limits, limitsNote := effectiveBgLimits(asked, runnerBgJobCeiling())
 		spec := bgJobSpec{
 			Command:      getString(args, "command"),
 			Kind:         getString(args, "kind"),
@@ -245,8 +245,8 @@ func (s *bgJobService) handle(req bgSocketRequest) bgSocketResponse {
 			WakeOnExit:   wakeOnExit,
 			WakeOnOutput: wakeOnOutput,
 			WakeOnStall:  wakeOnStall,
-			Limits:       limits,
-			LimitsNote:   limitsNote,
+			// A tool the job runs opens its pages as one the engine's shell runs does (browser_opener.go).
+			BrowserOpener: s.job != nil && s.job.BrowserEnabled,
 		}
 		if err := validateBgJobSpec(spec); err != nil {
 			return bgSocketResponse{Error: err.Error()}
@@ -302,6 +302,11 @@ func (s *bgJobService) handle(req bgSocketRequest) bgSocketResponse {
 	case browserMCPAcquireOp:
 		// One browser tool call by this session (browser_mcp.go).
 		return s.serveBrowserAcquire()
+	case browserSignInYieldOp:
+		// browser_request_sign_in gives the lease up while the owner signs in (browser_tools.go).
+		return s.serveBrowserSignInYield()
+	case browserSignInEndOp:
+		return s.serveBrowserSignInEnd(getBool(args, "retake"))
 
 	case "secret_scan":
 		return s.secretScan(getString(args, "path"))
@@ -310,6 +315,10 @@ func (s *bgJobService) handle(req bgSocketRequest) bgSocketResponse {
 		return bgSocketResponse{OK: true, Result: map[string]interface{}{
 			"jobs": s.bg.listJobs(getBool(args, "includeFinished")), "liveCount": s.bg.liveJobCount(),
 		}}
+
+	case driveProgressOp:
+		// How far a drive_put or drive_get call has got, as its live tool_output (drive_progress.go).
+		return s.serveDriveProgress(args)
 
 	case planGateModeOp:
 		// The session's permission mode as it is now, for Orbit's own Plan gate (plan_gate.go): `orbit mcp` and
@@ -467,7 +476,7 @@ func startSessionBgJobService(ctx context.Context, t *Transport, bg *bgTailer, j
 		token:              token,
 		execDir:            execDir,
 		scratchDir:         scratchDir,
-		extraDirs:          []string{uploadsDir(job.SessionID)},
+		extraDirs:          append([]string{uploadsDir(job.SessionID)}, driveGrantRoots()...),
 		env:                job.Agent.Env,
 		sessionID:          job.SessionID,
 		mode:               liveMode.current,

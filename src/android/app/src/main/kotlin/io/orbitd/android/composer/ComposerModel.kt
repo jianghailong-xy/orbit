@@ -2,7 +2,6 @@ package io.orbitd.android.composer
 
 import io.orbitd.android.core.auth.*
 import io.orbitd.android.core.cards.ClaudeRegion
-import io.orbitd.android.core.cards.DshRuntime
 import io.orbitd.android.core.net.*
 import io.orbitd.android.core.promptoptimizer.PromptOptimizationRequest
 import io.orbitd.android.core.promptoptimizer.PromptOptimizer
@@ -12,6 +11,7 @@ import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.directory.directoryError
 import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.navigation.ObjectId
+import io.orbitd.android.reader.COULDNT_CANCEL_MESSAGE
 import io.orbitd.android.reader.SteerDelivery
 import io.orbitd.android.toast.OrbitToasts
 import io.orbitd.android.toast.ToastTone
@@ -134,13 +134,6 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
     fun forgetOptimizationUndo() = optimizer { it.forgetUndo() }
     /** Why the box won't do what was asked of it, said as an error: there until dismissed. */
     fun refuse(message: String) { mutable.update { it.copy(error = message) } }
-    /** Whether [effective] — a session's detail, or a draft's workspace, under the picks held for it — runs on DeepSeek Harness: its
-     * engine ([ProviderChoices.engine]), which for a key or a pool on a server that records none only the account's keys can say. */
-    private suspend fun executesDsh(effective: JsonObject): Boolean {
-        val keys = if (!ProviderChoices.engineFromKeys(effective)) emptyList()
-            else runCatching { api.read(listOf("providers")).jsonArray.filterIsInstance<JsonObject>() }.getOrDefault(emptyList())
-        return ProviderChoices.engine(effective, keys) == DshRuntime.ENGINE
-    }
     suspend fun attachmentBytes(id: String): ByteArray = auth.readData(handle, DataKind.DRAFT, "$key:attachment:$id")
         ?.takeIf { it.isNotEmpty() } ?: error("Select the file again; its saved copy is unavailable.")
 
@@ -236,11 +229,11 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                 val detail = api.detail() // Revalidate resume/capabilities at the actual send, not from cache.
                 if (draft.text.trim().takeWhile { !it.isWhitespace() } == "/status") {
                     // The engine first, as the rows of iOS's status card name it (A07-19 (c), iOS cef3c3f83 `statusRows`).
-                    val engine = ProviderEngines.cliName(ProviderChoices.engine(JsonObject(detail + draft.resumeConfig),
-                        state.value.catalog?.providers.orEmpty()))
+                    val engineId = ProviderChoices.engine(JsonObject(detail + draft.resumeConfig), state.value.catalog?.providers.orEmpty())
+                    val engine = ProviderEngines.cliName(engineId)
                     mutable.update { it.copy(draft = it.draft.copy(text = "", selectionStart = 0, selectionEnd = 0),
                         notice = "Engine: $engine · Provider: ${detail.text("provider").orEmpty()} · Model: ${detail.text("model").orEmpty()} · " +
-                            "Session: ${detail.text("status") ?: "New session"} · Permission: ${detail.text("permissionMode") ?: "default"}") }
+                            "Session: ${detail.text("status") ?: "New session"} · Permission: ${detail.text("permissionMode") ?: CursorRuntime.unsetMode(engineId)}") }
                     persist(); return@launch
                 }
                 val endpoint = if (target != null) {
@@ -248,8 +241,6 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                 } else sendEndpoint(detail)
                 val raw = draft.text.trim()
                 val shell = raw.startsWith("!")
-                // DeepSeek Harness has no shell bridge (the runner settles such a turn as a refusal): the command stays here (A07-5).
-                if (shell && executesDsh(JsonObject(detail + draft.resumeConfig))) { refuse(DshRuntime.SHELL_REFUSAL); return@launch }
                 val content = if (shell) raw.drop(1).trim() else raw
                 if (content.isEmpty() && (shell || draft.attachments.isEmpty())) return@launch
                 val id = UUID.randomUUID().toString()
@@ -397,17 +388,24 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
      * have its engine drop it. Taken back, its [words] return to the box under any draft: an explicit press, so a draft keeps its place
      * above them. Its pictures and files are not staged again: the box holds only what this device staged. Too late is an answer, not a
      * failure — the agent on [engine] read it first, and it is part of the turn.
+     *
+     * [files] are staged again too, read before the DELETE since the server drops them with the turn; [refused] is the one line a
+     * failure is said with, in place of the tray's ([cancelHeld]).
      */
-    fun withdraw(turnId: String, words: String?, steer: Boolean, engine: String) {
+    fun withdraw(turnId: String, words: String?, steer: Boolean, engine: String, files: List<StagedAttachment> = emptyList(),
+        refused: String? = null) {
         val id = ObjectId.canonical(turnId) ?: turnId
         if (id in state.value.withdrawing || id in state.value.withdrawn) return
         mutable.update { it.copy(withdrawing = it.withdrawing + id) }
         launch {
             try {
-                try { api.mutation("turns/$turnId", method = HttpMethod.DELETE) }
+                val kept = try {
+                    files.map { it to api.attachment(it.id) }.also { api.mutation("turns/$turnId", method = HttpMethod.DELETE) }
+                }
                 catch (cancel: CancellationException) { throw cancel }
                 catch (e: Exception) {
                     when {
+                        refused != null -> OrbitToasts.show(refused, detail = failure(e), tone = ToastTone.ERROR)
                         e is ApiError && e.code == "STEER_ALREADY_READ" ->
                             OrbitToasts.show(PendingTray.TOO_LATE, detail = PendingTray.alreadyRead(engine), tone = ToastTone.INFO)
                         !steer -> OrbitToasts.show(PendingTray.ALREADY_PROCESSING, tone = ToastTone.INFO)
@@ -418,9 +416,18 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                 val restores = !words.isNullOrBlank() && state.value.loaded
                 mutable.update { it.copy(withdrawn = it.withdrawn + id, draft = if (restores) it.draft.under(words!!) else it.draft) }
                 if (restores) persist()
+                kept.forEach { (file, bytes) ->
+                    val staged = file.copy(id = UUID.randomUUID().toString(), size = bytes.size)
+                    importAttachment(staged, { staged to bytes }, {})
+                }
                 refresh()
             } finally { mutable.update { it.copy(withdrawing = it.withdrawing - id) } }
         }
+    }
+
+    /** Cancel under a message whose translation failed: [withdraw], once the box is there to take it back. */
+    fun cancelHeld(turnId: String, words: String, files: List<StagedAttachment>) {
+        if (state.value.loaded) withdraw(turnId, words, steer = false, engine = "", files = files, refused = COULDNT_CANCEL_MESSAGE)
     }
 
     /** The tray's Steer (POST …/turns/:turnId/steer; web and iOS `steerQueued`): a message queued for the next turn sent into the one

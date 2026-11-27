@@ -61,6 +61,13 @@ public struct ProjectCriterion: Codable, Equatable, Sendable, Identifiable {
     public let unmet: [ProjectCriterionUnmet]
     /// `LANDED`, `UNKNOWN` (no receipt either way — never "not landed") or `ON_INTEGRATION_LINE`.
     public let landing: String?
+    /// Why its work is where it is — the done read's `derivedDone.criteria[].landingReason`, which
+    /// decides a met criterion's landing half-sentence in the Done card's words (owner decision D2 A).
+    /// Nil with `landingReasonRead` true is on main by work of its own.
+    public var landingReason: CriterionLandingReason?
+    /// Whether a landing reason was read for it at all: absent — a public page, an older server, a
+    /// non-code project — the row keeps the half-sentence `landing` gives it.
+    public var landingReasonRead: Bool
     /// How the owner said anybody would know this criterion holds.
     public let verificationMethod: String?
     /// Its text revision — what a confirmation names, and what a change of mode restates.
@@ -79,7 +86,8 @@ public struct ProjectCriterion: Codable, Equatable, Sendable, Identifiable {
                 verificationMethod: String? = nil, revision: Int? = nil,
                 satisfiedBy: CriterionSatisfiedBy = .tasks,
                 confirmation: CriterionConfirmationStanding? = nil,
-                completionCriterionOverrideReason: String? = nil, movedFrom: CriterionMovedFrom? = nil) {
+                completionCriterionOverrideReason: String? = nil, movedFrom: CriterionMovedFrom? = nil,
+                landingReason: CriterionLandingReason? = nil, landingReasonRead: Bool = false) {
         self.id = id
         self.key = key
         self.ordinal = ordinal
@@ -87,6 +95,8 @@ public struct ProjectCriterion: Codable, Equatable, Sendable, Identifiable {
         self.satisfied = satisfied
         self.unmet = unmet
         self.landing = landing
+        self.landingReason = landingReason
+        self.landingReasonRead = landingReasonRead || landingReason != nil
         self.verificationMethod = verificationMethod
         self.revision = revision
         self.satisfiedBy = satisfiedBy
@@ -104,6 +114,14 @@ public struct ProjectCriterion: Codable, Equatable, Sendable, Identifiable {
         satisfied = try c.decodeIfPresent(Bool.self, forKey: .satisfied)
         unmet = try c.decodeIfPresent([ProjectCriterionUnmet].self, forKey: .unmet) ?? []
         landing = try c.decodeIfPresent(String.self, forKey: .landing)
+        // A value this client does not know is no reason it can say; the row keeps `landing`.
+        if c.contains(.landingReason), let reason = try? c.decode(CriterionLandingReason?.self, forKey: .landingReason) {
+            landingReason = reason
+            landingReasonRead = true
+        } else {
+            landingReason = nil
+            landingReasonRead = false
+        }
         verificationMethod = try c.decodeIfPresent(String.self, forKey: .verificationMethod)
         revision = try? c.decodeIfPresent(Int.self, forKey: .revision)
         satisfiedBy = (try? c.decodeIfPresent(CriterionSatisfiedBy.self, forKey: .satisfiedBy)) ?? .tasks
@@ -111,6 +129,28 @@ public struct ProjectCriterion: Codable, Equatable, Sendable, Identifiable {
         completionCriterionOverrideReason = try? c.decodeIfPresent(String.self,
                                                                    forKey: .completionCriterionOverrideReason)
         movedFrom = try? c.decodeIfPresent(CriterionMovedFrom.self, forKey: .movedFrom)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, key, ordinal, text, satisfied, unmet, landing, landingReason, verificationMethod, revision,
+             satisfiedBy, confirmation, completionCriterionOverrideReason, movedFrom
+    }
+
+    /// Each criterion with its `landingReason` from the done read, matched by id — the items do not
+    /// carry it. A non-code project's reasons are all null by design (it reads no landing), so it
+    /// keeps the rows it always drew. Web's `withLandingReasons`.
+    public static func withLandingReasons(_ criteria: [ProjectCriterion],
+                                          derivedDone: ProjectDerivedDone?) -> [ProjectCriterion] {
+        guard let derivedDone, !derivedDone.nonCode, !derivedDone.criteria.isEmpty else { return criteria }
+        let byId = Dictionary(derivedDone.criteria.map { ($0.definitionId, $0.landingReason) },
+                              uniquingKeysWith: { first, _ in first })
+        return criteria.map { criterion in
+            guard let reason = byId[criterion.id] else { return criterion }
+            var joined = criterion
+            joined.landingReason = reason
+            joined.landingReasonRead = true
+            return joined
+        }
     }
 
     /// The criterion as the done cards name it.
@@ -131,15 +171,19 @@ public struct ProjectIntegrationSettings: Codable, Equatable, Sendable {
     public let mergeCheckCommand: String?
     /// How long an exception may wait on the coordinator before it becomes the owner's.
     public let escalationSeconds: Int?
+    /// The landing check and who set it last (§12.16); nil from a server that predates it.
+    public let landingCheck: ProjectLandingCheck?
 
     public init(line: IntegrationLine? = nil, ref: String? = nil, upstreamRef: String? = nil,
-                locked: Bool = false, mergeCheckCommand: String? = nil, escalationSeconds: Int? = nil) {
+                locked: Bool = false, mergeCheckCommand: String? = nil, escalationSeconds: Int? = nil,
+                landingCheck: ProjectLandingCheck? = nil) {
         self.line = line
         self.ref = ref
         self.upstreamRef = upstreamRef
         self.locked = locked
         self.mergeCheckCommand = mergeCheckCommand
         self.escalationSeconds = escalationSeconds
+        self.landingCheck = landingCheck
     }
 
     public init(from decoder: Decoder) throws {
@@ -150,6 +194,7 @@ public struct ProjectIntegrationSettings: Codable, Equatable, Sendable {
         locked = try c.decodeIfPresent(Bool.self, forKey: .locked) ?? false
         mergeCheckCommand = try c.decodeIfPresent(String.self, forKey: .mergeCheckCommand)
         escalationSeconds = try c.decodeIfPresent(Int.self, forKey: .escalationSeconds)
+        landingCheck = try? c.decodeIfPresent(ProjectLandingCheck.self, forKey: .landingCheck)
     }
 }
 
@@ -201,6 +246,12 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
     public let acceptedGaps: [AcceptedGap]
     /// The non-code mark and the criteria moved out (`ProjectDoneFollowUps.swift`).
     public let followUps: ProjectDoneFollowUpFields
+    /// The coordinator's cardless landing-check changes and the owner's own, newest first (§12.15
+    /// P-R1). Nil from a server that predates them, which draws no Coordinator's changes row.
+    public var settingChanges: [ProjectSettingChange]? = nil
+    /// Settings › Translation: the title and criteria in the owner's language, which the done cards
+    /// draw (`ProjectDoneSubject.shown`). Nil with translation off and from an older server.
+    public var translation: ProjectTextTranslation? = nil
 
     /// The explicit non-code mark: the page names it where it would name the branch.
     public var nonCode: Bool { followUps.nonCodeMark != nil }
@@ -212,7 +263,7 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
                            derivedDone: derivedDone, doneBy: doneBy, doneAt: doneAt,
                            acceptedGaps: acceptedGaps, upstreamRef: integration?.upstreamRef,
                            projectID: id, nonCodeMark: followUps.nonCodeMark,
-                           criteriaMovedOut: followUps.criteriaMovedOut)
+                           criteriaMovedOut: followUps.criteriaMovedOut, translation: translation)
     }
 
     /// Whether the project has been started, read off `startedAt` and off nothing else — not off
@@ -246,7 +297,8 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
         self.coordinatorSessionId = coordinatorSessionId
         self.coordinatorWorkspaceId = coordinatorWorkspaceId
         self.taskCount = taskCount
-        self.acceptanceCriteriaItems = acceptanceCriteriaItems
+        self.acceptanceCriteriaItems = ProjectCriterion.withLandingReasons(acceptanceCriteriaItems,
+                                                                          derivedDone: derivedDone)
         self.integration = integration
         self.tasksByStatus = tasksByStatus
         self.blockers = blockers
@@ -269,7 +321,7 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
         case id, title, status, goal, instructions, createdAt, updatedAt, coordinatorEnabled,
              configRevision, coordinatorSessionId, coordinatorWorkspaceId, acceptanceCriteriaItems, integration, tasksByStatus,
              blockers, startedAt, pausedAt, maxConcurrentTasks, derivedDone, doneBy, doneAt,
-             acceptedGaps
+             acceptedGaps, settingChanges, translation
         case counts = "_count"
     }
 
@@ -287,8 +339,10 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
         coordinatorSessionId = try c.decodeIfPresent(String.self, forKey: .coordinatorSessionId)
         coordinatorWorkspaceId = try? c.decodeIfPresent(String.self, forKey: .coordinatorWorkspaceId)
         taskCount = try c.decodeIfPresent(Counts.self, forKey: .counts)?.tasks ?? 0
-        acceptanceCriteriaItems = try c.decodeIfPresent([ProjectCriterion].self,
-                                                        forKey: .acceptanceCriteriaItems) ?? []
+        let derivedDone = try? c.decodeIfPresent(ProjectDerivedDone.self, forKey: .derivedDone)
+        acceptanceCriteriaItems = ProjectCriterion.withLandingReasons(
+            try c.decodeIfPresent([ProjectCriterion].self, forKey: .acceptanceCriteriaItems) ?? [],
+            derivedDone: derivedDone)
         integration = try c.decodeIfPresent(ProjectIntegrationSettings.self, forKey: .integration)
         tasksByStatus = try? c.decodeIfPresent([String: Int].self, forKey: .tasksByStatus)
         blockers = try? c.decodeIfPresent(ProjectBlockers.self, forKey: .blockers)
@@ -296,11 +350,16 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
         startedAt = try c.decodeIfPresent(String.self, forKey: .startedAt)
         pausedAt = try c.decodeIfPresent(String.self, forKey: .pausedAt)
         maxConcurrentTasks = try? c.decodeIfPresent(Int.self, forKey: .maxConcurrentTasks)
-        derivedDone = try? c.decodeIfPresent(ProjectDerivedDone.self, forKey: .derivedDone)
+        self.derivedDone = derivedDone
         doneBy = try? c.decodeIfPresent(ProjectDoneBy.self, forKey: .doneBy)
         doneAt = try? c.decodeIfPresent(String.self, forKey: .doneAt)
         acceptedGaps = ((try? c.decodeIfPresent([AcceptedGap].self, forKey: .acceptedGaps)) ?? nil) ?? []
         followUps = (try? ProjectDoneFollowUpFields(from: decoder)) ?? ProjectDoneFollowUpFields()
+        // Each record decoded on its own: one this build cannot read is left out rather than taking
+        // the whole list with it (as the second port on main did; kept when the two were merged).
+        settingChanges = ((try? c.decodeIfPresent([LossyDecodable<ProjectSettingChange>].self,
+                                                  forKey: .settingChanges)) ?? nil)?.compactMap(\.value)
+        translation = (try? c.decodeIfPresent(ProjectTextTranslation.self, forKey: .translation)) ?? nil
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -329,6 +388,8 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
         try c.encodeIfPresent(doneBy, forKey: .doneBy)
         try c.encodeIfPresent(doneAt, forKey: .doneAt)
         if !acceptedGaps.isEmpty { try c.encode(acceptedGaps, forKey: .acceptedGaps) }
+        try c.encodeIfPresent(settingChanges, forKey: .settingChanges)
+        try c.encodeIfPresent(translation, forKey: .translation)
     }
 }
 
@@ -382,6 +443,8 @@ public struct ProjectIntegrationInFlight: Codable, Equatable, Sendable {
     public let liveness: String?
     /// Why a queued job is not claimed, or why a claimed one waits on the runner's local lock.
     public let blockingReason: LandTaskBlockingReason?
+    /// The pull request this landing waits on or ended in (design §8); nil from a server that predates it.
+    public let pullRequest: LandingPullRequestView?
 
     public init(taskTitle: String? = nil, state: String, startedAt: String,
                 kind: String? = nil, phase: String? = nil, heartbeatAt: String? = nil,
@@ -390,7 +453,9 @@ public struct ProjectIntegrationInFlight: Codable, Equatable, Sendable {
                 claim: Int? = nil, round: Int? = nil, check: ProjectIntegrationCheck? = nil,
                 stepStartedAt: String? = nil, outputMovedAt: String? = nil,
                 progressProtocol: String? = nil, typicalMs: Int? = nil, liveness: String? = nil,
-                blockingReason: LandTaskBlockingReason? = nil) {
+                blockingReason: LandTaskBlockingReason? = nil,
+                pullRequest: LandingPullRequestView? = nil) {
+        self.pullRequest = pullRequest
         self.taskTitle = taskTitle
         self.kind = kind
         self.phase = phase
@@ -439,6 +504,7 @@ public struct ProjectIntegrationInFlight: Codable, Equatable, Sendable {
         typicalMs = try? c.decodeIfPresent(Int.self, forKey: .typicalMs)
         liveness = try? c.decodeIfPresent(String.self, forKey: .liveness)
         blockingReason = try? c.decodeIfPresent(LandTaskBlockingReason.self, forKey: .blockingReason)
+        pullRequest = try? c.decodeIfPresent(LandingPullRequestView.self, forKey: .pullRequest)
     }
 }
 
@@ -531,6 +597,8 @@ public struct LandTaskIntegrationView: Codable, Equatable, Sendable {
     public let liveness: String?
     /// The runner holding the claim, by name — sent beside `liveness` by the same servers.
     public let runnerName: String?
+    /// The pull request this landing waits on or ended in (design §8); nil from a server that predates it.
+    public var pullRequest: LandingPullRequestView? = nil
 
     public init(jobId: String, state: String, phase: String? = nil, targetRef: String,
                 blockingReason: LandTaskBlockingReason? = nil, startedAt: String? = nil,
@@ -577,6 +645,7 @@ public struct LandTaskIntegrationView: Codable, Equatable, Sendable {
         waitMs = try? c.decodeIfPresent(Int.self, forKey: .waitMs)
         liveness = try? c.decodeIfPresent(String.self, forKey: .liveness)
         runnerName = try? c.decodeIfPresent(String.self, forKey: .runnerName)
+        pullRequest = try? c.decodeIfPresent(LandingPullRequestView.self, forKey: .pullRequest)
     }
 }
 
@@ -797,6 +866,9 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
     public let landingCheckCommand: String?
     public let landingCheckTimeoutSeconds: Int?
     public let landingCheckCommandAbsentReason: String?
+    /// The landing check and who set it last (§12.16): `command` is `NONE` for No check. Nil from a
+    /// server that predates it, which draws no badge.
+    public var landingCheck: ProjectLandingCheck? = nil
     public let mergeCheckTimeoutSeconds: Int?
     public let mergeCheckCommand: String?
     /// How long an exception may wait on the coordinator before it becomes the owner's. Nil from a
@@ -825,6 +897,10 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
     /// project with no binding. Not locked once integration starts. Nil from a server that predates
     /// it, which draws no Delivery row.
     public let deliveryMode: DeliveryMode?
+    /// The name the project's branch has, or would have, short (no `refs/heads/`):
+    /// `project/<title slug>-<8 chars of the id>`. Equals `ref` once the line is on a project
+    /// branch. Nil from a server that predates it.
+    public var defaultProjectBranch: String? = nil
 
     public init(line: IntegrationLine? = nil, ref: String? = nil, upstreamRef: String? = nil,
                 upstreamChosenAt: String? = nil, lastMainBranch: ProjectLastMainBranch? = nil,
@@ -836,9 +912,11 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
                 landingCheckCommand: String? = nil, landingCheckTimeoutSeconds: Int? = nil,
                 landingCheckCommandAbsentReason: String? = nil, mergeCheckTimeoutSeconds: Int? = nil,
                 escalationSeconds: Int? = nil, landTasks: [ProjectLandTask] = [],
-                inFlightJobs: [ProjectIntegrationJob]? = nil, deliveryMode: DeliveryMode? = nil) {
+                inFlightJobs: [ProjectIntegrationJob]? = nil, deliveryMode: DeliveryMode? = nil,
+                defaultProjectBranch: String? = nil) {
         self.line = line
         self.ref = ref
+        self.defaultProjectBranch = defaultProjectBranch
         self.upstreamRef = upstreamRef
         self.upstreamChosenAt = upstreamChosenAt
         self.lastMainBranch = lastMainBranch
@@ -880,6 +958,7 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
         landingCheckCommand = try c.decodeIfPresent(String.self, forKey: .landingCheckCommand)
         landingCheckTimeoutSeconds = try c.decodeIfPresent(Int.self, forKey: .landingCheckTimeoutSeconds)
         landingCheckCommandAbsentReason = try c.decodeIfPresent(String.self, forKey: .landingCheckCommandAbsentReason)
+        landingCheck = try? c.decodeIfPresent(ProjectLandingCheck.self, forKey: .landingCheck)
         mergeCheckTimeoutSeconds = try c.decodeIfPresent(Int.self, forKey: .mergeCheckTimeoutSeconds)
         escalationSeconds = try? c.decodeIfPresent(Int.self, forKey: .escalationSeconds)
         commitsAheadOfUpstream = try c.decodeIfPresent(Int.self, forKey: .commitsAheadOfUpstream)
@@ -893,6 +972,15 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
         // read: the landing row and How it runs still draw from the rest.
         inFlightJobs = try? c.decodeIfPresent([ProjectIntegrationJob].self, forKey: .inFlightJobs)
         deliveryMode = (try? c.decodeIfPresent(DeliveryMode.self, forKey: .deliveryMode)) ?? nil
+        defaultProjectBranch = (try? c.decodeIfPresent(String.self, forKey: .defaultProjectBranch)) ?? nil
+    }
+
+    /// The project branch as a client names it: the line's own ref once it is on one, else the
+    /// server's default name; `project/<id>` only from a server that sends neither.
+    public func projectBranchName(projectID: String) -> String {
+        let fallback = defaultProjectBranch ?? "project/\(projectID)"
+        guard line == .projectBranch else { return fallback }
+        return ref ?? fallback
     }
 }
 
@@ -1228,14 +1316,19 @@ public struct ProjectTaskIntegration: Codable, Equatable, Sendable {
     /// observation waits to see on the line. Nil while the identity is not frozen, in every other
     /// state, and from an older server.
     public let deliveredSha: String?
+    /// With `FIXING` (revision 42, §12.7): the task's own work session fixing the failed landing on
+    /// its branch, which pressing the row opens. Nil in every other state and from an older server.
+    public let workSessionId: String?
 
     public init(state: String, handler: String? = nil, checksRunningForMs: Double? = nil,
-                landTask: LandTaskIntegrationView? = nil, deliveredSha: String? = nil) {
+                landTask: LandTaskIntegrationView? = nil, deliveredSha: String? = nil,
+                workSessionId: String? = nil) {
         self.state = state
         self.handler = handler
         self.checksRunningForMs = checksRunningForMs
         self.landTask = landTask
         self.deliveredSha = deliveredSha
+        self.workSessionId = workSessionId
     }
 }
 
@@ -1265,13 +1358,24 @@ public struct ProjectTaskRow: Codable, Equatable, Sendable, Identifiable {
     public let integration: ProjectTaskIntegration?
     /// Finished prerequisites not yet landed on the project's integration line.
     public let landingWaitCount: Int?
+    /// Why a RUNNING row runs (`TURN`, `BACKGROUND_JOB`, `WAITING`), and whether its background jobs
+    /// have said nothing for ten minutes.
+    public let runReason: String?
+    public let runStalled: Bool?
+    /// No account that could run it can run now (contract §3); nil unless a hold stands.
+    public var accountHold: TaskAccountHold? = nil
+    /// The sign-in hold, which wins over `accountHold` when it stands. Read for its presence only.
+    public var hold: TaskSignInHoldMark? = nil
 
     public init(id: String, title: String, status: String = "OPEN", parentTaskId: String? = nil,
                 childCount: Int = 0, unmetCount: Int = 0, blocksCount: Int = 0, topoLevel: Int = 0,
                 dependencyState: String? = "READY", workState: String? = nil,
                 completionPolicy: String? = nil, verifiesTaskId: String? = nil,
                 verificationState: String? = nil, autoRunWhenReady: Bool? = nil,
-                integration: ProjectTaskIntegration? = nil, landingWaitCount: Int? = nil) {
+                integration: ProjectTaskIntegration? = nil, landingWaitCount: Int? = nil,
+                runReason: String? = nil, runStalled: Bool? = nil) {
+        self.runReason = runReason
+        self.runStalled = runStalled
         self.id = id
         self.title = title
         self.status = status
@@ -1308,6 +1412,10 @@ public struct ProjectTaskRow: Codable, Equatable, Sendable, Identifiable {
         autoRunWhenReady = try c.decodeIfPresent(Bool.self, forKey: .autoRunWhenReady)
         integration = try? c.decodeIfPresent(ProjectTaskIntegration.self, forKey: .integration)
         landingWaitCount = try c.decodeIfPresent(Int.self, forKey: .landingWaitCount)
+        runReason = try? c.decodeIfPresent(String.self, forKey: .runReason)
+        runStalled = try? c.decodeIfPresent(Bool.self, forKey: .runStalled)
+        accountHold = try? c.decodeIfPresent(TaskAccountHold.self, forKey: .accountHold)
+        hold = try? c.decodeIfPresent(TaskSignInHoldMark.self, forKey: .hold)
     }
 }
 
@@ -1382,6 +1490,8 @@ public struct UpdateProjectIntegrationRequest: Encodable, Equatable, Sendable {
     public let mergeCheckCommand: String??
     public let landingCheckCommand: String??
     public let landingCheckTimeoutSeconds: Int??
+    /// `NONE`: run no landing check (§12.15 P-C1). Writing a landing-check command, or null, lifts it.
+    public let landingCheck: String?
     public let exceptionEscalationSeconds: Int?
     /// How the work reaches main (§10.5 O-L1); nil leaves it alone. `agentPush` only with a main
     /// line, which a line leaving main answers with `platform` in the same write.
@@ -1389,7 +1499,9 @@ public struct UpdateProjectIntegrationRequest: Encodable, Equatable, Sendable {
 
     public init(line: IntegrationLine? = nil, upstreamRef: String? = nil, mergeCheckCommand: String?? = nil,
                 landingCheckCommand: String?? = nil, landingCheckTimeoutSeconds: Int?? = nil,
+                landingCheck: String? = nil,
                 exceptionEscalationSeconds: Int? = nil, deliveryMode: DeliveryMode? = nil) {
+        self.landingCheck = landingCheck
         self.line = line
         self.upstreamRef = upstreamRef
         self.mergeCheckCommand = mergeCheckCommand
@@ -1403,10 +1515,11 @@ public struct UpdateProjectIntegrationRequest: Encodable, Equatable, Sendable {
     public var isEmpty: Bool {
         line == nil && upstreamRef == nil && mergeCheckCommand == nil && exceptionEscalationSeconds == nil
             && deliveryMode == nil && landingCheckCommand == nil && landingCheckTimeoutSeconds == nil
+            && landingCheck == nil
     }
 
     enum CodingKeys: String, CodingKey {
-        case landingCheckCommand, landingCheckTimeoutSeconds
+        case landingCheckCommand, landingCheckTimeoutSeconds, landingCheck
         case line, upstreamRef, mergeCheckCommand, exceptionEscalationSeconds, deliveryMode
     }
 
@@ -1423,6 +1536,7 @@ public struct UpdateProjectIntegrationRequest: Encodable, Equatable, Sendable {
         if let value = landingCheckTimeoutSeconds {
             if let value { try c.encode(value, forKey: .landingCheckTimeoutSeconds) } else { try c.encodeNil(forKey: .landingCheckTimeoutSeconds) }
         }
+        try c.encodeIfPresent(landingCheck, forKey: .landingCheck)
         try c.encodeIfPresent(exceptionEscalationSeconds, forKey: .exceptionEscalationSeconds)
         try c.encodeIfPresent(deliveryMode, forKey: .deliveryMode)
     }

@@ -4,12 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import {
-  BG_JOB_LIMITS_CAPABILITY,
-  BG_JOB_LIMITS_UNAVAILABLE_CAPABILITY_PREFIX,
-  MACHINE_RESOURCES_CAPABILITY,
-  type RunnerResourcesAnswer,
-} from '@orbit/shared';
+import { MACHINE_RESOURCES_CAPABILITY, type RunnerResourcesAnswer } from '@orbit/shared';
 import type { Runner } from '../TasksSidePanel';
 import type { RunnerAttentionInput } from '../../lib/runnerAttention';
 import cases from '../../lib/runnerAttention.cases.json';
@@ -17,6 +12,7 @@ import { MachineSettingsPage } from './MachineSettingsPage';
 import { SettingsWorkspacePage } from './WorkspaceSettingsPage';
 import { ToastViewport } from '../ToastViewport';
 import { clearToasts } from '../../lib/toastStore';
+import { hoverTooltip } from '../../test/tooltipHover';
 
 /**
  * A machine's Settings page as board-3 lays it out (docs/mocks/settings-redesign): one column — the
@@ -78,6 +74,8 @@ let scrolledTo: Element[] = [];
 let published: string | null = null;
 /** What GET /runners/:id/resources answers. */
 let resourcesAnswer: RunnerResourcesAnswer | null = null;
+/** What GET /terminals answers: the account's approved terminals, on any machine. */
+let terminalsAnswer: Array<Record<string, unknown>> = [];
 
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -132,6 +130,7 @@ afterEach(() => {
   scrolledTo = [];
   published = null;
   resourcesAnswer = null;
+  terminalsAnswer = [];
   document.body.innerHTML = '';
 });
 
@@ -154,6 +153,7 @@ async function mount(m: Machine, counts: Array<{ workspaceId: string; running: n
     if (path === '/runners') return [m.runner];
     if (path === `/runners/${RUNNER_ID}/resources`) return resourcesAnswer ?? { at: null, latest: null, samples: [] };
     if (path === '/workspaces') return m.workspaces;
+    if (path === '/terminals') return { terminals: terminalsAnswer };
     if (path === '/sessions/counts') {
       return counts.map((count) => ({ ...count, active: count.running, needsYou: 0 }));
     }
@@ -274,12 +274,6 @@ async function typeNumber(input: HTMLInputElement, value: string, finish: 'blur'
 }
 
 /** Opens Keep Free and reads what it offers. */
-async function capacityOptions(label: string) {
-  await click($(`[role="combobox"][aria-label="${label}"]`));
-  // The list opened last: an earlier Select's closed list can stay in the document.
-  return $$('[role="option"]', $$('[role="listbox"]').at(-1));
-}
-
 async function keepFreeOptions() {
   await click($('[role="combobox"][aria-label="Keep Free"]'));
   return $$('[role="listbox"] [role="option"]');
@@ -317,12 +311,36 @@ describe('a runner’s page, laid out as web.png', () => {
     expect(document.body.textContent).not.toContain('Details');
   });
 
+  it('puts this machine’s approved terminals in a Terminals section between Workspaces and About, newest first', async () => {
+    const terminal = (id: string, runnerId: string, approvedAt: string) => ({
+      id, machineName: 'wikova', runnerId, createdAt: approvedAt, approvedAt, lastUsedAt: null, expiresAt: '2026-12-31T00:00:00Z',
+    });
+    terminalsAnswer = [
+      terminal('t-old', RUNNER_ID, '2026-06-01T00:00:00Z'),
+      terminal('t-elsewhere', 'someOtherRunner', '2026-06-20T00:00:00Z'),
+      terminal('t-new', RUNNER_ID, '2026-06-10T00:00:00Z'),
+    ];
+    await mount(machine('real wikova'));
+    expect([...$('.machine-page').children].map((el) => el.className).slice(-4)).toEqual([
+      'settings-section machine-section-workspaces',
+      'settings-section machine-section-terminals',
+      'settings-section machine-section-about',
+      'settings-section machine-section-delete',
+    ]);
+    expect($$('.machine-section-terminals .settings-row').map((row) => row.dataset.settingAnchor)).toEqual([
+      'terminal-t-new',
+      'terminal-t-old',
+    ]);
+    expect(text($('.machine-section-terminals .settings-row-title'))).toBe('Approved Jun 10, 2026');
+    expect(text($('.machine-section-terminals .settings-row button'))).toBe('Revoke');
+  });
+
   it('puts the country its IP is in first on the header line, with when it was checked on hover', async () => {
     const checkedAt = new Date(NOW - 3 * 60_000).toISOString();
     const region = { verdict: 'allowed' as const, country: 'JP', regionCode: null, name: 'Japan', viaProxy: false, checkedAt };
     await mount(machine('real wikova', { region }));
     expect(text($('.machine-metaline'))).toBe('📍 Japan · vmi3129740 · v0.1.197 · Last Check-in just now');
-    expect($('[data-testid="machine-location"]').title).toBe('Checked 3m ago · Claude’s connection: Japan (no proxy)');
+    expect(await hoverTooltip($('[data-testid="machine-location"]'))).toBe('Checked 3m ago · Claude’s connection: Japan (no proxy)');
   });
 
   it('says the country is the proxy’s when the check went through one', async () => {
@@ -452,50 +470,24 @@ describe('a runner’s page, laid out as web.png', () => {
     expect(sent).toHaveLength(3);
   });
 
-  it('sets each background job limit on pick, Off clears it, and a value set elsewhere shows as it is', async () => {
-    const { sent } = await mount(
-      machine('real wikova', { capabilities: [BG_JOB_LIMITS_CAPABILITY], bgJobMemoryMb: 3000 }),
-    );
-    expect(text($('.rd-job-cpu'))).toBe('Off');
-    expect(text($('.rd-job-memory'))).toBe('3000 MB');
-    expect(text($('.rd-job-limits-hint'))).toBe(
-      'Job CPU and Job Memory limit each background job an agent starts from now on; past its memory a job is ' +
-        'stopped. A job under limits takes no Max Concurrent slot: together, limited jobs get a tenth of the CPU ' +
-        'sessions get when the machine is busy, and at most half its memory.',
-    );
-    const cpus = await capacityOptions('Job CPU');
-    expect(cpus.map(text)).toEqual(['Off', '1 CPU', '2 CPUs', '4 CPUs', '8 CPUs']);
-    await press(cpus[2]);
-    expect(sent.at(-1)).toEqual({ method: 'PATCH', path: `/runners/${RUNNER_ID}`, body: { bgJobCpus: 2 } });
-    const memory = await capacityOptions('Job Memory');
-    expect(memory.map(text)).toEqual(['Off', '2 GB', '3000 MB', '4 GB', '8 GB', '16 GB']);
-    await press(memory[0]);
-    expect(sent.at(-1)).toEqual({ method: 'PATCH', path: `/runners/${RUNNER_ID}`, body: { bgJobMemoryMb: null } });
-    expect(sent).toHaveLength(2);
-  });
-
-  it('greys the background job limits out where the runner cannot apply them, and says why', async () => {
-    const disabled = (label: string) => {
-      const box = $<HTMLButtonElement>(`[role="combobox"][aria-label="${label}"]`);
-      return box.getAttribute('aria-disabled') === 'true' || box.disabled || box.hasAttribute('data-disabled');
-    };
-    await mount(machine('real wikova', { capabilities: [BG_JOB_LIMITS_UNAVAILABLE_CAPABILITY_PREFIX + 'delegate'] }));
-    expect([disabled('Job CPU'), disabled('Job Memory')]).toEqual([true, true]);
-    expect(text($('.rd-job-limits-hint'))).toBe(
-      "Background job limits need the runner's service reinstalled: run `orbit register` on the machine, then restart it.",
-    );
-  });
-
-  it('asks for a runner update before background job limits on a runner too old to declare them', async () => {
-    await mount(machine('real wikova', { capabilities: [] }));
-    expect(text($('.rd-job-limits-hint'))).toBe('Update the runner to limit background jobs on this machine.');
-  });
-
   it('fills Max Concurrent’s bar amber once every slot is taken', async () => {
     await mount(machine('real wikova', { activeSessions: 12 }));
     expect(text($('.machine-meter-value', capacityRow('Max Concurrent')))).toBe('12 of 12 running');
     expect($('.machine-meter-bar', capacityRow('Max Concurrent')).className).toContain('warn');
     expect($<HTMLElement>('.machine-meter-bar > span', capacityRow('Max Concurrent')).style.width).toBe('100%');
+  });
+
+  it('saves Extra sessions on demand next to Max Concurrent, including zero', async () => {
+    const { sent } = await mount(machine('real wikova', { burstConcurrent: 2 }));
+    const row = capacityRow('Extra sessions on demand');
+    expect(row.previousElementSibling).toBe(capacityRow('Max Concurrent'));
+    const field = $('[role="combobox"][aria-label="Extra sessions on demand"]', row);
+    expect(text(field)).toBe('2');
+    await click(field);
+    const options = $$('[role="listbox"] [role="option"]');
+    expect(options.map(text)).toContain('32');
+    await press(options.find((option) => text(option) === '0')!);
+    expect(sent).toEqual([{ method: 'PATCH', path: `/runners/${RUNNER_ID}`, body: { burstConcurrent: 0 } }]);
   });
 
   it('shows a floor set to something else as it is, and Off clears it', async () => {
@@ -517,13 +509,8 @@ describe('a runner’s page, laid out as web.png', () => {
     ]);
     expect($('[data-resource="disk"]').className).toBe('machine-res-tile warn');
     expect($$('.machine-res-spark')).toEqual([]);
-    // Capacity keeps its settings — the disk is a reading, under Resources — and the background job limits.
-    expect($$('.machine-section-capacity .settings-row-title').map(text)).toEqual([
-      'Max Concurrent',
-      'Keep Free',
-      'Job CPU',
-      'Job Memory',
-    ]);
+    // Capacity keeps the two settings; the disk is a reading, under Resources.
+    expect($$('.machine-section-capacity .settings-row-title').map(text)).toEqual(['Max Concurrent', 'Keep Free']);
     expect(text($('.machine-section-capacity .rd-hint'))).toBe(
       'Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, new sessions and ' +
         'task runs wait until space frees up, and finished worktrees are cleaned up sooner.',
@@ -764,7 +751,6 @@ describe('the Workspaces section of a machine with none', () => {
 // saved one is edited on its own page, row by row.
 describe('the Add workspace form', () => {
   const field = (label: string) => $<HTMLInputElement>(`input[aria-label="${label}"]`);
-  const submit = (label: string) => button(label) as HTMLButtonElement;
   const type = async (input: HTMLInputElement, value: string) => {
     await act(async () => {
       input.focus();
@@ -773,36 +759,17 @@ describe('the Add workspace form', () => {
     });
     await settle();
   };
-  const pressEnter = async (input: HTMLInputElement) => {
-    await act(async () => {
-      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-    });
-    await settle();
-  };
 
-  it('creates a workspace only once it has a name and a working directory', async () => {
+  // What the card does once it's open is WorkspaceSettingsPage.test.tsx's and MachineSetupCard.test.tsx's.
+  it('opens New workspace on this machine: the setup card, under the page’s own header', async () => {
     const { sent } = await mount(machine('no CLI signed in and no workspace'));
     await click(button('Add workspace'));
-    expect(field('Working directory').placeholder).toBe('/path/to/project on the runner');
-    expect(submit('Create').disabled).toBe(true);
-
-    await type(field('Name'), 'app');
-    expect(submit('Create').disabled).toBe(true);
-    // Enter in the name creates nothing while the folder is missing.
-    await pressEnter(field('Name'));
-    await type(field('Working directory'), '   ');
-    expect(submit('Create').disabled).toBe(true);
+    expect($('.settings-header-description')?.textContent).toContain('Change machine');
+    expect($('.workspace-new .msc')).not.toBeNull();
+    expect(document.querySelector('.msc-head')).toBeNull();
+    expect(field('Folder')).not.toBeNull();
+    expect(document.querySelector('input[aria-label="Working directory"]')).toBeNull();
     expect(sent).toEqual([]);
-
-    await type(field('Working directory'), '~/code/app');
-    expect(submit('Create').disabled).toBe(false);
-    await click(submit('Create'));
-    expect(sent).toHaveLength(1);
-    expect(sent[0]).toMatchObject({
-      method: 'POST',
-      path: '/workspaces',
-      body: { name: 'app', workDir: '~/code/app', runnerId: RUNNER_ID },
-    });
   });
 
   it('a saved workspace’s working directory, emptied on its page, goes back to what is saved and sends nothing', async () => {

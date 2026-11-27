@@ -203,7 +203,7 @@ describe('Orbit Cloud: the managed runner\'s name, version line and updates on i
     expect(title(await machinePage(MANAGED))).toBe('Team box');
   });
 
-  it('a managed-<sha> image: "Kept up to date by Orbit" and the check-in, never the hash; no Updates are turned off', async () => {
+  it('a managed-<sha> image: "Build 95884b1" and the check-in, never the whole hash; no Updates are turned off', async () => {
     server.status = state('available');
     managedReport = {
       version: 'managed-95884b154feb3d4e2a575fb012c4185b20c282ac',
@@ -213,21 +213,22 @@ describe('Orbit Cloud: the managed runner\'s name, version line and updates on i
     };
     ownReport = { version: '0.1.260' };
     const page = await machinePage(MANAGED);
-    expect(metaline(page)).toMatch(/^Kept up to date by Orbit · Last Check-in /);
+    expect(metaline(page)).toMatch(/^Build 95884b1 · Last Check-in /);
     expect(page.textContent).not.toContain('managed-95884');
-    expect(about(page)).toContain('Kept up to date by Orbit');
+    expect(about(page)).toContain('Build 95884b1');
+    expect(page.textContent).not.toContain('Kept up to date by Orbit');
     expect(about(page)).not.toContain('Last Update');
     expect(page.textContent).not.toContain('Updates are turned off');
     expect(page.textContent).not.toContain('ORBIT_NO_SELFUPDATE');
   });
 
-  it('a release behind the latest with ORBIT_NO_SELFUPDATE: its version, "Orbit updates this machine for you.", no card', async () => {
+  it('a release behind the latest with ORBIT_NO_SELFUPDATE: its version, "Orbit moves it to each new build.", no card', async () => {
     server.status = state('available');
     managedReport = { version: '0.1.250', online: true, lastHeartbeatAt: now, selfUpdate: NO_SELFUPDATE };
     ownReport = { version: '0.1.260' };
     const page = await machinePage(MANAGED);
     expect(metaline(page)).toMatch(/^v0\.1\.250 · Last Check-in /);
-    expect(about(page)).toContain('Orbit updates this machine for you.');
+    expect(about(page)).toContain('Orbit moves it to each new build.');
     expect(page.textContent).not.toContain('Updates are turned off');
     expect(page.textContent).not.toContain('ORBIT_NO_SELFUPDATE');
   });

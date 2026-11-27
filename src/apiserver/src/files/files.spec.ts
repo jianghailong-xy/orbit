@@ -33,6 +33,7 @@ import {
   DEFAULT_FILES_DIR,
   LocalFileStore,
   filesConfigFrom,
+  filesDirFrom,
   removeStaleTempFiles,
   uploadTempDir,
   writeHashedTempFile,
@@ -45,7 +46,7 @@ import { S3FileStore, sigV4Authorization, sigV4Encode } from './s3-file-store';
 const sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 
 function scratch(t: { after: (fn: () => void) => void }): string {
-  const dir = mkdtempSync(path.join(tmpdir(), 'orbit-files-spec-'));
+  const dir = mkdtempSync(path.join(tmpdir(), 'orbit-documents-spec-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   return dir;
 }
@@ -189,14 +190,14 @@ test('with nothing set, files are kept in /var/lib/orbit/files', () => {
   const backupRetentionMs = 3 * 24 * 60 * 60 * 1000;
   assert.deepEqual(filesConfigFrom({}), { dir: DEFAULT_FILES_DIR, storage: 'local', backupRetentionMs });
   assert.equal(DEFAULT_FILES_DIR, '/var/lib/orbit/files');
-  assert.deepEqual(filesConfigFrom({ ORBIT_FILES_DIR: '/srv/files' }), { dir: '/srv/files', storage: 'local', backupRetentionMs });
+  assert.deepEqual(filesConfigFrom({ ORBIT_DRIVE_DIR: '/srv/files' }), { dir: '/srv/files', storage: 'local', backupRetentionMs });
 });
 
 test('the quota and the backup retention are read from the environment, and a value that means nothing stops the start', () => {
-  assert.equal(filesConfigFrom({ ORBIT_FILES_QUOTA_BYTES: '1048576' }).quotaBytes, 1_048_576);
-  assert.equal(filesConfigFrom({ ORBIT_FILES_QUOTA_BYTES: ' ' }).quotaBytes, undefined, 'blank is what Compose passes when unset');
+  assert.equal(filesConfigFrom({ ORBIT_DRIVE_QUOTA_BYTES: '1048576' }).quotaBytes, 1_048_576);
+  assert.equal(filesConfigFrom({ ORBIT_DRIVE_QUOTA_BYTES: ' ' }).quotaBytes, undefined, 'blank is what Compose passes when unset');
   assert.equal(filesConfigFrom({ ORBIT_BASE_BACKUP_INTERVAL: '3600', ORBIT_BASE_BACKUP_KEEP: '48' }).backupRetentionMs, 49 * 3_600_000);
-  for (const name of ['ORBIT_FILES_QUOTA_BYTES', 'ORBIT_BASE_BACKUP_INTERVAL', 'ORBIT_BASE_BACKUP_KEEP']) {
+  for (const name of ['ORBIT_DRIVE_QUOTA_BYTES', 'ORBIT_BASE_BACKUP_INTERVAL', 'ORBIT_BASE_BACKUP_KEEP']) {
     for (const value of ['0', '-1', '1.5', 'ten', '1e3']) {
       assert.throws(() => filesConfigFrom({ [name]: value }), new RegExp(`${name} must be a whole number above zero, not "${value.replace('.', '\.')}"`));
     }
@@ -205,11 +206,11 @@ test('the quota and the backup retention are read from the environment, and a va
 
 test('s3 takes the endpoint, bucket, key pair and region, and refuses to start without them', () => {
   assert.deepEqual(filesConfigFrom({
-    ORBIT_FILES_BACKEND: 's3',
-    ORBIT_FILES_S3_ENDPOINT: 'http://minio:9000',
-    ORBIT_FILES_S3_BUCKET: 'orbit',
-    ORBIT_FILES_S3_ACCESS_KEY_ID: 'id',
-    ORBIT_FILES_S3_SECRET_ACCESS_KEY: 'secret',
+    ORBIT_DRIVE_BACKEND: 's3',
+    ORBIT_DRIVE_S3_ENDPOINT: 'http://minio:9000',
+    ORBIT_DRIVE_S3_BUCKET: 'orbit',
+    ORBIT_DRIVE_S3_ACCESS_KEY_ID: 'id',
+    ORBIT_DRIVE_S3_SECRET_ACCESS_KEY: 'secret',
   }), {
     dir: DEFAULT_FILES_DIR,
     storage: 's3',
@@ -217,17 +218,57 @@ test('s3 takes the endpoint, bucket, key pair and region, and refuses to start w
     backupRetentionMs: 3 * 24 * 60 * 60 * 1000,
   });
   assert.throws(
-    () => filesConfigFrom({ ORBIT_FILES_BACKEND: 's3', ORBIT_FILES_S3_ENDPOINT: 'http://minio:9000' }),
-    /ORBIT_FILES_BACKEND=s3 needs ORBIT_FILES_S3_BUCKET, ORBIT_FILES_S3_ACCESS_KEY_ID, ORBIT_FILES_S3_SECRET_ACCESS_KEY/,
+    () => filesConfigFrom({ ORBIT_DRIVE_BACKEND: 's3', ORBIT_DRIVE_S3_ENDPOINT: 'http://minio:9000' }),
+    /ORBIT_DRIVE_BACKEND=s3 needs ORBIT_DRIVE_S3_BUCKET, ORBIT_DRIVE_S3_ACCESS_KEY_ID, ORBIT_DRIVE_S3_SECRET_ACCESS_KEY/,
   );
   assert.throws(() => filesConfigFrom({
-    ORBIT_FILES_BACKEND: 's3',
-    ORBIT_FILES_S3_ENDPOINT: 'minio:9000',
-    ORBIT_FILES_S3_BUCKET: 'orbit',
-    ORBIT_FILES_S3_ACCESS_KEY_ID: 'id',
-    ORBIT_FILES_S3_SECRET_ACCESS_KEY: 'secret',
+    ORBIT_DRIVE_BACKEND: 's3',
+    ORBIT_DRIVE_S3_ENDPOINT: 'minio:9000',
+    ORBIT_DRIVE_S3_BUCKET: 'orbit',
+    ORBIT_DRIVE_S3_ACCESS_KEY_ID: 'id',
+    ORBIT_DRIVE_S3_SECRET_ACCESS_KEY: 'secret',
   }), /must be an http:\/\/ or https:\/\/ URL/);
-  assert.throws(() => filesConfigFrom({ ORBIT_FILES_BACKEND: 'gcs' }), /must be local or s3, not "gcs"/);
+  assert.throws(() => filesConfigFrom({ ORBIT_DRIVE_BACKEND: 'gcs' }), /must be local or s3, not "gcs"/);
+});
+
+test('every setting is still read by its older names (ORBIT_DOCUMENTS_*, then ORBIT_FILES_*) when ORBIT_DRIVE_* is unset', () => {
+  const backupRetentionMs = 3 * 24 * 60 * 60 * 1000;
+  // A host .env written before the rename, all of it.
+  assert.deepEqual(filesConfigFrom({
+    ORBIT_FILES_BACKEND: 's3',
+    ORBIT_FILES_DIR: '/srv/old',
+    ORBIT_FILES_S3_ENDPOINT: 'http://minio:9000',
+    ORBIT_FILES_S3_BUCKET: 'old-bucket',
+    ORBIT_FILES_S3_ACCESS_KEY_ID: 'old-id',
+    ORBIT_FILES_S3_SECRET_ACCESS_KEY: 'old-secret',
+    ORBIT_FILES_S3_REGION: 'eu-west-1',
+    ORBIT_FILES_S3_MIRROR: '1',
+    ORBIT_FILES_QUOTA_BYTES: '1048576',
+    ORBIT_FILES_STORE_QUOTA_BYTES: '2097152',
+  }), {
+    dir: '/srv/old',
+    storage: 's3',
+    s3: { endpoint: 'http://minio:9000', bucket: 'old-bucket', accessKeyId: 'old-id', secretAccessKey: 'old-secret', region: 'eu-west-1' },
+    s3Mirror: true,
+    quotaBytes: 1_048_576,
+    storeQuotaBytes: 2_097_152,
+    backupRetentionMs,
+  });
+  assert.equal(filesDirFrom({ ORBIT_FILES_DIR: '/srv/old' }), '/srv/old');
+  // The middle name: ORBIT_DOCUMENTS_*, read over ORBIT_FILES_* and under ORBIT_DRIVE_*.
+  assert.equal(filesDirFrom({ ORBIT_DOCUMENTS_DIR: '/srv/docs' }), '/srv/docs');
+  assert.equal(filesDirFrom({ ORBIT_DOCUMENTS_DIR: '/srv/docs', ORBIT_FILES_DIR: '/srv/old' }), '/srv/docs');
+  assert.equal(filesDirFrom({ ORBIT_DRIVE_DIR: '/srv/new', ORBIT_DOCUMENTS_DIR: '/srv/docs', ORBIT_FILES_DIR: '/srv/old' }), '/srv/new');
+  assert.equal(filesConfigFrom({ ORBIT_DOCUMENTS_QUOTA_BYTES: '7', ORBIT_FILES_QUOTA_BYTES: '5' }).quotaBytes, 7);
+  assert.throws(() => filesConfigFrom({ ORBIT_DOCUMENTS_BACKEND: 'gcs' }), /^Error: ORBIT_DOCUMENTS_BACKEND must be local or s3, not "gcs"/);
+  // The new name wins, and a blank one (what Compose passes for an unset variable) leaves the old one in force.
+  assert.deepEqual(filesConfigFrom({ ORBIT_DRIVE_DIR: '/srv/new', ORBIT_FILES_DIR: '/srv/old' }), { dir: '/srv/new', storage: 'local', backupRetentionMs });
+  assert.deepEqual(filesConfigFrom({ ORBIT_DRIVE_DIR: ' ', ORBIT_FILES_DIR: '/srv/old' }), { dir: '/srv/old', storage: 'local', backupRetentionMs });
+  assert.equal(filesConfigFrom({ ORBIT_DRIVE_QUOTA_BYTES: '', ORBIT_FILES_QUOTA_BYTES: '5' }).quotaBytes, 5);
+  assert.equal(filesConfigFrom({ ORBIT_DRIVE_BACKEND: 'local', ORBIT_FILES_BACKEND: 's3' }).storage, 'local');
+  // An error names the variable it read.
+  assert.throws(() => filesConfigFrom({ ORBIT_FILES_BACKEND: 'gcs' }), /^Error: ORBIT_FILES_BACKEND must be local or s3, not "gcs"/);
+  assert.throws(() => filesConfigFrom({ ORBIT_FILES_QUOTA_BYTES: '0' }), /ORBIT_FILES_QUOTA_BYTES must be a whole number above zero/);
 });
 
 // ── An upload, on its way to the store ────────────────────────────────────────────────────────
@@ -589,6 +630,8 @@ const cases = {
     const stream = await open();
     const { fd } = stream;
     for await (const chunk of stream) void chunk;
+    // A ReadStream closes its descriptor after 'end'; opening before that can get another number.
+    if (!stream.closed) await once(stream, 'close');
     kept = openSync(new LocalFileStore(FILES_DIR).pathOf(NAME), 'r');
     if (kept !== fd) throw new Error('the next file got another number');
   },

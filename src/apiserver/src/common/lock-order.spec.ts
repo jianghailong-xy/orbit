@@ -98,7 +98,7 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
   },
   {
     file: 'tasks.service.ts',
-    method: 'applyMoveApproval',
+    method: 'applyOneMoveUnderLocks',
     statements: ['task.updateMany'],
     holds: [
       'await this.lockDependencyGraph(tx, ownerId);',
@@ -107,7 +107,9 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
       'const row = await this.handoffs.lockMoveForConfirmation(tx, ownerId, handoffId, now);',
     ],
     note:
-      'Unit L4: the account owner\'s confirmation of a MOVE_TASK, which moves one task. The order ' +
+      'Unit L4: the account owner\'s confirmation of a MOVE_TASK, which moves one task, under the ' +
+      'locks `applyMoves` took (a batch takes every task in one sorted NOWAIT statement and every ' +
+      'request row in one sorted statement before the first move). The order ' +
       'the owner\'s own move in `update` takes, plus the request row: rank 10 (the move re-judges ' +
       'and rewrites the task\'s place in a hierarchy), both projects at rank 40 in one sorted ' +
       'statement, the task NOWAIT at rank 50 for the reason `linkSupersededBy` gives, and the ' +
@@ -438,7 +440,7 @@ test('the Open-list counters are taken without waiting, as their compatibility a
   assert.match(bump, /FROM open_list_epoch[\s\S]*FOR UPDATE SKIP LOCKED/, 'a counter row is taken in a way that can wait');
   assert.match(bump, /nextval\('open_list_epoch_shard_seq'\)/, 'a new counter row is keyed some other way');
   assert.doesNotMatch(bump, /ON CONFLICT/i, 'an insert that can conflict waits for the transaction holding the key');
-  for (const fn of ['open_list_bump_owner', 'open_list_bump_via_project', 'open_list_bump_via_session', 'open_list_bump_session']) {
+  for (const fn of ['open_list_bump_owner', 'open_list_bump_via_project', 'open_list_bump_via_session', 'open_list_bump_session', 'open_list_bump_watch']) {
     const body = lastFunctionBody(fn);
     assert.match(body, /PERFORM open_list_bump\(/, `${fn} no longer bumps through open_list_bump`);
     assert.doesNotMatch(body, /open_list_epoch/, `${fn} writes open_list_epoch itself`);

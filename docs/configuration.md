@@ -66,15 +66,19 @@ output into a public report: expanded values can contain secrets.
 | `FCM_PROJECT_ID` | `string` | Optional; empty disables Android push | Target Firebase project with Cloud Messaging HTTP v1 enabled, independent of the APNs values. | No; redact in public diagnostics | Recreate API |
 | `FCM_CLIENT_EMAIL` | `string` | Required when FCM is enabled; otherwise empty | Service-account `client_email` authorized for that project. | No; redact in public diagnostics | Recreate API |
 | `FCM_PRIVATE_KEY` | `secret` (base64) | Required when FCM is enabled; otherwise empty | Base64 of the service account's PEM `private_key`, not of the whole JSON file. | Yes | Recreate API |
+| `WEB_PUSH_PUBLIC_KEY` | `string` (base64url) | Optional; empty disables browser notifications | VAPID public key (uncompressed P-256) browsers subscribe with. Keep it: a new key pair makes every browser subscribe again. Needs HTTPS and outbound internet to the browsers' push services. | No | Recreate API |
+| `WEB_PUSH_PRIVATE_KEY` | `secret` (base64url) | Required when `WEB_PUSH_PUBLIC_KEY` is set | The matching 32-byte VAPID private key that signs every push. | Yes | Recreate API |
+| `WEB_PUSH_SUBJECT` | `string` (URL or `mailto:`) | Optional; `https://orbitd.io` | How the push services can reach the sender, sent in each push's VAPID claim. | No | Recreate API |
 | `FCM_ANDROID_PACKAGE` | `string` | Optional; `io.orbitd.android` | Exact Android application ID permitted to receive push. Use `io.orbitd.android.debug` for the debug client. | No | Recreate API |
 | `ORBIT_SOURCE_SHA` | `string` (40 lowercase hex) | Optional in a Git checkout; required without Git metadata | Source commit stamped into downloadable runner binaries and their advertised capability revision at web-image build time. | No | Rebuild web for each source revision |
 | `ORBIT_RUNNER_SOURCE` | `string` (path in the build context) | Optional; `.` | The tree the web image builds the downloadable runner from. The upgrade skill sets it to `.runner-release`, the newest `v*` release tag's tree it unpacks there, so `/dl` serves the released runner and not the deployed tree's ([Runner binaries come from the release tag](release-process.md#runner-binaries-come-from-the-release-tag)). | No | Rebuild web |
 | `ORBIT_RUNNER_SOURCE_SHA` | `string` (40 lowercase hex) | Optional; empty uses `ORBIT_SOURCE_SHA` | The commit of the tree `ORBIT_RUNNER_SOURCE` names, stamped into the downloadable runner binaries in place of `ORBIT_SOURCE_SHA`. Set by the upgrade skill with `ORBIT_RUNNER_SOURCE`; leave both unset in `.env`. | No | Rebuild web |
 | `ORBIT_RELEASE_REPOSITORY` | `string` (`owner/repo`, or its `https://github.com/` URL) | Optional; `jianghailong-xy/orbit` | The GitHub repository this deployment's release came from: Help → Ask → Still stuck → Report on GitHub opens a new issue there. A fork that ships its own builds names its own repository. A value that is not `owner/repo` is ignored. | No | Recreate API |
 | `RUNNER_RELEASE_DL_URL` | `URL` | Optional; `http://web/dl/` | Where the API reads the runner release manifests it states to a linked runner in Welcome and HeartbeatAck, as `GET /api/runner/release` answers them. Read at most once a minute, for at most two seconds; while unreadable, runners ask the route over HTTPS. | No | Recreate API |
-| `ORBIT_CLAUDE_OPENAI_GATEWAY` | `boolean` (`true` only) | Optional; off | Claude Code on an OpenAI API key, through the API server's own gateway at `/api/gw/anthropic` ([design](claude-engine-openai-gateway-design.md)). `true` turns it on: an OpenAI key's engines become Codex (still the default), Claude Code and OpenCode, and a Claude Code session on one is handed `PUBLIC_ORIGIN` + `/api/gw/anthropic` and a session token, never the key. Absent, empty, `false` or any other value is off: no key's engines or dispatch environment change, and the gateway refuses every token. Turning it off stops the running sessions' requests at once. | No | Recreate API |
+| `ORBIT_CLAUDE_OPENAI_GATEWAY` | `boolean` (`true` only) | Optional; off | Claude Code on an OpenAI API key, through the API server's own gateway at `/api/gw/anthropic` ([design](claude-engine-openai-gateway-design.md)). `true` turns it on: an OpenAI key's engines become Codex (still the default), Claude Code and OpenCode, an OpenAI-compatible (Chat Completions) key's become Kimi (still the default), Claude Code and OpenCode ([design §10](claude-engine-openai-gateway-design.md#10-openai-compatible-keys-through-chat-completions)), and a Claude Code session on one is handed `PUBLIC_ORIGIN` + `/api/gw/anthropic` and a session token, never the key. Absent, empty, `false` or any other value is off: no key's engines or dispatch environment change, and the gateway refuses every token. Turning it off stops the running sessions' requests at once. | No | Recreate API |
 | `ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY` | `boolean` (`true` only) | Optional; off | Claude Code on the account owner's own Codex login pool (their own ChatGPT accounts), through the same `/api/gw/anthropic` gateway ([design §9](claude-engine-openai-gateway-design.md#9-claude-code-on-the-owners-own-codex-login-pool-p2b)). Separate from `ORBIT_CLAUDE_OPENAI_GATEWAY`, and either works without the other. `true` turns it on: a Codex pool its owner made and did not share runs Codex (still the default) and Claude Code; a Claude Code session on one runs on an account its owner signed in, is handed `PUBLIC_ORIGIN` + `/api/gw/anthropic` and the pool's session token, never an account's token, and its requests go to ChatGPT's Codex backend as Claude Code's own, with no Codex prompt or user agent. A shared pool, or somebody else's, is never offered Claude Code. Absent, empty, `false` or any other value is off: no pool's engines or dispatch environment change, and the gateway refuses such tokens. Using a ChatGPT account outside the official Codex CLI may lead OpenAI to restrict the account. | No | Recreate API |
-| `ORBIT_GATEWAY_UPSTREAM_HOSTS` | `string` | Optional; empty | The hosts, besides `api.openai.com`, that the `/api/gw/anthropic` gateway may send an OpenAI key's requests to ([design §5.3](claude-engine-openai-gateway-design.md)): host names, comma- or space-separated, such as `responses.example.org`. The gateway calls a key's endpoint only over https, only on one of these hosts, and only when every address the host resolves to is public: private, loopback, link-local and other non-public addresses are refused before anything connects, and a redirect is never followed. A key whose endpoint is anywhere else is not offered Claude Code. Read at each request. | No | Recreate API |
+| `ORBIT_SESSION_RELEASE_V1` | `on` only | Optional; off | Tells runners that this deployment serves the runner protocol in which a failed turn and a session's release are two reports (`session-release/v1`, [plan step 6.2](session-three-state-plan.md#9-phase-6-runner-protocol)). `on` puts `sessionReleaseV1: true` in every heartbeat answer, and a runner from a release that knows it declares the protocol only while its latest answer says so. Absent, empty or any other value is off: runners report failed turns and run ends as before. The server serves either protocol whatever the switch says. **Turn it on only once every apiserver replica runs a release that serves the protocol.** An older replica would release a held failed turn as a stop and lose the failure and its retry. **Turn it off before going back to a release older than that one.** See [Upgrading](self-hosting.md#the-runner-protocol-switch). | No | Recreate API |
+| `ORBIT_GATEWAY_UPSTREAM_HOSTS` | `string` | Optional; empty | The hosts, besides `api.openai.com`, that the `/api/gw/anthropic` gateway may send an OpenAI or OpenAI-compatible key's requests to ([design §5.3](claude-engine-openai-gateway-design.md)): host names, comma- or space-separated, such as `responses.example.org`. The gateway calls a key's endpoint only over https, only on one of these hosts, and only when every address the host resolves to is public: private, loopback, link-local and other non-public addresses are refused before anything connects, and a redirect is never followed. A key whose endpoint is anywhere else is not offered Claude Code. Read at each request. | No | Recreate API |
 
 Use the host names `ORBIT_WATCHES_MODE` and `ORBIT_WIKI_MODE`, not `ORBIT_WATCHES` or `ORBIT_WIKI`:
 agent sessions already carry the latter variables, and shell precedence could accidentally change a
@@ -120,24 +124,48 @@ Two deployment values matter to it:
 
 See [Google sign-in](self-hosting.md#google-sign-in) for the Google Cloud console steps and who can sign in.
 
-### Orbit Files
+### Drive storage
 
-Attachment bytes live outside PostgreSQL: one copy per content, named by its sha256 ([design](orbit-files-design.md)).
+Attachment bytes live outside PostgreSQL: one copy per content, named by its sha256 ([design](drive-design.md)).
 `local` keeps them under `./data/files`, which Compose mounts at `/var/lib/orbit/files`; `s3` keeps them in an
 S3-compatible bucket addressed path-style under `files/`. Uploads are written to the files directory's `tmp/` first
 with either backend. An invalid backend, an incomplete S3 configuration, or an endpoint that is not `http://` or
-`https://` stops the API at start with the reason.
+`https://` stops the API at start with the reason. Each `ORBIT_DRIVE_*` variable here was `ORBIT_DOCUMENTS_*`
+while the drive was called Documents, and `ORBIT_FILES_*` before that: the older names are still read, in that order, by
+the API, the Compose file, the backup sidecar and the mount daemon (`ORBIT_DRIVE_MOUNT_TOKEN`), whenever the newer one is
+unset or empty, so an `.env` written before keeps working. A deployment that sets an older name needs no change at
+upgrade, and can rename the line at its own pace.
 
 | Variable | Type | Required / default | Purpose | Secret? | Apply change |
 | --- | --- | --- | --- | --- | --- |
-| `ORBIT_FILES_BACKEND` | `enum`: `local`, `s3` | Optional; `local` | Where new attachment bytes are stored. `local` is `./data/files` in Compose. | No | Recreate API; existing bytes stay where they were written and remain readable through their store |
-| `ORBIT_FILES_DIR` | `path` | Optional; `/var/lib/orbit/files` | The local store's directory and the upload staging directory (`tmp/` inside it). In Compose it is the mount of `./data/files`. | Holds user data | Recreate API |
-| `ORBIT_FILES_S3_ENDPOINT` | `URL` | Required with `ORBIT_FILES_BACKEND=s3`; otherwise empty | The bucket's endpoint, such as `https://s3.eu-west-1.amazonaws.com`. | No; avoid credential-bearing URLs | Recreate API |
-| `ORBIT_FILES_S3_BUCKET` | `string` | Required with `s3`; otherwise empty | Bucket name. Objects are addressed path-style under `files/`. | No | Recreate API |
-| `ORBIT_FILES_S3_REGION` | `string` | Optional with `s3`; `us-east-1` | Signing region. | No | Recreate API |
-| `ORBIT_FILES_S3_ACCESS_KEY_ID` | `secret` | Required with `s3`; otherwise empty | Access key ID for the bucket. | Yes | Recreate API |
-| `ORBIT_FILES_S3_SECRET_ACCESS_KEY` | `secret` | Required with `s3`; otherwise empty | Secret access key for the bucket. | Yes | Recreate API |
-| `ORBIT_FILES_QUOTA_BYTES` | `integer` (bytes) | Optional; empty means no limit | The most one account may keep, each content counted once. Past it an upload is refused with `413` and the code `FILE_QUOTA_EXCEEDED`. For a hosted instance; a self-hosted deployment needs none. | No | Recreate API |
+| `ORBIT_DRIVE_BACKEND` | `enum`: `local`, `s3` | Optional; `local` | Where new attachment bytes are stored. `local` is `./data/files` in Compose. | No | Recreate API; existing bytes stay where they were written and remain readable through their store |
+| `ORBIT_DRIVE_DIR` | `path` | Optional; `/var/lib/orbit/files` | The local store's directory and the upload staging directory (`tmp/` inside it). In Compose it is the mount of `./data/files`. | Holds user data | Recreate API |
+| `ORBIT_DRIVE_S3_ENDPOINT` | `URL` | Required with `ORBIT_DRIVE_BACKEND=s3`; otherwise empty | The bucket's endpoint, such as `https://s3.eu-west-1.amazonaws.com`. | No; avoid credential-bearing URLs | Recreate API |
+| `ORBIT_DRIVE_S3_BUCKET` | `string` | Required with `s3`; otherwise empty | Bucket name. Objects are addressed path-style under `files/`. | No | Recreate API |
+| `ORBIT_DRIVE_S3_REGION` | `string` | Optional with `s3`; `us-east-1` | Signing region. | No | Recreate API |
+| `ORBIT_DRIVE_S3_ACCESS_KEY_ID` | `secret` | Required with `s3`; otherwise empty | Access key ID for the bucket. | Yes | Recreate API |
+| `ORBIT_DRIVE_S3_SECRET_ACCESS_KEY` | `secret` | Required with `s3`; otherwise empty | Secret access key for the bucket. | Yes | Recreate API |
+| `ORBIT_DRIVE_S3_MIRROR` | `0` or `1` | Optional; `0` | Set to `1` to copy the bucket's `files/` prefix to `<ORBIT_BACKUP_SYNC_TARGET>-bucket` and schedule S3 mirror pruning. The sidecar uses the same S3 endpoint, bucket, region and key pair listed above. | No | Recreate `pgbackup` and `apiserver` |
+| `ORBIT_DRIVE_QUOTA_BYTES` | `integer` (bytes) | Optional; empty means no limit | The most one account may keep, each content counted once. Past it an upload is refused with `413` and the code `FILE_QUOTA_EXCEEDED`. For a hosted instance; a self-hosted deployment needs none. | No | Recreate API |
+| `ORBIT_DRIVE_STORE_QUOTA_BYTES` | `integer` (bytes) | Optional with `s3` | The S3 store's configured capacity across all accounts. Drive → Storage warns at 80% based on S3 blob bytes recorded by Orbit, cached for three minutes. The storage backend enforces its own limit. | No | Recreate API |
+| `ORBIT_DOCUMENTS_BACKEND` | as `ORBIT_DRIVE_BACKEND` | Deprecated; read only while `ORBIT_DRIVE_BACKEND` is unset or empty | The name while the drive was called Documents. Use `ORBIT_DRIVE_BACKEND`. | As `ORBIT_DRIVE_BACKEND` | As `ORBIT_DRIVE_BACKEND` |
+| `ORBIT_DOCUMENTS_S3_ENDPOINT` | as `ORBIT_DRIVE_S3_ENDPOINT` | Deprecated; read only while `ORBIT_DRIVE_S3_ENDPOINT` is unset or empty | The name while the drive was called Documents. Use `ORBIT_DRIVE_S3_ENDPOINT`. | As `ORBIT_DRIVE_S3_ENDPOINT` | As `ORBIT_DRIVE_S3_ENDPOINT` |
+| `ORBIT_DOCUMENTS_S3_BUCKET` | as `ORBIT_DRIVE_S3_BUCKET` | Deprecated; read only while `ORBIT_DRIVE_S3_BUCKET` is unset or empty | The name while the drive was called Documents. Use `ORBIT_DRIVE_S3_BUCKET`. | As `ORBIT_DRIVE_S3_BUCKET` | As `ORBIT_DRIVE_S3_BUCKET` |
+| `ORBIT_DOCUMENTS_S3_REGION` | as `ORBIT_DRIVE_S3_REGION` | Deprecated; read only while `ORBIT_DRIVE_S3_REGION` is unset or empty | The name while the drive was called Documents. Use `ORBIT_DRIVE_S3_REGION`. | As `ORBIT_DRIVE_S3_REGION` | As `ORBIT_DRIVE_S3_REGION` |
+| `ORBIT_DOCUMENTS_S3_ACCESS_KEY_ID` | as `ORBIT_DRIVE_S3_ACCESS_KEY_ID` | Deprecated; read only while `ORBIT_DRIVE_S3_ACCESS_KEY_ID` is unset or empty | The name while the drive was called Documents. Use `ORBIT_DRIVE_S3_ACCESS_KEY_ID`. | Yes | As `ORBIT_DRIVE_S3_ACCESS_KEY_ID` |
+| `ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY` | as `ORBIT_DRIVE_S3_SECRET_ACCESS_KEY` | Deprecated; read only while `ORBIT_DRIVE_S3_SECRET_ACCESS_KEY` is unset or empty | The name while the drive was called Documents. Use `ORBIT_DRIVE_S3_SECRET_ACCESS_KEY`. | Yes | As `ORBIT_DRIVE_S3_SECRET_ACCESS_KEY` |
+| `ORBIT_DOCUMENTS_S3_MIRROR` | as `ORBIT_DRIVE_S3_MIRROR` | Deprecated; read only while `ORBIT_DRIVE_S3_MIRROR` is unset or empty | The name while the drive was called Documents. Use `ORBIT_DRIVE_S3_MIRROR`. | As `ORBIT_DRIVE_S3_MIRROR` | As `ORBIT_DRIVE_S3_MIRROR` |
+| `ORBIT_DOCUMENTS_QUOTA_BYTES` | as `ORBIT_DRIVE_QUOTA_BYTES` | Deprecated; read only while `ORBIT_DRIVE_QUOTA_BYTES` is unset or empty | The name while the drive was called Documents. Use `ORBIT_DRIVE_QUOTA_BYTES`. | As `ORBIT_DRIVE_QUOTA_BYTES` | As `ORBIT_DRIVE_QUOTA_BYTES` |
+| `ORBIT_DOCUMENTS_STORE_QUOTA_BYTES` | as `ORBIT_DRIVE_STORE_QUOTA_BYTES` | Deprecated; read only while `ORBIT_DRIVE_STORE_QUOTA_BYTES` is unset or empty | The name while the drive was called Documents. Use `ORBIT_DRIVE_STORE_QUOTA_BYTES`. | As `ORBIT_DRIVE_STORE_QUOTA_BYTES` | As `ORBIT_DRIVE_STORE_QUOTA_BYTES` |
+| `ORBIT_FILES_BACKEND` | as `ORBIT_DRIVE_BACKEND` | Deprecated; read only while `ORBIT_DRIVE_BACKEND` and `ORBIT_DOCUMENTS_BACKEND` are unset or empty | The oldest name. Use `ORBIT_DRIVE_BACKEND`. | As `ORBIT_DRIVE_BACKEND` | As `ORBIT_DRIVE_BACKEND` |
+| `ORBIT_FILES_S3_ENDPOINT` | as `ORBIT_DRIVE_S3_ENDPOINT` | Deprecated; read only while `ORBIT_DRIVE_S3_ENDPOINT` and `ORBIT_DOCUMENTS_S3_ENDPOINT` are unset or empty | The oldest name. Use `ORBIT_DRIVE_S3_ENDPOINT`. | As `ORBIT_DRIVE_S3_ENDPOINT` | As `ORBIT_DRIVE_S3_ENDPOINT` |
+| `ORBIT_FILES_S3_BUCKET` | as `ORBIT_DRIVE_S3_BUCKET` | Deprecated; read only while `ORBIT_DRIVE_S3_BUCKET` and `ORBIT_DOCUMENTS_S3_BUCKET` are unset or empty | The oldest name. Use `ORBIT_DRIVE_S3_BUCKET`. | As `ORBIT_DRIVE_S3_BUCKET` | As `ORBIT_DRIVE_S3_BUCKET` |
+| `ORBIT_FILES_S3_REGION` | as `ORBIT_DRIVE_S3_REGION` | Deprecated; read only while `ORBIT_DRIVE_S3_REGION` and `ORBIT_DOCUMENTS_S3_REGION` are unset or empty | The oldest name. Use `ORBIT_DRIVE_S3_REGION`. | As `ORBIT_DRIVE_S3_REGION` | As `ORBIT_DRIVE_S3_REGION` |
+| `ORBIT_FILES_S3_ACCESS_KEY_ID` | as `ORBIT_DRIVE_S3_ACCESS_KEY_ID` | Deprecated; read only while `ORBIT_DRIVE_S3_ACCESS_KEY_ID` and `ORBIT_DOCUMENTS_S3_ACCESS_KEY_ID` are unset or empty | The oldest name. Use `ORBIT_DRIVE_S3_ACCESS_KEY_ID`. | Yes | As `ORBIT_DRIVE_S3_ACCESS_KEY_ID` |
+| `ORBIT_FILES_S3_SECRET_ACCESS_KEY` | as `ORBIT_DRIVE_S3_SECRET_ACCESS_KEY` | Deprecated; read only while `ORBIT_DRIVE_S3_SECRET_ACCESS_KEY` and `ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY` are unset or empty | The oldest name. Use `ORBIT_DRIVE_S3_SECRET_ACCESS_KEY`. | Yes | As `ORBIT_DRIVE_S3_SECRET_ACCESS_KEY` |
+| `ORBIT_FILES_S3_MIRROR` | as `ORBIT_DRIVE_S3_MIRROR` | Deprecated; read only while `ORBIT_DRIVE_S3_MIRROR` and `ORBIT_DOCUMENTS_S3_MIRROR` are unset or empty | The oldest name. Use `ORBIT_DRIVE_S3_MIRROR`. | As `ORBIT_DRIVE_S3_MIRROR` | As `ORBIT_DRIVE_S3_MIRROR` |
+| `ORBIT_FILES_QUOTA_BYTES` | as `ORBIT_DRIVE_QUOTA_BYTES` | Deprecated; read only while `ORBIT_DRIVE_QUOTA_BYTES` and `ORBIT_DOCUMENTS_QUOTA_BYTES` are unset or empty | The oldest name. Use `ORBIT_DRIVE_QUOTA_BYTES`. | As `ORBIT_DRIVE_QUOTA_BYTES` | As `ORBIT_DRIVE_QUOTA_BYTES` |
+| `ORBIT_FILES_STORE_QUOTA_BYTES` | as `ORBIT_DRIVE_STORE_QUOTA_BYTES` | Deprecated; read only while `ORBIT_DRIVE_STORE_QUOTA_BYTES` and `ORBIT_DOCUMENTS_STORE_QUOTA_BYTES` are unset or empty | The oldest name. Use `ORBIT_DRIVE_STORE_QUOTA_BYTES`. | As `ORBIT_DRIVE_STORE_QUOTA_BYTES` | As `ORBIT_DRIVE_STORE_QUOTA_BYTES` |
 
 With `local`, `./data/files` is the only copy of those bytes: it is not in PostgreSQL or in any local backup. The
 off-host mirror copies it to `<target>-files` beside the archive; with `s3`, the bucket's versioning or replication
@@ -179,6 +207,17 @@ would otherwise pick up the session's values.
 
 Until the wiki's jobs move to the server, the worker only probes the model and reports its state; wiki jobs still
 run on runners.
+
+### Drive
+
+The drive every account keeps files in and its agents read and write: see
+[Drive](self-hosting.md#drive).
+
+| Variable | Type | Required / default | Purpose | Secret? | Apply change |
+| --- | --- | --- | --- | --- | --- |
+| `ORBIT_DRIVE_ENABLED` | `boolean` (`true` only) | Optional; off. A fresh install writes `false`; an upgrade never writes it. `ORBIT_DOCUMENTS_ENABLED` and then `ORBIT_FILES_ENABLED`, its older names, are read while this is unset or empty | The switch. `true` turns Drive on; absent, empty or `false` is off, and so is any other value, with a warning in the API's log. Off, every drive route answers `404 DOCUMENTS_DISABLED`, `GET /api/auth/capabilities` says `documents.enabled: false` so the clients show no Drive, and sessions have no drive tools. Nothing is deleted. | No | Recreate API |
+| `ORBIT_DOCUMENTS_ENABLED` | as `ORBIT_DRIVE_ENABLED` | Deprecated; read only while `ORBIT_DRIVE_ENABLED` is unset or empty | The name while the drive was called Documents. Use `ORBIT_DRIVE_ENABLED`. | No | Recreate API |
+| `ORBIT_FILES_ENABLED` | as `ORBIT_DRIVE_ENABLED` | Deprecated; read only while `ORBIT_DRIVE_ENABLED` and `ORBIT_DOCUMENTS_ENABLED` are unset or empty | The oldest name. Use `ORBIT_DRIVE_ENABLED`. | No | Recreate API |
 
 ### Managed runners
 
@@ -299,10 +338,14 @@ network.
 | `80/tcp` | `web` | The Compose project network | The built web bundle and its `/healthz`. |
 | `3000/tcp` | `apiserver` | The Compose project network | The HTTP API, under `/api`. |
 | `3001/tcp` | `apiserver` | The Compose project network, while the runner link is configured | The runner-link call listener. It answers the gateway alone and requires `RUNNER_LINK_GATEWAY_TOKEN`; never publish it. |
+| `9091/tcp` | `apiserver` | The Compose project network | The internal metrics listener Prometheus scrapes: `GET /metrics` and nothing else, without a token. Never publish it ([Monitoring](self-hosting.md#monitoring)). |
 | `5432/tcp` | `postgres` | The Compose project network | PostgreSQL. Not published to the host. |
 | `4222/tcp` | `nats` | The Compose project network, under the `runner-link` profile | Runner hints. |
 | `8443/tcp` | `link-gateway` | The host, bound by `RUNNER_LINK_BIND`, published as `RUNNER_LINK_PORT` | The link gateway's own WebSocket listener on a link with a host name of its own. A same-origin link sets `RUNNER_LINK_PORT=0` and binds loopback, so nothing useful is published. |
 | `9464/tcp` | `link-gateway` | Host loopback only | `/metrics`. Keep it closed to the internet. |
+| `9090/tcp` | `prometheus` | The Compose project network, under the `monitoring` profile | Prometheus's API and UI. Not published to the host. |
+| `9100/tcp` | `node-exporter` | The Compose project network, under the `monitoring` profile | The host's metrics, for Prometheus. |
+| `9187/tcp` | `postgres-exporter` | The Compose project network, under the `monitoring` profile | PostgreSQL's statistics, for Prometheus. |
 | `7300/tcp` | `docker-channel` on a channel host | Only the private addresses named by `--allow-peer` | The remote channel host's control API, over a private link. |
 | none | managed runner containers | The `orbit-cloud-runners` network | Runners reach the deployment through the gateway's published port; they publish nothing themselves. |
 
@@ -317,12 +360,14 @@ two secrets (`JWT_SECRET`, `PROVIDER_SECRET_KEY`) in the same protected backup.
 | --- | --- | --- |
 | `./data/postgres` | The PostgreSQL data directory. | `pgbackup` base backups plus archived WAL. |
 | `./data/pg-archive` | `base/` base backups and `wal/` archived WAL segments. | Mirrored to `ORBIT_BACKUP_SYNC_TARGET` when set. |
-| `./data/files` | Attachment bytes of the local store, and `tmp/` for uploads in flight. Mounted at `/var/lib/orbit/files`. | Copied to `<target>-files` beside the off-host mirror; with `ORBIT_FILES_BACKEND=s3`, the bucket holds them instead. |
+| `./data/files` | Attachment bytes of the local store, and `tmp/` for uploads in flight. Mounted at `/var/lib/orbit/files`. | Copied to `<target>-files` beside the off-host mirror; with `ORBIT_DRIVE_BACKEND=s3`, the bucket holds them instead. |
 | `./data/files/tmp` | Upload staging. Each apiserver start removes files there untouched for a day. | No. |
 | `./data/managed-runners` | `profile.json`, `channel.json`, the channel's token and socket, and runner state. | No built-in backup; losing the token re-issues it, and losing the profile loses the runner limits. |
 | `RUNNER_LINK_GATEWAY_DIR` | `tls/` certificates and `acme/` state for the link gateway. | The certificates are renewable; keep them if they come from files. |
 | `ORBIT_BACKUP_SSH_DIR` | The mirror's `id_rsa` and `known_hosts`, mounted read-only at `/ssh`. | Keep with the deployment's secrets. |
 | `pg-socket` (Docker volume) | The PostgreSQL Unix socket shared by `postgres` and `pgbackup`. | No; it is recreated with the containers. |
+| `prometheus-data` (Docker volume) | Prometheus's time series, under the `monitoring` profile. | No; it is history, bounded by its retention. |
+| `pg-monitor-secret` (Docker volume) | The password of `orbit_monitor`, the role postgres-exporter signs in with, generated by `pg-monitor-role`. | No; removing the volume generates a new password on the next `up`. |
 | `$ORBIT_HOME` (runner machine, default `~/.orbit`) | `config.json` (server URL and runner credential), `user.json` (a CLI login), and `worktrees/` (session checkouts). | No; a runner re-registers, and checkouts are disposable. |
 
 ## Retention
@@ -332,16 +377,34 @@ What the stack keeps, and for how long. Durations are fixed unless a variable is
 | Data | Retained | Set by |
 | --- | --- | --- |
 | Base backups and their WAL | `ORBIT_BASE_BACKUP_KEEP` backups, one every `ORBIT_BASE_BACKUP_INTERVAL` seconds; an expired file's bytes are freed no sooner than max(7 days, interval × (keep + 1)) after its tombstone. | `ORBIT_BASE_BACKUP_KEEP`, `ORBIT_BASE_BACKUP_INTERVAL` |
-| Attachment bytes | Per [File retention and quota](self-hosting.md#file-retention-and-quota): agent uploads expire 14 to 30 days after upload unless evidence cites them; a pinned file never expires. | Fixed, plus `ORBIT_FILES_QUOTA_BYTES` for the per-account cap |
+| Attachment bytes | Per [File retention and quota](self-hosting.md#file-retention-and-quota): agent uploads expire 14 to 30 days after upload unless evidence cites them; a pinned file never expires. | Fixed, plus `ORBIT_DRIVE_QUOTA_BYTES` for the per-account cap |
 | A session in Trash | 30 days, after which an hourly purge deletes it and its events, turns, tool calls, usage, approvals and diff. A file that is pinned or still cited by evidence keeps the session in Trash past the 30 days. Emptying Trash by hand deletes at once. | Fixed (`TRASH_RETENTION_DAYS`) |
 | A wiki space's Trash | 365 days; a restore brings entries back. | Fixed |
 | User access tokens | `ACCESS_TOKEN_TTL` (default 7 days); a refresh token lasts 30 days. | `ACCESS_TOKEN_TTL` |
 | Runner-link connection tokens | One hour; revocations are deleted once every token minted with them has expired. | Fixed |
 | Container logs | `100 MB` per container, at most five rotated files (older ones compressed), for every service in the stack. A gateway's access log therefore holds a few days of traffic. | `x-logging` in [docker-compose.yml](../docker-compose.yml) |
+| Prometheus's time series | `ORBIT_PROMETHEUS_RETENTION` (default 15 days), and never more than `ORBIT_PROMETHEUS_RETENTION_SIZE` (default 4 GB) on disk, oldest data first. | `ORBIT_PROMETHEUS_RETENTION`, `ORBIT_PROMETHEUS_RETENTION_SIZE` |
+| Loki's log lines | `ORBIT_LOKI_RETENTION` (default 7 days); Loki's compactor deletes older chunks, and a line older than that is refused when it arrives. | `ORBIT_LOKI_RETENTION` |
 | Managed runner data volumes | Until the runner's container and volume are removed; a volume over its limit stops the runner rather than deleting data. | Operator |
 
 Session and wiki records otherwise live until their owner deletes them; there is no time-based deletion of run
 events or transcripts.
+
+## Monitoring
+
+The `monitoring` profile's settings ([Monitoring](self-hosting.md#monitoring)). With the profile off, only the
+apiserver's metrics listener runs, and it is reached by nothing.
+
+| Variable | Type | Required / default | Purpose | Secret? | Apply change |
+| --- | --- | --- | --- | --- | --- |
+| `METRICS_INTERNAL_PORT` | `integer` | Compose fixes `9091` | The apiserver's internal metrics listener, which serves `GET /metrics` alone without a token. `deploy/monitoring/prometheus.yml` scrapes this port. Unset outside Compose: no listener. | No | Fixed in Compose |
+| `METRICS_INTERNAL_HOST` | `string` (address) | Compose fixes `0.0.0.0`; `127.0.0.1` outside Compose | Where that listener binds. Every interface of the container, so Prometheus reaches it over the project network; it is published nowhere. | No | Fixed in Compose |
+| `ORBIT_MONITORING` | `string` | Written as `on` by the installer and, once, by the upgrade script | The record that the `monitoring` profile was switched on here. While the name is in `.env`, an upgrade never adds `monitoring` to `COMPOSE_PROFILES` again, so removing the profile ([Turn it off](self-hosting.md#monitoring)) sticks. Nothing in Compose reads it. | No | Read by the upgrade script |
+| `ORBIT_PROMETHEUS_RETENTION` | `string` (duration) | Optional; `15d` | How long Prometheus keeps its time series (`--storage.tsdb.retention.time`). | No | Recreate `prometheus` |
+| `ORBIT_PROMETHEUS_RETENTION_SIZE` | `string` (size) | Optional; `4GB` | The most disk Prometheus's time series may take; past it the oldest blocks go first (`--storage.tsdb.retention.size`). | No | Recreate `prometheus` |
+| `ORBIT_LOKI_RETENTION` | `string` (duration) | Optional; `168h` | How long Loki keeps log lines ([Logs](self-hosting.md#logs)). Hours, such as `72h` or `336h`. | No | Recreate `loki` |
+| `COMPOSE_PROJECT_NAME` | `string` | Set by Compose: the project's name, by default the directory's | Alloy ships the logs of the containers whose Compose project label is this name, and no other's ([Logs](self-hosting.md#logs)). Set it only to rename the whole project. | No | Recreate `alloy` |
+| `ORBIT_LOG_FORMAT` | `json` or `text` | Optional; Compose sets `json`; unset outside Compose (text) | How the apiserver writes its log: `json` is one JSON object a line, with the web gateway's request id on the lines written for a request; `text` is Nest's own lines. The message text is the same either way. | No | Recreate API |
 
 ## Optional Compose files
 
@@ -398,6 +461,27 @@ which pins both from `ORBIT_REGISTRY`.
 | `ORBIT_LINK_GATEWAY_TAG` | `string` (40-character commit) | Optional; `local` | The link gateway image's tag: the last commit under `src/link-gateway`, its whole build context, so a release that does not change it recreates nothing. | No | Written by the deploy stage |
 | `ORBIT_NGINX_IMAGE` | `string` (image reference) | Optional; `nginx:alpine` | The web gateway's image, by digest, as [deploy/two-stage/base-images.env](../deploy/two-stage/base-images.env) pins it: `library/nginx@sha256:<digest>`. | No | Written by the deploy stage |
 | `ORBIT_NATS_IMAGE` | `string` (image reference) | Optional; `nats:2.15-alpine` | The runner link's NATS image, by digest, as the same file pins it. | No | Written by the deploy stage |
+| `ORBIT_PROMETHEUS_IMAGE` | `string` (image reference) | Optional; `prom/prometheus:v3.16.0@sha256:<digest>` | The `monitoring` profile's Prometheus image, by digest, as the same file pins it. | No | Written by the deploy stage |
+| `ORBIT_NODE_EXPORTER_IMAGE` | `string` (image reference) | Optional; `prom/node-exporter:v1.13.1@sha256:<digest>` | The `monitoring` profile's node-exporter image. | No | Written by the deploy stage |
+| `ORBIT_POSTGRES_EXPORTER_IMAGE` | `string` (image reference) | Optional; `prometheuscommunity/postgres-exporter:v0.21.1@sha256:<digest>` | The `monitoring` profile's postgres-exporter image. | No | Written by the deploy stage |
+| `ORBIT_GRAFANA_IMAGE` | `string` (image reference) | Optional; `grafana/grafana:12.2.0@sha256:<digest>` | The `monitoring` profile's Grafana image. | No | Written by the deploy stage |
+| `ORBIT_LOKI_IMAGE` | `string` (image reference) | Optional; `grafana/loki:3.7.10@sha256:<digest>` | The `monitoring` profile's Loki image. | No | Written by the deploy stage |
+| `ORBIT_ALLOY_IMAGE` | `string` (image reference) | Optional; `grafana/alloy:v1.22.0@sha256:<digest>` | The `monitoring` profile's Grafana Alloy image. | No | Written by the deploy stage |
+| `GRAFANA_ADMIN_PASSWORD` | `string` (secret) | Required by the `grafana` service; generated by a fresh install and the upgrade script | Grafana's `admin` password. Grafana refuses to start without it. Applied the first time Grafana starts; see [Grafana](self-hosting.md#grafana). | Yes | Recreate `grafana` |
+| `GRAFANA_PORT` | `integer` | Optional; `3030` | The port Grafana is published on, on `127.0.0.1` only. | No | Recreate `grafana` |
+| `GRAFANA_ROOT_URL` | `string` (URL) | Optional; `http://localhost:<GRAFANA_PORT>/` | The address Grafana builds its links from, for a hostname of its own. | No | Recreate `grafana` |
+| `ORBIT_ALERT_CONTACT` | `string` | Optional; `orbit-ntfy` | Which contact point takes the alerts: `orbit-ntfy`, `orbit-email` or `orbit-webhook`. See [Alerts](self-hosting.md#alerts). | No | Recreate `grafana` |
+| `ORBIT_NTFY_SERVER` | `string` (URL) | Optional; `https://ntfy.sh` | The ntfy server the phone alerts are published to. | No | Recreate `grafana` |
+| `ORBIT_NTFY_TOPIC` | `string` (secret) | Optional; none, and then no alert is delivered | The ntfy topic. On a public server it is the only secret. | Yes | Recreate `grafana` |
+| `ORBIT_ALERT_EMAIL` | `string` | Optional; a placeholder | Addresses for `orbit-email`, separated by `;`. Needs `GF_SMTP_*`. | No | Recreate `grafana` |
+| `ORBIT_ALERT_WEBHOOK_URL` | `string` (URL) | Optional; Prometheus on this host | Where `orbit-webhook` POSTs. | No | Recreate `grafana` |
+| `GF_SMTP_ENABLED` | `boolean` | Optional; `false` | Turns on Grafana's SMTP client, which `orbit-email` sends through ([Alerts](self-hosting.md#alerts)). | No | Recreate `grafana` |
+| `GF_SMTP_HOST` | `string` (`host:port`) | Optional; `localhost:25` | The SMTP server Grafana sends alert email through. | No | Recreate `grafana` |
+| `GF_SMTP_USER` | `string` | Optional; empty | The SMTP login. | No | Recreate `grafana` |
+| `GF_SMTP_PASSWORD` | `string` | Optional; empty | The SMTP password. | Yes | Recreate `grafana` |
+| `GF_SMTP_FROM_ADDRESS` | `string` (email) | Optional; `grafana@localhost.localdomain` | The sender address of an alert email. | No | Recreate `grafana` |
+| `ORBIT_ALERT_HEARTBEAT_URL` | `string` (URL) | Optional; Prometheus on this host | The external heartbeat URL the always-firing Watchdog is POSTed to every minute. | No | Recreate `grafana` |
+| `ORBIT_NOTIFY_TOKEN` | `string` (secret) | Optional; none, and then alerts do not go to the Orbit app | A personal access token holding only the `notify` scope. Every alert but the Watchdog is then also sent to `POST /api/notify` over the project network and pushed to that account's Orbit apps, with this server's `APNS_*` / `FCM_*` keys; without them the call is accepted and nothing is pushed. See [Alerts in the Orbit app](self-hosting.md#alerts-in-the-orbit-app). | Yes | Recreate `grafana` |
 
 ## Runner machine only
 

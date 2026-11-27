@@ -60,7 +60,8 @@ import { zstdDecompressSync } from 'node:zlib';
 import { Logger, Module, NotFoundException, ValidationPipe, type LoggerService } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, type ClaimedSession, type TurnCompleteRequest } from '@orbit/shared';
 import { json, urlencoded } from 'express';
 import { Client } from 'pg';
@@ -95,6 +96,7 @@ import { decryptSecret, encryptSecret } from './provider-crypto';
 import { ProvidersService } from './providers.service';
 import { SharedPoolsService } from './shared-pools.service';
 import '../test-support/dequeue-under-lease';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 process.env.PROVIDER_SECRET_KEY ??= 'pool-login-gateway-spec';
@@ -349,18 +351,18 @@ suite("a login pool's gateway, end to end on real PostgreSQL", { timeout: 600_00
 
   /** The runner asking for work — which has to be `sessionId` — leaving it RUNNING or parked, as a turn would. */
   async function claim(who: Person, sessionId: string, park = true): Promise<ClaimedSession> {
-    await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.PENDING, cancelRequestedAt: null } });
+    await db.session.update({ where: { id: sessionId }, data: { turnState: 'QUEUED', cancelRequestedAt: null, finishedAt: null} });
     const claimed = await queue.claimSessionForRunner({ id: who.runnerId });
     assert.ok(claimed, 'the runner was offered no session');
     assert.equal(claimed.sessionId, sessionId);
-    if (park) await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+    if (park) await db.session.update({ where: { id: sessionId }, data: { turnState: null } });
     return claimed;
   }
   const tokenOf = (claimed: ClaimedSession) => claimed.agent.env!.OPENAI_API_KEY!;
   const sessionRow = (sessionId: string) =>
     db.session.findUniqueOrThrow({
       where: { id: sessionId },
-      select: { ownerId: true, provider: true, poolCodexAccountId: true, poolSwitchNotice: true, retryAt: true, status: true },
+      select: { ownerId: true, provider: true, poolCodexAccountId: true, poolSwitchNotice: true, retryAt: true, ...WORD_SELECT },
     });
   const loginRow = (poolId: string, accountId: string) =>
     db.poolCodexLogin.findUniqueOrThrow({ where: { poolId_accountId: { poolId, accountId } } });
@@ -555,9 +557,9 @@ suite("a login pool's gateway, end to end on real PostgreSQL", { timeout: 600_00
     assert.equal(seen.length, 0, 'a refused request reached the backend');
 
     // The session ends, then is completed; open again, the token is good again.
-    await db.session.update({ where: { id: session }, data: { status: RunStatus.CANCELLED } });
+    await db.session.update({ where: { id: session }, data: { turnState: null, finishedAt: new Date()} });
     await refused(token, 'the session ended');
-    await db.session.update({ where: { id: session }, data: { status: RunStatus.AWAITING_INPUT, completedAt: new Date() } });
+    await db.session.update({ where: { id: session }, data: { turnState: null, completedAt: new Date(), finishedAt: null} });
     await refused(token, 'the session was completed');
     await db.session.update({ where: { id: session }, data: { completedAt: null } });
     assert.equal((await ask(token)).status, 200, 'an open session again: its token is good again');
@@ -705,7 +707,7 @@ suite("a login pool's gateway, end to end on real PostgreSQL", { timeout: 600_00
       costUsd: 0,
     });
     const failed = await sessionRow(session);
-    assert.equal(failed.status, RunStatus.FAILED);
+    assert.equal(wordOf(failed), RunStatus.FAILED);
     assert.ok(failed.retryAt, 'no retry was armed for a turn the spent account ended');
     assert.ok(
       failed.retryAt!.getTime() >= RECORDED_RESET.getTime() && failed.retryAt!.getTime() < RECORDED_RESET.getTime() + 60_000,

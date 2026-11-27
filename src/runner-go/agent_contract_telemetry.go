@@ -335,13 +335,17 @@ type agentContractTurnTelemetry struct {
 	DiscoveryCalls        int  `json:"discoveryCalls"`
 	DiscoveryBytes        int  `json:"discoveryBytes"`
 	// InstructionBytes is the Orbit instructions the session's engine was given (the primer and what follows it).
-	InstructionBytes int            `json:"instructionBytes,omitempty"`
-	Operations       map[string]int `json:"operations,omitempty"`
-	Outcomes         map[string]int `json:"outcomes,omitempty"`
-	Failures         map[string]int `json:"failures,omitempty"`
-	PrivatePlanCalls int            `json:"privatePlanCalls"`
-	PrivatePlanItems int            `json:"privatePlanItems"`
-	BareOrbitCalls   int            `json:"bareOrbitCalls,omitempty"`
+	InstructionBytes int `json:"instructionBytes,omitempty"`
+	// InstructionManifestHash is the composite hash of the units sent (instructionManifest.Hash) and
+	// InstructionUnits their ids in order: which instructions a turn ran under, not only how many bytes.
+	InstructionManifestHash string         `json:"instructionManifestHash,omitempty"`
+	InstructionUnits        []string       `json:"instructionUnits,omitempty"`
+	Operations              map[string]int `json:"operations,omitempty"`
+	Outcomes                map[string]int `json:"outcomes,omitempty"`
+	Failures                map[string]int `json:"failures,omitempty"`
+	PrivatePlanCalls        int            `json:"privatePlanCalls"`
+	PrivatePlanItems        int            `json:"privatePlanItems"`
+	BareOrbitCalls          int            `json:"bareOrbitCalls,omitempty"`
 }
 
 type telemetryStep struct {
@@ -366,6 +370,7 @@ type agentContractTelemetry struct {
 	mode          func() string
 	orchestration bool
 	instructions  int
+	manifest      instructionManifest
 	turns         map[string]*telemetryTurn
 	order         []string
 }
@@ -391,8 +396,10 @@ func newAgentContractTelemetry(engine, exe string, mode func() string, orchestra
 // newSessionAgentContractTelemetry is newAgentContractTelemetry for a session the runner is running.
 func newSessionAgentContractTelemetry(job *ClaimedSession) *agentContractTelemetry {
 	exe := orbitCLIExecutable()
-	instructions := len(withOrbitCLIInstructions("", exe, job.insideRecordedWork(), job.watchesOn(), agentDelegates(job.Agent)))
-	return newAgentContractTelemetry(runtimeProvider(job), exe, func() string {
+	// Measured in Claude Code's spelling whatever the engine, as it always has been.
+	shape := job.sessionShape(exe)
+	instructions := len(compose(shape, claudeCodeProfile).System)
+	obs := newAgentContractTelemetry(runtimeProvider(job), exe, func() string {
 		if job.liveMode != nil {
 			if mode := job.liveMode.current(); mode != "" {
 				return mode
@@ -400,6 +407,10 @@ func newSessionAgentContractTelemetry(job *ClaimedSession) *agentContractTelemet
 		}
 		return job.Agent.PermissionMode
 	}, job.AllowOrchestration, instructions)
+	if obs != nil {
+		obs.manifest = composeManifest(shape, claudeCodeProfile)
+	}
+	return obs
 }
 
 func (a *agentContractTelemetry) turn(id string) *telemetryTurn {
@@ -414,6 +425,7 @@ func (a *agentContractTelemetry) turn(id string) *telemetryTurn {
 	t = &telemetryTurn{steps: map[string]*telemetryStep{}, sum: agentContractTurnTelemetry{
 		Version: agentContractTelemetryVersion, Contract: agentContractVersion, Primer: agentPrimerVersion,
 		Catalog: operationCatalogVersion, Engine: a.engine, Orchestration: a.orchestration, InstructionBytes: a.instructions,
+		InstructionManifestHash: a.manifest.Hash, InstructionUnits: a.manifest.UnitIDs,
 	}}
 	a.turns[id] = t
 	a.order = append(a.order, id)

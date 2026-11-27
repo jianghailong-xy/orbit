@@ -31,6 +31,11 @@ type DshAgentOverlay struct {
 	// AppendSystemPrompt becomes one literal section after Harness's own system prompt. It is
 	// never a template, a provider setting or a config key.
 	AppendSystemPrompt string
+	// Uploads is the session's uploads directory, a writable root of its shell sandbox beside the shared cache
+	// root (dshSandboxCacheRootPlugin). Empty leaves the cache root alone.
+	Uploads string
+	// Drive is the drive's roots (the parent included), writable beside Uploads; empty when none is mounted.
+	Drive []string
 }
 
 func (i DshLaunchInput) String() string {
@@ -63,10 +68,13 @@ const dshMissingKeyMessage = "DSH_CREDENTIAL_MISSING: DeepSeek Harness runs on a
 
 // PrepareDshSessionLaunch uses the same Agent.Env populated by encrypted provider dispatch.
 func PrepareDshSessionLaunch(ctx context.Context, job *ClaimedSession, executionDir, fileMode string) (DshLaunchSpec, error) {
-	return prepareDshLaunch(ctx, DshLaunchInput{
+	spec, err := prepareDshLaunch(ctx, DshLaunchInput{
 		OrbitSessionID: job.SessionID, ExecutionDir: executionDir,
 		APIKey: job.Agent.Env["ORBIT_DSH_API_KEY"], BaseURL: job.Agent.Env["ORBIT_DSH_BASE_URL"], FileMode: fileMode,
 	}, dshSessionAgentOverlay(job))
+	// On the Orbit Cloud runner with the browser on, a tool the agent runs opens its pages there (browser_opener.go).
+	spec.Env = browserOpenerEnv(spec.Env, err == nil && job.BrowserEnabled)
+	return spec, err
 }
 
 func PrepareDshLaunch(ctx context.Context, input DshLaunchInput) (DshLaunchSpec, error) {
@@ -246,7 +254,7 @@ func prepareDshAgentConfigAt(input DshLaunchInput, agent *DshAgentOverlay, execu
 	env = append(env, "DSH_HOME="+home, "DSH_AGENTS_HOME="+filepath.Join(home, "agents"), "DSH_PERMISSION_MODE="+input.FileMode,
 		"DSH_TELEMETRY_DISABLED=1", "ORBIT_DSH_API_KEY="+input.APIKey)
 	return DshLaunchSpec{Executable: executable, Args: args,
-		Env: env, Cwd: cwd, DshHome: home, Version: dshSupportedVersion, ConfigHash: owner.ConfigHash}, nil
+		Env: env, Cwd: cwd, DshHome: home, Version: dshSupportedVersion, ConfigHash: owner.ConfigHash, orbitSessionID: input.OrbitSessionID}, nil
 }
 
 const dshAgentPatchFile = "orbit-agent.patch.json"
@@ -328,6 +336,9 @@ export function apply(ctx, config) {
 // (runnerCacheEnv) — is denied there and reaches the cache only through an escalation, which runs
 // the whole command outside the sandbox.
 //
+// The session's uploads directory rides the same way (config.extra): Claude Code and Codex take it as a
+// working directory of their own (--add-dir), so a command writing there stays inside the sandbox too.
+//
 // This plugin wraps the sandbox seam itself (ctx.sandbox.confine) and adds the root to the
 // profile the selected platform runner already built, just before the command: a `--bind` mount
 // beside bwrap's workspace bind, a `--rw` grant beside the Landlock launcher's. Read-only mode is
@@ -338,9 +349,9 @@ const dshSandboxCacheRootPlugin = `// Orbit: the runner's shared toolchain cache
 export const name = 'orbit-sandbox-cache-root';
 export const inject = ['sandbox'];
 export function apply(ctx, config) {
-  const root = config.root;
+  const roots = [config.root, ...(Array.isArray(config.extra) ? config.extra : [])].filter((root) => typeof root === 'string' && root !== '');
   const sandbox = ctx.sandbox;
-  if (typeof root !== 'string' || root === '' || typeof sandbox?.confine !== 'function') return;
+  if (roots.length === 0 || typeof sandbox?.confine !== 'function') return;
   const confine = sandbox.confine.bind(sandbox);
   let told = false;
   sandbox.confine = async (argv, policy, signal) => {
@@ -349,11 +360,12 @@ export function apply(ctx, config) {
     const separator = wrapped.argv.indexOf('--');
     if (separator < 1) return wrapped;
     const head = wrapped.argv.slice(0, separator);
-    const extra = head.includes('--ro-bind') ? ['--bind', root, root] : head.includes('--rw') ? ['--rw', root] : undefined;
+    const extra = head.includes('--ro-bind') ? roots.flatMap((root) => ['--bind', root, root])
+      : head.includes('--rw') ? roots.flatMap((root) => ['--rw', root]) : undefined;
     if (extra === undefined) {
       if (!told) {
         told = true;
-        console.warn('orbit-sandbox-cache-root: unrecognized sandbox profile; ' + root + ' stays read-only inside it');
+        console.warn('orbit-sandbox-cache-root: unrecognized sandbox profile; ' + roots.join(', ') + ' stay read-only inside it');
       }
       return wrapped;
     }
@@ -402,8 +414,17 @@ func dshAgentOverlayPatch(home string, agent DshAgentOverlay) ([]byte, error) {
 	}
 	// The same root runnerCacheEnv points the session's toolchains at, so the confined command and
 	// the runner name one directory.
-	if err := insert("orbit-sandbox-cache-root", "sandbox-cache-root", dshSandboxCacheRootPlugin,
-		map[string]interface{}{"root": runnerCacheRoot()}); err != nil {
+	// The session's uploads directory rides beside it (extra), as Claude Code's --add-dir does.
+	rootsConfig := map[string]interface{}{"root": runnerCacheRoot()}
+	var extra []string
+	if strings.TrimSpace(agent.Uploads) != "" {
+		extra = append(extra, agent.Uploads)
+	}
+	extra = append(extra, agent.Drive...)
+	if len(extra) > 0 {
+		rootsConfig["extra"] = extra
+	}
+	if err := insert("orbit-sandbox-cache-root", "sandbox-cache-root", dshSandboxCacheRootPlugin, rootsConfig); err != nil {
 		return nil, err
 	}
 	if strings.TrimSpace(agent.AppendSystemPrompt) != "" {
@@ -419,7 +440,13 @@ func dshAgentOverlayPatch(home string, agent DshAgentOverlay) ([]byte, error) {
 // agent's own prompt, its appended prompt, then Orbit's CLI guidance.
 func dshSessionAgentOverlay(job *ClaimedSession) *DshAgentOverlay {
 	configured := strings.TrimSpace(strings.Join([]string{strings.TrimSpace(job.Agent.SystemPrompt), job.appendSystemPrompt()}, "\n\n"))
-	return &DshAgentOverlay{AppendSystemPrompt: withOrbitCLIInstructions(configured, orbitCLIExecutable(), job.insideRecordedWork(), job.watchesOn(), agentDelegates(job.Agent))}
+	overlay := &DshAgentOverlay{AppendSystemPrompt: withOrbitInstructions(configured, compose(job.sessionShape(orbitCLIExecutable()), dshProfile).System)}
+	// Created up front, as Claude Code's --add-dir is: a sandbox bind of a missing directory fails the command.
+	if upDir := uploadsDir(job.SessionID); os.MkdirAll(upDir, 0o755) == nil {
+		overlay.Uploads = upDir
+	}
+	overlay.Drive = driveGrantRoots()
+	return overlay
 }
 
 func dshConfigurationHash(fileMode string, patch []byte) string {

@@ -36,12 +36,12 @@ import test from 'node:test';
 import { BadRequestException, ForbiddenException, type HttpException } from '@nestjs/common';
 import {
   CreatorType,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
   type Prisma,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import { SESSION_CURRENT_WORK_ROUTING_V1, uuidToBase62 } from '@orbit/shared';
 import {
@@ -66,6 +66,8 @@ import { readPendingEvidenceJudgments, type PendingEvidenceJudgment } from './pe
 import { TaskCompletionEvidenceService } from './task-completion-evidence.service';
 import { TasksService } from './tasks.service';
 import '../test-support/dequeue-under-lease';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import type { SessionFixture } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const suite = URL ? test : test.skip;
@@ -138,8 +140,9 @@ suite('outside a project the dispatching session settles the evidence, and the o
     const theOwner = { type: CreatorType.USER, id: ownerId };
 
     /** A conversation of this account; with `taskId`, a run of that task. */
-    async function conversation(title: string, over: Partial<Prisma.SessionUncheckedCreateInput> = {}) {
+    async function conversation(title: string, fixture: SessionFixture = {}) {
       const id = randomUUID();
+      const { status: word = RunStatus.AWAITING_INPUT, ...over } = fixture;
       await db.session.create({
         data: {
           id,
@@ -150,12 +153,17 @@ suite('outside a project the dispatching session settles the evidence, and the o
           title,
           prompt: title,
           provider: 'claude',
-          status: RunStatus.AWAITING_INPUT,
+          turnState: turnStateOfWord(word),
           dispatchOrigin: SessionDispatchOrigin.USER,
           numTurns: 1,
           startedAt: new Date(),
           runtimeSessionId: randomUUID(),
           ...over,
+          ...(word === RunStatus.SUCCEEDED || word === RunStatus.FAILED
+            ? { finishedAt: over.finishedAt ?? new Date()}
+            : word === RunStatus.CANCELLED ? { finishedAt: over.finishedAt ?? new Date()} : {}),
+          // A failure release carries FAILED on its turn (removal step R2), which is what reads it as one since R7.
+          ...(word === RunStatus.FAILED && over.lastTurnOutcome === undefined ? { lastTurnOutcome: 'FAILED' } : {}),
         },
       });
       return id;
@@ -330,7 +338,7 @@ suite('outside a project the dispatching session settles the evidence, and the o
         assert.equal(await queuedConfirmationReviewContent(db, turn.clientTurnId), block);
 
         // What the runner's claim does: the next queued turn of the session, handed out.
-        await db.session.update({ where: { id: dispatcher }, data: { status: RunStatus.RUNNING } });
+        await db.session.update({ where: { id: dispatcher }, data: { turnState: 'IN_FLIGHT' } });
         const handed = await (runnerApi as unknown as {
           dequeueTurn(sessionId: string, runnerId: string, leaseGeneration: null): Promise<{ turnId: string; content?: string } | null>;
         }).dequeueTurn(dispatcher, runnerId, null);
@@ -438,7 +446,7 @@ suite('outside a project the dispatching session settles the evidence, and the o
       assert.equal(await waitingOn(reviewer), 0);
       assert.equal(await waitingOn(work.run), 0);
       await db.session.update({ where: { id: reviewer }, data: {
-        status: RunStatus.AWAITING_INPUT, retryAt: new Date(Date.now() + WINDOW_MS),
+        turnState: null, finishedAt: null, retryAt: new Date(Date.now() + WINDOW_MS),
       } });
       await reviews.deliverOwedTo(reviewer);
       assert.deepEqual(await deliveredTo(reviewer), [], 'scheduled retries remain untouched');
@@ -447,15 +455,15 @@ suite('outside a project the dispatching session settles the evidence, and the o
       let turns = await deliveredTo(reviewer);
       assert.equal(turns.length, 1);
       await db.conversationTurn.update({ where: { id: turns[0].id }, data: { status: 'ANSWERED' } });
-      await db.session.update({ where: { id: reviewer }, data: { status: RunStatus.FAILED } });
+      await db.session.update({ where: { id: reviewer }, data: { turnState: null, lastTurnOutcome: 'FAILED', finishedAt: new Date()} });
       assert.equal(await cardIn(reviewer, work.taskId, new Date(Date.now() + 10 * WINDOW_MS)), null);
-      await db.session.update({ where: { id: reviewer }, data: { status: RunStatus.AWAITING_INPUT } });
+      await db.session.update({ where: { id: reviewer }, data: { turnState: null, finishedAt: null} });
       await Promise.all([reviews.deliverOwedTo(reviewer), reviews.deliverOwedTo(reviewer)]);
       turns = await deliveredTo(reviewer);
       assert.equal(turns.length, 2, 'exactly one replacement for the drained unread turn');
       const replacement = turns.find((turn) => turn.status !== 'ANSWERED')!;
       assert.notEqual(replacement.clientTurnId, `${PREFIX}${revision.id}`);
-      await db.session.update({ where: { id: reviewer }, data: { status: RunStatus.PENDING } });
+      await db.session.update({ where: { id: reviewer }, data: { turnState: 'QUEUED' } });
       assert.equal(await cardIn(reviewer, work.taskId, new Date(Date.now() + 10 * WINDOW_MS)), null);
       assert.equal(await waitingOn(reviewer), 0);
       const takenAt = new Date();
@@ -474,14 +482,14 @@ suite('outside a project the dispatching session settles the evidence, and the o
       assert.equal(await reviews.deliver(ownerId, ownWork.taskId, (await latestEvidence(ownWork.taskId)).id),
         'REVIEWER_NOT_INDEPENDENT', 'the fixture is refused for independence');
       // Release the run's execution claim before making the other session live on the same task.
-      await db.session.update({ where: { id: ownWork.run }, data: { status: RunStatus.FAILED } });
-      await db.session.update({ where: { id: nonIndependent }, data: { status: RunStatus.AWAITING_INPUT } });
+      await db.session.update({ where: { id: ownWork.run }, data: { turnState: null, lastTurnOutcome: 'FAILED', finishedAt: new Date()} });
+      await db.session.update({ where: { id: nonIndependent }, data: { turnState: null, finishedAt: null} });
 
       const ended = await conversation('interrupted with a recorded end', { status: RunStatus.FAILED });
       const endedWork = await dispatched('cannot deliver after end', ended);
       await submit(endedWork, 'ready before the reviewer ended');
       await db.session.update({ where: { id: ended }, data: {
-        status: RunStatus.INTERRUPTED, completedAt: new Date(),
+        turnState: 'ABANDONED', finishedAt: null, completedAt: new Date(),
       } });
       assert.equal(await reviews.deliver(ownerId, endedWork.taskId, (await latestEvidence(endedWork.taskId)).id),
         'REVIEWER_ENDED', 'the interrupted fixture has an actual end');
@@ -506,7 +514,7 @@ suite('outside a project the dispatching session settles the evidence, and the o
         const ended = await dispatched('reconcile the ledger', reviewer);
         await submit(ended, 'reconciled');
         assert.equal(await cardIn(reviewer, ended.taskId), null, 'held while it is open');
-        await db.session.update({ where: { id: reviewer }, data: { status: RunStatus.SUCCEEDED, completedAt: new Date() } });
+        await db.session.update({ where: { id: reviewer }, data: { turnState: null, finishedAt: new Date(), completedAt: new Date() } });
         const card = await cardIn(reviewer, ended.taskId);
         assert.ok(card, 'its end hands the card to the owner at once, without the window');
         assert.equal(await waitingOn(reviewer), 0, 'completed conversations have no open-session badge');
@@ -514,7 +522,7 @@ suite('outside a project the dispatching session settles the evidence, and the o
         // Ended before the revision arrives: nothing is delivered, and the owner is asked at once.
         const gone = await conversation('files work and is completed', {});
         const unheld = await dispatched('close the books', gone);
-        await db.session.update({ where: { id: gone }, data: { status: RunStatus.SUCCEEDED, completedAt: new Date() } });
+        await db.session.update({ where: { id: gone }, data: { turnState: null, finishedAt: new Date(), completedAt: new Date() } });
         const turnsBefore = await db.conversationTurn.count({ where: { sessionId: gone } });
         await submit(unheld, 'closed');
         assert.equal(await db.conversationTurn.count({ where: { sessionId: gone } }), turnsBefore,
@@ -564,7 +572,8 @@ suite('outside a project the dispatching session settles the evidence, and the o
         const work = await dispatched(`send-back run ${outage}`, reviewer);
         await submit(work, 'Ready.');
         await db.session.update({ where: { id: work.run }, data: {
-          status: outage === 'FAILED' ? RunStatus.FAILED : outage === 'PENDING' ? RunStatus.PENDING : RunStatus.AWAITING_INPUT,
+          turnState: turnStateOfWord(outage === 'FAILED' ? RunStatus.FAILED : outage === 'PENDING' ? RunStatus.PENDING : RunStatus.AWAITING_INPUT),
+          ...(outage === 'FAILED' ? { finishedAt: new Date(), lastTurnOutcome: 'FAILED' } : {}),
           retryAt: outage === 'RETRY' ? new Date(Date.now() + 3_600_000) : null,
           completedAt: outage === 'ENDED' ? new Date() : null,
         } });
@@ -585,7 +594,7 @@ suite('outside a project the dispatching session settles the evidence, and the o
         const retry = (await db.session.findUniqueOrThrow({ where: { id: work.run } })).retryAt;
         if (outage === 'RETRY') assert.ok(retry, 'delivery preserves the retry');
         if (outage === 'FAILED' || outage === 'RETRY') assert.equal((await notices()).length, 0);
-        await db.session.update({ where: { id: work.run }, data: { status: RunStatus.AWAITING_INPUT, retryAt: null } });
+        await db.session.update({ where: { id: work.run }, data: { turnState: null, finishedAt: null, retryAt: null } });
         await Promise.all([reviews.deliverSendBacksOwedTo(work.run), reviews.deliverSendBacksOwedTo()]);
         const [first] = await notices();
         assert.equal((await notices()).length, 1);

@@ -108,3 +108,29 @@ func TestBranchCommitsWireField(t *testing.T) {
 		}
 	}
 }
+
+// Bringing the target into the branch is no step of the session's work: neither the merge nor what it brought in is listed.
+func TestBranchCommitsLeaveOutMergesOfTheTarget(t *testing.T) {
+	repo := initRepo(t)
+	base := mustGit(t, repo, "rev-parse", "HEAD")
+	mustGit(t, repo, "checkout", "-b", "orbit/s2")
+	if err := os.WriteFile(filepath.Join(repo, "mine.txt"), []byte("mine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, repo, "add", "-A")
+	mustGit(t, repo, "commit", "-m", "feat: my step")
+	mustGit(t, repo, "checkout", "main")
+	if err := os.WriteFile(filepath.Join(repo, "theirs.txt"), []byte("theirs\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, repo, "add", "-A")
+	mustGit(t, repo, "commit", "-m", "feat: on main meanwhile")
+	mustGit(t, repo, "checkout", "orbit/s2")
+	mustGit(t, repo, "merge", "--no-edit", "--no-ff", "main")
+	tip := mustGit(t, repo, "rev-parse", "HEAD")
+
+	got := branchCommitsBetween(repo, base, tip)
+	if len(got) != 1 || got[0].Subject != "feat: my step" {
+		t.Fatalf("want only the session's own commit, got %+v", got)
+	}
+}

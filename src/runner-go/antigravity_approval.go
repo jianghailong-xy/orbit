@@ -92,16 +92,21 @@ func antigravityAsksForApproval(mode string) bool {
 // had them when it started this agy. Written next to hooks.json, and named there with its SHA-256,
 // so the hook refuses everything if the file is not the one the runner wrote.
 type agyApprovalPolicy struct {
-	SessionID       string   `json:"sessionId"`
-	Mode            string   `json:"mode"`
-	Workspace       string   `json:"workspace"`
-	Uploads         string   `json:"uploads,omitempty"`
+	SessionID string `json:"sessionId"`
+	Mode      string `json:"mode"`
+	Workspace string `json:"workspace"`
+	Uploads   string `json:"uploads,omitempty"`
+	// Drive is the drive's roots, empty when none is mounted: a working directory like Uploads.
+	Drive           []string `json:"drive,omitempty"`
 	GeminiDir       string   `json:"geminiDir"`
 	AllowedTools    []string `json:"allowedTools,omitempty"`
 	DisallowedTools []string `json:"disallowedTools,omitempty"`
 	AnswerWithinMs  int64    `json:"answerWithinMs"`
 	// SubagentRunID is set when this agy runs as a SubAgent: its cards name the run (subagentApprovalBody).
 	SubagentRunID string `json:"subagentRunId,omitempty"`
+	// ReadonlyParentMode is set when this agy runs as a read-only SubAgent: the parent session's mode when it
+	// started, which answers what the hook does not refuse (readonlySubagentAnswer's table). Its writes are refused.
+	ReadonlyParentMode string `json:"readonlyParentMode,omitempty"`
 }
 
 // agyHookInput is the PreToolUse payload agy writes on the hook's stdin (contract §5.4). Unlike the
@@ -171,6 +176,9 @@ func decideAntigravityToolCall(policy *agyApprovalPolicy, in *agyHookInput) agyA
 			return agyApprovalVerdict{"deny", "A permission rule of this workspace denies " + name + " (" + strings.TrimSpace(rule) + ")."}
 		}
 	}
+	if policy.ReadonlyParentMode != "" && writes && !(artifacts != "" && pathWithin(target, artifacts)) {
+		return agyApprovalVerdict{"deny", "This is a read-only SubAgent: it does not write files."}
+	}
 	if agyOrbitMCPCall(raw, args) {
 		return agyApprovalVerdict{"allow", ""}
 	}
@@ -195,7 +203,7 @@ func decideAntigravityToolCall(policy *agyApprovalPolicy, in *agyHookInput) agyA
 		// agy reads its workspace without asking in its own default mode (contract §5.3); the
 		// session's uploads and the conversation's artifacts are where Orbit and agy put files for it.
 		path := firstString(args, "AbsolutePath", "Path")
-		if pathWithin(path, policy.Workspace) || pathWithin(path, policy.Uploads) || pathWithin(path, artifacts) {
+		if pathWithin(path, policy.Workspace) || pathWithin(path, policy.Uploads) || policy.inDrive(path) || pathWithin(path, artifacts) {
 			return agyApprovalVerdict{"allow", ""}
 		}
 	}
@@ -203,11 +211,22 @@ func decideAntigravityToolCall(policy *agyApprovalPolicy, in *agyHookInput) agyA
 		// agy writes its own artifacts — plans, task lists — without asking, in every mode (measured
 		// on 1.2.16); Accept Edits adds the workspace's files, except agy's own configuration there:
 		// a .agents/hooks.json written into the checkout is loaded from the next turn on, and its
-		// command runs before every tool call (measured on 1.2.16).
+		// command runs before every tool call (measured on 1.2.16). It adds the session's uploads too,
+		// which Claude Code and Codex take as a working directory of their own (--add-dir).
+		inSession := pathWithin(target, policy.Workspace) || pathWithin(target, policy.Uploads) || policy.inDrive(target)
 		if pathWithin(target, artifacts) ||
-			(policy.Mode == "acceptEdits" && pathWithin(target, policy.Workspace) && !agyConfigPath(target)) {
+			(policy.Mode == "acceptEdits" && inSession && !agyConfigPath(target)) {
 			return agyApprovalVerdict{"allow", ""}
 		}
+	}
+	switch policy.ReadonlyParentMode {
+	case "":
+	case "auto", "bypassPermissions":
+		return agyApprovalVerdict{"allow", ""}
+	case "dontAsk":
+		return agyApprovalVerdict{"deny", "The parent session's permission mode does not ask for approval, and nothing approved " + name + "."}
+	default:
+		return agyApprovalVerdict{"ask", ""}
 	}
 	if antigravityAsksForApproval(policy.Mode) {
 		return agyApprovalVerdict{"ask", ""}
@@ -368,6 +387,19 @@ func shellWords(line string) []string {
 		}
 		return false
 	})
+}
+
+// inDrive is whether path is in one of the drive's roots the policy was written with.
+func (p agyApprovalPolicy) inDrive(path string) bool { return pathWithinAny(path, p.Drive) }
+
+// pathWithinAny is whether path is within any of roots.
+func pathWithinAny(path string, roots []string) bool {
+	for _, root := range roots {
+		if pathWithin(path, root) {
+			return true
+		}
+	}
+	return false
 }
 
 // pathWithin is whether path names root or something under it, once both are resolved. A path that
@@ -595,11 +627,15 @@ func installAntigravityApprovalGate(ctx context.Context, job *ClaimedSession, ex
 		Mode:            strings.TrimSpace(job.Agent.PermissionMode),
 		Workspace:       execDir,
 		Uploads:         uploadsDir(job.SessionID),
+		Drive:           driveGrantRoots(),
 		GeminiDir:       geminiDir,
 		AllowedTools:    job.Agent.AllowedTools,
 		DisallowedTools: job.Agent.DisallowedTools,
 		AnswerWithinMs:  agyApprovalAnswerWithin(timeout).Milliseconds(),
 		SubagentRunID:   strings.TrimSpace(job.Agent.Env[envSubagentRunID]),
+	}
+	if job.readonlySubagent && job.readonlyParentMode != nil {
+		policy.ReadonlyParentMode = firstNonEmpty(job.readonlyParentMode(), "default")
 	}
 	body, err := json.MarshalIndent(policy, "", "  ")
 	if err != nil {

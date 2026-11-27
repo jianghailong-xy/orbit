@@ -1,0 +1,113 @@
+{
+  "name": "orbit.session-state",
+  "contractVersion": 1,
+  "doc": "docs/session-three-state-design.md",
+  "notes": [
+    "Plan step 5.1 (docs/session-three-state-plan.md section 8): every session payload kind carries the four fields below beside the legacy ones, which are sent unchanged.",
+    "The server decides each field in one place, src/apiserver/src/sessions/session-phase.ts. A client never rebuilds one from the legacy fields, from error or from the columns around them.",
+    "The value lists can grow. A client that reads one must read a value it does not know as absent. An older control plane omits all four.",
+    "Plan phase 5 (task 3524P71UOtTybEh6cnmZt): endReason and workFinished join the four on every kind, so a client words a released session (Finished, Failed, Ended) from these fields alone. Before it, the session.created/session.updated summary, the guest row and the shared header sent no endReason, and no kind sent workFinished. No kind sends a release cause.",
+    "Task 353YrK2AEGTm6mfl8GrW9: search hits (GET /sessions/search) join the kinds with all six fields, and every kind carries the Background mark's two inputs (backgroundFields) under the list row's own expressions. Before it, search hits sent none of the six, and the detail, session.created/session.updated/session.ended, the task's sessions[] and search sent neither input; the guest row and the shared header sent activity without runningBgCount.",
+    "Task T13 (docs/session-status-retirement-plan.md section 2.6): each vector's given states the stored facts (finishedAt, turnState, startedAt, endReason, lastTurnOutcome and the execution facts; \"set\" is a timestamp), not a status word. turnState is QUEUED, IN_FLIGHT, ABANDONED or null. What a payload carries is unchanged, legacy fields included."
+  ],
+  "fields": {
+    "phase": {
+      "type": "enum",
+      "nullable": false,
+      "values": ["PENDING", "RUNNING", "IDLE"],
+      "sharedConstant": "SESSION_PHASES",
+      "decidedBy": "deriveSessionPhase",
+      "meaning": {
+        "RUNNING": "something executes for the session: a dispatched turn, the engine's own turn, a sub-agent or a background job",
+        "PENDING": "nothing executes, and a turn is queued or an armed retry will re-send it, held or released (the owner, 2026-11-26: waiting for retry is PENDING)",
+        "IDLE": "neither; a released session is IDLE unless an armed retry will re-send it"
+      }
+    },
+    "released": {
+      "type": "boolean",
+      "nullable": false,
+      "decidedBy": "isReleased",
+      "meaning": "no runner holds the session (session.finished_at is set); the next message must be claimed again"
+    },
+    "lastTurnOutcome": {
+      "type": "enum",
+      "nullable": true,
+      "values": ["ANSWERED", "FAILED", "INTERRUPTED", "CANCELLED"],
+      "sharedConstant": "SESSION_TURN_OUTCOMES",
+      "decidedBy": "session.last_turn_outcome",
+      "meaning": "how the last turn ended; null before any turn recorded one"
+    },
+    "waitingOn": {
+      "type": "enum",
+      "nullable": true,
+      "values": ["PERSON", "HOLD", "WAKE"],
+      "sharedConstant": "SESSION_WAITING_ON",
+      "decidedBy": "deriveSessionWaitingOn",
+      "order": [
+        "PERSON when pendingApprovals is above zero (live approval cards plus owner decisions), in any phase",
+        "null when phase is RUNNING",
+        "WAKE when phase is PENDING and no turn is queued: an armed retry will re-send it",
+        "HOLD when phase is PENDING with a turn queued and the dispatch pause is on, its runner is unassigned, offline or updating, or the row carries a hold notice (src/apiserver/src/queue/hold-notice.ts)",
+        "WAKE when phase is IDLE and a RESUME_SESSION watch or a PENDING scheduled wake-up will give it a turn (an armed retry makes it PENDING, above); a released session only by a PENDING scheduled wake-up on a release by a failure still filed in Open (a watch never revives a released session)",
+        "null otherwise: a parked conversation that asked for nothing, a released session nothing revives (a watch or a wake-up left on an end that was asked for among them), and an IDLE session waiting only on a session request it sent or an ask_owner question"
+      ],
+      "ruledBy": "the coordinator, 2026-11-22 (task 5.1)"
+    },
+    "endReason": {
+      "type": "string",
+      "nullable": true,
+      "values": ["task_done", "task_cancelled", "ended", "completed", "deleted", "cancelled", "idle", "orphaned"],
+      "sharedConstant": "SessionEndReason, LEGACY_END_REASONS",
+      "decidedBy": "session.end_reason",
+      "meaning": "why an end was asked for, as stored; null when none was. idle and orphaned have no writer left. session.ended sends the reason the end settled with"
+    },
+    "workFinished": {
+      "type": "boolean",
+      "nullable": false,
+      "decidedBy": "releaseFinishedTheWork",
+      "meaning": "released having finished its work: endReason task_done, or a landing container that settled (released with no endReason). A client words Finished from this, never from the session kind"
+    }
+  },
+  "backgroundFields": {
+    "activity": {
+      "type": "enum",
+      "nullable": true,
+      "values": ["TURN", "BACKGROUND_JOB", "WAITING"],
+      "sharedType": "SessionActivity",
+      "decidedBy": "sessionActivitySql",
+      "meaning": "what the session is doing beyond its status: a turn, a runner-hosted job it waits for, or a wake it waits for; null when none of them holds"
+    },
+    "runningBgCount": {
+      "type": "integer",
+      "nullable": false,
+      "decidedBy": "cardinality(session.running_bg_shells)",
+      "meaning": "the runner-hosted jobs and shells still running for the session"
+    }
+  },
+  "legacyFields": ["status", "runStatus", "runState", "sessionState", "filingState"],
+  "payloads": {
+    "listRow": { "route": "GET /sessions", "sharedType": null, "fields": ["phase", "released", "lastTurnOutcome", "waitingOn", "endReason", "workFinished"], "background": ["activity", "runningBgCount"] },
+    "detail": { "route": "GET /sessions/:id", "sharedType": null, "fields": ["phase", "released", "lastTurnOutcome", "waitingOn", "endReason", "workFinished"], "background": ["activity", "runningBgCount"] },
+    "sessionSummary": { "event": "session.created, session.updated", "sharedType": "ControlSessionSummary", "fields": ["phase", "released", "lastTurnOutcome", "waitingOn", "endReason", "workFinished"], "background": ["activity", "runningBgCount"] },
+    "sessionEnded": { "event": "session.ended", "sharedType": "ControlSessionEnded", "fields": ["phase", "released", "lastTurnOutcome", "waitingOn", "endReason", "workFinished"], "background": ["activity", "runningBgCount"] },
+    "linkPreview": { "route": "POST /link-previews", "sharedType": "LinkPreviewSession", "fields": ["phase", "released", "lastTurnOutcome", "waitingOn", "endReason", "workFinished"], "background": ["activity", "runningBgCount"] },
+    "guestRow": { "route": "GET /guest-sessions", "sharedType": "GuestSessionSummary", "fields": ["phase", "released", "lastTurnOutcome", "waitingOn", "endReason", "workFinished"], "background": ["activity", "runningBgCount"] },
+    "sharedHead": { "route": "GET /shared/:token, the guest page root", "sharedType": null, "fields": ["phase", "released", "lastTurnOutcome", "waitingOn", "endReason", "workFinished"], "background": ["activity", "runningBgCount"] },
+    "taskRun": { "route": "GET /tasks/:id, each run in sessions[]", "sharedType": null, "fields": ["phase", "released", "lastTurnOutcome", "waitingOn", "endReason", "workFinished"], "background": ["activity", "runningBgCount"] },
+    "searchHit": { "route": "GET /sessions/search, each of hits[]", "sharedType": "SessionSearchHit", "fields": ["phase", "released", "lastTurnOutcome", "waitingOn", "endReason", "workFinished"], "background": ["activity", "runningBgCount"] }
+  },
+  "vectors": [
+    { "id": "PENDING", "given": { "finishedAt": null, "turnState": "QUEUED" }, "expect": { "phase": "PENDING", "released": false, "lastTurnOutcome": null, "waitingOn": null, "endReason": null, "workFinished": false } },
+    { "id": "RUNNING", "given": { "finishedAt": null, "turnState": "IN_FLIGHT" }, "expect": { "phase": "RUNNING", "released": false, "lastTurnOutcome": null, "waitingOn": null, "endReason": null, "workFinished": false } },
+    { "id": "AWAITING_INPUT", "given": { "finishedAt": null, "turnState": null, "lastTurnOutcome": "ANSWERED" }, "expect": { "phase": "IDLE", "released": false, "lastTurnOutcome": "ANSWERED", "waitingOn": null, "endReason": null, "workFinished": false } },
+    { "id": "INTERRUPTED", "given": { "finishedAt": null, "turnState": "ABANDONED", "lastTurnOutcome": "INTERRUPTED" }, "expect": { "phase": "IDLE", "released": false, "lastTurnOutcome": "INTERRUPTED", "waitingOn": null, "endReason": null, "workFinished": false } },
+    { "id": "SUCCEEDED", "given": { "finishedAt": "set", "startedAt": "set", "endReason": "task_done", "lastTurnOutcome": "ANSWERED" }, "expect": { "phase": "IDLE", "released": true, "lastTurnOutcome": "ANSWERED", "waitingOn": null, "endReason": "task_done", "workFinished": true } },
+    { "id": "FAILED", "given": { "finishedAt": "set", "lastTurnOutcome": "FAILED" }, "expect": { "phase": "IDLE", "released": true, "lastTurnOutcome": "FAILED", "waitingOn": null, "endReason": null, "workFinished": false } },
+    { "id": "CANCELLED", "given": { "finishedAt": "set", "endReason": "ended", "lastTurnOutcome": "ANSWERED" }, "expect": { "phase": "IDLE", "released": true, "lastTurnOutcome": "ANSWERED", "waitingOn": null, "endReason": "ended", "workFinished": false } },
+    { "id": "job running", "given": { "finishedAt": null, "turnState": null, "runningBgJobs": ["bgj_fixture"], "lastTurnOutcome": "ANSWERED" }, "expect": { "phase": "RUNNING", "released": false, "lastTurnOutcome": "ANSWERED", "waitingOn": null, "endReason": null, "workFinished": false } },
+    { "id": "waiting on an approval", "given": { "finishedAt": null, "turnState": "IN_FLIGHT", "pendingApprovals": 1 }, "expect": { "phase": "RUNNING", "released": false, "lastTurnOutcome": null, "waitingOn": "PERSON", "endReason": null, "workFinished": false } },
+    { "id": "watch armed", "given": { "finishedAt": null, "turnState": null, "resumeWatch": true, "lastTurnOutcome": "ANSWERED" }, "expect": { "phase": "IDLE", "released": false, "lastTurnOutcome": "ANSWERED", "waitingOn": "WAKE", "endReason": null, "workFinished": false } },
+    { "id": "paused account", "given": { "finishedAt": null, "turnState": "QUEUED", "error": "Account paused until 2099-01-01T00:00:00.000Z", "lastTurnOutcome": "ANSWERED" }, "expect": { "phase": "PENDING", "released": false, "lastTurnOutcome": "ANSWERED", "waitingOn": "HOLD", "endReason": null, "workFinished": false } },
+    { "id": "settled landing", "given": { "finishedAt": "set", "sessionKind": "LANDING", "landingSettledAs": "LANDED", "lastTurnOutcome": "ANSWERED" }, "expect": { "phase": "IDLE", "released": true, "lastTurnOutcome": "ANSWERED", "waitingOn": null, "endReason": null, "workFinished": true } }
+  ]
+}

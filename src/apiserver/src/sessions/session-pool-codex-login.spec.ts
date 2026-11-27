@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { SessionsService } from './sessions.service';
 import { noSessionRequests } from '../test-support/prisma-transaction-double';
+import { isSessionPhaseFactsQuery, noAnswersOwed, sessionPhaseFactsAnswer } from '../test-support/session-phase-facts';
 
 const NOW = new Date();
 const ACCOUNT = 'acct-RawOpenAiId-XYZZ';
@@ -98,7 +99,10 @@ function sessionRow(over: Record<string, unknown> = {}) {
  *  way the database would — only for THIS session's account and pool, never for another's. */
 function service(answer: ReturnType<typeof loginRow> | null, over: Record<string, unknown> = {}) {
   const prisma = {
-    $queryRaw: async () => [{ projectMembership: null }],
+    $queryRaw: async (query: unknown) => (isSessionPhaseFactsQuery(query)
+      ? sessionPhaseFactsAnswer(query, { [sessionRow(over).id]: sessionRow(over) })
+      : [{ projectMembership: null }]),
+    ...noAnswersOwed(),
     session: {
       findFirst: async () => sessionRow(over),
       findMany: async () => [],

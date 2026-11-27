@@ -415,6 +415,15 @@ private struct CompactSections: View {
             // and the line a rewrite floats (docs/wiki-chat-design.md §9).
             .wikiChatHost()
 
+        // DOCUMENTS — the drive's top level → a folder, a file's page, its earlier versions, Trash or Storage
+        // (docs/mocks/drive, 01-ios). The path is the section's stack, like every section here.
+        case .drive:
+            NavigationStack(path: $model.nav.path) {
+                DriveFolderPage(folderID: nil, name: DriveLogic.title)
+                    .drawerToggle(open: openDrawer)
+                    .navigationDestination(for: NavNode.self) { node in DriveDestination(node: node) }
+            }
+
         // SCHEDULED — the timeline and its bottom panel.
         case .scheduled:
             NavigationStack {
@@ -771,13 +780,13 @@ struct NavigationDrawer: View {
                     // Scheduled (board 01 ①): account-wide, here and nowhere in a workspace's list; away while
                     // the server predates scheduled tasks.
                     scheduled: model.scheduled.map { !$0.unsupported } ?? false,
-                    waitingOnYou: model.ownerRequests.map { !$0.unsupported } ?? false)) { row in
+                    // Documents under the Wiki, no count (documents board 01-ios ①), only while the server has it on.
+                    drive: model.drive?.shown == true)) { row in
                     switch row {
                     case .projects:       projectsRow
                     case .wiki:           wikiRow
                     case .scheduled:      scheduledRow
                     case .section(let section): sectionRow(section)
-                    case .waitingOnYou:   waitingOnYouRow(model.ownerRequests)
                     case .workspacesHeader: workspacesHeader
                     case .agents:         agentsRows
                     case .openProjects:   projectRows
@@ -805,6 +814,8 @@ struct NavigationDrawer: View {
             .task { await model.wiki?.loadSpaces() }
             // Scheduled's number — the schedules failing or held — read with the drawer like the others.
             .task { await model.scheduled?.load() }
+            // Whether the Drive row is drawn is the capabilities read's answer (`DriveLogic.shown`).
+            .task { await model.drive?.loadCapabilities() }
             // Shared with me, the rail's last group: read with the drawer, then every minute.
             .task { await model.followSharedWithMe() }
             // The action bar *floats over* the rail (ChatGPT-style) rather than being docked below a
@@ -1056,38 +1067,6 @@ struct NavigationDrawer: View {
     /// Projects row writes and says its own, and nothing at all at zero. Opening the Wiki never clears
     /// it: only answering what waits does. Selected whenever the Wiki is what is showing, since the
     /// drawer has no rows below it for the Wiki's pages.
-    /// "Waiting on you": a sheet rather than a page, so a push's action can raise it over anything.
-    @ViewBuilder
-    private func waitingOnYouRow(_ requests: OwnerRequestsModel?) -> some View {
-        if let requests {
-            waitingOnYouButton(requests)
-        }
-    }
-
-    private func waitingOnYouButton(_ requests: OwnerRequestsModel) -> some View {
-        let waiting = requests.waitingCount
-        return Button {
-            requests.tab = .open
-            requests.inboxPresented = true
-        } label: {
-            pill(selected: false) {
-                HStack(spacing: 12) {
-                    Image(systemName: "hand.raised").frame(width: 24).foregroundStyle(.primary)
-                    Text(OwnerRequests.waitingOnYou).foregroundStyle(.primary)
-                    Spacer(minLength: 0)
-                    if waiting > 0 {
-                        Text("\(waiting)")
-                            .font(.orbitMeta.weight(.semibold))
-                            .foregroundStyle(.orange)
-                    }
-                }
-            }
-        }
-        .buttonStyle(.plain)
-        .drawerRow()
-        .accessibilityIdentifier("owner-request-inbox-entry")
-    }
-
     private var wikiRow: some View {
         let selected = model.drawerDestination == .section(.wiki)
         let waiting = model.wiki?.waiting ?? 0
@@ -1155,12 +1134,22 @@ struct NavigationDrawer: View {
             Divider()
                 .padding(.leading, DrawerMetrics.textLeading)
                 .padding(.trailing, DrawerMetrics.hInset)
-            Text(AppSection.agents.title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .padding(.leading, DrawerMetrics.textLeading)
-                .padding(.top, 14)
-                .padding(.bottom, 4)
+            // New workspace on any machine (docs/mocks/new-workspace-form/02-apple-entry, owner A): the + at the
+            // group's trailing edge, a menu of machines or the one machine's page.
+            HStack(spacing: 8) {
+                Text(AppSection.agents.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                NewWorkspaceButton(machines: model.agents?.newWorkspaceMachines ?? []) { runnerID in
+                    model.openNewWorkspace(runnerID)
+                    close()
+                }
+            }
+            .padding(.leading, DrawerMetrics.textLeading)
+            .padding(.trailing, DrawerMetrics.textLeading - 4)
+            .padding(.top, 14)
+            .padding(.bottom, 4)
         }
         .padding(.top, 8)
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -4,7 +4,8 @@ import test from 'node:test';
 
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { CreatorType, Prisma, PrismaClient, RunStatus, RunnerStatus, TaskStatus } from '@prisma/client';
+import { CreatorType, Prisma, PrismaClient, RunnerStatus, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType } from '@orbit/shared';
 
 import { modelRoutingEnabled } from '../common/model-routing-switch';
@@ -35,11 +36,11 @@ import '../test-support/dequeue-under-lease';
  * Off — written as false — and routing is as if it did not exist: a
  * fresh run, single or bulk, records no Route Decision, its frozen target routes nothing, and its
  * Session is what it was before routing (the task's pins, the runtime default, the Agent's effort),
- * whatever tier the task suggests and whatever its Agent's own switch says; the sweep's quota gate
+ * whatever tier the task suggests and whatever its Agent's old switch stores; the sweep's quota gate
  * judges the engine the run's pins give it, and plans no route to find out; a coordinator's standing
- * instructions say nothing about suggesting a tier. On, and everything is as before: a shadow
- * decision when the Agent's switch is off, a routed run when it is on, the gate judging the routed
- * engine, the coordinator asked for a tier. Flipping it is read by every door at once — the opening
+ * instructions say nothing about suggesting a tier. On, and every task run on every Agent is routed
+ * and a decided tier applied — there is no per-Agent switch any more (owner, 2026-11-20; the column is
+ * stored but not read) — the gate judging the routed engine, the coordinator asked for a tier. Flipping it is read by every door at once — the opening
  * a coordinator is created with, the check that the opening is still current, and the delivery key
  * that re-sends the instructions on the coordinator's next turn.
  *
@@ -83,7 +84,7 @@ const TIERS: Record<string, { model: string; effort: string }> = {
   XL: { model: OPUS, effort: 'max' },
 };
 /** A claude-pinned task's run with no routing: the pin, the runtime default the claim resolves
- *  (model null), and the Agent's effort — what the shadow decision records as its baseline. */
+ *  (model null), and the Agent's effort — what a decision records as its baseline. */
 const UNROUTED = { provider: 'claude', model: null, effort: AGENT_EFFORT };
 const BASELINE = {
   // The task pins only the provider, so its engine is the one that provider runs on by default.
@@ -152,8 +153,8 @@ interface Fixture {
 /**
  * An owner, a runner reporting Claude (Opus, Sonnet) and Codex — both signed in — and its Agent with
  * an effort of its own. `account` is the account's switch as written on its row: absent — which
- * reads on — unless a case writes it. `agent` turns the Agent's own switch on through the owner's door, with `allowed`
- * the engines list it stores, which routing no longer reads. `started` makes the project one the sweep starts tasks in.
+ * reads on — unless a case writes it. `agent` writes the Agent's old switch through the owner's door, with `allowed`
+ * the engines list it stores: routing reads neither any more (owner, 2026-11-20). `started` makes the project one the sweep starts tasks in.
  */
 async function fixture(
   services: Services,
@@ -295,7 +296,7 @@ async function assertNotRouted(
   expected: { provider: string; model: string | null; effort: string | null },
   hint: string | null,
 ) {
-  assert.equal((await decisionsOf(db, taskId)).length, 0, 'no Route Decision is recorded, shadow or not');
+  assert.equal((await decisionsOf(db, taskId)).length, 0, 'no Route Decision is recorded');
   assert.equal(frozen.route ?? null, null, 'the frozen target routes nothing');
   assert.equal(frozen.effort, null, 'and names no effort, as before routing');
   const session = await sessionOf(db, sessionId);
@@ -389,7 +390,7 @@ test('off when turned off: a single and a bulk Run record no decision and run ex
       assert.equal(await db.taskRouteDecision.count({ where: { ownerId: target.ownerId } }), 0);
 
       // Never touched — no `modelRouting` key on the row at all — is on, not off: a Run records a decision
-      // (a shadow one, as this Agent's own switch is off) and its Session is still the baseline.
+      // and is created on it, though this Agent's old switch is off.
       const neverTarget = await fixture(services, 'never-written');
       assert.deepEqual(
         (await db.user.findUniqueOrThrow({ where: { id: neverTarget.ownerId }, select: { preferences: true } })).preferences,
@@ -402,21 +403,21 @@ test('off when turned off: a single and a bulk Run record no decision and run ex
       assert.equal(moreRows.length, 0);
       assert.deepEqual(
         { applied: neverRow.applied, level: neverRow.level, sessionId: neverRow.sessionId },
-        { applied: false, level: 'S', sessionId: neverRun.sessionId },
+        { applied: true, level: 'S', sessionId: neverRun.sessionId },
       );
-      assert.deepEqual(await sessionOf(db, neverRun.sessionId), UNROUTED);
+      assert.deepEqual(await sessionOf(db, neverRun.sessionId), { provider: 'claude', model: SONNET, effort: 'low' });
     } finally {
       await services.db.$disconnect();
     }
   });
 
-test('the Agent\'s own switch on, the account\'s off: a Run is not routed — not to the tier, not to another engine',
+test('the Agent\'s old switch stored on, the account\'s off: a Run is not routed — not to the tier, not to another engine',
   { skip, timeout: 120_000 }, async () => {
     assertCoordinatorPgUrlIsIsolated(URL!);
     const services = connect();
     try {
       const { db } = services;
-      // The Agent has smart selection on; claude is at 95% of its week, so a route would move an
+      // The Agent's old switch is stored on (no longer read); claude is at 95% of its week, so a route would move an
       // unpinned run to codex. The account turned the feature off.
       const target = await fixture(services, 'agent-on', { account: false, agent: true, allowed: ['codex'], planUsage: quota(95) });
       assert.equal(await accountSwitch(db, target.ownerId), false);
@@ -434,7 +435,7 @@ test('the Agent\'s own switch on, the account\'s off: a Run is not routed — no
       assert.deepEqual(dispatchedBy(unpinnedReceipt.target), { provider: null, model: null, effort: null });
       await assertNotRouted(db, unpinned, unpinnedRun.sessionId, unpinnedReceipt.target, UNROUTED, 'M');
 
-      // Nothing was cleared: the Agent's switch and engines are where the owner put them.
+      // Nothing was cleared: the Agent's stored switch and engines are where the owner put them.
       assert.deepEqual(
         await db.workspace.findUniqueOrThrow({
           where: { id: target.agentId }, select: { modelRouting: true, modelRoutingProviders: true },
@@ -452,7 +453,7 @@ test('the sweep plans no route while the account switch is off: its quota gate j
     const services = connect();
     try {
       const { db } = services;
-      // Claude's week is spent; codex has room; the Agent's switch is on; the account's is off. Both tasks are
+      // Claude's week is spent; codex has room; the Agent's old switch is stored on; the account's is off. Both tasks are
       // unpinned, so routing would move them to codex — and without it they would run on claude, the
       // Agent's seed. One is reached by each of the sweep's two scans: READY on a prerequisite, and
       // a started project's task that depends on nothing.
@@ -509,7 +510,7 @@ test('an automatic re-run is held by the engine its pins give it while the accou
 
       // Run 1 stopped at claude's weekly limit, which the runner now reports spent until RESETS.
       await db.session.update({
-        where: { id: run1.id }, data: { status: RunStatus.FAILED, error: WEEKLY_LIMIT, finishedAt: new Date() },
+        where: { id: run1.id }, data: { turnState: null, lastTurnOutcome: 'FAILED', error: WEEKLY_LIMIT, finishedAt: new Date() },
       });
       await db.runner.update({
         where: { id: target.runnerId },
@@ -568,7 +569,7 @@ async function startEngine(services: Services, target: Fixture, sessionId: strin
   const { db, api } = services;
   const engine = { sessionId, leaseOwner: randomUUID(), generation: randomUUID() };
   const session = await claimWrite(db, sessionId, {
-    assignedRunnerId: target.runnerId, status: RunStatus.RUNNING, inboxLeaseOwner: engine.leaseOwner,
+    assignedRunnerId: target.runnerId, turnState: 'IN_FLIGHT', inboxLeaseOwner: engine.leaseOwner,
   });
   assert.equal(session.provider, 'claude', 'a claude engine: the runtime the declared capability is for');
   await queueTurn(db, sessionId, session.prompt, `initial-${sessionId}`);
@@ -604,7 +605,7 @@ async function queueTurn(db: PrismaClient, sessionId: string, content: string, c
 async function turn(services: Services, target: Fixture, engine: Engine): Promise<string> {
   const { db, api } = services;
   // The claim's part: the session is running again.
-  await claimWrite(db, engine.sessionId, { status: RunStatus.RUNNING });
+  await claimWrite(db, engine.sessionId, { turnState: 'IN_FLIGHT'});
   const handed = await (api as unknown as {
     dequeueTurn(
       sessionId: string, runnerId: string, leaseGeneration: string, acceptsSteer: boolean, declared: string[],
@@ -726,7 +727,7 @@ test('a coordinator is asked for a tier only while the account switch is on; fli
     }
   });
 
-test('on: a Run is decided in shadow while the Agent\'s switch is off and routed when it is on; off again restores the baseline',
+test('on: every Run is routed and applied whatever the Agent\'s old switch stores; off again restores the baseline',
   { skip, timeout: 120_000 }, async () => {
     assertCoordinatorPgUrlIsIsolated(URL!);
     const services = connect();
@@ -743,24 +744,24 @@ test('on: a Run is decided in shadow while the Agent\'s switch is off and routed
       assert.equal(preferences.modelRouting, true);
       assert.equal(await accountSwitch(db, target.ownerId), true);
 
-      // The Agent's switch off: one shadow decision, and the Session is its baseline — the very run
-      // an account with the switch off gets.
-      const shadowTask = await taskIn(db, target);
-      const shadow = await runNow(services, target, shadowTask);
-      const [row, ...more] = await decisionsOf(db, shadowTask);
+      // The Agent's old switch off (its default): routed and applied all the same — the Session is on
+      // the tier's model and effort, and the baseline is still recorded beside it.
+      const offTask = await taskIn(db, target);
+      const off = await runNow(services, target, offTask);
+      const [row, ...more] = await decisionsOf(db, offTask);
       assert.equal(more.length, 0);
       assert.deepEqual(
         { applied: row.applied, level: row.level, provider: row.provider, model: row.model, effort: row.effort, sessionId: row.sessionId },
-        { applied: false, level: 'M', provider: 'claude', model: SONNET, effort: 'medium', sessionId: shadow.sessionId },
+        { applied: true, level: 'M', provider: 'claude', model: SONNET, effort: 'medium', sessionId: off.sessionId },
       );
       assert.deepEqual(row.baseline, BASELINE);
-      assert.equal((row.features as Record<string, unknown>).modelRouting, false);
-      const shadowReceipt = await receipt(db, target.ownerId, TASK_RUN_ACTION.execute, shadow.press);
-      assert.deepEqual(dispatchedBy(shadowReceipt.target), { provider: 'claude', model: null, effort: null });
-      assert.equal(shadowReceipt.target.route.applied, false);
-      assert.deepEqual(await sessionOf(db, shadow.sessionId), UNROUTED);
+      assert.equal('modelRouting' in (row.features as Record<string, unknown>), false);
+      const offReceipt = await receipt(db, target.ownerId, TASK_RUN_ACTION.execute, off.press);
+      assert.deepEqual(dispatchedBy(offReceipt.target), { provider: 'claude', model: SONNET, effort: 'medium' });
+      assert.equal(offReceipt.target.route.applied, true);
+      assert.deepEqual(await sessionOf(db, off.sessionId), { provider: 'claude', model: SONNET, effort: 'medium' });
 
-      // The Agent's switch on: routed — the Session is on the tier's model and effort.
+      // The Agent's old switch written on changes nothing: the same routed run.
       await services.workspaces.update(target.ownerId, target.agentId, { modelRouting: true });
       const routedTask = await taskIn(db, target);
       const routed = await runNow(services, target, routedTask);
@@ -769,13 +770,12 @@ test('on: a Run is decided in shadow while the Agent\'s switch is off and routed
         { applied: applied.applied, level: applied.level, model: applied.model, effort: applied.effort },
         { applied: true, level: 'M', model: SONNET, effort: 'medium' },
       );
-      assert.equal((applied.features as Record<string, unknown>).modelRouting, true);
       const routedReceipt = await receipt(db, target.ownerId, TASK_RUN_ACTION.execute, routed.press);
       assert.deepEqual(dispatchedBy(routedReceipt.target), { provider: 'claude', model: SONNET, effort: 'medium' });
       assert.deepEqual(await sessionOf(db, routed.sessionId), { provider: 'claude', model: SONNET, effort: 'medium' });
 
-      // Off again, through the same door: the next run is as before routing, and nothing was cleared —
-      // the Agent's switch is still on, ready for the account's to come back.
+      // Off again, through the same door: the next run is as before routing, whatever the Agent stores,
+      // and nothing was cleared.
       assert.equal((await patchPreferences(services, target.ownerId, { modelRouting: false })).modelRouting, false);
       const afterTask = await taskIn(db, target);
       const after = await runNow(services, target, afterTask);

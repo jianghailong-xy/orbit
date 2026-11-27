@@ -11,11 +11,12 @@ import {
   type SubagentRunCreateRequest,
   type SubagentWorkspaceChoice,
 } from '@orbit/shared';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import {
   ALWAYS_ALLOWED_TOOLS,
   isWiderThanParent,
   resolvePermissionMode,
+  subagentChildMode,
 } from '../common/permission-mode';
 import { dispatchAllowedTools } from '../common/permission-rules';
 import { normalizeBuiltinPermissionMode, normalizeEffortForRuntimeModel } from '../common/runtime-provider';
@@ -31,6 +32,8 @@ import { agentProviderSeed } from '../workspaces/workspace-provider';
 import { stripNul } from './strip-nul';
 import { appliedDecision, fallbackCandidates, noProviderMessage } from './subagent-run';
 import { subagentRouteInput, type SubagentPlanUsageReader } from './subagent-route';
+import { sessionReleasedSql } from '../common/session-release';
+import { assertEngineSession } from '../sessions/engine-session';
 
 /**
  * Cross-workspace SubAgents (docs/subagent-design.md §10): a delegate call that runs on another workspace of the
@@ -304,6 +307,8 @@ export interface RemoteSubagentExec {
   provider?: string;
   model?: string;
   effort?: string | null;
+  /** The parent session's mode, which a read-only child's requests are answered by on the target runner. */
+  parentMode?: PermissionMode;
   refusal?: string;
 }
 
@@ -394,10 +399,8 @@ export async function remoteSubagentExec(
     && !isWiderThanParent({ mode: parentMode, engine: parentEngine }, args.facts.permissionMode, provider)
     ? args.facts.permissionMode
     : null;
-  // A read-only Claude child keeps the parent's mode, its edit tools withheld; any other engine reads in Plan.
-  const childMode = (args.facts.readonly
-    ? (provider === AgentProvider.CLAUDE ? parentMode : PermissionMode.PLAN)
-    : asked ?? parentMode) as PermissionMode;
+  // The parent's mode on every engine, read-only or not: the runner keeps a read-only child read-only (§5.3).
+  const childMode = subagentChildMode(parentMode, { readonly: args.facts.readonly, asked }, provider);
   const effort = normalizeEffortForRuntimeModel(
     provider, (target ? target.effort : null) ?? workspace.effort ?? undefined, runnerModel, catalog, resolved.reasoningLevels,
   );
@@ -421,6 +424,7 @@ export async function remoteSubagentExec(
     provider: seed.provider,
     model: resolved.model,
     effort: effort ?? null,
+    parentMode,
   };
 }
 
@@ -642,10 +646,30 @@ export async function runOfTarget(
   return run;
 }
 
+/**
+ * The parent session a remote SubAgent keeps a file under (§10.2): its `file_upload` acts for the parent's session, which
+ * the run's target runner does not host. Only while the run is RUNNING, of this session and account, and handed to this
+ * runner; null otherwise, and the caller's own door then decides as for any session.
+ */
+export async function sessionOfRemoteSubagent(
+  db: Prisma.TransactionClient,
+  runner: { id: string; ownerId?: string },
+  sessionId: string,
+  subagentRunId: string | undefined,
+) {
+  if (!subagentRunId || !runner.ownerId) return null;
+  const run = await db.subagentRun.findFirst({
+    where: { id: subagentRunId, sessionId, ownerId: runner.ownerId, targetRunnerId: runner.id, status: 'RUNNING' },
+    select: { id: true },
+  });
+  if (!run) return null;
+  const session = await db.session.findFirst({ where: { id: sessionId, ownerId: runner.ownerId, deletedAt: null } });
+  if (session) assertEngineSession(session);
+  return session;
+}
+
 /** A run whose parent stopped it or ended: the target is to stop it. */
-const PARENT_GONE = Prisma.sql`(r."stop_requested_at" IS NOT NULL OR s."status"::text IN (${Prisma.join([
-  RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED,
-])}) OR s."cancel_requested_at" IS NOT NULL)`;
+const PARENT_GONE = Prisma.sql`(r."stop_requested_at" IS NOT NULL OR ${sessionReleasedSql('s')} OR s."cancel_requested_at" IS NOT NULL)`;
 
 /**
  * What a runner's heartbeat says of the remote SubAgent runs it is the target of (§10.2, §10.3): the ones to claim,

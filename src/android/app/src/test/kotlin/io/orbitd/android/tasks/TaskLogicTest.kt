@@ -214,7 +214,7 @@ class TaskLogicTest {
             "acceptanceCommand":"make check","acceptanceExpectedExitCode":0,"dependsOn":[{"dependsOnTask":{"id":"p","title":"Build","status":"DONE"}}],
             "sessions":[{"id":"s","runState":"SUCCEEDED","createdAt":"2030-01-01T00:00:00Z","agent":{"name":"Ada"}}]}"""), "https://o/tasks/t") { "Jan 1" }
         assertEquals("# Ship\n\n**Status:** Open · Judged by submitted evidence\n**Link:** https://o/tasks/t\n\n## Acceptance\n\nIt ships.\n\n" +
-            "Command: `make check` — done when it exits `0`\n\n## Dependencies\n\n- Needs: Build — Done\n\n## Runs\n\n1 run\n\n- Succeeded · Jan 1 · Ada\n", md)
+            "Command: `make check` — done when it exits `0`\n\n## Dependencies\n\n- Needs: Build — Done\n\n## Runs\n\n1 run\n\n- Finished · Jan 1 · Ada\n", md)
     }
 
     @Test fun followConditionsReadAsWatchProjectionWritesThem() {

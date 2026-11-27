@@ -26,7 +26,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.text.CodeText
-import io.orbitd.android.ui.LocalOrbitColors
 
 /** The agent tone iOS draws the SubAgent's rail and ✦ in (`ToolTone.agent`). */
 internal val AgentTone = Color(0xFFAF52DE)
@@ -35,25 +34,35 @@ internal val AgentTone = Color(0xFFAF52DE)
  * Orbit's own SubAgent — a `mcp__orbit__delegate` call — as one folded block (board docs/mocks/subagent/03.png, iOS `ToolCardView`'s
  * delegate branch): ✦ SubAgent and the call's description with its status, the grey second line ([SubagentBlock.detailLine]) and, for a
  * run still going, the italic line saying what it is on. A tap opens the grey Why line, the SubAgent's own steps and what it handed back.
- * [child] draws a nested record as the transcript does.
+ * A background run is this one card from start to end (board docs/mocks/subagent-card-and-end-line): once it ends, the row says how and
+ * the line under it becomes the ending, the opened block closes on its end ([SubagentEndBlock]), and while its end turn waits on the queue
+ * the card says so. [child] draws a nested record as the transcript does. [startOpen]: the block as a workflow call's detail page draws
+ * it, already opened.
  */
 @Composable
-internal fun SubagentBlockView(row: TranscriptRow, highlighted: Boolean, child: @Composable (TranscriptRow) -> Unit) {
+internal fun SubagentBlockView(row: TranscriptRow, highlighted: Boolean, startOpen: Boolean = false, child: @Composable (TranscriptRow) -> Unit) {
     val event = row.event
     val id = event.toolId()
     val run = id?.let { LocalSubagentRuns.current[it] }
     val resultText = row.result?.let { contentText(it.fields["content"]) ?: it.fields.string("result") }
-    val failed = row.result?.fields?.string("isError") == "true" || row.result?.fields?.string("is_error") == "true" ||
-        run?.status == "FAILED"
+    // How the run ended, read off the run itself: DONE ✓, failed and interrupted red, stopped grey (never ✓ for a run that did not finish).
+    val endStatus = run?.status?.takeIf { it in SubagentEnd.ENDS }
+    val callFailed = row.result?.fields?.string("isError") == "true" || row.result?.fields?.string("is_error") == "true"
     val block = SubagentBlock.describe(event.fields["input"], run, callRunning = row.result == null)
+    // A background SubAgent that has ended: its card draws the end, joined to its end turn by run id (web `SubagentCardEnd`).
+    val ended = SubagentEnd.ended(run)
+    val runId = remember(resultText) { SubagentEnd.runId(resultText) }
+    val endWake = runId?.let { LocalSubagentWakes.current[it] }
+    val queuedWakes = LocalSubagentQueuedWakes.current
     val nested = row.children
-    // What the opened block ends with; left out when the child's last message already says it (web `DelegateResult`).
+    // What the opened block ends with; left out when the child's last message already says it (web `DelegateResult`), and for an
+    // interrupted run, whose result is only the runner saying it was interrupted: its end says that, once.
     val handedBack = SubagentResult.text(resultText, run)?.takeIf { text ->
         val last = nested.lastOrNull()?.event
-        !(last?.type == "assistant" && last.body().trim() == text.trim())
+        ended?.status != "INTERRUPTED" && !(last?.type == "assistant" && last.body().trim() == text.trim())
     }
-    var open by rememberSaveable(row.key) { mutableStateOf(false) }
-    val canOpen = block.why != null || nested.isNotEmpty() || handedBack != null
+    var open by rememberSaveable(row.key) { mutableStateOf(startOpen) }
+    val canOpen = block.why != null || nested.isNotEmpty() || handedBack != null || ended != null
     val grey = MaterialTheme.colorScheme.onSurfaceVariant
     val description = (event.fields["input"] as? kotlinx.serialization.json.JsonObject)?.string("description")
     Column(Modifier.fillMaxWidth().background(if (highlighted) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface)
@@ -75,10 +84,11 @@ internal fun SubagentBlockView(row: TranscriptRow, highlighted: Boolean, child: 
                     style = MaterialTheme.typography.labelLarge,
                     maxLines = 1, overflow = TextOverflow.Ellipsis) }
                 when {
-                    failed -> Text("Failed", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelMedium)
                     block.running -> CircularProgressIndicator(Modifier.size(14.dp).testTag("subagent-running"), color = grey, strokeWidth = 2.dp)
-                    else -> Text("✓", Modifier.semantics { stateDescription = "Complete" }, color = LocalOrbitColors.current.success,
-                        fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+                    // ✓ for DONE; the word and the mark for every other end, grey for a stop (web `SubagentEndStatus`).
+                    endStatus != null -> SubagentEndStatus(endStatus)
+                    callFailed -> SubagentEndStatus("FAILED")
+                    else -> SubagentEndStatus("DONE")
                 }
             }
             // Board 03's narrow-screen line: type (or Background), tier, model and, once ended, duration and cost.
@@ -89,6 +99,8 @@ internal fun SubagentBlockView(row: TranscriptRow, highlighted: Boolean, child: 
                 Text(it, Modifier.padding(start = 30.dp).testTag("subagent-live-line"), color = grey, fontFamily = FontFamily.Monospace,
                     fontStyle = FontStyle.Italic, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
+            // Folded and ended, the ending where the live line was: two lines of its result, or why it did not finish and what it left.
+            if (!open && ended != null) SubagentFoldedEnd(ended, Modifier.padding(start = 30.dp)) { open = true }
             if (open) {
                 // The router's reasons first, then the steps, then the result (board 03).
                 // The server's one-line Why in at most two lines; every reason and removed candidate behind Details (web `SubagentWhy`).
@@ -112,6 +124,11 @@ internal fun SubagentBlockView(row: TranscriptRow, highlighted: Boolean, child: 
                     remember(nested) { Steps.group(nested) }.forEach { child(it) }
                 }
                 handedBack?.let { Text("Output", style = MaterialTheme.typography.labelMedium); CodeText(it) }
+                ended?.let { SubagentEndBlock(it, runId, endWake) }
+            }
+            // Its end turn still on the queue: the agent has not read it, and the reader can keep it back.
+            if (ended != null && runId != null && queuedWakes.containsKey(runId)) {
+                SubagentWakeQueued(Modifier.padding(start = 30.dp), queuedWakes[runId])
             }
         }
     }

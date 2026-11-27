@@ -18,7 +18,7 @@ import OrbitKit
 /// conversation leaves it out at the moment the owner answered (`OwnerAnswer.handedOver`). Still on
 /// the queue, the card is dashed and says so, with no Cancel: the answer is given, and taking the turn
 /// back would leave the coordinator never told. Unconfirmed, it says that; the words the coordinator
-/// read are folded at the foot of its sheet (`CoordinatorQuestionRecordView`).
+/// read are folded at the foot of the card (`CoordinatorQuestionRecordView`), which opens in place.
 ///
 /// The line is for what the card cannot be: a Not yet… to a request to record the project done, which
 /// has no card, and a question this conversation holds no record of. It is the pill a merge's record
@@ -40,12 +40,11 @@ struct OwnerAnswerLineView: View {
 
     var body: some View {
         if let record = OwnerAnswer.record(of: card, in: answered) {
-            // The queue's Cancel is not offered here: the answer is given. Its sheet is the record's own
-            // review, which folds the words this turn told the coordinator at its foot.
+            // The queue's Cancel is not offered here: the answer is given. The record unfolds in
+            // place on a tap — no sheet — and keeps the words this turn told the coordinator folded
+            // at its foot.
             CoordinatorQuestionRecordView(record: record, queued: queued && !undelivered,
                                           notice: undelivered ? OwnerAnswerCard.undelivered : nil)
-                .environment(\.approvalReviewTarget,
-                             .delivered(DeliveredDecisionCard(kind: .coordinatorQuestionRecord(record: record))))
         } else {
             line
         }

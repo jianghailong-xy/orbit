@@ -23,6 +23,9 @@
  *   (8) An Update engines report with failed lines (docs/mocks/engine-update-fix-with-agent): one press for the
  *       machine, whose message lists only the failed lines; refused once nothing failed, or once Dismiss
  *       cleared the report.
+ *   (9) A transcript's missing-bubblewrap warning (docs/mocks/codex-sandbox-fix-with-agent): a press on Codex
+ *       starts the session that installs it, while another engine has nothing to fix; once that session is
+ *       over GET moves it from `fixing` to `handled`, so the transcript's history row stops offering an agent.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/runners/runner-attention-fix.pg.spec.ts
  *
@@ -33,7 +36,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
-import { Prisma, PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { RunnerEngineHealth } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -138,7 +142,7 @@ test('Fix with an agent on PostgreSQL', { skip, concurrency: 1, timeout: 300_000
     await db.session.create({
       data: {
         id: randomUUID(), ownerId: m.ownerId, creatorId: m.ownerId, workspaceId, assignedRunnerId: m.runnerId, title: 'earlier work',
-        prompt: 'earlier work', status: RunStatus.AWAITING_INPUT, provider: 'claude', providerBuiltin: true, engine: 'claude',
+        prompt: 'earlier work', turnState: null, provider: 'claude', providerBuiltin: true, engine: 'claude',
         createdAt: at,
       },
     });
@@ -177,6 +181,7 @@ test('Fix with an agent on PostgreSQL', { skip, concurrency: 1, timeout: 300_000
       engineName: 'Claude Code',
       blocked: null,
       fixing: [],
+      handled: [],
     });
     // attention_fixes itself is not part of the payload; only what it means is.
     assert.equal((view as Record<string, unknown>).attentionFixes, undefined);
@@ -218,7 +223,7 @@ test('Fix with an agent on PostgreSQL', { skip, concurrency: 1, timeout: 300_000
     );
     assert.equal((await fixSessions(m)).length, 1);
     // Waiting on the owner (the agent asked before installing) is still open.
-    await db.session.update({ where: { id: started.sessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+    await db.session.update({ where: { id: started.sessionId }, data: { turnState: null } });
     await assert.rejects(controller.fix(m.user, m.runnerId, 'engineNotUpdating', { engine: 'codex' }), refusedWith('AGENT_FIX_RUNNING'));
 
     // Once it is over, the warning is free again.
@@ -384,5 +389,49 @@ test('Fix with an agent on PostgreSQL', { skip, concurrency: 1, timeout: 300_000
     await usedAt(install, await workspace(install, 'orbit-dev'), new Date());
     await assert.rejects(controller.fix(install.user, install.runnerId, 'engineUpdateFailed', {}), refusedWith('AGENT_FIX_NO_WARNING'));
     for (const r of [fine, dismissed, install]) assert.equal(await stored(r.runnerId), null);
+  });
+
+  await t.test('(9) a transcript\'s missing-bubblewrap warning: one agent, then a handled row', async () => {
+    const m = await machine('sandbox', {
+      engines: [{ engine: 'codex', installed: true, version: 'codex-cli 0.169.0', auth: 'yes' }] as unknown as Prisma.InputJsonValue,
+    });
+    const dev = await workspace(m, 'orbit-develop');
+    await usedAt(m, dev, new Date());
+
+    const started = await controller.fix(m.user, m.runnerId, 'sandboxMissing', { engine: 'codex' });
+    assert.equal(started.workspaceId, dev);
+    assert.equal(started.title, `Fix: Codex can't find bubblewrap on ${m.name}`);
+    const prompt = await firstMessage(started.sessionId);
+    assert.ok(prompt.startsWith(`Codex on this machine (${m.name}, Linux) reports that it could not find bubblewrap on PATH, so it is using its bundled copy.`), prompt);
+    assert.ok(prompt.includes('If `bwrap --version` already works, tell me and stop.'), prompt);
+    assert.ok(prompt.includes('`apt-get install -y bubblewrap` on Debian/Ubuntu'), prompt);
+    assert.ok(prompt.includes('tell me what `bwrap --version` reports; Codex uses it the next time it starts.'), prompt);
+
+    // Only Codex wants this package: another engine's press has nothing to fix.
+    await assert.rejects(
+      controller.fix(m.user, m.runnerId, 'sandboxMissing', { engine: 'claude' }),
+      refusedWith('AGENT_FIX_NO_WARNING', 'This machine no longer reports that warning.'),
+    );
+
+    // While open, GET reports the agent at work and a second press is refused.
+    assert.deepEqual((await runners.getRunner(m.ownerId, m.runnerId)).agentFix?.fixing.map((f) => [f.kind, f.engine]), [
+      ['sandboxMissing', 'codex'],
+    ]);
+    await assert.rejects(controller.fix(m.user, m.runnerId, 'sandboxMissing', { engine: 'codex' }), refusedWith('AGENT_FIX_RUNNING'));
+
+    // Once it is over, the transcript's history row reads what was done with it instead of a second agent.
+    // Ended as the server ends one when its person ends it: the end asked (reason `ended`), the word gracefulEndStatus
+    // gives it, and the release column (session_release_fact_chk, 1401). The handled row reads the projector's word
+    // (sessions/session-legacy-words.ts), the same one every session payload carries.
+    const over = new Date();
+    await db.session.update({
+      where: { id: started.sessionId },
+      data: { turnState: null, endReason: 'ended', cancelRequestedAt: over, finishedAt: over, completedAt: over },
+    });
+    const after = await runners.getRunner(m.ownerId, m.runnerId);
+    assert.deepEqual(after.agentFix?.fixing, []);
+    assert.deepEqual(after.agentFix?.handled, [
+      { kind: 'sandboxMissing', engine: 'codex', sessionId: started.sessionId, workspaceId: dev, workspaceName: 'orbit-develop', status: 'CANCELLED' },
+    ]);
   });
 });

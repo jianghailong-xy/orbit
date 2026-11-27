@@ -13,7 +13,9 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import { Prisma, RunStatus, RunnerStatus, TaskStatus, type ModelProvider } from '@prisma/client';
+import { Prisma, RunnerStatus, TaskStatus, type ModelProvider } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
+import { isReleasedStatus } from '../common/session-release';
 import { AgentProvider, openCodeKeyOf, providerPreset, type ClaimedSession } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -38,6 +40,7 @@ import {
 import { keyFingerprint, normalizedEndpoint, sessionResolution, type SessionResolution } from './provider-engine-resolution';
 import { ProvidersService } from './providers.service';
 import { legacySessionEngine } from './session-engine';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 process.env.PROVIDER_SECRET_KEY ??= 'provider-engine-migration-spec';
@@ -159,15 +162,19 @@ test('T4 provider-engine migration on PostgreSQL', { timeout: 900_000 }, async (
     label: string; engine: string | null; providerBuiltin?: boolean; model?: string | null; status?: RunStatus;
     completed?: boolean; workspaceId?: string; runtimeSessionId?: string | null; createdAt?: Date;
   }) {
+    const status = opts.status ?? RunStatus.PENDING;
     const id = (await db.session.create({ data: {
       title: opts.label, prompt: '', ownerId: at.ownerId, creatorId: at.ownerId, workspaceId: opts.workspaceId ?? at.workspaceId,
       assignedRunnerId: at.id, provider, providerBuiltin: opts.providerBuiltin ?? false,
       ...(opts.engine !== null ? { engine: opts.engine } : {}),
-      status: opts.status ?? RunStatus.PENDING, usesRuntimeDefaultModel: true,
+      turnState: turnStateOfWord(status), usesRuntimeDefaultModel: true,
+      ...(isReleasedStatus(status) ? {
+        finishedAt: new Date(),
+      } : {}),
       model: opts.model === undefined ? 'pinned-model' : opts.model,
       runtimeSessionId: opts.runtimeSessionId === undefined ? `runtime-${randomUUID()}` : opts.runtimeSessionId,
       numTurns: 1, startedAt: new Date(),
-      ...(opts.completed ? { completedAt: new Date(), finishedAt: new Date() } : {}),
+      ...(opts.completed ? { completedAt: new Date() } : {}),
       ...(opts.createdAt ? { createdAt: opts.createdAt } : {}),
     } })).id;
     fixtures.set(id, opts.label);
@@ -541,7 +548,7 @@ test('T4 provider-engine migration on PostgreSQL', { timeout: 900_000 }, async (
       [['session', straggler, 'UNRESOLVED']],
     );
     assert.equal(listed.summary?.aliasReferences, 1);
-    await db.session.update({ where: { id: straggler }, data: { completedAt: new Date(), status: RunStatus.SUCCEEDED } });
+    await db.session.update({ where: { id: straggler }, data: { completedAt: new Date(), turnState: null, finishedAt: new Date()} });
     // The name is held in the one slug namespace, and nothing lists it.
     await assert.rejects(key(owner, { slug: merged.slug }), (e: { code?: string }) => e.code === 'P2002');
     const listedKeys = (await providers.listUsable(owner)).map((p) => p.slug);

@@ -17,6 +17,7 @@ import { encodeId } from '../lib/idCodec';
 import { TASK_START_OPEN_TASK } from '../lib/taskStartCard';
 import { SharedSessionPage } from './SharedSessionPage';
 import * as rows from './SharedSessionPage.fixtures';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
  * The public page of a shared session (`/s/<token>`), mounted whole on the routes T1 gave it:
@@ -331,7 +332,7 @@ describe('a conversation still going', () => {
     added = [at(rows.OLDER_PROGRESS_1, 209)];
 
     await elapse(4_000);
-    expect(pill()).toBe('Succeeded');
+    expect(pill()).toBe('Finished');
     expect(container.textContent).toContain(FIRST);
     // It moved as it ended, so it is asked once more, in case the last of it was still on its way.
     await elapse(4_000);
@@ -555,7 +556,7 @@ describe('a conversation still going', () => {
       await mountRunning();
       expect(pill()).toBe('Running');
       await wires[0].send({ seq: 0, type: 'head', payload: headOf({ ...rows.THIS_RUN, status: 'SUCCEEDED' }) });
-      expect(pill()).toBe('Succeeded');
+      expect(pill()).toBe('Finished');
       expect(followReads()).toEqual([]);
     });
 
@@ -686,7 +687,7 @@ describe('the header', () => {
       'Read-only',
     ]);
     expect(header.querySelector('button')).toBeNull();
-    expect(header.querySelector('.share-live')!.getAttribute('title')).toBe(
+    expect(await hoverTooltip(header.querySelector('.share-live')!)).toBe(
       'Live — viewers see changes as they happen',
     );
     expect(container.querySelector('footer')!.textContent).toBe('Shared from Orbit · read-only');

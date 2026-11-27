@@ -13,8 +13,8 @@ import java.time.Instant
  *
  * Owner decisions (project 34yq7HVPsPDGBiMEm8sL2, 2026-11-17): an ended process stays until the user's next message, and a wake
  * turn does not clear it (D1); the visible label is "Background", the screen reader keeps "Background processes" (D2); several
- * running rotate their names, newest started first, 3000 ms each with a 300 ms change (E1); a shown failure is pinned (E2); nothing
- * running names the last one to end, the most recent failure first (E3).
+ * running rotate their names, newest started first, 3000 ms each with a 300 ms change (E1); a failure is neither counted nor pinned,
+ * as the owner can do nothing about it (E2, revised 2026-11-21); nothing running names the last one to end, failed or not (E3).
  */
 object BackgroundRow {
     /** The row's visible label. */
@@ -44,7 +44,7 @@ object BackgroundRow {
 
     data class Item(val id: String, val name: String, val truncate: Truncate, val mark: Mark)
 
-    /** `kind` is running or failed; a failed part is drawn in the error colour. */
+    /** `kind` is running. */
     data class CountPart(val kind: String, val text: String)
 
     sealed interface Name {
@@ -52,8 +52,6 @@ object BackgroundRow {
         data class One(val item: Item) : Name
         /** The running items' names in turn, newest started first, looping. */
         data class Rotate(val items: List<Item>, val perNameMs: Int, val changeMs: Int) : Name
-        /** The most recently failed item, held instead of rotating. */
-        data class Pinned(val item: Item) : Name
     }
 
     /** A shown row; a hidden one is null from [row]. */
@@ -78,12 +76,24 @@ object BackgroundRow {
 
     private fun time(iso: String?): Instant? = iso?.let { runCatching { Instant.parse(it) }.getOrNull() }
 
+    /** The row's cut-off: the later of the person's last message and the agent's latest turn start (null: none). */
+    fun clearedAt(lastUserMessageAt: String?, lastAgentTurnStartedAt: String?): String? {
+        val a = time(lastUserMessageAt)
+        val b = time(lastAgentTurnStartedAt)
+        return when {
+            a == null -> if (b == null) null else lastAgentTurnStartedAt
+            b == null -> lastUserMessageAt
+            b > a -> lastAgentTurnStartedAt
+            else -> lastUserMessageAt
+        }
+    }
+
     /**
      * The items the row shows: the running ones (only on a live session — a session that is not live has nothing running,
-     * whatever its list last said) and the ended ones that ended after the last user message (all ended ones when there is none).
+     * whatever its list last said) and the ended ones that ended after `clearedAt` (all ended ones when there is none).
      */
-    fun shown(list: List<Input>, lastUserMessageAt: String?, sessionLive: Boolean): Pair<List<Input>, List<Input>> {
-        val since = time(lastUserMessageAt)
+    fun shown(list: List<Input>, clearedAt: String?, sessionLive: Boolean): Pair<List<Input>, List<Input>> {
+        val since = time(clearedAt)
         val running = if (sessionLive) list.filter { it.status == "running" } else emptyList()
         val ended = list.filter { s ->
             val end = time(s.endedAt)
@@ -93,8 +103,8 @@ object BackgroundRow {
     }
 
     /** What the folded row draws, or null for no row. */
-    fun row(list: List<Input>, lastUserMessageAt: String?, sessionLive: Boolean): Row? {
-        val (running, ended) = shown(list, lastUserMessageAt, sessionLive)
+    fun row(list: List<Input>, clearedAt: String?, sessionLive: Boolean): Row? {
+        val (running, ended) = shown(list, clearedAt, sessionLive)
         val shown = running + ended
         if (shown.isEmpty()) return null
 
@@ -104,35 +114,29 @@ object BackgroundRow {
         }
         // The last to end; the first of equal ends, as the shared rule's reduce keeps it.
         fun lastEnded(xs: List<Input>) = xs.drop(1).fold(xs[0]) { a, b -> if (time(b.endedAt)!! > time(a.endedAt)!!) b else a }
-        val failed = ended.filter { it.status == "failed" }
 
         val name: Name = when {
             shown.size == 1 -> Name.One(item(shown[0]))
-            failed.isNotEmpty() -> Name.Pinned(item(lastEnded(failed)))
             running.size >= 2 -> Name.Rotate(running.sortedByDescending { it.startedSeq }.map(::item), ROTATE_PER_NAME_MS, ROTATE_CHANGE_MS)
             running.size == 1 -> Name.One(item(running[0]))
             else -> Name.One(item(lastEnded(ended)))
         }
 
-        // The Tasks card's parts, without its "done/total done".
+        // How many run; no failed count (E2).
         val parts = buildList {
-            if (shown.size > 1) {
-                if (running.isNotEmpty()) add(CountPart("running", "${running.size} running"))
-                if (failed.isNotEmpty()) add(CountPart("failed", "${failed.size} failed"))
-            }
+            if (shown.size > 1 && running.isNotEmpty()) add(CountPart("running", "${running.size} running"))
         }
         val countLine = parts.takeIf { it.isNotEmpty() }?.joinToString(" · ") { it.text }
         val spoken = countLine ?: when (name) {
             is Name.One -> name.item.name
-            is Name.Pinned -> name.item.name
             is Name.Rotate -> name.items[0].name
         }
         return Row(LABEL, name, parts, countLine, A11Y_PREFIX + spoken)
     }
 
     /** The row for a session's list as the server sends it. */
-    fun rowOf(list: List<JsonObject>, lastUserMessageAt: String?, sessionLive: Boolean): Row? =
-        row(list.map(Input::of), lastUserMessageAt, sessionLive)
+    fun rowOf(list: List<JsonObject>, clearedAt: String?, sessionLive: Boolean): Row? =
+        row(list.map(Input::of), clearedAt, sessionLive)
 
     private val ENDED = setOf("done", "failed", "killed")
 }

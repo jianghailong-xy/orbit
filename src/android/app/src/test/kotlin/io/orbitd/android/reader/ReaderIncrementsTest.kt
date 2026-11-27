@@ -104,7 +104,7 @@ class ReaderIncrementsTest : ComposerShellTest() {
         assertFalse(has(hasText("Grep · 3 tool calls") and card(6), unmerged = true))
     }
 
-    /** A06-12 (iOS 9d3751ec2): the tail keeps the fade's room, so the last line rests above it; the jump row is under the list. */
+    /** A06-12 (iOS 9d3751ec2): the tail keeps the fade's room, so the last line rests above it; the jump disc floats 6 dp above it (iOS). */
     @Test fun theLastLineRestsAboveTheFadeAndTheJumpRowSitsUnderTheList() {
         ComposerShell.events = (1L..30L).map { said(it, if (it % 2 == 1L) "user" else "assistant", "Message $it") }
         signIn(); openSession()
@@ -115,10 +115,15 @@ class ReaderIncrementsTest : ComposerShellTest() {
         val last = compose.onNodeWithText("Message 30", useUnmergedTree = true).fetchSemanticsNode().let { Rect(it.positionInRoot, it.size.toSize()) }
         assertTrue("at rest nothing is in the fade: ${last.bottom} against ${list.bottom}", last.bottom <= list.bottom - dp(20f))
         compose.onNodeWithTag("transcript-list").performTouchInput { swipeDown() }
-        await { shows("Jump to latest") }
+        await { jumpShown() }
         compose.waitForIdle()
-        assertTrue("the jump row lies under the list, out of its fade", bounds("transcript-jump").top >= bounds("transcript-list").bottom - 0.5f)
+        // iOS's disc: over the list's bottom centre, 6 dp above its fade.
+        val jump = bounds("transcript-jump")
+        assertEquals("the disc sits 6 dp above the fade", list.bottom - dp(26f), jump.bottom, 1f)
+        assertEquals("the disc is centred", list.center.x, jump.center.x, 1f)
     }
+
+    private fun jumpShown() = compose.onAllNodes(hasContentDescription("Jump to latest")).fetchSemanticsNodes().isNotEmpty()
 
     /**
      * A06-13 (iOS 900e1810d, 66c42e852) in the page: an agent starting grows its card a progress line and the card rail a
@@ -142,9 +147,9 @@ class ReaderIncrementsTest : ComposerShellTest() {
         assertEquals("the tail followed what grew", 0f, tailGap(), 1f)
 
         // The reader scrolls up a little, and the second agent's card grows below what they read: they stay where they went.
-        // (A scroll inside the rule's slack is TailPinningTest's `aScrollIsNeverFollowed`; here the jump row takes room too.)
+        // (A scroll inside the rule's slack is TailPinningTest's `aScrollIsNeverFollowed`; the jump disc floats over the list.)
         compose.onNodeWithTag("transcript-list").performTouchInput { swipeDown(startY = centerY, endY = centerY + dp(40f), durationMillis = 1_000) }
-        await { shows("Jump to latest") }
+        await { jumpShown() }
         compose.waitForIdle()
         val reading = top("Waiting on the agents.")
         ComposerShell.answers[background] = running("toolu_first" to "Read", "toolu_second" to "Grep")
@@ -152,6 +157,6 @@ class ReaderIncrementsTest : ComposerShellTest() {
         await { has(hasText("Grep · 3 tool calls"), unmerged = true) }
         compose.waitForIdle()
         assertEquals("a reader who scrolled is never followed", reading, top("Waiting on the agents."), 1f)
-        assertTrue(shows("Jump to latest"))
+        assertTrue(jumpShown())
     }
 }

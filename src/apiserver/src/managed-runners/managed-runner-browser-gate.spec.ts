@@ -7,6 +7,7 @@ import { NestFactory } from '@nestjs/core';
 
 import { RunnerLinkWelcomeController } from '../runner-api/runner-link-welcome.controller';
 import {
+  browserClaimFields,
   MANAGED_RUNNER_BROWSER_ENABLED_ENV,
   MANAGED_RUNNER_BROWSER_GATE,
   ManagedRunnerBrowserGateModule,
@@ -131,4 +132,10 @@ test('the welcome route offers the browser only with the gate on and an authoriz
   assert.equal((await answer({ enabled: true, problem: null }, undefined)).browser, false, 'never to a self-managed runner');
   assert.equal((await answer({ enabled: false, problem: null }, instance)).browser, false);
   assert.equal((await answer(undefined, instance)).browser, false, 'no gate provided: off');
+});
+
+test('a claim says browserEnabled only with the gate on, so the browser tools are absent otherwise', () => {
+  assert.deepEqual(browserClaimFields({ enabled: true }), { browserEnabled: true });
+  assert.deepEqual(browserClaimFields({ enabled: false }), {}, 'off: nothing said, so the runner spawns without the tools');
+  assert.deepEqual(browserClaimFields(undefined), {}, 'no gate provided: off');
 });

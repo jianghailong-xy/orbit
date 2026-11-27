@@ -4,9 +4,12 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as listingRules from '../../../apiserver/src/sessions/session-listing';
+import { answerListing } from '../test/sessionListingAnswer';
 import type { Runner } from './TasksSidePanel';
 import { ToastViewport } from './ToastViewport';
 import { clearToasts } from '../lib/toastStore';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
  * Compact and Start a new coordinator in the Context popover (board 01), and the handoff as the
@@ -54,6 +57,8 @@ const runnerFor = (engine: 'claude' | 'cursor'): Runner => ({
   capabilities: ['provider:cursor'],
   engines: [
     { engine: 'claude', installed: true, auth: 'yes' },
+    { engine: 'codex', installed: true, auth: 'yes' },
+    { engine: 'kimi', installed: true, auth: 'no' },
     { engine: 'cursor', installed: true, auth: 'yes', accounts: [{ id: 'default', home: '/h', auth: 'yes' }] },
   ],
   // Claude Code registers `compact` itself; Cursor CLI reports no such command.
@@ -99,8 +104,11 @@ class FakeEventSource {
 }
 
 let pathname = '';
+let search = '';
+const visited: string[] = [];
 function Where() {
-  pathname = useLocation().pathname;
+  ({ pathname, search } = useLocation());
+  if (visited[visited.length - 1] !== pathname) visited.push(pathname);
   return null;
 }
 
@@ -170,6 +178,19 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
   };
   const titleOf = (row: Element) => row.querySelector('b')?.textContent;
   const button = (text: string) => [...document.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === text);
+  const successorPicker = (scope: Element) => scope.querySelector('.handoff-successor [role="combobox"]');
+  const pickCodex = async (scope: Element) => {
+    await click(successorPicker(scope));
+    const options = () => [...document.querySelectorAll('[role="listbox"] [role="option"]')];
+    await waitFor(() => expect(options()[0]?.textContent).toBe('Same as this one'));
+    expect(options().find((option) => option.textContent?.includes('Not signed in'))?.getAttribute('aria-disabled')).toBe('true');
+    const codex = options().find((option) => option.textContent === 'Codex')!;
+    await act(async () => {
+      codex.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'mouse', button: 0 }));
+    });
+    await click(codex);
+    expect(successorPicker(scope)?.textContent).toBe('Codex');
+  };
 
   beforeEach(() => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -205,6 +226,7 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
       if (p === '/workspaces') {
         return reply([{ id: WORKSPACE, name: 'orbit', runnerId: RUNNER_ID, createdAt: '2026-01-01T00:00:00Z' }]);
       }
+      if (p.startsWith('/sessions/listing?')) return reply(answerListing(listingRules, [detail], [], p));
       if (p.startsWith('/sessions/')) {
         if (p.includes('/events/page')) return reply({ events: [], hasMore: false });
         if (p.includes('/diff')) return reply({ files: [] });
@@ -301,10 +323,23 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
     await waitFor(() => expect(dialog.textContent).toContain('2 pending waits move over'));
     // Waits without a kind (an older server) read as watches: the label alone, one line each.
     expect(waitLines(dialog)).toEqual(['Fix login redirect reaching Done', 'Session “Payment retries” finishing its turn (paused)']);
+    expect(successorPicker(dialog)?.textContent).toBe('Same as this one');
     await click(button('Hand over'));
     await waitFor(() =>
-      expect(apiMock.mock.calls.some(([p, init]) => p === `/projects/${PROJECT}/coordinator/handoff` && (init as { method?: string })?.method === 'POST')).toBe(true),
+      expect(apiMock).toHaveBeenCalledWith(`/projects/${PROJECT}/coordinator/handoff`, { method: 'POST', body: {} }),
     );
+  });
+
+  it('hands over on the engine and provider picked in the confirm dialog', async () => {
+    detail = session({ projectId: PROJECT, projectMembership: coordinator });
+    await mount();
+    await click((await contextActions())[1]);
+    await waitFor(() => expect(document.querySelector('.handoff-confirm')).not.toBeNull());
+    await pickCodex(document.querySelector('.handoff-confirm')!);
+    await click(button('Hand over'));
+    await waitFor(() => expect(apiMock).toHaveBeenCalledWith(`/projects/${PROJECT}/coordinator/handoff`, {
+      method: 'POST', body: { successor: { engine: 'codex', provider: 'codex' } },
+    }));
   });
 
   it('names each pending wait\'s kind after its label in the confirm dialog, a watch by its label alone', async () => {
@@ -426,13 +461,75 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
         : null,
     });
     await mount();
-    const sub = () => mounted().querySelector('.workspace-sub')?.textContent ?? '';
-    await waitFor(() => expect(sub()).not.toBe(''));
+    // A wide header has no status line (docs/mocks/session-header-compact): the word rides beside the title.
+    const line = () => mounted().querySelector('.workspace-title-line');
+    await waitFor(() => expect(line()?.querySelector('.workspace-name-text')).not.toBeNull());
+    const badges = () => [...line()!.querySelectorAll('.coordinator-badge')].map((n) => n.textContent);
     if (shown) {
-      expect(sub().split(' · ')[0]).toBe('Handing over');
+      expect(badges()).toContain('Handing over');
     } else {
-      expect(sub()).not.toContain('Handing over');
+      expect(badges()).not.toContain('Handing over');
     }
+  });
+
+  it('links the header to the project through the Coordinator badge, with no second line repeating the title', async () => {
+    // docs/mocks/session-header-project-link (C): a coordinator session is named after its project.
+    detail = session({ projectId: PROJECT, projectTitle: 'Checkout redesign', projectMembership: coordinator });
+    await mount();
+    const line = () => mounted().querySelector('.workspace-title-line');
+    await waitFor(() => expect(line()?.querySelector('.workspace-name-text')).not.toBeNull());
+    expect(mounted().querySelector('.workspace-header-main > .workspace-header-task')).toBeNull();
+    const badge = line()!.querySelector<HTMLButtonElement>('button.coordinator-badge-link');
+    expect(badge?.textContent).toBe('Coordinator');
+    expect(await hoverTooltip(badge!)).toBe('Open project · Checkout redesign');
+    expect(badge?.getAttribute('aria-label')).toBe('Coordinator · Open project Checkout redesign');
+    await act(async () => badge!.click());
+    // The test's one catch-all route keeps WorkspaceView mounted on /projects/…, which may route on from there.
+    await waitFor(() => expect(visited).toContain(`/projects/${PROJECT}`));
+  });
+
+  it('links a task session to its task through a Task badge, with no second line repeating the title', async () => {
+    // As the Coordinator badge does for a project: a task's session is named after its task.
+    detail = session({ title: 'Task: Fix the red checks', taskId: '0195c0de-0000-7000-8000-0000000000f1', taskTitle: 'Fix the red checks' });
+    await mount();
+    const line = () => mounted().querySelector('.workspace-title-line');
+    await waitFor(() => expect(line()?.querySelector('.workspace-name-text')).not.toBeNull());
+    expect(mounted().querySelector('.workspace-header-task')).toBeNull();
+    const badge = line()!.querySelector<HTMLButtonElement>('button.coordinator-badge-link');
+    expect(badge?.textContent).toBe('Task');
+    expect(await hoverTooltip(badge!)).toBe('Open task · Fix the red checks');
+    expect(badge?.getAttribute('aria-label')).toBe('Task · Open task Fix the red checks');
+    await act(async () => badge!.click());
+    await waitFor(() => expect(new URLSearchParams(search).get('task')).toBeTruthy());
+  });
+
+  it('the Task badge toggles its task beside the conversation, one column at a time with session settings', async () => {
+    // docs/mocks/session-task-column: pressed while the task is open, a second press closes it, and the
+    // task and session settings never stand side by side.
+    detail = session({ title: 'Task: Fix the red checks', taskId: '0195c0de-0000-7000-8000-0000000000f1', taskTitle: 'Fix the red checks' });
+    await mount();
+    const line = () => mounted().querySelector('.workspace-title-line');
+    await waitFor(() => expect(line()?.querySelector('.workspace-name-text')).not.toBeNull());
+    const badge = () => line()!.querySelector<HTMLButtonElement>('button.coordinator-badge-link')!;
+    const title = () => line()!.querySelector<HTMLButtonElement>('button.workspace-name-button')!;
+    const taskOpen = () => new URLSearchParams(search).get('task') != null;
+
+    await act(async () => title().click());
+    await waitFor(() => expect(title().getAttribute('aria-expanded')).toBe('true'));
+    await act(async () => badge().click());
+    await waitFor(() => expect(taskOpen()).toBe(true));
+    expect(title().getAttribute('aria-expanded')).toBe('false');
+    await waitFor(() => expect(badge().getAttribute('aria-pressed')).toBe('true'));
+
+    await act(async () => badge().click());
+    await waitFor(() => expect(taskOpen()).toBe(false));
+    expect(badge().getAttribute('aria-pressed')).toBe('false');
+
+    await act(async () => badge().click());
+    await waitFor(() => expect(taskOpen()).toBe(true));
+    await act(async () => title().click());
+    await waitFor(() => expect(taskOpen()).toBe(false));
+    expect(title().getAttribute('aria-expanded')).toBe('true');
   });
 
   it('02-3: opens the successor with the note card and the waits that moved here', async () => {
@@ -521,11 +618,55 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
     await waitFor(() => expect(mounted().querySelector('[data-handoff-state="FAILED"]')).not.toBeNull());
     const row = mounted().querySelector('[data-handoff-state="FAILED"]')!;
     expect(row.textContent).toMatch(/^The handoff note wasn't written: the turn failed\./);
-    expect([...row.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Try again', 'Hand over without a note', 'Keep this coordinator']);
+    expect([...row.querySelectorAll('button:not([role="combobox"])')].map((b) => b.textContent)).toEqual(['Try again', 'Hand over without a note', 'Keep this coordinator']);
     await click(button('Keep this coordinator'));
     await waitFor(() =>
       expect(apiMock.mock.calls.some(([p]) => p === `/projects/${PROJECT}/coordinator/handoff/cancel`)).toBe(true),
     );
+  });
+
+  it.each([['Hand over without a note', 'skip'], ['Try again', 'retry']])('preselects the stored successor and sends a new pick with %s', async (action, endpoint) => {
+    detail = session({
+      projectId: PROJECT,
+      projectMembership: coordinator,
+      coordinatorHandoff: { state: 'FAILED', startedAt: new Date().toISOString(), failureCode: 'TURN_FAILED',
+        successor: { engine: 'claude', provider: 'claude', model: 'claude-opus-5-5' } },
+    });
+    await mount();
+    const failure = () => mounted().querySelector('[data-handoff-state="FAILED"]')!;
+    await waitFor(() => expect(failure()).not.toBeNull());
+    expect(successorPicker(failure())?.textContent).toBe('Claude Code · claude-opus-5-5');
+    await pickCodex(failure());
+    await click(button(action));
+    await waitFor(() => expect(apiMock).toHaveBeenCalledWith(`/projects/${PROJECT}/coordinator/handoff/${endpoint}`, {
+      method: 'POST', body: { successor: { engine: 'codex', provider: 'codex' } },
+    }));
+  });
+
+  it('"Same as this one" after a stored pick sends successor: null, which clears it', async () => {
+    detail = session({
+      projectId: PROJECT,
+      projectMembership: coordinator,
+      coordinatorHandoff: { state: 'FAILED', startedAt: new Date().toISOString(), failureCode: 'TURN_FAILED',
+        successor: { engine: 'codex', provider: 'codex' } },
+    });
+    await mount();
+    const failure = () => mounted().querySelector('[data-handoff-state="FAILED"]')!;
+    await waitFor(() => expect(failure()).not.toBeNull());
+    expect(successorPicker(failure())?.textContent).toBe('Codex');
+    await click(successorPicker(failure()));
+    const options = () => [...document.querySelectorAll('[role="listbox"] [role="option"]')];
+    await waitFor(() => expect(options()[0]?.textContent).toBe('Same as this one'));
+    const same = options()[0];
+    await act(async () => {
+      same.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'mouse', button: 0 }));
+    });
+    await click(same);
+    expect(successorPicker(failure())?.textContent).toBe('Same as this one');
+    await click(button('Hand over without a note'));
+    await waitFor(() => expect(apiMock).toHaveBeenCalledWith(`/projects/${PROJECT}/coordinator/handoff/skip`, {
+      method: 'POST', body: { successor: null },
+    }));
   });
 
   it('02-5: does not offer Start a new coordinator while a handoff has failed: the row has its own doors', async () => {

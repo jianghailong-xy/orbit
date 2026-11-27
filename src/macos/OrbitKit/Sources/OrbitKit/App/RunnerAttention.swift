@@ -903,21 +903,28 @@ public enum RunnerAttention {
     }
 
     /// How a version is shown beside a runner's name: `v<version>`. A managed runner (Orbit Cloud) shows
-    /// its release when it reports one, and otherwise says Orbit keeps it up to date — never its image hash.
-    public static func runnerVersionLine(_ version: String?, managed: Bool = false) -> String? {
+    /// its release when it reports one, else the build it runs — `Build 95884b1 · Nov 16`, the date from
+    /// the status's `update` when it says — and only without either, that Orbit keeps it up to date.
+    public static func runnerVersionLine(_ version: String?, managed: Bool = false,
+                                         known: ManagedRunnerBuild? = ManagedRunnerRunningBuild.build) -> String? {
         let trimmed = version?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if managed {
-            return isReleaseVersion(trimmed)
-                ? RunnerPageCopy.runnerVersionTag(version: trimmed) : RunnerPageCopy.MANAGED_RUNNER_KEPT_UP_TO_DATE
+            if isReleaseVersion(trimmed) { return RunnerPageCopy.runnerVersionTag(version: trimmed) }
+            return ManagedRunnerUpdateLogic.runningBuild(version: trimmed, known: known).map { ManagedRunnerUpdateLogic.buildLine($0) }
+                ?? RunnerPageCopy.MANAGED_RUNNER_KEPT_UP_TO_DATE
         }
         return trimmed.isEmpty ? nil : RunnerPageCopy.runnerVersionTag(version: trimmed)
     }
 
     /// The list's second line. Online: `<hostname> · v<version>`, leaving out a hostname that is
     /// empty or the same as the name shown above it. Offline: `Offline · last seen 14d ago · v<version>`.
-    /// A managed runner's version is `runnerVersionLine`'s.
+    /// A managed runner's version is `runnerVersionLine`'s — except that this port runs the shared case
+    /// file against the web's rule (`runnerAttention.ts`), which still says "Kept up to date by Orbit"
+    /// for a managed image until the web half of the build line lands.
     public static func runnerListSubtitle(_ runner: RunnerAttentionRunner, nowMs: Int64, managed: Bool = false) -> String {
-        let version = runnerVersionLine(runner.version, managed: managed)
+        let version = managed && !isReleaseVersion(runner.version)
+            ? RunnerPageCopy.MANAGED_RUNNER_KEPT_UP_TO_DATE
+            : runnerVersionLine(runner.version, managed: managed)
         if runnerIsOffline(runner, nowMs: nowMs) {
             let lastSeen = runner.lastHeartbeatAt.flatMap { $0.isEmpty ? nil : $0 }
             let status = lastSeen.map { RunnerPageCopy.runnerOfflineLastSeen(when: ago($0, nowMs: nowMs)) }

@@ -1,4 +1,5 @@
 import { evidence, type Tenant, type TenantRequest } from './tenant-isolation-cases';
+import { underEveryDrivePrefix, underEveryRunnerDrivePrefix } from '../drive/drive-routes';
 
 /**
  * The tenant isolation census, second half (docs/google-sign-in-design.md §5.6, §11 T2). The first
@@ -156,6 +157,19 @@ export interface RunnerObjects {
   removingSecretGrantId: string;
   /** An import job of the space (server execution P5, contract `import.server`), ended, to be read back. */
   wikiImportJobId: string;
+  /**
+   * The drive door (docs/drive-technical-design.md §4.2): a staging of this machine's on the account's drive
+   * file holding chunk 0 (`driveChunkSha256`, content of this account's alone); another staging with nothing in it, which
+   * a commit names; a commit's id; and two files of the drive folder, one to move and one to delete.
+   */
+  driveStagingId: string;
+  driveCommitStagingId: string;
+  driveChunkSha256: string;
+  driveCommitId: string;
+  driveMoveFileId: string;
+  driveDeleteFileId: string;
+  /** An agent's directory sync this machine opened and is still reporting into (docs/drive-directory-sync-design.md S4). */
+  driveSyncId: string;
   /** Shared: a session link's root with a file in it; a task link's root with a run and a file; a project link's. */
   sharedSessionId: string;
   sharedSessionAttachmentId: string;
@@ -197,6 +211,10 @@ const SESSION = ['session'] as const;
 
 /** The header the runner door names its calling session in. */
 const calling = (sessionId: string) => ({ 'x-orbit-session-id': sessionId });
+
+/** Entries keyed `METHOD /runner/drive/…`, each held under /runner/drive and its /runner/documents alias (drive/drive-routes.ts). */
+const underEveryDoorPrefix = <T>(entries: Record<string, T>): Record<string, T> =>
+  Object.fromEntries(Object.entries(entries).flatMap(([key, value]) => underEveryRunnerDrivePrefix(key).map((route) => [route, value])));
 /** Another account's session in the calling session's place on a request of the caller's own. */
 const fromTheirSession = (
   as: readonly RunnerCredential[],
@@ -339,6 +357,11 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
       body: { leaseOwner: of.runner.leaseOwner, leaseGeneration: of.runner.leaseGeneration },
     }),
   },
+  // A slot return names the process that holds the session (docs/runner-update-drain-design.md §7.3).
+  'POST /runner/sessions/:id/return-slot': {
+    as: RUNNER,
+    request: (of) => ({ params: { id: of.runner.machineSessionId }, body: { leaseOwner: of.runner.leaseOwner } }),
+  },
   'POST /runner/sessions/:id/orchestration-credential': { as: RUNNER, request: (of) => ({ params: { id: of.runner.callingSessionId } }) },
   'GET /runner/sessions/:id/inbox': {
     as: RUNNER,
@@ -458,6 +481,15 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
   },
   'POST /runner/sessions/:id/events': { as: RUNNER, request: (of) => ({ params: { id: of.runner.machineSessionId }, body: { events: [] } }) },
   'POST /runner/sessions/:id/finalize': { as: RUNNER, request: (of) => ({ params: { id: of.runner.finalizeSessionId }, body: { status: 'CANCELLED' } }) },
+  // The release report of session-release/v1, declared as a runner declares it.
+  'POST /runner/sessions/:id/release': {
+    as: RUNNER,
+    request: (of) => ({
+      params: { id: of.runner.finalizeSessionId },
+      headers: { 'x-orbit-runner-capabilities': 'session-release/v1' },
+      body: {},
+    }),
+  },
   'POST /runner/sessions/:id/import-result': { as: RUNNER, request: (of) => ({ params: { id: of.runner.machineSessionId }, body: { ok: true } }) },
   'POST /runner/sessions/:id/merge-result': {
     as: RUNNER,
@@ -611,6 +643,16 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
       body: { line: 'MAIN', automatic: false, maxConcurrentTasks: 1, why: 'the census' },
     }),
   },
+  // Any session may ask (design D1): the caller's own session asks about A's project, which the door reads under the
+  // runner's owner and answers 404 before anything is filed.
+  'POST /runner/projects/:id/reopen-requests': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: { id: of.projectId },
+      headers: calling(mine.runner.coordinatorSessionId),
+      body: { why: 'the census', plannedWork: 'the census' },
+    }),
+  },
   'POST /runner/projects/:id/done-requests': {
     as: RUNNER,
     request: (of, mine) => ({ params: { id: of.projectId }, headers: calling(mine.runner.coordinatorSessionId), body: { judgment: 'Done.', gaps: [] } }),
@@ -752,10 +794,30 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
     nested: ['jobId'],
   },
   'GET /runner/wiki/entries/:id': { as: RUNNER, request: (of, mine) => ({ params: { id: of.wikiEntryId }, headers: calling(mine.runner.wikiSessionId) }) },
+  // ── the runner drive door (docs/drive-technical-design.md §4.2, §4.4) ───────────────
+  // A chunk only by a sha256 the caller's own versions or stagings name; a staging only of the caller's runner; a commit
+  // id only within the caller's account.
+  // Under /runner/drive and its /runner/documents alias.
+  ...underEveryDoorPrefix<RunnerCase>({
+    'GET /runner/drive/chunks/:sha256': { as: RUNNER, request: (of) => ({ params: { sha256: of.runner.driveChunkSha256 } }) },
+    'PUT /runner/drive/stagings/:id/chunks/:idx': { as: RUNNER, request: (of) => ({ params: { id: of.runner.driveStagingId, idx: '1' } }) },
+    'GET /runner/drive/stagings/:id/chunks/:idx': { as: RUNNER, request: (of) => ({ params: { id: of.runner.driveStagingId, idx: '0' } }) },
+    'POST /runner/drive/stagings/:id/keepalive': { as: RUNNER, request: (of) => ({ params: { id: of.runner.driveStagingId }, body: { dirty: false } }) },
+    'GET /runner/drive/commits/:commitId': { as: RUNNER, request: (of) => ({ params: { commitId: of.runner.driveCommitId } }) },
+    // A sync is reported into only by the runner that opened it, in the caller's account.
+    'PATCH /runner/drive/syncs/:id': { as: RUNNER, request: (of) => ({ params: { id: of.runner.driveSyncId }, body: { status: 'UPLOADING', filesDone: 1 } }) },
+  }),
 };
 
 /** Runner-gate routes the census cannot stand up, each with why and the reading that proves it. */
 export const RUNNER_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
+  // Revision 42 (§12.7): a task's own work session reading its task's landing. The census's runner fixture has no
+  // landing subject with a work session of its task, so A's own request could not be answered by the route here.
+  'GET /runner/landings/:id':
+    "the calling session is read by (id, the runner's owner, this runner, a work session of a task) and the landing by "
+    + "(session id, the runner's owner, that task, its project) (sessions/sessions.service.ts:3454, 3463); anything else is "
+    + "404 LANDING_NOT_THIS_SESSIONS_TASK and nothing is written; landing-fix-reads.pg.spec.ts case 5 sends its own landing, "
+    + "another task's, another session's id, another runner and a session of no task",
   'GET /runner/help-ask/:read':
     ':read names one of four account reads, never an object; the reads answer only an Ask session found by (the session header, the runner\'s owner, this runner) and read only that owner\'s rows (help/help-ask-reads.ts:224); help-ask.pg.spec.ts 6 sends them from another machine and another account',
   // ── scheduled tasks: a session's schedule_* tools (runner-api/runner-schedules.controller.ts) ─────────
@@ -788,7 +850,7 @@ export const RUNNER_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
   'GET /runner/owner-requests/:id':
     'read by (id, the runner\'s owner) and nothing else, so another account\'s id answers 404 (owner-requests/owner-requests.service.ts:193); owner-requests.pg.spec.ts (f) sends it',
   'POST /runner/owner-requests/:id/withdraw':
-    'the calling session must be one this runner hosts for its owner (runner-api/runner-owner-requests.controller.ts:66), the request is read by (id, that owner) (owner-requests/owner-requests.service.ts:193), and only the session that filed it may withdraw it (owner-requests/owner-requests.service.ts:233)',
+    'the calling session must be one this runner hosts for its owner (runner-api/runner-owner-requests.controller.ts:100), the request is read by (id, that owner) (owner-requests/owner-requests.service.ts:193), and only the session that filed it may withdraw it (owner-requests/owner-requests.service.ts:233)',
   'PATCH /runner/sessions/:id/subagents/:runId':
     'the session must be one of the runner\'s owner that this runner hosts, else 404 as for an id that names nothing '
     + '(runner-api/runner-subagents.controller.ts:137), and the run is matched by (id, that session) only, on an end '
@@ -798,6 +860,11 @@ export const RUNNER_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     'the session must be one of the runner\'s owner that this runner hosts, else 404 as for an id that names nothing '
     + '(runner-api/runner-subagents.controller.ts:137), and the run is matched by (id, that session) only '
     + '(runner-api/runner-subagents.controller.ts:303); subagent-fallback.pg.spec.ts sends another account\'s session and run',
+  'POST /runner/sessions/:id/subagents/:runId/rating':
+    'the session must be one of the runner\'s owner that this runner hosts, else 404 as for an id that names nothing '
+    + '(runner-api/runner-subagents.controller.ts:213), and the run is matched by (id, that session) only, '
+    + 'on the read and on the write (runner-api/subagent-rating.ts:52, runner-api/subagent-rating.ts:60); subagent-rating.pg.spec.ts sends '
+    + 'another session of the same runner and another account\'s runner, and finds the rating unchanged',
   'POST /runner/subagent-runs/:runId/claim':
     'the run is read by id and refused 404 unless it is a remote run of the runner\'s own account, 403 '
     + 'SUBAGENT_RUN_NOT_TARGET unless this runner is its target_runner_id (runner-api/subagent-remote.ts:403); '
@@ -989,6 +1056,12 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
       params: {},
       body: heartbeat({ sessions: [{ sessionId: of.runner.machineSessionId, isolationStatus: 'worktree', changedFiles: [], worktreeDirty: true }] }),
     }),
+  },
+  // What a runner states is executing in a session is written only to a session assigned to it and leased to its process
+  // (runners/runner-executing-sets.ts): another account's session under that id matches no row and is left as it is.
+  'POST /runner/heartbeat body executing[].sessionId': {
+    as: RUNNER,
+    request: (of) => ({ params: {}, body: heartbeat({ executing: [{ sessionId: of.runner.machineSessionId, jobs: [], shells: [], subagents: [], engineTurnActive: false }] }) }),
   },
   'POST /runner/heartbeat body expiredCommitErrors[].sessionId': {
     as: RUNNER,
@@ -1486,6 +1559,8 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     }),
     (of) => of.wikiChatId,
   ),
+  // A wiki chat's read (contract `chat.read`): read as another account's chat, refused as a session this runner does not host.
+  'GET /runner/wiki/read header x-orbit-session-id': fromTheirSession(RUNNER, () => ({ params: {} }), (of) => of.wikiChatId),
   // Another account's card is no card of this chat to replace: answered WIKI_SCHEMA at replaces, as one that names nothing.
   'POST /runner/wiki/drafts body replaces': {
     as: RUNNER,
@@ -1501,6 +1576,51 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
       },
     }),
   },
+  // ── the runner drive door: an entry, a version or a staging of another account's is one that is not there ──
+  ...underEveryDoorPrefix<RunnerFieldCase>({
+    'GET /runner/drive/stat query id': { as: RUNNER, request: (of) => ({ params: {}, query: { id: of.driveFileId } }) },
+    'GET /runner/drive/list query id': { as: RUNNER, request: (of) => ({ params: {}, query: { id: of.driveFolderId } }) },
+    'GET /runner/drive/manifest query id': { as: RUNNER, request: (of) => ({ params: {}, query: { id: of.driveFileId } }) },
+    'POST /runner/drive/stagings body entryId': { as: RUNNER, request: (of) => ({ params: {}, body: { entryId: of.driveFileId } }) },
+    'POST /runner/drive/commit body entryId': {
+      as: RUNNER,
+      request: (of) => ({ params: {}, body: { commitId: 'census-commit-entry', entryId: of.driveFileId, mode: 'OVERWRITE', chunks: [] } }),
+    },
+    // An append built on another account's version, onto the caller's own file: a base that is not there.
+    'POST /runner/drive/commit body baseVersionId': {
+      as: RUNNER,
+      request: (of, mine) => ({
+        params: {},
+        body: { commitId: 'census-commit-base', entryId: mine.driveFileId, mode: 'APPEND', baseVersionId: of.driveVersionId, chunks: [] },
+      }),
+    },
+    'POST /runner/drive/commit body stagingId': {
+      as: RUNNER,
+      request: (of, mine) => ({
+        params: {},
+        body: { commitId: 'census-commit-staging', entryId: mine.driveFileId, mode: 'OVERWRITE', chunks: [], stagingId: of.runner.driveCommitStagingId },
+      }),
+    },
+    // A batch names a staging only of the caller's runner, refused before any file of it is written.
+    'POST /runner/drive/batch body stagingId': {
+      as: RUNNER,
+      request: (of) => ({
+        params: {},
+        body: { stagingId: of.runner.driveCommitStagingId, items: [{ path: '/census batch.txt', commitId: 'census-batch-staging', chunks: [] }] },
+      }),
+    },
+    'POST /runner/drive/rename body id': {
+      as: RUNNER,
+      request: (of) => ({ params: {}, body: { id: of.runner.driveMoveFileId, to: '/census moved by the runner.txt' } }),
+    },
+    'POST /runner/drive/utimens body id': {
+      as: RUNNER,
+      request: (of) => ({ params: {}, body: { id: of.driveFileId, mtime: '2020-01-02T03:04:05.000Z' } }),
+    },
+  }),
+  // A's own request deletes its file, so this is held under /runner/drive alone; its /runner/documents alias is read by
+  // hand (RUNNER_ISOLATION_FIELDS_BY_HAND).
+  'POST /runner/drive/delete body id': { as: RUNNER, request: (of) => ({ params: {}, body: { id: of.runner.driveDeleteFileId } }) },
   ...Object.fromEntries(Object.entries(wikiRequests()).map(([route, own]) => [
     `${route} header x-orbit-session-id`,
     fromTheirSession(RUNNER, own, (of) => of.runner.wikiSessionId),
@@ -1523,6 +1643,23 @@ const planUsageReadings = Object.fromEntries(
 
 /** Ids a runner-gate request carries that name nothing of an account's to reach, with why and where. */
 export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> = {
+  // ── Push as me's credential door (docs/design/protected-branch-landing.md §5.2) ───────────────────────────
+  'POST /runner/git-credential body jobId':
+    "read only by (id, the runner's owner) and only when its source session's workspace is the named one, which is first "
+    + "read by (id, the calling runner, its owner, not deleted) (github/push-as-me.service.ts:67, :113); another account's "
+    + "job answers 403 PUSH_AS_ME_REFUSED, as an id that names nothing does, and nothing is written. pull-request-landing.pg.spec.ts "
+    + 'case 11 sends it for another runner, lease and generation',
+  'POST /runner/git-credential body sessionId':
+    "read only by (id, the runner's owner) and only when it is a session of the named workspace on the calling runner "
+    + "(github/push-as-me.service.ts:67, :136); another account's session answers 403 PUSH_AS_ME_REFUSED, as an id that names "
+    + 'nothing does, and nothing is written. pull-request-landing.pg.spec.ts case 13 sends it with another operation',
+  'POST /runner/git-credential body mergeOperationId':
+    "compared with the merge operation of a session already found as the runner owner's own (github/push-as-me.service.ts:136); "
+    + "it names nothing of its own, and one that is not that session's current operation answers 403 PUSH_AS_ME_REFUSED",
+  'GET /runner/landings/:id header x-orbit-session-id':
+    "the calling session is taken only as a work session of the runner's owner on this runner (sessions/sessions.service.ts:3454), "
+    + 'so another account\'s session there finds nothing and the read answers 404 LANDING_NOT_THIS_SESSIONS_TASK, writing nothing; '
+    + 'landing-fix-reads.pg.spec.ts case 5 sends it from another runner and as a session of no task',
   // ── the managed runner browser (docs/runner-browser-design.md §5) ─────────────────────────────────────
   'POST /runner/heartbeat body browser.holderSessionId':
     "the runner's own word about which of its sessions holds its browser, stored as text in the calling runner's own "
@@ -1580,15 +1717,45 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
   'POST /runner/owner-requests body blocksTaskIds[]':
     'counted among the runner owner\'s own tasks before anything is written; one that is not answers 404 (owner-requests/owner-requests.service.ts:128); owner-requests.pg.spec.ts (f) sends another account\'s',
   'POST /runner/owner-requests body secretSpec.runnerId':
-    'never used: the runner is the asking session\'s own (design §4.1), and any other one is refused 400 before anything is written (owner-requests/owner-secrets.service.ts:182); owner-requests.pg.spec.ts (c) sends another account\'s',
+    'never used: the runner is the asking session\'s own (design §4.1), and any other one is refused 400 before anything is written (owner-requests/owner-secrets.service.ts:187); owner-requests.pg.spec.ts (c) sends another account\'s',
   'POST /runner/owner-requests body clientRequestId':
     'the caller\'s own idempotency key, unique per asking session, and read back only by (the runner\'s owner, the asking session, the key) (owner-requests/owner-requests.service.ts:169); it names nothing of anybody else\'s',
   'POST /runner/owner-requests body projectId':
     'counted among the runner owner\'s own projects before anything is written; one that is not answers 404 (owner-requests/owner-requests.service.ts:132); owner-requests.pg.spec.ts (f) sends another account\'s',
   'POST /runner/owner-requests header x-orbit-session-id':
-    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-owner-requests.controller.ts:66); owner-requests.pg.spec.ts (f) sends another account\'s',
+    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-owner-requests.controller.ts:100); owner-requests.pg.spec.ts (f) sends another account\'s',
+  'POST /runner/projects/:id/reopen-requests header x-orbit-session-id':
+    'must be a session of the runner\'s owner that this runner hosts, else 403 before the project is read or anything is written (owner-requests/owner-requests.service.ts:719); the project is then read under that owner only, 404 for another account\'s (owner-requests/owner-requests.service.ts:586), and the card is filed under that owner',
+  'POST /runner/settings-proposals header x-orbit-session-id':
+    'must be a session of the runner\'s owner that this runner hosts, else 403 before anything is read or written (runner-api/runner-owner-requests.controller.ts:100); the proposal acts on that owner\'s own preferences only, and settings-proposals.pg.spec.ts (t) sends another account\'s session',
+  'GET /runner/settings header x-orbit-session-id':
+    'must be a session of the runner\'s owner that this runner hosts, else 403 before anything is read (runner-api/runner-owner-requests.controller.ts:100); the answer is that owner\'s own preferences, read by the runner\'s owner, never by the header, and settings-cli.pg.spec.ts sends another account\'s session',
   'POST /runner/owner-requests/:id/withdraw header x-orbit-session-id':
-    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-owner-requests.controller.ts:66), and must be the session that filed the request (owner-requests/owner-requests.service.ts:233)',
+    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-owner-requests.controller.ts:100), and must be the session that filed the request (owner-requests/owner-requests.service.ts:233)',
+  // ── the Orbit Cloud browser's agent tools ─────────────────────────────────────────────────────────
+  'POST /runner/browser/sign-in-requests body clientRequestId':
+    'the caller\'s own idempotency key, unique per asking session, and read back only by (the runner\'s owner, the asking session, the key) (owner-requests/owner-requests.service.ts:505, read at :309); it names nothing of anybody else\'s',
+  'GET /runner/browser header x-orbit-session-id':
+    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-browser.controller.ts:138), '
+    + 'and what is read is that owner\'s own managed runner, found by the owner (managed-runners/browser-state.ts accountStatus); '
+    + 'runner-browser-status.pg.spec.ts (3) sends another account\'s session both ways',
+  'POST /runner/browser/clear header x-orbit-session-id':
+    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-browser.controller.ts:138), '
+    + 'and what is cleared is that owner\'s own managed runner, found by the owner (runner-api/runner-browser-clear-approval.ts '
+    + 'accountBrowserRunner); runner-browser-clear-logins.pg.spec.ts (4) sends another account\'s session',
+  'POST /runner/browser/clear body approvalId':
+    'spent only when it names a card filed by the asking session, under orbit_browser_clear_logins, ALLOWED by a person, about '
+    + 'that owner\'s managed runner and not spent before (runner-api/runner-browser-clear-approval.ts:86, the WHERE of claimBrowserClearApproval); '
+    + 'anything else is 403 and nothing is sent; runner-browser-clear-logins.pg.spec.ts (4) sends another session\'s card',
+  'POST /runner/browser/open header x-orbit-session-id':
+    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-browser.controller.ts:138), '
+    + 'and what is opened is that owner\'s own managed runner, found by the owner (managed-runners/browser-state.ts open); '
+    + 'runner-browser-open.pg.spec.ts (3) sends another account\'s session both ways',
+  'POST /runner/browser/sign-in-requests header x-orbit-session-id':
+    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-browser.controller.ts:138), '
+    + 'and the runner must be that owner\'s own managed runner, else 403 BROWSER_SIGN_IN_NOT_ORBIT_CLOUD (runner-browser.controller.ts:138); '
+    + 'the card is filed for that owner and session only (owner-requests/owner-requests.service.ts:467); '
+    + 'runner-browser-sign-in.pg.spec.ts (3) sends another account\'s session both ways',
   // ── the wiki's import on the server ──────────────────────────────────────────────────────────────
   'POST /runner/wiki/spaces/:id/import-jobs body id':
     'the id the command names for the job it is making: the insert does nothing when the id is taken, and the job '
@@ -1644,6 +1811,25 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
   'POST /runner/sessions/:id/approvals body backgroundJobId':
     'the id the machine gave one of its own processes, stored on the approval of the session the path names '
     + '(runner-api.controller.ts:3900)',
+  // A remote SubAgent's runner keeping files under the parent session it does not host (5bc9c25f00): the run it names is
+  // looked up only among the RUNNING runs of the session the path names that belong to the calling runner's account
+  // and were handed to that runner, and the session is then read under the same account (sessionOfRemoteSubagent,
+  // runner-api/subagent-remote.ts:659). Another account's run, or another account's session, is the same 403 as
+  // naming no run. files/file-tools.pg.spec.ts (11) sends a run of another session, a runner it was not handed to and
+  // an ended run.
+  'POST /runner/sessions/:id/files query subagentRunId':
+    'a SubAgent run looked up only among the calling account\'s RUNNING runs of the session the path names that were '
+    + 'handed to this runner (runner-api/subagent-remote.ts:659); any other id, another account\'s run included, is '
+    + 'the 403 of naming none; files/file-tools.pg.spec.ts (11)',
+  'PUT /runner/sessions/:id/files/:fileId/pin query subagentRunId':
+    'the same lookup as the upload\'s subagentRunId (runner-api/subagent-remote.ts:659), then the file is read within '
+    + 'that session; files/file-tools.pg.spec.ts (11)',
+  'DELETE /runner/sessions/:id/files/:fileId/pin query subagentRunId':
+    'the same lookup as the upload\'s subagentRunId (runner-api/subagent-remote.ts:659), then the file is read within '
+    + 'that session; files/file-tools.pg.spec.ts (11)',
+  'POST /runner/sessions/:id/file-bundles query subagentRunId':
+    'the same lookup as the upload\'s subagentRunId (runner-api/subagent-remote.ts:659); the bundle\'s files are read '
+    + 'within that session; files/file-tools.pg.spec.ts (11)',
   'POST /runner/sessions/:id/approvals body subagentRunId':
     'a SubAgent run, looked up only among the runs of the session the path names, whose ownership the door checked '
     + 'first; any other id, another account\'s run included, is 404 (runner-api.controller.ts:5509); '
@@ -1667,6 +1853,12 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     + '(runner-api.controller.ts:6151)',
   'POST /runner/sessions/:id/finalize body runtimeSessionId':
     'the engine\'s own id for its conversation, stored on the session the path names (runner-api.controller.ts:6151)',
+  'POST /runner/sessions/:id/release body claudeSessionId':
+    'the release report is the finalize with no status word, and reads this as the finalize reads it: the engine\'s own '
+    + 'id for its conversation, under its older name, stored on the session the path names (runner-api.controller.ts:10308)',
+  'POST /runner/sessions/:id/release body runtimeSessionId':
+    'the release report is the finalize with no status word, and reads this as the finalize reads it: the engine\'s own '
+    + 'id for its conversation, stored on the session the path names (runner-api.controller.ts:10308)',
   'POST /runner/sessions/:id/merge-result body operationId':
     'the merge attempt token the server minted for the session the path names, compared only with that locked row '
     + '(runner-api.controller.ts:6554)',
@@ -1730,6 +1922,64 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
   'POST /runner/projects/:id/owner-questions body clientQuestionId':
     'the coordinator\'s own key for one question, a dedupe key within the project the path names '
     + '(project-open-item.service.ts:686)',
+  // ── the runner drive door: the writer's own keys ─────────────────────────────────────────────
+  ...underEveryDoorPrefix({
+    'POST /runner/drive/create body handleId':
+      "the writer's own key for the handle that fills the new file, stored on its first version and compared only with a "
+      + "later commit's handleId on that same entry of the caller's account (drive/drive.service.ts:703); nothing is looked up by it",
+    'POST /runner/drive/commit body handleId':
+      "compared only with the handle_id of the current version of the entry the commit names, an entry already found by "
+      + "(id, the runner's owner) under FOR UPDATE (drive/drive.service.ts:703); nothing is looked up by it",
+    'POST /runner/drive/commit body commitId':
+      "the writer's own retry key, looked up and stored only by (the runner's owner, commitId) (drive/drive.service.ts:690), "
+      + "so another account's commit id names nothing of anybody's here",
+    'POST /runner/drive/batch body items[].commitId':
+      "each file's retry key, passed to the same commit as the commit route's commitId and looked up and stored only by "
+      + "(the runner's owner, commitId) (drive/drive.service.ts:690), so another account's commit id names nothing of anybody's here",
+    'POST /runner/drive/batch body writer.sessionId':
+      "a drive write's attribution (docs/drive-technical-design.md §3.6), passed to the same mkdir, create, commit and "
+      + "setMtime as the routes above: kept only when it is a session of the runner's owner assigned to the calling runner, "
+      + "read by (id, owner, runner) in the write's own transaction, and stored as null otherwise (drive/drive.service.ts:1226)",
+    // ── the runner drive door: who a write is recorded as coming from ─────────────────────────────
+    'POST /runner/drive/create body writer.sessionId':
+      "a drive write's attribution (docs/drive-technical-design.md §3.6): kept only when it is a session of the "
+      + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
+      + "stored as null otherwise (drive/drive.service.ts:1226); no session is read beyond that, written or authorized by it",
+    'POST /runner/drive/mkdir body writer.sessionId':
+      "a drive write's attribution (docs/drive-technical-design.md §3.6): kept only when it is a session of the "
+      + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
+      + "stored as null otherwise (drive/drive.service.ts:1226); no session is read beyond that, written or authorized by it",
+    'POST /runner/drive/commit body writer.sessionId':
+      "a drive write's attribution (docs/drive-technical-design.md §3.6): kept only when it is a session of the "
+      + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
+      + "stored as null otherwise (drive/drive.service.ts:1226); no session is read beyond that, written or authorized by it",
+    'POST /runner/drive/rename body writer.sessionId':
+      "a drive write's attribution (docs/drive-technical-design.md §3.6): kept only when it is a session of the "
+      + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
+      + "stored as null otherwise (drive/drive.service.ts:1226); no session is read beyond that, written or authorized by it",
+    'POST /runner/drive/delete body writer.sessionId':
+      "a drive write's attribution (docs/drive-technical-design.md §3.6): kept only when it is a session of the "
+      + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
+      + "stored as null otherwise (drive/drive.service.ts:1226); no session is read beyond that, written or authorized by it",
+    'POST /runner/drive/utimens body writer.sessionId':
+      "a drive write's attribution (docs/drive-technical-design.md §3.6): kept only when it is a session of the "
+      + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
+      + "stored as null otherwise (drive/drive.service.ts:1226); no session is read beyond that, written or authorized by it",
+  }),
+  // ── an agent's directory sync, reported for the owner's upload tray (docs/drive-directory-sync-design.md S4) ──
+  ...underEveryDoorPrefix({
+    'POST /runner/drive/syncs body sessionId':
+      "the session a sync is shown under: kept only when it is a session of the runner's owner, read by (id, owner), and "
+      + "stored as null otherwise (drive/drive-syncs.service.ts:95); only its title is shown back, to that owner",
+    'PATCH /runner/drive/syncs/:id body destEntryId':
+      "the destination folder's id, stored on the caller's own sync row and never looked up (drive/drive-syncs.service.ts:132); "
+      + "it is shown only to the runner's owner, whose own read of another account's entry by that id is not found",
+  }),
+  'POST /runner/documents/delete body id':
+    'the same handler as POST /runner/drive/delete, whose case above holds it across accounts: RunnerDriveController '
+    + 'is one class mounted under both prefixes (drive/runner-drive.controller.ts:103, '
+    + '@Controller(RUNNER_DRIVE_ROUTE_PREFIXES)), so the alias reaches the same lookup by (id, the runner\'s owner); the '
+    + "case's own request deletes A's file, which a second run under /runner/documents would find already gone",
   // The skip door's `approvalId` is sent by the census itself (RUNNER_ISOLATION_FIELD_CASES above): a real case is
   // the stronger registration, and the census refuses a key registered both ways.
 };
@@ -1740,6 +1990,14 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
  * any other — and the reading, with file:line, of what it reads.
  */
 export const RUNNER_OPAQUE_BODIES: Readonly<Record<string, { reads: readonly string[]; reading: string }>> = {
+  ...underEveryDoorPrefix({
+    'PUT /runner/drive/stagings/:id/chunks/:idx request': {
+      reads: [],
+      reading: 'the raw bytes of one drive chunk, streamed into a temporary file and hashed; read only after the staging the '
+        + 'path names is found by (id, the runner\'s owner, this runner) (drive/runner-drive.controller.ts:213), and never '
+        + 'parsed for anything',
+    },
+  }),
   'POST /runner/link-token request': {
     reads: [],
     reading: 'the whole request, for how it arrived: X-Orbit-Request-Host, X-Orbit-Request-Proto, X-Forwarded-For and '
@@ -1921,6 +2179,10 @@ export const SHARED_BY_HAND: Readonly<Record<string, string>> = {
     'a document slug of the link\'s own wiki space, not an object a caller can name: the space is the link\'s '
     + '(share-links.service.ts:378), and the slug is looked up among that space\'s own written documents — any '
     + 'other is the one 404 (public-wiki.ts:155)',
+  'GET /shared/:token/content':
+    'names nothing but its link: the bytes are those of the version the link was pinned to, read for the link\'s own '
+    + 'owner and entry (share-links.service.ts:480), and a Range is a window on them — nothing in the request names '
+    + 'another object',
   'GET /shared/:token/card':
     'names nothing but its link: the token is resolved as `GET /shared/:token` resolves it, and the answer is that '
     + 'link\'s own kind and root title (share-links.service.ts:359)',
@@ -1932,6 +2194,13 @@ export const SHARED_BY_HAND: Readonly<Record<string, string>> = {
  * answered alike whoever made the one that does.
  */
 export const PUBLIC_ROUTES: Readonly<Record<string, string>> = {
+  // The same handler under /drive and its /documents alias (drive/drive-routes.ts).
+  ...Object.fromEntries(underEveryDrivePrefix('GET /drive/dl/:token').map((route) => [route,
+    'a download URL the owner\'s Files page minted (POST /drive/entries/:id/download-link, behind the owner\'s login): the '
+    + 'token is the credential, signed with a key of its own and expiring in five minutes, and it names its owner, file '
+    + 'and version itself; the version is read WHERE id, owner and file are the token\'s, and a forged, expired or stale '
+    + 'one is the one 404 — drive-download-links.ts:78, :84; nothing in the request but the token names an object — '
+    + 'drive.controller.ts:279'])),
   'GET /health':
     'a constant `{status:"ok"}` that touches no table — health/health.controller.ts:27',
   'ALL /gw/codex':
@@ -1977,6 +2246,12 @@ export const PUBLIC_ROUTES: Readonly<Record<string, string>> = {
   'GET /auth/google/callback':
     'Google\'s return: the state is found by its hash and must match the browser cookie the start set — '
     + 'google-login.service.ts:390',
+  'POST /integrations/github/webhook':
+    'GitHub\'s webhook deliveries (docs/design/protected-branch-landing.md §4.7): no session and no token; the credential '
+    + 'is the HMAC-SHA256 of the raw bytes under the deployment\'s saved secret, compared in constant time before '
+    + 'anything is read. It names no Orbit id: a delivery about a repository or installation no workspace was cloned '
+    + 'through is dropped, and the one row it writes is the delivery\'s own, keyed by GitHub\'s delivery id. The pull '
+    + 'requests it is about are read again from GitHub, never changed from the payload — github-webhook.ts:107, :125',
   'GET /integrations/github/callback':
     'GitHub\'s return: the flow is taken by its state\'s hash with one DELETE … RETURNING and must match the browser '
     + 'cookie /integrations/github/start set; it writes only the connection of the account that started that flow. '

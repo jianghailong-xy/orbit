@@ -5,11 +5,11 @@ import { test } from 'node:test';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -32,6 +32,7 @@ import { CriterionUnlandedProducer } from './criterion-unlanded.producer';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * The coordinator's fuse counts what the AGENT spends on its own, and nothing that happened to it.
@@ -180,7 +181,7 @@ async function fixture(db: PrismaClient, label: string): Promise<Fixture> {
       title: `协调：${label}`,
       prompt: `协调：${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
       startedAt: new Date(),
@@ -225,11 +226,19 @@ async function fixture(db: PrismaClient, label: string): Promise<Fixture> {
   return { ownerId, runnerId, workspaceId, projectId, coordinatorSessionId, criterion };
 }
 
-/** One more finished task serving the criterion: a new serving set, so a new fact about it. */
+/**
+ * One more finished task serving the criterion: a new serving set, so a new fact about it.
+ *
+ * Its work ran on a worktree branch whose tip is past its base (commits of its own), reported changes
+ * and finished, and no receipt puts it on a branch: it has commits still to land, which is the merge
+ * the CRITERION_UNLANDED fact says is owed.
+ * (A DONE task that never ran a branch delivered no commit and has nothing to land, §12.15 P-M3.)
+ */
 async function finishServingWork(db: PrismaClient, f: Fixture, n: number): Promise<void> {
+  const taskId = randomUUID();
   await db.task.create({
     data: {
-      id: randomUUID(),
+      id: taskId,
       ownerId: f.ownerId,
       projectId: f.projectId,
       title: `serving work ${n}`,
@@ -241,6 +250,17 @@ async function finishServingWork(db: PrismaClient, f: Fixture, n: number): Promi
       criterionDefinitionId: f.criterion.id,
       criterionRevision: f.criterion.revision,
       autoRunWhenReady: false,
+    },
+  });
+  await db.session.create({
+    data: {
+      id: randomUUID(), ownerId: f.ownerId, creatorId: f.ownerId, taskId, workspaceId: f.workspaceId,
+      assignedRunnerId: f.runnerId, title: `serving work ${n}`, prompt: `serving work ${n}`, provider: 'claude',
+      turnState: null, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      isolationStatus: 'worktree', branch: `orbit/serving-work-${n}-${taskId}`, changedFiles: ['src/work.ts'],
+      // Its own branch tip is past the commit it forked from: commits of its own, not a checkout.
+      baseSha: 'b'.repeat(40), branchSha: 'c'.repeat(40), worktreeBranch: `orbit/serving-work-${n}-${taskId}`,
+      worktreeDirty: false, finishedAt: new Date(),
     },
   });
 }
@@ -272,7 +292,14 @@ async function failWork(db: PrismaClient, f: Fixture, n: number): Promise<string
 async function openSession(
   db: PrismaClient,
   f: Fixture,
-  options: { taskId?: string; status?: RunStatus; startsTaskWork?: boolean } = {},
+  options: {
+    taskId?: string;
+    status?: RunStatus;
+    startsTaskWork?: boolean;
+    isolationStatus?: string;
+    branch?: string;
+    changedFiles?: string[];
+  } = {},
 ): Promise<string> {
   const id = randomUUID();
   await db.session.create({
@@ -286,9 +313,15 @@ async function openSession(
       title: `session ${id}`,
       prompt: `session ${id}`,
       provider: 'claude',
-      status: options.status ?? RunStatus.AWAITING_INPUT,
+      turnState: turnStateOfWord(options.status ?? RunStatus.AWAITING_INPUT),
+      ...(options.status === RunStatus.SUCCEEDED || options.status === RunStatus.FAILED
+        ? { finishedAt: new Date()}
+        : options.status === RunStatus.CANCELLED ? { finishedAt: new Date()} : {}),
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: options.startsTaskWork ?? false,
+      ...(options.isolationStatus ? { isolationStatus: options.isolationStatus } : {}),
+      ...(options.branch ? { branch: options.branch } : {}),
+      ...(options.changedFiles ? { changedFiles: options.changedFiles } : {}),
     },
   });
   return id;
@@ -332,7 +365,7 @@ async function coordinatorReads(db: PrismaClient, f: Fixture, seq: number): Prom
   const next = await turnEnds(db, f.coordinatorSessionId, seq, 1, unread[0]!.id);
   await db.session.update({
     where: { id: f.coordinatorSessionId },
-    data: { status: RunStatus.AWAITING_INPUT },
+    data: { turnState: null },
   });
   return next;
 }

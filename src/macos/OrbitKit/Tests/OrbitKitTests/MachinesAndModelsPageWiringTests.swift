@@ -87,7 +87,9 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
     func testThePageHoldsTheMocksBlocksInOrder() throws {
         let page = try XCTUnwrap(try lists().first?.code)
         let body = try slice(page, from: "List(selection:", to: ".orbitRevealSurface()")
-        try assertInOrder(body, ["if lists.settled {", "if !attention.isEmpty {", "MachinesAndModelsNeedsYouSection(",
+        try assertInOrder(body, ["if !terminals.isEmpty || lists.settled {",
+                                 "if !attention.isEmpty || !terminals.isEmpty {",
+                                 "MachinesAndModelsNeedsYouSection(",
                                  "ForEach(movable)", "RunnerSectionHeader(MachinesAndModels.machines,",
                                  "Text(MachinesAndModels.machinesDetail)", "RunnerAddSection { addingRunner = true }",
                                  "MachinesAndModelsPoolsSection(memberPools: lists.memberPools, ownPools: lists.ownPools,",
@@ -245,7 +247,7 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
                       "SwiftUI.ShareLink(item: command)",
                       "Text(RunnerPageCopy.RUNNER_WAITING_FOR_NEW)",
                       "arrived = RunnerPageFormat.newlyOnline(runners.runners, baseline: baseline)",
-                      "try? await Task.sleep(for: .seconds(5))",
+                      "await VisibilityGate.app.pause(5)",
                       "Text(MachineSetupCopy.REGISTER_NEXT)",
                       "Button(MachineSetupCopy.START_A_SESSION) { start(arrived) }",
                       "model.startSession(onMachine: runner.id)",

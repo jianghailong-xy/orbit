@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
+import { isReleasedStatus } from '../common/session-release';
 import type { SessionActivity } from '@orbit/shared';
 
 import type { AttachmentsService } from '../attachments/attachments.service';
@@ -12,6 +14,8 @@ import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionGuestsService } from '../session-guests/session-guests.service';
 import { SessionsService } from './sessions.service';
+import { turnStateOfWord } from './session-turn-state';
+import type { SessionFixture } from '../test-support/session-word';
 
 /**
  * Every session — not only a task's work session — says what it is doing beyond its status, on every
@@ -66,7 +70,7 @@ interface World {
 async function world(
   db: PrismaClient,
   label: string,
-  parked: Partial<Prisma.SessionUncheckedCreateInput>,
+  parked: SessionFixture,
   status: RunStatus,
 ): Promise<World> {
   const w: World = { ownerId: randomUUID(), guestId: randomUUID(), sessionId: randomUUID() };
@@ -86,12 +90,16 @@ async function world(
   await db.workspace.create({
     data: { id: workspaceId, ownerId: w.ownerId, runnerId, name: `${label}-agent`, enabled: true },
   });
+  const { status: fixtureStatus = status, ...parkedFacts } = parked;
   await db.session.create({
     data: {
       id: w.sessionId, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId, assignedRunnerId: runnerId,
-      title: `${label} conversation`, prompt: 'hello', provider: 'claude', status,
+      title: `${label} conversation`, prompt: 'hello', provider: 'claude', turnState: turnStateOfWord(fixtureStatus),
       dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(Date.now() - 60 * 60_000), numTurns: 1,
-      ...parked,
+      ...parkedFacts,
+      ...(isReleasedStatus(fixtureStatus) ? {
+        finishedAt: parked.finishedAt ?? new Date(),
+      } : {}),
     },
   });
   await db.sessionGuest.create({ data: { sessionId: w.sessionId, userId: w.guestId, ownerId: w.ownerId } });

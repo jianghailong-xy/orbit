@@ -178,11 +178,18 @@ func TestHelpAskMCPServesTheFourReadsAlone(t *testing.T) {
 	}
 }
 
-func TestHelpAskMCPInitializeSaysItIsReadOnly(t *testing.T) {
+// An Ask's four reads say what they are in their descriptions, each one read-only; initialize adds nothing since
+// step 7a, because no eval case guards a paragraph about them.
+func TestHelpAskMCPInitializeIsEmptyAndEveryReadSaysItIsReadOnly(t *testing.T) {
 	s := &mcpServer{helpAsk: true}
 	resp, _ := s.handle(&rpcRequest{ID: json.RawMessage(`1`), Method: "initialize"})
-	if instructions := resp.Result.(map[string]interface{})["instructions"].(string); instructions != helpAskInstructions {
+	if instructions := resp.Result.(map[string]interface{})["instructions"].(string); instructions != "" {
 		t.Fatalf("instructions = %q", instructions)
+	}
+	for read, description := range helpAskToolDescriptions {
+		if !strings.HasSuffix(description, "Read-only.") {
+			t.Errorf("help read %s does not say it is read-only: %q", read, description)
+		}
 	}
 }
 

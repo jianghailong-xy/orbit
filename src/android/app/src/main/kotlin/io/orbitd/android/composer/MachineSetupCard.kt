@@ -14,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import io.orbitd.android.cards.conversationCard
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -79,13 +80,16 @@ internal fun MachineSetupCard(
     /** From GitHub's Change: Settings → GitHub. */
     onOpenGithubSettings: () -> Unit = {},
     managedSetup: String? = null,
+    /** New workspace on a machine that has one (docs/mocks/new-workspace-form/02-apple-entry, owner A): the folder hint says a full path
+     *  is taken too, and the card draws no head under the page's title bar, which names the machine (iOS's phone card). */
+    addsWorkspace: Boolean = false,
 ) {
     val runnerId = runner.text("id").orEmpty()
     val machine = RunnerPage.displayName(runner)
     val offline = !online
     val usable = MachineSetup.answersDirProbe(runner) && MachineSetup.makesNewFolders(runner)
     val disabled = managedSetup == null && (offline || !usable)
-    val root = if (managedSetup != null && runner.text("reposRoot").isNullOrBlank()) ManagedRunner.REPOS_ROOT else MachineSetup.newFolderRootOf(runner)
+    val root = MachineSetup.setupFolderRoot(runner, managedSetup != null)
 
     var typed by remember(runnerId) { mutableStateOf("") }
     // The answer, with the path it is about: an answer about a name since changed says nothing.
@@ -96,8 +100,11 @@ internal fun MachineSetupCard(
     var editedName by remember(runnerId) { mutableStateOf<String?>(null) }
 
     val folder = typed.trim()
-    // The name is asked about where it would go, as it is typed: a folder, or a file, may be there already.
-    val query = if (managedSetup == null && !disabled && MachineSetup.isValidNewFolder(folder)) MachineSetup.newFolderPath(root, folder) else null
+    // A full path is asked about as typed; a name where it would go, as it is typed: a folder, or a file, may be there already
+    // (docs/mocks/new-workspace-form, decision 2 A).
+    val query = MachineSetup.folderQuestion(folder, root, canAsk = managedSetup == null && !disabled)
+    // The folder field holds a whole path: no home prefix before it.
+    val fullPath = MachineSetup.isFolderPath(folder)
     LaunchedEffect(runnerId, query, attempt) {
         if (query == null) return@LaunchedEffect
         delay(300)
@@ -112,8 +119,8 @@ internal fun MachineSetupCard(
     }
     val current = answer?.takeIf { query != null && it.first == query }?.second
     val found = (current as? DirProbeRelay.Outcome.Answered)?.probe
-    val typedPick = if (managedSetup != null && MachineSetup.isValidNewFolder(folder)) PickedFolder.New(folder, MachineSetup.newFolderPath(root, folder))
-        else if (found != null && MachineSetup.isValidNewFolder(folder)) MachineSetup.newFolderPick(found, folder, root, machine) else null
+    // A managed runner that isn't up takes a name unchecked, but a full path only once it is checked.
+    val typedPick = MachineSetup.typedPick(folder, found, root, machine, managedSetup)
 
     // From GitHub: offered only where the deployment has a GitHub App. Read again each time the app comes back to the front, which is
     // where a sign-in in the browser ends; the last answer stands while it is read.
@@ -132,7 +139,7 @@ internal fun MachineSetupCard(
     // Not the folder field's lock: a machine too old to make folders may clone, and the picker says when it can't.
     val locked = if (fromGithub) offline else disabled
 
-    val followed = if (fromGithub) (repository as? PickedFolder.Github)?.pick?.name.orEmpty() else folder
+    val followed = if (fromGithub) (repository as? PickedFolder.Github)?.pick?.name.orEmpty() else MachineSetup.followedName(folder)
     val shownName = MachineSetup.shownName(editedName, followed)
     val (nameLine, nameBad) = MachineSetup.nameLine(editedName)
     val canCreate = MachineSetup.canCreate(candidate, shownName, usable = !locked, creating = creating)
@@ -148,7 +155,7 @@ internal fun MachineSetupCard(
     }
 
     Surface(
-        modifier = Modifier.fillMaxWidth().testTag("machine-setup-card"),
+        modifier = Modifier.conversationCard().testTag("machine-setup-card"),
         shape = RoundedCornerShape(18.dp),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 1.dp,
@@ -157,7 +164,7 @@ internal fun MachineSetupCard(
     ) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
             if (welcome) WelcomeHead(welcomeName)
-            else Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            else if (!addsWorkspace) Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Box(
                     Modifier
                         .size(32.dp)
@@ -208,7 +215,7 @@ internal fun MachineSetupCard(
                 }
             }
 
-            HorizontalDivider(Modifier.padding(top = 12.dp))
+            if (!addsWorkspace) HorizontalDivider(Modifier.padding(top = 12.dp))
 
             if (fromGithub && offered != null && github != null) {
                 GithubFolderStep(
@@ -234,7 +241,7 @@ internal fun MachineSetupCard(
                     value = typed,
                     onValueChange = { typed = it },
                     // The folder it goes in is fixed; on a phone a long one is cut from its start, so the field keeps room to type in.
-                    prefix = {
+                    prefix = if (fullPath) null else ({
                         Text(
                             MachineSetup.newFolderPath(root, ""),
                             fontFamily = FontFamily.Monospace,
@@ -243,11 +250,11 @@ internal fun MachineSetupCard(
                             overflow = TextOverflow.StartEllipsis,
                             modifier = Modifier.widthIn(max = 160.dp),
                         )
-                    },
+                    }),
                     placeholder = { Text(MachineSetupCopy.SETUP_NEW_FOLDER_NAME) },
                     singleLine = true,
                     enabled = !disabled && !creating,
-                    isError = folder.isNotEmpty() && !MachineSetup.isValidNewFolder(folder),
+                    isError = folder.isNotEmpty() && !fullPath && !MachineSetup.isValidNewFolder(folder),
                     textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace),
                     keyboardOptions = KeyboardOptions(
                         capitalization = KeyboardCapitalization.None,
@@ -260,19 +267,12 @@ internal fun MachineSetupCard(
                         .semantics { contentDescription = MachineSetupCopy.SETUP_FOLDER }
                         .testTag("setup-new-folder-name"),
                 )
-                when {
-                    createError != null -> VerdictText(MachineSetupCopy.setupCreateFailed(createError), FolderVerdict.Tone.BAD)
-                    folder.isEmpty() -> MetaText(MachineSetupCopy.SETUP_FOLDER_HINT)
-                    !MachineSetup.isValidNewFolder(folder) -> VerdictText(MachineSetupCopy.SETUP_NEW_FOLDER_INVALID, FolderVerdict.Tone.BAD)
-                    managedSetup != null -> MetaText(ManagedRunner.Setup.FOLDER_UNCHECKED.getValue(managedSetup))
-                    found != null -> {
-                        val verdict = MachineSetup.newFolderVerdict(found, machine)
-                        // Nothing there yet reads as a note; anything there, or a check that failed, says what it is.
-                        if (found.exists || !verdict.usable) VerdictText(verdict.text, verdict.tone)
-                        else MetaText(MachineSetupCopy.SETUP_NEW_FOLDER_WITH_WORKSPACE)
-                    }
-                    current != null -> NoAnswerRow(machine) { attempt++ }
-                    else -> CheckingText(machine)
+                when (val line = MachineSetup.folderLine(folder, createError, found, unanswered = current != null && found == null, machine,
+                    managedSetup, pathHintRoot = root.takeIf { addsWorkspace })) {
+                    is MachineSetup.FolderLine.Meta -> MetaText(line.text)
+                    is MachineSetup.FolderLine.Verdict -> VerdictText(line.text, line.tone)
+                    MachineSetup.FolderLine.NoAnswer -> NoAnswerRow(machine) { attempt++ }
+                    MachineSetup.FolderLine.Checking -> CheckingText(machine)
                 }
             }
 

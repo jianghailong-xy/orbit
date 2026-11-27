@@ -6,7 +6,7 @@ routes: [/projects, /projects/:id, /projects/:id/tasks/:taskId]
 errors: []
 platforms: [web, macos, ios, android]
 common: false
-updated: 2026-11-14
+updated: 2026-11-17
 ---
 
 A project is a goal with a body of work under it. Its tasks say which one waits for which, and a coordinator, a conversation with an agent, decides what runs next until the work is merged.
@@ -26,6 +26,6 @@ Open [Projects](orbit:/projects) and press **New project**. Describe the goal; t
 
 ## Where your attention is needed
 
-Questions from the coordinator and confirmations it needs appear at the top of the project page and in [Waiting on you](orbit:/waiting).
+Questions from the coordinator and confirmations it needs appear at the top of the project page and as cards in the session that asked. A request to move tasks into this project is approved on one card in its coordinator session. See [Find what needs you](orbit:/help/projects-and-tasks/find-what-needs-you).
 
 Full guide: [Onboarding, step 5](../../onboarding.md#5-organize-work-as-a-project-and-read-its-task-graph).

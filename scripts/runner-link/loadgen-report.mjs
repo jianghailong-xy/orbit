@@ -455,7 +455,25 @@ if (gw.creditReducedEver) flag('credit_reduced', 1);
 const logLines = (svc) => (existsSync(join(dir, 'logs', `${svc}.log`)) ? read(join('logs', `${svc}.log`)).split('\n') : []);
 // eslint-disable-next-line no-control-regex
 const ansi = /\x1b\[[0-9;]*m/g;
+// An apiserver line is one JSON object where Compose runs it (ORBIT_LOG_FORMAT=json, src/apiserver/src/common/request-log.ts),
+// with its time in epoch milliseconds and its level in lower case; Nest's text otherwise, with neither.
+function nestJson(line) {
+  const at = line.indexOf('{"level":');
+  if (at < 0) return null;
+  try {
+    return JSON.parse(line.slice(at));
+  } catch {
+    return null;
+  }
+}
+function nestLevel(line) {
+  const json = nestJson(line);
+  if (json) return typeof json.level === 'string' ? json.level.toUpperCase() : null;
+  return /\s(LOG|WARN|ERROR|FATAL|DEBUG|VERBOSE)\s\[/.exec(line)?.[1] ?? null;
+}
 function nestTime(line) {
+  const json = nestJson(line);
+  if (json) return typeof json.timestamp === 'number' ? json.timestamp : null;
   const m = /(\d{1,2})\/(\d{1,2})\/(\d{4}), (\d{1,2}):(\d{2}):(\d{2}) (AM|PM)/.exec(line);
   if (!m) return null;
   let h = Number(m[4]) % 12;
@@ -480,7 +498,7 @@ const logs = {};
 for (const svc of ['apiserver', 'apiserver-b', ...moreApiservers]) {
   const lines = logLines(svc);
   if (lines.length === 0) continue;
-  logs[svc] = tally(lines, nestTime, (l) => /\s(LOG|WARN|ERROR|FATAL|DEBUG|VERBOSE)\s\[/.exec(l)?.[1] ?? null);
+  logs[svc] = tally(lines, nestTime, nestLevel);
 }
 logs['link-gateway'] = tally(logLines('link-gateway'), (l) => {
   const m = /^time=(\S+)/.exec(l);

@@ -12,6 +12,8 @@ import {
   landingsWindow,
   landingsWindowGroups,
   listShowsProjects,
+  PROJECT_ROW_FULL_SWIPE,
+  projectStateAction,
   SESSION_PROJECT_COPY,
   SESSION_PROJECT_COORDINATOR_COPY,
   sessionProjectListing,
@@ -32,6 +34,7 @@ const row = (id: string, over: Partial<Row> = {}): Row => ({
   title: id,
   createdAt: ago(60),
   lastTurnAt: ago(20),
+  listedAt: ago(20),
   line: { text: 'Last reply', tone: 'preview' },
   ...over,
 });
@@ -111,29 +114,34 @@ describe('sessionProjectListing', () => {
   });
 
   it('uses coordinator pinning and the latest member activity for recency and row ordering', () => {
-    const pinnedMember = member('pinnedMember', { pinnedAt: ago(30), lastTurnAt: ago(1) });
-    const out = listing([coordinator({ lastTurnAt: ago(10_000) }), pinnedMember, row('ordinary', { lastTurnAt: ago(5) })]);
-    expect(out.projects[0]).toMatchObject({ pinnedAt: null, lastTurnAt: ago(1) });
+    const pinnedMember = member('pinnedMember', { pinnedAt: ago(30), listedAt: ago(1) });
+    const out = listing([coordinator({ listedAt: ago(10_000) }), pinnedMember, row('ordinary', { listedAt: ago(5) })]);
+    expect(out.projects[0]).toMatchObject({ pinnedAt: null, listedAt: ago(1) });
     expect(out.entries.map((entry) => entry.id)).toEqual(['p1', 'ordinary']);
     expect(sessionTimeSections(out.entries, { now: new Date(NOW) }).map((section) => section.title)).toEqual(['Today']);
-    const pinned = listing([coordinator({ pinnedAt: ago(40), lastTurnAt: ago(10_000) }), member('worker', { lastTurnAt: ago(10_000) })]);
+    const pinned = listing([coordinator({ pinnedAt: ago(40), listedAt: ago(10_000) }), member('worker', { listedAt: ago(10_000) })]);
     expect(sessionTimeSections(pinned.entries, { now: new Date(NOW) })[0].title).toBe('Pinned');
     expect(sessionTimeSections(pinned.entries, { pinnedFirst: false, now: new Date(NOW) })[0].title).toBe('2–7 days ago');
   });
 
   it('uses createdAt when a member has no turn yet, ignoring global project activity', () => {
-    const out = listing([coordinator(), member('new', { createdAt: ago(2), lastTurnAt: null })]);
+    const out = listing([coordinator(), member('new', { createdAt: ago(2), lastTurnAt: null, listedAt: null })]);
     expect(out.projects[0].lastTurnAt).toBe(ago(2));
   });
 
-  it('puts all members in the coordinator folder for folder counts and activity', () => {
+  it('places and dates the row by the member listed last, carrying the one that spoke last as lastTurnAt', () => {
+    const out = listing([coordinator({ listedAt: ago(30), lastTurnAt: ago(3) }), member('worker', { listedAt: ago(10), lastTurnAt: ago(10) })]);
+    expect(out.projects[0]).toMatchObject({ listedAt: ago(10), lastTurnAt: ago(3) });
+  });
+
+  it('puts all members in the coordinator folder, counting the project there as one row', () => {
     const folders = [folder('f1', 'Release'), folder('f2', 'Tasks'), folder('empty', 'Empty')];
     const sessions = [coordinator({ folderId: 'f1' }), member('worker', { folderId: 'f2', motion: 'spinner' }), member('waiting', { line: { text: 'Waiting', tone: 'approval' } }), row('ordinary')];
     const out = listing(sessions, {}, [project()], folders);
     expect(out.projects).toEqual([]);
     expect(out.sessions.map((session) => session.id)).toEqual(['ordinary']);
     expect(out.folders.map((entry) => [entry.folder.id, entry.sessionCount, entry.needsYou, entry.running])).toEqual([
-      ['empty', 0, 0, false], ['f1', 3, 1, true], ['f2', 0, 0, false],
+      ['empty', 0, 0, false], ['f1', 1, 1, true], ['f2', 0, 0, false],
     ]);
     const inside = listing(sessions, { folderId: 'f1' }, [project()], folders);
     expect(inside.folders).toEqual([]);
@@ -178,10 +186,10 @@ describe('a project outside its coordinator’s workspace', () => {
   it('gives the project no row and marks each member there, beside a project that does have one', () => {
     const p2 = (role: SessionProjectMembership['role']) => ({ ...membership(role, 'p2'), projectTitle: 'Project two' });
     const sessions = [
-      member('check', { ...here, lastTurnAt: ago(22) }),
-      row('cert', { ...here, lastTurnAt: ago(15) }),
-      member('deploy', { ...here, lastTurnAt: ago(41) }),
-      row('coordinator-2', { ...here, lastTurnAt: ago(30), projectMembership: p2('COORDINATOR') }),
+      member('check', { ...here, listedAt: ago(22) }),
+      row('cert', { ...here, listedAt: ago(15) }),
+      member('deploy', { ...here, listedAt: ago(41) }),
+      row('coordinator-2', { ...here, listedAt: ago(30), projectMembership: p2('COORDINATOR') }),
     ];
     const out = listing(sessions, { workspaceId: 'w1', coordinators: [remote()] });
     expect(out.projects.map((entry) => entry.projectId)).toEqual(['p2']);
@@ -235,14 +243,14 @@ describe('a project outside its coordinator’s workspace', () => {
     expect(inside.entries).toEqual([{ ...sessions[0], kind: 'session', projectMark: mark }]);
     // Where the coordinator runs, its folder still holds every member, whatever folder each is filed in.
     const home = listing([coordinator({ ...here, folderId: 'f2' }), ...sessions], { workspaceId: 'w1' }, [project()], folders);
-    expect(home.folders.map((entry) => [entry.folder.id, entry.sessionCount])).toEqual([['f1', 0], ['f2', 3]]);
+    expect(home.folders.map((entry) => [entry.folder.id, entry.sessionCount])).toEqual([['f1', 0], ['f2', 1]]);
     expect(home.entries.map((entry) => entry.id)).toEqual(['ordinary']);
   });
 
   it('puts a member there in Pinned by its own pin, and in its own time section', () => {
-    const pinned = member('pinned', { ...here, pinnedAt: ago(5), lastTurnAt: ago(10_000) });
-    const out = listing([pinned, member('older', { ...here, lastTurnAt: ago(1_440) }), row('ordinary', here)],
-      { workspaceId: 'w1', coordinators: [remote({ pinnedAt: null, lastTurnAt: ago(1) })] });
+    const pinned = member('pinned', { ...here, pinnedAt: ago(5), listedAt: ago(10_000) });
+    const out = listing([pinned, member('older', { ...here, listedAt: ago(1_440) }), row('ordinary', here)],
+      { workspaceId: 'w1', coordinators: [remote({ pinnedAt: null, listedAt: ago(1) })] });
     const sections = sessionTimeSections(out.entries, { now: new Date(NOW) });
     expect(sections.map((section) => [section.title, section.sessions.map((entry) => entry.id)])).toEqual([
       ['Pinned', ['pinned']], ['Today', ['ordinary']], ['Yesterday', ['older']],
@@ -703,5 +711,61 @@ describe('projectSessionsButtonActive', () => {
     for (const state of ['READY', 'BLOCKED', 'MERGED']) {
       expect(projectSessionsButtonActive([], still, null, { state })).toBe(false);
     }
+  });
+});
+
+describe('project row Pause / Resume (design §4.2 2a/2b, §4.3)', () => {
+  const rowOf = (over: Partial<SidebarProject>, rows: Row[] = [coordinator()]) =>
+    listing(rows, {}, [project(over)]).projects[0];
+  const started = ago(600);
+  const fuse = (paused: boolean) => ({ paused, episodeId: paused ? 'ep1' : null, observed: paused ? 6 : null, limit: paused ? 6 : null });
+
+  it('names the one state action per project state, and Pin stays the second slot', () => {
+    expect(projectStateAction(rowOf({ startedAt: null }), 'open')).toBeNull();
+    expect(projectStateAction(rowOf({ startedAt: started }), 'open')).toBe('pause');
+    expect(projectStateAction(rowOf({ startedAt: started, pausedAt: ago(120), pausedReason: 'OWNER' }), 'open')).toBe('resume');
+    expect(projectStateAction(rowOf({ startedAt: started, fuse: fuse(true) }), 'open')).toBe('resume');
+    expect(projectStateAction(rowOf({ startedAt: started, status: 'DONE' }), 'open')).toBe('complete');
+    expect(projectStateAction(rowOf({ startedAt: started, status: 'CANCELLED' }), 'open')).toBe('complete');
+    expect(projectStateAction(rowOf({ startedAt: started, status: 'DONE' }), 'completed')).toBeNull();
+  });
+
+  it('resumes the daily limit first when both pauses hold', () => {
+    expect(rowOf({ startedAt: started, pausedAt: ago(5), fuse: fuse(true) }).pause).toEqual({ kind: 'fuse', episodeId: 'ep1' });
+    expect(rowOf({ startedAt: started, pausedAt: ago(5) }).pause).toEqual({ kind: 'owner' });
+    expect(rowOf({ startedAt: started }).pause).toBeNull();
+  });
+
+  it('never fires anything on a full swipe of a project row', () => {
+    expect(PROJECT_ROW_FULL_SWIPE).toBe(false);
+  });
+
+  it('says 2a amber for the limit and 2b grey for the owner, 2a winning', () => {
+    const limit = rowOf({ startedAt: started, pausedAt: ago(5), fuse: fuse(true) });
+    expect(limit.line).toEqual({ text: 'Paused at the daily limit · 6/6 today', tone: 'warning', glyph: 'pause' });
+    expect(rowOf({ startedAt: started, pausedAt: ago(120) }).line).toEqual({ text: 'Paused · 2 runs finishing', tone: 'paused', glyph: 'pause' });
+    expect(rowOf({ startedAt: started, pausedAt: ago(120), buckets: { running: 1 } }).line.text).toBe('Paused · 1 run finishing');
+    expect(rowOf({ startedAt: started, pausedAt: ago(120), buckets: { running: 0 } }).line.text).toBe('Paused · 2h');
+  });
+
+  it('keeps the line order: a waiting question beats 2a, 2a/2b beat the coordinator exceptions and running', () => {
+    const paused = { startedAt: started, pausedAt: ago(120) };
+    const waiting = coordinator({ line: { text: 'Approve merge to main', tone: 'approval' } });
+    expect(rowOf(paused, [waiting]).line.text).toBe('Approve merge to main');
+    const worker = member('worker', { line: { text: 'Waiting for your confirmation', tone: 'approval' } });
+    expect(rowOf(paused, [coordinator(), worker]).line.text).toBe('Waiting for your confirmation · worker');
+    const held = { attention: { ownerItems: [], startRequest: null, coordinatorItems: { leadKind: 'INTEGRATION_CONFLICT' as const, oldestWaitingSince: ago(18), count: 1 } } } as Partial<SidebarProject>;
+    expect(rowOf({ ...paused, ...held }).line.text).toBe('Paused · 2 runs finishing');
+    const running = coordinator({ motion: 'spinner', line: { text: 'Running coordinator', tone: 'running' } });
+    expect(rowOf(paused, [running]).line.text).toBe('Paused · 2 runs finishing');
+  });
+
+  it('reads refusals in words, never as a code', () => {
+    expect(SESSION_PROJECT_COPY.refusedReason('pause', 403, undefined, 'x')).toBe("Only the project's owner can pause it");
+    expect(SESSION_PROJECT_COPY.refusedReason('resume', 403, undefined, 'x')).toBe("Only the project's owner can resume it");
+    expect(SESSION_PROJECT_COPY.refusedReason('pause', 409, 'PROJECT_NOT_STARTED', 'x')).toBe("The project hasn't started yet");
+    expect(SESSION_PROJECT_COPY.refusedReason('pause', 500, undefined, 'Server said')).toBe('Server said');
+    expect(SESSION_PROJECT_COPY.pausedStill(0)).toBe('Nothing new starts or merges');
+    expect(SESSION_PROJECT_COPY.pausedStill(1)).toBe('1 run still going · nothing new starts or merges');
   });
 });

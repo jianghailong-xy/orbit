@@ -617,6 +617,7 @@
 4. **【中】J-T1c 没有实现，但 J5 依赖它（契约 :345、:370）。**
    - 入队点只有 `project-integration-job.ts:580,637,799,877,1028`，`turnComplete` 里没有从 branchSha 到入队的路径。
    - 要么实现它，要么从 J5 里删掉。
+   - 已由契约修订 42 收口（2026-11-20，`docs/project-integration-line-contract.md` §12.5 W7）：J-T1c 改写为「任务自己的会话修好、工作结算后再落一代」，不再有 `turnComplete` 上的独立触发。
 5. **【中，推断】任务重开或取消时不会叫停 LAND_TASK。**
    - 作业 `cancel_requested_at` 的唯一写者是晋升的 applyCancel（`project-promotion.service.ts:595-600`），领取也不看任务状态（`integration-job-relay.ts:312-399`）。
    - 推断：已取消任务的排队落地仍会被执行。

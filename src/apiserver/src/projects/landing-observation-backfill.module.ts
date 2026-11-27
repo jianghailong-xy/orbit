@@ -3,6 +3,7 @@ import { ModuleRef } from '@nestjs/core';
 import { databaseUrl } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { runLandingObservationBackfill } from './landing-observation-backfill';
+import { runLandingRegressionRepair } from './landing-regression-repair';
 import { ProjectOpenItemService } from './project-open-item.service';
 
 /**
@@ -15,11 +16,17 @@ import { ProjectOpenItemService } from './project-open-item.service';
  * It never fails a start. A task the pass has not reached reads as it did before revision 29 — DONE and
  * not yet landed — so a run that failed is logged and runs again on the next start.
  *
+ * After the pass, the repair of what §12.15 P-M1's first reading wrote (`landing-regression-repair.ts`):
+ * the questions it put about tasks that delivered nothing of their own are superseded by that fact, and
+ * their projects are projected again. After the pass, because the pass is what freezes the identities
+ * the repair reads. Idempotent, and never fails a start either.
+ *
  * Imported by AppModule only: the Wiki worker shares the database and must not run it too.
  */
 @Injectable()
 export class LandingObservationBackfillAtBoot implements OnApplicationBootstrap {
   private readonly log = new Logger('LandingObservationBackfill');
+  private readonly repairLog = new Logger('LandingRegressionRepair');
 
   constructor(
     private readonly prisma: PrismaService,
@@ -38,6 +45,13 @@ export class LandingObservationBackfillAtBoot implements OnApplicationBootstrap 
     } catch (error) {
       this.log.error(
         `the landing backfill did not finish and runs again on the next start: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    try {
+      await runLandingRegressionRepair(this.prisma, { log: this.repairLog });
+    } catch (error) {
+      this.repairLog.error(
+        `the landing repair did not finish and runs again on the next start: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }

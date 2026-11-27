@@ -11,6 +11,7 @@ import { MemoryRouter } from 'react-router-dom';
 import type { TaskIntegrationView } from '@orbit/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError, api } from '../api';
+import { SITUATIONS } from '../lib/sessionPhaseFields.fixture';
 import { newRunRequestToken } from '../lib/runRequestToken';
 import { encodeId } from '../lib/idCodec';
 import { TASK_RUN_HELD_TITLE, TASK_RUN_PIN_TITLE } from '../lib/taskRunHandoff';
@@ -93,6 +94,7 @@ const PROJECT_ID = '7bV4mNc1';
 const OTHER_PROJECT_ID = '2wX8dHt5';
 /** A run of the task, as the public id the panel links by. */
 const LIVE_RUN = '34MOJw69NzKSq2X0exxf9';
+const SECOND_RUN = '34MOJw69NzKSq2X0exxf8';
 
 /** A runnable task: assigned, unblocked, nothing in flight. */
 function task(over: Record<string, unknown> = {}) {
@@ -172,6 +174,36 @@ describe('the landing of a DONE task, apart from its status (§2.7a)', () => {
     /<section class="tdp-section" aria-label="Task landing">([\s\S]*?)<\/section>/.exec(html)?.[1];
   const meta = (html: string) => /<div class="tdp-meta">([\s\S]*?)<\/div>/.exec(html)?.[1];
 
+  it('draws a task exempt from the landing check as Exempt with its reason, who marked it and when, and a way to remove it (D5)', () => {
+    const PROJECT_ID = '34WvwUS8YMXfOfWbMqVuu';
+    const reason = 'Only moves cron entries; the landing check needs a database this task cannot reach.';
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnMount: false, retryOnMount: false } } });
+    qc.setQueryData(['project', PROJECT_ID], {
+      id: PROJECT_ID, title: 'P',
+      settingChanges: [{
+        id: 'c1', projectId: PROJECT_ID, taskId: TASK_ID, field: 'TASK_LANDING_CHECK_EXEMPT', origin: 'COORDINATOR',
+        oldValue: { exempt: false, reason: null }, newValue: { exempt: true, reason }, reason,
+        writtenBySessionId: 's', revertsChangeId: null, revertedAt: null, revertible: true,
+        createdAt: new Date(Date.now() - 20 * 60_000).toISOString(),
+      }],
+    });
+    const html = renderPanel(task({
+      status: 'DONE', projectId: PROJECT_ID, landingCheckExempt: true, landingCheckExemptReason: reason,
+      integration: integration('LANDED'),
+    }), false, qc);
+    const block = section(html)!;
+    expect(block).toContain('data-task-exempt="true"');
+    expect(block).toContain('>Exempt</span>');
+    expect(block).toContain(reason);
+    expect(block).toContain('>Coordinator</span>');
+    expect(block).toContain('marked 20m ago');
+    expect(block).toContain('<span>Remove exemption</span></button>');
+    // A task that is not exempt draws none of it.
+    expect(section(renderPanel(task({ status: 'DONE', integration: integration('LANDED') })))).not.toContain('data-task-exempt');
+    // An exempt task with no landing yet still has the section, for its exemption.
+    expect(section(renderPanel(task({ status: 'OPEN', landingCheckExempt: true, landingCheckExemptReason: reason })))).toContain('data-task-exempt="true"');
+  });
+
   it.each([
     ['QUEUED', 'Waiting to land', 'tone-amber'],
     ['RUNNING', 'Landing', 'tone-blue'],
@@ -191,7 +223,8 @@ describe('the landing of a DONE task, apart from its status (§2.7a)', () => {
     expect(block).toContain('<span class="land-task-task-state">Task DONE</span>');
     expect(block).toContain(`<span class="tdp-badge ${tone}">${label}</span>`);
     expect(block).toContain('generation 19');
-    expect(block).toContain('<code title="refs/heads/project/landing-visibility">project/landing-visibility</code>');
+    // The full ref is the app tooltip's now (ProjectIntegrationLine.test asserts it); the markup shows the branch.
+    expect(block).toMatch(/<code[^>]*>project\/landing-visibility<\/code>/);
     expect(block).toContain('<dt>Queue wait</dt><dd>2m</dd>');
     expect(block).toContain(`dateTime="${QUEUED_AT}"`);
     expect(block).not.toMatch(/<button|<a /);
@@ -1123,6 +1156,21 @@ describe('the task page led by the run', () => {
     expect(html).toContain('$0.84 so far');
   });
 
+  const nowTitle = (html: string) => /class="tdp-now-title">([^<]+)</.exec(html)?.[1];
+  const queuedRun = (situation: string) =>
+    task({ sessions: [{ ...SITUATIONS[situation], workFinished: false, endReason: null, id: LIVE_RUN, createdAt: STARTED, workspace: { name: 'Builder' } }] });
+
+  it('the Now card reads "Queued" with the On hold mark for a held queued run, by the run badge\'s own rule', () => {
+    const html = renderPanel(queuedRun('on hold'));
+    expect(nowTitle(html)).toBe('Queued');
+    expect(/class="tdp-now-title">Queued<span class="session-marks"><span class="session-mark tone-grey" data-mark="ON_HOLD"/.test(html)).toBe(true);
+  });
+
+  it('the Now card reads "Queued" for a queued run that nothing holds', () => {
+    const html = renderPanel(queuedRun('a queued turn'));
+    expect(nowTitle(html)).toBe('Queued');
+  });
+
   it('draws no Now and no progress when nothing is running, and none from a revision-0 progress', () => {
     const html = renderPanel(task({ progress: { revision: 0, phase: null, current: null, total: null, message: null } }));
     expect(titles(html)).not.toContain('Now');
@@ -1220,6 +1268,39 @@ describe('the task page led by the run', () => {
     expect(filed).toBeGreaterThan(-1);
     expect(filed).toBeLessThan(run);
     expect(run).toBeLessThan(comment);
+  });
+
+  it('docked beside a conversation, names that run This conversation and does not link to it', () => {
+    // docs/mocks/session-task-column: a fixed 420px column with no drag handle, beside the run it lists.
+    const data = task({
+      sessions: [
+        { id: LIVE_RUN, status: 'SUCCEEDED', createdAt: '2026-11-12T09:42:00.000Z', workspace: { name: 'Builder' } },
+        { id: SECOND_RUN, status: 'FAILED', createdAt: '2026-11-12T09:50:00.000Z', workspace: { name: 'Reviewer' } },
+      ],
+    });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnMount: false, retryOnMount: false } } });
+    qc.setQueryData(['task', TASK_ID], data);
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter>
+          <TaskDetailPanel taskId={TASK_ID} onOpenTask={() => {}} onClose={() => {}} onDelete={() => {}} deleting={false}
+            docked hereSessionId={LIVE_RUN} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(html).toContain('class="task-detail-panel is-docked"');
+    expect(html).not.toContain('tdp-resizer');
+    expect(html).toContain('<div class="tdp-session-title">This conversation</div>');
+    expect(html).not.toContain('<div class="tdp-session-title">Builder</div>');
+    expect(html).toContain('<div class="tdp-session-title">Reviewer</div>');
+    expect(html).not.toContain(`href="/sessions/${encodeId(LIVE_RUN)}"`);
+    expect(html).toContain(`href="/sessions/${encodeId(SECOND_RUN)}"`);
+
+    // Over any other page, as before: every run is a link, and the panel can be dragged wider.
+    const plain = renderPanel(data);
+    expect(plain).toContain('tdp-resizer');
+    expect(plain).not.toContain('This conversation');
+    expect(plain).toContain(`href="/sessions/${encodeId(LIVE_RUN)}"`);
   });
 });
 

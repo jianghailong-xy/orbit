@@ -1,0 +1,272 @@
+# Alert rules (docs/self-hosting.md, "Monitoring", "Alerts"). Grafana's own alerting, no Alertmanager: each rule queries
+# Prometheus, reduces to one number per series and compares it with a threshold. Which contact point takes them is
+# policies.yml's; the thresholds below are the only knobs, edit them here.
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: orbit-apiserver-down
+    folder: Orbit
+    interval: 1m
+    rules:
+      - uid: orbit-apiserver-down
+        title: 'Apiserver down'
+        condition: C
+        for: 2m
+        noDataState: Alerting
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: 'No apiserver is answering Prometheus'
+          description: 'Prometheus found no apiserver up for 2 minutes. Judged across every apiserver target, so a two-stage handover, where apiserver-next runs beside apiserver and one of them stops, does not fire it. Check docker compose ps apiserver and docker logs orbit-apiserver.'
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: orbit-prometheus
+            model: {refId: A, datasource: {type: prometheus, uid: orbit-prometheus}, expr: 'sum(up{job="apiserver"}) or vector(0)', instant: true, range: false}
+          - refId: B
+            datasourceUid: __expr__
+            model: {refId: B, datasource: {type: __expr__, uid: __expr__}, type: reduce, expression: A, reducer: last, settings: {mode: dropNN}}
+          - refId: C
+            datasourceUid: __expr__
+            model: {refId: C, datasource: {type: __expr__, uid: __expr__}, type: threshold, expression: B, conditions: [{evaluator: {type: lt, params: [1]}}]}
+  - orgId: 1
+    name: orbit-http-5xx
+    folder: Orbit
+    interval: 1m
+    rules:
+      - uid: orbit-http-5xx
+        title: 'High HTTP 5xx rate'
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: 'More than 5% of API requests fail with 5xx'
+          description: 'Over 5% of the answers of the last 5 minutes were 5xx, for 5 minutes. No traffic is not an error: the rule has no data then.'
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: orbit-prometheus
+            model: {refId: A, datasource: {type: prometheus, uid: orbit-prometheus}, expr: '(sum(rate(orbit_http_request_duration_seconds_count{status="5xx"}[5m])) or vector(0)) / sum(rate(orbit_http_request_duration_seconds_count[5m]))', instant: true, range: false}
+          - refId: B
+            datasourceUid: __expr__
+            model: {refId: B, datasource: {type: __expr__, uid: __expr__}, type: reduce, expression: A, reducer: last, settings: {mode: dropNN}}
+          - refId: C
+            datasourceUid: __expr__
+            model: {refId: C, datasource: {type: __expr__, uid: __expr__}, type: threshold, expression: B, conditions: [{evaluator: {type: gt, params: [0.05]}}]}
+  - orgId: 1
+    name: orbit-http-p95
+    folder: Orbit
+    interval: 1m
+    rules:
+      - uid: orbit-http-p95
+        title: 'High p95 latency'
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: 'API p95 latency is over 2.5 s'
+          description: 'The 95th percentile of API answers has been over 2.5 seconds for 10 minutes. The merge routes and the provider key checks, which can hold for minutes when asked to, are left out.'
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: orbit-prometheus
+            model: {refId: A, datasource: {type: prometheus, uid: orbit-prometheus}, expr: 'histogram_quantile(0.95, sum by (le) (rate(orbit_http_request_duration_seconds_bucket{route!~".*/merge|/api/providers/mine/:id/key-check|/api/providers/test"}[5m])))', instant: true, range: false}
+          - refId: B
+            datasourceUid: __expr__
+            model: {refId: B, datasource: {type: __expr__, uid: __expr__}, type: reduce, expression: A, reducer: last, settings: {mode: dropNN}}
+          - refId: C
+            datasourceUid: __expr__
+            model: {refId: C, datasource: {type: __expr__, uid: __expr__}, type: threshold, expression: B, conditions: [{evaluator: {type: gt, params: [2.5]}}]}
+  - orgId: 1
+    name: orbit-work-no-runner
+    folder: Orbit
+    interval: 1m
+    rules:
+      - uid: orbit-work-no-runner
+        title: 'Work queued with no runner online'
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Sessions wait for a runner and none is online'
+          description: 'Sessions have been queued for 10 minutes and no runner is online (a draining runner takes no new work). Start or reconnect a runner.'
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: orbit-prometheus
+            model: {refId: A, datasource: {type: prometheus, uid: orbit-prometheus}, expr: 'max(orbit_sessions{state="queued"}) and on() (max(orbit_runners{state="online"}) == 0) and on() (max(orbit_fleet_gauges_up) == 1)', instant: true, range: false}
+          - refId: B
+            datasourceUid: __expr__
+            model: {refId: B, datasource: {type: __expr__, uid: __expr__}, type: reduce, expression: A, reducer: last, settings: {mode: dropNN}}
+          - refId: C
+            datasourceUid: __expr__
+            model: {refId: C, datasource: {type: __expr__, uid: __expr__}, type: threshold, expression: B, conditions: [{evaluator: {type: gt, params: [0]}}]}
+  - orgId: 1
+    name: orbit-disk-85
+    folder: Orbit
+    interval: 1m
+    rules:
+      - uid: orbit-disk-85
+        title: 'Disk over 85%'
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: 'A filesystem is over 85% full'
+          description: 'A filesystem this host mounts has been more than 85% full for 5 minutes. A full disk stops PostgreSQL and the WAL archive.'
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: orbit-prometheus
+            model: {refId: A, datasource: {type: prometheus, uid: orbit-prometheus}, expr: 'max by (mountpoint) (1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|vfat|squashfs|ramfs|iso9660"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|vfat|squashfs|ramfs|iso9660"})', instant: true, range: false}
+          - refId: B
+            datasourceUid: __expr__
+            model: {refId: B, datasource: {type: __expr__, uid: __expr__}, type: reduce, expression: A, reducer: last, settings: {mode: dropNN}}
+          - refId: C
+            datasourceUid: __expr__
+            model: {refId: C, datasource: {type: __expr__, uid: __expr__}, type: threshold, expression: B, conditions: [{evaluator: {type: gt, params: [0.85]}}]}
+  - orgId: 1
+    name: orbit-base-backup-old
+    folder: Orbit
+    interval: 5m
+    rules:
+      - uid: orbit-base-backup-old
+        title: 'Base backup older than its interval'
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: 'The newest base backup is older than ORBIT_BASE_BACKUP_INTERVAL plus an hour'
+          description: 'No base backup has finished within ORBIT_BASE_BACKUP_INTERVAL plus an hour (a host with no backup yet counts as infinitely old). Read docker logs orbit-pgbackup.'
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: orbit-prometheus
+            model: {refId: A, datasource: {type: prometheus, uid: orbit-prometheus}, expr: 'max(time() - orbit_backup_base_last_success_timestamp_seconds) > bool max(orbit_backup_base_interval_seconds) + 3600', instant: true, range: false}
+          - refId: B
+            datasourceUid: __expr__
+            model: {refId: B, datasource: {type: __expr__, uid: __expr__}, type: reduce, expression: A, reducer: last, settings: {mode: dropNN}}
+          - refId: C
+            datasourceUid: __expr__
+            model: {refId: C, datasource: {type: __expr__, uid: __expr__}, type: threshold, expression: B, conditions: [{evaluator: {type: gt, params: [0]}}]}
+  - orgId: 1
+    name: orbit-wal-archive-failing
+    folder: Orbit
+    interval: 1m
+    rules:
+      - uid: orbit-wal-archive-failing
+        title: 'WAL archiving failing'
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: 'PostgreSQL cannot archive its WAL'
+          description: 'pg_stat_archiver reports a failure newer than its last success, for 5 minutes. Point-in-time recovery is not possible past the last archived segment, and pg_wal keeps growing.'
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: orbit-prometheus
+            model: {refId: A, datasource: {type: prometheus, uid: orbit-prometheus}, expr: 'max(orbit_backup_wal_archive_failing)', instant: true, range: false}
+          - refId: B
+            datasourceUid: __expr__
+            model: {refId: B, datasource: {type: __expr__, uid: __expr__}, type: reduce, expression: A, reducer: last, settings: {mode: dropNN}}
+          - refId: C
+            datasourceUid: __expr__
+            model: {refId: C, datasource: {type: __expr__, uid: __expr__}, type: threshold, expression: B, conditions: [{evaluator: {type: gt, params: [0]}}]}
+  - orgId: 1
+    name: orbit-mirror-failing
+    folder: Orbit
+    interval: 5m
+    rules:
+      - uid: orbit-mirror-failing
+        title: 'Off-host backup mirror failing'
+        condition: C
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: 'The off-host copy of the backups failed in the last hour'
+          description: 'Polls whose off-host copy (archive, files or bucket) failed in the last hour. Read docker logs orbit-pgbackup.'
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: orbit-prometheus
+            model: {refId: A, datasource: {type: prometheus, uid: orbit-prometheus}, expr: 'sum(increase(orbit_backup_mirror_failures_total[1h]))', instant: true, range: false}
+          - refId: B
+            datasourceUid: __expr__
+            model: {refId: B, datasource: {type: __expr__, uid: __expr__}, type: reduce, expression: A, reducer: last, settings: {mode: dropNN}}
+          - refId: C
+            datasourceUid: __expr__
+            model: {refId: C, datasource: {type: __expr__, uid: __expr__}, type: threshold, expression: B, conditions: [{evaluator: {type: gt, params: [0]}}]}
+  - orgId: 1
+    name: orbit-postgres-conflicts
+    folder: Orbit
+    interval: 1m
+    rules:
+      - uid: orbit-postgres-conflicts
+        title: 'Postgres conflict spike'
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Requests fail on database conflicts or PostgreSQL reports deadlocks'
+          description: 'The rate of requests answered with the typed 503 because a transaction conflict reached the API, plus PostgreSQL''s deadlocks, has been over 0.1 per second for 5 minutes.'
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: orbit-prometheus
+            model: {refId: A, datasource: {type: prometheus, uid: orbit-prometheus}, expr: '(sum(rate(orbit_db_conflict_responses_total[5m])) or vector(0)) + (sum(rate(pg_stat_database_deadlocks{datname="orbit"}[5m])) or vector(0))', instant: true, range: false}
+          - refId: B
+            datasourceUid: __expr__
+            model: {refId: B, datasource: {type: __expr__, uid: __expr__}, type: reduce, expression: A, reducer: last, settings: {mode: dropNN}}
+          - refId: C
+            datasourceUid: __expr__
+            model: {refId: C, datasource: {type: __expr__, uid: __expr__}, type: threshold, expression: B, conditions: [{evaluator: {type: gt, params: [0.1]}}]}
+  - orgId: 1
+    name: orbit-watchdog
+    folder: Orbit
+    interval: 1m
+    rules:
+      - uid: orbit-watchdog
+        title: Watchdog
+        condition: B
+        for: 0s
+        noDataState: Alerting
+        execErrState: Alerting
+        labels:
+          severity: none
+          watchdog: "true"
+        annotations:
+          summary: Always firing, so that an outside service can tell Grafana is alive
+          description: This alert is meant to fire. It goes to the heartbeat URL, not to the phone; when the heartbeats stop, Grafana or the host is down. It reads no data source, so a Prometheus outage does not stop it.
+        data:
+          - refId: A
+            datasourceUid: __expr__
+            model: {refId: A, datasource: {type: __expr__, uid: __expr__}, type: math, expression: "1"}
+          - refId: B
+            datasourceUid: __expr__
+            model: {refId: B, datasource: {type: __expr__, uid: __expr__}, type: threshold, expression: A, conditions: [{evaluator: {type: gt, params: [0]}}]}

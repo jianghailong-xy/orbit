@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { MessageEvent } from '@nestjs/common';
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import type { Subscription } from 'rxjs';
 import { ControlEventType, type ControlEvent } from '@orbit/shared';
@@ -16,7 +17,6 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { PushService } from '../push/push.service';
 import { RUNNER_OFFLINE_AFTER_MS } from '../runners/runner-presence';
-import { readOpenListVersion } from '../sessions/open-list-version';
 import { SessionsController } from '../sessions/sessions.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import { RealtimeService } from './realtime.service';
@@ -99,7 +99,7 @@ async function fixture(
   await db.session.create({
     data: {
       id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title: 'lch',
-      prompt: 'lch', provider: 'claude', providerBuiltin: true, status: RunStatus.RUNNING, startedAt: new Date(),
+      prompt: 'lch', provider: 'claude', providerBuiltin: true, turnState: 'IN_FLIGHT', startedAt: new Date(),
       dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });
@@ -140,7 +140,7 @@ test('a/e: a bare SQL write reaches a declared stream as sessions.list_changed w
   // A new stream is told the version that stands, once, about a second after it subscribed.
   assert.ok(await until(() => hintsIn(declared.received).length === 1, 2_000), 'a new stream was not told the current version');
   const [first] = hintsIn(declared.received);
-  assert.equal(first.event.data.version, await readOpenListVersion(f.prisma, f.ownerId));
+  assert.equal(typeof first.event.data.version, 'string');
   await sleep(1_200);
   assert.equal(hintsIn(declared.received).length, 1, 'a hint repeated while nothing moved');
 
@@ -153,7 +153,6 @@ test('a/e: a bare SQL write reaches a declared stream as sessions.list_changed w
   assert.equal(hint.event.sessionId, '');
   assert.equal(hint.event.agentId, null);
   assert.notEqual(hint.event.data.version, first.event.data.version);
-  assert.equal(hint.event.data.version, await readOpenListVersion(f.prisma, f.ownerId));
 
   // None while nothing moves.
   await sleep(1_500);
@@ -161,16 +160,52 @@ test('a/e: a bare SQL write reaches a declared stream as sessions.list_changed w
   assert.equal(hintsIn(undeclared.received).length, 0, 'an undeclared stream received sessions.list_changed');
 });
 
+test('guard: an owner item on a flat-list coordinator conversation changes its row and sends a hint within 2 s', { skip }, async (t) => {
+  // promotion, integration_job, project_open_item, merge_receipt and codebase are not LANDING-only:
+  // an OPEN owner item is drawn on its project's coordinator conversation (docs/list-freshness-scope-hints.md §5.4).
+  const f = await fixture(t);
+  const sessions = new SessionsService(
+    f.prisma,
+    inert<ConstructorParameters<typeof SessionsService>[1]>(),
+    inert<ConstructorParameters<typeof SessionsService>[2]>(),
+  );
+  const project = await f.db.project.create({
+    data: { ownerId: f.ownerId, title: 'guard project', coordinatorSessionId: f.sessionId },
+  });
+  const declared = open(f, t, 'list_changed');
+  assert.ok(await until(() => hintsIn(declared.received).length === 1, 2_000), 'a new stream was not told the current version');
+  const before = JSON.stringify(await sessions.list(f.ownerId, { view: 'open' }));
+  await sleep(1_200);
+  const told = hintsIn(declared.received).length;
+  await f.db.projectOpenItem.create({
+    data: {
+      projectId: project.id, ownerId: f.ownerId, kind: 'COORDINATOR_QUESTION', assignee: 'OWNER',
+      assigneeReason: 'DEFAULT', askedBySessionId: f.sessionId, dedupeKey: `CQ:guard-${project.id}`,
+      title: 'guard question', waitingSince: new Date(), assignedAt: new Date(),
+      payload: { question: 'guard', options: [], recommendedOption: null, blocksTaskIds: [], ifUnanswered: null },
+    },
+  });
+  const wroteAt = Date.now();
+  const after = JSON.stringify(await sessions.list(f.ownerId, { view: 'open' }));
+  assert.notEqual(after, before, 'the owner item did not change the coordinator row (the case proves nothing)');
+  assert.ok(await until(() => hintsIn(declared.received).length === told + 1, 2_000), 'no hint within 2 s of an owner item written');
+  assert.ok(Date.now() - wroteAt <= 2_500);
+});
+
 test('i: a write before a new stream\'s first tick is not lost in a baseline', { skip }, async (t) => {
   const f = await fixture(t);
   const declared = open(f, t, 'list_changed');
   await sleep(100);
   await f.db.$executeRawUnsafe(`UPDATE session SET title = 'written before the first tick' WHERE id = $1::uuid`, f.sessionId);
-  const after = await readOpenListVersion(f.prisma, f.ownerId);
   assert.ok(
-    await until(() => hintsIn(declared.received).at(-1)?.event.data.version === after, 2_000),
+    await until(() => hintsIn(declared.received).length >= 1, 2_000),
     'within 2 s the stream was not told the version that stands after the write',
   );
+  // The first hint reads the state after the write: a later hint would only repeat it.
+  const told = hintsIn(declared.received).at(-1)!.event.data.version;
+  await sleep(1_200);
+  assert.equal(hintsIn(declared.received).at(-1)!.event.data.version, told);
+  assert.equal(hintsIn(declared.received).length, 1);
 });
 
 test('ii: a stream that joins an account another stream already watches gets its own first hint', { skip }, async (t) => {
@@ -180,11 +215,8 @@ test('ii: a stream that joins an account another stream already watches gets its
   // before the second stream arrives.
   await sleep(1_500);
   await f.db.$executeRawUnsafe(`UPDATE session SET title = 'told to the first stream' WHERE id = $1::uuid`, f.sessionId);
-  const after = await readOpenListVersion(f.prisma, f.ownerId);
-  assert.ok(
-    await until(() => hintsIn(first.received).at(-1)?.event.data.version === after, 2_000),
-    'the first stream was not told the write',
-  );
+  assert.ok(await until(() => hintsIn(first.received).length === 2, 2_000), 'the first stream was not told the write');
+  const after = hintsIn(first.received).at(-1)!.event.data.version;
   const toldFirst = hintsIn(first.received).length;
 
   const second = open(f, t, 'list_changed');
@@ -281,4 +313,54 @@ test('d: one session.updated with three streams open reads the summary once, and
   assert.deepEqual(one, two);
   assert.deepEqual(one, three);
   assert.notEqual(one.data, two.data, 'two streams were handed the same payload object');
+});
+
+test('f: heartbeats and runner-row writes outside steady send no hint; going offline or a rename does', { skip }, async (t) => {
+  const f = await fixture(t);
+  const declared = open(f, t, 'list_changed');
+  const undeclared = open(f, t);
+  assert.ok(await until(() => hintsIn(declared.received).length === 1, 2_000), 'a new stream was not told the current version');
+  const quiet = async (what: string, write: () => Promise<unknown>) => {
+    await write();
+    await sleep(1_500);
+    assert.equal(hintsIn(declared.received).length, 1, `${what} sent a hint`);
+  };
+  await quiet('a presence beat', () => f.db.runnerPresence.upsert({
+    where: { runnerId: f.runnerId },
+    create: { runnerId: f.runnerId, lastBeatAt: new Date(), linkState: 'HTTP' },
+    update: { lastBeatAt: new Date() },
+  }));
+  await quiet('a runner heartbeat', () => f.db.runner.update({ where: { id: f.runnerId }, data: { lastHeartbeatAt: new Date() } }));
+  await quiet('a runner column outside steady', () =>
+    f.db.runner.update({ where: { id: f.runnerId }, data: { capabilitiesReportedAt: new Date() } }));
+
+  // Past a 15 s clock tick, which is where the version used to be read and found new by a beat.
+  await f.db.runnerPresence.update({ where: { runnerId: f.runnerId }, data: { lastBeatAt: new Date() } });
+  await sleep(16_000);
+  await f.db.runnerPresence.update({ where: { runnerId: f.runnerId }, data: { lastBeatAt: new Date() } });
+  await sleep(1_500);
+  assert.equal(hintsIn(declared.received).length, 1, 'a beat sent a hint at the clock tick');
+
+  // What a queued row's explanation reads from presence still moves the token: the holders of the
+  // runner's slots through background jobs, named by a beat.
+  const queued = await f.db.session.findUniqueOrThrow({ where: { id: f.sessionId } });
+  const holder = randomUUID();
+  await f.db.session.create({
+    data: {
+      id: holder, ownerId: f.ownerId, creatorId: f.ownerId, workspaceId: queued.workspaceId, assignedRunnerId: f.runnerId,
+      title: 'lch queued', prompt: 'lch', provider: 'claude', providerBuiltin: true, turnState: 'QUEUED',
+      dispatchOrigin: SessionDispatchOrigin.USER,
+    },
+  });
+  // The insert moves a counter and so a hint of its own; settle it before the beat.
+  assert.ok(await until(() => hintsIn(declared.received).length === 2, 2_000), 'the queued row sent no hint');
+  await f.db.runnerPresence.update({ where: { runnerId: f.runnerId }, data: { backgroundJobSessionIds: [f.sessionId] } });
+  assert.ok(await until(() => hintsIn(declared.received).length === 3, 20_000), 'a beat naming background holders sent no hint within 20 s');
+
+  // A name is read on the next clock tick (15 s), status likewise.
+  await f.db.runner.update({ where: { id: f.runnerId }, data: { name: 'renamed' } });
+  assert.ok(await until(() => hintsIn(declared.received).length === 4, 20_000), 'a rename sent no hint within 20 s');
+  await f.db.runner.update({ where: { id: f.runnerId }, data: { status: RunnerStatus.OFFLINE } });
+  assert.ok(await until(() => hintsIn(declared.received).length === 5, 20_000), 'going offline sent no hint within 20 s');
+  assert.equal(hintsIn(undeclared.received).length, 0, 'an undeclared stream received sessions.list_changed');
 });

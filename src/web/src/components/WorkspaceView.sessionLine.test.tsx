@@ -157,8 +157,10 @@ describe('sessionLine', () => {
       text: 'Record as done…',
       tone: 'approval',
     });
-    expect(sessionLine({ ...parked, waitingKind: 'OWNER_REQUEST' }, true)).toEqual({
-      text: 'Waiting on you',
+    // An owner request says its kind's own word, never "Waiting on you".
+    const request = { ownerRequestId: 'r1', kind: 'MANUAL_STEP' as const, title: 'Sign in', since: '2026-11-14T00:00:00Z' };
+    expect(sessionLine({ ...parked, waitingKind: 'OWNER_REQUEST', ownerRequests: [request] }, true)).toEqual({
+      text: 'Steps for you',
       tone: 'approval',
     });
   });
@@ -264,7 +266,7 @@ describe('sessionLine', () => {
    */
   it('falls back to the run state word when there is nothing to preview', () => {
     expect(sessionLine({ status: 'SUCCEEDED' }, true)).toEqual({
-      text: 'Succeeded',
+      text: 'Finished',
       tone: 'preview',
     });
     expect(sessionLine({ status: 'FAILED' }, true)).toEqual({ text: 'Failed', tone: 'preview' });
@@ -766,11 +768,23 @@ describe('the guests mark on a session row', () => {
     const row = (s: Record<string, unknown>) =>
       renderToStaticMarkup(<SessionTitleRow session={{ title: 'Retry budget for flaky pg specs', lastTurnAt: new Date().toISOString(), ...s }} />);
     const shown = row({ hasGuests: true, shared: true });
-    expect(shown).toContain(`<span class="session-guests" title="${SESSION_GUESTS_TIP}" aria-label="${SESSION_GUESTS_TIP}">`);
+    expect(shown).toContain(`<span class="session-guests" aria-label="${SESSION_GUESTS_TIP}"`);
     // Beside the globe, both before the time.
     expect(shown.indexOf('session-shared')).toBeLessThan(shown.indexOf('session-guests'));
     expect(shown.indexOf('session-guests')).toBeLessThan(shown.indexOf('session-time'));
     expect(row({ hasGuests: false })).not.toContain('session-guests');
     expect(row({})).not.toContain('session-guests');
+  });
+});
+
+/** The row's time (contracts/session-list-order.fixtures.json): when it was listed, or how long its turn has run. */
+describe('a session row\'s time', () => {
+  it('says when the row was listed, not when it last moved, and how long a running turn has run', async () => {
+    const { sessionRowTime } = await import('./WorkspaceView');
+    const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+    expect(sessionRowTime({ status: 'AWAITING_INPUT', listedAt: ago(2 * 3_600_000), lastTurnAt: ago(1000), createdAt: ago(9e7) })).toBe('2h ago');
+    expect(sessionRowTime({ status: 'AWAITING_INPUT', listedAt: null, lastTurnAt: ago(1000), createdAt: ago(5 * 60_000) })).toBe('5m ago');
+    expect(sessionRowTime({ status: 'RUNNING', listedAt: ago(2 * 3_600_000), currentTurnStartedAt: ago(12 * 60_000) })).toBe('12m');
+    expect(sessionRowTime({ status: 'RUNNING', listedAt: ago(2 * 3_600_000) })).toBe('');
   });
 });

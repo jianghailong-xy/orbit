@@ -49,7 +49,7 @@ extension StartProject {
         let main = main ?? RunSettings.mainBranchName(settings.upstreamRef)
         return [
             rowAsked,
-            RunSettings.lineInSentence(settings.line, main: main),
+            settings.line.map { RunSettings.lineInSentence($0, main: main) } ?? StartProject.landsWhenCommits,
             "\(RunSettings.automatic) \(settings.automatic ? "on" : "off")",
             "at most \(settings.maxConcurrentTasks) at a time",
         ].joined(separator: " · ")
@@ -133,6 +133,39 @@ extension RunSettings {
 
     /// The block's head says when what it changes takes hold.
     public static let appliesFromNextTask = "applies from the next task"
+
+    /// The one-line summary How it runs opens with (web's `project-run-settings-summary`):
+    /// "Automatic On" over "A project branch · project/34yca… · 3 tasks at a time".
+    public struct Summary: Equatable, Sendable {
+        public let title: String
+        public let line: String
+    }
+
+    /// The summary for the project as it stands, built from `parts` — the same words the start
+    /// receipt's line uses for the line and how many tasks run at once. A non-code project names its
+    /// mark where the line would be; a line nobody has decided says nothing, and then neither does
+    /// the count, as web's does.
+    public static func summary(_ view: ProjectIntegrationView, projectID: String, automatic on: Bool,
+                               maxConcurrentTasks: Int?, nonCode: Bool) -> Summary {
+        let title = "\(automatic) \(on ? switchOn : switchOff)"
+        let branch = view.line == .projectBranch && !(view.ref ?? "").isEmpty
+            ? (view.ref ?? "") : (view.defaultProjectBranch ?? "project/\(projectID)")
+        let settings = ProjectStartSettings(line: view.line ?? .projectBranch, projectBranchName: branch,
+                                            upstreamRef: storedMainBranch(view) ?? defaultMainBranch,
+                                            automatic: on, maxConcurrentTasks: maxConcurrentTasks ?? 0)
+        let said = parts(settings)
+        func text(_ key: ProjectStartSettingKey) -> String { said.first { $0.key == key }?.text ?? "" }
+        var line: [String] = []
+        if nonCode {
+            line.append(ProjectDone.nonCodeBadge)
+        } else if let standing = view.line {
+            line.append(standing == .main ? text(.line) : "\(lineProjectBranch) · \(text(.line))")
+        }
+        if nonCode || view.line != nil, maxConcurrentTasks != nil {
+            line.append(text(.maxConcurrentTasks))
+        }
+        return Summary(title: title, line: line.joined(separator: " · "))
+    }
     public static let escalateAfter = "Escalate after"
     public static let escalateHint = "Items the coordinator hasn’t handled by then come to you."
     /// The merge check's editor saves what was typed.

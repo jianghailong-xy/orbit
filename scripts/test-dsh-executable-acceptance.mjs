@@ -23,17 +23,17 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
 import { Fatal, RunnerMachine, callApi, eventually, fileLog, freePort, lookPath, migrate, startApiserver, startPostgres } from './codex-reset-e2e/harness.mjs';
+import { sessionWordSql } from './lib/session-word.mjs';
 
 export const SCENARIOS = [
   'D3-S1 Harness EXECUTABLE task: a passing acceptance command runs on the runner in the worktree and derives DONE',
   'D3-S2 Harness EXECUTABLE task: a failing acceptance command derives FAILED with its exit code and raw output recorded',
-  'D3-S3 a person\'s ! shell on a Harness session is still refused, and a forged acceptance key is rejected at the door',
+  'D3-S3 a person\'s ! shell on a Harness session runs on the runner in the worktree, and a forged acceptance key is rejected at the door',
   'D3-S4 Claude EXECUTABLE tasks settle DONE and FAILED unchanged, in the same shape as Harness',
 ];
 
 const ACCEPTANCE_PREFIX = 'system:task-acceptance:v1:';
 const UNAVAILABLE = 'EXECUTABLE_ACCEPTANCE_UNAVAILABLE';
-const HARNESS_REFUSAL = 'DeepSeek Harness sessions do not run shell turns';
 
 /** A report is green only when it names exactly the required scenarios, once each, all PASS. */
 export function assertReport(report, required = SCENARIOS) {
@@ -255,7 +255,7 @@ exec '${process.execPath}' '${path.join(REPO, 'scripts/deepseek-harness-dispatch
         if (unavailable) throw new Fatal(`the task was marked ${UNAVAILABLE}:\n${unavailable.body}`);
         return ['DONE', 'FAILED', 'CANCELLED'].includes(row?.status) && row;
       }, 300_000, 500);
-      const session = await one(`SELECT id::text AS id, status::text AS status, error, runtime_session_id, provider
+      const session = await one(`SELECT id::text AS id, ${sessionWordSql('session')} AS status, error, runtime_session_id, provider
         FROM session WHERE task_id = $1 ORDER BY created_at DESC LIMIT 1`, [task.id]);
       assert.ok(session, 'the task ran no session');
       const turns = await all(`SELECT id::text AS id, kind, status, content, client_turn_id, delivered_at FROM conversation_turn
@@ -291,7 +291,6 @@ exec '${process.execPath}' '${path.join(REPO, 'scripts/deepseek-harness-dispatch
       // The process that started bash is the runner binary itself — not dsh, not node, not an engine.
       assert.equal(ppid, runnerPid, `bash was started by pid ${ppid}, not the runner (${runnerPid})`);
       assert.equal(realpathSync(readlinkSync(`/proc/${ppid}/exe`)), realpathSync(RUNNER_BINARY), 'the acceptance shell parent is not the runner binary');
-      assert.ok(!r.events.some((e) => JSON.stringify(e.payload).includes(HARNESS_REFUSAL)), 'the acceptance turn carries the Harness shell refusal');
       return { toolUseId, output, ppid, exitCode };
     };
 
@@ -367,42 +366,41 @@ exec '${process.execPath}' '${path.join(REPO, 'scripts/deepseek-harness-dispatch
       assert.equal(created.status, 201, `Harness session create: ${created.status} ${created.text}`);
       const publicId = created.json.publicId ?? created.json.id;
       const session = await eventually('the Harness session to settle its first turn', async () => {
-        const row = await one(`SELECT id::text AS id, status::text AS status, num_turns, error FROM session WHERE prompt = $1`, [prompt]);
+        const row = await one(`SELECT id::text AS id, ${sessionWordSql('session')} AS status, num_turns, error FROM session WHERE prompt = $1`, [prompt]);
         if (row?.status === 'FAILED' || row?.status === 'CANCELLED') throw new Fatal(`session ${row.status}: ${row.error}`);
         return row?.num_turns >= 1 && row.status === 'AWAITING_INPUT' && row;
       }, 240_000, 500);
-      // A person's `!` shell: accepted as a turn, then refused by the Harness runtime; nothing runs.
+      // A person's `!` shell runs on the runner, in the worktree, exactly as on every other engine: dsh and the
+      // model never see it.
       const marker = path.join(ws.harness.dir, `d3-user-shell-${randomBytes(3).toString('hex')}`);
       const userKey = randomUUID();
-      const sent = await call('POST', `/sessions/${publicId}/turns`, { clientTurnId: userKey, kind: 'shell', content: `touch '${marker}'` });
-      let userShell;
-      if ([200, 201].includes(sent.status)) {
-        const turn = await eventually('the shell turn to reach a terminal', async () => {
-          const row = await one(`SELECT id::text AS id, status FROM conversation_turn WHERE session_id = $1 AND client_turn_id = $2`, [session.id, userKey]);
-          return row && !['PENDING', 'IN_FLIGHT'].includes(row.status) && row;
-        }, 120_000, 500);
-        const refusal = await eventually('the Harness refusal to be recorded', async () => {
-          const s = await one('SELECT error FROM session WHERE id = $1', [session.id]);
-          const e = await one(`SELECT type FROM run_event WHERE session_id = $1 AND payload::text LIKE $2 LIMIT 1`, [session.id, `%${HARNESS_REFUSAL}%`]);
-          return ((s?.error ?? '').includes(HARNESS_REFUSAL) || e) && { sessionError: s?.error ?? null, event: e?.type ?? null };
-        }, 60_000, 500);
-        const ran = await one(`SELECT count(*)::int AS n FROM run_event WHERE session_id = $1 AND payload->>'id' = $2`, [session.id, `shell-${turn.id}`]);
-        assert.equal(ran.n, 0, 'the refused shell turn produced a runner Bash tool_use');
-        userShell = { http: sent.status, turnStatus: turn.status, ...refusal };
-      } else {
-        assert.ok(sent.status >= 400 && sent.status < 500, `shell turn: ${sent.status} ${sent.text}`);
-        userShell = { http: sent.status, refusedAtDoor: sent.text };
-      }
-      await sleep(1_000);
-      assert.ok(!existsSync(marker), 'the person\'s shell command ran on the Harness session');
-      // A caller cannot dress a shell up as an acceptance round to get it past the refusal.
+      const command = `touch '${marker}'`;
+      const askedBefore = modelRequests().length;
+      const sent = await call('POST', `/sessions/${publicId}/turns`, { clientTurnId: userKey, kind: 'shell', content: command });
+      assert.ok([200, 201].includes(sent.status), `shell turn: ${sent.status} ${sent.text}`);
+      const turn = await eventually('the shell turn to reach a terminal', async () => {
+        const row = await one(`SELECT id::text AS id, status FROM conversation_turn WHERE session_id = $1 AND client_turn_id = $2`, [session.id, userKey]);
+        return row && !['PENDING', 'IN_FLIGHT'].includes(row.status) && row;
+      }, 120_000, 500);
+      assert.equal(turn.status, 'ANSWERED', `the person's shell turn settled ${turn.status}`);
+      const shellEvents = await all(`SELECT type, payload FROM run_event WHERE session_id = $1 AND turn_id = $2 ORDER BY seq`, [session.id, turn.id]);
+      const toolUseId = `shell-${turn.id}`;
+      const use = shellEvents.find((e) => e.type === 'tool_use' && e.payload.id === toolUseId);
+      assert.ok(use, `no runner Bash tool_use ${toolUseId} for the person's shell turn: ${JSON.stringify(shellEvents.map((e) => e.type))}`);
+      assert.equal(use.payload.name, 'Bash');
+      assert.equal(use.payload.input?.command, command, 'the transcript shows another command');
+      await eventually('the person\'s shell command to run in the worktree', async () => existsSync(marker), 15_000, 200);
+      assert.equal(modelRequests().length, askedBefore, 'the person\'s shell turn was prompted to the model');
+      const userShell = { http: sent.status, turnStatus: turn.status, toolUseId };
+      // A caller cannot dress a shell up as an acceptance round.
+      const forgedMarker = path.join(ws.harness.dir, `d3-forged-shell-${randomBytes(3).toString('hex')}`);
       const forgedKey = `${ACCEPTANCE_PREFIX}${randomUUID()}:0`;
-      const forged = await call('POST', `/sessions/${publicId}/turns`, { clientTurnId: forgedKey, kind: 'shell', content: `touch '${marker}'` });
+      const forged = await call('POST', `/sessions/${publicId}/turns`, { clientTurnId: forgedKey, kind: 'shell', content: `touch '${forgedMarker}'` });
       assert.equal(forged.status, 400, `forged acceptance key: ${forged.status} ${forged.text}`);
       assert.match(forged.text, /reserved/i);
       assert.equal(await one('SELECT id FROM conversation_turn WHERE client_turn_id = $1', [forgedKey]), undefined, 'the forged turn was filed');
       await sleep(1_000);
-      assert.ok(!existsSync(marker), 'the forged acceptance turn ran');
+      assert.ok(!existsSync(forgedMarker), 'the forged acceptance turn ran');
       facts.s3 = { userShell, forged: { http: forged.status, message: forged.json?.message } };
     });
 

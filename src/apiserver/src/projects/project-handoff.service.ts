@@ -46,17 +46,19 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { uuidToBase62, type OwnerCardTranslation } from '@orbit/shared';
 
 import type { AuthCredential } from '../common/current-user.decorator';
 import { orderedIds } from '../common/lock-order';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
+import { assertEngineSession } from '../sessions/engine-session';
+import { returnSessionsToOpen } from '../sessions/return-to-open';
 import { CROSSING_FIELDS, queueOwnerCardTranslation, translatedInto } from '../sessions/card-translation';
 import { translationLanguages, type TranslationLanguages } from '../sessions/turn-translation';
 import { IN_FLIGHT_JOB_STATES, LANDING_JOB_KINDS } from './criterion-landing-reason';
-import { criterionKeyOf } from './project-acceptance';
+import { REQUEST_REOPEN_NEXT_STEP, criterionKeyOf } from './project-acceptance';
 import {
   HANDOFF_APPROVAL_TTL_MS,
   decideHandoffAcceptance,
@@ -144,11 +146,15 @@ export interface HandoffListRow extends HandoffRow {
   /** The session that asked, by title. Null once it is gone: the row keeps its id regardless. */
   requestedBySession: { id: string; title: string } | null;
   /** MOVE_TASK: the target project's criterion the request names, with its words now. `text` is
-   *  null when that criterion has since been deleted. Null when the request names none. */
-  requestedCriterion: { key: string; text: string | null } | null;
+   *  null when that criterion has since been deleted. Null when the request names none.
+   *  `ordinal` is its 1-based position in that project's `acceptanceCriteriaItems` as they read
+   *  now — what a card calls it ("Criterion 4"), since the key is an opaque id. Null when the
+   *  criterion is gone. */
+  requestedCriterion: { key: string; text: string | null; ordinal: number | null } | null;
   /** MOVE_TASK: the source project's criterion the task declares today, which the move takes
-   *  back. Null when it declares none, or none of the source project's. */
-  withdrawnCriterion: { key: string; text: string } | null;
+   *  back. Null when it declares none, or none of the source project's. `ordinal` as above, in
+   *  the source project's list. */
+  withdrawnCriterion: { key: string; text: string; ordinal: number | null } | null;
   /** `title` and `reason` in the owner's language (Settings › Translation, migration 1080); absent
    *  until translated and on every crossing translation is off for. */
   translation?: OwnerCardTranslation;
@@ -243,6 +249,58 @@ export interface HandoffMoveApplier {
     now: Date,
     credential?: AuthCredential,
   ): Promise<void>;
+  /** A whole batch, in one transaction: see `ProjectHandoffService.decideBatch`. */
+  applyMoveApprovals(
+    ownerId: string,
+    userId: string,
+    answers: readonly TaskMoveAnswer[],
+    now: Date,
+    credential?: AuthCredential,
+  ): Promise<void>;
+}
+
+/** One crossing of a batch answer: the row, and the crossing key the person's card was drawn from. */
+export interface TaskMoveAnswer {
+  handoffId: string;
+  crossingKey: string;
+}
+
+/**
+ * The task moves one session draws as one card: the same asker, out of the same project, into the
+ * same project — the grouping the needs-you signal counts (`owner-decision-signal.ts`), so the row's
+ * "Approve 8 task moves" and the card's eight are the same eight. While waiting, that is every
+ * PENDING move of the three; once answered, the moves answered by the same answer (one state, one
+ * moment), which is what a batch answer writes.
+ */
+export interface TaskMoveBatch {
+  /** Stable for the life of the batch: the three it is grouped by, and for an answered batch its
+   *  answer and moment. */
+  batchKey: string;
+  requestedBySessionId: string;
+  fromProjectId: string;
+  /** null: the moves take their tasks out of every project (0610). */
+  toProjectId: string | null;
+  /** PENDING while waiting; APPLIED, DENIED (or APPROVED, a yes an earlier build recorded without
+   *  moving) once answered. */
+  state: string;
+  /** Oldest request first. */
+  since: Date;
+  decidedAt: Date | null;
+  /** Whether this session asked for these moves, coordinates the project that answers them — the
+   *  one they go into, or for a move out of every project the one they leave — or both. */
+  drawnAs: Array<'REQUESTER' | 'TARGET_COORDINATOR'>;
+  moves: HandoffListRow[];
+}
+
+/**
+ * What tells the session rows that a task move started or stopped waiting on the owner — the
+ * realtime service, handed over by the same `TasksService` for the reason the applier is: this
+ * module imports nothing it does not have to.
+ */
+export interface HandoffSignalAnnouncer {
+  ownerSignalChanged(ownerId: string, sessionIds: string[]): void;
+  /** These sessions were brought back to Open (`returnSessionsToOpen`). */
+  sessionsReturnedToOpen?(sessionIds: string[]): void;
 }
 
 /** What `crossingCardSessionId` reads of a crossing. */
@@ -274,6 +332,7 @@ export function crossingCardSessionId(row: {
 export class ProjectHandoffService {
   private readonly log = new Logger(ProjectHandoffService.name);
   private moveApplier?: HandoffMoveApplier;
+  private announcer?: HandoffSignalAnnouncer;
 
   private changeListener?: (change: { id: string; ownerId: string; filed: boolean }) => void;
 
@@ -282,6 +341,64 @@ export class ProjectHandoffService {
   /** Called by the `TasksService` that shares this instance; see `HandoffMoveApplier`. */
   bindMoveApplier(applier: HandoffMoveApplier): void {
     this.moveApplier = applier;
+  }
+
+  /** Called by the same `TasksService`; see `HandoffSignalAnnouncer`. */
+  bindSignalAnnouncer(announcer: HandoffSignalAnnouncer): void {
+    this.announcer = announcer;
+  }
+
+  /**
+   * A MOVE_TASK question was filed or answered: the two rows that count it — the session that asked
+   * and the coordinator that draws its card (`owner-decision-signal.ts`, `MOVE_REQUEST`) — re-read
+   * what waits on the owner. After the commit, and never a reason for the write to fail.
+   */
+  private async announceMove(
+    ownerId: string,
+    row: Pick<HandoffRow, 'kind' | 'requestedBySessionId' | 'fromProjectId' | 'toProjectId'>,
+  ): Promise<void> {
+    const announcer = this.announcer;
+    if (!announcer || row.kind !== 'MOVE_TASK') return;
+    try {
+      // The conversation that draws the card: the target's coordinator, or for a move out of every
+      // project (no target) the source's (`crossingCardSessionId`).
+      const target = await this.prisma.project.findFirst({
+        where: { id: row.toProjectId ?? row.fromProjectId, ownerId },
+        select: { coordinatorSessionId: true },
+      });
+      announcer.ownerSignalChanged(ownerId, [
+        row.requestedBySessionId,
+        ...(target?.coordinatorSessionId ? [target.coordinatorSessionId] : []),
+      ]);
+    } catch (error) {
+      this.log.warn(`could not announce a task move's change: ${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * A MOVE_TASK question was just filed: the session that asked and the target project's coordinator
+   * draw its card, so each of them that is in Completed or Trash comes back to Open
+   * (`returnSessionsToOpen`). After the commit, and never a reason for the filing to fail.
+   */
+  private async returnMoveSessionsToOpen(
+    ownerId: string,
+    row: Pick<HandoffRow, 'kind' | 'requestedBySessionId' | 'fromProjectId' | 'toProjectId'>,
+  ): Promise<void> {
+    if (row.kind !== 'MOVE_TASK') return;
+    try {
+      // The conversation that draws the card: the target's coordinator, or for a move out of every
+      // project (no target) the source's (`crossingCardSessionId`).
+      const target = await this.prisma.project.findFirst({
+        where: { id: row.toProjectId ?? row.fromProjectId, ownerId },
+        select: { coordinatorSessionId: true },
+      });
+      const moved = await returnSessionsToOpen(
+        this.prisma, ownerId, [row.requestedBySessionId, target?.coordinatorSessionId], this.log,
+      );
+      if (moved.length) this.announcer?.sessionsReturnedToOpen?.(moved);
+    } catch (error) {
+      this.log.warn(`could not bring a task move's sessions back to Open: ${(error as Error).message}`);
+    }
   }
 
   /**
@@ -629,8 +746,8 @@ export class ProjectHandoffService {
           message:
             (acceptance.refusal === 'MOVE_TASK_SERVES_SETTLED_CRITERION'
               ? 'this task serves an acceptance criterion of the settled project it would leave'
-              : 'a settled project takes no work until it is reopened')
-            + ' — nothing was written and no question was filed',
+              : 'a settled project takes no work until the account owner reopens it')
+            + ' — nothing was written and no question was filed. ' + REQUEST_REOPEN_NEXT_STEP,
         });
       }
       // Asked rather than assumed, and it can only come back a person's answer: the one row that
@@ -678,6 +795,8 @@ export class ProjectHandoffService {
     // was told when it was filed, and one a policy answered asks nobody.
     if (answer.filed && answer.row.state === 'PENDING') {
       this.changeListener?.({ id: answer.row.id, ownerId: answer.row.ownerId, filed: true });
+      await this.returnMoveSessionsToOpen(ownerId, answer.row);
+      await this.announceMove(ownerId, answer.row);
       // And translated for the owner in the background, when their translation is on (decision 1A).
       this.translateFiled(ownerId, answer.row.id);
     }
@@ -1096,6 +1215,24 @@ export class ProjectHandoffService {
           select: { id: true, projectId: true, text: true },
         })
       : [];
+    // The position a criterion holds in its project's list, which is what a person calls it.
+    // Counted over the list as it stands rather than read off the stored `ordinal`, so a gap left
+    // by an edit can never make the card name a criterion that is not there.
+    const criterionProjectIds = ids(criteria.map((criterion) => criterion.projectId));
+    const siblings = criterionProjectIds.length
+      ? await this.prisma.projectAcceptanceCriterionDefinition.findMany({
+          where: { projectId: { in: criterionProjectIds }, project: { ownerId } },
+          select: { id: true, projectId: true },
+          orderBy: [{ projectId: 'asc' }, { ordinal: 'asc' }],
+        })
+      : [];
+    const positionById = new Map<string, number>();
+    const countByProject = new Map<string, number>();
+    for (const sibling of siblings) {
+      const position = (countByProject.get(sibling.projectId) ?? 0) + 1;
+      countByProject.set(sibling.projectId, position);
+      positionById.set(sibling.id, position);
+    }
     const subjectById = new Map(subjects.map((task) => [task.id, task]));
     const sessionById = new Map(sessions.map((session) => [session.id, session]));
     const criterionById = new Map(criteria.map((criterion) => [criterion.id, criterion]));
@@ -1118,10 +1255,15 @@ export class ProjectHandoffService {
           ? {
               key: criterionKeyOf(row.requestedCriterionDefinitionId),
               text: requested?.text.trim() ?? null,
+              ordinal: requested ? positionById.get(requested.id) ?? null : null,
             }
           : null,
         withdrawnCriterion: declared && declared.projectId === row.fromProjectId
-          ? { key: criterionKeyOf(declared.id), text: declared.text.trim() }
+          ? {
+              key: criterionKeyOf(declared.id),
+              text: declared.text.trim(),
+              ordinal: positionById.get(declared.id) ?? null,
+            }
           : null,
       };
     });
@@ -1185,6 +1327,7 @@ export class ProjectHandoffService {
         );
       }
       await this.moveApplier.applyMoveApproval(ownerId, userId, row.id, now, credential);
+      await this.announceMove(ownerId, row);
       return this.get(ownerId, id, now);
     }
     if (next === state) return this.get(ownerId, id, now);
@@ -1206,7 +1349,268 @@ export class ProjectHandoffService {
         + 'deciding; re-read it before answering again',
       );
     }
+    await this.announceMove(ownerId, row);
     return this.get(ownerId, id, now);
+  }
+
+  /**
+   * The task moves a session draws, as batches (`TaskMoveBatch`): those it asked for, and those
+   * into a project it coordinates. Every one still waiting, and the latest answered ones (up to
+   * `answeredLimit` moves), so a card answered elsewhere can be drawn as answered here too.
+   */
+  async listMovesForSession(
+    ownerId: string,
+    sessionId: string,
+    answeredLimit = 100,
+  ): Promise<TaskMoveBatch[]> {
+    const session = await this.prisma.session.findFirst({
+      where: { id: sessionId, ownerId },
+      select: { id: true },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    const coordinated = new Set((await this.prisma.project.findMany({
+      where: { ownerId, coordinatorSessionId: sessionId },
+      select: { id: true },
+    })).map((project) => project.id));
+    const where: Prisma.ProjectHandoffApprovalWhereInput = {
+      ownerId,
+      kind: 'MOVE_TASK',
+      OR: [
+        { requestedBySessionId: sessionId },
+        ...(coordinated.size ? [{ toProjectId: { in: [...coordinated] } }] : []),
+        // A move out of every project has no target: its source's coordinator answers it.
+        ...(coordinated.size ? [{ toProjectId: null, fromProjectId: { in: [...coordinated] } }] : []),
+      ],
+    };
+    const select = {
+      ...HANDOFF_SELECT,
+      fromProject: { select: { title: true, status: true } },
+      toProject: { select: { title: true, status: true } },
+    };
+    type Listed = Omit<HandoffListRow,
+      'subjectTask' | 'requestedBySession' | 'requestedCriterion' | 'withdrawnCriterion'>;
+    const [pending, answered] = await Promise.all([
+      this.prisma.projectHandoffApproval.findMany({
+        where: { ...where, state: 'PENDING' },
+        select,
+        orderBy: [{ requestedAt: 'asc' }, { id: 'asc' }],
+      }) as unknown as Promise<Listed[]>,
+      this.prisma.projectHandoffApproval.findMany({
+        where: { ...where, state: { not: 'PENDING' } },
+        select,
+        orderBy: [{ decidedAt: 'desc' }, { requestedAt: 'asc' }, { id: 'asc' }],
+        take: Math.min(Math.max(answeredLimit, 0), 200),
+      }) as unknown as Promise<Listed[]>,
+    ]);
+    const rows = await this.withRequestDetail(ownerId, [...pending, ...answered]);
+
+    const batches = new Map<string, TaskMoveBatch>();
+    for (const row of rows) {
+      const answer = row.state === 'PENDING' ? 'PENDING' : `${row.state}|${row.decidedAt?.toISOString() ?? ''}`;
+      const key = `${row.requestedBySessionId}|${row.fromProjectId}|${row.toProjectId}|${answer}`;
+      let batch = batches.get(key);
+      if (!batch) {
+        batch = {
+          batchKey: createHash('sha256').update(key).digest('hex').slice(0, 32),
+          requestedBySessionId: row.requestedBySessionId,
+          fromProjectId: row.fromProjectId,
+          toProjectId: row.toProjectId,
+          state: row.state,
+          since: row.requestedAt,
+          decidedAt: row.state === 'PENDING' ? null : row.decidedAt,
+          drawnAs: [
+            ...(row.requestedBySessionId === sessionId ? ['REQUESTER' as const] : []),
+            ...(coordinated.has(row.toProjectId ?? row.fromProjectId) ? ['TARGET_COORDINATOR' as const] : []),
+          ],
+          moves: [],
+        };
+        batches.set(key, batch);
+      }
+      batch.moves.push(row);
+    }
+    for (const batch of batches.values()) {
+      batch.moves.sort((a, b) => a.requestedAt.getTime() - b.requestedAt.getTime() || a.id.localeCompare(b.id));
+      batch.since = batch.moves[0].requestedAt;
+    }
+    return [...batches.values()];
+  }
+
+  /**
+   * The rows of a batch answer, locked (rank 60) in id order in one statement inside the caller's
+   * transaction, and read again under that lock — each checked against itself, as every row this
+   * service treats as authority is.
+   */
+  async lockMovesForBatch(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    ids: readonly string[],
+  ): Promise<HandoffRow[]> {
+    const ordered = orderedIds(ids);
+    await tx.$queryRaw`
+      SELECT "id" FROM "project_handoff_approval"
+       WHERE "id" = ANY(${ordered}::uuid[]) AND "owner_id" = ${ownerId}::uuid
+       ORDER BY "id"
+       FOR UPDATE`;
+    const rows = (await tx.projectHandoffApproval.findMany({
+      where: { id: { in: ordered }, ownerId },
+      select: HANDOFF_SELECT,
+    })) as HandoffRow[];
+    if (rows.length !== ordered.length) throw new NotFoundException('handoff approval not found');
+    for (const row of rows) this.assertSelfConsistent(row);
+    return rows;
+  }
+
+  /**
+   * Every answer of a batch against the row it names, under the lock. One whose crossing key is not
+   * the row's, or whose row is no longer PENDING, refuses the whole batch with nothing written, and
+   * the refusal names each one: `APPROVAL_TARGET_MISMATCH` (the single answer's code for a key that
+   * names another crossing) when any key disagrees, `HANDOFF_ALREADY_ANSWERED` otherwise.
+   */
+  assertBatchStillAsked(rows: readonly HandoffRow[], answers: readonly TaskMoveAnswer[]): void {
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const conflicts: Array<{
+      handoffId: string;
+      reason: 'KEY_MISMATCH' | 'ALREADY_ANSWERED';
+      state: string;
+      crossingKey: string;
+    }> = [];
+    for (const answer of answers) {
+      const row = byId.get(answer.handoffId);
+      if (!row) throw new NotFoundException('handoff approval not found');
+      if (row.crossingKey !== answer.crossingKey) {
+        conflicts.push({ handoffId: row.id, reason: 'KEY_MISMATCH', state: row.state, crossingKey: row.crossingKey });
+      } else if (row.state !== 'PENDING') {
+        conflicts.push({ handoffId: row.id, reason: 'ALREADY_ANSWERED', state: row.state, crossingKey: row.crossingKey });
+      }
+    }
+    if (!conflicts.length) return;
+    const mismatched = conflicts.some((conflict) => conflict.reason === 'KEY_MISMATCH');
+    throw new ConflictException({
+      statusCode: 409,
+      error: 'Conflict',
+      code: mismatched ? 'APPROVAL_TARGET_MISMATCH' : 'HANDOFF_ALREADY_ANSWERED',
+      message:
+        `${conflicts.length} of the ${answers.length} moves in this answer cannot take it — `
+        + conflicts.map((conflict) => `${uuidToBase62(conflict.handoffId)} `
+          + (conflict.reason === 'KEY_MISMATCH' ? 'names a different crossing' : `is ${conflict.state}`))
+          .join(', ')
+        + '. Nothing was written; re-read the moves and answer what they say now',
+      owner: 'USER',
+      requiredAction: 'AWAIT_HANDOFF_APPROVAL',
+      handoffIds: conflicts.map((conflict) => conflict.handoffId),
+      conflicts,
+    });
+  }
+
+  /**
+   * The person's answer to a whole batch of task moves, from the card one session draws.
+   *
+   * The client sends every move of the batch with the crossing key it read. All of them must be
+   * task moves drawn on `sessionId` (asked by it, or into a project it coordinates) and one batch
+   * (one asker, one source, one target). Then, in ONE transaction, every row is locked and checked
+   * (`assertBatchStillAsked`): if any key disagrees or any row is no longer PENDING, nothing is
+   * written. A yes applies each move exactly as a single yes does (`HandoffMoveApplier
+   * .applyMoveApprovals`), and any move it refuses refuses the batch; a no writes DENIED on every row
+   * by the same compare-and-set `decide` uses. Returns the batch's rows as they stand now.
+   */
+  async decideBatch(
+    ownerId: string,
+    userId: string,
+    sessionId: string,
+    decision: 'APPROVE' | 'DENY',
+    answers: readonly TaskMoveAnswer[],
+    now: Date,
+    credential?: AuthCredential,
+  ): Promise<HandoffListRow[]> {
+    const session = await this.prisma.session.findFirst({
+      where: { id: sessionId, ownerId },
+      select: { sessionKind: true },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    // A move card is drawn in a conversation, never in the platform's landing container (§2.9 LS6).
+    assertEngineSession(session);
+    const ids = answers.map((answer) => answer.handoffId);
+    if (ids.length === 0) throw new BadRequestException('a batch answer names at least one move');
+    if (new Set(ids).size !== ids.length) {
+      throw new BadRequestException('a batch answer names each move once');
+    }
+    const rows = await this.prisma.projectHandoffApproval.findMany({
+      where: { id: { in: ids }, ownerId },
+      select: {
+        id: true,
+        kind: true,
+        requestedBySessionId: true,
+        fromProjectId: true,
+        toProjectId: true,
+        toProject: { select: { coordinatorSessionId: true } },
+        fromProject: { select: { coordinatorSessionId: true } },
+      },
+    });
+    if (rows.length !== ids.length) throw new NotFoundException('handoff approval not found');
+    const [first] = rows;
+    for (const row of rows) {
+      if (row.kind !== 'MOVE_TASK') {
+        throw new BadRequestException(`handoff approval ${uuidToBase62(row.id)} is not a task move`);
+      }
+      // The coordinator that draws the card: the target's, or for a move out of every project the
+      // source's (`crossingCardSessionId`).
+      const card = row.toProjectId ? row.toProject?.coordinatorSessionId : row.fromProject.coordinatorSessionId;
+      if (row.requestedBySessionId !== sessionId && card !== sessionId) {
+        throw new BadRequestException(
+          `the move ${uuidToBase62(row.id)} is not drawn in this session — it neither asked for it `
+          + 'nor coordinates the project that answers it',
+        );
+      }
+      if (
+        row.requestedBySessionId !== first.requestedBySessionId
+        || row.fromProjectId !== first.fromProjectId
+        || row.toProjectId !== first.toProjectId
+      ) {
+        throw new BadRequestException(
+          'a batch is the moves one session asked for out of one project into another, and these '
+          + 'are not one batch — answer each batch on its own',
+        );
+      }
+    }
+    if (decision === 'APPROVE') {
+      if (!this.moveApplier) {
+        throw new ServiceUnavailableException(
+          'this server cannot apply a move right now — nothing was written; try again',
+        );
+      }
+      await this.moveApplier.applyMoveApprovals(ownerId, userId, answers, now, credential);
+    } else {
+      await withTransactionRetry(this.prisma, async (tx) => {
+        const locked = await this.lockMovesForBatch(tx, ownerId, ids);
+        this.assertBatchStillAsked(locked, answers);
+        const denied = await tx.projectHandoffApproval.updateMany({
+          where: { id: { in: ids }, ownerId, state: 'PENDING' },
+          data: {
+            state: 'DENIED',
+            decidedBy: 'USER',
+            decidedByUserId: userId,
+            decidedAt: now,
+            expiresAt: null,
+            updatedAt: now,
+          },
+        });
+        if (denied.count !== ids.length) {
+          throw new Error(`a batch of ${ids.length} moves changed under the lock this answer holds`);
+        }
+      }, loggedRetry(this.log, 'projectHandoff.decideBatch'));
+    }
+    await this.announceMove(ownerId, first);
+    const answered = (await this.prisma.projectHandoffApproval.findMany({
+      where: { id: { in: ids }, ownerId },
+      select: {
+        ...HANDOFF_SELECT,
+        fromProject: { select: { title: true, status: true } },
+        toProject: { select: { title: true, status: true } },
+      },
+      orderBy: [{ requestedAt: 'asc' }, { id: 'asc' }],
+    })) as unknown as Array<Omit<HandoffListRow,
+      'subjectTask' | 'requestedBySession' | 'requestedCriterion' | 'withdrawnCriterion'>>;
+    return this.withRequestDetail(ownerId, answered);
   }
 
   /** The 409 for an answer §6 has no edge for — `decide`'s, and a confirmation's under its lock. */

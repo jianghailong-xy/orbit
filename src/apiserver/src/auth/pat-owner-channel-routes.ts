@@ -15,13 +15,25 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   // The owner's Create wiki on a WIKI_CREATE card (docs/wiki-explicit-creation-design.md §3.6): making a wiki is the
   // owner's own act, as POST /wiki/spaces is; it also refuses an acting session, WIKI_OWNER_CHANNEL_ONLY.
   'POST /owner-requests/:id/create-wiki',
+  // The owner's Save changes on a SETTINGS_CHANGE card (docs/settings-from-conversation-design.md §5.2): it writes the
+  // account's preferences; it also refuses an acting session, SETTINGS_OWNER_CHANNEL_ONLY.
+  'POST /owner-requests/:id/apply-settings',
+  // The owner's Reopen on a PROJECT_REOPEN card (docs/project-reopen-request-design.md §4.2): the project page's Reopen
+  // press made from a card; it also refuses an acting session, REOPEN_OWNER_CHANNEL_ONLY.
+  'POST /owner-requests/:id/reopen-project',
   'GET /account-secrets',
+  'POST /account-secrets',
+  'GET /account-secrets/grants',
+  'POST /account-secrets/grants/:id/revoke',
   'PUT /account-secrets/:id',
   'DELETE /account-secrets/:id',
   'POST /tasks/:taskId/owner-confirmation',
   'POST /tasks/:taskId/evidence/decision',
   'POST /tasks/:taskId/evidence/:revision/restart',
   'POST /sessions/:id/approvals/:approvalId/decision',
+  // Run now (docs/mocks/queued-run-now decision E): starting a queued message over the runner's limit is a person's
+  // act, so agents cannot skip the queue for themselves. It also refuses an acting session, RUN_NOW_OWNER_CHANNEL_ONLY.
+  'POST /sessions/:id/run-now',
   // Session guests (docs/session-guests-design.md §3): who may drive the agent on the owner's machine, with the
   // owner's accounts, is the owner's to decide and to see.
   'GET /sessions/:id/guests',
@@ -34,6 +46,7 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /projects/:projectId/promotions/:promotionId/decline',
   'POST /projects/:projectId/promotions/:promotionId/cancel',
   'POST /projects/:id/handoffs/:handoffId/decision',
+  'POST /sessions/:id/task-moves/decision',
   // The same rule where the design names no door: the owner's own decisions the code already keeps
   // from agents. These refuse a request that carries an agent session — starting a project seals its
   // criteria, the standard-set confirmation by another door.
@@ -73,6 +86,8 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   // §10.8's "look again", the owner's door annotated and registered as the abandon door is: it refuses
   // an acting session, and a coordinator asks through `integration_observe`.
   'POST /projects/:id/integration/observe',
+  // §12.15 P-R1: the owner putting a coordinator's recorded landing-check change back. Refuses an acting session.
+  'POST /projects/:id/setting-changes/:changeId/revert',
   // The wiki's owner channel: each refuses an agent session WIKI_OWNER_CHANNEL_ONLY.
   'POST /wiki/entries/:id/reject',
   'POST /wiki/entries/:id/confirm',

@@ -48,7 +48,7 @@ export const FILES_CONFIG = Symbol('FILES_CONFIG');
 
 /** An attachment's bytes, ready to be answered with. */
 export interface OpenedFile {
-  /** A stream from the file store, or the bytes of a row from before Orbit Files. */
+  /** A stream from the file store, or the bytes of a row from before Drive. */
   content: Readable | Buffer;
   mimeType: string;
   sizeBytes: number;
@@ -78,8 +78,9 @@ const FILE_LIST_LIMIT = 200;
 
 /** How often `open` says that one store made it answer from `data`: a store gone bad does that on every read. */
 const STORE_FALLBACK_WARNING_MS = 60_000;
+const STORE_USAGE_CACHE_MS = 3 * 60_000;
 
-/** The code of an upload refused because the account has used its quota (ORBIT_FILES_QUOTA_BYTES). */
+/** The code of an upload refused because the account has used its quota (ORBIT_DRIVE_QUOTA_BYTES). */
 export const FILE_QUOTA_EXCEEDED = 'FILE_QUOTA_EXCEEDED';
 
 /** How many projects and tasks the usage read names, largest first. */
@@ -93,13 +94,24 @@ export interface StorageUsage {
   /** What the account keeps now, each content once. */
   totalBytes: number;
   fileCount: number;
-  /** ORBIT_FILES_QUOTA_BYTES, when this deployment sets one. */
+  /** ORBIT_DRIVE_QUOTA_BYTES, when this deployment sets one. */
   quotaBytes: number | null;
   /** Largest first. A file counts under its task, and its task's project. */
   projects: { projectId: string; title: string; bytes: number; fileCount: number }[];
   tasks: { taskId: string; title: string; bytes: number; fileCount: number }[];
   /** What arrived each week, oldest first, ending with this week, which starts on a Monday, UTC. */
   weeks: { weekStart: string; bytes: number }[];
+}
+
+/** What `driveUsage` answers. `totalBytes` is `driveBytes + otherBytes`; `trashBytes` is the part of the drive's share only Trash holds. */
+export interface DriveUsage {
+  totalBytes: number;
+  driveBytes: number;
+  trashBytes: number;
+  otherBytes: number;
+  storeUsedBytes?: number;
+  storeQuotaBytes?: number;
+  nearQuota?: boolean;
 }
 
 /** How many files one page of a Storage file list holds. */
@@ -174,7 +186,7 @@ export interface FileView {
   label: string | null;
   mimeType: string;
   sizeBytes: number;
-  /** Null on a row from before Orbit Files, until its bytes are moved. */
+  /** Null on a row from before Drive, until its bytes are moved. */
   sha256: string | null;
   sessionId: string | null;
   taskId: string | null;
@@ -278,7 +290,7 @@ type EvidenceFileSection =
   | { fileCount: 1; totalBytes: number; file: EvidenceFileView }
   | { fileCount: number; totalBytes: number; folder: EvidenceFileRow };
 
-/** A folder bundle's manifest: what its bytes are (docs/orbit-files-design.md §2.2). Ids are public ids. */
+/** A folder bundle's manifest: what its bytes are (docs/drive-design.md §2.2). Ids are public ids. */
 export interface FileBundleManifest {
   kind: 'orbit-file-bundle';
   version: 1;
@@ -298,10 +310,10 @@ function assertBundlePath(filePath: string): void {
 }
 
 /**
- * Orbit Files' storage layer (docs/orbit-files-design.md §2.1): an attachment row describes a file, and
+ * Drive' storage layer (docs/drive-design.md §2.1): an attachment row describes a file, and
  * its bytes are kept once per content in a file store — the files directory, or an S3-compatible bucket —
  * under their sha256, with a `file_blob` row saying which. Every attachment upload is kept here; every read
- * of an attachment's bytes comes through `open`, which serves a row from before Orbit Files from its own
+ * of an attachment's bytes comes through `open`, which serves a row from before Drive from its own
  * `data` column until the copy of old attachments reaches it (attachment-migration.ts). What agents keep with
  * `file_upload` and find with `file_list` is the same rows, with the doors at the end of this class.
  */
@@ -313,6 +325,7 @@ export class FilesService implements OnApplicationBootstrap {
   private readonly s3: S3FileStore | null;
   /** When each store last made `open` say so, and how many reads it has made it answer from `data` since. */
   private readonly storeFallbacks = new Map<string, { warnedAt: number; readsSince: number }>();
+  private storeUsageCache?: { bytes: Promise<number>; expiresAt: number };
 
   constructor(
     private readonly prisma: PrismaService,
@@ -552,7 +565,7 @@ export class FilesService implements OnApplicationBootstrap {
 
   /**
    * What citing these files as evidence takes from the file store (§2.4), before the transaction that saves it, which holds
-   * the task's lock: a row from before Orbit Files gets the sha256 the citation binds, and an image's header says how big
+   * the task's lock: a row from before Drive gets the sha256 the citation binds, and an image's header says how big
    * it is, which is kept on the citation so that no later read of it has to come here. Keyed by file. The citation
    * itself is judged in that transaction, so this reads the owner's rows whether or not it will hold. An expired row has
    * nothing to take: that transaction refuses a new version citing it. It answers a retry of the version that already did,
@@ -885,6 +898,64 @@ export class FilesService implements OnApplicationBootstrap {
       },
       HttpStatus.PAYLOAD_TOO_LARGE,
     );
+  }
+
+  /**
+   * What the account keeps in all (§2.5): the drive's share, the rest, and their sum, each content once. A content the
+   * drive names (a chunk of a version, current or in Trash, or of a write not committed yet) is the drive's even when an
+   * attachment holds the same bytes, so it is never counted twice. A separate query: `storedTotals` and the attachment
+   * quota are unchanged, so drive bytes can never refuse an attachment upload.
+   */
+  async driveUsage(ownerId: string): Promise<DriveUsage> {
+    const [row] = await this.prisma.$queryRaw<Array<{ drive: bigint; trash: bigint; other: bigint }>>`
+      WITH held AS (
+        SELECT c.sha256, MAX(c.size_bytes) AS size,
+               BOOL_OR(v.trash_group_id IS NULL AND e.trashed_at IS NULL) AS live
+          FROM drive_version_chunk c
+          JOIN drive_version v ON v.id = c.version_id AND v.owner_id = c.owner_id
+          JOIN drive_entry e ON e.id = v.entry_id AND e.owner_id = v.owner_id
+         WHERE c.owner_id = ${ownerId}::uuid
+         GROUP BY c.sha256
+        UNION ALL
+        SELECT sc.sha256, MAX(sc.size_bytes), TRUE
+          FROM drive_staging_chunk sc
+         WHERE sc.owner_id = ${ownerId}::uuid
+           AND NOT EXISTS (SELECT 1 FROM drive_version_chunk c WHERE c.owner_id = sc.owner_id AND c.sha256 = sc.sha256)
+         GROUP BY sc.sha256
+      ), other AS (
+        SELECT MAX(size_bytes) AS size
+          FROM attachment
+         WHERE owner_id = ${ownerId}::uuid AND expired_at IS NULL
+           AND (sha256 IS NULL OR sha256 NOT IN (SELECT sha256 FROM held))
+         GROUP BY COALESCE(sha256, id::text)
+      )
+      SELECT (SELECT COALESCE(SUM(size), 0) FROM held)::bigint AS drive,
+             (SELECT COALESCE(SUM(size), 0) FROM held WHERE NOT live)::bigint AS trash,
+             (SELECT COALESCE(SUM(size), 0) FROM other)::bigint AS other`;
+    const driveBytes = Number(row.drive);
+    const otherBytes = Number(row.other);
+    const usage = { totalBytes: driveBytes + otherBytes, driveBytes, trashBytes: Number(row.trash), otherBytes };
+    const { storeQuotaBytes } = this.config;
+    if (storeQuotaBytes === undefined) return usage;
+    const storeUsedBytes = await this.s3StoreUsedBytes();
+    return { ...usage, storeUsedBytes, storeQuotaBytes, nearQuota: storeUsedBytes >= storeQuotaBytes - Math.floor(storeQuotaBytes / 5) };
+  }
+
+  /** Count the bytes Orbit still keeps in S3. Refresh on request and share the read across concurrent callers. */
+  private s3StoreUsedBytes(): Promise<number> {
+    if (this.storeUsageCache && Date.now() < this.storeUsageCache.expiresAt) return this.storeUsageCache.bytes;
+    const bytes = this.prisma.fileBlob.aggregate({
+      where: { storage: 's3', bytesDeletedAt: null },
+      _sum: { sizeBytes: true },
+    }).then(({ _sum }) => {
+      this.storeUsageCache = { bytes, expiresAt: Date.now() + STORE_USAGE_CACHE_MS };
+      return _sum.sizeBytes ?? 0;
+    }).catch((error: unknown) => {
+      this.storeUsageCache = undefined;
+      throw error;
+    });
+    this.storeUsageCache = { bytes, expiresAt: Infinity };
+    return bytes;
   }
 
   /** What Settings shows of an account's files (§2.10): what it keeps, where most of that is, and how fast it grows. */

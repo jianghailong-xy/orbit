@@ -17,7 +17,7 @@ import { MANAGED_RUNNER_BACKENDS, ManagedRunnerConflict } from './managed-runner
 import { capacityBudget, computeShare, storageShare } from './managed-runner-capacity';
 import { ManagedRunnerManager } from './managed-runner-manager';
 import { parseManagedRunnerProfile, type ManagedRunnerProfile } from './managed-runner-profile';
-import { MANAGED_STOP_REPORT_FINALIZER, managedAdmissionProbeName, managedPodName, managedPvcName, managedSecretName } from './managed-runner-resources';
+import { MANAGED_POD_TERMINATION_GRACE_SECONDS, MANAGED_STOP_REPORT_FINALIZER, managedAdmissionProbeName, managedPodName, managedPvcName, managedSecretName } from './managed-runner-resources';
 import { createManagedRunnerRuntime } from './managed-runner-runtime';
 import { ManagedRunnerService } from './managed-runner.service';
 
@@ -217,6 +217,13 @@ test('KubernetesBackend issues, reads and removes the bootstrap credential, and 
   assert.deepEqual((await backend.readInstance(running))!.exit, { code: 137, outOfMemory: true });
   cluster.stopPod(managedPodName(RUNNER), 255, 'OOMKilled');
   assert.deepEqual((await backend.readInstance(running))!.exit, { code: 255, outOfMemory: false });
+  // Evicted for its temporary storage: storage full; evicted for anything else: a plain stop.
+  cluster.evictPod(managedPodName(RUNNER), 'Usage of EmptyDir volume "tmp" exceeds the limit "1Gi". ');
+  assert.deepEqual((await backend.readInstance(running))!.exit, { code: 137, outOfMemory: false, storageFull: true });
+  cluster.evictPod(managedPodName(RUNNER), 'Pod ephemeral local storage usage exceeds the total limit of containers 1Gi. ');
+  assert.deepEqual((await backend.readInstance(running))!.exit, { code: 137, outOfMemory: false, storageFull: true });
+  cluster.evictPod(managedPodName(RUNNER), 'The node was low on resource: memory. ');
+  assert.deepEqual((await backend.readInstance(running))!.exit, { code: 137, outOfMemory: false });
   cluster.stopPod(managedPodName(RUNNER));
   const predecessor = { runnerId: RUNNER, generation: 1, podName: instance.name, podUid: instance.uid, nodeName: 'node-a', pvcUid: volume.uid, volumeHandle: backing.handle };
   const proof = backend.observedStop(predecessor, stopped, new Date('2026-10-17T00:00:00.000Z'));
@@ -286,6 +293,60 @@ test('a Pod deleted by anyone stays, ended, with its kubelet\'s report, until th
   assert.equal(cluster.object<Pod>('pods', name)?.metadata.uid, successor.uid, 'the successor is untouched');
   assert.deepEqual(cluster.object<Pod>('pods', name)!.metadata.finalizers, [MANAGED_STOP_REPORT_FINALIZER]);
   assert.equal(cluster.count('patch'), 1, 'only the recorded Pod was ever patched');
+});
+
+test('KubernetesBackend stops the recorded Pod for the owner\'s Update Now: deleted by UID with its grace, and only its kubelet\'s report is the stop', async () => {
+  const profile = testManagedRunnerProfile();
+  const cluster = new FakeKubeCluster(profile.kubernetes.namespace);
+  const backend = new KubernetesBackend(cluster.client(), profile);
+  const recorded = mapping({ pvcUid: '0195c0de-0000-7000-8000-0000000000c1' });
+  const name = managedPodName(RUNNER);
+  assert.equal(backend.ownerStopsOnly, true, 'asked for the owner\'s Update Now alone, never on the manager\'s own account');
+
+  const instance = await backend.createInstance(recorded);
+  const running = mapping({ ...recorded, podUid: instance.uid, podName: instance.name, nodeName: instance.node });
+  assert.equal(cluster.object<Pod>('pods', name)!.spec.terminationGracePeriodSeconds, MANAGED_POD_TERMINATION_GRACE_SECONDS);
+
+  // The kubelet sends SIGTERM and the runner drains its turns within the grace: no report yet.
+  cluster.kubeletReportsDeletions = false;
+  cluster.calls.length = 0;
+  await backend.stopInstance(running);
+  assert.deepEqual(
+    cluster.calls,
+    [{ op: 'delete', kind: 'pods', name, gracePeriodSeconds: MANAGED_POD_TERMINATION_GRACE_SECONDS }],
+    'one delete, by UID, with the grace the Pod is made with',
+  );
+  const stopping = (await backend.readInstance(running))!;
+  assert.deepEqual(
+    { uid: stopping.uid, running: stopping.running, terminated: stopping.terminated, stopConfirmed: stopping.stopConfirmed, removing: stopping.removing },
+    { uid: instance.uid, running: true, terminated: false, stopConfirmed: false, removing: true },
+    'asking is no stop: the Pod is still there, running in its grace',
+  );
+  assert.ok(cluster.object<Pod>('pods', name)!.metadata.deletionTimestamp);
+
+  // Asked again on the next pass: the same delete, and the same Pod.
+  await backend.stopInstance(running);
+  assert.equal(cluster.object<Pod>('pods', name)!.metadata.uid, instance.uid);
+
+  // The runner's shutdown ends (SIGTERM's 143): the kubelet's report, kept by the stop-report finalizer, is the stop.
+  cluster.stopPod(name, 143);
+  const stopped = (await backend.readInstance(running))!;
+  assert.deepEqual(
+    { terminated: stopped.terminated, stopConfirmed: stopped.stopConfirmed, removing: stopped.removing, exit: stopped.exit },
+    { terminated: true, stopConfirmed: true, removing: false, exit: { code: 143, outOfMemory: false } },
+  );
+  assert.ok(cluster.object<Pod>('pods', name), 'held for the manager to record');
+  const deletes = cluster.calls.filter((call) => call.op === 'delete');
+  assert.ok(deletes.length === 2 && deletes.every((call) => call.gracePeriodSeconds === MANAGED_POD_TERMINATION_GRACE_SECONDS), 'never a shorter grace, never a force delete');
+
+  // By UID only: a successor under the name is never stopped.
+  await backend.removeInstance(running);
+  const successor = await backend.createInstance(mapping({ ...recorded, generation: 2 }));
+  await assert.rejects(backend.stopInstance(running), (e: unknown) => e instanceof KubeApiError && e.status === 409);
+  assert.deepEqual(
+    { uid: cluster.object<Pod>('pods', name)!.metadata.uid, deleting: cluster.object<Pod>('pods', name)!.metadata.deletionTimestamp ?? null },
+    { uid: successor.uid, deleting: null },
+  );
 });
 
 test('KubernetesBackend proves the admission guard before a Pod, and words failures as the manager did', async () => {

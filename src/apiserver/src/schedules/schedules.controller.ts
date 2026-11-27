@@ -1,7 +1,8 @@
 /**
  * The REST doors of scheduled tasks (docs/scheduled-tasks-design.md §9.1): read and control, and the owner's press
  * on the two cards. There is deliberately NO door here that creates or changes a schedule — those go through a
- * session's `schedule_create` / `schedule_update` and its card (`schedules-rest-surface.spec.ts` holds this).
+ * session's `schedule_create` / `schedule_update` and its card — with one exception, rename, which changes the title
+ * alone (§8.4; `schedules-rest-surface.spec.ts` holds this).
  *
  *   GET    /api/schedules                         list (not ENDED unless ?state=), with the page's timeline runs
  *   GET    /api/schedules/drafts                  the Scheduled page's drafts: PENDING create cards
@@ -9,6 +10,7 @@
  *   GET    /api/schedules/:id                     the inspector, with this month's use
  *   GET    /api/schedules/:id/runs                runs, newest first
  *   POST   /api/schedules/:id/{pause,resume,run,undo}
+ *   POST   /api/schedules/:id/rename              the title alone
  *   DELETE /api/schedules/:id
  *   POST   /api/schedule-runs/:id/stop
  *   GET    /api/schedule-requests[/:id]           the cards
@@ -43,7 +45,8 @@ import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import { SessionsService } from '../sessions/sessions.service';
 import { actingSession } from '../wiki/wiki.controller';
-import { ScheduleDecisionDto, ScheduleDraftDto, ScheduleUndoDto } from './dto';
+import { ScheduleChangeDto, ScheduleDecisionDto, ScheduleDraftDto, ScheduleRenameDto, ScheduleUndoDto } from './dto';
+import { ScheduleChangeConversations } from './schedule-change-conversation';
 import { ScheduleReadsService } from './schedule-reads.service';
 import { ScheduleRunsService } from './schedule-runs.service';
 import { scheduleRunView } from './schedule-views';
@@ -89,6 +92,7 @@ export class SchedulesController {
     private readonly runs: ScheduleRunsService,
     private readonly reads: ScheduleReadsService,
     private readonly sessions: SessionsService,
+    private readonly changes: ScheduleChangeConversations,
   ) {}
 
   @Get('schedules')
@@ -122,6 +126,39 @@ export class SchedulesController {
     return { sessionId: (session as { id: string }).id, session };
   }
 
+  /**
+   * Change… (§8.2): the schedule's open change conversation, if any, and the opening Orbit draws for a new one. Nothing
+   * is written: the conversation exists from the person's first words (`POST`).
+   */
+  @Get('schedules/:id/change')
+  @PatScope('sessions:read', READ)
+  change(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.changes.read(user.userId, id);
+  }
+
+  /**
+   * Opens the schedule's change conversation with the person's first words. The person's door: a session (one acting
+   * through `X-Orbit-Session`) changes a schedule with its own tools, not by opening a conversation in the person's
+   * name, so it is refused.
+   */
+  @Post('schedules/:id/change')
+  @PatScope('sessions:write', READ)
+  @HttpCode(HttpStatus.OK)
+  openChange(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: ScheduleChangeDto,
+    @Req() req: Headers,
+  ) {
+    if (actingSession(req.headers) !== null) {
+      throw new ForbiddenException({
+        code: 'SCHEDULE_CHANGE_FROM_SESSION',
+        message: 'A session changes a schedule with schedule_update; Change… is the person\'s door.',
+      });
+    }
+    return this.changes.open(user, id, dto.text);
+  }
+
   @Get('schedules/:id')
   @PatScope('sessions:read', READ)
   get(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
@@ -151,6 +188,19 @@ export class SchedulesController {
   @HttpCode(HttpStatus.OK)
   async resume(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Req() req: Headers) {
     return this.reads.controlAnswer(user.userId, await this.schedules.resume(scheduleActorOf(user, req), id));
+  }
+
+  /** Rename (§8.4): the title alone; answers as Undo does, with the schedule and the change's record. */
+  @Post('schedules/:id/rename')
+  @PatScope('sessions:write', READ)
+  @HttpCode(HttpStatus.OK)
+  async rename(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: ScheduleRenameDto,
+    @Req() req: Headers,
+  ) {
+    return this.reads.updateAnswer(user.userId, await this.schedules.rename(scheduleActorOf(user, req), id, dto.title));
   }
 
   /** Run now: a MANUAL run under the overlap rule; refused when ENDED (§8.4). */
@@ -227,7 +277,10 @@ export class SchedulesController {
   }
 
   private async decide(user: AuthUser, id: string, decision: 'ALLOW' | 'DECLINE', dto: ScheduleDecisionDto, req: Headers) {
-    const result = await this.schedules.decide(scheduleActorOf(user, req), id, decision, { timezone: dto.timezone ?? null });
+    const result = await this.schedules.decide(scheduleActorOf(user, req), id, decision, {
+      timezone: dto.timezone ?? null,
+      dropSuggestedEnd: dto.dropSuggestedEnd === true,
+    });
     const answer = await this.reads.decisionAnswer(user.userId, result);
     if (result.outcome === 'STALE') {
       throw new ConflictException({

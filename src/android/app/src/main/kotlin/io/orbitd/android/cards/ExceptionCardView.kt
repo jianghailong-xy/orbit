@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package io.orbitd.android.cards
 
 import androidx.compose.foundation.background
@@ -16,15 +18,19 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.R
 import io.orbitd.android.management.LocalTranslation
+import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.translation.CardTranslationFoot
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.projects.CoordinatorChange
@@ -90,6 +96,8 @@ internal fun ExceptionCard(card: InteractionCard, fresh: Boolean, result: CardAc
     }
     val tone = LocalOrbitColors.current.needsYou
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    // A repair task is live on the item (any `handledBy` not DONE or CANCELLED): the card says so once and asks nothing of the reader.
+    val fixing = !gone && !whoFixes && ExceptionCards.fixing(row)
     Column(Modifier.fillMaxWidth().testTag(card.key).alpha(if (gone) 0.72f else 1f)
         .background(tone.copy(alpha = 0.07f), RoundedCornerShape(14.dp)).border(1.dp, tone.copy(alpha = 0.28f), RoundedCornerShape(14.dp))
         .padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -101,8 +109,14 @@ internal fun ExceptionCard(card: InteractionCard, fresh: Boolean, result: CardAc
                 else -> R.drawable.ic_warning
             }
             Icon(painterResource(glyph), null, Modifier.size(18.dp), tint = tone)
-            Text(ExceptionCards.title(row), Modifier.weight(1f).testTag("${card.key}:title"),
+            Text(ExceptionCards.title(row), Modifier.weight(1f, fill = !fixing).testTag("${card.key}:title"),
                 style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold))
+            // The "Fixing" tag beside the kind while a repair task is live (board card-ui-polish ①), in the blue the board's Handling
+            // tag wears. As on iPhone, the "Who fixes it?" card keeps its own heading line and draws no tag.
+            if (fixing) {
+                FixingTag("${card.key}:fixing-tag")
+                Spacer(Modifier.weight(1f))
+            }
             // D3 = A: the card's one clock, the total wait, at its top right.
             if (whoFixes) Text(ExceptionCards.whoFixesClock(row), Modifier.testTag("${card.key}:clock"), style = MaterialTheme.typography.labelSmall,
                 color = secondary)
@@ -124,8 +138,11 @@ internal fun ExceptionCard(card: InteractionCard, fresh: Boolean, result: CardAc
             return@Column
         }
         Text(ExceptionCards.headingLine(row), Modifier.testTag("${card.key}:heading"), style = MaterialTheme.typography.bodyMedium)
+        // While a repair task is live, the server's sentence and the handled-by line say the same thing twice (board card-ui-polish
+        // ①): the block becomes the one line naming the task, and the doors wait under the facts as quiet links.
+        if (fixing) FixingBlock(card.key, row, open)
         // What has to happen next and the doors that do it, ahead of the facts: it is what the reader came for.
-        Column(Modifier.fillMaxWidth().background(tone.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
+        else Column(Modifier.fillMaxWidth().background(tone.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
             .border(1.dp, tone.copy(alpha = 0.22f), RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 9.dp)
             .testTag("${card.key}:next"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(ExceptionCards.requiredAction(row), Modifier.testTag("${card.key}:required"),
@@ -169,6 +186,33 @@ internal fun ExceptionCard(card: InteractionCard, fresh: Boolean, result: CardAc
                 ExceptionCards.handlingReason(row)?.let { FactRowView(card.key, ExceptionCards.FactRow(ExceptionCards.reasonLabel, it)) }
             }
         }
+        // Every door a quiet link in one row with Chat about this, under the facts, while the repair runs (board card-ui-polish ①,
+        // D1 = A; iOS `quietRow`). What a press came back with is said under the row, as the doors' block says it otherwise.
+        if (fixing) {
+            FlowRow(Modifier.fillMaxWidth().testTag("${card.key}:quiet"), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                // A pause keeps its one Resume, drawn quiet like the rest.
+                (if (row.text("kind") == "FUSE_PAUSED") ExceptionCards.cardPresses(row, mergeCard) else ExceptionCards.presses(row, mergeCard, quiet = true))
+                    .forEach { press ->
+                        val verb = ExceptionCards.verb(row, press.action)
+                        pressFor(press.action)?.let { pressed ->
+                            QuietLink(press.label, if (verb == null) true else enabled, "${card.key}:${verb?.name ?: press.action}", pressed)
+                        }
+                    }
+                CardDiscussion.context(card)?.let { context ->
+                    if (discuss != null) QuietLink("Chat about this", fresh && !result.busy, "${card.key}:chat") { discuss(context) }
+                }
+                if (ExceptionCards.markable(row) && CardVerb.MARK_HANDLED in card.actions) {
+                    QuietLink(ExceptionCards.markHandled, enabled, "${card.key}:MARK_HANDLED") { asking = true }
+                }
+            }
+            result.message?.let {
+                Text(it, Modifier.testTag("card-result"), style = MaterialTheme.typography.bodySmall,
+                    color = if (result.uncertain) MaterialTheme.colorScheme.error else secondary)
+            }
+            result.response?.takeIf { it.text("code") in setOf("TASK_ALREADY_RUNNING", "TASK_RUN_PIN_CONFLICT", "TASK_RUN_PROVIDER_SWITCH_CONFIRMATION_REQUIRED") }
+                ?.text("conflictingSessionId")?.takeIf { it.isNotBlank() }?.let { LinkButton("Open the run", "orbit-session:$it", open) }
+            if (result.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+        }
         if (lookingAgain) ReasonPanel("${card.key}:observe", "${card.key}:observe-reason", ExceptionCards.observeTitle, ExceptionCards.observeBody,
             ExceptionCards.observeReason, ExceptionCards.observeAgain, why, { why = it.take(ExceptionCards.observeReasonMaxLength) }, enabled,
             back = { lookingAgain = false }) {
@@ -187,6 +231,53 @@ internal fun ExceptionCard(card: InteractionCard, fresh: Boolean, result: CardAc
         confirmButton = { TextButton(modifier = Modifier.testTag("confirm:${CardVerb.CANCEL_TASK.name}"), enabled = enabled,
             onClick = { cancelling = false; submit(CardVerb.CANCEL_TASK, CardInput()) }) { Text(CardVerb.CANCEL_TASK.label) } },
         dismissButton = { TextButton(onClick = { cancelling = false }) { Text("Back") } })
+}
+
+/** "Fixing": the small blue tag beside the card's kind while a repair task is live (web `FIXING_TAG` in the Handling tag's tone). */
+@Composable
+private fun FixingTag(tag: String) {
+    val blue = MaterialTheme.colorScheme.primary
+    Text(ExceptionCards.fixingTag, Modifier.testTag(tag).background(blue.copy(alpha = 0.16f), RoundedCornerShape(50))
+        .border(1.dp, blue.copy(alpha = 0.35f), RoundedCornerShape(50)).padding(horizontal = 7.dp, vertical = 2.dp),
+        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold), color = blue, maxLines = 1)
+}
+
+/** The one line a live repair is drawn as: "Being fixed in <task ↗>", each title a link to its task (the rest after a middot), and under
+ * it what it asks of the reader — nothing unless it fails (iOS `fixingBlock`). An id that names no task is drawn as plain words rather
+ * than as a link that could only do nothing. One annotated line, so a long title wraps inside the card. */
+@Composable
+private fun FixingBlock(key: String, row: JsonObject, open: (String) -> Unit) {
+    val blue = MaterialTheme.colorScheme.primary
+    val linkStyle = TextLinkStyles(SpanStyle(color = blue, fontWeight = FontWeight.SemiBold))
+    val line = buildAnnotatedString {
+        append("${ExceptionCards.beingFixedIn} ")
+        ExceptionCards.liveRepairs(row).forEachIndexed { index, task ->
+            if (index > 0) append(" · ")
+            val title = "${task.text("title").orEmpty()} ↗"
+            val id = task.text("taskId")?.takeIf { ObjectId.canonical(it) != null }
+            if (id == null) append(title)
+            else withLink(LinkAnnotation.Clickable("orbit-task:$id", linkStyle) { open("orbit-task:$id") }) { append(title) }
+        }
+    }
+    Row(Modifier.fillMaxWidth().background(blue.copy(alpha = 0.10f), RoundedCornerShape(8.dp))
+        .border(1.dp, blue.copy(alpha = 0.35f), RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 9.dp).testTag("$key:fixing"),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        CircularProgressIndicator(Modifier.padding(top = 2.dp).size(14.dp), color = blue, strokeWidth = 2.dp)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(line, Modifier.testTag("$key:being-fixed"), style = MaterialTheme.typography.bodyMedium)
+            Text(ExceptionCards.fixingNothingForYou, Modifier.testTag("$key:nothing-for-you"), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** A door while a repair runs: a quiet link in the tint, with no line under it — link text, as iOS draws it (`quietRow`'s plain
+ * buttons), not a Material button, so the row wraps as words do. */
+@Composable
+private fun QuietLink(label: String, enabled: Boolean, tag: String, onClick: () -> Unit) {
+    Text(label, Modifier.clickable(enabled = enabled, role = Role.Button, onClick = onClick).padding(vertical = 6.dp).testTag(tag),
+        style = MaterialTheme.typography.bodyMedium,
+        color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f))
 }
 
 /** One door and, under it, the line that says what pressing it does. */

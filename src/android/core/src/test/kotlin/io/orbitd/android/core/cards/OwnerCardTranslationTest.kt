@@ -103,13 +103,14 @@ class OwnerCardTranslationTest {
         assertEquals("If you don’t answer: 待つ", OwnerCardTranslation.listDetailLine(older, "ja"))
     }
 
-    @Test fun anOwnerRequestsInboxRowTitleIsTranslatedWhileItsCardWouldBe() {
+    @Test fun anOwnerRequestsCardTitleIsTranslatedOnlyIntoTheOwnersLanguage() {
+        fun title(request: OwnerRequest, owner: String?) = OwnerCardTranslation.ownerRequest(request, owner)?.title ?: request.title
         val request = Wire.decode(j("""{"id":"r","kind":"DECISION","state":"PENDING","title":"Pick a region","why":"W","createdAt":"2026-11-18T00:00:00Z",
             "translation":{"lang":"ja","title":"リージョンを選ぶ"}}""").toString().encodeToByteArray(), OwnerRequest.serializer())
-        assertEquals("リージョンを選ぶ", OwnerRequests.rowTitle(request, "ja"))
-        assertEquals("Pick a region", OwnerRequests.rowTitle(request, "zh-Hans"))
-        assertEquals("Pick a region", OwnerRequests.rowTitle(request, null))
-        assertEquals("Pick a region", OwnerRequests.rowTitle(request.copy(translation = j("""{"lang":"ja","failed":true}""")), "ja"))
+        assertEquals("リージョンを選ぶ", title(request, "ja"))
+        assertEquals("Pick a region", title(request, "zh-Hans"))
+        assertEquals("Pick a region", title(request, null))
+        assertEquals("Pick a region", title(request.copy(translation = j("""{"lang":"ja","failed":true}""")), "ja"))
     }
 
     @Test fun startAndDoneRequestsReadTheirOwnFields() {

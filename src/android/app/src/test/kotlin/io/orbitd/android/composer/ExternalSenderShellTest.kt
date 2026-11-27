@@ -29,18 +29,21 @@ class ExternalSenderShellTest : ComposerShellTest() {
                 "externalSender":{"source":"SLACK","name":"Han Meimei"}}}"""))
     }
     private fun headed(seq: Int, words: String) = has(hasText(words) and hasAnyAncestor(hasTestTag("event:$seq")), unmerged = true)
+    /** The owner's own words: their bubble, headed by nobody (iOS `UserBubbleView` names only somebody else). */
+    private fun ownersBubble(seq: Int) = has(hasTestTag("user-bubble") and hasAnyAncestor(hasTestTag("event:$seq")), unmerged = true) &&
+        !headed(seq, "You")
 
     @Test fun theConversationHeadsAFeishuMembersWordsWithTheirName() {
         echoes()
         signIn(); openSession()
         await { has(hasTestTag("event:8")) }
-        assertTrue("the owner's own words are still theirs", headed(1, "You"))
+        assertTrue("the owner's own words are still theirs", ownersBubble(1))
         assertTrue(headed(4, "From Feishu · Li Lei"))
         assertFalse(headed(4, "You"))
         assertTrue("their words are drawn as ever", headed(4, "Can you also check why the export failed last night?"))
         assertTrue("no name, Feishu alone", headed(6, "From Feishu"))
         assertFalse(headed(6, "You"))
-        assertTrue("a source this build does not know reads as before", headed(8, "You"))
+        assertTrue("a source this build does not know reads as before", ownersBubble(8))
         assertFalse(headed(8, "From Feishu · Han Meimei"))
     }
 
@@ -55,11 +58,11 @@ class ExternalSenderShellTest : ComposerShellTest() {
                 "externalSender":{"source":"ORBIT_GUEST","name":null}}}"""))
         signIn(); openSession()
         await { has(hasTestTag("event:5")) }
-        assertTrue("the owner's own words are still theirs", headed(1, "You"))
+        assertTrue("the owner's own words are still theirs", ownersBubble(1))
         assertTrue("a guest the owner invited is named", headed(3, "From Alice Chen"))
         assertFalse(headed(3, "You"))
         assertTrue("their words are drawn as ever", headed(3, "Can you add the October numbers too?"))
-        assertTrue("a nameless guest reads as before", headed(5, "You"))
+        assertTrue("a nameless guest reads as before", ownersBubble(5))
     }
 
     @Test fun theHeadARunnerTookSaysWhatItsEchoWill() {

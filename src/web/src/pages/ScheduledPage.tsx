@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type JSX, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -10,10 +10,14 @@ import {
   scheduleFill,
   scheduleHistoryWho,
   scheduleRecordText,
+  scheduleRenamedText,
   scheduleRowCircle,
   scheduleRowLine,
   scheduleRuleRepeats,
   scheduleRuleText,
+  scheduleCollapseMissed,
+  scheduleEndText,
+  scheduleMissedText,
   scheduleRunCircle,
   scheduleRunLine,
   scheduleRunOfText,
@@ -33,8 +37,12 @@ import {
 } from '@orbit/shared';
 import { api } from '../api';
 import {
+  scheduleChangePath,
   scheduleClock,
   scheduleDetailQuery,
+  awaitDraftFrom,
+  putRenameAnswer,
+  renameSchedule,
   scheduleDraftsQuery,
   scheduleRecordUndoable,
   scheduleRunSessionPath,
@@ -42,7 +50,13 @@ import {
   undoScheduleRecord,
   viewerTimezone,
 } from '../lib/schedules';
+import type { SessionReach } from '../lib/sessionReach';
+import { ownerRequestsQuery } from '../lib/queries';
 import { sameResourceId } from '../lib/watches';
+import { isTypingTarget } from '../lib/helpDrawer';
+import { OwnerRequestCard } from '../components/OwnerRequestCard';
+import { isScheduleWaitingKind } from '../components/ScheduleWaitingCard';
+import { isConditionWaitingKind } from '../components/ConditionWaitingCard';
 import {
   CONDITION_COPY,
   conditionCantRead,
@@ -62,8 +76,10 @@ import {
 import { GaugeIcon, runFindingFacts, scheduleErrorText, ScheduleCreateCardView } from '../components/ScheduleCards';
 import { Button } from '../components/ui/Button';
 import { useConfirm } from '../components/ui/ConfirmDialog';
+import { RenameField } from '../components/RenameField';
 import { Menu } from '../components/ui/Menu';
 import { Switch } from '../components/ui/Switch';
+import { Tooltip } from '../components/ui/Tooltip';
 import '../components/Scheduled.css';
 
 const C = SCHEDULE_COPY;
@@ -89,6 +105,9 @@ type Selection =
   | { kind: 'pending'; sessionId: string }
   | null;
 
+/** A pick from a row's menu, which the inspector it opens carries out. */
+type RowAsk = { id: string; action: 'run' | 'pause' | 'resume' | 'rename' | 'delete' };
+
 function selectionOf(params: URLSearchParams): Selection {
   const id = params.get('id');
   if (id) return { kind: 'schedule', id };
@@ -111,12 +130,15 @@ function Circle({ view }: { view: ScheduleCircleView }): JSX.Element {
   );
 }
 
-function RowLine({ repeats, text }: { repeats: boolean; text: string }): JSX.Element {
+function RowLine({ repeats, text, end }: { repeats: boolean; text: string; end?: string | null }): JSX.Element {
   return (
-    <div className="sched-row-line">
-      {repeats ? <span className="sched-repeat" aria-hidden="true">{REPEAT}</span> : null}
-      {text}
-    </div>
+    <>
+      <div className="sched-row-line">
+        {repeats ? <span className="sched-repeat" aria-hidden="true">{REPEAT}</span> : null}
+        {text}
+      </div>
+      {end ? <div className="sched-row-line sched-row-end">{end}</div> : null}
+    </>
   );
 }
 
@@ -125,24 +147,32 @@ interface RowView {
   circle: ScheduleCircleView;
   title: string;
   line: string;
+  /** The planned end, on its own line so it is never the part that is cut off. */
+  end?: string | null;
   repeats: boolean;
   time: string;
   cls: string;
   selected: boolean;
   onSelect: () => void;
+  /** A row that never shows as selected (a past run, a task that opens elsewhere): Up/Down step over it. */
+  noCursor?: true;
+  /** The schedule a right-click on the row opens the menu of; absent on a draft's row and a task's. */
+  schedule?: ScheduleListRow;
   /** A condition's row: the gauge in place of the circle, and the newest reading and its age in place of a time. */
   gauge?: 'waiting' | 'cant-read';
   reading?: { value: string | null; age: string };
 }
 
-function Row({ row }: { row: RowView }): JSX.Element {
+function Row({ row, onMenu }: { row: RowView; onMenu?: (event: ReactMouseEvent, schedule: ScheduleListRow) => void }): JSX.Element {
   return (
     <button
       type="button"
       className={`sched-row${row.cls}${row.selected ? ' is-selected' : ''}`}
+      data-row-focus=""
       aria-pressed={row.selected}
       data-row={row.key}
       onClick={row.onSelect}
+      onContextMenu={onMenu && row.schedule ? (event) => onMenu(event, row.schedule!) : undefined}
     >
       {row.gauge ? (
         <span className="sched-gauge" data-gauge={row.gauge}><GaugeIcon /></span>
@@ -150,7 +180,7 @@ function Row({ row }: { row: RowView }): JSX.Element {
       <span className="sched-row-body">
         <span className="sched-row-text">
           <span className="sched-row-title">{row.title}</span>
-          <RowLine repeats={row.repeats} text={row.line} />
+          <RowLine repeats={row.repeats} text={row.line} end={row.end} />
         </span>
         {row.circle.tag ? <span className="sched-tag" data-tone={row.circle.tag.tone}>{row.circle.tag.text}</span> : null}
         {row.reading ? (
@@ -163,6 +193,11 @@ function Row({ row }: { row: RowView }): JSX.Element {
       </span>
     </button>
   );
+}
+
+/** A schedule's planned end for its row's own line: "until Nov 25", "3 runs left"; null without an end. */
+function endOf(schedule: Pick<ScheduleListRow, 'endAt' | 'maxRuns' | 'runsLeft'>, now: Date, timezone: string): string | null {
+  return scheduleEndText(schedule, now, timezone);
 }
 
 const OPEN_CIRCLE: ScheduleCircleView = { circle: 'open', mark: null, tag: null };
@@ -207,6 +242,18 @@ export function ScheduledPage(): JSX.Element {
   const pendingRows = pending.filter((p) =>
     !(drafts.data?.drafts ?? []).some((card) => card.askedBySessionId && sameResourceId(card.askedBySessionId, p.sessionId)));
 
+  // A scheduled task's items (failed, held, a run's approval, a run's wider envelope) and a condition's (it cannot be
+  // read, or a task's has not held in 30 days) are drawn whole here, newest first, each a card with its own doors
+  // (board docs/mocks/scheduled-tasks/web/02-board.png ④). There is no Waiting on you page
+  // (docs/mocks/waiting-on-you-removal); the run's session draws the same card where it was filed.
+  const openRequests = useQuery(ownerRequestsQuery('open'));
+  const scheduleItems = (openRequests.data?.requests ?? [])
+    .filter((request) => (isScheduleWaitingKind(request.kind) || isConditionWaitingKind(request.kind)) && request.state === 'PENDING')
+    .filter((request) => !workspaceFilter
+      || schedules.some((schedule) => request.scheduleId && sameResourceId(schedule.id, request.scheduleId))
+      || (isConditionWaitingKind(request.kind) && !!request.workspaceId && sameResourceId(request.workspaceId, workspaceFilter)))
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+
   const now = new Date();
   const runs = list.data?.runs ?? [];
   const placed = new Map(runs.map((run) => [run.id, run]));
@@ -229,7 +276,23 @@ export function ScheduledPage(): JSX.Element {
     setParams(p, { replace: true });
   };
 
-  const rowOf = (group: ScheduleTimelineGroup, item: ScheduleTimelineItem): RowView => {
+  const rowOf = (group: ScheduleTimelineGroup, item: ReturnType<typeof scheduleCollapseMissed>[number]): RowView => {
+    if (item.kind === 'MISSED') {
+      const first = item.runs[0]!;
+      return {
+        key: `missed:${first.id}`,
+        schedule: item.schedule,
+        circle: scheduleRunCircle(first, { newFinding: false }),
+        title: item.schedule.title,
+        line: scheduleMissedText(item.runs, timezone),
+        repeats: false,
+        time: scheduleClock(item.at, timezone),
+        cls: ' is-past',
+        selected: false,
+        onSelect: () => select({ kind: 'schedule', id: item.schedule.id }),
+        noCursor: true,
+      };
+    }
     if (item.kind === 'DRAFT') {
       const card = item.card;
       return {
@@ -259,21 +322,25 @@ export function ScheduledPage(): JSX.Element {
         : null;
       return {
         key: `run:${run.id}`,
+        schedule,
         circle: scheduleRunCircle(run, { newFinding: facts.newFinding }),
         title: schedule.title,
         line: underWay
           ? scheduleRowLine(schedule, { agentName: schedule.agentName, runningMinutes: minutes })
           : scheduleRunLine(run, { notified: facts.notified }),
+        end: underWay ? endOf(schedule, now, timezone) : null,
         repeats: underWay && scheduleRuleRepeats(schedule.rule),
         time: scheduleClock(run.plannedAt, timezone),
         cls: underWay ? '' : ' is-past',
         selected: false,
         onSelect,
+        noCursor: true,
       };
     }
     const inPaused = group.key === 'PAUSED';
     return {
       key: `${group.key}:${schedule.id}`,
+      schedule,
       circle: scheduleRowCircle(schedule, runs),
       title: schedule.title,
       line: scheduleRowLine(schedule, {
@@ -281,6 +348,7 @@ export function ScheduledPage(): JSX.Element {
         pausedAt: schedule.pausedAt ? new Date(schedule.pausedAt) : null,
         timezone,
       }),
+      end: endOf(schedule, now, timezone),
       repeats: scheduleRuleRepeats(schedule.rule),
       time: item.at && !inPaused ? scheduleClock(item.at, timezone) : '',
       cls: inPaused ? ' is-paused' : '',
@@ -294,6 +362,7 @@ export function ScheduledPage(): JSX.Element {
   const nowMs = now.getTime();
   const conditionScheduleRow = (schedule: ScheduleListRow, cantRead: boolean): RowView => ({
     key: `CONDITION:${schedule.id}`,
+    schedule,
     circle: cantRead ? { circle: 'open', mark: null, tag: { tone: 'held', text: K.cantRead } } : scheduleRowCircle(schedule, runs),
     title: schedule.title,
     line: conditionScheduleLine(schedule),
@@ -315,6 +384,7 @@ export function ScheduledPage(): JSX.Element {
     cls: '',
     selected: false,
     onSelect: () => navigate(`/tasks/${encodeURIComponent(task.id)}`),
+    noCursor: true,
     gauge: cantRead ? 'cant-read' : 'waiting',
     reading: cantRead ? undefined : conditionRowReading(task.condition, nowMs),
   });
@@ -330,7 +400,7 @@ export function ScheduledPage(): JSX.Element {
     key: group.key,
     title: group.title,
     subtitle: group.subtitle,
-    rows: group.items.map((item) => rowOf(group, item)),
+    rows: scheduleCollapseMissed(group.items).map((item) => rowOf(group, item)),
   }));
   if (waitingRows.length) {
     sections.unshift({
@@ -340,6 +410,45 @@ export function ScheduledPage(): JSX.Element {
 
   const workspaceName = (id: string | null) =>
     workspaces.data?.find((w) => sameResourceId(w.id, id ?? ''))?.name ?? null;
+  const pendingRowViews: RowView[] = pendingRows.map((p) => ({
+    key: `pending:${p.sessionId}`,
+    circle: scheduleCircle({ state: 'ACTIVE', consecutiveFailures: 0 }, { draft: true }),
+    title: p.text,
+    line: [workspaceName(p.workspaceId), C.row.draft].filter(Boolean).join(C.separator),
+    repeats: false,
+    time: '',
+    cls: ' is-draft',
+    selected: selection?.kind === 'pending' && selection.sessionId === p.sessionId,
+    onSelect: () => select({ kind: 'pending', sessionId: p.sessionId }),
+  }));
+  // The rows Up/Down step through, top to bottom as drawn.
+  const cursorRows = [...sections.flatMap((section) => section.rows), ...pendingRowViews].filter((row) => !row.noCursor);
+
+  // Up/Down move the selection to the row above or below, as a click on it would, and stop at the ends. Skipped
+  // while typing, while a menu or dialog is open, and when something else already took the key.
+  const cursorRef = useRef(cursorRows);
+  cursorRef.current = cursorRows;
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent): void => {
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      if (e.defaultPrevented || e.altKey || e.metaKey || e.ctrlKey || e.shiftKey || isTypingTarget(e.target)) return;
+      if (document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]')) return;
+      const rows = cursorRef.current;
+      if (rows.length === 0) return;
+      const down = e.key === 'ArrowDown';
+      const cur = rows.findIndex((row) => row.selected);
+      const next = cur === -1 ? (down ? 0 : rows.length - 1) : cur + (down ? 1 : -1);
+      if (next < 0 || next >= rows.length) return;
+      e.preventDefault();
+      const row = rows[next]!;
+      row.onSelect();
+      const el = document.querySelector<HTMLElement>(`.sched-row[data-row="${CSS.escape(row.key)}"]`);
+      el?.focus({ preventScroll: true });
+      el?.scrollIntoView({ block: 'nearest' });
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   const filterLabel = workspaceFilter ? (workspaceName(workspaceFilter) ?? C.page.allWorkspaces) : C.page.allWorkspaces;
   const empty = list.isSuccess && schedules.length === 0 && waitingTasks.length === 0 && draftCards.length === 0
     && pendingRows.length === 0;
@@ -362,7 +471,23 @@ export function ScheduledPage(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drafts.data, selection?.kind === 'pending' ? selection.sessionId : null]);
 
+  // A right-click on a schedule's row: its menu, where the pointer is. A pick opens the schedule in the inspector,
+  // which does what was picked.
+  const [rowMenu, setRowMenu] = useState<{ schedule: ScheduleListRow; x: number; y: number } | null>(null);
+  const [ask, setAsk] = useState<RowAsk | null>(null);
+  const openRowMenu = (event: ReactMouseEvent, schedule: ScheduleListRow) => {
+    event.preventDefault();
+    setRowMenu({ schedule, x: event.clientX, y: event.clientY });
+  };
+  const pick = (schedule: ScheduleListRow, action: RowAsk['action']) => {
+    setRowMenu(null);
+    select({ kind: 'schedule', id: schedule.id });
+    // On the next task: the menu's point is gone with it, so nothing comes back to take focus from Rename…'s field.
+    window.setTimeout(() => setAsk({ id: schedule.id, action }), 0);
+  };
+
   const [quickText, setQuickText] = useState('');
+  const [inspectorWidth, startInspectorResize, inspectorResizing] = useInspectorWidth();
   const quickAdd = (
     <QuickAdd
       text={quickText}
@@ -371,6 +496,7 @@ export function ScheduledPage(): JSX.Element {
       initialWorkspaceId={workspaceFilter}
       onSent={(draft) => {
         setPending((rows) => [...rows, draft]);
+        awaitDraftFrom(draft.sessionId);
         void qc.invalidateQueries({ queryKey: ['schedules', 'drafts'] });
         select({ kind: 'pending', sessionId: draft.sessionId });
       }}
@@ -378,7 +504,10 @@ export function ScheduledPage(): JSX.Element {
   );
 
   return (
-    <div className="sched-page">
+    <div
+      className={`sched-page${inspectorResizing ? ' is-resizing' : ''}`}
+      style={inspectorWidth != null ? ({ '--sched-inspector-width': `${inspectorWidth}px` } as CSSProperties) : undefined}
+    >
       <div className="sched-list">
         <header className="sched-head">
           <h1>{C.page.title}</h1>
@@ -423,34 +552,32 @@ export function ScheduledPage(): JSX.Element {
                 {C.page.showPastRuns}
               </label>
             </div>
+            {scheduleItems.length > 0 ? (
+              <div className="sched-waiting-list" data-schedule-waiting="">
+                {scheduleItems.map((request) => <OwnerRequestCard key={request.id} request={request} now={now.getTime()} />)}
+              </div>
+            ) : null}
             {sections.map((section) => (
               <section key={`${section.key}:${section.title}`} className="sched-group" data-group={section.key}>
                 <h2>{section.title}{section.subtitle ? <small>{section.subtitle}</small> : null}</h2>
-                {section.rows.map((row) => <Row key={row.key} row={row} />)}
+                {section.rows.map((row) => <Row key={row.key} row={row} onMenu={openRowMenu} />)}
               </section>
             ))}
-            {pendingRows.map((p) => (
-              <Row
-                key={`pending:${p.sessionId}`}
-                row={{
-                  key: `pending:${p.sessionId}`,
-                  circle: scheduleCircle({ state: 'ACTIVE', consecutiveFailures: 0 }, { draft: true }),
-                  title: p.text,
-                  line: [workspaceName(p.workspaceId), C.row.draft].filter(Boolean).join(C.separator),
-                  repeats: false,
-                  time: '',
-                  cls: ' is-draft',
-                  selected: selection?.kind === 'pending' && selection.sessionId === p.sessionId,
-                  onSelect: () => select({ kind: 'pending', sessionId: p.sessionId }),
-                }}
-              />
-            ))}
+            {pendingRowViews.map((row) => <Row key={row.key} row={row} />)}
             {quickAdd}
           </>
         )}
       </div>
+      {selectedSchedule || selectedDraft || selectedPending ? (
+        <div className="sched-resizer" data-schedule-resizer="" onMouseDown={startInspectorResize} />
+      ) : null}
       {selectedSchedule ? (
-        <ScheduleInspector key={selectedSchedule.id} schedule={selectedSchedule} />
+        <ScheduleInspector
+          key={selectedSchedule.id}
+          schedule={selectedSchedule}
+          ask={ask && sameResourceId(ask.id, selectedSchedule.id) ? ask : null}
+          onAsked={() => setAsk(null)}
+        />
       ) : selectedDraft ? (
         <DraftInspector
           card={selectedDraft}
@@ -466,8 +593,76 @@ export function ScheduledPage(): JSX.Element {
           </div>
         </aside>
       ) : null}
+      {rowMenu ? (
+        <Menu
+          open
+          nativeButton={false}
+          onOpenChange={(open) => { if (!open) setRowMenu(null); }}
+          trigger={<span className="sched-menu-point" style={{ left: rowMenu.x, top: rowMenu.y }} />}
+          items={[
+            { key: 'run', label: C.actions.runNow, onSelect: () => pick(rowMenu.schedule, 'run') },
+            rowMenu.schedule.state === 'PAUSED' || rowMenu.schedule.state === 'HELD'
+              ? { key: 'resume', label: C.actions.resume, onSelect: () => pick(rowMenu.schedule, 'resume') }
+              : { key: 'pause', label: C.actions.pause, onSelect: () => pick(rowMenu.schedule, 'pause') },
+            { key: 'rename', label: C.actions.rename, onSelect: () => pick(rowMenu.schedule, 'rename') },
+            {
+              key: 'change',
+              label: C.actions.change,
+              onSelect: () => navigate(scheduleChangePath(rowMenu.schedule.id)),
+            },
+            { type: 'separator', key: 'separator' },
+            { key: 'delete', label: C.actions.delete, danger: true, onSelect: () => pick(rowMenu.schedule, 'delete') },
+          ]}
+        />
+      ) : null}
     </div>
   );
+}
+
+// The inspector's width is dragged by its left edge and kept in this browser; null until the first drag (CSS default).
+const INSPECTOR_WIDTH_KEY = 'orbit.scheduleInspectorWidth';
+const INSPECTOR_WIDTH = { min: 320, max: 900, listMin: 360 } as const;
+
+function useInspectorWidth(): [number | null, (event: ReactMouseEvent<HTMLElement>) => void, boolean] {
+  const [width, setWidth] = useState<number | null>(() => {
+    const stored = Number(localStorage.getItem(INSPECTOR_WIDTH_KEY));
+    return stored > 0 && Number.isFinite(stored) ? Math.min(INSPECTOR_WIDTH.max, Math.max(INSPECTOR_WIDTH.min, stored)) : null;
+  });
+  const [resizing, setResizing] = useState(false);
+  const startResize = (event: ReactMouseEvent<HTMLElement>) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const inspector = event.currentTarget.nextElementSibling;
+    const list = event.currentTarget.previousElementSibling;
+    const startWidth = inspector?.getBoundingClientRect().width ?? 400;
+    // The list beside it keeps at least listMin; a list already narrower than that never shrinks further.
+    const listWidth = list?.getBoundingClientRect().width ?? Infinity;
+    const max = Math.max(startWidth, Math.min(INSPECTOR_WIDTH.max, startWidth + listWidth - INSPECTOR_WIDTH.listMin));
+    let latest = startWidth;
+    const onMove = (ev: MouseEvent) => {
+      // It sits on the right: dragging left widens it.
+      latest = Math.round(Math.min(max, Math.max(INSPECTOR_WIDTH.min, startWidth + startX - ev.clientX)));
+      setWidth(latest);
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      setResizing(false);
+      try {
+        localStorage.setItem(INSPECTOR_WIDTH_KEY, String(latest));
+      } catch {
+        // Storage unavailable: the width lasts this page.
+      }
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    setResizing(true);
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+  return [width, startResize, resizing];
 }
 
 /** The line at the end of the list: one sentence and the workspace it goes to (board 1/2 ③ ⑤). Not a form. */
@@ -545,7 +740,8 @@ function DraftInspector({ card, onOpenConversation }: { card: ScheduleCreateCard
 type HistoryEntry =
   | { kind: 'run'; at: string; run: ScheduleRunView }
   | { kind: 'record'; at: string; record: ScheduleChangeRecord }
-  | { kind: 'condition'; at: string; event: ConditionEventView; run: ScheduleRunView | null };
+  | { kind: 'condition'; at: string; event: ConditionEventView; run: ScheduleRunView | null }
+  | { kind: 'missed'; at: string; runs: ScheduleRunView[] };
 
 /** The condition's events the history shows (§9): each firing, with the run it started, and each re-arm. */
 const HISTORY_EVENTS: ReadonlySet<string> = new Set(['FIRED', 'READY_AGAIN']);
@@ -630,7 +826,11 @@ function capitalFirst(text: string): string {
 const LATE_MS = 15 * 60_000;
 
 /** A schedule's inspector (board 1/2 ②): read-back, next and last run, its doors, and what it has done. */
-function ScheduleInspector({ schedule }: { schedule: ScheduleListRow }): JSX.Element {
+function ScheduleInspector({ schedule, ask, onAsked }: {
+  schedule: ScheduleListRow;
+  ask: RowAsk | null;
+  onAsked: () => void;
+}): JSX.Element {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const timezone = viewerTimezone();
@@ -645,7 +845,7 @@ function ScheduleInspector({ schedule }: { schedule: ScheduleListRow }): JSX.Ele
   // same door, but this needs the title alone.
   const asked = useQuery({
     queryKey: ['schedules', 'asked-in', s.createdFromSessionId] as const,
-    meta: { entities: ['session'] },
+    meta: { entities: ['session'], sessionReach: { session: s.createdFromSessionId ?? '' } satisfies SessionReach },
     queryFn: () => api<{ title?: string | null }>(`/sessions/${encodeURIComponent(s.createdFromSessionId!)}`),
     enabled: Boolean(s.createdFromSessionId),
     staleTime: 300_000,
@@ -669,7 +869,36 @@ function ScheduleInspector({ schedule }: { schedule: ScheduleListRow }): JSX.Ele
     danger: true,
     onConfirm: () => control.mutateAsync('delete'),
   });
-  const error = scheduleErrorText(control.error) ?? scheduleErrorText(undo.error);
+  // Rename… (§8.4): the title is a field in place while it is being named. This holds the name the field opened with:
+  // leaving it as it was saves nothing, even if the schedule was renamed elsewhere meanwhile.
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const startRename = () => setRenaming(s.title);
+  const rename = useMutation({
+    mutationFn: (title: string) => renameSchedule(s.id, title),
+    onSuccess: (answer) => putRenameAnswer(qc, answer),
+    onSettled: invalidate,
+  });
+  // The ⋯ opens the field once its menu has handed focus back to the button: opened any sooner, that focus return
+  // blurs, and so closes, the field.
+  const moreButton = useRef<HTMLButtonElement>(null);
+  const renameFromMore = () => {
+    const button = moreButton.current;
+    if (!button) return startRename();
+    if (document.activeElement === button) button.blur();
+    button.addEventListener('focus', startRename, { once: true });
+  };
+  // What a row's menu picked, once: the ref holds it against the effect running twice (StrictMode).
+  const handled = useRef<RowAsk | null>(null);
+  useEffect(() => {
+    if (!ask || handled.current === ask) return;
+    handled.current = ask;
+    if (ask.action === 'rename') startRename();
+    else if (ask.action === 'delete') void askDelete();
+    else control.mutate(ask.action);
+    onAsked();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ask]);
+  const error = scheduleErrorText(control.error) ?? scheduleErrorText(undo.error) ?? scheduleErrorText(rename.error);
 
   const lastFacts = lastRun ? runFindingFacts(detail, lastRun) : { newFinding: false, notified: false };
   const meta = [
@@ -691,19 +920,66 @@ function ScheduleInspector({ schedule }: { schedule: ScheduleListRow }): JSX.Ele
       .map((run) => ({ kind: 'run' as const, at: run.startedAt ?? run.plannedAt, run })),
     ...(detail?.history ?? []).map((record) => ({ kind: 'record' as const, at: record.createdAt, record })),
     ...events.map((event) => ({ kind: 'condition' as const, at: event.at, event, run: runOf(event) })),
-  ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+  ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
+    // Consecutive missed slots, with nothing else between them, read as one line.
+    .reduce<HistoryEntry[]>((out, entry) => {
+      const last = out[out.length - 1];
+      if (entry.kind === 'run' && entry.run.state === 'MISSED') {
+        if (last?.kind === 'missed') last.runs.push(entry.run);
+        else if (last?.kind === 'run' && last.run.state === 'MISSED') out[out.length - 1] = { kind: 'missed', at: last.at, runs: [last.run, entry.run] };
+        else out.push(entry);
+      } else out.push(entry);
+      return out;
+    }, []);
 
-  const change = () => navigate(`/workspaces/${encodeURIComponent(s.workspaceId)}/new`, {
-    state: { composerText: `${s.title}: ` },
+  // Change… (§8.2): the schedule's change conversation — the open one, or Orbit's opening for a new one.
+  const change = () => navigate(scheduleChangePath(s.id));
+
+  const endLine = scheduleEndText(s, now, timezone);
+  // The end is the agent's to change, like every other part of a schedule: the composer opens with the ask.
+  const askChange = (template: string) => navigate(`/workspaces/${encodeURIComponent(s.workspaceId)}/new`, {
+    state: { composerText: scheduleFill(template, { title: s.title }) },
   });
 
   return (
     <aside className="sched-inspector" data-schedule-inspector="schedule">
-      <h2 className="sched-inspector-title">{s.title}</h2>
+      {renaming !== null ? (
+        <RenameField
+          label={C.history.fields.title}
+          title={renaming}
+          onDone={(title) => {
+            setRenaming(null);
+            if (title && title !== renaming.trim()) rename.mutate(title);
+          }}
+        />
+      ) : (
+        <h2 className="sched-inspector-title">
+          <Tooltip content={C.actions.rename} side="bottom" align="start">
+            <button type="button" className="sched-title" onClick={startRename}>
+              {s.title}
+            </button>
+          </Tooltip>
+        </h2>
+      )}
       <div className="sched-inspector-meta">
         {scheduleRuleRepeats(s.rule) ? <span className="sched-repeat" aria-hidden="true">{REPEAT}</span> : null}
         {meta}
       </div>
+      {endLine ? (
+        <div className="sched-block" data-inspector-block="end">
+          <span className="sched-label">{C.end.endLabel}</span>
+          {C.separator}
+          {endLine}
+          {' '}
+          <button type="button" className="sched-link" onClick={() => askChange(C.end.extendAsk)}>
+            {C.end.extend}
+          </button>
+          {' '}
+          <button type="button" className="sched-link" onClick={() => askChange(C.end.removeAsk)}>
+            {C.end.remove}
+          </button>
+        </div>
+      ) : null}
       {isWhen ? <ConditionBlocks schedule={s} condition={condition} now={now} timezone={timezone} /> : null}
       <div className="sched-block" data-inspector-block="next" hidden={isWhen}>
         <div className="sched-label">{C.inspector.nextRun}</div>
@@ -730,8 +1006,12 @@ function ScheduleInspector({ schedule }: { schedule: ScheduleListRow }): JSX.Ele
         <Button size="small" onClick={change}>{C.actions.change}</Button>
         <Menu
           align="end"
-          trigger={<Button size="small" className="sched-more" aria-label={C.actions.delete}>{'⋯'}</Button>}
-          items={[{ key: 'delete', label: C.actions.delete, danger: true, onSelect: askDelete }]}
+          trigger={<Button ref={moreButton} size="small" className="sched-more" aria-label={C.actions.delete}>{'⋯'}</Button>}
+          items={[
+            { key: 'rename', label: C.actions.rename, onSelect: renameFromMore },
+            { type: 'separator', key: 'separator' },
+            { key: 'delete', label: C.actions.delete, danger: true, onSelect: askDelete },
+          ]}
         />
       </div>
       {confirmation}
@@ -792,6 +1072,14 @@ function ScheduleInspector({ schedule }: { schedule: ScheduleListRow }): JSX.Ele
       <div className="sched-section">{C.inspector.history}</div>
       <div className="sched-block sched-history" data-inspector-block="history">
         {history.map((entry) => {
+          if (entry.kind === 'missed') {
+            return (
+              <div key={`missed:${entry.runs[0]!.id}`} className="sched-history-row" data-history="missed">
+                <span className="sched-history-when">{scheduleWhenText(new Date(entry.at), now, timezone)}</span>
+                <span className="sched-history-what" data-tone="failed">{scheduleMissedText(entry.runs, timezone)}</span>
+              </div>
+            );
+          }
           if (entry.kind === 'condition') {
             const { event, run } = entry;
             const path = run ? scheduleRunSessionPath(run) : null;
@@ -850,7 +1138,23 @@ function ScheduleInspector({ schedule }: { schedule: ScheduleListRow }): JSX.Ele
           return (
             <div key={`rev:${record.revision}`} className="sched-history-row" data-history="revision">
               <span className="sched-history-when">{scheduleWhenText(new Date(entry.at), now, timezone)}</span>
-              <span className="sched-history-what">{scheduleRecordText(record)}</span>
+              <span className="sched-history-what">
+                {scheduleRenamedText(record) ?? scheduleRecordText(record)}
+                {record.askedText ? (
+                  // Asked in the schedule's change conversation (§8.2): the person's words, and the way back to them.
+                  <span className="sched-history-asked">
+                    “{record.askedText}”
+                    {record.sessionId ? (
+                      <>
+                        {C.separator}
+                        <button type="button" className="sched-link" onClick={() => navigate(`/sessions/${encodeURIComponent(record.sessionId!)}`)}>
+                          {C.changeConversation.conversation}
+                        </button>
+                      </>
+                    ) : null}
+                  </span>
+                ) : null}
+              </span>
               <span className="sched-who" data-who={who.who}>{who.text}</span>
               {scheduleRecordUndoable(record) ? (
                 <button type="button" className="sched-link" disabled={undo.isPending} onClick={() => undo.mutate(record)}>

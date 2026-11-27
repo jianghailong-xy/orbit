@@ -263,7 +263,7 @@ class WikiWatchDeviceTest {
         press("wiki-doc-source-open")
         compose.waitUntil(20_000) { app.realtime.state.value.session?.id == ids.string("session") }
         compose.waitUntil(20_000) { journal().any { it.string("path").contains("/events/page") && it.string("path").contains("around=") } }
-        await("Jump to latest")
+        awaitTag("transcript-jump")
         capture("doc-source-record")
         compose.onNodeWithContentDescription("Back").performClick()
         awaitTag("wiki-doc-list")

@@ -50,7 +50,7 @@ const machine = (over: Partial<Runner> = {}): Runner =>
     online: true,
     maxConcurrent: 4,
     activeSessions: 0,
-    capabilities: ['provider:dsh'],
+    capabilities: ['provider:dsh', 'codex-default-sign-out/v1'],
     engines: [
       health({ engine: 'claude', version: '2.1.291 (Claude Code)', auth: 'no' }),
       health({
@@ -209,8 +209,8 @@ describe('an engine on its machine’s page', () => {
     // Its sign-in opens under the row, on this page.
     expect(here()).toBe(`/settings/machines/${RUNNER_ID}`);
     expect(document.querySelector('[data-testid="elsewhere"]')).toBeNull();
-    const panel = $('.re-panel', claude);
-    await click(button('Sign in to Claude Code', panel));
+    // The row's press starts it (docs/runner-browser-engine-sign-in-design.md §2): no second button to press.
+    expect(text($('.re-panel', claude))).toContain('Starting sign-in on the runner');
     expect(sent).toEqual([{ method: 'POST', path: `/runners/${RUNNER_ID}/login`, body: { engine: 'claude' } }]);
     expect(here()).toBe(`/settings/machines/${RUNNER_ID}`);
   });
@@ -232,9 +232,12 @@ describe('an engine on its machine’s page', () => {
     await click($('.re-grp-toggle', codex));
     expect($$('.machine-section-engines .re-acct .re-name-text').map(text)).toEqual(['Default', 'Work']);
 
-    const work = $$('.machine-section-engines .re-acct')[1];
+    const [first, work] = $$('.machine-section-engines .re-acct');
     const menu = await openRunnerMenu(work);
     expect($$('[role="menuitem"]', menu).map(text)).toEqual(['Rename', 'Re-sign in', 'Pause account…', 'Remove account']);
+    // Default's alone offers Sign out…, the runner having declared it.
+    const defaultMenu = await openRunnerMenu(first);
+    expect($$('[role="menuitem"]', defaultMenu).map(text)).toEqual(['Rename', 'Re-sign in', 'Pause account…', 'Sign out…', 'Remove account']);
 
     await click(button('Add account', codex));
     expect(text($('.re-add-label', codex))).toBe('Account name');
@@ -422,6 +425,7 @@ describe('the machine’s own controls over its engines', () => {
       reportedAt: '2026-11-18T05:00:00.000Z',
       clearRequestedAt: null,
       profileClearedAt: null,
+      savedLogins: null,
     };
     await mount(machine(), { ...MANAGED_READY, runnerId: RUNNER_ID });
     expect($$('.machine-section-browser')).toHaveLength(1);

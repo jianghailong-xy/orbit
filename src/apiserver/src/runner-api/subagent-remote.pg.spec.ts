@@ -35,7 +35,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { type PrismaClient, type Runner, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, type Runner, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import {
   CLAUDE_REGION_V1,
   RunEventType,
@@ -168,7 +169,7 @@ test('Cross-workspace SubAgents: choice of workspace, refusals, hand-over, relay
       data: {
         id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runner.id,
         title: 'ship the iOS build', prompt: 'ship the iOS build', provider: 'claude', engine: 'claude',
-        model: 'claude-opus-5-5', effort: 'high', status: RunStatus.AWAITING_INPUT, numTurns: 1,
+        model: 'claude-opus-5-5', effort: 'high', turnState: null, numTurns: 1,
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false, costUsd: 0,
       },
     });
@@ -420,6 +421,9 @@ test('Cross-workspace SubAgents: choice of workspace, refusals, hand-over, relay
     assert.equal(claim.exec.provider, 'claude', "the target workspace's own default engine");
     assert.equal(claim.exec.model, 'claude-sonnet-5-5', "and its runner's default model");
     assert.ok(Array.isArray(claim.exec.allowedTools) && typeof claim.exec.permissionMode === 'string', "in a session claim's shape");
+    const parentRow = await prisma.session.findUniqueOrThrow({ where: { id: e.sessionId }, select: { permissionMode: true } });
+    assert.equal(claim.parentPermissionMode, parentRow.permissionMode ?? 'auto',
+      "the claim names the parent's mode, which the target runner answers a read-only child's requests by");
     assert.deepEqual(await remoteSubagentHeartbeat(prisma, e.mac.id), { remoteSubagentRuns: [], stopSubagentRunIds: [] },
       'claimed, it is no longer listed to claim');
 

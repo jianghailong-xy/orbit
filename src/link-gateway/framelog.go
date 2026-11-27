@@ -49,6 +49,10 @@ func bodyName(f *linkpb.Frame) string {
 		return "turn_prefix_request"
 	case *linkpb.Frame_TurnPrefixResponse:
 		return "turn_prefix_response"
+	case *linkpb.Frame_BackgroundJobTailRequest:
+		return "background_job_tail_request"
+	case *linkpb.Frame_BackgroundJobTailResponse:
+		return "background_job_tail_response"
 	case *linkpb.Frame_Chunk:
 		return "chunk"
 	case *linkpb.Frame_StreamOpen:
@@ -179,6 +183,16 @@ func summarize(f *linkpb.Frame) string {
 		kv("turn", r.GetTurnId())
 		kv("text", len(r.GetText()))
 		kv("through_live_seq", r.GetThroughLiveSeq())
+	case *linkpb.Frame_BackgroundJobTailRequest:
+		kv("request", body.BackgroundJobTailRequest.GetRequestId())
+		kv("session", body.BackgroundJobTailRequest.GetSessionId())
+		kv("job", body.BackgroundJobTailRequest.GetJobId())
+	case *linkpb.Frame_BackgroundJobTailResponse:
+		r := body.BackgroundJobTailResponse
+		kv("request", r.GetRequestId())
+		kv("job", r.GetJobId())
+		kv("outcome", r.GetOutcome())
+		kv("text", len(r.GetText()))
 	case *linkpb.Frame_Chunk:
 		c := body.Chunk
 		kv("frame", c.GetFrameId())

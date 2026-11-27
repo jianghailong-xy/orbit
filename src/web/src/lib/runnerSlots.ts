@@ -238,7 +238,17 @@ export const RUNNER_UPDATING_TITLE = 'Runner updating';
 /** A session held by its GitHub workspace's clone (queuedReason WORKSPACE_CLONING / WORKSPACE_CLONE_FAILED). */
 export const CLONE_WAIT_TITLE = 'Waiting for the clone';
 export const CLONE_FAILED_TITLE = 'Clone failed';
-export const CLONE_FAILED_WAIT = 'This session starts once the repository is cloned. Retry the clone from the conversation’s first line.';
+export const CLONE_FAILED_WAIT = 'This session starts once the repository is cloned.';
+/** The waiting card's title while a clone is under way or yet to start (board clone-progress-wait-card ②). */
+export function cloneWaitTitle(state: 'PENDING' | 'CLONING', repository: string): string {
+  return `${state === 'CLONING' ? 'Cloning' : 'Waiting to clone'} ${repository}`;
+}
+/** The waiting card's sentence under it: where, and when this session starts. */
+export const CLONE_WAIT_STARTS = 'This session starts when the clone is done.';
+/** A held session's list line once git has reported a percentage (board ④). */
+export function cloneRowLabel(progress: number): string {
+  return `Cloning · ${progress}%`;
+}
 /** A new session held by Keep Free (queuedReason disk_below_floor): its workspace's disk is below its runner's floor. */
 export const DISK_LOW_TITLE = 'Low disk space';
 export const DISK_LOW_WAIT = 'This runner has less free disk space than its Keep Free setting. This session starts once space is freed.';

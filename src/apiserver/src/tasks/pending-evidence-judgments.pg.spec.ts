@@ -47,11 +47,11 @@ import test from 'node:test';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import { uuidToBase62 } from '@orbit/shared';
 import {
@@ -175,7 +175,7 @@ async function fixture(db: PrismaClient) {
         title,
         prompt: 'run the task',
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: taskFor !== undefined,
       },
@@ -556,7 +556,7 @@ suite('the pending-decision queue is derived from the facts, not delivered to an
     // session, it would go with it.
     await db.session.update({
       where: { id: f.coordinatorSessionId },
-      data: { status: RunStatus.SUCCEEDED, completedAt: new Date() },
+      data: { turnState: null, finishedAt: new Date(), completedAt: new Date() },
     });
     await db.session.delete({ where: { id: f.coordinatorSessionId } });
 
@@ -571,7 +571,7 @@ suite('the pending-decision queue is derived from the facts, not delivered to an
         title: 'the coordinator, reopened',
         prompt: 'keep going',
         provider: 'claude',
-        status: RunStatus.RUNNING,
+        turnState: 'IN_FLIGHT',
         dispatchOrigin: SessionDispatchOrigin.USER,
       },
     });

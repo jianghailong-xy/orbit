@@ -116,7 +116,8 @@ final class ProjectPageSectionsCopyParityTests: XCTestCase {
                             ("OF", ProjectPage.landingOf),
                             ("TAKEN_OVER", ProjectPage.landingTakenOver),
                             ("FIRST_STARTED", ProjectPage.landingFirstStarted),
-                            ("USUALLY", ProjectPage.landingUsually)] {
+                            ("USUALLY", ProjectPage.landingUsually),
+                            ("WAITING", ProjectPage.landingWaiting)] {
             assertSays(web, "\(key): '\(word)'", in: Self.panorama)
         }
         // A runner that stopped reporting says so — a fact about the REPORTS, worded apart from

@@ -43,9 +43,10 @@ final class MachineSetupModel {
     /// The folder field's text trimmed: the name asked about and the one the workspace's name follows.
     var folder: String { typed.trimmingCharacters(in: .whitespacesAndNewlines) }
 
-    /// The folder the workspace's name follows: the typed one, or on From GitHub the picked repository's.
+    /// The folder the workspace's name follows: the typed one (a full path's last segment), or on From GitHub the
+    /// picked repository's.
     var followed: String {
-        guard githubOpen else { return folder }
+        guard githubOpen else { return MachineSetup.followedName(folder: folder) }
         if case .github(let pick)? = repository { return pick.name }
         return ""
     }

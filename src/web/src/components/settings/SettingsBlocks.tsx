@@ -1,4 +1,6 @@
-import { useId, type MouseEventHandler, type ReactNode } from 'react';
+import { useContext, useId, type MouseEventHandler, type ReactNode } from 'react';
+import { SettingChangedLineSlot } from './SettingChangedLine';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from '../ui/Tooltip';
 import './Settings.css';
 
 /** A page's own heading in the right-hand column: its name, a line under it, and an optional action on its right. */
@@ -79,16 +81,20 @@ export function SettingsRow({
    *  the row's own control, so the row itself stays out of the tab order. */
   onClick?: MouseEventHandler<HTMLDivElement>;
 }) {
+  const ChangedLine = useContext(SettingChangedLineSlot);
   return (
     <div className={onClick ? 'settings-row settings-row--link' : 'settings-row'} data-setting-anchor={anchor} onClick={onClick}>
       <div className="settings-row-text">
         <div className="settings-row-title">{title}</div>
         {description != null && <div className="settings-row-description">{description}</div>}
+        {ChangedLine && anchor ? <ChangedLine anchor={anchor} /> : null}
       </div>
       {control != null && (
-        <div className="settings-row-control" title={tooltip}>
-          {control}
-        </div>
+        <Tooltip content={tooltip} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <div className="settings-row-control">
+            {control}
+          </div>
+        </Tooltip>
       )}
     </div>
   );

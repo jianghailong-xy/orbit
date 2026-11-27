@@ -20,10 +20,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  android:
-    name: Android (test + lint + debug APK)
+  # verify.sh's three shares run side by side: run one after another, the debug and the release
+  # unit tests alone took ~25 of a green job's ~36 minutes (11-22, six green runs), which left
+  # a slow runner no margin under 40. Every share still runs on every push.
+  verify:
+    name: Android · ${{ matrix.part }}
     runs-on: ubuntu-24.04
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [unit-debug, unit-release, lint-apk]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Verify release trigger isolation
@@ -39,15 +46,55 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'cmdline-tools;22.0'
           "$ANDROID_HOME/cmdline-tools/22.0/bin/sdkmanager" 'platforms;android-36' 'build-tools;36.0.0'
           echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
-      # A fresh runner, no Gradle cache restore, and clean outputs witness a real
-      # build. Debug signing is generated locally and requires no release secrets.
-      - name: Verify Android
-        run: bash src/android/scripts/verify.sh "$RUNNER_TEMP/android-verification"
+      # Downloaded dependencies only (Gradle's module cache and distribution, Robolectric's
+      # android-all jars), never build outputs: Maven Central answered fresh runners with 429
+      # Too Many Requests and failed main's build (runs 45033011240, 45105861162, 45118846521).
+      # Only a push to main writes the cache; every other run reads main's.
+      - name: Restore downloaded dependencies
+        id: deps
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches/modules-2
+            ~/.gradle/wrapper/dists
+            ~/.m2/repository/org/robolectric
+          key: android-deps-${{ matrix.part }}-${{ hashFiles('src/android/gradle/libs.versions.toml', 'src/android/**/*.gradle.kts', 'src/android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: android-deps-${{ matrix.part }}-
+      # Fresh build outputs witness a real build: verify.sh cleans first, and no build cache is restored.
+      # Debug signing is generated locally and requires no release secrets.
+      - name: Verify Android (${{ matrix.part }})
+        run: bash src/android/scripts/verify.sh --part "${{ matrix.part }}" "$RUNNER_TEMP/android-verification"
+      - name: Save downloaded dependencies
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.deps.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches/modules-2
+            ~/.gradle/wrapper/dists
+            ~/.m2/repository/org/robolectric
+          key: ${{ steps.deps.outputs.cache-primary-key }}
       - name: Keep verification evidence and installable debug APK
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: android-debug-${{ github.sha }}
+          name: android-${{ matrix.part == 'lint-apk' && 'debug' || matrix.part }}-${{ github.sha }}
           path: ${{ runner.temp }}/android-verification
           if-no-files-found: error
           retention-days: 14
+
+  # The one Android check: it passes only when every share above passed. A run cancelled as a
+  # whole (a newer push to the same ref) skips it rather than report a failure; a share that
+  # fails or hits its timeout still fails it.
+  android:
+    name: Android (test + lint + debug APK)
+    needs: [verify]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Every share passed
+        env:
+          RESULT: ${{ needs.verify.result }}
+        run: |
+          echo "Android shares: $RESULT"
+          test "$RESULT" = success

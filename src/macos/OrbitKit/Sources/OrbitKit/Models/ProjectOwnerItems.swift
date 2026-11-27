@@ -354,6 +354,10 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
     /// `DONE_REQUEST`'s judgment and gaps. Nil until translated, and from an older server
     /// (`OwnerCardTranslations` decides when it is drawn).
     public let translation: OwnerCardTranslation?
+    /// The task's own work session this landing failure went to first (revision 42, §12.7), whether
+    /// it still holds it or handed it back; nil for an item never offered to one, and from a server
+    /// that predates it.
+    public let workSession: OpenItemWorkSession?
 
     /// The browser's `OpenItemChat`: the conversation the chat is held in, the stage, and — when
     /// the chat cannot be had — why (`NO_COORDINATOR`, `COORDINATOR_UNAVAILABLE`, …).
@@ -393,7 +397,8 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
                 facts: OpenItemFacts? = nil, handling: OpenItemHandling? = nil,
                 coordinatorUnreachable: Bool = false, handoverNote: String? = nil,
                 chat: Chat? = nil, translation: OwnerCardTranslation? = nil,
-                baseline: OpenItemBaseline? = nil, heldTaskIds: [String] = []) {
+                baseline: OpenItemBaseline? = nil, heldTaskIds: [String] = [],
+                workSession: OpenItemWorkSession? = nil) {
         self.itemId = itemId
         self.kind = kind
         self.title = title
@@ -426,6 +431,7 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
         self.handoverNote = handoverNote
         self.chat = chat
         self.translation = translation
+        self.workSession = workSession
     }
 
     public init(from decoder: Decoder) throws {
@@ -469,7 +475,52 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
         handoverNote = (try? c.decodeIfPresent(String.self, forKey: .handoverNote)) ?? nil
         chat = (try? c.decodeIfPresent(Chat.self, forKey: .chat)) ?? nil
         translation = (try? c.decodeIfPresent(OwnerCardTranslation.self, forKey: .translation)) ?? nil
+        workSession = (try? c.decodeIfPresent(OpenItemWorkSession.self, forKey: .workSession)) ?? nil
     }
+}
+
+/// The task's own work session a landing failure went to first (revision 42, §12.5 W4–W7, §12.7) —
+/// `@orbit/shared`'s `OpenItemWorkSession`: which session, when it was offered, and, once it came
+/// back to the coordinator, when and why.
+///
+/// While `returnedAt` is nil the item is in that session's hands: listed under `withWorkSession`
+/// ("Being fixed by its session"), in no one's Needs you. `rounds` is how many landing generations
+/// that session has asked for in this task segment (W8 caps them at `OpenItemWorkSession.maxRounds`):
+/// 0 while it fixes the first failure.
+public struct OpenItemWorkSession: Codable, Equatable, Sendable {
+    /// W8's cap on the rounds one task segment's work session may ask for.
+    public static let maxRounds = 2
+
+    public let sessionId: String
+    public let offeredAt: String
+    public let returnedAt: String?
+    /// `NO_NEW_COMMIT`, `TURN_FAILED`, `SESSION_ENDED`, `ROUNDS_EXHAUSTED` or `TASK_MOVED_ON`.
+    public let returnReason: String?
+    public let rounds: Int
+
+    public init(sessionId: String, offeredAt: String = "", returnedAt: String? = nil,
+                returnReason: String? = nil, rounds: Int = 0) {
+        self.sessionId = sessionId
+        self.offeredAt = offeredAt
+        self.returnedAt = returnedAt
+        self.returnReason = returnReason
+        self.rounds = rounds
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        sessionId = try c.decode(String.self, forKey: .sessionId)
+        offeredAt = (try? c.decodeIfPresent(String.self, forKey: .offeredAt)) ?? ""
+        returnedAt = (try? c.decodeIfPresent(String.self, forKey: .returnedAt)) ?? nil
+        returnReason = (try? c.decodeIfPresent(String.self, forKey: .returnReason)) ?? nil
+        rounds = (try? c.decodeIfPresent(Int.self, forKey: .rounds)) ?? 0
+    }
+
+    /// Still in the session's hands: offered and not handed back.
+    public var held: Bool { returnedAt == nil }
+
+    /// Which round the session is on, counting from 1: the rounds it has asked for, plus the one in hand.
+    public var round: Int { min(rounds + 1, Self.maxRounds) }
 }
 
 /// What an open item's payload holds, as the rows its card draws (§7.5), mirroring `@orbit/shared`'s
@@ -648,6 +699,10 @@ public struct ProjectDoneRequestSuperseded: Codable, Equatable, Sendable {
 public struct ProjectOpenItemsView: Codable, Equatable, Sendable {
     public let needsYou: [ProjectOpenItemRow]
     public let withCoordinator: [ProjectOpenItemRow]
+    /// "Being fixed by its session" (revision 42, §12.7): landing failures in the hands of the task's
+    /// own work session, kept out of `needsYou` and `withCoordinator`. Each row carries its
+    /// `workSession`. Empty from a server that predates it.
+    public let withWorkSession: [ProjectOpenItemRow]
     /// The coordinator's questions that have ended, newest first — answered or withdrawn. Drawn as
     /// records at the moment each ended, and counted by nothing. Empty from a server that predates
     /// the group.
@@ -668,12 +723,14 @@ public struct ProjectOpenItemsView: Codable, Equatable, Sendable {
     public let latestDoneRequestDecline: ProjectDoneRequestDecline?
 
     public init(needsYou: [ProjectOpenItemRow] = [], withCoordinator: [ProjectOpenItemRow] = [],
+                withWorkSession: [ProjectOpenItemRow] = [],
                 closedQuestions: [ProjectClosedQuestion] = [],
                 startRequest: ProjectOpenItemRow? = nil, doneRequest: ProjectOpenItemRow? = nil,
                 latestDoneRequestSuperseded: ProjectDoneRequestSuperseded? = nil,
                 latestDoneRequestDecline: ProjectDoneRequestDecline? = nil) {
         self.needsYou = needsYou
         self.withCoordinator = withCoordinator
+        self.withWorkSession = withWorkSession
         self.closedQuestions = closedQuestions
         self.startRequest = startRequest
         self.latestDoneRequestDecline = latestDoneRequestDecline
@@ -685,6 +742,7 @@ public struct ProjectOpenItemsView: Codable, Equatable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         needsYou = try c.decodeIfPresent([ProjectOpenItemRow].self, forKey: .needsYou) ?? []
         withCoordinator = try c.decodeIfPresent([ProjectOpenItemRow].self, forKey: .withCoordinator) ?? []
+        withWorkSession = (try? c.decodeIfPresent([ProjectOpenItemRow].self, forKey: .withWorkSession)) ?? []
         // Read with `try?` for the reason the two requests are: records this build cannot read are
         // records it does not draw, never an open-items read that fails and takes the open
         // questions down with it.

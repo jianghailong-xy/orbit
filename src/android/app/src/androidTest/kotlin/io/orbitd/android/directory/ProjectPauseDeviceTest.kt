@@ -1,0 +1,235 @@
+package io.orbitd.android.directory
+
+import io.orbitd.android.hasRowMenu
+import io.orbitd.android.openRowMenu
+import io.orbitd.android.openProjectSessionsPage
+import android.graphics.Bitmap
+import android.os.SystemClock
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.*
+import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.test.core.app.ActivityScenario
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import io.orbitd.android.MainActivity
+import io.orbitd.android.OrbitApplication
+import io.orbitd.android.core.auth.AuthState
+import io.orbitd.android.core.net.ServerAddress
+import io.orbitd.android.projects.StartSheetLoad
+import java.io.File
+import java.time.Instant
+import java.util.concurrent.CopyOnWriteArrayList
+import kotlinx.coroutines.runBlocking
+import okhttp3.mockwebserver.*
+import org.junit.Assert.*
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+
+/**
+ * A05p on a device, over a controlled HTTP fixture (not a deployment): a workspace's list draws project Launch's sessions as one row
+ * in its coordinator's place (A05-6), the row opens the coordinator's conversation, whose bar's button opens the project's sessions in a
+ * bottom sheet where a member picked takes the conversation's place, Back returning to the list (owner 2026-11-11), and the
+ * drawer's project row opens that page as its destination's root (A05-7). The theme is the device's (the script runs it light and
+ * dark); every step leaves a screenshot in files/a05p/<theme>.
+ */
+@RunWith(AndroidJUnit4::class)
+class ProjectPauseDeviceTest {
+    @get:Rule val compose = createEmptyComposeRule()
+    private lateinit var scenario: ActivityScenario<MainActivity>
+    private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
+    private val app get() = instrumentation.targetContext.applicationContext as OrbitApplication
+    private val theme = InstrumentationRegistry.getArguments().getString("a05p_theme") ?: "light"
+    private val evidence get() = File(app.filesDir, "a05p/$theme").also { it.mkdirs() }
+    private val calls = CopyOnWriteArrayList<String>()
+    private val alpha = "34A05pWorkspaceAlpha01"; private val beta = "34A05pWorkspaceBeta002"
+    private val launch = "34A05pProjectLaunch001"
+    private val coord = "34A05pSessionCoord0001"; private val worker = "34A05pSessionWorker002"; private val waiting = "34A05pSessionWaiting03"
+    private val plain = "34A05pSessionPlain0004"; private val done = "34A05pSessionDone00005"
+    private val ids = listOf(alpha, beta, launch, coord, worker, waiting, plain, done)
+    @Volatile private var started = true
+    @Volatile private var paused = false
+
+    @Test fun projectRowsAndTheProjectSessionsPage() {
+        instrumentation.sendStatus(0, android.os.Bundle().apply { putString("a05p_pid", android.os.Process.myPid().toString()) })
+        // No Activity has started to restore the stored session, as one does on launch: restored here, as a process without one does.
+        runBlocking { app.session.restore() }
+        compose.waitUntil(10_000) { app.session.state.value !is AuthState.Restoring }
+        assertTrue("Requires a dedicated signed-out debug installation", app.session.state.value is AuthState.SignedOut)
+        evidence.listFiles()?.forEach { it.delete() }
+        MockWebServer().use { server ->
+            server.dispatcher = fixture()
+            try {
+                // Signed in before the Activity starts. Under the test rule the composition's effects run on an unconfined test
+                // dispatcher, so a sign-in pressed on the login page resumes on OkHttp's thread and runs a Recomposer frame there
+                // beside the main thread's (A05i: F-19's "pending composition has not been applied"). The login page is
+                // AuthFlowDeviceTest's journey.
+                runBlocking { app.session.login(ServerAddress.parse(server.url("/").toString(), true), "a05p@example.test", "a05p-fixture-password") }
+                scenario = ActivityScenario.launch(MainActivity::class.java)
+                compose.waitUntil(20_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
+
+                await { exists(hasTestTag("project-row:$launch")) && exists(hasTestTag("project-row-line"), unmerged = true) }
+                // A running project: swiped right, its first slot is Pause, Pin next; Move waits on the left.
+                compose.onNodeWithTag("project-row:$launch").performTouchInput { swipeRight(startX = left + 20f, endX = left + 400f, durationMillis = 400) }
+                await { exists(hasTestTag("project-swipe-action:pause"), unmerged = true) && exists(hasTestTag("project-swipe-action:pin"), unmerged = true) }
+                capture("01-running-swiped-right")
+                compose.onNodeWithTag("project-swipe-action:pause", useUnmergedTree = true).performClick()
+                await { calls.any { it == "POST /api/projects/$launch/pause" } }
+                capture("02-after-pause-toast")
+                await { exists(hasTestTag("project-row-line") and hasText("Paused · 2 runs finishing"), unmerged = true) }
+                // The toast has gone, so the rows are clear.
+                await { !exists(hasText("Project paused"), unmerged = true) }
+                capture("03-paused-row")
+                compose.onNodeWithTag("project-row:$launch").performTouchInput { swipeRight(startX = left + 20f, endX = left + 400f, durationMillis = 400) }
+                await { exists(hasTestTag("project-swipe-action:resume"), unmerged = true) }
+                capture("04-paused-swiped-right")
+                File(evidence, "result.txt").writeText("PASS\n")
+            } catch (failure: Throwable) {
+                File(evidence, "failure.txt").writeText(failure.stackTraceToString())
+                runCatching { capture("failure") }
+                throw failure
+            } finally {
+                runBlocking { app.session.logout() }
+                if (::scenario.isInitialized) scenario.close()
+                app.realtime.selectSession(null)
+                File(evidence, "requests.txt").writeText(calls.joinToString("\n"))
+            }
+        }
+    }
+
+    private fun ago(minutes: Long) = Instant.now().minusSeconds(minutes * 60).toString()
+    private fun member(role: String) = """"projectMembership":{"projectId":"$launch","projectTitle":"Launch","projectStatus":"OPEN","role":"$role"}"""
+    private fun row(id: String, title: String, workspace: String, run: String, extra: String, lifecycle: String = "OPEN", lastTurnAt: String = ago(5),
+        approvals: Int = 0) =
+        """{"id":"$id","title":"$title","status":"$run","runState":"$run","lifecycleState":"$lifecycle","agent":{"id":"$workspace","name":"${if (workspace == alpha) "Alpha" else "Beta"}"},
+            "agentId":"$workspace","createdAt":"${ago(600)}","lastTurnAt":"$lastTurnAt","pendingApprovals":$approvals,"tags":[],
+            "capabilities":{"canComplete":${lifecycle == "OPEN"},"canRestore":${lifecycle != "OPEN"}}$extra}"""
+    private fun session(id: String) = when (id) {
+        coord -> row(coord, "Coordinate launch", alpha, "AWAITING_INPUT", ""","lastAssistantText":"Planning the release",${member("COORDINATOR")}""", lastTurnAt = ago(30))
+        worker -> row(worker, "Wire tests", alpha, "RUNNING", ""","lastToolUse":"Bash",${member("TASK")}""", lastTurnAt = ago(2))
+        waiting -> row(waiting, "Quota retry", beta, "AWAITING_INPUT", """,${member("TASK")}""", lastTurnAt = ago(10))
+        plain -> row(plain, "Plain notes", alpha, "AWAITING_INPUT", ""","lastAssistantText":"Notes kept"""")
+        else -> row(done, "Shipped docs", alpha, "SUCCEEDED", ""","completedAt":"${ago(2 * 24 * 60)}",${member("TASK")}""", "COMPLETED", ago(2 * 24 * 60))
+    }
+    private fun list(vararg sessions: String) = sessions.joinToString(",", "[", "]") { session(it) }
+    private fun startedAt() = if (started) "\"2026-10-02T00:00:00Z\"" else "null"
+
+    private fun fixture() = object : Dispatcher() {
+        override fun dispatch(request: RecordedRequest): MockResponse {
+            val path = request.requestUrl!!.encodedPath
+            calls += "${request.method} ${request.path}"
+            if (path == "/api/auth/methods") return MockResponse().setResponseCode(404)
+            if (path !in listOf("/api/auth/login", "/api/auth/logout")) assertEquals("Bearer a05p-fixture-access", request.getHeader("Authorization"))
+            val parts = path.removePrefix("/api/").split('/').map { part -> ids.firstOrNull { io.orbitd.android.navigation.ObjectId.same(it, part) } ?: part }
+            val view = request.requestUrl!!.queryParameter("view") ?: "open"
+            val project = request.requestUrl!!.queryParameter("projectId")
+            if (path == "/api/projects/$launch/pause") paused = true
+            if (path == "/api/projects/$launch/resume") paused = false
+            val body = when {
+                path == "/api/auth/login" -> """{"accessToken":"a05p-fixture-access","refreshToken":"a05p-fixture-refresh","user":{"id":"u1","email":"a05p@example.test","name":"A05p fixture"}}"""
+                path == "/api/users/me" -> """{"id":"u1","email":"a05p@example.test","name":"A05p fixture"}"""
+                path == "/api/workspaces" -> """[{"id":"$alpha","name":"Alpha","runnerId":"r1","enabled":true,"position":0,"createdAt":"2026-10-01T01:00:00.000Z"},
+                    {"id":"$beta","name":"Beta","runnerId":"r1","enabled":true,"position":1,"createdAt":"2026-10-01T02:00:00.000Z"}]"""
+                path == "/api/runners" -> """[{"id":"r1","name":"Fixture runner","online":true}]"""
+                path == "/api/sessions" && project != null -> if (view == "open") list(coord, worker, waiting) else if (view == "completed") list(done) else "[]"
+                path == "/api/sessions" -> when (view) { "open" -> list(coord, worker, waiting, plain); "completed" -> list(done); else -> "[]" }
+                parts[0] == "sessions" && parts.size == 2 && request.method == "GET" -> session(parts[1])
+                parts[0] == "sessions" && parts.last() == "events" -> return heartbeatStream()
+                parts[0] == "sessions" && parts.last() == "page" -> """{"events":[],"hasMore":false,"lastSeq":0,"latestSeq":0}"""
+                path == "/api/events" -> return heartbeatStream()
+                path == "/api/projects/sidebar" -> """[{"id":"$launch","title":"Launch","status":"OPEN","createdAt":"2026-10-01T00:00:00Z","buckets":{"running":2},
+                    "taskCounts":{"done":3,"failed":1,"total":8},"attention":{},"integration":{"line":"PROJECT_BRANCH","ref":"project/launch","activeJobCount":1},
+                    "startedAt":${startedAt()},"pausedAt":${if (paused) "\"${ago(120)}\"" else "null"},"pausedReason":${if (paused) "\"OWNER\"" else "null"},
+                    "fuse":{"paused":false,"episodeId":null,"observed":null,"limit":null}}]"""
+                path == "/api/projects" -> """[{"id":"$launch","title":"Launch","status":"OPEN","goal":"Ship it.","createdAt":"2026-10-01T00:00:00Z"}]"""
+                parts == listOf("projects", launch) -> """{"id":"$launch","title":"Launch","status":"OPEN","goal":"Ship it.","createdAt":"2026-10-01T00:00:00Z",
+                    "_count":{"tasks":8},"startedAt":${startedAt()},"coordinatorSessionId":"$coord","integration":{"escalationSeconds":7200},
+                    "acceptanceCriteriaItems":[{"id":"c1","ordinal":1,"text":"The session list groups a project's sessions."},
+                    {"id":"c2","ordinal":2,"text":"The project's sessions page opens and returns."}]}"""
+                parts == listOf("projects", launch, "integration") -> """{"line":"PROJECT_BRANCH","ref":"project/launch","integratingCount":1,"queuedCount":0,
+                    "inFlight":{"kind":"LAND_TASK","state":"RUNNING","phase":"CHECK","taskTitle":"Wire the page","startedAt":"${ago(3)}","heartbeatAt":"${ago(0)}"}}"""
+                parts == listOf("projects", launch, "open-items") -> if (started) """{"needsYou":[],"withCoordinator":[]}""" else """{"needsYou":[],"withCoordinator":[],
+                    "startRequest":{"itemId":"start-1","waitingSince":"${ago(130)}","startRequest":{"criteriaDigest":"digest-1","why":"Every task is filed and the plan is set.",
+                    "settings":{"line":"PROJECT_BRANCH","automatic":true,"maxConcurrentTasks":3,"mergeCheckCommand":null,"projectBranchName":"project/launch"}}}}"""
+                parts == listOf("projects", launch, "acceptance", "confirmation") -> """{"currentVersion":{"digest":"digest-1"}}"""
+                parts[0] == "projects" -> "{}"
+                parts[0] == "wiki" -> return MockResponse().setResponseCode(404).setHeader("Content-Type", "application/json")
+                    .setBody("""{"code":"WIKI_DISABLED","message":"The wiki is off."}""")
+                path.endsWith("/logout") -> "{}"
+                request.method == "GET" -> "[]"
+                else -> "{}"
+            }
+            return MockResponse().setHeader("Content-Type", "application/json").setBody(body)
+        }
+    }
+
+    // A finite response reconnects and re-reads the lists while the journey looks at them: hold it open.
+    private fun heartbeatStream() = MockResponse().setHeader("Content-Type", "text/event-stream")
+        .setChunkedBody(": connected\n\n".repeat(240), 13)
+        .throttleBody(13, 1, java.util.concurrent.TimeUnit.SECONDS)
+
+    /** The page's lines top to bottom, read as a person scrolls them: on a 360×640 dp phone the list composes only the rows on screen.
+     * Each step scrolls by most of the list's height and keeps the lines of the nodes it had not seen. */
+    private fun pageLines(): List<String> {
+        val list = compose.onNodeWithTag("project-sessions-list")
+        list.performScrollToIndex(0); settle()
+        val seen = mutableSetOf<Int>()
+        val lines = mutableListOf<String>()
+        repeat(30) {
+            compose.onAllNodes(hasAnyAncestor(hasTestTag("project-sessions"))).fetchSemanticsNodes().forEach { node ->
+                val text = node.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text
+                if (seen.add(node.id) && text in setOf("Coordinator", "Today", "Yesterday", "2–7 days ago", "8–30 days ago", "Older", "Coordinate launch",
+                        "Wire tests", "Quota retry", "Shipped docs")) lines += text!!
+            }
+            val node = list.fetchSemanticsNode()
+            val range = node.config[SemanticsProperties.VerticalScrollAxisRange]
+            if (range.value() >= range.maxValue()) return lines
+            // The action runs on the main thread, where the test may not read the tree: the step is measured first.
+            val step = node.size.height * 0.7f
+            list.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, step) }
+            settle()
+        }
+        throw AssertionError("The project's sessions page did not reach its end")
+    }
+    private fun dialogButtons(): List<String> = compose.onAllNodes(hasAnyAncestor(isDialog()) and hasClickAction()).fetchSemanticsNodes()
+        .mapNotNull { node -> node.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text }
+    private fun drawerRow(text: String) = hasText(text) and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)
+    private fun exists(matcher: SemanticsMatcher, unmerged: Boolean = false) = compose.onAllNodes(matcher, unmerged).fetchSemanticsNodes().isNotEmpty()
+    private fun await(condition: () -> Boolean) = compose.waitUntil(30_000, condition)
+    /**
+     * The start sheet's card. When it has not come in 30 s, the failure record says what the sheet showed instead: its card, its
+     * error with Retry, or its spinner. A spinner over reads the fixture answered is the harness's (A15 F-25 at c17b6ae4c: the
+     * rule's unconfined effects resume on OkHttp's thread), an error is the app's; this records which, it does not retry.
+     */
+    private fun awaitStartCard() {
+        try { await { exists(hasTestTag("project-start-request-sheet")) && exists(hasTestTag("project-start-request")) } }
+        catch (timeout: ComposeTimeoutException) {
+            val sheet = hasAnyAncestor(hasTestTag("project-start-request-sheet"))
+            val shows = "card=${exists(hasTestTag("project-start-request"))} error=${exists(hasText(StartSheetLoad.couldNotLoad, substring = true) and sheet)} " +
+                "spinner=${exists(SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo) and sheet)}"
+            File(evidence, "start-sheet.txt").writeText("after 30 s the start sheet showed $shows\n")
+            throw AssertionError("The start sheet's card did not come in 30 s; the sheet showed $shows", timeout)
+        }
+    }
+    private fun openDrawer() {
+        compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
+        settle()
+    }
+    private fun settle() {
+        compose.waitForIdle()
+        instrumentation.waitForIdleSync()
+        instrumentation.uiAutomation.waitForIdle(300, 5_000)
+    }
+    private fun capture(name: String) {
+        settle()
+        SystemClock.sleep(600) // the swiftshader frame lags the UI under load
+        var bitmap: Bitmap? = null
+        repeat(3) { if (bitmap == null) bitmap = instrumentation.uiAutomation.takeScreenshot() ?: run { SystemClock.sleep(500); null } }
+        val shot = bitmap ?: run { File(evidence, "$name.missing").writeText("takeScreenshot returned null 3 times\n"); return }
+        File(evidence, "$name.png").outputStream().use { shot.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        shot.recycle()
+    }
+}

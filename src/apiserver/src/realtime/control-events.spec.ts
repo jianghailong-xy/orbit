@@ -37,6 +37,7 @@ test('controlTypeFor maps the synthesized lifecycle signals', () => {
   assert.equal(controlTypeFor(RunEventType.WIKI_CHANGED), ControlEventType.WIKI_CHANGED);
   assert.equal(controlTypeFor(RunEventType.TERMINALS_CHANGED), ControlEventType.TERMINALS_CHANGED);
   assert.equal(controlTypeFor(RunEventType.TRANSLATION_STATUS_CHANGED), ControlEventType.TRANSLATION_STATUS_CHANGED);
+  assert.equal(controlTypeFor(RunEventType.DRIVE_CHANGED), ControlEventType.DRIVE_CHANGED);
 });
 
 test('only the owner-library events are user-scoped', () => {
@@ -59,6 +60,8 @@ test('only the owner-library events are user-scoped', () => {
     ControlEventType.TERMINALS_CHANGED,
     // The translator's breaker is the server's, the same for every account: it rides the every-user key.
     ControlEventType.TRANSLATION_STATUS_CHANGED,
+    // The drive belongs to the account; its writes come from the owner, a runner or the mount, not from a session.
+    ControlEventType.DRIVE_CHANGED,
   ]) {
     assert.equal(isUserScopedType(t), true, `${t} should be user-scoped`);
   }
@@ -118,6 +121,15 @@ test('backgroundPayloadOf names the process from command and includes a numeric 
   const noExit = backgroundPayloadOf({ command: 'sleep 1', status: 'killed' });
   assert.deepEqual(noExit, { name: 'sleep 1', status: 'killed' });
   assert.equal('exitCode' in noExit, false);
+});
+
+test('backgroundPayloadOf carries the process id and a runner-hosted job\'s kind', () => {
+  assert.deepEqual(
+    backgroundPayloadOf({ toolUseId: 'bgj_1', kind: 'service', command: 'npm run dev', status: 'running', idleMs: 5 }),
+    { name: 'npm run dev', status: 'running', toolUseId: 'bgj_1', kind: 'service' },
+  );
+  // An engine's own shell states no kind, and an empty id is no id.
+  assert.deepEqual(backgroundPayloadOf({ toolUseId: '', status: 'completed' }), { name: 'background task', status: 'completed' });
 });
 
 test('approvalIdOf reads payload.id', () => {

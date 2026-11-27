@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
+import { asLegacyMainSyncItem } from '../test-support/legacy-main-sync';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { receiveOpenItem } from '../test-support/open-item-delivery';
@@ -35,6 +37,7 @@ import { openItemOwed } from './project-open-item';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { readTaskIntegrationViews } from './project-task-integration';
 import '../test-support/dequeue-under-lease';
+import { enqueueForDoneTask, settleDeliveredIdentityAfterFinish } from './project-integration-job';
 
 /**
  * The landing generation created by a real DONE after task_reopen is an H1 hand-off, not a fresh
@@ -104,6 +107,7 @@ const LANDED: Result = {
 
 interface Stack {
   db: PrismaClient;
+  sessions: SessionsService;
   tasks: TasksService;
   api: RunnerApiController;
   jobs: IntegrationJobRelay;
@@ -140,6 +144,7 @@ async function connect(): Promise<Stack> {
   );
   return {
     db,
+    sessions,
     tasks,
     api,
     jobs,
@@ -200,7 +205,7 @@ async function world(stack: Stack, label: string): Promise<World> {
       title: `coordinator: ${label}`,
       prompt: `coordinator: ${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
       numTurns: 1,
@@ -266,7 +271,7 @@ async function completeTask(stack: Stack, w: World, taskId: string, label: strin
       title,
       prompt: title,
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
@@ -306,6 +311,12 @@ async function completeTask(stack: Stack, w: World, taskId: string, label: strin
       Promise<{ turnId: string; taskAcceptance?: boolean } | null>;
   }).dequeueTurn(sessionId, w.runnerId, null);
   assert.equal(acceptance?.taskAcceptance, true, 'acceptance was queued for the reopened task');
+  // W4 false on purpose (§12.3 condition 1): this file is about the reopen's H1 hand-off of the card the
+  // coordinator (or the owner) holds, so every landing failure here must open that card as before
+  // revision 42. A person ends the work session while its acceptance command runs; the command passes and
+  // writes DONE, but the session ended with `end_reason = 'ended'`, not with its task's DONE, so it is never
+  // handed the failure. Left to its DONE's own end (`task_done`), the failure would be the session's (W-T1).
+  await stack.sessions.end(w.ownerId, sessionId);
   await stack.api.turnComplete({ id: w.runnerId }, sessionId, {
     turnId: acceptance!.turnId,
     status: SharedRunStatus.SUCCEEDED,
@@ -317,17 +328,28 @@ async function completeTask(stack: Stack, w: World, taskId: string, label: strin
     (await stack.db.task.findUniqueOrThrow({ where: { id: taskId }, select: { status: true } })).status,
     TaskStatus.DONE,
   );
+  assert.equal(
+    (await stack.db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { endReason: true } })).endReason,
+    'ended', 'CONTROL: the work session is one a person ended, which W4 does not hand a failure',
+  );
   // Integration conflict happens after the task work session has ended. Keep the fixture's old run
   // out of the execution-claim index before the task_reopen analogue creates the next run.
-  await stack.db.session.update({
-    where: { id: sessionId },
-    data: {
-      status: RunStatus.CANCELLED,
-      completedAt: new Date(),
-      finishedAt: new Date(),
-      worktreeBranch: branch,
-      worktreeDirty: false,
-    },
+  await stack.db.$transaction(async (tx) => {
+    // The finish settles the DONE's delivered identity in the transaction that writes it, as every
+    // finish door does — and decides the route a DONE written while this work moved left to it
+    // (§10.5 O-L4 3, §12.15 P-M1).
+    const finished = await tx.session.update({
+      where: { id: sessionId },
+      data: {
+        turnState: null,
+        completedAt: new Date(),
+        finishedAt: new Date(),
+        worktreeBranch: branch,
+        worktreeDirty: false,
+      },
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
   });
   return { sessionId, branch };
 }
@@ -371,6 +393,9 @@ async function failFirst(
   await completeTask(stack, w, taskId, `${label}-first`);
   const first = await claim(stack, w);
   assert.equal((await report(stack, w, first, result)).accepted, true);
+  // Revision 45: a MAIN_SYNC conflict now opens the task-less line-sync item. This file pins the LEGACY task-level
+  // item's handling (docs/design/project-line-upstream-sync.md §4.6 item 7), so it is narrowed to one.
+  if (result.phase === 'MAIN_SYNC') await asLegacyMainSyncItem(stack.db, { projectId: w.projectId, taskId });
   const item = await stack.db.projectOpenItem.findFirstOrThrow({
     where: { taskId, kind: { in: ['INTEGRATION_CONFLICT', 'INTEGRATION_CHECK_FAILED', 'INTEGRATION_ERROR'] } },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
@@ -471,6 +496,71 @@ test('reopen -> DONE hands the old integration card to the new generation, then 
       assert.equal(old.resolvedByUserId, null);
       assert.equal(old.resolvedByJobId, reopened.jobId);
       assert.equal(old.resolutionNote, REOPEN_LANDING_HANDLING_REASON);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('an owner\'s Confirm that writes the reopened DONE while the run is open: the finish hands the OWNER-held old card to the new generation',
+  { skip, timeout: 240_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'reopen-owner-confirm');
+      const failed = await failFirst(stack, w, 'reopen-owner-confirm');
+      await stack.db.projectOpenItem.update({ where: { id: failed.firstItemId }, data: { assignee: 'OWNER', escalatedAt: new Date(), escalateAt: null } });
+      await reopen(stack, w, failed.taskId);
+
+      // The reopened work is still running when the owner presses Confirm: DONE is written, the route
+      // is deferred (§12.15 P-M1), and the record of who wrote it is the owner's decision row.
+      const sessionId = randomUUID();
+      const branch = `orbit/owner-confirm-${randomUUID().slice(0, 6)}`;
+      await stack.db.session.create({
+        data: {
+          id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId: failed.taskId,
+          workspaceId: w.workspaceId, assignedRunnerId: w.runnerId, title: 'reopened work', prompt: 'rework',
+          provider: 'claude', turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
+          startsTaskWork: true, startedAt: new Date(), branch, isolationStatus: 'worktree',
+          baseSha: '9'.repeat(40), branchSha: '8'.repeat(40),
+          changedFiles: [{ path: 'src/reopened.ts', additions: 1, deletions: 0 }],
+        },
+      });
+      await stack.db.$transaction(async (tx) => {
+        await tx.task.update({ where: { id: failed.taskId }, data: { status: TaskStatus.DONE } });
+        await tx.taskOwnerDecision.create({
+          data: {
+            taskId: failed.taskId, ownerId: w.ownerId, decision: 'CONFIRM',
+            decidedByType: 'USER', decidedById: w.ownerId,
+          },
+        });
+        await enqueueForDoneTask(tx, w.ownerId, failed.taskId, { userId: w.ownerId });
+      });
+      assert.equal(
+        await stack.db.projectIntegrationJob.count({ where: { taskId: failed.taskId, generation: 2 } }), 0,
+        'CONTROL: the DONE written while the work moves queued no generation',
+      );
+      assert.equal((await openItem(stack, failed.firstItemId)).handlingJobId, null, 'CONTROL: not handled yet');
+
+      await stack.db.$transaction(async (tx) => {
+        const finished = await tx.session.update({
+          where: { id: sessionId },
+          data: {
+            turnState: null, finishedAt: new Date(), 
+            worktreeBranch: branch, worktreeDirty: false,
+          },
+          select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+        });
+        await settleDeliveredIdentityAfterFinish(tx, finished);
+      });
+      const job = await stack.db.projectIntegrationJob.findFirstOrThrow({
+        where: { taskId: failed.taskId, kind: 'LAND_TASK', generation: 2 }, select: { id: true },
+      });
+      const old = await openItem(stack, failed.firstItemId);
+      assert.equal(old.state, 'OPEN');
+      assert.equal(old.handlingJobId, job.id, 'the new generation handles the owner-held card');
+      assert.equal(old.handlingUserId, w.ownerId, 'attributed to the owner who confirmed');
+      assert.equal(old.handlingSessionId, null);
+      assert.equal(old.handlingReason, REOPEN_LANDING_HANDLING_REASON);
+      assert.equal(await stack.db.taskReopenIntent.count({ where: { taskId: failed.taskId } }), 0);
     } finally {
       await stack.db.$disconnect();
     }

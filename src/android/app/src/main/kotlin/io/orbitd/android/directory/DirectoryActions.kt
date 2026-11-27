@@ -13,6 +13,7 @@ import androidx.compose.ui.platform.LocalContext
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.protocol.SessionAction
+import io.orbitd.android.core.protocol.SessionFacts
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.projects.failureReason
 import io.orbitd.android.toast.OrbitToasts
@@ -184,7 +185,7 @@ fun DirectoryActionDialog(dialog: DirectoryDialog, api: DirectoryApi, data: Dire
                         // People who can reply say where a guest's message runs: the workspace's machine, as web `guestContextOf` falls back to.
                         is DirectoryDialog.Share -> io.orbitd.android.management.SessionSharePanel(dialog.session.id,
                             io.orbitd.android.management.SessionGuestContext(data.machineName(dialog.session.workspace) ?: "Shared",
-                                dialog.session.permissionMode ?: "default"))
+                                dialog.session.permissionMode ?: io.orbitd.android.composer.CursorRuntime.unsetMode(null)))
                         is DirectoryDialog.Purge, is DirectoryDialog.DeleteFolder, is DirectoryDialog.ConfirmMove -> Unit
                     }
                 }
@@ -296,9 +297,13 @@ internal suspend fun moveToWorkspace(api: DirectoryApi, id: String, workspace: S
     api.move(id, workspace, folder)
 }
 
-/** Whether the session's run is over (SUCCEEDED, FAILED or CANCELLED), as the server has it now; a failed read is not yet. */
+/** Whether the session's run is over, as the server has it now; a failed read is not yet. `released` (no runner holds it) says so
+ * when sent; an older server's SUCCEEDED, FAILED or CANCELLED status says it otherwise. */
 private suspend fun sessionEnded(api: DirectoryApi, id: String): Boolean = try {
-    val session = api.objectRead(listOf("sessions", id))
+    runEnded(api.objectRead(listOf("sessions", id)))
+} catch (e: CancellationException) { throw e } catch (_: Exception) { false }
+
+internal fun runEnded(session: JsonObject): Boolean = SessionFacts.released(session) ?: run {
     val status = (session["runStatus"] as? JsonPrimitive)?.contentOrNull ?: (session["status"] as? JsonPrimitive)?.contentOrNull
     status in setOf("SUCCEEDED", "FAILED", "CANCELLED")
-} catch (e: CancellationException) { throw e } catch (_: Exception) { false }
+}

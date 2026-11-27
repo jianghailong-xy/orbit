@@ -29,7 +29,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -67,7 +68,7 @@ async function world(db: PrismaClient, label: string): Promise<World> {
   await db.session.create({
     data: {
       id: sessionId, ownerId, creatorId: ownerId, workspaceId,
-      title: label, prompt: 'p', status: RunStatus.SUCCEEDED,
+      title: label, prompt: 'p', turnState: null, finishedAt: new Date(), 
       branch: BRANCH, isolationStatus: 'worktree', assignedRunnerId: runnerId,
     },
   });

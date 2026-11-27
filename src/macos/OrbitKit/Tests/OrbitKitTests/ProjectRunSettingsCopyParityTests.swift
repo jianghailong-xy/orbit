@@ -87,7 +87,11 @@ final class ProjectRunSettingsCopyParityTests: XCTestCase {
         XCTAssertEqual(StartProject.requestSummary(ProjectStartSettings(line: .main, automatic: false,
                                                                         maxConcurrentTasks: 1)),
                        "The coordinator asked · directly into main · Automatic off · at most 1 at a time")
-        for part in ["START_ROW_ASKED,", "runLineInSentence(settings.line, main),",
+        // A request that names no line names none: the start card's one sentence, which the browser declares as START_NO_LINE.
+        XCTAssertEqual(StartProject.requestSummary(ProjectStartSettings(line: nil, automatic: true, maxConcurrentTasks: 23)),
+                       "The coordinator asked · Lands on the project’s branch when a task commits · Automatic on · at most 23 at a time")
+        assertDeclares(web, "START_NO_LINE", StartProject.landsWhenCommits)
+        for part in ["START_ROW_ASKED,", "settings.line ? runLineInSentence(settings.line, main) : START_NO_LINE,",
                      "main: string = mainBranchName(settings.upstreamRef),",
                      "`${RUN_AUTOMATIC} ${settings.automatic ? 'on' : 'off'}`,",
                      "`at most ${settings.maxConcurrentTasks} at a time`,", "].join(' · ');"] {

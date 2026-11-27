@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { CreatorType, Prisma, RunStatus } from '@prisma/client';
+import { CreatorType, Prisma } from '@prisma/client';
 import {
   classifyFailure,
   FailureCause,
@@ -8,6 +8,7 @@ import {
   uuidToBase62,
 } from '@orbit/shared';
 import { lockOwnerTaskGraph } from '../common/lock-order';
+import { heldFilter, releaseWasFailureFilter } from '../common/session-release';
 import { SingleFlight } from '../common/single-flight';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
@@ -19,7 +20,6 @@ import {
   taskCarriedSql,
   taskRunOverlay,
 } from '../sessions/task-work-carrier';
-import { TASK_OCCUPYING } from '../tasks/reclaim-stalled-task';
 import { TaskListPauseProjectorService } from './task-list-pause-projector.service';
 import {
   canRun,
@@ -511,7 +511,7 @@ export class TaskListsService {
         await tx.session.updateMany({
           where: {
             batchId: id,
-            status: { in: TASK_OCCUPYING },
+            ...heldFilter(),
             // A same-value row is not written, so its `updated_at` does not move for a change that
             // did not reach it. `null` is included rather than left behind by `<>`: nothing should
             // stay in the state that cannot be claimed.
@@ -594,7 +594,7 @@ export class TaskListsService {
       // Error text only — the classifier reads nothing else, and a list can have thousands of
       // failed runs whose bodies are of no use here.
       this.prisma.session.findMany({
-        where: { task: { listId: id }, status: RunStatus.FAILED },
+        where: { task: { listId: id }, ...releaseWasFailureFilter() },
         select: { error: true },
       }),
       // Bounded by kinds, not by occurrences: one row per condition, bumped in place.
@@ -854,7 +854,7 @@ export class TaskListsService {
     await this.get(ownerId, id);
     // Read while the tasks still point at the list — after the delete they are unfindable by it.
     const running = await this.prisma.session.findMany({
-      where: { ownerId, task: { listId: id }, status: { in: TASK_OCCUPYING } },
+      where: { ownerId, task: { listId: id }, ...heldFilter() },
       select: { id: true },
     });
     // Every one of these is ended below, so a session that may not end one of them may not do it from here

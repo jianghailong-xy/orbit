@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException, ForbiddenException } from '@nestjs/common';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
+import { turnStateFilter } from '../sessions/session-turn-state';
 import { RunnerApiController } from './runner-api.controller';
 import { importForkSessionId } from '../sessions/import-fork';
+import { wordOfWrite, writtenWord } from '../test-support/session-word';
 
 /**
  * POST /runner/sessions/:id/import-result — the checkout the runner's transcript-import step
@@ -91,13 +93,14 @@ test('ok clears the pending marker with a CAS, and parks the session it was hold
   assert.deepEqual(h.updateManyCalls[0].where, {
     id: SESSION_ID,
     importSourceCwd: { not: null },
-    // The claim set the row RUNNING; a row another writer already finalized is not this
+    // The claim set the row RUNNING (IN_FLIGHT); a row another writer already finalized is not this
     // receipt's to move, and must not be resurrected as claimable.
-    status: RunStatus.RUNNING,
+    ...turnStateFilter(['IN_FLIGHT']),
   });
   assert.equal(h.updateManyCalls[0].data.importSourceCwd, null);
+  assert.equal(h.updateManyCalls[0].data.turnState, null, 'parked: no turn state');
   assert.equal(
-    h.updateManyCalls[0].data.status,
+    writtenWord(h.updateManyCalls[0].data),
     RunStatus.AWAITING_INPUT,
     'the import is the whole claim and spawns no engine: nothing else moves the row off RUNNING',
   );
@@ -112,7 +115,7 @@ test('a message already queued when the import lands keeps the session claimable
 
   await importResult(h.controller, { leaseOwner: LEASE_OWNER, ok: true });
 
-  assert.equal(h.updateManyCalls[0].data.status, RunStatus.PENDING);
+  assert.equal(writtenWord(h.updateManyCalls[0].data), RunStatus.PENDING);
 });
 
 test('ok may carry the real transcript title, which wins and is announced', async () => {
@@ -213,9 +216,12 @@ test('a failed import Trashes the session with the runner’s reason', async () 
   assert.deepEqual(response, { ok: true, applied: false, failed: true, announced: true });
   assert.equal(h.updateCalls.length, 1);
   assert.equal(h.updateCalls[0].where.id, SESSION_ID);
-  assert.equal(h.updateCalls[0].data.status, RunStatus.FAILED);
+  // Released with the pending-import marker it keeps: the projector's P2 (FAILED).
+  assert.equal(wordOfWrite({ importSourceCwd: 'the marker the row keeps', ...h.updateCalls[0].data }), RunStatus.FAILED);
   assert.equal(h.updateCalls[0].data.error, 'transcript holds no conversation');
   assert.ok(h.updateCalls[0].data.deletedAt instanceof Date, 'the failed import goes to Trash');
+  // Released with the status (plan step 3.1).
+  assert.ok(h.updateCalls[0].data.finishedAt instanceof Date, 'the failed import sets the release column');
   assert.deepEqual(h.published, [SESSION_ID]);
 });
 

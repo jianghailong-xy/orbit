@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { AgentProvider, PermissionMode } from '@orbit/shared';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
+import { isReleasedStatus } from '../common/session-release';
 import { encryptSecret } from '../providers/provider-crypto';
 import { resolveProviderExec } from '../providers/custom-provider';
 import { SessionsService } from './sessions.service';
 import { sessionMoveVerdict, type SessionMoveFacts } from './session-move';
+import { writtenWord } from '../test-support/session-word';
 
 process.env.PROVIDER_SECRET_KEY = 'dsh-session-routing-test-key';
 
@@ -92,6 +94,8 @@ function historyFixture(
     assignedRunner: { id: 'runner-1', status: 'ONLINE', lastHeartbeatAt: now, capabilities: ['provider:dsh'], capabilitiesReportedAt: now },
     workspace: null, cancelRequestedAt: null, completedAt: null, archivedAt: null,
     deletedAt: null, mergeStatus: null, commitStatus: null,
+    // A terminal row carries its release column (session_release_fact_chk).
+    ...(isReleasedStatus(String(overrides.status ?? RunStatus.FAILED)) ? { finishedAt: now } : {}),
     ...overrides,
   };
   const updates: Array<Record<string, unknown>> = [];
@@ -175,7 +179,7 @@ test('dsh compatibility: legacy DeepSeek history resumes with the same Claude id
   const answer = await fixture.service.resume(ownerId, sessionId, continuation);
   assert.equal(answer.turnId, 'resume-turn');
   assert.equal(answer.revived, true);
-  assert.equal(fixture.updates[0].status, RunStatus.PENDING);
+  assert.equal(writtenWord(fixture.updates[0]), RunStatus.PENDING);
   const resumed = { ...fixture.session, ...fixture.updates[0] };
   assert.equal(resumed.runtimeSessionId, historicalId);
   assert.equal(resumed.numTurns, 3);
@@ -330,7 +334,7 @@ test('dsh compatibility: other built-in engine creation and runtime routes remai
 
 test('dsh admission: Harness history cannot move to a different workspace', () => {
   const verdict = sessionMoveVerdict({
-    runtime: AgentProvider.DSH, status: RunStatus.SUCCEEDED, deletedAt: null,
+    runtime: AgentProvider.DSH, turnState: null, finishedAt: new Date(), deletedAt: null,
     completedAt: null, importSourceCwd: null, taskId: null,
     dispatchOrigin: 'USER', cancelRequestedAt: null, engineTurnActive: false,
     runningBgShells: [], liveApprovals: 0, queuedTurns: 0, mergeStatus: null,

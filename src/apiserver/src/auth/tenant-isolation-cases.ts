@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { underEveryDrivePrefix } from '../drive/drive-routes';
 
 /**
  * The tenant isolation census (docs/google-sign-in-design.md §5.6, §11 T1). Orbit keeps accounts
@@ -82,6 +83,7 @@ export interface Tenant {
   doneRequestItemId: string;
   blockerId: string;
   fuseEpisodeId: string;
+  settingChangeId: string;
   handoffId: string;
   promotionId: string;
   /** A queued landing of `projectTaskId`. */
@@ -135,6 +137,18 @@ export interface Tenant {
   adminSubjectId: string;
   adminSubjectTokenId: string;
   adminProviderId: string;
+  /**
+   * The account's drive (docs/drive-technical-design.md §4.1): a folder, a file in it with a replaced
+   * version in Trash, and a Trash group of a deleted file.
+   */
+  driveFolderId: string;
+  driveFileId: string;
+  driveVersionId: string;
+  driveTrashGroupId: string;
+  /** An upload in progress (OWNER_UPLOAD staging) with no chunks yet. */
+  driveUploadId: string;
+  /** An agent's directory sync this account's runner opened. */
+  driveSyncId: string;
   /** Objects a destructive route takes away, one each, so that no other case loses its own. */
   spare: {
     accessTokenId: string;
@@ -161,6 +175,17 @@ export interface Tenant {
     guestUserId: string;
     listId: string;
     taskId: string;
+    /** A drive file the owner moves to Trash, a replaced version deleted for good, and Trash groups deleted and restored. */
+    driveEntryId: string;
+    driveVersionId: string;
+    driveTrashGroupId: string;
+    driveRestoreGroupId: string;
+    /** A Trash group whose one item the owner restores on its own, and that item. */
+    driveRestoreItemGroupId: string;
+    driveRestoreItemEntryId: string;
+    /** An empty upload that completes, and one that is abandoned. */
+    driveCompleteUploadId: string;
+    driveAbandonUploadId: string;
   };
 }
 
@@ -189,6 +214,24 @@ export interface TenantCase {
 
 /** The path parameters a route template names: `GET /tasks/:id/comments/:commentId` → id, commentId. */
 export const paramsOf = (route: string): string[] => [...route.matchAll(/:(\w+)/g)].map((m) => m[1]);
+
+/**
+ * The /documents aliases of the Drive cases that spend a spare of A's: a delete or a restore that A's own request uses
+ * up, so a second run of it under /documents finds nothing left to answer. Read by hand instead (TENANT_ISOLATION_BY_HAND).
+ */
+const DRIVE_SPARE_SPENDING_ALIASES: Readonly<Record<string, string>> = {
+  'DELETE /documents/entries/:id': 'drive/drive.service.ts:1097 (moveToTrash)',
+  'POST /documents/uploads/:id/complete': 'drive/drive-uploads.service.ts:92 (complete)',
+  'DELETE /documents/uploads/:id': 'drive/drive-uploads.service.ts:153 (abandon)',
+  'DELETE /documents/versions/:id': 'drive/drive.service.ts:1386 (deleteVersion)',
+  'POST /documents/trash/groups/:id/restore': 'drive/drive.service.ts:1203 (restoreGroup)',
+  'DELETE /documents/trash/groups/:id': 'drive/drive.service.ts:1364 (deleteGroup)',
+  'POST /documents/trash/groups/:id/items/:entryId/restore': 'drive/drive.service.ts:1278 (restoreItem)',
+};
+
+/** Cases keyed `METHOD /drive/…`, each held under /drive and under its /documents alias (drive/drive-routes.ts). */
+const driveUnderEveryPrefix = <T>(cases: Record<string, T>): Record<string, T> =>
+  Object.fromEntries(Object.entries(cases).flatMap(([key, c]) => underEveryDrivePrefix(key).map((route) => [route, c])));
 
 const workspaceRoutes = (prefix: 'agents' | 'workspaces', ruleOf: (t: Tenant) => string, spareOf: (t: Tenant) => string) => ({
   [`GET /${prefix}/:id`]: { request: (of: Tenant) => ({ params: { id: of.workspaceId } }) },
@@ -221,6 +264,9 @@ const graphCursor = (ownerId: string, focusTaskId: string, anchorTaskId = focusT
     anchorTaskId,
     direction: 'prerequisites',
   })).toString('base64url');
+
+/** The id of the bg_run job every census session has running (tenant-isolation-fixtures.ts). */
+export const TENANT_ISOLATION_BG_JOB_ID = 'bgj_0a0b0c0d0e0f';
 
 /** A completion-evidence envelope, as a run submits one. */
 export const evidence = (claim: string) => ({
@@ -282,6 +328,38 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /attachments/usage/projects/:id/files': { request: (of) => ({ params: { id: of.projectId } }) },
   'GET /attachments/usage/tasks/:id/files': { request: (of) => ({ params: { id: of.taskId } }) },
   'DELETE /attachments/:id/everywhere': { request: (of) => ({ params: { id: of.spare.storedFileId } }) },
+
+  // ── Drive (docs/drive-technical-design.md §4.1, §4.4): every read and write by (id, owner) ──────────
+  ...driveUnderEveryPrefix({
+    'GET /drive/entries/:id': { request: (of) => ({ params: { id: of.driveFileId } }) },
+    'GET /drive/syncs/:id': { request: (of) => ({ params: { id: of.driveSyncId } }) },
+    'PATCH /drive/entries/:id': { request: (of) => ({ params: { id: of.driveFileId }, body: { name: 'renamed by the census.txt' } }) },
+    'POST /drive/entries/:id/share-check': { request: (of) => ({ params: { id: of.driveFileId } }) },
+    'GET /drive/entries/:id/versions': { request: (of) => ({ params: { id: of.driveFileId } }) },
+    'GET /drive/entries/:id/content': { request: (of) => ({ params: { id: of.driveFileId } }) },
+    'GET /drive/versions/:id/content': { request: (of) => ({ params: { id: of.driveVersionId } }) },
+    'GET /drive/uploads/:id': { request: (of) => ({ params: { id: of.driveUploadId } }) },
+    // An empty body is answered 400 for A (a chunk holds at least one byte): not a 404, and B is refused before anything else is read.
+    'PUT /drive/uploads/:id/chunks/:idx': {
+      request: (of) => ({ params: { id: of.driveUploadId, idx: 0 }, headers: { 'x-orbit-chunk-sha256': 'a'.repeat(64) } }),
+    },
+    // As a copy: the owner's own restore leaves the version in Trash for the cases after it.
+    'POST /drive/versions/:id/restore': { request: (of) => ({ params: { id: of.driveVersionId }, body: { as: 'COPY' } }) },
+    'GET /drive/trash/groups/:id': { request: (of) => ({ params: { id: of.driveTrashGroupId } }) },
+    'POST /drive/entries/:id/download-link': { request: (of) => ({ params: { id: of.driveFileId } }) },
+  }),
+  // Each of these spends a spare of A's, so it is held under /drive alone; its /documents alias is read by hand
+  // (DRIVE_SPARE_SPENDING_ALIASES).
+  'DELETE /drive/entries/:id': { request: (of) => ({ params: { id: of.spare.driveEntryId } }) },
+  'POST /drive/uploads/:id/complete': { request: (of) => ({ params: { id: of.spare.driveCompleteUploadId } }) },
+  'DELETE /drive/uploads/:id': { request: (of) => ({ params: { id: of.spare.driveAbandonUploadId } }) },
+  'DELETE /drive/versions/:id': { request: (of) => ({ params: { id: of.spare.driveVersionId } }) },
+  'POST /drive/trash/groups/:id/restore': { request: (of) => ({ params: { id: of.spare.driveRestoreGroupId } }) },
+  'DELETE /drive/trash/groups/:id': { request: (of) => ({ params: { id: of.spare.driveTrashGroupId } }) },
+  'POST /drive/trash/groups/:id/items/:entryId/restore': {
+    request: (of) => ({ params: { id: of.spare.driveRestoreItemGroupId, entryId: of.spare.driveRestoreItemEntryId } }),
+    nested: ['entryId'],
+  },
 
   // ── projects ─────────────────────────────────────────────────────────────────────────────────
   'GET /projects/:id': { request: (of) => ({ params: { id: of.projectId } }) },
@@ -367,6 +445,10 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'POST /projects/:id/fuse/:episodeId/resume': {
     request: (of) => ({ params: { id: of.projectId, episodeId: of.fuseEpisodeId }, body: {} }),
     nested: ['episodeId'],
+  },
+  'POST /projects/:id/setting-changes/:changeId/revert': {
+    request: (of) => ({ params: { id: of.projectId, changeId: of.settingChangeId } }),
+    nested: ['changeId'],
   },
   'POST /projects/:id/open-items/:itemId/answer': {
     request: (of) => ({ params: { id: of.projectId, itemId: of.openItemId }, body: { text: 'the census' } }),
@@ -536,11 +618,17 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'DELETE /runners/:id/accounts/:engine/:account': {
     request: (of) => ({ params: { id: of.runnerId, ...of.runnerAccount } }),
   },
+  'DELETE /runners/:id/accounts/:engine/:account/set-default': {
+    request: (of) => ({ params: { id: of.runnerId, ...of.runnerAccount } }),
+  },
   'POST /runners/:id/accounts/:engine/:account/set-default': {
     request: (of) => ({ params: { id: of.runnerId, ...of.runnerAccount } }),
   },
   'POST /runners/:id/accounts/:engine/default/restore': {
     request: (of) => ({ params: { id: of.runnerId, engine: of.runnerAccount.engine } }),
+  },
+  'POST /runners/:id/accounts/:engine/default/sign-out': {
+    request: (of) => ({ params: { id: of.runnerId, engine: of.runnerAccount.engine }, body: { force: true } }),
   },
   'POST /runners/:id/attention/:kind/fix': {
     request: (of) => ({ params: { id: of.runnerId, kind: 'installFailed' }, body: { engine: 'codex' } }),
@@ -596,6 +684,13 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   // ── sessions ─────────────────────────────────────────────────────────────────────────────────
   'GET /sessions/:id': { request: (of) => ({ params: { id: of.sessionId } }) },
   'GET /sessions/:id/compact': { request: (of) => ({ params: { id: of.sessionId } }) },
+  'GET /sessions/:id/task-moves': { request: (of) => ({ params: { id: of.sessionId } }) },
+  'POST /sessions/:id/task-moves/decision': {
+    request: (of) => ({
+      params: { id: of.sessionId },
+      body: { decision: 'DENY', moves: [{ handoffId: of.handoffId, crossingKey: 'a'.repeat(64) }] },
+    }),
+  },
   // A landing session's check output (contract §2.9 LS2): the subject the session belongs to is the
   // account's, and another account's session is the same 404 as one that does not exist.
   'GET /sessions/:id/landing/log': { request: (of) => ({ params: { id: of.landingSessionId } }) },
@@ -614,6 +709,8 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /sessions/:id/turns': { request: (of) => ({ params: { id: of.sessionId } }) },
   // A session's SubAgent runs (docs/subagent-design.md §6.4): B on A's session is 404 (SessionsService.listSubagentRuns).
   'GET /sessions/:id/subagents': { request: (of) => ({ params: { id: of.sessionId } }) },
+  // And the Orbit workflows they are calls of (docs/subagent-workflow-design.md §5.1): the same 404 (listWorkflowRuns).
+  'GET /sessions/:id/workflows': { request: (of) => ({ params: { id: of.sessionId } }) },
   'DELETE /sessions/:id/turns/:turnId': {
     request: (of) => ({ params: { id: of.sessionId, turnId: of.turnId } }),
     nested: ['turnId'],
@@ -656,6 +753,7 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   // Another account's session is not B's to throw work away from, whatever B knows of it.
   'POST /sessions/:id/checkout/discard': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/adopt-branch': { request: (of) => ({ params: { id: of.sessionId } }) },
+  'POST /sessions/:id/merge-failure/dismiss': { request: (of) => ({ params: { id: of.sessionId } }) },
   'GET /sessions/:id/retry-message': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/retry-message': { request: (of) => ({ params: { id: of.sessionId }, body: {} }) },
   'POST /sessions/:id/auto-retry': {
@@ -665,6 +763,8 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'POST /sessions/:id/complete': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/archive': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/restore': { request: (of) => ({ params: { id: of.sessionId } }) },
+  // Run now (sessions/run-now.ts): another account's queued message is not B's to put over A's runner's limit.
+  'POST /sessions/:id/run-now': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/pin': { request: (of) => ({ params: { id: of.sessionId } }) },
   'DELETE /sessions/:id/pin': { request: (of) => ({ params: { id: of.sessionId } }) },
   'GET /sessions/:id/move-targets': { request: (of) => ({ params: { id: of.sessionId } }) },
@@ -676,6 +776,12 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
     nested: ['approvalId'],
   },
   'GET /sessions/:id/background': { request: (of) => ({ params: { id: of.sessionId } }) },
+  'GET /sessions/:id/background/jobs/:jobId/tail': {
+    request: (of) => ({ params: { id: of.sessionId, jobId: TENANT_ISOLATION_BG_JOB_ID } }),
+  },
+  'POST /sessions/:id/background/jobs/:jobId/stop': {
+    request: (of) => ({ params: { id: of.sessionId, jobId: TENANT_ISOLATION_BG_JOB_ID }, body: {} }),
+  },
   'GET /sessions/:id/events': { request: (of) => ({ params: { id: of.sessionId } }) },
   'GET /sessions/:id/events/page': { request: (of) => ({ params: { id: of.sessionId } }) },
   'GET /sessions/:id/events/search': { request: (of) => ({ params: { id: of.sessionId }, query: { q: 'census' } }) },
@@ -882,6 +988,18 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
  * that shows the route finds its object only under the caller's own account. Kept as short as it can be.
  */
 export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
+  // ── Drive's /documents alias, where its case spends a spare (DRIVE_SPARE_SPENDING_ALIASES) ─────────────────────
+  ...Object.fromEntries(Object.entries(DRIVE_SPARE_SPENDING_ALIASES).map(([route, scoped]) => [route,
+    `the same handler as ${route.replace(' /documents/', ' /drive/')}, whose case above holds it across accounts: `
+    + 'DriveController is one class mounted under both prefixes (drive/drive.controller.ts:33, '
+    + `@Controller(DRIVE_ROUTE_PREFIXES)), so the alias reaches the same lookup by (id, owner), ${scoped}; the case `
+    + "spends a spare of A's, which a second run under /documents would find already spent"])),
+  // ── the owner's tier for a built-in engine's model (docs/subagent-design.md §7) ─────────────────────────
+  'PATCH /providers/builtin/:engine/model-tier':
+    'the path names an engine (claude, cursor, …), which every account shares, not an object of any account: the write '
+    + 'is one UPDATE of the caller\'s own user row (WHERE "id" = the caller, providers/providers.service.ts:793 '
+    + 'in setBuiltinModelTier), and the model is checked against the caller\'s own runners; no other account\'s row can be '
+    + 'named. subagent-settings.pg.spec.ts section 5 sets and clears it and reads the caller\'s preferences back',
   // ── the managed runner browser (docs/runner-browser-design.md §5, §6) ──────────────────────────────────
   'GET /runners/:id/browser':
     'behind the browser switch, which the census server leaves off (every caller 404 there); on, the runner is read by '
@@ -893,11 +1011,18 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     + '(runner id, the caller) through its managed_runner row before anything is written, and another account\'s runner, '
     + 'a self-managed one or a guest\'s view is 404 with no row written (managed-runners/browser-state.ts:122); '
     + 'browser-state.pg.spec.ts section 2 sends it as each and checks browser_clear_requested_at stayed NULL',
-  // ── Still stuck (help center board 02 ②): the id is an Ask, which the census's fixture account has none of ──
+  'POST /runners/:id/browser/sign-in':
+    "behind the browser switch, which the census server leaves off. The owner's managed runner is read by (runnerId, ownerId) "
+    + 'before its sign-in is read or updated (managed-runners/browser-state.ts:177); login-runner-browser.pg.spec.ts sends it as another account.',
+  // ── The help center's Ask (board 02): the id is an Ask, which the census's fixture account has none of ──
+  'GET /help/ask/:id':
+    'the Ask is read by (id, the caller) before anything else, so another account\'s Ask answers 404 (help/help-ask.ts:158, :260); help-ask.pg.spec.ts "another account" sends it with the owner\'s Ask',
+  'POST /help/ask/:id/messages':
+    'the follow-up is written by one UPDATE keyed by (id, the caller), and when it matches nothing the Ask is read by (id, the caller), so another account\'s Ask answers 404 and nothing is written or asked (help/help-ask.ts:142, :146, :260); help-ask.pg.spec.ts "another account" sends it and reads the owner\'s Ask unchanged',
   'GET /help/ask/:id/stuck':
-    'the Ask is read by (id, the caller, help_ask set, not deleted) before anything else, so another account\'s Ask answers 404 (help/help-ask.ts:207, :238); help-ask-stuck.pg.spec.ts "another account" sends it with the owner\'s Ask',
+    'the Ask is read by (id, the caller) before anything else, so another account\'s Ask answers 404 (help/help-ask.ts:282, :260); help-ask.pg.spec.ts "another account" sends it with the owner\'s Ask',
   'POST /help/ask/:id/admin':
-    'the Ask is read by (id, the caller, help_ask set, not deleted) before the admin is looked up or the task made, so another account\'s Ask answers 404 and no task or hand-off row is written (help/help-ask.ts:207, :271); help-ask-stuck.pg.spec.ts "another account" sends it and counts both',
+    'the Ask is read by (id, the caller) before the admin is looked up or the task made, so another account\'s Ask answers 404 and no task is made or Ask marked sent (help/help-ask.ts:300, :260); help-ask.pg.spec.ts "another account" sends it and counts both',
   'GET /integrations/github/repos/:id/branches':
     '`:id` is GitHub\'s repository id, not an Orbit object: the repository is looked up only in the caller\'s own listing, '
     + 'read from GitHub with the caller\'s own user-to-server token (github/github-connection.service.ts:241), and '
@@ -911,12 +1036,20 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
   // ── scheduled tasks (docs/scheduled-tasks-design.md §9.1) ─────────────────────────────────────────
   'GET /schedules/:id':
     "read by (id, the caller) and nothing else, 404 for another account's id (schedules/schedule-reads.service.ts:98)",
+  'GET /schedules/:id/change':
+    "the schedule is looked up by (id, ownerId) before reading any conversation or opening. Another account's schedule returns 404 "
+    + '(schedules/schedule-change-conversation.ts:76).',
+  'POST /schedules/:id/change':
+    'the same owner-scoped schedule lookup returns 404 before appending a turn or creating a session '
+    + '(schedules/schedule-change-conversation.ts:76).',
   'GET /schedules/:id/runs':
     "the schedule is counted by (id, the caller) first, 404 for another account's id (schedules/schedule-reads.service.ts:128)",
   'POST /schedules/:id/pause':
     "the schedule is read FOR UPDATE by (id, the caller) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
   'POST /schedules/:id/resume':
     "the schedule is read FOR UPDATE by (id, the caller) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
+  'POST /schedules/:id/rename':
+    "the schedule is read FOR UPDATE by (id, the caller) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:951)",
   'POST /schedules/:id/undo':
     "the schedule is read FOR UPDATE by (id, the caller) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
   'DELETE /schedules/:id':
@@ -933,7 +1066,7 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     "the request is read FOR UPDATE by (id, the caller as its owner) and nothing else, 404 SCHEDULE_REQUEST_NOT_FOUND for another account's (schedules/schedules.service.ts:427)",
   'GET /sessions/:id/schedule-cards':
     "the session is read by (id, the caller) first, 404 for another account's (schedules/schedule-reads.service.ts:183), and the cards and records are read by the caller as owner",
-  // Settings → Storage's file lists (docs/orbit-files-design.md §2.10).
+  // Settings → Storage's file lists (docs/drive-design.md §2.10).
   'GET /attachments/usage/weeks/:week/files':
     'the week is a date, not an object: every row the list reads is filtered by the caller\'s owner_id, in the scope, in what is counted as holding it and in its totals, so another account\'s files never reach it (files/files.service.ts:963, :965, :1011); it writes nothing',
   // ── main checkout (0534) ──
@@ -985,17 +1118,27 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
   'POST /owner-requests/:id/done':
     'read by (id, the caller) first, 404 for another account\'s id (owner-requests/owner-requests.service.ts:193), and the write is a compare-and-set on (id, the caller, PENDING) (owner-requests/owner-requests.service.ts:270); owner-requests.pg.spec.ts (f) sends it',
   'POST /owner-requests/:id/secret':
-    'the request is read FOR UPDATE by (id, the caller) and nothing else, 404 for another account\'s id, and the grant takes its runner and session from that row, never from the body (owner-requests/owner-secrets.service.ts:244); owner-secrets.pg.spec.ts (h) sends it',
+    'the request is read FOR UPDATE by (id, the caller) and nothing else, 404 for another account\'s id, and the grant takes its runner and session from that row, never from the body (owner-requests/owner-secrets.service.ts:249); owner-secrets.pg.spec.ts (h) sends it',
   'POST /owner-requests/:id/secret/cancel':
-    'the grant is written by (request id, the caller) only; when that matched nothing the request is counted by (id, the caller), 404 for another account\'s (owner-requests/owner-secrets.service.ts:314); owner-secrets.pg.spec.ts (h) sends it',
+    'the grant is written by (request id, the caller) only; when that matched nothing the request is counted by (id, the caller), 404 for another account\'s (owner-requests/owner-secrets.service.ts:328); owner-secrets.pg.spec.ts (h) sends it',
   'POST /owner-requests/:id/secret/revoke':
-    'the grant is read and written by (request id, the caller) only, 404 for another account\'s (owner-requests/owner-secrets.service.ts:332); owner-secrets.pg.spec.ts (h) sends it',
+    'the grant is read and written by (request id, the caller) only, 404 for another account\'s (owner-requests/owner-secrets.service.ts:347); owner-secrets.pg.spec.ts (h) sends it',
   'PUT /account-secrets/:id':
-    'written by (id, the caller) only, and 404 when that matched nothing (owner-requests/owner-secrets.service.ts:404); owner-secrets.pg.spec.ts (h) sends another account\'s',
+    'written by (id, the caller) only, and 404 when that matched nothing (owner-requests/owner-secrets.service.ts:455); owner-secrets.pg.spec.ts (h) sends another account\'s',
   'DELETE /account-secrets/:id':
-    'deleted by (id, the caller) only, and 404 when that matched nothing (owner-requests/owner-secrets.service.ts:412); owner-secrets.pg.spec.ts (h) sends another account\'s',
+    'read FOR UPDATE by (id, the caller) only, 404 when that matched nothing, before anything is written; the copies revokeCopies ends are read by (that id, the caller) (owner-requests/owner-secrets.service.ts:470); owner-secrets.pg.spec.ts (h) sends another account\'s',
+  'POST /account-health/:id/check':
+    'the pressed row is read inside the one UPDATE by (id, owner = the caller, still live), so another account\'s id matches no row, clears nothing, and the controller answers 404 for the zero it returns (providers/account-health.service.ts:206, providers/account-health.controller.ts:90); account-health-check-again.pg.spec.ts (3) presses another owner\'s row and finds it still blocked. The census Tenant holds no account_health row to aim at, so no case is stood up here',
+  'POST /account-secrets/grants/:id/revoke':
+    'the grant is read by (id, the caller) only, 404 for another account\'s, and its request is then revoked by (request id, the caller) (owner-requests/owner-secrets.service.ts:828); owner-secrets.pg.spec.ts (k) sends another account\'s',
   'POST /owner-requests/:id/create-wiki':
     'read by (id, the caller) first, 404 for another account\'s id (owner-requests/owner-requests.service.ts:306); the wiki is made under the caller\'s account through wiki.createSpace from that row\'s repository and workspace, never from the body, and the card is settled by a compare-and-set on (id, the caller, PENDING) (owner-requests/owner-requests.service.ts:521)',
+  'POST /owner-requests/:id/apply':
+    'the request is read FOR UPDATE by (id, the caller) and nothing else, 404 for another account\'s id, and its runner is then read FOR UPDATE by (the id its change_spec names, the caller), 404 when that finds nothing, before anything is written; the body carries only the value, never a runner (owner-requests/owner-requests.service.ts:897, owner-requests/owner-requests.service.ts:931); owner-request-change.pg.spec.ts (11) sends another account\'s',
+  'POST /owner-requests/:id/apply-settings':
+    'read by (id, the caller) first, 404 for another account\'s id (owner-requests/owner-requests.service.ts:509); the preferences read FOR NO KEY UPDATE and written are the caller\'s own user row, never one the body names (owner-requests/settings-apply.ts:21, owner-requests/settings-apply.ts:39), and the card is settled by a compare-and-set on (id, the caller, PENDING) (owner-requests/owner-requests.service.ts:820)',
+  'POST /owner-requests/:id/reopen-project':
+    'read by (id, the caller) first, 404 for another account\'s id (owner-requests/owner-requests.service.ts:745); the project locked and reopened is the one that row names, by (its project id, the caller), 404 when that finds nothing (owner-requests/owner-requests.service.ts:761), never one the body names, and every card it settles is by (the caller, that project, PENDING) (owner-requests/project-reopen.ts:102)',
   'POST /owner-requests/:id/decline':
     'read by (id, the caller) first, 404 for another account\'s id (owner-requests/owner-requests.service.ts:193), and the write is a compare-and-set on (id, the caller, PENDING) (owner-requests/owner-requests.service.ts:270)',
   'POST /admin/managed-runners/:id/volume-switch':
@@ -1212,6 +1355,28 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
     request: (of, mine) => ({ params: { id: mine.projectId }, query: { parentId: of.projectTaskId } }),
   },
 
+  // ── Drive: a folder named in B's own request ─────────────────────────────────────────────
+  'POST /share-links body driveEntryId': {
+    request: (of) => ({ params: {}, body: { kind: 'DRIVE_FILE', driveEntryId: of.driveFileId } }),
+  },
+  ...driveUnderEveryPrefix({
+    'GET /drive/entries query parentId': { request: (of) => ({ params: {}, query: { parentId: of.driveFolderId } }) },
+    'GET /drive/trash/groups/:id query parentId': {
+      request: (of, mine) => ({ params: { id: mine.driveTrashGroupId }, query: { parentId: of.driveFolderId } }),
+    },
+    'POST /drive/folders body parentId': { request: (of) => ({ params: {}, body: { parentId: of.driveFolderId, name: 'census folder' } }) },
+    'POST /drive/uploads body parentId': { request: (of) => ({ params: {}, body: { parentId: of.driveFolderId, name: 'census.bin', size: 1 } }) },
+    'POST /drive/uploads body dropRootId': {
+      request: (of, mine) => ({ params: {}, body: { parentId: mine.driveFolderId, name: 'census.bin', size: 1, relativePath: 'Dir/census.bin', dropRootId: of.driveFolderId } }),
+    },
+    'POST /drive/entries/:id/download-link body versionId': {
+      request: (of, mine) => ({ params: { id: mine.driveFileId }, body: { versionId: of.driveVersionId } }),
+    },
+    'PATCH /drive/entries/:id body parentId': {
+      request: (of, mine) => ({ params: { id: mine.driveFileId }, body: { parentId: of.driveFolderId } }),
+    },
+  }),
+
   // ── providers, phones, runners ───────────────────────────────────────────────────────────────
   'POST /providers/pools body providerIds[]': { request: (of) => ({ params: {}, body: { label: 'census pool', providerIds: [of.providerId] } }) },
   'POST /providers/pools/:id/members body providerId': {
@@ -1255,6 +1420,11 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
   'GET /sessions query tagId': { request: (of) => ({ params: {}, query: { tagId: of.tagId } }) },
   'GET /sessions query agentId': { request: (of) => ({ params: {}, query: { agentId: of.workspaceId } }) },
   'GET /sessions query workspaceId': { request: (of) => ({ params: {}, query: { workspaceId: of.workspaceId } }) },
+  'GET /sessions/search query folderId': { request: (of) => ({ params: {}, query: { folderId: of.folderId } }) },
+  'GET /sessions/listing query workspaceId': { request: (of) => ({ params: {}, query: { workspaceId: of.workspaceId } }) },
+  'GET /sessions/listing query folderId': {
+    request: (of, mine) => ({ params: {}, query: { workspaceId: mine.workspaceId, folderId: of.folderId } }),
+  },
   'GET /sessions query runnerId': { request: (of) => ({ params: {}, query: { runnerId: of.runnerId } }) },
   // The attempt a landing page names: B reads its own landing with A's job in the query, and is
   // answered as if it named nothing — the job is resolved within that landing and nowhere else.
@@ -1416,6 +1586,9 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
     request: (of) => ({ params: {}, query: { decidingSessionId: of.sessionId } }),
   },
   'GET /tasks/model-routing/report query agentId': { request: (of) => ({ params: {}, query: { agentId: of.workspaceId } }) },
+  'GET /tasks/model-routing/report/subagents query agentId': {
+    request: (of) => ({ params: {}, query: { agentId: of.workspaceId } }),
+  },
   'POST /tasks/batch-assign body taskIds[]': {
     request: (of, mine) => ({ params: {}, body: { taskIds: [mine.taskId, of.taskId], assigneeId: mine.workspaceId } }),
   },
@@ -1452,10 +1625,6 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
   'POST /wiki/spaces/:id/maintenance/probe body workspaceId': {
     request: (of, mine) => ({ params: { id: mine.wikiSpaceId }, body: { workspaceId: of.workspaceId } }),
   },
-  // An Ask on another account's machine: no such machine for this one (HelpAsk.create).
-  'POST /help/ask body runnerId': {
-    request: (of) => ({ params: {}, body: { content: 'from the census', runnerId: of.runnerId, engine: 'claude' } }),
-  },
   // A chat named into another account's workspace: no such workspace for this one (WikiChat.chosenWorkspace).
   'POST /wiki/spaces/:id/chats body workspaceId': {
     request: (of, mine) => ({
@@ -1474,6 +1643,14 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
   // Where a space's chats run, set to another account's workspace: not one this space's chats may run in.
   'PATCH /wiki/spaces/:id body chat.workspaceId': {
     request: (of, mine) => ({ params: { id: mine.wikiSpaceId }, body: { chat: { workspaceId: of.workspaceId } } }),
+  },
+  // A batch answer naming another account's move from the caller's own session: the rows are read by
+  // (id, the caller) before anything is locked or written, so it is the 404 of a move that does not exist.
+  'POST /sessions/:id/task-moves/decision body moves[].handoffId': {
+    request: (of, mine) => ({
+      params: { id: mine.sessionId },
+      body: { decision: 'DENY', moves: [{ handoffId: of.handoffId, crossingKey: 'a'.repeat(64) }] },
+    }),
   },
   'POST /wiki/changesets/:id/decide body decisions[].opId': {
     request: (of, mine) => ({
@@ -1508,7 +1685,7 @@ export const TENANT_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
   'POST /tasks/batch-create body tasks[].fork.sessionId':
     'refused 403 whatever it names: the browser door has no calling session, and a fork is only ever of the session making the call (tasks/task-fork.ts:117); task-session-fork.pg.spec.ts sends one from the owner door',
   'POST /owner-requests/:id/secret body savedSecretId':
-    'read by (id, the caller) before anything is written, so another account\'s saved secret is the 404 of one that does not exist (owner-requests/owner-secrets.service.ts:217); owner-secrets.pg.spec.ts (h) sends another account\'s',
+    'read by (id, the caller) before anything is written, so another account\'s saved secret is the 404 of one that does not exist (owner-requests/owner-secrets.service.ts:222); owner-secrets.pg.spec.ts (h) sends another account\'s',
   'POST /tasks/:id/execute body triggerId':
     'an idempotency key the caller makes up for one press, not a thing it names: it keys only the caller\'s own '
     + 'run receipt, (owner_id, action_kind, request_token) — tasks.service.ts:12779',

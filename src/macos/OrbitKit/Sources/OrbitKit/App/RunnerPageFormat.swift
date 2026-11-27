@@ -131,8 +131,8 @@ public enum RunnerPageFormat {
 
     /// `vmi3129740 · v0.1.197` — the list's second line for a machine that is up, whether or not
     /// this one is: a hostname empty or the same as the name shown is left out.
-    /// A managed runner's version is `RunnerAttention.runnerVersionLine`'s: its release or "Kept up to date
-    /// by Orbit", never `managed-<sha>`.
+    /// A managed runner's version is `RunnerAttention.runnerVersionLine`'s: its release or its build line
+    /// (`Build 95884b1 · Nov 16`), never `managed-<sha>`.
     public static func hostLine(_ runner: Runner, managed: Bool? = nil) -> String {
         let orbitCloud = managed ?? isManaged(runner)
         let shown = displayName(runner, managedRunnerID: orbitCloud ? runner.id : nil)
@@ -803,6 +803,9 @@ public enum RunnerPageFormat {
         let refused: String?
         switch blocking.count {
         case 0: refused = failed ? state.message : nil
+        // A relayed state naming Default is always a sign-out (docs/default-sign-out-design.md).
+        case let count where account == CodexAccounts.defaultID:
+            refused = signOutInUse(count: count)
         case 1: refused = RunnerAccountCopy.runnerAccountInUseOne(engine: engineName(engine))
         default: refused = RunnerAccountCopy.runnerAccountInUseMany(engine: engineName(engine), count: blocking.count)
         }
@@ -830,6 +833,42 @@ public enum RunnerPageFormat {
     /// machine, so it works with the runner offline; an added account's sign-in is deleted by the
     /// runner, which has to be online for it.
     public static func canRemove(_ line: AccountLine, offline: Bool) -> Bool { line.isDefault || !offline }
+
+    /// What a runner declares when it signs `engine`'s Default out on request (runner-go default_sign_out.go).
+    public static func defaultSignOutCapability(_ engine: String) -> String { "\(engine)-default-sign-out/v1" }
+
+    /// Whether `line`'s menu offers Sign out…: the Default row of an engine, while it is signed in and its
+    /// runner declares it can sign it out — an older runner would read the request as a removal.
+    public static func offersSignOut(_ line: AccountLine, engine: String, runner: Runner) -> Bool {
+        line.isDefault && line.auth == "yes" && !line.envKey
+            && runner.capabilities?.contains(defaultSignOutCapability(engine)) == true
+    }
+
+    /// Whether Sign out… can be pressed: the runner deletes the credential, so it has to be online, and
+    /// one request at a time is in flight.
+    public static func canSignOut(offline: Bool, pending: Bool) -> Bool { !offline && !pending }
+
+    /// Default's login is deleted from the machine; for Claude Code and Codex the CLI in a terminal shares
+    /// it, which the question says too (the web's words).
+    public static func signOutQuestion(_ line: AccountLine, engine: String, runner: Runner) -> RemovalQuestion {
+        let machine = displayName(runner)
+        var message = RunnerAccountCopy.runnerDefaultSignOutDetail(runner: machine)
+        if engine == "claude" || engine == "codex" {
+            message += " " + RunnerAccountCopy.runnerDefaultSignOutTerminal(runner: machine, command: engine)
+        }
+        return RemovalQuestion(title: RunnerAccountCopy.runnerDefaultSignOutTitle(name: line.name), message: message)
+    }
+
+    /// The second question, once the runner named `count` sessions running on Default.
+    public static func signOutAgainQuestion(_ line: AccountLine, count: Int) -> RemovalQuestion {
+        RemovalQuestion(title: signOutInUse(name: line.name, count: count),
+                        message: RunnerAccountCopy.RUNNER_DEFAULT_SIGN_OUT_RUNNING_DETAIL)
+    }
+
+    private static func signOutInUse(name: String = "Default", count: Int) -> String {
+        count == 1 ? RunnerAccountCopy.runnerDefaultSignOutRunningOne(name: name)
+                   : RunnerAccountCopy.runnerDefaultSignOutRunningMany(count: count, name: name)
+    }
 
     /// What a runner declares when it can make an added Claude Code account the Default: the swap
     /// itself, and moving a session into its account's new folder (RunnersService.setDefaultAccount
@@ -1051,11 +1090,14 @@ public enum RunnerPageFormat {
     /// says which it is; an older one is judged by `runsAsRoot`, as before.
     ///
     /// The account's managed runner (Orbit Cloud) says only that Orbit updates it: its release with that
-    /// note, or "Kept up to date by Orbit" for an image that reports no release — never `managed-<sha>`.
+    /// note, or the build it runs (`Build 95884b1 · Nov 16`) for an image that reports no release — never
+    /// `managed-<sha>`, and "Kept up to date by Orbit" only when no build is known.
     public static func versionValue(_ runner: Runner, latest: String?, managed: Bool? = nil) -> String? {
         if managed ?? isManaged(runner) {
             guard let version = runner.version?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  RunnerAttention.isReleaseVersion(version) else { return RunnerPageCopy.MANAGED_RUNNER_KEPT_UP_TO_DATE }
+                  RunnerAttention.isReleaseVersion(version) else {
+                return RunnerAttention.runnerVersionLine(runner.version, managed: true)
+            }
             return version + RunnerPageCopy.RUNNER_LINE_SEPARATOR + RunnerPageCopy.MANAGED_RUNNER_UPDATED_BY_ORBIT
         }
         guard let version = runner.version?.trimmingCharacters(in: .whitespacesAndNewlines), !version.isEmpty else {

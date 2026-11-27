@@ -16,6 +16,7 @@ import {
   LiveToolOutputsCtx,
   MD,
   type RunEvent,
+  SandboxFixCtx,
   SteerWithdrawCtx,
   type SteerWithdrawHandle,
   Transcript,
@@ -24,9 +25,24 @@ import {
   unreadSteersOf,
 } from './Transcript';
 import { encodeId } from '../lib/idCodec';
+import type { RunnerAgentFix } from '@orbit/shared';
 import { ApiError } from '../api';
 import { readTaskRunConflict } from '../lib/taskRunHandoff';
 import { transcriptEventsWithDurableDeliveryReceipts } from '../lib/acceptedUserTurn';
+
+// A static render opens no tip: the app Tooltip also puts what it would say on its child here.
+vi.mock('./ui/Tooltip', async (importOriginal) => {
+  const real = await importOriginal<typeof import('./ui/Tooltip')>();
+  const { cloneElement, createElement } = await import('react');
+  return {
+    ...real,
+    Tooltip: (props: import('./ui/Tooltip').TooltipProps) =>
+      createElement(real.Tooltip, {
+        ...props,
+        children: typeof props.content === 'string' ? cloneElement(props.children, { 'data-tip': props.content } as object) : props.children,
+      }),
+  };
+});
 
 const LIST_UUID = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
 const LIST_B62 = encodeId(LIST_UUID);
@@ -482,7 +498,7 @@ describe('message delivery', () => {
     );
 
     expect(html).toContain('Not delivered');
-    expect(html).toContain('claude stdin is closed');
+    // The reason is the row's tooltip (Transcript.tips.test.tsx).
   });
 
   it('says nothing about a message that arrived', () => {
@@ -662,7 +678,7 @@ describe('a message steered into the running turn', () => {
     );
 
     expect(html).toContain('Not delivered');
-    expect(html).toContain('no turn is running');
+    // The reason is the row's tooltip (Transcript.tips.test.tsx).
     expect(html).not.toContain('Sending…');
     expect(html).not.toContain('chat-steer-state');
   });
@@ -1116,7 +1132,8 @@ describe('engine stderr', () => {
 
       expect(html.split('chat-diagnostic"').length - 1).toBe(1);
       expect(html).toContain(`×${times}`);
-      expect(html).toContain('2026-10-28T15:13:06.979719Z');
+      // The folded row's tip keeps the first stamp the engine wrote.
+      expect(html).toMatch(/data-tip="2026-10-28T15:13:06\.979719Z/);
       expect(html).not.toContain('chat-error');
     }
   });
@@ -1332,7 +1349,7 @@ describe('engine stderr', () => {
 
     expect(html).toContain(`>${MISSING_OUTPUT}<`);
     expect(html).toContain('data-level="ERROR"');
-    expect(html).toContain('title="2026-08-12T15:31:40.112363Z ERROR codex_core::util:');
+    // The raw line is the row's tooltip (Transcript.tips.test.tsx).
   });
 
   it('carries a warning at its own level rather than as an error', () => {
@@ -1397,13 +1414,13 @@ describe('engine stderr', () => {
       <Transcript
         events={[
           stderrEvent(1, codexLine('2026-08-12T15:31:40.112363Z', MISSING_OUTPUT)),
-          stderrEvent(2, codexLine('2026-08-12T15:32:38.753979Z', 'Codex could not find bubblewrap on PATH')),
+          stderrEvent(2, codexLine('2026-08-12T15:32:38.753979Z', 'Another failure, seen once')),
         ]}
       />,
     );
 
     expect(html.split('chat-error"').length - 1).toBe(2);
-    expect(html).toContain('bubblewrap');
+    expect(html).toContain('Another failure, seen once');
     expect(html).not.toContain('chat-error-repeat');
   });
 
@@ -1430,6 +1447,114 @@ describe('engine stderr', () => {
 
     expect(html.split('chat-error"').length - 1).toBe(3);
     expect(html).not.toContain('chat-error-repeat');
+  });
+
+  // Codex's sandbox setup asks for the system bubblewrap and falls back to its bundled copy
+  // (docs/mocks/codex-sandbox-fix-with-agent): a degraded sandbox, not a failed turn, with the
+  // agent that installs it under the row.
+  const BUBBLEWRAP =
+    'Codex could not find bubblewrap on PATH. Install bubblewrap with your OS package manager. See the sandbox prerequisites: ' +
+    'https://developers.openai.com/codex/concepts/sandboxing#prerequisites. Codex will use the bundled bubblewrap in the meantime.';
+  const bubblewrapEvent = (seq = 1): RunEvent => ({
+    seq,
+    type: 'system',
+    payload: {
+      stderr: `2026-08-14T14:31:13.780609Z ERROR codex_app_server: ${BUBBLEWRAP}\n`,
+      diagnostic: {
+        component: 'sandbox', phase: 'startup', severity: 'WARN', impact: 'degraded', recoverable: true, code: 'bubblewrap_missing',
+      },
+    },
+  });
+  const readyFix: RunnerAgentFix = {
+    workspaceId: 'w1', workspaceName: 'orbit-develop', engine: 'codex', engineName: 'Codex', blocked: null, fixing: [], handled: [],
+  };
+  const sandbox = (fix: RunnerAgentFix, extra: { start?: () => void; starting?: boolean } = {}) =>
+    renderToStaticMarkup(
+      <SandboxFixCtx.Provider value={{ fix, start: extra.start ?? (() => {}), starting: extra.starting ?? false }}>
+        <Transcript events={[bubblewrapEvent()]} />
+      </SandboxFixCtx.Provider>,
+    );
+
+  it('draws the missing bubblewrap as a warning with the agent that installs it', () => {
+    const html = sandbox(readyFix);
+
+    expect(html).toContain('chat-notice chat-diagnostic');
+    expect(html).toContain('Startup · sandbox · bubblewrap_missing');
+    expect(html).not.toContain('chat-error');
+    expect(html).toContain('Fix with an agent');
+    expect(html).toContain('Starts a session in orbit-develop on this machine, with Codex.');
+  });
+
+  it('recognizes the same warning in an older persisted stderr event', () => {
+    const html = renderToStaticMarkup(
+      <Transcript events={[stderrEvent(1, `2026-08-14T14:31:13.780609Z ERROR codex_app_server: ${BUBBLEWRAP}\n`)]} />,
+    );
+
+    expect(html).toContain('chat-notice chat-diagnostic');
+    expect(html).toContain('Startup · sandbox · bubblewrap_missing');
+    expect(html).not.toContain('chat-error');
+  });
+
+  it('gives the button way to the agent at work, then to the one that finished', () => {
+    const fixing = sandbox({
+      ...readyFix,
+      fixing: [{ kind: 'sandboxMissing', engine: 'codex', sessionId: 's1', workspaceId: 'w1', workspaceName: 'orbit-develop' }],
+    });
+    expect(fixing).toContain('An agent is fixing this in orbit-develop');
+    expect(fixing).toContain('sessions/s1');
+    expect(fixing).not.toContain('Fix with an agent');
+
+    const handled = sandbox({
+      ...readyFix,
+      handled: [{ kind: 'sandboxMissing', engine: 'codex', sessionId: 's2', workspaceId: 'w1', workspaceName: 'orbit-develop', status: 'SUCCEEDED' }],
+    });
+    expect(handled).toContain('Fixed by an agent in orbit-develop');
+    expect(handled).toContain('sessions/s2');
+    expect(handled).not.toContain('Fix with an agent');
+  });
+
+  it('holds the button, and says why, when no agent can start', () => {
+    const html = sandbox({
+      ...readyFix,
+      engine: 'claude',
+      engineName: 'Claude Code',
+      blocked: { code: 'engineSignedOut', message: 'An agent can’t run here: orbit-develop uses Claude Code, which is signed out on this machine.' },
+    });
+
+    expect(html).toContain('disabled');
+    expect(html).toContain('An agent can');
+    expect(html).toContain('signed out on this machine.');
+    expect(html).toContain('Sign in to Claude Code on the machine page to use this.');
+  });
+
+  it('starts the agent on a press', async () => {
+    const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost' });
+    vi.stubGlobal('window', dom.window);
+    vi.stubGlobal('document', dom.window.document);
+    vi.stubGlobal('HTMLElement', dom.window.HTMLElement);
+    vi.stubGlobal('Element', dom.window.Element);
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    const root = createRoot(dom.window.document.getElementById('root')!);
+    const start = vi.fn();
+    try {
+      await act(async () => {
+        root.render(
+          <SandboxFixCtx.Provider value={{ fix: readyFix, start, starting: false }}>
+            <Transcript events={[bubblewrapEvent()]} />
+          </SandboxFixCtx.Provider>,
+        );
+      });
+      const button = [...dom.window.document.querySelectorAll('button')].find((b) =>
+        b.textContent?.includes('Fix with an agent'),
+      );
+      expect(button, 'the warning drew no Fix with an agent button').toBeTruthy();
+      await act(async () => button!.click());
+      expect(start).toHaveBeenCalledTimes(1);
+    } finally {
+      await act(async () => root.unmount());
+      dom.window.close();
+      vi.unstubAllGlobals();
+    }
   });
 });
 
@@ -2532,6 +2657,7 @@ describe('clipped screenshot results', () => {
     const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost' });
     vi.stubGlobal('window', dom.window);
     vi.stubGlobal('document', dom.window.document);
+    vi.stubGlobal('Element', dom.window.Element);
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
     const root = createRoot(dom.window.document.getElementById('root')!);
     await act(async () => {

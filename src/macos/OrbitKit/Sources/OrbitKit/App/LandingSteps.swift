@@ -121,6 +121,9 @@ public enum LandingSteps {
         var groups: [String: [(index: Int, entry: IntegrationTimelineEntry)]] = [:]
         var current: String?
         for (index, entry) in entries.enumerated() {
+            // Revision 42's rows (the hand-off, the fix landing again, the hand-back) are no step's:
+            // the record draws them apart (`LandingFix.rows`).
+            if LandingFix.rowKinds.contains(entry.kind) { continue }
             let key = step(of: entry, current: current)
             current = key
             groups[key, default: []].append((index, entry))
@@ -139,7 +142,8 @@ public enum LandingSteps {
     public static func failed(_ step: LandingStep, kind: String) -> Bool {
         step.entries.contains { item in
             let entry = item.entry
-            if entry.data?["skipped"]?.stringValue == "PATHS_EXEMPT" { return false }
+            // A landing check skipped for exempt paths (K2) or an exempt task (P-C2) did not fail.
+            if LandingCheckSkip.isSkip(entry) { return false }
             if failures.contains(entry.kind) { return true }
             if ["CHECK_FINISHED", "RESULT", "RESULT_FALLBACK"].contains(entry.kind) {
                 return !entry.succeeded(in: kind)

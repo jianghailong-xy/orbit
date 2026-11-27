@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException } from '@nestjs/common';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { SessionsService } from './sessions.service';
 
 /**
@@ -91,6 +92,7 @@ function terminalRow(startsTaskWork: boolean): Record<string, unknown> {
     ownerId: 'owner-1',
     taskId: TASK,
     status: RunStatus.FAILED,
+    finishedAt: new Date(),
     startsTaskWork,
     assignedRunner: null,
   };

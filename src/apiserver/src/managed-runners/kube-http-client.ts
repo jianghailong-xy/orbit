@@ -72,6 +72,8 @@ export interface KubeHttpClientOptions {
   /** `https://host[:port]`, compared with the profile before this is constructed. */
   server: string;
   namespace: string;
+  /** The files namespace, where only the mount credential's Secrets are written (`driveSecrets`). */
+  filesNamespace?: string;
   tls: KubeTls;
   /** A bearer token, read again for every request so a rotated token file is followed. */
   token?: () => string;
@@ -112,6 +114,7 @@ export class KubeHttpClient implements ManagedKubeClient {
   readonly namespace: string;
   readonly persistentVolumeClaims: KubeResource<PersistentVolumeClaim>;
   readonly secrets: KubeResource<Secret>;
+  readonly driveSecrets?: Pick<KubeResource<Secret>, 'get' | 'create' | 'delete'>;
   readonly pods: KubePods;
   readonly configMaps: Pick<KubeResource<ConfigMap>, 'get'>;
   private readonly server: URL;
@@ -126,6 +129,13 @@ export class KubeHttpClient implements ManagedKubeClient {
     this.transport = options.transport ?? httpsTransport;
     this.persistentVolumeClaims = this.resource<PersistentVolumeClaim>('persistentvolumeclaims');
     this.secrets = this.resource<Secret>('secrets');
+    if (options.filesNamespace !== undefined) {
+      if (!DNS_LABEL.test(options.filesNamespace) || options.filesNamespace === options.namespace) {
+        throw new Error(`not a files namespace: ${JSON.stringify(options.filesNamespace)}`);
+      }
+      const { get, create, delete: remove } = this.resource<Secret>('secrets', options.filesNamespace);
+      this.driveSecrets = { get, create, delete: remove };
+    }
     this.pods = { ...this.resource<Pod>('pods'), patch: (name, operations) => this.patchPod(name, operations) };
     // Read only: the manager can be shown a fencing receipt, and cannot write one.
     const configMaps = this.resource<ConfigMap>('configmaps');
@@ -149,8 +159,8 @@ export class KubeHttpClient implements ManagedKubeClient {
     return this.parse<Pod>(response, `PATCH pods ${name}`);
   }
 
-  private resource<T extends KubeObject>(plural: string): KubeResource<T> {
-    const base = `/api/v1/namespaces/${this.namespace}/${plural}`;
+  private resource<T extends KubeObject>(plural: string, namespace = this.namespace): KubeResource<T> {
+    const base = `/api/v1/namespaces/${namespace}/${plural}`;
     return {
       get: async (name) => {
         const response = await this.send('GET', `${base}/${objectName(name)}`);
@@ -158,8 +168,8 @@ export class KubeHttpClient implements ManagedKubeClient {
         return this.parse<T>(response, `GET ${plural} ${name}`);
       },
       create: async (object, options) => {
-        if (object.metadata.namespace && object.metadata.namespace !== this.namespace) {
-          throw new Error(`refusing to create ${plural} ${object.metadata.name} outside namespace ${this.namespace}`);
+        if (object.metadata.namespace && object.metadata.namespace !== namespace) {
+          throw new Error(`refusing to create ${plural} ${object.metadata.name} outside namespace ${namespace}`);
         }
         objectName(object.metadata.name);
         const response = await this.send('POST', `${base}${query({ dryRun: options?.dryRun ? 'All' : undefined })}`, JSON.stringify(object));
@@ -170,6 +180,7 @@ export class KubeHttpClient implements ManagedKubeClient {
           apiVersion: 'v1',
           kind: 'DeleteOptions',
           ...(options?.uid ? { preconditions: { uid: options.uid } } : {}),
+          ...(options?.gracePeriodSeconds !== undefined ? { gracePeriodSeconds: options.gracePeriodSeconds } : {}),
         };
         const response = await this.send('DELETE', `${base}/${objectName(name)}`, JSON.stringify(body));
         if (response.status === 404) return;
@@ -371,6 +382,7 @@ export function kubeClientFromProfile(profile: ManagedRunnerProfile, deps: KubeC
   return new KubeHttpClient({
     server,
     namespace: profile.kubernetes.namespace,
+    ...(profile.files ? { filesNamespace: profile.files.namespace } : {}),
     tls,
     token,
     requestTimeoutMs: profile.lifecycle.requestTimeoutSeconds * 1000,

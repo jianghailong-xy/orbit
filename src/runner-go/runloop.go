@@ -413,7 +413,8 @@ func (g *selfUpdateGate) notePostponedLocked() {
 // the control plane does not take a scoped claim (serverScopes false: an older one would ignore the
 // scope and hand over any session), so the pool claims nothing, as before.
 func drainClaimScope(pool *sessionPool, serverScopes bool) []string {
-	if !serverScopes || !pool.isDrainingForUpdate() {
+	// Below the data volume's free-space reserve nothing new is claimed, a drain's message included.
+	if !serverScopes || !pool.isDrainingForUpdate() || pool.admissionHoldReason() != "" {
 		return nil
 	}
 	return pool.liveEngineTurnSessionIDs()
@@ -693,13 +694,32 @@ func reclaimInitiallyActive(status string) bool {
 // reclaimStatusOpen is a second, runner-side terminal fence. Current servers
 // reject takeover for terminal rows, but an older server may return a status from
 // the row lock; never build a worktree/supervisor for one of those rows.
-func reclaimStatusOpen(status string) bool {
+// SUCCEEDED, FAILED and CANCELLED are therefore closed whatever else is known.
+//
+// A status word this binary does not know is not read as terminal, which would
+// drop every session a newer server describes with a new word at each restart.
+// It is open only when leaseHeld: the server's own answer says this process
+// holds the session. On every reclaim path that is the takeover-leases answer
+// itself, which a server gives only after making this process the session's
+// inbox lease owner under the row lock (a refusal comes back as an error, and
+// the status is never judged). An older server that answers a takeover of a
+// terminal row knows only the seven words, so it never reaches the unknown case.
+func reclaimStatusOpen(status string, leaseHeld bool) bool {
 	switch status {
 	case "", stPending, stRunning, stAwaitingInput, stInterrupted:
 		return true
-	default:
+	case stSucceeded, stFailed, stCancelled:
 		return false
+	default:
+		return leaseHeld
 	}
+}
+
+// reclaimStatusEnded says a snapshot row, not taken over yet, names one of the
+// terminal words. A word this binary does not know is not ended here: the row
+// stays waiting for its takeover, whose answer decides it (reclaimStatusOpen).
+func reclaimStatusEnded(status string) bool {
+	return status == stSucceeded || status == stFailed || status == stCancelled
 }
 
 func claimedSessionFromReclaim(r ReclaimSession) *ClaimedSession {
@@ -725,6 +745,9 @@ func claimedSessionFromReclaim(r ReclaimSession) *ClaimedSession {
 		AllowOrchestration: r.AllowOrchestration,
 		WatchesDisabled:    r.WatchesDisabled,
 		WikiDisabled:       r.WikiDisabled,
+		DocumentsDisabled:  r.DocumentsDisabled,
+		BrowserEnabled:     r.BrowserEnabled,
+		WorkflowsDisabled:  r.WorkflowsDisabled,
 		ScheduleRun:        r.ScheduleRun,
 		OrchestrationToken: r.OrchestrationToken,
 		Reclaimed:          true,
@@ -1106,7 +1129,8 @@ func reclaimSessions(
 					endTakeoversExcept(nil)
 					return nil, nil, false, takeoverErr
 				}
-				if !reclaimStatusOpen(status) {
+				// Answered without an error: the takeover made this process the lease owner.
+				if !reclaimStatusOpen(status, true) {
 					continue
 				}
 				if c.locallyKnown && !reclaimInitiallyActive(status) {
@@ -1533,11 +1557,33 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// the control plane returns on each heartbeat — so editing a runner's max-concurrent
 	// in the UI takes effect within one heartbeat, no restart. The local config value is
 	// only the initial seed; the DB value is authoritative once the first heartbeat lands.
-	pool := newSessionPool(cfg.MaxConcurrent)
+	startupConcurrency := cfg.MaxConcurrent
+	if currentManagedInstance() != nil {
+		// Startup reclaim can start a turn before the first heartbeat supplies the
+		// mapping's cap. Until then, admit at most one turn.
+		startupConcurrency = 1
+	}
+	pool := newSessionPool(startupConcurrency)
+	t.draining = pool.isDrainingForUpdate // every inbox fetch says whether the pool drains for an update
+	// A slot with nothing running under it is given back while the pool drains (§7.3). Its callers run it on a
+	// goroutine of its own: it waits for the control plane's answer.
+	t.returnHeldSlot = func(sessionID string) {
+		pool.returnHeldSlot(sessionID, func() (string, error) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			return t.returnSlot(ctx, sessionID)
+		})
+	}
+	// A managed instance claims nothing, and starts no reclaimed RUNNING session, while its container has less than one
+	// more turn's memory left (memory_reserve.go). Nil anywhere else: it admits.
+	turnMemory := newTurnMemoryGate(currentManagedInstance() != nil)
 	// Before this image does anything else — spawns a probe, reclaims a session, sweeps a checkout. A
 	// job the image before handed on as it re-executed is still this process's child, and until the
 	// pool holds it again the sweep takes its checkout for one nobody is using.
 	pool.adoptRecordedJobs()
+	// A managed runner's /tmp is a directory of its data volume and outlives the container: what the container
+	// before left in it goes now, before anything here writes there (managed_tmp.go).
+	sweepManagedTmpAtStart(pool)
 	// Remote SubAgents a previous process was hosting when it ended unreported: worktrees removed, runs INTERRUPTED.
 	go recoverRemoteSubagents(t)
 	// A copy of the Google sign-in lives in a session's directory only while an agy runs on it; the
@@ -1577,6 +1623,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 
 	loopCtx, stopLoop := context.WithCancelCause(context.Background())
 	loopCancel := func() { stopLoop(nil) }
+	defer startMemoryWatchdog(loopCtx, currentManagedInstance() != nil)()
+	// A managed runner takes no new work while its data volume is below its free-space reserve
+	// (managed_disk_reserve.go). Checked once now, before the reclaim and the first claim.
+	if currentManagedInstance() != nil {
+		watchDataVolumeReserve(loopCtx, pool, func() string { return measureDataVolumeHold(&storage) }, dataVolumeCheckInterval)
+	}
 	// The other half of what a finished session's checkout can hold: one that still has
 	// uncommitted work is never reclaimed, so the control plane is told which ones those are
 	// (abandoned_checkout.go). Its own goroutine and its own clock — it reads every checkout,
@@ -1720,6 +1772,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// Which engines are installed and signed in here (started below). Made before the quota probes,
 	// since they read by it while idle.
 	engineHealth := &engineHealthProbe{}
+	// Default sign-outs in flight, one per engine (default_sign_out.go).
+	var signOuts defaultSignOuts
 	// Set as default for Claude Code (claude_account_swap_relay.go): once a swap has ended either way the
 	// Claude engine is probed again and the runner beats at once, as after a removal, so the page shows
 	// the exchanged accounts now.
@@ -1756,10 +1810,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	claudeActive := func() int { return activeProviderCount(providerClaude) }
 	claudeIdle := idleUsage(providerClaude, providerConfigured, engineHealth)
 	go claudeUsage.run(loopCtx, claudeActive, claudeIdle)
-	// Codex keeps one snapshot per account slot: Default's — its usage probe, which the reset steps
-	// read through too — and every added slot's own.
+	// Codex keeps one snapshot per account slot: Default's and every added slot's own, each with its
+	// own reset block, and the reset steps read and consume through the probe of the slot they name.
 	codexUsage := newCodexAccountUsage(t.leaseOwner)
-	codexUsageProbe := codexUsage.def
 	codexActive := func() int { return activeProviderCount(providerCodex) }
 	codexIdle := idleUsage(providerCodex, providerConfigured, engineHealth)
 	go codexUsage.run(loopCtx, codexActive, codexIdle)
@@ -1941,12 +1994,25 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// process nothing, so nothing more can be delivered to it.
 	resetCtx, stopResets := context.WithCancel(context.Background())
 	defer stopResets()
-	resetConsumer := newCodexResetConsumer(codexUsageProbe)
+	resetConsumer := newCodexResetConsumer(codexUsage)
 	resetConsumer.wakeHeartbeat = beatNow
 	resets := newCodexResetRelay(resetCtx, t, resetConsumer.execute, &heartbeatOps)
 	// A managed instance's side of idle sleep (managed_sleep.go); unused by a self-managed runner.
 	sleeper := newManagedSleep()
-	managedWorkload := func() ManagedWorkload { return managedWorkloadCounts(pool, &heartbeatOps, login, install) }
+	// A managed instance shares the duplicate files on its own volume while it is idle (managed_dedupe.go).
+	var dedupe *homeDedupe
+	if currentManagedInstance() != nil {
+		if home, err := os.UserHomeDir(); err == nil {
+			dedupe = newHomeDedupe(home)
+		}
+	}
+	defer dedupe.stop()
+	// What the workload report says: a dedupe pass is one of its operations, so the runner is not put to sleep under it.
+	managedWorkload := func() ManagedWorkload {
+		counts := managedWorkloadCounts(pool, &heartbeatOps, login, install)
+		counts.Operations += dedupe.inFlight()
+		return counts
+	}
 	// Closed once a managed instance's first heartbeat has been taken, or given up on
 	// (managedStartupBeat); its claims wait for it.
 	startupBeatDone := make(chan struct{})
@@ -1992,6 +2058,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			sent := time.Now()
 			var workload *ManagedWorkload
 			if currentManagedInstance() != nil {
+				// The pass itself left out: whether anything else is at work. One is not started for a stop already
+				// under way, nor once a sleep request has been accepted.
+				dedupe.tick(managedWorkloadCounts(pool, &heartbeatOps, login, install).idle() && !draining && !sleeper.hasAccepted())
 				report := sleeper.report(managedWorkload())
 				workload = &report
 			}
@@ -2037,6 +2106,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			beatTaken = true
 			// Whether the control plane takes a claim scoped to named sessions (drainClaimScope).
 			drainScopedClaims.Store(resp.DrainScopedClaims)
+			// Whether this runner reports a failed turn and the release separately (session_release.go): this answer's word.
+			t.noteSessionReleaseOffer(resp)
 			// Idle sleep: accept the manager's request while there is still nothing to do here, and stop
 			// once the control plane confirms that acceptance — never on the request alone, which the
 			// manager may still withdraw. A process already draining for another reason accepts nothing.
@@ -2092,13 +2163,11 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					return integratingNow[jobID]
 				})
 			}
-			// Adopt the control plane's authoritative max-concurrent (the editable DB
-			// value). 0 means an older server that doesn't report it — keep current.
-			if resp.MaxConcurrent > 0 {
-				if prev := pool.maxConcurrent(); prev != resp.MaxConcurrent {
-					pool.setMax(resp.MaxConcurrent)
-					logln(fmt.Sprintf("max-concurrent updated %d -> %d (from control plane)", prev, resp.MaxConcurrent))
-				}
+			// Apply both limits together so a claim never sees a mix of two heartbeat answers.
+			prev := pool.maxConcurrent()
+			pool.applyConcurrency(resp.MaxConcurrent, resp.BurstConcurrent)
+			if resp.MaxConcurrent > 0 && resp.MaxConcurrent != prev {
+				logln(fmt.Sprintf("max-concurrent updated %d -> %d (from control plane)", prev, resp.MaxConcurrent))
 			}
 			// The machine's free-space floor. Absence REPLACES rather than preserves, unlike
 			// max-concurrent: null is what a runner with no floor configured legitimately has,
@@ -2111,8 +2180,6 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			diskFloorMb.Store(floorMb)
 			// The storage budget is replaced the same way: an answer without one means there is none.
 			storage.budget.Store(resp.StorageBudget)
-			// The background job limits are replaced the same way: an answer without them turns them off.
-			runnerBgJobLimits.Store(resp.BackgroundJobLimits)
 			// Process ownership loss first. A terminal row can appear in both lists;
 			// marking its exact advertised epoch detaching before a durable cancel
 			// makes that overlap take the no-finalize path.
@@ -2137,6 +2204,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			}
 			// Remote SubAgents this runner is the target of: claimed while it takes work, stopped whenever asked.
 			remoteSubagents.onHeartbeat(t, resp.RemoteSubagentRuns, resp.StopSubagentRunIDs, draining)
+			// The owner's stop of single bg_run jobs, carried out as bg_kill does under its own reason.
+			stopBackgroundJobsForOwner(resp.StopBackgroundJobs)
 			if loopCtx.Err() != nil {
 				// Drain began after the server claimed this cycle's git commands, so nothing
 				// below will run them and this process image is about to be replaced. Hand
@@ -2296,6 +2365,11 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 						RebaseBaseSha: res.RebaseBase, Conflicts: res.Conflicts,
 						AlreadyMerged: res.AlreadyMerged,
 						Recovery:      res.Recovery,
+						PushedSha:     res.PushedSha,
+						PushRefusal:   res.PushRefusal,
+						LandVia:       res.LandVia,
+						PushedAs:      res.PushedAs,
+						BypassedRules: res.BypassedRules,
 					}); err != nil {
 						logln("merge-result POST failed for", req.SessionID+":", err)
 						if !isRetryableTransportError(err) {
@@ -2442,6 +2516,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					login.submitCode(*lr, report)
 				case "cancel":
 					login.cancelLogin(*lr)
+				case "browser":
+					go login.openInBrowser(loopCtx, *lr, runnerBrowser())
 				}
 			}
 			// Install an engine CLI the user asked for from the web. Idempotent for the same
@@ -2498,6 +2574,14 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					}
 					beatNow()
 				}()
+			}
+			// A session's browser_open: start the browser and open the page asked for, on its own goroutine like the
+			// clear, since a Chrome just started takes a moment to answer; the beat it asks for reports it running.
+			if resp.OpenBrowser != nil {
+				go func(cmd BrowserOpenCommand) {
+					handleBrowserOpen(context.Background(), runnerBrowser(), cmd)
+					beatNow()
+				}(*resp.OpenBrowser)
 			}
 			// The owner's Update Now: install the waiting release now, interrupting the turns in flight
 			// (selfUpdateGate.updateNow). The check it asks for takes it.
@@ -2583,7 +2667,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			// codex-named one is what a control plane older than accounts-per-engine sends. A
 			// runner that answered a Claude request on the codex field would remove a path that
 			// never existed and report "done".
-			if rr := resp.AccountRemoveRequest; rr != nil {
+			//
+			// A sign-out of Default (default_sign_out.go) rides on the engine-named field and runs
+			// off this goroutine: it may wait on a `codex logout` or a Keychain dialog.
+			if rr := resp.AccountRemoveRequest; rr != nil && rr.Action == accountRemoveActionSignOut {
+				signOuts.handle(*rr, &heartbeatOps, pool.sessionIDs, t.accountRemoveResult, engineHealth.refreshEngine, beatNow)
+			} else if rr := resp.AccountRemoveRequest; rr != nil {
 				kind, ok := accountSlotKindFor(rr.Engine)
 				if !ok {
 					logln("account-remove: unknown engine", rr.Engine)
@@ -2669,6 +2758,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// A supervisor that was silently engine-evicted remains registered cold; its
 	// next claim wakes it without creating a duplicate supervisor.
 	startSession := func(job *ClaimedSession, initiallyActive bool) {
+		noteDocumentsDisabled(job.DocumentsDisabled)
 		// §6.3 steps 2–3, and the only place they can go: BEFORE anything is staged, before a
 		// worktree exists and before an engine could be spawned. SR33 makes engine start a
 		// conjunction — the SOURCE is PINNED *and* the checkout stands on that commit — so a run
@@ -2755,6 +2845,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				}
 				forgetMergeTarget(j.SessionID)
 				pool.finish(live)
+				// A session's end: what the work left in a managed runner's /tmp goes once nothing else runs.
+				sweepManagedTmpWhenIdle(pool)
 			}()
 
 			// An OPEN reclaim can contain many idle sessions. Keep those supervisors
@@ -2788,6 +2880,14 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// Retried with backoff: on a joint restart the apiserver is often still down when
 	// we come up, and a single failed attempt would orphan every resumable session for
 	// the rest of this process — their queued turns then sit PENDING forever.
+	// A RUNNING session a reclaim after the startup one hands back (the deferred retry, the late claim check, a failed
+	// claim's reconciliation) takes its turn permit as the startup reclaim's do: once a slot and the memory reserve are
+	// free (sessionPool.waitReclaimPermit). Those reclaims start their sessions one after another, so one at a time.
+	admitReclaimed := func(pending reclaimedStart) {
+		if pending.initiallyActive {
+			pool.waitReclaimPermit(loopCtx, turnMemory)
+		}
+	}
 	reclaimed := false
 	// When a reclaim sets conflicted sessions aside, retry at this time so they do
 	// not stay unsupervised; zero means nothing is waiting.
@@ -2849,6 +2949,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// prepared locally first as the single takeover above prepares one.
 		startupStarts.batchSize = t.takeoverBatchSize
 		startupStarts.takeoverMany = batchIdleTakeover(loopCtx, t, prepareTakeover)
+		// A RUNNING session takes its turn permit as a claim does, one at a time: a free slot, and the memory reserve.
+		startupStarts.admit = func() { pool.waitReclaimPermit(loopCtx, turnMemory) }
 		startupStarts.onStarted = func(id string) { reclaimDeferred.started(id, beatNow) }
 		startupStarts.run(reclaimStartWorkers, func() {
 			idleHanded, idleTook := startupStarts.idlePhase()
@@ -2967,6 +3069,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			}
 			for _, pending := range recovered {
 				logln(fmt.Sprintf("reclaiming session %s — %s", pending.job.SessionID, pending.job.Title))
+				admitReclaimed(pending)
 				startSession(pending.job, pending.initiallyActive)
 				pending.endTakeover()
 			}
@@ -2998,6 +3101,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			}
 			for _, pending := range recovered {
 				logln(fmt.Sprintf("reclaiming session %s — %s (late claim check)", pending.job.SessionID, pending.job.Title))
+				admitReclaimed(pending)
 				startSession(pending.job, pending.initiallyActive)
 				pending.endTakeover()
 			}
@@ -3019,12 +3123,22 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// against turn permits alone: a parked session whose runner-hosted build is
 		// still going holds no permit and no engine, and claiming another session on
 		// top of it is how a host with a global-OOM history ends up running three
-		// builds it never counted.
+		// builds it never counted. When only burst room is left, a server claim
+		// needs the Run now flag to acquire a turn permit here.
 		//
 		// Draining for an update, the pool admits nothing, with one exception (drainClaimScope): a session
 		// whose engine is running a turn here and whose queued message moved its row to PENDING.
+		//
+		// And no claim while memory has no room for one more turn (turnMemoryReserveBytes): the session waits queued.
+		if !turnMemory.admits() {
+			select {
+			case <-loopCtx.Done():
+			case <-time.After(500 * time.Millisecond):
+			}
+			continue
+		}
 		var scope []string
-		if pool.admissionIdleCapacity() <= 0 {
+		if !pool.canClaim() {
 			if scope = drainClaimScope(pool, drainScopedClaims.Load()); len(scope) == 0 {
 				select {
 				case <-loopCtx.Done():
@@ -3073,6 +3187,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				}
 				for _, pending := range recovered {
 					logln(fmt.Sprintf("recovering ambiguously claimed session %s — %s", pending.job.SessionID, pending.job.Title))
+					admitReclaimed(pending)
 					startSession(pending.job, pending.initiallyActive)
 					pending.endTakeover()
 				}
@@ -3159,12 +3274,14 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				reclaimRetryAt = time.Now().Add(reclaimRetryInterval)
 			}
 			for _, pending := range recovered {
+				admitReclaimed(pending)
 				startSession(pending.job, pending.initiallyActive)
 				pending.endTakeover()
 			}
 			continue
 		}
-		if reclaimStatusOpen(status) {
+		// The takeover answered without an error: this process holds the lease.
+		if reclaimStatusOpen(status, true) {
 			startSession(job, reclaimInitiallyActive(status))
 		}
 		endTakeover()

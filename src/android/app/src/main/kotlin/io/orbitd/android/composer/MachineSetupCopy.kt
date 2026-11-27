@@ -101,6 +101,11 @@ object MachineSetupCopy {
         "Waiting for $machine to connect. It can check folders as soon as it does."
     fun setupUpdatingCreate(machine: String): String =
         "$machine updates itself first: this version can’t check folders yet."
+    // The folder field takes a full path too (docs/mocks/new-workspace-form, decision 2 A). The hint is said where the screen names
+    // the machine already (New workspace on a machine that has one); a bare machine's card keeps SETUP_FOLDER_HINT.
+    fun setupFolderOrPathHint(root: String): String =
+        "A name in $root, or a full path. Uses the folder if it exists, otherwise creates it."
+    fun setupPathUnchecked(machine: String): String = "$machine checks a full path once it’s up."
     const val SETUP_CREATE = "Create workspace"
     fun setupCreateFailed(why: String): String = "Couldn’t create the workspace: $why"
 

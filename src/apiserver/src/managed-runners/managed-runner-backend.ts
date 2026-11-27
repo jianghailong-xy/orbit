@@ -47,11 +47,14 @@ import type { VolumeFigures } from './managed-runner-storage';
  *     `ManagedInstance.terminated`, and `stopConfirmed` when the host itself vouches every process
  *     ended, which is half a stop proof; `exit` says how it ended (exit code, out of memory), for
  *     the log and the owner's reason. Only a backend whose host reports every stop it makes may
- *     also stop an instance (`stopInstance`, Docker), and the manager asks it only for a drain that
- *     overran its drain time, or for an instance of a previous image (`previousImage`) that a
- *     link-only server has long stopped hearing. A stop asked for is never a proof: the same report
- *     and removal are waited for. Kubernetes has no such call — a deleted Pod on an unreachable node
- *     proves nothing.
+ *     also stop an instance (`stopInstance`), and the manager asks it for the owner's Update Now of
+ *     a busy runner with their word that its turns may be interrupted. Docker is also asked on the
+ *     manager's own account (`ownerStopsOnly` absent): for a drain that overran its drain time, or
+ *     for an instance of a previous image (`previousImage`) that a link-only server has long stopped
+ *     hearing. Kubernetes is asked for the owner's Update Now alone: elsewhere nothing is forced
+ *     there. A stop asked for is never a proof: the same report and removal are waited for — on
+ *     Kubernetes the kubelet's terminal report, which the stop-report finalizer keeps on the deleted
+ *     Pod; a deleted Pod on an unreachable node has none and proves nothing.
  *   - Removal by UID. An instance or a credential is removed only by the UID it was observed with,
  *     so a successor under the same name is never removed; and an instance only once its stop is
  *     proven (the manager's gate).
@@ -137,6 +140,21 @@ export interface ManagedCredential {
   readonly removing: boolean;
 }
 
+/**
+ * Where the drive's mount credential of a generation is delivered for the mounter, never the instance
+ * (docs/drive-technical-design.md §4.3, §6.1): on Kubernetes, Secret `mrf-<runner uuid>` in the files
+ * namespace, which the CSI plugin reads when the kubelet publishes the drive.
+ */
+export interface ManagedDriveMountDelivery {
+  /** Its name, for messages. */
+  readonly name: string;
+  read(mapping: ManagedRunner): Promise<ManagedCredential | null>;
+  /** Deliver `token`, the mount credential of the mapping's generation (create once). */
+  deliver(mapping: ManagedRunner, token: string): Promise<ManagedCredential>;
+  /** Remove an older generation's, by the identity it was read with. */
+  remove(mapping: ManagedRunner, credential: ManagedCredential): Promise<void>;
+}
+
 /** A runner's instance, as found under its name. */
 export interface ManagedInstance {
   /** Its fixed name. Recorded as `podName`. */
@@ -163,13 +181,23 @@ export interface ManagedInstance {
    *  Pod that has ended and that the manager's stop-report finalizer holds is not being removed: it
    *  waits for `removeInstance`.) */
   readonly removing: boolean;
-  /** How it ended, by its host's report: its runner's exit code (null when the host gives none) and
-   *  whether it was killed at its memory limit. Null while it has not ended, or when it never ran. */
-  readonly exit: { readonly code: number | null; readonly outOfMemory: boolean } | null;
+  /** How it ended, by its host's report: its runner's exit code (null when the host gives none),
+   *  whether it was killed at its memory limit, and whether its host evicted it for filling its
+   *  temporary storage (`storageFull`, Kubernetes: present only when true). Null while it has not
+   *  ended, or when it never ran. */
+  readonly exit: { readonly code: number | null; readonly outOfMemory: boolean; readonly storageFull?: boolean } | null;
   /** The image it was made from, when its host says and that is not the one this backend makes instances from
    *  now (Docker: the image ID against the profile's `runner.image`, which an upgrade moves on; Kubernetes: a Pod
    *  container's image against the profile's `runner.image`). Absent otherwise. */
   readonly previousImage?: string;
+  /** With `previousImage`: the source commit the image it is made from now was built from (its
+   *  `org.opencontainers.image.revision` label; Docker: as the channel reports it, Kubernetes: the profile's
+   *  `runner.imageRevision`). Absent when the host or profile does not say. */
+  readonly currentImageRevision?: string;
+  /** With `currentImageRevision`: the release that image was published for, which its runner reports as its version
+   *  (its `org.opencontainers.image.version` label; Docker: as the channel reports it, Kubernetes: the profile's
+   *  `runner.imageVersion`). Absent for an image built from a checkout, and when the host or profile does not say. */
+  readonly currentImageVersion?: string;
 }
 
 /** A fencing receipt left for an instance, and what reading it concluded. */
@@ -267,8 +295,9 @@ export interface ManagedRunnerBackend {
   recheckReachability?(): Promise<void>;
   /**
    * The image a READY instance of a previous image (`previousImage`) is moved onto once it is idle: drained and woken
-   * at once as the next generation (the manager's image roll). Kubernetes: the profile's `runner.image`. Absent on a
-   * backend whose instances keep their image until they next sleep (Docker).
+   * at once as the next generation (the manager's image roll). Kubernetes: the profile's `runner.image`; Docker: the
+   * image new containers are made from (the profile's, or the channel's on a profile that adopts it). Absent on a
+   * backend whose instances keep their image until they next sleep, or while that image is not known yet.
    */
   readonly rollImage?: string;
 
@@ -325,6 +354,9 @@ export interface ManagedRunnerBackend {
   /** Remove a retired generation's credential, by the identity it was read with. */
   removeCredential(mapping: ManagedRunner, credential: ManagedCredential): Promise<void>;
 
+  /** The drive's mount credential: present only where runner instances receive the drive. */
+  readonly driveMount?: ManagedDriveMountDelivery;
+
   // ── the instance ──
   readInstance(mapping: ManagedRunner): Promise<ManagedInstance | null>;
   /**
@@ -341,10 +373,17 @@ export interface ManagedRunnerBackend {
   removeInstance(mapping: ManagedRunner): Promise<void>;
   /**
    * Ask the recorded instance (`mapping.podUid`) to stop: its runner is signalled, given its grace and
-   * then killed. Only for a backend whose host reports every stop it makes (Docker); absent for one
-   * that cannot vouch for a stop it asked for (Kubernetes). Never a proof: `stopConfirmed` is.
+   * then killed. Only for a backend whose host reports every stop it makes (Docker: the channel's
+   * stop; Kubernetes: the Pod deleted by UID with its termination grace, the kubelet's report kept by
+   * the stop-report finalizer). Never a proof: `stopConfirmed` is.
    */
   stopInstance?(mapping: ManagedRunner): Promise<void>;
+  /**
+   * `stopInstance` is asked only for the owner's Update Now, never on the manager's own account (an
+   * accepted sleep past its drain time, a disabled owner's drain, a silent instance of a previous
+   * image): Kubernetes, where those stop by themselves and nothing is forced. Absent: Docker, asked for all.
+   */
+  readonly ownerStopsOnly?: true;
 
   // ── stop proof ──
   /** The recorded proof of an instance's own stop. The caller has checked `stopConfirmed`. */

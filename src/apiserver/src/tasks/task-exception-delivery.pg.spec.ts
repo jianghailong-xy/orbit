@@ -6,11 +6,11 @@ import { test } from 'node:test';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { RunEventType, RunStatus as SharedRunStatus, TaskStatus as DeclaredTaskStatus } from '@orbit/shared';
@@ -253,7 +253,7 @@ async function fixture(
       title: label,
       prompt: label,
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
@@ -490,7 +490,7 @@ test('a run that files its own FAILED through the task door delivers it too',
       // self-report about work that has already stopped.
       await stack.db.session.update({
         where: { id: f.sessionId },
-        data: { status: RunStatus.FAILED },
+        data: { turnState: null, finishedAt: new Date()},
       });
       await stack.tasks.update(f.ownerId, f.taskId, { status: DeclaredTaskStatus.FAILED });
 

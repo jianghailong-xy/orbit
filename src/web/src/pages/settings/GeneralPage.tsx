@@ -1,7 +1,6 @@
 import { TRANSLATION_LANGUAGE_NAMES, TRANSLATION_LANGUAGES, type TranslationLanguage } from '@orbit/shared';
 import { SettingsCard, SettingsHeader, SettingsRow, SettingsSection } from '../../components/settings';
 import { NumberInput } from '../../components/ui/NumberInput';
-import { Segmented } from '../../components/ui/Segmented';
 import { Select } from '../../components/ui/Select';
 import { Switch } from '../../components/ui/Switch';
 import { agentLanguageOf, translationLanguageOf } from '../../lib/translation';
@@ -17,14 +16,6 @@ export const GENERAL_HINTS = {
   defaultPermissionMode: {
     short: S.defaultPermissionMode.description,
     full: 'The mode a new session starts in, unless the composer picks another. Account-wide: the mode is a property of the run, not of the workspace it runs in.',
-  },
-  modelRouting: {
-    short: S.modelRouting.description,
-    full: "Coordinators suggest a tier for each task, and a SubAgent's size sets its own. Every SubAgent, and the task runs of Agents you turn this on for, run on a model of that tier from your providers. Off: tasks keep their Agent's model and SubAgents their parent session's.",
-  },
-  optimizeFor: {
-    short: S.optimizeFor.description,
-    full: 'Cost spends subscriptions before metered keys. Balance spends the quota that expires first, then the most room. Intelligence puts the strongest model first.',
   },
   promptSuggestions: {
     short: S.promptSuggestions.description,
@@ -85,44 +76,6 @@ export function GeneralSettingsPage() {
               />
             }
           />
-          {/* Absent means on, like the switches below. */}
-          <SettingsRow
-            anchor={S.modelRouting.anchor}
-            title={S.modelRouting.title}
-            description={h.modelRouting.short}
-            tooltip={h.modelRouting.full}
-            control={
-              <Switch
-                aria-label="Smart model selection"
-                checked={prefs.modelRouting !== false}
-                onCheckedChange={(v) => save.mutate({ modelRouting: v })}
-                loading={save.isPending}
-              />
-            }
-          />
-          {/* Account-wide since 2026-11-19 (board docs/mocks/routing-mode-account); absent means Balance. Only
-              smart model selection reads it, so it shows only while that is on (owner, 2026-11-20); the saved
-              value is kept while it is off. */}
-          {prefs.modelRouting !== false && (
-            <SettingsRow
-              anchor={S.optimizeFor.anchor}
-              title={S.optimizeFor.title}
-              description={h.optimizeFor.short}
-              tooltip={h.optimizeFor.full}
-              control={
-                <Segmented<'cost' | 'balance' | 'intelligence'>
-                  aria-label="Optimize For"
-                  value={prefs.optimizeFor ?? 'balance'}
-                  onValueChange={(v) => save.mutate({ optimizeFor: v })}
-                  options={[
-                    { value: 'cost', label: 'Cost' },
-                    { value: 'balance', label: 'Balance' },
-                    { value: 'intelligence', label: 'Intelligence' },
-                  ]}
-                />
-              }
-            />
-          )}
           {/* Absent means on, like the switches below. The engine reads it when it starts, so a
               session already running keeps what it started with. */}
           <SettingsRow

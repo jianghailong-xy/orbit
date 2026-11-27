@@ -269,13 +269,44 @@ class StartProjectTest {
         }
     }
 
+    @Test fun aRequestWithoutALineOmitsTheLineAndItsSettingsFromBothStartDoors() {
+        val raw = requestRow("item-1").replace("\"line\":\"PROJECT_BRANCH\",", "")
+        val row = j(raw)
+        val request = StartProjectCopy.request(row)!!
+        assertNull(StartProjectCopy.request(j(raw.replace("\"settings\":{", "\"settings\":{\"line\":null,")))!!.settings.line)
+        val view = j("""{"repository":"acme/app","upstreamRef":"refs/heads/trunk","deliveryMode":"AGENT_PUSH"}""")
+        val draft = StartProjectCopy.Draft.of(request.settings.copy(upstreamRef = "refs/heads/other", landingCheckCommand = "make fast",
+            landingCheckTimeoutSeconds = 600), view)
+        assertNull(draft.line)
+        assertNull(draft.upstream)
+        assertNull(draft.deliveryMode)
+        assertTrue(draft.complete)
+        val expected = j("""{"criteriaDigest":"$seal","requestId":"item-1","automatic":true,"maxConcurrentTasks":3,
+            "mergeCheckCommand":null,"mergeCheckTimeoutSeconds":null}""")
+        assertEquals(expected, StartProjectCopy.body(request, draft, "item-1"))
+        assertEquals(expected, StartProjectCopy.body(request, draft.copy(upstream = "trunk"), "item-1"))
+        val card = InteractionCard("start:item-1", CardFamily.START, StartProjectCopy.title, row, "s1", project, "item-1", seal,
+            actions = listOf(CardVerb.START))
+        val edited = ProjectStartSettings(null, true, 3, null, request.settings.projectBranchName,
+            upstreamRef = "refs/heads/trunk", deliveryMode = "PLATFORM", landingCheckCommand = "make fast", landingCheckTimeoutSeconds = 600)
+        for (input in listOf(CardInput(), CardInput(settings = edited))) {
+            val sent = CardRequests.build(card, CardVerb.START, input)
+            assertEquals(expected, j(sent.body!!.decodeToString()))
+        }
+    }
+
     @Test fun theDraftIsCompleteOnlyInsideTheDoorsLimits() {
         val draft = StartProjectCopy.Draft.of(request().settings)
         assertTrue(draft.complete)
         assertFalse(draft.copy(maxConcurrentTasks = 0).complete)
         assertFalse(draft.copy(maxConcurrentTasks = StartProjectCopy.maxConcurrentTasks + 1).complete)
         assertTrue(draft.copy(maxConcurrentTasks = StartProjectCopy.maxConcurrentTasks).complete)
-        assertEquals("project/$project", StartProjectCopy.branch(request().settings.projectBranchName, project))
+        assertEquals("project/$project", StartProjectCopy.branch(request().settings.projectBranchName, null, project))
+        val bare = StartProjectCopy.Settings("PROJECT_BRANCH", null, true, 3, null)
+        assertEquals("project/foo-352xNyEH", StartProjectCopy.branch(bare.projectBranchName, "refs/heads/project/foo-352xNyEH", project))
+        assertEquals("project/$project", StartProjectCopy.branch(bare.projectBranchName, null, project))
+        assertEquals("project/foo-352xNyEH", StartProjectCopy.request(j("""{"startRequest":{"settings":{"line":"PROJECT_BRANCH","automatic":true,"maxConcurrentTasks":3},
+            "criteriaDigest":"$seal","defaultProjectBranchName":"refs/heads/project/foo-352xNyEH"}}"""))!!.defaultProjectBranchName!!.removePrefix("refs/heads/"))
     }
 
     // MARK: the reads

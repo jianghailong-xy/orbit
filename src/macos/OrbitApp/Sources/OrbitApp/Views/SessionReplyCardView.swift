@@ -82,11 +82,13 @@ struct SessionReplyCardsView: View {
     /// Withdraws the reply turn while it is still queued behind the running turn; nil once a runner
     /// has taken it (web parity: the queued tail's `QueuedTurnMeta`).
     var onCancelQueued: (() -> Void)?
+    /// A record link or a search hit asked for this turn: a folded reply opens to show it.
+    var revealed: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(replies, id: \.requestId) { reply in
-                SessionReplyCardView(reply: reply, ts: ts)
+                SessionReplyCardView(reply: reply, ts: ts, revealed: revealed)
             }
             if undelivered {
                 Text(ProjectStartedCard.undelivered).font(.orbitMeta).foregroundStyle(.orange)
@@ -107,8 +109,18 @@ struct SessionReplyCardsView: View {
 struct SessionReplyCardView: View {
     let reply: SessionReply
     var ts: String?
+    /// A record link or a search hit asked for this turn: a folded reply opens to show it.
+    var revealed: Bool = false
 
     @Environment(\.openURL) private var openURL
+    @State private var expanded = false
+    /// The reply's full height and one line of its font, measured as drawn: a long reply folds as a
+    /// long message does (`FoldedProse`, `SessionMessageCard.folds`) — web parity: `SessionReplyCard.tsx`.
+    @State private var bodyHeight: CGFloat = 0
+    @State private var lineHeight: CGFloat = 0
+
+    private var tall: Bool { SessionMessageCard.folds(height: bodyHeight, lineHeight: lineHeight) }
+    private var clamped: Bool { tall && !expanded && !revealed }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -121,9 +133,17 @@ struct SessionReplyCardView: View {
                     .font(.orbitMeta).foregroundStyle(.secondary)
             }
             if let text = reply.replyText {
-                MarkdownView(source: text, base: .body, ink: .primary)
-                    .font(.orbitProse)
-                    .textSelection(.enabled)
+                // Only the reply folds: the head, what was asked, the chosen option, the excerpt and
+                // the foot stay as they are.
+                FoldedProse(bodyHeight: $bodyHeight, lineHeight: $lineHeight, clamped: clamped) {
+                    MarkdownView(source: text, base: .body, ink: .primary)
+                        .font(.orbitProse)
+                        .textSelection(.enabled)
+                }
+                if tall && !revealed {
+                    Button(expanded ? SessionMessageCard.showLess : SessionMessageCard.showMore) { expanded.toggle() }
+                        .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.tint)
+                }
             }
             if reply.outcome == .undelivered {
                 Text(SessionRequestCopy.neverSeen)

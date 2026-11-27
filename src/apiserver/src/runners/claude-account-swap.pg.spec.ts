@@ -13,7 +13,8 @@
  *       a live one gets the reload that starts its next turn in the account's new folder. A message that arrived
  *       while the swap was pending is held from the inbox and the claim, and delivered after, in the new folder.
  *       A redelivered done swaps nothing back.
- *   (3) A failed swap leaves every record unchanged, says why, and releases what it held.
+ *   (3) A failed swap leaves every record unchanged, says why, and releases what it held. The owner can dismiss it,
+ *       which clears only that account's failed swap, never a pending one.
  *   (4) "Default" is a slot's label, not a name: an unnamed Default lands in the added slot with no name, served as the
  *       former Default with the email the runner read there (none from a runner that sends none); a name the owner
  *       gives it is kept as theirs, and swapped back to Default it is called Default again. A renamed Default keeps its
@@ -27,7 +28,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { AgentProvider, type PlanUsage, type RunnerEngineHealth } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -43,6 +45,7 @@ import { SessionsService } from '../sessions/sessions.service';
 import { sessionLease } from '../test-support/dequeue-under-lease';
 import { CLAUDE_ACCOUNT_SWAP_V1 } from './claude-account-swap';
 import { RunnersService } from './runners.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -174,12 +177,15 @@ test('Set as default for Claude Code accounts: the swap relay and the records th
         prompt: 'fix the flaky test',
         provider: 'claude',
         providerBuiltin: true,
-        status,
+        turnState: turnStateOfWord(status),
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
         runtimeSessionId: randomUUID(),
         numTurns: 2,
         ...extra,
+        ...(status === RunStatus.SUCCEEDED || status === RunStatus.FAILED
+          ? { finishedAt: extra.finishedAt ?? new Date()}
+          : status === RunStatus.CANCELLED ? { finishedAt: extra.finishedAt ?? new Date()} : {}),
       },
     });
     return id;
@@ -418,6 +424,19 @@ test('Set as default for Claude Code accounts: the swap relay and the records th
       if (claimed) claims.set(claimed.sessionId, claimed.agent.env?.CLAUDE_CONFIG_DIR);
     }
     assert.equal(claims.get(queued), WORK_HOME, 'the queued session is claimed, still on Work');
+
+    // The owner dismisses the failure: only that account's failed swap clears, and only for its owner.
+    const beforeDismiss = await records(m, all);
+    await runners.dismissSetDefaultFailure(m.ownerId, m.runnerId, 'claude', 'someone-else');
+    assert.equal(((await served(m)) as { status: string }).status, 'failed', "another account's dismissal clears nothing");
+    await refused(runners.dismissSetDefaultFailure(randomUUID(), m.runnerId, 'claude', WORK), 404, null, "another owner's runner");
+    assert.deepEqual(await runners.dismissSetDefaultFailure(m.ownerId, m.runnerId, 'claude', WORK), { ok: true });
+    assert.deepEqual(await served(m), { account: null, status: null, message: null, waitingOn: [], foreignProcesses: [] });
+    assert.deepEqual(await records(m, all), beforeDismiss, 'dismissing touches no record');
+    // A pending swap is never dismissed out from under the runner.
+    await runners.setDefaultAccount(m.ownerId, m.runnerId, 'claude', WORK);
+    await runners.dismissSetDefaultFailure(m.ownerId, m.runnerId, 'claude', WORK);
+    assert.equal(((await served(m)) as { status: string }).status, 'pending', 'a pending swap stays');
   });
 
   await t.test('(4) an unnamed Default is not called "Default" in the added slot: its email, else "Former default"', async () => {

@@ -110,10 +110,19 @@
 
 /* ---- The inspector ---- */
 .sched-inspector {
-  width: 400px; flex: none; border-left: 1px solid var(--border); background: var(--bg-subtle); overflow: auto; padding: 22px 22px 30px;
+  width: var(--sched-inspector-width, 400px); flex: none; border-left: 1px solid var(--border); background: var(--bg-subtle); overflow: auto; padding: 22px 22px 30px;
 }
+/* Drag handle over the inspector's left border, with a wider hit area. */
+.sched-resizer { flex: none; width: 1px; margin-right: -1px; position: relative; z-index: 2; cursor: col-resize; }
+.sched-resizer::before { content: ''; position: absolute; inset: 0 -5px; }
+.sched-resizer:hover, .sched-page.is-resizing .sched-resizer { background: var(--brand); }
 .sched-inspector-title { font-size: 19px; font-weight: 700; color: var(--text-1); line-height: 26px; margin: 0; }
 .sched-inspector-title.is-draft { color: var(--text-2); }
+/* The title is pressed to rename it, and the field it turns into holds the same type. */
+.sched-title { display: block; width: 100%; padding: 0; border: 0; background: none; text-align: left; font: inherit; color: inherit; cursor: text; overflow-wrap: anywhere; }
+.sched-inspector .folder-name-input { height: 34px; font-size: 19px; font-weight: 700; }
+/* Where a row's menu is placed: the point that was right-clicked. */
+.sched-menu-point { position: fixed; width: 0; height: 0; pointer-events: none; }
 .sched-inspector-meta { font-size: 12.5px; color: var(--text-3); margin-top: 2px; }
 .sched-block {
   background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 11px 13px; margin-top: 12px;
@@ -185,6 +194,25 @@
   border: 1px solid var(--border-subtle); border-radius: 8px; padding: 7px 12px; margin: 14px 0 4px;
 }
 .sched-strip .sched-icon { color: var(--brand); }
+.sched-strip .sched-strip-door { margin-left: auto; }
+/* A change conversation's opening (§8.2): Orbit's message, read as the agent's. */
+.sched-history-asked { display: block; color: var(--text-2); font-size: 12.5px; margin-top: 1px; }
+.sched-change-opening { max-width: 720px; font-size: 14px; line-height: 22px; color: var(--text-1); }
+.sched-change-opening p { margin: 10px 0; }
+.sched-change-rows {
+  display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0; padding: 10px 14px;
+  border: 1px solid var(--border-subtle); border-radius: 8px;
+}
+.sched-change-rows > div { display: contents; }
+.sched-change-rows dt { color: var(--text-2); }
+.sched-change-rows dd { margin: 0; }
+.sched-change-draft { flex: 1; display: flex; flex-direction: column; max-width: 760px; margin: 0 auto; padding: 22px 26px; width: 100%; min-height: 0; }
+.sched-change-draft h1 { font-size: 20px; margin: 0 0 4px; }
+.sched-change-draft-body { flex: 1; overflow: auto; }
+.sched-change-composer {
+  display: flex; gap: 8px; align-items: flex-end; border: 1px solid var(--border); border-radius: 16px; padding: 8px 8px 8px 14px; margin-top: 16px;
+}
+.sched-change-composer textarea { flex: 1; border: 0; outline: none; resize: none; font: inherit; background: transparent; color: var(--text-1); min-height: 22px; }
 .sched-report {
   border: 1px solid var(--border-subtle); border-left: 3px solid var(--success-solid); border-radius: 8px; padding: 10px 14px;
   font-size: 14px; line-height: 22px; margin: 12px 0 0; max-width: var(--chat-card-max, 640px); color: var(--text-1);
@@ -205,4 +233,27 @@
   .sched-page { flex-direction: column; height: auto; }
   .sched-list { padding: 18px 16px 30px; }
   .sched-inspector { width: auto; border-left: 0; border-top: 1px solid var(--border); }
+  .sched-resizer { display: none; }
 }
+
+/* ---- A run's session where the run did not get under way (board scheduled-run-not-started ②③④) ---- */
+.sched-run-card {
+  border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--bg-subtle); padding: 14px 16px 16px;
+  margin: 12px 0 0; max-width: var(--chat-card-max, 560px); color: var(--text-1);
+}
+.sched-run-title { display: flex; gap: 8px; align-items: center; font-size: 15px; font-weight: 600; line-height: 22px; }
+.sched-run-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--text-4); }
+.sched-run-dot[data-tone='waiting'] { background: var(--warning-solid); }
+.sched-run-dot[data-tone='started'] { background: var(--success-solid); }
+.sched-run-body { margin: 6px 0 0; font-size: 14px; line-height: 22px; color: var(--text-1); }
+.sched-run-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.sched-run-chip {
+  font-size: 12.5px; line-height: 18px; padding: 1px 8px; border-radius: 6px; color: var(--text-2);
+  background: var(--fill-muted); font-variant-numeric: tabular-nums;
+}
+.sched-run-meta { margin-top: 8px; font-size: 13px; color: var(--text-3); }
+.sched-run-meta.is-gave-up { margin-top: 6px; font-size: 12.5px; color: var(--text-2); }
+.sched-run-doors { display: flex; gap: 10px; margin-top: 14px; }
+.sched-run-door { flex: 1 1 0; min-width: 0; }
+.sched-run-door.is-wide { flex-basis: 100%; }
+.sched-run-error { margin-top: 8px; color: var(--error); font-size: 13px; }

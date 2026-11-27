@@ -37,6 +37,7 @@ import { RunnerSchedulesController } from '../runner-api/runner-schedules.contro
 import { SessionsService } from '../sessions/sessions.service';
 import { ScheduleReadsService } from './schedule-reads.service';
 import { ScheduleRunsService, type ScheduleRunSessionPort } from './schedule-runs.service';
+import { ScheduleChangeConversations } from './schedule-change-conversation';
 import { SchedulesController } from './schedules.controller';
 import { SchedulesService } from './schedules.service';
 
@@ -76,7 +77,7 @@ before(async () => {
   // The real create door, as the quick-add line uses it; its runner and realtime sides are no-ops here.
   const quiet = new Proxy({}, { get: () => () => undefined });
   const sessions = new SessionsService(db as never, quiet as never, quiet as never);
-  rest = new SchedulesController(schedules, runs, reads, sessions);
+  rest = new SchedulesController(schedules, runs, reads, sessions, new ScheduleChangeConversations(prisma, sessions));
 });
 
 after(async () => {
@@ -769,12 +770,18 @@ test('over the weekly budget: schedule_run_now from a session and a PAT\'s run a
   const w = await world('budget');
   const s = await createdThroughCard(w);
   assert.equal(s.envelope.runsPerWeek, 7);
-  // Seven runs started in the past 7 days: the budget is used.
+  // Seven Run now presses by sessions or tokens in the past 7 days: their budget is used (§8.4).
   const now = Date.now();
   for (let i = 1; i <= 7; i++) {
     const at = new Date(now - i * 60 * 60_000);
+    // Delivered: only a run whose first turn reached its engine counts toward the budget (§4).
+    const runId = randomUUID();
     await db.scheduleRun.create({
-      data: { scheduleId: s.id, scheduleRevision: 1, plannedAt: at, trigger: 'SCHEDULED', state: 'NO_CHANGE', startedAt: at, endedAt: at },
+      data: { id: runId, scheduleId: s.id, scheduleRevision: 1, plannedAt: at, trigger: 'MANUAL', state: 'NO_CHANGE', startedAt: at, endedAt: at },
+    });
+    const sessionId = await makeSession(w.ownerId, w.workspaceId, PermissionMode.PLAN, null, { scheduleRunId: runId });
+    await db.conversationTurn.create({
+      data: { sessionId, seq: 1, clientTurnId: `initial-${sessionId}`, content: 'x', status: 'IN_FLIGHT', deliveredAt: at },
     });
   }
   // A slot the start found over budget, as the run list reads it.
@@ -803,7 +810,7 @@ test('over the weekly budget: schedule_run_now from a session and a PAT\'s run a
   assert.equal(pressed.run.trigger, 'MANUAL');
   const started = await db.scheduleRun.findUniqueOrThrow({ where: { id: pressed.run.id } });
   assert.equal(started.state, 'RUNNING', "the owner's own press starts over budget");
-  assert.ok(started.startedAt, 'and it counts as a start');
+  assert.equal(started.byOwner, true, 'and counts toward no budget');
 });
 
 // -----------------------------------------------------------------------------------------------------------------
@@ -1012,4 +1019,94 @@ test('a timing change without readBack keeps what the check does and reads the c
   assert.ok(latest.revision > movedRevision);
   assert.equal((await rest.undo(w.user, s.id, { revision: latest.revision }, NO_SESSION)).outcome, 'APPLIED');
   assert.equal((await rest.get(w.user, s.id)).readBack, rezoned);
+});
+
+// -----------------------------------------------------------------------------------------------------------------
+// Rename (§8.4, owner 2026-11-26): the one REST door that changes a schedule, and the title alone
+// -----------------------------------------------------------------------------------------------------------------
+
+const revisionsOf = (scheduleId: string) => db.scheduleRevision.findMany({ where: { scheduleId }, orderBy: { revision: 'asc' } });
+
+test('rename writes a USER revision of the title alone, and the list and the schedule read the new one', { skip }, async () => {
+  const w = await world('rename');
+  const s = await createdThroughCard(w);
+  const answer = await rest.rename(w.user, s.id, { title: '  Codex releases  ' }, NO_SESSION);
+  assert.equal(answer.outcome, 'APPLIED');
+  const applied = answer as unknown as {
+    schedule: { title: string };
+    record: { revision: number; changedBy: string; before: unknown; after: unknown; undo: unknown };
+  };
+  assert.equal(applied.schedule.title, 'Codex releases', 'trimmed');
+  assert.equal(applied.record.changedBy, 'USER');
+  assert.ok(applied.record.undo, 'the record offers Undo');
+  const revision = (await revisionsOf(s.id)).at(-1)!;
+  assert.equal(revision.revision, 2);
+  assert.equal(revision.changedBy, 'USER');
+  assert.equal(revision.sessionId, null);
+  assert.deepEqual(revision.fields, { before: { title: CREATE.title }, after: { title: 'Codex releases' } });
+  assert.equal((await rest.get(w.user, s.id)).schedule.title, 'Codex releases');
+  assert.equal((await rest.list(w.user)).schedules.find((row) => row.id === s.id)!.title, 'Codex releases');
+  // Nothing waits on a card, and nothing else of the schedule moved.
+  assert.equal(await db.scheduleChangeRequest.count({ where: { scheduleId: s.id, kind: 'UPDATE' } }), 0);
+  const row = await db.schedule.findUniqueOrThrow({ where: { id: s.id } });
+  assert.deepEqual(
+    [row.intent, row.prompt, row.readBack, row.nextDueAt?.toISOString()],
+    [CREATE.intent, CREATE.prompt, CREATE.readBack, s.nextDueAt],
+  );
+});
+
+test('rename: the same text after trimming writes nothing, and an empty one is refused', { skip }, async () => {
+  const w = await world('rename-same');
+  const s = await createdThroughCard(w);
+  const answer = await rest.rename(w.user, s.id, { title: `  ${CREATE.title} ` }, NO_SESSION);
+  assert.equal(answer.outcome, 'UNCHANGED');
+  assert.equal(answer.changed, false);
+  await refusedWith(rest.rename(w.user, s.id, { title: '   ' }, NO_SESSION), 'SCHEDULE_FIELD_INVALID');
+  assert.equal((await revisionsOf(s.id)).length, 1);
+});
+
+test('rename is refused once the schedule has ENDED', { skip }, async () => {
+  const w = await world('rename-ended');
+  const s = await createdThroughCard(w);
+  await rest.remove(w.user, s.id, NO_SESSION);
+  await refusedWith(rest.rename(w.user, s.id, { title: 'Codex releases' }, NO_SESSION), 'SCHEDULE_ENDED');
+  assert.equal((await db.schedule.findUniqueOrThrow({ where: { id: s.id } })).title, CREATE.title);
+  assert.equal((await revisionsOf(s.id)).length, 2);
+});
+
+test('Undo restores the old title, and a later schedule_update from a session still applies: no hold', { skip }, async () => {
+  const w = await world('rename-undo');
+  const s = await createdThroughCard(w);
+  await rest.rename(w.user, s.id, { title: 'Codex releases' }, NO_SESSION);
+  assert.equal((await rest.undo(w.user, s.id, { revision: 2 }, NO_SESSION)).outcome, 'APPLIED');
+  assert.equal((await rest.get(w.user, s.id)).schedule.title, CREATE.title);
+  await rest.rename(w.user, s.id, { title: 'My Codex watch' }, NO_SESSION);
+  const byAgent = await tools.update(w.runner, w.sessionId, s.id, { title: 'Codex stable releases' } as never);
+  assert.equal(byAgent.outcome, 'APPLIED');
+  assert.equal((await rest.get(w.user, s.id)).schedule.title, 'Codex stable releases');
+  const last = (await revisionsOf(s.id)).at(-1)!;
+  assert.equal(last.changedBy, 'SESSION');
+  assert.deepEqual(last.fields, { before: { title: 'My Codex watch' }, after: { title: 'Codex stable releases' } });
+});
+
+test('rename: a token is the person; allowed paused, held and while a run is under way, leaving a due slot due', { skip }, async () => {
+  const w = await world('rename-states');
+  const s = await createdThroughCard(w);
+  const run = await runSession(w, s.id);
+  // A slot that has come round and not been taken yet: a new name must not move the schedule past it.
+  const due = new Date(Date.now() - 60_000);
+  await db.schedule.update({ where: { id: s.id }, data: { nextDueAt: due } });
+  assert.equal((await rest.rename(w.pat, s.id, { title: 'While running' }, NO_SESSION)).outcome, 'APPLIED');
+  assert.equal((await revisionsOf(s.id)).at(-1)!.changedBy, 'USER');
+  assert.equal((await db.schedule.findUniqueOrThrow({ where: { id: s.id } })).nextDueAt?.toISOString(), due.toISOString());
+  const underWay = await db.scheduleRun.findUniqueOrThrow({ where: { id: run.runId } });
+  assert.deepEqual([underWay.state, underWay.scheduleRevision], ['RUNNING', 1], 'the run keeps its revision');
+  assert.equal((await db.session.findUniqueOrThrow({ where: { id: run.sessionId } })).title, 'chat');
+
+  await rest.pause(w.user, s.id, NO_SESSION);
+  assert.equal((await rest.rename(w.user, s.id, { title: 'While paused' }, NO_SESSION)).outcome, 'APPLIED');
+  await db.schedule.update({ where: { id: s.id }, data: { state: 'HELD', heldReason: 'AGENT_DISABLED' } });
+  assert.equal((await rest.rename(w.user, s.id, { title: 'While held' }, NO_SESSION)).outcome, 'APPLIED');
+  const row = await db.schedule.findUniqueOrThrow({ where: { id: s.id } });
+  assert.deepEqual([row.title, row.state, row.heldReason, row.nextDueAt], ['While held', 'HELD', 'AGENT_DISABLED', null]);
 });

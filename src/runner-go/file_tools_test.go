@@ -40,13 +40,15 @@ type fakeFile struct {
 // with a UUID id and a public id beside it, and the others speaking public ids. A route it is told not to have answers
 // what Nest answers for a route it does not have.
 type fakeFileServer struct {
-	t      *testing.T
-	mu     sync.Mutex
-	files  map[string]*fakeFile
-	next   int
-	calls  []string
-	fields []map[string]string
-	bundle map[string]interface{}
+	t     *testing.T
+	mu    sync.Mutex
+	files map[string]*fakeFile
+	next  int
+	calls []string
+	// queries is each call's query string, beside calls.
+	queries []string
+	fields  []map[string]string
+	bundle  map[string]interface{}
 	// refuse is what the server says of a file it finds a credential in, by the file's name.
 	refuse map[string]string
 	// Names of file parts as busboy would read them: the raw Content-Disposition.
@@ -133,6 +135,7 @@ func (f *fakeFileServer) serve(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, r.Method+" "+r.URL.Path)
+	f.queries = append(f.queries, r.URL.RawQuery)
 	if r.Header.Get("authorization") != "Bearer runner-secret" {
 		f.t.Errorf("%s %s came without the runner credential", r.Method, r.URL.Path)
 	}
@@ -380,6 +383,58 @@ func TestFileUploadKeepsOneFileAndSaysWhatItIs(t *testing.T) {
 	}
 	if got.MimeType != "application/json" {
 		t.Errorf("mimeType = %q", got.MimeType)
+	}
+}
+
+// A remote SubAgent keeps files under its parent's session, which its own runner does not host: each call that keeps
+// one names the run, by which the server lets that runner in (docs/subagent-design.md §10.2).
+func TestFileUploadFromASubAgentNamesItsRun(t *testing.T) {
+	api := newFakeFileServer(t)
+	s := api.mcp(t)
+	t.Setenv(envSubagentRunID, "run-1")
+	path := writeTestFile(t, filepath.Join(inCheckout(t), "shot.png"), "png")
+	root := filepath.Join(inCheckout(t), "shots")
+	writeTestFile(t, filepath.Join(root, "light.png"), "light")
+
+	fileResult(t, s, "file_upload", map[string]interface{}{"path": path, "pin": true})
+	fileResult(t, s, "file_upload", map[string]interface{}{"path": root})
+
+	want := []string{
+		"POST /api/runner/sessions/session-1/files", "PUT /api/runner/sessions/session-1/files/file1/pin",
+		"POST /api/runner/sessions/session-1/files", "POST /api/runner/sessions/session-1/file-bundles",
+	}
+	if !equalStrings(api.calls, want) {
+		t.Fatalf("calls = %v, want %v", api.calls, want)
+	}
+	for i, query := range api.queries {
+		if query != "subagentRunId=run-1" {
+			t.Errorf("%s came with query %q, want the run named", api.calls[i], query)
+		}
+	}
+}
+
+// A remote SubAgent's checkout is a worktree under Orbit's own directory (addRemoteSubagentTree): it may upload from
+// that one, and from no other run's.
+func TestFileUploadFromARemoteSubAgentReadsItsOwnWorktree(t *testing.T) {
+	api := newFakeFileServer(t)
+	s := api.mcp(t)
+	tree := filepath.Join(remoteSubagentDir("run-1"), "tree")
+	shot := writeTestFile(t, filepath.Join(tree, "shots", "ios.png"), "png")
+	other := writeTestFile(t, filepath.Join(remoteSubagentDir("run-2"), "tree", "ios.png"), "png")
+	chdirForTest(t, tree)
+
+	if text := fileToolText(t, s, "file_upload", map[string]interface{}{"path": shot}, true); !strings.Contains(text, localFileInOrbitsDirectory) {
+		t.Fatalf("with no SubAgent run, the upload answered %s; want it refused as Orbit's own directory", text)
+	}
+	t.Setenv(envSubagentRunID, "run-1")
+	if got := fileResult(t, s, "file_upload", map[string]interface{}{"path": shot}); got.Name != "ios.png" {
+		t.Fatalf("the upload from the run's own worktree = %+v", got)
+	}
+	if text := fileToolText(t, s, "file_upload", map[string]interface{}{"path": other}, true); !strings.Contains(text, localFileInOrbitsDirectory) {
+		t.Fatalf("another run's worktree answered %s; want it refused", text)
+	}
+	if len(api.calls) != 1 {
+		t.Fatalf("calls = %v, want the one upload", api.calls)
 	}
 }
 
@@ -905,7 +960,7 @@ func TestFileFetchSavesNothingWhenTheBytesAreNotTheOnesOrbitHolds(t *testing.T) 
 	}
 }
 
-// A row from before Orbit Files has no sha256 yet: its bytes are still read, and hashed here.
+// A row from before Drive has no sha256 yet: its bytes are still read, and hashed here.
 func TestFileFetchHashesARowWithNoSha256(t *testing.T) {
 	api := newFakeFileServer(t)
 	s := api.mcp(t)

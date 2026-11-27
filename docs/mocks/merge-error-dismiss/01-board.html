@@ -1,0 +1,132 @@
+<!doctype html>
+<!-- Merge failure strip under the worktree bar (SessionOutputs.tsx .wt-merge.wt-bar-fail): a ✕ closes it.
+     Before: a refused push (GH006 protected branch) leaves the red strip and the red Retry button up for good.
+     After: ✕ in the strip's corner; closing clears the failure, so the row goes back to what the branch is. -->
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  :root {
+    --bg: #ffffff; --bg-raised: #ffffff; --bg-subtle: #fafbfc; --bg-sunken: #f2f3f5; --bg-hover: #eff0f2;
+    --border: #dee0e3; --border-subtle: #eceef1;
+    --text-1: #1f2329; --text-2: #646a73; --text-3: #8f959e;
+    --error: #cf3b35; --error-bg: #fdeceb; --error-border: #ffccc7;
+    --brand: #3370ff; --brand-tint: #eef3ff; --brand-border: #c2d4ff;
+    --ok: #2ea043; --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  body { margin: 0; padding: 28px 36px 36px; background: var(--bg); color: var(--text-1);
+         font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; width: 980px; }
+  h1 { font-size: 16px; margin: 0 0 4px; }
+  .lede { color: var(--text-2); margin: 0 0 22px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-3); margin: 24px 0 8px; }
+  .note { color: var(--text-2); font-size: 12px; margin: 8px 0 0; line-height: 1.5; }
+  .note b { color: var(--text-1); }
+
+  .bg-proc { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border: 1px solid var(--border-subtle);
+             border-radius: 8px; background: var(--bg-subtle); margin-bottom: 8px; font-weight: 600; }
+  .bg-proc span { color: var(--brand); font-weight: 400; }
+  .bg-proc em { margin-left: auto; color: var(--text-3); font-style: normal; font-weight: 400; }
+  .composer { height: 22px; border: 1px solid var(--border); border-bottom: 0; border-radius: 14px 14px 0 0; }
+
+  .wt-bar { margin: 0 0 8px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-subtle); overflow: hidden; }
+  .wt-row { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 2px 6px 2px 10px; font-size: 12px; }
+  .wt-branch { display: inline-flex; gap: 5px; padding: 2px 7px; border: 1px solid var(--border); border-radius: 6px;
+               background: var(--bg-raised); font-family: var(--mono); color: var(--text-3); }
+  .wt-branch b { color: var(--text-1); font-weight: 400; }
+  .title { color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sp { flex: 1; }
+  .add { color: var(--ok); } .del { color: var(--error); }
+  .btn { display: inline-flex; border-radius: 6px; font-weight: 600; font-size: 12px; overflow: hidden; }
+  .btn > span { padding: 3px 10px; border: 1px solid var(--brand-border); background: var(--brand-tint); color: var(--brand); }
+  .btn > span + span { padding: 3px 6px; border-left: 0; font-size: 9px; display: inline-flex; align-items: center; }
+  .btn.failed > span { border-color: var(--error-border); background: var(--error-bg); color: var(--error); }
+  .done { font-weight: 600; color: var(--ok); }
+  .caret { color: var(--text-3); font-size: 10px; padding: 0 4px; }
+
+  .wt-merge { padding: 9px 10px 10px; border-top: 1px solid var(--border-subtle); font-size: 12px;
+              display: flex; align-items: flex-start; gap: 8px; }
+  .err { color: var(--error); white-space: pre-wrap; word-break: break-word; line-height: 1.55; flex: 1; }
+  /* NEW: the close button, same control as the no-git notice's ✕ (.wt-notice-close) */
+  .x { flex: none; margin: -2px -2px 0 0; width: 22px; height: 22px; border-radius: 5px; color: var(--text-3);
+       display: inline-flex; align-items: center; justify-content: center; font-size: 13px; }
+  .x.hover { background: var(--bg-hover); color: var(--text-1); }
+  .tipwrap { position: relative; flex: none; }
+  .tip { position: absolute; right: 30px; top: 0; white-space: nowrap; background: #1f2329; color: #fff;
+         font-size: 12px; padding: 5px 9px; border-radius: 6px; }
+  .tip::after { content: ""; position: absolute; right: -4px; top: 9px; width: 8px; height: 8px; background: #1f2329; transform: rotate(45deg); }
+
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .tag { display: inline-block; font-size: 11px; color: var(--text-2); background: var(--bg-sunken); border-radius: 4px; padding: 1px 6px; margin-bottom: 6px; }
+  .callout { outline: 2px solid #3370ff; outline-offset: 2px; border-radius: 5px; }
+</style>
+</head>
+<body>
+<h1>Merge failure strip — closable</h1>
+<p class="lede">GitHub refused the push to <code>main</code> (branch protection). Today the red strip and the red Retry button stay until a merge succeeds; there is no way to close it.</p>
+
+<h2>Before (today)</h2>
+<div class="bg-proc">▤ Background <span>runner-go browser tests</span><em>2 running ▸</em></div>
+<div class="wt-bar">
+  <div class="wt-row">
+    <span class="wt-branch">⎇ <span>orbit/<b>webvnc-chrome</b>-b7d5f1</span></span>
+    <span class="title">fix(runner-browser): start Chrome again under a viewer when its last tab closes</span>
+    <span class="sp"></span><span class="add">+164</span><span class="del">−18</span>
+    <span class="btn failed"><span>Retry merge to main</span><span>▾</span></span><span class="caret">▸</span>
+  </div>
+  <div class="wt-merge"><span class="err">could not push main to origin: remote: error: GH006: Protected branch update failed for refs/heads/main.
+remote: - Changes must be made through a pull request.
+remote: - 6 of 6 required status checks are expected.
+ ! [remote rejected]  HEAD -> main (protected branch hook declined)
+error: failed to push some refs to 'https://github.com/…/orbit.git'</span></div>
+</div>
+<div class="composer"></div>
+
+<h2>After ① — ✕ in the strip's top-right corner (shown hovered)</h2>
+<div class="bg-proc">▤ Background <span>runner-go browser tests</span><em>2 running ▸</em></div>
+<div class="wt-bar">
+  <div class="wt-row">
+    <span class="wt-branch">⎇ <span>orbit/<b>webvnc-chrome</b>-b7d5f1</span></span>
+    <span class="title">fix(runner-browser): start Chrome again under a viewer when its last tab closes</span>
+    <span class="sp"></span><span class="add">+164</span><span class="del">−18</span>
+    <span class="btn failed"><span>Retry merge to main</span><span>▾</span></span><span class="caret">▸</span>
+  </div>
+  <div class="wt-merge"><span class="err">could not push main to origin: remote: error: GH006: Protected branch update failed for refs/heads/main.
+remote: - Changes must be made through a pull request.
+remote: - 6 of 6 required status checks are expected.
+ ! [remote rejected]  HEAD -> main (protected branch hook declined)
+error: failed to push some refs to 'https://github.com/…/orbit.git'</span>
+    <span class="tipwrap"><span class="tip">Dismiss</span><span class="x hover callout" aria-label="Dismiss">✕</span></span>
+  </div>
+</div>
+<div class="composer"></div>
+<p class="note"><b>Where</b>: top-right of the strip, on its first line, so it never pushes the message or wraps with it. Same 22px control as the ✕ on the no-git notice.
+  <b>Every merge failure strip</b> gets it — a refused push, a precondition error, a conflict. The commit-failed card is not part of this.</p>
+
+<h2>After ② — closed: the row says what the branch is now</h2>
+<div class="pair">
+  <div>
+    <span class="tag">Branch already in main (this case)</span>
+    <div class="wt-bar">
+      <div class="wt-row">
+        <span class="wt-branch">⎇ <span>orbit/<b>webvnc-chrome</b>-b7d5f1</span></span>
+        <span class="sp"></span><span class="add">+164</span><span class="del">−18</span>
+        <span class="done">✓ In main</span><span class="caret">▸</span>
+      </div>
+    </div>
+  </div>
+  <div>
+    <span class="tag">Branch not in main yet</span>
+    <div class="wt-bar">
+      <div class="wt-row">
+        <span class="wt-branch">⎇ <span>orbit/<b>webvnc-chrome</b>-b7d5f1</span></span>
+        <span class="sp"></span><span class="add">+164</span><span class="del">−18</span>
+        <span class="btn"><span>Merge to main</span><span>▾</span></span><span class="caret">▸</span>
+      </div>
+    </div>
+  </div>
+</div>
+<p class="note"><b>Closing clears the failure</b>, not just the strip: the red Retry button goes back to a plain <b>Merge to main</b>, or to <b>✓ In main</b> when the commits already reached main another way (as this branch's did).
+  <b>Stored on the server</b> with the session's merge state, so it stays closed after a reload and on the Mac, iPhone and Android apps.
+  <b>A new failure shows again</b>: the next merge that fails brings back a fresh strip.</p>
+</body>
+</html>

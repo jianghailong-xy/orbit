@@ -76,7 +76,7 @@ final class CreatedTasksWiringTests: XCTestCase {
     /// run starting or settling on a task the card draws all make the focused card read again.
     func testTaskEventsAndReconnectsMakeTheFocusedCardReadAgain() throws {
         let app = code(try source("AppModel.swift"))
-        XCTAssertTrue(try slice(app, from: "private func reconcileOnConnect() async {", to: "\n    }\n")
+        XCTAssertTrue(try slice(app, from: "private func alignOnScreenAfterConnect() async {", to: "\n    }\n")
             .contains("nudgeCreatedTasks()"))
         XCTAssertTrue(try slice(app, from: "case .tasks:\n", to: "case .taskLists:")
             .contains("nudgeCreatedTasks()"))

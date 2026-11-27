@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException } from '@nestjs/common';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
+import { isReleasedStatus } from '../common/session-release';
 import { SessionsService } from './sessions.service';
+import { writtenWord } from '../test-support/session-word';
 
 const now = new Date();
 
@@ -35,6 +37,8 @@ function makeService(
     commitStatus: null,
     commitOperationId: null,
     commitOperationOwner: null,
+    // A terminal row carries its release column (session_release_fact_chk).
+    ...(isReleasedStatus(String(overrides.status ?? RunStatus.FAILED)) ? { finishedAt: now } : {}),
     ...overrides,
   };
   const updates: unknown[] = [];
@@ -112,7 +116,7 @@ test('a claimed zero-turn Codex session can restart after sign-in without a runt
   const reviveData = (updates[0] as {
     data: { status: RunStatus; inboxLeaseOwner: string };
   }).data;
-  assert.equal(reviveData.status, RunStatus.PENDING);
+  assert.equal(writtenWord(reviveData), RunStatus.PENDING);
   assert.match(
     reviveData.inboxLeaseOwner,
     /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
@@ -197,7 +201,7 @@ test('a lost resume response can retry its clientTurnId after the session became
     attachments: [],
   };
   const { service, updates, announced, notified, retired } = makeService(
-    { status: RunStatus.PENDING },
+    { turnState: 'QUEUED', status: RunStatus.PENDING },
     existingTurn,
   );
 
@@ -227,7 +231,7 @@ test('a lost resume response rejects reuse of its clientTurnId for a changed pay
     attachments: [],
   };
   const { service, updates, notified, retired } = makeService(
-    { status: RunStatus.PENDING },
+    { turnState: 'QUEUED', status: RunStatus.PENDING },
     existingTurn,
   );
 
@@ -263,7 +267,7 @@ test('resume idempotency fingerprints model, permission mode, effort, and provid
     attachments: [],
     requestFingerprint: String(requestFingerprint),
   };
-  const same = makeService({ status: RunStatus.PENDING }, existingTurn);
+  const same = makeService({ turnState: 'QUEUED', status: RunStatus.PENDING }, existingTurn);
   assert.equal(
     (await same.service.resume('owner-1', 'session-1', original)).turnId,
     existingTurn.id,
@@ -275,7 +279,7 @@ test('resume idempotency fingerprints model, permission mode, effort, and provid
     { effort: 'low' },
     { provider: 'configured-provider-b' },
   ]) {
-    const h = makeService({ status: RunStatus.PENDING }, existingTurn);
+    const h = makeService({ turnState: 'QUEUED', status: RunStatus.PENDING }, existingTurn);
     await assert.rejects(
       () => h.service.resume('owner-1', 'session-1', { ...original, ...changed }),
       /different resume payload/,

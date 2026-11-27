@@ -12,16 +12,19 @@ import {
   withSessionCapabilities,
   withSessionState,
 } from './session-state';
+import { factsOfWord } from './session-legacy-words.fixture';
 
 const NOW = new Date('2026-08-01T12:00:00.000Z');
 
 function resumable(overrides: Record<string, unknown> = {}) {
   return {
+    ...factsOfWord(RunStatus.CANCELLED),
     status: RunStatus.CANCELLED,
     endReason: 'ended',
     completedAt: null,
     archivedAt: null,
     deletedAt: null,
+    finishedAt: NOW,
     cancelRequestedAt: NOW,
     startedAt: new Date('2026-08-01T10:00:00.000Z'),
     numTurns: 1,
@@ -38,9 +41,8 @@ function resumable(overrides: Record<string, unknown> = {}) {
 
 test('withSessionState preserves the legacy raw status and adds both explicit fields', () => {
   const row = withSessionState({
+    ...factsOfWord(RunStatus.CANCELLED, { endReason: 'completed' }),
     id: 'session-1',
-    status: RunStatus.CANCELLED,
-    endReason: 'completed',
     archivedAt: new Date('2026-08-01T00:00:00Z'),
     deletedAt: null,
   });
@@ -56,7 +58,7 @@ test('withSessionState preserves the legacy raw status and adds both explicit fi
 });
 
 test('withSessionState keeps a failed archived run visibly failed', () => {
-  const row = withSessionState({ status: RunStatus.FAILED, archivedAt: new Date() });
+  const row = withSessionState({ ...factsOfWord(RunStatus.FAILED), archivedAt: new Date() });
   assert.equal(row.runStatus, RunStatus.FAILED);
   assert.equal(row.sessionState, SessionState.FAILED);
   assert.equal(row.runState, SessionRunState.FAILED);
@@ -65,7 +67,7 @@ test('withSessionState keeps a failed archived run visibly failed', () => {
 });
 
 test('withSessionState preserves SUCCEEDED after archiving', () => {
-  const row = withSessionState({ status: RunStatus.SUCCEEDED, archivedAt: new Date() });
+  const row = withSessionState({ ...factsOfWord(RunStatus.SUCCEEDED), archivedAt: new Date() });
   assert.equal(row.sessionState, SessionState.COMPLETED);
   assert.equal(row.runState, SessionRunState.SUCCEEDED);
   assert.equal(row.lifecycleState, SessionLifecycleState.COMPLETED);
@@ -75,7 +77,7 @@ test('withSessionState preserves SUCCEEDED after archiving', () => {
 test('withSessionState derives a mismatched legacy timestamp from canonical completedAt', () => {
   const completedAt = new Date('2026-08-01T00:00:00.000Z');
   const row = withSessionState({
-    status: RunStatus.SUCCEEDED,
+    ...factsOfWord(RunStatus.SUCCEEDED),
     completedAt,
     archivedAt: new Date('2025-01-01T00:00:00.000Z'),
   });
@@ -83,6 +85,21 @@ test('withSessionState derives a mismatched legacy timestamp from canonical comp
   assert.equal(row.completedAt, completedAt);
   assert.equal(row.archivedAt, completedAt);
   assert.equal(row.lifecycleState, SessionLifecycleState.COMPLETED);
+});
+
+test('the words come from the facts, and the stored turn state and phase stay off the wire', () => {
+  // A stored word that disagrees with the facts is not read.
+  const row = withSessionState({
+    ...factsOfWord(RunStatus.RUNNING),
+    status: RunStatus.CANCELLED,
+    phase: 'IDLE',
+  });
+  assert.equal(row.status, RunStatus.RUNNING);
+  assert.equal(row.runStatus, RunStatus.RUNNING);
+  assert.equal(row.runState, SessionRunState.RUNNING);
+  assert.equal(row.sessionState, SessionState.RUNNING);
+  assert.equal('turnState' in row, false);
+  assert.equal('phase' in row, false);
 });
 
 test('terminal cancelRequestedAt is historical, not an ENDING resume blocker', () => {
@@ -100,8 +117,8 @@ test('terminal cancelRequestedAt is historical, not an ENDING resume blocker', (
 test('capability blockers follow the mutation guard ordering', () => {
   const cases = [
     [{ deletedAt: NOW }, 'TRASHED'],
-    [{ status: RunStatus.RUNNING, cancelRequestedAt: NOW }, 'ENDING'],
-    [{ status: RunStatus.RUNNING, cancelRequestedAt: null }, 'NOT_TERMINAL'],
+    [{ status: RunStatus.RUNNING, finishedAt: null, cancelRequestedAt: NOW }, 'ENDING'],
+    [{ status: RunStatus.RUNNING, finishedAt: null, cancelRequestedAt: null }, 'NOT_TERMINAL'],
     [{ startedAt: null }, 'NOT_STARTED'],
     [{ runtimeSessionId: null, numTurns: 1 }, 'MISSING_CONTEXT'],
     [{ assignedRunnerId: null, assignedRunner: null }, 'NO_RUNNER'],

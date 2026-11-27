@@ -28,9 +28,10 @@
  *       goes on as it was once the channel answers again;
  *  (11) an upgrade's new managed runner image (/upgrade, "Implementation record: image upgrades"): an
  *       apiserver whose profile names it makes and changes nothing while the channel still serves the
- *       previous one; the container of the previous image goes on running, busy or not, and is never
- *       drained for its image; after its next sleep (the same stop proof, compute back only once it is
- *       removed) the wake makes the next generation from the new image, on the same volume and runner;
+ *       previous one; the container of the previous image goes on running while busy, never drained for
+ *       its image; once idle it rolls (the drain a sleep takes, marked `imageRollTo`, the same stop proof,
+ *       compute held until it is removed) and wakes at once as the next generation from the new image, on
+ *       the same volume and runner (managed-runner-docker-image-roll.pg.spec.ts covers the roll itself);
  *  (12) why an upgrade recreates the apiserver before the channel: a channel already on the new image
  *       refuses the previous apiserver's creates, and the runner it was starting fails;
  *  (13) model supply is the same rule on Docker: with no runtime signed in, the owner's own enabled
@@ -439,7 +440,7 @@ test('the manager drives a mapping on DockerBackend, through the restricted chan
     assert.equal((await w.settle(ownerId, 'SLEEPING')).at(-1), 'SLEEPING');
   });
 
-  await t.test('(11) an upgrade\'s new image: the running container is left as it is, and the next generation after a sleep is made from it', async () => {
+  await t.test('(11) an upgrade\'s new image: the running container is left as it is while busy, and once idle rolls onto it', async () => {
     const w = world();
     const { ownerId, mapping } = await w.readyRunner('image-switch');
     const previous = w.profile.runner.image;
@@ -469,19 +470,14 @@ test('the manager drives a mapping on DockerBackend, through the restricted chan
       { state: 'READY', podUid: mapping.podUid, generation: 1, lastError: null });
     assert.deepEqual([w.channel.containers.get(name)!.status, w.channel.stopRequests], ['running', []]);
 
-    // Its next sleep is any sleep, (2)'s: drained once idle, Docker's report of the exit, removal by UID, and compute
-    // back only once the container is gone.
-    await w.accepted(ownerId);
+    // Idle, it rolls: drained as for sleep, marked as a roll to the new image, Docker's report of the exit, removal
+    // by UID, compute held until the container is gone, and the wake at once, with no demand.
+    const rolling = await w.accepted(ownerId);
+    assert.equal(rolling.imageRollTo, next, 'drained as a roll to the new image');
     w.channel.exit(mapping.runnerId, 0);
     assert.deepEqual(pick(await w.reserved(), COMPUTE_KEYS), computeHeld, 'exited, not yet removed: compute still held');
-    const outcomes = await w.settle(ownerId, 'SLEEPING');
-    assert.equal(outcomes.at(-1), 'SLEEPING', outcomes.join(' → '));
-    const asleep = await w.mappingOf(ownerId);
-    assert.deepEqual([(asleep.fencingReceipt as { kind: string }).kind, asleep.generation, onTheVolume().length], ['OBSERVED_STOP', 2, 0]);
-    assert.deepEqual(pick(await w.reserved(), COMPUTE_KEYS), computeFree);
 
     // The wake makes generation 2 from the new image, on the same volume, for the same runner.
-    assert.ok(await recordManagedDemand(prisma, mapping.runnerId, w.now()));
     assert.equal((await w.drive(ownerId)).at(-1), 'READY');
     const awake = await w.mappingOf(ownerId);
     const made = w.channel.containers.get(name)!;

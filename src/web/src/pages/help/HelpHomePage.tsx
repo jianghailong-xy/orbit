@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { CheckCircleFilled, RightOutlined, SearchOutlined } from '@ant-design/icons';
 import { HELP_CATEGORIES, type HelpMatch, type HelpSearchHit } from '@orbit/shared';
 import { getStartedSteps, type GetStartedAccount } from '../../lib/help/getStarted';
+import { useHelpLanguage } from '../../lib/help/helpLanguage';
 import { helpArticlePath, helpIndexQuery, helpSearchQuery } from '../../lib/help/helpQueries';
 import { openHelpDrawer } from '../../lib/help/openHelpDrawer';
 import { useHelpAccount } from '../../lib/help/useHelpAccount';
@@ -32,7 +33,8 @@ export const GET_STARTED_HIDDEN_KEY = 'orbit.help.getStartedHidden';
  */
 export function HelpHomePage() {
   useDocumentTitle('Help center');
-  const index = useQuery(helpIndexQuery());
+  const { language } = useHelpLanguage();
+  const index = useQuery(helpIndexQuery(language));
   const { signedIn, checklist } = useHelpAccount({ checklist: true });
   const [query, setQuery] = useState('');
   const searching = query.trim() !== '';
@@ -79,7 +81,7 @@ export function HelpHomePage() {
               <h2 id="help-common">Common problems</h2>
               <div className="help-list">
                 {common.map((article) => (
-                  <Link key={article.slug} to={helpArticlePath(article)} className="help-list-row">
+                  <Link key={article.slug} to={helpArticlePath(article)} className="help-list-row" data-row-focus="">
                     <span>{article.title}</span>
                     <RightOutlined />
                   </Link>
@@ -131,12 +133,13 @@ function SearchBox({ query, onQuery }: { query: string; onQuery: (q: string) => 
 
 /** The results as the reader types, a moment after they stop. */
 function SearchResults({ query, signedIn }: { query: string; signedIn: boolean }) {
+  const { language } = useHelpLanguage();
   const [asked, setAsked] = useState(query);
   useEffect(() => {
     const t = setTimeout(() => setAsked(query), 200);
     return () => clearTimeout(t);
   }, [query]);
-  const search = useQuery({ ...helpSearchQuery(asked), enabled: asked !== '' });
+  const search = useQuery({ ...helpSearchQuery(asked, language), enabled: asked !== '' });
   const hits = search.data?.hits ?? [];
   const titleOf = (slug: string) => HELP_CATEGORIES.find((c) => c.slug === slug)?.title ?? slug;
   return (

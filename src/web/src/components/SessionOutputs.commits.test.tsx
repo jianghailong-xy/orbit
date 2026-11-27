@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BranchCommit } from '@orbit/shared';
 import { getSessionDiff, refreshSessionDiff, type SessionDetail } from '../api';
 import { SessionOutputs } from './SessionOutputs';
+import { hoverTooltip } from '../test/tooltipHover';
 
 vi.mock('../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api')>()),
@@ -107,11 +108,30 @@ async function mount(d: SessionDetail, committed = true): Promise<void> {
   });
 }
 
+/** Render the same tree again with new props, as the session page does when it asks the drawer to open. */
+async function rerender(d: SessionDetail, openDiffSignal: number): Promise<void> {
+  await act(async () => {
+    root!.render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter>
+          <SessionOutputs detail={d} committed openDiffSignal={openDiffSignal} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  });
+  await settle();
+}
+
 async function press(el: Element | null | undefined): Promise<void> {
   expect(el, 'the element to press').toBeTruthy();
   await act(async () => (el as HTMLElement).click());
   await settle();
 }
+
+/** The drawer's row for a file, by the name it shows (these paths' names are unique). */
+const fileRow = (list: Element, path: string) =>
+  [...list.querySelectorAll('.session-file-btn')]
+    .find((b) => b.querySelector('.session-file-name')?.textContent === path.split('/').at(-1));
 
 const bar = () => container!.querySelector('.wt-row-toggle')!;
 const commitRow = (scope: ParentNode, subject: string) =>
@@ -174,8 +194,8 @@ describe('the worktree bar counted in commits', () => {
     expect(head.textContent).toContain('feat(rows): paginate the row list');
     expect(head.textContent).toContain('timed out past 2,000');
     const list = document.querySelector('.wt-diff-list')!;
-    expect(list.querySelector(`button[title="View diff · ${HOOK}"]`)).toBeTruthy();
-    expect(list.querySelector(`button[title="View diff · ${API}"]`)).toBeNull();
+    expect(await hoverTooltip(fileRow(list, HOOK)!)).toBe(`View diff · ${HOOK}`);
+    expect(fileRow(list, API)).toBeUndefined();
     // RowList.tsx is changed by the newer commit too: its diff is the file's whole change, and the head says so.
     expect(head.textContent).toContain('whole change');
   });
@@ -188,7 +208,21 @@ describe('the worktree bar counted in commits', () => {
     expect(document.querySelector('.wt-commit-head')).toBeNull();
     const list = document.querySelector('.wt-diff-list')!;
     for (const path of [ROWS, HOOK, API]) {
-      expect(list.querySelector(`button[title="View diff · ${path}"]`), path).toBeTruthy();
+      expect(fileRow(list, path), path).toBeTruthy();
     }
+  });
+
+  it('opens on All changes again after a commit was looked at and the drawer closed', async () => {
+    const d = detail();
+    await mount(d);
+    await press(bar());
+    await press(commitRow(container!.querySelector('.wt-commits-panel')!, COMMITS[1].subject));
+    expect(document.querySelector('.wt-commit-head')).toBeTruthy();
+    await press(document.querySelector('button[aria-label="Close"]'));
+    // Opened from outside the bar (a changed-files link): no commit is named, so the whole branch.
+    await rerender(d, 1);
+    expect(document.querySelector('.wt-commit-head')).toBeNull();
+    const tab = [...document.querySelectorAll('.wt-rail-tab')].find((t) => t.textContent?.startsWith('All changes'));
+    expect(tab?.getAttribute('aria-selected')).toBe('true');
   });
 });

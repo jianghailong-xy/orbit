@@ -14,7 +14,9 @@ final class BackgroundRowRuleParityTests: XCTestCase {
             let covers: [String]
             let list: [BackgroundRowRule.Input]
             let lastUserMessageAt: String?
+            let lastAgentTurnStartedAt: String?
             let sessionLive: Bool
+            let events: [RunEvent]?
         }
         let rules: [String: String]
         let rotation: [String: Int]
@@ -41,7 +43,6 @@ final class BackgroundRowRuleParityTests: XCTestCase {
         let name: [String: Any]
         switch row.name {
         case .one(let i): name = ["mode": "one", "item": item(i)]
-        case .pinned(let i): name = ["mode": "pinned", "item": item(i)]
         case .rotate(let items, let per, let change):
             name = ["mode": "rotate", "items": items.map(item), "perNameMs": per, "changeMs": change]
         }
@@ -53,6 +54,10 @@ final class BackgroundRowRuleParityTests: XCTestCase {
         ] as NSDictionary
     }
 
+    private func cutOff(_ c: Fixture.Case) -> String? {
+        BackgroundRowRule.clearedAt(lastUserMessageAt: c.lastUserMessageAt, lastAgentTurnStartedAt: c.lastAgentTurnStartedAt)
+    }
+
     func testEveryCaseDrawsWhatTheFixtureSays() throws {
         let data = try fixtureData()
         let fixture = try JSONDecoder().decode(Fixture.self, from: data)
@@ -60,7 +65,14 @@ final class BackgroundRowRuleParityTests: XCTestCase {
         let expects = try XCTUnwrap(raw["cases"] as? [[String: Any]]).map { $0["expect"] as! NSDictionary }
         XCTAssertGreaterThan(fixture.cases.count, 0)
         for (c, expect) in zip(fixture.cases, expects) {
-            let row = BackgroundRowRule.row(c.list, lastUserMessageAt: c.lastUserMessageAt, sessionLive: c.sessionLive)
+            // A case that carries its transcript is read through the reader, as every client must.
+            if let events = c.events {
+                var reducer = TranscriptReducer()
+                for ev in events { reducer.apply(ev) }
+                XCTAssertEqual(BackgroundRowRule.lastUserMessageAt(reducer.state.items), c.lastUserMessageAt, c.case)
+                XCTAssertEqual(reducer.state.agentTurnStartedAt, c.lastAgentTurnStartedAt, c.case)
+            }
+            let row = BackgroundRowRule.row(c.list, clearedAt: cutOff(c), sessionLive: c.sessionLive)
             XCTAssertEqual(json(row), expect, c.case)
         }
     }
@@ -81,10 +93,10 @@ final class BackgroundRowRuleParityTests: XCTestCase {
             }
             let hidden = expect["hidden"] as? Bool == true
             if hidden { hiddenCases += 1 }
-            let mark = FoldedBand.processes(procs, lastUserMessageAt: c.lastUserMessageAt, sessionLive: c.sessionLive)
+            let mark = FoldedBand.processes(procs, clearedAt: cutOff(c), sessionLive: c.sessionLive)
             XCTAssertEqual(mark == nil, hidden, c.case)
             // The tray's own processes reach the same row as the fixture's list.
-            let row = BackgroundRowRule.row(BackgroundRowRule.inputs(procs), lastUserMessageAt: c.lastUserMessageAt,
+            let row = BackgroundRowRule.row(BackgroundRowRule.inputs(procs), clearedAt: cutOff(c),
                                             sessionLive: c.sessionLive)
             XCTAssertEqual(row == nil, hidden, c.case)
             XCTAssertEqual(row?.accessibilityLabel, expect["accessibilityLabel"] as? String, c.case)
@@ -112,6 +124,24 @@ final class BackgroundRowRuleParityTests: XCTestCase {
         let items = [user("a", "2026-11-16T02:40:00.000Z"), user("b", "2026-11-16T02:50:00.000Z", orbit: true)]
         XCTAssertEqual(BackgroundRowRule.lastUserMessageAt(items), "2026-11-16T02:40:00.000Z")
         XCTAssertNil(BackgroundRowRule.lastUserMessageAt([]))
+    }
+
+    /// The cut-off is the later of the two; the agent's latest turn starts at its earliest event.
+    func testTheCutOffIsTheLaterOfTheMessageAndTheTurn() {
+        let a = "2026-11-16T02:40:00.000Z", b = "2026-11-16T02:46:00.000Z"
+        XCTAssertEqual(BackgroundRowRule.clearedAt(lastUserMessageAt: a, lastAgentTurnStartedAt: b), b)
+        XCTAssertEqual(BackgroundRowRule.clearedAt(lastUserMessageAt: b, lastAgentTurnStartedAt: a), b)
+        XCTAssertEqual(BackgroundRowRule.clearedAt(lastUserMessageAt: a, lastAgentTurnStartedAt: nil), a)
+        XCTAssertEqual(BackgroundRowRule.clearedAt(lastUserMessageAt: nil, lastAgentTurnStartedAt: b), b)
+        XCTAssertNil(BackgroundRowRule.clearedAt(lastUserMessageAt: nil, lastAgentTurnStartedAt: nil))
+        var reducer = TranscriptReducer()
+        func ev(_ seq: Int, _ type: RunEventType, _ ts: String, _ turn: String) -> RunEvent {
+            RunEvent(seq: seq, type: type, ts: ts, turnId: turn, payload: .object([:]))
+        }
+        reducer.apply(ev(1, .assistant, "2026-11-16T02:41:00.000Z", "t1"))
+        reducer.apply(ev(2, .assistant, "2026-11-16T02:42:00.000Z", "t2"))
+        reducer.apply(ev(3, .toolUse, "2026-11-16T02:43:00.000Z", "t2"))
+        XCTAssertEqual(reducer.state.agentTurnStartedAt, "2026-11-16T02:42:00.000Z")
     }
 
     /// GET /sessions/:id/background's bg_run rows reach the tray as jobs, with when they ended.

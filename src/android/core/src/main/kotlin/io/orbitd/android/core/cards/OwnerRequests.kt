@@ -13,8 +13,8 @@ import kotlinx.serialization.json.*
 
 /*
  * Owner requests: what a session has asked the account owner to do (apiserver `owner-requests`; web lib/ownerRequests.ts and
- * components/OwnerRequestCard.tsx). One door (`/owner-requests`) is read for the card in the conversation that asked and for the
- * "Waiting on you" inbox, so the two cannot say different things.
+ * components/OwnerRequestCard.tsx). One door (`/owner-requests`) is read for the card in the conversation that asked, where each
+ * request is seen and answered.
  */
 
 @Serializable
@@ -35,7 +35,13 @@ data class OwnerRequestSecretGrant(val state: String, val endReason: String? = n
 @Serializable
 data class OwnerRequestAnswer(val option: Int? = null, val text: String? = null,
     /** WIKI_CREATE once DONE: the wiki made, by id and name. */
-    val spaceId: String? = null, val name: String? = null)
+    val spaceId: String? = null, val name: String? = null,
+    /** CHANGE once DONE: the value written, and the one the runner held just before. */
+    val applied: Int? = null, val actualBefore: Int? = null)
+
+/** CHANGE: `owner_request.change_spec`, written by the server when the request is filed. [before] is the value then. */
+@Serializable
+data class OwnerRequestChangeSpec(val runnerId: String, val field: String = "maxConcurrent", val requested: Int, val before: Int)
 
 @Serializable
 data class OwnerRequest(
@@ -53,10 +59,18 @@ data class OwnerRequest(
     /** SECRET: what ends the key (design §6.1) — its task, or, for a session with no task, the session. */
     val secretScope: String? = null,
     val secretGrant: OwnerRequestSecretGrant? = null,
+    /** CHANGE: the runner setting asked for, and its value when it was asked. */
+    val changeSpec: OwnerRequestChangeSpec? = null,
     val verifyHint: String? = null,
     /** WIKI_CREATE: the repository the wiki is asked for, and the asking session's workspace it would read it from. */
     val repoUrlNorm: String? = null,
     val workspaceId: String? = null,
+    /** SETTINGS_CHANGE: `{changes: [{key, from, to, tier}]}`; read with [SettingsFromConversation.entries]. */
+    val payload: JsonElement? = null,
+    /** BROWSER_SIGN_IN: the site to sign in to, the Orbit Cloud runner whose browser it is, and the asking session's title. */
+    val browserSite: String? = null,
+    val browserRunnerId: String? = null,
+    val askedBySessionTitle: String? = null,
     val expiresAt: String? = null,
     val askedBySessionId: String = "",
     val projectId: String? = null,
@@ -91,7 +105,24 @@ object OwnerRequests {
     const val CONFIRM = "CONFIRM"
     /** An agent asking the owner to create a wiki for its workspace's repository (docs/wiki-explicit-creation-design.md §3.6). */
     const val WIKI_CREATE = "WIKI_CREATE"
-    val kinds = setOf(DECISION, SECRET, MANUAL_STEP, CONFIRM, WIKI_CREATE)
+    /** An agent proposing changes to the owner's own Settings (docs/settings-from-conversation-design.md §5.1). */
+    const val SETTINGS_CHANGE = "SETTINGS_CHANGE"
+    /** An agent proposing a runner's Max Concurrent, which the owner applies with one press (docs/design/owner-request-change.md). */
+    const val CHANGE = "CHANGE"
+    /** An agent asking the owner to reopen a settled project (docs/project-reopen-request-design.md §6). */
+    const val PROJECT_REOPEN = "PROJECT_REOPEN"
+    val kinds = setOf(DECISION, SECRET, MANUAL_STEP, CONFIRM, WIKI_CREATE, SETTINGS_CHANGE, BROWSER_SIGN_IN, CHANGE, PROJECT_REOPEN)
+    /** An agent asking the owner to sign in to a site in the Orbit Cloud runner's browser. Signed in is answered from the browser tab. */
+    const val BROWSER_SIGN_IN = "BROWSER_SIGN_IN"
+
+    /** The BROWSER_SIGN_IN card's words (web `BROWSER_SIGN_IN_COPY`). */
+    const val browserSignInEyebrow = "Sign in needed · Orbit Cloud browser"
+    const val browserSignInNote = "You sign in yourself; Orbit never sees your password. The login stays on this runner, and every agent on it can use it."
+    const val notNow = "Not now"
+    fun fromSession(title: String) = "From session $title"
+    fun signedIn(site: String) = "Signed in to $site"
+    /** The runner's browser tab, on the web only: Open browser opens it there, and does not answer the card. */
+    fun browserTabUrl(server: String, runnerId: String) = "${server.trimEnd('/')}/runners/$runnerId/browser?control=1"
 
     const val waitingOnYou = "Waiting on you"
     const val holdingUp = "Holding up"
@@ -123,14 +154,12 @@ object OwnerRequests {
     const val later = "Later"
 
     /** The tag beside a card's title. */
-    fun kindTag(kind: String) = when (kind) { MANUAL_STEP -> "STEPS"; WIKI_CREATE -> "WIKI"; else -> kind }
+    fun kindTag(kind: String) = when (kind) { MANUAL_STEP -> "STEPS"; WIKI_CREATE -> "WIKI"; SETTINGS_CHANGE -> "SETTINGS"; CHANGE -> ChangeCopy.tag; BROWSER_SIGN_IN -> "SIGN IN"; PROJECT_REOPEN -> "REOPEN"; else -> kind }
     /** The card's primary button. */
-    fun primary(kind: String) = when (kind) { DECISION -> "Send answer"; SECRET -> "Provide key"; MANUAL_STEP -> "Mark done"; WIKI_CREATE -> "Create wiki"; else -> "Confirm" }
-    /** An inbox row's button. */
-    fun inboxAction(kind: String) = when (kind) { DECISION -> "Answer"; SECRET -> "Provide"; MANUAL_STEP -> "Open steps"; else -> "Review" }
+    fun primary(kind: String) = when (kind) { DECISION -> "Send answer"; SECRET -> "Provide key"; MANUAL_STEP -> "Mark done"; WIKI_CREATE -> "Create wiki"; SETTINGS_CHANGE -> SettingsChangeCopy.save; CHANGE -> ChangeCopy.primary; BROWSER_SIGN_IN -> "Open browser"; PROJECT_REOPEN -> ProjectReopenCopy.reopen; else -> "Confirm" }
     /** A push's primary action, which opens the card on its input. */
     fun pushAction(kind: String): String? = when (kind) {
-        SECRET -> "Provide key"; DECISION -> "Answer"; MANUAL_STEP -> "Mark done"; CONFIRM, WIKI_CREATE -> "Review"; else -> null
+        SECRET -> "Provide key"; DECISION -> "Answer"; MANUAL_STEP -> "Mark done"; CONFIRM, WIKI_CREATE, SETTINGS_CHANGE, CHANGE, PROJECT_REOPEN -> "Review"; BROWSER_SIGN_IN -> "Sign in"; else -> null
     }
     fun declineLabel(kind: String) = if (kind == MANUAL_STEP) "Can’t do this…" else "Decline…"
 
@@ -211,9 +240,10 @@ object OwnerRequests {
 
     /** The summary's second line: what came of it. */
     fun outcomeLine(request: OwnerRequest, runner: String): String {
+        if (request.kind == PROJECT_REOPEN) return ProjectReopenCopy.outcomeLine(request)
         val note = request.resolutionNote?.trim()?.takeIf { it.isNotEmpty() }
         return when (request.state) {
-            "DECLINED" -> note?.let { "Declined: “$it”" } ?: "Declined"
+            "DECLINED" -> if (request.kind == BROWSER_SIGN_IN) notNow else note?.let { "Declined: “$it”" } ?: "Declined"
             "EXPIRED" -> "Expired before anyone answered"
             "WITHDRAWN" -> note?.let { "Withdrawn: “$it”" } ?: "Withdrawn"
             else -> when {
@@ -230,7 +260,12 @@ object OwnerRequests {
                     }
                 }
                 request.kind == CONFIRM -> "Confirmed"
+                request.kind == SETTINGS_CHANGE -> SettingsChangeCopy.changed(SettingsFromConversation.entries(request.payload).size)
+                request.kind == CHANGE && request.changeSpec != null -> request.changeSpec.let {
+                    ChangeCopy.applied(runner, request.answer?.actualBefore ?: it.before, request.answer?.applied ?: it.requested, it.requested)
+                }
                 request.kind == WIKI_CREATE -> request.answer?.name?.takeIf { it.isNotEmpty() }?.let { "Created the wiki $it" } ?: "Wiki created"
+                request.kind == BROWSER_SIGN_IN -> signedIn(request.browserSite.orEmpty())
                 else -> "Marked done"
             }
         }
@@ -293,29 +328,6 @@ object OwnerRequests {
     fun resolvedGrant(request: OwnerRequest): OwnerRequestSecretGrant? =
         request.secretGrant?.takeIf { request.kind == SECRET && (request.state == "DONE" || removalToTell(it)) }
 
-    /** An inbox row's detail: "3 steps", "decision · recommended: Ship it", "confirmation". */
-    fun requestDetail(request: OwnerRequest): String? = when (request.kind) {
-        MANUAL_STEP -> request.steps.orEmpty().size.let { "$it ${if (it == 1) "step" else "steps"}" }
-        DECISION -> request.recommendedOption?.let { request.options?.getOrNull(it)?.label }?.let { "decision · recommended: $it" } ?: "decision"
-        CONFIRM -> "confirmation"
-        else -> null
-    }
-
-    /** "holds 2 tasks", and for how long once that has passed a day. */
-    fun holdsText(request: OwnerRequest, now: Instant): String? {
-        val count = request.blocksTaskIds.size
-        if (count == 0) return null
-        val waited = parse(request.createdAt)?.let { Duration.between(it, now) } ?: Duration.ZERO
-        return "holds $count ${if (count == 1) "task" else "tasks"}" +
-            (if (waited >= Duration.ofDays(1)) " for ${BackgroundWakeCard.duration(waited.seconds)}" else "")
-    }
-
-    /** The row's title: the request's, in [owner]'s language when its card would be drawn translated ([OwnerCardTranslation.ownerRequest]). */
-    fun rowTitle(request: OwnerRequest, owner: String?): String = OwnerCardTranslation.ownerRequest(request, owner)?.title ?: request.title
-
-    /** The row's detail line: the kind's own words, then what it holds up. */
-    fun rowDetail(request: OwnerRequest, now: Instant): String = listOfNotNull(requestDetail(request), holdsText(request, now)).joinToString(" · ")
-
     data class SnoozeChoice(val label: String, val duration: Duration)
     val snoozeChoices = listOf(SnoozeChoice("In 1 hour", Duration.ofHours(1)), SnoozeChoice("In 4 hours", Duration.ofHours(4)),
         SnoozeChoice("Tomorrow", Duration.ofDays(1)))
@@ -327,56 +339,6 @@ object OwnerRequests {
         val deadline = parse(request.expiresAt) ?: return snoozeChoices
         return snoozeChoices.filter { now.plus(it.duration).isBefore(deadline) }
     }
-
-    /** How many requests are waiting: a request put off for later is not counted until it comes back. */
-    fun waitingCount(requests: List<OwnerRequest>, snoozes: Map<String, Long>, now: Instant): Int =
-        requests.count { it.pending && (snoozes[key(it.id)] ?: 0) <= now.toEpochMilli() }
-
-    /**
-     * The inbox's one count (web `waitingCount`): the requests not put off for later, and the questions coordinators asked through
-     * `ask_owner` — which stay on their own table (project open items) but are one list to the owner — as each open project's
-     * attention counts them.
-     */
-    fun waitingCount(requests: List<OwnerRequest>, projects: List<JsonObject>, snoozes: Map<String, Long>, now: Instant): Int =
-        waitingCount(requests, snoozes, now) + projects.sumOf(::openQuestionCount)
-
-    /** How many coordinator questions an open project (`GET /projects?status=OPEN`) says wait on the owner. */
-    fun openQuestionCount(project: JsonObject): Int = project.obj("attention")?.objects("ownerItems").orEmpty()
-        .filter { it.text("kind") == "COORDINATOR_QUESTION" }.sumOf { it.number("count") ?: 0 }
-
-    /** The open projects a coordinator has asked the owner something in: the ones whose open items are worth reading. */
-    fun projectsWithQuestions(projects: List<JsonObject>): List<JsonObject> = projects.filter { openQuestionCount(it) > 0 }
-
-    /** A coordinator's open question as an inbox row: what it asks, in plain words, the project it is about, and since when. */
-    data class CoordinatorQuestionRow(val projectId: String, val projectTitle: String, val itemId: String, val question: String,
-        val recommended: String?, val waitingSince: String) {
-        val detail get() = "$projectTitle · " + (recommended?.let { "decision · recommended: $it" } ?: "decision")
-    }
-
-    /** The questions on a project's open items (web `coordinatorQuestions`): only the owner's group, and only rows carrying a question. */
-    fun coordinatorQuestions(project: JsonObject, items: JsonObject?): List<CoordinatorQuestionRow> {
-        val projectId = project.text("id") ?: return emptyList()
-        val title = project.text("title").orEmpty()
-        return items?.objects("needsYou").orEmpty().mapNotNull { row ->
-            val question = row.obj("question")?.takeIf { row.text("kind") == "COORDINATOR_QUESTION" } ?: return@mapNotNull null
-            val itemId = row.text("itemId") ?: return@mapNotNull null
-            val recommended = question.number("recommendedOption")?.let { question.objects("options").getOrNull(it)?.text("label") }
-            CoordinatorQuestionRow(projectId, title, itemId, CoordinatorQuestions.lead(question), recommended,
-                row.text("waitingSince") ?: return@mapNotNull null)
-        }
-    }
-
-    /** One row of the inbox's Open tab: an owner request, or a coordinator's question. */
-    sealed interface OpenRow {
-        val at: String
-        data class Request(val request: OwnerRequest) : OpenRow { override val at get() = request.createdAt }
-        data class Question(val question: CoordinatorQuestionRow) : OpenRow { override val at get() = question.waitingSince }
-    }
-
-    /** The Open tab: requests and questions in one list, newest first by when each was asked. */
-    fun openRows(requests: List<OwnerRequest>, questions: List<CoordinatorQuestionRow>): List<OpenRow> =
-        (requests.map { OpenRow.Request(it) } + questions.map { OpenRow.Question(it) })
-            .sortedByDescending { parse(it.at) ?: Instant.MIN }
 
     /** The one spelling a request is kept under on this device (a push names the UUID, a read may name the short id). */
     fun key(id: String): String = canonicalId(id) ?: id
@@ -404,6 +366,9 @@ object OwnerRequests {
             times.indexOfLast { it != null && !it.isAfter(at) } to request
         }.groupBy({ it.first }, { it.second })
     }
+
+    /** The CHANGE card's note under the number: what [n] would do to a runner now at [current], or null when it changes nothing. */
+    fun changeEffect(n: Int, current: Int): String? = when { n < current -> ChangeCopy.lowering(n); n > current -> ChangeCopy.raising(n); else -> null }
 
     /** A link the card may open: only a web page, because the address is an agent's words. */
     fun openableLink(link: String): String? = runCatching { java.net.URI(link) }.getOrNull()
@@ -467,6 +432,18 @@ class OwnerRequestsApi(private val api: OrbitApi, private val handle: SessionHan
     /** WIKI_CREATE's Create wiki: the owner's door that makes the wiki with the card's settings and settles the card (design §3.6). */
     suspend fun createWiki(id: String): OwnerRequest = post(id, listOf("create-wiki"), buildJsonObject { })
 
+    /** SETTINGS_CHANGE's Save changes (design §5.2): writes the proposed values and settles the card DONE. A value that moved since is
+     * refused 409 SETTINGS_STALE and nothing is written. */
+    suspend fun applySettings(id: String): OwnerRequest = post(id, listOf("apply-settings"), buildJsonObject { })
+
+    /** PROJECT_REOPEN's Reopen (docs/project-reopen-request-design.md §4.2): reopens the project as the project page's press does and
+     * settles every pending reopen request of it DONE. Answers with this card. */
+    suspend fun reopenProject(id: String): OwnerRequest = post(id, listOf("reopen-project"), null)
+
+    /** CHANGE's Apply (design §3): writes the runner's Max Concurrent with [maxConcurrent] and settles the card DONE. */
+    suspend fun applyChange(id: String, maxConcurrent: Int): OwnerRequest =
+        post(id, listOf("apply"), buildJsonObject { put("maxConcurrent", maxConcurrent) })
+
     /** The key itself, optionally saved under [saveAs]. */
     suspend fun provide(id: String, value: String, saveAs: String? = null): OwnerRequest =
         post(id, listOf("secret"), buildJsonObject { put("value", value); saveAs?.let { put("saveAs", it) } })
@@ -488,4 +465,18 @@ class OwnerRequestsApi(private val api: OrbitApi, private val handle: SessionHan
             return Wire.decode(response.body, OwnerRequest.serializer())
         } finally { bytes?.fill(0) }
     }
+}
+
+/** The CHANGE card's words (web `CHANGE_COPY`, lib/ownerRequests.ts); a test holds them equal. */
+object ChangeCopy {
+    const val tag = "SETTING"
+    const val primary = "Apply"
+    const val numberLabel = "Max Concurrent"
+    fun setting(runner: String) = "$runner · Max Concurrent"
+    fun runningNow(n: Int) = "$n running now"
+    fun wasWhenAsked(before: Int) = "Was $before when asked."
+    fun lowering(n: Int) = "Nothing running stops. New sessions wait until fewer than $n run."
+    fun raising(n: Int) = "Up to $n sessions can run at once on this machine."
+    fun applied(runner: String, from: Int, to: Int, requested: Int) =
+        "Applied: $runner Max Concurrent $from → $to${if (to != requested) " (asked for $requested)" else ""}"
 }

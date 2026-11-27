@@ -49,8 +49,54 @@ Orbit runner setup
 EOF
 fi
 
+# mb prints a byte count in MB with one decimal (bash 3.2 on macOS: integer arithmetic only).
+mb() { printf '%d.%d' $(($1 / 1048576)) $(($1 * 10 / 1048576 % 10)); }
+
+# download fetches the binary. On a terminal it draws its own bar on stderr, with size, speed and
+# time left, while curl fetches in the background: curl's own bar has no speed. Without a
+# Content-Length it shows size and speed only. Without a terminal (CI, image build) it stays
+# silent, so a log is not filled with progress lines; -S keeps the error.
+download() {
+  [ -t 2 ] || { curl -fsSL "$url" -o "$tmp.gz"; return; }
+  local total size=0 ticks=0 speed=0 pid
+  total="$(curl -fsSLI "$url" 2>/dev/null | tr -d '\r' | awk 'tolower($1)=="content-length:"{n=$2} END{print n+0}')"
+  curl -fsSL "$url" -o "$tmp.gz" </dev/null &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    sleep 0.2
+    ticks=$((ticks + 1))
+    if [ -f "$tmp.gz" ]; then size="$(wc -c <"$tmp.gz" | tr -d ' ')"; fi
+    speed=$((size * 5 / ticks))
+    draw_bar
+  done
+  wait "$pid" || { echo >&2; return 1; }
+  size="$(wc -c <"$tmp.gz" | tr -d ' ')"
+  draw_bar
+  echo >&2
+}
+
+# draw_bar redraws download's line from its size, total and speed.
+draw_bar() {
+  local pct fill bar left secs
+  if [ "$total" -gt 0 ]; then
+    pct=$((size * 100 / total))
+    [ "$pct" -gt 100 ] && pct=100
+    fill=$((pct * 30 / 100))
+    bar="$(printf '%*s' "$fill" '' | tr ' ' '#')$(printf '%*s' $((30 - fill)) '' | tr ' ' '-')"
+    left="--"
+    if [ "$speed" -gt 0 ]; then
+      secs=$(((total - size + speed - 1) / speed))
+      left="${secs}s"
+      [ "$secs" -ge 60 ] && left="$((secs / 60))m$((secs % 60))s"
+    fi
+    printf '\r  [%s] %3d%%  %s/%s MB  %s MB/s  %s left ' "$bar" "$pct" "$(mb "$size")" "$(mb "$total")" "$(mb "$speed")" "$left" >&2
+  else
+    printf '\r  %s MB  %s MB/s ' "$(mb "$size")" "$(mb "$speed")" >&2
+  fi
+}
+
 echo "Downloading Orbit for ${os}-${arch}..."
-if ! curl -fsSL "$url" -o "$tmp.gz"; then
+if ! download; then
   echo "orbit: download failed ($url)" >&2
   exit 1
 fi

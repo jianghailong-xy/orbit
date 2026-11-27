@@ -25,6 +25,7 @@ vi.mock('../../api', async (importOriginal) => ({
 const { api } = await import('../../api');
 const apiMock = vi.mocked(api);
 const { GeneralSettingsPage } = await import('./GeneralPage');
+const { ModelRoutingPage } = await import('./ModelRoutingPage');
 const { NotificationsSettingsPage } = await import('./NotificationsPage');
 const { AppearanceSettingsPage } = await import('./AppearancePage');
 
@@ -111,7 +112,7 @@ afterEach(async () => {
 
 describe('each switch saves through the preference field it always had', () => {
   const cases: Array<[string, () => ReactElement, string, keyof UserPreferences, boolean]> = [
-    ['General', () => <GeneralSettingsPage />, 'Smart model selection', 'modelRouting', false],
+    ['Model routing', () => <ModelRoutingPage />, 'Route by tier', 'modelRouting', false],
     ['General', () => <GeneralSettingsPage />, 'Suggested replies', 'promptSuggestions', false],
     ['General', () => <GeneralSettingsPage />, 'Session recaps', 'recaps', false],
     ['General', () => <GeneralSettingsPage />, 'Let sessions orchestrate', 'enableOrchestration', false],

@@ -132,8 +132,8 @@ test('unit L4: a crossing is declared, answered and spent exactly once', { skip,
     for (const id of [w.sessionA, w.sessionC, w.successorSessionId]) {
       await admin.query(
         `INSERT INTO "session" ("id","owner_id","workspace_id","title","prompt","creator_id",
-           "provider","status","dispatch_origin","updated_at")
-         VALUES ($1,$2,$3,$4,'fixture',$2,'claude','RUNNING'::"run_status",
+           "provider","turn_state","dispatch_origin","updated_at")
+         VALUES ($1,$2,$3,$4,'fixture',$2,'claude','IN_FLIGHT',
            'USER'::"session_dispatch_origin",now())`,
         [id, w.ownerId, w.workspaceId, `${label}-session`],
       );

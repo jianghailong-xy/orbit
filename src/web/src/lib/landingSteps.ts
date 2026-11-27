@@ -1,5 +1,6 @@
 import type { IntegrationJobKind, IntegrationTimelineEntry } from '@orbit/shared';
 import { landingCheckLabel } from './landingSession';
+import { LANDING_FIX_ENTRY_KINDS } from './landingFix';
 
 /**
  * A landing's timeline, read as the session chat reads a turn (owner 2026-11-11,
@@ -131,6 +132,9 @@ export function landingSteps(entries: readonly IntegrationTimelineEntry[], kind:
   let current: LandingStepKey | null = null;
   entries.forEach((entry, index) => {
     if (triggered && current === null && TRIGGER_KINDS.has(entry.kind)) return;
+    // Where a failure went once the attempt ended — to the task's own session, and back — and that session's fix
+    // landing again (revision 42, §12.7): rows of their own between the attempts, never a step's line.
+    if (LANDING_FIX_ENTRY_KINDS.has(entry.kind)) return;
     const key = stepOf(entry, current);
     current = key;
     const group = groups.get(key) ?? [];

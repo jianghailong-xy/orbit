@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { HELP_ADMIN_CATEGORY, HELP_CATEGORIES, type HelpCategory } from '@orbit/shared';
+import { HELP_ADMIN_CATEGORY, HELP_CATEGORIES, HELP_LANGUAGES, type HelpCategory, type HelpLanguage } from '@orbit/shared';
 import { LeftOutlined, MenuOutlined } from '@ant-design/icons';
 import { getToken } from '../../api';
 import { HelpDrawer } from '../../components/HelpDrawer';
+import { useHelpLanguage } from '../../lib/help/helpLanguage';
 import { helpArticlePath, helpIndexQuery } from '../../lib/help/helpQueries';
 import { settingsReturnPath } from '../../lib/settingsReturn';
 import { useMediaQuery } from '../../lib/useMediaQuery';
@@ -20,7 +21,8 @@ const FALLBACK_CATEGORIES: HelpCategory[] = HELP_CATEGORIES.filter((c) => c.slug
 /**
  * The help center's window (docs/mocks/help-center board 01 §3–4), drawn as Settings is: its own nav in place of
  * the app's sidebar — "‹ Back to Orbit", Home, the categories the reader may see (the open one listing its
- * articles), and More — with the page beside it. It is outside the sign-in gate, so an article reads signed out.
+ * articles), More, and the Language the articles are read in — with the page beside it. It is outside the sign-in
+ * gate, so an article reads signed out.
  * Narrower than 900px the nav is a menu the button above the page opens. Signed in, the help drawer docks at the
  * right as it does in Settings, a column that narrows the page; signed out it never opens, so nothing is drawn.
  */
@@ -55,7 +57,8 @@ export function HelpLayout() {
 function HelpNav() {
   const navigate = useNavigate();
   const { category: openCategory } = useParams();
-  const index = useQuery(helpIndexQuery());
+  const { language, setLanguage } = useHelpLanguage();
+  const index = useQuery(helpIndexQuery(language));
   const categories = index.data?.categories ?? FALLBACK_CATEGORIES;
   const signedIn = !!getToken();
   return (
@@ -91,6 +94,25 @@ function HelpNav() {
           </div>
           <HelpNavRow to="/help/whats-new" label="What's new" />
           {signedIn && <HelpNavRow to="/help/questions" label="Your questions" />}
+        </div>
+        <div className="settings-nav-group" role="group" aria-label="Language">
+          <div className="settings-nav-heading">
+            <span>Language</span>
+          </div>
+          <div className="help-language-row">
+            <select
+              className="help-language-select"
+              aria-label="Article language"
+              value={language}
+              onChange={(event) => setLanguage(event.target.value as HelpLanguage)}
+            >
+              {HELP_LANGUAGES.map((option) => (
+                <option key={option.code} value={option.code}>
+                  {option.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
     </nav>

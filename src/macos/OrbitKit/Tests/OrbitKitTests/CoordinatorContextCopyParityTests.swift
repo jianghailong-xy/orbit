@@ -62,8 +62,11 @@ final class CoordinatorContextCopyParityTests: XCTestCase {
             ("tryAgain", CoordinatorHandoffCopy.tryAgain),
             ("handOverWithoutNote", CoordinatorHandoffCopy.handOverWithoutNote),
             ("keepThisCoordinator", CoordinatorHandoffCopy.keepThisCoordinator),
+            ("successorRowTitle", CoordinatorHandoffCopy.successorRowTitle),
+            ("successorKeep", CoordinatorHandoffCopy.successorKeep),
         ]
         for (key, value) in pairs { assertSays(ts, "\(key): '\(value)',", in: Self.shared) }
+        assertSays(ts, "successorRowDetail: \"\(CoordinatorHandoffCopy.successorRowDetail)\",", in: Self.shared)
 
         // The two bodies, the project's title where the template puts it.
         assertSays(ts, "`\(CoordinatorHandoffCopy.confirmBody("${projectTitle}"))`", in: Self.shared)

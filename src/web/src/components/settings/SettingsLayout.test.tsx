@@ -61,7 +61,7 @@ vi.mock('../../pages/settings/StoragePage', async () => ({ StorageSettingsPage: 
 vi.mock('../../pages/ProfilePage', () => ({ ProfilePage: () => <p data-page="profile">profile</p> }));
 vi.mock('../../pages/SharedLinksPage', () => ({ SharedLinksPage: () => <p data-page="shared-links">links</p> }));
 vi.mock('../../pages/AccessTokensPage', () => ({ AccessTokensPage: () => <p data-page="access-tokens">tokens</p> }));
-vi.mock('../../pages/TerminalsPage', () => ({ TerminalsPage: () => <p data-page="terminals">terminals</p> }));
+vi.mock('../../pages/settings/ModelRoutingPage', () => ({ ModelRoutingPage: () => <p data-page="routing">routing</p> }));
 vi.mock('../../pages/FeishuIntegrationPage', () => ({ FeishuIntegrationPage: () => <p data-page="feishu">feishu</p> }));
 vi.mock('./SettingsProviderPages', async (original) => {
   const { useParams } = await import('react-router-dom');
@@ -290,10 +290,9 @@ describe('the Settings window', () => {
       ['Notifications', '/settings/notifications'],
       ['Appearance', '/settings/appearance'],
       ['Profile', '/settings/profile'],
-      ['Storage', '/settings/storage'],
       ['Shared links', '/settings/shared-links'],
       ['Access tokens', '/settings/access-tokens'],
-      ['Terminals', '/settings/terminals'],
+      ['Secrets', '/settings/secrets'],
     ]);
     expect(rows('Integrations').map((r) => [r.label, r.href])).toEqual([
       ['Feishu', '/settings/integrations/feishu'],
@@ -308,6 +307,7 @@ describe('the Settings window', () => {
       // Two rows however many vendors the keys are (docs/mocks/settings-providers-compact).
       ['API keys', '/settings/providers', '3'],
       ['Account pools', '/settings/providers/pools', '1'],
+      ['Model routing', '/settings/providers/routing', null],
     ]);
     expect(rows('Workspaces').map((r) => [r.label, r.href, r.meta])).toEqual([
       ['orbit', '/settings/workspaces/wsOrbit', 'gpu-box'],
@@ -322,15 +322,14 @@ describe('the Settings window', () => {
       '/settings/notifications': '/settings/notifications',
       '/settings/appearance': '/settings/appearance',
       '/settings/profile': 'profile',
-      '/settings/storage': '/settings/storage',
       '/settings/shared-links': 'shared-links',
       '/settings/access-tokens': 'access-tokens',
-      '/settings/terminals': 'terminals',
       '/settings/integrations/feishu': 'feishu',
       '/settings/machines/gpuBox': 'machine:gpuBox:',
       '/settings/machines/studioMac': 'machine:studioMac:',
       '/settings/providers': 'keys',
       '/settings/providers/pools': 'pools',
+      '/settings/providers/routing': 'routing',
       '/settings/workspaces/wsOrbit': 'workspace:wsOrbit',
       '/settings/workspaces/wsSite': 'workspace:wsSite',
     };
@@ -342,12 +341,26 @@ describe('the Settings window', () => {
     }
   });
 
+  it('opens Machines from the old /settings/terminals address: the first machine’s page', async () => {
+    await visit('/settings/terminals');
+    expect(addressBar()).toBe('/settings/machines/gpuBox');
+    expect(page()).toBe('machine:gpuBox:');
+  });
+
+  it('opens General from the old /settings/terminals address when there is no machine', async () => {
+    runners = [];
+    await visit('/settings/terminals');
+    expect(addressBar()).toBe('/settings/general');
+  });
+
   it('draws Providers as the one way to connect a provider while there is no key and no pool', async () => {
     keys = [];
     pools = [];
     await visit('/settings/general');
     expect(rows('Providers').map((r) => [r.label, r.href, r.meta])).toEqual([
       ['Connect a provider', '/settings/providers/new', null],
+      // The built-in engines have model tiers with no key at all.
+      ['Model routing', '/settings/providers/routing', null],
     ]);
     await click(nav().querySelector('a[href="/settings/providers/new"]'));
     expect(page()).toBe('pick-vendor');
@@ -361,9 +374,26 @@ describe('the Settings window', () => {
       ['/settings/providers/new/anthropic', null],
       ['/settings/providers/keys/k1', null],
       ['/settings/providers/pools/p1', '/settings/providers/pools'],
+      ['/settings/providers/routing', '/settings/providers/routing'],
     ] as const) {
       await visit(path);
       expect([path, nav().querySelector('a.active')?.getAttribute('href') ?? null]).toEqual([path, lit]);
+      await act(async () => root?.unmount());
+      root = null;
+      container.remove();
+    }
+  });
+
+  it('leads Model tiers’ and the Routing report’s old addresses to Model routing, keeping the view and period asked for', async () => {
+    for (const [path, landed] of [
+      ['/settings/providers/tiers', '/settings/providers/routing'],
+      ['/settings/routing-report', '/settings/providers/routing'],
+      ['/settings/routing-report?view=workflows&period=7d', '/settings/providers/routing?view=workflows&period=7d'],
+    ] as const) {
+      await visit(path);
+      expect([path, addressBar()]).toEqual([path, landed]);
+      expect(page()).toBe('routing');
+      expect(nav().querySelector('a.active')?.getAttribute('href')).toBe('/settings/providers/routing');
       await act(async () => root?.unmount());
       root = null;
       container.remove();
@@ -376,6 +406,8 @@ describe('the Settings window', () => {
       ['/settings/providers/new/anthropic', 'key'],
       ['/settings/providers/keys/k1', 'key'],
       ['/settings/providers/pools/p1', 'pool'],
+      // Model routing is a page of its own, not the :vendor keys page.
+      ['/settings/providers/routing', 'routing'],
     ] as const) {
       await visit(path);
       expect(addressBar()).toBe(path);
@@ -587,7 +619,6 @@ describe('reordering machines in the nav', () => {
       'Reorder old-laptop',
       'Reorder Studio Mac',
     ]);
-    expect(grips.every((g) => g.title === 'Drag to reorder')).toBe(true);
     // Hidden at rest is the stylesheet's to say: opacity 0, shown on the row's hover or the grip's focus.
     const fs = await import('node:fs');
     const css = fs.readFileSync(

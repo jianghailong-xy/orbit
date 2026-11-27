@@ -7,6 +7,8 @@ import { api, fetchAttachmentObjectUrl } from '../api';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { DEFAULT_MAIN_BRANCH, mainBranchName } from '../lib/projectStart';
 import { useMediaQuery } from '../lib/useMediaQuery';
+import { criterionTextIn } from '../lib/translation';
+import { useOwnerCardTranslation } from './TranslationParts';
 import { AppLink } from './AppLink';
 import { ProjectTaskLink } from './ProjectTaskLink';
 import { TaskStatusPill } from './TaskStatusPill';
@@ -58,6 +60,7 @@ import {
   CRITERION_WORDING_NOW,
   CONFIRM_SHEET_HOW_CHECKED,
   MOVED_FROM,
+  criterionLandingHalfSentence,
   movedByLine,
   movedOutLead,
   screenshotCount,
@@ -70,8 +73,11 @@ import {
   type CriterionMovedFrom,
   type CriterionMovedOut,
   type CriterionSatisfiedBy,
+  type ProjectDoneCriterion,
 } from '../lib/projectDone';
+import type { CriterionLandingReason, ProjectTextTranslation } from '@orbit/shared';
 import { ago } from '../lib/watches';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 import './ui/Typography.css';
 
 /**
@@ -185,6 +191,10 @@ export interface AcceptanceCriterionItem {
   satisfied?: boolean;
   unmet?: CriterionUnmetReason[];
   landing?: string;
+  /** Why its work is where it is (`derivedDone.criteria[].landingReason`), joined in by the project
+   *  page. When present it decides the landing half-sentence, in the Done card's words (D2 A); absent
+   *  — a public page, an older server — the row falls back to `landing`. */
+  landingReason?: CriterionLandingReason | null;
   /** How the OWNER said anybody would know this criterion holds, authored beside the criterion
    *  itself. Not derived and not judged by it: it is the instruction, and until now the card
    *  printed none of it. Null for a criterion whose author left it unanswered. */
@@ -201,6 +211,8 @@ export interface AcceptanceCriterionItem {
 /** The parts of the project detail document this card reads. */
 interface ProjectAcceptanceDetail {
   acceptanceCriteriaItems?: AcceptanceCriterionItem[];
+  /** The criteria's text in the owner's language (Settings › Translation). */
+  translation?: ProjectTextTranslation | null;
   /** The criteria this project moved out to a follow-up (board 02 G). */
   criteriaMovedOut?: CriterionMovedOut[];
   /** The owner rulings still live, oldest first (coordinator handoff v2 §2). */
@@ -209,6 +221,20 @@ interface ProjectAcceptanceDetail {
    *  branch a criterion's work can be met ON without being on main (§7.4 V11), and the project's main
    *  branch, which the landings name. */
   integration?: { ref?: string | null; upstreamRef?: string | null };
+  /** The unified done read, whose criteria carry `landingReason` (the items do not). */
+  derivedDone?: { criteria?: Pick<ProjectDoneCriterion, 'definitionId' | 'landingReason'>[]; nonCode?: boolean };
+}
+
+/** Each criterion with its `landingReason` from the done read, matched by id. A non-code project's
+ *  reasons are all null by design (it reads no landing), so it keeps the rows it always drew. */
+export function withLandingReasons(
+  criteria: AcceptanceCriterionItem[],
+  derivedDone: ProjectAcceptanceDetail['derivedDone'],
+): AcceptanceCriterionItem[] {
+  const reasons = derivedDone?.nonCode ? undefined : derivedDone?.criteria;
+  if (!Array.isArray(reasons)) return criteria;
+  const byId = new Map(reasons.map((c) => [c.definitionId, c.landingReason]));
+  return criteria.map((c) => (byId.has(c.id) ? { ...c, landingReason: byId.get(c.id) ?? null } : c));
 }
 
 /** How many criteria a card lists before it stops and says how many more there are. Twelve rather
@@ -331,7 +357,7 @@ function RequiredAction({ code }: { code: string }) {
       </span>
     );
   }
-  return <span className="acceptance-held-up-action" title={code}>{sentence}</span>;
+  return <Tooltip content={code} delay={TEXT_TOOLTIP_DELAY_MS}><span className="acceptance-held-up-action">{sentence}</span></Tooltip>;
 }
 
 /** Who confirmed a criterion, as its row's state sentence says it. */
@@ -622,19 +648,25 @@ function CriterionWork({
   }
   if (criterion.satisfied === undefined) return null;
   const unmet = criterion.unmet ?? [];
-  const landing = criterion.landing === undefined
-    ? null
-    : landingSentence(criterion.landing, integrationRef, mainBranch);
+  const reasoned = criterion.landingReason !== undefined;
+  const landing: { text: string; tail?: string } | null = reasoned
+    ? { text: criterionLandingHalfSentence({ satisfied: criterion.satisfied, landingReason: criterion.landingReason ?? null }, mainBranch) ?? '' }
+    : criterion.landing === undefined
+      ? null
+      : landingSentence(criterion.landing, integrationRef, mainBranch);
+  const flagged = reasoned
+    ? criterion.landingReason === 'NO_RECEIPT' || criterion.landingReason === 'NO_BRANCH'
+    : criterion.landing === LANDING_FLAGGED;
   return (
     <>
       <div className="acceptance-work">
         <span className={`acceptance-work-state ${criterion.satisfied ? 'is-met' : 'is-unmet'}`}>
           {criterion.satisfied ? MET : NOT_MET}
         </span>
-        {criterion.satisfied && landing ? (
+        {criterion.satisfied && landing?.text ? (
           <span
             className={
-              `acceptance-landing${criterion.landing === LANDING_FLAGGED ? ' is-flagged' : ''}`
+              `acceptance-landing${flagged ? ' is-flagged' : ''}`
             }
           >
             {landing.text}
@@ -731,8 +763,12 @@ export function AcceptanceCriteriaList({
   integrationRef,
   mainBranch,
   projectId,
+  translation,
 }: {
   criteria: AcceptanceCriterionItem[];
+  /** The project's translation while the list is drawn translated. Only what a row reads: every write
+   *  and dialog keeps the criterion's own text. */
+  translation?: ProjectTextTranslation;
   /** The whole set, which a change of one criterion's mode restates. Defaults to `criteria`. */
   allCriteria?: AcceptanceCriterionItem[];
   id?: string;
@@ -759,7 +795,7 @@ export function AcceptanceCriteriaList({
               urlTransform={referenceUrlTransform}
               components={{ ...INLINE_ONLY, a: ReferenceLink }}
             >
-              {c.text}
+              {criterionTextIn(translation, c.id, c.text)}
             </Markdown>
             {projectId && c.movedFrom ? <MovedFromLine moved={c.movedFrom} /> : null}
             <CriterionWork criterion={c} integrationRef={integrationRef} mainBranch={mainBranch} projectId={projectId} />
@@ -888,7 +924,10 @@ export function ProjectAcceptanceCard({
       action={action}
       pending={detail.isPending}
       error={detail.isError ? detail.error : null}
-      criteria={Array.isArray(detail.data?.acceptanceCriteriaItems) ? detail.data.acceptanceCriteriaItems : []}
+      criteria={Array.isArray(detail.data?.acceptanceCriteriaItems)
+        ? withLandingReasons(detail.data.acceptanceCriteriaItems, detail.data.derivedDone)
+        : []}
+      translation={detail.data?.translation}
       movedOut={Array.isArray(detail.data?.criteriaMovedOut) ? detail.data.criteriaMovedOut : []}
       rulings={Array.isArray(detail.data?.rulings) ? detail.data.rulings : []}
       integrationRef={detail.data?.integration?.ref ?? null}
@@ -912,8 +951,11 @@ export function AcceptanceCriteriaCard({
   action,
   movedOut = [],
   rulings = [],
+  translation,
 }: {
   criteria: AcceptanceCriterionItem[];
+  /** The criteria's text in the owner's language (Settings › Translation); the project's own page only. */
+  translation?: ProjectTextTranslation | null;
   /** The owner rulings still live (coordinator handoff v2 §2); the project's own page only. */
   rulings?: readonly ProjectRulingView[];
   /** The criteria this project moved out to a follow-up (board 02 G); the project's own page only. */
@@ -938,6 +980,7 @@ export function AcceptanceCriteriaCard({
   const shown = criteriaPreview(criteria, expanded, previewLimit);
   const hasCriteriaDisclosure = criteria.length > previewLimit;
   const confirmed = criteria.filter((criterion) => criterion.satisfiedBy === 'CONFIRMATION').length;
+  const translated = useOwnerCardTranslation(criteria.length > 0 ? translation : null);
 
   return (
     <Card
@@ -983,7 +1026,9 @@ export function AcceptanceCriteriaCard({
             integrationRef={integrationRef}
             mainBranch={mainBranch}
             projectId={projectId}
+            translation={translated.shown}
           />
+          {translated.foot ? <div className="acceptance-block">{translated.foot}</div> : null}
           {hasCriteriaDisclosure ? (
             // Says what it is hiding. A list that stopped at twelve without naming the other
             // forty-one would read as a complete list of twelve. The control remains after it is

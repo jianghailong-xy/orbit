@@ -58,6 +58,8 @@ import { projectIntegrationQuery, projectOpenItemsQuery, projectPromotionQuery }
 import { integrationInFlight, pollWhileInFlight, promotionInFlight, streamPoll } from '../lib/listBudget';
 import { mainBranchName } from '../lib/projectStart';
 import { ago } from '../lib/watches';
+import { useProjectIntegration } from '../lib/pollOwner';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /** A read the page can draw from: the door answers a candidate or `null`, and anything else is no
  *  candidate rather than one with every field missing. */
@@ -99,7 +101,7 @@ export function ProjectMergeStrip({
   onOpenCoordinator: (() => void) | null;
 }): JSX.Element | null {
   const qc = useQueryClient();
-  const integration = useQuery(projectIntegrationQuery(projectId));
+  const integration = useProjectIntegration(projectId);
   // No event says when a merge check or a landing ends, so while one runs the candidate is read on
   // its own cadence; otherwise it follows the stream (listBudget).
   const jobInFlight = integrationInFlight(integration.data);
@@ -273,7 +275,9 @@ export function ProjectMergeStrip({
             <span className="session-project-merge-title">{promotionPageTitle(current)}</span>
             <span className="session-project-merge-badge">{NEEDS_YOU}</span>
           </div>
-          <div className="session-project-merge-ref" title={current.sourceRef}>{promotionBranchLine(current)}</div>
+          <Tooltip content={current.sourceRef} align="start" delay={TEXT_TOOLTIP_DELAY_MS}>
+            <div className="session-project-merge-ref">{promotionBranchLine(current)}</div>
+          </Tooltip>
           <div className="session-project-merge-rule" />
           <div className="session-project-merge-counts">{promotionPageCounts(current)}</div>
           <TaskTitles promotion={current} />

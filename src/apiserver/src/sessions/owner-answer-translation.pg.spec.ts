@@ -31,7 +31,8 @@ import { beforeEach, test } from 'node:test';
 import { resetTranslationBreaker } from './translation';
 
 import { Logger, UnprocessableEntityException } from '@nestjs/common';
-import { CreatorType, RunStatus, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { CreatorType, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { FeishuDirectService } from '../feishu/feishu-direct.service';
@@ -545,7 +546,7 @@ async function newSession(db: Db, a: Account, title: string, taskId: string | nu
   await db.session.create({
     data: {
       id, ownerId: a.ownerId, creatorId: a.ownerId, workspaceId: a.workspaceId, assignedRunnerId: a.runnerId, taskId,
-      title, prompt: title, provider: 'claude', status: RunStatus.AWAITING_INPUT,
+      title, prompt: title, provider: 'claude', turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER, numTurns: 1, startedAt: new Date(), runtimeSessionId: randomUUID(),
       startsTaskWork: taskId !== null,
     },

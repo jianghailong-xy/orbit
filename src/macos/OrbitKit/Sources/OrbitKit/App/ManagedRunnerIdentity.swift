@@ -21,3 +21,24 @@ public enum ManagedRunnerIdentity {
         }
     }
 }
+
+/// The build the managed runner is running, as `ManagedRunnerModel` last read it from its status `update`
+/// (nil when it runs the current build or the server did not say). It carries the build date the runner's
+/// `managed-<sha>` version lacks, for the version line (`RunnerAttention.runnerVersionLine`).
+public enum ManagedRunnerRunningBuild {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var stored: ManagedRunnerBuild?
+
+    public static var build: ManagedRunnerBuild? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return stored
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            stored = newValue
+        }
+    }
+}

@@ -181,13 +181,10 @@ final class UnchangedReloadObservationTests: XCTestCase {
         withObservationTracking {
             _ = model.open
             _ = model.all
-            _ = model.ended
-            _ = model.questions
             _ = model.terminalRequests
             _ = model.snoozes
             _ = model.taskTitles
             _ = model.savedSecrets
-            _ = model.unsupported
         } onChange: {
             changes.bump()
         }

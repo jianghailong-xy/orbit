@@ -1,6 +1,8 @@
 import { CallHandler, ExecutionContext, Injectable, Logger, NestInterceptor } from '@nestjs/common';
 import { Observable, finalize } from 'rxjs';
 
+import { isHeldRoute } from './held-routes';
+
 /**
  * One line per request the server spent a noticeable time on.
  *
@@ -30,21 +32,6 @@ import { Observable, finalize } from 'rxjs';
  */
 const SLOW_REQUEST_MS = 500;
 
-/**
- * Routes that are supposed to hold, and are therefore not timed at all.
- *
- *  - The approval `orbit mcp`'s permission tool blocks on sits on a 25 s deadline waiting for a
- *    person. It is "slow" by construction, so a line about one would say nothing; what would be
- *    worth knowing is one that never ended, and that is a runner-side question.
- *  - The two SSE streams stay open for as long as what they stream — a transcript, a user's
- *    control-plane events.
- */
-const HELD_ROUTES = new Set([
-  '/api/runner/sessions/:id/approvals/:approvalId',
-  '/api/events',
-  '/api/sessions/:id/events',
-]);
-
 @Injectable()
 export class SlowRequestInterceptor implements NestInterceptor {
   private readonly log = new Logger(SlowRequestInterceptor.name);
@@ -52,7 +39,8 @@ export class SlowRequestInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const request = context.switchToHttp().getRequest<{ method?: string; route?: { path?: string } }>();
     const route = request?.route?.path;
-    if (typeof route !== 'string' || HELD_ROUTES.has(route)) return next.handle();
+    // A route that is supposed to hold is not timed at all (common/held-routes.ts): it is slow by construction.
+    if (typeof route !== 'string' || isHeldRoute(route)) return next.handle();
 
     const startedAt = Date.now();
     return next.handle().pipe(

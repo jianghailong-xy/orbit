@@ -158,3 +158,43 @@ test('a rebuild that finds the same rows keeps the cursor and records the newer 
   assert.equal(s.unchanged(OWNER, SCOPE, cursor, 'v2'), true);
   assert.equal(s.unchanged(OWNER, SCOPE, cursor, 'v1'), false);
 });
+
+const MARKS = { epochs: {}, steady: 's', overlayInputs: 'o', rows: new Map<string, string>() };
+
+test('a delta from a held base with only the moved rows rebuilt reads as a whole build of the same rows', () => {
+  const s = store();
+  const cursor = s.answer(OWNER, SCOPE, [a, b, c], '', (row) => row, undefined, MARKS).cursor;
+  const base = s.base(OWNER, SCOPE, cursor);
+  assert.ok(base?.marks, 'the snapshot did not keep its marks');
+  const renamed = { id: 'b', title: 'B2' };
+  const partial = s.answerFrom(OWNER, SCOPE, cursor, base, ['b', 'a', 'c'], [renamed], (row) => row, undefined, MARKS);
+  const whole = store();
+  const wholeCursor = first(whole, [a, b, c]);
+  assert.deepEqual(partial, whole.answer(OWNER, SCOPE, [renamed, a, c], wholeCursor));
+});
+
+test('a delta from a held base drops the ids no longer in the order, and builds nothing for them', () => {
+  const s = store();
+  const cursor = s.answer(OWNER, SCOPE, [a, b, c], '', (row) => row, undefined, MARKS).cursor;
+  const answer = s.answerFrom(OWNER, SCOPE, cursor, s.base(OWNER, SCOPE, cursor)!, ['a', 'c'], [], (row) => row, undefined, MARKS);
+  assert.equal(answer.full, false);
+  assert.deepEqual(answer.full === false && [answer.upserts, answer.removedIds, answer.order], [[], ['b'], ['a', 'c']]);
+  // The new cursor is the snapshot of what the caller now holds: an unchanged read of it is empty.
+  assert.deepEqual(s.answer(OWNER, SCOPE, [a, c], answer.cursor), { full: false, upserts: [], removedIds: [], cursor: answer.cursor });
+});
+
+test('a delta from a held base refuses an id that was neither rebuilt nor held', () => {
+  const s = store();
+  const cursor = s.answer(OWNER, SCOPE, [a], '', (row) => row, undefined, MARKS).cursor;
+  assert.throws(() => s.answerFrom(OWNER, SCOPE, cursor, s.base(OWNER, SCOPE, cursor)!, ['a', 'b'], [], (row) => row, undefined, MARKS), /neither rebuilt nor held/);
+});
+
+test('a base is only the scope it was built for, and not past its time', () => {
+  const clock = { now: 0 };
+  const s = store(clock, { ttlMs: 1_000 });
+  const cursor = s.answer(OWNER, SCOPE, [a], '', (row) => row, undefined, MARKS).cursor;
+  assert.equal(s.base(OWNER, '[other]', cursor), undefined);
+  assert.equal(s.base('owner-2', SCOPE, cursor), undefined);
+  clock.now = 1_001;
+  assert.equal(s.base(OWNER, SCOPE, cursor), undefined);
+});

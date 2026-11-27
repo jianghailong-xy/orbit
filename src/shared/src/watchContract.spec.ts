@@ -26,14 +26,14 @@ const CONTRACT = readJson('contracts/watch.contract.json');
 const STATE_MACHINES = ['watch', 'target', 'delivery'] as const;
 
 describe('watch contract', () => {
-  it('is version 1, serves predicate versions 1, 2 and 3, and points at a document that exists', () => {
+  it('is version 2, serves predicate versions 1 to 4, and points at a document that exists', () => {
     expect(CONTRACT.name).toBe('orbit.watch');
-    expect(CONTRACT.contractVersion).toBe(1);
-    expect(CONTRACT.predicateVersion).toBe(3);
+    expect(CONTRACT.contractVersion).toBe(2);
+    expect(CONTRACT.predicateVersion).toBe(4);
     // The newest grammar is served, and so is every one before it: a stored predicate is decided under
     // the version it was requested with, so dropping one would strand every watch written under it.
-    expect(CONTRACT.servedPredicateVersions).toEqual([1, 2, 3]);
-    expect(Object.keys(CONTRACT.grammar.versions)).toEqual(['1', '2', '3']);
+    expect(CONTRACT.servedPredicateVersions).toEqual([1, 2, 3, 4]);
+    expect(Object.keys(CONTRACT.grammar.versions)).toEqual(['1', '2', '3', '4']);
     expect(existsSync(path.join(ROOT, CONTRACT.doc))).toBe(true);
   });
 
@@ -65,7 +65,7 @@ describe('watch contract', () => {
       const since = leaf.sinceVersion ?? 1;
       expect(CONTRACT.servedPredicateVersions, `${name} arrives in an unserved version`).toContain(since);
       // A leaf that takes parameters says what they are, and none of the version-1 leaves takes any.
-      expect(Boolean(leaf.params), `${name}'s params and its version disagree`).toBe(since > 1);
+      if (since === 1) expect(leaf.params, `${name} is a version-1 leaf with params`).toBeUndefined();
     }
   });
 
@@ -196,8 +196,13 @@ describe('watch contract', () => {
     const headline = CONTRACT.vectors.find((v: any) => v.id === 'all-terminal-or-any-failed');
     const tasks = surface.awaitPresets.task_await;
     expect(tasks.until[tasks.default]).toEqual(headline.given.predicate);
-    // session_create(wait) keeps waiting for the line it always waited for: a settled turn.
-    expect(surface.sessionCreateWait.watch.predicate).toEqual({ kind: 'ALL', over: 'ALL_TARGETS', leaf: 'SESSION_TURN_SETTLED' });
+    // session_create(wait) and session_await wait by default for nothing executing and nothing armed to wake
+    // the session, so a child that ended its turn with its own job or subagent still running is not done.
+    expect(surface.sessionCreateWait.watch.predicate).toEqual({ kind: 'ALL', over: 'ALL_TARGETS', leaf: 'SESSION_QUIESCENT' });
+    const sessions = surface.awaitPresets.session_await;
+    expect(JSON.stringify(sessions.until[sessions.default])).toContain('SESSION_QUIESCENT');
+    // The older presets stay, each with the meaning it was published with.
+    expect(sessions.until.ALL_SETTLED).toEqual({ kind: 'ALL', over: 'ALL_TARGETS', leaf: 'SESSION_TURN_SETTLED' });
     expect(Object.keys(surface.release.outcomes).sort()).toEqual(
       ['ALREADY_WOKEN', 'CANCELLED', 'NOTHING_OWED', 'WAKE_NOT_QUEUED', 'WAKE_WITHDRAWN'],
     );

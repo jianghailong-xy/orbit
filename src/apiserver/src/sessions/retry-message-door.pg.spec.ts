@@ -111,10 +111,10 @@ async function cleanUp(): Promise<void> {
 async function seedSession(sessionId: string, ownerId: string): Promise<void> {
   await admin.query(
     `INSERT INTO "session"("id","owner_id","creator_id","workspace_id","assigned_runner_id",
-                           "title","prompt","provider","status","num_turns","started_at",
-                           "runtime_session_id","retry_attempts","updated_at")
+                           "title","prompt","provider","turn_state","num_turns","started_at",
+                           "runtime_session_id","retry_attempts","updated_at","finished_at")
      VALUES ($1::uuid,$2::uuid,$2::uuid,$3::uuid,$4::uuid,'parked','an opening prompt nobody asked to re-send',
-             'claude','FAILED'::"run_status",1,clock_timestamp(),gen_random_uuid(),0,clock_timestamp())`,
+             'claude',NULL,1,clock_timestamp(),gen_random_uuid(),0,clock_timestamp(),clock_timestamp())`,
     [sessionId, ownerId, WORKSPACE_ID, RUNNER_ID],
   );
 }

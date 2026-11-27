@@ -49,6 +49,17 @@ class DirectoryGroupingTest {
         assertEquals(listOf(run), ScheduledRunsFolder.sessions(rows, "w"))
     }
 
+    @Test fun aChangeConversationIsNoRunAndShowsInNoList() {
+        // A SCHEDULE_CHANGE session (§8.2): a realtime upsert can bring a row in, and it must not appear in an ordinary
+        // list or count — exactly where a SCHEDULE run is kept out — nor in the Scheduled runs folder, which it is not.
+        val change = DirectorySession("change", workspaceId = "w", runSource = "SCHEDULE_CHANGE")
+        assertTrue(change.isScheduleChange)
+        assertFalse(change.isScheduledRun)
+        val rows = listOf(change, DirectorySession("manual", workspaceId = "w"))
+        assertEquals(listOf("manual"), rows.withoutScheduledRuns().map { it.id })
+        assertEquals(emptyList<DirectorySession>(), ScheduledRunsFolder.sessions(rows, "w"))
+    }
+
     @Test fun scheduledFolderShowsWithRunsInFolderViewsAndCountsSessionsNeedingReply() {
         val rows = listOf(
             DirectorySession("running", status = "RUNNING", workspaceId = "w", runSource = "SCHEDULE"),
@@ -93,5 +104,28 @@ class DirectoryGroupingTest {
         assertEquals(listOf("Untagged", "Untagged"), before.map { it.title })
         assertEquals(2, before.map { it.id }.distinct().size)
         assertEquals(before.map { it.id }, groups("Renamed").map { it.id })
+    }
+
+    private fun failed(id: String, vararg facts: Pair<String, Any?>): DirectorySession {
+        val f = facts.toMap()
+        return DirectorySession(id, createdAt = "2026-10-03T17:00:00Z", status = "FAILED", phase = f["phase"] as String?,
+            released = f["released"] as Boolean?, lastTurnOutcome = f["outcome"] as String?, endReason = f["endReason"] as String?,
+            retryAt = f["retryAt"] as String?)
+    }
+    private fun needsYou(s: DirectorySession) =
+        directoryGroups(listOf(s), SessionView.OPEN, Grouping.RECENCY, now, ZoneId.of("UTC")).first().title == "Needs you"
+
+    @Test fun anEndTheRunnerNeverConfirmedIsNotUnderNeedsYou() =
+        assertFalse(needsYou(failed("a", "phase" to "IDLE", "released" to true, "outcome" to "FAILED", "endReason" to "user_ended")))
+
+    @Test fun aRealFailureIsUnderNeedsYou() =
+        assertTrue(needsYou(failed("a", "phase" to "IDLE", "released" to true, "outcome" to "FAILED")))
+
+    @Test fun aFailureBeingRetriedIsNotUnderNeedsYou() =
+        assertFalse(needsYou(failed("a", "phase" to "IDLE", "released" to true, "outcome" to "FAILED", "retryAt" to "2026-10-04T01:00:00Z")))
+
+    @Test fun factsAbsentGroupsAsBefore() {
+        assertTrue(needsYou(failed("a", "endReason" to "user_ended")))
+        assertFalse(needsYou(failed("a", "retryAt" to "2026-10-04T01:00:00Z")))
     }
 }

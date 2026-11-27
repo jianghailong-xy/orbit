@@ -219,7 +219,7 @@ export class TaskCompletionEvidenceDto {
    * for every revision with a checks envelope, as of the read: the judge has to see which handles
    * still hold (a TOOL_CALL's `bgj_…` included, which it cannot read with bg_output), and a row
    * deleted since submission reads as unresolved with its reason. A file's citation also says what
-   * the file is (docs/orbit-files-design.md §2.4). Null only for a stored evidence object that is
+   * the file is (docs/drive-design.md §2.4). Null only for a stored evidence object that is
    * not a checks envelope (a legacy import).
    */
   citations!: TaskEvidenceCitationDto[] | null;
@@ -507,11 +507,17 @@ export class CreateTaskDto {
   // criteria said one thing is refused, not silently dropped, after a person rewrites them.
   @IsOptional() @IsString() @MaxLength(64) criterionKey?: string;
   // SR5's escape hatch (migration 0231): this work produces no code — a rollout, a verification, a
-  // piece of research — so it resolves no source and does not take part in its criterion's landing
-  // conjunction (§1.1 isCodeTask, §1.4). Omitted is false, which is every task there has been.
+  // piece of research — so it resolves no source and its run gets a checkout with no branch
+  // (§1.1 isCodeTask); it does not decide landing, which is measured from commits. Omitted is false, which is every task there has been.
   // Declaring it here is the first statement of what the task is and needs no reason; turning an
   // existing task codeless does (UpdateTaskDto.codelessReason, `task-codeless.ts`).
   @IsOptional() @IsBoolean() codeless?: boolean;
+  // §12.15 P-C2 (`task-landing-check-exempt.ts`): when this task lands on its project's branch, skip the
+  // project's landing check; its own acceptance still runs. Only on a PROJECT_BRANCH line, only from the
+  // project's coordinator or the owner, and only with `landingCheckExemptReason` (at most 280 characters,
+  // checked by the service so the refusal carries its code).
+  @IsOptional() @IsBoolean() landingCheckExempt?: boolean;
+  @IsOptional() @IsString() landingCheckExemptReason?: string;
   // SR55: start this task from a snapshot of the session making the call (the runner door posts it;
   // the MCP tool calls it `forkFromSession`). Create-time only: the five columns it becomes are never
   // written again (migration 0615).
@@ -772,14 +778,19 @@ export class UpdateTaskDto {
   // declare again — was the one thing no caller could perform. The alternative on offer was
   // deleting the task and filing it afresh, which is the detachment 0232 refused to automate.
   @IsOptional() @IsString() @MaxLength(64) criterionKey?: string | null;
-  // SR5's declaration on the edit door (`task-codeless.ts`): true takes this task out of its
-  // criterion's landing conjunction, false puts it back. Omit to leave it. Turning a task codeless
+  // SR5's declaration on the edit door (`task-codeless.ts`): true declares that it produces no code
+  // (it does not decide landing), false takes that back. Omit to leave it. Turning a task codeless
   // needs `codelessReason` in the same request and is refused outright for a task that already has
   // commits of its own; re-sending the value it has, or taking the declaration back, needs nothing.
   @IsOptional() @IsBoolean() codeless?: boolean;
   // Why this edit turns the task codeless. Read only when it does — stored beside the declaration
   // (`task.codeless_reason`), and cleared when the declaration is taken back.
   @IsOptional() @IsString() @MaxLength(MAX_TASK_CODELESS_REASON_CHARS) codelessReason?: string;
+  // §12.15 P-C2 on the edit door: true exempts this task from its project's landing check and needs
+  // `landingCheckExemptReason` in the same request; false takes it back and clears the reason. A reason
+  // alone replaces the one an exempt task carries. Omit both to leave it.
+  @IsOptional() @IsBoolean() landingCheckExempt?: boolean;
+  @IsOptional() @IsString() landingCheckExemptReason?: string;
   // Null/null clears EXECUTABLE's evidence fields; omission preserves the stored values.
   @IsOptional() @IsString() acceptanceCommand?: string | null;
   @IsOptional() @IsInt() acceptanceExpectedExitCode?: number | null;

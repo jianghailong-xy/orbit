@@ -429,3 +429,35 @@ func TestAttachLocalReplyFilesFindsRelativeLinksInUploads(t *testing.T) {
 		t.Fatalf("uploads = %q, want 3 with both.png from the working directory", bodies)
 	}
 }
+
+func TestAttachLocalReplyFilesRewritesDrivePaths(t *testing.T) {
+	fakeDriveMount(t, true)
+	var stats int
+	srv := newDriveTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/runner/drive/stat" {
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		stats++
+		switch p := r.URL.Query().Get("path"); p {
+		case "/Proj/r.md":
+			fmt.Fprint(w, `{"id":"e1","kind":"FILE","path":"/Proj/r.md"}`)
+		case "/absent":
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprint(w, `{"code":"DRIVE_ENTRY_NOT_FOUND","message":"No such entry."}`)
+		default:
+			t.Errorf("unexpected drive path %q", p)
+			http.NotFound(w, r)
+		}
+	})
+	text := "[home](" + driveHomePath + "/Proj/r.md) [tilde](~/Drive/Proj/r.md) " +
+		"[resolved](" + driveMountPath + "/Proj/r.md) [missing](~/Drive/absent)"
+	want := "[home](orbit-drive:e1) [tilde](orbit-drive:e1) [resolved](orbit-drive:e1) [missing](~/Drive/absent)"
+	out := []RunEvent{{Type: evAssistant, Payload: map[string]interface{}{"text": text}}}
+	transport := newCallerTransport(srv.URL, "runner-secret", runnerCallerMCP)
+	attachLocalReplyFiles(context.Background(), transport, fileTestSession, out, []string{t.TempDir()}, newReplyAttachmentIDs())
+	if got := out[0].Payload["text"]; got != want || stats != 2 {
+		t.Fatalf("rewrote to %q with %d lookups; want %q with 2 lookups", got, stats, want)
+	}
+}

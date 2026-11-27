@@ -39,8 +39,13 @@ final class ScheduledModel {
     var workspaceFilter: String?
     /// The schedule whose detail panel is up.
     var inspectedID: String?
+    /// The schedule whose title the Mac's detail panel is editing in place (Rename…, §8.4).
+    var renamingID: String?
     /// The draft panel: the sentence typed and the session it opened.
     var draftPanel: DraftPanel?
+    /// The draft change conversation (§8.2, board 03-change ③): Orbit's opening and a composer, before any
+    /// session exists. The person's first words open the change conversation, and the page gives way to it.
+    var changeDraft: ChangeDraft?
     /// The last refusal a press came back with, said once under what was pressed.
     var errorText: String?
 
@@ -48,6 +53,12 @@ final class ScheduledModel {
         let sessionID: String
         let typed: String
         var id: String { sessionID }
+    }
+
+    /// The schedule the draft change conversation is about.
+    struct ChangeDraft: Equatable, Identifiable {
+        let scheduleID: String
+        var id: String { scheduleID }
     }
 
     /// The viewer's zone: the timeline's days, and the zone a create card naming none is allowed in.
@@ -217,6 +228,17 @@ final class ScheduledModel {
         await control(id) { try await self.api.runScheduleNow(id) }
     }
 
+    /// Run now from a run's session: the refusal's sentence, or the session of the run it started (web opens it).
+    func runNowSession(_ id: String) async -> (said: String?, sessionID: String?) {
+        var started: String?
+        let said = await control(id) {
+            let answer = try await self.api.runScheduleNow(id)
+            started = answer.run.sessionId
+            return answer
+        }
+        return (said, said == nil ? started : nil)
+    }
+
     @discardableResult func pause(_ id: String) async -> String? {
         await control(id) { try await self.api.pauseSchedule(id) }
     }
@@ -233,6 +255,11 @@ final class ScheduledModel {
 
     @discardableResult func undo(_ id: String, revision: Int) async -> String? {
         await control(id) { try await self.api.undoSchedule(id, revision: revision) }
+    }
+
+    /// Rename (§8.4): the title alone, applied at once.
+    @discardableResult func rename(_ id: String, title: String) async -> String? {
+        await control(id) { try await self.api.renameSchedule(id, title: title) }
     }
 
     @discardableResult func stop(runID: String, scheduleID: String) async -> String? {
@@ -277,6 +304,30 @@ final class ScheduledModel {
         await load()
         await loadCard(card.id)
         return result
+    }
+
+    /// Change… (§8.2): the schedule's open change conversation, or the opening a new one would start with.
+    /// A failure is said in `errorText`, like every other press.
+    func changeConversation(_ id: String) async -> ScheduleChangeConversationResponse? {
+        errorText = nil
+        do {
+            return try await api.scheduleChangeConversation(id)
+        } catch {
+            errorText = Self.refusal(error)
+            return nil
+        }
+    }
+
+    /// The person's first words: opens the change conversation, or — `created` false, another device opened
+    /// one meanwhile — says them in that one and answers it.
+    func openChangeConversation(_ id: String, text: String) async -> ScheduleChangeAnswer? {
+        errorText = nil
+        do {
+            return try await api.openScheduleChange(id, text: text)
+        } catch {
+            errorText = Self.refusal(error)
+            return nil
+        }
     }
 
     /// The quick-add line: the sentence opens a conversation in the workspace on its right; the draft panel

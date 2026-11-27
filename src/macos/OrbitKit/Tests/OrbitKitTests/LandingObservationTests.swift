@@ -377,7 +377,8 @@ final class LandingObservationTests: XCTestCase {
         assertSays(web, "return deliveredSha ? `${words} · ${deliveredSha.slice(0, 7)}` : words;", "and its commit")
         assertSays(web, "return { text: waitingToBeSeenOn(branches.upstreamRef ?? 'main', integration.deliveredSha), "
                        + "color: 'default' };", "on the project's main branch, in the plain tone")
-        assertSays(web, "'QUEUED', 'RUNNING', 'CONFLICT', 'CHECK_FAILED', 'ERROR', 'AWAITING_OWNER', 'AWAITING_OBSERVATION',",
+        // FIXING (revision 42) is in Pending landing at both ends (`ProjectPage.integratingStates`).
+        assertSays(web, "'QUEUED', 'RUNNING', 'CONFLICT', 'CHECK_FAILED', 'ERROR', 'FIXING', 'AWAITING_OWNER', 'AWAITING_OBSERVATION',",
                    "in Pending landing")
     }
 

@@ -53,8 +53,9 @@ final class AccessTokensListTests: XCTestCase {
 
     /// Twelve scopes, the server's PAT_SCOPES; the read-only preset is the seven `:read` ones.
     func testThePresetsAreTheServersScopes() {
-        XCTAssertEqual(AccessTokensList.allScopes.count, 12)
-        XCTAssertEqual(Set(AccessTokensList.allScopes).count, 12)
+        // The 12 resource scopes, then files and notify, which Read & write includes as the web's ALL_SCOPES does.
+        XCTAssertEqual(AccessTokensList.allScopes.count, 14)
+        XCTAssertEqual(Set(AccessTokensList.allScopes).count, 14)
         XCTAssertEqual(AccessTokensList.readScopes.count, 7)
         XCTAssertTrue(AccessTokensList.readScopes.allSatisfy { $0.hasSuffix(":read") })
     }

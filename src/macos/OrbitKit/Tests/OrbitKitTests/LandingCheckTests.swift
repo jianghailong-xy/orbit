@@ -11,38 +11,121 @@ final class LandingCheckTests: XCTestCase {
             root = parent
         }
         let web = try String(contentsOf: root.appendingPathComponent("src/web/src/lib/landingCheck.ts"), encoding: .utf8)
-        let pairs: [(String, String)] = [
-            ("LABEL", LandingCheckCopy.label),
-            ("CONFIRM_TITLE", LandingCheckCopy.confirmTitle),
-            ("CONFIRM_ACTION", LandingCheckCopy.confirmAction),
-            ("COMMAND", LandingCheckCopy.command),
-            ("TIMEOUT", LandingCheckCopy.timeout),
-            ("HINT", LandingCheckCopy.hint),
-            ("INHERITS", LandingCheckCopy.inherits),
-            ("COMMAND_PLACEHOLDER", LandingCheckCopy.commandPlaceholder),
-            ("INHERITS_TIMEOUT", LandingCheckCopy.inheritsTimeout),
-            ("TIMEOUT_PLACEHOLDER", LandingCheckCopy.timeoutPlaceholder),
-            ("TIMEOUT_HINT", LandingCheckCopy.timeoutHint),
-            ("MAIN", LandingCheckCopy.main),
-            ("APPLIES", LandingCheckCopy.applies),
-            ("WAITING", LandingCheckCopy.waiting),
-            ("RESUMES", LandingCheckCopy.resumes),
-            ("BASELINE_BODY", LandingCheckCopy.baselineBody),
-            ("HELD", LandingCheckCopy.held),
-            ("UPSTREAM", LandingCheckCopy.upstream),
-            ("TIP", LandingCheckCopy.tip),
-            ("BASELINE", LandingCheckCopy.baseline),
-            ("VIEW_HELD", LandingCheckCopy.viewHeld),
+        // Every copy object the web declares, each held key by key: a key two objects share (`COMMAND`,
+        // `LABEL`) is held in each of them, and an object this table does not know fails. (This guard
+        // came with main's second port of revision 42 part two; kept, pointed at this client's words.)
+        let objects: [String: [(String, String)]] = [
+            "LANDING_CHECK_COPY": [
+                ("LABEL", LandingCheckCopy.label),
+                ("CONFIRM_TITLE", LandingCheckCopy.confirmTitle),
+                ("CONFIRM_ACTION", LandingCheckCopy.confirmAction),
+                ("COMMAND", LandingCheckCopy.command),
+                ("TIMEOUT", LandingCheckCopy.timeout),
+                ("HINT", LandingCheckCopy.hint),
+                ("INHERITS", LandingCheckCopy.inherits),
+                ("COMMAND_PLACEHOLDER", LandingCheckCopy.commandPlaceholder),
+                ("INHERITS_TIMEOUT", LandingCheckCopy.inheritsTimeout),
+                ("TIMEOUT_PLACEHOLDER", LandingCheckCopy.timeoutPlaceholder),
+                ("TIMEOUT_HINT", LandingCheckCopy.timeoutHint),
+                ("MAIN", LandingCheckCopy.main),
+                ("APPLIES", LandingCheckCopy.applies),
+                ("WAITING", LandingCheckCopy.waiting),
+                ("RESUMES", LandingCheckCopy.resumes),
+                ("BASELINE_BODY", LandingCheckCopy.baselineBody),
+                ("HELD", LandingCheckCopy.held),
+                ("UPSTREAM", LandingCheckCopy.upstream),
+                ("TIP", LandingCheckCopy.tip),
+                ("BASELINE", LandingCheckCopy.baseline),
+                ("VIEW_HELD", LandingCheckCopy.viewHeld),
+            ],
+            // Revision 42 part two (docs/mocks/landing-measured): the three values, who set it, the
+            // coordinator's changes and a task's exemption.
+            "LANDING_MODE_COPY": [
+                ("MERGE_CHECK", LandingProvenanceCopy.modeMergeCheck),
+                ("COMMAND", LandingProvenanceCopy.modeCommand),
+                ("NONE", LandingProvenanceCopy.modeNone),
+                ("NONE_HEAD", LandingProvenanceCopy.noneLead),
+                ("NONE_BODY", LandingProvenanceCopy.noneBody),
+                ("COMMAND_NOTE", LandingProvenanceCopy.commandNote),
+                ("WHO_CAN_SET", LandingProvenanceCopy.whoCanSet),
+            ],
+            "LANDING_CHECK_ORIGIN_COPY": [
+                ("OWNER", LandingProvenanceCopy.you),
+                ("COORDINATOR", LandingProvenanceCopy.coordinator),
+                ("CARD", LandingProvenanceCopy.card),
+                ("START", LandingProvenanceCopy.start),
+            ],
+            "CHANGES_COPY": [
+                ("TITLE", LandingProvenanceCopy.changesTitle),
+                ("INTRO", LandingProvenanceCopy.changesIntro),
+                ("EMPTY", LandingProvenanceCopy.noChanges),
+                ("LANDING_CHECK", LandingProvenanceCopy.landingCheck),
+                ("CHECK_EXEMPT", LandingProvenanceCopy.checkExemptHead),
+                ("USES_MERGE_CHECK", LandingProvenanceCopy.usesMergeCheck),
+                ("NO_CHECK", LandingProvenanceCopy.modeNone),
+                ("EXEMPT", LandingProvenanceCopy.exemptValue),
+                ("NOT_EXEMPT", LandingProvenanceCopy.notExemptValue),
+                ("REVERT", LandingProvenanceCopy.revert),
+                ("YOUR_CHANGE", LandingProvenanceCopy.yourChangeHead),
+                ("YOUR_CHANGE_NOTHING", LandingProvenanceCopy.yourChange),
+                ("CONFIRM_TITLE", LandingProvenanceCopy.revertTitle),
+                ("CONFIRM_CONSEQUENCE", LandingProvenanceCopy.revertAfter),
+                ("CANCEL", LandingProvenanceCopy.cancel),
+            ],
+            "TASK_EXEMPT_COPY": [
+                ("LABEL", LandingProvenanceCopy.landingCheck),
+                ("BADGE", LandingProvenanceCopy.exempt),
+                ("REMOVE", LandingProvenanceCopy.removeExemption),
+                ("SKIPPED", LandingProvenanceCopy.skipped),
+                ("MERGE_CHECK_STILL_RUNS", LandingProvenanceCopy.mergeCheckStillRuns),
+                ("STILL_RUNS", LandingProvenanceCopy.stillRuns),
+            ],
         ]
-        let regex = try NSRegularExpression(pattern: "(?m)^  ([A-Z_]+): '([^']*)',")
-        let keys = regex.matches(in: web, range: NSRange(web.startIndex..., in: web)).compactMap {
-            Range($0.range(at: 1), in: web).map { String(web[$0]) }
+        let block = try NSRegularExpression(pattern: "(?s)export const ([A-Z_]+) = \\{\\n(.*?)\\n\\} as const;")
+        let entry = try NSRegularExpression(pattern: "(?m)^  ([A-Z_]+): '([^']*)',")
+        var declared: [String: [String: String]] = [:]
+        for match in block.matches(in: web, range: NSRange(web.startIndex..., in: web)) {
+            guard let name = Range(match.range(at: 1), in: web).map({ String(web[$0]) }),
+                  let bodyRange = Range(match.range(at: 2), in: web) else { continue }
+            let body = String(web[bodyRange])
+            var keys: [String: String] = [:]
+            for row in entry.matches(in: body, range: NSRange(body.startIndex..., in: body)) {
+                guard let key = Range(row.range(at: 1), in: body), let value = Range(row.range(at: 2), in: body) else { continue }
+                XCTAssertNil(keys[String(body[key])], "\(name) declares \(body[key]) twice")
+                keys[String(body[key])] = String(body[value])
+            }
+            declared[name] = keys
         }
-        XCTAssertEqual(Set(keys), Set(pairs.map { $0.0 }), "A missing parity counterpart must fail")
-        for (key, value) in pairs { XCTAssertTrue(web.contains("\(key): '\(value)'"), key) }
+        XCTAssertEqual(Set(declared.keys), Set(objects.keys), "A copy object without a native counterpart must fail")
+        for (name, pairs) in objects {
+            let keys = declared[name] ?? [:]
+            XCTAssertEqual(Set(keys.keys), Set(pairs.map { $0.0 }), "A missing parity counterpart in \(name) must fail")
+            for (key, value) in pairs { XCTAssertEqual(keys[key], value, "\(name).\(key)") }
+        }
+        // Who can set it, under No check: every note in the web's order and words, and no other.
+        for entry in LandingProvenanceCopy.originNotes {
+            XCTAssertTrue(web.contains("{ by: '\(entry.by)', note: '\(entry.note)' }"), "the note for \(entry.by)")
+        }
+        let notes = try NSRegularExpression(pattern: "\\{ by: '([A-Z_]+)'")
+            .matches(in: web, range: NSRange(web.startIndex..., in: web))
+            .compactMap { Range($0.range(at: 1), in: web).map { String(web[$0]) } }
+        XCTAssertEqual(notes, LandingProvenanceCopy.originNotes.map(\.by))
+        let originLabels = Dictionary(uniqueKeysWithValues: objects["LANDING_CHECK_ORIGIN_COPY"]!)
+        for entry in LandingProvenanceCopy.originNotes {
+            XCTAssertEqual(entry.label, originLabels[entry.by], "the note for \(entry.by) wears another badge")
+        }
         XCTAssertEqual(LandingCheckCopy.inheritedCommand("make all"), "Uses merge check: make all")
         XCTAssertEqual(LandingCheckCopy.inheritedTimeout(900), "Uses merge check timeout: 900 seconds")
         XCTAssertEqual(LandingCheckCopy.title("project/payments"), "Baseline checks failing on project/payments")
+        // The functions beside the objects: the count row, the revert line, the exemption's reason.
+        XCTAssertTrue(web.contains("`${count} ${count === 1 ? 'change' : 'changes'}`"))
+        XCTAssertEqual(LandingProvenanceCopy.changesCount(3), "3 changes")
+        XCTAssertEqual(LandingProvenanceCopy.changesCount(1), "1 change")
+        XCTAssertTrue(web.contains("`Reverted by you · ${when} · coordinator needs a card for this field`"))
+        XCTAssertEqual(LandingProvenanceCopy.revertedByYou("just now"),
+                       "Reverted by you · just now · coordinator needs a card for this field")
+        XCTAssertTrue(web.contains("`Exempt: ${reason}`"))
+        XCTAssertEqual(LandingProvenanceCopy.exemptBecause("why"), "Exempt: why")
     }
 
     func testSettingsDecodeAndWriteExactCommandAndIndependentNulls() throws {

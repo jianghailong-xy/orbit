@@ -1,5 +1,33 @@
 import Foundation
 
+extension SessionRunState {
+    static func afterRelease(endReason: String?, lastTurnOutcome: SessionTurnOutcome?,
+                             workFinished: Bool?, isLanding: Bool = false) -> SessionRunState {
+        if workFinished ?? (endReason == "task_done" || (endReason == nil && isLanding)) { return .succeeded }
+        if endReason == nil && lastTurnOutcome == .failed { return .failed }
+        return .ended
+    }
+}
+
+extension Session {
+    /// The outcome the session's release can establish for the header, list and notifications.
+    var releasedRunState: SessionRunState? {
+        guard released == true else { return nil }
+        return .afterRelease(endReason: endReason, lastTurnOutcome: lastTurnOutcome,
+                             workFinished: workFinished, isLanding: isLanding)
+    }
+
+    var displayRunState: SessionRunState {
+        if let releasedRunState { return releasedRunState }
+        if released == false && endReason != nil && lastTurnOutcome == .interrupted {
+            return .interrupted
+        }
+        return effectiveRunState
+    }
+
+    var queueWord: String { waitingOn == .hold ? "On hold" : "Queued" }
+}
+
 /// The session console's header text — a 1:1 port of the web Agent console header (`AgentView.tsx`):
 /// the session's title over a "run state · lifecycle · when" subtitle
 /// ("Running · Open · 3m ago"). Kept in OrbitKit so
@@ -15,8 +43,7 @@ public enum SessionHeader {
         return "Session"
     }
 
-    /// The short execution-state word. Lifecycle location is deliberately not consulted: a succeeded
-    /// session remains "Succeeded" in Open, Completed and Trash alike. The DTO resolves old servers.
+    /// The short execution-state word, independent of where the session is filed.
     /// `watching` is the session as an observer: parked with a live watch that will resume it, it
     /// reads "Watching 7 targets" — not "Waiting for your reply", and not a background process.
     /// `machine`, where the caller knows it, is the runner the session runs on, by name: a session held
@@ -34,12 +61,12 @@ public enum SessionHeader {
         // reviewer (contract §5 N3): the card is there, but nobody is asking the owner yet. Web
         // parity: `statusLabel`'s `confirmationUnderReview` branch.
         if s.confirmationUnderReview != nil { return OwnerConfirmations.underReview }
-        switch s.effectiveRunState {
+        switch s.displayRunState {
         case .queued:
             return ClaudeRegion.heldWords(s, machine: machine)
                 ?? (RunnerUpdating.holds(s) ? RunnerUpdating.title(s)
                     : QueuedCapacity.holds(s) ? QueuedCapacity.title(s)
-                    : QueuedDiskLow.holds(s) ? QueuedDiskLow.title : "Queued")
+                    : QueuedDiskLow.holds(s) ? QueuedDiskLow.title : s.queueWord)
         case .running:
             return "Running"
         case .awaitingInput:
@@ -58,7 +85,7 @@ public enum SessionHeader {
             if (s.runningBgCount ?? 0) > 0 { return SessionLine.bgRunningLabel(s.runningBgCount ?? 0) }
             return "Waiting for your reply"
         case .succeeded:
-            return "Succeeded"
+            return s.releasedRunState == .succeeded ? "Finished" : "Succeeded"
         case .failed:
             // Not "Failed" while the server is still going to re-send it — see `retryPending`.
             if s.retryPending(now: now) { return "Retrying" }
@@ -78,9 +105,11 @@ public enum SessionHeader {
     /// card's words, one of the four owner items in the words the banner and the card use, so a
     /// person who pressed either arrives where the words came from, a project waiting to be
     /// started in the start card's own `Ready to start`, and one waiting to be recorded done in
-    /// `Ready to close` (or `Record as done…`, unasked). Anything else waiting on you —
-    /// a blocked tool call, a proposal, a row counting two kinds at once — keeps the approval
-    /// wording. Web parity: `waitingLabel` in `WorkspaceView.tsx`, which the copy-parity test reads.
+    /// `Ready to close` (or `Record as done…`, unasked). An open owner request says its kind's word,
+    /// and waiting task moves say `Approve task move` / `Approve N task moves`. Anything else
+    /// waiting on you — a blocked tool call, a proposal, a row counting two kinds at once — keeps
+    /// the approval wording. Web parity: `waitingLabel` in `WorkspaceView.tsx`, which the
+    /// copy-parity test reads.
     public static func waitingWord(for s: Session) -> String {
         switch s.waitingKind {
         case .ownerConfirmation: return OwnerConfirmations.waitingForConfirmation
@@ -92,8 +121,17 @@ public enum SessionHeader {
         // and was not asked about in time: the two rows web's `waitingLabel` names.
         case .doneRequest:       return ProjectDone.readyToClose
         case .recordAsDone:      return ProjectDone.recordAsDoneRow
-        // An owner request this session filed: its card's and the inbox's words.
-        case .ownerRequest:      return OwnerRequests.waitingOnYou
+        // An owner request this session filed (`OWNER_REQUEST`): the row says the request kind's
+        // own word — "Decision for you", "Key needed", "Steps for you", "Confirm for you". Two
+        // kinds on one row are a mix, and the server names no kind then; the fallback below says
+        // what it always did.
+        case .ownerRequest:      return s.ownerRequests?.first?.kind.rowWord ?? unnamedWord
+        // A batch of task moves waiting on this session (`MOVE_REQUEST`): the row counts the moves
+        // across every group, and says "Approve task move" / "Approve N task moves" — the same
+        // words `@orbit/shared` gives the web row.
+        case .moveRequest:
+            let moves = (s.taskMoves ?? []).reduce(0) { $0 + $1.count }
+            return moves > 0 ? TaskMoves.rowWord(moves) : unnamedWord
         default:                 return unnamedWord
         }
     }
@@ -105,14 +143,16 @@ public enum SessionHeader {
     /// (`Session.resumesOnItsOwn`; web `SESSION_ACTIVITY_WORD.WAITING`).
     public static let waitingToResume = "Waiting to resume"
 
-    /// The word the conversation header leads with: `statusWord`, except on a coordinator whose
-    /// handoff note is being written or whose replacement is running, which reads "Handing over"
+    /// The word the conversation header leads with: the state word from `phase` (`SessionDisplay`;
+    /// the header draws the marks after it), else, from an older server, `statusWord`. A coordinator
+    /// whose handoff note is being written or whose replacement is running reads "Handing over"
     /// (board 02-2). Only the header: list rows and the menu bar keep `statusWord`.
     public static func headerWord(for s: Session, watching: WatchSessionSummary? = nil,
                                   now: Date = Date(), machine: String? = nil) -> String {
         if CoordinatorContextActions.locksComposer(s.coordinatorHandoff) {
             return CoordinatorHandoffCopy.badgeHandingOver
         }
+        if let state = SessionDisplay.state(s.displayFacts) { return state.word }
         return statusWord(for: s, watching: watching, now: now, machine: machine)
     }
 

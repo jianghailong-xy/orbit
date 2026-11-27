@@ -67,11 +67,15 @@ func recoverManagedRepositories() {
 	}
 }
 
-// managedCheckouts are the checkouts a managed runner keeps: each directory under reposRoot with a
-// .git of its own, and each session worktree (not the scratch checkouts beside them).
+// managedCheckouts are the checkouts a managed runner keeps: each directory in home or under reposRoot
+// with a .git of its own (new folders and clones are made in home, older ones in reposRoot), and each
+// session worktree (not the scratch checkouts beside them).
 func managedCheckouts() []string {
 	var out []string
-	for _, root := range []string{reposRoot(), worktreesDir()} {
+	for _, root := range []string{userHome(), reposRoot(), worktreesDir()} {
+		if root == "" {
+			continue
+		}
 		entries, err := os.ReadDir(root)
 		if err != nil {
 			continue

@@ -12,6 +12,9 @@ import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.directory.DirectoryApi
 import kotlinx.coroutines.*
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.currentTime
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.serialization.json.*
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.State
@@ -29,6 +32,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import org.robolectric.shadows.ShadowDialog
 
 /**
  * The worktree bar and its merge operation over a controlled `/api` (iOS WorktreeBar/WorktreeModel): what each
@@ -90,6 +94,9 @@ class WorktreeBarTest {
         return when {
             path == listOf("sessions", id) -> ok(detail.toString())
             path == listOf("sessions", id, "merge") -> { detail = JsonObject(detail + ("mergeStatus" to JsonPrimitive("pending"))); ok("{}") }
+            path == listOf("sessions", id, "merge-failure", "dismiss") -> {
+                detail = JsonObject(detail - "mergeStatus" - "mergeError"); ok("""{"ok":true,"dismissed":true}""")
+            }
             path == listOf("sessions", id, "commit") -> { detail = JsonObject(detail + ("commitStatus" to JsonPrimitive("pending"))); ok("{}") }
             path == listOf("sessions", id, "diff") -> ok("""{"patches":[{"path":"src/reader/Bar.kt","patch":"diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-old line\n+new line"}]}""")
             path == listOf("sessions", id, "worktree-file") -> when (api.query.toMap()["path"]) {
@@ -115,6 +122,25 @@ class WorktreeBarTest {
     private fun patches() = server.calls.filter { it.path == listOf("workspaces", workspaceId) && it.method == HttpMethod.PATCH }.map(::body)
     private fun shown(text: String) = compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
     private fun settle(next: JsonObject) { detail = next; runBlocking { model.loadDetail() }; compose.waitForIdle() }
+
+    /** Criterion 4 (page polls follow the stream): a running session's bar, with nothing in flight, is read on the stream's cadence — when the
+     * page opens and once a minute — and not on a 3–5 s timer (the owner's ~31 `GET sessions/:id` a minute). A merge pending is read on its
+     * own bounded 3 s while it lasts. On a test clock; the reads are counted, as a request recorder would. */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test fun aRunningBarWithNothingInFlightIsReadOnceAMinuteNotOnATimer() = kotlinx.coroutines.test.runTest {
+        detail = session("status" to JsonPrimitive("RUNNING"))
+        show()
+        val signal = kotlinx.coroutines.flow.MutableStateFlow(io.orbitd.android.realtime.PageSignal(true, 0))
+        val reads = mutableListOf<Long>()
+        backgroundScope.launch {
+            io.orbitd.android.realtime.PagePolls.follow(signal, { model.inFlightMs() }, jitter = { 1.0 }) { reads += currentTime }
+        }
+        runCurrent()
+        advanceTimeBy(150_000); runCurrent()
+        assertEquals("the stream's page read and its minute, nothing between: $reads", listOf(0L, 60_000L, 120_000L), reads)
+        model.offer(session("status" to JsonPrimitive("RUNNING"), "mergeStatus" to JsonPrimitive("pending")))
+        assertEquals(3_000L, model.inFlightMs())
+    }
 
     @Test fun aCleanTreeMergesToTheTargetThePersonPickedAndTheBarFollowsTheRunnersAnswer() {
         show()
@@ -143,6 +169,83 @@ class WorktreeBarTest {
         }
     }
 
+    @Test @Config(qualifiers = "w360dp-h640dp") @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun commitsOpenFirstAndTheirFilesReturnToTheCommit() {
+        detail = session(
+            "worktreeDirty" to JsonPrimitive(true),
+            "baseSha" to JsonPrimitive("e9f1c074cd"),
+            "mergeTarget" to JsonPrimitive("develop"),
+            "branchCommits" to Wire.json.parseToJsonElement("""[
+                {"sha":"c98e1d4123","subject":"Keep the selected row","body":"Preserve selection on refresh.",
+                 "committedAt":"2026-11-22T10:00:00Z","savedBy":"commit-button",
+                 "files":[{"path":"src/reader/Bar.kt","additions":5,"deletions":1}]},
+                {"sha":"a41c9e2456","subject":"Add the first page","committedAt":"2026-11-22T09:00:00Z","savedBy":"session-end",
+                 "files":[{"path":"src/reader/Page.kt","additions":7,"deletions":2}]}
+            ]"""),
+        )
+        show()
+        val summary = "2 commits + uncommitted · +12 −3"
+        assertKeepsItsSize(summary, compose.onNodeWithText(summary, useUnmergedTree = true))
+        assertKeepsItsSize("Commit", compose.onNodeWithText("Commit"))
+        compose.onNodeWithText("Keep the selected row").assertDoesNotExist()
+        compose.onNodeWithText(summary).performClick()
+        compose.onNodeWithText("Commits 2").assertIsSelected()
+        compose.onNodeWithText("Uncommitted changes").assertIsDisplayed()
+        compose.onNodeWithText("Not committed yet").assertIsDisplayed()
+        compose.onNodeWithText("Saved with Commit").assertIsDisplayed()
+        compose.onNodeWithText("Auto-saved by Orbit").assertIsDisplayed()
+        compose.onNodeWithText("Based on develop @ e9f1c07").assertIsDisplayed()
+
+        compose.onNodeWithText("Keep the selected row").performClick()
+        compose.onNodeWithText("Preserve selection on refresh.").assertIsDisplayed()
+        compose.onNodeWithText("+5 −1 · 1 file", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Some of these files change elsewhere", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("shot.png", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("Page.kt", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("Bar.kt", substring = true, useUnmergedTree = true).performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("+new line", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("Back to commit").performClick()
+        compose.onNodeWithText("Preserve selection on refresh.").assertIsDisplayed()
+        compose.runOnIdle { ShadowDialog.getLatestDialog().onBackPressed() }
+        compose.onNodeWithText("Commits 2").assertIsSelected()
+        compose.onNodeWithText("Keep the selected row").performClick()
+        compose.onNodeWithContentDescription("Back to Commits").performClick()
+        compose.onNodeWithText("Commits 2").assertIsSelected()
+
+        compose.onNodeWithText("All changes 4").performClick()
+        compose.onNodeWithText("All changes 4").assertIsSelected()
+        compose.onNodeWithText("shot.png", substring = true, useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("Bar.kt", substring = true, useUnmergedTree = true).performClick()
+        compose.onNodeWithText("‹ Worktree changes").performClick()
+        compose.onNodeWithText("All changes 4").assertIsSelected()
+
+        compose.onNodeWithText("Commits 2").performClick()
+        compose.onNodeWithText("Uncommitted changes").performClick()
+        compose.onNodeWithText("All changes 4").assertIsSelected()
+        compose.onNodeWithText("Done").performClick()
+        compose.onNodeWithText(summary, useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test fun noCommitsOpensAllChanges() {
+        detail = session("branchCommits" to JsonArray(emptyList()), "worktreeDirty" to JsonPrimitive(true))
+        show()
+        compose.onNodeWithText("Uncommitted · 4 files").performClick()
+        // No commit yet: today's file list, with no tabs to switch between (board 02-native, Rules).
+        compose.onNodeWithTag("worktree-files").assertIsDisplayed()
+        compose.onNodeWithText("Commits", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("All changes", substring = true).assertDoesNotExist()
+    }
+
+    @Test fun nullBranchCommitsKeepsTheLegacyBarAndDialog() {
+        detail = session("branchCommits" to JsonNull)
+        show()
+        compose.onNodeWithText("+12 −3 · 4 files · committed").performClick()
+        compose.onNodeWithText("Worktree changes").assertIsDisplayed()
+        compose.onNodeWithTag("worktree-files").assertIsDisplayed()
+        compose.onNodeWithText("Commits", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("All changes", substring = true).assertDoesNotExist()
+    }
+
     @Test fun aConflictIsHandedToTheSessionAndAnErrorRetries() {
         detail = session("mergeStatus" to JsonPrimitive("conflict"), "mergeError" to JsonPrimitive("CONFLICT (content): src/reader/Bar.kt"),
             "mergeTarget" to JsonPrimitive("main"))
@@ -165,6 +268,19 @@ class WorktreeBarTest {
         settle(session("mergeStatus" to JsonPrimitive("error"), "mergeError" to JsonPrimitive("target has uncommitted changes")))
         compose.onNodeWithText("target has uncommitted changes").assertIsDisplayed()
         compose.onNodeWithText("Retry merge to main").assertIsDisplayed()
+    }
+
+    @Test fun theCloseOnAFailedMergeClearsItAndTheBarOffersMergeAgain() {
+        detail = session("mergeStatus" to JsonPrimitive("error"), "mergeTarget" to JsonPrimitive("main"),
+            "mergeError" to JsonPrimitive("could not push main to origin: remote: error: GH006: Protected branch update failed"))
+        show()
+        compose.onNodeWithText("Retry merge to main").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Dismiss").performClick()
+        compose.waitUntil(5_000) { sent("sessions", id, "merge-failure", "dismiss").isNotEmpty() }
+        compose.waitForIdle()
+        compose.onNodeWithTag("merge-failure-dismiss").assertDoesNotExist()
+        assertFalse(shown("Retry merge to main"))
+        assertTrue(shown("Merge to main"))
     }
 
     @Test fun aDirtyLiveTreeCommitsAndAFailedCommitSaysWhy() {

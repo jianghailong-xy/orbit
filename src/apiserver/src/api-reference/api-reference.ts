@@ -63,6 +63,9 @@ const GUARD_CALLERS: Record<string, Caller> = {
   SharedStreamGuard: 'public',
   // The help doors: open signed out; a credential sent along only says whether the reader is an admin.
   HelpReaderGuard: 'public',
+  // The Drive switch admits nobody by itself: the drive door's credential guard says who, and the download link's
+  // signed token, which no guard checks, keeps it public.
+  DriveEnabledGuard: 'public',
 };
 
 const REQUEST_METHODS: Record<number, string> = {
@@ -240,6 +243,63 @@ function requestCell(route: ApiRoute): string {
 }
 
 /** The page, as committed. Deterministic: routes are sorted and nothing carries a timestamp. */
+/**
+ * The one route the page shows a call for: POST /api/notify (push/notify.controller.ts) is the route people script
+ * against first — a monitoring system, a cron job — so its body, answers and limits are written out with a curl that
+ * works as written once the two variables are set.
+ */
+const SENDING_A_NOTIFICATION: readonly string[] = [
+  '## Sending a notification',
+  '',
+  '`POST /api/notify` pushes a notification to your own Orbit apps (iOS and Android). It needs a personal access',
+  'token with the `notify` scope (Settings → Access tokens → New token → Custom → Notifications: Send), and reaches',
+  'nothing else with it. Grafana’s "Orbit app" contact point calls it (docs/self-hosting.md, "Monitoring").',
+  '',
+  '```sh',
+  'curl -sS -X POST "$PUBLIC_ORIGIN/api/notify" \\',
+  '  -H "Authorization: Bearer $ORBIT_NOTIFY_TOKEN" \\',
+  '  -H "Content-Type: application/json" \\',
+  '  -d \'{"title": "Backup finished", "message": "The nightly base backup took 4 minutes.", "priority": "low"}\'',
+  '```',
+  '',
+  '| Field | Required | Meaning |',
+  '| --- | --- | --- |',
+  '| `title` | yes | Up to 100 characters. |',
+  '| `message` | yes | Up to 800 characters. |',
+  '| `priority` | no | `low` (silent), `normal` (the default, with sound) or `high` (also time-sensitive on iOS). |',
+  '| `url` | no | An `http` or `https` link of up to 500 characters, carried in the push payload as `url`. |',
+  '',
+  'A longer or blank field is refused `400`. Each token may send 20 notifications a minute on each apiserver; past that',
+  'it is answered `429` and nothing is sent. Otherwise the answer is `200` and says what happened:',
+  '',
+  '- `{"delivered": true, "devices": 2}`: APNs or FCM accepted it for that many of your devices.',
+  '- `{"delivered": false, "reason": "PUSH_NOT_CONFIGURED"}`: this server has no APNs or FCM credentials',
+  '  (docs/configuration.md), so it sends no push. The call is still accepted; it is not an error.',
+  '- `{"delivered": false, "reason": "NO_DEVICES"}`: no Orbit app is signed in to your account on a device this',
+  '  server can push to.',
+  '- `{"delivered": false, "reason": "NOT_ACCEPTED"}`: APNs and FCM accepted it for none of your devices.',
+];
+
+/**
+ * GET /api/sessions/listing pages a workspace's session list (docs/session-list-scale-design.md §3.2). Its answer
+ * has a field a client must act on, `restarted`, so the shape is written out here.
+ */
+const PAGING_A_SESSION_LIST: readonly string[] = [
+  '## Paging a workspace’s session list',
+  '',
+  '`GET /api/sessions/listing?workspaceId=<id>&view=open|completed[&folderId=<id>][&limit=40][&after=<cursor>]`',
+  'answers one page of the list as top-level entries, with an ETag answered `304` when nothing moved:',
+  '',
+  '| Field | Meaning |',
+  '| --- | --- |',
+  '| `folders` | The folder rows, `{ folderId, rowCount, needsYou, running, jobs }`: only on a first page without `folderId`. |',
+  '| `entries` | `{ kind: "session", session }` or `{ kind: "project", projectId, placedAt, spokeAt, memberCount, running, jobs, coordinator }`, in list order (in Open: Pinned, then Needs you, then Working, then the rest, each newest listed first, as the web\'s sections draw them); a project\'s `running` / `jobs` say whether a member it holds runs / has a background job moving. |',
+  '| `next` | The `after` of the following page, or `null` at the end. |',
+  '| `restarted` | `true` when `after` was written under an order the list no longer has (Completed switches order on whether any session is held by a project): this is the first page again, with its `folders`, and replaces the pages already read. Absent otherwise. |',
+  '',
+  '`limit` is 1 to 200 (40 when absent); a malformed `after` is refused `400`.',
+];
+
 export function renderApiReference(routes: ApiRoute[]): string {
   const lines: string[] = [];
   lines.push('# External HTTP API reference');
@@ -313,6 +373,8 @@ export function renderApiReference(routes: ApiRoute[]): string {
   );
   lines.push('  a route without one returns its whole result.');
   lines.push('');
+  lines.push(...SENDING_A_NOTIFICATION, '');
+  lines.push(...PAGING_A_SESSION_LIST, '');
   const byCaller = new Map<Caller, ApiRoute[]>(CALLERS.map((caller) => [caller, []]));
   for (const route of routes) byCaller.get(route.caller)!.push(route);
   lines.push('## Summary');

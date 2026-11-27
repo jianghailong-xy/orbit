@@ -240,14 +240,14 @@ final class ProjectsWiringTests: XCTestCase {
     /// system's sidebar toggle, and a work row only switches section, as the source list did: the list
     /// column is on screen anyway, and the detail keeps the page it had.
     /// The Mac's source list is the drawer's rail (the owner's picks on docs/mocks/macos-sidebar, 01, 2026-11-12):
-    /// the work first with its amber counts, Waiting on you, the Workspaces one line each with the drawer's
+    /// the work first with its amber counts, then the Workspaces one line each with the drawer's
     /// row and a ⌘ hint, then every open project. No New session in the rail, and no Following, Settings
     /// or Admin rows: the footer's gear and account menu reach them.
     func testTheMacSidebarIsTheDrawersRail() throws {
         let main = code(try appSource("Views/MainView.swift"))
         let sidebar = try slice(main, from: "struct SectionSidebar: View {", to: "struct AccountFooter: View {")
-        try assertInOrder(sidebar, ["ForEach(sections) { row in", "OwnerRequestInboxEntry()",
-                                    "Section(AppSection.agents.title, isExpanded: $workspacesExpanded)",
+        try assertInOrder(sidebar, ["ForEach(sections) { row in",
+                                    "Section(isExpanded: $workspacesExpanded)", "Text(AppSection.agents.title)",
                                     "ForEach(projects) { row in"],
                           "the drawer's order")
         XCTAssertTrue(sidebar.contains("model.projects?.drawerProjects(coordinators: model.projectCoordinators)"),
@@ -325,23 +325,28 @@ final class ProjectsWiringTests: XCTestCase {
     func testTheProjectPageLeadsWithProgressAndOpensItemsFromTheToolbar() throws {
         let view = code(try appSource("Views/ProjectsView.swift"))
         let page = try slice(view, from: "private func page(", to: ".projectPageListStyle()")
-        let order = ["openItemsAttention(", "overviewSection(", "coordinatorSection(", "runSettingsSection(",
+        let order = ["openItemsPageSection(", "overviewSection(", "coordinatorSection(", "runSettingsSection(",
                      "goalSection(", "graphSection(", "blockersSection(", "runQueueSection(", "criteriaSection(",
                      "instructionsSection(", "tasksSection(", "crossingsSection("]
         let positions = order.map { page.range(of: $0)?.lowerBound }
         XCTAssertFalse(positions.contains(nil), "the page lost one of \(order)")
         XCTAssertEqual(positions.compactMap { $0 }, positions.compactMap { $0 }.sorted(),
-                       "the owner's reminder precedes progress; the remaining sections keep their order")
-        XCTAssertFalse(page.contains("openItemsSection("), "the full inbox no longer occupies the project page")
+                       "Open items precede progress (D3 A); the remaining sections keep their order")
         let content = try slice(view, from: "private func content(", to: "private func page(")
-        XCTAssertTrue(content.contains("ToolbarItem(placement: .primaryAction) { openItemsEntry(store, document) }"))
-        let entry = try slice(view, from: "private func openItemsEntry(", to: "private func openItemsAttention(")
+        XCTAssertTrue(content.contains("ToolbarItem(placement: .primaryAction) { openItemsEntry(store, document) }"),
+                      "the toolbar's Open items stays beside the section")
+        let entry = try slice(view, from: "private func openItemsEntry(", to: "private func openItemsPageSection(")
         XCTAssertTrue(entry.contains("pageSheet = .openItems"))
         XCTAssertTrue(entry.contains("summary.count > 0"), "an empty inbox has no badge")
-        let attention = try slice(view, from: "private func openItemsAttention(", to: "private func openItemsSheet(")
-        XCTAssertTrue(attention.contains("if let attention = summary?.attention"))
-        XCTAssertTrue(attention.contains("pageSheet = .openItems"))
-        XCTAssertTrue(attention.contains("start.request == nil"), "the owner's own Start… stays on the page")
+        // D3 A: the section is on the page at all times, with web's header detail and its groups.
+        let section = try slice(view, from: "private func openItemsPageSection(", to: "private func openItemsSheet(")
+        XCTAssertTrue(section.contains("ProjectPage.openItemsSection(status: document.status, started: document.started,"))
+        XCTAssertTrue(section.contains("Text(section.hint)"))
+        XCTAssertTrue(section.contains("groupLabel(ProjectPage.needsYouGroup)"))
+        XCTAssertTrue(section.contains("if let done = section.done { doneItem(done, store: store, now: now) }"),
+                      "the owner's own Record as done… · not asked yet is a Needs you row")
+        XCTAssertTrue(section.contains("if let start = section.start { startItem(start, store: store, now: now) }"),
+                      "the owner's own Start… stays on the page")
         let sheet = try slice(view, from: "private func openItemsSheet(", to: "private func openItemsSection(")
         XCTAssertTrue(sheet.contains("openItemsSection(store, document, now: context.date)"))
         XCTAssertTrue(sheet.contains("TimelineView(.periodic(from: .now, by: 30))"), "the sheet's countdown keeps updating")

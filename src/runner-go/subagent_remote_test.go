@@ -21,13 +21,14 @@ import (
 // plane and a scripted `claude`: the claim, the temporary detached worktree outside the workspace's workDir, the
 // relayed events, the discarded-changes line, the worktree's removal, a stop, and a restart's INTERRUPTED report.
 
-// remoteChildScript is the child engine: it records where it ran and its prompt, writes one file through a Write
+// remoteChildScript is the child engine: it records where it ran, its prompt and its SubAgent environment, writes one file through a Write
 // call and one through the shell, waits for $REMOTE_MARKS/finish when REMOTE_WAIT is set, and ends.
 const remoteChildScript = `#!/bin/sh
 read -r frame
 printf '%s' "$frame" > "$REMOTE_MARKS/frame"
 pwd > "$REMOTE_MARKS/cwd"
 printf '%s\n' "$@" > "$REMOTE_MARKS/argv"
+printf '%s %s' "$ORBIT_SUBAGENT_RUN_ID" "$ORBIT_SUBAGENT_REMOTE_MODE" > "$REMOTE_MARKS/env"
 printf '%s\n' '{"type":"system","subtype":"init","session_id":"child"}'
 printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_w","name":"Write","input":{"file_path":"src/new.swift","content":"x"}}]}}'
 mkdir -p src && printf 'x' > src/new.swift
@@ -205,6 +206,10 @@ func TestRemoteSubagentRunsInATemporaryWorktreeAndRemovesIt(t *testing.T) {
 	argv, _ := os.ReadFile(filepath.Join(r.marks, "argv"))
 	if !strings.Contains(string(argv), "You are a SubAgent") || !strings.Contains(string(argv), "acceptEdits") {
 		t.Fatalf("the child was not started in child mode with the preamble and its mode:\n%s", argv)
+	}
+	// Its Plan gate reads the mode it was claimed in: this machine hosts no socket for the parent session.
+	if env, _ := os.ReadFile(filepath.Join(r.marks, "env")); string(env) != "run-1 acceptEdits" {
+		t.Fatalf("the child's SubAgent environment is %q, want its run and the mode it was claimed in", env)
 	}
 
 	if err := os.WriteFile(filepath.Join(r.marks, "finish"), nil, 0o644); err != nil {

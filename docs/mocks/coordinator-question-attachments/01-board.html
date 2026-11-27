@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Coordinator question card: rendering its attachments</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="board.css">
+</head>
+<body class="cra">
+
+<!-- ── ① today ─────────────────────────────────────────────────────────────────────────── -->
+<section class="cra-part" id="part-1">
+  <h2>① Today: the mocks never reach the card</h2>
+  <p class="cra-lede">The card renders the question as Markdown with <code>referenceUrlTransform</code>, which lets <code>orbit-(list|task|session|project|settings):</code> through and blanks every other scheme. An <code>orbit-attachment:</code> id arrives as <code>src=""</code>, so the picture is not drawn. Written as text, the ids stay text.</p>
+  <div class="cra-row">
+    <div>
+      <div class="cra-cap">Written with links (what this card carried)</div>
+      <article class="approval-card coordinator-question cqa-card" style="width:520px">
+        <div class="approval-head coordinator-question-head">
+          <span class="coordinator-question-heading">The coordinator has a question</span>
+          <span class="criteria-provenance prov-brand">FROM COORDINATOR</span>
+        </div>
+        <div class="approval-body is-questions coordinator-question-body">
+          <div class="coordinator-question-text md">
+            <p>The mocks are on the web task branch, in <code>docs/mocks/codex-reset-accounts/</code>:</p>
+            <ul>
+              <li>Option A: orbit-attachment:354FYvqAYfCe18PmyjskL</li>
+              <li>States and the confirmation dialog: orbit-attachment:354FYwf3RJ189k2Nz1NVt</li>
+              <li>Option B: orbit-attachment:354FYxERKqRJdsLqG6U5c</li>
+              <li>Today: orbit-attachment:354FYvGmiXkcjXgn6RnUP</li>
+            </ul>
+            <p>In option A, the current session’s account comes first, as it does today…</p>
+          </div>
+        </div>
+        <div class="card-actions coordinator-question-actions">
+          <button class="card-action card-action--primary" type="button">Send answer</button>
+          <span class="coordinator-question-asked">asked 44s ago</span>
+        </div>
+      </article>
+    </div>
+    <div>
+      <div class="cra-cap">Written with images (the shape a coordinator would reach for)</div>
+      <article class="approval-card coordinator-question cqa-card" style="width:520px">
+        <div class="approval-head coordinator-question-head">
+          <span class="coordinator-question-heading">The coordinator has a question</span>
+          <span class="criteria-provenance prov-brand">FROM COORDINATOR</span>
+        </div>
+        <div class="approval-body is-questions coordinator-question-body">
+          <div class="coordinator-question-text md">
+            <p>The mocks are on the web task branch, in <code>docs/mocks/codex-reset-accounts/</code>:</p>
+            <ul>
+              <li>Option A: <img class="md-image" alt="Option A — the layout, three accounts" src=""></li>
+              <li>States: <img class="md-image" alt="States and the confirmation dialog" src=""></li>
+              <li>Option B: <img class="md-image" alt="Option B — other accounts as compact cards" src=""></li>
+              <li>Today: <img class="md-image" alt="Today, for comparison" src=""></li>
+            </ul>
+            <p>In option A, the current session’s account comes first, as it does today…</p>
+          </div>
+        </div>
+        <div class="card-actions coordinator-question-actions">
+          <button class="card-action card-action--primary" type="button">Send answer</button>
+          <span class="coordinator-question-asked">asked 44s ago</span>
+        </div>
+      </article>
+    </div>
+  </div>
+  <div class="cra-row" style="margin-top:16px">
+    <div class="cra-note"><b>Why:</b> the card has no <code>img</code> component and its transform is the cards’ one. The attachment-aware renderer (<code>transcriptUrlTransform</code>, <code>MarkdownImage</code>) is private to <code>Transcript.tsx</code>, so only a conversation draws an attachment today.</div>
+  </div>
+</section>
+
+<!-- ── ② proposal: the compact gallery ─────────────────────────────────────────────────── -->
+<section class="cra-part" id="part-2">
+  <h2>② Proposal: draw the mocks, keep the card answerable</h2>
+  <p class="cra-lede">Same renderer as the conversation (<code>.md-image</code>, the same viewer on tap), laid out as a grid so the question, its options and Send answer stay within one look. One picture is drawn full width; two or more fill a two-column grid. A caption says how many there are.</p>
+  <div class="cra-row">
+    <div>
+      <div class="cra-cap">Four mocks on one question</div>
+      <article class="approval-card coordinator-question cqa-card" style="width:640px">
+        <div class="approval-head coordinator-question-head">
+          <span class="coordinator-question-heading">The coordinator has a question</span>
+          <span class="criteria-provenance prov-brand">FROM COORDINATOR</span>
+        </div>
+        <div class="approval-body is-questions coordinator-question-body">
+          <div class="coordinator-question-text md">
+            <p>For the reset credit card on each GPT account, which layout should the Plan usage popover use? This is the mock approval the project’s web standard needs from you.</p>
+            <p>The mocks are on the web task branch, in <code>docs/mocks/codex-reset-accounts/</code>:</p>
+            <p class="cqa-caption">4 images · tap any to open it full size</p>
+            <div class="cqa-gallery">
+              <button class="chat-image-btn" type="button"><img class="md-image" alt="Option A — the layout, three accounts" src="img/02-option-a.png"><span class="chat-image-mask">Preview</span></button>
+              <button class="chat-image-btn" type="button"><img class="md-image" alt="States and the confirmation dialog" src="img/03-states.png"><span class="chat-image-mask">Preview</span></button>
+              <button class="chat-image-btn" type="button"><img class="md-image" alt="Option B — other accounts as compact cards" src="img/04-option-b.png"><span class="chat-image-mask">Preview</span></button>
+              <button class="chat-image-btn" type="button"><img class="md-image" alt="Today, for comparison" src="img/01-today.png"><span class="chat-image-mask">Preview</span></button>
+            </div>
+            <p>In option A, the current session’s account comes first, as it does today. Then every other account with credit gets a block of its own: the account name, a one-line usage readout, and the full reset card. The popover scrolls when it gets too tall, and the confirmation dialog gains an Account row.</p>
+            <p>In option B, the other accounts are compact cards, each with its own button.</p>
+            <p>In both options, an account with 0 credits shows no card.</p>
+          </div>
+          <label class="coordinator-question-option is-chosen">
+            <input type="radio" name="q" checked>
+            <span class="coordinator-question-option-text">Option A
+              <span class="coordinator-question-recommended">Recommended</span>
+              <span class="coordinator-question-option-why">It keeps iOS’s stacking and reuses one card, so expiry, unavailable reasons and reset progress already have a place. The popover grows taller with three accounts.</span>
+            </span>
+          </label>
+          <label class="coordinator-question-option">
+            <input type="radio" name="q">
+            <span class="coordinator-question-option-text">Option B
+              <span class="coordinator-question-option-why">A shorter popover. Other accounts’ last update time, unavailable reasons and reset progress all need somewhere new, and the style differs from iOS.</span>
+            </span>
+          </label>
+          <label class="coordinator-question-option">
+            <input type="radio" name="q">
+            <span class="coordinator-question-option-text">Other — say it in my own words</span>
+          </label>
+          <textarea class="coordinator-question-free orbit-textarea" rows="2" placeholder="Add a note (optional)"></textarea>
+          <p class="coordinator-question-meta">Blocks 1 task · If you don’t answer: The web task stays blocked and no UI code is written. Orbit asks you directly if nobody replies by 13:09 UTC.</p>
+        </div>
+        <div class="card-actions coordinator-question-actions">
+          <button class="card-action card-action--primary" type="button">Send answer</button>
+          <span class="coordinator-question-asked">asked 44s ago</span>
+        </div>
+      </article>
+    </div>
+    <div class="cra-note" style="margin-top:0">
+      <p><b>One picture</b> is drawn full width, capped at 340px tall.</p>
+      <p><b>Two or more</b> fill two columns of 184px tiles; the phone draws one column.</p>
+      <p><b>A tap</b> opens the conversation’s own viewer — the same pager, the same zoom.</p>
+      <p><b>The collapsed card</b> keeps the question’s opening line only: the record does not grow a second gallery.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ── ③ the alternative ────────────────────────────────────────────────────────────────── -->
+<section class="cra-part" id="part-3">
+  <h2>③ Alternative: full width, exactly as a conversation draws it</h2>
+  <p class="cra-lede">The smallest change: the card takes the conversation’s transform and <code>img</code> component unchanged, so every picture is drawn at the card’s width. Nothing new is designed — and a four-mock question becomes a very tall card, with its options and Send answer a long scroll below the last image.</p>
+  <div class="cra-row">
+    <div>
+      <div class="cra-cap">Four mocks, stacked</div>
+      <article class="approval-card coordinator-question cqa-card cqa-stack" style="width:640px">
+        <div class="approval-head coordinator-question-head">
+          <span class="coordinator-question-heading">The coordinator has a question</span>
+          <span class="criteria-provenance prov-brand">FROM COORDINATOR</span>
+        </div>
+        <div class="approval-body is-questions coordinator-question-body">
+          <div class="coordinator-question-text md">
+            <p>The mocks are on the web task branch, in <code>docs/mocks/codex-reset-accounts/</code>:</p>
+            <p>Option A:</p>
+            <button class="chat-image-btn" type="button"><img class="md-image" alt="Option A — the layout, three accounts" src="img/02-option-a.png"><span class="chat-image-mask">Preview</span></button>
+            <p>States and the confirmation dialog:</p>
+            <button class="chat-image-btn" type="button"><img class="md-image" alt="States and the confirmation dialog" src="img/03-states.png"><span class="chat-image-mask">Preview</span></button>
+            <p>Option B:</p>
+            <button class="chat-image-btn" type="button"><img class="md-image" alt="Option B — other accounts as compact cards" src="img/04-option-b.png"><span class="chat-image-mask">Preview</span></button>
+            <p>Today:</p>
+            <button class="chat-image-btn" type="button"><img class="md-image" alt="Today, for comparison" src="img/01-today.png"><span class="chat-image-mask">Preview</span></button>
+          </div>
+          <label class="coordinator-question-option is-chosen"><input type="radio" name="q3" checked><span class="coordinator-question-option-text">Option A <span class="coordinator-question-recommended">Recommended</span></span></label>
+          <p class="coordinator-question-meta">Blocks 1 task · If you don’t answer: The web task stays blocked…</p>
+        </div>
+        <div class="card-actions coordinator-question-actions">
+          <button class="card-action card-action--primary" type="button">Send answer</button>
+          <span class="coordinator-question-asked">asked 44s ago</span>
+        </div>
+      </article>
+    </div>
+    <div class="cra-note" style="margin-top:0">
+      <p><b>Cost:</b> one shared renderer, no new layout. This is the honest "make it match the transcript" option.</p>
+      <p><b>But:</b> at 640px wide each mock is 300–600px tall, so four put the question’s own options more than a screen away from the first picture — the decision the card is asking for.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ── ④ gallery at phone width and in dark ───────────────────────────────────────────── -->
+<section class="cra-part" id="part-4">
+  <h2>④ The gallery on a phone and in dark</h2>
+  <p class="cra-lede">The same card at phone width draws one column of 150px tiles; the shipped dark tokens, scoped to a frame, repaint every piece without new colours.</p>
+  <div class="cra-row">
+    <div>
+      <div class="cra-cap">Phone width</div>
+      <div class="cqa-phone">
+        <article class="approval-card coordinator-question cqa-card cqa-phone-gallery">
+          <div class="approval-head coordinator-question-head">
+            <span class="coordinator-question-heading">The coordinator has a question</span>
+            <span class="criteria-provenance prov-brand">FROM COORDINATOR</span>
+          </div>
+          <div class="approval-body is-questions coordinator-question-body">
+            <div class="coordinator-question-text md">
+              <p class="cqa-caption">4 images · tap any to open it full size</p>
+              <div class="cqa-gallery">
+                <button class="chat-image-btn" type="button"><img class="md-image" alt="Option A — the layout, three accounts" src="img/02-option-a.png"><span class="chat-image-mask">Preview</span></button>
+                <button class="chat-image-btn" type="button"><img class="md-image" alt="States and the confirmation dialog" src="img/03-states.png"><span class="chat-image-mask">Preview</span></button>
+                <button class="chat-image-btn" type="button"><img class="md-image" alt="Option B — other accounts as compact cards" src="img/04-option-b.png"><span class="chat-image-mask">Preview</span></button>
+                <button class="chat-image-btn" type="button"><img class="md-image" alt="Today, for comparison" src="img/01-today.png"><span class="chat-image-mask">Preview</span></button>
+              </div>
+            </div>
+            <label class="coordinator-question-option is-chosen"><input type="radio" name="q4" checked><span class="coordinator-question-option-text">Option A <span class="coordinator-question-recommended">Recommended</span></span></label>
+          </div>
+        </article>
+      </div>
+    </div>
+    <div>
+      <div class="cra-cap">Dark</div>
+      <div class="cra-dark">
+        <article class="approval-card coordinator-question cqa-card" style="width:560px">
+          <div class="approval-head coordinator-question-head">
+            <span class="coordinator-question-heading">The coordinator has a question</span>
+            <span class="criteria-provenance prov-brand">FROM COORDINATOR</span>
+          </div>
+          <div class="approval-body is-questions coordinator-question-body">
+            <div class="coordinator-question-text md">
+              <p class="cqa-caption">4 images · tap any to open it full size</p>
+              <div class="cqa-gallery">
+                <button class="chat-image-btn" type="button"><img class="md-image" alt="Option A — the layout, three accounts" src="img/02-option-a.png"><span class="chat-image-mask">Preview</span></button>
+                <button class="chat-image-btn" type="button"><img class="md-image" alt="States and the confirmation dialog" src="img/03-states.png"><span class="chat-image-mask">Preview</span></button>
+                <button class="chat-image-btn" type="button"><img class="md-image" alt="Option B — other accounts as compact cards" src="img/04-option-b.png"><span class="chat-image-mask">Preview</span></button>
+                <button class="chat-image-btn" type="button"><img class="md-image" alt="Today, for comparison" src="img/01-today.png"><span class="chat-image-mask">Preview</span></button>
+              </div>
+            </div>
+            <label class="coordinator-question-option is-chosen"><input type="radio" name="q5" checked><span class="coordinator-question-option-text">Option A <span class="coordinator-question-recommended">Recommended</span></span></label>
+            <textarea class="coordinator-question-free orbit-textarea" rows="2" placeholder="Add a note (optional)"></textarea>
+          </div>
+          <div class="card-actions coordinator-question-actions">
+            <button class="card-action card-action--primary" type="button">Send answer</button>
+            <span class="coordinator-question-asked">asked 44s ago</span>
+          </div>
+        </article>
+      </div>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>

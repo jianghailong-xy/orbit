@@ -17,11 +17,13 @@
  * unchanged; only what the person looks at is.
  */
 
-export type ReferenceKind = 'list' | 'task';
+export type ReferenceKind = 'list' | 'task' | 'drive';
 
 export interface PickedReference {
   kind: ReferenceKind;
   id: string;
+  /** A drive file's `/home/orbit/Drive/…` path: what is sent in place of its chip. */
+  path?: string;
 }
 
 /** Tokens the user has picked, keyed by the exact text inserted after the `#`. */
@@ -108,6 +110,8 @@ export function materializeReferences(text: string, refs: ReferenceMap): string 
   return text.replace(matcher, (whole, token: string) => {
     const ref = refs[token];
     if (!ref) return whole;
+    // A drive file goes out as its path, which a Cloud agent reads from its mount (design §4.5).
+    if (ref.kind === 'drive' && ref.path) return ref.path;
     // Brackets in the title are escaped, not passed through: this deployment's task titles start
     // with `[W 009/250]`, and an unescaped one closes the link text early — the server still
     // expands it (it matches on the URI), but the user's own bubble renders the markdown, so the

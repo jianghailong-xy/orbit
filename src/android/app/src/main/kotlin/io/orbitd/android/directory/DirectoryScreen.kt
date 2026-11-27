@@ -45,7 +45,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 /** What a page's list draws, worked out once per change of what it is worked out from: the body also runs for what moves no row.
  * [marks]: the project of each member that is a row of its own here, its project's row being where its coordinator runs. */
 private class ListContent(val groups: List<SessionGroup>, val projects: Map<String, SessionProjectRow>, val marks: Map<String, SessionProjectMark>,
-    val folders: List<Pair<Folder, List<DirectorySession>>>)
+    val folders: List<Pair<Folder, List<DirectorySession>>>, val held: Map<String, String>)
 
 /** How long a pull's spinner stays for a read that has not answered: a read gets 10 s, and past that the store keeps retrying by itself. */
 private const val PULL_WAIT_MS = 12_000L
@@ -70,7 +70,8 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
     var action by remember { mutableStateOf<DirectoryDialog?>(null) }
     var projectMenu by remember { mutableStateOf<SessionProjectRow?>(null) }
     var pulling by remember { mutableStateOf(false) }
-    var pinnedCollapsed by rememberPinnedCollapsed()
+    var pinnedCollapsed by rememberSectionCollapsed("pinnedCollapsed")
+    var needsYouCollapsed by rememberSectionCollapsed("needsYouCollapsed")
     val sidebar by rememberProjectSidebar(app, handle, api)
     val asks by app.realtime.directoryAsks.collectAsState()
     val trashing by app.trashing.ids.collectAsState()
@@ -127,7 +128,7 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
     val content = remember(sessions, openRows, data.folders, sidebar, view, workspace, folderId, onScheduledRuns,
         showFolders, tag, grouping, runnerOffline, watching, recaps) {
         if (onScheduledRuns) return@remember ListContent(
-            directoryGroups(sessions, view, Grouping.RECENCY), emptyMap(), emptyMap(), emptyList())
+            directoryGroups(sessions, view, Grouping.RECENCY), emptyMap(), emptyMap(), emptyList(), emptyMap())
         // This workspace's rows, by the few spellings of a workspace there are: `ObjectId.same` parses both ids, and an owner's Completed
         // has thousands of rows, mostly in other workspaces.
         val spellings = sessions.mapTo(HashSet()) { it.workspace }.filterTo(HashSet()) { ObjectId.same(it, workspace) }
@@ -143,13 +144,13 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
                 contentSessions = sessions, watching = watching, recaps = recaps, workspaceId = workspace)
         }
         val groups = directoryGroups(listing?.entries?.map { it.groupingSession } ?: visibleSessions(local, data.folders, workspace,
-            folderId, view, tag, grouping == Grouping.TAG), view, grouping)
+            folderId, view, tag, grouping == Grouping.TAG), view, grouping, tagFiltered = tag != null)
         // A folder counts a project's members where their coordinator is filed.
         val counted = listing?.assigned ?: local
         val folders = if (!showFolders) emptyList() else data.folders.filter { f ->
             ObjectId.same(f.workspaceId, workspace) && (view == SessionView.OPEN || counted.any { ObjectId.same(it.folderId, f.id) })
         }.sortedBy { it.name.lowercase() }.map { f -> f to counted.filter { ObjectId.same(it.folderId, f.id) } }
-        ListContent(groups, listing?.projects.orEmpty().associateBy { it.projectId }, listing?.marks.orEmpty(), folders)
+        ListContent(groups, listing?.projects.orEmpty().associateBy { it.projectId }, listing?.marks.orEmpty(), folders, listing?.held.orEmpty())
     }
     val failure = when {
         onScheduledRuns -> scheduledList.error(view).takeIf { scheduledSnapshot == null }
@@ -215,35 +216,49 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
                                 RowDivider()
                             }
                             items(content.folders, key = { "folder:${it.first.id}" }) { (f, children) ->
-                                FolderRow(f, children, runnerOffline, watching,
+                                // A project is one row on the folder's page, so it counts once.
+                                FolderRow(f, children, children.distinctBy { content.held[it.id]?.let { p -> "project:$p" } ?: it.id }.size, runnerOffline, watching,
                                     onOpen = { open(OrbitRoute(Destination.FOLDER, f.id, workspace, origin = Origin.LIST, sessionView = view.query)) },
                                     onOptions = { action = DirectoryDialog.EditFolder(f) })
                                 RowDivider()
                             }
                             content.groups.forEachIndexed { index, group ->
                                 val pinned = group.id == "time:0"
+                                val needsYou = group.id == NEEDS_YOU_GROUP
                                 // iOS: a list that opens on today would be saying what its rows say, and the title costs half a row.
                                 if (index != 0 || group.id != "time:1") stickyHeader(key = "heading:${group.id}") {
                                     when {
-                                        pinned -> PinnedHeading(group.title, pinnedCollapsed) { pinnedCollapsed = !pinnedCollapsed }
+                                        pinned -> FoldHeading(group.title, pinnedCollapsed, SessionListCopy.PINNED_SHOWS, SessionListCopy.PINNED_HIDES,
+                                            "pinned-heading") { pinnedCollapsed = !pinnedCollapsed }
+                                        needsYou -> FoldHeading(group.title, needsYouCollapsed, SessionListCopy.NEEDS_YOU_SHOWS, SessionListCopy.NEEDS_YOU_HIDES,
+                                            "needs-you-heading") { needsYouCollapsed = !needsYouCollapsed }
                                         group.id.startsWith("tag:") -> TagHeading(group.sessions.first().tags.first())
                                         group.id == "bucket:untagged" -> TagHeading(null)
                                         else -> ListHeading(group.title)
                                     }
                                 }
-                                if (!pinned || !pinnedCollapsed) items(group.sessions, key = { it.id }) { session ->
+                                if (!(pinned && pinnedCollapsed) && !(needsYou && needsYouCollapsed)) items(group.sessions, key = { it.id }) { session ->
                                     val project = content.projects[session.id]
                                     // A project's row opens its coordinator's conversation (owner 2026-11-11, docs/mocks/project-sessions-column
                                     // board 5), whose bar opens the project's sessions; a project with no coordinator opens them as a page. A row
                                     // whose line says a member waits on you opens that member, onto its waiting card (owner 2026-11-14).
-                                    if (project != null) SessionProjectRowView(project, {
+                                    if (project != null) SwipeableProjectRow(project, view, true, onAction = { act ->
+                                        val actions = SessionActions(api, app) { refresh() }
+                                        when (act) {
+                                            ProjectRowAction.PAUSE -> actions.pauseProject(project)
+                                            ProjectRowAction.RESUME -> actions.resumeProject(project)
+                                            ProjectRowAction.COMPLETE -> actions.completeProject(project.projectId, project.title)
+                                            ProjectRowAction.PIN, ProjectRowAction.UNPIN -> project.coordinator?.let { actions.pin(it.id, it.pinnedAt == null) }
+                                            ProjectRowAction.MOVE -> project.coordinator?.let { action = DirectoryDialog.Move(it) }
+                                        }
+                                    }) { SessionProjectRowView(project, {
                                         val member = project.waitingMember
                                         if (member != null) CardFocus.request(member, CardFocus.WAITING)
                                         open((member ?: project.coordinator?.id)?.let { OrbitRoute(Destination.SESSION, it, workspace, folderId) }
                                             ?: OrbitRoute(Destination.PROJECT_SESSIONS, project.projectId, workspace, origin = Origin.LIST))
                                     }) {
                                         projectMenu = project
-                                    }
+                                    } }
                                     else SessionRow(session, machine, { open(OrbitRoute(Destination.SESSION, session.id, workspace, folderId)) },
                                         deleted = view == SessionView.TRASH, watching = watching[watchKey(session.id)], mark = content.marks[session.id]) {
                                         action = DirectoryDialog.SessionMenu(session, view, content.marks[session.id])
@@ -289,7 +304,9 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
             openSessions = { open(OrbitRoute(Destination.PROJECT_SESSIONS, row.projectId, workspace, origin = Origin.LIST)) },
             openProject = { open(OrbitRoute(Destination.PROJECT, row.projectId)) },
             pin = { coordinator -> SessionActions(api, app) { refresh() }.pin(coordinator.id, coordinator.pinnedAt == null) },
-            move = { coordinator -> action = DirectoryDialog.Move(coordinator) })
+            move = { coordinator -> action = DirectoryDialog.Move(coordinator) },
+            pause = { SessionActions(api, app) { refresh() }.pauseProject(row) },
+            resume = { SessionActions(api, app) { refresh() }.resumeProject(row) })
     }
 }
 
@@ -341,13 +358,32 @@ private fun SearchResultsList(query: String, api: DirectoryApi, open: (OrbitRout
             if (result.hits.isEmpty()) item { StatusMessage(if (query.isBlank()) "No sessions yet" else "No matches",
                 if (query.isBlank()) "Recent sessions will appear here." else "Try another name or message.") }
             items(result.hits, key = { it.id }) { hit ->
-                ListItem(headlineContent = { Text(hit.title) }, supportingContent = {
-                    Column { Text(listOfNotNull(hit.agent?.name, hit.lifecycleState, hit.runState ?: hit.status).joinToString(" · "))
-                        hit.snippet?.let { Text(it, style = MaterialTheme.typography.bodyMedium) } }
-                }, modifier = Modifier.clickable(role = Role.Button) { open(OrbitRoute(Destination.SESSION, hit.id, hit.agent?.id, origin = Origin.SEARCH)) })
+                SearchHitRow(hit) { open(OrbitRoute(Destination.SESSION, hit.id, hit.agent?.id, origin = Origin.SEARCH)) }
             }
         }
     }
+}
+
+/** One search result. With the session facts it leads with the state icon and says the state word and then every mark (iOS
+ * `SessionSearchRow`), a screen reader hearing both as the row's value, as [SessionRow]'s; from an older server, today's line. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun SearchHitRow(hit: SearchHit, onOpen: () -> Unit) {
+    val state = SessionDisplay.state(hit.displayFacts)
+    val value = SessionDisplay.text(hit.displayFacts, ", ")
+    val line = listOfNotNull(hit.agent?.name, hit.lifecycleState, state?.word ?: hit.runState ?: hit.status).joinToString(" · ")
+    ListItem(headlineContent = { Text(hit.title) }, supportingContent = {
+        Column {
+            // The marks wrap under the line where they do not fit beside it, so none is clipped.
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+                Text(line)
+                SessionMarkChips(SessionDisplay.marks(hit.displayFacts))
+            }
+            hit.snippet?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+        }
+    }, leadingContent = state?.let { { SessionStateGlyph(it) } },
+        modifier = Modifier.clickable(role = Role.Button, onClick = onOpen)
+            .then(if (value == null) Modifier else Modifier.semantics { stateDescription = value }))
 }
 
 /** The machine a workspace's sessions run on, by the name its page gives it (web `machineName(runner)`): what a session held for the

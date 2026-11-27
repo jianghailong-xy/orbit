@@ -377,13 +377,32 @@ final class OrbitLinkTests: XCTestCase {
                            [.card(OrbitLinkRef(target: target,
                                                source: .reference("orbit-\(kind.rawValue):\(listID)")))])
         }
-        for text in ["[x](orbit-attachment:\(taskID))", "[x](orbit-task:)", "[x](orbit-task:abc-def)",
+        for text in ["[x](orbit-attachment:\(taskID))", "[x](orbit-drive:\(taskID))", "[x](orbit-task:)", "[x](orbit-task:abc-def)",
                      "[x](https://orbitd.io/tasks/\(taskID))"] {
             XCTAssertEqual(place(text), [paragraph(text)], "should have stayed as it was: \(text)")
         }
     }
 
     // MARK: what the four cards say
+
+    /// A task run stored SUCCEEDED is one whose task ended done, which the owner's board words "Finished";
+    /// the other runs keep their words.
+    func testTheTaskCardWordsAFinishedRunFinished() throws {
+        func line(_ state: String) throws -> String {
+            let json = """
+            {"kind":"task","id":"\(taskID)","state":"ok","task":{
+              "title":"T","status":"DONE","running":false,"queued":false,"runs":1,
+              "lastRun":{"status":"\(state)","runState":"\(state)","numTurns":3,"endedAt":null},
+              "updatedAt":null}}
+            """
+            let content = OrbitLinkCardContent.preview(
+                ref(.task, taskUUID, .pageURL("https://orbitd.io/tasks/\(taskID)")),
+                try preview(json), host: host, now: now)
+            return content.lines.last?.text ?? ""
+        }
+        XCTAssertTrue(try line("SUCCEEDED").contains("last Finished, 3 turns"))
+        XCTAssertTrue(try line("FAILED").contains("last Failed, 3 turns"))
+    }
 
     /// A task: its pill, the project it is filed under, and how its newest run came out.
     func testTheTaskCard() throws {
@@ -407,7 +426,7 @@ final class OrbitLinkTests: XCTestCase {
         XCTAssertEqual(content.lines.count, 2)
         XCTAssertEqual(content.lines[0], OrbitLinkCardContent.Line(
             text: "Codex 多账户：一台机器上登录多个 Codex", glyph: .project))
-        XCTAssertEqual(content.lines[1].text, "orbit · 2 runs · last Succeeded, 93 turns · 44m ago")
+        XCTAssertEqual(content.lines[1].text, "orbit · 2 runs · last Finished, 93 turns · 44m ago")
         XCTAssertEqual(content.lines[1].isWarning, false)
         XCTAssertNil(content.foot)
         XCTAssertEqual(content.path, "orbitd.io/tasks/\(taskID)")

@@ -28,7 +28,6 @@ import { acceptanceConfirmationKey, acceptanceConfirmationQuery } from '../lib/a
 import { markStatus, type ProjectDependencyGraphResponse } from '../lib/projectDependencyGraph';
 import {
   projectDependencyGraphQuery,
-  projectIntegrationQuery,
   projectOpenItemsQuery,
 } from '../lib/queries';
 import {
@@ -53,6 +52,7 @@ import {
   START_COMES_TO_YOU,
   START_COORDINATOR,
   START_HOW_IT_RUNS,
+  START_NO_LINE,
   START_LESS,
   START_MORE,
   START_NOT_RECORDED,
@@ -82,6 +82,7 @@ import {
   runTasksAtATime,
   startAskedLine,
   startBarCaption,
+  startCardBranch,
   startComesToYou,
   startDoneWhenHead,
   startExplanation,
@@ -123,6 +124,8 @@ import { Spinner } from './ui/Spinner';
 import { Switch } from './ui/Switch';
 import { Textarea } from './ui/Textarea';
 import { streamPoll } from '../lib/listBudget';
+import { useProjectIntegration } from '../lib/pollOwner';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * "Start this project?" — the one card on which the account owner starts a project: the criteria
@@ -160,7 +163,9 @@ import { streamPoll } from '../lib/listBudget';
 
 /** The settings as the card edits them: the number box can be empty mid-edit, the text box is text. */
 export interface StartSettingsDraft {
-  line: ProjectStartSettings['line'];
+  /** Null for a request that named no line (P-M2): the card draws one sentence, offers no line, main
+   *  branch or landing check, and the press sends no `line` — the line is decided when the first task commits. */
+  line: NonNullable<ProjectStartSettings['line']> | null;
   /** The main branch by name, `refs/heads/` left off: what the menu shows and the reader types —
    *  null for a project with no repository, which has no main branch to choose. */
   upstream: string | null;
@@ -196,10 +201,10 @@ export function startDraftOf(
   > | null = null,
 ): StartSettingsDraft {
   return {
-    line: settings.line,
-    // Only a project with a repository has a main branch to choose; a read that does not say whether
-    // it has one offers none.
-    upstream: standing?.repository ? startMainBranch(settings.upstreamRef, standing) : null,
+    line: settings.line ?? null,
+    // Only a project with a repository has a main branch to choose, and a request with no line offers
+    // none (the line, and so the branch, is decided later); a read that does not say offers none.
+    upstream: settings.line && standing?.repository ? startMainBranch(settings.upstreamRef, standing) : null,
     automatic: true,
     maxConcurrentTasks: settings.maxConcurrentTasks,
     mergeCheckCommand: settings.mergeCheckCommand ?? '',
@@ -239,7 +244,8 @@ export function startBody(
   const branch = request.settings.projectBranchName;
   return {
     criteriaDigest: request.criteriaDigest,
-    line: draft.line,
+    // No line on the card is no `line` key: the door then writes nothing about the line or its checks.
+    ...(draft.line ? { line: draft.line } : {}),
     ...(draft.line === 'PROJECT_BRANCH' && branch ? { projectBranchName: branch } : {}),
     ...(draft.upstream ? { upstreamRef: mainBranchRef(draft.upstream) } : {}),
     automatic: draft.automatic,
@@ -451,9 +457,11 @@ export function StartProjectCard({
     <div ref={ref} className="approval-card settlement-card start-card">
       <div className="approval-head settlement-card-head">
         <span className="settlement-card-heading">{START_PROJECT_TITLE}</span>
-        <span className="criteria-provenance prov-brand" title={ACCEPTANCE_PROVENANCE_TITLE}>
-          {PROVENANCE_LABEL}
-        </span>
+        <Tooltip content={ACCEPTANCE_PROVENANCE_TITLE} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="criteria-provenance prov-brand">
+            {PROVENANCE_LABEL}
+          </span>
+        </Tooltip>
       </div>
       <div className="approval-body is-questions settlement-card-body">
         {/* Who is asking, and in their own words: the card is the coordinator asking to begin. */}
@@ -540,6 +548,11 @@ export function StartProjectCard({
               </ul>
             </div>
           </div>
+          {draft.line === null ? (
+            <div className="start-card-row start-card-no-line" data-no-line="true">
+              <div className="start-card-hint">{START_NO_LINE}</div>
+            </div>
+          ) : <>
           <div className="start-card-row">
             <div className="start-card-row-head">
               <span>{RUN_TASKS_LAND_ON}</span>
@@ -567,10 +580,11 @@ export function StartProjectCard({
               />
             </div>
           </div>
+          </>}
           {/* How the work reaches main (§10.5 O-L1, A-Q21): Orbit lands it, or the agent pushes it
               there itself — a choice only a project landing directly into main has. On a project
               branch the menu stays on Orbit's and the line under it says why. */}
-          {draft.deliveryMode !== null ? (
+          {draft.line !== null && draft.deliveryMode !== null ? (
             <div className="start-card-row">
               <div className="start-card-row-head">
                 <span>{RUN_DELIVERY}</span>
@@ -622,7 +636,7 @@ export function StartProjectCard({
               ) : null}
             </div>
           ) : null}
-          <div className="start-card-row" data-landing-check="true">
+          {draft.line !== null ? <div className="start-card-row" data-landing-check="true">
             <div className="start-card-row-head"><span>{LANDING_CHECK_COPY.LABEL}</span></div>
             {draft.line === 'MAIN' ? <div className="start-card-hint">{LANDING_CHECK_COPY.MAIN}</div> : <>
               <Textarea value={draft.landingCheckCommand ?? ''} disabled={!editable}
@@ -637,7 +651,7 @@ export function StartProjectCard({
               <div className="start-card-hint">{LANDING_CHECK_COPY.TIMEOUT_HINT}</div>
               {draft.landingCheckTimeoutSeconds == null && <div className="start-card-hint">{inheritedLandingTimeout(draft.mergeCheckTimeoutSeconds)}</div>}
             </>}
-          </div>
+          </div> : null}
           <div className="start-card-row">
             <button
               type="button"
@@ -916,10 +930,7 @@ export function SessionStartProjectCard({
   // repository, and the branches the Main branch menu offers. The card waits for the read: a card
   // drawn before it answered would open on a main branch the answer then moves. One that fails
   // offers no main branch, and the start keeps the one the project stands on.
-  const integrationRead = useQuery({
-    ...projectIntegrationQuery(project),
-    enabled: enabled && started === false,
-  });
+  const integrationRead = useProjectIntegration(project, enabled && started === false);
   const integration = integrationRead.isError ? null : (integrationRead.data ?? null);
   const draft = shown && request && !integrationRead.isLoading
     ? (edited?.itemId === shown.itemId ? edited.draft : startDraftOf(request.settings, integration))
@@ -1004,7 +1015,6 @@ export function SessionStartProjectCard({
       <Alert type="info" title={unread ? CONFIRMATION_UNREAD_EXPLANATION : START_REQUEST_GONE} />
     );
   }
-  const branchRef = request.settings.projectBranchName ?? `refs/heads/project/${project}`;
   const card = (
     <StartProjectCard
       ref={anchor}
@@ -1018,7 +1028,7 @@ export function SessionStartProjectCard({
       plan={startPlanView(graphRead.data ?? null, document?._count?.tasks ?? 0)}
       graph={graphRead.data ?? null}
       facts={startProjectFacts(document, true)}
-      branch={branchRef.replace(/^refs\/heads\//u, '')}
+      branch={startCardBranch(request, project)}
       branches={integration?.branches ?? null}
       lastMainBranch={integration?.lastMainBranch ?? null}
       draft={draft}
@@ -1119,7 +1129,7 @@ function OwnerStartProjectCard({
     meta: { entities: ['project', 'task'] },
     queryFn: () => api<StartProjectDocument>(`/projects/${encodeURIComponent(projectId)}`),
   });
-  const integrationRead = useQuery(projectIntegrationQuery(projectId));
+  const integrationRead = useProjectIntegration(projectId);
   const graphRead = useQuery(projectDependencyGraphQuery(projectId));
   const standing = standingRead.isError ? null : (standingRead.data ?? null);
   const document = documentRead.isError ? null : (documentRead.data ?? null);
@@ -1135,6 +1145,8 @@ function OwnerStartProjectCard({
       planDigest: '',
       repository: null,
       warnings: [],
+      // The branch the server would name, for a card with none named: it is the server's to say.
+      ...(view?.defaultProjectBranch ? { defaultProjectBranchName: `refs/heads/${view.defaultProjectBranch}` } : {}),
     }
     : null;
   // The owner's edits, once there are any; until then the defaults, as the reads resolve them.
@@ -1167,7 +1179,6 @@ function OwnerStartProjectCard({
     );
   }
   const criteria = document?.acceptanceCriteriaItems ?? null;
-  const branchRef = request.settings.projectBranchName ?? `refs/heads/project/${projectId}`;
   return (
     <StartProjectCard
       projectId={projectId}
@@ -1178,7 +1189,7 @@ function OwnerStartProjectCard({
       plan={startPlanView(graph, document?._count?.tasks ?? 0)}
       graph={graph}
       facts={startProjectFacts(document, false)}
-      branch={branchRef.replace(/^refs\/heads\//u, '')}
+      branch={startCardBranch(request, projectId)}
       branches={view?.branches ?? null}
       lastMainBranch={view?.lastMainBranch ?? null}
       draft={draft}

@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { receiveOpenItem } from '../test-support/open-item-delivery';
@@ -226,7 +227,7 @@ async function fixture(
       title: `协调：${label}`,
       prompt: `协调：${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
     },
@@ -333,7 +334,7 @@ async function attempt(
       title: label,
       prompt: label,
       provider: 'claude',
-      status: RunStatus.SUCCEEDED,
+      turnState: null, 
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       branch: `orbit/${label}`,

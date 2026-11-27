@@ -8,11 +8,11 @@ import { test } from 'node:test';
 
 import {
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { RunEventType, RunStatus as SharedRunStatus } from '@orbit/shared';
@@ -303,7 +303,7 @@ async function fixture(
       title: `协调：${label}`,
       prompt: `协调：${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
     },
@@ -422,9 +422,14 @@ async function queueRound(stack: Stack, f: Fixture, taskId: string, label: strin
       title: label,
       prompt: label,
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
+      // The attempt commits on a worktree branch of its own, past the commit it forked from: work with
+      // something to land. A run that never made a branch delivered nothing to land (§12.15 P-M3).
+      isolationStatus: 'worktree', branch: `orbit/${label}-${sessionId.slice(0, 8)}`,
+      worktreeBranch: `orbit/${label}-${sessionId.slice(0, 8)}`, baseSha: 'a'.repeat(40), branchSha: 'b'.repeat(40),
+      worktreeDirty: false, changedFiles: ['src/round.ts'],
     },
   });
   await stack.db.conversationTurn.create({

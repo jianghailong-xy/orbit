@@ -30,7 +30,7 @@ class SessionProjectsTest {
             pendingApprovals = approvals, waitingKind = waitingKind,
             ownerItems = JsonArray(since.mapIndexed { index, at -> buildJsonObject { put("itemId", "$id-$index"); put("kind", "COORDINATOR_QUESTION"); put("title", "Question"); put("since", at) } }),
             lastAssistantText = reply, lastToolUse = tool, lastUserText = userText, runningBgCount = bg, runningBgJobCount = jobs,
-            runningSubagentCount = subagents, pinnedAt = pinnedAt, createdAt = createdAt, lastTurnAt = lastTurnAt, folderId = folder,
+            runningSubagentCount = subagents, pinnedAt = pinnedAt, createdAt = createdAt, lastTurnAt = lastTurnAt, listedAt = lastTurnAt, folderId = folder,
             confirmationUnderReview = review, projectMembership = role?.let { SessionProjectMembership(projectId, "Project one", projectStatus, it) })
 
     private fun coordinator(folder: String? = null, approvals: Int = 0, pinnedAt: String? = null, lastTurnAt: String? = "2026-10-04T09:40:00Z") =
@@ -321,6 +321,29 @@ class SessionProjectsTest {
         assertNull(listing(listOf(coord, service)).projects.first().indicator)
         assertNull(listing(listOf(coord)).projects.first().indicator)
         assertEquals(Indicator.RUNNING, listing(listOf(coord, session("subagent", subagents = 1))).projects.first().indicator)
+    }
+
+    /** `GET /projects/sidebar`'s pause fields (design §4.2 2a/2b): Pause project, the older Automatic switch and the daily limit, and a
+     * row without them — an older server, or no sidebar row at all — is not paused. */
+    @Test fun sidebarRowsCarryThePauseAndOlderReadsAreNotPaused() {
+        fun with(extra: JsonObjectBuilder.() -> Unit) = JsonObject(project() + buildJsonObject(extra))
+        val coord = coordinator()
+        fun pause(summary: JsonObject?) = listing(listOf(coord), projects = listOfNotNull(summary)).projects.first().pause
+
+        assertEquals(ProjectPause("2026-11-19T10:00:00.000Z", "OWNER"), pause(with {
+            put("pausedAt", "2026-11-19T10:00:00.000Z"); put("pausedReason", "OWNER")
+            putJsonObject("fuse") { put("paused", false); put("episodeId", JsonNull); put("observed", JsonNull); put("limit", JsonNull) }
+        }))
+        assertEquals("LEGACY_AUTOMATIC_OFF", pause(with {
+            put("pausedAt", "2026-11-19T10:00:00.000Z"); put("pausedReason", "LEGACY_AUTOMATIC_OFF")
+        }).pausedReason)
+        assertEquals(ProjectPause(fusePaused = true, fuseEpisodeId = "350N4oGD3euQuPJ0VT9TD", fuseObserved = 6, fuseLimit = 6), pause(with {
+            put("pausedAt", JsonNull); put("pausedReason", JsonNull)
+            putJsonObject("fuse") { put("paused", true); put("episodeId", "350N4oGD3euQuPJ0VT9TD"); put("observed", 6); put("limit", 6) }
+        }))
+        assertEquals(ProjectPause.NONE, pause(project()))
+        assertEquals(ProjectPause.NONE, pause(with { put("fuse", JsonNull) }))
+        assertEquals(ProjectPause.NONE, pause(null))
     }
 
     @Test fun sidebarRunningCountsNeverCreateLocalMotionAndOfflineSuppressesMotionOnly() {
@@ -682,5 +705,100 @@ class SessionProjectsTest {
         assertEquals(Tone.WARNING, row.line.tone)
         assertNull(row.indicator)
         assertFalse(row.needsYou)
+    }
+
+    // ---- Pause / Resume on the row (design §4.2 2a/2b, §4.3, owner 2026-11-19) ----
+
+    private fun paused(extra: JsonObjectBuilder.() -> Unit = {}) = JsonObject(project() + buildJsonObject(extra))
+    private fun ownerPaused(running: Int = 2) = paused {
+        put("pausedAt", ago(120)); put("pausedReason", "OWNER"); putJsonObject("buckets") { put("running", running) }
+    }
+    private fun limitPaused() = paused {
+        putJsonObject("fuse") { put("paused", true); put("episodeId", "ep1"); put("observed", 6); put("limit", 6) }
+    }
+    private fun projectRow(summary: JsonObject, coord: DirectorySession = coordinator(), status: String? = null) =
+        listing(listOf(coord), projects = listOf(if (status == null) summary else JsonObject(summary + ("status" to JsonPrimitive(status))))).projects.first()
+    private fun actions(row: SessionProjectRow, view: SessionView = SessionView.OPEN) =
+        ProjectRowActions.swipeRight(row, view).map { it.name } to ProjectRowActions.swipeLeft(row).map { it.name }
+
+    @Test fun swipeActionsFollowTheProjectsState() {
+        val notStarted = paused { put("startedAt", JsonNull) }
+        assertEquals(listOf("PIN") to listOf("MOVE"), actions(projectRow(notStarted)))
+        val running = paused { put("startedAt", "2026-11-01T00:00:00Z") }
+        assertEquals(listOf("PAUSE", "PIN") to listOf("MOVE"), actions(projectRow(running)))
+        assertEquals(listOf("RESUME", "PIN") to listOf("MOVE"), actions(projectRow(ownerPaused())))
+        assertEquals(listOf("RESUME", "UNPIN") to listOf("MOVE"), actions(projectRow(limitPaused(), coordinator(pinnedAt = ago(5)))))
+        assertEquals(listOf("COMPLETE", "PIN") to listOf("MOVE"), actions(projectRow(running, status = "DONE")))
+        assertEquals(listOf("COMPLETE", "PIN") to listOf("MOVE"), actions(projectRow(running, status = "CANCELLED")))
+        // Completed view: nothing left to complete.
+        assertEquals(listOf("PIN") to listOf("MOVE"), actions(projectRow(running, status = "DONE"), SessionView.COMPLETED))
+        // A server that sends no startedAt is taken as started.
+        assertEquals(listOf("PAUSE", "PIN"), actions(projectRow(project())).first)
+    }
+
+    @Test fun pinAndMoveNeedACoordinatorAndAFullSwipeFiresNothing() {
+        val row = listing(listOf(session("member")), projects = listOf(project())).projects.first()
+        assertNull(row.coordinator)
+        assertEquals(listOf("PAUSE"), ProjectRowActions.swipeRight(row, SessionView.OPEN).map { it.name })
+        assertTrue(ProjectRowActions.swipeLeft(row).isEmpty())
+        assertFalse(ProjectRowActions.fullSwipeFires)
+    }
+
+    @Test fun theMenuGroupLeadsWithPauseOrResume() {
+        fun group(row: SessionProjectRow) = ProjectRowActions.menuGroup(row, SessionView.OPEN).map { it.name }
+        assertEquals(listOf("PAUSE", "PIN", "MOVE"), group(projectRow(paused())))
+        assertEquals(listOf("RESUME", "PIN", "MOVE"), group(projectRow(ownerPaused())))
+        // Complete leads the menu on its own, not in the group.
+        assertEquals(listOf("PIN", "MOVE"), group(projectRow(paused(), status = "DONE")))
+    }
+
+    @Test fun theLimitsPauseSaysTheDailyLimitAndIsLiftedThroughTheFuseDoor() {
+        val row = projectRow(limitPaused())
+        assertEquals("Paused at the daily limit · 6/6 today", row.line.text)
+        assertEquals(Tone.WARNING, row.line.tone)
+        assertEquals(SessionProjectRow.PauseLine.DAILY_LIMIT, row.pauseLine)
+        assertTrue(row.pause.fusePaused); assertEquals("ep1", row.pause.fuseEpisodeId)
+        // Both at once: the limit comes first.
+        val both = projectRow(JsonObject(limitPaused() + ownerPaused()))
+        assertEquals(SessionProjectRow.PauseLine.DAILY_LIMIT, both.pauseLine)
+    }
+
+    @Test fun yourPauseSaysRunsFinishingOrHowLongAndGoesGrey() {
+        assertEquals("Paused · 2 runs finishing", projectRow(ownerPaused(2)).line.text)
+        assertEquals("Paused · 1 run finishing", projectRow(ownerPaused(1)).line.text)
+        val idle = projectRow(ownerPaused(0))
+        assertEquals("Paused · 2h", idle.line.text)
+        assertEquals(Tone.PREVIEW, idle.line.tone)
+        assertEquals(SessionProjectRow.PauseLine.OWNER, idle.pauseLine)
+        assertTrue(idle.pause.paused)
+        // The older Automatic switch reads the same.
+        assertEquals(SessionProjectRow.PauseLine.OWNER, projectRow(JsonObject(ownerPaused() + ("pausedReason" to JsonPrimitive("LEGACY_AUTOMATIC_OFF")))).pauseLine)
+    }
+
+    @Test fun theSecondLinesOrderPutsThePausesAfterWhatWaitsOnYouAndBeforeTheRest() {
+        // 1: the coordinator waiting on you outranks a pause.
+        val waiting = projectRow(limitPaused(), coordinator(approvals = 1))
+        assertEquals(Tone.APPROVAL, waiting.line.tone); assertNull(waiting.pauseLine)
+        // 2: so does a run waiting on you.
+        val run = session("exec", approvals = 1, role = "TASK")
+        val member = listing(listOf(coordinator(), run), projects = listOf(ownerPaused())).projects.first()
+        assertEquals(Tone.APPROVAL, member.line.tone); assertNull(member.pauseLine)
+        // 2a, 2b: then the pause, over a coordinator handling an exception.
+        val held = held("TASK_FAILED", ago(18))
+        val exception = JsonObject(ownerPaused() + ("attention" to buildJsonObject { put("coordinatorItems", held) }))
+        assertEquals("Paused · 2 runs finishing", projectRow(exception).line.text)
+        // 3 and below are unchanged without a pause.
+        assertEquals("Handling a failed task · 18m", projectRow(project(held = held)).line.text)
+    }
+
+    @Test fun pauseCopyAndRefusalsAreInWords() {
+        assertEquals("2 runs still going · nothing new starts or merges", ProjectPauseCopy.pausedDetail(2))
+        assertEquals("1 run still going · nothing new starts or merges", ProjectPauseCopy.pausedDetail(1))
+        assertEquals("Nothing new starts or merges", ProjectPauseCopy.pausedDetail(0))
+        assertEquals("Only the project's owner can pause it", ProjectPauseCopy.refusal(false, 403, null, "Forbidden"))
+        assertEquals("Only the project's owner can resume it", ProjectPauseCopy.refusal(true, 403, null, null))
+        assertEquals("The project hasn't started yet", ProjectPauseCopy.refusal(false, 409, "PROJECT_NOT_STARTED", "x"))
+        assertEquals("Something else", ProjectPauseCopy.refusal(false, 500, null, "Something else"))
+        assertEquals("Couldn't resume the project", ProjectPauseCopy.couldNot(true))
     }
 }

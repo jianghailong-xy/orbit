@@ -443,9 +443,11 @@ generation off the node.
 kubectl --kubeconfig $ADMIN_KUBECONFIG --context $TEST_CONTEXT drain <node> --ignore-daemonsets --delete-emptydir-data --force
 ```
 
-- A runner's Pod is a bare Pod with an emptyDir (`/tmp`). Without `--delete-emptydir-data` the drain refuses it ("Pods
-  with local storage"), and without `--force` too ("Pods that declare no controller"). A refused drain cordons the node
-  and evicts nothing.
+- A runner's Pod is a bare Pod. Its `/tmp` is the `.orbit-tmp` subPath of its data volume, so filling it gives the
+  writer ENOSPC and the kubelet never evicts the Pod for it; a Pod made before that change still has an emptyDir
+  `/tmp` until its next generation. Without `--delete-emptydir-data` the drain refuses such a Pod ("Pods with local
+  storage"), and without `--force` it refuses any runner Pod ("Pods that declare no controller"). A refused drain
+  cordons the node and evicts nothing.
 - The drain finishes once every Pod it evicted is gone. For a runner's Pod that is once a manager has recorded its stop
   and taken the stop-report finalizer off. With managed runners switched off, or for a managed Pod no running manager
   records, it waits until its `--timeout` ([When a Pod stays Terminating](#the-stop-report-finalizer)).
@@ -624,9 +626,9 @@ checkouts below its floor as any runner does
   disk is under its floor, applies only that. With managed runners switched off, a runner gets no default floor.
 - **No storage budget.** A storage budget is the Docker backend's, where `statfs` cannot see a volume's limit
   ([its runbook](managed-runner-docker-operations.md#session-checkouts-and-the-volumes-limit)). Here the rules of a
-  runner without one apply: a resting session's checkout goes only once nothing in it has been written for two weeks
-  and every commit is on a remote, a look that finds nothing to take waits an hour, and no room is made before a new
-  checkout. So resting sessions keep their checkouts for two weeks, and a volume with many of them can fill up:
+  runner without one apply: below the floor a resting session's checkout goes, oldest first, when nothing in it would
+  be lost, as under a budget, but a look that finds nothing to take waits an hour, and no room is made before a new
+  checkout. So a burst of new checkouts can still take the volume past its floor before a sweep catches up, and
   writes then fail with "no space left on device".
 - **Clones on XFS; plain on ext4.** On the .3 deployment the claim is XFS with `reflink=1` (the patched Ceph-CSI class),
   so every session checkout is cloned from the workspace checkout and the runner logs `checkouts: cloned: …`; the
@@ -638,6 +640,106 @@ checkouts below its floor as any runner does
   files, so git writes out every session checkout`, and every checkout is written out in full. A repository's
   `.orbit/checkout-exclude` makes checkouts smaller on either filesystem
   ([the format](runner-troubleshooting.md#f-a-sessions-checkout-lacks-some-paths)).
+
+## Out of memory kills one process: the kubelet's `singleProcessOOMKill`
+
+On cgroup v2 the kubelet writes `memory.oom.group=1` into every container's cgroup by default. A runner container
+that reaches its memory limit then loses **every** process at once: `tini`, the daemon, every engine and every
+session's tools. dmesg says `Tasks in /kubepods.slice/…/cri-containerd-<id>.scope are going to be killed due to
+memory.oom.group set`, and the Pod stops with `OOMKilled`. The kubelet's `singleProcessOOMKill: true` stops it writing
+that flag, so the kernel kills only the process it picks (the largest one, after `oom_score_adj`), and the container
+keeps running. It is a `KubeletConfiguration` field only: no kubelet flag sets it. On cgroup v1 it is always on and
+may not be set to false.
+
+Every node that runs managed runners needs it. On k3s:
+
+1. Check that the kubelet knows the field. k3s has no `k3s kubelet --help`, but the binary carries the field's name and
+   description: `strings "$(command -v k3s)" | grep -m3 singleProcessOOMKill`. Then check how k3s starts the kubelet:
+   `journalctl -u k3s | grep 'Running kubelet' | tail -1`. k3s passes `--config-dir=/var/lib/rancher/k3s/agent/etc/kubelet.conf.d`
+   and rewrites `00-k3s-defaults.conf` there at every start, so do not edit that file.
+2. Back up `/etc/rancher/k3s`, then add two files. `/etc/rancher/k3s/kubelet-orbit.yaml`:
+
+   ```yaml
+   apiVersion: kubelet.config.k8s.io/v1beta1
+   kind: KubeletConfiguration
+   singleProcessOOMKill: true
+   ```
+
+   and `/etc/rancher/k3s/config.yaml.d/95-orbit-kubelet.yaml`, which hands it to the kubelet. k3s's own
+   `00-k3s-defaults.conf` does not set the field, so nothing overrides it:
+
+   ```yaml
+   kubelet-arg+:
+     - "config=/etc/rancher/k3s/kubelet-orbit.yaml"
+   ```
+
+3. Restart k3s at a quiet moment: `systemctl restart k3s`. Containers keep running through the restart
+   (`KillMode=process`), but the API server and the kubelet are away until k3s is back (9 s on .3), so every Pod on
+   the node is briefly unmanaged and no runner Pod can be created. Before the restart, check that no runner is running a turn: read each runner Pod's log (`kubectl logs
+   --since=20m`), and list the processes in its container cgroup from the host. An idle runner has only `tini`,
+   `orbit-container run`, `orbit run` and its memory reserve, `orbit orbit-headroom`.
+4. Verify. `kubectl get --raw /api/v1/nodes/<node>/proxy/configz` must show `"singleProcessOOMKill": true`, and the
+   file must be in the kubelet's drop-in directory: k3s v1.37.2 copies a `config=` kubelet-arg file to
+   `/var/lib/rancher/k3s/agent/etc/kubelet.conf.d/10-cli-config.conf` and still passes only `--config-dir`, so the
+   `Running kubelet` line does not change. The kubelet writes
+   `memory.oom.group` only when it creates a container. Containers made before the restart keep `1` until their Pod's
+   next generation (a sleep and wake, or an image roll), and new ones read `0` in
+   `/sys/fs/cgroup/kubepods.slice/…/cri-containerd-<id>.scope/memory.oom.group`. A test Pod in a scratch namespace
+   proves it: give it a 64 MiB limit, a `sleep` beside it, and `dd bs=256M count=1`. dmesg then shows one `Killed
+   process … (dd)` and no `memory.oom.group set` line, `memory.events` counts `oom_kill 1` and `oom_group_kill 0`, and
+   the container's restart count stays 0. Delete the namespace afterwards.
+
+To undo it, remove `95-orbit-kubelet.yaml` and restart k3s. The .3 deployment's run of this procedure is in
+[its record](managed-runner-k3s-xfs-deployment.md#memory-one-process-not-the-container-2026-11-22).
+
+### A second kill while a shared-memory victim drains: a kernel limit, and the reserve
+
+The kernel frees a killed process's memory in two steps. Private anonymous memory, which builds mostly use, goes while
+the victim unmaps it. Shared memory (`MAP_SHARED|MAP_ANONYMOUS`, memfd, tmpfs such as `/dev/shm`) goes only when the last
+reference to its file is dropped, later in the victim's exit. The OOM killer stops waiting for its victim much sooner:
+by the time the victim has unmapped its memory (`MMF_OOM_SKIP`) at the latest, and in the lab sometimes 2 ms after the
+kill. Until the shared memory is gone the container stays at its limit, and an allocation in it then makes the kernel
+kill again: the next process by badness, usually another session's tool at `oom_score_adj` 1000. **No runner-side
+change can close this window entirely**: a process woken by the kill cannot free memory within 2 ms.
+
+Measured in the lab (2026-11-24; guest kernel 7.0 under k3s; a 2 CPU / 4 GiB runner; one session's tool fills 3.6 GiB of
+`MAP_SHARED|MAP_ANONYMOUS` memory while another session's tool runs `sleep 210`; all times on CLOCK_MONOTONIC from the
+kernel's `oom/mark_victim`):
+
+- The victim finished unmapping 85 to 96 ms after the kill (360 ms once, when the whole guest stalled for about a
+  second), and its shared memory was gone 386 to 437 ms after it (700 ms in that trial). The OOM was the Pod cgroup's:
+  the Pod's 4 GiB includes the `pause` container, so it meets the limit just before the runner container does.
+- Before the reserve below, the kernel killed the other session's tool shell 93 or 115 ms after the first kill, in 2 of
+  4 trials.
+- With the reserve, in 10 trials the runner's watchdog stopped the allocator below the limit 5 times (no kernel kill)
+  and the kernel killed it 5 times. In 3 of those 5 the reserve was woken 0.4 to 3.2 ms and freed 5.3 to 14.7 ms after
+  the kill. From then until the shared memory was gone the container stayed 45 to 68 MiB below its limit and never met
+  it again (`memory.events` `max` unchanged); anon and kernel memory did not grow, and only page cache came back (32 to
+  134 MiB). The kernel killed only the allocator. In the other 2 the kernel killed again 2.1 and 53.0 ms after the first
+  kill, before the reserve was freed, and took the reserve itself. The other session's tool finished in all 10 trials.
+- On orbit-ws01's 7.2 kernel (a 1 GiB, 2 CPU scope), a second kill came 0.3 to 0.5 ms after the first in 2 of 5 runs
+  without the reserve, while the victim was still unmapping; with it, 8 of 8 runs had one kill.
+
+**The reserve.** On a managed runner the memory watchdog starts `orbit orbit-headroom`, a child of `orbit run`. It holds
+64 MiB of touched private memory, counted against the container like any other, and frees it (`madvise(MADV_DONTNEED)`)
+as soon as the container's `memory.events` `oom_kill` rises, so the container's other processes have that room while
+the victim's shared memory drains. It waits on `memory.events` with `poll`, which the kernel wakes on a change of that
+file as it signals inotify's `IN_MODIFY` (at most once in 10 ms, rounded up to whole jiffies), with a 100 ms timeout as
+the fallback. It arms again once no kill has followed for 4 s and arming leaves the watchdog's tenth of the limit free.
+
+- It is a process of its own because a daemon thread that faults at the limit holds up Go's stop-the-world, and every
+  goroutine with it, until memory is freed. An earlier attempt that freed a reserve from a daemon goroutine freed it 1 to
+  2.7 s after the kill, after the second kill (with heavy kernel tracing on).
+- Its `oom_score_adj` is 1000 and it holds about 80 MiB resident, so when the kernel kills again before the reserve is
+  freed it takes the reserve before a smaller tool (a shell, a `sleep`), as in the 2 trials above. A tool larger than the
+  reserve still goes first, and so does one when more than 64 MiB of memory that cannot be reclaimed is allocated
+  before the victim's shared memory is gone. The memory watchdog never stops the reserve; the daemon starts it again
+  4 s after a signal ends it.
+- Runner log lines: `Armed the emergency memory reserve of 64 MiB; the container's oom_kill is N`; `Freed the emergency
+  memory reserve of 64 MiB: the container's oom_kill rose from N to M (woken at monotonic … ns, freed at … ns)`, on the
+  clock of ftrace's `mono` trace clock, so the times compare with `oom/mark_victim`; `The emergency memory reserve was
+  stopped: signal: killed - it starts again in 4s` after the kernel took it; and `The emergency memory reserve is not
+  running: …` if it could not start.
 
 ## Names from before orbit-cloud (2026-11-20)
 
@@ -654,8 +756,225 @@ Until 2026-11-20 these names said `orbit-managed`; they now say `orbit-cloud`. W
   those as well as `X-Orbit-Cloud-Runner-*`, so a Pod keeps working until its image is replaced.
 - The hosted runners' image is now `<registry>/orbit-cloud-runner`. The first release after the rename builds and pushes
   it there; the earlier `<registry>/orbit-managed-runner` digests stay in the registry for a rollback.
-- The namespace is whatever the profile's `kubernetes.namespace` says. An existing `orbit-managed` namespace needs no
-  change.
+- The namespace is whatever the profile's `kubernetes.namespace` says. A namespace cannot be renamed: moving the runners
+  out of `orbit-managed` is [Move the runners to another namespace](#move-the-runners-to-another-namespace). Production
+  moved its 7 runners to `orbit-cloud` that way on 2026-11-22, with management off for about 6 minutes, and then
+  deleted `orbit-managed` and its guard `orbit-managed-runner-pods`.
+
+## Move the runners to another namespace
+
+A namespace cannot be renamed, and a claim cannot change namespace. Each runner's data volume moves on its own: with
+reclaim policy `Retain`, deleting its claim leaves the PV and the RBD image, and the PV is then bound to a new claim of
+the same name in the other namespace. The PV, its UID and its CSI volume handle stay what Orbit recorded; the claim gets
+a new UID, which the runner's mapping must record. The manager drives only the namespace its profile names, and on a
+single cluster it treats every Kubernetes mapping as its own, so the mappings, the profile and the claims change
+together, with managed runners switched off and every runner asleep. Orbit itself stays up; Orbit Cloud runners do
+not wake from step 3 until step 7.
+
+Written for production's move from `orbit-managed` to `orbit-cloud` on `orbit-ws03`; the same steps move any
+namespace. Run the cluster's steps on the k3s host as root and the server's in the deploy directory of the apiserver's
+host:
+
+```bash
+K="k3s kubectl"; OLD=orbit-managed; NEW=orbit-cloud          # on the k3s host
+DC="docker compose"; PSQL="$DC exec -T postgres psql -U orbit -d orbit -v ON_ERROR_STOP=1"   # on the apiserver's host
+MOVE=/root/ns-move-$(date -u +%Y%m%d)                         # on each host: backups and records, mode 0700
+```
+
+### 1. Before the window: back up, and prepare the new namespace
+
+Nothing here changes what runs; the new namespace holds nothing a runner uses until step 6.
+
+1. On the apiserver's host, keep copies: `install -d -m 700 $MOVE`, then `cp -p` the profile and the kubeconfig it
+   names (both in `ORBIT_MANAGED_RUNNERS_DIR`) into `$MOVE`, and
+   `$DC exec -T postgres pg_dump -U orbit -d orbit --data-only -t managed_runner -t managed_runner_capacity >$MOVE/rows.sql`.
+2. On the k3s host, `install -d -m 700 $MOVE` and save the manager's objects:
+   `$K get sa,role,rolebinding orbit-mr-manager -n $OLD -o json >$MOVE/manager.json`,
+   `$K get clusterrolebinding orbit-mr-manager-storage -o json >$MOVE/crb.json`, and the guard in force, found by the
+   namespace it selects rather than by name (production's is `orbit-managed-runner-pods`; a cluster deployed after the
+   rename has `orbit-cloud-runner-pods`):
+
+   ```bash
+   OLD_GUARD="$($K get validatingwebhookconfigurations -o json | python3 -I -c 'import json,sys; old=sys.argv[1]; print(" ".join(w["metadata"]["name"] for w in json.load(sys.stdin)["items"] if any((h.get("namespaceSelector") or {}).get("matchLabels",{}).get("kubernetes.io/metadata.name")==old for h in w.get("webhooks",[]))))' $OLD)"
+   echo "$OLD_GUARD"    # exactly one name
+   $K get validatingwebhookconfiguration "$OLD_GUARD" -o json >$MOVE/webhook.json
+   NEW_GUARD=orbit-cloud-runner-pods; [ "$OLD_GUARD" = "$NEW_GUARD" ] && NEW_GUARD="orbit-cloud-runner-pods-$NEW"
+   ```
+
+   The copy must never take the name of the guard in force: applying it would make that guard select `$NEW` and leave
+   `$OLD` unguarded.
+3. Make the namespace and the manager's identity in it, from those copies with the namespace replaced:
+
+   ```bash
+   $K create namespace $NEW
+   python3 -I - "$MOVE/manager.json" "$OLD" "$NEW" <<'EOF' | $K apply -f -
+   import json, sys
+   objects, old, new = json.load(open(sys.argv[1]))["items"], sys.argv[2], sys.argv[3]
+   for o in objects:
+       m = o["metadata"]
+       o["metadata"] = {"name": m["name"], "namespace": new, "labels": m.get("labels", {})}
+       o.pop("status", None); o.pop("secrets", None)
+       for s in o.get("subjects", []):
+           if s.get("namespace") == old: s["namespace"] = new
+   print(json.dumps({"apiVersion": "v1", "kind": "List", "items": objects}))
+   EOF
+   $K create -n $NEW -f - <<EOF
+   {"apiVersion": "v1", "kind": "Secret", "type": "kubernetes.io/service-account-token",
+    "metadata": {"name": "orbit-mr-manager-token", "annotations": {"kubernetes.io/service-account.name": "orbit-mr-manager"}}}
+   EOF
+   $K patch clusterrolebinding orbit-mr-manager-storage --type json \
+     -p "[{\"op\": \"add\", \"path\": \"/subjects/-\", \"value\": {\"kind\": \"ServiceAccount\", \"name\": \"orbit-mr-manager\", \"namespace\": \"$NEW\"}}]"
+   for verb in "create pods" "get persistentvolumeclaims" "create secrets" "get persistentvolumes"; do
+     $K auth can-i $verb -n $NEW --as=system:serviceaccount:$NEW:orbit-mr-manager | sed "s/^/$verb: /"
+   done
+   ```
+
+   Every `can-i` answers `yes`, as it does for `$OLD` (`--as=system:serviceaccount:$OLD:orbit-mr-manager`).
+4. The admission guard for the new namespace, a copy of the one in force under the new name (same URL and CA bundle):
+
+   ```bash
+   python3 -I - "$MOVE/webhook.json" "$NEW" "$NEW_GUARD" <<'EOF' | $K create -f -
+   import json, sys
+   w, new, name = json.load(open(sys.argv[1])), sys.argv[2], sys.argv[3]
+   w["metadata"] = {"name": name, "labels": {**w["metadata"].get("labels", {}), "app.kubernetes.io/name": "orbit-cloud-runner"}}
+   for hook in w["webhooks"]:
+       hook["namespaceSelector"] = {"matchLabels": {"kubernetes.io/metadata.name": new}}
+   print(json.dumps(w))
+   EOF
+   ```
+
+   `create`, not `apply`: it refuses rather than replace an existing guard. It guards only `$NEW`, where nothing runs
+   yet, and `$OLD_GUARD` keeps guarding `$OLD`.
+5. The kubeconfig for the new identity: the current one with the context's namespace set to `$NEW` and the user's token
+   replaced by the new Secret's. Make it on the k3s host and copy it beside the profile on the apiserver's host as
+   `kubeconfig-orbit-ws03.json.$NEW`, mode 0600, never printing it:
+
+   ```bash
+   token="$($K get secret orbit-mr-manager-token -n $NEW -o jsonpath='{.data.token}' | base64 -d)"
+   # with the current kubeconfig copied to $MOVE/kubeconfig.json (mode 0600):
+   TOKEN="$token" python3 -I - "$MOVE/kubeconfig.json" "$NEW" >"$MOVE/kubeconfig.$NEW.json" <<'EOF'
+   import json, os, sys
+   k, new = json.load(open(sys.argv[1])), sys.argv[2]
+   for c in k["contexts"]: c["context"]["namespace"] = new
+   for u in k["users"]: u["user"] = {"token": os.environ["TOKEN"]}
+   print(json.dumps(k, indent=2))
+   EOF
+   chmod 600 "$MOVE/kubeconfig.$NEW.json"; unset token
+   ```
+
+6. Optional, independent of the rest, and only where the API server's admission configuration is in a directory named
+   after the namespace, as production's is (`/etc/rancher/k3s/orbit-managed/`, drop-in `90-orbit-admission.yaml`; the
+   lab's is `/etc/rancher/k3s/orbit-admission/` and needs nothing): move it out of `/etc/rancher/k3s/$OLD/`. `cp -a /etc/rancher/k3s/$OLD /etc/rancher/k3s/$NEW`, replace `/etc/rancher/k3s/$OLD/` with
+   `/etc/rancher/k3s/$NEW/` in `config.yaml.d/90-orbit-admission.yaml` and in `$NEW/admission-configuration.json`, then
+   `systemctl restart k3s`. Pods keep running across the restart; the API answers again within a minute. Check that the
+   guard still answers: the dry run of [step 4 of the deployment](#deploy-a-test-environment) (an unowned
+   `mr-data-<uuid>` claim) is refused in `$OLD`. Remove `/etc/rancher/k3s/$OLD` in step 8.
+
+### 2. Put every runner to sleep
+
+Each runner must be `SLEEPING` with no Pod. A ready runner sleeps as its owner's **Sleep** does, which never interrupts
+work: the manager drains it, and it exits only once idle by its own account.
+
+```bash
+$PSQL -c "select runner_id, management_state, desired_state, pod_uid is not null as pod, resource_operation_state from managed_runner where cluster_key = 'orbit-ws03' and namespace = '$OLD'"
+$PSQL -c "update managed_runner set desired_state = 'SLEEPING', revision = revision + 1 where cluster_key = 'orbit-ws03' and namespace = '$OLD' and management_state = 'READY' and desired_state = 'RUNNING'"
+```
+
+Repeat the first query until every row says `SLEEPING`, no Pod and no operation; a drain gives up after
+`lifecycle.drainSeconds` (600) if the runner stays busy, and new work wakes a runner again. A runner `STARTING` or
+`FAILED` must first be brought to `SLEEPING`, or to `FAILED` with nothing in flight and its Pod gone: find out why
+before the window.
+
+### 3. Freeze management
+
+Set `ORBIT_MANAGED_RUNNERS_ENABLED=false` in the apiserver host's `.env` and recreate the apiservers
+(`$DC up -d --no-deps apiserver`, then any `apiserver-2` and on). Its log no longer says
+`managed runners are enabled in ...`. Nothing managed moves now: no Pod or claim is created, stopped or deleted, and work
+for a sleeping runner waits. Then check that the step-2 query still says every row `SLEEPING` with no Pod, and on the
+k3s host that `$K get pods -n $OLD` lists nothing and no VolumeAttachment names their PVs
+(`$K get volumeattachments`). If a runner woke between steps 2 and 3, switch back on, and start again at step 2.
+
+### 4. Move each volume
+
+Only the mappings' claims move: a namespace can hold others (the lab keeps smoke-test claims there), and step 5 refuses
+a move no mapping matches. On the apiserver's host,
+`$PSQL -Atc "select pvc_name from managed_runner where cluster_key = 'orbit-ws03' and namespace = '$OLD' order by pvc_name" >$MOVE/claims.txt`,
+and copy it to `$MOVE` on the k3s host. There, with `scripts/managed-runner/move_volume_namespace.py` from this
+repository, and a directory of its own for this attempt and direction (`forward`; a rollback uses `back`, a second
+attempt `forward-2`), so that its `moved.tsv` holds only this attempt's moves:
+
+```bash
+DIR=$MOVE/forward
+while read -r pvc; do
+  KUBECTL="$K" python3 -I move_volume_namespace.py --from $OLD --to $NEW --pvc "$pvc" --backup $DIR --dry-run || break
+done <$MOVE/claims.txt
+while read -r pvc; do
+  KUBECTL="$K" python3 -I move_volume_namespace.py --from $OLD --to $NEW --pvc "$pvc" --backup $DIR || break
+done <$MOVE/claims.txt
+```
+
+Each refuses, having changed nothing, if its claim is not Bound, its PV is not `Retain` or not bound to it, a Pod mounts
+it or a VolumeAttachment names its PV. Before deleting a claim it saves the claim and its PV in `$MOVE`; a run that
+stopped part way is finished by running it again with the same directory. `$DIR/moved.tsv` gets one line per volume:
+the claim's name, its old and new UIDs, the PV, its UID and its volume handle; it must have as many lines as
+`claims.txt`. Copy it to `$MOVE/forward.tsv` on the apiserver's host.
+
+### 5. Record the moves
+
+On the apiserver's host, in one transaction, each update matched to exactly one row by everything recorded, and the
+capacity pool's row with them:
+
+```bash
+{
+  echo 'begin;'
+  while IFS=$'\t' read -r pvc old new pv pvuid handle; do
+    echo "do \$\$ declare n int; begin
+      update managed_runner set namespace = '$NEW', pvc_uid = '$new', revision = revision + 1
+       where cluster_key = 'orbit-ws03' and namespace = '$OLD' and pvc_name = '$pvc' and pvc_uid = '$old'
+         and pv_uid = '$pvuid' and volume_handle = '$handle' and management_state = 'SLEEPING' and pod_uid is null;
+      get diagnostics n = row_count;
+      if n <> 1 then raise exception 'pvc % matched % rows', '$pvc', n; end if; end \$\$;"
+  done <$MOVE/forward.tsv
+  echo "update managed_runner_capacity set namespace = '$NEW' where cluster_key = 'orbit-ws03' and namespace = '$OLD';"
+  echo "do \$\$ begin if exists (select 1 from managed_runner where cluster_key = 'orbit-ws03' and namespace = '$OLD') then raise exception 'a mapping is still in $OLD'; end if; end \$\$;"
+  echo 'commit;'
+} >$MOVE/record.sql
+$PSQL -f - <$MOVE/record.sql
+```
+
+A mapping whose volume was not moved stops the transaction, and nothing is recorded.
+
+### 6. Point the profile at the new namespace
+
+In the managed runners' directory, replace `kubeconfig-orbit-ws03.json` with `kubeconfig-orbit-ws03.json.$NEW` (by a
+rename, mode 0600), and in `profile.json` set `kubernetes.namespace` to `$NEW`, `admission.managerUsername` to
+`system:serviceaccount:$NEW:orbit-mr-manager`, and, while there, `kubernetes.kubeconfig` to the file's path under
+`/var/lib/orbit-cloud-runners/`. The kubeconfig's context namespace and the profile's must be the same: the apiserver
+refuses to start managed runners otherwise.
+
+### 7. Switch management back on, and wake one runner
+
+Set `ORBIT_MANAGED_RUNNERS_ENABLED=true` and recreate the apiservers. The log says
+`managed runners are enabled in orbit-ws03 (namespace orbit-cloud)`. Wake one runner (send a message to a session on
+it): the manager proves the guard in `$NEW` with its dry-run probe, and the runner's Pod `mr-<runner uuid>` starts in
+`$NEW` on the moved claim, with its files as they were. The others wake as work reaches them.
+
+### Rollback
+
+Until step 7 nothing has run on the moved volumes. To go back: with management still off (or off again, step 3), move
+each volume back (the same loop with `--from $NEW --to $OLD` and `DIR=$MOVE/back`), record `back/moved.tsv` as in
+step 5 with `$OLD` and `$NEW` swapped, put back the profile and the
+kubeconfig from `$MOVE`, and switch management on. The new namespace, its manager identity and its guard can stay until
+the move is tried again.
+
+### 8. Clean up, once the runners have run in the new namespace
+
+`$K get pvc -n $OLD` lists none of `claims.txt`. Then delete the old guard, `$K delete validatingwebhookconfiguration
+"$OLD_GUARD"` (on production `orbit-managed-runner-pods`); delete the
+namespace `$OLD` (its ServiceAccount, its token, its Role and RoleBinding and the earlier generations' bootstrap
+Secrets go with it, and the token is no longer accepted); remove its subject from `orbit-mr-manager-storage`; remove
+`/etc/rancher/k3s/$OLD` if step 1.6 moved it; and remove the old kubeconfig and profile copies from `$MOVE` once they
+are no longer needed for a rollback.
 
 ## Where each setting lives
 
@@ -668,4 +987,5 @@ Until 2026-11-20 these names said `orbit-managed`; they now say `orbit-cloud`. W
 | Idle interval, attempts, backoff, poll, lease, startup deadline, heartbeat freshness, drain | The profile, `lifecycle` | The apiserver's restart |
 | The manager's identity and rights | Its ServiceAccount, Role, ClusterRole and the kubeconfig the profile names | At once (RBAC); the kubeconfig at the apiserver's restart |
 | The admission guard | `ValidatingWebhookConfiguration` `orbit-cloud-runner-pods`; the API server's admission configuration (token) | At once; the token at the API server's restart |
+| One process, not the container, on out of memory (`singleProcessOOMKill: true`) | Each node's kubelet configuration; on k3s `/etc/rancher/k3s/kubelet-orbit.yaml`, loaded by `/etc/rancher/k3s/config.yaml.d/95-orbit-kubelet.yaml` | The k3s restart, for containers created after it |
 | The webhook token's hash | The profile, `admission.webhookTokenSha256` | The apiserver's restart |

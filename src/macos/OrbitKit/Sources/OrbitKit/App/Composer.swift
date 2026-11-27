@@ -103,6 +103,9 @@ public enum ComposerLogic {
         case .awaitingInput, .interrupted: return .sendNow
         case .running, .pending: return .queue
         case .succeeded, .failed, .cancelled: return .sendNow
+        // A status word this build does not know is never treated as running: send, and let the
+        // server's capabilities and answer decide.
+        case .unknown: return .sendNow
         }
     }
 
@@ -130,13 +133,15 @@ public enum ComposerLogic {
 
     /// True when a terminal-but-resumable session should be revived via POST /resume rather
     /// than POST /turns.
-    public static func shouldResume(status: RunStatus) -> Bool { status.isTerminal }
+    public static func shouldResume(status: RunStatus, released: Bool? = nil) -> Bool {
+        released ?? status.isTerminal
+    }
 
     /// Server capability wins when present, but execution state still chooses the endpoint:
     /// terminal + resumable uses `/resume`; a live send always uses `/turns`.
-    public static func shouldResume(status: RunStatus,
+    public static func shouldResume(status: RunStatus, released: Bool? = nil,
                                     capabilities: SessionCapabilities?) -> Bool {
-        guard shouldResume(status: status) else { return false }
+        guard shouldResume(status: status, released: released) else { return false }
         guard let capabilities else { return true }
         return capabilities.canSend && capabilities.canResume
     }
@@ -146,12 +151,12 @@ public enum ComposerLogic {
     /// Keyed on `canSend` for the same reason `availability` is: a NOT_TERMINAL denial is the
     /// server telling us the session is fine, not a reason to stop the user sending — and showing
     /// it as a standing banner made a recoverable disagreement look like a dead session.
-    public static func blockedMessage(status: RunStatus,
+    public static func blockedMessage(status: RunStatus, released: Bool? = nil,
                                       capabilities: SessionCapabilities?) -> String? {
         guard let capabilities, !capabilities.canSend else { return nil }
         // Resume-flavoured copy while the session looks terminal to us ("…cannot be resumed"),
         // send-flavoured while it looks live ("…cannot accept messages").
-        if shouldResume(status: status) {
+        if shouldResume(status: status, released: released) {
             return resumeBlockedMessage(reason: capabilities.resumeBlockedReason)
                 ?? "This session cannot be resumed right now."
         }

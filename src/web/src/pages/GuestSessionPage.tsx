@@ -24,6 +24,7 @@ import {
   Transcript,
 } from '../components/Transcript';
 import { Image } from '../components/ui/Image';
+import { Tooltip } from '../components/ui/Tooltip';
 import { ALLOWED_IMAGE_TYPES, type ComposerImage, useComposerImages } from '../components/WorkspaceView';
 import { memoizeEventFull } from '../lib/eventFull';
 import { meQuery } from '../lib/queries';
@@ -32,12 +33,11 @@ import { supersedesLiveDrafts } from '../lib/steerDelivery';
 import {
   isSessionLive,
   sessionLifecycleStateOf,
-  sessionStateWord,
   type SessionStateSource,
 } from '../lib/sessionState';
 import { NEAR_BOTTOM, sampleTail } from '../lib/tailPinning';
 import { titleFirstLine } from '../lib/title';
-import { followDelay, sharedStateTone, WORKING_POLL_MS } from './SharedSessionPage';
+import { followDelay, SharedSessionStatus, WORKING_POLL_MS } from './SharedSessionPage';
 
 const TAIL_PAGE = 200;
 const OLDER_PAGE = 200;
@@ -498,7 +498,6 @@ function GuestConversation({ sessionId }: { sessionId: string }) {
 
   const owner = data.ownerName;
   const completed = sessionLifecycleStateOf(head) === 'COMPLETED';
-  const tone = sharedStateTone(head, true);
   const live = isSessionLive(head) && !completed;
   const waiting = live && head.waitingOnOwner === true;
   const hint = !live ? guestCopy.restarts(owner) : waiting ? guestCopy.waitsItsTurn : guestCopy.runsOn(owner);
@@ -598,15 +597,16 @@ function GuestConversation({ sessionId }: { sessionId: string }) {
             }}
           />
           <div className="guest-composer-foot">
-            <button
-              type="button"
-              className="guest-composer-attach"
-              aria-label="Attach image"
-              title="Attach image"
-              onClick={() => imageInputRef.current?.click()}
-            >
-              <PictureOutlined />
-            </button>
+            <Tooltip content="Attach image">
+              <button
+                type="button"
+                className="guest-composer-attach"
+                aria-label="Attach image"
+                onClick={() => imageInputRef.current?.click()}
+              >
+                <PictureOutlined />
+              </button>
+            </Tooltip>
             <span className={`guest-composer-hint${sendError ? ' is-error' : ''}`}>{sendError ?? hint}</span>
             <button
               type="submit"
@@ -626,16 +626,15 @@ function GuestConversation({ sessionId }: { sessionId: string }) {
     <div className="share-page guest-view">
       <header className="share-header">
         <div className="share-crumbs">
-          <span className="share-crumb is-here" title={titleFirstLine(head.title)}>
-            {titleFirstLine(head.title)}
-          </span>
+          <Tooltip content={titleFirstLine(head.title)} truncatedOnly side="bottom" align="start">
+            <span className="share-crumb is-here">
+              {titleFirstLine(head.title)}
+            </span>
+          </Tooltip>
           <span className="share-subtitle">Shared by {owner}</span>
         </div>
         <div className="share-right">
-          <span className={`status-pill ${tone}`}>
-            {tone === 'running' ? <LoadingOutlined spin /> : <span className="status-dot" />}
-            {sessionStateWord(head)}
-          </span>
+          <SharedSessionStatus head={head} canReply />
           <span className="share-badge">Guest</span>
         </div>
       </header>

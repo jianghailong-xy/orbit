@@ -2,10 +2,16 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import {
-  CreatorType, PrismaClient, RunnerStatus, RunStatus, SessionDispatchOrigin, TaskStatus,
+  CreatorType,
+  PrismaClient,
+  RunnerStatus,
+  SessionDispatchOrigin,
+  TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { NotFoundException } from '@nestjs/common';
 import { Client } from 'pg';
+import { isReleasedStatus } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from '../sessions/sessions.service';
 import {
@@ -14,6 +20,7 @@ import {
 } from './coordinator-pg-test-safety';
 import { ProjectsService } from './projects.service';
 import { prismaClientFor } from '../prisma/prisma-client';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * `GET /projects/:id/panorama` against a real, fully migrated PostgreSQL.
@@ -128,7 +135,8 @@ async function session(
       taskId,
       title: `run of ${taskId}`,
       prompt: 'do the thing',
-      status,
+      turnState: turnStateOfWord(status),
+      ...(isReleasedStatus(status) ? { finishedAt: new Date()} : {}),
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
     },

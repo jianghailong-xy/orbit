@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ControlPlaneLeader } from '../realtime/control-plane-leader';
 import { messageOf } from './file-store';
 import { FilesService } from './files.service';
-import { FILE_UPLOAD_RETENTION, UPLOAD_RETENTION_MS, fileGraceMs } from './file-retention';
+import { FILE_UPLOAD_RETENTION, UPLOAD_RETENTION_MS, fileGraceMs, offHostPruneAtFor } from './file-retention';
 
 /** How often the sweep runs: a file's dates are in days, and nothing waits on it. */
 const SWEEP_INTERVAL_MS = 60 * 60 * 1000;
@@ -18,8 +18,21 @@ const SWEEP_BATCH = 1000;
 /** How long one blob's delete may hold its row: a local unlink is at once, and a bucket gets as long as it takes to answer. */
 const DELETE_TRANSACTION_TIMEOUT_MS = 65_000;
 
+/** How long a drive write may go untouched before its staging, and the chunks only it held, are let go. */
+export const DRIVE_STAGING_IDLE_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** How long the drive keeps a commit's answer and a change-feed row (docs/drive-technical-design.md §1.1). */
+export const DRIVE_FEED_KEEP_MS = 24 * 60 * 60 * 1000;
+
 /** What one sweep did. */
 export interface FileSweepResult {
+  /**
+   * Drive stagings removed because nothing had touched them for DRIVE_STAGING_IDLE_MS, and the files a replacing rename
+   * removed (drive_removed_entry) kept that long for a handle still writing one.
+   */
+  stagingsRemoved: number;
+  /** Drive commit answers and change-feed rows removed because they were older than DRIVE_FEED_KEEP_MS. */
+  feedRowsRemoved: number;
   /** Rows given a date: those whose task was deleted, and those no date was ever written for. */
   dated: number;
   tombstoned: number;
@@ -30,9 +43,13 @@ export interface FileSweepResult {
 }
 
 /**
- * Carries out §2.8's expiry (file-retention.ts says what the dates mean), in four steps, each of which can stop at any
+ * Carries out §2.8's expiry (file-retention.ts says what the dates mean), in five steps, each of which can stop at any
  * instant and is carried on from by the next sweep:
  *
+ *   0. A drive staging (docs/drive-technical-design.md §2.4), a write no commit has taken, is removed once
+ *      nothing has touched it for seven days; its chunk rows go with it, and step 3 then finds what only they held. A
+ *      drive commit's answer and a change-feed row go once they are a day old: a retried commit or a feed reader older
+ *      than that starts again from the tree.
  *   1. A file its task's deletion let go of gets its date. Nothing else writes one then: the deletion takes the versions
  *      that held the row with it, whichever door or cascade it came through, and a row that evidence held has no date and
  *      names a version that is no longer there. Other rows of that task keep the date they have. An upload no evidence
@@ -40,12 +57,15 @@ export interface FileSweepResult {
  *      rolling upgrade.
  *   2. Every row past its date gets a tombstone (`expired_at`), and keeps everything else: its name, size, sha256, test
  *      summary and evidence. Nothing pinned, and nothing a door other than `file_upload` wrote.
- *   3. Bytes no live row names are marked `released_at`, and bytes a live row names again lose the mark.
+ *   3. Bytes no live row names are marked `released_at`, and bytes a live row names again lose the mark. A drive chunk row,
+ *      of a version or of a staging, is live for as long as it exists: drive content never expires, and stops holding
+ *      only when the owner deletes it for good, which deletes the row.
  *   4. Bytes released for longer than the grace period go from their store (`bytes_deleted_at`), and the off-host copy may
  *      follow one grace period later (`off_host_prune_at`, scripts/pg-backup.sh). The row of a file_blob stays.
  *
- * Bytes are never deleted while an attachment row could still want them. Step 4 asks that under the file_blob row's lock,
- * which an attachment row naming these bytes needs in order to commit (its foreign key's FOR KEY SHARE), which `store` needs
+ * Bytes are never deleted while an attachment row, or a drive chunk row, could still want them. Step 4 asks that under the
+ * file_blob row's lock, which an attachment or drive chunk row naming these bytes needs in order to commit (its foreign key's
+ * FOR KEY SHARE), which `store` needs
  * in order to stamp `last_referenced_at`, and which a pin takes before it lifts a tombstone. So once the question is answered
  * no new holder can appear until the bytes are gone and the row says so: an upload of the same content then finds them gone
  * and keeps them again. A row may be copied without `store` only while it has no tombstone, and that row holds the bytes.
@@ -90,9 +110,9 @@ export class FileRetentionSweep implements OnApplicationBootstrap, OnModuleDestr
     if (this.running) return;
     this.running = this.sweep()
       .then((done) => {
-        if (done.dated + done.tombstoned + done.deleted + done.failed > 0) {
+        if (done.stagingsRemoved + done.feedRowsRemoved + done.dated + done.tombstoned + done.deleted + done.failed > 0) {
           this.logger.log(
-            `gave ${done.dated} file(s) a date, tombstoned ${done.tombstoned}, deleted the bytes of ${done.deleted}, and could `
+            `removed ${done.stagingsRemoved} idle drive write(s) and ${done.feedRowsRemoved} old drive feed row(s), gave ${done.dated} file(s) a date, tombstoned ${done.tombstoned}, deleted the bytes of ${done.deleted}, and could `
               + `not reach the store of ${done.failed}`,
           );
         }
@@ -105,11 +125,66 @@ export class FileRetentionSweep implements OnApplicationBootstrap, OnModuleDestr
 
   /** One sweep, as of `now`: a spec's clock, or the time it runs. */
   async sweep(now: Date = new Date()): Promise<FileSweepResult> {
+    const stagingsRemoved = await this.removeIdleStagings(now);
+    const feedRowsRemoved = await this.pruneDriveFeed(now);
     const dated = await this.dateUndatedFiles(now);
     const tombstoned = await this.tombstoneDue(now);
     await this.markReleased(now);
     const { deleted, failed } = await this.deleteReleased(now);
-    return { dated, tombstoned, deleted, failed };
+    return { stagingsRemoved, feedRowsRemoved, dated, tombstoned, deleted, failed };
+  }
+
+  /** Step 0's second half: drive commit answers and change-feed rows older than a day, a batch at a time. */
+  private async pruneDriveFeed(now: Date): Promise<number> {
+    const before = new Date(now.getTime() - DRIVE_FEED_KEEP_MS).toISOString();
+    let total = 0;
+    for (;;) {
+      const removed = await this.prisma.$executeRaw`
+        DELETE FROM drive_commit
+         WHERE (owner_id, commit_id) IN (
+           SELECT owner_id, commit_id FROM drive_commit WHERE created_at < ${before}::timestamptz LIMIT ${SWEEP_BATCH}
+         )`;
+      total += removed;
+      if (removed < SWEEP_BATCH) break;
+    }
+    for (;;) {
+      const removed = await this.prisma.$executeRaw`
+        DELETE FROM drive_change
+         WHERE seq IN (SELECT seq FROM drive_change WHERE at < ${before}::timestamptz ORDER BY seq LIMIT ${SWEEP_BATCH})`;
+      total += removed;
+      if (removed < SWEEP_BATCH) return total;
+    }
+  }
+
+  /** Step 0, a batch at a time. A staging a chunk is arriving for is skipped, and its touch moves it out of reach. */
+  private async removeIdleStagings(now: Date): Promise<number> {
+    const before = new Date(now.getTime() - DRIVE_STAGING_IDLE_MS).toISOString();
+    let total = 0;
+    for (;;) {
+      const removed = await this.prisma.$executeRaw`
+        DELETE FROM drive_staging
+         WHERE id IN (
+           SELECT id FROM drive_staging
+            WHERE committed_at IS NULL
+              AND touched_at < ${before}::timestamptz
+            ORDER BY touched_at
+            LIMIT ${SWEEP_BATCH}
+            FOR UPDATE SKIP LOCKED
+         )
+           AND touched_at < ${before}::timestamptz`;
+      total += removed;
+      if (removed < SWEEP_BATCH) break;
+    }
+    // A file a replacing rename removed is kept for a handle still writing it as long as an untouched staging is (§3.2).
+    for (;;) {
+      const removed = await this.prisma.$executeRaw`
+        DELETE FROM drive_removed_entry
+         WHERE (owner_id, entry_id) IN (
+           SELECT owner_id, entry_id FROM drive_removed_entry WHERE removed_at < ${before}::timestamptz LIMIT ${SWEEP_BATCH}
+         )`;
+      total += removed;
+      if (removed < SWEEP_BATCH) return total;
+    }
   }
 
   /**
@@ -167,11 +242,24 @@ export class FileRetentionSweep implements OnApplicationBootstrap, OnModuleDestr
    */
   private async markReleased(now: Date): Promise<void> {
     await this.prisma.fileBlob.updateMany({
-      where: { releasedAt: null, bytesDeletedAt: null, attachments: { none: { expiredAt: null } } },
+      where: {
+        releasedAt: null,
+        bytesDeletedAt: null,
+        attachments: { none: { expiredAt: null } },
+        driveVersionChunks: { none: {} },
+        driveStagingChunks: { none: {} },
+      },
       data: { releasedAt: now },
     });
     await this.prisma.fileBlob.updateMany({
-      where: { releasedAt: { not: null }, attachments: { some: { expiredAt: null } } },
+      where: {
+        releasedAt: { not: null },
+        OR: [
+          { attachments: { some: { expiredAt: null } } },
+          { driveVersionChunks: { some: {} } },
+          { driveStagingChunks: { some: {} } },
+        ],
+      },
       data: { releasedAt: null },
     });
   }
@@ -185,6 +273,8 @@ export class FileRetentionSweep implements OnApplicationBootstrap, OnModuleDestr
         releasedAt: { lte: cutoff },
         lastReferencedAt: { lte: cutoff },
         attachments: { none: { OR: [{ expiredAt: null }, { expiredAt: { gt: cutoff } }] } },
+        driveVersionChunks: { none: {} },
+        driveStagingChunks: { none: {} },
       },
       select: { sha256: true },
       take: SWEEP_BATCH,
@@ -224,6 +314,8 @@ export class FileRetentionSweep implements OnApplicationBootstrap, OnModuleDestr
           where: { sha256, OR: [{ expiredAt: null }, { expiredAt: { gt: cutoff } }] },
         });
         if (holders > 0) return false;
+        if (await tx.driveVersionChunk.count({ where: { sha256 }, take: 1 })) return false;
+        if (await tx.driveStagingChunk.count({ where: { sha256 }, take: 1 })) return false;
         const store = this.files.storeOf(blob.storage);
         if (!store) throw new Error(`this deployment has no ${blob.storage} store`);
         await store.remove(sha256);
@@ -231,8 +323,8 @@ export class FileRetentionSweep implements OnApplicationBootstrap, OnModuleDestr
           where: { sha256 },
           data: {
             bytesDeletedAt: now,
-            // Only the local store's bytes are in the off-host copy (scripts/pg-backup.sh).
-            offHostPruneAt: blob.storage === 'local' ? new Date(now.getTime() + this.grace) : null,
+            // The sidecar prunes local blobs from its files copy and S3 blobs from its declared bucket mirror.
+            offHostPruneAt: offHostPruneAtFor(blob.storage, this.files.config, now, this.grace),
           },
         });
         return true;

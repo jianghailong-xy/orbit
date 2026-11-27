@@ -83,9 +83,10 @@ const NAMING_SYSTEM_PROMPT =
 function reusePrompt(knownTags: string[]): string {
   return (
     `\n\nThe user's existing tags: ${knownTags.join(', ')}. ` +
-    'REUSE any that fit this session instead of coining a near-duplicate. ' +
+    'Pick "tags" ONLY from this list, spelled as listed, and give [] when none fits: a tag not ' +
+    'on it is dropped. ' +
     "These are a vocabulary, not an example: their language says nothing about this request's " +
-    "language. Still write the title, and any NEW tag, in the language of the user's request."
+    "language. Still write the title in the language of the user's request."
   );
 }
 
@@ -356,11 +357,9 @@ export const TITLE_BEAUTIFY_CONCURRENCY = 3;
 const beautifyQueue = new AsyncWorkQueue(TITLE_BEAUTIFY_CONCURRENCY);
 
 /**
- * How many of the owner's existing tag names are offered to the model as reuse candidates —
- * and, deliberately the same number, the ceiling on the auto-grown library (see applyAutoTags).
- * They are one constant because a tag the model is never shown is a tag it will coin again under
- * a new name: letting the library outgrow the prompt would manufacture the duplicates the reuse
- * list exists to prevent.
+ * How many of the owner's existing tag names are offered to the model as candidates. Auto-tagging
+ * only picks among them (see SessionsService.applyAutoTags), so a tag past this many is one the
+ * model never chooses.
  */
 export const MAX_KNOWN_TAGS_PROMPTED = 60;
 

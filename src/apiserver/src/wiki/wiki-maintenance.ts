@@ -23,6 +23,7 @@ import { redactSecrets } from '../common/secret-redaction';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
+import { sessionTurnStateSql } from '../sessions/session-turn-state';
 import { buildDossier, loadDossierRecords, ownerEnvLiterals, storedDossierSources, type DossierImportedNote, type DossierReader, type DossierRecords } from './wiki-dossier';
 import { normalizeRepoUrl, WikiRefusalError } from './wiki.service';
 import { wikiWorkspacesOfSpaces } from './wiki-workspaces';
@@ -230,6 +231,10 @@ export async function spaceScope(prisma: PrismaService, ownerId: string, spaceId
   };
 }
 
+/** No turn of the session the query names `alias` is queued or in flight (session-turn-state.ts). */
+const noTurnOwed = (alias: string): Prisma.Sql =>
+  Prisma.sql`COALESCE(${sessionTurnStateSql(alias)}, 'NONE') NOT IN ('QUEUED', 'IN_FLIGHT')`;
+
 /**
  * The space's committed facts (contract `maintenance.cursor.factKinds`), as one statement over the five
  * sources. Nothing of a maintenance run is among them: the sessions, tasks, approvals and receipts a run made
@@ -254,7 +259,7 @@ export function factsSql(scope: SpaceScope, from: FactPosition | null): Prisma.S
        -- v1 feeds no scheduled task's run to the wiki (docs/scheduled-tasks-design.md §12.1).
        AND s."run_source" <> 'SCHEDULE'
        AND s."last_turn_at" IS NOT NULL
-       AND s."status"::text IN ('AWAITING_INPUT', 'SUCCEEDED', 'FAILED', 'CANCELLED', 'INTERRUPTED')
+       AND ${noTurnOwed('s')}
        AND ${ours(Prisma.sql`s."id"`)}
        AND ${notMaintenance(Prisma.sql`t."list_id"`)} ${onOrAfter(Prisma.sql`s."last_turn_at"`)}
     UNION ALL
@@ -332,7 +337,7 @@ export async function wikiSessionsOfSpace(reader: DossierReader, scope: SpaceSco
      WHERE s."owner_id" = ${scope.ownerId}::uuid AND s."id" = ANY(${[...sessionIds]}::uuid[])
        AND s."workspace_id" = ANY(${scope.workspaceIds}::uuid[]) AND s."deleted_at" IS NULL
        AND s."run_source" <> 'SCHEDULE'
-       AND s."status"::text IN ('AWAITING_INPUT', 'SUCCEEDED', 'FAILED', 'CANCELLED', 'INTERRUPTED')
+       AND ${noTurnOwed('s')}
        AND s."id" <> ALL(${scope.foreignSessionIds}::uuid[])
        AND (${scope.maintenanceListId}::uuid IS NULL OR t."list_id" IS NULL OR t."list_id" <> ${scope.maintenanceListId}::uuid)`;
   return new Set(rows.map((row) => row.id));

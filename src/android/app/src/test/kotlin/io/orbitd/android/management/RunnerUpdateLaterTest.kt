@@ -138,7 +138,7 @@ class RunnerUpdateLaterTest {
         assertTrue(screens.contains("if (card.phase == \"draining\" || card.phase == \"postponed\")"))
         assertTrue(screens.contains("}, change = card.phase == \"postponed\")"))
         assertTrue(screens.contains("confirmButton = { TextButton(onClick = { confirmingUpdateNow = false; updateRunner() })"))
-        assertTrue(reader.contains("RunnerUpdatingFoot(it, runnerUpdatingMachine, later = runnerUpdatingLater)"))
+        assertTrue(reader.contains("RunnerUpdatingFoot(it, runnerUpdatingMachine, Modifier.align(Alignment.End), later = runnerUpdatingLater, runNow = runNow)"))
         assertEquals(2, Regex("RunnerUpdatingQueued\\(runnerUpdatingPage, runnerUpdatingMachine, openTurn, later = runnerUpdatingLater\\)").findAll(reader).count())
         assertTrue(reader.contains("api.mutate(RunnerUpdateLater.path(runnerId), body = RunnerUpdateLater.body(until))"))
     }

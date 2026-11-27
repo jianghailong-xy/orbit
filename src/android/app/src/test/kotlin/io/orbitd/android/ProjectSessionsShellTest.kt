@@ -123,7 +123,7 @@ class ProjectSessionsShellTest {
         signIn(); openAlpha()
         await { exists(hasRowMenu("Options for Plain notes")) }
         compose.onNode(hasText("Plain notes") and hasClickAction()).performClick()
-        await { ProjectShell.calls.any { it == "GET sessions/${ProjectShell.PLAIN}" } && exists(hasContentDescription("Back")) }
+        await { exists(hasContentDescription("Back")) && ProjectShell.calls.any { it == "GET sessions/${ProjectShell.PLAIN}" } }
         compose.waitForIdle()
         compose.onAllNodesWithContentDescription("Project sessions").assertCountEquals(0)
     }
@@ -250,7 +250,7 @@ class ProjectSessionsShellTest {
     @Test fun theRowsMenuOpensTheSessionItSpeaksForItsSessionsAndItsProject() {
         signIn(); openAlpha()
         rowMenu()
-        assertEquals(listOf("Open Session", "Sessions", "Open Project", "Pin", "Move…", "Close"), dialogButtons())
+        assertEquals(listOf("Open Session", "Sessions", "Open Project", "Pause", "Pin", "Move…", "Close"), dialogButtons())
         compose.onNode(hasText("Open Session") and hasAnyAncestor(isDialog())).performClick()
         // The member in Beta the line names opens over the list.
         await { ProjectShell.calls.any { it == "GET sessions/${ProjectShell.WAITING}" } }

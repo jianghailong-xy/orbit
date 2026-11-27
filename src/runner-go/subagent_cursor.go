@@ -84,6 +84,9 @@ func runCursorChild(ctx context.Context, c subagentChild) (ExecResult, string, e
 	bridge := newCursorPermissionBridge(policy, mapper.permissionAsk, mapper.refuse, mapper.withdraw, func(ask cursorPermissionAsk) bool {
 		return cursorPreApproved(preApproved, ask)
 	}, cursorChildCard(bridgeCursorCard(c.t, child.SessionID), c.runID), emitFor, launch.Cwd)
+	// The parent's uploads directory, which the parent writes to unasked when it is Claude Code or Codex.
+	bridge.uploads = uploadsDir(child.SessionID)
+	bridge.subagent = child
 	bridge.prepareSandbox(ctx, child, runnerCursorSandboxInstaller, detectCursorSandbox, installCursorBubblewrap)
 	app, err := startCursorACP(ctx, launch, mapper, bridge, c.emit)
 	if err != nil {
@@ -177,5 +180,7 @@ func runCursorChild(ctx context.Context, c subagentChild) (ExecResult, string, e
 		req.Status = stFailed
 	}
 	// Cursor reports no usage and no cost (§3.2): none is claimed.
-	return subagentChildResult(req.Status, strings.TrimSpace(req.Result), req.Error, 0, nil), conversation, nil
+	res := subagentChildResult(req.Status, strings.TrimSpace(req.Result), req.Error, 0, nil)
+	res.Failure, res.Admission = req.Failure, req.Admission
+	return res, conversation, nil
 }

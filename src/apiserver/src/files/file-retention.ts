@@ -3,7 +3,7 @@ import { citedFileIds, storedEvidenceEnvelope } from '../tasks/task-evidence-env
 import type { FilesConfig } from './file-store';
 
 /**
- * How long a file an agent keeps with `file_upload` lasts (docs/orbit-files-design.md §2.8, decided 2026-11-02):
+ * How long a file an agent keeps with `file_upload` lasts (docs/drive-design.md §2.8, decided 2026-11-02):
  *
  *   uploaded, and no evidence cites it                 14 days after the upload
  *   cited by the newest version, undecided             does not expire
@@ -49,6 +49,21 @@ export const MIN_GRACE_MS = 7 * DAY_MS;
  */
 export function fileGraceMs(config: Pick<FilesConfig, 'backupRetentionMs'>): number {
   return Math.max(MIN_GRACE_MS, config.backupRetentionMs ?? 0);
+}
+
+/**
+ * When the off-host copy of bytes just deleted from `storage` may follow them (`file_blob.off_host_prune_at`, which the backup
+ * sidecar prunes by): one grace period on, for the local store always, and for the bucket only when the deployment declares
+ * a mirror of it (ORBIT_DRIVE_S3_MIRROR=1). Null: nothing of those bytes is off host.
+ */
+export function offHostPruneAtFor(
+  storage: string,
+  config: Pick<FilesConfig, 's3Mirror'>,
+  deletedAt: Date,
+  graceMs: number,
+): Date | null {
+  if (storage === 'local' || (storage === 's3' && config.s3Mirror)) return new Date(deletedAt.getTime() + graceMs);
+  return null;
 }
 
 /**

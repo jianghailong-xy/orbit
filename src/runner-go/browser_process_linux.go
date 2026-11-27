@@ -82,6 +82,9 @@ func (execBrowserStarter) WaitDisplay(display string) error {
 
 func (p *execBrowserProcess) Exited() bool { return p.exited.Load() }
 
+// Done is closed when the program has ended.
+func (p *execBrowserProcess) Done() <-chan struct{} { return p.done }
+
 // Stop sends the process group SIGTERM, and SIGKILL after 5 seconds.
 func (p *execBrowserProcess) Stop() {
 	pgid := p.cmd.Process.Pid

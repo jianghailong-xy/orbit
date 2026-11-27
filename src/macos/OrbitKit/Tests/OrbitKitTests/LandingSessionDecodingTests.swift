@@ -306,7 +306,7 @@ final class LandingSessionDecodingTests: XCTestCase {
             ]),
         ]))
         XCTAssertEqual(card?.landingSessionId, "landing-1")
-        XCTAssertEqual(OpenItemDeliveryCard.actionLabels(card?.actions ?? []), ["Open landing"])
+        XCTAssertEqual(card?.actions, ["OPEN_LANDING"])
         XCTAssertNotNil(card.flatMap(OpenItemDeliveryCard.landingLink))
 
         let older = OpenItemDelivery.parse(.object([

@@ -288,11 +288,11 @@ describe('a session its workspace’s clone holds', () => {
     expect(pendingSlotDescription(0, 16, gate)).toBe('Starts when the clone is done.');
   });
 
-  it('a failed clone is named, with where to retry it', () => {
+  it('a failed clone is named; its Retry is on the never-started card', () => {
     const gate = { queuedReason: 'WORKSPACE_CLONE_FAILED' };
     expect(queuedTitle(gate)).toBe('Clone failed');
     expect(pendingSlotDescription(0, 16, gate)).toBe(
-      'This session starts once the repository is cloned. Retry the clone from the conversation’s first line.',
+      'This session starts once the repository is cloned.',
     );
   });
 

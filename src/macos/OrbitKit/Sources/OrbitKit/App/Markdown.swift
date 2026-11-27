@@ -169,6 +169,20 @@ private func paragraphBlocks(_ paragraph: Paragraph) -> [MarkdownBlock] {
     return result
 }
 
+/// A table cell's content as `.paragraph`/`.image` blocks. A cell is carried as inline source and
+/// drawn by the inline parser, which drops images, so a reply that put its screenshots in a table
+/// (`| 3 | ![Flywheel](orbit-attachment:…) | … |`) showed empty cells. A cell holding an image is
+/// split the way a paragraph is; any other cell stays one `.paragraph` of its source, unparsed, so
+/// a cell like `1.` or `- x` never turns into a list.
+public func tableCellBlocks(_ cell: String) -> [MarkdownBlock] {
+    guard cell.contains("![") else { return [.paragraph(text: cell)] }
+    let document = Document(parsing: cell)
+    guard document.childCount == 1, let paragraph = document.child(at: 0) as? Paragraph else {
+        return [.paragraph(text: cell)]
+    }
+    return paragraphBlocks(paragraph)
+}
+
 /// Flatten a (possibly nested) list into items tagged with their nesting depth, mirroring the
 /// hand-rolled parser's `indent` model. Ordered numbering counts up from the list's start index.
 private func flatten(_ list: ListItemContainer, depth: Int, into items: inout [MarkdownListItem]) {

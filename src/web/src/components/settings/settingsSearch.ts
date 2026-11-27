@@ -1,4 +1,4 @@
-import { INTEGRATION_PAGES, PERSONAL_PAGES, PERSONAL_SETTINGS } from '../../pages/settings/settingsIndex';
+import { INTEGRATION_PAGES, MODEL_ROUTING_PAGE, PERSONAL_PAGES, PERSONAL_SETTINGS } from '../../pages/settings/settingsIndex';
 import { vendorName, vendorOf } from '../ProviderGallery';
 import { machineName } from '../../lib/machineSetup';
 
@@ -39,6 +39,8 @@ export type SettingsSearchSources = {
     workDir?: string | null;
     machine?: string | null;
   }>;
+  /** The server sends web push, so Notifications has its This browser row (docs/web-push-design.md). */
+  webPush?: boolean;
 };
 
 const has = (text: string | null | undefined, needle: string): boolean => !!text && text.toLowerCase().includes(needle);
@@ -53,6 +55,9 @@ export function searchSettings(query: string, sources: SettingsSearchSources): S
   const q = query.trim().toLowerCase();
   if (!q) return [];
   const pageLabel = new Map<string, string>(PERSONAL_PAGES.map((page) => [page.path, page.label]));
+  pageLabel.set(MODEL_ROUTING_PAGE.path, MODEL_ROUTING_PAGE.label);
+  // A row on Model routing is found under Providers, where that page is.
+  const routingRows: SettingsHit[] = [];
 
   const personal: SettingsHit[] = PERSONAL_PAGES.filter((page) => has(page.label, q)).map((page) => ({
     key: page.path,
@@ -60,9 +65,10 @@ export function searchSettings(query: string, sources: SettingsSearchSources): S
     to: page.path,
   }));
   for (const s of Object.values(PERSONAL_SETTINGS)) {
+    if (s === PERSONAL_SETTINGS.browserNotifications && !sources.webPush) continue;
     const description = 'description' in s ? s.description : undefined;
     if (!has(s.title, q) && !has(description, q)) continue;
-    personal.push({
+    (s.path === MODEL_ROUTING_PAGE.path ? routingRows : personal).push({
       key: `${s.path}#${s.anchor}`,
       label: s.title,
       detail: description && has(description, q) ? around(description, q) : pageLabel.get(s.path),
@@ -123,6 +129,14 @@ export function searchSettings(query: string, sources: SettingsSearchSources): S
       label: 'Account pools',
       to: '/settings/providers/pools',
     });
+  // The page holds what Model tiers and the Routing report were, so their names find it too.
+  if (['Model routing', 'Model tiers', 'Routing report'].some((name) => has(name, q)))
+    providers.push({
+      key: 'routing',
+      label: MODEL_ROUTING_PAGE.label,
+      to: MODEL_ROUTING_PAGE.path,
+    });
+  providers.push(...routingRows);
 
   const workspaces: SettingsHit[] = [];
   for (const workspace of sources.workspaces) {

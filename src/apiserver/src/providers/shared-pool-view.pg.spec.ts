@@ -24,7 +24,8 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
 import { ConflictException } from '@nestjs/common';
-import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import {
@@ -39,6 +40,7 @@ import { choosePoolKey } from './pool-key-select';
 import { ProvidersService } from './providers.service';
 import { sharedPoolKeyCandidates, usageWindowStart } from './shared-pool';
 import { SharedPoolsService } from './shared-pools.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 process.env.PROVIDER_SECRET_KEY ??= 'shared-pool-view-spec';
@@ -86,7 +88,10 @@ async function sessionOn(
     data: {
       title: 'shared pool view',
       prompt: 'hello',
-      status,
+      turnState: turnStateOfWord(status),
+      ...(['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(status)
+        ? { finishedAt: new Date()}
+        : {}),
       ownerId: owner.id,
       creatorId: owner.id,
       workspaceId: owner.workspaceId,
@@ -199,9 +204,9 @@ suite("a shared pool page's next key, running keys and session counts — on rea
     for (const who of [ann, mia, max]) assert.deepEqual(await running(who), ['mia-org'], `${who.name}'s view`);
 
     // A session that finished is on the key no longer; a turn the engine started for itself is.
-    await db.session.update({ where: { id: onMia }, data: { status: RunStatus.SUCCEEDED } });
+    await db.session.update({ where: { id: onMia }, data: { turnState: null, finishedAt: new Date()} });
     assert.deepEqual(await running(ann), []);
-    await db.session.update({ where: { id: onMia }, data: { status: RunStatus.AWAITING_INPUT, engineTurnActive: true } });
+    await db.session.update({ where: { id: onMia }, data: { turnState: null, finishedAt: null, engineTurnActive: true } });
     assert.deepEqual(await running(ann), ['mia-org']);
     await db.session.update({ where: { id: onMia }, data: { engineTurnActive: false } });
     assert.deepEqual(await running(ann), []);

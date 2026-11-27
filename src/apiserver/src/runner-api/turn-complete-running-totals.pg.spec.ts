@@ -16,7 +16,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import {
   RunEventType,
   RunStatus as SharedRunStatus,
@@ -92,7 +93,7 @@ test('a Claude turn books its own cost and tokens, and no turn twice', {
       data: {
         ownerId, creatorId: ownerId, assignedRunnerId: runnerId, provider: data.provider ?? 'claude',
         model: data.model ?? OPUS, costUsd: data.costUsd ?? 0,
-        title: 'totals session', prompt: 'report totals', status: RunStatus.RUNNING,
+        title: 'totals session', prompt: 'report totals', turnState: 'IN_FLIGHT',
         engineTurnActive: true, dispatchOrigin: SessionDispatchOrigin.USER,
       },
       select: { id: true },
@@ -105,7 +106,7 @@ test('a Claude turn books its own cost and tokens, and no turn twice', {
   async function turn(sessionId: string) {
     seq += 1;
     await db.session.update({
-      where: { id: sessionId }, data: { status: RunStatus.RUNNING, engineTurnActive: true },
+      where: { id: sessionId }, data: { turnState: 'IN_FLIGHT', engineTurnActive: true },
     });
     const { id } = await db.conversationTurn.create({
       data: {

@@ -1,5 +1,5 @@
 /**
- * `file_upload --as test-report` at its door (docs/orbit-files-design.md §2.5; migration 0465), held against the
+ * `file_upload --as test-report` at its door (docs/drive-design.md §2.5; migration 0465), held against the
  * production apiserver — `build/main.js`, multer and every guard and pipe in front of the route — over a real PostgreSQL
  * that `scripts/run-pg-spec.sh` migrates from empty:
  *
@@ -72,13 +72,13 @@ test('file_upload --as test-report', { skip: !URL, concurrency: 1, timeout: 600_
   server = await startApiserver(url, `test-report-${randomUUID()}`, {
     PROVIDER_SECRET_KEY,
     MODEL_CATALOG_URL: 'http://127.0.0.1:9/',
-    ORBIT_FILES_BACKEND: 'local',
-    ORBIT_FILES_DIR: dir,
+    ORBIT_DRIVE_BACKEND: 'local',
+    ORBIT_DRIVE_DIR: dir,
   });
   const api = server;
 
   const ownerId = randomUUID();
-  await db.user.create({ data: { id: ownerId, email: `test-report-${RUN}@orbit-files.invalid`, name: 'test report', passwordHash: 'x' } });
+  await db.user.create({ data: { id: ownerId, email: `test-report-${RUN}@orbit-documents.invalid`, name: 'test report', passwordHash: 'x' } });
   const runnerId = randomUUID();
   const token = `${runnerId}-${RUN}`;
   await db.runner.create({ data: { id: runnerId, ownerId, name: 'test-report', tokenHash: createHash('sha256').update(token).digest('hex') } });
@@ -88,7 +88,7 @@ test('file_upload --as test-report', { skip: !URL, concurrency: 1, timeout: 600_
   await db.session.create({
     data: {
       id: sessionId, title: 'a run', prompt: 'a run', ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
-      status: 'AWAITING_INPUT', startedAt: new Date(), runtimeSessionId: `runtime-${sessionId}`,
+      turnState: null, startedAt: new Date(), runtimeSessionId: `runtime-${sessionId}`,
     },
   });
   const STANDARD = 'The report says the tests pass.';
@@ -103,7 +103,7 @@ test('file_upload --as test-report', { skip: !URL, concurrency: 1, timeout: 600_
   await db.session.create({
     data: {
       id: runId, title: 'a run of the task', prompt: 'a run of the task', ownerId, creatorId: ownerId, workspaceId,
-      assignedRunnerId: runnerId, status: 'AWAITING_INPUT', startedAt: new Date(), runtimeSessionId: `runtime-${runId}`,
+      assignedRunnerId: runnerId, turnState: null, startedAt: new Date(), runtimeSessionId: `runtime-${runId}`,
       provider: 'claude', taskId, startsTaskWork: true,
     },
   });

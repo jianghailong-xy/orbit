@@ -8,11 +8,11 @@ import { HttpException } from '@nestjs/common';
 import {
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import {
@@ -43,7 +43,11 @@ import { CoordinatorWakeService } from './coordinator-wake.service';
 import { CriterionReadyProducer } from './criterion-ready.producer';
 import { CriterionUnlandedProducer } from './criterion-unlanded.producer';
 import { ProjectOpenItemEscalationService } from './open-item-escalation.service';
-import { INTEGRATION_JOB_CLAIM, PROMOTION_AUTOMATIC_LAND } from './project-integration-job';
+import {
+  INTEGRATION_JOB_CLAIM,
+  PROMOTION_AUTOMATIC_LAND,
+  settleDeliveredIdentityAfterFinish,
+} from './project-integration-job';
 import { configureProjectIntegration } from './project-integration-line';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectPromotionService } from './project-promotion.service';
@@ -51,6 +55,7 @@ import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
 import '../test-support/dequeue-under-lease';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 /**
  * "Chat about this" on an exception item, as `GET /projects/:id/open-items` serves it
@@ -296,7 +301,7 @@ async function world(stack: Stack, label: string): Promise<World> {
       title: `coordinator: ${label}`,
       prompt: `coordinator: ${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
       numTurns: 1,
@@ -359,11 +364,10 @@ async function doneCodeTask(stack: Stack, w: World, label: string): Promise<{ ta
       title,
       prompt: title,
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
-      finishedAt: new Date(Date.now() - 60_000),
       branch: `orbit/${label}-${randomUUID().slice(0, 6)}`,
       isolationStatus: 'worktree',
       baseSha: 'b'.repeat(40),
@@ -405,6 +409,14 @@ async function doneCodeTask(stack: Stack, w: World, label: string): Promise<{ ta
   });
   const task = await db.task.findUniqueOrThrow({ where: { id: declared.id }, select: { status: true } });
   assert.equal(task.status, TaskStatus.DONE, 'the acceptance command agreed');
+  await db.$transaction(async (tx) => {
+    const finished = await tx.session.update({
+      where: { id: sessionId },
+      data: { turnState: null, finishedAt: new Date(Date.now() - 60_000)},
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
+  });
   return { taskId: declared.id, sessionId };
 }
 
@@ -441,6 +453,12 @@ function itemsWhere(db: PrismaClient, where: { taskId?: string; promotionId?: st
 async function failedLanding(stack: Stack, w: World, label: string) {
   const task = await doneCodeTask(stack, w, label);
   const landing = await onlyClaim(stack, w, 'LAND_TASK');
+  // Revision 42 (W4): a red landing goes first to its task's own work session while that session could take it. These
+  // cases are about the coordinator's item, so a person ended the work session first and the failure is the
+  // coordinator's from the start (W-T6).
+  await stack.db.session.update({
+    where: { id: task.sessionId }, data: { endReason: 'ended', finishedAt: new Date() },
+  });
   assert.equal((await report(stack, w, landing, RED_LANDING)).accepted, true);
   const [item] = await itemsWhere(stack.db, { taskId: task.taskId });
   assert.ok(item, 'the red landing opened an item');
@@ -698,7 +716,7 @@ test('refused with its reason where there is no conversation to take the message
       // Ended, and resumable: the platform will not hand it a turn, a person may.
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId },
-        data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
+        data: { turnState: null, finishedAt: new Date() },
       });
       await stack.db.runner.update({ where: { id: w.runnerId }, data: { lastHeartbeatAt: new Date() } });
       let read = await rowOf(stack, w, red.itemId);
@@ -758,7 +776,7 @@ test('escalated, coordinator reaped while its runner is away: Ask again can queu
       // FAILED with the cancel it writes beside it — while the runner stayed away.
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId },
-        data: { status: RunStatus.FAILED, cancelRequestedAt: new Date(), finishedAt: new Date(), error: 'runner offline' },
+        data: { turnState: null, cancelRequestedAt: new Date(), finishedAt: new Date(), error: 'runner offline', lastTurnOutcome: 'FAILED' },
       });
       await stack.db.runner.update({
         where: { id: w.runnerId },
@@ -790,7 +808,7 @@ test('escalated, coordinator reaped and its runner back (2026-11-15): Ask again 
       // beside it, nobody closing the conversation — and then the runner came back.
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId },
-        data: { status: RunStatus.FAILED, cancelRequestedAt: new Date(), finishedAt: new Date(), error: 'runner offline' },
+        data: { turnState: null, cancelRequestedAt: new Date(), finishedAt: new Date(), error: 'runner offline', lastTurnOutcome: 'FAILED' },
       });
       await stack.db.runner.update({
         where: { id: w.runnerId },
@@ -815,13 +833,13 @@ test('escalated, coordinator reaped and its runner back (2026-11-15): Ask again 
       assert.deepEqual({ assignee: after.assignee, state: after.state }, { assignee: 'COORDINATOR', state: 'OPEN' });
       assert.equal(returned.escalateAt, null);
       const session = await stack.db.session.findUniqueOrThrow({
-        where: { id: w.coordinatorSessionId }, select: { status: true, cancelRequestedAt: true },
+        where: { id: w.coordinatorSessionId }, select: { ...WORD_SELECT, cancelRequestedAt: true },
       });
-      assert.equal(session.status, RunStatus.FAILED);
+      assert.equal(wordOf(session), RunStatus.FAILED);
       assert.ok(session.cancelRequestedAt);
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId },
-        data: { status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null, finishedAt: null },
+        data: { turnState: null, cancelRequestedAt: null, finishedAt: null},
       });
       await stack.openItems.deliverOwedTo(w.coordinatorSessionId);
       const delivery = await stack.db.projectOpenItemDelivery.findFirst({
@@ -865,7 +883,7 @@ test('escalated, coordinator that truly cannot receive — ended with no revival
       });
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId },
-        data: { status: RunStatus.CANCELLED, endReason: 'COMPLETED', completedAt: new Date(), cancelRequestedAt: null },
+        data: { turnState: null, finishedAt: new Date(), endReason: 'COMPLETED', completedAt: new Date(), cancelRequestedAt: null },
       });
       await expectUnreachable('ended without revival', 'COORDINATOR_UNAVAILABLE');
 

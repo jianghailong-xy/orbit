@@ -156,6 +156,14 @@ services:
       # its own on the far side — the mirror deletes anything there it did not put there.
       ORBIT_BACKUP_SYNC_TARGET: "${ORBIT_BACKUP_SYNC_TARGET:-}"
       ORBIT_BACKUP_SYNC_SSH_PORT: "${ORBIT_BACKUP_SYNC_SSH_PORT:-22}"
+      # Optional one-way copy of the bucket's files/ prefix to the archive's -bucket sibling. Each falls back to its
+      # ORBIT_DOCUMENTS_* and then ORBIT_FILES_* name from before the rename back to Drive.
+      ORBIT_DRIVE_S3_MIRROR: "${ORBIT_DRIVE_S3_MIRROR:-${ORBIT_DOCUMENTS_S3_MIRROR:-${ORBIT_FILES_S3_MIRROR:-0}}}"
+      ORBIT_DRIVE_S3_ENDPOINT: "${ORBIT_DRIVE_S3_ENDPOINT:-${ORBIT_DOCUMENTS_S3_ENDPOINT:-${ORBIT_FILES_S3_ENDPOINT:-}}}"
+      ORBIT_DRIVE_S3_BUCKET: "${ORBIT_DRIVE_S3_BUCKET:-${ORBIT_DOCUMENTS_S3_BUCKET:-${ORBIT_FILES_S3_BUCKET:-}}}"
+      ORBIT_DRIVE_S3_ACCESS_KEY_ID: "${ORBIT_DRIVE_S3_ACCESS_KEY_ID:-${ORBIT_DOCUMENTS_S3_ACCESS_KEY_ID:-${ORBIT_FILES_S3_ACCESS_KEY_ID:-}}}"
+      ORBIT_DRIVE_S3_SECRET_ACCESS_KEY: "${ORBIT_DRIVE_S3_SECRET_ACCESS_KEY:-${ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY:-${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}}}"
+      ORBIT_DRIVE_S3_REGION: "${ORBIT_DRIVE_S3_REGION:-${ORBIT_DOCUMENTS_S3_REGION:-${ORBIT_FILES_S3_REGION:-}}}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -223,6 +231,9 @@ services:
       # `docker compose up -d apiserver`. Set it on the host as ORBIT_RUN_STOPPED_WAKE_MODE.
       ORBIT_RUN_STOPPED_WAKE: "${ORBIT_RUN_STOPPED_WAKE_MODE:-on}"
       PORT: "3000"
+      # How the apiserver writes its log (src/apiserver/src/common/request-log.ts): json, one object a line carrying the
+      # web gateway's request id, which Alloy ships to Loki (docs/self-hosting.md, "Logs"); text, Nest's own lines.
+      ORBIT_LOG_FORMAT: "${ORBIT_LOG_FORMAT:-json}"
       CORS_ORIGINS: "http://localhost:2086"
       # Where runners reach this deployment — the origin the web image bakes in below. A session on a
       # shared Codex pool is handed <origin>/api/gw/codex as its OpenAI endpoint (providers/shared-pool.ts).
@@ -233,6 +244,9 @@ services:
       # Optional: Claude Code on the account owner's own Codex login pool, through the same gateway (docs/configuration.md).
       # `true` turns it on; anything else leaves every pool's engines and dispatch environment as they were.
       ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY: "${ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY:-}"
+      # Optional: tell runners this deployment serves session-release/v1 (docs/configuration.md). Off unless `on`; turn it
+      # on only once every apiserver replica serves it, and off before going back to a release that does not.
+      ORBIT_SESSION_RELEASE_V1: "${ORBIT_SESSION_RELEASE_V1:-}"
       # Optional: hosts besides api.openai.com that gateway may call (comma-separated; public https only, no redirects).
       ORBIT_GATEWAY_UPSTREAM_HOSTS: "${ORBIT_GATEWAY_UPSTREAM_HOSTS:-}"
       # Optional: the proxies in front of the gateway (a CDN such as Cloudflare, a load balancer, a TLS proxy on the host),
@@ -263,6 +277,11 @@ services:
       FCM_CLIENT_EMAIL: "${FCM_CLIENT_EMAIL:-}"
       FCM_PRIVATE_KEY: "${FCM_PRIVATE_KEY:-}"
       FCM_ANDROID_PACKAGE: "${FCM_ANDROID_PACKAGE:-io.orbitd.android}"
+      # Web Push to browsers (docs/web-push-design.md): a VAPID key pair, base64url as `npx web-push generate-vapid-keys`
+      # prints it. Empty disables browser notifications. Keep the pair: a new one makes every browser subscribe again.
+      WEB_PUSH_PUBLIC_KEY: "${WEB_PUSH_PUBLIC_KEY:-}"
+      WEB_PUSH_PRIVATE_KEY: "${WEB_PUSH_PRIVATE_KEY:-}"
+      WEB_PUSH_SUBJECT: "${WEB_PUSH_SUBJECT:-}"
       # The runner link (docs/self-hosting.md, "Runner link"): the connection tokens a runner trades its runner token for,
       # to reach the link gateway. A fresh install and /upgrade generate them. This build serves runners only over the link,
       # so the signing key is required: without it Compose renders nothing, and says what to run, rather than start an
@@ -288,6 +307,12 @@ services:
       RUNNER_LINK_INTERNAL_PORT: "${RUNNER_LINK_INTERNAL_PORT:-3001}"
       RUNNER_LINK_INTERNAL_HOST: "${RUNNER_LINK_INTERNAL_HOST:-0.0.0.0}"
       RUNNER_LINK_NATS_SEED: "${RUNNER_LINK_NATS_APISERVER_SEED:-}"
+      # Prometheus's door to the metrics (src/apiserver/src/metrics/metrics-listener.ts; docs/self-hosting.md, "Monitoring"):
+      # GET /metrics and nothing else, without a token, on every interface of this container, so that the prometheus
+      # service below reaches each apiserver over this project's network by orbit-apiservers. The port is published
+      # nowhere, and it opens whether or not the monitoring profile is on.
+      METRICS_INTERNAL_PORT: "9091"
+      METRICS_INTERNAL_HOST: 0.0.0.0
       # What /dl publishes, read from the web container beside the apiserver for the runner link
       # (src/apiserver/src/runner-api/runner-release-feed.ts): a runner working over the link is told its release in
       # Welcome and HeartbeatAck, assigned from these two manifests as GET /api/runner/release assigns it. Read at most once
@@ -296,29 +321,36 @@ services:
       # The GitHub repository (owner/repo) this build was released from: where Help → Still stuck → Report on GitHub
       # opens a new issue. Empty is Orbit's own.
       ORBIT_RELEASE_REPOSITORY: "${ORBIT_RELEASE_REPOSITORY:-}"
-      # Orbit Files (docs/orbit-files-design.md §2.10): where attachment bytes are kept, one copy per content, named by
+      # Drive and attachments (docs/drive-design.md §2.10): where their bytes are kept, one copy per content, named by
       # its sha256; Postgres keeps only what describes each file. local (the default) is ./data/files, mounted below.
       # s3 is an S3-compatible bucket, addressed path-style at the endpoint, and needs the bucket and key pair below;
-      # the region defaults to us-east-1. Uploads are written to ./data/files/tmp first with either.
-      ORBIT_FILES_BACKEND: "${ORBIT_FILES_BACKEND:-local}"
-      ORBIT_FILES_S3_ENDPOINT: "${ORBIT_FILES_S3_ENDPOINT:-}"
-      ORBIT_FILES_S3_BUCKET: "${ORBIT_FILES_S3_BUCKET:-}"
-      ORBIT_FILES_S3_ACCESS_KEY_ID: "${ORBIT_FILES_S3_ACCESS_KEY_ID:-}"
-      ORBIT_FILES_S3_SECRET_ACCESS_KEY: "${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}"
-      ORBIT_FILES_S3_REGION: "${ORBIT_FILES_S3_REGION:-}"
-      # The most one account may keep in Orbit Files, in bytes: past it an upload is refused. Empty means no limit, a
+      # the region defaults to us-east-1. Uploads are written to ./data/files/tmp first with either. Each ORBIT_DRIVE_*
+      # falls back to its names from before, ORBIT_DOCUMENTS_* and then ORBIT_FILES_*, so a host .env written then still works.
+      ORBIT_DRIVE_BACKEND: "${ORBIT_DRIVE_BACKEND:-${ORBIT_DOCUMENTS_BACKEND:-${ORBIT_FILES_BACKEND:-local}}}"
+      ORBIT_DRIVE_S3_ENDPOINT: "${ORBIT_DRIVE_S3_ENDPOINT:-${ORBIT_DOCUMENTS_S3_ENDPOINT:-${ORBIT_FILES_S3_ENDPOINT:-}}}"
+      ORBIT_DRIVE_S3_BUCKET: "${ORBIT_DRIVE_S3_BUCKET:-${ORBIT_DOCUMENTS_S3_BUCKET:-${ORBIT_FILES_S3_BUCKET:-}}}"
+      ORBIT_DRIVE_S3_ACCESS_KEY_ID: "${ORBIT_DRIVE_S3_ACCESS_KEY_ID:-${ORBIT_DOCUMENTS_S3_ACCESS_KEY_ID:-${ORBIT_FILES_S3_ACCESS_KEY_ID:-}}}"
+      ORBIT_DRIVE_S3_SECRET_ACCESS_KEY: "${ORBIT_DRIVE_S3_SECRET_ACCESS_KEY:-${ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY:-${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}}}"
+      ORBIT_DRIVE_S3_REGION: "${ORBIT_DRIVE_S3_REGION:-${ORBIT_DOCUMENTS_S3_REGION:-${ORBIT_FILES_S3_REGION:-}}}"
+      ORBIT_DRIVE_S3_MIRROR: "${ORBIT_DRIVE_S3_MIRROR:-${ORBIT_DOCUMENTS_S3_MIRROR:-${ORBIT_FILES_S3_MIRROR:-0}}}"
+      # The most one account may keep in Drive and attachments, in bytes: past it an upload is refused. Empty means no limit, a
       # self-hosted deployment's default. A hosted instance sets it.
-      ORBIT_FILES_QUOTA_BYTES: "${ORBIT_FILES_QUOTA_BYTES:-}"
+      ORBIT_DRIVE_QUOTA_BYTES: "${ORBIT_DRIVE_QUOTA_BYTES:-${ORBIT_DOCUMENTS_QUOTA_BYTES:-${ORBIT_FILES_QUOTA_BYTES:-}}}"
+      ORBIT_DRIVE_STORE_QUOTA_BYTES: "${ORBIT_DRIVE_STORE_QUOTA_BYTES:-${ORBIT_DOCUMENTS_STORE_QUOTA_BYTES:-${ORBIT_FILES_STORE_QUOTA_BYTES:-}}}"
       # The two values pgbackup keeps base backups by, with its defaults: an expired file's bytes go no sooner than
       # max(7 days, interval x (keep + 1)) after its tombstone, so restoring any retained backup finds the bytes its rows name.
       ORBIT_BASE_BACKUP_INTERVAL: "${ORBIT_BASE_BACKUP_INTERVAL:-86400}"
       ORBIT_BASE_BACKUP_KEEP: "${ORBIT_BASE_BACKUP_KEEP:-2}"
       # Optional: managed runners (docs/self-hosting.md, "Managed runners"): every account gets a runner of its own,
-      # a container on this host's Docker, at sign-in. Off unless the host's .env says true. A fresh install
-      # (scripts/install-server.sh) writes that line and an upgrade never does, so a deployment that predates managed
+      # a container on this host's Docker, at sign-in. Off unless the host's .env says true. A fresh install with
+      # --managed-runners (scripts/install-server.sh) writes that line and an upgrade never does, so a deployment that predates managed
       # runners keeps them off. The profile read here, the Docker channel's token and its socket are the files in
       # ORBIT_MANAGED_RUNNERS_DIR, mounted below.
       ORBIT_MANAGED_RUNNERS_ENABLED: "${ORBIT_MANAGED_RUNNERS_ENABLED:-false}"
+      # The drive (src/apiserver/src/drive/drive-switch.ts): off unless the host's .env says true, under ORBIT_DRIVE_ENABLED
+      # or its older names ORBIT_DOCUMENTS_ENABLED and ORBIT_FILES_ENABLED. A fresh install writes false, and an upgrade
+      # never writes it.
+      ORBIT_DRIVE_ENABLED: "${ORBIT_DRIVE_ENABLED:-${ORBIT_DOCUMENTS_ENABLED:-${ORBIT_FILES_ENABLED:-false}}}"
       # Orbit Cloud browser, off unless the host's .env says true (docs/runner-browser-design.md §2).
       ORBIT_MANAGED_RUNNER_BROWSER_ENABLED: "${ORBIT_MANAGED_RUNNER_BROWSER_ENABLED:-false}"
       ORBIT_MANAGED_RUNNERS_PROFILE: /var/lib/orbit-cloud-runners/profile.json
@@ -328,7 +360,7 @@ services:
       # The same directory at its path from before the rename, which channel.json and profile.json written by an
       # earlier install still name inside them.
       - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners:ro"
-      # The files directory (ORBIT_FILES_DIR's default), the way ./data/postgres holds the database: the bytes of every
+      # The files directory (ORBIT_DRIVE_DIR's default), the way ./data/postgres holds the database: the bytes of every
       # attachment the local store keeps, and the temporary files uploads arrive in.
       - ./data/files:/var/lib/orbit/files
     depends_on:
@@ -439,8 +471,8 @@ services:
   # (deploy/managed-runner/docker-channel), the one process given the Docker socket. It makes each account's runner
   # container and data volume from its own template, and touches nothing without its instance's label. The apiserver
   # reaches it only through its unix socket in ORBIT_MANAGED_RUNNERS_DIR, and it needs no network of its own.
-  # It runs only under the managed-runners-docker profile, which a fresh install switches on in .env
-  # (scripts/install-server.sh) and an upgrade never does.
+  # It runs only under the managed-runners-docker profile, which a fresh install with --managed-runners switches on
+  # in .env (scripts/install-server.sh) and an upgrade never does.
   docker-channel:
     profiles: [managed-runners-docker]
     build:
@@ -476,8 +508,8 @@ services:
   # nothing else of this host or of the private networks behind it. It runs in the host's network namespace with
   # NET_ADMIN and NET_RAW, never with the Docker socket; it checks the rules every 10 s, repairs what changed, and leaves
   # them in place when it stops. The Docker channel starts no runner container while it does not report them in force.
-  # It runs only under the managed-runner-firewall profile, which a fresh install switches on in .env beside the Docker
-  # backend's (scripts/install-server.sh; --no-managed-runner-firewall leaves it off), and an upgrade never does.
+  # It runs only under the managed-runner-firewall profile, which a fresh install with --managed-runners switches on in
+  # .env beside the Docker backend's (scripts/install-server.sh; --no-managed-runner-firewall leaves it off), and an upgrade never does.
   managed-runner-firewall:
     profiles: [managed-runner-firewall]
     build:
@@ -610,7 +642,261 @@ services:
       retries: 6
       start_period: 5s
 
+  # Monitoring (docs/self-hosting.md, "Monitoring"): Prometheus and the two exporters it scrapes beside the apiservers
+  # and the link gateway, under the monitoring profile. None of them publishes a port on this host, none is given the
+  # Docker socket, and each has a memory limit.
+  #
+  # Prometheus finds every apiserver by the orbit-apiservers name above, each on its internal metrics listener
+  # (METRICS_INTERNAL_PORT), so apiserver-2 and on and a two-stage release's apiserver-next are scraped as they come
+  # and go; the link gateway by its own name, which resolves only while the runner-link profile runs it, so without it
+  # the target is absent rather than down (deploy/monitoring/prometheus.yml). It keeps ORBIT_PROMETHEUS_RETENTION of
+  # data, 15 days by default, and never more than ORBIT_PROMETHEUS_RETENTION_SIZE, in a volume of its own.
+  prometheus:
+    profiles: [monitoring]
+    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}${ORBIT_PROMETHEUS_IMAGE:-prom/prometheus:v3.16.0@sha256:e04987641b57704f408e31f6373ba4138ecf27cb4a165d24aabb6c38fddd0f06}
+    container_name: orbit-prometheus
+    restart: unless-stopped
+    logging: *logging
+    mem_limit: 1g
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${ORBIT_PROMETHEUS_RETENTION:-15d}
+      - --storage.tsdb.retention.size=${ORBIT_PROMETHEUS_RETENTION_SIZE:-4GB}
+    volumes:
+      - ./deploy/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    expose:
+      - "9090"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9090/-/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
+  # The host: CPU, memory, load and every disk this host mounts, the one holding ./data among them, read from the host's
+  # /proc, /sys and / mounted read-only. It runs in this project's network rather than the host's, so its port is
+  # reached by Prometheus alone; its network counters are therefore its own container's, not the host's. The host's /
+  # shows it the Docker socket's path too, which nobody, with every capability dropped, cannot open.
+  # It also serves the textfile pgbackup writes on every poll (scripts/pg-backup.sh), from that one directory of the
+  # archive, read-only: the backup metrics.
+  node-exporter:
+    profiles: [monitoring]
+    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}${ORBIT_NODE_EXPORTER_IMAGE:-prom/node-exporter:v1.13.1@sha256:7296504d4ada44b7d7ab4431e27e9f9900d8488f8d55842f4b12ae2704e16dfe}
+    container_name: orbit-node-exporter
+    restart: unless-stopped
+    logging: *logging
+    user: "65534:65534"
+    mem_limit: 128m
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/host/root
+      - --web.listen-address=:9100
+      - --collector.textfile.directory=/textfile
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro,rslave
+      - ./data/pg-archive/metrics:/textfile:ro
+    expose:
+      - "9100"
+
+  # postgres-exporter's role (docs/self-hosting.md, "Monitoring"): runs once each time the profile comes up, over the
+  # socket pgbackup uses, and exits. It makes orbit_monitor, a login role in pg_monitor with no other right and at most
+  # 3 connections, and sets its password to the one in the pg-monitor-secret volume, which it generates the first time.
+  pg-monitor-role:
+    profiles: [monitoring]
+    image: postgres:16-alpine
+    container_name: orbit-pg-monitor-role
+    logging: *logging
+    mem_limit: 64m
+    entrypoint: ["/bin/sh", "/usr/local/bin/pg-monitor-role.sh"]
+    environment:
+      PGHOST: /var/run/postgresql
+      PGUSER: orbit
+      PGDATABASE: orbit
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./scripts/pg-monitor-role.sh:/usr/local/bin/pg-monitor-role.sh:ro
+      - pg-socket:/var/run/postgresql
+      - pg-monitor-secret:/secret
+
+  # PostgreSQL's statistics, read as orbit_monitor over this project's network with the password pg-monitor-role keeps.
+  postgres-exporter:
+    profiles: [monitoring]
+    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}${ORBIT_POSTGRES_EXPORTER_IMAGE:-prometheuscommunity/postgres-exporter:v0.21.1@sha256:3b8e05a84282cd1199ad2fb6c66f362738bf4c68c1547d8f4226a34a7dd6d8d7}
+    container_name: orbit-postgres-exporter
+    restart: unless-stopped
+    logging: *logging
+    mem_limit: 128m
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      DATA_SOURCE_URI: "postgres:5432/orbit?sslmode=disable"
+      DATA_SOURCE_USER: orbit_monitor
+      DATA_SOURCE_PASS_FILE: /secret/password
+    depends_on:
+      pg-monitor-role:
+        condition: service_completed_successfully
+    volumes:
+      - pg-monitor-secret:/secret:ro
+    expose:
+      - "9187"
+
+  # Grafana (docs/self-hosting.md, "Monitoring"): the dashboards, with Prometheus and Loki provisioned as its data sources. It
+  # is published on this host's loopback alone, never on the web gateway or the Orbit origin: a script served from that
+  # origin can read the login token in the browser's localStorage, so Grafana, which can run scripts of its own
+  # making, never shares it. Reach it by SSH tunnel, or from a hostname of your own that is not the Orbit origin. The
+  # admin password is GRAFANA_ADMIN_PASSWORD in .env, which a fresh install and the upgrade script generate; with
+  # none, the container refuses to start rather than fall back to Grafana's own default. Sign-up, creating
+  # organizations and anonymous access are off.
+  grafana:
+    profiles: [monitoring]
+    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}${ORBIT_GRAFANA_IMAGE:-grafana/grafana:12.2.0@sha256:74144189b38447facf737dfd0f3906e42e0776212bf575dc3334c3609183adf7}
+    container_name: orbit-grafana
+    restart: unless-stopped
+    logging: *logging
+    mem_limit: 384m
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    entrypoint:
+      - /bin/sh
+      - -c
+      - '[ -n "$$GF_SECURITY_ADMIN_PASSWORD" ] || { echo "GRAFANA_ADMIN_PASSWORD is not set in .env" >&2; exit 1; }; exec /run.sh'
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_USERS_ALLOW_ORG_CREATE: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_AUTH_DISABLE_LOGIN_FORM: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      GF_LOG_MODE: console
+      GF_SERVER_HTTP_ADDR: 0.0.0.0
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:${GRAFANA_PORT:-3030}/}
+      # Read by the alerting files under provisioning/alerting (docs/self-hosting.md, "Monitoring", "Alerts"). Each has a
+      # default that provisions cleanly and sends nothing anywhere useful: with no ORBIT_NTFY_TOPIC, ntfy refuses the
+      # alert and Grafana's contact point shows the error; with no ORBIT_ALERT_HEARTBEAT_URL, the always-firing alert's heartbeat is a
+      # request to Prometheus, so nothing leaves this host.
+      ORBIT_ALERT_CONTACT: ${ORBIT_ALERT_CONTACT:-orbit-ntfy}
+      ORBIT_NTFY_SERVER: ${ORBIT_NTFY_SERVER:-https://ntfy.sh}
+      ORBIT_NTFY_TOPIC: ${ORBIT_NTFY_TOPIC:-}
+      ORBIT_ALERT_EMAIL: ${ORBIT_ALERT_EMAIL:-alerts@example.invalid}
+      ORBIT_ALERT_WEBHOOK_URL: ${ORBIT_ALERT_WEBHOOK_URL:-http://prometheus:9090/api/v1/labels}
+      ORBIT_ALERT_HEARTBEAT_URL: ${ORBIT_ALERT_HEARTBEAT_URL:-http://prometheus:9090/api/v1/labels}
+      # The Orbit app contact point: a personal access token holding `notify`, sent to POST /api/notify over this
+      # project's network. ORBIT_APP_ALERTS is the regex policies.yml routes to it by: every alert while a token is set,
+      # none while it is not, and then alerts go to ORBIT_ALERT_CONTACT alone.
+      ORBIT_NOTIFY_TOKEN: ${ORBIT_NOTIFY_TOKEN:-}
+      ORBIT_APP_ALERTS: ${ORBIT_NOTIFY_TOKEN:+.+}
+      GF_SMTP_ENABLED: ${GF_SMTP_ENABLED:-false}
+      GF_SMTP_HOST: ${GF_SMTP_HOST:-localhost:25}
+      GF_SMTP_USER: ${GF_SMTP_USER:-}
+      GF_SMTP_PASSWORD: ${GF_SMTP_PASSWORD:-}
+      GF_SMTP_FROM_ADDRESS: ${GF_SMTP_FROM_ADDRESS:-grafana@localhost.localdomain}
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    volumes:
+      - ./deploy/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    tmpfs:
+      - /tmp
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3030}:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
+  # Logs (docs/self-hosting.md, "Logs"): Loki keeps them, Alloy ships them, under the monitoring profile. Loki publishes
+  # no port and has no authentication of its own; Alloy and Grafana reach it inside this project's network. It keeps
+  # ORBIT_LOKI_RETENTION of lines, seven days by default, in a volume of its own (deploy/monitoring/loki.yml). Its image
+  # has no shell to run a health check with, so Alloy waits only for it to start, and retries what it could not send.
+  loki:
+    profiles: [monitoring]
+    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}${ORBIT_LOKI_IMAGE:-grafana/loki:3.7.10@sha256:b43c257ccfc925d4a50b8717cac61a3b51df8c48d01847936057e5c4075a24a7}
+    container_name: orbit-loki
+    restart: unless-stopped
+    logging: *logging
+    mem_limit: 512m
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    command: ["-config.file=/etc/loki/loki.yml", "-config.expand-env=true"]
+    environment:
+      ORBIT_LOKI_RETENTION: "${ORBIT_LOKI_RETENTION:-168h}"
+    volumes:
+      - ./deploy/monitoring/loki.yml:/etc/loki/loki.yml:ro
+      - loki-data:/loki
+    tmpfs:
+      - /tmp
+    expose:
+      - "3100"
+
+  # This project's container logs, from Docker's json-file logs in /var/lib/docker/containers, mounted read-only. It is
+  # never given the Docker socket: which files are this project's it reads from each container's config.v2.json beside
+  # them, by Compose's project label, and it leaves out every managed runner's container (deploy/monitoring/alloy). It
+  # runs as root, which those files need, with every capability dropped, so it reads only what root owns there. It can
+  # read every container's record there, environment included, which makes it as trusted as the host's Docker.
+  alloy:
+    profiles: [monitoring]
+    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}${ORBIT_ALLOY_IMAGE:-grafana/alloy:v1.22.0@sha256:9acc2529bc1edb7f5b2bd801dd8334ebc80c158e3a9e5526ecd7c9a273d43189}
+    container_name: orbit-alloy
+    restart: unless-stopped
+    logging: *logging
+    init: true
+    mem_limit: 256m
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    entrypoint: ["/bin/bash", "/etc/orbit-alloy/run.sh"]
+    environment:
+      ORBIT_COMPOSE_PROJECT: "${COMPOSE_PROJECT_NAME}"
+    depends_on:
+      loki:
+        condition: service_started
+    volumes:
+      - ./deploy/monitoring/alloy:/etc/orbit-alloy:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - alloy-data:/alloy-data
+    tmpfs:
+      - /run/orbit-alloy
+      - /tmp
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/12345 && printf 'GET /-/ready HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q ' 200 ' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
 volumes:
   # Only the Postgres socket directory: the archive itself is a bind mount under ./data
   # so backups are visible (and copyable off the host) without docker.
   pg-socket:
+  # The monitoring profile's: Prometheus's time series, the password postgres-exporter signs in with, which
+  # pg-monitor-role generates once (docs/self-hosting.md, "Monitoring"), Grafana's database, Loki's index and chunks, and
+  # where Alloy has read each log file to.
+  prometheus-data:
+  pg-monitor-secret:
+  grafana-data:
+  loki-data:
+  alloy-data:

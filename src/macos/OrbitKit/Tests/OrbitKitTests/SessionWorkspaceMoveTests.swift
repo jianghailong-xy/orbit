@@ -242,10 +242,11 @@ final class SessionWorkspaceMoveTests: XCTestCase {
                     self.log.append("end")
                     if let error = self.endError { throw error }
                 },
-                status: {
+                session: {
                     let next = self.statuses.isEmpty ? .success(.awaitingInput) : self.statuses.removeFirst()
                     self.log.append("status")
-                    return try next.get()
+                    return Session(id: "s", title: nil, status: try next.get(), agentId: nil,
+                                   assignedRunnerId: nil, pendingApprovals: nil, branch: nil, updatedAt: nil)
                 },
                 move: {
                     self.log.append("move")

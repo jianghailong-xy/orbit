@@ -179,6 +179,14 @@ export const LEAF_COPY: Record<WatchLeaf, LeafCopy> = {
     hint: 'A job it started with bg_run has written no output for a set time.',
     met: 'had a quiet job',
   },
+  // Version 4: what session_await and session_create(wait) wait for by default; not offered by the editor.
+  SESSION_QUIESCENT: {
+    one: 'finishes all its work',
+    many: 'finish all their work',
+    option: 'Finishes all its work',
+    hint: 'Its turn is over, nothing it started still runs, and nothing is set to wake it.',
+    met: 'finished all their work',
+  },
 };
 
 const NOUN: Record<WatchTargetKind, [one: string, many: string]> = {
@@ -406,7 +414,7 @@ export const SESSION_TARGET_WORDS: Record<string, string> = {
   RUNNING: 'Running',
   AWAITING_INPUT: 'Waiting for your reply',
   INTERRUPTED: 'Interrupted',
-  SUCCEEDED: 'Succeeded',
+  SUCCEEDED: 'Finished',
   FAILED: 'Failed',
   ENDED: 'Ended',
 };
@@ -824,21 +832,6 @@ export function groupWatches(watches: readonly WatchView[]): Record<WatchBucket,
   for (const w of watches) groups[watchBucket(w)].push(w);
   groups.history.sort((a, b) => Date.parse(endedAt(b)) - Date.parse(endedAt(a)));
   return groups;
-}
-
-/**
- * Several reads of the owner's watches as one list: each watch once, in the order first read. Given the
- * newest 100 first (lib/queries `watchesQuery`), a live watch only its own state's read found comes after
- * them, older than all of them, and so does one only the Needs attention read found.
- */
-export function mergeWatches(lists: readonly (readonly WatchView[])[]): WatchView[] {
-  const seen = new Set<string>();
-  return lists.flat().filter((w) => {
-    const key = normId(w.id);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 }
 
 export type WatchTone = 'live' | 'paused' | 'met' | 'ended' | 'failed';

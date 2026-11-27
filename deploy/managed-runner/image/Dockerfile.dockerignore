@@ -14,4 +14,5 @@
 !deploy/managed-runner/image/Dockerfile
 !deploy/managed-runner/image/entrypoint.py
 !deploy/managed-runner/image/pins.json
+!deploy/managed-runner/image/orbit-browser-opener.sh
 src/runner-go/*_test.go

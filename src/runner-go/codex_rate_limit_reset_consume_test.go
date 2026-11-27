@@ -35,6 +35,9 @@ const (
 	codexResetTestOtherAccount = "acct_fixture_other"
 	codexResetProviderFile     = "provider.json"
 	codexResetEventLog         = "events.jsonl"
+	// An account slot's own provider: a fake app-server running in a CODEX_HOME holding this directory
+	// serves that account instead of the machine's Default one (codex_rate_limit_reset_slot_test.go).
+	codexResetSlotProviderDir = "orbit-fake-reset-provider"
 )
 
 // The requests of one read on a fresh app-server: its handshake, then account/read and
@@ -171,7 +174,16 @@ func codexResetUpdateProvider(dir string, change func(*codexResetProviderState))
 // log's order is the order things happened in.
 func runFakeCodexResetProvider(dir string) int {
 	log := filepath.Join(dir, codexResetEventLog)
-	appendJSONL(log, codexResetEvent{Src: "app", Pid: os.Getpid(), Spawn: true, At: codexResetEventTime()})
+	// The account this app-server serves: the one of the CODEX_HOME it runs in when that home has one of
+	// its own, else the machine's. Every event names the home, so a test sees where each request went.
+	home := os.Getenv("CODEX_HOME")
+	state := dir
+	if home != "" {
+		if _, err := os.Stat(filepath.Join(home, codexResetSlotProviderDir, codexResetProviderFile)); err == nil {
+			state = filepath.Join(home, codexResetSlotProviderDir)
+		}
+	}
+	appendJSONL(log, codexResetEvent{Src: "app", Pid: os.Getpid(), Spawn: true, CodexHome: home, At: codexResetEventTime()})
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for scanner.Scan() {
@@ -183,7 +195,7 @@ func runFakeCodexResetProvider(dir string) int {
 		if json.Unmarshal(scanner.Bytes(), &frame) != nil {
 			continue
 		}
-		event := codexResetEvent{Src: "app", Pid: os.Getpid(), Method: frame.Method, Params: frame.Params, At: codexResetEventTime()}
+		event := codexResetEvent{Src: "app", Pid: os.Getpid(), CodexHome: home, Method: frame.Method, Params: frame.Params, At: codexResetEventTime()}
 		if frame.ID == nil {
 			appendJSONL(log, event)
 			continue
@@ -191,7 +203,7 @@ func runFakeCodexResetProvider(dir string) int {
 		reply := map[string]interface{}{"id": frame.ID}
 		// Who the account is, as a real backend's error text may name it: no runner log line may repeat it.
 		named := ""
-		err := codexResetUpdateProvider(dir, func(state *codexResetProviderState) {
+		err := codexResetUpdateProvider(state, func(state *codexResetProviderState) {
 			if state.AccountID != nil {
 				named = *state.AccountID
 			}
@@ -261,12 +273,14 @@ type codexResetEvent struct {
 
 	// app: its start, or one frame it heard and what it answered — the outcome, or the fault the request
 	// went through, and when.
-	Pid    int             `json:"pid,omitempty"`
-	Spawn  bool            `json:"spawn,omitempty"`
-	Method string          `json:"method,omitempty"`
-	Params json.RawMessage `json:"params,omitempty"`
-	Answer string          `json:"answer,omitempty"`
-	At     string          `json:"at,omitempty"`
+	Pid   int  `json:"pid,omitempty"`
+	Spawn bool `json:"spawn,omitempty"`
+	// The CODEX_HOME the app-server ran in; empty for the runner's own environment's.
+	CodexHome string          `json:"codexHome,omitempty"`
+	Method    string          `json:"method,omitempty"`
+	Params    json.RawMessage `json:"params,omitempty"`
+	Answer    string          `json:"answer,omitempty"`
+	At        string          `json:"at,omitempty"`
 
 	// cp: a delivery, or one result and what became of it.
 	Delivered  string          `json:"delivered,omitempty"`
@@ -305,9 +319,11 @@ type codexResetModel struct {
 	usage *PlanUsage
 }
 
-// codexResetModelOperation is the operation row: its checkpoints and its claim.
+// codexResetModelOperation is the operation row: its checkpoints and its claim. Slot is the added account
+// slot it is for, which makes its commands protocol version 2; empty for a version 1 operation on Default.
 type codexResetModelOperation struct {
 	ID, AccountFingerprint, ProviderIdempotencyKey string
+	Slot                                           string
 	ConsumeState, ConsumeOutcome, RefreshState     string
 	FailureCode, LastErrorCode                     string
 	ClaimLeaseOwner                                string
@@ -443,6 +459,9 @@ func (m *codexResetModel) dispatch(leaseOwner string) *CodexRateLimitResetComman
 		Phase:              phase,
 		AccountFingerprint: op.AccountFingerprint,
 		RequestedAt:        m.createdAt,
+	}
+	if op.Slot != "" {
+		cmd.ProtocolVersion, cmd.AccountSlot = codexRateLimitResetProtocolVersionV2, op.Slot
 	}
 	if phase == codexResetPhaseConsume {
 		cmd.ProviderIdempotencyKey = op.ProviderIdempotencyKey
@@ -883,8 +902,10 @@ func codexResetRequireSequence(t *testing.T, events []codexResetEvent, want []st
 // probe and consume. crash ends it as a killed process ends: nothing it holds in memory reaches its
 // successor.
 type codexResetTestProcess struct {
-	h      *codexResetHarness
-	relay  *codexResetRelay
+	h     *codexResetHarness
+	relay *codexResetRelay
+	// Every account slot's usage; probe is Default's.
+	usage  *codexAccountUsage
 	probe  *planUsageProbe
 	ops    *sync.WaitGroup
 	cancel context.CancelFunc
@@ -893,13 +914,14 @@ type codexResetTestProcess struct {
 func (h *codexResetHarness) process(tune ...func(*codexResetConsumer)) *codexResetTestProcess {
 	ctx, cancel := context.WithCancel(context.Background())
 	transport := NewTransport(h.server.URL, "runner-token")
-	probe := newCodexPlanUsageProbe(transport.leaseOwner)
-	consumer := newCodexResetConsumer(probe)
+	usage := newCodexAccountUsage(transport.leaseOwner)
+	probe := usage.def
+	consumer := newCodexResetConsumer(usage)
 	consumer.now, consumer.wait = h.clock.now, h.clock.wait
 	var ops sync.WaitGroup
 	relay := newCodexResetRelay(ctx, transport, consumer.execute, &ops)
 	relay.now, relay.wait = h.clock.now, h.clock.wait
-	p := &codexResetTestProcess{h: h, relay: relay, probe: probe, ops: &ops, cancel: cancel}
+	p := &codexResetTestProcess{h: h, relay: relay, usage: usage, probe: probe, ops: &ops, cancel: cancel}
 	consumer.wakeHeartbeat = func() {
 		h.clock.advance(time.Nanosecond)
 		p.heartbeat()
@@ -1683,7 +1705,7 @@ func TestCodexResetCapabilityIsDeclaredWithTheConsumeThatServesIt(t *testing.T) 
 		t.Fatal(err)
 	}
 	for _, wiring := range []string{
-		"resetConsumer := newCodexResetConsumer(codexUsageProbe)",
+		"resetConsumer := newCodexResetConsumer(codexUsage)",
 		"resetConsumer.wakeHeartbeat = beatNow",
 		"newCodexResetRelay(resetCtx, t, resetConsumer.execute, &heartbeatOps)",
 	} {

@@ -64,7 +64,7 @@ var guideRoutes = []guideRoute{
 	{"R1.8", "What is the state of this project, task or session?", "none", "inspect", []string{"project_get", "task_get", "task_list", "session_get"}},
 	{"R1.9", "Wait for it to finish", "watch", "wait", []string{"task_await", "session_await", "watch_create"}},
 	{"R1.10", "Remember this lesson or pitfall about a file or a pattern", "wiki", "wiki", []string{"wiki_search", "wiki_propose", "wiki_note"}},
-	{"R1.11", "Keep this file, or read one back", "file", "files", []string{"file_upload", "file_fetch", "file_list"}},
+	{"R1.11", "Keep this file, or read one back", "file", "files", []string{"file_upload", "file_fetch", "file_list", "drive_put", "drive_get", "drive_list", "drive_move", "drive_delete", "drive_sync"}},
 	{"R1.12", "This class of work needs its own dispatch policy", "task_list", "task-list", []string{"tasklist_create", "tasklist_update"}},
 	{"R1.13", "Which agent should run this, or change an agent's defaults", "agent", "agent", []string{"agent_list", "agent_create", "agent_update"}},
 	{"R1.14", "Answer, explain, or edit code", "none", "", nil},
@@ -114,7 +114,7 @@ var guideTopics = []guideTopic{
 		Rules: []string{
 			"Say in a sentence or two what you are about to file and why, then call. The card is the user's yes: a declined card (APPROVAL_DECLINED) is a refusal, so do not create it another way. A chat answer is not a no: answer the owner, then call again, changed as agreed.",
 			"Newly discovered work belongs in one task by default. Several related tasks from a plan already worked out are task-batch, written with their edges in one atomic call. A project is worth proposing only for a plan of 4+ dependent steps, or work that plainly wants several agents over days (project-create); proposing one does not block this call, and if the answer is no, or you did not ask, a task is the right record.",
-			"Creating is not starting, but autoRunWhenReady defaults to true: an assigned task starts by itself once every prerequisite is DONE and, in a project, the project has started. Pass autoRunWhenReady: false when the person said nothing should run until they say so. To run it now pass startNow: true (task-start); at a set time, runAt (task-schedule).",
+			"Creating is not starting, and autoRunWhenReady is required: true makes an assigned task start by itself once every prerequisite is DONE and, in a project, the project has started; false keeps it recorded until someone starts it, which is what to pass when the person said nothing should run until they say so. To run it now pass startNow: true (task-start); at a set time, runAt (task-schedule).",
 			"Ask the person what would settle the task before you write it, and pass their answer as acceptanceCriteria: the observable result a reader who did not watch the work can verify, where description says what work to perform. If they have not said, ask and end your turn with the question; never file criteria they did not state. Where one command decides it, pass acceptanceCommand with acceptanceExpectedExitCode and the task settles itself; a task filed with neither leaves its run no legal way to finish (ATTEMPT_ENDED_WITHOUT_JUDGMENT_PATH).",
 			"Declare completionCriterion every time. EVIDENCE_JUDGMENT is work a reviewer settles: outside a project each evidence revision its run submits reaches this session as an <orbit-evidence-review> message to decide with task_evidence_decide, and the owner is asked only if you have not decided within 30 minutes. OWNER_CONFIRMED outside an Automatic project takes ownerConfirmationReason. VERIFICATION with completionPolicy VERIFICATION_PASSED is a pure gate: pass verification: {title, assigneeId} in the same call. If TASK_CRITERION_SHAPE_ADVICE questions the criterion, adopt its suggestedCriterion or retry with completionCriterionOverrideReason.",
 			"projectId files the task under a project (what the work is for) and listId under a dispatch policy; the two are orthogonal. parentTaskId makes it a subtask of a task in the same project. Order work with dependsOnTaskIds naming the subject of the work, never with preconditions written into the description. codeless: true marks work that produces no code.",
@@ -138,7 +138,7 @@ var guideTopics = []guideTopic{
 			"A later item depends on an earlier one without knowing its id: give the earlier item a ref and list it in the later item's dependsOnRefs. parentRef names an earlier item as this item's parent, so the plan lands as a tree: dependsOnRefs is when an item may run, parentRef what it is part of. dependsOnTaskIds and parentTaskId still name tasks that already exist.",
 			"Ask, per item, what would settle it, and put the person's answer in that item's acceptanceCriteria; if they have not said it for every item, ask and end your turn. An item a single command decides takes acceptanceCommand with acceptanceExpectedExitCode.",
 			"Every item declares completionCriterion. A VERIFICATION item with completionPolicy VERIFICATION_PASSED is a pure gate, paired by a later item's verifiesRef in the same call.",
-			"Items are only recorded, except one carrying startNow: true, which the server starts within the minute. autoRunWhenReady defaults to true per item, so give an item the person wants held autoRunWhenReady: false.",
+			"Items are only recorded, except one carrying startNow: true, which the server starts within the minute. autoRunWhenReady is required on every item: true starts it by itself once it is ready, false holds it until someone starts it.",
 			"Key the batch with an idempotencyKey: the same key answers with the tasks the first send wrote, item for item.",
 		},
 		Done:    "The receipt reads ok: true and outcome: written, with every item's id and status in input order, each echoing its ref.",
@@ -178,7 +178,7 @@ var guideTopics = []guideTopic{
 			{Op: "task_await", Optional: true, Why: "Be woken when the run ends instead of polling; end your turn after it."},
 		},
 		Rules: []string{
-			"Start is its own decision: task_start runs recorded work, startNow: true records and starts it in one approval, runAt schedules one start, and autoRunWhenReady (default true) starts an assigned task by itself once it is ready.",
+			"Start is its own decision: task_start runs recorded work, startNow: true records and starts it in one approval, runAt schedules one start, and autoRunWhenReady: true starts an assigned task by itself once it is ready.",
 			"After startNow do not ask the person a second time and do not call task_start; never start a task they said must wait.",
 		},
 		Done:    "task_start's receipt names the started (or resumed) session's id and status; a startNow create's receipt carries it as start.sessionId.",
@@ -222,7 +222,7 @@ var guideTopics = []guideTopic{
 			{Op: "project_get", Optional: true, Why: "A project's goal, acceptance criteria, instructions, blockers and task counts."},
 			{Op: "task_get", Why: "One task in full, with its comments and sessions; with no id, the task this session runs.", Example: map[string]interface{}{"taskId": "<taskId>"}},
 			{Op: "task_list", Optional: true, Why: "Tasks filtered by project, status, list or label, as compact rows.", Example: map[string]interface{}{"projectId": "<projectId>"}},
-			{Op: "session_get", Optional: true, Why: "One session's record."},
+			{Op: "session_get", Optional: true, Why: "One session's record: over when `released`; failed when released with `lastTurnOutcome` FAILED and no endReason; working when `phase` is RUNNING; `waitingOn` names what holds it."},
 		},
 		Rules: []string{
 			"After a compaction or a resume, read the object again: never rebuild an id, a status or an approval from memory or a summary.",
@@ -270,13 +270,19 @@ var guideTopics = []guideTopic{
 		Asks:   []string{"Keep this screenshot with the task."},
 		Intent: "Keep a screenshot, report or log in Orbit instead of the repository, or read one back.",
 		Steps: []guideStep{
-			{Op: "file_upload", Why: "Keep the file; it reads only this session's checkout and uploads directory."},
+			{Op: "file_upload", Why: "Keep a file from this session's checkout, uploads directory or a mounted Drive."},
 			{Op: "file_list", Optional: true, Why: "What this task's sessions have uploaded."},
 			{Op: "file_fetch", Optional: true, Why: "Read a file back by id."},
+			{Op: "drive_put", Optional: true, Why: "Keep a local file on the owner's drive.", Example: map[string]interface{}{"localPath": "report.md", "path": "/reports/report.md"}},
+			{Op: "drive_get", Optional: true, Why: "Download a drive file into session uploads.", Example: map[string]interface{}{"path": "/reports/report.md"}},
+			{Op: "drive_list", Optional: true, Why: "List a folder on the owner's drive."},
+			{Op: "drive_move", Optional: true, Why: "Move a drive entry.", Example: map[string]interface{}{"from": "/reports/report.md", "to": "/archive/report.md"}},
+			{Op: "drive_delete", Optional: true, Why: "Move a drive entry to the owner's Trash.", Example: map[string]interface{}{"path": "/archive/report.md"}},
+			{Op: "drive_sync", Optional: true, Why: "Copy a whole directory to the owner's Drive in the background.", Example: map[string]interface{}{"localPath": "out", "path": "/Reports/out"}},
 		},
 		Rules: []string{
 			"A file linked in a reply reaches the user only from the working directory or this session's uploads directory: copy it there first, and keep files that do not belong in the repository out of the checkout.",
-			"Cite an uploaded file in evidence as a FILE check, by the id file_upload returned.",
+			"Cite an uploaded file in evidence as a FILE check, by the id file_upload returned. A drive path is refused as a FILE check: file_upload the drive file and cite that id.",
 		},
 		Done:    "file_upload answers the file's id, sha256, sizeBytes and an orbit-attachment: link to put in a reply.",
 		Related: []string{"finish-task"},
@@ -409,6 +415,7 @@ type guideContext struct {
 	Orchestration bool   `json:"orchestration"`
 	Watches       bool   `json:"watches"`
 	Wiki          bool   `json:"wiki"`
+	DocumentsOff  bool   `json:"documentsOff,omitempty"` // the server has Drive off: no drive tools (drive_switch.go)
 }
 
 // guideFacts is a guide's context plus what it reads availability from: the MCP server's own switches,
@@ -526,6 +533,9 @@ func (f guideFacts) mcpAvailability(op *operation) (bool, string) {
 	if wikiToolNames[op.Tool] && !f.context.Wiki {
 		return false, wikiOffMessage(op.Tool)
 	}
+	if driveToolNames[op.Tool] && f.context.DocumentsOff {
+		return false, documentsOffMessage(op.Tool)
+	}
 	return true, ""
 }
 
@@ -603,6 +613,9 @@ func (f guideFacts) topic(built *builtOperationCatalog, topic *guideTopic) guide
 		if route.Topic == topic.ID {
 			doc.Routes = append(doc.Routes, route.Route)
 		}
+	}
+	if topic.ID == "files" && !f.context.DocumentsOff {
+		doc.Rules = append(append([]string{}, doc.Rules...), orbitDriveGuide())
 	}
 	for i, step := range topic.Steps {
 		op := built.ByTool[step.Op]
@@ -694,6 +707,7 @@ func (s *mcpServer) guideFacts() guideFacts {
 			Orchestration: s.orchestrationEnabled(),
 			Watches:       !s.watchesOff,
 			Wiki:          !s.wikiOff,
+			DocumentsOff:  s.documentsOff,
 		},
 		onlyTools: s.onlyTools,
 	}
@@ -735,6 +749,7 @@ func cliGuideFacts(executable string) guideFacts {
 			Orchestration: d.facts.orchestration,
 			Watches:       d.facts.watches,
 			Wiki:          d.facts.wiki,
+			DocumentsOff:  d.facts.documentsOff,
 		},
 		cli: d,
 	}

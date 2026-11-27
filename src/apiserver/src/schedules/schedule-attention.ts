@@ -6,6 +6,7 @@
  *   | CHANGED, new key                 | once     | push, opens the run's session          |
  *   | CHANGED, known key               | no       | lastSeenRunId moves and links merge    |
  *   | FAILED                           | yes      | push and Waiting on you                |
+ *   | inferred failure, reported late  | once     | push replacing the failure's banner    |
  *   | HELD, AWAITING_APPROVAL          | yes      | push and Waiting on you                |
  *   | the run ended its own schedule   | once     | push, opens the schedule               |
  *   | a ONCE slot MISSED (§5.2)        | once     | push, opens the schedule               |
@@ -34,8 +35,10 @@ import {
   scheduleFailedPush,
   scheduleFailedWaiting,
   scheduleGoalReachedPushTitle,
+  scheduleReportedLatePushTitle,
   scheduleHeldClause,
   scheduleHeldWaiting,
+  scheduleStoppedAsPlannedText,
   scheduleWidenWaitingText,
   type ScheduleEnvelope,
   type ScheduleEnvelopePart,
@@ -58,8 +61,10 @@ export type ScheduleAlertKind =
   | 'AWAITING_APPROVAL'
   | 'WIDEN'
   | 'GOAL_REACHED'
+  | 'REPORTED_LATE'
   | 'ONCE_MISSED'
-  | 'OVER_BUDGET';
+  | 'OVER_BUDGET'
+  | 'PLANNED_END';
 
 /** One push. `opens` is where a tap goes: the run's session, or the schedule. */
 export interface ScheduleAlert {
@@ -264,6 +269,19 @@ export function goalReachedCopy(title: string): { title: string; body: string } 
     title: line(scheduleGoalReachedPushTitle(title), 120),
     body: 'A run found nothing left to watch and ended this scheduled task. Undo resumes it.',
   };
+}
+
+/**
+ * A run failed NO_REPORT or ENGINE_CRASHED that reported after the owner stepped in (§7.1): what it reported, over the
+ * failure's banner.
+ */
+export function reportedLateCopy(title: string, summary: string): { title: string; body: string } {
+  return { title: line(scheduleReportedLatePushTitle(title), 120), body: line(summary) };
+}
+
+/** §8.5: the one push for a planned end reached, "Stopped as planned after 12 runs". */
+export function plannedEndCopy(title: string, runs: number): { title: string; body: string } {
+  return { title: line(title, 120), body: scheduleStoppedAsPlannedText(runs) };
 }
 
 export function onceMissedCopy(title: string): { title: string; body: string } {

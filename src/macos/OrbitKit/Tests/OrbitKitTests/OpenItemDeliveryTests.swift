@@ -245,9 +245,11 @@ final class OpenItemDeliveryTests: XCTestCase {
 
     func testSaysWhyTheItemIsHereOutOfItsOwnFields() throws {
         let conflict = try XCTUnwrap(OpenItemDelivery.parse(try delivered(conflictCard).payload))
+        // The branch by name, and the fact alone: the agent's "will not retry" half stays in the
+        // disclosure, where the words the coordinator read live.
         XCTAssertEqual(OpenItemDeliveryCard.headline(conflict),
-                       "git refused the merge into refs/heads/project/34ODoUKJGEsfbgcJDGS4q; the "
-                           + "target branch did not move. The platform will not retry it by itself.")
+                       "git refused the merge into project/34ODoUKJGEsfbgcJDGS4q; "
+                           + "project/34ODoUKJGEsfbgcJDGS4q did not move.")
 
         let failed = try XCTUnwrap(OpenItemDelivery.parse(try delivered("""
             {"itemId": "x", "kind": "TASK_FAILED", "title": "t",
@@ -314,21 +316,12 @@ final class OpenItemDeliveryTests: XCTestCase {
         XCTAssertNil(OpenItemDeliveryCard.landingLine(absent))
     }
 
-    /// The doors, in the server's order, and only the ones a reader can name here: the coordinator's
-    /// own conversation and the session link are drawn as themselves (web leads its chips the same
-    /// way), and a value this build does not know has no label to draw.
-    func testDrawsTheDoorsTheServerOfferedAndNoOthers() throws {
-        let card = try XCTUnwrap(OpenItemDelivery.parse(try delivered(conflictCard).payload))
-        // A conflict's cell holds no rerun door — the server refuses one for it — so the server
-        // lists none, and the only chip left is the quiet one that stops the task.
-        XCTAssertEqual(OpenItemDeliveryCard.actionLabels(card.actions),
-                       ["Cancel the task"])
-
-        XCTAssertEqual(OpenItemDeliveryCard.actionLabels(
-            ["ASK_COORDINATOR_AGAIN", "REVIEW", "ANSWER", "RESUME", "SOMETHING_NEW"]),
-            ["Ask the coordinator again", "Review the merge", "Answer the question",
-             "Resume the project"])
-        XCTAssertEqual(OpenItemDeliveryCard.actionLabels([]), [])
+    /// The card points at the item's own card instead of naming doors nobody can press, and says so
+    /// when the conversation holds no card for the item.
+    func testPointsAtTheItemsOwnCard() throws {
+        XCTAssertEqual(OpenItemDeliveryCard.goToItemCard, "Go to the item card ↑")
+        XCTAssertEqual(OpenItemDeliveryCard.itemCardNotHere,
+                       "The item card is not in this conversation.")
     }
 
     func testFoldsTheFileListPastThree() throws {
@@ -344,22 +337,22 @@ final class OpenItemDeliveryTests: XCTestCase {
         XCTAssertNil(OpenItemDeliveryCard.filesToggle(total: 0, expanded: false))
     }
 
-    /// The foot line, in the spelling the web draws it in: the item's PUBLIC id — the payload carries
-    /// a uuid, and both clients show the base62 one.
-    func testDrawsTheItemIdInThePublicSpellingAndTheTimeItArrived() throws {
+    /// The foot line is the person's, and the id — the agent's own handle — is inside the disclosure
+    /// with the words it read. The id is drawn in the public spelling the web draws it in, and is
+    /// kept as it arrived when it is in neither spelling.
+    func testDrawsTheTimeItWasSentAndKeepsTheIdInTheDisclosure() throws {
         let card = try XCTUnwrap(OpenItemDelivery.parse(try delivered(conflictCard).payload))
         let now = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-09-21T12:29:47Z"))
         // The card says the age the way every other row does — `RelativeTime`, which floors: 179
         // seconds is 2 minutes.
         XCTAssertEqual(OpenItemDeliveryCard.meta(card, ts: "2026-09-21T12:26:47.307Z", now: now),
-                       "Item 30sxqUAeWVTWSpHLLkk73 · a notification, not an interruption · 2m ago")
-        XCTAssertEqual(OpenItemDeliveryCard.meta(card),
-                       "Item 30sxqUAeWVTWSpHLLkk73 · a notification, not an interruption",
-                       "an event with no clock says only what the card is")
+                       "Sent to the coordinator · 2m ago")
+        XCTAssertNil(OpenItemDeliveryCard.meta(card),
+                     "an event with no clock says nothing about when it was sent")
+        XCTAssertEqual(OpenItemDeliveryCard.rawItemId(card), "Item 30sxqUAeWVTWSpHLLkk73")
         // An id in neither spelling is left alone: this line is a footnote, not a link.
         let odd = try XCTUnwrap(OpenItemDelivery.parse(try delivered(#"{"itemId": "not-an-id", "kind": "TASK_FAILED", "title": "t"}"#).payload))
-        XCTAssertEqual(OpenItemDeliveryCard.meta(odd),
-                       "Item not-an-id · a notification, not an interruption")
+        XCTAssertEqual(OpenItemDeliveryCard.rawItemId(odd), "Item not-an-id")
     }
 
     /// Where the two links go: the app's own `orbit-task:` / `orbit-session:` doors, which both

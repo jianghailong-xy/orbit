@@ -62,7 +62,7 @@ final class SessionMessageWiringTests: XCTestCase {
         // The transcript draws a user turn with the one row both states share (`UserTurnRow`).
         let view = try section(try source(Self.consolePath),
                                from: "struct TranscriptItemView: View", to: "case .assistant(let b)")
-        XCTAssertTrue(statements(view).contains("UserTurnRow(bubble: b, steer: steerControls(b), putBack: putBack(b))"),
+        XCTAssertTrue(statements(view).contains("UserTurnRow(bubble: b, steer: steerControls(b), putBack: putBack(b), revealItemCard: { console?.revealOpenItemCard($0) ?? false })"),
                       "the transcript no longer draws a user turn with the row that asks for the card")
         let row = try section(try source(Self.rowPath), from: "struct UserTurnRow: View", to: "private func told")
         let user = statements(try section(row, from: "var body: some View {",
@@ -96,7 +96,8 @@ final class SessionMessageWiringTests: XCTestCase {
             "Task { await console.cancelQueued(bubble) }",
             "}, steer: SteerControls(bubble: bubble, withdrawing: console.withdrawingSteers) {",
             "Task { await console.withdrawSteer(bubble) }",
-            "}, putBack: putBack(bubble))",
+            "}, putBack: putBack(bubble),",
+            "revealItemCard: { console.revealOpenItemCard($0) })",
             // What holds it, where its runner's update does: its own queued line says so
             // (docs/mocks/queued-card-runner-updating ②).
             ".environment(\\.runnerUpdatingQueued, runnerUpdatingQueued(bubble))",

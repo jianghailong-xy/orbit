@@ -62,10 +62,10 @@ final class MachineSetupTests: XCTestCase {
     }
 
     func testAMachinesNewFolderRootIsReadFromWhatItReports() throws {
-        XCTAssertEqual(MachineSetup.newFolderRoot(try runner(
-            #"{"id":"r","name":"m","capabilities":["create-workdir/v1","create-workdir/v2"],"reposRoot":"/root/orbit-repos"}"#)), "/root")
-        XCTAssertEqual(MachineSetup.newFolderRoot(try runner(
-            #"{"id":"r","name":"m","capabilities":["create-workdir/v1"],"reposRoot":"/root/orbit-repos"}"#)), "/root/orbit-repos")
+        XCTAssertEqual(MachineSetup.setupFolderRoot(try runner(
+            #"{"id":"r","name":"m","capabilities":["create-workdir/v1","create-workdir/v2"],"reposRoot":"/root/orbit-repos"}"#), managedState: nil), "/root")
+        XCTAssertEqual(MachineSetup.setupFolderRoot(try runner(
+            #"{"id":"r","name":"m","capabilities":["create-workdir/v1"],"reposRoot":"/root/orbit-repos"}"#), managedState: nil), "/root/orbit-repos")
     }
 
     func testAMachineTooOldToAnswerGetsThereByItselfUnlessItsUpdaterSaysItCant() throws {

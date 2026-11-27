@@ -26,6 +26,9 @@ import { MODEL_ROUTING_ENGINES } from '../tasks/model-routing';
 import { CreateWorkspaceDto, UpdateWorkspaceDto } from './dto';
 import { worktreeNeedsGit } from './worktree-needs-git';
 import { isNewFolderName, newFolderWorkDirOn, readGithub, type NewWorkspaceTarget } from '../sessions/new-workspace';
+import { RUNNER_BEATS } from '../runners/runner-presence';
+import { workspaceLandingView } from '../projects/pull-request-landing';
+import { GithubInstallationGrants, installationReviewUrl, pullRequestPermissionsPending } from '../github/github-installation-grants';
 
 /** The engines a list names, each once and in the order the router weighs them. Absent stays absent:
  *  a patch that says nothing about the list leaves it as it is. */
@@ -50,6 +53,8 @@ export class WorkspacesService {
      * specs that build this service by hand.
      */
     @Optional() private readonly realtime?: RealtimeService,
+    /** What each installation granted, for the Landing section's "has not accepted the new permissions" notice (§10). */
+    @Optional() private readonly grants?: GithubInstallationGrants,
   ) {}
 
   /** Resolve each machine on the server so changing the chosen runner never guesses at credentials. */
@@ -96,7 +101,7 @@ export class WorkspacesService {
     }
     const runner = await this.prisma.runner.findFirstOrThrow({
       where: { id: dto.runnerId, ownerId },
-      select: { reposRoot: true, capabilities: true, capabilitiesReportedAt: true, managedRunner: { select: { id: true } } },
+      select: { reposRoot: true, capabilities: true, capabilitiesReportedAt: true, managedRunner: { select: { id: true } }, status: true, ...RUNNER_BEATS },
     });
     return newFolderWorkDirOn(runner, dto.newFolder);
   }
@@ -164,6 +169,7 @@ export class WorkspacesService {
         modelRoutingProviders: modelRoutingEngines(dto.modelRoutingProviders) ?? [],
         subagentsEnabled: dto.subagentsEnabled ?? true,
         subagentsMaxRunning: dto.subagentsMaxRunning ?? 8,
+        workflowsEnabled: dto.workflowsEnabled ?? true,
         // A clone (§5.3): its repository and PENDING, which the runner's next reconcile asks it to clone, and which
         // holds the workspace's sessions until it is READY.
         ...(cloned?.clone ? { ...cloned.clone, cloneState: 'PENDING' as const } : {}),
@@ -319,15 +325,59 @@ export class WorkspacesService {
   /**
    * GET /workspaces/:id: the workspace with when it was last used and how many conversations it holds,
    * which its Settings page's header says. Apart from `get`, which update and remove read back
-   * through, so a per-row save never pays for the count.
+   * through, so a per-row save never pays for the count. With its `landing` block
+   * (docs/design/protected-branch-landing.md §8): the landing setting, whether Push as me can be chosen, and the
+   * last refusal GitHub gave it.
    */
   async getWithUsage(ownerId: string, id: string) {
     const workspace = await this.get(ownerId, id);
-    const [lastActive, sessionCount] = await Promise.all([
+    const [lastActive, sessionCount, connected] = await Promise.all([
       lastActiveByWorkspace(this.prisma, [workspace.id]),
       workspaceSessionCount(this.prisma, workspace.id),
+      this.githubConnected(ownerId),
     ]);
-    return { ...workspace, lastActiveAt: lastActive.get(workspace.id) ?? null, sessionCount };
+    return {
+      ...workspace,
+      lastActiveAt: lastActive.get(workspace.id) ?? null,
+      sessionCount,
+      landing: { ...workspaceLandingView(workspace, connected), ...(await this.permissionsPending(workspace)) },
+    };
+  }
+
+  /** §10: the installation has not accepted the pull request permissions; nothing when it has, or cannot be asked. */
+  private async permissionsPending(
+    workspace: { githubRepoId: bigint | null; githubInstallationId: bigint | null },
+  ): Promise<{ permissionsPending?: { account: string; reviewUrl: string } }> {
+    if (!this.grants || workspace.githubRepoId == null || workspace.githubInstallationId == null) return {};
+    const grant = await this.grants.grant(workspace.githubInstallationId.toString()).catch(() => null);
+    if (!grant || pullRequestPermissionsPending(grant.permissions).length === 0) return {};
+    return { permissionsPending: { account: grant.account, reviewUrl: installationReviewUrl(grant) } };
+  }
+
+  /** The owner's GitHub connection is one GitHub still takes (§3 rule 4). */
+  private async githubConnected(ownerId: string): Promise<boolean> {
+    const row = await this.prisma.githubConnection.findFirst({
+      where: { ownerId, refreshExpiresAt: { gt: new Date() } },
+      select: { id: true },
+    });
+    return row !== null;
+  }
+
+  /** §8: PUSH_AS_ME needs a workspace cloned from GitHub and a live GitHub connection; PULL_REQUEST, the former. */
+  private async assertLandingMode(
+    ownerId: string,
+    current: { githubRepoId: bigint | null },
+    mode: 'PULL_REQUEST' | 'PUSH_AS_ME',
+  ): Promise<void> {
+    if (current.githubRepoId == null) {
+      throw new ConflictException({
+        code: 'WORKSPACE_NOT_FROM_GITHUB',
+        message: "This workspace was not cloned from GitHub: its landings push with this machine's Git credential.",
+      });
+    }
+    if (mode === 'PUSH_AS_ME' && !(await this.githubConnected(ownerId))) {
+      throw new ConflictException({ code: 'GITHUB_NOT_CONNECTED', message: 'Connect GitHub to push as yourself.' });
+    }
   }
 
   /**
@@ -376,6 +426,7 @@ export class WorkspacesService {
     if (needsGit) throw needsGit;
     await this.assertOwnedRunner(ownerId, dto.targetRunnerId);
     await this.assertOwnedRunner(ownerId, dto.runnerId);
+    if (dto.landingMode !== undefined) await this.assertLandingMode(ownerId, current, dto.landingMode);
     const data: Prisma.WorkspaceUpdateInput = {
       name: dto.name,
       description: dto.description,
@@ -405,6 +456,8 @@ export class WorkspacesService {
       modelRoutingProviders: modelRoutingEngines(dto.modelRoutingProviders),
       subagentsEnabled: dto.subagentsEnabled,
       subagentsMaxRunning: dto.subagentsMaxRunning,
+      workflowsEnabled: dto.workflowsEnabled,
+      landingMode: dto.landingMode,
     };
     if (dto.disallowedTools) data.disallowedTools = dto.disallowedTools as Prisma.InputJsonValue;
     if (dto.providerFallbacks) {

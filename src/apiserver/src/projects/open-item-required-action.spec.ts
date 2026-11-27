@@ -250,9 +250,9 @@ test('a coordinator\'s own sentence is untouched by whether the owner could ask 
 });
 
 test('readCoordinatorReach: Ask again can wait for recovery, and unreachable means neither action works', async () => {
-  const live: SessionEnding = { status: 'AWAITING_INPUT', endReason: null, completedAt: null, archivedAt: null, deletedAt: null, cancelRequestedAt: null };
-  const reaped: SessionEnding = { ...live, status: 'FAILED', cancelRequestedAt: new Date() };
-  const closed: SessionEnding = { ...live, status: 'CANCELLED', endReason: 'COMPLETED', completedAt: new Date() };
+  const live: SessionEnding = { turnState: null, finishedAt: null, lastTurnOutcome: 'ANSWERED', endReason: null, completedAt: null, archivedAt: null, deletedAt: null, cancelRequestedAt: null };
+  const reaped: SessionEnding = { ...live, turnState: null, finishedAt: new Date(), lastTurnOutcome: 'FAILED', cancelRequestedAt: new Date() };
+  const closed: SessionEnding = { ...live, turnState: null, finishedAt: new Date(), endReason: 'COMPLETED', completedAt: new Date() };
   const answering = (reason: string | null) => ({ receiveBlockedReasonFor: async () => reason });
   const project = (session: SessionEnding | null) => ({ coordinatorSessionId: session ? 'coordinator' : null, coordinatorSession: session });
   const read = async (reason: string | null, session: SessionEnding | null) => {
@@ -275,7 +275,7 @@ test('readCoordinatorReach: Ask again can wait for recovery, and unreachable mea
   for (const reason of [null, 'RUNNER_OFFLINE', 'TRASHED', 'RUN_RETIRED', 'SESSION_GONE']) {
     for (const session of [live, reaped, closed, null]) {
       const reach = await read(reason, session);
-      assert.equal(reach.unreachable, !reach.askable && !reach.receiving, `unreachable iff both actions are unavailable (${reason}, ${session?.status})`);
+      assert.equal(reach.unreachable, !reach.askable && !reach.receiving, `unreachable iff both actions are unavailable (${reason}, ${session?.turnState} ${session?.finishedAt ? 'released' : 'held'})`);
     }
   }
 });

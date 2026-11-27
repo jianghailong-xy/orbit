@@ -12,7 +12,7 @@
  *       Result:
  *         <the result, four spaces in>          — or —   (no result)
  *       … the next run …
- *       <two sentences for the agent>
+ *       <the sentences for the agent>
  *     </orbit-subagent-finished>
  *
  * A wording this does not recognise parses as nothing at all rather than half a line: the note then
@@ -124,5 +124,3 @@ function parseRuns(body: string): SubagentFinishedRun[] | null {
   return runs;
 }
 
-/** Whether a run came to its end on its own. */
-export const subagentFinishedOk = (run: SubagentFinishedRun): boolean => run.status === 'DONE';

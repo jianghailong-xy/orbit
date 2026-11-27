@@ -1,24 +1,34 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
-import { RunStatus, TaskStatus } from '@prisma/client';
+import { ModuleRef } from '@nestjs/core';
+import { Prisma, TaskStatus } from '@prisma/client';
 import {
   AgentProvider,
   RunEventType,
+  RunStatus,
   SessionEndReason,
-  SessionLifecycleState,
   TRASH_RETENTION_DAYS,
   gracefulEndStatus,
   isApiErrorText,
   isAuthErrorText,
   isConnectionFailureText,
 } from '@orbit/shared';
-import { randomUUID } from 'crypto';
 import { initializesRuntimeDynamically } from '../common/runtime-provider';
 import { sessionEngine } from '../providers/session-engine';
-import { runnerOfflineIsFatal } from '../common/session-scheduling';
+import { carryingTurnOf, recordCarryingTurnOutcome } from '../common/carrying-turn';
+import { heldFilter } from '../common/session-release';
+import { isSessionExecuting } from '../common/session-working';
+import { LEGACY_STATUS_SELECT, legacySessionStatus } from '../sessions/session-legacy-words';
+import { TURN_STATE_SELECT, turnStateFilter, turnStateOf, type TurnState } from '../sessions/session-turn-state';
+import { wasOutOfMemoryStop } from '../managed-runners/managed-runner-fencing';
+import { fileSubagentWake, fileWorkflowWake } from '../runner-api/subagent-wake';
+import { SessionsService } from '../sessions/sessions.service';
+import { fileLostJobWake, RUNNER_LIVENESS, settleLostRunnerWork, type RunnerLiveness } from './lost-runner-work';
 import { retireSessionInboxGeneration } from '../common/session-inbox-fence';
 import { PrismaService } from '../prisma/prisma.service';
+import { returnWaitingSessionsToOpen } from '../sessions/return-to-open';
 import { postRunFailureComment, reclaimStalledTask } from '../tasks/reclaim-stalled-task';
 import { RealtimeService } from './realtime.service';
+import { announceParkedSessionEnd, claimParkedSessionEnd, fixingLandingWithWakeSource } from './parked-session-end';
 import { readRuntimeStartupFacts, runtimeStartupClock, runtimeStartupOverdue } from './runtime-startup-clock';
 import {
   classifyTransactionFault,
@@ -37,10 +47,10 @@ import { settleUnrunSessionRequests } from '../sessions/session-request';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { PushService } from '../push/push.service';
 import { RUNNER_LINK_REVOCATION_WINDOW_MS } from '../runner-api/runner-link-token';
+import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { settleUnrunWakeTurns, signalDrainedWakeups } from '../runner-api/wake-turn-withdraw';
 import {
   APISERVER_PROCESS_QUIET_AFTER_MS,
-  RUNNER_BEATS,
   RUNNER_SILENT_AFTER_MS,
   RunnerPresenceService,
   runnerLastBeatAt,
@@ -194,14 +204,13 @@ const DYNAMIC_RUNTIME_STARTUP_GRACE_MS = 2 * 60_000;
 // timeout; this is only the control-plane backstop for a live-but-wedged runner.
 const CODEX_SHARED_STATE_STARTUP_GRACE_MS = 25 * 60_000;
 
-const LIVE: RunStatus[] = [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED];
-// What one sweep reads. Wider than LIVE by PENDING, and only so the cancel-grace branch can
-// reach a queued session: claim requires `cancel_requested_at IS NULL`, so a cancel that lands
-// on a PENDING row takes it out of the queue for good, and with LIVE alone nothing would ever
-// finalize it — it sits at "Waiting for a free slot" with no owner. Every other branch below
-// is guarded on its own status and skips these rows. LIVE stays as it was: it is also
-// forceFinalize's default expected-status set, which must not silently widen to PENDING.
-const SWEPT: RunStatus[] = [RunStatus.PENDING, ...LIVE];
+// Held by a runner past its claim: every turn state of a held session but QUEUED, null being parked. One sweep reads
+// every held session, queued ones included, and only so the cancel-grace branch can reach a queued one: claim requires
+// `cancel_requested_at IS NULL`, so a cancel that lands on a queued row takes it out of the queue for good, and with
+// LIVE alone nothing would ever finalize it — it sits at "Waiting for a free slot" with no owner. Every other branch
+// below is guarded on its own turn state and skips these rows. LIVE is forceFinalize's default expected set, which must
+// not silently widen to QUEUED.
+const LIVE: ReadonlyArray<TurnState | null> = ['IN_FLIGHT', 'ABANDONED', null];
 
 /**
  * Whether a runner has stopped answering, as this service reads it.
@@ -213,8 +222,11 @@ const SWEPT: RunStatus[] = [RunStatus.PENDING, ...LIVE];
  * copies that can drift, and the whole point of the second ask is that it is the first one's
  * predicate re-run, not a similar one.
  *
- * `status` is not a second opinion: nothing in this control plane ever writes OFFLINE, which only
- * a runner reports about itself on its way out (`runner-api.controller.ts` heartbeat). A crashed
+ * `status` is not a second opinion: OFFLINE is what a runner reports about itself on its way out
+ * (`runner-api.controller.ts` heartbeat). The one other writer is a managed runner's manager, which marks
+ * it OFFLINE when it records a proven stop of its instance (managed-runner-manager.ts `terminated`) and
+ * then starts the next generation on the same volume, which reclaims its RUNNING sessions: for a
+ * managed runner OFFLINE is no sign-off, and its heartbeat's age is read as for a crash. A crashed
  * machine leaves ONLINE behind, so the heartbeat's age is the whole of the signal. It is read against
  * RUNNER_REAP_AFTER_MS, not the shorter RUNNER_OFFLINE_AFTER_MS the runner list calls a machine
  * offline by: this verdict destroys work in flight, and a runner whose own network blipped while its
@@ -233,13 +245,13 @@ const SWEPT: RunStatus[] = [RunStatus.PENDING, ...LIVE];
  * of it, selected with RUNNER_BEATS, the later winning.
  */
 function runnerLooksOffline(
-  runner: ({ status: string } & RunnerBeats) | null | undefined,
+  runner: RunnerLiveness | null | undefined,
   now: number,
   claimedAt?: Date | null,
 ): boolean {
   if (!runner) return true;
   if (claimedAt && now - claimedAt.getTime() <= RUNNER_REAP_AFTER_MS) return false;
-  if (runner.status === 'OFFLINE') return true;
+  if (signedOff(runner)) return true;
   return now - (runnerLastBeatAt(runner)?.getTime() ?? 0) > RUNNER_REAP_AFTER_MS;
 }
 
@@ -249,8 +261,13 @@ function runnerLooksOffline(
  * (reported by a runner about itself as it leaves, or a runner's row before it ever beat), or no
  * runner at all — and `silenceHold`, which is about silence, does not hold them.
  */
-function offlineFromSilence(runner: { status: string } | null | undefined): boolean {
-  return !!runner && runner.status !== 'OFFLINE';
+function offlineFromSilence(runner: RunnerLiveness | null | undefined): boolean {
+  return !!runner && !signedOff(runner);
+}
+
+/** OFFLINE, said by the runner itself: a managed runner's OFFLINE is its manager's record of a stop (see above). */
+function signedOff(runner: RunnerLiveness): boolean {
+  return runner.status === 'OFFLINE' && !runner.managedRunner;
 }
 
 /** `runnerLooksOffline`'s claim clause as the finalizing write's WHERE: not claimed inside the window. */
@@ -309,6 +326,17 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
      * checks); `@Optional()` for the specs that build the reaper by hand about something else.
      */
     @Optional() private readonly push?: PushService,
+    /**
+     * How the reaper finds SessionsService to file the wakes a lost runner's work owes (settleLostWork), without
+     * RealtimeModule importing SessionsModule. `@Optional()` for the specs that build the reaper by hand.
+     */
+    @Optional() private readonly moduleRef?: ModuleRef,
+    /**
+     * The completion doors a project's facts go out through. A DONE task whose route this reap decided
+     * (§12.15 P-M1) re-derives the settled fact its deferred landing held. CoordinatorJudgmentModule,
+     * which RealtimeModule imports, provides it; `@Optional()` for the specs that build the reaper by hand.
+     */
+    @Optional() private readonly completionInputs?: CompletionInputRouter,
   ) {}
 
   onModuleInit(): void {
@@ -333,7 +361,24 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
   /** What the timer runs every REAP_INTERVAL_MS: a sweep, on the one process that sweeps (`leading`). */
   async tick(): Promise<void> {
     if (!this.leading()) return;
+    // Its own failure, never the sweep's: a session waiting on the owner comes back to Open whatever
+    // happened to the runs this sweep reaps.
+    await this.returnWaitingSessions().catch((e: unknown) =>
+      this.log.error('waiting-session sweep failed: ' + (e as Error).message));
     await this.sweep();
+  }
+
+  /**
+   * Every session filed in Completed or Trash that still has a question waiting on the owner comes
+   * back to Open (`returnWaitingSessionsToOpen`), whatever filed it there. The writers that file a
+   * session already do this after their own commit; this catches every other path, and its first
+   * run after boot is the backfill for sessions filed away before it existed.
+   */
+  async returnWaitingSessions(): Promise<number> {
+    const back = await returnWaitingSessionsToOpen(this.prisma, this.log);
+    for (const { id } of back) this.realtime.publishSessionCreated(id);
+    if (back.length) this.log.log(`brought ${back.length} session(s) with a question waiting back to Open`);
+    return back.length;
   }
 
   /**
@@ -374,7 +419,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
    * path that actually removes session data — soft-delete just hides it.
    *
    * A session holding a file somebody pinned or evidence cites waits in Trash until that stops, with everything else in it
-   * (docs/orbit-files-design.md §2.8): the row would go with the session, and nobody asked for that. A person who empties
+   * (docs/drive-design.md §2.8): the row would go with the session, and nobody asked for that. A person who empties
    * Trash by hand (`SessionsService.purge`) is asking for exactly that, and gets it.
    */
   private async purgeTrash(): Promise<void> {
@@ -421,12 +466,13 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     const sessions = await this.prisma.session.findMany({
       // A LANDING row is platform-driven and has no runner: it must never read as a dropped run,
       // be force-finalized or be armed for a retry (§2.9 LS6).
-      where: { status: { in: SWEPT }, sessionKind: 'CONVERSATION' },
+      where: { ...heldFilter(), sessionKind: 'CONVERSATION' },
       select: {
         id: true,
         taskId: true,
         assignedRunnerId: true,
-        status: true,
+        // Where the turn stands for the runner (sessions/session-turn-state.ts).
+        ...TURN_STATE_SELECT,
         provider: true,
         providerBuiltin: true,
         engine: true,
@@ -437,6 +483,12 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         runClaimedAt: true,
         cancelRequestedAt: true,
         endReason: true,
+        // The failure a held session's last turn reported under the new runner protocol, whose release never came:
+        // the cancel-grace branch keeps it (SESSION_RELEASE_V1).
+        lastTurnOutcome: true,
+        // And, for that hold, what its task is told: the failure's words, and whether a retry was armed for it.
+        error: true,
+        retryAt: true,
         // §13.6 SU6: whether this run is DOING the task's work or looking at it. Only the first
         // follows the task's lifecycle; see `shouldEndTerminalTask`.
         startsTaskWork: true,
@@ -444,7 +496,11 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         // auto-run candidate scan requires, so it is the column that says whether the retry
         // this reaper stands aside for exists at all.
         task: { select: { status: true, autoRunWhenReady: true } },
-        assignedRunner: { select: { status: true, ...RUNNER_BEATS } },
+        assignedRunner: { select: RUNNER_LIVENESS },
+        // What is executing outside a turn, for an idle-looking session whose runner is lost (settleLostWork).
+        engineTurnActive: true,
+        runningSubagents: true,
+        runningBgJobs: true,
       },
     });
     // Whether THIS sweep has watched the database refuse a unit of work; see the field above for
@@ -479,6 +535,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     const held = new Map<string, string[]>();
     for (const s of sessions) {
       try {
+        const turn = turnStateOf(s);
         const offline = runnerLooksOffline(s.assignedRunner, now, s.runClaimedAt);
         // A runner that hasn't honored a cancel/end in time is wedged. Handle this
         // before ordinary offline liveness so a graceful end remains graceful even if
@@ -486,13 +543,17 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         const cancelAt = s.cancelRequestedAt?.getTime() ?? 0;
         if (cancelAt && now - cancelAt > CANCEL_GRACE_MS) {
           const graceful = gracefulEndStatus(s.endReason);
-          // A session still PENDING never reached a runner: no work could have failed, and
+          // A session still queued never reached a runner: no work could have failed, and
           // there is no process that could have honored the cancel. It settles CANCELLED —
           // the same terminal state transitionEnd gives a cancel that lands while the
           // session is still queued — rather than FAILED with a "not honored" error blaming
           // a runner that was never handed it.
-          const queued = !graceful && s.status === RunStatus.PENDING;
+          const queued = !graceful && turn === 'QUEUED';
           const status = graceful ?? (queued ? RunStatus.CANCELLED : undefined);
+          // The hold a failed turn leaves under the new runner protocol (SESSION_RELEASE_V1), whose release never
+          // came: no end asked, and its failure already on the turn and copied to last_turn_outcome.
+          const failedTurnHeld = !status && turn === 'IN_FLIGHT' && s.endReason == null
+            && s.lastTurnOutcome === 'FAILED';
           await this.forceFinalize(
             s.id,
             s.assignedRunnerId,
@@ -502,9 +563,31 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
               : queued
                 ? 'cancelled while queued'
                 : 'cancel not honored',
-            status
-              ? { status, expectedStatuses: [s.status] }
-              : { expectedStatuses: [s.status] },
+            {
+              ...(status ? { status } : {}),
+              expectedTurnStates: [turn],
+              // An end somebody asked for settles as asked (a graceful end, or a cancel that found the session
+              // still queued). Not honoured, it is released FAILED (forceFinalize's default), with end_reason kept
+              // as asked.
+              // Not honoured, the end still is one somebody asked for: the turn it cut off ends CANCELLED, and nothing
+              // records a failure (design §12.1 W7). Only a session with a turn in flight had one: idle, none was.
+              // Except the hold a failed turn leaves under the new runner protocol (SESSION_RELEASE_V1): no end asked,
+              // the queue drained, and its failure already on the turn and copied to last_turn_outcome. Its release
+              // never came; released here, it reads as the failure it is, as the old protocol's would have.
+              ...(!status && turn === 'IN_FLIGHT' && !failedTurnHeld
+                ? { carryingTurn: { outcome: 'CANCELLED' as const, orLatest: false } }
+                : {}),
+              // Its task is told what the release would have told it (the old protocol's failed turn): FAILED with
+              // the run-failure comment, or, with a retry armed, nothing yet.
+              ...(failedTurnHeld
+                ? (s.retryAt == null
+                  ? { resetTaskTo: TaskStatus.FAILED, taskFailure: 'RUN_FAILED' as const, failureDetail: s.error ?? undefined }
+                  : { keepTask: true })
+                : {}),
+              // And the session keeps the failure's own words, which its turn report wrote, as the release it stands
+              // in for would have: "cancel not honored" is this sweep's reason, not what failed (step 6.2's walk).
+              ...(failedTurnHeld ? { keepError: true } : {}),
+            },
           );
           continue;
         }
@@ -526,13 +609,12 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         // ending it here on the next sweep would make the permission worthless: the conversation
         // gets one tick, is closed as TASK_CANCELLED, and the categorical revive rule then refuses
         // to bring it back. A window that closes itself is not a window.
-        const shouldEndTerminalTask =
-          s.status === RunStatus.AWAITING_INPUT && taskEndReason !== null && s.startsTaskWork;
+        const shouldEndTerminalTask = turn === null && taskEndReason !== null && s.startsTaskWork;
         if (offline && !shouldEndTerminalTask) {
-          // RUNNING is an active turn and cannot survive losing its runner. An idle
-          // AWAITING_INPUT/INTERRUPTED session consumes no slot and remains resumable;
-          // its next message simply waits in PENDING until this runner is online.
-          if (runnerOfflineIsFatal(s.status)) {
+          // A turn in flight cannot survive losing its runner. A parked or abandoned session
+          // consumes no slot and remains resumable; its next message simply waits queued
+          // until this runner is online.
+          if (turn === 'IN_FLIGHT') {
             // "Offline" is read off the ABSENCE of a heartbeat write, so it is only a fact about
             // the runner while the writes this control plane takes were landing. Once they were
             // not, the silence is as likely to be ours; leave the session for a sweep that can
@@ -558,7 +640,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
               }
             }
             await this.forceFinalize(s.id, s.assignedRunnerId, s.taskId, 'runner offline', {
-              expectedStatuses: [RunStatus.RUNNING],
+              expectedTurnStates: ['IN_FLIGHT'],
               onlyIfNotCancelling: true,
               // The verdict above came from ONE snapshot taken at the top of this sweep, and this
               // write happens a transaction-per-session later. Re-ask inside the transaction.
@@ -581,9 +663,11 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
               // names the retry it is standing aside for, and happens only when there is one.
               //
               // Arming the other case does NOT put two retries on one task if the opt-in flips
-              // to true in between. `session_task_execution_claim_idx` (migration 0130) is a
-              // partial UNIQUE index on `session(task_id)` over exactly the TASK_OCCUPYING
-              // statuses, so a task can hold ONE live session and no more: whichever starts
+              // to true in between. `session_task_execution_claim_idx_finished_at` (migration
+              // 1426) is a partial UNIQUE index on `session(task_id)` over the sessions not
+              // released (`finished_at IS NULL`), which session_release_fact_chk makes exactly the
+              // TASK_OCCUPYING statuses of 0130's index beside it, so a task can hold ONE live
+              // session and no more: whichever starts
               // first is seen by the scans' own `NOT EXISTS (occupying session)` clause, and a
               // resume that races past that read loses at the index — a 23505 the transaction
               // classifier calls permanent, so auto-retry takes its ordinary backoff rather than
@@ -597,7 +681,28 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
               // work left behind in the old one.
               armRetry: !s.taskId || !s.task?.autoRunWhenReady,
               taskFailure: 'ATTEMPT_LOST_RUNNER_OFFLINE',
+              carryingTurn: { outcome: 'FAILED', orLatest: false },
             });
+          } else if (isSessionExecuting(s)) {
+            // Not a dispatched turn, so not failed — but something was executing on the lost machine: an engine turn of
+            // its own, a SubAgent or a runner-hosted job, none of which will report an end (lost-runner-work.ts). Held by
+            // exactly what holds the in-flight verdict above, for the same reasons.
+            if (heartbeatEvidenceIsDisqualified()) {
+              this.log.warn(
+                `not settling ${s.id}'s work: this control plane could not reach its own database within ` +
+                  `the window its ${RUNNER_REAP_AFTER_MS}ms of runner silence was read from`,
+              );
+              continue;
+            }
+            if (offlineFromSilence(s.assignedRunner)) {
+              const disconnect = massDisconnectOf(disconnects, s.assignedRunner, now);
+              const why = (await silenceHeld()) ?? cellUnread ?? (disconnect ? heldFor(disconnect) : null);
+              if (why) {
+                held.set(why, [...(held.get(why) ?? []), s.id]);
+                continue;
+              }
+            }
+            await this.settleLostWork(s.id, s.assignedRunnerId);
           }
           continue;
         }
@@ -605,8 +710,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         // a Codex, Kimi, OpenCode, Antigravity or Harness session on a key or a pool initializes its
         // runtime the same way the built-in one does, and stalls the same way. One nobody can place
         // (its credential gone before an engine was recorded) is not judged here.
-        const provider =
-          s.status === RunStatus.RUNNING && !s.runtimeSessionId ? await sessionEngine(this.prisma, s) : null;
+        const provider = turn === 'IN_FLIGHT' && !s.runtimeSessionId ? await sessionEngine(this.prisma, s) : null;
         const lastTurn = s.lastTurnAt?.getTime() ?? 0;
         const runtimeStartupGrace =
           provider === AgentProvider.CODEX
@@ -615,7 +719,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         if (
           provider &&
           initializesRuntimeDynamically(provider) &&
-          s.status === RunStatus.RUNNING &&
+          turn === 'IN_FLIGHT' &&
           !s.runtimeSessionId &&
           now - lastTurn > runtimeStartupGrace &&
           // Not the time a runner restart or Update Now kept the turn waiting (runtime-startup-clock.ts).
@@ -631,21 +735,22 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
             s.taskId,
             `${provider} runtime not initialized`,
             {
-              expectedStatuses: [RunStatus.RUNNING],
+              expectedTurnStates: ['IN_FLIGHT'],
               onlyIfNotCancelling: true,
               taskFailure: 'ATTEMPT_LOST_RUNTIME_NOT_INITIALIZED',
+              carryingTurn: { outcome: 'FAILED', orLatest: false },
             },
           );
           continue;
         }
         // Backstop for a task run whose last turn ended in a Claude API error (e.g.
         // content filtering), a failure of the connection to the API, or an expired sign-in:
-        // the SDK reports it as a successful turn, so an older runner parks the session at
-        // AWAITING_INPUT and the task stays IN_PROGRESS with nothing watching. (Current runners
+        // the SDK reports it as a successful turn, so an older runner parks the session
+        // and the task stays IN_PROGRESS with nothing watching. (Current runners
         // flag the turn FAILED at the source, so this only catches sessions a stale runner left
         // behind — which outlive a release, since a runner only self-updates at startup.) Finalize
         // FAILED and reclaim the task as FAILED. Task-bound, online, not-being-cancelled only.
-        if (s.status === RunStatus.AWAITING_INPUT && s.taskId && !s.cancelRequestedAt) {
+        if (turn === null && s.taskId && !s.cancelRequestedAt) {
           const last = await this.prisma.runEvent.findFirst({
             where: { sessionId: s.id, type: RunEventType.ASSISTANT },
             orderBy: { seq: 'desc' },
@@ -657,9 +762,11 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
             await this.forceFinalize(s.id, s.assignedRunnerId, s.taskId, why, {
               resetTaskTo: TaskStatus.FAILED,
               failureDetail: text,
-              expectedStatuses: [RunStatus.AWAITING_INPUT],
+              expectedTurnStates: [null],
               onlyIfNotCancelling: true,
               taskFailure: 'REAPED_API_ERROR',
+              // Nothing is in flight: the turn the error answered is the latest, and it fails with the reply as its error.
+              carryingTurn: { outcome: 'FAILED', orLatest: true },
             });
             continue;
           }
@@ -671,7 +778,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         // durable end claim starts the cancel grace timer, whose later sweep can finalize
         // without that runner. Ordinary parked sessions still returned above.
         if (shouldEndTerminalTask) {
-          await this.endParked(s.id, s.assignedRunnerId, taskEndReason);
+          await this.endParked(s.id, s.assignedRunnerId, taskEndReason, offline);
         }
       } catch (e) {
         // Isolate per-session failures so one doesn't skip the rest; retried next sweep. A failure
@@ -685,6 +792,58 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     for (const [why, ids] of held) {
       const named = ids.slice(0, 10).join(', ') + (ids.length > 10 ? ` and ${ids.length - 10} more` : '');
       this.log.warn(`not reaping ${ids.length} session(s) whose runner looks offline (${named}): ${why}`);
+    }
+  }
+
+  /**
+   * Settles an idle-looking session whose runner is lost while something was executing in it (lost-runner-work.ts): its
+   * sets emptied, its SubAgent and workflow runs ended owing their wakes, and a wake filed for each runner-hosted job it
+   * had. The wakes are filed after the commit, through SessionsService, which this module reaches at call time as
+   * MergeReceiptService does (RealtimeModule cannot import SessionsModule); the SubAgent and workflow wakes that are not
+   * filed here are filed by the wake sweep (ScheduledWakeupWorker).
+   */
+  private async settleLostWork(sessionId: string, runnerId: string | null): Promise<void> {
+    if (!runnerId) return;
+    const settled = await withTransactionRetry(
+      this.prisma,
+      (tx) => settleLostRunnerWork(tx, sessionId, runnerId, new Date(Date.now() - RUNNER_REAP_AFTER_MS), (runner) =>
+        runnerLooksOffline(runner, Date.now())),
+      loggedRetry(this.log, 'reaper.settleLostWork'),
+    );
+    if (!settled) return;
+    this.log.warn(
+      `settled ${sessionId}'s work on lost runner ${runnerId}: ${settled.jobs.length} job(s), ` +
+        `${settled.subagentRuns.length} SubAgent run(s), ${settled.workflowRuns.length} workflow run(s)`,
+    );
+    this.realtime.publishSessionUpdated(sessionId);
+    const sessions = this.sessionsForWakes();
+    if (!sessions) {
+      if (settled.jobs.length > 0) this.log.warn(`no session service here to wake ${sessionId} for its lost job(s)`);
+      return;
+    }
+    for (const job of settled.jobs) {
+      try {
+        await fileLostJobWake(sessions, settled.ownerId, sessionId, job);
+      } catch (error) {
+        this.log.warn(`the wake for lost job ${job.jobId} of ${sessionId} was not filed: ${(error as Error).message}`);
+      }
+    }
+    for (const runId of settled.subagentRuns) {
+      await fileSubagentWake(this.prisma, sessions, runId).catch((error: unknown) =>
+        this.log.warn(`the wake for interrupted SubAgent run ${runId} was not filed yet: ${(error as Error).message}`));
+    }
+    for (const runId of settled.workflowRuns) {
+      await fileWorkflowWake(this.prisma, sessions, runId).catch((error: unknown) =>
+        this.log.warn(`the wake for interrupted workflow run ${runId} was not filed yet: ${(error as Error).message}`));
+    }
+  }
+
+  /** SessionsService, resolved when a wake is to be filed: by then every module is loaded. */
+  private sessionsForWakes(): Pick<SessionsService, 'createTurn'> | undefined {
+    try {
+      return this.moduleRef?.get(SessionsService, { strict: false });
+    } catch {
+      return undefined;
     }
   }
 
@@ -826,8 +985,8 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       // Detail recorded on the task comment for a genuine failure (resetTaskTo=FAILED);
       // defaults to `reason`. Lets the API-error backstop surface the actual error text.
       failureDetail?: string;
-      /** State observed by the sweep; prevents a stale decision finalizing a newer turn. */
-      expectedStatuses?: RunStatus[];
+      /** The turn state observed by the sweep; prevents a stale decision finalizing a newer turn. LIVE without it. */
+      expectedTurnStates?: ReadonlyArray<TurnState | null>;
       /** Non-cancel decisions must not overwrite an end/cancel that won the race. */
       onlyIfNotCancelling?: boolean;
       /** Re-ask `runnerLooksOffline` inside this transaction before writing. Only the offline
@@ -845,13 +1004,26 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
        * for: that ending says nothing about the work.
        */
       taskFailure?: TaskFailureHow;
-    } = {},
+      /**
+       * How the turn that carries this release ends (design §12.1, `common/carrying-turn.ts`), recorded in this
+       * transaction with its error (`failureDetail`, else `reason`), and copied to `last_turn_outcome` in the release's
+       * own write. FAILED for a failure; CANCELLED for the turn an end nobody honoured cut off, asked only of a session
+       * with a turn in flight, the one that has such a turn. Absent, no turn outcome is written.
+       */
+      carryingTurn?: { outcome: 'FAILED' | 'CANCELLED'; orLatest: boolean };
+      /** Leave the task as it is: a retry armed for the run's failure goes on with it (the new runner protocol's held
+       *  failed turn, released by the cancel grace). */
+      keepTask?: boolean;
+      /** Leave the session's `error` as it is rather than writing `reason` over it: the failure a held failed turn's
+       *  report already recorded (the new runner protocol's hold, released by the cancel grace). */
+      keepError?: boolean;
+    },
   ): Promise<void> {
     const status = opts.status ?? RunStatus.FAILED;
     const failed = status === RunStatus.FAILED;
     // Due immediately (see below), and carried on the published STATUS so that event says the
     // same thing the row does: this end is one the server means to undo, not a settlement.
-    const retryAt = opts.armRetry ? new Date() : null;
+    let retryAt = null as Date | null;
     const resetTaskTo = opts.resetTaskTo ?? TaskStatus.OPEN;
     // Retried whole. The reaper re-reads the session under its row lock and decides from that read,
     // so a re-run either finds the same stalled run or finds that somebody finished it first.
@@ -868,18 +1040,41 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         const runner = runnerId
           ? await tx.runner.findUnique({
               where: { id: runnerId },
-              select: { status: true, ...RUNNER_BEATS },
+              select: {
+                ...RUNNER_LIVENESS,
+                managedRunner: {
+                  select: { id: true, desiredState: true, managementState: true, concurrencyCap: true, fencingReceipt: true, nextAttemptAt: true },
+                },
+              },
             })
           : null;
         if (!runnerLooksOffline(runner, Date.now())) {
           return { ok: false, taskReclaimed: false, currentWorkTerminalized: 0, recanted: true };
         }
+        // A proven OOM stop may leave turns for the replacement to reclaim. During that
+        // restart, even expired heartbeat evidence must leave those turns for reclaim.
+        const mapping = runner?.managedRunner;
+        if (mapping?.desiredState === 'RUNNING' && mapping.concurrencyCap !== null && wasOutOfMemoryStop(mapping.fencingReceipt)
+          && (
+            mapping.managementState === 'REQUESTED' || mapping.managementState === 'WAITING_CAPACITY'
+            || mapping.managementState === 'PROVISIONING' || mapping.managementState === 'STARTING'
+            || (mapping.managementState === 'FAILED' && mapping.nextAttemptAt !== null)
+          )) {
+          return { ok: false, taskReclaimed: false, currentWorkTerminalized: 0 };
+        }
       }
-      const res = await tx.session.updateMany({
+      const carrying = opts.carryingTurn;
+      // One write that ends the session, in at most two attempts: with the retry armed only on a session
+      // nobody completed or trashed (that is out of the auto-retry sweep, so an arm written on it could never
+      // fire and would only hold its runner awake: sessions/auto-retry-eligibility.ts), and, when that matches
+      // nothing, without it. The condition is in the statement, so a complete() cannot land between a read and it.
+      const endSession = (arm: Date | null) => tx.session.updateMany({
         where: {
           id: sessionId,
-          status: { in: opts.expectedStatuses ?? LIVE },
+          ...(arm ? { completedAt: null, archivedAt: null, deletedAt: null } : {}),
           ...(opts.onlyIfNotCancelling ? { cancelRequestedAt: null } : {}),
+          // Held, in the expected turn state. In an AND list: the filter has an OR of its own, beside the claim's.
+          AND: [turnStateFilter(opts.expectedTurnStates ?? LIVE)],
           // The claim half of the re-ask above, on the row this writes: a run claimed inside the
           // window — since the sweep looked, too — is a runner answering.
           ...(opts.requireRunnerStillOffline ? claimedLongAgo(Date.now()) : {}),
@@ -887,13 +1082,16 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         // Set cancelRequestedAt too so the heartbeat cancel-drain tells a runner
         // recovering from a partition to stop (the session is already finalized here).
         data: {
-          status,
-          ...(failed ? { error: reason } : {}),
+          // A released session holds no turn (plan §2.2).
+          turnState: null,
+          ...(failed && !opts.keepError ? { error: reason } : {}),
           // Due immediately: AutoRetryService's own sweep is what waits for the runner to
           // come back, so arming for "now" makes the first sweep after this the first check
           // rather than a fixed delay guessing when the runner returns.
-          ...(retryAt ? { retryAt } : {}),
+          ...(arm ? { retryAt: arm } : {}),
           finishedAt: new Date(),
+          // The carrying turn's outcome, copied in the release's own write (design §12.1).
+          ...(carrying ? { lastTurnOutcome: carrying.outcome } : {}),
           cancelRequestedAt: new Date(),
           // Every status this writes is terminal, so the run this reaps stops being live here and
           // what it had running goes with it (CLEARED_RUNNING_WORK). A runner that is merely
@@ -903,12 +1101,26 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           ...CLEARED_RUNNING_WORK,
         },
       });
+      const arm = new Date();
+      let res = opts.armRetry ? await endSession(arm) : { count: 0 };
+      retryAt = res.count > 0 ? arm : null;
+      if (res.count === 0) res = await endSession(null);
       if (res.count === 0) return { ok: false, taskReclaimed: false, currentWorkTerminalized: 0 };
+      // The word the released row answers with (sessions/session-legacy-words.ts), for the STATUS event below. The
+      // sentences this writes keep the word computed above (plan §3.4).
+      const released = await tx.session.findUnique({ where: { id: sessionId }, select: LEGACY_STATUS_SELECT });
+      const word = released ? legacySessionStatus(released) : status;
+      // The turn that carries it, read under the Session row lock the write above took, before the drain below
+      // answers it.
+      const carryingTurnId = carrying ? await carryingTurnOf(tx, sessionId, { orLatest: carrying.orLatest }) : null;
+      if (carrying && carryingTurnId) {
+        await recordCarryingTurnOutcome(tx, carryingTurnId, carrying.outcome, opts.failureDetail ?? reason);
+      }
       // This finish may be the one a DONE task's identity was waiting for (§10.5 O-L4 3).
       const delivered = taskId
         ? await settleDeliveredIdentityAfterFinish(tx, await tx.session.findUnique({
           where: { id: sessionId },
-          select: { ownerId: true, taskId: true, startsTaskWork: true },
+          select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
         }))
         : null;
       await retireSessionInboxGeneration(tx, sessionId);
@@ -953,7 +1165,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         `its run was reaped as ${status} (${reason})`,
       );
       // Reclaim a now-stalled IN_PROGRESS task so it stops showing as running.
-      const taskReclaimed = taskId && status !== RunStatus.SUCCEEDED
+      const taskReclaimed = taskId && status !== RunStatus.SUCCEEDED && !opts.keepTask
         ? await reclaimStalledTask(
             tx,
             taskId,
@@ -970,9 +1182,12 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       }
       return {
         ok: true,
+        word,
         taskReclaimed,
         currentWorkTerminalized,
-        identityUnknown: delivered === 'IDENTITY_UNKNOWN',
+        // Or the WORK_ELSEWHERE item an identity frozen here opened (§12.15 P-M1). The dependents of a
+        // task that delivered nothing are released by the 60 s ready sweep, which asks the same predicate.
+        identitySettled: delivered === 'IDENTITY_UNKNOWN' || delivered === 'FROZEN',
         droppedWakeups,
         checksSettled,
       };
@@ -995,9 +1210,18 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       // And the exception item this sweep opened goes to whoever is responsible for it (§4.4 X-D4 1).
       await this.openItems?.deliverForTasks([taskId]);
     }
-    // The item a DONE task's unknown identity opened when this finish settled its work (O-T1).
-    if ('identityUnknown' in outcome && outcome.identityUnknown && taskId) {
+    // The item a DONE task's unknown identity opened when this finish settled its work (O-T1), or the
+    // WORK_ELSEWHERE item its frozen identity opened (§12.15 P-M1).
+    if ('identitySettled' in outcome && outcome.identitySettled && taskId) {
       await this.openItems?.deliverForTasks([taskId]);
+      // §12.5 W7: a failed landing this session held, handed back by this finish (TURN_FAILED), whatever it names.
+      await this.openItems?.offerLandingFixesTo(sessionId);
+      // And the project facts the deferred landing held (PROJECT_TASKS_SETTLED / looks-finished),
+      // re-derived now that it is decided. The dependents themselves are the 60 s ready sweep's.
+      if (this.completionInputs) {
+        const settled = await this.prisma.task.findUnique({ where: { id: taskId }, select: { projectId: true } });
+        await this.completionInputs.routeSettledWork([settled?.projectId]);
+      }
     }
     if (outcome.currentWorkTerminalized > 0) {
       this.realtime.publishQueuedTurnsChanged(sessionId);
@@ -1007,7 +1231,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       seq: Number.MAX_SAFE_INTEGER,
       type: RunEventType.STATUS,
       ts: new Date().toISOString(),
-      payload: { status, final: true, reason, ...(retryAt ? { retryAt: retryAt.toISOString() } : {}) },
+      payload: { status: outcome.word, final: true, reason, ...(retryAt ? { retryAt: retryAt.toISOString() } : {}) },
     });
     const msg = `reaped session ${sessionId} -> ${status} (${reason})`;
     if (failed) this.log.warn(msg);
@@ -1024,64 +1248,39 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     sessionId: string,
     runnerId: string | null,
     reason: SessionEndReason,
+    runnerOffline: boolean,
   ): Promise<void> {
-    const taskStatus =
-      reason === SessionEndReason.TASK_DONE ? TaskStatus.DONE : TaskStatus.CANCELLED;
     // Claim the teardown atomically: re-evaluate the trigger at execution time and put
     // the cancelRequestedAt flip + the 'end' turn in ONE transaction so a seq P2002
     // rolls BOTH back (no half-ended, wedged session). Retried next sweep if so. The
     // re-check mirrors sweep() — still parked and its task is terminal — so a turn
-    // that arrived since the sweep read doesn't get cut off.
+    // that arrived since the sweep read doesn't get cut off. The same claim a DONE
+    // makes at once for its task's idle work (parked-session-end.ts, §12.15 P-M1);
+    // this sweep is the backstop for what that one left.
     // Retried whole, for the same reason as forceFinalize above.
-    const done = await withTransactionRetry(this.prisma, async (tx) => {
-      const now = new Date();
-      const claimed = await tx.session.updateMany({
-        where: {
-          id: sessionId,
-          status: RunStatus.AWAITING_INPUT,
-          cancelRequestedAt: null,
-          // Re-check the exact terminal outcome, not merely "some terminal state": a
-          // stale sweep must never turn a cancelled task into task_done/SUCCEEDED.
-          task: { status: taskStatus },
-          // Trash remains authoritative over Completed even for an anomalous live row.
-          ...(reason === SessionEndReason.TASK_DONE ? { deletedAt: null } : {}),
-        },
-        data: {
-          cancelRequestedAt: now,
-          endReason: reason,
-          ...(reason === SessionEndReason.TASK_DONE
-            ? { completedAt: now, archivedAt: now }
-            : {}),
-        },
-      });
-      if (claimed.count === 0) return false;
-      const last = await tx.conversationTurn.findFirst({
-        where: { sessionId },
-        orderBy: { seq: 'desc' },
-        select: { seq: true },
-      });
-      await tx.conversationTurn.create({
-        data: {
-          sessionId,
-          seq: (last?.seq ?? 0) + 1,
-          clientTurnId: randomUUID(),
-          kind: 'end',
-          status: 'PENDING',
-        },
-      });
-      return true;
-    }, loggedRetry(this.log, 'reaper.endParked'));
+    // R2 (§12.5 W6, W7): not a session its task's failed landing revived that something will still wake — it
+    // ends at its own park, or on a later sweep, once nothing does — unless its runner is gone, when nothing will.
+    const done = await withTransactionRetry(
+      this.prisma,
+      async (tx) => {
+        if (reason === SessionEndReason.TASK_DONE && !runnerOffline
+          && (await fixingLandingWithWakeSource(tx, sessionId))) return false;
+        return claimParkedSessionEnd(tx, sessionId, reason);
+      },
+      loggedRetry(this.log, 'reaper.endParked'),
+    );
     if (!done) return;
-    if (reason === SessionEndReason.TASK_DONE) {
-      this.realtime.publishSessionLifecycleChanged(
-        sessionId,
-        RunStatus.AWAITING_INPUT,
-        reason,
-        SessionLifecycleState.COMPLETED,
-      );
-    }
     if (runnerId) this.realtime.requestCancel(runnerId, sessionId);
-    this.realtime.notifyInbox(sessionId);
+    announceParkedSessionEnd(this.realtime, { sessionId, reason });
+    if (reason === SessionEndReason.TASK_DONE) {
+      // A run filed in Completed with a question still waiting on the owner comes straight back.
+      const back = await returnWaitingSessionsToOpen(this.prisma, this.log, { sessionIds: [sessionId] })
+        .catch((e: unknown) => {
+          this.log.warn(`could not bring session ${sessionId} back to Open: ${(e as Error).message}`);
+          return [];
+        });
+      for (const { id } of back) this.realtime.publishSessionCreated(id);
+    }
     this.log.log(`recycling parked session ${sessionId}`);
   }
 }

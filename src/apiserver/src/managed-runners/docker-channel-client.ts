@@ -77,7 +77,7 @@ export interface ChannelHost {
   serverVersion: string | null;
   /** The filesystem Docker's volumes live on, when the channel can see it. */
   disk: { path: string; totalBytes: number; freeBytes: number } | null;
-  /** What this instance's data volumes hold now, by Docker's measure. */
+  /** Host bytes used by this instance's volumes, including reserved image bytes in filesystem mode. */
   managedVolumeBytes: number;
 }
 
@@ -85,10 +85,18 @@ export interface ChannelInfo {
   schemaVersion: number;
   instanceId: string;
   image: string;
+  /** The image's `org.opencontainers.image.revision` label: the source commit it was built from. Null when the
+   *  image has none; absent from an older channel. */
+  imageRevision?: string | null;
+  /** The image's `org.opencontainers.image.version` label: the release it was published for, which its runner reports
+   *  as its version. Null when the image has none or it is empty (one built from a checkout); absent from an older
+   *  channel. */
+  imageVersion?: string | null;
   network: { name: string; internal: boolean; interContainer: boolean } | null;
   limits: Record<string, number>;
   stopGraceSeconds: number;
   diskCheckSeconds: number;
+  volumeLimitMode?: 'filesystem' | 'measured';
   host: ChannelHost;
 }
 

@@ -9,12 +9,13 @@ import OrbitKit
 /// not retry. A person watching the conversation gets none of that from a card, so this draws what
 /// the payload records (OrbitKit's `OpenItemDelivery`, read out of `openItemDelivery`): what kind of
 /// item it is, what it is about, the facts the item was opened with — the files a merge conflicted
-/// on, the check that disagreed, the attempt that failed — the doors the coordinator has on it, and
-/// the one thing the platform already knows and the coordinator otherwise re-checks by hand every
-/// time: whether the work is on the target branch.
+/// on, the check that disagreed, the attempt that failed — a link to the item's own card (where its
+/// doors are pressed), and the one thing the platform already knows and the coordinator otherwise
+/// re-checks by hand every time: whether the work is on the target branch.
 ///
 /// The words the agent read are not thrown away — they are one disclosure away at the bottom, which
-/// is also where a reader finds the instruction this card deliberately does not repeat.
+/// is also where a reader finds the instruction this card deliberately does not repeat and, since
+/// the agent is its only reader, the item's id.
 ///
 /// Built in the card language of `BackgroundWakeCardView` (amber, a glyph and a name, raised rows)
 /// because it sits in the same place in the same transcript and is the control plane's for the same
@@ -30,6 +31,9 @@ struct OpenItemDeliveryCardView: View {
     /// taken it — by then the turn is the transcript's, and there is nothing left to take back
     /// (web parity: the queue's own line, drawn at the card's foot).
     var onCancelQueued: (() -> Void)?
+    /// Scrolls to the item's own card in this conversation, and answers false when it holds none —
+    /// the card then says so instead of pointing at nothing (board card-ui-polish ②).
+    var revealItemCard: ((String) -> Bool)? = nil
 
     @Environment(\.openURL) private var openURL
     /// The app's own link door: the task, session and landing this card names are pushed over a
@@ -41,6 +45,8 @@ struct OpenItemDeliveryCardView: View {
     @Environment(\.opensTasksOverPage) private var opensTasksOverPage
     @State private var allFiles = false
     @State private var showingRaw = false
+    /// Asked for the item's own card and the conversation holds none: the link becomes the sentence.
+    @State private var cardMissing = false
 
     private var queued: Bool { onCancelQueued != nil }
 
@@ -49,7 +55,6 @@ struct OpenItemDeliveryCardView: View {
     private var tone: Color { .orange }
     private var why: String? { OpenItemDeliveryCard.headline(card) }
     private var landing: (text: String, landed: Bool)? { OpenItemDeliveryCard.landingLine(card) }
-    private var doors: [String] { OpenItemDeliveryCard.actionLabels(card.actions) }
     private var files: [String] {
         allFiles ? card.files : Array(card.files.prefix(OpenItemDeliveryCard.filesShown))
     }
@@ -68,11 +73,12 @@ struct OpenItemDeliveryCardView: View {
             }
             if !card.files.isEmpty { fileList }
             if let landing { facts(landing) }
-            if !doors.isEmpty { doorsRow }
             links
-            Text(OpenItemDeliveryCard.meta(card, ts: ts))
-                .font(.orbitMeta).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            if let foot = OpenItemDeliveryCard.meta(card, ts: ts) {
+                Text(foot)
+                    .font(.orbitMeta).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if undelivered {
                 // Amber, not red: the turn was handed to a session that has not confirmed it.
                 Text(OpenItemDeliveryCard.undelivered)
@@ -199,26 +205,20 @@ struct OpenItemDeliveryCardView: View {
         .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
     }
 
-    /// The doors the coordinator has on this item, as the server decided them (§4.8) — named, not
-    /// offered: the reader is watching somebody else's conversation, and the press belongs to it.
-    private var doorsRow: some View {
-        FlowLayout(spacing: 6) {
-            Text(OpenItemDeliveryCard.doorsLead)
-                .font(.orbitLabel).foregroundStyle(.secondary)
-            ForEach(doors, id: \.self) { door in
-                Text(door)
-                    .font(.orbitLabel)
-                    .padding(.horizontal, 8).padding(.vertical, 2)
-                    .background(Color.primary.opacity(0.05), in: Capsule())
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    /// Where the reader can go: the task, and the run that failed. Both are the app's own doors, so
-    /// a tap lands on the screen the rest of the product already opens for that id.
+    /// Where the reader can go: the item's own card, where its doors are pressed, then the task, the
+    /// run that failed and the landing. All are the app's own doors, so a tap lands on the screen
+    /// the rest of the product already opens for that id; the item card is scrolled to in place.
     private var links: some View {
-        HStack(spacing: 12) {
+        FlowLayout(spacing: 12) {
+            if cardMissing {
+                Text(OpenItemDeliveryCard.itemCardNotHere)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+            } else {
+                Button(OpenItemDeliveryCard.goToItemCard) {
+                    cardMissing = !(revealItemCard?(card.itemId) ?? false)
+                }
+                .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.tint)
+            }
             if let url = OpenItemDeliveryCard.taskLink(card) {
                 Button(OpenItemDeliveryCard.openTask) { openLink(url) }
                     .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.tint)
@@ -233,8 +233,8 @@ struct OpenItemDeliveryCardView: View {
                 Button(OpenItemDeliveryCard.openLanding) { openURL(url) }
                     .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.tint)
             }
-            Spacer(minLength: 0)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// One of this card's links through the app's own link door, told whether the card is in a
@@ -245,15 +245,21 @@ struct OpenItemDeliveryCardView: View {
     }
 
     /// The paragraph the agent was handed, exactly as it read it — one tap away and folded by
-    /// default. It is the instruction this card deliberately does not repeat.
+    /// default. It is the instruction this card deliberately does not repeat, and the item's id
+    /// lives here with it: the id is the agent's handle, not a person's.
     private var raw: some View {
         DisclosureGroup(isExpanded: $showingRaw) {
-            Text(text)
-                .font(.orbitMono)
-                .foregroundStyle(.secondary)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 4)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(OpenItemDeliveryCard.rawItemId(card))
+                    .font(.orbitMeta)
+                    .foregroundStyle(.secondary)
+                Text(text)
+                    .font(.orbitMono)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.top, 4)
         } label: {
             Text(OpenItemDeliveryCard.rawSummary)
                 .font(.orbitMeta)

@@ -60,7 +60,9 @@ import { test } from 'node:test';
 import { pathToFileURL } from 'node:url';
 
 import { BadRequestException } from '@nestjs/common';
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
+import { isReleasedStatus } from '../common/session-release';
 import { AgentProvider } from '@orbit/shared';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
@@ -83,6 +85,8 @@ import { RunnerSessionsController } from './runner-sessions.controller';
 import { lastLoopRun, loopSilenceLimitMs, ScheduledWakeupDto } from './scheduled-wakeup';
 import { ScheduledWakeupWorker } from './scheduled-wakeup.worker';
 import '../test-support/dequeue-under-lease';
+import { type SessionFixture, wordOf } from '../test-support/session-word';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const PG_URL = process.env.COORDINATOR_PG_URL;
 const skip = !PG_URL;
@@ -219,8 +223,9 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
   }
 
   /** A session that has run a turn and is parked between turns, unless `data` says otherwise. */
-  async function session(m: Machine, data: Partial<Prisma.SessionUncheckedCreateInput> = {}): Promise<string> {
+  async function session(m: Machine, data: SessionFixture = {}): Promise<string> {
     const id = randomUUID();
+    const { status: fixtureStatus = RunStatus.AWAITING_INPUT, ...dataFacts } = data;
     await db.session.create({
       data: {
         id,
@@ -233,13 +238,16 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
         provider: 'claude',
         providerBuiltin: true,
         engine: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: turnStateOfWord(fixtureStatus),
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: false,
         startedAt: new Date(),
         numTurns: 1,
         runtimeSessionId: randomUUID(),
-        ...data,
+        ...dataFacts,
+        ...(isReleasedStatus(fixtureStatus) ? {
+          finishedAt: data.finishedAt ?? new Date(),
+        } : {}),
       },
     });
     await db.conversationTurn.create({
@@ -362,7 +370,7 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
         WHERE "session_id" = $1::uuid AND "kind" = 'message' AND "status" IN ('PENDING', 'IN_FLIGHT')`,
       [sessionId],
     );
-    await sql.query(`UPDATE "session" SET "status" = 'AWAITING_INPUT' WHERE "id" = $1::uuid`, [sessionId]);
+    await sql.query(`UPDATE "session" SET "turn_state" = NULL, "finished_at" = NULL WHERE "id" = $1::uuid`, [sessionId]);
   }
   /** A turn failed the session, as turn-complete records it: FAILED, its runner slot reclaimed. */
   async function failSession(sessionId: string, retryAt: Date | null = null): Promise<void> {
@@ -372,7 +380,7 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
       [sessionId],
     );
     await sql.query(
-      `UPDATE "session" SET "status" = 'FAILED', "finished_at" = clock_timestamp(), "cancel_requested_at" = clock_timestamp(),
+      `UPDATE "session" SET "turn_state" = NULL, "last_turn_outcome" = 'FAILED', "finished_at" = clock_timestamp(), "cancel_requested_at" = clock_timestamp(),
               "error" = 'Prompt is too long', "retry_at" = $2::timestamptz(3)
         WHERE "id" = $1::uuid`,
       [sessionId, retryAt],
@@ -413,7 +421,7 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
     assert.equal(turn.content, '', `the revive turn records words: ${JSON.stringify(turn.content)}`);
     assert.equal(turn.status, 'PENDING');
     const revived = await sessionRow(id);
-    assert.equal(revived.status, RunStatus.PENDING, 'the session was not revived');
+    assert.equal(wordOf(revived), RunStatus.PENDING, 'the session was not revived');
     assert.equal(revived.cancelRequestedAt, null);
     assert.equal(revived.lastUserText, null, 'the list would preview the tick as the person\'s message');
     const [settled, next] = await ticksOf(loop.id);
@@ -470,7 +478,7 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
     const [turn] = await turnsOf(id);
     assert.equal(turn.clientTurnId, `bg-wake:wakeup:${first.id}`);
     assert.equal(turn.content, '');
-    assert.equal((await sessionRow(id)).status, RunStatus.PENDING, 'the tick did not ask for a runner slot');
+    assert.equal(wordOf((await sessionRow(id))), RunStatus.PENDING, 'the tick did not ask for a runner slot');
     let ticks = await ticksOf(loop.id);
     assert.deepEqual(ticks.map((tick) => tick.state), ['DELIVERED', 'PENDING']);
     assert.equal(ticks[1].dueAt.getTime() - ticks[0].dueAt.getTime(), 120_000);
@@ -532,7 +540,7 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
       JSON.stringify(after),
     );
     const failed = await sessionRow(id);
-    assert.equal(failed.status, RunStatus.FAILED, 'the tick revived a session whose retry is armed');
+    assert.equal(wordOf(failed), RunStatus.FAILED, 'the tick revived a session whose retry is armed');
     assert.equal(failed.retryAt?.getTime(), retryAt.getTime(), 'the tick touched the armed retry');
     assert.equal((await turnsOf(id)).length, 0, 'a turn was filed for a session the retry is to bring back');
   });
@@ -546,7 +554,7 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
     for (let n = 1; n <= 3; n += 1) {
       const tick = await makeDue(loop.id);
       assert.equal(await worker.deliverTick(tick.id), 'REVIVED', `tick ${n} of the streak did not revive the session`);
-      assert.equal((await sessionRow(id)).status, RunStatus.PENDING);
+      assert.equal(wordOf((await sessionRow(id))), RunStatus.PENDING);
       assert.equal((await loopOf(id)).reviveStreak, n);
       // The revived turn fails again, as a full context does at once.
       await failSession(id);
@@ -557,7 +565,7 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
       const tick = await makeDue(loop.id);
       assert.equal(await worker.deliverTick(tick.id), 'MISSED', `tick ${n} of the streak revived the session again`);
       const held = await sessionRow(id);
-      assert.equal(held.status, RunStatus.FAILED, `tick ${n} revived the session`);
+      assert.equal(wordOf(held), RunStatus.FAILED, `tick ${n} revived the session`);
       assert.equal((await turnsOf(id)).length, turnsBefore, `tick ${n} filed a turn`);
     }
     let after = await loopOf(id);
@@ -570,7 +578,7 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
 
     // The session is healthy again — its owner brought it back — and the loop goes on by itself.
     await sql.query(
-      `UPDATE "session" SET "status" = 'AWAITING_INPUT', "cancel_requested_at" = NULL, "finished_at" = NULL, "error" = NULL WHERE "id" = $1::uuid`,
+      `UPDATE "session" SET "turn_state" = NULL, "cancel_requested_at" = NULL, "finished_at" = NULL, "error" = NULL WHERE "id" = $1::uuid`,
       [id],
     );
     const tick = await makeDue(loop.id);
@@ -614,13 +622,13 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
     );
     await autoRetry.sweep();
     const disarmed = await sessionRow(id);
-    assert.deepEqual([disarmed.status, disarmed.retryAt], [RunStatus.FAILED, null], 'the auto-retry did not give up on the runner');
+    assert.deepEqual([wordOf(disarmed), disarmed.retryAt], [RunStatus.FAILED, null], 'the auto-retry did not give up on the runner');
 
     // Now the ticks try to revive it, and every resume is refused while the runner is away.
     for (let n = 3; n <= 4; n += 1) {
       const tick = await makeDue(loop.id);
       assert.equal(await worker.deliverTick(tick.id), 'MISSED', `tick ${n}, whose revive the runner was not there for`);
-      assert.equal((await sessionRow(id)).status, RunStatus.FAILED);
+      assert.equal(wordOf((await sessionRow(id))), RunStatus.FAILED);
       assert.equal((await loopOf(id)).reviveStreak, 0, `tick ${n}: a refused revive was counted as one`);
     }
     assert.equal((await turnsOf(id)).length, 0, 'a turn was filed while the runner was away');
@@ -629,7 +637,7 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
     await goOnline(m);
     const back = await makeDue(loop.id);
     assert.equal(await worker.deliverTick(back.id), 'REVIVED', 'the loop did not revive the session once its runner was back');
-    assert.equal((await sessionRow(id)).status, RunStatus.PENDING);
+    assert.equal(wordOf((await sessionRow(id))), RunStatus.PENDING);
     const after = await loopOf(id);
     assert.deepEqual(
       [after.state, after.ticksFired, after.ticksMissed, after.reviveStreak],
@@ -713,7 +721,7 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
 
     // The retry brought the session back: the wakeup is delivered.
     await sql.query(
-      `UPDATE "session" SET "status" = 'AWAITING_INPUT', "retry_at" = NULL, "cancel_requested_at" = NULL WHERE "id" = $1::uuid`,
+      `UPDATE "session" SET "turn_state" = NULL, "retry_at" = NULL, "cancel_requested_at" = NULL, "finished_at" = NULL WHERE "id" = $1::uuid`,
       [armed],
     );
     assert.deepEqual(await drainOnly(armed), ['DELIVERED']);
@@ -763,11 +771,11 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
   await t.test('SESSION_ENDED: a tick that finds its session over ends the loop, for every way a session ends', async () => {
     const m = await machine('ended');
     const ways: Array<[string, Partial<Prisma.SessionUncheckedUpdateInput>]> = [
-      ['ended by its owner (CANCELLED)', { status: RunStatus.CANCELLED, endReason: 'ended', finishedAt: new Date() }],
+      ['ended by its owner (CANCELLED)', { turnState: null, endReason: 'ended', finishedAt: new Date() }],
       ['moved to Completed', { completedAt: new Date() }],
       ['moved to Trash', { deletedAt: new Date() }],
-      ['finished (SUCCEEDED)', { status: RunStatus.SUCCEEDED, finishedAt: new Date() }],
-      ['being ended', { status: RunStatus.RUNNING, cancelRequestedAt: new Date() }],
+      ['finished (SUCCEEDED)', { turnState: null, finishedAt: new Date() }],
+      ['being ended', { turnState: 'IN_FLIGHT', cancelRequestedAt: new Date() }],
     ];
     for (const [how, end] of ways) {
       const id = await session(m);
@@ -963,7 +971,7 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
       tick = await elapse(loop.id, id);
       assert.equal(await signalling.deliverTick(tick.id), 'DELIVERED', `tick ${n}`);
     }
-    assert.equal((await sessionRow(id)).status, RunStatus.RUNNING);
+    assert.equal(wordOf((await sessionRow(id))), RunStatus.RUNNING);
     assert.equal(rang.length, 0, 'a loop queued behind a turn that is still running alerted');
     assert.equal((await loopOf(id)).alertedAt, null);
 
@@ -1001,7 +1009,7 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
       const filed = await elapse(overLoop.id, over);
       assert.equal(await signalling.deliverTick(filed.id), 'DELIVERED', `tick ${n} of the loop whose session ends`);
     }
-    await db.session.update({ where: { id: over }, data: { status: RunStatus.CANCELLED, endReason: 'ended', finishedAt: new Date() } });
+    await db.session.update({ where: { id: over }, data: { turnState: null, endReason: 'ended', finishedAt: new Date() } });
     const last = await elapse(overLoop.id, over);
     assert.equal(await signalling.deliverTick(last.id), 'LOOP_ENDED');
     assert.equal(rang.length, 1, 'a loop that ended with its session was told as silent');
@@ -1034,8 +1042,8 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
     assert.equal(await signalling.deliver(held.id, armed, m.ownerId), 'HELD');
 
     const ways: Array<[string, Partial<Prisma.SessionUncheckedUpdateInput>]> = [
-      ['ended by its owner (CANCELLED)', { status: RunStatus.CANCELLED, endReason: 'ended', finishedAt: new Date() }],
-      ['FAILED and moved to Completed', { status: RunStatus.FAILED, finishedAt: new Date(), completedAt: new Date() }],
+      ['ended by its owner (CANCELLED)', { turnState: null, endReason: 'ended', finishedAt: new Date() }],
+      ['FAILED and moved to Completed', { turnState: null, lastTurnOutcome: 'FAILED', finishedAt: new Date(), completedAt: new Date() }],
     ];
     for (const [how, end] of ways) {
       const id = await session(m);

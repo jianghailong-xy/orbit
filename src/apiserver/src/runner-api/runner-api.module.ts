@@ -26,6 +26,8 @@ import { RunnerNotifyController } from './runner-notify.controller';
 import { RunnerServiceTokensController } from './runner-service-tokens.controller';
 import { RunnerWatchesController } from './runner-watches.controller';
 import { RunnerOwnerRequestsController } from './runner-owner-requests.controller';
+import { RunnerBrowserController } from './runner-browser.controller';
+import { ManagedRunnerBrowserModule } from '../managed-runners/browser-state';
 import { RunnerConditionsController } from './runner-conditions.controller';
 import { RunnerSchedulesController } from './runner-schedules.controller';
 import { SchedulesModule } from '../schedules/schedules.module';
@@ -58,6 +60,7 @@ import { PushModule } from '../push/push.module';
 import { ProvidersModule } from '../providers/providers.module';
 import { RunnersModule } from '../runners/runners.module';
 import { RunnerWriteProtocolInterceptor } from './runner-write-protocol';
+import { PullRequestLandingModule } from '../github/pull-request-landing.module';
 import { IntegrationJobRelay } from './integration-job-relay';
 import { WikiRepoOps } from '../wiki-worker/wiki-repo-ops';
 import { MainCheckoutService } from '../workspaces/main-checkout.service';
@@ -93,6 +96,8 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     WatchesModule,
     // RunnerOwnerRequestsController files through the one OwnerRequestsService the owner's door reads.
     OwnerRequestsModule,
+    // RunnerBrowserController (browser_status) reads through the service behind GET /runners/:id/browser.
+    ManagedRunnerBrowserModule,
     // And RunnerWikiController through the one WikiService the user door writes with: one entry point
     // underneath both doors is what makes "there is one write path" true rather than intended.
     WikiModule,
@@ -102,6 +107,9 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     // RunnerGitCredentialController mints a GitHub workspace's token, and the heartbeat reconciles its clone, through
     // the one GithubWorkspaceService, whose in-memory token cache is the only place a token is kept.
     GithubModule,
+    // A landing that waits on its pull request (docs/design/protected-branch-landing.md §4.2 J-T14) and a session's
+    // Merge through one (§4.6) are handed to the one pull request door after their results commit.
+    PullRequestLandingModule,
     // RunnerSchedulesController: a session's schedule_* tools, through the services the REST doors use.
     SchedulesModule,
     ScheduleRunsModule,
@@ -139,6 +147,7 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     RunnerProjectsController,
     RunnerWatchesController,
     RunnerOwnerRequestsController,
+    RunnerBrowserController,
     RunnerSecretGrantsController,
     // A GitHub workspace's installation token, for the runner's own git commands (docs/github-workspace-design.md §5.4).
     RunnerGitCredentialController,

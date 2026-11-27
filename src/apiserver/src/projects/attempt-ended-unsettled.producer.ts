@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import { Injectable, Logger } from '@nestjs/common';
-import { uuidToBase62 } from '@orbit/shared';
-import { CreatorType, Prisma, RunStatus, TaskStatus } from '@prisma/client';
+import { RunStatus, uuidToBase62 } from '@orbit/shared';
+import { CreatorType, Prisma, TaskStatus } from '@prisma/client';
 
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
@@ -12,6 +12,8 @@ import {
   type JudgmentOutcome,
 } from './coordinator-judgment.service';
 import { attemptEndedUnsettledFact } from './coordinator-wake';
+import { isReleased, sessionReleasedSql } from '../common/session-release';
+import { LEGACY_STATUS_SELECT, legacySessionStatus } from '../sessions/session-legacy-words';
 
 /** The project vanished between the committed attempt read and wake authorization. */
 export const ATTEMPT_WAKE_PROJECT_GONE = 'PROJECT_GONE';
@@ -61,15 +63,12 @@ export type AttemptEndedDelivery =
       signal?: AttemptHumanSignal;
     };
 
-const TERMINAL_SESSION_STATUSES: readonly RunStatus[] = [
-  RunStatus.SUCCEEDED,
-  RunStatus.FAILED,
-  RunStatus.CANCELLED,
-];
-
 interface AttemptSessionSnapshot {
   id: string;
-  status: RunStatus;
+  /** The legacy word, derived from the facts (sessions/session-legacy-words.ts), never the stored one. */
+  word: RunStatus;
+  /** Released: its release column, `finished_at`, is set (common/session-release.ts). */
+  released: boolean;
   retryAt: Date | null;
   engineTurnActive: boolean;
   startsTaskWork: boolean;
@@ -89,6 +88,7 @@ interface HumanSignalInput {
   projectId: string | null;
   sessionId: string;
   sessionStatus: RunStatus;
+  sessionReleased: boolean;
   l2RefusalCode: string;
 }
 
@@ -132,8 +132,7 @@ export class AttemptEndedUnsettledProducer {
       return { outcome: 'JUDGMENT_PATH_AVAILABLE' };
     }
 
-    const terminal = TERMINAL_SESSION_STATUSES.includes(session.status)
-      && session.retryAt == null;
+    const terminal = session.released && session.retryAt == null;
     if (!terminal) return { outcome: 'NOT_ENDED' };
 
     if (!task.projectId) {
@@ -141,7 +140,8 @@ export class AttemptEndedUnsettledProducer {
         taskId: task.id,
         projectId: null,
         sessionId,
-        sessionStatus: session.status,
+        sessionStatus: session.word,
+        sessionReleased: session.released,
         l2RefusalCode: ATTEMPT_WAKE_NO_PROJECT_COORDINATOR,
       });
       return { outcome: 'NOT_PROJECT_TASK', taskId: task.id, signal };
@@ -153,7 +153,7 @@ export class AttemptEndedUnsettledProducer {
       taskId: task.id,
       taskStatus: task.status,
       sessionId,
-      sessionStatus: session.status,
+      sessionStatus: session.word,
     });
     if (!fact) {
       await this.resolveHumanSignal(task.id, projectId);
@@ -186,7 +186,8 @@ export class AttemptEndedUnsettledProducer {
       taskId: task.id,
       projectId,
       sessionId,
-      sessionStatus: session.status,
+      sessionStatus: session.word,
+      sessionReleased: session.released,
       l2RefusalCode: result.refusalCode,
     });
     return { outcome: result.outcome, projectId, taskId: task.id, signal };
@@ -231,7 +232,7 @@ export class AttemptEndedUnsettledProducer {
               AND verifier."terminal_reason" IS NULL
               AND verifier."superseded_by_task_id" IS NULL
          )
-         AND s."status" IN ('SUCCEEDED', 'FAILED', 'CANCELLED')
+         AND ${sessionReleasedSql('s')}
        ORDER BY s."task_id", s."updated_at" DESC, s."id" DESC
        LIMIT ${limit}
     `);
@@ -255,7 +256,7 @@ export class AttemptEndedUnsettledProducer {
       where: { id: sessionId },
       select: {
         id: true,
-        status: true,
+        ...LEGACY_STATUS_SELECT,
         retryAt: true,
         engineTurnActive: true,
         startsTaskWork: true,
@@ -287,7 +288,9 @@ export class AttemptEndedUnsettledProducer {
     if (!session) return null;
     return {
       id: session.id,
-      status: session.status,
+      // A task's run is never a LANDING container, so no landing row.
+      word: legacySessionStatus(session),
+      released: isReleased(session),
       retryAt: session.retryAt,
       engineTurnActive: session.engineTurnActive,
       startsTaskWork: session.startsTaskWork,
@@ -458,7 +461,7 @@ export class AttemptEndedUnsettledProducer {
 
   private humanSignalComment(input: HumanSignalInput, taskStatus: TaskStatus): string {
     const sessionPublicId = uuidToBase62(input.sessionId);
-    const sessionLine = TERMINAL_SESSION_STATUSES.includes(input.sessionStatus)
+    const sessionLine = input.sessionReleased
       ? `Run session ${sessionPublicId} has reached the terminal state ${input.sessionStatus}`
       : `Run session ${sessionPublicId} has ended its work turn and now stands at ${input.sessionStatus}`;
     return `${ATTEMPT_UNJUDGED_COMMENT_MARKER}\n`

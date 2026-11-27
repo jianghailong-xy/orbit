@@ -146,3 +146,50 @@ public struct LRUOrder: Sendable, Equatable {
         keys.removeAll { $0 == key }
     }
 }
+
+/// Which snapshot of each session's transcript is already on disk, so a console is written only
+/// when it holds something durable its disk copy does not (`ConsoleRegistry.persist`). Pure and
+/// `Sendable` like `LRUOrder`, so the skip rule is unit-tested; the registry holds one.
+///
+/// A new durable event is one such thing, and `maxSeq` says so. The other is a row that changed in
+/// place with no new seq: a live `translation` folded into a reply already in the window
+/// (`TranscriptReducer.inPlaceRevision`). Skipping on `maxSeq` alone never wrote that to disk, so the
+/// last reply of an idle session came back untranslated after a relaunch (web parity: the `rewrite`
+/// seqs of transcriptStore.ts's `saveTranscript`).
+public struct TranscriptSaveLedger: Sendable, Equatable {
+    private struct Mark: Sendable, Equatable {
+        let maxSeq: Int
+        let inPlaceRevision: Int
+    }
+    private var written: [String: Mark] = [:]
+
+    public init() {}
+
+    private static func mark(_ reducer: TranscriptReducer) -> Mark {
+        Mark(maxSeq: reducer.state.maxSeq, inPlaceRevision: reducer.inPlaceRevision)
+    }
+
+    /// The disk copy a console was just restored from: the reducer holds nothing it does not.
+    public mutating func restored(_ sessionID: String, _ reducer: TranscriptReducer) {
+        written[sessionID] = Self.mark(reducer)
+    }
+
+    /// Whether `reducer` holds something its session's disk copy does not. If it does, it is claimed as
+    /// written before the write is made, so a later tick cannot queue a second write of the same state.
+    /// A failed write was already indistinguishable from a successful one (the store swallows it) and
+    /// heals on the next change.
+    public mutating func claim(_ sessionID: String, _ reducer: TranscriptReducer) -> Bool {
+        let mark = Self.mark(reducer)
+        guard written[sessionID] != mark else { return false }
+        written[sessionID] = mark
+        return true
+    }
+
+    public mutating func forget(_ sessionID: String) {
+        written[sessionID] = nil
+    }
+
+    public mutating func forgetAll() {
+        written.removeAll()
+    }
+}

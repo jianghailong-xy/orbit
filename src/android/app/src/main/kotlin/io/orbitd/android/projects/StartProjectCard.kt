@@ -125,7 +125,7 @@ internal fun StartProjectCard(
         // record says what it started with, in one line.
         StartCardHead(StartProjectCopy.howItRuns)
         if (recorded) StartCardPanel {
-            Text(StartProjectCopy.settingsLine(draft, StartProjectCopy.branch(request.settings.projectBranchName, projectId)),
+            Text(StartProjectCopy.settingsLine(draft, StartProjectCopy.branch(request.settings.projectBranchName, request.defaultProjectBranchName, projectId)),
                 Modifier.padding(12.dp).testTag("$tag-settings"), style = MaterialTheme.typography.bodySmall, color = muted)
         } else StartCardPanel {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -146,10 +146,12 @@ internal fun StartProjectCard(
                     RunSettings.delivery(draft.line, draft.deliveryMode)), tag)
             }
             HorizontalDivider()
-            LineRow(draft, request, projectId, editable, tag, onDraft)
+            // A request that names no line (§12.15 P-M2, rulings D1 and D8): one line in place of the line, its delivery, its main
+            // branch and the landing check — no control to choose a line — and the merge check kept.
+            if (draft.line == null) NoLineRow(tag) else LineRow(draft, request, projectId, editable, tag, onDraft)
             // How the work reaches main, under the line it only means something for: a card whose read does not say offers no
             // choice, and no row.
-            if (draft.deliveryMode != null) {
+            if (draft.line != null && draft.deliveryMode != null) {
                 HorizontalDivider()
                 DeliveryRow(draft, editable, tag, onDraft)
             }
@@ -158,8 +160,8 @@ internal fun StartProjectCard(
                 HorizontalDivider()
                 MainBranchRow(draft, branches, lastChoice, editable, tag, onDraft)
             }
-            HorizontalDivider()
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (draft.line != null) HorizontalDivider()
+            if (draft.line != null) Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(LandingCheckCopy.label)
                 if (draft.line == "MAIN") Text(LandingCheckCopy.main) else {
                     OutlinedTextField(draft.landingCheckCommand, { onDraft(draft.copy(landingCheckCommand = it)) },
@@ -306,7 +308,7 @@ fun CoordinatorStartCard(card: InteractionCard, reads: Map<String, JsonElement>,
 /** An edited draft across recreation; none saved while nothing has been edited. */
 private val draftSaver = Saver<StartProjectCopy.Draft?, List<Any?>>(
     save = { draft -> draft?.let { listOf(it.line, it.automatic, it.maxConcurrentTasks, it.mergeCheckCommand, it.upstream, it.deliveryMode) } },
-    restore = { StartProjectCopy.Draft(it[0] as String, it[1] as Boolean, it[2] as Int, it[3] as String, it[4] as String?, it[5] as String?) })
+    restore = { StartProjectCopy.Draft(it[0] as String?, it[1] as Boolean, it[2] as Int, it[3] as String, it[4] as String?, it[5] as String?) })
 
 /** What still comes to the owner once the project starts with these settings. */
 @Composable
@@ -326,6 +328,11 @@ private fun ComesToYou(items: List<StartProjectCopy.ComesToYouItem>, tag: String
     }
 }
 
+/** How it runs on a request with no line: the one sentence, on the tint the board gives it, and nothing to press. */
+@Composable
+private fun NoLineRow(tag: String) = Text(LandingMeasuredCopy.landsWhenATaskCommits, Modifier.fillMaxWidth()
+    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.07f)).padding(horizontal = 12.dp, vertical = 12.dp).testTag("$tag-no-line"))
+
 /** Where finished tasks land, picked from the platform's menu: each option with what choosing it means, the branch's own
  * name under its option, and the chosen one ticked. */
 @Composable
@@ -339,7 +346,7 @@ private fun LineRow(draft: StartProjectCopy.Draft, request: StartProjectCopy.Req
                 Text("${if (draft.line == "MAIN") RunSettings.lineMain(draft.main) else RunSettings.lineProjectBranch} ▾", maxLines = 1) }
             DropdownMenu(menu, { menu = false }) {
                 listOf(Triple("PROJECT_BRANCH", RunSettings.lineProjectBranch,
-                    "${StartProjectCopy.branch(request.settings.projectBranchName, projectId)} — ${RunSettings.lineProjectBranchHint}"),
+                    "${StartProjectCopy.branch(request.settings.projectBranchName, request.defaultProjectBranchName, projectId)} — ${RunSettings.lineProjectBranchHint}"),
                     Triple("MAIN", RunSettings.lineMain(draft.main), RunSettings.lineMainHint(draft.main))).forEach { (value, title, hint) ->
                     DropdownMenuItem(text = { Column(Modifier.widthIn(max = 280.dp)) {
                         Text(if (draft.line == value) "✓ $title" else title); Text(hint, style = MaterialTheme.typography.labelSmall) } },

@@ -108,16 +108,17 @@ final class AgentsStackWiringTests: XCTestCase {
 
     /// One row, two containers. The row view is built once — what differs is who moves the screen:
     /// the three-column `List`'s selection, or the compact row's own destination value. Neither
-    /// shape draws a highlight it cannot open, because both read the same stack.
+    /// shape draws a highlight it cannot open, because both read the same stack. The wrapper is the
+    /// shared shell (`Views/SessionListRow.swift`), which every row kind goes through.
     func testOneRowInTwoContainersAndOnlyTheCompactOnePushes() throws {
-        let agentsSource = try appSource("Views/AgentsView.swift")
-        let row = code(try slice(agentsSource, from: "@ViewBuilder private func sessionRow(",
-                                 to: "private func tagSectionHeader("))
+        let shellSource = try appSource("Views/SessionListRow.swift")
+        let row = code(try slice(shellSource, from: "    @ViewBuilder private var wrapped: some View {",
+                                 to: "    private var label: some View {"))
         let selectionBranch = try XCTUnwrap(row.range(of: "case .selection:"))
         let pushBranch = try XCTUnwrap(row.range(of: "case .push:"), "the compact branch")
-        let tag = try XCTUnwrap(row.range(of: ".tag(s.id)"), "the three-column row stays tag-driven")
+        let tag = try XCTUnwrap(row.range(of: ".tag(subject.id)"), "the three-column row stays tag-driven")
         let pushed = try XCTUnwrap(
-            row.range(of: "Button { app.openSessionRow(s) } label: {"),
+            row.range(of: "app.openSessionRow(subject)"),
             "the compact row carries its destination")
         XCTAssertLessThan(tag.lowerBound, pushBranch.lowerBound,
                           "`.tag` belongs to the selection branch, not the pushing one")
@@ -128,25 +129,19 @@ final class AgentsStackWiringTests: XCTestCase {
                        + "`NavigationLink(value:)` draws cannot be hidden on iOS 17/18, so the row "
                        + "pushes its frame through `AppModel.push` instead")
         XCTAssertLessThan(selectionBranch.lowerBound, pushBranch.lowerBound)
-        XCTAssertEqual(row.components(separatedBy: "AgentSessionRow(session: s").count - 1, 1,
-                       "the row itself is built once and shared by both branches")
+        XCTAssertEqual(row.components(separatedBy: "label").count - 1, 5,
+                       "the row's content is built once and shared by both branches")
 
         // ...and its actions attach to the row, never to what the row is made of. `.swipeActions`
         // and `.contextMenu` are read off the view the `List` hosts as its row; a `Button` does not
         // pass them up from its label, so holding them inside that label — which is where the
         // compact row carried them — leaves a session row that cannot be swiped or long-pressed.
-        // The actions therefore follow the `Button`'s closing brace, at the row's own level.
-        let push = code(String(row[pushBranch.lowerBound...]))
-            .split(separator: "\n")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-        let actions = try XCTUnwrap(push.firstIndex(
-            of: ".sessionRowActions(s, scope: view, onTag: { taggingSession = s }, onShare: { sharingSession = s },"),
-            "the compact row attaches its own actions")
-        XCTAssertEqual(push.dropFirst(actions + 1).first, "onMove: { movingSession = s }, onSessions: onSessions)")
-        XCTAssertGreaterThan(actions, 0)
-        XCTAssertTrue(push[actions - 1].hasSuffix("}"),
-                      "attached to the row from outside the `Button`'s label, not nested inside it")
+        // The shell therefore hands the wrapped row to `swipeable`, which attaches them outside it.
+        XCTAssertTrue(shellSource.contains("swipeable(wrapped)"))
+        let swipeable = code(try slice(shellSource, from: "    private func systemSwipeActions<Row: View>(_ row: Row) -> some View {",
+                                       to: "\n    }"))
+        XCTAssertTrue(swipeable.contains("row\n            .swipeActions(edge: .leading"))
+        XCTAssertTrue(swipeable.contains(".contextMenu { menu }"))
 
         // Who gets which shape: the compact shell asks for the pushing one, and the three-column
         // shell takes the default. `MainView` reaches the column through `SectionContent`, so the

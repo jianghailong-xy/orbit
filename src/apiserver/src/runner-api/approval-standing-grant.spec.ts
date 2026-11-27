@@ -36,6 +36,8 @@ function harness(session: SessionRow, rules: { toolName: string; ruleContent: st
         workspaceId: WORKSPACE,
         ...session,
       }),
+      // A raised card moves the session's row in its owner's list (session.listed_at, session-listed-at.ts).
+      updateMany: async () => ({ count: 1 }),
     },
     approval: {
       findFirst: async () => ({ id: 'approval-1', status: 'ALLOWED', ...created[0], decidedById: decidedById ?? null, ...pollRow }),

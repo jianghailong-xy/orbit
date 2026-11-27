@@ -17,7 +17,6 @@ import {
   makesNewFolders,
   newFolderPath,
   newFolderPick,
-  newFolderRootOf,
   newFolderVerdict,
   newWorkspaceOf,
   updatesItself,
@@ -147,16 +146,6 @@ describe('rule 3: a new folder', () => {
     for (const bad of ['', '.', '..', 'a/b', 'a\\b', 'with space', 'naïve', '~', 'x'.repeat(65)]) {
       expect(isValidNewFolder(bad), bad).toBe(false);
     }
-  });
-
-  it('goes in the machine’s home, the directory its Repos Folder sits in, on a runner that makes folders there', () => {
-    const home = ['create-workdir/v1', 'create-workdir/v2'];
-    expect(newFolderRootOf({ capabilities: home, reposRoot: '/root/orbit-repos' })).toBe('/root');
-    expect(newFolderPath(newFolderRootOf({ capabilities: home, reposRoot: '/root/orbit-repos/' }), '')).toBe('/root/');
-    // An older runner makes them only in its Repos Folder, so that is where they go there.
-    expect(newFolderRootOf({ capabilities: ['create-workdir/v1'], reposRoot: '/home/orbit/orbit-repos' })).toBe(
-      '/home/orbit/orbit-repos',
-    );
   });
 
   it('lands under the root it is given, however that was reported', () => {

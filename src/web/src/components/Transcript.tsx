@@ -71,7 +71,7 @@ import {
 } from '@orbit/shared';
 import { DELEGATE_TOOL, delegateResultText, delegateRunId, subagentMeta, subagentWhy, subagentWhyDetails } from '../lib/subagentRuns';
 import type { LoginEngine } from '@orbit/shared';
-import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api';
+import { fetchSessionArtifactObjectUrl } from '../api';
 import {
   EVIDENCE_FILE_EXPIRED,
   ExpiredAttachmentError,
@@ -81,6 +81,7 @@ import {
 import { saveUserFile } from '../lib/userFile';
 import { stripAnsi } from '../lib/ansi';
 import { Diff, ExportCtx, KeyVals, Pre, relPath, safeJson, type ExportMode } from './ToolBlocks';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 // Re-exported for the modules that have always read them from the transcript.
 export { ExportCtx, Pre, relPath, type ExportMode };
 import { copyText } from '../lib/clipboard';
@@ -90,6 +91,10 @@ import { BatchGraph } from './BatchGraph';
 import { buildBatchGraph, describeShape, type BatchTaskInput } from '../lib/batchGraph';
 import { RunnerSignIn } from './RunnerSignIn';
 import { AppLink } from './AppLink';
+import { Button } from './ui/Button';
+import { sandboxFixView } from '../lib/agentFix';
+import { AGENT_FIX_BUTTON, AGENT_FIX_OPEN_SESSION, agentFixFixed, agentFixFixing } from '../lib/runnerCopy';
+import type { RunnerAgentFix } from '@orbit/shared';
 import { SameOriginLink } from './SameOriginLink';
 import { TaskRunHandoffNotice } from './TaskRunHandoffNotice';
 import { MainCheckoutCard, MainCheckoutResultRow } from './MainCheckout';
@@ -98,8 +103,20 @@ import type { MainCheckoutChangedNotice, MainCheckoutResultNotice } from '@orbit
 import type { TaskRunConflict } from '../lib/taskRunHandoff';
 import { WatchWakeCard, WatchWakeNamesCtx, watchWakeTitle } from './WatchWakeCard';
 import { BackgroundWakeCard, backgroundWakeName, backgroundWakeTitle } from './BackgroundWakeCard';
-import { SubagentFinishedCard, subagentFinishedTitle } from './SubagentFinishedCard';
+import {
+  SubagentEndBlock,
+  type SubagentEndedRun,
+  SubagentEndStatus,
+  subagentEnded,
+  SubagentFoldedEnd,
+  SubagentQueuedWakesCtx,
+  SubagentWakeQueued,
+  type SubagentWakeSeen,
+  SubagentWakesCtx,
+} from './SubagentCardEnd';
 import { OrbitEventLine } from './OrbitEventLine';
+import { LandingFixCard } from './LandingFixCard';
+import { parseLandingFixTurn } from '../lib/landingFix';
 import { OrbitExchangeGroup, OrbitExchangeSolo } from './OrbitExchangeFold';
 import { foldsAtLength, parseRunNotice, replyGist, type OrbitExchangeSummary } from '../lib/orbitExchangeFold';
 import { WikiDraftCard, WikiDraftCardCtx } from './WikiDraftCard';
@@ -112,7 +129,13 @@ import { resolutionTurnLabel } from '../lib/ownerRequests';
 import { RUNNER_UPDATE_INTERRUPT_REASON, RUNNER_UPDATE_RESUME_NOTE } from '@orbit/shared';
 import { isRunnerUpdateResume, runnerUpdateInterruptedLine } from '../lib/runnerUpdateNow';
 import { parseBackgroundWake } from '../lib/backgroundWake';
-import { parseSubagentFinished, subagentFinishedOk } from '../lib/subagentFinished';
+import { BG_RUN_TOOL, bgRunReceipt, isRunnerJobLaunch, jobWakesOf, wakeupsOnly } from '../lib/bgJobCard';
+import { deriveBackgroundShells, mergeBackgroundShells, type BgShell } from '../lib/backgroundShells';
+import { BgJobHostCtx, JobCard, JobShellsCtx, JobWakesCtx } from './JobCard';
+import { parseSubagentFinished } from '../lib/subagentFinished';
+import { parseWorkflowFinished, workflowFinishedTitle } from '../lib/orbitWorkflow';
+import { WorkflowRunsCtx } from '../lib/workflowRuns';
+import { OrbitWorkflowBlock, WorkflowFinishedStrip } from './OrbitWorkflowBlock';
 import { parseOpenItemDelivery } from '../lib/openItemDelivery';
 import type { OpenItemDeliveryCard as OpenItemDelivery, ProjectStartedCard as Started } from '@orbit/shared';
 import { OpenItemDeliveryCard } from './OpenItemDeliveryCard';
@@ -165,11 +188,11 @@ import { SessionMessageCard } from './SessionMessageCard';
 import { parseSessionReplies } from '../lib/sessionRequest';
 import { SessionReplyCards } from './SessionReplyCard';
 
-// How a transcript fetches an attachment's bytes (as an object URL). Defaults to the
-// bearer-guarded owner route; the public shared page overrides it with the share-token route
-// so a logged-out viewer can still see inline images. See SharedSessionPage.
-export const AttachmentResolverContext =
-  createContext<(id: string) => Promise<string>>(fetchAttachmentObjectUrl);
+// How a surface fetches an attachment's bytes (as an object URL), defined in its own module so the
+// cards that draw attachments need not import the transcript. Re-exported here because the pages
+// and tests import it with the transcript's other contexts.
+import { AttachmentResolverContext } from '../lib/attachmentResolver';
+export { AttachmentResolverContext };
 
 export const ArtifactResolverContext =
   createContext<((artifactPath: string) => Promise<string>) | null>(null);
@@ -313,6 +336,53 @@ export interface AuthErrorHelp {
 }
 export const AuthErrorCtx = createContext<AuthErrorHelp | null>(null);
 
+/**
+ * Fix with an agent for the missing-bubblewrap warning a transcript caught
+ * (docs/mocks/codex-sandbox-fix-with-agent): this machine's agent-fix state and the press.
+ * WorkspaceView supplies it; the shared page, the standalone export and a wiki chat leave it null,
+ * where the row is history with no action.
+ */
+export interface SandboxFixHelp {
+  fix: RunnerAgentFix | null | undefined;
+  /** One press; the runners are re-read, which is what turns the row into its fixing line. */
+  start: () => void;
+  /** A press is on its way, so the button holds. */
+  starting: boolean;
+}
+export const SandboxFixCtx = createContext<SandboxFixHelp | null>(null);
+
+/** The action under the sandbox warning: the agent at work, the one that finished, or the button. */
+function SandboxFixAction({ seq }: { seq: number }) {
+  const help = useContext(SandboxFixCtx);
+  if (!help) return null;
+  const view = sandboxFixView(help.fix);
+  if (!view) return null;
+  if (view.state === 'fixing' || view.state === 'handled') {
+    return (
+      <div className={`chat-sandbox-fix ${view.state}`} data-seq={seq}>
+        <div className="chat-sandbox-fix-line">
+          {view.state === 'fixing' && <span className="agent-fix-dot" aria-hidden />}
+          {view.state === 'fixing' ? agentFixFixing(view.workspaceName) : agentFixFixed(view.workspaceName)}
+          <AppLink to={`/sessions/${encodeURIComponent(view.sessionId)}`}>{AGENT_FIX_OPEN_SESSION}</AppLink>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className={`chat-sandbox-fix ${view.state}`} data-seq={seq}>
+      <Button
+        size="small"
+        disabled={view.state === 'blocked' || help.starting}
+        loading={help.starting}
+        onClick={help.start}
+      >
+        {AGENT_FIX_BUTTON}
+      </Button>
+      {view.line ? <div className="chat-sandbox-fix-line">{view.line}</div> : null}
+    </div>
+  );
+}
+
 export type AntigravityRepair = 'needsKey' | 'updateRunner' | 'notInstalled';
 
 /**
@@ -405,7 +475,7 @@ export function AntigravityRepairCard({ repair, help, seq }: {
       {repair === 'needsKey' && help.provider === 'antigravity' && (
         help.googleLogin === 'available' && help.runnerId
           ? <RunnerSignIn runnerId={help.runnerId} engine="antigravity" onDone={help.onRetry} />
-          : <div className="chat-authfix-desc">{help.googleLogin === 'unsupported_platform' ? 'Google sign-in is not supported on macOS runners yet. Use a Gemini API key.' : 'Update this runner to sign in with Google.'}</div>
+          : <div className="chat-authfix-desc">{help.googleLogin === 'unsupported_platform' ? "Google sign-in is not supported on this runner's operating system. Use a Gemini API key." : 'Update this runner to sign in with Google.'}</div>
       )}
       <div className="chat-authfix-actions">
         {repair === 'needsKey' ? (
@@ -451,9 +521,8 @@ export interface SteerWithdrawHandle {
   withdrawing: ReadonlySet<string>;
   withdrawn: ReadonlySet<string>;
 }
-/** A tag for one user bubble's foot row, by the bubble's seq: what holds the message the reader sent
- *  last (WorkspaceView's RunnerUpdatingTag). Null where nothing holds one. */
-export const QueuedFootCtx = createContext<{ seq: number; tag: ReactNode } | null>(null);
+/** A tag for one user bubble's foot row, by its seq: what holds the turn or how it is running. */
+export const TurnStatusFootCtx = createContext<{ seq: number; tag: ReactNode; running?: boolean } | null>(null);
 
 export const SteerWithdrawCtx = createContext<SteerWithdrawHandle | null>(null);
 
@@ -560,8 +629,10 @@ type ToolNode = {
   // Set when the server clipped `input` to a preview; opening the card refetches it by `seq`.
   truncated?: boolean;
   // `seq` is the *result* event's own seq (≠ the call's), which is what refetches its content.
-  result?: { content: any; isError?: boolean; seq: number; truncated?: boolean };
+  result?: { content: any; isError?: boolean; seq: number; truncated?: boolean; ts?: string };
   children: Node[];
+  // When the call was made; with the result's, how long a drive transfer took (DriveTransferCard).
+  ts?: string;
 };
 type TextNode = {
   kind: 'user' | 'assistant' | 'thinking';
@@ -798,6 +869,20 @@ function parseRunDiagnostic(raw: unknown, fallbackMessage: string): RunDiagnosti
  * sessions from changing meaning when the UI is upgraded. */
 function legacyRecoverableDiagnostic(line: string): RunDiagnostic | undefined {
   const lower = line.toLowerCase();
+  // Codex's sandbox setup asks for the system bubblewrap and falls back to its bundled copy
+  // (docs/mocks/codex-sandbox-fix-with-agent). A current runner sends this structured; events
+  // stored before it did are recognized here so the warning and its action survive.
+  if (lower.includes('could not find bubblewrap on path')) {
+    return {
+      message: line,
+      component: 'sandbox',
+      phase: 'startup',
+      severity: 'WARN',
+      impact: 'degraded',
+      recoverable: true,
+      code: 'bubblewrap_missing',
+    };
+  }
   const tokenInvalidated = lower.includes('token_invalidated') || lower.includes('token has been invalidated');
   if (lower.includes('codex_models_manager') && lower.includes('failed to refresh available models')) {
     if (lower.includes('401') && tokenInvalidated) {
@@ -1000,8 +1085,10 @@ const readersOwnWords = (node: TextNode): boolean =>
   && !parseWatchWake(node.text)
   && !resolutionTurnLabel(node.text)
   && !isRunnerUpdateResume(node.text)
+  && !parseLandingFixTurn(node.text)
   && !parseBackgroundWake(node.note)
   && !parseSubagentFinished(node.note)
+  && !parseWorkflowFinished(node.note)
   && !orbitOnlyTurn(node);
 
 // A turn whose typed text is empty and whose recorded note holds Orbit's blocks, with nothing the
@@ -1043,6 +1130,10 @@ function legacyWithheldMessage(count: number): string {
     : `Orbit held back the diffs of ${count} files while it checked this runner for a removed secret. No secret was found in them.`;
 }
 
+/** The runner's key for a Claude workflow agent's call: `<Workflow call id>:workflow-agent:<agent id>`
+ *  (runner-go claude_workflow_transcript.go). */
+const WORKFLOW_AGENT_KEY = ':workflow-agent:';
+
 function buildTranscript(
   events: RunEvent[],
   turnImages?: Record<string, TurnImage[]>,
@@ -1057,14 +1148,35 @@ function buildTranscript(
   // result can't be matched by id. Fall back to the most recently opened tool that
   // still has no result — results arrive right after their call in those streams.
   let lastOpenTool: ToolNode | undefined;
-  // Sub-workspace events land inside their spawning Task's children; everything else
-  // (and any event whose parent we haven't seen) goes to the top level.
-  const into = (parentId?: string): Node[] => {
-    if (parentId) {
-      const t = byId.get(parentId);
-      if (t) return t.children;
-    }
-    return roots;
+  // The event being read: where a stand-in call is drawn (standInCall).
+  let seqNow = 0;
+  // Stand-in calls not yet met by their own tool_use, which takes the stand-in's place when it comes.
+  const standIns = new Set<ToolNode>();
+  // A sub-agent's events whose call is older than the loaded window (a tail page that starts in the
+  // middle of a long workflow or Agent run) nest under a stand-in for that call, drawn where the
+  // first of them is. Without it, the agent's replies and steps read as the session's own, and the
+  // result it handed back drew as a raw JSON dump. Loading the older page rebuilds the transcript
+  // with the real call. `childId` is the call being nested, if it is one: a Claude workflow agent's
+  // key is its Workflow call's id + WORKFLOW_AGENT_KEY, which says what the missing call was.
+  const standInCall = (id: string, childId?: string): ToolNode => {
+    const node: ToolNode = {
+      kind: 'tool',
+      seq: seqNow,
+      id,
+      name: childId?.startsWith(id + WORKFLOW_AGENT_KEY) ? 'Workflow' : 'Agent',
+      input: {},
+      children: [],
+    };
+    byId.set(id, node);
+    standIns.add(node);
+    const cut = id.indexOf(WORKFLOW_AGENT_KEY);
+    (cut > 0 ? into(id.slice(0, cut), id) : roots).push(node);
+    return node;
+  };
+  // Sub-workspace events land inside their spawning Task's children; top-level events go to the top level.
+  const into = (parentId?: string, childId?: string): Node[] => {
+    if (!parentId) return roots;
+    return (byId.get(parentId) ?? standInCall(parentId, childId)).children;
   };
   // A task retry re-sends the exact brief that opened the run, but its new user event has no
   // `taskStart` payload of its own. Keep the control-plane snapshot from that run only while a
@@ -1298,7 +1410,11 @@ function buildTranscript(
   // `turn_end` closes it. What says how long that turn worked once the end arrives.
   let turnHead: TextNode['turnHead'];
   let legacyWithheld: { node: NoticeNode; count: number; turn: string | null | undefined } | undefined;
+  // The runner's launch pair for a bg_run job (lib/bgJobCard `isRunnerJobLaunch`): the job's card is its
+  // bg_run call, so neither half draws, and its result must not fall to whichever call is still open.
+  const runnerJobLaunches = new Set<string>();
   for (const ev of events) {
+    seqNow = ev.seq;
     const p = ev.payload ?? {};
     const parent: string | undefined = p.parentToolUseId;
     const legacy =
@@ -1537,28 +1653,51 @@ function buildTranscript(
         break;
       }
       case 'tool_use': {
+        if (isRunnerJobLaunch(String(p.name ?? ''), String(p.id ?? ''), p.input)) {
+          runnerJobLaunches.add(String(p.id));
+          break;
+        }
+        const id = String(p.id ?? '');
+        const standIn = byId.get(id);
         const node: ToolNode = {
           kind: 'tool',
           seq: ev.seq,
-          id: String(p.id ?? ''),
+          id,
           name: String(p.name ?? 'tool'),
           input: p.input,
           truncated: ev.truncated,
           children: [],
+          ts: ev.ts,
         };
-        if (node.id) byId.set(node.id, node);
-        openTools.push({ node, parent });
         agentWorked();
-        into(parent).push(node);
+        if (standIn && standIns.has(standIn)) {
+          // A call its own events got here before: it is the stand-in, from now on with its name and input.
+          standIns.delete(standIn);
+          Object.assign(standIn, { name: node.name, input: node.input, truncated: node.truncated, ts: node.ts });
+          openTools.push({ node: standIn, parent });
+          lastOpenTool = standIn;
+          break;
+        }
+        if (id) byId.set(id, node);
+        openTools.push({ node, parent });
+        into(parent, id).push(node);
         lastOpenTool = node;
         break;
       }
       case 'tool_result': {
-        const t =
-          (p.toolUseId ? byId.get(String(p.toolUseId)) : undefined) ??
-          (lastOpenTool && !lastOpenTool.result ? lastOpenTool : undefined);
+        if (p.toolUseId && runnerJobLaunches.has(String(p.toolUseId))) break;
+        const toolUseId = p.toolUseId ? String(p.toolUseId) : '';
+        // Only a result that names no call (a legacy stream) falls to the call still open: one that
+        // names a call older than the loaded window belongs to that call, not to whichever is open.
+        // A workflow agent's is drawn in a stand-in for its call, as the agent's other events are.
+        const t = toolUseId
+          ? byId.get(toolUseId) ??
+            (parent && toolUseId.startsWith(parent + WORKFLOW_AGENT_KEY) ? standInCall(toolUseId) : undefined)
+          : lastOpenTool && !lastOpenTool.result
+            ? lastOpenTool
+            : undefined;
         if (t) {
-          t.result = { content: p.content, isError: !!p.isError, seq: ev.seq, truncated: ev.truncated };
+          t.result = { content: p.content, isError: !!p.isError, seq: ev.seq, truncated: ev.truncated, ts: ev.ts };
           removeOpenTool(t);
           if (lastStderr && 'tool' in lastStderr && lastStderr.tool === t) lastStderr = undefined;
           if (t === lastOpenTool) lastOpenTool = undefined;
@@ -1916,6 +2055,27 @@ export const Transcript = memo(function Transcript({
   inserts?: readonly TranscriptInsert[];
 }) {
   const nodes = useMemo(() => transcriptOf(events, turnImages).nodes, [events, turnImages]);
+  // Each SubAgent end turn loaded, by run id: its card draws the end, so the turn itself draws nothing.
+  const subagentWakes = useMemo(() => subagentWakesOf(nodes), [nodes]);
+  // Each bg_run job's wake turns and its runner reports, by job id: its card draws them (JobCard).
+  const jobWakes = useMemo(
+    () =>
+      jobWakesOf(
+        nodes.flatMap((node) =>
+          node.kind === 'user'
+            ? [{ note: node.note, ts: node.ts, delivered: node.delivery !== 'failed' && node.delivery !== 'unconfirmed' }]
+            : [],
+        ),
+      ),
+    [nodes],
+  );
+  const jobHost = useContext(BgJobHostCtx);
+  const jobShells = useMemo(() => {
+    const out = new Map<string, BgShell>();
+    const shells = mergeBackgroundShells([...(jobHost?.serverShells ?? [])], deriveBackgroundShells(events, { sessionLive: !!live }));
+    for (const shell of shells) if (shell.kind === 'job') out.set(shell.shellId, shell);
+    return out;
+  }, [events, live, jobHost]);
   // Only the Agent and Workflow cards read this (TaskBadgeAndStatus, TaskProgressDetail), so a
   // progress frame re-renders those and nothing else.
   const activity = useContext(TaskActivityCtx);
@@ -1988,6 +2148,9 @@ export const Transcript = memo(function Transcript({
   }, [events]);
   const body = (
     <MainCheckoutResultsCtx.Provider value={mainCheckoutResults}>
+      <SubagentWakesCtx.Provider value={subagentWakes}>
+      <JobWakesCtx.Provider value={jobWakes}>
+      <JobShellsCtx.Provider value={jobShells}>
       <TaskLookupCtx.Provider value={taskLookup}>
         <ShownOriginalProvider>
         <ImagePreviewProvider>
@@ -2000,6 +2163,9 @@ export const Transcript = memo(function Transcript({
         </ImagePreviewProvider>
         </ShownOriginalProvider>
       </TaskLookupCtx.Provider>
+      </JobShellsCtx.Provider>
+      </JobWakesCtx.Provider>
+      </SubagentWakesCtx.Provider>
     </MainCheckoutResultsCtx.Provider>
   );
   return artifactResolve ? (
@@ -2008,6 +2174,19 @@ export const Transcript = memo(function Transcript({
     body
   );
 });
+
+/** The SubAgent end turns among `nodes`, by run id: the block the agent read and, once delivered, when. */
+function subagentWakesOf(nodes: Node[]): ReadonlyMap<string, SubagentWakeSeen> {
+  const out = new Map<string, SubagentWakeSeen>();
+  for (const node of nodes) {
+    if (node.kind !== 'user') continue;
+    const wake = parseSubagentFinished(node.note);
+    if (!wake) continue;
+    const read = node.delivery !== 'failed' && node.delivery !== 'unconfirmed';
+    for (const run of wake.runs) out.set(run.runId, { text: wake.text, readAt: read ? node.ts : undefined });
+  }
+  return out;
+}
 
 /**
  * Something drawn into the conversation that is not an event: it has a moment but no seq of its
@@ -2025,7 +2204,10 @@ export interface TranscriptInsert {
   element: ReactNode;
 }
 
-type NodeListItem = { kind: 'node'; node: Node } | { kind: 'steps'; key: string; nodes: Node[] };
+type NodeListItem =
+  | { kind: 'node'; node: Node }
+  | { kind: 'steps'; key: string; nodes: Node[] }
+  | { kind: 'drive'; key: string; transfer: DriveTransferKind; nodes: ToolNode[] };
 
 function NodeList({
   nodes,
@@ -2042,8 +2224,9 @@ function NodeList({
   const items = useMemo(() => groupToolRuns(nodes, chat), [nodes, chat]);
   const exporting = useContext(ExportCtx) !== null;
   const wakeName = useContext(WatchWakeNamesCtx);
+  const turnFoot = useContext(TurnStatusFootCtx);
   const renderItem = (item: NodeListItem) => {
-    const seqs = item.kind === 'steps' ? item.nodes.map((node) => node.seq) : [item.node.seq];
+    const seqs = item.kind === 'node' ? [item.node.seq] : item.nodes.map((node) => node.seq);
     // The row a turn opens with, under its message and over everything the turn writes.
     const head =
       item.kind === 'node' && item.node.kind === 'user' && item.node.turnHead ? (
@@ -2052,8 +2235,13 @@ function NodeList({
     return [
       item.kind === 'steps' ? (
         <StepsLine key={item.key} nodes={item.nodes} live={live} />
+      ) : item.kind === 'drive' ? (
+        <DriveTransferItem key={item.key} transfer={item.transfer} nodes={item.nodes} live={!!live} />
       ) : (
         <NodeView key={item.node.seq} node={item.node} live={live} />
+      ),
+      turnFoot?.running && item.kind === 'node' && item.node.seq === turnFoot.seq && (
+        <div key="running-over-limit" className="chat-user-meta">{turnFoot.tag}</div>
       ),
       head,
       ...seqs
@@ -2176,20 +2364,19 @@ function orbitTurnOf(
       target: one && (one.kind === 'TASK' || one.kind === 'SESSION') ? { kind: one.kind, id: one.id, title: name } : null,
     };
   }
-  // A SubAgent's end folds like a job's news: a session running several should not read as a run of
-  // rounds the reader opened. One that did not finish stays drawn, as a failed job does.
-  const subagent = parseSubagentFinished(node.note);
-  if (subagent) {
-    if (subagent.runs.some((run) => !subagentFinishedOk(run))) return null;
-    const jobs = parseBackgroundWake(subagent.rest);
-    if (jobs?.jobs.some((job) => job.status === 'failed' || job.status === 'killed')) return null;
-    const title = subagentFinishedTitle(subagent);
-    const name = subagent.runs.length === 1 ? subagent.runs[0].description : null;
+  // A workflow's end folds like a job's news. A SubAgent's end itself draws no separate line because
+  // its card owns the end; any background job news carried beside it still folds normally.
+  const workflow = parseWorkflowFinished(node.note);
+  if (workflow) {
+    if (workflow.runs.some((run) => run.status !== 'DONE')) return null;
+    const title = workflowFinishedTitle(workflow.runs[0]);
+    const name = workflow.runs.length === 1 ? workflow.runs[0].name : null;
     return { ts, what: name ? `${title}: ${name}` : title, category: 'job', target: null };
   }
-  const background = parseBackgroundWake(node.note);
+  // A job's news draws nothing either (its card says it, JobCard): only a wakeup coming due beside it folds.
+  const subagent = parseSubagentFinished(node.note);
+  const background = wakeupsOnly(parseBackgroundWake(subagent ? subagent.rest : node.note));
   if (background) {
-    if (background.jobs.some((job) => job.status === 'failed' || job.status === 'killed')) return null;
     const title = backgroundWakeTitle(background);
     const name = backgroundWakeName(background);
     return { ts, what: name ? `${title}: ${name}` : title, category: 'job', target: null };
@@ -2200,7 +2387,7 @@ function orbitTurnOf(
 /** A turn that asks the reader something, or went wrong, stays in view whatever opened it. */
 function turnNeedsReader(items: NodeListItem[]): boolean {
   return items.some((item) =>
-    (item.kind === 'steps' ? item.nodes : [item.node]).some(
+    (item.kind === 'node' ? [item.node] : item.nodes).some(
       (node) =>
         node.kind === 'error'
         || node.kind === 'authError'
@@ -2241,7 +2428,7 @@ function foldOrbitExchanges(
     // enough to say something stays drawn too (`foldsAtLength`).
     const answered = replies.reduce((n, text) => n + text.length, 0);
     if (orbit && replies.length > 0 && foldsAtLength(orbit.category, answered) && !turnNeedsReader(turn)) {
-      const seqs = turn.flatMap((item) => (item.kind === 'steps' ? item.nodes : [item.node]).map((node) => node.seq));
+      const seqs = turn.flatMap((item) => (item.kind === 'node' ? [item.node] : item.nodes).map((node) => node.seq));
       run.push({
         summary: {
           ...orbit,
@@ -2274,6 +2461,19 @@ function groupToolRuns(nodes: Node[], chat = false): NodeListItem[] {
     run = [];
   };
   for (const node of nodes) {
+    // An agent's drive_put or drive_get calls (documents_put / documents_get while Drive was called Documents) are one transfer card, which only thinking may sit inside: the thinking
+    // is drawn under the card, so the calls stay together.
+    const transfer = node.kind === 'tool' && node.children.length === 0 ? driveTransferKind(node.name) : null;
+    if (transfer) {
+      const last = out[out.length - 1];
+      if (last?.kind === 'drive' && last.transfer === transfer && run.every((n) => n.kind === 'thinking')) {
+        last.nodes.push(node as ToolNode);
+        continue;
+      }
+      flush();
+      out.push({ kind: 'drive', key: `drive-${node.seq}`, transfer, nodes: [node as ToolNode] });
+      continue;
+    }
     if (node.kind === 'thinking' || isGroupableTool(node, chat)) {
       run.push(node);
       continue;
@@ -2283,6 +2483,23 @@ function groupToolRuns(nodes: Node[], chat = false): NodeListItem[] {
   }
   flush();
   return out;
+}
+
+/** A run of drive calls as its transfer card: each call's file from its input, its result, or its live byte count. */
+function DriveTransferItem({ transfer, nodes, live }: { transfer: DriveTransferKind; nodes: ToolNode[]; live: boolean }) {
+  const outputs = useContext(LiveToolOutputsCtx);
+  const files = nodes.map((node) =>
+    driveTransferFile({
+      id: node.id || String(node.seq),
+      toolInput: node.input,
+      result: node.result && { text: resultText(node.result.content), isError: node.result.isError },
+      progress: outputs.get(node.id)?.content,
+      live,
+      ts: node.ts,
+      resultTs: node.result?.ts,
+    }),
+  );
+  return <DriveTransferCard kind={transfer} files={files} live={live} />;
 }
 
 // Calls that render as their own card — an approval, a plan, a spawned child session, a
@@ -2307,6 +2524,8 @@ function isGroupableTool(node: Node, chat = false): node is ToolNode {
     node.name !== 'mcp__orbit__task_create' &&
     node.name !== 'mcp__orbit__project_create' &&
     !isBackgroundTaskCall(node.name) &&
+    node.name !== BG_RUN_TOOL &&
+    !isDriveSyncTool(node.name) &&
     !ownerChatReplyOf(node)
   );
 }
@@ -2446,8 +2665,21 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       // payload is written for the agent.
       // The turn Orbit sends a session whose turn the owner's Update Now cut (D4): Orbit's words, written
       // for the agent, so one Orbit line rather than a bubble in the reader's name (owner rule 10-27).
+      // A failed landing handed to the session that wrote the work (revision 42, §12.5 W6): Orbit's card, from the
+      // turn's own words, never the reader's bubble.
+      const landingFix = parseLandingFixTurn(node.text);
+      if (landingFix) {
+        return (
+          <LandingFixCard
+            turn={landingFix}
+            seq={seq}
+            undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+            queued={queued}
+          />
+        );
+      }
       if (isRunnerUpdateResume(node.text)) {
-        return <div className="chat-note runner-update-resume" data-seq={seq} title={node.text}>{RUNNER_UPDATE_RESUME_NOTE}</div>;
+        return <Tooltip content={node.text} delay={TEXT_TOOLTIP_DELAY_MS}><div className="chat-note runner-update-resume" data-seq={seq}>{RUNNER_UPDATE_RESUME_NOTE}</div></Tooltip>;
       }
       const ownerRequestEnding = resolutionTurnLabel(node.text);
       if (ownerRequestEnding) {
@@ -2622,31 +2854,37 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       // the running turn's stream where its echo landed, saying how far it got as a steer's bubble
       // would — never the bubble itself.
       //
-      // A SubAgent's end is the same kind of turn, in a block of its own (SubagentFinishedCard). A note
-      // that carries a background job's news beside it draws that line too, after the SubAgent's, as
-      // the control plane wrote them; the job's line then says how the turn went, once.
+      // A workflow's end is one strip (board part 2), drawn before any background job news the note
+      // carried. A SubAgent's end draws nothing here: its joined card owns that end.
+      const workflow = parseWorkflowFinished(node.note);
+      if (workflow) {
+        const others = parseSubagentFinished(workflow.rest);
+        const jobs = wakeupsOnly(parseBackgroundWake(others ? others.rest : workflow.rest));
+        return (
+          <>
+            <WorkflowFinishedStrip wake={workflow} seq={seq} queued={jobs ? undefined : queued} />
+            {jobs && <BackgroundWakeCard wake={jobs} seq={seq} ts={node.ts} queued={queued} />}
+            {node.text.trim() !== '' && <UserBubble node={{ ...node, note: undefined }} />}
+          </>
+        );
+      }
+      // A SubAgent's end is the same kind of turn, in a block of its own, and it draws NOTHING: like Claude
+      // Code's built-in Agent, the SubAgent is one card from start to end, and that card draws how it ended
+      // (SubagentCardEnd, joined by run id). The agent still reads the block unchanged. A note that carries
+      // a background job's news beside it draws that line, as it always has.
       const subagent = parseSubagentFinished(node.note);
       if (subagent) {
         const undelivered = node.delivery === 'failed' || node.delivery === 'unconfirmed';
-        const steer = node.steer && !undelivered ? steerDeliveryState(node.delivery).label : undefined;
-        const jobs = parseBackgroundWake(subagent.rest);
+        const jobs = wakeupsOnly(parseBackgroundWake(subagent.rest));
         return (
           <>
-            <SubagentFinishedCard
-              wake={subagent}
-              seq={seq}
-              ts={node.ts}
-              undelivered={undelivered && !jobs}
-              steer={jobs ? undefined : steer}
-              queued={jobs ? undefined : queued}
-            />
             {jobs && (
               <BackgroundWakeCard
                 wake={jobs}
                 seq={seq}
                 ts={node.ts}
                 undelivered={undelivered}
-                steer={steer}
+                steer={node.steer && !undelivered ? steerDeliveryState(node.delivery).label : undefined}
                 queued={queued}
               />
             )}
@@ -2654,8 +2892,13 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
           </>
         );
       }
-      const background = parseBackgroundWake(node.note);
-      if (background) {
+      // A background job's end, new output or stall draws NOTHING (board C1): like a SubAgent, the job is one card
+      // from start to end (JobCard, joined by job id), and the agent still reads the block unchanged. A wakeup that
+      // came due beside it keeps its line.
+      const jobNews = parseBackgroundWake(node.note);
+      if (jobNews) {
+        const background = wakeupsOnly(jobNews);
+        if (!background) return node.text.trim() !== '' ? <UserBubble node={{ ...node, note: undefined }} /> : null;
         const undelivered = node.delivery === 'failed' || node.delivery === 'unconfirmed';
         return (
           <>
@@ -2723,24 +2966,36 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
         .filter(Boolean)
         .join(' · ');
       const className = warning ? 'chat-notice chat-diagnostic' : 'chat-error chat-diagnostic';
-      return (
-        <div
-          className={className}
-          data-diagnostic="true"
-          data-impact={node.impact}
-          data-phase={node.phase}
-          data-level={level}
-          data-seq={node.seq}
-          title={node.message}
-        >
-          <span className="chat-diagnostic-mark">{warning ? '⚠' : !log || level === 'ERROR' ? '✖' : '·'}</span>
-          {label && <span className="chat-diagnostic-label">{label}</span>}
-          <span className="chat-diagnostic-text">{linkifyLogText(log?.text ?? node.message)}</span>
-          {(node.repeats ?? 1) > 1 && (
-            <span className={warning ? 'chat-diagnostic-repeat' : 'chat-error-repeat'}>×{node.repeats}</span>
-          )}
-        </div>
+      const row = (
+        <Tooltip content={log ? node.message : undefined} delay={TEXT_TOOLTIP_DELAY_MS}>
+          <div
+            className={className}
+            data-diagnostic="true"
+            data-impact={node.impact}
+            data-phase={node.phase}
+            data-level={level}
+            data-seq={node.seq}
+          >
+            <span className="chat-diagnostic-mark">{warning ? '⚠' : !log || level === 'ERROR' ? '✖' : '·'}</span>
+            {label && <span className="chat-diagnostic-label">{label}</span>}
+            <span className="chat-diagnostic-text">{linkifyLogText(log?.text ?? node.message)}</span>
+            {(node.repeats ?? 1) > 1 && (
+              <span className={warning ? 'chat-diagnostic-repeat' : 'chat-error-repeat'}>×{node.repeats}</span>
+            )}
+          </div>
+        </Tooltip>
       );
+      // The sandbox warning offers the agent that installs what Codex wants
+      // (docs/mocks/codex-sandbox-fix-with-agent); every other diagnostic stays a plain row.
+      if (node.component === 'sandbox' && node.code === 'bubblewrap_missing') {
+        return (
+          <>
+            {row}
+            <SandboxFixAction seq={node.seq} />
+          </>
+        );
+      }
+      return row;
     }
     case 'error': {
       const dsh = authHelp?.runtime === 'dsh' ? dshRepair(node.message) : null;
@@ -2757,13 +3012,15 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       // is the runner's own account of why a turn failed and stays loud.
       const log = parseEngineLogLine(node.message);
       return (
-        <div className="chat-error" data-level={log?.level} data-seq={node.seq} title={log && node.message}>
-          <span className="chat-error-mark">
-            {!log || log.level === 'ERROR' ? '✖' : log.level === 'WARN' ? '⚠' : '·'}
-          </span>
-          <span className="chat-error-text">{log ? linkifyLogText(log.text) : node.message}</span>
-          {(node.repeats ?? 1) > 1 && <span className="chat-error-repeat">×{node.repeats}</span>}
-        </div>
+        <Tooltip content={log ? node.message : undefined} delay={TEXT_TOOLTIP_DELAY_MS}>
+          <div className="chat-error" data-level={log?.level} data-seq={node.seq}>
+            <span className="chat-error-mark">
+              {!log || log.level === 'ERROR' ? '✖' : log.level === 'WARN' ? '⚠' : '·'}
+            </span>
+            <span className="chat-error-text">{log ? linkifyLogText(log.text) : node.message}</span>
+            {(node.repeats ?? 1) > 1 && <span className="chat-error-repeat">×{node.repeats}</span>}
+          </div>
+        </Tooltip>
       );
     }
     case 'notice':
@@ -2829,9 +3086,11 @@ function ToolFailureCard({
       </div>
       <div className="chat-error-card-detail">
         {summary.path && <div className="chat-error-card-path">{summary.path}</div>}
-        <div className="chat-error-card-reason" title={summary.reason}>
-          {summary.reason}
-        </div>
+        <Tooltip content={summary.reason} truncatedOnly>
+          <div className="chat-error-card-reason">
+            {summary.reason}
+          </div>
+        </Tooltip>
         <button
           className="chat-error-card-disclosure"
           type="button"
@@ -3002,7 +3261,8 @@ export interface CursorQuotaHelp {
 }
 
 export interface AutoRetryHelp {
-  /** Session's provider slug, for naming whose quota ran out / whose API failed. */
+  /** Session's provider by its display name ("Qwen (Model Studio)", "Claude Code"), for naming whose quota ran
+   *  out / whose API failed. */
   provider: string;
   /** Set for a session on Cursor CLI (CursorQuotaHelp). */
   cursor?: CursorQuotaHelp | null;
@@ -3392,8 +3652,8 @@ function SteerState({ node, typed }: { node: TextNode; typed: string }) {
 function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   const exp = useContext(ExportCtx);
   const putBack = useContext(UndeliveredCtx);
-  const foot = useContext(QueuedFootCtx);
-  const held = foot && !queued && foot.seq === node.seq ? foot.tag : null;
+  const foot = useContext(TurnStatusFootCtx);
+  const held = foot && !foot.running && !queued && foot.seq === node.seq ? foot.tag : null;
   const [copied, setCopied] = useState(false);
   // The "Copied" reset is cancelled when this goes, so it never updates a component that is gone.
   const copiedReset = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -3446,18 +3706,20 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   // says how far it got.
   const status =
     node.delivery === 'failed' || node.delivery === 'unconfirmed' ? (
-      <div className="chat-undelivered" title={node.deliveryReason}>
-        ⚠ {steerDeliveryState(node.delivery).label}
-        {node.delivery === 'failed' && putBack && typed && (
-          <button
-            type="button"
-            className="chat-undelivered-retry"
-            onClick={() => putBack(typed, node.attachmentRefs)}
-          >
-            Put back in the composer
-          </button>
-        )}
-      </div>
+      <Tooltip content={node.deliveryReason} delay={TEXT_TOOLTIP_DELAY_MS}>
+        <div className="chat-undelivered">
+          ⚠ {steerDeliveryState(node.delivery).label}
+          {node.delivery === 'failed' && putBack && typed && (
+            <button
+              type="button"
+              className="chat-undelivered-retry"
+              onClick={() => putBack(typed, node.attachmentRefs)}
+            >
+              Put back in the composer
+            </button>
+          )}
+        </div>
+      </Tooltip>
     ) : node.steer ? (
       <SteerState node={node} typed={typed} />
     ) : null;
@@ -3493,15 +3755,16 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
           {flipFoot && translationFoot}
           {flipFoot && typed && <span className="chat-meta-sep">·</span>}
           {typed && (
-            <button
-              type="button"
-              className="chat-copy"
-              onClick={copy}
-              title={copied ? 'Copied' : 'Copy message'}
-              aria-label={copied ? 'Copied' : 'Copy message'}
-            >
-              {copied ? <CheckOutlined /> : <CopyOutlined />}
-            </button>
+            <Tooltip content={copied ? 'Copied' : 'Copy message'}>
+              <button
+                type="button"
+                className="chat-copy"
+                onClick={copy}
+                aria-label={copied ? 'Copied' : 'Copy message'}
+              >
+                {copied ? <CheckOutlined /> : <CopyOutlined />}
+              </button>
+            </Tooltip>
           )}
           {typed && node.ts && <span className="chat-time">{relTime(node.ts)}</span>}
           {typed && node.ts && (status || held || (!flipFoot && translationFoot)) && (
@@ -3579,15 +3842,16 @@ function TurnFoot({ node }: { node: DividerNode }) {
   return (
     <div className="chat-turn-divider chat-turn-foot" data-seq={seq}>
       {reply && (
-        <button
-          type="button"
-          className="chat-copy"
-          onClick={copy}
-          title={copied ? 'Copied' : 'Copy reply'}
-          aria-label={copied ? 'Copied' : 'Copy reply'}
-        >
-          {copied ? <CheckOutlined /> : <CopyOutlined />}
-        </button>
+        <Tooltip content={copied ? 'Copied' : 'Copy reply'}>
+          <button
+            type="button"
+            className="chat-copy"
+            onClick={copy}
+            aria-label={copied ? 'Copied' : 'Copy reply'}
+          >
+            {copied ? <CheckOutlined /> : <CopyOutlined />}
+          </button>
+        </Tooltip>
       )}
       {ts && <span className="chat-time">{formatClock(new Date(ts))}</span>}
     </div>
@@ -3712,15 +3976,17 @@ function resolveFileObjectUrl(
 /** What a file whose bytes have gone leaves in a conversation: the grey a card's tile has, in the card's words. */
 function AttachmentExpiredTile({ at, name }: { at: string | null; name: string }) {
   return (
-    <span className="chat-expired" title={name}>
-      {EVIDENCE_FILE_EXPIRED}
-      {at === null ? null : (
-        <>
-          <br />
-          {evidenceExpiryDate(at)}
-        </>
-      )}
-    </span>
+    <Tooltip content={name} delay={TEXT_TOOLTIP_DELAY_MS}>
+      <span className="chat-expired">
+        {EVIDENCE_FILE_EXPIRED}
+        {at === null ? null : (
+          <>
+            <br />
+            {evidenceExpiryDate(at)}
+          </>
+        )}
+      </span>
+    </Tooltip>
   );
 }
 
@@ -3795,11 +4061,13 @@ export function AttachmentFile({ id, name }: { id: string; name?: string }) {
   // Its bytes have gone, so there is nothing to press or to try again.
   if (expired) {
     return (
-      <span className="chat-file is-expired" title={label}>
-        <PaperClipOutlined />
-        <span className="chat-file-name">{label}</span>
-        <span className="chat-file-expired">{`· ${evidenceFileExpiredLine(expired.at)}`}</span>
-      </span>
+      <Tooltip content={label} truncatedOnly>
+        <span className="chat-file is-expired">
+          <PaperClipOutlined />
+          <span className="chat-file-name">{label}</span>
+          <span className="chat-file-expired">{`· ${evidenceFileExpiredLine(expired.at)}`}</span>
+        </span>
+      </Tooltip>
     );
   }
   const download = async (): Promise<void> => {
@@ -3821,17 +4089,18 @@ export function AttachmentFile({ id, name }: { id: string; name?: string }) {
     }
   };
   return (
-    <button
-      type="button"
-      className={`chat-file${failed ? ' is-error' : ''}`}
-      onClick={download}
-      title={failed ? `Retry download ${label}` : `Download ${label}`}
-      aria-label={failed ? `Retry download ${label}` : `Download ${label}`}
-      data-download-state={busy ? 'loading' : failed ? 'error' : 'idle'}
-    >
-      {busy ? <LoadingOutlined spin /> : failed ? <CloseCircleFilled /> : <PaperClipOutlined />}
-      <span className="chat-file-name">{label}</span>
-    </button>
+    <Tooltip content={failed ? `Retry download ${label}` : `Download ${label}`}>
+      <button
+        type="button"
+        className={`chat-file${failed ? ' is-error' : ''}`}
+        onClick={download}
+        aria-label={failed ? `Retry download ${label}` : `Download ${label}`}
+        data-download-state={busy ? 'loading' : failed ? 'error' : 'idle'}
+      >
+        {busy ? <LoadingOutlined spin /> : failed ? <CloseCircleFilled /> : <PaperClipOutlined />}
+        <span className="chat-file-name">{label}</span>
+      </button>
+    </Tooltip>
   );
 }
 
@@ -3928,19 +4197,27 @@ function CodeBlock({ children }: any) {
   };
   return (
     <div className="md-codeblock">
-      <button
-        type="button"
-        className="md-copy"
-        onClick={copy}
-        title={copied ? 'Copied' : 'Copy code'}
-        aria-label={copied ? 'Copied' : 'Copy code'}
-      >
-        {copied ? <CheckOutlined /> : <CopyOutlined />}
-      </button>
+      <Tooltip content={copied ? 'Copied' : 'Copy code'}>
+        <button
+          type="button"
+          className="md-copy"
+          onClick={copy}
+          aria-label={copied ? 'Copied' : 'Copy code'}
+        >
+          {copied ? <CheckOutlined /> : <CopyOutlined />}
+        </button>
+      </Tooltip>
       <pre ref={preRef}>{children}</pre>
     </div>
   );
 }
+
+import { DriveFileCard, driveIdFromHref } from './drive/DriveFileCard';
+import { DriveTransferCard } from './drive/DriveTransferCard';
+import { DriveSyncCard } from './drive/DriveSyncCard';
+import { driveSyncIdOf, isDriveSyncTool } from '../lib/driveSyncs';
+import { driveTransferFile, driveTransferKind, type DriveTransferKind } from '../lib/driveTransfer';
+import { useDriveSaidOff } from '../lib/driveSwitch';
 
 const ORBIT_ATTACHMENT_PREFIX = 'orbit-attachment:';
 
@@ -3962,6 +4239,7 @@ function attachmentIdFromSrc(src: unknown): string | null {
 function transcriptUrlTransform(url: string): string {
   const trimmed = url.trim();
   if (trimmed.startsWith(ORBIT_ATTACHMENT_PREFIX)) return trimmed;
+  if (driveIdFromHref(trimmed)) return trimmed;
   return referenceUrlTransform(url);
 }
 
@@ -4020,6 +4298,9 @@ function fileLabel(src: string): string {
 }
 
 function MarkdownImage({ node: _node, src, alt, className: _className, ...rest }: any) {
+  const driveOff = useDriveSaidOff();
+  const driveId = !driveOff ? driveIdFromHref(src) : null;
+  if (driveId) return <DriveFileCard id={driveId} label={typeof alt === 'string' ? alt : undefined} />;
   const id = attachmentIdFromSrc(src);
   if (id) {
     return (
@@ -4040,10 +4321,12 @@ function MarkdownImage({ node: _node, src, alt, className: _className, ...rest }
   }
   if (typeof src === 'string' && isLocalImageSrc(src)) {
     return (
-      <span className="md-image-unavailable" title={src}>
-        <PaperClipOutlined />
-        <code>{fileLabel(src)}</code>
-      </span>
+      <Tooltip content={src} delay={TEXT_TOOLTIP_DELAY_MS} mono>
+        <span className="md-image-unavailable">
+          <PaperClipOutlined />
+          <code>{fileLabel(src)}</code>
+        </span>
+      </Tooltip>
     );
   }
   if (typeof src === 'string' && isCheckoutRelativeImageSrc(src)) {
@@ -4110,10 +4393,12 @@ function LocalArtifactFile({
   const filename = downloadName || fileLabel(artifactPath);
   if (!resolve || exp) {
     return (
-      <span className="md-image-unavailable" title={artifactPath}>
-        <PaperClipOutlined />
-        <code>{shown}</code>
-      </span>
+      <Tooltip content={artifactPath} delay={TEXT_TOOLTIP_DELAY_MS}>
+        <span className="md-image-unavailable">
+          <PaperClipOutlined />
+          <code>{shown}</code>
+        </span>
+      </Tooltip>
     );
   }
   const download = async (): Promise<void> => {
@@ -4131,17 +4416,18 @@ function LocalArtifactFile({
     }
   };
   return (
-    <button
-      type="button"
-      className={`chat-file${failed ? ' is-error' : ''}`}
-      onClick={download}
-      title={failed ? `Retry download ${filename}` : `Download ${filename}`}
-      aria-label={failed ? `Retry download ${filename}` : `Download ${filename}`}
-      data-download-state={busy ? 'loading' : failed ? 'error' : 'idle'}
-    >
-      {busy ? <LoadingOutlined spin /> : failed ? <CloseCircleFilled /> : <PaperClipOutlined />}
-      <span className="chat-file-name">{shown}</span>
-    </button>
+    <Tooltip content={failed ? `Retry download ${filename}` : `Download ${filename}`}>
+      <button
+        type="button"
+        className={`chat-file${failed ? ' is-error' : ''}`}
+        onClick={download}
+        aria-label={failed ? `Retry download ${filename}` : `Download ${filename}`}
+        data-download-state={busy ? 'loading' : failed ? 'error' : 'idle'}
+      >
+        {busy ? <LoadingOutlined spin /> : failed ? <CloseCircleFilled /> : <PaperClipOutlined />}
+        <span className="chat-file-name">{shown}</span>
+      </button>
+    </Tooltip>
   );
 }
 
@@ -4155,6 +4441,9 @@ function nodeText(node: ReactNode): string {
 
 function MarkdownLink({ node: _node, href, title, children, ...rest }: any) {
   const exp = useContext(ExportCtx);
+  const driveOff = useDriveSaidOff();
+  const driveId = !driveOff ? driveIdFromHref(href) : null;
+  if (driveId) return <DriveFileCard id={driveId} label={nodeText(children).trim() || undefined} />;
   const id = attachmentIdFromSrc(href);
   if (id) {
     const name = typeof title === 'string' && title.trim() ? title.trim() : nodeText(children).trim() || undefined;
@@ -4191,10 +4480,12 @@ function MarkdownLink({ node: _node, href, title, children, ...rest }: any) {
   }
   if (typeof href === 'string' && isLocalFileSrc(href)) {
     return (
-      <span className="md-image-unavailable" title={href}>
-        <PaperClipOutlined />
-        <code>{fileLabel(href)}</code>
-      </span>
+      <Tooltip content={href} delay={TEXT_TOOLTIP_DELAY_MS} mono>
+        <span className="md-image-unavailable">
+          <PaperClipOutlined />
+          <code>{fileLabel(href)}</code>
+        </span>
+      </Tooltip>
     );
   }
   // A `#`-reference routes to the thing it names; anything else is an ordinary link.
@@ -4607,7 +4898,7 @@ function isLaunchReceipt(node: ToolNode): boolean {
 // Each tool renders as a single folded row (icon · name · summary · status);
 // clicking expands to show the call body, any sub-workspace transcript, and the
 // result.
-function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
+function ToolView({ node, live, startOpen }: { node: ToolNode; live?: boolean; startOpen?: boolean }) {
   // A `!`-shell command the user ran (runner tags its tool_use id `shell-…`) renders as a
   // distinct "Shell" card, not Claude's Bash tool — see describeTool's isShell branch.
   const isShell = node.id.startsWith('shell-');
@@ -4631,6 +4922,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // asked and how it was answered (see `questionUnread` below for the one time it still does).
   const usuallyOpen =
     !!exp ||
+    !!startOpen ||
     node.name === 'ExitPlanMode' ||
     isShell ||
     isAutoOpenBatch(node);
@@ -4690,6 +4982,12 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // A SubAgent's tier, model, time and cost, and its Why, come from its run rather than its call.
   const isDelegate = node.name === DELEGATE_TOOL;
   const run = useContext(SubagentRunsCtx).get(node.id);
+  const taskLookup = useContext(TaskLookupCtx);
+  // A background SubAgent that has ended: its card draws the end (SubagentCardEnd), joined to its end turn by run id.
+  const ended = isDelegate ? subagentEnded(run) : undefined;
+  const runId = isDelegate && node.result ? delegateRunId(resultContent) : null;
+  const endWake = useContext(SubagentWakesCtx).get(runId ?? '');
+  const dontSend = useContext(SubagentQueuedWakesCtx).get(runId ?? '');
   const meta = isDelegate ? subagentMeta(run) ?? undefined : toolMeta;
   const why = isDelegate ? subagentWhy(run) : null;
   const waitingFor = useContext(SubagentWaitingCtx).get(node.id);
@@ -4711,6 +5009,19 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   if ((node.name === 'AskUserQuestion' || node.name === 'ExitPlanMode') && live && !node.result) return null;
   // A spawned child session (mcp__orbit__session_create): once its result is back, render a
   // clickable card that jumps to the child instead of the default folded JSON.
+  // A bg_run call is its job's card from start to end (JobCard); one refused, or whose answer names no job, stays a call.
+  if (node.name === BG_RUN_TOOL && !node.result?.isError) {
+    const receipt = node.result ? bgRunReceipt(resultContent) : null;
+    if (!node.result || receipt) {
+      return <JobCard seq={node.seq} input={input} jobId={receipt?.jobId ?? null} startedAt={receipt?.startedAt ?? null} live={live} />;
+    }
+  }
+  // A drive_sync (or documents_sync) call is its sync's card once its answer names the sync; an older runner's answer
+  // names none and stays a call (board docs/mocks/drive-sync-card).
+  if (isDriveSyncTool(node.name) && node.result && !node.result.isError) {
+    const syncId = driveSyncIdOf(resultText(resultContent));
+    if (syncId) return <DriveSyncCard syncId={syncId} />;
+  }
   if (node.name === 'mcp__orbit__session_create' && node.result && !node.result.isError) {
     // Nothing to render until the untrimmed result lands (see needsWholeResult).
     if (node.result.truncated && !fullResult) return null;
@@ -4718,6 +5029,21 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   }
   // A drafting call that made a card is the card; one that made none (a dry run, a refusal) stays a call. A clipped
   // answer that does not name its card yet waits for the whole one (see needsWholeResult), as a session's does.
+  // An Orbit workflow is its own block (board parts 2 and 3): its calls by phase, read from the server.
+  if (node.name === ORBIT_WORKFLOW_TOOL) {
+    return (
+      <OrbitWorkflowBlock
+        node={node}
+        running={taskLookup.running(node.id)}
+        title={summary}
+        source={body}
+        card={(id) => {
+          const child = node.children.find((c): c is ToolNode => c.kind === 'tool' && c.id === id);
+          return child ? <WorkflowCallCard node={child} live={live} /> : null;
+        }}
+      />
+    );
+  }
   if (draftCall && node.result && !node.result.isError) {
     const draftId = wikiChatDraftIdOf(resultContent);
     if (draftId) return <WikiDraftCard draftId={draftId} />;
@@ -4727,8 +5053,8 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
     <>
       <div
         data-seq={node.seq}
-        // Where a SubAgent's finished line finds the card it was started from (SubagentFinishedCard).
-        data-subagent-run={isDelegate && node.result ? delegateRunId(resultContent) ?? undefined : undefined}
+        // The run a SubAgent's card stands for: its end turn is joined to it by this id.
+        data-subagent-run={runId ?? undefined}
         // Where the composer band's Agents list finds a run's block (SessionAgentsStrip).
         data-delegate-call={isDelegate ? node.id : undefined}
         className={`chat-tool-card chat-tone-${tone ?? 'default'}${isSubWorkspace ? ' chat-tool-task' : ''}${
@@ -4747,10 +5073,12 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
           <span className="chat-tool-icon">{icon}</span>
           <span className="chat-tool-name">{label}</span>
           {p ? (
-            <span className="chat-tool-summary mono chat-path" title={path}>
-              <b className="chat-path-file">{p.base}</b>
-              {p.dir && <span className="chat-path-dir">{p.dir}</span>}
-            </span>
+            <Tooltip content={path} delay={TEXT_TOOLTIP_DELAY_MS} mono>
+              <span className="chat-tool-summary mono chat-path">
+                <b className="chat-path-file">{p.base}</b>
+                {p.dir && <span className="chat-path-dir">{p.dir}</span>}
+              </span>
+            </Tooltip>
           ) : (
             title && <span className={`chat-tool-summary${summaryMono ? ' mono' : ''}`}>{title}</span>
           )}
@@ -4767,7 +5095,14 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
             </>
           )}
         </div>
-        {isBackgroundTask && !(hasDetail && open) && (waitingLine ?? <SubagentLiveLine node={node} live={live} />)}
+        {isBackgroundTask &&
+          !(hasDetail && open) &&
+          (waitingLine ??
+            (ended ? (
+              <SubagentFoldedEnd run={ended} onShowFiles={() => setManualOpen(true)} />
+            ) : (
+              <SubagentLiveLine node={node} live={live} />
+            )))}
         {questions.length > 0 && !(hasDetail && open) && (
           <QuestionFolded
             questions={shown}
@@ -4813,19 +5148,35 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
             {/* A sub-agent's totals close its transcript rather than open it. */}
             {isBackgroundTask && node.name !== 'Workflow' && <TaskProgressDetail id={node.id} />}
             {/* A question's result, once read, is only the replay above said again. */}
+            {/* An interrupted run's result is only the runner saying it was interrupted: its end says that, once. */}
             {isDelegate
-              ? node.result && !node.result.isError && (
+              ? node.result && !node.result.isError && ended?.status !== 'INTERRUPTED' && (
                   <DelegateResult content={resultContent} run={run} seq={node.seq} steps={node.children} />
                 )
               : node.result && !node.result.isError && !hideResult && !launchReceipt && !outcome && (
                   <ToolResult seq={node.seq} content={resultContent} compact markdown={isSubWorkspace} />
                 )}
             {!node.result && isShell && <LiveShellOutput toolUseId={node.id} seq={node.seq} />}
+            {ended && <SubagentEndBlock run={ended} runId={runId} wake={endWake} />}
           </div>
         )}
+        {/* Its end turn still on the queue: the agent has not read it, and the reader can keep it back. */}
+        {ended && dontSend && <SubagentWakeQueued onDontSend={dontSend} />}
       </div>
       {ownerWords && <OwnerChatBubble words={ownerWords} />}
     </>
+  );
+}
+
+/** A workflow call's SubAgent card, opened from its row: today's SubAgent block, reading the call's run. */
+function WorkflowCallCard({ node, live }: { node: ToolNode; live?: boolean }) {
+  const runs = useContext(SubagentRunsCtx);
+  const run = useContext(WorkflowRunsCtx).calls.get(node.id);
+  const merged = useMemo(() => (run ? new Map(runs).set(node.id, run) : runs), [runs, run, node.id]);
+  return (
+    <SubagentRunsCtx.Provider value={merged}>
+      <ToolView node={node} live={live} startOpen />
+    </SubagentRunsCtx.Provider>
   );
 }
 
@@ -4958,9 +5309,11 @@ function StepLive({ node }: { node: ToolNode }) {
         <span className={what?.mono ? 'mono' : undefined}>{what?.text}</span>
       </div>
       {command && (
-        <div className="chat-steps-live-cmd mono" title={command}>
-          <span className="chat-steps-elbow">⎿</span> $ {command}
-        </div>
+        <Tooltip content={command} truncatedOnly mono>
+          <div className="chat-steps-live-cmd mono">
+            <span className="chat-steps-elbow">⎿</span> $ {command}
+          </div>
+        </Tooltip>
       )}
     </div>
   );
@@ -5006,12 +5359,8 @@ function TaskBadgeAndStatus({
       {lookup.running(node.id) ? (
         <LoadingOutlined className="chat-tool-status running" spin />
       ) : run && run.status !== 'RUNNING' ? (
-        // Red for every end but DONE, as the SubAgent's finished line is (subagentFinishedOk).
-        run.status === 'DONE' ? (
-          <CheckCircleFilled className="chat-tool-status ok" aria-label="done" />
-        ) : (
-          <CloseCircleFilled className="chat-tool-status err" aria-label={run.status.toLowerCase()} />
-        )
+        // ✓ for DONE; the mark and a word for every other end, grey for a stop (SubagentCardEnd).
+        <SubagentEndStatus run={run as SubagentEndedRun} />
       ) : (
         <ToolStatus node={node} live={live} />
       )}
@@ -5034,22 +5383,24 @@ function SubagentWhy({ why, run }: { why: string; run: SubagentRunView | undefin
     : undefined;
   return (
     <>
-      <div className="chat-subagent-why" title={tooltip}>
-        <b>Why</b> · {why}
-        {more && (
-          <button
-            type="button"
-            className="chat-subagent-why-more"
-            aria-expanded={open}
-            onClick={(e) => {
-              e.stopPropagation();
-              setOpen((v) => !v);
-            }}
-          >
-            {open ? 'Hide' : 'Details'}
-          </button>
-        )}
-      </div>
+      <Tooltip content={tooltip} align="start" delay={TEXT_TOOLTIP_DELAY_MS}>
+        <div className="chat-subagent-why">
+          <b>Why</b> · {why}
+          {more && (
+            <button
+              type="button"
+              className="chat-subagent-why-more"
+              aria-expanded={open}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen((v) => !v);
+              }}
+            >
+              {open ? 'Hide' : 'Details'}
+            </button>
+          )}
+        </div>
+      </Tooltip>
       {open && (
         <ul className="chat-subagent-why-list">
           {reasons.map((line, i) => (

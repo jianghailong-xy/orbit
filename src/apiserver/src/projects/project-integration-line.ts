@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { Prisma, TaskStatus } from '@prisma/client';
 import {
   uuidToBase62,
@@ -6,12 +6,14 @@ import {
   type IntegrationCheckResult,
   type IntegrationJobGeneration,
   type IntegrationJobState,
+  type LandingCheckSetBy,
   type ProjectBranchCandidates,
   type ProjectIntegrationRead,
   type ProjectIntegrationSettings as SharedProjectIntegrationSettings,
   type ProjectIntegrationView as SharedProjectIntegrationView,
   type ProjectLastMainBranch,
   type ProjectListIntegration,
+  type ProjectStartRecord,
   type ProjectIntegrationInFlight,
   type ProjectIntegrationJob,
   type ProjectIntegrationCheck,
@@ -24,10 +26,19 @@ import {
   type PromotionBlockedReason,
   type PromotionSourceKind,
   type PromotionState,
+  type LandingPullRequestView,
 } from '@orbit/shared';
 
 import type { PrismaService } from '../prisma/prisma.service';
 import { baselineHoldSql } from './baseline-hold';
+import { lineSyncHoldSql } from './line-sync-hold';
+import {
+  landingCheckValueOf,
+  recordSettingChange,
+  requiredChangeReason,
+  sameSettingValue,
+  type LandingCheckValue,
+} from './project-setting-change';
 import { runnerOfflineSql } from '../runners/runner-presence';
 import { branchName, canonicalRepoUrl, workOnProjectRepository } from './project-criterion-landing';
 import {
@@ -56,6 +67,8 @@ import {
   type RunnerWait,
   readProjectLandTaskViews,
 } from './project-task-integration';
+import { IN_FLIGHT_JOB_STATES, IN_FLIGHT_JOB_STATES_SQL } from './in-flight-job-states';
+import { pullRequestBlockingCode, pullRequestViewOf, pullRequestWaitSummary } from './pull-request-landing';
 
 // SR36 and §1.1's repository condition live beside their SQL spellings, in the landing module; they
 // are served from here too, where the line's readers have always found them.
@@ -125,9 +138,50 @@ export function defaultIntegrationLine(
     : 'MAIN';
 }
 
-/** A project's own branch, named after its public id — the spelling every client shows (A-Q1). */
-export function projectBranchRef(projectId: string): string {
-  return `refs/heads/project/${uuidToBase62(projectId)}`;
+/** Latin letters that Unicode does not split into a base letter and a mark, as they are spelled in ASCII. */
+const LATIN_WITHOUT_DECOMPOSITION: Readonly<Record<string, string>> = {
+  ß: 'ss', æ: 'ae', œ: 'oe', ø: 'o', đ: 'd', ł: 'l', þ: 'th', ı: 'i',
+};
+
+/** How long a branch's title part may be, in characters: it is cut back to a word boundary. */
+const PROJECT_BRANCH_SLUG_MAX = 40;
+
+/**
+ * A project title as a branch name part: lowercase ASCII letters and digits, every other run of
+ * characters one `-`, capped at {@link PROJECT_BRANCH_SLUG_MAX} on a word boundary. An accented
+ * letter keeps its base letter (`Café` is `cafe`). Empty for a title with no ASCII letter or digit
+ * in it, such as a Chinese one.
+ */
+export function projectBranchSlug(title: string): string {
+  const slug = title.normalize('NFKD').replace(/\p{M}+/gu, '').toLowerCase()
+    .replace(/[ßæœøđłþı]/gu, (letter) => LATIN_WITHOUT_DECOMPOSITION[letter] ?? letter)
+    .replace(/[^a-z0-9]+/gu, '-').replace(/^-+|-+$/gu, '');
+  if (slug.length <= PROJECT_BRANCH_SLUG_MAX) return slug;
+  const cut = slug.slice(0, PROJECT_BRANCH_SLUG_MAX + 1);
+  const boundary = cut.lastIndexOf('-');
+  // One word longer than the cap is cut inside it, since there is no boundary to cut at.
+  return (boundary > 0 ? cut.slice(0, boundary) : cut.slice(0, PROJECT_BRANCH_SLUG_MAX)).replace(/-+$/u, '');
+}
+
+/**
+ * A project's own branch by default: `refs/heads/project/<title slug>-<first 8 characters of its
+ * public id>`, or `refs/heads/project/<8 characters>` when the title gives no slug. The name is
+ * chosen once, when the line is decided or starts, and stored as the binding's `integrationRef`;
+ * every later reader reads that, so renaming the project never renames its branch.
+ */
+export function projectBranchRef(projectId: string, title: string): string {
+  const id = uuidToBase62(projectId).slice(0, 8);
+  const slug = projectBranchSlug(title);
+  return `refs/heads/project/${slug ? `${slug}-${id}` : id}`;
+}
+
+/** {@link projectBranchRef} for a project read by id, its title from its own row. */
+async function defaultProjectBranchRef(
+  db: Pick<Prisma.TransactionClient, 'project'>,
+  projectId: string,
+): Promise<string> {
+  const { title } = await db.project.findUniqueOrThrow({ where: { id: projectId }, select: { title: true } });
+  return projectBranchRef(projectId, title);
 }
 
 /**
@@ -149,6 +203,10 @@ const LINE_COLUMNS = {
   integrationStartedAt: true,
   landingCheckCommand: true,
   landingCheckTimeoutSeconds: true,
+  landingCheckNone: true,
+  landingCheckSetBy: true,
+  landingCheckSetBySessionId: true,
+  landingCheckSetAt: true,
   mergeCheckCommand: true,
   mergeCheckTimeoutSeconds: true,
   deliveryMode: true,
@@ -215,7 +273,7 @@ export async function readProjectListBindings(
       projectId: true,
       // An observation is not an integration attempt (§10.6, A-Q23): it is not counted here.
       _count: { select: { integrationJobs: {
-        where: { state: { in: ['QUEUED', 'RUNNING'] }, kind: { not: 'OBSERVE_LANDING' } },
+        where: { state: { in: [...IN_FLIGHT_JOB_STATES] }, kind: { not: 'OBSERVE_LANDING' } },
       } } },
     },
   });
@@ -241,20 +299,22 @@ export async function readProjectListBindings(
   return bindings;
 }
 
-/** How long this project's exception items wait on its coordinator before they are the owner's. */
-async function escalationWindow(
+/** {@link projectIntegrationView} for a project read by id: how long its exception items wait on
+ *  its coordinator before they are the owner's, and its title for the default branch name. */
+async function settingsViewOf(
   db: Pick<Prisma.TransactionClient, 'project'>,
   projectId: string,
-): Promise<number> {
-  const row = await db.project.findUniqueOrThrow({
+  row: ProjectCodebaseLine | null,
+): Promise<ProjectIntegrationSettingsView> {
+  const project = await db.project.findUniqueOrThrow({
     where: { id: projectId },
-    select: { exceptionEscalationSeconds: true },
+    select: { exceptionEscalationSeconds: true, title: true },
   });
-  return row.exceptionEscalationSeconds;
+  return projectIntegrationView(row, project.exceptionEscalationSeconds, { id: projectId, title: project.title });
 }
 
 /** The line a binding states, when somebody decided it: the owner, or the default rule at the start. */
-function decidedLine(row: ProjectCodebaseLine): IntegrationLine | null {
+export function decidedLine(row: ProjectCodebaseLine): IntegrationLine | null {
   if (row.integrationRefSource !== 'EXPLICIT' && !row.integrationStartedAt) return null;
   return row.integrationRef === row.upstreamRef ? 'MAIN' : 'PROJECT_BRANCH';
 }
@@ -274,15 +334,31 @@ export type ProjectIntegrationSettingsView = SharedProjectIntegrationSettings<Da
  *  answers (§1.6), and the five facts the project page's line row is drawn from. */
 export type ProjectIntegrationView = SharedProjectIntegrationView<Date>;
 
+/**
+ * The branch a project branch line of this project is on, as a full ref: the one its binding
+ * stores, once its line is decided on one, and otherwise the name {@link projectBranchRef} gives it
+ * now. What a client shows for a project branch nobody named, so it never builds one itself.
+ */
+export function defaultProjectBranchOf(
+  row: ProjectCodebaseLine | null,
+  project: { id: string; title: string },
+): string {
+  return row && decidedLine(row) === 'PROJECT_BRANCH'
+    ? row.integrationRef
+    : projectBranchRef(project.id, project.title);
+}
+
 export function projectIntegrationView(
   row: ProjectCodebaseLine | null,
   escalationSeconds: number,
+  project: { id: string; title: string },
 ): ProjectIntegrationSettingsView {
   const line = row ? decidedLine(row) : null;
   return {
     line,
     lineAbsentReason: line ? null : 'NOT_DECIDED',
     ref: row && line ? branchName(row.integrationRef) : null,
+    defaultProjectBranch: branchName(defaultProjectBranchOf(row, project)),
     upstreamRef: row ? branchName(row.upstreamRef) : null,
     upstreamChosenAt: row?.upstreamRefChosenAt ?? null,
     source: row && line ? (row.integrationRefSource as IntegrationRefSource) : null,
@@ -290,7 +366,15 @@ export function projectIntegrationView(
     startedAt: row?.integrationStartedAt ?? null,
     landingCheckCommand: row?.landingCheckCommand ?? null,
     landingCheckTimeoutSeconds: row?.landingCheckTimeoutSeconds ?? null,
-    landingCheckCommandAbsentReason: row?.landingCheckCommand == null ? 'FALLS_BACK_TO_MERGE_CHECK' : null,
+    landingCheckCommandAbsentReason: row?.landingCheckNone
+      ? 'NONE'
+      : row?.landingCheckCommand == null ? 'FALLS_BACK_TO_MERGE_CHECK' : null,
+    landingCheck: {
+      command: row?.landingCheckNone ? 'NONE' : row?.landingCheckCommand ?? null,
+      setBy: (row?.landingCheckSetBy ?? null) as LandingCheckSetBy | null,
+      setBySessionId: row?.landingCheckSetBySessionId ?? null,
+      setAt: row?.landingCheckSetAt ?? null,
+    },
     mergeCheckCommand: row?.mergeCheckCommand ?? null,
     mergeCheckCommandAbsentReason: row?.mergeCheckCommand ? null : 'NOT_CONFIGURED',
     mergeCheckTimeoutSeconds: row?.mergeCheckTimeoutSeconds ?? null,
@@ -554,6 +638,16 @@ interface InFlightJobRow extends IntegrationCheckSource {
   ownerId: string;
   id: string;
   state: string;
+  /** The pull request a PULL_REQUEST job waits on (docs/design/protected-branch-landing.md §8). */
+  prNumber?: number | null;
+  prUrl?: string | null;
+  prState?: string | null;
+  prCondition?: string | null;
+  prChecks?: unknown;
+  prMergeMethod?: string | null;
+  prMergedSha?: string | null;
+  prRefusal?: unknown;
+  prWorkspaceId?: string | null;
   kind: IntegrationJobKind;
   phase: IntegrationJobPhase | null;
   generation: number;
@@ -609,6 +703,13 @@ interface InFlightJobRow extends IntegrationCheckSource {
   serialBlockOwnerId: string | null;
   serialBlockKind: string | null;
   serialBlockTaskTitle: string | null;
+  /** The job a claimed job waits behind on its runner's local lock: the earliest other RUNNING job on
+   *  the same runner, repository and target ref that is not itself waiting for the lock. */
+  lockHolderJobId: string | null;
+  lockHolderOwnerId: string | null;
+  lockHolderKind: string | null;
+  lockHolderTaskTitle: string | null;
+  lockHolderProjectTitle: string | null;
   /** The landing session of this attempt's subject (`project_landing.session_id`, §2.9); null for
    *  a job written before 0436. Pre-generated when the subject opens, so it needs no session row. */
   landingSessionId: string | null;
@@ -659,9 +760,20 @@ function blockingReasonOf(row: InFlightJobRow): IntegrationJobBlockingReason | n
     const localLock = row.progressProtocol === INTEGRATION_PROGRESS_V2_PROTOCOL
       ? row.step === 'WAITING_LOCAL_LOCK'
       : !!row.behindAnotherOnRunner;
-    return localLock
-      ? { code: 'WAITING_LOCAL_LOCK', summary: queueBlockingSummary('WAITING_LOCAL_LOCK', queueFacts(row)) }
-      : null;
+    if (!localLock) return null;
+    // The holder is named only to its own owner, as every other blocker is.
+    const mineHolder = row.lockHolderJobId !== null && mine(row.lockHolderOwnerId);
+    const reason: IntegrationJobBlockingReason = {
+      code: 'WAITING_LOCAL_LOCK',
+      summary: queueBlockingSummary('WAITING_LOCAL_LOCK', queueFacts(row, {
+        runnerName: row.runnerName,
+        blockingJobKind: mineHolder ? row.lockHolderKind : null,
+        blockingTaskTitle: mineHolder ? row.lockHolderTaskTitle : null,
+        blockingProjectTitle: mineHolder ? row.lockHolderProjectTitle : null,
+      })),
+    };
+    if (mineHolder) reason.jobId = row.lockHolderJobId!;
+    return reason;
   }
   if (row.cancelRequestedAt) {
     return { code: 'CANCELLING', summary: queueBlockingSummary('CANCELLING', queueFacts(row)) };
@@ -731,6 +843,14 @@ function queueFacts(row: InFlightJobRow, blocker: Partial<QueueBlockingFacts> = 
 /** One row as both the view's `inFlight` and its `inFlightJobs` entry state it. */
 function inFlightJobOf(row: InFlightJobRow, typicalMs: Map<string, number>): ProjectIntegrationJob<Date> {
   const running = row.state === 'RUNNING';
+  // §4.2: a job waiting on its pull request holds no runner and has no lease: never timed out, never silent.
+  const pullRequest = row.state === 'PULL_REQUEST' && row.prState
+    ? pullRequestViewOf({
+      number: row.prNumber ?? null, url: row.prUrl ?? null, state: row.prState, condition: row.prCondition ?? null,
+      checks: row.prChecks, mergeMethod: row.prMergeMethod ?? null, mergedSha: row.prMergedSha ?? null,
+      refusal: row.prRefusal ?? null, workspaceId: row.prWorkspaceId ?? null,
+    })
+    : null;
   const limitSeconds = integrationJobLimitSeconds(row);
   const timedOut = limitSeconds !== null && !row.behindAnotherOnRunner
     && (row.silentSeconds ?? 0) > limitSeconds;
@@ -740,7 +860,8 @@ function inFlightJobOf(row: InFlightJobRow, typicalMs: Map<string, number>): Pro
   return {
     jobId: row.id,
     kind: row.kind,
-    state: running ? 'RUNNING' : 'QUEUED',
+    state: running ? 'RUNNING' : row.state === 'PULL_REQUEST' ? 'PULL_REQUEST' : 'QUEUED',
+    ...(row.state === 'PULL_REQUEST' ? { pullRequest } : {}),
     landingSessionId: row.landingSessionId ?? null,
     phase: row.phase,
     taskId: row.taskId,
@@ -762,7 +883,7 @@ function inFlightJobOf(row: InFlightJobRow, typicalMs: Map<string, number>): Pro
     outputMovedAt: running ? row.outputMovedAt : null,
     typicalMs: (check?.name === 'MERGE_CHECK' || check?.name === 'LANDING_CHECK') ? typicalMs.get(row.projectId) ?? null : null,
     liveness: livenessOf(row, timedOut),
-    blockingReason: blockingReasonOf(row),
+    blockingReason: row.state === 'PULL_REQUEST' ? pullRequestBlockingReason(pullRequest, row.upstreamRef) : blockingReasonOf(row),
     retryable: timedOut && row.kind === 'LAND_TASK',
     skippable: row.taskId !== null && inFlightSkipRefusal({
       kind: row.kind,
@@ -774,10 +895,18 @@ function inFlightJobOf(row: InFlightJobRow, typicalMs: Map<string, number>): Pro
       pushReportedGeneration: row.pushReportedGeneration,
       claimGeneration: row.claimGeneration,
       landingCheckCommand: row.landingCheckCommand ?? null,
+      landingCheckNone: row.landingCheckNone ?? false,
       mergeCheckCommand: row.mergeCheckCommand,
     }) === null,
     skipCheck: row.skipMergeCheck ? 'SKIPPED' : row.stoppingToSkip ? 'STOPPING' : null,
   };
+}
+
+/** Why a job waiting on its pull request waits (§8): the required checks or a review, in one sentence. */
+function pullRequestBlockingReason(pullRequest: LandingPullRequestView | null, upstreamRef: string | null): IntegrationJobBlockingReason {
+  const code = pullRequestBlockingCode(pullRequest?.condition ?? null);
+  const mainBranch = upstreamRef ? upstreamRef.replace(/^refs\/heads\//, '') : null;
+  return { code, summary: pullRequestWaitSummary(code, pullRequest, mainBranch) };
 }
 
 /** The oldest job of a project, as the project's line states it — the same fields the view's
@@ -789,6 +918,7 @@ function inFlightOf(job: ProjectIntegrationJob<Date>): ProjectIntegrationInFligh
     kind: job.kind,
     phase: job.phase,
     state: job.state,
+    ...(job.state === 'PULL_REQUEST' ? { pullRequest: job.pullRequest ?? null } : {}),
     startedAt: job.startedAt,
     heartbeatAt: job.heartbeatAt,
     waitMs: claimedWaitMs(job),
@@ -935,6 +1065,7 @@ async function readInFlightJobsForProjects(
            st."acceptance_timeout_seconds" AS "acceptanceTimeoutSeconds",
            cb."landing_check_command" AS "landingCheckCommand",
            cb."landing_check_timeout_seconds" AS "landingCheckTimeoutSeconds",
+           cb."landing_check_none" AS "landingCheckNone",
            cb."merge_check_command" AS "mergeCheckCommand",
            cb."merge_check_timeout_seconds" AS "mergeCheckTimeoutSeconds",
            j."skip_merge_check" AS "skipMergeCheck",
@@ -971,10 +1102,19 @@ async function readInFlightJobsForProjects(
            sync_block."handlingGeneration" AS "syncHandlingGeneration",
            running_block."jobId" AS "serialBlockJobId", running_block."ownerId" AS "serialBlockOwnerId",
            running_block."kind" AS "serialBlockKind", running_block."taskTitle" AS "serialBlockTaskTitle",
-           landing."session_id" AS "landingSessionId"
+           landing."session_id" AS "landingSessionId",
+           -- docs/design/protected-branch-landing.md §8: the pull request a PULL_REQUEST job waits on.
+           pr."number" AS "prNumber", pr."url" AS "prUrl", pr."state" AS "prState", pr."condition" AS "prCondition",
+           pr."checks" AS "prChecks", pr."merge_method" AS "prMergeMethod", pr."merged_sha" AS "prMergedSha",
+           pr."refusal" AS "prRefusal",
+           pr."workspace_id"::text AS "prWorkspaceId",
+           lock_holder."jobId" AS "lockHolderJobId", lock_holder."ownerId" AS "lockHolderOwnerId",
+           lock_holder."kind" AS "lockHolderKind", lock_holder."taskTitle" AS "lockHolderTaskTitle",
+           lock_holder."projectTitle" AS "lockHolderProjectTitle"
       FROM "project_integration_job" j
       JOIN "project_codebase" cb ON cb."id" = j."codebase_id"
       LEFT JOIN "project_landing" landing ON landing."id" = j."landing_id"
+      LEFT JOIN "github_pull_request" pr ON pr."id" = j."pull_request_id"
       LEFT JOIN "task" t ON t."id" = j."task_id"
       LEFT JOIN "session" s ON s."id" = j."session_id"
       LEFT JOIN "task" st ON st."id" = s."task_id"
@@ -1005,22 +1145,18 @@ async function readInFlightJobsForProjects(
       -- holds every later landing on it; the conflicted job's own later generations are exempt (M3),
       -- and so are the landings of a task filed to fix that item (fixes_open_item_id), as in the
       -- claim. The claim reads the item, not a handling generation (T17), so this does too.
+      -- The line-sync item (docs/design/project-line-upstream-sync.md §4.3) has no same-task exemption: lineSyncHoldSql.
       LEFT JOIN LATERAL (
         SELECT f."id" AS "jobId", i."id" AS "openItemId", i."owner_id" AS "ownerId",
-               ft."title" AS "taskTitle",
-               CASE WHEN handling."id" IS NOT NULL AND handling."state" IN ('QUEUED', 'RUNNING')
+               -- The line-sync item is about the line, not the task that happened to land next.
+               CASE WHEN i."task_id" IS NOT NULL THEN ft."title" END AS "taskTitle",
+               CASE WHEN handling."id" IS NOT NULL AND handling."state" IN ${IN_FLIGHT_JOB_STATES_SQL}
                     THEN handling."generation" END AS "handlingGeneration"
           FROM "project_open_item" i
           JOIN "project_integration_job" f ON f."id" = i."integration_job_id"
           LEFT JOIN "task" ft ON ft."id" = f."task_id"
           LEFT JOIN "project_integration_job" handling ON handling."id" = i."handling_job_id"
-         WHERE j."state" = 'QUEUED'
-           AND f."serial_key" = j."serial_key" AND f."phase" = 'MAIN_SYNC'
-           AND i."kind" = 'INTEGRATION_CONFLICT' AND i."state" = 'OPEN'
-           AND f."task_id" IS DISTINCT FROM j."task_id"
-           AND NOT EXISTS (
-             SELECT 1 FROM "task" fix
-              WHERE fix."id" = j."task_id" AND fix."fixes_open_item_id" = i."id")
+         WHERE j."state" = 'QUEUED' AND ${lineSyncHoldSql('j')}
          ORDER BY i."created_at", i."id" LIMIT 1
       ) sync_block ON true
       LEFT JOIN LATERAL (
@@ -1041,8 +1177,30 @@ async function readInFlightJobsForProjects(
            AND r."serial_key" = j."serial_key" AND r."state" = 'RUNNING'
          ORDER BY COALESCE(r."claimed_at", r."created_at"), r."id" LIMIT 1
       ) running_block ON true
+      -- The runner's local lock is keyed by its checkout and the target ref (runner-go
+      -- integrationLock), so a claimed job waiting for it waits behind another RUNNING job of the
+      -- same runner, repository and target ref — of whichever project. The one not itself waiting
+      -- for the lock holds it; the earliest claimed of those is named.
+      LEFT JOIN LATERAL (
+        SELECT o."id" AS "jobId", o."owner_id" AS "ownerId", o."kind" AS "kind",
+               ot."title" AS "taskTitle", op."title" AS "projectTitle"
+          FROM "project_integration_job" o
+          JOIN "project_codebase" ocb ON ocb."id" = o."codebase_id"
+          LEFT JOIN "task" ot ON ot."id" = o."task_id"
+          LEFT JOIN "project" op ON op."id" = o."project_id"
+         WHERE j."state" = 'RUNNING'
+           AND (j."step" = 'WAITING_LOCAL_LOCK'
+                OR (j."progress_protocol" IS DISTINCT FROM ${INTEGRATION_PROGRESS_V2_PROTOCOL}
+                    AND j."heartbeat_at" <= j."claimed_at"))
+           AND o."state" = 'RUNNING' AND o."id" <> j."id"
+           AND o."runner_id" = j."runner_id"
+           AND o."target_ref" = j."target_ref"
+           AND (o."kind" = 'OBSERVE_LANDING') = (j."kind" = 'OBSERVE_LANDING')
+           AND ocb."canonical_repo_url" = cb."canonical_repo_url"
+         ORDER BY (o."step" IS NOT DISTINCT FROM 'WAITING_LOCAL_LOCK'), o."claimed_at", o."id" LIMIT 1
+      ) lock_holder ON true
      WHERE j."project_id" IN (${ids})
-       AND j."state" IN ('RUNNING', 'QUEUED')
+       AND j."state" IN ${IN_FLIGHT_JOB_STATES_SQL}
        ${observations === 'EXCLUDE' ? Prisma.sql`AND j."kind" <> 'OBSERVE_LANDING'` : Prisma.empty}
        ${jobId ? Prisma.sql`AND j."id" = ${jobId}::uuid` : Prisma.empty}
      ORDER BY j."project_id" ASC,
@@ -1141,7 +1299,7 @@ export async function readProjectPromotionIntegrationViews(
         FROM "project_integration_job" j
        WHERE j."project_id" = ${projectId}::uuid
          AND j."promotion_id" IS NOT NULL
-         AND j."state" IN ('QUEUED', 'RUNNING')
+         AND j."state" IN ${IN_FLIGHT_JOB_STATES_SQL}
     ),
     last_merged AS (
       SELECT p."id"
@@ -1254,7 +1412,7 @@ export async function readProjectIntegrationRead(
 ): Promise<ProjectIntegrationRead<Date>> {
   const [settings, queue, landTasks, promotionViews, log, timeline] = await Promise.all([
     readProjectCodebase(prisma, project.id).then((row) =>
-      projectIntegrationView(row, project.exceptionEscalationSeconds)),
+      projectIntegrationView(row, project.exceptionEscalationSeconds, project)),
     readInFlightJobs(prisma, project.id),
     readProjectLandTaskViews(prisma, project.id),
     readProjectPromotionIntegrationViews(prisma, project.id),
@@ -1392,7 +1550,7 @@ export function lastLandingCheck(checks: unknown): 'PASSING' | 'FAILING' | 'UNKN
   let complete = true;
   for (const check of checks) {
     if (!check || typeof check !== 'object') { complete = false; continue; }
-    if (check.name === 'LANDING_CHECK' && check.skipped === 'PATHS_EXEMPT') continue;
+    if (check.name === 'LANDING_CHECK' && (check.skipped === 'PATHS_EXEMPT' || check.skipped === 'TASK_EXEMPT')) continue;
     if (check.timedOut === true) return 'FAILING';
     if (typeof check.expectedExitCode !== 'number' || typeof check.exitCode !== 'number'
       || check.timedOut !== false) { complete = false; continue; }
@@ -1480,6 +1638,31 @@ export async function stopInFlightJob(
       return { outcome: 'CANCELLED', errorCode: null };
     }
     // It was claimed between the read and the write: fall through and ask that claim to stop.
+  } else if (job.state === 'PULL_REQUEST') {
+    // docs/design/protected-branch-landing.md §4.2 J-T18: a landing waiting on its pull request holds no runner, so
+    // the stop ends it on the spot. Nothing reached the target. The pull request stays open for the subject's next
+    // attempt, which pushes the same landing branch; the door merges no pull request nobody waits on.
+    const ended = await tx.projectIntegrationJob.updateMany({
+      where: { id: input.jobId, state: 'PULL_REQUEST' },
+      data: { state: 'CANCELLED', cancelRequestedAt: input.now, finishedAt: input.now },
+    });
+    if (ended.count === 1) {
+      await appendIntegrationJobEvent(tx, {
+        jobId: input.jobId,
+        key: 'cancelled',
+        kind: 'CANCELLED',
+        claim: job.claim ?? 0,
+        round: job.round ?? null,
+        phase: job.phase,
+        actor: input.actor ?? { type: 'PLATFORM' },
+        reason: input.reason ?? null,
+        data: { cause: input.cause ?? 'STOP', state: 'CANCELLED', pullRequestOpen: true },
+        text: 'Stopped · cancelled while its pull request waited; the pull request stays open',
+        at: input.now,
+      });
+      return { outcome: 'CANCELLED', errorCode: null };
+    }
+    return { outcome: 'NONE', errorCode: null };
   } else if (job.timedOut) {
     const errorCode = await endTimedOutLanding(tx, job, input.cause ?? 'STOP');
     if (errorCode !== null) {
@@ -1528,12 +1711,143 @@ export interface IntegrationSettings {
   upstreamRef?: string;
   landingCheckCommand?: string | null;
   landingCheckTimeoutSeconds?: number | null;
+  /**
+   * `NONE`: run no project landing check, so a landing runs only the task's own acceptance
+   * (§12.15 P-C1). A landing-check command written in the same request is refused; writing
+   * `landingCheckCommand` later (a command, or null to fall back to the merge check) lifts it.
+   */
+  landingCheck?: 'NONE';
+  /**
+   * Why the project's coordinator is changing the landing check without a card (§12.15 P-R1): required
+   * and at most 280 characters on that cardless write, ignored on every other. Not a setting.
+   */
+  landingCheckReason?: string;
   mergeCheckCommand?: string | null;
   mergeCheckTimeoutSeconds?: number | null;
   /** This project's escalation window in seconds (§4.6). The column's CHECK bounds it, 300 to a week. */
   exceptionEscalationSeconds?: number;
   /** How finished work reaches the upstream (§10.5 O-L1). Not locked by L4; `AGENT_PUSH` needs `MAIN`. */
   deliveryMode?: DeliveryMode;
+}
+
+/**
+ * Who writes a landing check (§12.14): the account owner at their own door, a session through a
+ * merge-check card the owner answered, the project's coordinator with no card (§12.15 P-C1), or the
+ * owner's Start press confirming the value the coordinator proposed (`START`, §12.12 P2). A Start
+ * press that writes a value of the owner's own is `OWNER` (`startLandingCheckWriter`).
+ */
+export type LandingCheckWriter =
+  | { by: 'OWNER' }
+  | { by: 'CARD' }
+  | { by: 'COORDINATOR'; sessionId: string }
+  | { by: 'START' };
+
+/**
+ * Who a Start press writes the landing check as: `START` when every landing-check field it names is
+ * the value the start request it answers proposed — the owner confirmed the coordinator's running
+ * mode, which stays the coordinator's to change (§12.12 P2) — and `OWNER` when one differs or no
+ * request was named, because then the value is the owner's own words. A command is compared as it
+ * is written (trimmed, blank as none) and a missing field as null.
+ */
+export function startLandingCheckWriter(
+  started: Pick<StartLineSettings, 'landingCheckCommand' | 'landingCheckTimeoutSeconds'>,
+  proposed: Pick<StartLineSettings, 'landingCheckCommand' | 'landingCheckTimeoutSeconds'> | undefined,
+): LandingCheckWriter {
+  if (!proposed) return { by: 'OWNER' };
+  const command = (value: string | null | undefined) => value?.trim() || null;
+  const sameCommand = started.landingCheckCommand === undefined
+    || command(started.landingCheckCommand) === command(proposed.landingCheckCommand);
+  const sameTimeout = started.landingCheckTimeoutSeconds === undefined
+    || (started.landingCheckTimeoutSeconds ?? null) === (proposed.landingCheckTimeoutSeconds ?? null);
+  return sameCommand && sameTimeout ? { by: 'START' } : { by: 'OWNER' };
+}
+
+/** Why the project's coordinator may not write its landing check without a card (§12.15 P-C1). */
+export type CoordinatorLandingCheckRefusal = 'NOT_PROJECT_BRANCH' | 'NO_MERGE_CHECK' | 'SET_BY_OWNER';
+
+/**
+ * Whether the project's coordinator may write this binding's landing check with no card, read off
+ * the binding alone (P-C1): the line is `PROJECT_BRANCH`, so the landing check guards the project
+ * branch rather than main; a merge check is configured, so a gate still stands before main; and the
+ * owner has not written the landing check themselves or through a card, which keeps it theirs
+ * (§12.15 P-R1). Null when it may. That the writer is the project's current coordinator is the
+ * caller's to check, against the project row it holds.
+ */
+export function coordinatorLandingCheckRefusal(
+  row: ProjectCodebaseLine | null,
+): CoordinatorLandingCheckRefusal | null {
+  if (!row || decidedLine(row) !== 'PROJECT_BRANCH') return 'NOT_PROJECT_BRANCH';
+  if (!row.mergeCheckCommand) return 'NO_MERGE_CHECK';
+  if (row.landingCheckSetBy === 'OWNER' || row.landingCheckSetBy === 'CARD') return 'SET_BY_OWNER';
+  return null;
+}
+
+/** The sentence a refused cardless landing-check write is answered with, per reason. */
+export function coordinatorLandingCheckRefusalReason(refusal: CoordinatorLandingCheckRefusal): string {
+  switch (refusal) {
+    case 'NOT_PROJECT_BRANCH':
+      return 'this project does not land on a project branch, so its landing check is the check work '
+        + 'passes on its way to main';
+    case 'NO_MERGE_CHECK':
+      return 'this project has no merge check, so its landing check is the only check before main';
+    case 'SET_BY_OWNER':
+      return 'the account owner set this landing check, at their own door or on a card, so it stays '
+        + 'theirs';
+  }
+}
+
+/** 403 for a cardless landing-check write that lost one of P-C1's conditions under the lock. */
+export function coordinatorLandingCheckRefused(refusal: CoordinatorLandingCheckRefusal): ForbiddenException {
+  return new ForbiddenException({
+    statusCode: 403,
+    code: 'INTEGRATION_SETTINGS_OWNER_ONLY',
+    message: `the landing check cannot be changed from this session without the owner's card: `
+      + `${coordinatorLandingCheckRefusalReason(refusal)}. Nothing was written. Call project_update `
+      + 'with the change: it puts the question in front of them and performs the write once they answer',
+  });
+}
+
+/** The provenance columns a landing-check write leaves on the binding: who, and always when; the
+ *  session only for the coordinator's cardless write. */
+function landingCheckProvenance(
+  writer: LandingCheckWriter = { by: 'OWNER' },
+): Prisma.ProjectCodebaseUpdateInput {
+  return {
+    landingCheckSetBy: writer.by,
+    landingCheckSetBySessionId: writer.by === 'COORDINATOR' ? writer.sessionId : null,
+    landingCheckSetAt: new Date(),
+  };
+}
+
+/**
+ * The owner putting a recorded landing check back (§12.15 P-R1): under the binding's lock, when the field still
+ * holds `ifCurrent` it is written as `value`, with the owner's provenance, so the coordinator's next cardless
+ * write is refused and goes to the card. Returns the value it replaced, or null (nothing written) when the field
+ * has moved on. `beforeWrite` runs under the lock, for the caller's own refusals.
+ */
+export async function restoreLandingCheck(
+  tx: Prisma.TransactionClient,
+  projectId: string,
+  ifCurrent: LandingCheckValue,
+  value: LandingCheckValue,
+  beforeWrite: () => Promise<void>,
+): Promise<LandingCheckValue | null> {
+  const row = await lockCodebase(tx, projectId);
+  if (!row) throw new ConflictException({ code: 'SETTING_CHANGE_NO_BINDING', message: 'this project has no code binding any more' });
+  await beforeWrite();
+  const now = landingCheckValueOf(row);
+  if (!sameSettingValue('LANDING_CHECK', ifCurrent, now)) return null;
+  await tx.projectCodebase.update({
+    where: { id: row.id },
+    data: {
+      landingCheckCommand: value.command,
+      landingCheckTimeoutSeconds: value.timeoutSeconds,
+      landingCheckNone: value.none,
+      ...landingCheckProvenance({ by: 'OWNER' }),
+    },
+    select: { id: true },
+  });
+  return now;
 }
 
 /** The binding, locked for the rest of this transaction. Rank 55: after `task`, before its children. */
@@ -1549,6 +1863,10 @@ async function lockCodebase(
            "integration_started_at" AS "integrationStartedAt",
            "landing_check_command" AS "landingCheckCommand",
            "landing_check_timeout_seconds" AS "landingCheckTimeoutSeconds",
+           "landing_check_none" AS "landingCheckNone",
+           "landing_check_set_by" AS "landingCheckSetBy",
+           "landing_check_set_by_session_id" AS "landingCheckSetBySessionId",
+           "landing_check_set_at" AS "landingCheckSetAt",
            "merge_check_command" AS "mergeCheckCommand",
            "merge_check_timeout_seconds" AS "mergeCheckTimeoutSeconds",
            "delivery_mode" AS "deliveryMode",
@@ -1586,6 +1904,9 @@ export async function rememberedUpstreamRef(
  * first integration of a project nobody started all bind through here. The binding does not
  * record a choice of its own: it carries one, and `upstream_ref_chosen_at` stays null until the
  * owner names this project's upstream.
+ *
+ * A project started with no line (P-M2, D8) had no binding to hold the merge check its owner set on
+ * the start card, so the start recorded it (`startedWithMergeCheck`) and the binding starts from it.
  */
 async function bind(
   tx: Prisma.TransactionClient,
@@ -1593,6 +1914,7 @@ async function bind(
 ): Promise<ProjectCodebaseLine> {
   const upstreamRef = await rememberedUpstreamRef(tx, binding.ownerId, binding.canonicalRepoUrl)
     ?? DEFAULT_UPSTREAM_REF;
+  const mergeCheck = await startedWithMergeCheck(tx, binding.projectId);
   await tx.projectCodebase.createMany({
     data: [{
       ownerId: binding.ownerId,
@@ -1602,10 +1924,34 @@ async function bind(
       integrationRef: upstreamRef,
       refAuthority: 'REMOTE',
       remoteName: 'origin',
+      ...mergeCheck,
     }],
     skipDuplicates: true,
   });
   return (await lockCodebase(tx, binding.projectId))!;
+}
+
+/**
+ * The merge check a start with no line recorded (D8): where a project that started before it had a
+ * binding keeps the check its owner chose on the start card, until `bind` makes the binding that
+ * carries it. Nothing for a project not started, or started with a line — that start wrote its
+ * check on the binding it made.
+ */
+async function startedWithMergeCheck(
+  tx: Prisma.TransactionClient,
+  projectId: string,
+): Promise<{ mergeCheckCommand: string | null; mergeCheckTimeoutSeconds: number | null } | Record<string, never>> {
+  const start = await tx.projectStandardSetConfirmation.findFirst({
+    where: { projectId, startedWith: { not: Prisma.DbNull } },
+    orderBy: [{ confirmedAt: 'desc' }, { id: 'desc' }],
+    select: { startedWith: true },
+  });
+  const settings = (start?.startedWith as unknown as ProjectStartRecord | null)?.settings;
+  if (!settings || settings.line !== undefined) return {};
+  return {
+    mergeCheckCommand: settings.mergeCheckCommand ?? null,
+    mergeCheckTimeoutSeconds: settings.mergeCheckTimeoutSeconds ?? null,
+  };
 }
 
 function repositoryUnknown(message: string): ConflictException {
@@ -1661,15 +2007,33 @@ export async function projectRepository(
  */
 export async function configureProjectIntegration(
   tx: Prisma.TransactionClient,
-  input: { ownerId: string; projectId: string; settings: IntegrationSettings },
+  input: {
+    ownerId: string;
+    projectId: string;
+    settings: IntegrationSettings;
+    /**
+     * Who is writing the landing check, recorded on the binding when the settings name it
+     * (§12.14). Left out is the account owner at their own door.
+     */
+    landingCheckWriter?: LandingCheckWriter;
+  },
 ): Promise<ProjectIntegrationSettingsView> {
   const { ownerId, projectId, settings } = input;
   if (Object.values(settings).every((value) => value === undefined)) {
     throw new BadRequestException('name at least one integration setting to change');
   }
+  if (settings.landingCheck !== undefined && settings.landingCheck !== 'NONE') {
+    throw new BadRequestException('landingCheck takes one value, NONE: send landingCheckCommand to set a command, or null to fall back to the merge check');
+  }
+  if (settings.landingCheck === 'NONE' && settings.landingCheckCommand) {
+    throw new BadRequestException('landingCheck NONE runs no landing check, so it cannot be sent with a landingCheckCommand');
+  }
   if (settings.line === 'MAIN' && settings.projectBranchName !== undefined) {
     throw new BadRequestException('a project that integrates straight into main has no project branch to name');
   }
+  const cardlessReason = input.landingCheckWriter?.by === 'COORDINATOR'
+    ? requiredChangeReason(settings.landingCheckReason, 'LANDING_CHECK_REASON_REQUIRED', 'landingCheckReason')
+    : null;
 
   // The escalation window is the PROJECT's column, not the binding's (§4.1): it says how long a
   // person waits, and a project with no code at all still has exceptions waiting on somebody. So it
@@ -1683,22 +2047,27 @@ export async function configureProjectIntegration(
     });
   }
   // `!== undefined` rather than a falsy test, because `null` is a setting: it clears the merge check.
+  const landingNamed = settings.landingCheckCommand !== undefined
+    || settings.landingCheckTimeoutSeconds !== undefined
+    || settings.landingCheck !== undefined;
   const bindingNamed = settings.line !== undefined
     || settings.projectBranchName !== undefined
     || settings.upstreamRef !== undefined
-    || settings.landingCheckCommand !== undefined
-    || settings.landingCheckTimeoutSeconds !== undefined
+    || landingNamed
     || settings.mergeCheckCommand !== undefined
     || settings.mergeCheckTimeoutSeconds !== undefined
     || settings.deliveryMode !== undefined;
   if (!bindingNamed) {
-    return projectIntegrationView(
-      await readProjectCodebase(tx, projectId),
-      await escalationWindow(tx, projectId),
-    );
+    return settingsViewOf(tx, projectId, await readProjectCodebase(tx, projectId));
   }
 
   let row = await lockCodebase(tx, projectId);
+  // A cardless coordinator write (P-C1) is decided before the transaction, and decided again here,
+  // under the binding's lock: an owner write or a line change that committed in between wins.
+  if (input.landingCheckWriter?.by === 'COORDINATOR') {
+    const refusal = coordinatorLandingCheckRefusal(row);
+    if (refusal) throw coordinatorLandingCheckRefused(refusal);
+  }
   if (!row) {
     const repository = await coordinationRepository(tx, ownerId, projectId);
     if (!repository) {
@@ -1715,7 +2084,8 @@ export async function configureProjectIntegration(
   const upstreamRef = settings.upstreamRef ?? row.upstreamRef;
   const integrationRef = (chosen ?? decided) === 'PROJECT_BRANCH'
     ? settings.projectBranchName
-      ?? (decided === 'PROJECT_BRANCH' ? row.integrationRef : projectBranchRef(projectId))
+      // A line already on a project branch keeps the name it has: never renamed.
+      ?? (decided === 'PROJECT_BRANCH' ? row.integrationRef : await defaultProjectBranchRef(tx, projectId))
     // MAIN, or not decided yet: the line stands on the upstream until the default rule moves it.
     : upstreamRef;
   if ((chosen ?? decided) === 'PROJECT_BRANCH' && integrationRef === upstreamRef) {
@@ -1753,9 +2123,12 @@ export async function configureProjectIntegration(
       integrationRef,
       ...(chosen ? { integrationRefSource: 'EXPLICIT' } : {}),
       ...(settings.landingCheckCommand !== undefined
-        ? { landingCheckCommand: settings.landingCheckCommand?.trim() || null } : {}),
+        ? { landingCheckCommand: settings.landingCheckCommand?.trim() || null, landingCheckNone: false } : {}),
+      // After the command, so NONE beside a null command (both clear it) ends with NONE.
+      ...(settings.landingCheck === 'NONE' ? { landingCheckCommand: null, landingCheckNone: true } : {}),
       ...(settings.landingCheckTimeoutSeconds !== undefined
         ? { landingCheckTimeoutSeconds: settings.landingCheckTimeoutSeconds } : {}),
+      ...(landingNamed ? landingCheckProvenance(input.landingCheckWriter) : {}),
       ...(settings.mergeCheckCommand !== undefined
         ? { mergeCheckCommand: settings.mergeCheckCommand?.trim() || null }
         : {}),
@@ -1772,7 +2145,23 @@ export async function configureProjectIntegration(
   if (settings.deliveryMode === 'AGENT_PUSH' && row.deliveryMode !== 'AGENT_PUSH') {
     await deliveryModeTurnedAgentPush(tx, { ownerId, projectId });
   }
-  return projectIntegrationView(written, await escalationWindow(tx, projectId));
+  // §12.15 P-R1: the history of the landing check, in this transaction, under the lock. The coordinator's cardless
+  // write is always one row, with its reason and session; the owner's own write and a card's are rows when they
+  // change the value, and are never revertible. A Start press (START) is the owner confirming the coordinator's
+  // proposal, which the start card already shows, and writes none.
+  const writer = input.landingCheckWriter ?? { by: 'OWNER' as const };
+  if (landingNamed && writer.by !== 'START') {
+    const oldValue = landingCheckValueOf(row);
+    const newValue = landingCheckValueOf(written);
+    if (writer.by === 'COORDINATOR' || !sameSettingValue('LANDING_CHECK', oldValue, newValue)) {
+      await recordSettingChange(tx, {
+        ownerId, projectId, field: 'LANDING_CHECK', origin: writer.by, oldValue, newValue,
+        reason: writer.by === 'COORDINATOR' ? cardlessReason : null,
+        sessionId: writer.by === 'COORDINATOR' ? writer.sessionId : null,
+      });
+    }
+  }
+  return settingsViewOf(tx, projectId, written);
 }
 
 /**
@@ -1809,8 +2198,9 @@ function deliveryModeNeedsMainLine(
 
 /**
  * The session that did a code task's work, when the task is one (§1.1 `isCodeTask`): filed under a
- * project, not codeless, and its latest work session ran in a worktree on a branch, in no
- * repository known to differ from the one the project's line is bound to (O-L7).
+ * project, and its latest work session ran in a worktree on a branch, in no repository known to
+ * differ from the one the project's line is bound to (O-L7). `codeless` is not read: since revision
+ * 42 (§12 P-M3) a task flagged codeless that has commits lands like any other.
  */
 async function codeTaskWork(
   db: Pick<Prisma.TransactionClient, 'task'>,
@@ -1821,7 +2211,6 @@ async function codeTaskWork(
     where: { id: taskId, ownerId },
     select: {
       projectId: true,
-      codeless: true,
       project: {
         select: { codebases: { where: { slot: 'primary' }, select: { canonicalRepoUrl: true } } },
       },
@@ -1834,7 +2223,7 @@ async function codeTaskWork(
     },
   });
   const work = task?.sessions[0];
-  if (!task?.projectId || task.codeless || work?.isolationStatus !== 'worktree' || !work.branch) {
+  if (!task?.projectId || work?.isolationStatus !== 'worktree' || !work.branch) {
     return null;
   }
   const repoUrl = work.workspace?.repoUrl ?? null;
@@ -1854,8 +2243,8 @@ export async function projectDefaultLine(
   // two `IN` lists. Large projects can exceed PostgreSQL's bind-parameter limit that way.
   const edge = await db.taskDependency.findFirst({
     where: {
-      task: { projectId, codeless: false, status: { not: TaskStatus.CANCELLED } },
-      dependsOnTask: { projectId, codeless: false, status: { not: TaskStatus.CANCELLED } },
+      task: { projectId, status: { not: TaskStatus.CANCELLED } },
+      dependsOnTask: { projectId, status: { not: TaskStatus.CANCELLED } },
     },
     select: { id: true },
   });
@@ -1864,7 +2253,8 @@ export async function projectDefaultLine(
 
 /** The line half of a start's settings — what `startProjectLine` is asked for and answers with. */
 export interface StartLineSettings {
-  line: IntegrationLine;
+  /** Left out, the start writes nothing about the line or the checks (P-M2). */
+  line?: IntegrationLine;
   /** A full `refs/heads/…` ref, only with `PROJECT_BRANCH`. */
   projectBranchName?: string;
   /**
@@ -1900,7 +2290,7 @@ export async function defaultStartLine(
   tx: Prisma.TransactionClient,
   ownerId: string,
   projectId: string,
-): Promise<StartLineSettings> {
+): Promise<StartLineSettings & { line: IntegrationLine }> {
   const row = await readProjectCodebase(tx, projectId);
   const mergeCheckCommand = row?.mergeCheckCommand ?? null;
   const mergeCheckTimeoutSeconds = row?.mergeCheckTimeoutSeconds ?? null;
@@ -1925,8 +2315,13 @@ export async function defaultStartLine(
  * A start's line and merge check, applied under the binding's lock (rank 55) as the owner's choice.
  *
  * A participant, like `configureProjectIntegration`, which does the writing: the caller owns the
- * transaction and holds the project row. Three ways it goes:
+ * transaction and holds the project row. Four ways it goes:
  *
+ *   * NO LINE NAMED (P-M2). Nothing about the line or the landing check is written and no
+ *     repository is needed; the answer carries no line, and the default rule decides it when the
+ *     first task with commits is done. The merge check is kept (D8): written on the binding when the
+ *     project has one, and otherwise only answered, for the start to record — the binding the
+ *     first committing DONE makes starts from that record (`bind`).
  *   * THE LINE HAS STARTED. It is locked (L4), so the start leaves it where it is and writes only the
  *     merge check — its command and the budget that check runs on — and the delivery mode it names,
  *     which L4 does not lock (O-L1), and says so — `locked`, with the line the project is actually
@@ -1947,10 +2342,36 @@ export async function defaultStartLine(
  */
 export async function startProjectLine(
   tx: Prisma.TransactionClient,
-  input: { ownerId: string; projectId: string; settings: StartLineSettings },
+  input: {
+    ownerId: string;
+    projectId: string;
+    settings: StartLineSettings;
+    /** Who the landing check the start names is written as (`startLandingCheckWriter`); left out,
+     *  the owner's own. */
+    landingCheckWriter?: LandingCheckWriter;
+  },
 ): Promise<StartLineSettings & { locked: boolean }> {
   const { ownerId, projectId, settings } = input;
   const mergeCheckCommand = settings.mergeCheckCommand?.trim() || null;
+  // P-M2: a start that names no line writes nothing about the line or the landing check, and needs
+  // no repository. The line is decided by the default rule when the first task with commits is
+  // done. The merge check the owner set on the card is kept (D8): on the binding when the project
+  // has one, and otherwise in the start's own record, which `bind` starts the binding from.
+  if (settings.line === undefined) {
+    const namedBudget = settings.mergeCheckTimeoutSeconds !== undefined
+      ? { mergeCheckTimeoutSeconds: settings.mergeCheckTimeoutSeconds } : {};
+    if (!(await lockCodebase(tx, projectId))) {
+      return { mergeCheckCommand, mergeCheckTimeoutSeconds: settings.mergeCheckTimeoutSeconds ?? null, locked: false };
+    }
+    const written = await configureProjectIntegration(tx, {
+      ownerId, projectId, settings: { mergeCheckCommand, ...namedBudget },
+    });
+    return {
+      mergeCheckCommand: written.mergeCheckCommand,
+      mergeCheckTimeoutSeconds: written.mergeCheckTimeoutSeconds,
+      locked: false,
+    };
+  }
   // Only when the start NAMED a budget: absent is a client that does not know the field, and
   // reading that as "no budget" would clear one its owner never saw (`StartProjectDto`). `null` is
   // the naming that says "back to the default", and it is written like any other value.
@@ -1981,6 +2402,7 @@ export async function startProjectLine(
   await configureProjectIntegration(tx, {
     ownerId,
     projectId,
+    landingCheckWriter: input.landingCheckWriter ?? { by: 'OWNER' },
     settings: locked
       ? { mergeCheckCommand, ...namedLanding, ...namedTimeout, ...namedDelivery }
       : {
@@ -2073,7 +2495,7 @@ export async function startOnFirstIntegration(
     let integrationRef = row.integrationRef;
     if (row.integrationRefSource !== 'EXPLICIT') {
       integrationRef = await projectDefaultLine(tx, first.projectId) === 'PROJECT_BRANCH'
-        ? projectBranchRef(first.projectId)
+        ? await defaultProjectBranchRef(tx, first.projectId)
         : row.upstreamRef;
     }
     row = await tx.projectCodebase.update({

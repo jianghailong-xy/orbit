@@ -5,7 +5,8 @@ import {
   ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
+import { isReleasedStatus } from '../common/session-release';
 import { RunnerApiController } from './runner-api.controller';
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
@@ -67,6 +68,8 @@ function harness({
               inboxLeaseGeneration: current,
               inboxLeaseOwner: LEASE_OWNER,
               status,
+              // A terminal row carries its release column (session_release_fact_chk).
+              ...(isReleasedStatus(status) ? { finishedAt: new Date() } : {}),
             }]
           : [];
       }
@@ -101,7 +104,7 @@ function harness({
         if (args?.select?.sessionKind === true) return { sessionKind: 'CONVERSATION' };
         preflightCalls.push(args);
         if (preflight !== undefined) return preflight;
-        return owned ? { inboxLeaseOwner: LEASE_OWNER, inboxLeaseGeneration: current, status } : null;
+        return owned ? { inboxLeaseOwner: LEASE_OWNER, inboxLeaseGeneration: current, status, ...(isReleasedStatus(status) ? { finishedAt: new Date() } : {}) } : null;
       },
     },
     // Read outside the transaction, on every path including the preflight: a steer stranded by

@@ -127,6 +127,32 @@ class LandingStepsTest {
         assertNull(LandingSteps.checksDurationMs(emptyList()))
     }
 
+    /** A landing check its task is exempt from (D5) is skipped, not failed: web's `landingCheckTaskExempt` and the Skipped step.
+     *  Ported from main's second Android port (33b4952524) onto this project's `taskExempt(step)` / `exemptReason`. */
+    @Test fun aTaskExemptLandingCheckIsSkippedNotFailed() {
+        val reason = "Only moves cron entries"
+        val accepted = line("CHECK_FINISHED", "Task acceptance passed · 14s", check = "TASK_ACCEPTANCE", exit = 0)
+        val exempt = line("CHECK_FINISHED", "Landing check skipped · this task is exempt: $reason", check = "LANDING_CHECK")
+            .copy(data = buildJsonObject { put("skipped", "TASK_EXEMPT"); put("reason", reason); put("timedOut", false) })
+        fun stepOf(vararg entries: LandingEntry) = LandingSteps.steps(entries.toList(), "LAND_TASK").single()
+        assertEquals(exempt, LandingSteps.taskExempt(stepOf(exempt)))
+        assertEquals(reason, LandingSteps.exemptReason(exempt))
+        assertNull(LandingSteps.taskExempt(stepOf(accepted)))
+        // Only a finished check carries it, and only TASK_EXEMPT: a paths-exempt skip is another line.
+        assertNull(LandingSteps.taskExempt(stepOf(exempt.copy(kind = "CHECK_STARTED"))))
+        assertNull(LandingSteps.taskExempt(stepOf(exempt.copy(data = buildJsonObject { put("skipped", "PATHS_EXEMPT") }))))
+        // A reason the server left out: the row reads Exempt alone.
+        assertNull(LandingSteps.exemptReason(exempt.copy(data = buildJsonObject { put("skipped", "TASK_EXEMPT") })))
+
+        val steps = LandingSteps.steps(listOf(accepted, exempt), "LAND_TASK")
+        assertEquals(listOf("check:TASK_ACCEPTANCE", "check:LANDING_CHECK"), steps.map { it.key })
+        assertEquals(listOf(false, false), steps.map { LandingSteps.failed(it, "LAND_TASK") })
+        assertEquals(listOf(null, exempt), steps.map(LandingSteps::taskExempt))
+        // The same line under a failing exit code still fails: only the skip is exempt.
+        val failed = line("CHECK_FINISHED", "Landing check failed · exit 1", check = "LANDING_CHECK", exit = 1)
+        assertTrue(LandingSteps.failed(LandingSteps.steps(listOf(failed), "LAND_TASK").single(), "LAND_TASK"))
+    }
+
     /** The words, as the web writes them; the tool rows' status words, as the chat's own tool rows say them. */
     @Test fun theWordsAreTheWebs() {
         val root = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }.first { File(it, "src/web/src/lib").isDirectory }

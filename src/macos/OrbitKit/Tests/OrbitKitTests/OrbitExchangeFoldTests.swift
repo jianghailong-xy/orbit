@@ -100,15 +100,16 @@ final class OrbitExchangeFoldTests: XCTestCase {
         }
     }
 
+    /// A scheduled wakeup: a background job's news draws nothing at all, so it has no line to fold under
+    /// (`BgJobCard`; web parity: Transcript.orbitFold.test.tsx).
     private func jobWake(_ id: String, _ name: String) -> [String: Any] {
         let wake = [
-            "<background-job-wake>",
-            "  A background job you started with bg_run has news you were waiting for; the control plane opened this turn for it:",
-            "    \(id)｜query｜bash q.sh｜\(name)",
-            "      ended｜completed｜exit code 0",
-            "      output /root/.orbit/runs/x/\(id).output｜this covers bytes 0–20",
-            "  The control plane recorded this for you; the user did not write it. Read the whole output with mcp__orbit__bg_output by id.",
-            "</background-job-wake>",
+            "<scheduled-wakeup>",
+            "  The wakeup you asked for with schedule_wakeup is due; the control plane opened this turn for it:",
+            "    2026-11-20T10:00:00.000Z scheduled 300 seconds out, due 2026-11-20T10:05:00.000Z",
+            "    reason: \(id) \(name)",
+            "  The control plane recorded this for you; the user did not say it.",
+            "</scheduled-wakeup>",
         ].joined(separator: "\n")
         return ["text": wake, "controlPlaneNote": wake]
     }

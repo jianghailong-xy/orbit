@@ -356,6 +356,7 @@ public struct ProjectDoneFinding: Codable, Equatable, Sendable {
         case "DONE_TASKS_IN_FLIGHT": template = tasks.count == 1 ? ProjectDone.checkTask : ProjectDone.checkTasks; n = tasks.count
         case "DONE_OWNER_ITEMS_OPEN": template = ProjectDone.checkOwnerItems; n = items.count
         case "DONE_INTEGRATION_IN_FLIGHT": template = ProjectDone.checkLandings; n = jobs.count
+        case "DONE_LANDING_DEFERRED": template = ProjectDone.checkDeferredLandings; n = tasks.count
         default: return message
         }
         return template.replacingOccurrences(of: "{n}", with: String(n)).replacingOccurrences(of: "{main}", with: main)
@@ -524,12 +525,15 @@ public struct ProjectDoneSubject: Equatable, Sendable {
     public let nonCodeMark: NonCodeMark?
     /// The criteria this project moved out to a follow-up (board 02 G).
     public let criteriaMovedOut: [CriterionMovedOut]
+    /// Settings › Translation: the title and criteria in the owner's language, as the document
+    /// carried them — what `shown(owner:showOriginal:)` draws from.
+    public let translation: ProjectTextTranslation?
 
     public init(title: String, status: String?, criteria: [Criterion] = [],
                 derivedDone: ProjectDerivedDone? = nil, doneBy: ProjectDoneBy? = nil,
                 doneAt: String? = nil, acceptedGaps: [AcceptedGap] = [], upstreamRef: String? = nil,
                 projectID: String? = nil, nonCodeMark: NonCodeMark? = nil,
-                criteriaMovedOut: [CriterionMovedOut] = []) {
+                criteriaMovedOut: [CriterionMovedOut] = [], translation: ProjectTextTranslation? = nil) {
         self.title = title
         self.status = status
         self.criteria = criteria
@@ -541,6 +545,7 @@ public struct ProjectDoneSubject: Equatable, Sendable {
         self.projectID = projectID
         self.nonCodeMark = nonCodeMark
         self.criteriaMovedOut = criteriaMovedOut
+        self.translation = translation
     }
 
     /// `isNonCode`: the mark on the project, or on its derived read.
@@ -600,6 +605,7 @@ public enum ProjectDone {
     public static let checkTask = "1 task is still running"
     public static let checkOwnerItems = "Open owner items: {n}"
     public static let checkLandings = "Landings in flight: {n}"
+    public static let checkDeferredLandings = "Landings waiting for work sessions to finish: {n}"
     public static let findingsHeading = "Orbit can’t prove {n} things"
     public static let findingsAccepted = "These will be kept as the gaps you accepted."
     public static let recordAsDoneAnyway = "Record as done anyway"
@@ -776,9 +782,38 @@ public enum ProjectDone {
     public static func tally(_ counts: ProjectDoneCounts?,
                              main: String = RunSettings.defaultMainBranch) -> String {
         guard let counts else { return "" }
+        let notMetCount = notMetCount(counts)
         return (["\(counts.criteria) criteria", "\(counts.met) met",
-                 "\(counts.onMain) \(landedOn(main))"] + reasonParts(counts))
+                 "\(counts.onMain) \(landedOn(main))"] + reasonParts(counts)
+                + (notMetCount > 0 ? ["\(notMetCount) \(notMet)"] : []))
             .joined(separator: " · ")
+    }
+
+    /// The criteria their work has not met, counted apart: `counts.byReason` and `onMain` tally met
+    /// criteria only, so an unmet one is never said by its landing lane. Web's `notMetCount`.
+    static func notMetCount(_ counts: ProjectDoneCounts) -> Int {
+        max(0, counts.criteria - counts.met)
+    }
+
+    /// The tally the page's Record as done confirmation says (G1/G2): the Done tally — unmet
+    /// criteria counted apart as "N not met", never by their landing reason — read off the done
+    /// read's counts. A non-code project reads no landing, so it says how many are met and not met.
+    /// With no counts (an older server) it counts the criteria themselves the same way.
+    public static func recordAsDoneTally(_ document: ProjectDocument?) -> String {
+        let main = RunSettings.mainBranchName(document?.integration?.upstreamRef)
+        if let counts = document?.derivedDone?.counts {
+            guard document?.nonCode == true || document?.derivedDone?.nonCode == true else {
+                return tally(counts, main: main)
+            }
+            let unmet = notMetCount(counts)
+            return (["\(counts.criteria) criteria", "\(counts.met) met"]
+                    + (unmet > 0 ? ["\(unmet) \(notMet)"] : [])).joined(separator: " · ")
+        }
+        let criteria = document?.acceptanceCriteriaItems ?? []
+        let met = criteria.filter { $0.satisfied == true }.count
+        let unmet = criteria.count - met
+        return (["\(criteria.count) criteria", "\(met) met"]
+                + (unmet > 0 ? ["\(unmet) \(notMet)"] : [])).joined(separator: " · ")
     }
 
     /// `projectDoneCardTally` — the request card's counts; its head already says how many criteria
@@ -798,9 +833,13 @@ public enum ProjectDone {
         }
         let noBranch = counts.count(.noBranch)
         let nothing = nothingToLandCount(counts)
+        // The unmet criteria, apart from any landing reason; those waiting for a confirmation are
+        // said by their own part, so none is counted twice.
+        let unmet = max(0, notMetCount(counts) - waitingConfirmation)
         return (["\(counts.met) met", "\(counts.onMain) \(landedOn(main))"]
                 + (noBranch > 0 ? ["\(noBranch) \(reasonLabel(.noBranch))"] : [])
                 + (nothing > 0 ? ["\(nothing) \(nothingToLand)"] : [])
+                + (unmet > 0 ? ["\(unmet) \(notMet)"] : [])
                 + waitPart).joined(separator: " · ")
     }
 
@@ -986,9 +1025,15 @@ public enum ProjectDone {
             .count
     }
 
-    /// How many criteria are still landing — what the Orbit checked line calls running.
+    /// How many criteria are still landing, met or not — what the Orbit checked line calls running.
+    /// Read off the criteria, since `counts.byReason` tallies met criteria only (web's
+    /// `criteriaInFlightCount`).
     public static func runningCount(_ subject: ProjectDoneSubject) -> Int {
-        subject.counts?.count(.inFlight) ?? 0
+        criteriaInFlightCount(subject.derivedDone)
+    }
+
+    public static func criteriaInFlightCount(_ derivedDone: ProjectDerivedDone?) -> Int {
+        derivedDone?.criteria.filter { $0.landingReason == .inFlight }.count ?? 0
     }
 
     // MARK: the receipt

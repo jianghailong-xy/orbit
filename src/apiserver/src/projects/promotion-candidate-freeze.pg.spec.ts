@@ -58,7 +58,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { RunStatus, RunnerStatus, TaskStatus, type PrismaClient } from '@prisma/client';
+import { RunnerStatus, TaskStatus, type Prisma, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { IntegrationJobResultRequest } from '@orbit/shared';
 import { Client } from 'pg';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -68,7 +69,7 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
-import { INTEGRATION_JOB_CLAIM, enqueueForDoneTask } from './project-integration-job';
+import { DELIVERED_IDENTITY_CLEARED, INTEGRATION_JOB_CLAIM, enqueueForDoneTask } from './project-integration-job';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -193,12 +194,12 @@ test('a candidate is not frozen before the work it offers has stopped moving', {
         createdAt: when.createdAt,
         ...(when.finished
           ? {
-            status: RunStatus.SUCCEEDED,
+            turnState: null, 
             finishedAt: when.finished,
             worktreeBranch: when.worktreeBranch ?? branch,
             worktreeDirty: when.worktreeDirty ?? false,
           }
-          : { status: RunStatus.RUNNING }),
+          : { turnState: 'IN_FLIGHT' }),
       },
     });
     return id;
@@ -214,9 +215,38 @@ test('a candidate is not frozen before the work it offers has stopped moving', {
     });
   }
 
+  /**
+   * The DONE as it queued before §12.15 P-M1: over the work as it stood, with sessions still running,
+   * and no identity frozen. A DONE written now leaves a moving task's route to the finish that freezes
+   * it (WORK_MOVING), so this guard is for the rows that predate P-M1 — every landing queued while
+   * its work moved — and for work that moves again after a DONE queued it (a revived session). The
+   * row is produced as that DONE produced it: the enqueue reads the work sessions as settled for the
+   * one statement that routes them, and they are put back as they were, identity unfrozen.
+   */
+  async function enqueueOverMovingWork(tx: Prisma.TransactionClient, taskId: string) {
+    const moving = (await tx.session.findMany({
+      where: { taskId, startsTaskWork: true, deletedAt: null, turnState: 'IN_FLIGHT' }, select: { id: true },
+    })).map((row) => row.id);
+    if (moving.length > 0) {
+      await tx.session.updateMany({
+        where: { id: { in: moving } },
+        data: { turnState: null, finishedAt: new Date()},
+      });
+    }
+    const queued = await enqueueForDoneTask(tx, ownerId, taskId);
+    if (moving.length > 0) {
+      await tx.session.updateMany({
+        where: { id: { in: moving } },
+        data: { turnState: 'IN_FLIGHT', finishedAt: null},
+      });
+      await tx.task.update({ where: { id: taskId }, data: DELIVERED_IDENTITY_CLEARED });
+    }
+    return queued;
+  }
+
   /** Queue this task's candidate, the way the DONE that ended it does (M-F2). */
   async function enqueue(taskId: string) {
-    const queued = await prisma.$transaction((tx) => enqueueForDoneTask(tx, ownerId, taskId));
+    const queued = await prisma.$transaction((tx) => enqueueOverMovingWork(tx, taskId));
     assert.ok(queued.enqueued && queued.kind === 'PROMOTION',
       `the DONE queued no candidate for ${taskId}: ${JSON.stringify(queued)}`);
     return { promotionId: queued.promotionId, jobId: queued.jobId };
@@ -362,7 +392,7 @@ test('a candidate is not frozen before the work it offers has stopped moving', {
       await prisma.session.update({
         where: { id: runningSession },
         data: {
-          status: RunStatus.SUCCEEDED,
+          turnState: null, 
           finishedAt: new Date(),
           worktreeBranch: runningBranch,
           worktreeDirty: false,

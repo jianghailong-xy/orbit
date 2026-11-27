@@ -2,9 +2,11 @@ package io.orbitd.android.schedule
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,9 +18,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -31,6 +36,8 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.withStyle
@@ -41,6 +48,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.orbitd.android.R
+import io.orbitd.android.core.schedule.ConditionWaitingItem
 import io.orbitd.android.core.schedule.ConditionCopy
 import io.orbitd.android.core.schedule.ConditionDisplay
 import io.orbitd.android.core.schedule.ConditionEventView
@@ -53,6 +61,7 @@ import io.orbitd.android.core.schedule.ScheduleDisplay
 import io.orbitd.android.core.schedule.ScheduleRule
 import io.orbitd.android.core.schedule.ScheduleRunView
 import io.orbitd.android.core.schedule.ScheduleView
+import io.orbitd.android.core.schedule.ScheduleWaitingItem
 import io.orbitd.android.ui.LocalOrbitColors
 import java.time.Instant
 import kotlinx.coroutines.delay
@@ -144,17 +153,22 @@ internal fun scheduleClock(iso: String?, timezone: String): String =
 private data class ScheduleRowModel(val id: String, val circle: ScheduleDisplay.CircleView, val title: String, val line: String,
     val repeats: Boolean, val time: String, val draft: Boolean, val paused: Boolean,
     /** A condition's row: the newest reading and its age, where a timed row shows its time (board ④ ②). */
-    val reading: ConditionDisplay.RowReading? = null, val open: () -> Unit)
+    val reading: ConditionDisplay.RowReading? = null,
+    /** The planned end, on its own line so the row's line never cuts it off. */
+    val end: String? = null,
+    /** A schedule's own row, which a long press opens the menu of, with its last run's session. */
+    val schedule: ScheduleView? = null, val lastSession: String? = null, val open: () -> Unit)
 
 /**
  * The Scheduled page: "Scheduled 6" and the workspace filter, the timeline's groups, the line at the end, and the detail sheet of
  * the row pressed. [focused] — a schedule a push or a card named — opens its sheet. [workspaces] are the quick-add line's choices,
  * [preferredWorkspace] is the initial choice. [openSession] opens a draft's conversation, and [openRun] opens a run's session.
- * [change] starts a conversation in the schedule's workspace.
+ * [change] opens the schedule's draft change conversation (§8.2).
  */
 @Composable
 fun ScheduledPage(store: ScheduledStore, workspaces: List<Pair<String, String>>, preferredWorkspace: String?, focused: String?,
-    openSession: (String) -> Unit, openRun: (String) -> Unit, change: (ScheduleView) -> Unit, openTask: (String) -> Unit = {}) {
+    openSession: (String) -> Unit, openRun: (String) -> Unit, change: (ScheduleView) -> Unit, openTask: (String) -> Unit = {},
+    waiting: List<ScheduleWaitingItem> = emptyList(), conditionWaiting: List<ConditionWaitingItem> = emptyList(), answered: () -> Unit = {}) {
     val state by store.state.collectAsState()
     val zone = store.timezone
     LaunchedEffect(store) { store.loadNow() }
@@ -166,8 +180,36 @@ fun ScheduledPage(store: ScheduledStore, workspaces: List<Pair<String, String>>,
     val empty = state.loaded && state.shownSchedules.isEmpty() && state.drafts.isEmpty() && state.shownWaitingTasks.isEmpty() &&
         state.workspaceFilter == null
     var typed by rememberSaveable { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    // The schedule a row's menu asked to rename or delete, while the question is up.
+    var renaming by rememberSaveable(stateSaver = RenamingSaver) { mutableStateOf<Renaming?>(null) }
+    var deleting by remember { mutableStateOf<ScheduleView?>(null) }
+    val menu = ScheduleMenu(
+        runNow = { s -> scope.launch { store.runNow(s.id) } },
+        toggle = { s -> scope.launch { if (s.state == "PAUSED" || s.state == "HELD") store.resume(s.id) else store.pause(s.id) } },
+        rename = { s -> renaming = Renaming(s.id, s.title) },
+        change = { s -> store.inspect(null); change(s) },
+        openLastRun = openRun,
+        delete = { s -> deleting = s },
+    )
     LazyColumn(Modifier.fillMaxSize().testTag("scheduled-page"), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
         item(key = "header") { ScheduledHeader(store, state) }
+        // A condition's items (the can't-read card and the 30-day question, condition-triggers board ⑥ ①) and a scheduled task's
+        // (failed, held, a run's approval, a run asking for more), whole, under the head: each answers at its own doors. There is no
+        // Waiting on you page (docs/mocks/waiting-on-you-removal; the owner, 2026-11-16); the run's session draws its own.
+        items(conditionWaiting, key = { "condition-waiting:${it.id}" }) { item ->
+            Box(Modifier.padding(vertical = 6.dp).testTag("scheduled-waiting:${item.id}")) {
+                ConditionWaitingCard(item, store, openSchedule = { id -> store.inspect(id); store.loadDetail(id) }, openTask = openTask,
+                    answered = answered)
+            }
+        }
+        items(waiting, key = { "schedule-waiting:${it.id}" }) { item ->
+            val openSchedule: (String) -> Unit = { id -> store.inspect(id); store.loadDetail(id) }
+            Box(Modifier.padding(vertical = 6.dp).testTag("scheduled-waiting:${item.id}")) {
+                ScheduleWaitingCard(item, store, openSession = openRun, openSchedule = openSchedule,
+                    openAgentSettings = { openSchedule(item.scheduleId) }, answered = answered)
+            }
+        }
         if (empty) {
             item(key = "lead") {
                 Text(SC.Empty.lead, Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.bodyMedium,
@@ -182,7 +224,7 @@ fun ScheduledPage(store: ScheduledStore, workspaces: List<Pair<String, String>>,
             groups.forEach { group ->
                 item(key = "group-${group.id}") { GroupHeader(group) }
                 val rows = rows(group, state, store, zone, now, openRun, openTask, state.pageRuns)
-                items(rows, key = { it.id }) { row -> ScheduleRow(row) }
+                items(rows, key = { it.id }) { row -> ScheduleRow(row, menu) }
             }
             item(key = "quick-add") { QuickAddLine(store, typed, { typed = it }, workspaces, preferredWorkspace) }
         }
@@ -195,6 +237,84 @@ fun ScheduledPage(store: ScheduledStore, workspaces: List<Pair<String, String>>,
     state.draftPanel?.let { panel ->
         ScheduleDraftSheet(store, panel, close = store::closeDraftPanel) { store.closeDraftPanel(); openSession(panel.sessionId) }
     }
+    renaming?.let { ScheduleRenameDialog(store, it) { renaming = null } }
+    deleting?.let { ScheduleDeleteDialog(store, it) { deleting = null } }
+}
+
+/** The schedule being renamed and the name it had when asked. */
+private data class Renaming(val id: String, val title: String)
+
+private val RenamingSaver = listSaver<Renaming?, String>(save = { r -> r?.let { listOf(it.id, it.title) }.orEmpty() },
+    restore = { Renaming(it[0], it[1]) })
+
+/** What a schedule row's long-press menu does. */
+private class ScheduleMenu(val runNow: (ScheduleView) -> Unit, val toggle: (ScheduleView) -> Unit, val rename: (ScheduleView) -> Unit,
+    val change: (ScheduleView) -> Unit, val openLastRun: (String) -> Unit, val delete: (ScheduleView) -> Unit)
+
+@Composable
+private fun MenuItem(title: String, icon: Int, tag: String, danger: Boolean = false, press: () -> Unit) {
+    val color = if (danger) scheduleRed() else MaterialTheme.colorScheme.onSurface
+    DropdownMenuItem(text = { Text(title, color = color) }, onClick = press, modifier = Modifier.testTag(tag),
+        leadingIcon = { Icon(painterResource(icon), null, Modifier.size(20.dp), tint = color) })
+}
+
+/** A schedule row's long-press menu, as the iPhone's (`ScheduleRowActions`): Run now (not while held), Pause or Resume,
+ * Rename…, Change…, Open last run, then Delete, which asks first. */
+@Composable
+private fun ColumnScope.ScheduleRowMenu(s: ScheduleView, lastSession: String?, menu: ScheduleMenu, dismiss: () -> Unit) {
+    fun pick(press: () -> Unit) { dismiss(); press() }
+    val resumes = s.state == "PAUSED" || s.state == "HELD"
+    // A held schedule's Run now is refused until it is resumed (SCHEDULE_HELD).
+    if (s.state != "HELD") MenuItem(SC.Actions.runNow, R.drawable.ic_bolt, "schedule-menu-run-now") { pick { menu.runNow(s) } }
+    MenuItem(if (resumes) SC.Actions.resume else SC.Actions.pause, if (resumes) R.drawable.ic_play else R.drawable.ic_pause,
+        "schedule-menu-toggle") { pick { menu.toggle(s) } }
+    MenuItem(SC.Actions.rename, R.drawable.ic_edit, "schedule-menu-rename") { pick { menu.rename(s) } }
+    MenuItem(SC.Actions.change, R.drawable.ic_sessions, "schedule-menu-change") { pick { menu.change(s) } }
+    lastSession?.let { session ->
+        MenuItem(SC.Actions.openLastRun, R.drawable.ic_arrow_forward, "schedule-menu-open-last-run") { pick { menu.openLastRun(session) } }
+    }
+    HorizontalDivider()
+    MenuItem(SC.Actions.delete, R.drawable.ic_trash, "schedule-menu-delete", danger = true) { pick { menu.delete(s) } }
+}
+
+/** Rename… (§8.4, board schedule-rename 01-board-2; the iPhone's alert): one field holding the current name, selected,
+ * Save off while it is empty or unchanged. */
+@Composable
+private fun ScheduleRenameDialog(store: ScheduledStore, renaming: Renaming, dismiss: () -> Unit) {
+    var draft by rememberSaveable(renaming.id, stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(renaming.title, TextRange(0, renaming.title.length)))
+    }
+    val focus = remember { FocusRequester() }
+    val savable = ScheduleDisplay.renameTitle(draft.text, renaming.title) != null
+    fun save() {
+        if (!savable) return
+        val text = draft.text
+        dismiss()
+        // On the store's scope: the dialog is gone once pressed.
+        store.renameNow(renaming.id, text, renaming.title)
+    }
+    AlertDialog(onDismissRequest = dismiss, modifier = Modifier.testTag("schedule-rename-dialog"),
+        title = { Text(SC.RenameAlert.title) },
+        text = {
+            // Scrolls, so a keyboard that squeezes the dialog can't set the field relaying out every frame (API 30).
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(SC.RenameAlert.body)
+                OutlinedTextField(draft, { draft = it }, Modifier.fillMaxWidth().focusRequester(focus).testTag("schedule-rename-field"),
+                    placeholder = { Text(SC.History.fields.getValue("title")) }, singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { save() }))
+                LaunchedEffect(Unit) { focus.requestFocus() }
+            }
+        },
+        confirmButton = { TextButton(::save, Modifier.testTag("schedule-rename-save"), enabled = savable) { Text(SC.RenameAlert.save) } },
+        dismissButton = { TextButton(dismiss, Modifier.testTag("schedule-rename-cancel")) { Text(SC.RenameAlert.cancel) } })
+}
+
+@Composable
+private fun ScheduleDeleteDialog(store: ScheduledStore, s: ScheduleView, dismiss: () -> Unit) {
+    AlertDialog(onDismissRequest = dismiss,
+        title = { Text(ScheduleDisplay.deleteTitle(s.title)) }, text = { Text(SC.DeleteConfirm.body) },
+        confirmButton = { TextButton(onClick = { dismiss(); store.deleteNow(s.id) }) { Text(SC.DeleteConfirm.confirm, color = scheduleRed()) } },
+        dismissButton = { TextButton(onClick = dismiss) { Text(SC.DeleteConfirm.cancel) } })
 }
 
 /** "Scheduled 6" in the boards' blue, the ⋯ menu with Show past runs, and the workspace filter under it (board 01 ②). */
@@ -283,6 +403,14 @@ private fun rows(group: ScheduleDisplay.TimelineGroup, state: ScheduledStore.Sta
                 else { store.inspect(s.id); store.loadDetail(s.id) }
             }
         }
+        // A streak of missed slots as one row: "16 slots missed, 01:00–08:30".
+        is ScheduleDisplay.TimelineItem.Missed -> {
+            val s = item.schedule
+            ScheduleRowModel("${group.id}-${item.id}", ScheduleDisplay.runCircle("MISSED"), s.title,
+                ScheduleDisplay.missedText(item.runs, zone), repeats = false, time = scheduleClock(item.at, zone), draft = false, paused = false) {
+                store.inspect(s.id); store.loadDetail(s.id)
+            }
+        }
         is ScheduleDisplay.TimelineItem.Schedule -> {
             val s = item.schedule
             val inPaused = group.key == ScheduleDisplay.GroupKey.paused
@@ -299,26 +427,35 @@ private fun rows(group: ScheduleDisplay.TimelineGroup, state: ScheduledStore.Sta
                 val cantRead = s.condition?.cantRead == true
                 return@map ScheduleRowModel("${group.id}-${item.id}", circle, s.title,
                     parts.joinToString(SC.separator), repeats = true, time = "", draft = false, paused = inPaused,
-                    reading = if (cantRead || inPaused) null else s.condition?.let { ConditionDisplay.rowReading(it, now) }) {
+                    reading = if (cantRead || inPaused) null else s.condition?.let { ConditionDisplay.rowReading(it, now) },
+                    schedule = s, lastSession = lastSession(state, s)) {
                     store.inspect(s.id); store.loadDetail(s.id)
                 }
             }
-            ScheduleRowModel("${group.id}-${item.id}", circle, s.title, ScheduleDisplay.phoneRowLine(s.rule, s.workspaceName, s.accessLevel, s.state, s.heldReason, pausedAt, zone),
-                ScheduleDisplay.ruleRepeats(s.rule), time, draft = false, paused = inPaused) {
+            val line = ScheduleDisplay.phoneRowLine(s.rule, s.workspaceName, s.accessLevel, s.state, s.heldReason, pausedAt, zone)
+            ScheduleRowModel("${group.id}-${item.id}", circle, s.title, line,
+                ScheduleDisplay.ruleRepeats(s.rule), time, draft = false, paused = inPaused, end = ScheduleDisplay.endText(s, now, zone),
+                schedule = s, lastSession = lastSession(state, s)) {
                 store.inspect(s.id); store.loadDetail(s.id)
             }
         }
     }
 }
 
+private fun lastSession(state: ScheduledStore.State, s: ScheduleView): String? = (state.detail(s.id)?.lastRun ?: s.lastRun)?.sessionId
+
 /** When a schedule was paused: its newest revision that paused it. */
 private fun pausedAt(detail: ScheduleDetailResponse?): Instant? = detail?.history
     ?.firstOrNull { (it.after["state"] as? JsonPrimitive)?.contentOrNull == "PAUSED" }?.let { ScheduleDisplay.parse(it.createdAt) }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ScheduleRow(row: ScheduleRowModel) {
+private fun ScheduleRow(row: ScheduleRowModel, menu: ScheduleMenu) {
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
-    Column(Modifier.fillMaxWidth().clickable(onClick = row.open).padding(vertical = 8.dp).testTag("schedule-row")) {
+    var menuOpen by remember { mutableStateOf(false) }
+    val press = if (row.schedule == null) Modifier.clickable(onClick = row.open) else Modifier.combinedClickable(
+        onLongClickLabel = "Options for ${row.title}", onLongClick = { menuOpen = true }, onClick = row.open)
+    Column(Modifier.fillMaxWidth().then(press).padding(vertical = 8.dp).testTag("schedule-row")) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(Modifier.padding(top = 1.dp)) { ScheduleCircleGlyph(row.circle) }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -341,8 +478,11 @@ private fun ScheduleRow(row: ScheduleRowModel) {
                 // One line, the phone's short grammar; the tail gives way if it must.
                 Text((if (row.repeats) "↻ " else "") + row.line, style = MaterialTheme.typography.bodySmall, color = secondary,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
+                // The planned end on its own line: "until 23:00 today · 3 runs left" is the part a reader must not lose.
+                row.end?.let { Text(it, Modifier.testTag("schedule-row-end"), style = MaterialTheme.typography.bodySmall, color = secondary) }
             }
         }
+        row.schedule?.let { s -> DropdownMenu(menuOpen, { menuOpen = false }) { ScheduleRowMenu(s, row.lastSession, menu) { menuOpen = false } } }
     }
 }
 
@@ -393,6 +533,7 @@ private fun ScheduleDetailSheet(store: ScheduledStore, id: String, close: () -> 
     var confirmingDelete by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var more by remember { mutableStateOf(false) }
+    var renaming by rememberSaveable(id, stateSaver = RenamingSaver) { mutableStateOf<Renaming?>(null) }
     LaunchedEffect(id) { store.loadDetail(id) }
     val s = state.schedule(id)
     ModalBottomSheet(onDismissRequest = close, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -406,7 +547,14 @@ private fun ScheduleDetailSheet(store: ScheduledStore, id: String, close: () -> 
                 Box {
                     IconButton(onClick = { more = true }, Modifier.testTag("schedule-detail-more")) { Icon(painterResource(R.drawable.ic_more), "More") }
                     DropdownMenu(more, { more = false }) {
-                        DropdownMenuItem(text = { Text(SC.Actions.delete, color = scheduleRed()) }, onClick = { more = false; confirmingDelete = true })
+                        MenuItem(SC.Actions.rename, R.drawable.ic_edit, "schedule-detail-rename") {
+                            more = false
+                            s?.let { renaming = Renaming(it.id, it.title) }
+                        }
+                        HorizontalDivider()
+                        MenuItem(SC.Actions.delete, R.drawable.ic_trash, "schedule-detail-delete", danger = true) {
+                            more = false; confirmingDelete = true
+                        }
                     }
                 }
             }
@@ -421,7 +569,7 @@ private fun ScheduleDetailSheet(store: ScheduledStore, id: String, close: () -> 
             LaunchedEffect(conditionId) { conditionId?.let(store::loadCondition) }
             // A WHEN rule has no time, so its zone says nothing.
             val meta = listOfNotNull(ScheduleDisplay.ruleText(s.rule, ScheduleDisplay.RuleForm.short), s.timezone.takeIf { conditionId == null },
-                s.workspaceName, ScheduleDisplay.accessCopy(s.accessLevel).label).joinToString(SC.separator)
+                s.workspaceName, ScheduleDisplay.accessCopy(s.accessLevel).label, ScheduleDisplay.endText(s, now, zone)).joinToString(SC.separator)
             val next = s.nextDueAt?.let(ScheduleDisplay::parse)?.let { ScheduleDisplay.whenText(it, now, zone) } ?: "—"
             val lastLine = lastRun?.let { run ->
                 val at = ScheduleDisplay.parse(run.startedAt ?: run.plannedAt)?.let { ScheduleDisplay.whenText(it, now, zone) }.orEmpty()
@@ -469,10 +617,8 @@ private fun ScheduleDetailSheet(store: ScheduledStore, id: String, close: () -> 
             HistorySection(store, s, detail, condition, now, zone, openSession)
         }
     }
-    if (confirmingDelete && s != null) AlertDialog(onDismissRequest = { confirmingDelete = false },
-        title = { Text(ScheduleDisplay.deleteTitle(s.title)) }, text = { Text(SC.DeleteConfirm.body) },
-        confirmButton = { TextButton(onClick = { confirmingDelete = false; scope.launch { store.delete(s.id) } }) { Text(SC.DeleteConfirm.confirm, color = scheduleRed()) } },
-        dismissButton = { TextButton(onClick = { confirmingDelete = false }) { Text(SC.DeleteConfirm.cancel) } })
+    renaming?.let { ScheduleRenameDialog(store, it) { renaming = null } }
+    if (confirmingDelete && s != null) ScheduleDeleteDialog(store, s) { confirmingDelete = false }
 }
 
 @Composable
@@ -567,8 +713,14 @@ private fun HistorySection(store: ScheduledStore, s: ScheduleView, detail: Sched
                     Row(Modifier.fillMaxWidth().testTag("schedule-history-record"), verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Column(Modifier.weight(1f)) {
-                            Text(ScheduleDisplay.recordText(record), style = MaterialTheme.typography.bodyMedium)
+                            Text(ScheduleDisplay.renamedText(record) ?: ScheduleDisplay.recordText(record), style = MaterialTheme.typography.bodyMedium)
                             Text(whenText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            // Asked for in the schedule's change conversation (§8.2): the person's words, opening it.
+                            record.askedText?.takeIf { record.sessionId != null }?.let { asked ->
+                                Text("“$asked”${SC.separator}${SC.ChangeConversation.conversation}",
+                                    Modifier.clickable { record.sessionId?.let(openSession) }.testTag("schedule-history-asked"),
+                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                            }
                         }
                         Chip(who.text, if (who.who == "USER" || who.who == "ALLOWED") ScheduleDisplay.TagTone.new else ScheduleDisplay.TagTone.mute)
                         if (ScheduleDisplay.recordUndoable(record)) TextButton(onClick = { scope.launch { store.undo(s.id, record.revision) } },

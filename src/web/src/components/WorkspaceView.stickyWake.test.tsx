@@ -7,15 +7,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
 
 /**
- * The bar pinned to the top of the transcript, over a turn nobody typed.
+ * The question the pill at the top of the transcript names, over a turn nobody typed.
  *
- * It names the last turn that has scrolled above the fold so a reader halfway down an answer knows
- * what is being answered, and tapping it goes back to that turn. A watch's wake was once one of those
- * turns, named in its card's own words — and so "↑ Watch triggered" took the bar over the reply the
- * agent simply carried on with, and the person's question left the screen. A wake is now one line in
- * the agent's stream, as a background job's news is (BackgroundWakeCard): neither is the head of a
- * round, so the bar keeps naming the question the answer around them belongs to. (iOS holds the same
- * rule in `StickySummary.isAnchor`.)
+ * It names the last turn the person typed above the fold, so a reader scrolled up into an answer knows
+ * what is being answered, and tapping it goes back to that turn. (It was a bar pinned under the header
+ * until the owner folded it into the pill on 2026-11-25.) A watch's wake was once one of those turns,
+ * named in its card's own words — and so "↑ Watch triggered" took the bar over the reply the agent
+ * simply carried on with, and the person's question left the screen. A wake is now one line in the
+ * agent's stream, as a background job's news is (BackgroundWakeCard): neither is the head of a round,
+ * so the question stays the one the answer around them belongs to. (iOS holds the same rule in
+ * `StickySummary.isAnchor`.)
  */
 
 vi.mock('../api', async (importOriginal) => {
@@ -230,15 +231,43 @@ afterEach(async () => {
   }
 });
 
+// jsdom lays nothing out: every scroller here is a 5000 px transcript in a 500 px view, opened at its
+// tail, so the top edge's own page load stays out of it.
+let scrollTops = new WeakMap<Element, number>();
+beforeEach(() => {
+  scrollTops = new WeakMap();
+  Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, get: () => 5000 });
+  Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get: () => 500 });
+  Object.defineProperty(HTMLElement.prototype, 'scrollTop', {
+    configurable: true,
+    get(this: Element) { return scrollTops.get(this) ?? 4500; },
+    set(this: Element, top: number) { scrollTops.set(this, top); },
+  });
+});
+afterEach(() => {
+  for (const key of ['scrollHeight', 'clientHeight', 'scrollTop']) delete (HTMLElement.prototype as unknown as Record<string, unknown>)[key];
+});
+
+const scroller = (): HTMLElement => mounted().querySelector<HTMLElement>('.workspace-sessions:not(.session-col-list)')!;
+/** Moves the transcript to `top`, as the reader's own scroll when `byReader`. */
+const scrollTo = async (top: number, byReader: boolean): Promise<void> => {
+  const el = scroller();
+  await act(async () => {
+    if (byReader) el.dispatchEvent(new Event('wheel'));
+    el.scrollTop = top;
+    el.dispatchEvent(new Event('scroll'));
+  });
+};
+
 /**
- * Mounts the session and waits for the bar to name something.
+ * Mounts the session at its tail and, unless `stayAtTail`, scrolls up off it, where the pill names the
+ * question.
  *
  * jsdom lays nothing out, so every row reports the same empty rectangle and the scanner reads them
- * all as sitting above the fold — which is the state the bar exists for, with the LAST eligible
- * turn as the one it names. A wake after the question is the last turn of all, so a bar that still
- * named it would show here.
+ * all as sitting above the fold, with the LAST turn the person typed as the one named. A wake after the
+ * question is the last turn of all, so a pill that still named it would show here.
  */
-async function mountTranscript(drawn: string | null = '.watch-wake', barShown = true): Promise<void> {
+async function mountTranscript(drawn: string | null = '.watch-wake', stayAtTail = false): Promise<void> {
   const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
   const nextContainer = document.createElement('div');
   const nextRoot = createRoot(nextContainer);
@@ -257,79 +286,102 @@ async function mountTranscript(drawn: string | null = '.watch-wake', barShown = 
   });
   await waitForUi(() => {
     if (drawn) expect(mounted().querySelector(drawn), 'the wake is drawn').not.toBeNull();
-    if (barShown) expect(mounted().querySelector('.chat-sticky-question'), 'the bar names a turn').not.toBeNull();
+    expect(mounted().querySelector('.chat-user'), 'the transcript is drawn').not.toBeNull();
   });
+  await scrollTo(4500, false);
+  if (!stayAtTail) await scrollTo(2000, true);
 }
 
-describe('the sticky bar over a turn a watch queued', { timeout: 60_000 }, () => {
+/** Presses the pill's question. */
+const pressQuestion = async (): Promise<void> => {
+  await act(async () => {
+    mounted().querySelector<HTMLElement>('.chat-older-mine')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
+};
+
+describe('the question over a turn a watch queued', { timeout: 60_000 }, () => {
   it('keeps naming the question the answer around it belongs to', async () => {
     await mountTranscript();
 
-    expect(text('.chat-sticky-label')).toBe('↑ Your question');
-    expect(text('.chat-sticky-text')).toBe(TYPED);
+    await waitForUi(() => expect(text('.chat-older-mine')).toBe(TYPED));
     // The wake is still drawn, in its own words, as the line in the answer it is.
     expect(text('.watch-wake .bgwake-title')).toBe('Watch triggered');
     expect(text('.watch-wake-why')).toBe(IN_WORDS);
     // And never the payload the agent was handed: a head line with a raw UUID in it.
-    const bar = text('.chat-sticky-question');
-    expect(bar).not.toContain(WATCH);
-    expect(bar).not.toContain('Orbit Watch');
-    expect(bar).not.toContain('Watch triggered');
+    const pill = text('.workspace-header-jump');
+    expect(pill).not.toContain(WATCH);
+    expect(pill).not.toContain('Orbit Watch');
+    expect(pill).not.toContain('Watch triggered');
   });
 
   it('goes back to that question when tapped, not to the line in its answer', async () => {
     await mountTranscript();
+    await waitForUi(() => expect(text('.chat-older-mine')).toBe(TYPED));
 
     const question = mounted().querySelector<HTMLElement>('.chat-user[data-seq="1"]')!;
     expect(question, 'the question is drawn as the person’s bubble').not.toBeNull();
-    await act(async () => {
-      mounted()
-        .querySelector<HTMLElement>('.chat-sticky-question')!
-        .dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
+    await pressQuestion();
 
     expect(scrolledTo).toEqual([question]);
   });
 
-  it('still calls a turn the person typed their question', async () => {
-    // The same session with the wake taken out: the bar names the last thing they typed, in the
-    // words they typed it, exactly as it always has.
+  it('still names a turn the person typed', async () => {
+    // The same session with the wake taken out: the pill names the last thing they typed, in the
+    // words they typed it.
     vi.mocked(getSessionEventPage).mockResolvedValue({ events: EVENTS.slice(0, 2), hasMore: false } as never);
     await mountTranscript(null);
 
-    expect(text('.chat-sticky-label')).toBe('↑ Your question');
-    expect(text('.chat-sticky-text')).toBe(TYPED);
+    await waitForUi(() => expect(text('.chat-older-mine')).toBe(TYPED));
   });
 });
 
-describe('the sticky bar over a background job’s news', { timeout: 60_000 }, () => {
+describe('the question at the live tail', { timeout: 60_000 }, () => {
+  // The owner, 2026-11-25: the sticky bar is gone, and its question is in the pill, which shows only
+  // once the reader has scrolled up off the tail.
+  it('is not shown, and there is no bar under the header', async () => {
+    vi.mocked(getSessionEventPage).mockResolvedValue({ events: EVENTS.slice(0, 2), hasMore: false } as never);
+    await mountTranscript(null, true);
+    await act(async () => {});
+
+    expect(mounted().querySelector('.chat-older-mine')).toBeNull();
+    expect(mounted().querySelector('.chat-sticky-question')).toBeNull();
+  });
+
+  it('is shown in the pill once the reader scrolls up, still with no bar', async () => {
+    vi.mocked(getSessionEventPage).mockResolvedValue({ events: EVENTS.slice(0, 2), hasMore: false } as never);
+    await mountTranscript(null);
+
+    await waitForUi(() => expect(text('.chat-older-mine')).toBe(TYPED));
+    expect(mounted().querySelector('.chat-sticky-question')).toBeNull();
+    // The way back to the beginning sits beside it, as an icon that still says what it does.
+    expect(mounted().querySelector('.chat-older-start')?.getAttribute('aria-label')).toBe('Jump to the beginning');
+  });
+});
+
+describe('the question over a background job’s news', { timeout: 60_000 }, () => {
   // The job's news is a line inside the answer the agent is still giving, not the head of a new
   // round: the bar kept being taken by it — "Background job finished" over an answer to the
   // person's question — and with a run of jobs the question was never on screen at all.
   it('keeps naming the question the answer around it belongs to', async () => {
     vi.mocked(getSessionEventPage).mockResolvedValue({ events: JOB_EVENTS, hasMore: false } as never);
-    await mountTranscript('.bgwake');
+    await mountTranscript(null);
+    // The news itself draws nothing now (job-card board C1): the job's own card says it (JobCard).
+    expect(mounted().querySelector('.bgwake')).toBeNull();
 
-    expect(text('.chat-sticky-label')).toBe('↑ Your question');
-    expect(text('.chat-sticky-text')).toBe(TYPED);
+    await waitForUi(() => expect(text('.chat-older-mine')).toBe(TYPED));
 
     // And tapping it goes back to that question, not to the line in the middle of its answer.
     const question = mounted().querySelector<HTMLElement>('.chat-user[data-seq="1"]')!;
     expect(question, 'the question is drawn as the person’s bubble').not.toBeNull();
-    await act(async () => {
-      mounted()
-        .querySelector<HTMLElement>('.chat-sticky-question')!
-        .dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
+    await pressQuestion();
     expect(scrolledTo).toEqual([question]);
   });
 });
 
-describe('the sticky bar over a fact told to the coordinator', { timeout: 60_000 }, () => {
-  // A fact Orbit tells the coordinator is the head of a round — the reply under it answers it — so the
-  // question above it no longer heads what is on screen. But nobody typed it, and the owner ruled on
-  // 2026-11-14 that a machine's message never appears on the bar ("↑ Evidence to review" over a
-  // coordinator's reply): over it the bar is hidden.
+describe('the question over a fact told to the coordinator', { timeout: 60_000 }, () => {
+  // A fact Orbit tells the coordinator is the head of a round — the reply under it answers it. But
+  // nobody typed it, and the owner ruled on 2026-11-14 that a machine's message is never named ("↑
+  // Evidence to review" over a coordinator's reply): the question is the person's last one before it.
   const TITLE = 'Wiki model queue: one claim can take more requests than the concurrency room';
   const TOLD = 'From Orbit · project “Runner link v1” has a revision of completion evidence for you to decide\n\n'
     + `Task “${TITLE}” (34nmQgDgyywHNIUtjb9TD) submitted revision 1 of its completion evidence.`;
@@ -354,25 +406,100 @@ describe('the sticky bar over a fact told to the coordinator', { timeout: 60_000
     { seq: 4, type: 'assistant', payload: { text: 'reading revision 1 of the evidence' }, turnId: 'turn-delivery', ts: '2026-09-17T06:00:20Z' },
   ];
 
-  it('hides the bar over it instead of naming a machine’s message', async () => {
+  it('names the person’s question before it instead of a machine’s message', async () => {
     vi.mocked(getSessionEventPage).mockResolvedValue({ events: DELIVERY_EVENTS, hasMore: false } as never);
-    await mountTranscript('.coordinator-delivery', false);
+    await mountTranscript('.coordinator-delivery');
 
     expect(mounted().querySelector('.coordinator-delivery[data-seq="3"]'), 'the delivery is drawn as its line').not.toBeNull();
     expect(mounted().querySelector('.chat-user[data-seq="3"]'), 'drawn as the owner’s bubble').toBeNull();
-    // The owner's question sits above it and is drawn, so a bar would have shown by now if it named anything.
-    expect(mounted().querySelector('.chat-user[data-seq="1"]')).not.toBeNull();
-    await act(async () => {});
-    expect(mounted().querySelector('.chat-sticky-question')).toBeNull();
+    await waitForUi(() => expect(text('.chat-older-mine')).toBe(TYPED));
+    expect(text('.workspace-header-jump')).not.toContain('revision of completion evidence');
   });
 
-  it('without its card is the bubble it was, and the bar calls it the owner’s question', async () => {
+  it('without its card is the bubble it was, and the pill names it as the owner’s question', async () => {
     // The negative control: the same words with nothing recorded beside them are read as typed.
     const bare = DELIVERY_EVENTS.map((event) => (event.seq === 3 ? { ...event, payload: { text: TOLD } } : event));
     vi.mocked(getSessionEventPage).mockResolvedValue({ events: bare, hasMore: false } as never);
     await mountTranscript(null);
 
-    expect(text('.chat-sticky-label')).toBe('↑ Your question');
-    expect(text('.chat-sticky-text')).toContain('has a revision of completion evidence');
+    await waitForUi(() => expect(text('.chat-older-mine')).toContain('has a revision of completion evidence'));
+  });
+});
+
+describe('the question on a page not loaded yet', { timeout: 60_000 }, () => {
+  // In a coordinator whose last page is nothing but turns Orbit opened, the person's own last message
+  // is out of the window: once the reader has left the tail it is found a page at a time, and named
+  // only once it is found.
+  const TOLD = 'From Orbit · project “Runner link v1” has a revision of completion evidence for you to decide';
+  const TAIL = [
+    {
+      seq: 300,
+      type: 'user',
+      payload: {
+        text: TOLD,
+        coordinatorDelivery: {
+          kind: 'EVIDENCE_SUBMITTED',
+          task: { id: TASK, title: 'Pause on the project row' },
+          revision: 1,
+          count: null,
+          deliveredAt: '2026-09-17T06:00:00.000Z',
+        },
+      },
+      turnId: 'turn-delivery',
+      ts: '2026-09-17T06:00:00Z',
+    },
+    { seq: 301, type: 'assistant', payload: { text: 'reading revision 1 of the evidence' }, turnId: 'turn-delivery', ts: '2026-09-17T06:00:20Z' },
+  ];
+  const OLDER = [
+    ...EVENTS.slice(0, 2),
+    ...Array.from({ length: 3 }, (_, i) => ({ seq: 10 + i, type: 'assistant', payload: { text: `step ${i}` }, turnId: 'turn-typed', ts: '2026-09-17T05:10:00Z' })),
+  ];
+
+  beforeEach(() => {
+    vi.mocked(getSessionEventPage).mockImplementation((async (_id: string, opts?: { before?: number }) =>
+      opts?.before == null ? { events: TAIL, hasMore: true } : { events: OLDER, hasMore: false }) as never);
+  });
+
+  const olderPagesAsked = (): number =>
+    vi.mocked(getSessionEventPage).mock.calls.filter(([, opts]) => (opts as { before?: number } | undefined)?.before != null).length;
+  /** Mounts a tail page with no turn the person typed in it. */
+  const mountTail = async (): Promise<void> => {
+    const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
+    const nextContainer = document.createElement('div');
+    const nextRoot = createRoot(nextContainer);
+    client = nextClient;
+    container = nextContainer;
+    root = nextRoot;
+    document.body.appendChild(nextContainer);
+    await act(async () => {
+      nextRoot.render(
+        <QueryClientProvider client={nextClient}>
+          <MemoryRouter initialEntries={[`/sessions/${SESSION_PUBLIC}`]}>
+            <WorkspaceView runner={RUNNER} />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+    });
+    await waitForUi(() => expect(mounted().querySelector('.coordinator-delivery')).not.toBeNull());
+    await scrollTo(4500, false);
+  };
+
+  it('loads nothing more while the reader stays at the tail', async () => {
+    await mountTail();
+    await act(async () => {});
+
+    expect(olderPagesAsked()).toBe(0);
+    expect(mounted().querySelector('.chat-older-mine')).toBeNull();
+  });
+
+  it('is found on an older page once the reader scrolls up, and goes to it when pressed', async () => {
+    await mountTail();
+    await scrollTo(2000, true);
+
+    await waitForUi(() => expect(text('.chat-older-mine')).toBe(TYPED));
+    expect(olderPagesAsked()).toBe(1);
+
+    await pressQuestion();
+    expect(scrolledTo).toEqual([mounted().querySelector('.chat-user[data-seq="1"]')]);
   });
 });

@@ -233,7 +233,7 @@ describe('the task panel’s ⋯', { timeout: 60_000 }, () => {
     expect(markdown).toContain('## Dependencies\n\n- Needs: T3b 放开池 slug 的写入口 — Done\n- Unblocks: T7 合并边界 — Open');
     // Its runs in brief — the one in the Trash is not one to send anybody to.
     const runs = markdown.slice(markdown.indexOf('## Runs'));
-    expect(runs).toMatch(/^## Runs\n\n1 run\n\n- Succeeded · .+ · orbit\n$/);
+    expect(runs).toMatch(/^## Runs\n\n1 run\n\n- Finished · .+ · orbit\n$/);
     expect(toast.success).toHaveBeenCalledWith('Markdown copied');
   });
 

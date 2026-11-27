@@ -1,6 +1,7 @@
 package io.orbitd.android.reader
 
 import androidx.compose.runtime.Immutable
+import io.orbitd.android.core.cards.BgJob
 import io.orbitd.android.core.cards.ClaudeRegion
 import io.orbitd.android.core.cards.OwnerChatReply
 import io.orbitd.android.core.realtime.RunEvent
@@ -78,13 +79,18 @@ internal fun transcriptRows(events: List<RunEvent>, receipts: List<JsonObject> =
     }
     val engine = EngineReading(events)
     val awaiting = awaitingTranslation(events)
-    val knownTools = events.filter { it.type == "tool_use" }.mapNotNull { it.toolId() }.toSet()
+    // What is drawn: the events, with a stand-in for each sub-agent call older than the loaded window (withStandIns).
+    val drawn = withStandIns(events)
+    val knownTools = drawn.filter { it.type == "tool_use" }.mapNotNull { it.toolId() }.toSet()
     fun parent(event: RunEvent) = event.parent()?.takeIf(knownTools::contains)
-    val results = events.filter { it.type == "tool_result" && it.toolId() != null }
+    val results = drawn.filter { it.type == "tool_result" && it.toolId() != null }
         .associateBy { parent(it) to it.toolId() }
     val usedResults = mutableSetOf<Long>()
+    // The runner's launch pair for a bg_run job (BgJob.isRunnerJobLaunch): the job's card is its bg_run call, so neither half draws.
+    val runnerJobLaunches = drawn.filter { it.type == "tool_use" && BgJob.isRunnerJobLaunch(it.fields.string("name"), it.toolId(), it.fields["input"]) }
+        .mapNotNull { it.toolId() }.toSet()
     // Only where rows stand moves: what each event says about its turn is still read in the order it happened.
-    val grouped = (if (holdsSteers) SteerDelivery.place(events, receipts).drawn else events).groupBy(::parent)
+    val grouped = (if (holdsSteers) SteerDelivery.place(drawn, receipts).drawn else drawn).groupBy(::parent)
     // How each of the reader's steers came out — but one the engine dropped unread, which a window short of the tail still draws.
     val outcomes = SteerDelivery.outcomes(events, receipts)
     fun steer(e: RunEvent) = if (!SteerDelivery.readersSteer(e)) null
@@ -101,6 +107,7 @@ internal fun transcriptRows(events: List<RunEvent>, receipts: List<JsonObject> =
             // read of claude's transcript would otherwise be a wall of blank "Thinking" lines.
             if (e.type == "thinking" && e.body().isEmpty()) return@mapNotNull null
             if (e.type == "tool_result" && e.seq in usedResults) return@mapNotNull null
+            if (e.type in setOf("tool_use", "tool_result") && e.toolId() in runnerJobLaunches) return@mapNotNull null
             val result = if (e.type == "tool_use") engine.toolFailures[e.toolId()]?.takeIf { e.parent().isNullOrEmpty() }
                 ?: results[parent to e.toolId()] else null
             result?.let { usedResults += it.seq }
@@ -110,8 +117,54 @@ internal fun transcriptRows(events: List<RunEvent>, receipts: List<JsonObject> =
         }.let(::foldThinking)
     }
     // Results may precede calls in a restored partial window; suppress matched results independent of order.
-    events.filter { it.type == "tool_use" }.forEach { e -> results[parent(e) to e.toolId()]?.let { usedResults += it.seq } }
+    drawn.filter { it.type == "tool_use" }.forEach { e -> results[parent(e) to e.toolId()]?.let { usedResults += it.seq } }
     return rows(null, emptySet())
+}
+
+/** The runner's key for a Claude workflow agent's call: `<Workflow call id>:workflow-agent:<agent id>` (runner-go
+ * claude_workflow_transcript.go). */
+private const val WORKFLOW_AGENT_KEY = ":workflow-agent:"
+
+/**
+ * [events] with a stand-in `tool_use` for each call a sub-agent's events nest under that is older than the loaded window (a tail
+ * page that starts in the middle of a long workflow or Agent run), placed just before the first of them. Without it the agent's
+ * replies and steps drew as the session's own, and the result it handed back as a raw "Tool output" row. Web parity: Transcript.tsx
+ * `standInCall`. A workflow agent's key names its Workflow call, so that one stands in too, as a Workflow; a workflow agent's result
+ * with nothing else loaded still gets its card. Loading the older page brings the real call, and the stand-in is not made again.
+ */
+internal fun withStandIns(events: List<RunEvent>): List<RunEvent> {
+    val known = events.filter { it.type == "tool_use" }.mapNotNullTo(HashSet()) { it.toolId() }
+    fun missing(e: RunEvent): Boolean {
+        val parent = e.parent()
+        if (parent.isNullOrEmpty()) return false
+        if (parent !in known) return true
+        val id = e.toolId()
+        return e.type == "tool_result" && id != null && id !in known && id.startsWith(parent + WORKFLOW_AGENT_KEY)
+    }
+    if (events.none(::missing)) return events
+    val out = ArrayList<RunEvent>(events.size + 4)
+    fun standIn(id: String, at: RunEvent, childId: String?) {
+        if (!known.add(id)) return
+        val cut = id.indexOf(WORKFLOW_AGENT_KEY)
+        val workflow = if (cut > 0) id.substring(0, cut) else null
+        if (workflow != null) standIn(workflow, at, id)
+        out += RunEvent("tool_use", at.seq, buildJsonObject {
+            put("id", id)
+            put("name", if (childId?.startsWith(id + WORKFLOW_AGENT_KEY) == true) "Workflow" else "Agent")
+            put("input", buildJsonObject {})
+            workflow?.let { put("parentToolUseId", it) }
+        }, turnId = at.turnId, ts = at.ts)
+    }
+    for (e in events) {
+        val parent = e.parent()
+        if (!parent.isNullOrEmpty()) {
+            val id = e.toolId()
+            standIn(parent, e, id.takeIf { e.type == "tool_use" || e.type == "tool_result" })
+            if (e.type == "tool_result" && id != null && id.startsWith(parent + WORKFLOW_AGENT_KEY)) standIn(id, e, null)
+        }
+        out += e
+    }
+    return out
 }
 
 /**
@@ -315,6 +368,8 @@ internal class EngineReading(events: List<RunEvent>) {
         stderrRows.forEach { row -> rows[row.event.seq] = row.event.row("error") { put("text", row.message) } }
         diagnosticRows.forEach { d -> rows[d.event.seq] = d.event.row("diagnostic") {
             put("label", d.diagnostic.label); put("text", d.diagnostic.line); put("repeats", d.repeats)
+            // The one diagnostic the transcript acts on (Codex's missing bubblewrap) is known by these.
+            d.diagnostic.component?.let { put("component", it) }; d.diagnostic.code?.let { put("code", it) }
         } }
         failures.forEach { f -> toolFailures[f.toolId] = RunEvent("tool_result", f.seq, buildJsonObject {
             put("toolUseId", f.toolId); put("content", f.message); put("isError", true)

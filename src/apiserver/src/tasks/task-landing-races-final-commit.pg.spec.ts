@@ -90,7 +90,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { RunStatus, RunnerStatus, TaskStatus, type PrismaClient } from '@prisma/client';
+import { RunnerStatus, TaskStatus, type Prisma, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { IntegrationJobResultRequest } from '@orbit/shared';
 import { Client } from 'pg';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -107,6 +108,7 @@ import {
 } from '../projects/project-criterion-landing';
 import {
   INTEGRATION_JOB_CLAIM,
+  DELIVERED_IDENTITY_CLEARED,
   enqueueForDoneTask,
   landingBehindTheWorkKey,
   landingLeftWorkBehind,
@@ -245,9 +247,9 @@ test('a landing is not judged before the work it is about has stopped moving', {
         isolationStatus: 'worktree',
         createdAt,
         ...(finish === 'NOT_FINISHED'
-          ? { status: RunStatus.RUNNING }
+          ? { turnState: 'IN_FLIGHT' }
           : {
-            status: RunStatus.SUCCEEDED,
+            turnState: null, 
             finishedAt: new Date(createdAt.getTime() + 60_000),
             worktreeBranch: finish.worktreeBranch ?? branch,
             worktreeDirty: finish.worktreeDirty ?? false,
@@ -267,9 +269,38 @@ test('a landing is not judged before the work it is about has stopped moving', {
     });
   }
 
+  /**
+   * The DONE as it queued before §12.15 P-M1: over the work as it stood, with sessions still running,
+   * and no identity frozen. A DONE written now leaves a moving task's route to the finish that freezes
+   * it (WORK_MOVING), so this guard is for the rows that predate P-M1 — every landing queued while
+   * its work moved — and for work that moves again after a DONE queued it (a revived session). The
+   * row is produced as that DONE produced it: the enqueue reads the work sessions as settled for the
+   * one statement that routes them, and they are put back as they were, identity unfrozen.
+   */
+  async function enqueueOverMovingWork(tx: Prisma.TransactionClient, taskId: string) {
+    const moving = (await tx.session.findMany({
+      where: { taskId, startsTaskWork: true, deletedAt: null, finishedAt: null }, select: { id: true },
+    })).map((row) => row.id);
+    if (moving.length > 0) {
+      await tx.session.updateMany({
+        where: { id: { in: moving } },
+        data: { turnState: null, finishedAt: new Date()},
+      });
+    }
+    const queued = await enqueueForDoneTask(tx, ownerId, taskId);
+    if (moving.length > 0) {
+      await tx.session.updateMany({
+        where: { id: { in: moving } },
+        data: { turnState: 'IN_FLIGHT', finishedAt: null},
+      });
+      await tx.task.update({ where: { id: taskId }, data: DELIVERED_IDENTITY_CLEARED });
+    }
+    return queued;
+  }
+
   /** Queue this task's landing, the way the DONE that ended it does (J-T1a). */
   async function enqueue(taskId: string) {
-    const queued = await prisma.$transaction((tx) => enqueueForDoneTask(tx, ownerId, taskId));
+    const queued = await prisma.$transaction((tx) => enqueueOverMovingWork(tx, taskId));
     assert.ok(queued.enqueued, `the DONE queued no landing for ${taskId}: ${JSON.stringify(queued)}`);
     return queued.enqueued ? queued.jobId : '';
   }
@@ -461,7 +492,7 @@ test('a landing is not judged before the work it is about has stopped moving', {
       await prisma.session.update({
         where: { id: runningSession },
         data: {
-          status: RunStatus.SUCCEEDED,
+          turnState: null, 
           finishedAt: new Date(),
           worktreeBranch: runningBranch,
           worktreeDirty: false,
@@ -531,7 +562,7 @@ test('a landing is not judged before the work it is about has stopped moving', {
       await prisma.session.update({
         where: { id: workSessionId },
         data: {
-          status: RunStatus.SUCCEEDED,
+          turnState: null, 
           finishedAt: new Date(),
           worktreeBranch: 'orbit/autorun-false-91f94d',
           worktreeDirty: false,
@@ -880,14 +911,14 @@ test('a landing is not judged before the work it is about has stopped moving', {
     // (`sessions.service.ts`), so while it runs its branch can move again…
     await prisma.session.update({
       where: { id: guardSession },
-      data: { status: RunStatus.PENDING, finishedAt: null },
+      data: { turnState: 'QUEUED', finishedAt: null},
     });
     // …and its finalize commits what it did onto the branch it ends on and records a NEW finish
     // (SR13): the same branch, with more work on it.
     await prisma.session.update({
       where: { id: guardSession },
       data: {
-        status: RunStatus.SUCCEEDED,
+        turnState: null, 
         finishedAt: new Date(),
         worktreeBranch: guardEndedOn,
         worktreeDirty: false,

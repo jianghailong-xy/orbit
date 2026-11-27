@@ -10,10 +10,12 @@ import { Prisma } from '@prisma/client';
 import { RunEventType } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { LEGACY_STATUS_SELECT } from '../sessions/session-legacy-words';
 import { withSessionState } from '../sessions/session-state';
 import { assertEngineSession } from '../sessions/engine-session';
 import { WikiDocs } from '../wiki/wiki-docs';
 import { currentWikiRollout, wikiDisabledError, wikiOnFor } from '../wiki/wiki-rollout';
+import { documentsDisabledError, documentsEnabled } from '../drive/drive-switch';
 import type { PutShareLinkDto } from './dto';
 import {
   effectiveProjectInclude,
@@ -63,6 +65,7 @@ const ROOT_COLUMN = {
   TASK: 'taskId',
   PROJECT: 'projectId',
   WIKI: 'wikiSpaceId',
+  DRIVE_FILE: 'driveEntryId',
 } as const satisfies Record<ShareRootKind, keyof Prisma.ShareLinkUncheckedCreateInput>;
 
 /** The column a root of each kind is named by, as a `where`/`data` fragment. */
@@ -87,6 +90,8 @@ const LINK_SELECT = {
   taskId: true,
   projectId: true,
   wikiSpaceId: true,
+  driveEntryId: true,
+  driveVersionId: true,
   include: true,
   expiresAt: true,
   revokedAt: true,
@@ -97,7 +102,8 @@ const LINK_SELECT = {
   updatedAt: true,
   session: {
     select: {
-      id: true, title: true, status: true, endReason: true, completedAt: true, archivedAt: true, deletedAt: true,
+      ...LEGACY_STATUS_SELECT,
+      id: true, title: true, completedAt: true, archivedAt: true, deletedAt: true,
     },
   },
   task: { select: { id: true, title: true, status: true } },
@@ -105,12 +111,15 @@ const LINK_SELECT = {
   // The address is read to name the space by its repository's last part, never written out.
   // `deletedAt`: a wiki in Trash pauses its link, as a session in Trash does (contract `space.trash`).
   wikiSpace: { select: { id: true, slug: true, title: true, repoUrlNorm: true, deletedAt: true } },
+  // A drive file in Trash pauses its link. `currentVersionId` says whether the version it is pinned to is still the file's.
+  driveEntry: { select: { id: true, name: true, trashedAt: true, currentVersionId: true } },
 } satisfies Prisma.ShareLinkSelect;
 
 type LinkRow = Prisma.ShareLinkGetPayload<{ select: typeof LINK_SELECT }>;
 
 /** Whether a link's root is in Trash: a session, or a wiki (contract `space.trash`). Its link is paused until it is restored. */
-const rootInTrash = (row: LinkRow): boolean => row.session?.deletedAt != null || row.wikiSpace?.deletedAt != null;
+const rootInTrash = (row: LinkRow): boolean =>
+  row.session?.deletedAt != null || row.wikiSpace?.deletedAt != null || row.driveEntry?.trashedAt != null;
 
 /** A token is 32 characters; anything much longer is not one, and is not worth an index probe. */
 const MAX_TOKEN_LENGTH = 256;
@@ -122,7 +131,9 @@ const OPEN_ATTEMPTS = 3;
 export type ShareRootSummary =
   | { id: string; title: string; status: string; lifecycleState: string; completedAt: Date | string | null }
   | { id: string; title: string; status: string }
-  | { id: string; title: string; slug: string };
+  | { id: string; title: string; slug: string }
+  /** A drive file: its name, and whether the version the link is pinned to is the file's current one. */
+  | { id: string; title: string; pinnedIsCurrent: boolean };
 
 /** How much a session link's two layers hold: Messages, and Tool calls and output. */
 export interface SessionShareCounts {
@@ -162,6 +173,8 @@ export interface OpenLink {
   expiresAt: Date | null;
   /** Set for a session root: the transcript the link serves. */
   sessionId: string | null;
+  /** Set for a drive file root: the version the link serves, whatever the file holds now. */
+  driveVersionId: string | null;
   /** Set for a task, a project or a wiki root (public-task.ts / public-project.ts / public-wiki.ts
    *  project it further). A wiki's title is its name (`wikiSpaceName`), and it has no status. */
   root: { id: string; title: string; status?: string } | null;
@@ -174,8 +187,9 @@ export type ConversationContext =
   | { task: { id: string; title: string; runs: { sessionId: string }[] } }
   | (ProjectConversation & { scope: ProjectScope });
 
-function kindOf(row: { sessionId: string | null; taskId: string | null; wikiSpaceId: string | null }): ShareRootKind {
+function kindOf(row: { sessionId: string | null; taskId: string | null; wikiSpaceId: string | null; driveEntryId: string | null }): ShareRootKind {
   if (row.sessionId) return 'SESSION';
+  if (row.driveEntryId) return 'DRIVE_FILE';
   if (row.taskId) return 'TASK';
   if (row.wikiSpaceId) return 'WIKI';
   return 'PROJECT';
@@ -253,6 +267,7 @@ export class ShareLinksService {
    * be shared (its link, if it has one, stays paused as it is).
    */
   async put(ownerId: string, kind: ShareRootKind, rootId: string, dto: PutShareLinkDto): Promise<ShareLinkView> {
+    if (kind === 'DRIVE_FILE') throw new BadRequestException('a drive file is shared with POST /share-links');
     const root = await this.ownedRoot(ownerId, kind, rootId);
     // A landing session is not a conversation anyone can share (§2.9 LS6). Reading the link it has
     // (GET) is left alone; opening, changing or turning one off is an engine door's act.
@@ -279,6 +294,53 @@ export class ShareLinksService {
       if (open) await this.end({ id: open.id }, now); // past its expiry: settle it EXPIRED first
       const created = await this.insert(ownerId, kind, rootId, mergeInclude(kind, {}, dto.include), expiresAt ?? null);
       if (created) return this.view(await this.rowById(created), now);
+    }
+    throw new ConflictException('this link changed while it was being opened — nothing was changed; try again');
+  }
+
+  /**
+   * Share one drive file, pinned to `versionId` (the version the owner's share check just read): open its link, or move the
+   * link it has to that version (docs/drive-technical-design.md §9). Only the owner's routes call this. The same
+   * version twice changes nothing. A file in Trash cannot be shared.
+   */
+  async putDriveFile(ownerId: string, entryId: string, versionId: string, expiresAtRaw?: string | null): Promise<ShareLinkView> {
+    const root = await this.ownedRoot(ownerId, 'DRIVE_FILE', entryId);
+    if (root.inTrash) throw new ConflictException('this file is in Trash — restore it before sharing it');
+    const version = await this.prisma.driveVersion.findFirst({ where: { id: versionId, ownerId, entryId }, select: { id: true } });
+    if (!version) throw new NotFoundException('version not found');
+    const expiresAt = this.expiryFrom(expiresAtRaw);
+    for (let attempt = 0; attempt < OPEN_ATTEMPTS; attempt++) {
+      const now = new Date();
+      const open = await this.openRow(ownerId, 'DRIVE_FILE', entryId);
+      if (open && linkState(open, false, now).state !== 'ENDED') {
+        const nextExpiry = expiresAt === undefined ? open.expiresAt : expiresAt;
+        if (open.driveVersionId === versionId && (nextExpiry?.getTime() ?? null) === (open.expiresAt?.getTime() ?? null)) {
+          return this.view(open, now);
+        }
+        const moved = await this.prisma.shareLink.updateMany({
+          where: { id: open.id, revokedAt: null },
+          data: { driveVersionId: versionId, expiresAt: nextExpiry, updatedAt: now },
+        });
+        if (moved.count === 1) return this.view(await this.rowById(open.id), now);
+        continue; // it ended between the read and the write: read again
+      }
+      if (open) await this.end({ id: open.id }, now); // past its expiry: settle it EXPIRED first
+      try {
+        const row = await this.prisma.shareLink.create({
+          data: {
+            ownerId,
+            token: randomBytes(24).toString('base64url'),
+            driveEntryId: entryId,
+            driveVersionId: versionId,
+            include: {},
+            expiresAt: expiresAt ?? null,
+          },
+          select: { id: true },
+        });
+        return this.view(await this.rowById(row.id), now);
+      } catch (error) {
+        if (!isUniqueViolation(error)) throw error;
+      }
     }
     throw new ConflictException('this link changed while it was being opened — nothing was changed; try again');
   }
@@ -349,7 +411,9 @@ export class ShareLinksService {
     if (kind === 'WIKI' && !wikiOnFor(currentWikiRollout(), row.ownerId)) throw linkNotFound();
     const root = row.wikiSpace
       ? { id: row.wikiSpace.id, title: wikiSpaceName(row.wikiSpace) }
-      : (row.task ?? row.project);
+      : row.driveEntry
+        ? { id: row.driveEntry.id, title: row.driveEntry.name }
+        : (row.task ?? row.project);
     const include = resolveInclude(kind, row.include);
     return {
       id: row.id,
@@ -359,6 +423,7 @@ export class ShareLinksService {
       sharedAt: row.createdAt,
       expiresAt: row.expiresAt,
       sessionId: row.sessionId,
+      driveVersionId: row.driveVersionId,
       root: kind === 'SESSION' || !root ? null : root,
     };
   }
@@ -411,6 +476,22 @@ export class ShareLinksService {
       readProjectScope(this.prisma, projectId, link.include),
     ]);
     return { root, scope };
+  }
+
+  /** A drive file link's root page: the file's name and the size of the version the link is pinned to. Its bytes are the
+   *  public door's `content` route; nothing the file has since been given reaches here. */
+  async driveFilePage(link: OpenLink): Promise<{ name: string; sizeBytes: number; versionId: string }> {
+    const entryId = this.rootOf(link, 'DRIVE_FILE');
+    // A link made while Drive was on reads, while it is off, as one naming nothing (drive-switch.ts).
+    if (!documentsEnabled()) throw linkNotFound();
+    const version = link.driveVersionId
+      ? await this.prisma.driveVersion.findFirst({
+          where: { id: link.driveVersionId, ownerId: link.ownerId, entryId },
+          select: { id: true, sizeBytes: true },
+        })
+      : null;
+    if (!version) throw linkNotFound();
+    return { name: link.root!.title, sizeBytes: Number(version.sizeBytes), versionId: version.id };
   }
 
   /** A wiki link's root page: the space's written documents by category (public-wiki.ts). */
@@ -477,7 +558,7 @@ export class ShareLinksService {
     return publicTaskAttachmentWhere(this.rootOf(link, 'TASK'), link.include, id);
   }
 
-  private rootOf(link: OpenLink, kind: 'TASK' | 'PROJECT' | 'WIKI'): string {
+  private rootOf(link: OpenLink, kind: 'TASK' | 'PROJECT' | 'WIKI' | 'DRIVE_FILE'): string {
     if (link.kind !== kind || !link.root) throw linkNotFound();
     return link.root.id;
   }
@@ -513,6 +594,12 @@ export class ShareLinksService {
       const space = await this.prisma.wikiSpace.findFirst({ where: { id, ownerId, deletedAt: null }, select: { id: true } });
       if (!space) throw new NotFoundException('no such wiki space');
       return { inTrash: false };
+    }
+    if (kind === 'DRIVE_FILE') {
+      if (!documentsEnabled()) throw documentsDisabledError();
+      const entry = await this.prisma.driveEntry.findFirst({ where: { id, ownerId, kind: 'FILE' }, select: { trashedAt: true } });
+      if (!entry) throw new NotFoundException('file not found');
+      return { inTrash: entry.trashedAt != null };
     }
     const project = await this.prisma.project.findFirst({ where: { id, ownerId }, select: { id: true } });
     if (!project) throw new NotFoundException('project not found');
@@ -626,12 +713,15 @@ export class ShareLinksService {
       return {
         id: session.id,
         title: session.title,
-        status: session.status,
+        status: session.runStatus,
         lifecycleState: session.lifecycleState,
         completedAt: session.completedAt,
       };
     }
     if (row.wikiSpace) return { id: row.wikiSpace.id, title: wikiSpaceName(row.wikiSpace), slug: row.wikiSpace.slug };
+    if (row.driveEntry) {
+      return { id: row.driveEntry.id, title: row.driveEntry.name, pinnedIsCurrent: row.driveEntry.currentVersionId === row.driveVersionId };
+    }
     const root = (row.task ?? row.project)!;
     return { id: root.id, title: root.title, status: root.status };
   }

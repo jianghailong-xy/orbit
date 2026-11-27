@@ -9,16 +9,17 @@ import {
 } from './tasks.service';
 import { encryptSecret } from '../providers/provider-crypto';
 import { QueueService } from '../queue/queue.service';
-import { TASK_OCCUPYING } from './reclaim-stalled-task';
 import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { recordingQueryRaw } from './query-raw-test-helper';
+import { failureClauseOf, matchesFailureFilter } from '../test-support/failure-kind-filter-double';
 
 interface FailureHistory {
   taskId: string;
   /** Failure count, when the failures' text doesn't matter. */
   failed?: number;
-  /** `session.error` of each failed run, when it does (usage-limit filtering); null records none. */
-  errors?: Array<string | null>;
+  /** `session.error` of each failed run, when it does (usage-limit filtering); null records none. A run whose
+   *  runner classified its failure gives its stored kind beside it. */
+  errors?: Array<string | null | { error: string | null; failureKind: string | null }>;
   lastFailedAt: Date;
 }
 
@@ -81,15 +82,12 @@ function poolQueue(members: Array<PlanUsageSnapshot | null>): QueueService {
   return new QueueService(prisma as never, {} as never, planUsage as never);
 }
 
-type ErrorClause = Array<{ error: { contains: string } }>;
 type GroupByArgs = {
   where: {
     taskId: { in: string[] };
-    /**
-     * The usage-limit query: count only failures matching a marker. The budget query: count a
-     * failure that recorded no error text, or one matching no marker.
-     */
-    OR?: Array<{ error: { contains: string } | null } | { NOT: { OR: ErrorClause } }>;
+    /** Released by a failure, and the failure-kind clause: the budget query counts what is not a usage limit, the
+     *  blind brake's query only what is (common/run-failure-kind-filter.ts). */
+    AND?: unknown[];
   };
 };
 
@@ -160,27 +158,17 @@ function makeService(readyTaskIds: string[], history: FailureHistory[], options:
     },
     session: {
       groupBy: async ({ where }: GroupByArgs) => {
-        const clauses = where.OR ?? [];
-        const included = clauses.flatMap((c) =>
-          'error' in c && c.error ? [c.error.contains.toLowerCase()] : []);
-        const excluded = clauses.flatMap((c) =>
-          'NOT' in c ? c.NOT.OR.map((m) => m.error.contains.toLowerCase()) : []);
-        // A NULL `error` matches no marker, and a negated match is not true of it either — so a
-        // query counts one only when it says so.
-        const countsNoText = clauses.some((c) => 'error' in c && c.error === null);
+        // The double answers the failure-kind clause the caller asked, NULLs as Postgres reads them.
+        const clause = failureClauseOf(where);
         // A `failed: n` fixture means n ordinary failures with no usage-limit wording, so it
         // stands in as n empty error strings — counted by the exclusion query, ignored by the
         // inclusion one. Modelling both directions is what lets a test assert that a quota
         // failure and a real failure are held back by different rules.
         const counted = (h: FailureHistory): number => {
           const errors = h.errors ?? Array.from({ length: h.failed ?? 0 }, () => '');
-          return errors.filter((e) => {
-            if (e === null) return countsNoText;
-            const lower = e.toLowerCase();
-            return included.length
-              ? included.some((m) => lower.includes(m))
-              : !excluded.some((m) => lower.includes(m));
-          }).length;
+          return errors
+            .map((e) => (e !== null && typeof e === 'object' ? e : { error: e, failureKind: null }))
+            .filter((row) => matchesFailureFilter(clause, row)).length;
         };
         return history
           .filter((h) => where.taskId.in.includes(h.taskId) && counted(h) > 0)
@@ -463,6 +451,38 @@ test('a genuine failure still counts when quota failures are mixed in', async ()
   assert.deepEqual(executed, []);
 });
 
+// A runner that classifies its failures (docs/routing-account-health-design.md §5.4): its kind decides, the words
+// only when it sent none. An older runner's runs above are read through the markers exactly as before.
+test("a runner's USAGE_LIMIT kind keeps a run out of the budget even when its words carry no marker", async () => {
+  const { service, executed } = makeService(
+    [],
+    [
+      {
+        taskId: 'task-classified-quota',
+        errors: Array.from({ length: MAX_AUTO_RUN_FAILURES + 3 }, () => ({
+          error: 'Kimi Code failed this turn (QuotaExhausted)',
+          failureKind: 'USAGE_LIMIT',
+        })),
+        lastFailedAt: agoMs(30_000),
+      },
+    ],
+    { provider: 'codex', planUsage: quotaExhausted('codex', inHours(-1)) },
+  );
+  await sweep(service);
+  assert.deepEqual(executed, ['task-classified-quota']);
+});
+
+test("a runner's kind other than USAGE_LIMIT counts, even when its words read as a quota", async () => {
+  const { service, executed } = makeService(
+    [],
+    [{ taskId: 'task-classified-other', errors: [{ error: QUOTA_ERROR, failureKind: 'REQUEST_REFUSED' }], lastFailedAt: agoMs(30_000) }],
+    { provider: 'codex', planUsage: quotaExhausted('codex', inHours(-1)) },
+  );
+  await sweep(service);
+  // One counted failure 30s ago -> inside the first backoff window.
+  assert.deepEqual(executed, []);
+});
+
 // The hole these four close: planUsageBlockedUntil declines to block without a reported
 // `resetsAt` on the grounds that "the caller's normal failure backoff" will handle it, while
 // that backoff exempts usage-limit failures on the grounds that the gate will. Between the two,
@@ -673,11 +693,11 @@ test('the sweep selects candidates on all five READY conditions, anchored on a p
   // the control loop that wrote those is gone, so inside a project that clause never released.
   assert.match(
     sql,
-    /NOT EXISTS \(\s*SELECT 1 FROM "session" passed_live[\s\S]*passed_live\."status"::text IN \('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'\)/,
+    /NOT EXISTS \(\s*SELECT 1 FROM "session" passed_live[\s\S]*passed_live\."finished_at" IS NULL/,
   );
   assert.match(
     sql,
-    /AND EXISTS \(\s*SELECT 1 FROM "session" passed_run[\s\S]*passed_run\."status"::text = 'SUCCEEDED'[\s\S]*passed_run\."end_reason" = 'task_done'/,
+    /AND EXISTS \(\s*SELECT 1 FROM "session" passed_run[\s\S]*passed_run\."finished_at" IS NOT NULL[\s\S]*passed_run\."end_reason" = 'task_done'/,
   );
   // Load-bearing, and the SHAPE is the whole of why: this is where the plan enters the
   // deployment's dependency graph, or nowhere. "HAS an edge" is 110,872 edges over 110,502 tasks
@@ -695,7 +715,8 @@ test('the sweep selects candidates on all five READY conditions, anchored on a p
     sql,
     /AND EXISTS \(\s*SELECT 1 FROM task_dependency d\s+JOIN task x ON x\.id = d\.depends_on_task_id\s+WHERE d\.task_id = t\.id\s+AND \(x\.status = 'DONE'::task_status OR NOT \(x\."terminal_reason" IS NULL AND x\."superseded_by_task_id" IS NULL\)\)/,
   );
-  // The occupied-session set is the wider TASK_OCCUPYING (incl. idle-but-live AWAITING_INPUT /
-  // INTERRUPTED), not the two states the Ready tab's own predicate uses.
-  assert.equal((sql.match(/::run_status/g) ?? []).length, TASK_OCCUPYING.length);
+  // The occupied-session set is every held session (incl. idle-but-live AWAITING_INPUT / INTERRUPTED: the release
+  // column, the same sessions as TASK_OCCUPYING since plan step 4.3), not the two states the Ready tab's own
+  // predicate uses.
+  assert.match(sql, /NOT EXISTS \(\s*SELECT 1 FROM session s\s+WHERE s\.task_id = t\.id\s+AND s\."finished_at" IS NULL\s*\)/);
 });

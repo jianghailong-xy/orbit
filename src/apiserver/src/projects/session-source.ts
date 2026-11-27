@@ -4,8 +4,9 @@ import {
   ForbiddenException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import {
+  RunStatus,
   SessionSourceSnapshot,
   SourceKind,
   SourcePinRequest,
@@ -17,9 +18,16 @@ import {
   SOURCE_REFUSAL_CODES,
 } from '@orbit/shared';
 import { retireSessionInboxGeneration } from '../common/session-inbox-fence';
-import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
+import { heldFilter } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
 import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
+import { carryingTurnOf, recordCarryingTurnOutcome } from '../common/carrying-turn';
+import { CURRENT_WORK_SESSION_FINALIZED, terminalizePendingCurrentWorkSteers } from '../sessions/current-work-delivery';
+import { settleUnrunSessionRequests } from '../sessions/session-request';
+import { DRAIN_SKIPS_HELD } from '../sessions/turn-translation';
+import { settleUnrunWakeTurns, type DrainedWakeupDrop } from '../runner-api/wake-turn-withdraw';
+import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
+import { returnQueuedTurns } from './project-open-item';
 // Type-only, so the two modules do not import each other at run time: the refusal this door freezes
 // onto the session is RECORDED on the task by the door's caller, in the same transaction, through
 // `recordDispatchRefusal` — and that module reads `hasResolvedSource` from this one.
@@ -533,6 +541,8 @@ export async function forkAuthorityBindings(
  * request is the attempt whose record committed with its session.
  */
 export interface SourcePinOutcome extends SourcePinResponse {
+  /** The one-shot wakeups a refusal's drain dropped, for the caller to tell their owners after the commit. */
+  droppedWakeups?: DrainedWakeupDrop[];
   refused?: {
     /** The task this run executes. A session that executes none records nothing anywhere else. */
     taskId: string;
@@ -635,6 +645,7 @@ export async function freezeSessionSourcePin(
   }
   let wonRace = false;
   let refused: SourcePinOutcome['refused'];
+  let droppedWakeups: DrainedWakeupDrop[] = [];
   if (baseSha !== undefined) {
     const claimed = await tx.session.updateMany({
       where: {
@@ -681,20 +692,25 @@ export async function freezeSessionSourcePin(
     // unset (`retireSessionInboxGeneration`; the session keeps pointing at the tombstone, which is
     // what lets a later revive prove the prior engine is gone).
     //
-    // `status` is the fence, not a second CAS: the compare-and-set above stays exactly as SR30
+    // `finished_at` (held) is the fence, not a second CAS: the compare-and-set above stays exactly as SR30
     // states it (this function's whole job), and a row somebody already ended — a user's cancel
     // landing between the claim and this request — is left as it is, rather than overwritten by a
     // runner that reported a refusal about a run that is no longer live.
     if (wonRace) {
+      // `<code>: <reason>` is the shape the runner writes for a checkout refusal
+      // (`readDispatchRefusal` reads it back out of the same sentence), so the run that never
+      // started reads exactly like every other refused start.
+      const error = `${refusal.code}: ${reason}`;
       const closed = await tx.session.updateMany({
-        where: { id: actor.sessionId, status: { in: OPEN_SESSION_STATUSES } },
+        where: { id: actor.sessionId, ...heldFilter() },
         data: {
-          status: RunStatus.FAILED,
-          // `<code>: <reason>` is the shape the runner writes for a checkout refusal
-          // (`readDispatchRefusal` reads it back out of the same sentence), so the run that never
-          // started reads exactly like every other refused start.
-          error: `${refusal.code}: ${reason}`,
+          // Released: no turn (plan §2.2 #4).
+          turnState: null,
+          error,
           finishedAt: new Date(),
+          // The run never started (design §4.2).
+          // The failure is the turn's that the dispatch was for, recorded below (design §12.1 W4), and copied here.
+          lastTurnOutcome: 'FAILED',
           // The claim's own markers. `run_claimed_at` is what a waiting notice counts from and the
           // owner of the inbox lease is a process that is not coming back for this run.
           runClaimedAt: null,
@@ -704,7 +720,10 @@ export async function freezeSessionSourcePin(
       });
       // After the status write, whose predicate this reads: a generation is retired only while its
       // session is terminal, and this is the statement that made it one.
-      if (closed.count > 0) await retireSessionInboxGeneration(tx, actor.sessionId);
+      if (closed.count > 0) {
+        await retireSessionInboxGeneration(tx, actor.sessionId);
+        droppedWakeups = await failAndDrainRefusedRunTurns(tx, actor.sessionId, error);
+      }
     }
     // What the caller records on the task, for the winner only: a loser changed nothing, and the
     // winner of a retried request is the first attempt, whose record is already committed with it.
@@ -738,7 +757,41 @@ export async function freezeSessionSourcePin(
     refusalCode: (after.sourceRefusalCode as SourceRefusalCode | null) ?? undefined,
     wonRace,
     ...(refused ? { refused } : {}),
+    ...(droppedWakeups.length > 0 ? { droppedWakeups } : {}),
   };
+}
+
+/**
+ * The turns of a run its source refused, in the transaction that released it (design §12.1 W4). The runner pins
+ * the source right after the claim, before any engine or inbox read, so nothing is in flight and the turn the
+ * dispatch was for is still PENDING: it carries the failure, with the session's error. Then the queue is drained
+ * as every other release drains it (runner finalize), so no turn of a released session is left to be leased.
+ * Returns the one-shot wakeups the drain dropped, for the caller to tell their owners after the commit.
+ */
+async function failAndDrainRefusedRunTurns(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  error: string,
+): Promise<DrainedWakeupDrop[]> {
+  const carrying = await carryingTurnOf(tx, sessionId, { orLatest: false });
+  if (carrying) await recordCarryingTurnOutcome(tx, carrying, 'FAILED', error);
+  await terminalizePendingCurrentWorkSteers(tx, sessionId, {
+    includeInFlight: true,
+    code: CURRENT_WORK_SESSION_FINALIZED,
+    reason: 'CURRENT_WORK was not delivered before its session was released: the runner refused its source.',
+  });
+  await deadLetterQueuedWatchWakes(tx, sessionId, {
+    code: 'OBSERVER_SESSION_ENDED',
+    ending: 'the runner refused its source',
+  });
+  await returnQueuedTurns(tx, sessionId, { code: 'SESSION_ENDED', ending: true });
+  await settleUnrunSessionRequests(tx, sessionId, { code: 'SESSION_ENDED', closesRequests: true, retryArmed: false });
+  const dropped = await settleUnrunWakeTurns(tx, sessionId, { drained: true });
+  await tx.conversationTurn.updateMany({
+    where: { sessionId, status: { notIn: DRAIN_SKIPS_HELD } },
+    data: { status: 'ANSWERED', answeredAt: new Date() },
+  });
+  return dropped;
 }
 
 /**

@@ -416,22 +416,22 @@ final class RunnerSelfUpdateTests: XCTestCase {
         XCTAssertEqual(RunnerPageFormat.displayName(other), "build-box")
     }
 
-    /// The managed runner's version line is its release or "Kept up to date by Orbit", never `managed-<sha>`,
+    /// The managed runner's version line is its release or its `Build <sha7>`, never `managed-<sha>`,
     /// in the head, About and the list; any other runner's stays as reported.
     func testTheManagedRunnersVersionLineIsAReleaseOrKeptUpToDateNeverItsHash() throws {
         let hash = "managed-95884b154feb3d4e2a575fb012c4185b20c282ac"
         let shaRunner = try runner(try caseInput("selfUpdate disabledByEnv on a managed runner"))
-        XCTAssertEqual(RunnerPageFormat.versionValue(shaRunner, latest: "0.1.197", managed: true),
-                       "Kept up to date by Orbit")
-        XCTAssertEqual(RunnerPageFormat.hostLine(shaRunner, managed: true), "lab-host · Kept up to date by Orbit")
+        XCTAssertEqual(RunnerPageFormat.versionValue(shaRunner, latest: "0.1.197", managed: true), "Build 95884b1")
+        XCTAssertEqual(RunnerPageFormat.hostLine(shaRunner, managed: true), "lab-host · Build 95884b1")
         XCTAssertFalse(RunnerPageFormat.hostLine(shaRunner, managed: true).contains(hash))
         XCTAssertEqual(RunnerPageFormat.hostLine(shaRunner, managed: false), "lab-host · v\(hash)", "a runner not managed: as before")
         let release = try runner(try caseInput("selfUpdate disabledByEnv and behind"))
         XCTAssertEqual(RunnerPageFormat.versionValue(release, latest: "0.1.197", managed: true),
-                       "0.1.190 · Orbit updates this machine for you.")
+                       "0.1.190 · Orbit moves it to each new build.")
         XCTAssertEqual(RunnerPageFormat.hostLine(release, managed: true), "lab-host · v0.1.190")
         XCTAssertEqual(RunnerPageFormat.versionValue(release, latest: "0.1.197", managed: false), "0.1.190")
-        XCTAssertEqual(RunnerAttention.runnerVersionLine(hash, managed: true), "Kept up to date by Orbit")
+        XCTAssertEqual(RunnerAttention.runnerVersionLine(hash, managed: true, known: nil), "Build 95884b1")
+        XCTAssertEqual(RunnerAttention.runnerVersionLine("dev", managed: true, known: nil), "Kept up to date by Orbit")
         XCTAssertNil(RunnerAttention.runnerVersionLine(nil))
     }
 

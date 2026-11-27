@@ -142,6 +142,31 @@ final class StartProjectCardCopyParityTests: XCTestCase {
         assertDeclares(web, "START_CHANGE_LATER", StartProject.changeLater)
     }
 
+    /// A request with no line (rulings D1, D8): one sentence in place of the line, main branch,
+    /// delivery and landing check rows, sentences that name no branch, and a press that sends no line.
+    /// (Held by main's second port of revision 42 part two; kept on this side's names.)
+    func testARequestWithNoLineIsDrawnAndSentAsTheWebDoes() throws {
+        let web = try flat(Self.words)
+        assertDeclares(web, "START_NO_LINE", StartProject.landsWhenCommits)
+        XCTAssertTrue(web.contains("return automatic ? '\(RunSettings.automaticSaysNoLine(automatic: true))' : '\(RunSettings.automaticSaysNoLine(automatic: false))';"),
+                      "the web no longer says the no-line Automatic sentences this end says")
+        XCTAssertTrue(web.contains("if (line === null) {"), "the web no longer words a request with no line on its own")
+        XCTAssertTrue(web.contains("input.line === null ? [] : input.line === 'MAIN'"),
+                      "the web no longer lists no merge for a request with no line")
+        let card = try flat(Self.card)
+        for literal in [
+            "line: settings.line ?? null,",
+            "...(draft.line ? { line: draft.line } : {}),",
+            "...(draft.line === 'PROJECT_BRANCH' ? {",
+            "{draft.line === null ? (",
+            "<div className=\"start-card-hint\">{START_NO_LINE}</div>",
+            "{draft.line !== null && draft.deliveryMode !== null ? (",
+            "{draft.line !== null ? <div className=\"start-card-row\" data-landing-check=\"true\">",
+        ] {
+            XCTAssertTrue(card.contains(literal), "\(Self.card) no longer says \(literal)")
+        }
+    }
+
     func testTheSectionHeadsAndTheHeaderLineMatchTheWebWhole() throws {
         let web = try flat(Self.words)
         let criteria = "${count === 1 ? 'criterion' : 'criteria'}"
@@ -284,7 +309,7 @@ final class StartProjectCardCopyParityTests: XCTestCase {
         XCTAssertTrue(web.contains("`project/${project[1]!.slice(0, 5)}…`"),
                       "the web no longer shortens a project branch the way this end does")
         let settings = ProjectStartSettings(line: .projectBranch,
-                                            projectBranchName: "refs/heads/project/34WvwUS8YMXf",
+                                            projectBranchName: "refs/heads/project/34WvwUS8YMXfOfWbMqVuu",
                                             automatic: false, maxConcurrentTasks: Self.count,
                                             mergeCheckCommand: nil)
         XCTAssertEqual(RunSettings.parts(settings).map(\.text),

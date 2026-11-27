@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>Web：会话状态读新字段（计划 5.2）</title>
+<link rel="stylesheet" href="board.css"></head>
+<body>
+<h1>Web：会话状态读新字段（计划 5.2）</h1>
+<p class="lede" style="width:1500px">服务端（5.1）现在每个会话都带 <code>phase</code>、<code>released</code>、<code>lastTurnOutcome</code>、<code>waitingOn</code>，旧字段照发。Web 改成先读这四个，缺了（老服务端，也就是今天的生产环境）就按旧字段、和今天一模一样地判断。下面每张图都是真实 Web 控制台的截图（vite + 假数据，脚本在 <code>capture/</code>）：<b>改前</b>是现在提交的代码，也就是任何老服务端看到的样子；<b>改后</b>是打上 <code>prototype.patch</code>、读新字段的同一个页面。界面文案都是英文，说明是中文。<br>
+结论：任务列的 8 种情况里，只有 <b>任务做完了</b>（Succeeded → Finished）和 <b>被挡住</b>（Queued → On hold）两处变；另外三种边角情况跟着 D2 / D9 变（下面标红的）。其余不变，只是换了数据来源。</p>
+
+<div class="row">
+  <div class="col" style="width:320px">
+    <div class="cap"><span class="tag n">改前</span>会话列表（全部 11 种）</div>
+    <div class="shot" style="width:300px"><img src="shots/before/list.png" alt=""></div>
+  </div>
+  <div class="col" style="width:320px">
+    <div class="cap"><span class="tag new">改后</span>同一个列表</div>
+    <div class="shot" style="width:300px"><img src="shots/after/list.png" alt=""></div>
+  </div>
+  <div class="col" style="width:760px;padding-top:30px">
+    <ul class="notes">
+      <li class="n" data-n="1"><b>Translate the help pages</b>：Queued → <b>On hold</b>（waitingOn HOLD）。</li>
+      <li class="n" data-n="2"><b>Profile the slow query</b>：红叉 → 灰勾 Ended。要求了结束、runner 没确认就被回收，不算失败。</li>
+      <li class="n" data-n="3"><b>Sketch the onboarding flow</b>：正在被 End 的、被打断过的会话，先显示 Interrupted（灰色减号），runner 放手后才是 Ended。</li>
+      <li class="n" data-n="4"><b>Rename the CLI flags</b>：老的普通对话 SUCCEEDED 行，绿勾 → 灰勾 Ended。</li>
+      <li><b>Task: Add the export button</b> 行图标不变（绿勾），悬停提示和标题行的词从 Succeeded 变成 Finished（见下表）。</li>
+      <li>其余行一像素不变：Waiting for approval、Waiting for your reply（气泡）、后台进程（终端图标）、Failed、Ended、Waiting to resume。</li>
+    </ul>
+  </div>
+</div>
+
+<div class="grid">
+  <div class="h">情况 · 服务端发的字段</div><div class="h">改前（标题行 / 底部那句）</div><div class="h">改后</div><div class="h">变了什么、为什么</div>
+  <div class="name">挂着、空闲<small>held idle</small><small><code style="white-space:normal">phase IDLE · released false · ANSWERED · waitingOn null</code></small></div>
+<div><img src="shots/before/held-idle-head.png" alt=""><div class="b"></div></div>
+<div><img src="shots/after/held-idle-head.png" alt=""><div class="b"></div></div>
+<div class="why same">不变。</div>
+<div class="sep"></div><div class="name">一个回合失败后释放<small>released by a failed turn</small><small><code style="white-space:normal">released · lastTurnOutcome FAILED · 无 endReason</code></small></div>
+<div><img src="shots/before/failed-turn-head.png" alt=""><div class="b"><img src="shots/before/failed-turn-banner.png" alt=""></div></div>
+<div><img src="shots/after/failed-turn-head.png" alt=""><div class="b"><img src="shots/after/failed-turn-banner.png" alt=""></div></div>
+<div class="why same">不变。新判法：released + 最后回合 FAILED + 没人要求结束（D9），不再看 status。</div>
+<div class="sep"></div><div class="name">被 End 释放<small>released by End</small><small><code style="white-space:normal">released · endReason ended</code></small></div>
+<div><img src="shots/before/ended-head.png" alt=""><div class="b"><img src="shots/before/ended-banner.png" alt=""></div></div>
+<div><img src="shots/after/ended-head.png" alt=""><div class="b"><img src="shots/after/ended-banner.png" alt=""></div></div>
+<div class="why same">不变。</div>
+<div class="sep"></div><div class="name">任务那次运行做完了<small>a task run that finished</small><small><code style="white-space:normal">released · endReason task_done</code></small></div>
+<div><img src="shots/before/task-finished-head.png" alt=""><div class="b"><img src="shots/before/task-finished-banner.png" alt=""></div></div>
+<div><img src="shots/after/task-finished-head.png" alt=""><div class="b"><img src="shots/after/task-finished-banner.png" alt=""></div></div>
+<div class="why"><span class="chg">Succeeded → Finished</span>，绿勾不变；底部那句改成 <code>The linked task is done, so the session finished.</code>（D2：会话不说 succeeded；只有任务 DONE 或落地容器结算才说 Finished）。任务详情里这次运行的徽标同样改成 Finished（没截图，同一个词）。</div>
+<div class="sep"></div><div class="name">没有回合、后台 job 在跑<small>running a job with no turn</small><small><code style="white-space:normal">phase RUNNING · activity BACKGROUND_JOB</code></small></div>
+<div><img src="shots/before/job-no-turn-head.png" alt=""><div class="b"></div></div>
+<div><img src="shots/after/job-no-turn-head.png" alt=""><div class="b"></div></div>
+<div class="why same">不变（推荐，见问题 ①）。phase RUNNING 只拿来决定轮询，不换图标。</div>
+<div class="sep"></div><div class="name">等审批<small>waiting on an approval</small><small><code style="white-space:normal">phase RUNNING · waitingOn PERSON</code></small></div>
+<div><img src="shots/before/approval-head.png" alt=""><div class="b"></div></div>
+<div><img src="shots/after/approval-head.png" alt=""><div class="b"></div></div>
+<div class="why same">不变。waitingOn PERSON 和 pendingApprovals 读到的是同一件事。</div>
+<div class="sep"></div><div class="name">被挡住（暂停派发、账户暂停等）<small>on hold</small><small><code style="white-space:normal">phase PENDING · waitingOn HOLD · queuedReason null</code></small></div>
+<div><img src="shots/before/on-hold-head.png" alt=""><div class="b"></div></div>
+<div><img src="shots/after/on-hold-head.png" alt=""><div class="b"></div></div>
+<div class="why"><span class="chg">Queued → On hold</span>，图标不变（问题 ②）。只在服务端说 HOLD、又没有更具体的说法时换；Runner offline / 更新中 / 地区 / 磁盘这些原来的词照旧。</div>
+<div class="sep"></div><div class="name">会被叫醒<small>will wake</small><small><code style="white-space:normal">phase IDLE · waitingOn WAKE</code></small></div>
+<div><img src="shots/before/will-wake-head.png" alt=""><div class="b"></div></div>
+<div><img src="shots/after/will-wake-head.png" alt=""><div class="b"></div></div>
+<div class="why same">不变。waitingOn WAKE 和 activity WAITING 说的是同一件事。</div>
+<div class="sep"></div><div class="name">要求了结束、runner 没回应、被回收<small>ended, runner never confirmed</small><small><code style="white-space:normal">released · endReason ended · lastTurnOutcome FAILED · status FAILED</code></small></div>
+<div><img src="shots/before/end-not-honored-head.png" alt=""><div class="b"><img src="shots/before/end-not-honored-banner.png" alt=""></div></div>
+<div><img src="shots/after/end-not-honored-head.png" alt=""><div class="b"><img src="shots/after/end-not-honored-banner.png" alt=""></div></div>
+<div class="why"><span class="chg">Failed（红叉）→ Ended（灰勾）</span>。有人要求结束，会话就结束了；runner 不回应不是这次对话失败（设计 §12，end_not_honored 不算失败）。</div>
+<div class="sep"></div><div class="name">老数据：普通对话存成 SUCCEEDED<small>old plain row stored SUCCEEDED</small><small><code style="white-space:normal">released · 无 endReason · 不是落地容器</code></small></div>
+<div><img src="shots/before/plain-succeeded-head.png" alt=""><div class="b"><img src="shots/before/plain-succeeded-banner.png" alt=""></div></div>
+<div><img src="shots/after/plain-succeeded-head.png" alt=""><div class="b"><img src="shots/after/plain-succeeded-banner.png" alt=""></div></div>
+<div class="why"><span class="chg">Succeeded（绿勾）→ Ended（灰勾）</span>。D2：普通对话只有 Ended 或 Failed。现在的代码不会再写出这种行，只剩老数据。</div>
+<div class="sep"></div><div class="name">打断后正在被 End<small>being ended after an interrupted turn</small><small><code style="white-space:normal">released false · lastTurnOutcome INTERRUPTED · endReason ended</code></small></div>
+<div><img src="shots/before/ending-interrupted-head.png" alt=""><div class="b"></div></div>
+<div><img src="shots/after/ending-interrupted-head.png" alt=""><div class="b"></div></div>
+<div class="why"><span class="chg">Ended → Interrupted</span>，直到 runner 真的放手（几秒）才变 Ended。旧读法凭 endReason 提前说 Ended，于是“移到别的 Workspace”会在 runner 放手前就去移（已修，见下面“不改像素的行为”）。</div>
+<div class="sep"></div>
+</div>
+
+<div class="row" style="margin-top:34px">
+  <div class="col box" style="width:1500px">
+    <h2>需要定的</h2>
+    <table>
+      <tr><th style="width:40px"></th><th style="width:420px">问题</th><th>选项（第一个是推荐）</th></tr>
+      <tr><td>①</td><td>没有回合、只有后台 job 在跑：服务端说 <code>phase RUNNING</code>（D8）。要不要显示成在跑？</td><td><b>A（推荐）不变</b>：终端图标，job 在跑时呼吸，行里照旧是回复预览或“N background processes running”。这是 2026-11-16 定的“后台进程不抢行、不转圈”。phase RUNNING 只用来让分享页按“在工作”的节奏刷新。<br><b>B</b>：转圈 + “Running”，和真的回合一样。会把常驻 dev server 之外的 job 也画成在工作，列表里转的会变多。</td></tr>
+      <tr><td>②</td><td>被挡住的回合（暂停派发、账户暂停、Provider 不可用）：今天只说 Queued。</td><td><b>On hold（推荐）</b>：服务端明确说是被挡住，不是排队等槽位；图标和颜色不变，具体原因还是在会话里的提示卡说。<br><b>保持 Queued</b>。</td></tr>
+      <tr><td>③</td><td>Watch 条里被盯的会话，结束时的词也是 Succeeded（<code>watch-strip.fixture.json</code>，Web 和 macOS 共用）。</td><td><b>这个任务不改</b>：文件在 <code>src/shared</code>，超出本任务允许改的范围；建议跟 Apple 的 5.3 一起改成 Finished。<br>或者允许这个任务一起改。</td></tr>
+    </table>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col box" style="width:1500px">
+    <h2>不改像素的行为（已做，提交 cdb841e958，不等这张板）</h2>
+    <table>
+      <tr><th>什么</th><th>读什么</th><th>老服务端</th></tr>
+      <tr><td>发消息还是恢复（send / resume / 新建）</td><td><code>released</code>：没释放就直接发，释放了才走恢复。正在被 End 的会话（还没释放）不再落到“新建会话”，而是提示“正在结束，稍后再试”</td><td>和今天一样</td></tr>
+      <tr><td>End 之后等它结束（移到别的 Workspace、换协调者）</td><td><code>released</code>：等 runner 真的放手再移</td><td>和今天一样</td></tr>
+      <tr><td>停止轮询（会话详情、帮助对话、分享页）</td><td><code>released</code> 停；分享页按 <code>phase</code> 决定快慢（后台 job 在跑也算在工作）</td><td>和今天一样</td></tr>
+      <tr><td>Workspace 计数的刷新判断</td><td><code>released</code> 优先；<code>RELEASED_STATUSES</code> 留着只给老服务端用（行里有 released，但老服务端没有，没有别的办法认出释放）</td><td>和今天一样</td></tr>
+    </table>
+  </div>
+</div>
+<p class="foot">iOS 的 <code>SessionHeader.statusWord</code> 是 Web <code>statusLabel</code> 的逐字移植，这张板定下的词就是 5.3 要用的词。截图里“Working for 50m”是假数据没给被打断的回合写结束事件，改前改后都有，和这次改动无关。</p>
+</body></html>

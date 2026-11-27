@@ -13,7 +13,7 @@ import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 
 /**
- * A loopback owner-requests server for the card and inbox tests: the requests it holds move from PENDING as the owner's doors are
+ * A loopback owner-requests server for the card and link tests: the requests it holds move from PENDING as the owner's doors are
  * pressed, and every call is kept with its body, through OkHttp and `AuthSession` as the app makes them.
  */
 internal class OwnerRequestFixture {
@@ -25,13 +25,11 @@ internal class OwnerRequestFixture {
     @Volatile var refuseSecret: String? = null
     /** Settings › Translation: done and decline refuse the owner's words 422 TRANSLATION_FAILED unless sent as written. */
     @Volatile var refuseUntranslated = false
-    /** The open projects (`GET /projects?status=OPEN`) and each one's open items, for the coordinators' questions. */
-    @Volatile var projects: JsonArray = JsonArray(emptyList())
-    val openItems = ConcurrentHashMap<String, JsonObject>()
-    /** The terminals asking to be approved (`GET /terminals/requests`), which Approve and Deny take off the list; [terminalsMissing] is a
-     * server that predates terminals (404). */
-    val terminalRequests = CopyOnWriteArrayList<JsonObject>()
-    @Volatile var terminalsMissing = false
+    /** SETTINGS_CHANGE: Save changes is refused 409 SETTINGS_STALE, and `GET /users/me` as the account answers (with its `changedBy`). */
+    @Volatile var staleApply = false
+    /** CHANGE: the apply door's reply, verbatim, when a test holds one from a real server. */
+    @Volatile var applyReply: String? = null
+    @Volatile var me: JsonObject = buildJsonObject { put("id", "u"); put("email", "u@example.test"); put("name", "U") }
 
     private val server = MockWebServer().apply {
         dispatcher = object : Dispatcher() {
@@ -44,15 +42,8 @@ internal class OwnerRequestFixture {
                 return when {
                     path == "/api/auth/login" -> json(200, """{"accessToken":"or-access","refreshToken":"or-refresh","user":{"id":"u","email":"u@example.test","name":"U"}}""")
                     path == "/api/account-secrets" -> json(200, """{"secrets":[]}""")
-                    path == "/api/projects" -> json(200, projects.toString())
-                    parts.first() == "projects" && parts.getOrNull(2) == "open-items" -> json(200, (openItems[parts[1]] ?: JsonObject(emptyMap())).toString())
-                    path == "/api/terminals/requests" -> if (terminalsMissing) json(404, """{"message":"Cannot GET /api/terminals/requests"}""")
-                        else json(200, buildJsonObject { put("requests", JsonArray(terminalRequests.toList())) }.toString())
-                    parts.take(2) == listOf("terminals", "requests") && request.method == "POST" -> {
-                        val row = terminalRequests.firstOrNull { it.s("id") == parts[2] } ?: return json(404, """{"message":"terminal sign-in not found"}""")
-                        terminalRequests.remove(row)
-                        json(200, buildJsonObject { put("id", parts[2]); put("status", if (parts[3] == "approve") "APPROVED" else "DENIED") }.toString())
-                    }
+                    path == "/api/users/me" -> json(200, me.toString())
+                    path == "/api/users/me/preferences" && request.method == "PATCH" -> json(200, me.toString())
                     parts.first() == "tasks" -> json(200, """{"id":"${parts[1]}","title":"Ship the login page"}""")
                     path == "/api/owner-requests" -> {
                         val state = request.requestUrl!!.queryParameter("state")
@@ -61,6 +52,10 @@ internal class OwnerRequestFixture {
                         }.sortedByDescending { it.s("createdAt") }
                         json(200, buildJsonObject { put("requests", JsonArray(rows)) }.toString())
                     }
+                    // One request by either spelling of its id: what an `orbit://owner-request/<id>` link reads.
+                    parts.first() == "owner-requests" && parts.size == 2 && request.method == "GET" ->
+                        held.values.firstOrNull { io.orbitd.android.navigation.ObjectId.same(it.s("id"), parts[1]) }?.let { json(200, it.toString()) }
+                            ?: json(404, """{"message":"owner request not found"}""")
                     parts.first() == "owner-requests" && request.method == "POST" -> {
                         val id = parts[1]
                         val row = held[id] ?: return json(404, """{"message":"owner request not found"}""")
@@ -73,6 +68,11 @@ internal class OwnerRequestFixture {
                             return json(422, """{"code":"TRANSLATION_FAILED","message":"The answer could not be translated, so nothing was recorded."}""")
                         val next = when (door) {
                             "done" -> ended("DONE") { put("answer", body) }
+                            "apply-settings" -> if (staleApply) return json(409, """{"code":"SETTINGS_STALE","message":"SETTINGS_STALE"}""")
+                                else ended("DONE") {}
+                            "reopen-project" -> ended("DONE") {}
+                            "apply" -> applyReply?.let { reply -> return json(200, reply).also { held[id] = Json.parseToJsonElement(reply).jsonObject } }
+                                ?: ended("DONE") { putJsonObject("answer") { put("applied", body["maxConcurrent"]!!); put("actualBefore", 4) } }
                             "decline" -> ended("DECLINED") { put("resolutionNote", body["reason"]!!) }
                             "secret" -> refuseSecret?.let { return json(400, buildJsonObject { put("message", it) }.toString()) }
                                 ?: JsonObject(row + buildJsonObject { putJsonObject("secretGrant") {
@@ -154,40 +154,31 @@ internal class OwnerRequestFixture {
             put("recommendedOption", 0)
         }
 
-        const val PROJECT = "01a0d6a9-d763-70e1-b4cf-8793e971b5dd"
-        const val QUESTION_ITEM = "01a0d6a9-d763-70e1-b4cf-8793e971b5ee"
+        const val SETTINGS_ID = "01a0d6a9-d763-70e1-b4cf-8793e971b505"
 
-        /** An open project whose coordinator asked one question, and its open items carrying it. */
-        fun questionProject(minutesAgo: Long, count: Int = 1) = buildJsonObject {
-            put("id", PROJECT); put("title", "Payments rollout"); put("status", "OPEN")
-            putJsonObject("attention") { putJsonArray("ownerItems") { addJsonObject {
-                put("kind", "COORDINATOR_QUESTION"); put("count", count); put("oldestWaitingSince", Instant.now().minusSeconds(minutesAgo * 60).toString())
-            } } }
+        /** An agent's proposal of three changes: two on the Translation page (one a tier-2, new-sessions-only key) and the Theme. */
+        fun settingsChange() = request(SETTINGS_ID, "SETTINGS_CHANGE", "Change 3 settings?", "You asked for the agents to write Chinese and for the app to be dark.", 1) {
+            putJsonObject("payload") { putJsonArray("changes") {
+                addJsonObject { put("key", "translationEnabled"); put("from", false); put("to", true); put("tier", 1) }
+                addJsonObject { put("key", "translationLanguage"); put("from", "en"); put("to", "zh-Hans"); put("tier", 1) }
+                addJsonObject { put("key", "defaultPermissionMode"); put("from", "default"); put("to", "plan"); put("tier", 2) }
+            } }
         }
-        fun questionItems(minutesAgo: Long) = buildJsonObject {
-            putJsonArray("needsYou") {
-                addJsonObject {
-                    put("itemId", QUESTION_ITEM); put("kind", "COORDINATOR_QUESTION"); put("assignee", "OWNER")
-                    put("waitingSince", Instant.now().minusSeconds(minutesAgo * 60).toString())
-                    putJsonObject("question") {
-                        put("question", "Should the **canary** go to 5% or 20% of traffic?")
-                        putJsonArray("options") { addJsonObject { put("label", "5%") }; addJsonObject { put("label", "20%") } }
-                        put("recommendedOption", 0)
-                    }
+
+        const val REOPEN_ID = "01a0d6a9-d763-70e1-b4cf-8793e971b506"
+        const val REOPEN_PROJECT = "01a0d6a9-d763-70e1-b4cf-8793e971b507"
+
+        /** An agent asking to reopen a settled project, with a second session that joined the ask. */
+        fun projectReopen() = request(REOPEN_ID, "PROJECT_REOPEN", "Reopen project “Share to Orbit”?", "The share sheet needs a dark-mode fix that changes its acceptance criteria.", 3) {
+            put("projectId", REOPEN_PROJECT); put("askedBySessionTitle", "Fix share sheet colours")
+            putJsonObject("payload") {
+                put("projectId", REOPEN_PROJECT); put("statusAtAsk", "DONE"); put("settledAt", "2026-11-18T09:00:00.000Z")
+                put("plannedWork", "Restyle the share sheet for dark mode and add a screenshot check.")
+                putJsonArray("askers") {
+                    addJsonObject { put("sessionId", SESSION); put("title", "Fix share sheet colours") }
+                    addJsonObject { put("sessionId", "01a0d6a9-d763-70e1-b4cf-8793e971b5cc"); put("title", "Audit dark mode") }
                 }
-                // Another owner item on the same project is not a question.
-                addJsonObject { put("itemId", "01a0d6a9-d763-70e1-b4cf-8793e971b5ef"); put("kind", "FUSE_PAUSED"); put("assignee", "OWNER")
-                    put("waitingSince", Instant.now().toString()) }
             }
-        }
-
-        const val TERMINAL_REQUEST = "01a0d6a9-d763-70e1-b4cf-8793e971b5f1"
-
-        /** A terminal on dev-laptop asking to be approved, three minutes ago, with the code it shows. */
-        fun terminalRequest(id: String = TERMINAL_REQUEST, machine: String = "dev-laptop", code: String = "7KQ-4MZ", minutesAgo: Long = 3) = buildJsonObject {
-            put("id", id); put("userCode", code); put("machineName", machine); put("runnerId", RUNNER)
-            put("createdAt", Instant.now().minusSeconds(minutesAgo * 60).toString())
-            put("expiresAt", Instant.now().plusSeconds(600 - minutesAgo * 60).toString())
         }
 
         fun confirm() = request(CONFIRM_ID, "CONFIRM", "Confirm the DNS change", "The new records point the app at the new load balancer.", 45) {}

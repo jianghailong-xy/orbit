@@ -58,7 +58,8 @@ export function sessionProjectMembershipSql(sessionAlias: string): Prisma.Sql {
  *  indexes: its coordinator, the sessions executing or about its tasks, its open judgment sessions, and
  *  every session whose root is one of those. A superset — precedence can still put one of them in
  *  another project, or keep a child with its own membership out — so it is only ever narrowed by
- *  sessionProjectMembershipSql. Each source of directProjectMembershipSql needs a branch here.
+ *  sessionProjectMembershipSql. Each source of directProjectMembershipSql needs a branch here, and in
+ *  projectsMembershipCandidatesSql.
  *
  *  The task branches are joins so the planner can start from either side: from the project's tasks
  *  when it has few, from the sessions that have a task when it has most of them (one production
@@ -81,6 +82,34 @@ function projectMembershipCandidatesSql(projectId: string): Prisma.Sql {
       UNION ALL
       SELECT w.session_id FROM project_coordinator_wake w
         WHERE w.project_id = ${projectId}::uuid AND w.status = 'SESSION_OPENED' AND w.session_id IS NOT NULL
+    )
+    SELECT id FROM direct
+    UNION
+    SELECT child.id FROM session child WHERE child.root_session_id = ANY(ARRAY(SELECT id FROM direct))`;
+}
+
+/** projectMembershipCandidatesSql for several projects at once, in one statement however many there are:
+ *  the read that places a workspace list's project rows (SessionsService.projectPlacement) asks for all
+ *  of them together rather than once a project. The same branches as the one-project form, each over
+ *  `= ANY` of the ids; a source added there needs its branch here too. */
+export function projectsMembershipCandidatesSql(projectIds: readonly string[]): Prisma.Sql {
+  const ids = Prisma.sql`${[...projectIds]}::uuid[]`;
+  return Prisma.sql`
+    WITH direct(id) AS (
+      SELECT p.coordinator_session_id FROM project p
+        WHERE p.id = ANY(${ids}) AND p.coordinator_session_id IS NOT NULL
+      UNION ALL
+      SELECT l.session_id FROM project_landing l
+        WHERE l.project_id = ANY(${ids})
+      UNION ALL
+      SELECT ts.id FROM session ts JOIN task t ON t.id = ts.task_id
+        WHERE ts.task_id IS NOT NULL AND t.project_id = ANY(${ids})
+      UNION ALL
+      SELECT cs.id FROM session cs JOIN task t ON t.id = cs.context_task_id
+        WHERE cs.context_task_id IS NOT NULL AND t.project_id = ANY(${ids})
+      UNION ALL
+      SELECT w.session_id FROM project_coordinator_wake w
+        WHERE w.project_id = ANY(${ids}) AND w.status = 'SESSION_OPENED' AND w.session_id IS NOT NULL
     )
     SELECT id FROM direct
     UNION

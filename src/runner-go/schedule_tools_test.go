@@ -278,3 +278,49 @@ func TestScheduleAccessSchemaOffersLandWithItsLandingContract(t *testing.T) {
 		}
 	}
 }
+
+func TestScheduleToolsCarryEveryAndMaxRuns(t *testing.T) {
+	for _, tool := range toolDescriptors(false, false) {
+		name, _ := tool["name"].(string)
+		if name != "schedule_create" && name != "schedule_update" {
+			continue
+		}
+		props := tool["inputSchema"].(map[string]interface{})["properties"].(map[string]interface{})
+		if _, ok := props["maxRuns"]; !ok {
+			t.Errorf("%s has no maxRuns", name)
+		}
+		rule := props["rule"].(map[string]interface{})["properties"].(map[string]interface{})
+		kinds := strings.Join(rule["kind"].(map[string]interface{})["enum"].([]string), ",")
+		if !strings.Contains(kinds, "EVERY") {
+			t.Errorf("%s rule kinds: %s", name, kinds)
+		}
+		for _, f := range []string{"minutes", "until"} {
+			if _, ok := rule[f]; !ok {
+				t.Errorf("%s rule has no %s", name, f)
+			}
+		}
+	}
+	var create string
+	for _, tool := range toolDescriptors(false, false) {
+		if tool["name"] == "schedule_create" {
+			create, _ = tool["description"].(string)
+		}
+	}
+	for _, want := range []string{"{kind: \"EVERY\", minutes: 60}", "endAt", "maxRuns: 3", "active hours", "CHANGED only when something changed"} {
+		if !strings.Contains(create, want) {
+			t.Errorf("schedule_create does not say %q", want)
+		}
+	}
+}
+
+func TestScheduleWritesSendEveryAndMaxRuns(t *testing.T) {
+	var calls []scheduleCall
+	srv := scheduleServer(t, &calls, `{"outcome":"PENDING","note":"Nothing is scheduled yet."}`)
+	s := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "s1"}
+	rule := map[string]interface{}{"kind": "EVERY", "minutes": 60}
+	s.callTool("schedule_create", map[string]interface{}{"intent": "i", "title": "t", "prompt": "p", "accessLevel": "CHECK_ONLY", "rule": rule, "endAt": "2026-11-20T18:00:00+08:00", "maxRuns": 6})
+	s.callTool("schedule_update", map[string]interface{}{"scheduleId": "sch1", "maxRuns": 8})
+	if len(calls) != 2 || calls[0].body["maxRuns"] != float64(6) || calls[1].body["maxRuns"] != float64(8) || calls[0].body["rule"] == nil {
+		t.Fatalf("calls = %+v", calls)
+	}
+}

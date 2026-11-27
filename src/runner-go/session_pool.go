@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -79,7 +81,8 @@ type liveSession struct {
 	detach    context.CancelFunc
 	doneOnce  sync.Once
 
-	active bool // owns one maxConcurrent turn permit
+	active        bool // owns a turn permit
+	permitPending bool // server claim is installed but still waiting for local capacity
 	// Incremented for every server claim, including a claim that races the tail
 	// of the prior turn while active is still true locally. A late ack may release
 	// only the exact permit generation under which its turn ran.
@@ -130,6 +133,9 @@ type liveSession struct {
 	// (subagent.go), nil where no job service is at stake. Lock-free on the service's side, like
 	// monitorProbe, because it is called under p.mu.
 	subagentProbe func() bool
+	// executingProbe is this run's "what is executing in it" (session_executing.go), nil until the run has its
+	// tailer and adopted jobs. Unlike the two above it is never called under p.mu (executingEntries).
+	executingProbe func(resident bool) executingSnapshot
 }
 
 // heartbeatSupervisorSnapshot binds a heartbeat response to the exact local
@@ -186,8 +192,8 @@ func (h worktreeHolder) String() string { return h.kind + " " + h.name }
 type bgHold struct {
 	name         string
 	runnerHosted bool
-	// watch marks a runner-hosted job that takes no capacity: one that only waits (bgKindWatch), or one
-	// held to its own CPU and memory limits (bgJob.boundedLocked). It holds the checkout like any other.
+	// watch marks a runner-hosted job that only waits (bgKindWatch): it holds the checkout like
+	// any other, and is no capacity.
 	watch bool
 }
 
@@ -198,10 +204,11 @@ type bgHold struct {
 // Warm engines only consume capacity not promised to active turns. Activating a
 // cold session therefore evicts the least-recently-active warm engine first. The
 // victim remains counted as resident until its process Wait completes, so a new
-// process can never transiently push resident engines over max.
+// process can never transiently push resident engines past its claim's limit.
 type sessionPool struct {
 	mu          sync.Mutex
 	max         int
+	burst       int // extra permits and engines available to over-capacity claims
 	clock       poolClock
 	sessions    map[string]*liveSession
 	worktreeOps map[string]*worktreeOperationState
@@ -239,6 +246,10 @@ type sessionPool struct {
 	// accountSwap is the Claude login swap in progress, nil when none is: every session on one of its
 	// two folders starts no turn until it ends (claude_account_swap_relay.go).
 	accountSwap *poolAccountSwap
+
+	// admissionHold is why this runner takes no new work now, or "" (managed_disk_reserve.go). Read
+	// without p.mu, so whoever sets it never measures anything under the pool's lock.
+	admissionHold atomic.Pointer[string]
 }
 
 func newSessionPool(max int) *sessionPool {
@@ -385,19 +396,14 @@ func (p *sessionPool) backgroundJobCountsLocked() map[string]int {
 	return counts
 }
 
-// admissionIdleCapacity spends the account above: it reports how many more sessions
-// this runner may be given, counting a session as occupying a slot while it holds a
-// turn permit OR while runner-hosted jobs of its own are still running. Per session
-// and not per job — several jobs of one session share one checkout, and a session is
-// the unit that new work displaces. A watch is not among those jobs: it only waits. Nor is a job held
-// to its own CPU and memory limits: what it may take is bounded, and the owner set the bound.
+// admissionIdleCapacity reports the number of ordinary slots available. A shared
+// checkout with several runner-hosted jobs still takes just one slot.
 func (p *sessionPool) admissionIdleCapacity() int {
 	idle, _ := p.admissionOccupancy()
 	return idle
 }
 
-// admissionOccupancy is the one count admission and the heartbeat both read: the idle
-// capacity admissionIdleCapacity reports, and the sessions that occupy a slot only
+// admissionOccupancy reports ordinary idle capacity and sessions that occupy a slot only
 // through background jobs of their own — no turn permit, no reclaim under way — which
 // the heartbeat reports as backgroundJobSessionIds, so the control plane can show them
 // as running (sorted). A draining runner offers no capacity, and its job holders still
@@ -405,9 +411,17 @@ func (p *sessionPool) admissionIdleCapacity() int {
 func (p *sessionPool) admissionOccupancy() (int, []string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	occupied, backgroundOnly := p.admissionOccupancyLocked()
+	if p.drainingForUpdate || p.admissionHoldReason() != "" {
+		return 0, backgroundOnly
+	}
+	return max(0, p.max-occupied), backgroundOnly
+}
+
+func (p *sessionPool) admissionOccupancyLocked() (int, []string) {
 	occupied := make(map[string]bool, len(p.sessions))
 	for id, s := range p.sessions {
-		if s.active {
+		if s.active || s.permitPending {
 			occupied[id] = true
 		}
 	}
@@ -425,14 +439,101 @@ func (p *sessionPool) admissionOccupancy() (int, []string) {
 		}
 	}
 	sort.Strings(backgroundOnly)
-	if p.drainingForUpdate {
-		return 0, backgroundOnly
+	return len(occupied), backgroundOnly
+}
+
+// canClaim leaves ordinary admission at max, while letting the server offer a
+// Run now claim whenever there is burst room. The returned claim still has to
+// acquire a local turn permit.
+func (p *sessionPool) canClaim() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	occupied, _ := p.admissionOccupancyLocked()
+	return !p.drainingForUpdate && !p.closedForUpdate && p.admissionHoldReason() == "" && occupied-p.max < p.burst
+}
+
+// idleForTmpSweep says whether nothing is running here that could be using /tmp: no session holds a turn, an
+// engine, a self-driven turn or a reclaim, and no background job runs (managed_tmp.go).
+func (p *sessionPool) idleForTmpSweep() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, s := range p.sessions {
+		if s.active || s.resident || s.selfDrivenTurn {
+			return false
+		}
 	}
-	idle := p.max - len(occupied)
-	if idle < 0 {
-		idle = 0
+	for _, active := range p.reclaiming {
+		if active {
+			return false
+		}
 	}
-	return idle, backgroundOnly
+	for _, jobs := range p.bgJobs {
+		if len(jobs) > 0 {
+			return false
+		}
+	}
+	return len(p.hostless) == 0
+}
+
+// setAdmissionHold sets why this runner takes no new work ("" for none) and returns what it was before.
+func (p *sessionPool) setAdmissionHold(reason string) string {
+	if before := p.admissionHold.Swap(&reason); before != nil {
+		return *before
+	}
+	return ""
+}
+
+// admissionHoldReason is why this runner takes no new work now, or "" when it takes work: while it is set the
+// pool offers no capacity (admissionOccupancy) and no reclaimed RUNNING session starts (waitReclaimPermit).
+func (p *sessionPool) admissionHoldReason() string {
+	if reason := p.admissionHold.Load(); reason != nil {
+		return *reason
+	}
+	return ""
+}
+
+// waitReclaimPermit holds the start of a reclaimed RUNNING session until it can take a turn permit as a claim takes
+// one: fewer sessions hold a slot than max, counted as admissionOccupancy counts them but without the sessions still
+// being reclaimed, this one among them (a claim counts those as holding their slots, so none can take the slot meanwhile),
+// memory has room for one more turn (mem), and the data volume is above its free-space reserve (admissionHoldReason,
+// managed_disk_reserve.go). The reclaim's starts call it one at a time (reclaimStarter.run), so each one started is a
+// permit holder the next one counts. It returns when the permit is free, or when ctx ends: a start then still runs, and
+// detaches on the cancelled loop. Each reserve says in the log when it refuses and when it lifts, once per change.
+func (p *sessionPool) waitReclaimPermit(ctx context.Context, mem *turnMemoryGate) {
+	for {
+		p.mu.Lock()
+		free := p.reclaimSlotsTakenLocked() < p.max
+		changed := p.changed
+		p.mu.Unlock()
+		if free && p.admissionHoldReason() == "" && mem.admits() {
+			return
+		}
+		// A permit coming free signals the pool; memory coming back signals nothing, so it is read again.
+		recheck := time.NewTimer(mem.recheckEvery())
+		select {
+		case <-ctx.Done():
+			recheck.Stop()
+			return
+		case <-changed:
+		case <-recheck.C:
+		}
+		recheck.Stop()
+	}
+}
+
+// reclaimSlotsTakenLocked is how many sessions hold a slot for a reclaimed start: every turn permit holder, and every
+// session whose runner-hosted jobs still run.
+func (p *sessionPool) reclaimSlotsTakenLocked() int {
+	occupied := make(map[string]bool, len(p.sessions))
+	for id, s := range p.sessions {
+		if s.active {
+			occupied[id] = true
+		}
+	}
+	for id := range p.backgroundJobCountsLocked() {
+		occupied[id] = true
+	}
+	return len(occupied)
 }
 
 // holdWorktreeForBackgroundJob records one background shell as a live writer of
@@ -483,12 +584,16 @@ func (p *sessionPool) releaseWorktreeBackgroundJob(sessionID, jobID string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	jobs := p.bgJobs[sessionID]
-	if _, held := jobs[jobID]; !held {
+	hold, held := jobs[jobID]
+	if !held {
 		return
 	}
 	delete(jobs, jobID)
 	if len(jobs) == 0 {
 		delete(p.bgJobs, sessionID)
+	}
+	if hold.runnerHosted && !hold.watch {
+		p.signalLocked(nil)
 	}
 }
 
@@ -584,7 +689,7 @@ func (p *sessionPool) beginWorktreeTakeover(id string) (<-chan struct{}, func())
 				// has to come down here or it stays up until that turn ends or the engine is
 				// evicted — the fence-outliving-its-reason shape of the 2026-09-15 incident.
 				if state.takeovers == 0 {
-					if supervisor := p.sessions[id]; supervisor == nil || !supervisor.active {
+					if supervisor := p.sessions[id]; supervisor == nil || (!supervisor.active && !supervisor.permitPending) {
 						p.releaseWorktreeFenceLocked(id, supervisor)
 					}
 				}
@@ -743,6 +848,21 @@ func (p *sessionPool) activeCountLocked() int {
 	return n
 }
 
+// canAdmitTurnLocked counts actual permits and background holders other than
+// this session. A pending claim or reclaim has yet to acquire its own permit.
+func (p *sessionPool) canAdmitTurnLocked(job *ClaimedSession) bool {
+	occupied := p.activeCountLocked()
+	for id := range p.backgroundJobCountsLocked() {
+		if s := p.sessions[id]; id != job.SessionID && (s == nil || !s.active) {
+			occupied++
+		}
+	}
+	if job.OverCapacity {
+		return occupied-p.max < p.burst
+	}
+	return occupied < p.max
+}
+
 // turnsInFlightLocked counts the sessions a turn is running in right now: every permit holder — a
 // permit is taken at the claim and handed back only once the turn's /turn-complete has landed, so a
 // message, a `!` shell and an EXECUTABLE acceptance command are all counted from claim to settle —
@@ -868,8 +988,7 @@ func (p *sessionPool) forgetUpdateAskedByOwner() {
 }
 
 // drainForUpdate stops this runner taking new work so that the turns in flight can run out: from
-// now on admissionIdleCapacity is 0, which the claim loop reads before every claim, and the
-// heartbeat says it is draining, which keeps the control plane's merges, commits, landings and
+// now on canClaim is false and the heartbeat says it is draining, which keeps merges, commits, landings and
 // repository operations for later. Nothing running is touched, and nothing takes it back: the
 // drain ends in the update's stop.
 func (p *sessionPool) drainForUpdate() {
@@ -1145,9 +1264,8 @@ func runCancels(cancels []context.CancelFunc) {
 }
 
 // register adds a new supervisor. Reclaimed AWAITING_INPUT sessions register
-// cold/inactive; a normal claim registers active and will reserve an engine in
-// runInteractiveSession.
-func (p *sessionPool) register(job *ClaimedSession, cancel context.CancelFunc, active bool) (*liveSession, bool) {
+// cold/inactive; a claim registers with a permit or waits for one in waitActive.
+func (p *sessionPool) register(job *ClaimedSession, cancel context.CancelFunc, claimed bool) (*liveSession, bool) {
 	p.mu.Lock()
 	if existing := p.sessions[job.SessionID]; existing != nil {
 		p.mu.Unlock()
@@ -1157,7 +1275,6 @@ func (p *sessionPool) register(job *ClaimedSession, cancel context.CancelFunc, a
 		id:               job.SessionID,
 		cancel:           cancel,
 		job:              job,
-		active:           active,
 		permitGeneration: 0,
 		wake:             make(chan struct{}),
 		done:             make(chan struct{}),
@@ -1166,12 +1283,14 @@ func (p *sessionPool) register(job *ClaimedSession, cancel context.CancelFunc, a
 		// rather than zero so a pin can never be measured from the year 1.
 		lastOrbitTurnAt: p.clock.Now(),
 	}
-	if active {
+	if claimed {
+		s.active = p.canAdmitTurnLocked(job)
+		s.permitPending = !s.active
 		s.permitGeneration = 1
 		p.markActivityLocked()
 	}
 	p.sessions[s.id] = s
-	if active {
+	if claimed {
 		p.fenceWorktreeOperationLocked(s.id)
 	} else {
 		p.releaseWorktreeFenceLocked(s.id, s)
@@ -1292,8 +1411,8 @@ func (p *sessionPool) beginFinalization(ctx context.Context, s *liveSession) boo
 	}
 }
 
-// activate consumes a server-side claim. A resident warm engine is reused; a
-// cold/evicting supervisor is woken and will reserve capacity before spawning.
+// activate installs a server-side claim. A warm engine can be reused once its
+// turn permit is available. A cold supervisor also reserves an engine slot.
 func (p *sessionPool) activate(job *ClaimedSession) (*liveSession, bool) {
 	return p.activatePrepared(job, nil)
 }
@@ -1342,7 +1461,10 @@ func (p *sessionPool) activatePrepared(job *ClaimedSession, prepare func()) (*li
 		// Before the permit below: an engine that holds one is not recycled.
 		cancels = append(cancels, p.requestEvictLocked(s))
 	}
-	s.active = true
+	// A claim can arrive before the prior turn's completion has released its
+	// permit. Retain the existing permit and engine protection in that case.
+	s.active = s.active || p.canAdmitTurnLocked(job)
+	s.permitPending = !s.active
 	p.markActivityLocked()
 	// A claim taken while the pool drains for an update is one for a session whose engine is already
 	// running a turn here (drainClaimScope): its message waits for the update, as a held follow-up
@@ -1394,8 +1516,13 @@ func (p *sessionPool) park(s *liveSession, expectedPermit uint64) {
 	p.markActivityLocked()
 	p.releaseWorktreeFenceLocked(s.id, s)
 	p.armWarmTimerLocked(s)
+	var cancels []context.CancelFunc
+	if p.residentCountLocked() > p.max {
+		cancels = p.evictWarmExcessLocked()
+	}
 	p.signalLocked(s)
 	p.mu.Unlock()
+	runCancels(cancels)
 }
 
 // armWarmTimerLocked starts the warm TTL of an engine that has just gone idle, and makes
@@ -1463,24 +1590,28 @@ func engineTurnSignal(eventType string, payload map[string]interface{}) (generat
 // start one. A turn that ends parked leaves an idle engine, whose warm TTL starts over
 // from that moment the way park starts it; one that a claim took over in the meantime
 // ends with the permit protecting the engine, and park still to come.
-func (p *sessionPool) engineTurnEvent(s *liveSession, eventType string, payload map[string]interface{}) {
+//
+// It reports whether the slot is to be given back (returnHeldSlot): the engine's own turn ended while the pool drains
+// for an update, under a claim taken for that turn (drainClaimScope) whose message waits for the update. Nothing runs
+// under that permit any more, so it is not kept for the follow-up (docs/runner-update-drain-design.md §7.1, §7.3).
+func (p *sessionPool) engineTurnEvent(s *liveSession, eventType string, payload map[string]interface{}) (returnSlot bool) {
 	generating, ended := engineTurnSignal(eventType, payload)
 	if !generating && !ended {
-		return
+		return false
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.sessions[s.id] != s || !s.resident {
-		return
+		return false
 	}
 	if generating {
 		if !s.active && !s.evictRequested {
 			s.selfDrivenTurn = true
 		}
-		return
+		return false
 	}
 	if !s.selfDrivenTurn {
-		return
+		return false
 	}
 	s.selfDrivenTurn = false
 	p.markActivityLocked()
@@ -1489,6 +1620,36 @@ func (p *sessionPool) engineTurnEvent(s *liveSession, eventType string, payload 
 	}
 	// A cold start waiting at the resident cap may take this engine now.
 	p.signalLocked(s)
+	return p.drainingForUpdate && s.active && !s.completingTurn && !s.detaching
+}
+
+// returnHeldSlot gives back, while the pool drains for an update, the slot a session holds with nothing running under
+// it (docs/runner-update-drain-design.md §7.3): the claim taken for an engine's own turn once that turn has ended
+// (engineTurnEvent), or a permit whose session was stopped while its queued message waited for the update (the
+// poller, on an interrupt). send asks the control plane, which decides from the session's turns: a turn in flight
+// answers RUNNING and the permit is kept; otherwise the session is queued behind the update or idle, and the permit is
+// parked, its engine warm and its background work untouched. Only the permit asked about is parked, so a claim that
+// came in the meantime keeps its own. Nothing is asked when the pool is not draining, the session holds no permit, its
+// engine is at work on a turn of its own, or a turn's completion is already out.
+func (p *sessionPool) returnHeldSlot(id string, send func() (string, error)) {
+	p.mu.Lock()
+	s := p.sessions[id]
+	if s == nil || !p.drainingForUpdate || !s.active || s.detaching || s.completingTurn || s.selfDrivenTurn {
+		p.mu.Unlock()
+		return
+	}
+	permit := s.permitGeneration
+	p.mu.Unlock()
+	status, err := send()
+	if err != nil {
+		logln(fmt.Sprintf("the slot of %s, under which nothing runs while the runner drains for an update, was not given back: %v", id, err))
+		return
+	}
+	if status == stRunning || status == "" {
+		return
+	}
+	logln(fmt.Sprintf("gave back the slot of %s while draining for an update: nothing ran under it (now %s)", id, status))
+	p.park(s, permit)
 }
 
 func (p *sessionPool) permitGeneration(s *liveSession) uint64 {
@@ -1540,12 +1701,22 @@ func (p *sessionPool) waitActive(s *liveSession, sessionCtx, shutdown context.Co
 			p.mu.Unlock()
 			return false
 		}
-		if s.active && !p.closedForUpdate && !s.heldForUpdate && p.accountSwapHoldsLocked(s) {
+		if s.permitPending && !p.closedForUpdate && !p.drainingForUpdate && p.canAdmitTurnLocked(s.job) {
+			s.active = true
+			s.permitPending = false
+			cancels := p.evictWarmExcessLocked()
+			p.signalLocked(s)
+			p.mu.Unlock()
+			runCancels(cancels)
+			continue
+		}
+		ready := s.active && !s.evictRequested && !p.closedForUpdate && !s.heldForUpdate
+		if ready && p.accountSwapHoldsLocked(s) {
 			if !s.heldForSwap {
 				s.heldForSwap = true
 				p.signalLocked(nil) // the swap waiting on this session's turn looks again
 			}
-		} else if s.active && !p.closedForUpdate && !s.heldForUpdate {
+		} else if ready {
 			s.heldForSwap = false
 			if s.completingTurn {
 				s.startedWhileCompleting = true
@@ -1554,6 +1725,9 @@ func (p *sessionPool) waitActive(s *liveSession, sessionCtx, shutdown context.Co
 			return true
 		}
 		wake := s.wake
+		if s.permitPending {
+			wake = p.changed
+		}
 		p.mu.Unlock()
 		select {
 		case <-wake:
@@ -1580,7 +1754,12 @@ func (p *sessionPool) reserveEngine(s *liveSession, sessionCtx, shutdown context
 			p.mu.Unlock()
 			return gen, job, true
 		}
-		if p.residentCountLocked() < p.max {
+		resident := p.residentCountLocked()
+		var cancel context.CancelFunc
+		if resident >= p.max {
+			cancel = p.requestEvictLocked(p.oldestWarmLocked(s.id))
+		}
+		if resident < p.max || (s.job.OverCapacity && resident-p.max < p.burst && !p.evictionPendingLocked()) {
 			s.resident = true
 			s.engineGeneration++
 			s.engineCancel = nil
@@ -1591,8 +1770,6 @@ func (p *sessionPool) reserveEngine(s *liveSession, sessionCtx, shutdown context
 			return gen, job, true
 		}
 
-		victim := p.oldestWarmLocked(s.id)
-		cancel := p.requestEvictLocked(victim)
 		changed := p.changed
 		p.mu.Unlock()
 		if cancel != nil {
@@ -1606,6 +1783,17 @@ func (p *sessionPool) reserveEngine(s *liveSession, sessionCtx, shutdown context
 			return 0, nil, false
 		}
 	}
+}
+
+// Evicting engines still use memory until Wait returns. Give them time to
+// release it before using an extra resident slot.
+func (p *sessionPool) evictionPendingLocked() bool {
+	for _, s := range p.sessions {
+		if s.evictRequested {
+			return true
+		}
+	}
+	return false
 }
 
 // engineStarted installs the cancel func for the exact reserved generation. If
@@ -1720,12 +1908,20 @@ func (p *sessionPool) finish(s *liveSession) {
 	s.doneOnce.Do(func() { close(s.done) })
 }
 
-func (p *sessionPool) setMax(max int) {
-	if max < 1 {
-		max = 1
-	}
+func (p *sessionPool) applyConcurrency(maxConcurrent int, burstConcurrent *int) {
 	p.mu.Lock()
-	p.max = max
+	if maxConcurrent <= 0 {
+		maxConcurrent = p.max
+	}
+	burst := p.burst
+	if burstConcurrent != nil {
+		burst = max(0, *burstConcurrent)
+	}
+	if p.max == maxConcurrent && p.burst == burst {
+		p.mu.Unlock()
+		return
+	}
+	p.max, p.burst = maxConcurrent, burst
 	cancels := p.evictWarmExcessLocked()
 	p.signalLocked(nil)
 	p.mu.Unlock()
@@ -1810,16 +2006,15 @@ func (p *sessionPool) ids() map[string]bool {
 	return ids
 }
 
-// reclaimStates snapshots whether each locally known supervisor already owns an
-// active-turn permit. An ambiguous claim must revive a known cold/warm session
-// when reclaim says RUNNING, while a genuinely active one must not be activated
-// twice and advance its permit generation.
+// reclaimStates snapshots whether each locally known supervisor has already
+// installed its server claim. An ambiguous claim must revive a known cold/warm
+// session when reclaim says RUNNING, while an installed claim must not be replaced.
 func (p *sessionPool) reclaimStates() map[string]bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	states := make(map[string]bool, len(p.sessions))
 	for id, session := range p.sessions {
-		states[id] = session.active
+		states[id] = session.active || session.permitPending
 	}
 	return states
 }

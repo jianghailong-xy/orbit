@@ -22,10 +22,12 @@ import { CRITERIA_WEAKENING_EFFECT_CLASS } from '../projects/criteria-weakening-
 import { DONE_REQUEST_DEDUPE_KEY, DONE_REQUEST_KIND, DONE_REQUEST_TITLE } from '../projects/project-done-request';
 import { handoffCrossingKey } from '../projects/project-handoff';
 import { SessionAttemptService } from '../projects/session-attempt.service';
+import { DriveChunksService } from '../drive/drive-chunks.service';
+import { DriveService, OWNER_WRITER } from '../drive/drive.service';
 import { encryptSecret } from '../providers/provider-crypto';
 import { PatService } from './pat.service';
 import { call, type Apiserver, type Reply } from './pat-test-apiserver';
-import { evidence, paramsOf, type Tenant, type TenantRequest } from './tenant-isolation-cases';
+import { evidence, paramsOf, TENANT_ISOLATION_BG_JOB_ID, type Tenant, type TenantRequest } from './tenant-isolation-cases';
 
 /**
  * What every table notes while the census runs: one row per row written, by whom it does not say. Every table but the
@@ -213,7 +215,6 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
         creatorId: ownerId,
         workspaceId,
         assignedRunnerId: runnerId,
-        status: 'AWAITING_INPUT',
         startedAt: new Date(),
         runtimeSessionId: `runtime-${id}`,
       },
@@ -244,6 +245,18 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
     await db.runEvent.create({ data: { id: eventId, sessionId, seq: 1, type: 'assistant_text', payload: { text: `wrote ${artifactPath}` } } });
     // A reply of the agent's, which Settings › Translation can translate again (reply-translation.ts).
     await db.runEvent.create({ data: { sessionId, seq: 2, type: 'assistant', payload: { text: 'the census replied' } } });
+    // A bg_run job still running, as runner-go background_job.go reports one: the launch pair and its `running` record,
+    // so POST /background/jobs/:jobId/stop and GET .../tail name a job the session ran (TENANT_ISOLATION_BG_JOB_ID).
+    const bgJob = TENANT_ISOLATION_BG_JOB_ID;
+    await db.runEvent.create({ data: { sessionId, seq: 3, type: 'tool_use', payload: {
+      id: bgJob, name: 'Bash', input: { command: 'sleep 600', run_in_background: true },
+    } } });
+    await db.runEvent.create({ data: { sessionId, seq: 4, type: 'tool_result', payload: {
+      toolUseId: bgJob, content: `Command running in background with ID: ${bgJob}. Output is being written to: /census/${bgJob}.output. `,
+    } } });
+    await db.runEvent.create({ data: { sessionId, seq: 5, type: 'background_task', payload: {
+      shellId: bgJob, toolUseId: bgJob, status: 'running', kind: 'job', command: 'sleep 600', outputPath: `/census/${bgJob}.output`,
+    } } });
     await db.attachment.create({
       data: { ownerId, sessionId, mimeType: 'text/plain', sizeBytes: 6, fileName: 'census.txt', data: Buffer.from('census') },
     });
@@ -348,6 +361,13 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
         crossingFact: { kind: 'SELF_STARTED_TURN' },
       },
     })).id;
+    const settingChangeId = (await db.projectSettingChange.create({
+      data: {
+        ownerId, projectId, field: 'LANDING_CHECK', origin: 'COORDINATOR', reason: 'CENSUS', writtenBySessionId: randomUUID(),
+        oldValue: { command: null, timeoutSeconds: null, none: false },
+        newValue: { command: 'true', timeoutSeconds: null, none: false },
+      },
+    })).id;
     const handoffTargetId = await project(`${name} handoff target`);
     const handoffId = randomUUID();
     const payloadDigest = 'a'.repeat(64);
@@ -373,7 +393,7 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
       data: {
         id: landingSessionId, title: `${name} landing`, ownerId, creatorId: ownerId, workspaceId,
         prompt: 'Orbit runs this landing. This conversation is a record, not an engine.',
-        status: 'AWAITING_INPUT', sessionKind: 'LANDING', startsTaskWork: false,
+        sessionKind: 'LANDING', startsTaskWork: false,
         provider: 'orbit', providerBuiltin: true, titleManagedByProject: true,
         dispatchOrigin: 'USER', runSource: 'MANUAL',
       },
@@ -557,7 +577,6 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
         creatorId: ownerId,
         workspaceId,
         assignedRunnerId: runnerId,
-        status: 'AWAITING_INPUT',
         startedAt: new Date(),
         runtimeSessionId: `runtime-${wikiChatId}`,
         wikiChatSpaceId: wikiSpaceId,
@@ -650,6 +669,33 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
       return id;
     };
 
+    // The drive: a folder, a file in it with two replaced versions (an empty overwrite each), and files deleted to Trash.
+    const drive = new DriveService(db as never);
+    const driveFolder = await drive.createFolder(ownerId, { name: `${name} census folder` });
+    const driveFile = await drive.createFile(ownerId, { parentId: driveFolder.id, name: 'census.txt' });
+    const driveOverwrite = async () => (await drive.commit(ownerId, {
+      commitId: randomUUID(), entryId: driveFile.id, mode: 'OVERWRITE', chunks: [], writer: OWNER_WRITER,
+    })).replacedVersionId!;
+    const driveVersionId = await driveOverwrite();
+    const spareDriveVersionId = await driveOverwrite();
+    const driveTrashed = async (label: string) =>
+      (await drive.moveToTrash(ownerId, (await drive.createFile(ownerId, { parentId: driveFolder.id, name: `${label}.txt` })).id)).trashGroupId;
+    const driveTrashGroupId = await driveTrashed('in-trash');
+    const spareDriveTrashGroupId = await driveTrashed('deleted-for-good');
+    const spareDriveRestoreGroupId = await driveTrashed('restored');
+    const spareDriveRestoreItemEntryId = (await drive.createFile(ownerId, { parentId: driveFolder.id, name: 'restored-alone.txt' })).id;
+    const spareDriveRestoreItemGroupId = (await drive.moveToTrash(ownerId, spareDriveRestoreItemEntryId)).trashGroupId;
+    const driveUpload = async (declaredSize: number) =>
+      (await new DriveChunksService(db as never, undefined as never).openStaging(ownerId, {
+        source: 'OWNER_UPLOAD', parentId: driveFolder.id, name: 'upload.bin', declaredSize,
+      })).id;
+    const driveUploadId = await driveUpload(10);
+    // An agent's directory sync of this account's runner (docs/drive-directory-sync-design.md S4).
+    const driveSyncId = (await db.driveSync.create({ data: { ownerId, runnerId, sourceName: 'census', destPath: '/census' } })).id;
+    const spareDriveCompleteUploadId = await driveUpload(0);
+    const spareDriveAbandonUploadId = await driveUpload(10);
+    const spareDriveEntryId = (await drive.createFile(ownerId, { parentId: driveFolder.id, name: 'spare.txt' })).id;
+
     const shareTaskId = await task(`${name} shared task`);
     ok(await as('PUT', `/tasks/${shareTaskId}/share`, {}), 'a share link');
     const shareLinkId = (await db.shareLink.findFirstOrThrow({ where: { ownerId, taskId: shareTaskId } })).id;
@@ -727,6 +773,7 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
       doneRequestItemId,
       blockerId,
       fuseEpisodeId,
+      settingChangeId,
       handoffId,
       promotionId,
       integrationJobId,
@@ -763,6 +810,12 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
       adminSubjectId: adminSubject.userId,
       adminSubjectTokenId,
       adminProviderId: await adminProvider(`${name}-admin-provider`),
+      driveFolderId: driveFolder.id,
+      driveFileId: driveFile.id,
+      driveVersionId,
+      driveTrashGroupId,
+      driveUploadId,
+      driveSyncId,
       spare: {
         accessTokenId: idOf(await as('POST', '/access-tokens', { name: `${name} spare`, scopes: ['tasks:read'] }), 'a token'),
         adminProviderId: await adminProvider(`${name}-admin-provider-spare`),
@@ -791,6 +844,14 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
         guestUserId: spareGuestUserId,
         listId: idOf(await as('POST', '/task-lists', { title: `${name} spare list` }), 'a spare list'),
         taskId: await task(`${name} spare task`),
+        driveEntryId: spareDriveEntryId,
+        driveCompleteUploadId: spareDriveCompleteUploadId,
+        driveAbandonUploadId: spareDriveAbandonUploadId,
+        driveVersionId: spareDriveVersionId,
+        driveTrashGroupId: spareDriveTrashGroupId,
+        driveRestoreGroupId: spareDriveRestoreGroupId,
+        driveRestoreItemGroupId: spareDriveRestoreItemGroupId,
+        driveRestoreItemEntryId: spareDriveRestoreItemEntryId,
       },
     };
   }

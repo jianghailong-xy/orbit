@@ -58,7 +58,8 @@ import {
   type StartProjectRequestBody,
   uuidToBase62,
 } from '@orbit/shared';
-import { RunStatus, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { PrismaClient } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
@@ -82,6 +83,7 @@ import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectFuseService } from './project-fuse.service';
 import { ProjectHandoffService } from './project-handoff.service';
 import { enqueueForDoneTask } from './project-integration-job';
+import { projectBranchRef } from './project-integration-line';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectsController } from './projects.controller';
 import { ProjectsService } from './projects.service';
@@ -111,6 +113,8 @@ interface Account { ownerId: string; runnerId: string }
 interface Fixture extends Account {
   projectId: string;
   publicId: string;
+  /** The project branch a line nobody named gets, as a full ref (`projectBranchRef`). */
+  branchRef: string;
   workspaceId: string;
   sessionId: string;
 }
@@ -263,7 +267,7 @@ test('a project’s main branch is chosen by its owner, remembered per account a
         title: label,
         prompt: label,
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
         runtimeSessionId: randomUUID(),
@@ -306,7 +310,10 @@ test('a project’s main branch is chosen by its owner, remembered per account a
     await projects.update(who.ownerId, projectId, {
       acceptanceCriteriaItems: [{ text: CRITERION, verificationMethod: METHOD }],
     } as never);
-    return { ...who, projectId, publicId: uuidToBase62(projectId), workspaceId, sessionId };
+    return {
+      ...who, projectId, publicId: uuidToBase62(projectId),
+      branchRef: projectBranchRef(projectId, `${label} project`), workspaceId, sessionId,
+    };
   }
 
   async function seal(f: Fixture): Promise<string> {
@@ -429,7 +436,7 @@ test('a project’s main branch is chosen by its owner, remembered per account a
     assert.equal(onBranch.status, 201, onBranch.body);
     const branchedRow = await bindingOf(branched);
     assert.equal(branchedRow?.upstream_ref, 'refs/heads/develop');
-    assert.equal(branchedRow?.integration_ref, `refs/heads/project/${branched.publicId}`);
+    assert.equal(branchedRow?.integration_ref, branched.branchRef);
     assert.ok(branchedRow?.upstream_ref_chosen_at instanceof Date);
   });
 
@@ -451,7 +458,7 @@ test('a project’s main branch is chosen by its owner, remembered per account a
     assert.equal(chosen.status, 200, chosen.body);
     const row = await bindingOf(next);
     assert.equal(row?.upstream_ref, 'refs/heads/master', 'bound on the main branch chosen last');
-    assert.equal(row?.integration_ref, `refs/heads/project/${next.publicId}`);
+    assert.equal(row?.integration_ref, next.branchRef);
     assert.equal(row?.upstream_ref_chosen_at, null,
       'carrying the owner’s last choice is not a choice of this project’s');
     const view = await integrationOf(next);
@@ -546,11 +553,15 @@ test('a project’s main branch is chosen by its owner, remembered per account a
         title: 'first-integration work',
         prompt: 'first-integration work',
         provider: 'claude',
-        status: RunStatus.SUCCEEDED,
+        turnState: null, 
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: true,
         isolationStatus: 'worktree',
         branch: `orbit/first-integration-${f.publicId}`,
+        // Finished, as /finalize writes SUCCEEDED, with a tip of its own past its base: settled work with
+        // commits to land. Since §12.15 P-M1 a run with no finish is work still moving, and queues nothing.
+        baseSha: 'a'.repeat(40), branchSha: 'b'.repeat(40), worktreeBranch: `orbit/first-integration-${f.publicId}`,
+        worktreeDirty: false, changedFiles: ['src/first.ts'], finishedAt: new Date(),
       },
     });
     await prisma.task.update({ where: { id: created.id }, data: { status: TaskStatus.DONE } });
@@ -680,7 +691,7 @@ test('a project’s main branch is chosen by its owner, remembered per account a
           title: label,
           prompt: label,
           provider: 'claude',
-          status: RunStatus.SUCCEEDED,
+          turnState: null, finishedAt: new Date(), 
           dispatchOrigin: SessionDispatchOrigin.USER,
           mergeTargets,
           ...extra,
@@ -858,7 +869,7 @@ test('a project’s main branch is chosen by its owner, remembered per account a
     // coordination workspace's checkout.
     const branched = await project(lister, 'on-its-branch', REPO_URL);
     assert.equal((await configure(branched, { line: 'PROJECT_BRANCH', upstreamRef: 'refs/heads/master' })).status, 200);
-    const projectBranch = `project/${branched.publicId}`;
+    const projectBranch = branched.branchRef.slice('refs/heads/'.length);
     assert.equal((await bindingOf(branched))?.integration_ref, `refs/heads/${projectBranch}`);
     // One straight onto master, whose integration ref is master itself.
     const straight = await project(lister, 'straight-onto-master', REPO_URL);
@@ -870,7 +881,7 @@ test('a project’s main branch is chosen by its owner, remembered per account a
     const stranger = await account('lister-stranger');
     const theirs = await project(stranger, 'theirs-on-its-branch', REPO_URL);
     assert.equal((await configure(theirs, { line: 'PROJECT_BRANCH' })).status, 200);
-    const theirBranch = `project/${theirs.publicId}`;
+    const theirBranch = theirs.branchRef.slice('refs/heads/'.length);
 
     // The coordinator's own session is the newest in its workspace: what its runner reports there.
     const report = async (f: Fixture, names: string[]) => {

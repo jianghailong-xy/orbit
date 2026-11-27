@@ -2,14 +2,13 @@ import SwiftUI
 import OrbitKit
 
 /// The project occupies its coordinator's place, with the same two scan lines as a session row.
-/// A tap opens the coordinator on a phone and the project's sessions in the iPad's column; Open Session
-/// in the menu reaches the grouping target.
+/// The shared shell (`SessionListRow`) is the button, the tag, the swipes and the menu; this is the
+/// row's content alone, so both a project with a coordinator and one without draw it the same.
 struct SessionProjectRowView: View {
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
     let row: SessionProjectRow
-    let onOpen: () -> Void
     #if os(macOS)
     /// The leading glyph's box, the session rows' (`StatusGlyphView`), so the two titles line up.
     @ScaledMetric(relativeTo: .subheadline) private var glyphBox: CGFloat = 20
@@ -24,28 +23,23 @@ struct SessionProjectRowView: View {
     }
 
     var body: some View {
-        #if os(macOS)
-        Button(action: onOpen) {
-            macRow
-                .contentShape(Rectangle())
-                .accessibilityElement(children: .combine)
-                .accessibilityValue(statusWords)
-        }
-        .buttonStyle(.plain)
-        // The session row's own cell metrics (`AgentSessionRow`): zeroed insets and the
-        // separator under the title.
-        .listRowInsets(EdgeInsets())
-        .alignmentGuide(.listRowSeparatorLeading) { _ in 44 }
-        #else
-        Button(action: onOpen) {
-            Group {
-                if regular { regularIOSRow } else { compactRow }
-            }
+        layout
             .contentShape(Rectangle())
             .accessibilityElement(children: .combine)
             .accessibilityValue(statusWords)
+    }
+
+    @ViewBuilder private var layout: some View {
+        #if os(macOS)
+        // The session row's own cell metrics (`AgentSessionRow`): zeroed insets and the
+        // separator under the title.
+        macRow
+            .listRowInsets(EdgeInsets())
+            .alignmentGuide(.listRowSeparatorLeading) { _ in 44 }
+        #else
+        Group {
+            if regular { regularIOSRow } else { compactRow }
         }
-        .buttonStyle(.plain)
         #endif
     }
 
@@ -62,7 +56,7 @@ struct SessionProjectRowView: View {
                     HStack(spacing: 8) {
                         Text(row.title).foregroundStyle(.primary).lineLimit(1).layoutPriority(1)
                         Spacer(minLength: 8)
-                        if let timestamp = row.lastTurnAt ?? row.createdAt,
+                        if let timestamp = row.listedAt ?? row.createdAt,
                            let relative = RelativeTime.format(timestamp) {
                             Text(relative).font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1).fixedSize()
                         }
@@ -123,7 +117,7 @@ struct SessionProjectRowView: View {
                 .layoutPriority(1)
             Spacer(minLength: 8)
             liveIndicator
-            if let timestamp = row.lastTurnAt ?? row.createdAt,
+            if let timestamp = row.listedAt ?? row.createdAt,
                let relative = RelativeTime.format(timestamp) {
                 Text(relative)
                     .font(.orbitMeta)
@@ -137,6 +131,9 @@ struct SessionProjectRowView: View {
     private var secondLine: some View {
         HStack(spacing: 7) {
             progressChip
+            if row.line.pauseGlyph {
+                Image(systemName: "pause.fill").font(.caption2).foregroundStyle(lineColor)
+            }
             Text(row.line.text)
                 .font(.orbitListSubtitle)
                 .foregroundStyle(lineColor)
@@ -145,7 +142,8 @@ struct SessionProjectRowView: View {
     }
 
     private var progressChip: some View {
-        SessionProjectProgressChip(counts: row.taskCounts, running: row.runningCount, status: row.status)
+        SessionProjectProgressChip(counts: row.taskCounts, running: row.runningCount, status: row.status,
+                                   paused: row.pause != nil)
     }
 
     @ViewBuilder private var liveIndicator: some View {
@@ -198,11 +196,12 @@ private struct SessionProjectProgressChip: View {
     let counts: ProjectSidebarTaskCounts?
     let running: Int
     let status: ProjectStatus
+    var paused = false
 
     var body: some View {
         HStack(spacing: 4) {
             if let counts {
-                SessionProjectProgressBar(counts: counts, running: running)
+                SessionProjectProgressBar(counts: counts, running: running, paused: paused)
                     .frame(width: 26)
                 Text(SessionProjectCopy.progress(done: counts.done, total: counts.total))
             } else {
@@ -223,12 +222,16 @@ private struct SessionProjectProgressChip: View {
 private struct SessionProjectProgressBar: View {
     let counts: ProjectSidebarTaskCounts
     let running: Int
+    /// A paused project's bar draws grey: nothing is moving.
+    var paused = false
 
     var body: some View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
                 Color.secondary.opacity(0.3)
-                if counts.total > 0 {
+                if counts.total > 0 && paused {
+                    Color.secondary.frame(width: proxy.size.width * CGFloat(counts.done) / CGFloat(counts.total))
+                } else if counts.total > 0 {
                     HStack(spacing: 0) {
                         Color.green.frame(width: proxy.size.width * CGFloat(counts.done) / CGFloat(counts.total))
                         Color.blue.frame(width: proxy.size.width * CGFloat(running) / CGFloat(counts.total))
@@ -243,93 +246,138 @@ private struct SessionProjectProgressBar: View {
     }
 }
 
-/// Pin and Move affect the coordinator. An OPEN project has no completion, sharing or deletion
-/// action; a finished one in Open leads with Complete, which moves all its open sessions (§4.3).
-private struct SessionProjectRowActions: ViewModifier {
+/// A project's row as the session list draws it. With a coordinator it is the coordinator's own
+/// session row — the shared shell, so it is tagged in the `List`'s selection, swipes on the Mac, and
+/// drags, exactly as a plain session's row does — with this project's content, actions and open
+/// target. Pin and Move affect the coordinator; an OPEN project has no completion, sharing or
+/// deletion action, and a finished one in Open leads with Complete, which moves all its open
+/// sessions (§4.3). A project with no coordinator has no session behind it, so it stays the small
+/// button-and-menu row it has always been.
+struct SessionProjectListRow: View {
     @Environment(AppModel.self) private var app
-    #if os(iOS)
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    #endif
     let row: SessionProjectRow
     let view: SessionView
-    let onOpen: () -> Void
-    let onSessions: () -> Void
-    let onProject: () -> Void
-    let onMove: () -> Void
+    let agentID: String
+    let navigation: SessionRowNavigation
+    let drag: SessionDragState
+    /// Whether the list offers somewhere to drop a row (folder rows, or a folder's page head).
+    let dropTargets: Bool
+    let onMove: (Session) -> Void
 
-    func body(content: Content) -> some View {
-        #if os(macOS)
-        content.contextMenu { menu }
-        #else
-        if #available(iOS 26.0, *), horizontalSizeClass == .compact {
-            content
-                .contextMenu { menu }
-                .circleSwipeActions(id: "project-\(row.projectId)", leading: leadingActions,
-                                    trailing: trailingActions, leadingFullSwipe: row.coordinator != nil)
+    private var address: SessionProjectAddress {
+        SessionProjectAddress(projectID: row.projectId, agentID: agentID, view: view)
+    }
+
+    /// The sessions the app holds, for the row's line and its target.
+    private var held: [Session] { app.sessions + (app.agents?.allSessions ?? []) }
+
+    var body: some View {
+        if let coordinator = row.coordinator {
+            SessionListRow(
+                subject: coordinator, navigation: navigation, onOpen: onTap,
+                leading: row.leadingActions(in: view).map { swipeAction($0, coordinator) },
+                trailing: row.trailingActions().map { swipeAction($0, coordinator) },
+                leadingFullSwipe: SessionProjectRow.allowsFullSwipe,
+                draggable: navigation == .selection && SessionFolderDrag.draggable(
+                    projectCoordinator: coordinator, view: view, dropTargets: dropTargets),
+                drag: drag, dragTitle: row.title,
+                content: { SessionProjectRowView(row: row) },
+                menu: { menu(pin: SessionRowAction.pin(coordinator, in: app)) })
         } else {
-            content
-                .swipeActions(edge: .leading, allowsFullSwipe: row.coordinator != nil) {
-                    ForEach(leadingActions) { actionButton($0) }
-                }
-                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    ForEach(trailingActions) { actionButton($0) }
-                }
-                .contextMenu { menu }
+            // No session to back a shell row, a swipe or a drag: the same content in a plain button,
+            // with the ways into the project (Complete still applies to a finished one, §4.3).
+            Button(action: onTap) {
+                SessionProjectRowView(row: row)
+            }
+            .buttonStyle(.plain)
+            .contextMenu { menu(pin: nil) }
         }
-        #endif
     }
 
-    @ViewBuilder
-    private var menu: some View {
-        if row.offersComplete(in: view) {
-            Button { app.completeProjectSessions(row) } label: {
-                Label(SessionProjectCopy.complete, systemImage: "checkmark")
+    /// One slot of a swipe, drawn from the row's own action list (`SessionProjectRow.leadingActions`).
+    private func swipeAction(_ action: SessionProjectRowAction, _ coordinator: Session) -> RowSwipeAction {
+        switch action {
+        case .pause:
+            return RowSwipeAction(title: SessionProjectCopy.pause, systemImage: "pause.fill", tint: .orange) {
+                app.pauseProject(row)
             }
-            Divider()
+        case .resume:
+            return RowSwipeAction(title: SessionProjectCopy.resume, systemImage: "play.fill", tint: .green) {
+                app.resumeProject(row)
+            }
+        case .complete:
+            return RowSwipeAction(title: SessionProjectCopy.complete, systemImage: "checkmark", tint: .green) {
+                app.completeProjectSessions(row)
+            }
+        case .pin: return SessionRowAction.pin(coordinator, in: app)
+        case .move: return SessionRowAction.move { onMove(coordinator) }
         }
-        Button(action: onOpen) {
-            Label(SessionProjectCopy.openSession, systemImage: "bubble.left")
-        }
-        .disabled(!canOpenSession)
-        Button(action: onSessions) { Label(SessionProjectCopy.sessions, systemImage: "list.bullet") }
-        Button(action: onProject) { Label(SessionProjectCopy.openProject, systemImage: "square.grid.2x2") }
-        Divider()
-        actionButton(pinAction)
-        Button(action: onMove) { Label(SessionProjectCopy.move, systemImage: "folder") }
-            .disabled(row.coordinator == nil)
     }
+
+    /// A phone opens the coordinator's conversation, not the project's sessions page, which is the
+    /// button in that conversation's navigation bar (owner 2026-11-11, board 5). The iPad's column
+    /// keeps the page. A row whose line says a member is waiting on you opens that member instead, at
+    /// its card, on both (owner 2026-11-14).
+    private var onTap: () -> Void {
+        {
+            switch SessionProjectSheet.rowTap(row, held: held, push: navigation == .push) {
+            case .waitingMember(let member): app.openWaitingMember(member, project: address, push: navigation == .push)
+            case .coordinator(let coordinator): app.openProjectMember(coordinator, push: true)
+            case .sessions: app.openProjectSessions(address)
+            }
+        }
+    }
+
+    /// Open Session: the grouping target — the coordinator, or the member the line names.
+    private var onOpenTarget: () -> Void {
+        switch row.target {
+        case .session(let id):
+            return {
+                if let session = held.first(where: { $0.id == id }) {
+                    app.openProjectMember(session, push: navigation == .push)
+                }
+            }
+        case .project:
+            return { app.openProjectSessions(address) }
+        }
+    }
+
+    private var onSessions: () -> Void { { app.openProjectSessions(address) } }
+    private var onProject: () -> Void { { app.openProject(row.projectId) } }
 
     private var canOpenSession: Bool {
         if case .session = row.target { return true }
         return false
     }
 
-    private var leadingActions: [RowSwipeAction] { row.coordinator == nil ? [] : [pinAction] }
-    private var trailingActions: [RowSwipeAction] {
-        row.coordinator == nil ? [] : [RowSwipeAction(title: "Move", systemImage: "folder", tint: .indigo,
-                                                    perform: onMove)]
-    }
-    private var pinAction: RowSwipeAction {
-        let pinned = row.coordinator?.pinnedAt != nil
-        return RowSwipeAction(title: pinned ? SessionProjectCopy.unpin : SessionProjectCopy.pin,
-                              systemImage: pinned ? "pin.slash" : "pin", tint: .indigo,
-                              isEnabled: row.coordinator != nil) {
-            if let coordinator = row.coordinator { app.setPinned(coordinator, pinned: !pinned) }
+    /// The project row's menu (§4.3). `pin` is nil for a project with no coordinator, which has
+    /// nothing to pin or move.
+    @ViewBuilder private func menu(pin: RowSwipeAction?) -> some View {
+        if row.offersComplete(in: view) {
+            Button { app.completeProjectSessions(row) } label: {
+                Label(SessionProjectCopy.complete, systemImage: "checkmark")
+            }
+            Divider()
         }
-    }
-    private func actionButton(_ action: RowSwipeAction) -> some View {
-        Button(action: action.perform) { Label(action.title, systemImage: action.systemImage) }
-            .tint(action.tint)
-            .disabled(!action.isEnabled)
-    }
-}
-
-extension View {
-    func sessionProjectRowActions(_ row: SessionProjectRow, view: SessionView, onOpen: @escaping () -> Void,
-                                  onSessions: @escaping () -> Void, onProject: @escaping () -> Void,
-                                  onMove: @escaping () -> Void) -> some View {
-        modifier(SessionProjectRowActions(row: row, view: view, onOpen: onOpen, onSessions: onSessions,
-                                          onProject: onProject, onMove: onMove))
+        Button(action: onOpenTarget) {
+            Label(SessionProjectCopy.openSession, systemImage: "bubble.left")
+        }
+        .disabled(!canOpenSession)
+        Button(action: onSessions) { Label(SessionProjectCopy.sessions, systemImage: "list.bullet") }
+        Button(action: onProject) { Label(SessionProjectCopy.openProject, systemImage: "square.grid.2x2") }
+        if let pin, let coordinator = row.coordinator {
+            Divider()
+            ForEach(row.menuGroup(in: view), id: \.self) { action in
+                switch action {
+                case .pin: pin.menuItem
+                case .move:
+                    Button(action: { onMove(coordinator) }) {
+                        Label(SessionProjectCopy.move, systemImage: "folder")
+                    }
+                default: swipeAction(action, coordinator).menuItem
+                }
+            }
+        }
     }
 }
 
@@ -383,7 +431,8 @@ struct SessionProjectPage: View {
     /// counts, over the project's landing sessions and its merges into main. Nil for a project that
     /// has never had a landing, which draws no row.
     private var landingsSummary: LandingsRowSummary? {
-        SessionProjectLandings.rowSummary(landingRows, merges: merge?.merged ?? [],
+        guard !ProjectPage.noLineYet(app.projectSessionsIntegration) else { return nil }
+        return SessionProjectLandings.rowSummary(landingRows, merges: merge?.merged ?? [],
                                           main: RunSettings.mainBranchName(app.projectSessionsIntegration?.upstreamRef))
     }
     /// The merge job in flight, if one is — its id, kind and the sentence where it stopped.
@@ -546,7 +595,8 @@ struct SessionProjectPage: View {
         .sheet(item: $sharingSession) { session in
             if let baseURL = app.baseURL {
                 ShareSheet(kind: .session, rootID: session.id, baseURL: baseURL, tokenStore: app.tokenStore,
-                           guests: .of(session, agents: app.agents))
+                           guests: .of(session, agents: app.agents,
+                                       accountDefault: app.user?.preferences?.defaultPermissionMode))
             }
         }
         .sheet(item: $movingSession) { session in
@@ -815,7 +865,8 @@ struct SessionProjectPage: View {
     /// job's card is the merge card's (`mergeCard`), so this one stays about tasks landing on the
     /// project branch.
     @ViewBuilder private var landingCard: some View {
-        if let integration = app.projectSessionsIntegration, integration.inFlight != nil {
+        if let integration = app.projectSessionsIntegration, integration.inFlight != nil,
+           !ProjectPage.noLineYet(integration) {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 if let card = ProjectMergeCard.taskLandingCard(integration, now: context.date,
                                                                updatedAt: app.projectSessionsIntegrationReadAt,
@@ -986,17 +1037,12 @@ struct SessionProjectPage: View {
 
     @ViewBuilder private func sessionRow(_ session: Session) -> some View {
         let scope: SessionView = session.effectiveLifecycleState == .completed ? .completed : .open
-        let row = AgentSessionRow(session: session)
-        switch rowNavigation {
-        case .selection:
-            row.sessionRowActions(session, scope: scope, onTag: { taggingSession = session },
-                                  onShare: { sharingSession = session }, onMove: moveAction(session))
-                .tag(session.id)
-        case .push:
-            Button { openMember(session) } label: { row.foregroundStyle(.primary) }
-                .sessionRowActions(session, scope: scope, onTag: { taggingSession = session },
-                                   onShare: { sharingSession = session }, onMove: moveAction(session))
-        }
+        // A column shell's selection opens the member; a pushed page's own press does.
+        let open: (() -> Void)? = rowNavigation == .push ? { openMember(session) } : nil
+        SessionRow(session: session, navigation: rowNavigation, scope: scope,
+                   onTag: { taggingSession = session },
+                   onShare: { sharingSession = session }, onMove: moveAction(session),
+                   onOpen: open)
     }
 
     /// Move: the Move panel for this row, on every platform.

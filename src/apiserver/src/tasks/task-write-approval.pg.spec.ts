@@ -64,8 +64,8 @@ test('a session write is the write its card approved', { skip: !URL, concurrency
   server = await startApiserver(url, jwtSecret, {
     PROVIDER_SECRET_KEY: `task-write-approval-${RUN}`,
     MODEL_CATALOG_URL: 'http://127.0.0.1:9/',
-    ORBIT_FILES_BACKEND: 'local',
-    ORBIT_FILES_DIR: dir,
+    ORBIT_DRIVE_BACKEND: 'local',
+    ORBIT_DRIVE_DIR: dir,
   });
   const api = server;
 
@@ -90,7 +90,7 @@ test('a session write is the write its card approved', { skip: !URL, concurrency
     await db.session.create({
       data: {
         id, title, prompt: title, ownerId, creatorId: ownerId, workspaceId,
-        assignedRunnerId: runnerId, status: 'AWAITING_INPUT', startedAt: new Date(),
+        assignedRunnerId: runnerId, turnState: null, startedAt: new Date(),
         runtimeSessionId: `runtime-${id}`, provider: 'claude',
         ...(permissionMode ? { permissionMode } : {}),
       },
@@ -304,7 +304,7 @@ test('a session write is the write its card approved', { skip: !URL, concurrency
     refusedForSession(await dagApply(forged, listId, ops), 'a DAG apply under a forged session');
 
     const ended = await sessionOf('an ended session');
-    await db.session.update({ where: { id: ended }, data: { status: 'CANCELLED', completedAt: new Date() } });
+    await db.session.update({ where: { id: ended }, data: { turnState: null, finishedAt: new Date(), completedAt: new Date() } });
     const endedBody = taskBody('a create under an ended session');
     await cardOf(ended, 'orbit_task_create', endedBody);
     refusedForSession(await create(ended, endedBody), 'a create under an ended session, even with a card of its own');

@@ -293,7 +293,7 @@ func TestWikiImportIsTheContractsAndIsPreApproved(t *testing.T) {
 	}
 	// Pre-approved for the session it runs in, as the other wiki verbs are.
 	exe := "/usr/local/bin/orbit"
-	if rules := strings.Join(orbitCLIAllowedTools(exe, false), "\n"); !strings.Contains(rules, "Bash("+exe+" wiki import *)") {
+	if rules := strings.Join(orbitCLIAllowedTools(exe, false, false), "\n"); !strings.Contains(rules, "Bash("+exe+" wiki import *)") {
 		t.Errorf("orbit wiki import is advertised and pre-approved for nobody: %q", rules)
 	}
 }

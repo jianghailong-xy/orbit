@@ -45,7 +45,7 @@ public enum ControlEventType: String, Codable, Sendable {
     case wikiChanged = "wiki.changed"
     /// The owner's terminals changed — a terminal asked to be approved, a request was decided or collected, or a
     /// terminal was revoked. USER-scoped; `data` names the request or terminal and nothing else: a nudge to re-read
-    /// `GET /terminals/requests` (the approve card) and `GET /terminals` (Settings → Terminals).
+    /// `GET /terminals/requests` (the approve card) and `GET /terminals` (each machine page's Terminals).
     case terminalsChanged = "terminals.changed"
     /// The account's Open list may read differently now (docs/realtime-control-plane-stream.md
     /// §4.8). USER-scoped; `data` carries the list's version (`ControlListChanged`). Sent only to a
@@ -56,6 +56,12 @@ public enum ControlEventType: String, Codable, Sendable {
     /// docs/ux/translation-failure-policy.html frame 6). USER-scoped: a nudge to re-read `GET /users/me`
     /// for `translationUnavailableUntil`. Not sent when the skip simply runs out: the client times that.
     case translationStatusChanged = "translation.status_changed"
+    /// One write to the owner's Drive committed (docs/drive-technical-design.md §5.4). USER-scoped: a
+    /// nudge to re-read what the Drive page shows.
+    case driveChanged = "drive.changed"
+    /// An agent's directory sync into Drive started, moved or ended (docs/drive-directory-sync-design.md):
+    /// a nudge to re-read `GET /drive/syncs` for the uploads popover.
+    case driveSync = "drive.sync"
     case notification = "notification"
     case unknown
 
@@ -117,9 +123,20 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
     public let status: RunStatus
     /// Explicit low-level runner state; `status` is retained for older control planes.
     public let runStatus: RunStatus?
+    @LenientSessionField public private(set) var phase: SessionPhase?
+    @LenientSessionField public private(set) var released: Bool?
+    @LenientSessionField public private(set) var workFinished: Bool?
+    @LenientSessionField public private(set) var lastTurnOutcome: SessionTurnOutcome?
+    @LenientSessionField public private(set) var waitingOn: SessionWaitingOn?
+    /// The Background mark's inputs, beside the facts. `activity` is doubly optional for `retryAt`'s reason:
+    /// `nil` is a server that never sends the key (keep the row's), `.some(nil)` is this server saying the
+    /// session is doing nothing beyond its status. `runningBgCount` is never null: nil keeps the row's.
+    public let activity: String??
+    public let runningBgCount: Int?
     /// Server-normalized state, omitted by older control planes.
     public let sessionState: SessionState?
     /// Orthogonal execution state and lifecycle location, omitted by older control planes.
+    public let endReason: String??
     public let runState: SessionRunState?
     public let lifecycleState: SessionLifecycleState?
     public let capabilities: SessionCapabilities?
@@ -143,6 +160,12 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
     /// nothing is waiting any more — which is how the Needs-you bar lets go of a card somebody
     /// answered — and `.some(items)` is what is waiting now.
     public let ownerItems: [SessionOwnerItem]??
+    /// The open owner requests this session asked, and the PENDING task moves waiting on it —
+    /// overwritten with the count they are part of, and doubly optional for `ownerItems`' reason:
+    /// `nil` is an older control plane that never sends the key (keep what the row knows),
+    /// `.some([])` is this server saying none is waiting any more, and `.some(list)` is what is.
+    public let ownerRequests: [SessionOwnerRequest]??
+    public let taskMoves: [SessionTaskMoveGroup]??
     /// The confirmation on this run's session that is still with its reviewer (contract §5 N3).
     /// Doubly optional for `retryAt`'s reason: `nil` is an older control plane that never sends the
     /// key (keep the row's), `.some(nil)` is this server saying none is under review any more — how a
@@ -154,6 +177,8 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
     public let awaitingReplyFrom: [SessionRequestPeer]??
     public let owesReplyTo: [SessionRequestPeer]??
     public let lastTurnAt: String?
+    /// The list's order key; nil from an older control plane (keep the row's).
+    public let listedAt: String?
     /// The rolling recap and when it was written. Doubly optional like `retryAt`: `nil` is an older
     /// control plane that never sends the key (keep the row's), `.some(nil)` is this server saying
     /// the session has none — how a manual refresh that dropped the recap reaches the other clients
@@ -203,7 +228,22 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
         title = try values.decodeIfPresent(String.self, forKey: .title)
         status = try values.decode(RunStatus.self, forKey: .status)
         runStatus = try values.decodeIfPresent(RunStatus.self, forKey: .runStatus)
+        phase = try? values.decodeIfPresent(SessionPhase.self, forKey: .phase)
+        released = try? values.decodeIfPresent(Bool.self, forKey: .released)
+        workFinished = try? values.decodeIfPresent(Bool.self, forKey: .workFinished)
+        lastTurnOutcome = try? values.decodeIfPresent(SessionTurnOutcome.self, forKey: .lastTurnOutcome)
+        waitingOn = try? values.decodeIfPresent(SessionWaitingOn.self, forKey: .waitingOn)
+        activity = values.contains(.activity)
+            ? .some(try? values.decodeIfPresent(String.self, forKey: .activity))
+            : nil
+        runningBgCount = try? values.decodeIfPresent(Int.self, forKey: .runningBgCount)
         sessionState = try values.decodeIfPresent(SessionState.self, forKey: .sessionState)
+        // An older summary omits the key. A null on a current summary clears a previous end.
+        if (try? values.decodeNil(forKey: .endReason)) == true {
+            endReason = .some(nil)
+        } else {
+            endReason = (try? values.decode(String.self, forKey: .endReason)).map { .some($0) }
+        }
         runState = try values.decodeIfPresent(SessionRunState.self, forKey: .runState)
         lifecycleState = try values.decodeIfPresent(SessionLifecycleState.self, forKey: .lifecycleState)
             ?? legacy.decodeIfPresent(SessionLifecycleState.self, forKey: .filingState)
@@ -230,6 +270,12 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
         ownerItems = values.contains(.ownerItems)
             ? .some(try values.decodeIfPresent([SessionOwnerItem].self, forKey: .ownerItems) ?? [])
             : nil
+        ownerRequests = values.contains(.ownerRequests)
+            ? .some((try? values.decodeIfPresent([SessionOwnerRequest].self, forKey: .ownerRequests)) ?? [])
+            : nil
+        taskMoves = values.contains(.taskMoves)
+            ? .some((try? values.decodeIfPresent([SessionTaskMoveGroup].self, forKey: .taskMoves)) ?? [])
+            : nil
         confirmationUnderReview = values.contains(.confirmationUnderReview)
             ? .some(try? values.decodeIfPresent(ConfirmationUnderReview.self, forKey: .confirmationUnderReview))
             : nil
@@ -240,6 +286,7 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
             ? .some((try? values.decodeIfPresent([SessionRequestPeer].self, forKey: .owesReplyTo)) ?? [])
             : nil
         lastTurnAt = try values.decodeIfPresent(String.self, forKey: .lastTurnAt)
+        listedAt = try values.decodeIfPresent(String.self, forKey: .listedAt)
         // `contains` rather than `decodeIfPresent` alone, for `retryAt`'s reason: null is this
         // server saying the session has no recap, a missing key is an older one saying nothing.
         recapText = values.contains(.recapText)
@@ -271,6 +318,11 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
 public struct ControlSessionEnded: Codable, Equatable, Sendable {
     public let status: RunStatus
     public let runStatus: RunStatus?
+    @LenientSessionField public private(set) var phase: SessionPhase?
+    @LenientSessionField public private(set) var released: Bool?
+    @LenientSessionField public private(set) var workFinished: Bool?
+    @LenientSessionField public private(set) var lastTurnOutcome: SessionTurnOutcome?
+    @LenientSessionField public private(set) var waitingOn: SessionWaitingOn?
     public let sessionState: SessionState?
     public let runState: SessionRunState?
     public let lifecycleState: SessionLifecycleState?
@@ -293,11 +345,16 @@ public struct ControlSessionEnded: Codable, Equatable, Sendable {
         let legacy = try decoder.container(keyedBy: LegacyCodingKeys.self)
         status = try values.decode(RunStatus.self, forKey: .status)
         runStatus = try values.decodeIfPresent(RunStatus.self, forKey: .runStatus)
+        phase = try? values.decodeIfPresent(SessionPhase.self, forKey: .phase)
+        released = try? values.decodeIfPresent(Bool.self, forKey: .released)
+        workFinished = try? values.decodeIfPresent(Bool.self, forKey: .workFinished)
+        lastTurnOutcome = try? values.decodeIfPresent(SessionTurnOutcome.self, forKey: .lastTurnOutcome)
+        waitingOn = try? values.decodeIfPresent(SessionWaitingOn.self, forKey: .waitingOn)
         sessionState = try values.decodeIfPresent(SessionState.self, forKey: .sessionState)
         runState = try values.decodeIfPresent(SessionRunState.self, forKey: .runState)
         lifecycleState = try values.decodeIfPresent(SessionLifecycleState.self, forKey: .lifecycleState)
             ?? legacy.decodeIfPresent(SessionLifecycleState.self, forKey: .filingState)
-        endReason = try values.decodeIfPresent(String.self, forKey: .endReason)
+        endReason = try? values.decodeIfPresent(String.self, forKey: .endReason)
     }
 }
 

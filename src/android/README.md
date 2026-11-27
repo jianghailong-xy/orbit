@@ -81,7 +81,10 @@ failure/cancellation, stale-response fencing and account data isolation. `:app` 
 under Robolectric API29 and verifies login/logout, navigation/recreation. These local tests do not replace AVD
 or physical-device evidence. Results are under `.artifacts/verify-<UTC>/` (ignored by Git).
 The workflow `.github/workflows/android.yml` runs the same entry on PRs and manual dispatch,
-and Android branch changes trigger it on push. It uploads the evidence even on failure.
+and Android branch changes trigger it on push. It runs the entry's three shares
+(`--part unit-debug`, `unit-release`, `lint-apk`) as parallel jobs, and its one check,
+`Android (test + lint + debug APK)`, passes only when all three did. It uploads the evidence even
+on failure. The release build runs every share in one job (no `--part`).
 
 The engineering screen and generated `BuildConfig` record the source SHA and dirty state.
 Make a source commit before generating handoff APKs. The debug key is generated locally and

@@ -14,14 +14,21 @@ enum class Destination { WORKSPACES, WORKSPACE, FOLDER, SEARCH, SESSION, DRAFT, 
     LANDINGS,
     WIKI_BROWSE, WIKI_INDEX, WIKI_ARTICLE, WIKI_DOC, WIKI_REVIEW, WIKI_SETTINGS, WIKI_RUN, WIKI_JOB, WIKI_PLAN, WIKI_PLAN_DOC, WIKI_PLAN_SECTION,
     WIKI_ACTIVITY, WIKI_TRASH,
-    /** The owner requests inbox (web `WaitingOnYouPage`): `id` the request whose card opens focused, from a push's action. */
-    WAITING_ON_YOU,
     /** Scheduled tasks (docs/scheduled-tasks-design.md §9.2): account-wide, in the drawer only. `id` the schedule whose detail sheet
-     * opens over the timeline, from a push or a card's Open. */
+     * opens over the timeline, from a push or a card's Open. There is no Waiting on you page (docs/mocks/waiting-on-you-removal). */
     SCHEDULED,
+    /** A schedule's draft change conversation (§8.2, board 03-change ③): `id` the schedule. The page reads
+     * `GET /schedules/:id/change`; a conversation already open — or opened by the first words sent here — takes its
+     * place. */
+    SCHEDULE_CHANGE,
     /** A session someone shared with this account (docs/session-guests-design.md §4): `id` the session, drawn as the guest view. A
      *  Shared with me row opens it; a session link the owner's read answers 404 for draws the same view through `SESSION`. */
-    GUEST_SESSION }
+    GUEST_SESSION,
+    /** Drive, the account's drive (board docs/mocks/drive/04-android): `id` the folder (null: the drive's root), `recordId` its
+     * name for the bar until the folder is read — or `uploads`, the upload notification's Show, which opens the uploads sheet. */
+    DRIVE,
+    /** A Drive file's preview: `id` the file, `folderId` the folder it is in, `recordId` its name. */
+    DRIVE_FILE, DRIVE_TRASH, DRIVE_STORAGE }
 enum class Origin { DRAWER, LIST, SEARCH, LINK, EXTERNAL }
 
 /** Object and source travel together; the preceding frame is the actual return destination. */
@@ -84,6 +91,13 @@ data class OrbitNavigation(
         val left = if (folder != null) foldersLeftOpen + (section to folder) else foldersLeftOpen - section
         return copy(section = key, stacks = mapOf(key to listOf(root)), foldersLeftOpen = left)
     }
+    /** The session on top, filed in [folder], gets its folder's page under it: [workspace]'s list, then the folder's page in [view],
+     * so Back reaches the session's row (web WorkspaceView's "A filed session opened from anywhere but its folder's page"). */
+    fun underFolder(workspace: String, folder: String, view: String): OrbitNavigation {
+        val session = current
+        return land(workspace, OrbitRoute(Destination.WORKSPACE, workspace, workspace))
+            .push(OrbitRoute(Destination.FOLDER, folder, workspace, sessionView = view)).push(session)
+    }
     /** A link opens over the page showing. One that [waitsForDirectory] stays [pending], signed in or not, and a later link
      * replaces it. A link to the app itself (`orbit://active`) only opens it (iOS `route(to: .active)`): a workspace's stack stays as
      * it is, and from anywhere else it goes home. */
@@ -140,6 +154,18 @@ fun guestDestination(id: String) = "guest:${ObjectId.canonical(id) ?: id}"
 /** The destination of a drawer Set up <machine> row (iOS `DrawerDestination.machineDraft`). */
 fun machineDraftDestination(id: String) = "setup:${ObjectId.canonical(id) ?: id}"
 
+/** A machine's new session page opened as New workspace while the machine has one (docs/mocks/new-workspace-form/02-apple-entry, owner
+ *  A 2026-11-20; iOS `AppModel.openNewWorkspace`): the setup card makes one more instead of moving on to the first. */
+const val NEW_WORKSPACE_RECORD = "new-workspace"
+
+/** New workspace on a machine, from the drawer's + or the machine page's row: its new session page with the setup card. One with no
+ *  workspace yet gets the page its Set up row opens. */
+fun newWorkspaceRoute(runnerId: String, hasWorkspace: Boolean, origin: Origin) =
+    OrbitRoute(Destination.DRAFT, id = runnerId, recordId = NEW_WORKSPACE_RECORD.takeIf { hasWorkspace }, origin = origin)
+
+/** The page [newWorkspaceRoute] opens on a machine that has a workspace. */
+val OrbitRoute.addsWorkspace get() = destination == Destination.DRAFT && workspaceId == null && recordId == NEW_WORKSPACE_RECORD
+
 /** The Wiki and Watch pages, whose state is the frame's own (MainActivity drops it once the frame left every stack). */
 val OrbitRoute.isWikiOrWatch get() = destination == Destination.WATCH || destination.name.startsWith("WIKI")
 
@@ -193,13 +219,17 @@ object OrbitLinks {
     private val references = mapOf("session" to Destination.SESSION, "task" to Destination.TASK,
         "project" to Destination.PROJECT, "wiki" to Destination.WIKI_ENTRY, "list" to Destination.LIST)
     // `orbit://project/<id>` is a merge push's (A11-9): the project's sessions page. Like `orbit://wiki/<space>`, no iOS DeepLink host.
-    // `orbit://owner-request/<id>` is an owner request push's action: the inbox, that request's card open on its input.
-    // `orbit://terminal-login/<id>` is a terminal asking to be approved: the inbox, whose Open tab heads with its card.
-    // `orbit://schedule/<id>` is a scheduled task's push that names no run session: the Scheduled page, its detail sheet open.
     private val deepLinks = references.filterKeys { it !in setOf("project", "wiki") } +
         mapOf("watch" to Destination.WATCH, "runner" to Destination.RUNNER, "wiki" to Destination.WIKI, "project" to Destination.PROJECT_SESSIONS,
-            "owner-request" to Destination.WAITING_ON_YOU, "terminal-login" to Destination.WAITING_ON_YOU,
+            // `orbit://schedule/<id>`: a scheduled task's push that names no run session opens the Scheduled page, its detail sheet open.
             "schedule" to Destination.SCHEDULED)
+
+    /** `orbit://owner-request/<id>`, an owner request push's action: the request, by its canonical id. It names no page of its own:
+     * the request's read says which conversation asked, and that conversation opens on its card ([io.orbitd.android.cards.OwnerRequestLinks]). */
+    fun ownerRequest(raw: String): String? = try {
+        URI(raw).takeIf { it.scheme.equals("orbit", ignoreCase = true) && it.host.equals("owner-request", ignoreCase = true) }
+            ?.path.orEmpty().trim('/').takeIf { it.isNotEmpty() && '/' !in it }?.let(ObjectId::canonical)
+    } catch (_: Exception) { null }
     /** iOS DeepLink's `case "active", ""` (A05h, DL-1): an `orbit:` link with no host, an empty one or `active` (percent-decoded,
      * in any case) opens the workspaces home, whatever path, query or fragment follows — iOS's URL percent-encodes a blank there
      * and DeepLink never reads it — while a blank in the host is no URL there, so nothing opens. Read off the link itself:
@@ -215,12 +245,30 @@ object OrbitLinks {
         val scheme = uri.scheme?.lowercase().orEmpty()
         var kind: Destination? = null
         var id: String? = null
+        // `orbit-settings:<key>` opens Settings at that row (design §6): its page, the row asked for in recordId. Theme has no page.
+        if (scheme == "orbit-settings") {
+            val place = io.orbitd.android.core.cards.SettingsFromConversation.place(uri.schemeSpecificPart) ?: return null
+            return OrbitRoute(Destination.SETTINGS, place.page, recordId = place.key, origin = origin)
+        }
         if (scheme.startsWith("orbit-")) {
             kind = references[scheme.removePrefix("orbit-")]
             id = if (kind == Destination.SESSION) uri.schemeSpecificPart.substringBefore('?') else uri.schemeSpecificPart
+        } else if (scheme == "orbit" && uri.host.equals("settings", ignoreCase = true)) {
+            // `orbit://settings/<page>`: a Settings page itself, as the Providers screen a key's alert opens.
+            val page = uri.path.orEmpty().trim('/')
+            return if (page in setOf("providers", "machines", "machines-and-models")) OrbitRoute(Destination.SETTINGS, page, origin = origin) else null
+        } else if (scheme == "orbit" && (uri.host.equals("drive", ignoreCase = true) || uri.host.equals("documents", ignoreCase = true))) {
+            // `orbit://drive/uploads` (`orbit://documents/uploads` from an older build), the upload notification's Show: Drive with its uploads sheet open.
+            return OrbitRoute(Destination.DRIVE, recordId = uri.path.orEmpty().trim('/').takeIf { it == "uploads" }, origin = origin)
         } else if (scheme == "orbit") {
-            kind = deepLinks[uri.host?.lowercase()]
             val parts = uri.path.orEmpty().trim('/').split('/')
+            // `orbit://terminal-login/<id>`, a terminal asking to be approved: Settings › Machines & models, on its Needs you section,
+            // that request's card lit (docs/mocks/waiting-on-you-removal/02 ④). One answered or expired opens the page all the same.
+            if (uri.host.equals("terminal-login", ignoreCase = true)) {
+                val request = parts.singleOrNull()?.takeIf { it.isNotEmpty() }?.let(ObjectId::canonical) ?: return null
+                return OrbitRoute(Destination.RUNNER, recordId = "terminal:$request", origin = origin)
+            }
+            kind = deepLinks[uri.host?.lowercase()]
             if (parts.size == 1) id = parts.first()
         } else if (scheme in setOf("https", "http") && server != null && uri.userInfo == null) {
             val base = URI(server)

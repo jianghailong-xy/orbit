@@ -6,6 +6,7 @@ The deployment keeps two things on disk so any moment of the database can be rec
 | --- | --- | --- |
 | Continuous WAL archive | `./data/pg-archive/wal/<segment>.gz` | every finished segment; a written-to database closes one at least every 5 min (`archive_timeout=300`) |
 | Base backups | `./data/pg-archive/base/<UTC stamp>/` | daily, newest 2 kept |
+| Backup metrics | `./data/pg-archive/metrics/pgbackup.prom` | every poll; this host's state, never mirrored |
 
 A base backup is the image the archived WAL is replayed onto; on their own neither restores
 anything. Recovery point is therefore "the last archived segment" — within ~5 minutes of a
@@ -43,6 +44,15 @@ forever, so a broken `archive_command` ends as a full disk and a stopped databas
 logs `ERROR: WAL archiving is failing` while that is the case. Note that `archive_command` is
 set on the server's command line in `docker-compose.yml`, so `ALTER SYSTEM` cannot change it —
 edit compose and recreate the container.
+
+The same facts are metrics: on every poll the sidecar writes them to `data/pg-archive/metrics/pgbackup.prom`, which
+the [monitoring profile](self-hosting.md#monitoring)'s node-exporter serves to Prometheus. They are the newest base
+backup's time, the configured interval, `pg_stat_archiver`'s failure count and whether archiving is failing now, and
+the off-host copies that failed. [The backup metrics](self-hosting.md#the-backup-metrics) lists them.
+
+```bash
+cat data/pg-archive/metrics/pgbackup.prom
+```
 
 ## The off-host mirror
 
@@ -174,6 +184,21 @@ like the mirror's (`ERROR: off-host sync … failed`), does not touch base backu
 retried on the next poll. The archive goes first, because bytes are stored before the row naming them
 commits: a round that finishes leaves the copy with the bytes of every row in the mirrored WAL.
 
+#### S3 bucket mirror
+
+Set `ORBIT_DRIVE_S3_MIRROR=1` in the deployment's `.env` and recreate `apiserver` and `pgbackup`.
+Set `ORBIT_BACKUP_SYNC_TARGET` to the off-host archive destination. The sidecar uses
+`ORBIT_DRIVE_S3_ENDPOINT`, `ORBIT_DRIVE_S3_BUCKET`, `ORBIT_DRIVE_S3_ACCESS_KEY_ID`,
+`ORBIT_DRIVE_S3_SECRET_ACCESS_KEY` and `ORBIT_DRIVE_S3_REGION` (default `us-east-1`).
+The backup host must provide SFTP using the same SSH settings as the archive, and the SSH user must
+be able to write to the archive's sibling directory, `<target>-bucket`.
+
+Each poll runs `rclone copy` from the bucket's `files/` prefix to that sibling, keeping the relative
+object paths. The mirror interval is 15 minutes by default, or `ORBIT_BASE_BACKUP_INTERVAL` seconds
+if that is shorter. With successful rounds keeping pace, a host loss can lose at most one mirror
+interval of new S3 data. Failed or slow rounds can extend that lag. Copy failures are logged and
+retried on the next poll.
+
 #### How the copy is pruned
 
 Files agents upload expire, and their bytes then go in steps, each a grace period after the last. The grace period is
@@ -186,11 +211,12 @@ old ones longer than that. Restoring one of those can find rows without their by
 | When | What happens |
 | --- | --- |
 | The file's date | A tombstone on its row (`expired_at`). Name, size, sha256 and test summary stay, and so do the bytes, here and in the copy |
-| One grace period after the last row naming those bytes got its tombstone | The bytes go from `./data/files` (`file_blob.bytes_deleted_at`) |
-| One grace period after that | The bytes go from the off-host copy (`file_blob.off_host_prune_at`) |
+| One grace period after the last row naming those bytes got its tombstone | The bytes go from the live store (`file_blob.bytes_deleted_at`) |
+| One grace period after that | The bytes go from the off-host copy (`file_blob.off_host_prune_at`; for a bucket-stored blob only when `ORBIT_DRIVE_S3_MIRROR=1`, from the `<target>-bucket` mirror) |
 
-The sidecar prunes at most once per base backup interval, and only in a round where the mirror took this archive. It
-asks the database which names are due, lists the copy, and removes those names and nothing else: `pruned N file(s) from …`.
+The sidecar prunes each copy at most once per base backup interval, and only in a round where the mirror took this archive.
+Bucket pruning also requires a successful bucket copy in that round. The sidecar asks the database which names are due
+for that store, lists the copy, and removes only those names from the off-host destination.
 It is not a `--delete` of what `./data/files` lacks, so an empty or unmounted directory cannot empty the copy. If
 `./data/files` is empty or not mounted it refuses even those names (`ERROR: refusing to prune …`), and it skips a name whose
 bytes are back here because the same content was uploaded again.
@@ -198,14 +224,12 @@ bytes are back here because the same content was uploaded again.
 That order is what makes a restore safe. A database restored to any moment a retained backup reaches expects the bytes that
 had not gone by that moment, and the copy keeps them a whole grace period longer, which is at least as far back as any backup
 reaches. Without an off-host target, `./data/files` alone still holds the bytes of every file that had no tombstone at that
-moment. With `ORBIT_FILES_BACKEND=s3` the bytes go from the bucket and nothing is pruned from the copy: use the bucket's own
-versioning or lifecycle rules for anything older. Neither attachment rows nor `file_blob` rows are deleted by any of this.
+moment. Neither attachment rows nor `file_blob` rows are deleted by any of this.
 
 - **With no target,** `./data/files` is the only copy of those bytes. Postgres does not hold them and no
   local backup does, so they are lost with the disk.
-- **With `ORBIT_FILES_BACKEND=s3`,** keeping the bytes is the bucket's job: use its versioning or
-  replication. Uploads only pass through `./data/files/tmp`, so the sidecar has nothing to copy, and that
-  is not an error. Bytes left in the directory from before a move to a bucket are still copied.
+- **With `ORBIT_DRIVE_BACKEND=s3` and the mirror disabled,** use the bucket's own versioning or replication.
+  Uploads pass through `./data/files/tmp`. The sidecar still copies any local blobs left from before a move to a bucket.
 
 The sidecar gets its read-only mount of `./data/files` when its container is recreated, and until then
 it copies no files. `docker compose up -d --build` recreates it, and so does `/upgrade`, which runs only
@@ -324,7 +348,7 @@ adds them without touching anything else. Such a file already read as expired at
 depends on them.
 
 The copy has no `tmp/`, and the apiserver makes it again at the next upload. With
-`ORBIT_FILES_BACKEND=s3` there is nothing to copy back: start the deployment on the same bucket, whose
+`ORBIT_DRIVE_BACKEND=s3` there is nothing to copy back: start the deployment on the same bucket, whose
 own versioning or replication is what brings back any object that was lost.
 
 ### Verify a backup without touching production

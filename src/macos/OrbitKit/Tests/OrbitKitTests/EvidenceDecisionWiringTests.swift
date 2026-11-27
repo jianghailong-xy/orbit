@@ -264,7 +264,8 @@ final class EvidenceDecisionWiringTests: XCTestCase {
         XCTAssertTrue(load.contains("guard !loadingContext else { return }"), "and one read at a time")
         let again = try section(console, from: "private func loadContextIfUnread() async {",
                                 to: "/// List seeds and the later detail read")
-        XCTAssertTrue(again.contains("if !contextLoaded { await loadContext() }"), "read again until it is known")
+        XCTAssertTrue(again.contains("guard !contextLoaded else { return }") && again.contains("await loadContext()"),
+                      "read again until it is known")
         let run = try section(console, from: "func run() async {", to: "isReconnect = true")
         XCTAssertTrue(run.contains("await self?.loadContextIfUnread()"), "on a reconnect")
         let minute = try section(console, from: "runnerPollTask = Task { [weak self] in", to: "evidencePollTask = Task")

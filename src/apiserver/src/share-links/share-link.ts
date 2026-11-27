@@ -7,10 +7,10 @@ import { RunEventType } from '@orbit/shared';
  * off" removes from a transcript. docs/share-links-design.md §1, §3 and §4 are the contract.
  */
 
-export type ShareRootKind = 'SESSION' | 'TASK' | 'PROJECT' | 'WIKI';
+export type ShareRootKind = 'SESSION' | 'TASK' | 'PROJECT' | 'WIKI' | 'DRIVE_FILE';
 
 /** Every kind, in the order the contract lists them. */
-export const SHARE_ROOT_KINDS: readonly ShareRootKind[] = ['SESSION', 'TASK', 'PROJECT', 'WIKI'];
+export const SHARE_ROOT_KINDS: readonly ShareRootKind[] = ['SESSION', 'TASK', 'PROJECT', 'WIKI', 'DRIVE_FILE'];
 
 export type ShareLayer = 'taskPages' | 'commentsAndFiles' | 'conversations' | 'toolOutput' | 'footnotes';
 
@@ -28,6 +28,8 @@ export const LAYER_DEFAULTS: Readonly<Record<ShareRootKind, Readonly<ShareInclud
   TASK: { commentsAndFiles: false, conversations: false, toolOutput: true },
   PROJECT: { taskPages: true, commentsAndFiles: false, conversations: false, toolOutput: true },
   WIKI: { footnotes: false },
+  // One file has no layers: the link serves the version it was pinned to and nothing else.
+  DRIVE_FILE: {},
 };
 
 /** The kind's layers with what is stored laid over their defaults. A stored key the kind does not

@@ -14,10 +14,13 @@ import {
   scheduleNeedsYou,
   scheduleReportedText,
   scheduleRowCircle,
+  scheduleRenamedText,
   scheduleRowLine,
   scheduleRunCircle,
   scheduleRunLine,
   scheduleRunOfText,
+  scheduleRuleRepeats,
+  scheduleRuleText,
   scheduleRunStripText,
   scheduleTimeline,
   scheduleWhenText,
@@ -414,4 +417,37 @@ describe('the run\'s session (board 2/2 ⑥)', () => {
     expect(scheduleReportedText({ state: 'NO_CHANGE', key: null })).toBe('Reported: No change');
   });
 
+});
+
+describe('an EVERY rule (design §3, §9.2)', () => {
+  const WORK = ['MON', 'TUE', 'WED', 'THU', 'FRI'] as const;
+  const ALL = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as const;
+  it('reads as the doc\'s rule sentence, the same short and long, with seven weekdays left unsaid', () => {
+    const window = { kind: 'EVERY', minutes: 30, time: '09:00', until: '18:00', weekdays: [...WORK] } as const;
+    expect(scheduleRuleText(window)).toBe('Every 30 min, 09:00–18:00, Mon–Fri');
+    expect(scheduleRuleText(window, 'long')).toBe('Every 30 min, 09:00–18:00, Mon–Fri');
+    expect(scheduleRuleText({ kind: 'EVERY', minutes: 60, time: '00:00', weekdays: [...ALL] })).toBe('Every hour');
+    expect(scheduleRuleText({ kind: 'EVERY', minutes: 120, time: '08:00', weekdays: ['SUN', 'SAT'] }))
+      .toBe('Every 2 hours from 08:00, weekends');
+    expect(scheduleRuleText({ kind: 'EVERY', minutes: 720, time: '00:00', weekdays: ['MON', 'THU'] })).toBe('Every 12 hours, Mon, Thu');
+  });
+
+  it('shows the repeat mark, and its row line carries the sentence', () => {
+    const rule = { kind: 'EVERY', minutes: 30, time: '09:00', until: '18:00', weekdays: [...WORK] } as const;
+    expect(scheduleRuleRepeats(rule)).toBe(true);
+    expect(scheduleRowLine(schedule({ rule }))).toBe('Every 30 min, 09:00–18:00, Mon–Fri · apiserver · Check only');
+  });
+});
+
+describe('a rename in the history (design §8.4 Rename)', () => {
+  it('names the old title for a person’s change of the title alone, and nothing else', () => {
+    const change = { before: { title: 'Codex check' }, after: { title: 'Codex stable check' } };
+    expect(scheduleRenamedText({ changedBy: 'USER', ...change })).toBe('Renamed from “Codex check”');
+    expect(scheduleRenamedText({ changedBy: 'SESSION', ...change })).toBeNull();
+    expect(scheduleRenamedText({ changedBy: 'RUN', ...change })).toBeNull();
+    expect(scheduleRenamedText({ changedBy: 'USER', before: null, after: { title: 'Codex check' } })).toBeNull();
+    expect(scheduleRenamedText({
+      changedBy: 'USER', before: { title: 'a', prompt: 'p' }, after: { title: 'b', prompt: 'q' },
+    })).toBeNull();
+  });
 });

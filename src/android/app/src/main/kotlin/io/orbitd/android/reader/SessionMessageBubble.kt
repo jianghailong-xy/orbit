@@ -70,7 +70,7 @@ internal fun SessionMessageBubble(source: JsonObject, event: RunEvent?, open: (S
     val quiet = secondary.copy(alpha = 0.75f)
     val requestId = source.text("requestId")
     val request = sessionRequest(requestId)
-    Column(Modifier.widthIn(max = 720.dp).testTag("session-message"), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+    Column(Modifier.widthIn(max = io.orbitd.android.core.cards.ConversationCardWidth.DP.dp).testTag("session-message"), verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(painterResource(R.drawable.ic_sessions), null, Modifier.padding(end = 4.dp).size(14.dp), tint = quiet)
             Text("${SessionMessageCopy.FROM} ", style = MaterialTheme.typography.labelMedium, color = secondary)

@@ -227,6 +227,16 @@ final class WorktreeModel {
         await loadDetail()
     }
 
+    /// Close a failed merge's section (its ✕): the server clears the stored failure, so it stays closed
+    /// on every client, and the reload puts Merge (or "In main") back in the bar. Nothing in git changes.
+    func dismissMergeFailure() async {
+        busy = true
+        defer { busy = false }
+        do { try await api.dismissMergeFailure(sessionID: sessionID) }
+        catch { onOutcome(Self.failure("Couldn't dismiss the merge failure", error: error)); return }
+        await loadDetail()
+    }
+
     /// Resolve a merge conflict in-session: revive the session so its own agent rebases the branch
     /// onto the target that conflicted and fixes the conflicts (it has the context for its own
     /// changes). The resume clears the stale mergeStatus server-side, so the bar offers Merge again

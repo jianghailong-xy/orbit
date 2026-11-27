@@ -23,6 +23,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import io.orbitd.android.cards.SettingChangedLine
+import io.orbitd.android.cards.settingRow
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -396,13 +398,16 @@ fun NotificationsPreferences(api: ManagementApi, revision: Long) {
         ).forEach { (key, title, hint) ->
             // Absent means on: only the switch that moved is written. The row is the switch, read once by TalkBack.
             val on = (preferences?.get(key) as? JsonPrimitive)?.booleanOrNull != false
-            Row(Modifier.fillMaxWidth().toggleable(value = on, enabled = record.ready, role = Role.Switch) { checked ->
+            Row(Modifier.fillMaxWidth().settingRow(key).toggleable(value = on, enabled = record.ready, role = Role.Switch) { checked ->
                 scope.launch { record.mutate { api.patch("users/me/preferences", buildJsonObject { put(key, checked) }) } }
             }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(title, Modifier.weight(1f))
                 Switch(checked = on, onCheckedChange = null, enabled = record.ready)
             }
             Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            SettingChangedLine(key, record.value as? JsonObject) { k, v ->
+                scope.launch { record.mutate { api.patch("users/me/preferences", buildJsonObject { put(k, v) }) } }
+            }
         }
         Text("Always sent", style = MaterialTheme.typography.titleMedium)
         listOf("Tool approvals", "Projects waiting on you", "Engine sign-outs", "Watch matches").forEach { kind ->

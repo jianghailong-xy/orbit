@@ -3,7 +3,7 @@ import type { ProjectIntegrationBuckets } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { dependenciesSatisfiedSql, everyPrerequisiteTailDoneSql } from '../tasks/task-dependencies';
 import { projectTaskDependencyFactsSql } from './project-dependency-facts';
-import { isCodeTaskSql, lineStartedSql, taskLandingSql } from './project-criterion-landing';
+import { hasWorkToLandSql, lineStartedSql, taskLandingSql } from './project-criterion-landing';
 import { projectTaskWorkStateSql } from './project-task-work-state';
 
 /**
@@ -119,7 +119,8 @@ export async function readProjectPanorama(
   // three buckets `done` splits across are a partition of it, and computing them in a second query
   // would let the two disagree about one task across the gap between them.
   const landing = Prisma.raw(taskLandingSql('task_row'));
-  const isCode = Prisma.raw(isCodeTaskSql('task_row'));
+  // §12.15 P-M1: a DONE that delivered nothing of its own is not work this line integrates.
+  const isCode = Prisma.raw(hasWorkToLandSql('task_row'));
   const lineStarted = Prisma.raw(lineStartedSql('task_row'));
   // Held up by a landing AND BY NOTHING ELSE: the dependency predicate refuses it, and the same
   // predicate with the landing clause lifted would not. The subtraction is what makes this

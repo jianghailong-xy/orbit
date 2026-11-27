@@ -102,6 +102,9 @@ func orbitMCPDeclaredEnv(job *ClaimedSession, callTimeout time.Duration) []map[s
 		envMCPOrchestration + "=" + orchestrationEnv(job.AllowOrchestration),
 		envWatches + "=" + watchesEnv(job.WatchesDisabled),
 		envWiki + "=" + wikiEnv(job.WikiDisabled),
+		envDocuments + "=" + documentsEnv(job.DocumentsDisabled),
+		envBrowser + "=" + browserEnv(job.BrowserEnabled),
+		envWorkflows + "=" + workflowsEnv(job.WorkflowsDisabled),
 		envScheduleRun + "=" + scheduleRunEnv(job.ScheduleRun),
 		envMCPPermissionPrompt + "=0",
 		envSpawnDepth + "=" + strconv.Itoa(job.SpawnDepth),
@@ -116,6 +119,9 @@ func orbitMCPDeclaredEnv(job *ClaimedSession, callTimeout time.Duration) []map[s
 	// A SubAgent's engine: its `orbit mcp` neither offers nor serves delegate (subagentChildJob).
 	if runID := strings.TrimSpace(job.Agent.Env[envSubagentRunID]); runID != "" {
 		pairs = append(pairs, envSubagentRunID+"="+runID)
+	}
+	if mode := strings.TrimSpace(job.Agent.Env[envSubagentRemoteMode]); mode != "" {
+		pairs = append(pairs, envSubagentRemoteMode+"="+mode)
 	}
 	// A managed runner's instance, which `orbit mcp` sends with the runner credential.
 	pairs = append(pairs, managedInstanceEnv()...)

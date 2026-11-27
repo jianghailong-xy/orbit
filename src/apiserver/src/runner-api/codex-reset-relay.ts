@@ -91,26 +91,36 @@ export type CodexResetResultAnswer =
 type DispatchHeartbeat = Omit<CodexResetHeartbeat, 'rateLimitReset' | 'now'>;
 
 /**
- * One heartbeat's pass over its runner's active operations, oldest first. Each is expired, settled for
+ * One heartbeat's pass over its runner's active operations: the ones its process holds first, then the
+ * rest, each oldest first. Each is expired, settled for
  * an account change, claimed, renewed, taken over or left alone, as `decideCodexResetDispatch` says for the
- * process THIS heartbeat speaks for and the block stored after its planUsage compare-and-set. Resolves
- * the command a claim holds for that process, or undefined. At most one can: a command needs the stored
- * block's account, and 0255's in-flight index allows one active operation per runner and account.
+ * process THIS heartbeat speaks for and the block stored for that operation's own account slot after its
+ * planUsage compare-and-set (§12.3). Resolves the command a claim holds for that process, or undefined.
+ *
+ * A heartbeat response carries one command at most (§6.2), while each account can have an operation in
+ * flight (0255's index is per runner and account). So once one operation is to be delivered, the ones
+ * after it are only settled — by their deadline or an account change — and never claimed or renewed in
+ * that heartbeat: a claim whose command was not sent would count a consume that may have called the
+ * provider when it never could. They are delivered once the operation before them settles.
  */
 export async function dispatchCodexResetCommand(
   prisma: PrismaService,
   heartbeat: DispatchHeartbeat,
 ): Promise<CodexRateLimitResetCommand | undefined> {
   const operations = new CodexRateLimitResetRepository(prisma);
-  const active = await operations.activeIdsOfRunner(heartbeat.runnerId);
+  const active = await operations.activeIdsOfRunner(heartbeat.runnerId, heartbeat.leaseOwner);
   if (active.length === 0) return undefined;
   const runner = await prisma.runner.findUnique({ where: { id: heartbeat.runnerId }, select: { planUsage: true } });
-  const rateLimitReset = codexRateLimitResetOf(runner?.planUsage as PlanUsage | null | undefined);
+  const planUsage = runner?.planUsage as PlanUsage | null | undefined;
   let command: CodexRateLimitResetCommand | undefined;
   for (const id of active) {
     const seen: { before?: CodexRateLimitResetOperationState; decision?: CodexResetDispatch } = {};
+    const delivering = command !== undefined;
     await operations.transition(id, (current) => {
-      const decision = decideCodexResetDispatch(current, { ...heartbeat, rateLimitReset, now: new Date() });
+      const rateLimitReset = codexRateLimitResetOf(planUsage, current.accountSlot);
+      const decided = decideCodexResetDispatch(current, { ...heartbeat, rateLimitReset, now: new Date() });
+      const decision: CodexResetDispatch =
+        delivering && decided.kind === 'DELIVER' ? { kind: 'NONE', reason: 'CLAIM_HELD' } : decided;
       seen.before = current;
       seen.decision = decision;
       return decision.kind === 'NONE' ? null : decision.operation;
@@ -209,7 +219,7 @@ export async function receiveCodexResetResult(
     codexResetLogLine('receipt', { ...fields, event: 'answered', disposition: application.kind, status: response.status, next: response.next }, secrets),
   );
   if (result.kind === 'REFRESHED' && result.rateLimitReset) {
-    const stored = await storeRefreshedCodexResetBlock(prisma, runnerId, result.rateLimitReset, result.leaseOwner);
+    const stored = await storeRefreshedCodexResetBlock(prisma, runnerId, result.rateLimitReset, result.leaseOwner, operation.accountSlot);
     logger.log(codexResetLogLine('refresh', { ...fields, event: stored ? 'snapshot_stored' : 'snapshot_kept' }, secrets));
   }
   return { status: 200, body: response };

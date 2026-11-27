@@ -31,6 +31,7 @@ import { SessionCriteriaChangeCard, criteriaChangeHeld } from './CriteriaChangeC
 import { CriteriaChangeList, criteriaChangeRows } from './CriteriaChangeList';
 import { RunSettingsSummary } from './RunSettingsSummary';
 import { SessionStartProjectCard } from './StartProjectCard';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * The settlement question, asked in the conversation it was delivered to, at the moment it can
@@ -547,9 +548,11 @@ export function AcceptanceConfirmationCard({
     <div ref={ref} className="approval-card settlement-card">
       <div className="approval-head settlement-card-head">
         <span className="settlement-card-heading">{ACCEPTANCE_CONFIRMATION_TITLE}</span>
-        <span className="criteria-provenance" title={ACCEPTANCE_PROVENANCE_TITLE}>
-          {PROVENANCE_LABEL}
-        </span>
+        <Tooltip content={ACCEPTANCE_PROVENANCE_TITLE} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="criteria-provenance">
+            {PROVENANCE_LABEL}
+          </span>
+        </Tooltip>
       </div>
       <div className="approval-body is-questions settlement-card-body">
         <div className="settlement-card-meta">
@@ -652,9 +655,11 @@ export function AcceptanceConfirmationReceipt({
     <div className="approval-card settlement-receipt" id={ACCEPTANCE_RECEIPT_ID}>
       <div className="approval-head settlement-card-head">
         <span className="settlement-card-heading">{ACCEPTANCE_RECEIPT_HEADING}</span>
-        <span className="criteria-provenance" title={ACCEPTANCE_PROVENANCE_TITLE}>
-          {PROVENANCE_LABEL}
-        </span>
+        <Tooltip content={ACCEPTANCE_PROVENANCE_TITLE} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="criteria-provenance">
+            {PROVENANCE_LABEL}
+          </span>
+        </Tooltip>
       </div>
       <div className="approval-body settlement-receipt-body">
         <p className="settlement-receipt-line">{acceptanceReceiptLine(confirmation)}</p>

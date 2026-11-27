@@ -93,3 +93,50 @@ describe('Popover on a trigger that is not a button', () => {
   });
 });
 
+
+describe('Popover closing', () => {
+  async function openByMouse(): Promise<HTMLButtonElement> {
+    await act(async () => root!.render(
+      <div>
+        <Popover title="Runner full" trigger={<button type="button" className="reason">runner full</button>}>
+          <div className="pop-body">Both slots are taken.</div>
+        </Popover>
+        <div className="elsewhere">elsewhere</div>
+      </div>,
+    ));
+    await settle();
+    const trigger = container!.querySelector<HTMLButtonElement>('.reason')!;
+    await act(async () => {
+      trigger.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'mouse' }));
+      trigger.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
+    await settle();
+    expect(document.querySelector('.orbit-popover .pop-body')).not.toBeNull();
+    return trigger;
+  }
+
+  it('leaves the trigger unfocused when a press outside closes it, so no focus ring is left behind', async () => {
+    const trigger = await openByMouse();
+    const elsewhere = container!.querySelector<HTMLElement>('.elsewhere')!;
+    await act(async () => {
+      elsewhere.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'mouse' }));
+      elsewhere.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      elsewhere.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'mouse' }));
+      elsewhere.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+      elsewhere.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await settle();
+    expect(document.querySelector('.orbit-popover .pop-body')).toBeNull();
+    expect(document.activeElement).not.toBe(trigger);
+  });
+
+  it('still hands focus back to the trigger when Escape closes it', async () => {
+    const trigger = await openByMouse();
+    await act(async () => {
+      (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    });
+    await settle();
+    expect(document.querySelector('.orbit-popover .pop-body')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+});

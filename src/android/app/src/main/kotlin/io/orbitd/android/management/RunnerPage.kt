@@ -2,6 +2,8 @@ package io.orbitd.android.management
 
 import io.orbitd.android.composer.CursorRuntime
 import io.orbitd.android.composer.ManagedRunnerIdentity
+import io.orbitd.android.composer.ManagedRunnerRunningBuild
+import io.orbitd.android.composer.ManagedRunnerUpdateLogic
 import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.core.cards.ClaudeRegion
 import io.orbitd.android.core.cards.ClaudeRegionCopy
@@ -80,7 +82,7 @@ internal object RunnerCopy {
     /** A managed runner's version when it reports none that is a release (its image is `managed-<sha>`). */
     const val MANAGED_RUNNER_KEPT_UP_TO_DATE = "Kept up to date by Orbit"
     /** About's Version note on a managed runner: Orbit rolls its image, so it neither updates itself nor needs to. */
-    const val MANAGED_RUNNER_UPDATED_BY_ORBIT = "Orbit updates this machine for you."
+    const val MANAGED_RUNNER_UPDATED_BY_ORBIT = "Orbit moves it to each new build."
     const val SEP = " · "
     const val NO_PROVIDER_KEY = "no provider key found"
     fun offlineLastSeen(whenText: String) = "Offline · last seen $whenText"
@@ -159,11 +161,16 @@ internal object RunnerCopy {
     const val FIX_WITH_AGENT = "Fix with an agent"
     /** The line in the button's place while the session a press started is open; "Open session" follows it as a link. */
     fun agentFixing(workspace: String) = "An agent is fixing this in $workspace · "
+    /** A transcript's history row, after the agent it was handed to finished; "Open session" follows it as a link. */
+    fun agentFixFixed(workspace: String) = "Fixed by an agent in $workspace · "
     const val OPEN_SESSION = "Open session"
     /** Under the Install failed panel's button, while a press can start a session. */
     fun agentFixStarts(workspace: String, engine: String) = "Starts a session in $workspace on this machine, with $engine."
     /** Appended to a signed-out reason on the Install failed panel, whose engine rows sit above it. */
     fun agentFixSignIn(engine: String) = " Sign in to $engine above to use this."
+    /** Appended to a signed-out reason in a transcript, which has no engine list of its own. */
+    fun agentFixSignInOnMachinePage(engine: String) = " Sign in to $engine on the machine page to use this."
+    const val FIX_FAILED = "Couldn't start the agent"
     const val WORKTREES = "Worktrees"
     fun workspaceRunning(count: Int) = "$count running"
     const val ABOUT_NAME = "Name"
@@ -242,7 +249,7 @@ internal object AccountCopy {
     const val ENV_KEY_LINE = "env key · runs on your Gemini key"
     const val NOT_SUPPORTED_YET = "Not supported yet"
     const val UPDATE_RUNNER = "Update runner"
-    const val HINT_UNSUPPORTED = "Google sign-in is not supported on macOS runners yet. Use a Gemini API key."
+    const val HINT_UNSUPPORTED = "Google sign-in is not supported on this runner's operating system. Use a Gemini API key."
     const val HINT_UPDATE = "Update this runner to sign in with Google."
     const val GOOGLE_TERMS_WARNING = "Google terms restrict personal account sign-in through third-party tools; your account may be suspended."
     const val GOOGLE_TERMS = "Google terms"
@@ -339,6 +346,22 @@ internal object RunnerAccountCopy {
     /** What a former Default is called — the account a Set as default moved out of ~/.claude into an added folder — while the owner has
      * not named it and no email is known for it. */
     const val FORMER_DEFAULT = "Former default"
+
+    /** The question in front of Default's Sign out…, which deletes its login from the machine. */
+    fun defaultSignOutTitle(name: String) = "Sign out of $name?"
+    /** What Sign out of Default does to the machine: the login goes, the history and settings stay. */
+    fun defaultSignOutDetail(runner: String) = "Its login is deleted from $runner. Its history and settings stay."
+    /** Added for Claude Code and Codex, whose CLI shares Default's login; [command] is `claude` or `codex`. */
+    fun defaultSignOutTerminal(runner: String, command: String) = "$command in a terminal on $runner is signed out too."
+    const val DEFAULT_SIGN_OUT_CONFIRM = "Sign out"
+    /** The menu item, and the row's state while the runner takes the login off the machine. */
+    const val DEFAULT_SIGN_OUT = "Sign out…"
+    const val DEFAULT_SIGNING_OUT = "Signing out…"
+    /** The second question, after the runner refused because sessions are running on Default. */
+    fun defaultSignOutRunningOne(name: String) = "1 session is running on $name. Sign out anyway?"
+    fun defaultSignOutRunningMany(count: Int, name: String) = "$count sessions are running on $name. Sign out anyway?"
+    const val DEFAULT_SIGN_OUT_RUNNING_DETAIL = "They will stop working until you sign in again."
+    fun defaultSignOutFailed(name: String) = "Couldn’t sign out of $name"
 }
 
 /**
@@ -547,10 +570,23 @@ internal data class AttentionItem(val kind: String, val tone: String, val short:
  * the machine's most recently used workspace, on that workspace's engine — or why it can't ([blockedCode] offline, noWorkspace,
  * engineSignedOut, with the server's own [blockedMessage]), and the warnings an agent is fixing now. */
 internal data class AgentFix(val workspaceId: String?, val workspaceName: String?, val engine: String?, val engineName: String?,
-    val blockedCode: String?, val blockedMessage: String?, val fixing: List<AgentFixing>)
+    val blockedCode: String?, val blockedMessage: String?, val fixing: List<AgentFixing>, val handled: List<AgentFixHandled> = emptyList())
 
 /** An open session a press started, on one warning: [engine] for engineNotUpdating and installFailed, null for cannotSelfUpdate. */
 internal data class AgentFixing(val kind: String, val engine: String?, val sessionId: String, val workspaceId: String, val workspaceName: String)
+
+/** The latest agent a warning was handed to once its session is over: a transcript's history row shows what was done with it. */
+internal data class AgentFixHandled(val kind: String, val engine: String?, val sessionId: String, val workspaceId: String,
+    val workspaceName: String, val status: String)
+
+/** What the transcript's missing-bubblewrap warning draws (web `sandboxFixView`): the button and where its session runs, the reason none
+ * can start, the agent at work, or the one that already finished with that row — a transcript is history, so it offers no second agent. */
+internal sealed interface SandboxFixView {
+    data class Ready(val line: String?) : SandboxFixView
+    data class Blocked(val line: String) : SandboxFixView
+    data class Fixing(val fixing: AgentFixing) : SandboxFixView
+    data class Handled(val sessionId: String, val workspaceName: String) : SandboxFixView
+}
 
 /** What one warning draws for Fix with an agent: the session at work on it ([fixing], in the button's place), or the button — disabled
  * while [enabled] is false — with the grey [line] under it, if any. */
@@ -752,7 +788,27 @@ internal object RunnerPage {
             fix.list("fixing").mapNotNull { entry ->
                 AgentFixing(entry.str("kind") ?: return@mapNotNull null, entry.str("engine"), entry.str("sessionId") ?: return@mapNotNull null,
                     entry.str("workspaceId").orEmpty(), entry.str("workspaceName").orEmpty())
+            },
+            fix.list("handled").mapNotNull { entry ->
+                AgentFixHandled(entry.str("kind") ?: return@mapNotNull null, entry.str("engine"), entry.str("sessionId") ?: return@mapNotNull null,
+                    entry.str("workspaceId").orEmpty(), entry.str("workspaceName").orEmpty(), entry.str("status").orEmpty())
             })
+    }
+
+    /** The transcript's missing-bubblewrap warning (docs/mocks/codex-sandbox-fix-with-agent): nil from an older server, which sends no
+     * `agentFix`. The handled line comes before the button, so a history row already handed to an agent offers no second one. */
+    fun sandboxFixView(runner: JsonObject?): SandboxFixView? {
+        val fix = runner?.let(::agentFixOf) ?: return null
+        agentFixing(fix, "sandboxMissing", "codex")?.let { return SandboxFixView.Fixing(it) }
+        fix.handled.firstOrNull { it.kind == "sandboxMissing" && it.engine == "codex" }?.let {
+            return SandboxFixView.Handled(it.sessionId, it.workspaceName)
+        }
+        fix.blockedCode?.let { code ->
+            val signIn = if (code == "engineSignedOut") RunnerCopy.agentFixSignInOnMachinePage(fix.engineName ?: engineName(fix.engine.orEmpty())) else ""
+            return SandboxFixView.Blocked(fix.blockedMessage.orEmpty() + signIn)
+        }
+        val starts = fix.workspaceName?.let { RunnerCopy.agentFixStarts(it, fix.engineName ?: engineName(fix.engine.orEmpty())) }
+        return SandboxFixView.Ready(starts)
     }
 
     /** The open session at work on this warning: the same kind and, but for the machine's own (cannotSelfUpdate, engineUpdateFailed),
@@ -1135,11 +1191,16 @@ internal object RunnerPage {
     /** Whether a version is a release number, not a managed image's `managed-<sha>` or a `dev` build. */
     fun isReleaseVersion(version: String?): Boolean = version != null && Regex("^[vV]?[0-9]").containsMatchIn(version.trim())
 
+    /** The build a managed runner runs, `Build 95884b1 · Nov 16`; only when it has none to name does Orbit say it keeps it up to date. */
+    private fun managedBuildLine(version: String?): String =
+        ManagedRunnerRunningBuild.build?.let { ManagedRunnerUpdateLogic.runningBuild(version, it) }?.let { ManagedRunnerUpdateLogic.buildLine(it) }
+            ?: RunnerCopy.MANAGED_RUNNER_KEPT_UP_TO_DATE
+
     /** A version beside a runner's name: `v<version>`. A managed runner shows its release when it reports one, and otherwise says
      * Orbit keeps it up to date — never its image hash (web runnerVersionLine). */
     fun versionLine(version: String?, managed: Boolean = false): String? {
         val v = version?.trim()?.takeIf { it.isNotEmpty() }
-        if (managed) return if (isReleaseVersion(v)) RunnerCopy.versionTag(v!!) else RunnerCopy.MANAGED_RUNNER_KEPT_UP_TO_DATE
+        if (managed) return if (isReleaseVersion(v)) RunnerCopy.versionTag(v!!) else managedBuildLine(v)
         return v?.let(RunnerCopy::versionTag)
     }
 
@@ -1511,6 +1572,32 @@ internal object RunnerPage {
         }
     }
 
+    /** What a runner declares when it signs [engine]'s Default out on request (runner-go default_sign_out.go). */
+    fun defaultSignOutCapability(engine: String) = "$engine-default-sign-out/v1"
+
+    /** Whether [line]'s menu offers Sign out…: the Default row of an engine, while it is signed in and its runner declares it can sign it
+     * out — an older runner would read the request as a removal. */
+    fun offersSignOut(engine: String, line: AccountLine, runner: JsonObject) =
+        line.isDefault && line.auth == "yes" && !line.envKey && defaultSignOutCapability(engine) in runner.strings("capabilities")
+
+    /** Whether Sign out… can be pressed: the runner deletes the credential, so it is online, and one request at a time is in flight. */
+    fun canSignOut(offline: Boolean, pending: Boolean) = !offline && !pending
+
+    /** The question before Default's Sign out…, title and body; Claude Code and Codex name their CLI in a terminal, which shares the login. */
+    fun signOutQuestion(runner: JsonObject, engine: String, line: AccountLine): Pair<String, String> {
+        val machine = displayName(runner)
+        var message = RunnerAccountCopy.defaultSignOutDetail(machine)
+        if (engine == "claude" || engine == "codex") message += " " + RunnerAccountCopy.defaultSignOutTerminal(machine, engine)
+        return RunnerAccountCopy.defaultSignOutTitle(line.name) to message
+    }
+
+    /** The second question, once the runner named [count] sessions running on Default. */
+    fun signOutAgainQuestion(line: AccountLine, count: Int): Pair<String, String> =
+        signOutInUse(line.name, count) to RunnerAccountCopy.DEFAULT_SIGN_OUT_RUNNING_DETAIL
+
+    fun signOutInUse(name: String, count: Int) =
+        if (count == 1) RunnerAccountCopy.defaultSignOutRunningOne(name) else RunnerAccountCopy.defaultSignOutRunningMany(count, name)
+
     /** What a runner declares when it can make an added Claude Code account the Default: the swap itself, and moving a session into its
      * account's new folder (RunnersService.setDefaultAccount asks for both). */
     private val CLAUDE_ACCOUNT_SWAP_CAPABILITIES = listOf("claude-account-swap/v1", "claude-account-move/v1")
@@ -1657,7 +1744,7 @@ internal object RunnerPage {
     fun versionValue(runner: JsonObject, latest: String?, managed: Boolean = false): String? {
         // Orbit rolls the managed runner's image: its release and that Orbit updates it, or that Orbit keeps it up to date.
         if (managed) return runner.str("version")?.trim()?.takeIf(::isReleaseVersion)?.let { it + RunnerCopy.SEP + RunnerCopy.MANAGED_RUNNER_UPDATED_BY_ORBIT }
-            ?: RunnerCopy.MANAGED_RUNNER_KEPT_UP_TO_DATE
+            ?: managedBuildLine(runner.str("version"))
         val version = runner.str("version")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         val newest = latest?.trim()?.takeIf { it.isNotEmpty() } ?: return version
         if (compareRunnerVersions(version, newest) >= 0) return version + RunnerCopy.SEP + "Latest"

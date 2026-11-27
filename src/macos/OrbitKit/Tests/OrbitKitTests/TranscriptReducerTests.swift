@@ -1422,6 +1422,27 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(r.state.items[0].asUser?.queued, false)
     }
 
+    /// Translated while the runner is full: the listing says DONE long before the runner's echo can,
+    /// and the bubble kept in the conversation drops its "Translating…" chip on that listing.
+    func testHeldSendTakesTheListingsTranslationBeforeItsEcho() {
+        var r = TranscriptReducer()
+        r.addOptimisticUser(clientTurnId: "c1", text: "先给我效果图")
+        r.setOptimisticTurnId(clientTurnId: "c1", turnId: "t1",
+                              translation: TurnTranslation(state: .translating, from: .zhHans, original: "先给我效果图"),
+                              placement: "queued")
+        let done: JSONValue = .object([
+            "state": .string("DONE"), "from": .string("zh-Hans"), "original": .string("先给我效果图"),
+        ])
+        r.reconcileQueuedTurns([
+            QueuedTurnInfo(turnId: "t1", kind: "message", content: "Show me the mockup first",
+                           placement: "accepted", translation: done),
+        ], knownBefore: r.state.listedTurnIDs)
+        XCTAssertEqual(r.state.items.count, 1)
+        XCTAssertEqual(r.state.items[0].asUser?.translation?.state, .done)
+        XCTAssertEqual(r.state.items[0].asUser?.pending, true, "still waiting on its echo")
+        XCTAssertTrue(r.state.queued.isEmpty && r.state.accepted.isEmpty, "drawn once")
+    }
+
     /// The other way round: a send guessed queued that the server `accepted` is delivered now, so it
     /// is drawn inline and offers no Cancel.
     func testServerAcceptedPlacementMovesQueuedSendInline() {
@@ -2170,6 +2191,26 @@ final class TranscriptReducerTests: XCTestCase {
 
         XCTAssertEqual(r.state.items.map(\.asDiagnostic), [DiagnosticRead(
             label: "mcp", text: "model refresh 401 request id: req_first", message: "model refresh 401 request id: req_first")])
+    }
+
+    /// Codex's sandbox setup asks for the system bubblewrap and falls back to its bundled copy
+    /// (docs/mocks/codex-sandbox-fix-with-agent): a degraded sandbox diagnostic, with the code the
+    /// transcript's row acts on.
+    func testMissingBubblewrapIsADegradedSandboxDiagnostic() {
+        let line = "2026-08-14T14:31:13.780609Z ERROR codex_app_server: Codex could not find bubblewrap on PATH. "
+            + "Install bubblewrap with your OS package manager. See the sandbox prerequisites: "
+            + "https://developers.openai.com/codex/concepts/sandboxing#prerequisites. "
+            + "Codex will use the bundled bubblewrap in the meantime."
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .system, payload: .object(["stderr": .string(line)])))
+
+        guard case .diagnostic(let notice)? = r.state.items.first else {
+            return XCTFail("the missing-bubblewrap line was not a diagnostic: \(r.state.items)")
+        }
+        XCTAssertTrue(notice.isSandboxMissing)
+        XCTAssertEqual(notice.component, "sandbox")
+        XCTAssertEqual(notice.code, "bubblewrap_missing")
+        XCTAssertEqual(notice.label, "Startup · sandbox · bubblewrap_missing")
     }
 
     func testUnrelatedErrorStderrStaysAnErrorRow() {

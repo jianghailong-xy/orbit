@@ -6,7 +6,8 @@ import { Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { RunnerStatus as HeartbeatRunnerStatus, uuidToBase62, type AgentDirProbe } from '@orbit/shared';
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -35,6 +36,7 @@ import { ProjectHandoffService } from './project-handoff.service';
 import { ProjectFuseService } from './project-fuse.service';
 import { PROJECT_INTEGRATION_APPROVAL_TOOL_NAME } from './project-integration-approval';
 import { enqueueForDoneTask } from './project-integration-job';
+import { projectBranchRef } from './project-integration-line';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectsController } from './projects.controller';
 import { ProjectsService } from './projects.service';
@@ -211,6 +213,8 @@ interface Fixture {
   workspaceId: string;
   projectId: string;
   publicId: string;
+  /** The project branch a line nobody named gets, short: `project/<label slug>-<8 characters>`. */
+  branch: string;
   coordinatorSessionId: string;
 }
 
@@ -268,7 +272,7 @@ async function project(stack: Stack, label: string, repoUrl: string | null = REP
       title: `协调：${label}`,
       prompt: `协调：${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
     },
@@ -299,6 +303,8 @@ async function project(stack: Stack, label: string, repoUrl: string | null = REP
     workspaceId,
     projectId,
     publicId: uuidToBase62(projectId),
+    // The title's Chinese words give the slug nothing: only the label's ASCII words name it.
+    branch: projectBranchRef(projectId, `${label} 的代码项目`).slice('refs/heads/'.length),
     coordinatorSessionId,
   };
 }
@@ -339,7 +345,10 @@ async function workSession(
       title: label,
       prompt: label,
       provider: 'claude',
-      status: RunStatus.SUCCEEDED,
+      turnState: null,
+      // A SUCCEEDED run is a finished one: its finish is what settles the work (§10.5 O-L4 3), and a
+      // DONE over work that has not finished decides its landing at that finish (§12.15 P-M1).
+      finishedAt: new Date(), 
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: taskId !== null,
       isolationStatus: 'worktree',
@@ -528,13 +537,16 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
       { line: 'MAIN', ref: 'main', upstreamRef: 'main', source: 'EXPLICIT', locked: false });
 
     // L-T2: before anything integrated, the owner may change their mind, and the project branch
-    // is named after the project's public id (appendix A-Q1).
+    // nobody named is named after the project's title and the first 8 characters of its public id.
+    assert.equal(f.branch, `project/explicit-${f.publicId.slice(0, 8)}`);
+    assert.equal((await integrationOf(door, f)).defaultProjectBranch, f.branch,
+      'on main, the read names the branch a project branch line would get');
     const changed = await call(door.base, f.ownerId, 'PATCH',
       `/api/projects/${f.publicId}/integration`, { line: 'PROJECT_BRANCH' });
     assert.equal(changed.status, 200, changed.body);
     const expected = {
       line: 'PROJECT_BRANCH',
-      ref: `project/${f.publicId}`,
+      ref: `${f.branch}`,
       upstreamRef: 'main',
       source: 'EXPLICIT',
       locked: false,
@@ -550,7 +562,7 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
       integration_ref_source: row.integration_ref_source,
       integration_started_at: row.integration_started_at,
     })), [{
-      integration_ref: `refs/heads/project/${f.publicId}`,
+      integration_ref: `refs/heads/${f.branch}`,
       upstream_ref: 'refs/heads/main',
       canonical_repo_url: CANONICAL_REPO_URL,
       integration_ref_source: 'EXPLICIT',
@@ -575,12 +587,15 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
     assert.deepEqual(lineOf(before), NOT_DECIDED,
       'nothing integrated yet and nobody chose: there is no line to report');
     assert.equal(before.lineAbsentReason, 'NOT_DECIDED');
+    assert.equal(f.branch, `project/dependent-${f.publicId.slice(0, 8)}`);
+    assert.equal(before.defaultProjectBranch, f.branch,
+      'before anything decided it, the read names the default a project branch would get');
 
     await integrate(stack, f, prerequisite);
 
     assert.deepEqual(lineOf(await integrationOf(door, f)), {
       line: 'PROJECT_BRANCH',
-      ref: `project/${f.publicId}`,
+      ref: `${f.branch}`,
       upstreamRef: 'main',
       source: 'DEFAULT_RULE',
       locked: true,
@@ -589,6 +604,8 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
     assert.equal(row?.canonical_repo_url, CANONICAL_REPO_URL,
       'the repository is the one the integrated task’s session worked in');
     assert.ok(row?.integration_started_at instanceof Date, 'the line records when it started');
+    assert.equal(row?.integration_ref, `refs/heads/project/dependent-${f.publicId.slice(0, 8)}`,
+      'the default rule stores the readable default as the integration ref');
   });
 
   // A person can still declare the remote directly through the workspace form.
@@ -636,7 +653,7 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
       'the integration was still refused after the workspace declared its remote');
     assert.deepEqual(lineOf(await integrationOf(door, f)), {
       line: 'PROJECT_BRANCH',
-      ref: `project/${f.publicId}`,
+      ref: `${f.branch}`,
       upstreamRef: 'main',
       source: 'DEFAULT_RULE',
       locked: true,
@@ -727,7 +744,7 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
       assert.equal(chosen.status, 200,
         `the discovered repository must admit the project branch: ${chosen.body}`);
       assert.deepEqual(lineOf(await integrationOf(door, f)), {
-        line: 'PROJECT_BRANCH', ref: `project/${f.publicId}`, upstreamRef: 'main',
+        line: 'PROJECT_BRANCH', ref: `${f.branch}`, upstreamRef: 'main',
         source: 'EXPLICIT', locked: false,
       });
       assert.equal((await codebaseRow(stack, f))[0]?.canonical_repo_url, CANONICAL_REPO_URL);
@@ -784,7 +801,7 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
       // The database's refusal, for a writer that never asked the service.
       await assert.rejects(stack.sql.query(
         `UPDATE "project_codebase" SET "integration_ref" = $2 WHERE "project_id" = $1::uuid`,
-        [f.projectId, `refs/heads/project/${f.publicId}`],
+        [f.projectId, `refs/heads/${f.branch}`],
       ), LOCKED_BY_THE_DATABASE);
       await assert.rejects(stack.sql.query(
         `UPDATE "project_codebase" SET "integration_started_at" = NULL WHERE "project_id" = $1::uuid`,
@@ -803,11 +820,11 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
       `INSERT INTO "project_codebase" ("id", "project_id", "owner_id", "canonical_repo_url",
                                        "upstream_ref", "integration_ref", "ref_authority", "updated_at")
        VALUES ($1::uuid, $2::uuid, $3::uuid, $4, 'refs/heads/main', $5, 'REMOTE', now())`,
-      [randomUUID(), f.projectId, f.ownerId, CANONICAL_REPO_URL, `refs/heads/project/${f.publicId}`],
+      [randomUUID(), f.projectId, f.ownerId, CANONICAL_REPO_URL, `refs/heads/${f.branch}`],
     );
 
     await landEach(stack, f, {
-      'on the project branch': `project/${f.publicId}`,
+      'on the project branch': `${f.branch}`,
       'on main': 'main',
       'on master': 'master',
     });
@@ -837,7 +854,7 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
     // 166ce5937 makes the agent's queued merge explicit: PENDING with polling guidance, so
     // callers cannot mistake acceptance for a completed merge. The owner's menu keeps ok: true.
     const answer = await runnerDoor.mergeSession(runner, undefined, undefined, undefined, merged,
-      { targetBranch: `project/${f.publicId}` });
+      { targetBranch: `${f.branch}` });
     const queued = await stack.db.session.findUniqueOrThrow({ where: { id: merged } });
     assert.ok(queued.mergeOperationId);
     assert.deepEqual(answer, {
@@ -857,7 +874,7 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
     assert.deepEqual(await stack.db.session.findUniqueOrThrow({
       where: { id: merged },
       select: { mergeStatus: true, mergeTarget: true },
-    }), { mergeStatus: 'pending', mergeTarget: `project/${f.publicId}` },
+    }), { mergeStatus: 'pending', mergeTarget: `${f.branch}` },
     'the merge itself is queued into the target it named');
     assert.equal(await defaultMergeTargetOf(stack, f), 'main',
       'a merge nobody picked in the Merge menu moved the default that every session of this '
@@ -982,7 +999,7 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
     assert.equal(outcome.enqueued, true, `the line never started: ${JSON.stringify(outcome)}`);
     assert.deepEqual(lineOf(await integrationOf(door, f)), {
       line: 'PROJECT_BRANCH',
-      ref: `project/${f.publicId}`,
+      ref: `${f.branch}`,
       upstreamRef: 'main',
       source: 'DEFAULT_RULE',
       locked: true,
@@ -1006,7 +1023,7 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
 
     assert.equal(outcome.enqueued, true, `the line never started: ${JSON.stringify(outcome)}`);
     assert.deepEqual(await jobsFor(stack, other), [
-      { kind: 'LAND_TASK', state: 'QUEUED', target_ref: `refs/heads/project/${f.publicId}` },
+      { kind: 'LAND_TASK', state: 'QUEUED', target_ref: `refs/heads/${f.branch}` },
     ], 'the back-fill stopped offering a project’s finished code tasks a landing at all');
     assert.equal(outcome.enqueued && outcome.alsoQueuedTaskIds.includes(other), true,
       'the back-fill left a finished code task with no landing evidence behind');
@@ -1019,7 +1036,7 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
     const pair = await finishedPair(stack, f, 'elsewhere');
     const recorded = await stack.receipts.record(f.ownerId, pair.otherWork, {
       result: 'MERGED',
-      targetBranch: `project/${other.publicId}`,
+      targetBranch: `${other.branch}`,
       sourceSha: sha('a'),
       targetShaBefore: sha('b'),
       targetShaAfter: sha('c'),
@@ -1030,7 +1047,7 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
 
     assert.equal(outcome.enqueued, true, `the line never started: ${JSON.stringify(outcome)}`);
     assert.deepEqual(await jobsFor(stack, pair.other), [
-      { kind: 'LAND_TASK', state: 'QUEUED', target_ref: `refs/heads/project/${f.publicId}` },
+      { kind: 'LAND_TASK', state: 'QUEUED', target_ref: `refs/heads/${f.branch}` },
     ], 'a receipt into some other project’s branch was read as landing on this project’s line');
   });
 
@@ -1059,7 +1076,7 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
     assert.deepEqual(outcome.enqueued && outcome.alsoQueuedTaskIds, [],
       'a DONE written after the line started back-filled the project’s other finished tasks');
     assert.deepEqual(await jobsFor(stack, trigger), [
-      { kind: 'LAND_TASK', state: 'CHECK_FAILED', target_ref: `refs/heads/project/${f.publicId}` },
+      { kind: 'LAND_TASK', state: 'CHECK_FAILED', target_ref: `refs/heads/${f.branch}` },
     ], 'another task’s DONE queued a red landing again — only its coordinator’s rerun may (J-T1b)');
     assert.deepEqual((await jobsFor(stack, late)).map((job) => job.kind), ['LAND_TASK']);
   });

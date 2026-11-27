@@ -17,6 +17,7 @@ final class SessionProjectGroupingTests: XCTestCase {
                          waitingKind: SessionWaitingKind? = nil, since: [String] = [],
                          bg: Int = 0, jobs: Int = 0, subagents: Int = 0,
                          pinnedAt: String? = nil, lastTurnAt: String? = "2026-10-04T09:40:00Z",
+                         listedAt: String? = nil,
                          createdAt: String? = "2026-10-04T09:00:00Z",
                          reply: String? = "Last reply", userText: String? = nil,
                          tool: String? = nil, review: ConfirmationUnderReview? = nil) -> Session {
@@ -33,7 +34,7 @@ final class SessionProjectGroupingTests: XCTestCase {
                 lastAssistantText: reply, lastToolUse: tool, lastUserText: userText,
                 runningBgCount: bg, runningBgJobCount: jobs, runningSubagentCount: subagents,
                 agent: workspaceRef,
-                pinnedAt: pinnedAt, createdAt: createdAt, lastTurnAt: lastTurnAt,
+                pinnedAt: pinnedAt, createdAt: createdAt, lastTurnAt: lastTurnAt, listedAt: listedAt,
                 folderId: folder, confirmationUnderReview: review,
                 projectMembership: role.map {
                     SessionProjectMembership(projectId: projectID, projectTitle: "Project one",
@@ -143,14 +144,15 @@ final class SessionProjectGroupingTests: XCTestCase {
 
     func testOnlyCoordinatorPinsAndLatestLocalActivityOrdersRows() {
         let coord = coordinator(lastTurnAt: ago(10_000))
-        let worker = session("worker", pinnedAt: ago(30), lastTurnAt: ago(1))
-        let out = listing([coord, worker, session("ordinary", role: nil, lastTurnAt: ago(5))])
+        let worker = session("worker", pinnedAt: ago(30), lastTurnAt: ago(1), listedAt: ago(1))
+        let out = listing([coord, worker, session("ordinary", role: nil, lastTurnAt: ago(5), listedAt: ago(5))])
         XCTAssertNil(out.projects.first?.pinnedAt)
         XCTAssertEqual(out.projects.first?.lastTurnAt, ago(1))
+        XCTAssertEqual(out.projects.first?.listedAt, ago(1))
         XCTAssertEqual(out.entries.map(\.id), ["p1", "ordinary"])
         let pinned = listing([coordinator(pinnedAt: ago(40), lastTurnAt: ago(10_000)),
                               session("worker", lastTurnAt: ago(10_000)),
-                              session("ordinary", role: nil, lastTurnAt: ago(1))])
+                              session("ordinary", role: nil, lastTurnAt: ago(1), listedAt: ago(1))])
         XCTAssertEqual(pinned.entries.map(\.id), ["p1", "ordinary"])
         XCTAssertEqual(pinned.entries.first?.pinnedAt, ago(40))
         let completed = listing([coordinator(pinnedAt: ago(40), lastTurnAt: ago(10_000)),
@@ -172,7 +174,7 @@ final class SessionProjectGroupingTests: XCTestCase {
         XCTAssertTrue(out.projects.isEmpty)
         XCTAssertEqual(out.sessions.map(\.id), ["ordinary"])
         XCTAssertEqual(out.folders.map(\.id), ["empty", "f1", "f2"])
-        XCTAssertEqual(out.folders.map(\.sessionCount), [0, 3, 0])
+        XCTAssertEqual(out.folders.map(\.sessionCount), [0, 1, 0])
         XCTAssertEqual(out.folders.map(\.status), [.idle, .needsYou(1), .idle])
         let inside = listing(sessions, folderID: "f1", folders: folders)
         XCTAssertTrue(inside.folders.isEmpty)
@@ -193,7 +195,7 @@ final class SessionProjectGroupingTests: XCTestCase {
         let filed = listing([coordinator(folder: "f1"), session("worker", folder: "f2")],
                             view: .completed, folders: [folder("f1", "Release"), folder("f2", "Tasks")])
         XCTAssertEqual(filed.folders.map(\.id), ["f1"])
-        XCTAssertEqual(filed.folders.map(\.sessionCount), [2])
+        XCTAssertEqual(filed.folders.map(\.sessionCount), [1])
     }
 
     func testSupplementalCoordinatorAffectsWordingAndPlacementOnly() {
@@ -449,9 +451,11 @@ final class SessionProjectGroupingTests: XCTestCase {
     }
 
     func testAProjectWhoseCoordinatorRunsElsewhereHasNoRowAndItsMembersHereAreMarked() {
-        let sessions = [session("check", lastTurnAt: ago(22)), session("cert", role: nil, lastTurnAt: ago(15)),
-                        session("deploy", lastTurnAt: ago(41)),
-                        session("coordinator-2", role: .coordinator, projectID: "p2", lastTurnAt: ago(30))]
+        let sessions = [session("check", lastTurnAt: ago(22), listedAt: ago(22)),
+                        session("cert", role: nil, lastTurnAt: ago(15), listedAt: ago(15)),
+                        session("deploy", lastTurnAt: ago(41), listedAt: ago(41)),
+                        session("coordinator-2", role: .coordinator, projectID: "p2", lastTurnAt: ago(30),
+                                listedAt: ago(30))]
         let out = listing(sessions, workspace: "w1", coordinators: [remote()])
         XCTAssertEqual(out.projects.map(\.projectId), ["p2"], "a project whose coordinator runs here keeps its row")
         XCTAssertEqual(out.entries.map(\.id), ["cert", "check", "p2", "deploy"])
@@ -516,14 +520,16 @@ final class SessionProjectGroupingTests: XCTestCase {
         XCTAssertEqual(inside.marks, ["check": mark])
         // Where the coordinator runs, its folder still holds every member, whatever folder each is filed in.
         let home = listing([coordinator(folder: "f2")] + sessions, folders: folders, workspace: "w1")
-        XCTAssertEqual(home.folders.map(\.sessionCount), [0, 3])
+        XCTAssertEqual(home.folders.map(\.sessionCount), [0, 1])
         XCTAssertEqual(home.entries.map(\.id), ["ordinary"])
         XCTAssertTrue(home.marks.isEmpty)
     }
 
     func testAMemberThereIsPinnedByItsOwnPinAndInItsOwnTimeSection() {
-        let pinned = session("pinned", pinnedAt: ago(5), lastTurnAt: ago(10_000))
-        let out = listing([pinned, session("older", lastTurnAt: ago(1_440)), session("ordinary", role: nil, lastTurnAt: ago(1))],
+        let pinned = session("pinned", pinnedAt: ago(5), lastTurnAt: ago(10_000), listedAt: ago(10_000))
+        let out = listing([pinned,
+                           session("older", lastTurnAt: ago(1_440), listedAt: ago(1_440)),
+                           session("ordinary", role: nil, lastTurnAt: ago(1), listedAt: ago(1))],
                           workspace: "w1", coordinators: [remote(lastTurnAt: ago(1))])
         var utc = Calendar(identifier: .gregorian)
         utc.timeZone = TimeZone(identifier: "UTC")!

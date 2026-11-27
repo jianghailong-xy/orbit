@@ -35,6 +35,17 @@ import {
   waitingToBeSeenOn,
 } from './ProjectsPage';
 
+// The app Tooltip draws its words only while open: this file reads them off the trigger, as `data-tip`.
+vi.mock('../components/ui/Tooltip', async () => {
+  const { cloneElement } = await import('react');
+  return {
+    CONTROL_TOOLTIP_DELAY_MS: 100,
+    TEXT_TOOLTIP_DELAY_MS: 600,
+    Tooltip: ({ children, content }: { children: import('react').ReactElement; content?: import('react').ReactNode }) =>
+      cloneElement(children, (content ? { 'data-tip': content } : {}) as object),
+  };
+});
+
 // react-query never dispatches a fetch during a static (effect-free) render — confirmed by
 // instrumenting it directly, matching TaskListView.test.tsx's own note that these tests must
 // seed the cache instead of letting the real request run. So `api` is stubbed both as a backstop
@@ -339,7 +350,6 @@ describe('ProjectsPage', () => {
       [
         'import {',
         '  projectCoordinatorStatusQuery,',
-        '  projectIntegrationQuery,',
         '  projectsPath,',
         '  projectsQueryKey,',
         '  runnersQuery,',
@@ -347,6 +357,9 @@ describe('ProjectsPage', () => {
         "} from '../lib/queries';",
       ].join('\n'),
     );
+    // The integration line is read through the hook every part of a page shares, so one of them polls it
+    // (lib/pollOwner); the hook reads projectIntegrationQuery, whose one call is held below.
+    expect(source).toContain("import { useProjectIntegration } from '../lib/pollOwner';");
 
     // The page's SEVENTH and EIGHTH endpoints — the coordinator card's read, and the integration
     // line's. Their `api(...)` calls live in lib/queries.ts, so the scan above cannot see them and
@@ -1790,7 +1803,7 @@ function timeTag(html: string): { instant: string; hover: string; text: string }
   const el = /<time\s+([^>]*)>([^<]*)<\/time>/i.exec(html);
   if (!el) return null;
   const attr = (name: string) => new RegExp(`\\b${name}="([^"]*)"`, 'i').exec(el[1])?.[1] ?? '';
-  return { instant: attr('datetime'), hover: attr('title'), text: el[2] };
+  return { instant: attr('datetime'), hover: attr('data-tip'), text: el[2] };
 }
 
 describe('ProjectDetailPage — a task’s scheduled start on its row', () => {

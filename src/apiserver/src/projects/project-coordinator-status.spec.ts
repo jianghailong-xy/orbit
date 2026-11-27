@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
+import { factsOfWord } from '../sessions/session-legacy-words.fixture';
 import { withSessionState } from '../sessions/session-state';
 import { COORDINATOR_UNAVAILABLE_CODE, ProjectsService } from './projects.service';
+import { wordOf } from '../test-support/session-word';
 
 const OWNER_ID = '00000000-0000-7000-8000-000000000001';
 const OTHER_OWNER_ID = '00000000-0000-7000-8000-000000000002';
@@ -15,13 +17,13 @@ const BORROWED_ID = '00000000-0000-7000-8000-0000000000c3';
 
 /** The session columns `coordinatorStatus` selects, in the shape Prisma hands back. */
 function sessionRow(overrides: Record<string, unknown> = {}) {
+  const status = (overrides.status as RunStatus | undefined) ?? RunStatus.AWAITING_INPUT;
   return {
     id: SESSION_ID,
     title: 'Ship the coordinator',
-    status: RunStatus.AWAITING_INPUT,
-    endReason: null,
+    // What the words are derived from (sessions/session-legacy-words.ts), as a session at `status` has them.
+    ...factsOfWord(status),
     startedAt: new Date('2026-08-24T06:00:00.000Z'),
-    finishedAt: null,
     completedAt: null,
     archivedAt: null,
     deletedAt: null,
@@ -95,8 +97,8 @@ function serviceWith(fixture: Fixture = {}) {
     },
     // The owner decisions the session list adds to the same row (`countOwnerDecisionsBySession`):
     // every read answers empty except the owner items, which `ownerItems` fills.
-    ownerRequest: { groupBy: async () => [] },
-    // A move out of a project waiting on the owner (57a2943fa4's crossing signal): none here.
+    // The open owner requests and waiting task moves the same row counts (none here).
+    ownerRequest: { findMany: async () => [] },
     projectHandoffApproval: { findMany: async () => [] },
     projectOpenItem: {
       findMany: async () => {
@@ -501,7 +503,7 @@ test('the session’s three derived states are the ones withSessionState derives
     });
     const served = (await service.coordinatorStatus(OWNER_ID, PROJECT_ID)).coordination.session;
     const derived = withSessionState(row);
-    assert.ok(served, `no session served for ${row.status}`);
+    assert.ok(served, `no session served for ${wordOf(row)}`);
     assert.deepEqual(
       {
         runStatus: served.runStatus,
@@ -517,7 +519,7 @@ test('the session’s three derived states are the ones withSessionState derives
         filingState: derived.filingState,
         completedAt: derived.completedAt,
       },
-      `endpoint and withSessionState disagree about ${row.status}`,
+      `endpoint and withSessionState disagree about ${wordOf(row)}`,
     );
   }
 });

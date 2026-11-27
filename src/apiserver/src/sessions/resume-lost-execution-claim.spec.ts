@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { ConflictException } from '@nestjs/common';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { uuidToBase62 } from '@orbit/shared';
 
 import { SessionsService } from './sessions.service';
@@ -49,9 +50,9 @@ function claimConflict(): Prisma.PrismaClientKnownRequestError {
         cause: {
           originalCode: '23505',
           originalMessage:
-            'duplicate key value violates unique constraint "session_task_execution_claim_idx"',
+            'duplicate key value violates unique constraint "session_task_execution_claim_idx_finished_at"',
           kind: 'UniqueConstraintViolation',
-          constraint: { index: 'session_task_execution_claim_idx' },
+          constraint: { index: 'session_task_execution_claim_idx_finished_at' },
         },
       },
     },
@@ -90,6 +91,7 @@ function fixture(
     taskId: TASK,
     workspaceId: WORKSPACE,
     status: RunStatus.FAILED,
+    finishedAt: now,
     startsTaskWork: true,
     startedAt: now,
     numTurns: 3,
@@ -156,7 +158,7 @@ const retry = { clientTurnId: 'retry-1', content: 'go on' };
 test('a revive that loses the execution claim is a 409 naming the session that holds it', async () => {
   const { service, holderReads } = fixture({
     id: SIBLING,
-    status: RunStatus.RUNNING,
+    turnState: 'IN_FLIGHT', status: RunStatus.RUNNING,
     workspaceId: WORKSPACE,
     startsTaskWork: true,
     cancelRequestedAt: null,
@@ -175,22 +177,22 @@ test('a revive that loses the execution claim is a 409 naming the session that h
       return true;
     },
   );
-  // The predicate the read asks by has to be the index's own: the four statuses 0130 covers, and
-  // no narrowing to the rows somebody guessed were the interesting ones.
+  // The predicate the read asks by has to be the index's own: 1426's, the sessions not released
+  // (plan step 4.5; 0130's four statuses before it), and no narrowing to the rows somebody guessed
+  // were the interesting ones.
   const where = holderReads[0] as {
-    taskId: string; deletedAt: null; status: { in: RunStatus[] };
+    taskId: string; deletedAt: null; finishedAt: null; status?: unknown;
   };
   assert.equal(where.taskId, TASK);
   assert.equal(where.deletedAt, null);
-  assert.deepEqual(where.status.in, [
-    RunStatus.PENDING, RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED,
-  ]);
+  assert.equal(where.finishedAt, null);
+  assert.equal(where.status, undefined);
 });
 
 test('the refusal says which of the shapes the holder is', async () => {
   const onAnotherAgent = fixture({
     id: SIBLING,
-    status: RunStatus.RUNNING,
+    turnState: 'IN_FLIGHT', status: RunStatus.RUNNING,
     workspaceId: OTHER_WORKSPACE,
     startsTaskWork: true,
     cancelRequestedAt: null,
@@ -205,7 +207,7 @@ test('the refusal says which of the shapes the holder is', async () => {
 
   const ending = fixture({
     id: SIBLING,
-    status: RunStatus.RUNNING,
+    turnState: 'IN_FLIGHT', status: RunStatus.RUNNING,
     workspaceId: WORKSPACE,
     startsTaskWork: true,
     cancelRequestedAt: now,

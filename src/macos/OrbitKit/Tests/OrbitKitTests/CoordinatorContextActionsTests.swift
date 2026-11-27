@@ -167,6 +167,53 @@ final class CoordinatorContextActionsTests: XCTestCase {
 
     // MARK: Wire
 
+    func testSuccessorRequestBody() throws {
+        let encoder = JSONEncoder()
+        let emptyBody = try encoder.encode(CoordinatorHandoffRequest(successor: nil))
+        XCTAssertEqual(String(decoding: emptyBody, as: UTF8.self), "{}")
+
+        let pick = CoordinatorHandoffSuccessor(engine: "claude", provider: "claude")
+        let body = try encoder.encode(CoordinatorHandoffRequest(successor: pick))
+        let fields = try JSONDecoder().decode([String: [String: String]].self, from: body)
+        XCTAssertEqual(fields, ["successor": ["engine": "claude", "provider": "claude"]])
+
+        // "Same as this one" said on purpose clears a saved pick.
+        let same = try encoder.encode(CoordinatorHandoffRequest(successor: .same))
+        XCTAssertEqual(String(decoding: same, as: UTF8.self), #"{"successor":null}"#)
+    }
+
+    func testSuccessorDecodesOnSessionAndHandoffResponse() throws {
+        let row = try session("""
+            {"id":"s1","status":"FAILED","pendingApprovals":0,
+             "coordinatorHandoff":{"state":"FAILED","successor":{"engine":"claude","provider":"claude","model":"claude-opus-5-5"}}}
+            """)
+        let expected = CoordinatorHandoffSuccessor(engine: "claude", provider: "claude", model: "claude-opus-5-5")
+        XCTAssertEqual(row.coordinatorHandoff?.successor, expected)
+
+        let summary = try JSONDecoder().decode(ControlSessionSummary.self, from: Data("""
+            {"id":"s1","status":"FAILED","pendingApprovals":0,
+             "coordinatorHandoff":{"state":"FAILED","successor":{"engine":"codex","provider":"codex"}}}
+            """.utf8))
+        let updated = CoordinatorHandoffSuccessor(engine: "codex", provider: "codex")
+        XCTAssertEqual(row.applying(summary).coordinatorHandoff?.successor, updated)
+
+        let response = try JSONDecoder().decode(CoordinatorHandoffView.self, from: Data("""
+            {"projectId":"p1","sessionId":"s1","state":"FAILED","successor":{"engine":"codex","provider":"codex"}}
+            """.utf8))
+        XCTAssertEqual(response.successor, updated)
+        let olderResponse = try JSONDecoder().decode(CoordinatorHandoffView.self, from: Data("""
+            {"projectId":"p1","sessionId":"s1","state":"FAILED"}
+            """.utf8))
+        XCTAssertNil(olderResponse.successor)
+
+        let withoutSuccessor = try session("""
+            {"id":"s1","status":"FAILED","pendingApprovals":0,
+             "coordinatorHandoff":{"state":"FAILED","successor":null}}
+            """)
+        XCTAssertEqual(withoutSuccessor.coordinatorHandoff?.state, .failed)
+        XCTAssertNil(withoutSuccessor.coordinatorHandoff?.successor)
+    }
+
     func testTheSessionFieldsDecodeAndTheSummaryOwnsThem() throws {
         let row = try session("""
             {"id":"s1","status":"RUNNING","pendingApprovals":0,"projectId":"p1",
@@ -175,6 +222,7 @@ final class CoordinatorContextActionsTests: XCTestCase {
             """)
         XCTAssertEqual(row.coordinatorHandoff?.state, .failed)
         XCTAssertEqual(row.coordinatorHandoff?.failureCode, .emptyNote)
+        XCTAssertNil(row.coordinatorHandoff?.successor)
         // An older control plane says nothing: the row keeps its handoff.
         let older = try JSONDecoder().decode(ControlSessionSummary.self, from: Data("""
             {"id":"s1","status":"RUNNING","pendingApprovals":0}
@@ -250,6 +298,10 @@ final class CoordinatorContextActionsTests: XCTestCase {
     }
 
     func testTheConfirmsCopy() {
+        XCTAssertEqual(CoordinatorHandoffCopy.successorRowTitle, "New coordinator runs on")
+        XCTAssertEqual(CoordinatorHandoffCopy.successorKeep, "Same as this one")
+        XCTAssertEqual(CoordinatorHandoffCopy.successorRowDetail,
+                       "Pick another if this one's model or provider has stopped working.")
         XCTAssertEqual(CoordinatorHandoffCopy.waitsRowTitle(1), "1 pending wait moves over")
         XCTAssertEqual(CoordinatorHandoffCopy.waitsRowTitle(2), "2 pending waits move over")
         XCTAssertEqual(CoordinatorHandoffCopy.waitsMovedHere(1), "1 wait moved here")

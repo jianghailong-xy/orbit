@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { classifyFailure, FailureCause, toUuid, uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { releaseWasFailureFilter } from '../common/session-release';
+import { LEGACY_STATUS_SELECT, legacySessionStatus } from '../sessions/session-legacy-words';
 import { countTaskWorkCarriers } from '../sessions/task-work-carrier';
 
 /**
@@ -102,7 +104,7 @@ export class ReferenceExpansionService {
           SELECT list_task."id" FROM "task" list_task WHERE list_task."list_id" = ${id}::uuid)`,
       ),
       this.prisma.session.findMany({
-        where: { task: { listId: id }, status: RunStatus.FAILED },
+        where: { task: { listId: id }, ...releaseWasFailureFilter() },
         select: { error: true },
       }),
       // "为什么卡住了" is the reason people reference a list at all, and the answer is here rather
@@ -163,7 +165,7 @@ export class ReferenceExpansionService {
       this.prisma.session.findFirst({
         where: { taskId: id },
         orderBy: { createdAt: 'desc' },
-        select: { status: true, numTurns: true, error: true },
+        select: { ...LEGACY_STATUS_SELECT, numTurns: true, error: true },
       }),
     ]);
     // The evidence question, answered up front — it is the one that decided every verification
@@ -172,7 +174,8 @@ export class ReferenceExpansionService {
       where: { taskId: id, numTurns: { gt: 0 } },
     });
     const lastLine = lastRun
-      ? `${lastRun.status}${lastRun.error ? ` (${classifyFailure(lastRun.error)})` : ''}, ${lastRun.numTurns} turns`
+      // The word derived from the facts (plan §3.1). A task's run is never a LANDING container, so no landing row.
+      ? `${legacySessionStatus(lastRun)}${lastRun.error ? ` (${classifyFailure(lastRun.error)})` : ''}, ${lastRun.numTurns} turns`
       : 'never run';
     // Read back by the clients, which draw the block as a card (web lib/referencedTask.ts, OrbitKit
     // Transcript/ReferencedTask.swift): a label or a sentence reworded here is reworded there too.

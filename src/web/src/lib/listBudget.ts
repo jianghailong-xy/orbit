@@ -8,7 +8,8 @@
  * - while the stream is down, every poll backs off together: 4 s, 8 s, 16 s, then every 30 s, each a
  *   little later than the next by its own jitter (R2). The outage ends with the first message a
  *   reopened stream delivers, not when it opens: a stream that opens and dies keeps the polls where
- *   they had got to.
+ *   they had got to. A tab that comes back into view while the stream is down reads once what came due,
+ *   and its polls go on at the outage's slowest pace.
  * - a failed read is not retried while the stream is down: the next poll is its retry.
  *
  * One tab has one stream, so this is module state: ControlPlaneProvider reports to it, and a poll
@@ -21,6 +22,8 @@ export const LIVE_FALLBACK_MS = 60_000;
 
 /** The polls' intervals through an outage, from its start: 4 s, 8 s, 16 s, then every 30 s (R2). */
 const OUTAGE_STEPS_MS = [4_000, 8_000, 16_000, 30_000] as const;
+/** How long into an outage its polls reach the last step. */
+const OUTAGE_RAMP_MS = OUTAGE_STEPS_MS.slice(0, -1).reduce((sum, step) => sum + step, 0);
 /** Each poll waits up to this much longer than the step says, its own amount for the whole outage, so
  *  the lists of a tab (and the tabs of every client) don't all ask in the same instant. */
 const OUTAGE_JITTER = 0.2;
@@ -44,6 +47,14 @@ export const streamReport = {
   dropped(now = Date.now()): void {
     state = 'down';
     if (outageSince === null) outageSince = now;
+  },
+  /** The tab came back into view with the stream down. It reads once what came due, which is what the backoff's
+   *  quick first steps are for, so from here the polls keep the outage's slowest pace: a tab back from hours in
+   *  the background read every 4 s, then 8 s, then 16 s, from the moment it learned its stream had died. */
+  returned(now = Date.now()): void {
+    if (state !== 'down') return;
+    const slowestFrom = now - OUTAGE_RAMP_MS;
+    if (outageSince === null || outageSince > slowestFrom) outageSince = slowestFrom;
   },
   /** The provider is gone (signed out, unmounted): nothing is known about a stream any more. */
   stopped(): void {

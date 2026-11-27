@@ -42,6 +42,19 @@ final class BackgroundRowWiringTests: XCTestCase {
         }
     }
 
+    /// As AgentsBandRow ends: the name takes the free space, then the count, the mark and the chevron
+    /// sit at the right edge, the count first, the mark just before the chevron.
+    func testTheFoldedRowEndsCountThenMarkThenChevron() throws {
+        let folded = try slice(try source("Views/WorktreeBar.swift"),
+                               from: "private func folded(", to: "private struct RotationKey")
+        let order = [".frame(maxWidth: .infinity, alignment: .leading)", "row.countParts.enumerated()",
+                     "BackgroundRowMarkView(mark: item.mark)", "Image(systemName: \"chevron.right\")"]
+        let at = try order.map { piece in
+            try XCTUnwrap(folded.range(of: piece), "the folded row no longer says \(piece)").lowerBound
+        }
+        XCTAssertEqual(at, at.sorted(), "the folded row is no longer name, count, mark, chevron")
+    }
+
     func testTheConsoleHandsTheTrayTheRuleAndTheFold() throws {
         let console = try source("Views/Console/ConsoleView.swift")
         let call = try slice(console, from: "BackgroundTrayView(procs: console.state.background", to: "CreatedTasksCard(")

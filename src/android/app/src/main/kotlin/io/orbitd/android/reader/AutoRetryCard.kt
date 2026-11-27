@@ -51,7 +51,7 @@ internal fun AutoRetryCard(notice: AutoRetryNotice, console: SessionConsole) {
     val retryText = console.retryText
     val cursor = if (notice.quota) console.cursorQuota else null
     val s = AutoRetryLogic.state(notice, live = !notice.stale, retryAtMs = retryAt, attempts = console.retryAttempts,
-        provider = console.provider, runnerName = console.runnerName, hasRetryText = retryText.isNotEmpty(),
+        provider = composer.catalog?.providerName(console.engine, console.provider) ?: console.provider, runnerName = console.runnerName, hasRetryText = retryText.isNotEmpty(),
         nothingToResend = console.retryContinues, nowMs = now, takenOver = console.takenOver, cursor = cursor)
     val tint = if (s.needsYou) LocalOrbitColors.current.needsYou else MaterialTheme.colorScheme.onSurfaceVariant
     Column(Modifier.fillMaxWidth().background(tint.copy(alpha = .08f), RoundedCornerShape(10.dp)).padding(10.dp).testTag("auto-retry-card"),

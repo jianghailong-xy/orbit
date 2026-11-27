@@ -11,6 +11,7 @@ import {
   dshRuntimeUnavailable,
 } from '../runner-api/runner-provider-support';
 import { QueueService } from './queue.service';
+import { turnStateFilter } from '../sessions/session-turn-state';
 
 const runner = { id: '11111111-1111-4111-8111-111111111111', ownerId: '22222222-2222-4222-8222-222222222222' };
 // Every runtime declared, Cursor CLI's included (migration 0426): only dsh's install state is in question.
@@ -133,7 +134,12 @@ test('dsh install gate: the queue holds the runner\'s dsh rows with the notice a
     let claim: { strings: readonly string[]; values: readonly unknown[] } | undefined;
     const tx = {
       $executeRaw: async () => 0,
-      $queryRaw: async (...args: unknown[]) => { claim = renderRawQuery(args); return []; },
+      $queryRaw: async (...args: unknown[]) => {
+        // Only the claim statement: Run now's pass check (an EXISTS) follows a claim that took nothing.
+        const rendered = renderRawQuery(args);
+        if (rendered.text.includes('UPDATE "session" SET')) claim = rendered;
+        return [];
+      },
     };
     const prisma = {
       session: {
@@ -153,7 +159,7 @@ test('dsh install gate: the queue holds the runner\'s dsh rows with the notice a
     if (dshUnavailable) {
       assert.ok(asked[0].OR.some((clause) => JSON.stringify(clause) === JSON.stringify({ provider: 'dsh', providerBuiltin: true })));
       assert.deepEqual(paused, ['waiting', 'marked']);
-      assert.deepEqual(marked, [{ where: { id: 'waiting', status: 'PENDING' }, data: { error: DSH_NOT_INSTALLED_ERROR } }]);
+      assert.deepEqual(marked, [{ where: { id: 'waiting', ...turnStateFilter(['QUEUED']) }, data: { error: DSH_NOT_INSTALLED_ERROR } }]);
       assert.deepEqual(published, ['waiting']);
     } else {
       assert.ok(!asked[0].OR.some((clause) => JSON.stringify(clause).includes('"dsh"')));
@@ -172,7 +178,12 @@ async function claimStatement(dshUnavailable: string | null) {
       if (rendered.text.includes('orbit.runner_supports_dsh')) settings = rendered;
       return 0;
     },
-    $queryRaw: async (...args: unknown[]) => { sql = renderRawQuery(args); return []; },
+    $queryRaw: async (...args: unknown[]) => {
+      // Only the claim statement: Run now's pass check (an EXISTS) follows a claim that took nothing.
+      const rendered = renderRawQuery(args);
+      if (rendered.text.includes('UPDATE "session" SET')) sql = rendered;
+      return [];
+    },
   };
   const prisma = {
     session: { findMany: async () => [] },

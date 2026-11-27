@@ -800,7 +800,7 @@ func prepareCursorPrompt(ctx context.Context, t *Transport, job *ClaimedSession,
 }
 
 // cursorAgentInstructions are Orbit's agent instructions for a Cursor CLI conversation: the workspace's
-// system prompt and its appended one, with Orbit's own (withOrbitCLIInstructions) — Orbit's MCP tools
+// system prompt and its appended one, with Orbit's own as cursorProfile renders them — Orbit's MCP tools
 // named as Cursor shows them, a server's tools rather than mcp__orbit__* names, and without the sentence on loading
 // delegate in Claude Code. They go ahead of the
 // conversation's first prompt (§7.2: no user-level rules file reaches the model), and stay in the
@@ -810,10 +810,9 @@ func cursorAgentInstructions(job *ClaimedSession) string {
 	if strings.TrimSpace(job.Agent.SystemPrompt) != "" {
 		parts = append(parts, strings.TrimSpace(job.Agent.SystemPrompt))
 	}
-	appended := strings.TrimSpace(withOrbitCLIInstructions(job.appendSystemPrompt(), orbitCLIExecutable(), job.insideRecordedWork(), job.watchesOn(), agentDelegates(job.Agent)))
-	if appended != "" {
-		appended = strings.Replace(appended, "the `mcp__orbit__*` tools", "the tools of the `orbit` MCP server", 1)
-		parts = append(parts, strings.Replace(appended, orbitDelegateClaudeCodeLoad, "", 1))
+	orbit := compose(job.sessionShape(orbitCLIExecutable()), cursorProfile).System
+	if appended := strings.TrimSpace(withOrbitInstructions(job.appendSystemPrompt(), orbit)); appended != "" {
+		parts = append(parts, appended)
 	}
 	return strings.Join(parts, "\n\n")
 }
@@ -1192,6 +1191,7 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 	bridge := newCursorPermissionBridge(policy, mapper.permissionAsk, mapper.refuse, mapper.withdraw, func(ask cursorPermissionAsk) bool {
 		return cursorPreApproved(preApproved, ask)
 	}, bridgeCursorCard(p.t, p.job.SessionID), p.emitFor, launch.Cwd)
+	bridge.uploads = uploadsDir(p.job.SessionID)
 	bridge.prepareSandbox(p.ctx, p.job, runnerCursorSandboxInstaller, detectCursorSandbox, installCursorBubblewrap)
 	app, err := startCursorACP(p.ctx, *launch, mapper, bridge, p.emit)
 	if err != nil {
@@ -1249,6 +1249,7 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 	// The generation's inbox poller: what fetches its turns, and the turnIds already taken on, which
 	// a redelivery of one is dropped against for the generation's whole life.
 	poller := newInboxPoller(p.t, p.job.SessionID, p.leaseGeneration)
+	poller.holdTurns(p.waitTurnPermit, p.job, p.completeTurn) // a turn waiting for its permit does not stop the inbox being read
 	defer poller.close()
 	inbox := make(chan *RunInboxResponse, 8)
 	pollErrors := make(chan error, 1)

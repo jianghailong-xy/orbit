@@ -5,7 +5,8 @@ import test from 'node:test';
 import { BadRequestException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { CreatorType, Prisma, PrismaClient, RunStatus, RunnerStatus, TaskStatus } from '@prisma/client';
+import { CreatorType, Prisma, PrismaClient, RunnerStatus, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -24,6 +25,7 @@ import { CreateWorkspaceDto, UpdateWorkspaceDto } from '../workspaces/dto';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 import { subagentCandidateRefusal } from './model-routing';
 import { TasksService } from './tasks.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * P5 of model routing (docs/model-routing-design.md §6; contract §7.4 R1–R4): routing may move a
@@ -134,9 +136,10 @@ interface Fixture {
 
 /**
  * An owner, a runner reporting Claude and Codex — both signed in, quota to spare unless `planUsage`
- * says otherwise — and its Agent, set up through the user API as the owner sets it up: smart
- * selection on unless `routing` says otherwise, and `allowed` the other engines its runs may use.
- * `started` makes the project one the sweep starts tasks in.
+ * says otherwise — and its Agent. The account has smart selection on unless `routing` says
+ * otherwise: there is no per-Agent switch any more (owner, 2026-11-20). `allowed` is the engines list
+ * the Agent stores, set through the user API, which routing no longer reads. `started` makes the
+ * project one the sweep starts tasks in.
  */
 async function fixture(
   services: Services,
@@ -157,11 +160,11 @@ async function fixture(
     projectId: randomUUID(),
   };
   const { ownerId, runnerId, agentId, projectId } = target;
-  // The account has smart model selection on: these cases are about routing with it on.
+  // The account's switch alone decides whether runs are routed.
   await db.user.create({
     data: {
       id: ownerId, email: `${label}-${RUN}-${ownerId}@routing.invalid`, name: label, passwordHash: 'x',
-      preferences: { modelRouting: true, optimizeFor: 'cost' },
+      preferences: { modelRouting: routing, optimizeFor: 'cost' },
     },
   });
   await db.runner.create({
@@ -187,9 +190,7 @@ async function fixture(
     data: { id: agentId, ownerId, runnerId, name: `${label}-agent`, enabled: true, effort: AGENT_EFFORT },
   });
   // The owner's door, and the only one: what `PATCH /workspaces/:id` reaches.
-  const agent = await services.workspaces.update(ownerId, agentId, {
-    modelRouting: routing, modelRoutingProviders: allowed,
-  });
+  const agent = await services.workspaces.update(ownerId, agentId, { modelRoutingProviders: allowed });
   assert.deepEqual(agent.modelRoutingProviders, allowed);
   // LEGACY dispatch authority: no coordinator.
   await db.project.create({
@@ -237,9 +238,11 @@ async function runNow(services: Services, target: Fixture, taskId: string): Prom
   return result.sessionId;
 }
 
-/** The run ends as the runner's /finalize leaves it. */
-async function end(db: PrismaClient, sessionId: string, status: RunStatus, error: string | null = null) {
-  await db.session.update({ where: { id: sessionId }, data: { status, error, finishedAt: new Date() } });
+/** The run ends as the runner's /finalize leaves it: a failure is on the turn it cut off (removal step R2). */
+async function end(db: PrismaClient, sessionId: string, status: typeof RunStatus.SUCCEEDED | typeof RunStatus.FAILED, error: string | null = null) {
+  await db.session.update({ where: { id: sessionId }, data: {
+    turnState: turnStateOfWord(status), error, finishedAt: new Date(), ...(status === RunStatus.FAILED ? { lastTurnOutcome: 'FAILED' } : {}),
+  } });
 }
 
 /** What a run actually is: the three values routing decides. */
@@ -290,13 +293,19 @@ async function readyTask(db: PrismaClient, target: Fixture, seed: Partial<Prisma
 // Routing no longer reads `modelRoutingProviders` (2026-11-20: the pool is every provider of the owner's), so what this
 // case once proved — that only the owner decides which engines a run may move to — has no premise left. What still
 // holds is kept: the API still stores the list, and the agent tools still cannot write it.
+/** The account's smart model selection switch (user.preferences.modelRouting), written onto its row. */
+async function setAccountSwitch(db: PrismaClient, ownerId: string, on: boolean): Promise<void> {
+  const { preferences } = await db.user.findUniqueOrThrow({ where: { id: ownerId }, select: { preferences: true } });
+  await db.user.update({ where: { id: ownerId }, data: { preferences: { ...(preferences as object), modelRouting: on } } });
+}
+
 test('the engines list on an Agent is still the owner\'s to write: the user API stores it, the agent tools cannot',
   { skip, timeout: 120_000 }, async () => {
     assertCoordinatorPgUrlIsIsolated(URL!);
     const services = connect();
     try {
       // The user API validates with a whitelist (main.ts): engines with a tier table are kept, nothing else.
-      for (const Dto of [CreateWorkspaceDto, UpdateWorkspaceDto]) {
+      for (const Dto of [CreateWorkspaceDto, UpdateWorkspaceDto] as Array<typeof UpdateWorkspaceDto>) {
         const ok = plainToInstance(Dto, { name: 'agent', modelRoutingProviders: ['codex', 'claude'] });
         assert.deepEqual(await validate(ok, { whitelist: true }), []);
         assert.deepEqual(ok.modelRoutingProviders, ['codex', 'claude'], `${Dto.name} keeps it`);
@@ -418,7 +427,7 @@ test('a run leaves the agent\'s engine when its account is at 90% or signed out,
 
       // The moved run was paused, and is asked to go on: it continues on codex, and is not routed again —
       // a run never changes engine, only a fresh one starts on another (R4).
-      await db.session.update({ where: { id: moved }, data: { status: RunStatus.AWAITING_INPUT, numTurns: 1 } });
+      await db.session.update({ where: { id: moved }, data: { turnState: null, numTurns: 1 } });
       assert.equal(await runNow(services, target, movedTask), moved, 'the paused run is continued');
       assert.deepEqual(await sessionOf(db, moved), { provider: 'codex', model: CODEX, effort: 'medium' });
       assert.equal(await db.taskRouteDecision.count({ where: { taskId: movedTask } }), 1, 'only the fresh run was decided');
@@ -455,14 +464,14 @@ test('a run leaves the agent\'s engine when its account is at 90% or signed out,
       assert.equal(await refusal(db, target, 'codex'), 'The account is at 92% of its weekly quota');
       assert.equal((await sessionOf(db, codexFull)).provider, 'claude');
 
-      // Smart selection off: the decision says where it would have gone, and the run is the baseline.
+      // The Agent's old switch written off changes nothing (owner, 2026-11-20): routed to codex and applied.
       await runnerReports(db, target, { planUsage: quota(95) });
       await services.workspaces.update(target.ownerId, target.agentId, { modelRouting: false });
-      const shadow = await runNow(services, target, await taskIn(db, target));
-      assert.deepEqual(await routed(db, shadow), {
-        applied: false, provider: 'codex', model: CODEX, effort: 'medium', reasons: [TIER_M, ...picked('codex', 90, false)],
+      const agentOff = await runNow(services, target, await taskIn(db, target));
+      assert.deepEqual(await routed(db, agentOff), {
+        applied: true, provider: 'codex', model: CODEX, effort: 'medium', reasons: [TIER_M, ...picked('codex', 90, false)],
       });
-      assert.deepEqual(await sessionOf(db, shadow), { provider: 'claude', model: null, effort: AGENT_EFFORT });
+      assert.deepEqual(await sessionOf(db, agentOff), { provider: 'codex', model: CODEX, effort: 'medium' });
     } finally {
       await services.db.$disconnect();
     }
@@ -574,17 +583,17 @@ test('the sweep\'s quota gate judges the engine routing picks: a spent agent eng
     const services = connect();
     try {
       const { db } = services;
-      // Claude's weekly window is spent until RESETS; Codex has room. The Agent's own switch is off.
+      // Claude's weekly window is spent until RESETS; Codex has room. The account's switch is off.
       const target = await fixture(services, 'gate', { allowed: [], routing: false, started: true, planUsage: quota(100) });
       const taskId = await readyTask(db, target);
 
-      // Smart selection off on the Agent: the run would be the baseline on claude, whose quota is spent — held.
+      // Smart selection off: the run would be the baseline on claude, whose quota is spent — held.
       await sweep(services);
-      assert.deepEqual(await workRuns(db, taskId), [], 'held: in shadow the run is claude\'s');
+      assert.deepEqual(await workRuns(db, taskId), [], 'held: un-routed the run is claude\'s');
 
       // Smart selection on: routing moves the run to codex, which the gate finds with room, so it starts — with
       // nothing on the Agent's list.
-      await services.workspaces.update(target.ownerId, target.agentId, { modelRouting: true });
+      await setAccountSwitch(db, target.ownerId, true);
       await sweep(services);
       const [run] = await workRuns(db, taskId);
       assert.ok(run, 'the sweep did not start the task on the engine it would run on');
@@ -647,9 +656,9 @@ test('an automatic re-run after a usage limit is held, or not, by the engine it 
           autoRunSkipped: { code: string; retryAt: Date | null } | null;
         }).autoRunSkipped;
 
-      // The Agent's own switch off: the re-run would be the baseline on claude — held until the reset, as the task
+      // The account's switch off: the re-run would be the baseline on claude — held until the reset, as the task
       // read says.
-      await services.workspaces.update(target.ownerId, target.agentId, { modelRouting: false });
+      await setAccountSwitch(db, target.ownerId, false);
       const held = await skipped();
       assert.equal(held?.code, 'QUOTA_EXHAUSTED');
       assert.equal(held?.retryAt?.toISOString(), RESETS);
@@ -657,7 +666,7 @@ test('an automatic re-run after a usage limit is held, or not, by the engine it 
       assert.equal((await workRuns(db, taskId)).length, 1, 'held: nothing re-run');
 
       // Back on: the re-run would be routed to codex, which has room — due now, with nothing on the Agent's list.
-      await services.workspaces.update(target.ownerId, target.agentId, { modelRouting: true });
+      await setAccountSwitch(db, target.ownerId, true);
       assert.equal(await skipped(), null, 'nothing holds it');
       await sweep(services);
       const runs = await workRuns(db, taskId);

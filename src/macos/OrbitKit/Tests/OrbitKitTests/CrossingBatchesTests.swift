@@ -12,16 +12,23 @@ final class CrossingBatchesTests: XCTestCase {
     private func row(_ id: String, kind: String = "MOVE_TASK", from: String = "34bSource",
                      to: String = CrossingBatchesTests.here, state: String = "PENDING",
                      requestedAt: String, decidedAt: String? = nil, title: String? = nil,
-                     subject: String? = nil, criterion: String? = nil, criterionText: String? = "text",
-                     withdrawn: String? = nil, reason: String? = nil,
+                     subject: String? = nil, criterion: Int? = nil, criterionText: String? = "text",
+                     textOnlyCriterion: String? = nil,
+                     withdrawn: Int? = nil, reason: String? = nil,
                      source: String? = "Runner v1") -> ProjectCrossing {
         ProjectCrossing(id: "uuid-\(id)", publicId: id, fromProjectId: "uuid-\(from)", fromProjectPublicId: from,
                         toProjectId: "uuid-\(to)", toProjectPublicId: to,
                         fromProject: source.map { ProjectCrossing.ProjectEnd(title: $0) },
                         toProject: ProjectCrossing.ProjectEnd(title: "Runner hardening"), kind: kind,
                         subjectTask: subject.map { ProjectCrossing.SubjectTask(id: "t-\(id)", title: $0) },
-                        requestedCriterion: criterion.map { ProjectCrossing.Criterion(key: $0, text: criterionText) },
-                        withdrawnCriterion: withdrawn.map { ProjectCrossing.Criterion(key: $0, text: "w") },
+                        requestedCriterion: criterion.map {
+                            ProjectCrossing.Criterion(key: "Key\($0)", text: criterionText, ordinal: $0)
+                        } ?? textOnlyCriterion.map {
+                            ProjectCrossing.Criterion(key: "KeyText\(id)", text: $0, ordinal: nil)
+                        },
+                        withdrawnCriterion: withdrawn.map {
+                            ProjectCrossing.Criterion(key: "Key\($0)", text: "w", ordinal: $0)
+                        },
                         crossingKey: "key-\(id)", state: state, title: title ?? "Task \(id)", reason: reason,
                         requestedAt: requestedAt, decidedAt: decidedAt)
     }
@@ -111,7 +118,8 @@ final class CrossingBatchesTests: XCTestCase {
         XCTAssertEqual(CrossingBatches.listHead(for: one), "Tasks to take out")
         XCTAssertEqual(CrossingBatches.consequence(one), CrossingBatches.takeOutConsequence)
         XCTAssertEqual(CrossingBatches.consequence(one),
-                       "Confirming takes the task out of this project as soon as you answer, and nobody has to send the request again.")
+                       "Confirming takes the task out of this project as soon as you answer; no project's acceptance counts it any more.")
+        XCTAssertEqual(CrossingBatches.takeOutConsequence, ProjectCrossings.moveOutApproveConsequence)
         XCTAssertEqual(CrossingBatches.approveLabel(for: one), "Take it out")
         XCTAssertEqual(CrossingBatches.refuseLabel(for: one), "Keep it here")
         XCTAssertEqual(CrossingBatches.badge(one), "move")
@@ -122,13 +130,21 @@ final class CrossingBatchesTests: XCTestCase {
         XCTAssertEqual(CrossingBatches.title(many), "Take these tasks out of the project?")
         XCTAssertEqual(CrossingBatches.summary(many), "2 tasks to take out of Runner v1")
         XCTAssertEqual(CrossingBatches.consequence(many),
-                       "Confirming takes the tasks out of this project as soon as you answer, and nobody has to send the request again.")
+                       "Confirming takes the tasks out of this project as soon as you answer; no project's acceptance counts them any more.")
         XCTAssertEqual(CrossingBatches.approveLabel(for: many), "Take them out")
         XCTAssertEqual(CrossingBatches.refuseLabel(for: many), "Keep them here")
 
         let answered = CrossingBatches.batches([outRow("O3", state: "APPLIED", requestedAt: at(1),
                                                        decidedAt: at(5))], projectID: "34bSource")[0]
         XCTAssertEqual(CrossingBatches.badge(answered), "taken out")
+        // Answered, the card says what happened, and the rows leave their state to the receipt.
+        XCTAssertEqual(CrossingBatches.title(answered), "Task taken out of the project")
+        XCTAssertEqual(CrossingBatches.summary(answered), "1 task taken out of Runner v1")
+        XCTAssertNil(CrossingBatches.stateLine(answered.rows[0], in: answered))
+        let kept = CrossingBatches.batches([outRow("O4", state: "DENIED", requestedAt: at(1),
+                                                   decidedAt: at(5))], projectID: "34bSource")[0]
+        XCTAssertEqual(CrossingBatches.title(kept), "Task kept in the project")
+        XCTAssertEqual(CrossingBatches.summary(kept), "1 task kept in Runner v1")
         // Into-batches keep their current words.
         let into = CrossingBatches.batches([row("A", requestedAt: at(1))], projectID: Self.here)[0]
         XCTAssertFalse(into.out)
@@ -263,7 +279,7 @@ final class CrossingBatchesTests: XCTestCase {
     }
 
     func testTheSummaryNamesTheSourceAndTheCriteria() {
-        let rows = (4...11).map { row("M\($0)", requestedAt: at($0), criterion: String($0)) }
+        let rows = (4...11).map { row("M\($0)", requestedAt: at($0), criterion: $0) }
         let batch = CrossingBatches.batches(rows, projectID: Self.here)[0]
         XCTAssertEqual(CrossingBatches.summary(batch), "8 tasks from Runner v1 · for criteria 4–11")
         let unnamed = CrossingBatches.batches([row("U", requestedAt: at(1), source: nil)], projectID: Self.here)[0]
@@ -272,24 +288,69 @@ final class CrossingBatchesTests: XCTestCase {
 
     func testTheCriteriaRange() {
         XCTAssertNil(CrossingBatches.criteriaRange([]))
-        XCTAssertEqual(CrossingBatches.criteriaRange(["4"]), "for criterion 4")
-        XCTAssertEqual(CrossingBatches.criteriaRange(["4", "4"]), "for criterion 4")
-        XCTAssertEqual(CrossingBatches.criteriaRange(["6", "4", "5"]), "for criteria 4–6")
-        XCTAssertEqual(CrossingBatches.criteriaRange(["9", "4", "6"]), "for criteria 4, 6, 9")
-        XCTAssertEqual(CrossingBatches.criteriaRange(["10", "9"]), "for criteria 9–10")
-        XCTAssertEqual(CrossingBatches.criteriaRange(["b", "a"]), "for criteria a, b")
+        XCTAssertEqual(CrossingBatches.criteriaRange([4]), "4")
+        XCTAssertEqual(CrossingBatches.criteriaRange([4, 4]), "4")
+        XCTAssertEqual(CrossingBatches.criteriaRange([6, 4, 5]), "4–6")
+        XCTAssertEqual(CrossingBatches.criteriaRange([9, 4, 6]), "4, 6, 9")
+        XCTAssertEqual(CrossingBatches.criteriaRange([10, 9]), "9–10")
+    }
+
+    /// The number is what a person calls the criterion; the opaque key is never drawn. A server too
+    /// old to send one falls back to the criterion's words.
+    func testCriteriaAreNamedByNumberAndFallBackToTheirWords() {
+        XCTAssertEqual(CrossingBatches.criterionName(
+            ProjectCrossing.Criterion(key: "5QwwlrpmVQesF7jgVjMxe5", text: "old words", ordinal: 4)),
+            "Criterion 4")
+        XCTAssertEqual(CrossingBatches.criterionName(
+            ProjectCrossing.Criterion(key: "5QwwlrpmVQesF7jgVjMxe5", text: "A wedged drain restarts within a minute.")),
+            "A wedged drain restarts within a minute.")
+        XCTAssertNil(CrossingBatches.criterionName(
+            ProjectCrossing.Criterion(key: "5QwwlrpmVQesF7jgVjMxe5", text: "  ")),
+            "a criterion that is gone has neither a number nor words")
+
+        // Numbers and words together: the numbers first, then the words.
+        let mixed = CrossingBatches.batches([
+            row("A", requestedAt: at(1), criterion: 2, criterionText: "one"),
+            row("B", requestedAt: at(2), textOnlyCriterion: "two"),
+        ], projectID: Self.here)[0]
+        XCTAssertEqual(CrossingBatches.summary(mixed), "2 tasks from Runner v1 · for criteria 2, “two”")
+        XCTAssertFalse(CrossingBatches.summary(mixed).contains("Key2"))
     }
 
     func testTheReviewRows() {
         let move = row("A", requestedAt: at(1), title: "As first asked", subject: "Wire the watchdog",
-                       criterion: "4", withdrawn: "2")
+                       criterion: 4, withdrawn: 2)
         XCTAssertEqual(CrossingBatches.rowTitle(move), "Wire the watchdog")
-        XCTAssertEqual(CrossingBatches.requestedLine(move), "Target criterion requested: 4")
-        XCTAssertEqual(CrossingBatches.withdrawnLine(move), "Source criterion it serves now: 2")
+        XCTAssertEqual(CrossingBatches.requestedLine(move), "Target criterion requested: Criterion 4")
+        XCTAssertEqual(CrossingBatches.withdrawnLine(move), "Source criterion it serves now: Criterion 2")
         XCTAssertNil(CrossingBatches.stateLine(move))
-        let gone = row("B", requestedAt: at(1), criterion: "7", criterionText: nil)
-        XCTAssertEqual(CrossingBatches.requestedLine(gone),
-                       "Target criterion requested: 7 — The target project no longer states this criterion.")
+        // A server that sends no number, or a criterion that has since been deleted.
+        let words = ProjectCrossing(id: "uuid-W", publicId: "W", fromProjectId: "uuid-34bSource",
+                                    fromProjectPublicId: "34bSource", toProjectId: "uuid-\(Self.here)",
+                                    toProjectPublicId: Self.here,
+                                    fromProject: ProjectCrossing.ProjectEnd(title: "Runner v1"),
+                                    kind: "MOVE_TASK",
+                                    requestedCriterion: ProjectCrossing.Criterion(
+                                      key: "5QwwlrpmVQesF7jgVjMxe5", text: "A wedged drain restarts within a minute."),
+                                    withdrawnCriterion: ProjectCrossing.Criterion(key: "old-key", text: "old", ordinal: nil),
+                                    crossingKey: "key-W", state: "PENDING", title: "Task W", requestedAt: at(1))
+        XCTAssertEqual(CrossingBatches.requestedLine(words),
+                       "Target criterion requested: A wedged drain restarts within a minute.")
+        XCTAssertEqual(CrossingBatches.withdrawnLine(words), "Source criterion it serves now: old")
+        let goneRow = ProjectCrossing(id: "uuid-B2", publicId: "B2", fromProjectId: "uuid-34bSource",
+                                      fromProjectPublicId: "34bSource", toProjectId: "uuid-\(Self.here)",
+                                      toProjectPublicId: Self.here,
+                                      fromProject: ProjectCrossing.ProjectEnd(title: "Runner v1"),
+                                      kind: "MOVE_TASK",
+                                      requestedCriterion: ProjectCrossing.Criterion(
+                                        key: "5QwwlrpmVQesF7jgVjMxe5", text: nil, ordinal: nil),
+                                      crossingKey: "key-B2", state: "PENDING", title: "Task B2",
+                                      requestedAt: at(1))
+        XCTAssertEqual(CrossingBatches.requestedLine(goneRow),
+                       "Target criterion requested: The target project no longer states this criterion.")
+        XCTAssertFalse(CrossingBatches.requestedLine(goneRow)!.contains("5Qww"))
+        let gone = row("B", requestedAt: at(1))
+        XCTAssertNil(CrossingBatches.requestedLine(gone), "an absent criterion draws no line")
         XCTAssertEqual(CrossingBatches.rowTitle(row("C", requestedAt: at(1), title: "Moved title")), "Moved title")
         let file = row("F", kind: "FILE_TASK", requestedAt: at(1), title: "Plan title", subject: "Other")
         XCTAssertEqual(CrossingBatches.rowTitle(file), "Plan title")
@@ -299,7 +360,9 @@ final class CrossingBatchesTests: XCTestCase {
                        ProjectCrossings.label("APPLIED"))
         XCTAssertEqual(CrossingBatches.showMore(5), "Show 5 more")
         XCTAssertEqual(CrossingBatches.shownRows, 3)
-        XCTAssertEqual(CrossingBatches.provenance, "From Orbit — not the requesting agent.")
+        XCTAssertEqual(CrossingBatches.provenance, "Written by Orbit — not the requesting agent.")
+        XCTAssertEqual(CrossingBatches.reasonsHead(1), "Reason given by the requesting agent")
+        XCTAssertEqual(CrossingBatches.reasonsHead(2), "Reasons given by the requesting agent")
     }
 
     func testReasonsAreDistinctAndQuoted() {

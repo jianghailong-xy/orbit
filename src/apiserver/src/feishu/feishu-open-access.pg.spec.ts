@@ -28,7 +28,8 @@ import { test } from 'node:test';
 
 import { JwtService } from '@nestjs/jwt';
 import { toUuid } from '@orbit/shared';
-import { type PrismaClient, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { PAT_SCOPES, PatService } from '../auth/pat.service';
@@ -44,6 +45,7 @@ import { FEISHU_TEST_OPEN_PLATFORM_ENV } from './feishu-open-platform';
 import { FEISHU_OPEN_REPLIES, openSlotStarted, reserveOpenSlot, type FeishuOpenRequest, type FeishuOpenSlot } from './feishu-open-limits';
 import type { FeishuOutbound } from './feishu-outbound';
 import { FakeOpenPlatform } from './test-support/fake-open-platform';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 process.env.PROVIDER_SECRET_KEY = `feishu-open-access-${randomUUID()}`;
@@ -213,7 +215,10 @@ test('Feishu: who can use the bot is saved only through the owner channel, and t
     await db.session.create({
       data: {
         id, ownerId: owner.id, creatorId: owner.id, workspaceId: owner.workspaceId, assignedRunnerId: owner.runnerId, title: `open ${id.slice(0, 8)}`,
-        prompt: 'the work', provider: 'claude', status, dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(),
+        prompt: 'the work', provider: 'claude', turnState: turnStateOfWord(status), dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(),
+        ...(status === RunStatus.SUCCEEDED || status === RunStatus.FAILED
+          ? { finishedAt: new Date()}
+          : status === RunStatus.CANCELLED ? { finishedAt: new Date()} : {}),
       },
     });
   };
@@ -261,13 +266,13 @@ test('Feishu: who can use the bot is saved only through the owner channel, and t
       'You already have a session running. Wait for it to finish, then send this again.',
     );
     // Waiting for its next message, it holds none.
-    await db.session.update({ where: { id: first.sessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+    await db.session.update({ where: { id: first.sessionId }, data: { turnState: null } });
     await started('ou_bob', RunStatus.PENDING);
     await limits({ perRun: 2, perDay: 10, allRun: 3, allDay: 50 });
     await started('ou_bob', RunStatus.RUNNING);
     await refusedAs('ou_bob', { ok: false, limit: 'PERSON_RUNNING', max: 2, words: FEISHU_OPEN_REPLIES.personRunning(2) });
     assert.equal(FEISHU_OPEN_REPLIES.personRunning(2), 'You already have 2 sessions running. Wait for one to finish, then send this again.');
-    await db.session.updateMany({ where: { ownerId: owner.id }, data: { status: RunStatus.AWAITING_INPUT } });
+    await db.session.updateMany({ where: { ownerId: owner.id }, data: { turnState: null } });
   });
 
   await t.test('(5b) one person a day: sessions started since midnight UTC, running or not', async () => {
@@ -295,7 +300,7 @@ test('Feishu: who can use the bot is saved only through the owner channel, and t
     await started('ou_frank', RunStatus.RUNNING, `oc_group_${RUN}`);
     await refusedAs('ou_grace', { ok: false, limit: 'TOTAL_RUNNING', max: 2, words: FEISHU_OPEN_REPLIES.totalRunning(2) });
     assert.equal(FEISHU_OPEN_REPLIES.totalRunning(2), 'This bot is already running 2 sessions, the most it allows at a time. Try again when one finishes.');
-    await db.session.updateMany({ where: { ownerId: owner.id }, data: { status: RunStatus.AWAITING_INPUT } });
+    await db.session.updateMany({ where: { ownerId: owner.id }, data: { turnState: null, finishedAt: null} });
   });
 
   await t.test('(5d) everyone a day', async () => {

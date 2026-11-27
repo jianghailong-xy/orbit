@@ -49,6 +49,7 @@ import {
 } from '@orbit/shared';
 import { Client } from 'pg';
 
+import { isReleasedStatus } from '../common/session-release';
 import { call } from '../auth/pat-test-apiserver';
 import { generateToken, hashPassword, sha256 } from '../common/crypto.util';
 import {
@@ -58,6 +59,7 @@ import {
 import { assertTripwireQuiet, bootScrubbedApiserver } from '../test-support/managed-runner-apiserver';
 import { managedPodName, managedPvcName } from './managed-runner-resources';
 import '../test-support/daemon-routes-over-http';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -109,6 +111,11 @@ test('managed runners switched off with existing state: nothing is stopped, dele
       ...mapping,
     } as Record<string, unknown>;
     if (columns.pod_uid) columns.pod_name = managedPodName(runnerId);
+    // The word as its facts (deploy D3): the turn state of a held word; the release beside a released one is set above.
+    if ('status' in columns) {
+      columns.turn_state = turnStateOfWord(String(columns.status));
+      delete columns.status;
+    }
     const names = Object.keys(columns);
     await sql.query(
       `INSERT INTO managed_runner (${names.map((n) => `"${n}"`).join(', ')}) VALUES (${names.map((_, i) => `$${i + 1}`).join(', ')})`,
@@ -174,8 +181,19 @@ test('managed runners switched off with existing state: nothing is stopped, dele
     const columns: Record<string, unknown> = {
       id, owner_id: of.ownerId, creator_id: of.ownerId, workspace_id: of.workspaceId, assigned_runner_id: of.runnerId,
       title: 'earlier work', prompt: 'the opening prompt', provider: 'claude', provider_builtin: true, status, num_turns: 1,
-      runtime_session_id: randomUUID(), ...extra,
+      runtime_session_id: randomUUID(),
+      ...(isReleasedStatus(status) ? {
+        finished_at: new Date(),
+        // A failure release carries FAILED on its turn (removal step R2), which is what reads it as one since R7.
+        ...(status === 'FAILED' ? { last_turn_outcome: 'FAILED' } : {}),
+      } : {}),
+      ...extra,
     };
+    // The word as its facts (deploy D3): the turn state of a held word; the release beside a released one is set above.
+    if ('status' in columns) {
+      columns.turn_state = turnStateOfWord(String(columns.status));
+      delete columns.status;
+    }
     const names = Object.keys(columns);
     await sql.query(
       // started_at and updated_at by the database's clock: they are timestamps without a zone.
@@ -223,7 +241,7 @@ test('managed runners switched off with existing state: nothing is stopped, dele
       const owner = await login(ready.ownerId);
 
       const capabilities = await call(server, 'GET', '/api/auth/capabilities', owner);
-      assert.deepEqual(capabilities.json, { managedRunners: { enabled: false, contractVersion: 1 } });
+      assert.deepEqual(capabilities.json, { managedRunners: { enabled: false, contractVersion: 1 }, documents: { enabled: false } });
       const status = await call(server, 'GET', '/api/managed-runner', owner);
       assert.equal(status.status, 200, status.text);
       assert.equal(status.json.enabled, false);
@@ -335,7 +353,7 @@ test('managed runners switched off with existing state: nothing is stopped, dele
       assert.equal(claimed.status, 200, claimed.text);
       assert.equal(toUuid(claimed.json.sessionId), queuedForDraining, 'its queued turn is still handed out');
       // Its turn ran: settled, so the next boot finds nothing of this one's left running.
-      await sql.query(`UPDATE "session" SET status = 'SUCCEEDED', finished_at = now() WHERE id = $1`, [queuedForDraining]);
+      await sql.query(`UPDATE "session" SET "turn_state" = NULL, finished_at = now() WHERE id = $1`, [queuedForDraining]);
     } finally {
       await server.stop();
     }

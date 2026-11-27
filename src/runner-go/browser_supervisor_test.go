@@ -16,10 +16,22 @@ type fakeBrowserProcess struct {
 	args    []string
 	exited  bool
 	stopped bool
+	done    chan struct{}
+	once    sync.Once
 }
 
-func (p *fakeBrowserProcess) Exited() bool { return p.exited }
-func (p *fakeBrowserProcess) Stop()        { p.stopped = true }
+func (p *fakeBrowserProcess) Exited() bool          { return p.exited }
+func (p *fakeBrowserProcess) Done() <-chan struct{} { return p.done }
+func (p *fakeBrowserProcess) Stop()                 { p.ended() }
+
+// ended is this program ending, by Stop or by itself, as Chrome does when its last tab closes.
+func (p *fakeBrowserProcess) ended() {
+	p.once.Do(func() {
+		p.exited = true
+		p.stopped = true
+		close(p.done)
+	})
+}
 
 type fakeBrowserStarter struct {
 	mu      sync.Mutex
@@ -30,9 +42,16 @@ type fakeBrowserStarter struct {
 func (s *fakeBrowserStarter) Start(name string, args []string) (browserProcess, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	p := &fakeBrowserProcess{name: name, args: args}
+	p := &fakeBrowserProcess{name: name, args: args, done: make(chan struct{})}
 	s.started = append(s.started, p)
 	return p, nil
+}
+
+// count is how many programs have been started, for a watcher running in its own goroutine.
+func (s *fakeBrowserStarter) count() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.started)
 }
 func (s *fakeBrowserStarter) WaitDisplay(string) error { return nil }
 func (s *fakeBrowserStarter) Reap()                    { s.reaped++ }
@@ -269,6 +288,43 @@ func TestBrowserDoesNotIdleStopWhileAViewerIsOpen(t *testing.T) {
 	}
 }
 
+// A sign-in that did not succeed keeps its tab, and the browser with it: a stopped browser starts again without it.
+func TestBrowserDoesNotIdleStopWhileAFailedSignInsTabIsKept(t *testing.T) {
+	r := newBrowserRig(t)
+	if err := r.b.ReserveForEngineSignIn("A1"); err != nil {
+		t.Fatal(err)
+	}
+	r.b.KeepSignInTab("TAB1")
+	r.b.EndEngineSignIn("A1")
+	r.clock.Advance(time.Hour)
+	if !r.b.Running() || !r.b.KeepsSignInTab("TAB1") {
+		t.Fatal("the browser stopped for idleness while a failed sign-in's tab was kept")
+	}
+	r.b.ReleaseSignInTabs("TAB1")
+	r.clock.Advance(14 * time.Minute)
+	if !r.b.Running() {
+		t.Fatal("the idle clock did not restart when the kept tab went")
+	}
+	r.clock.Advance(time.Minute)
+	if r.b.Running() {
+		t.Fatal("the browser still runs 15 minutes after the kept tab went")
+	}
+	// A browser that stops anyway keeps nothing: its tabs are gone.
+	_ = r.b.Acquire("sess-a", "")
+	r.b.KeepSignInTab("TAB2")
+	r.b.ReleaseSignInTabs() // every kept tab
+	if r.b.KeepsSignInTab("TAB2") {
+		t.Fatal("ReleaseSignInTabs() kept a tab")
+	}
+	r.b.KeepSignInTab("TAB3")
+	r.b.mu.Lock()
+	r.b.stopLocked("test")
+	r.b.mu.Unlock()
+	if r.b.KeepsSignInTab("TAB3") {
+		t.Fatal("a stopped browser still keeps a tab")
+	}
+}
+
 func TestBrowserStopsWhenTheOfferEndsAfterTheRunningTurn(t *testing.T) {
 	r := newBrowserRig(t)
 	_ = r.b.Acquire("sess-a", "")
@@ -304,6 +360,67 @@ func TestBrowserRestartsWhenAProgramEnded(t *testing.T) {
 	}
 	if got := strings.Join(r.starter.live(), ","); got != "Xvfb,x11vnc,chromium" || len(r.starter.started) != 6 {
 		t.Fatalf("after a crash: live %s of %d started", got, len(r.starter.started))
+	}
+}
+
+// Chromium quits with its last tab or window. Under a viewer, Chrome alone starts again on the display and VNC server
+// still running, so the owner's stream stays open and draws the new window instead of a black display forever.
+func TestBrowserStartsWithChromeAgainWhenItsLastTabClosesUnderAViewer(t *testing.T) {
+	r := newBrowserRig(t)
+	if err := r.b.Open(); err != nil {
+		t.Fatal(err)
+	}
+	closeViewer := r.b.ViewerOpened()
+	defer closeViewer()
+
+	r.starter.started[browserProgramChrome].ended() // the owner closed the last tab: Chromium exits with it
+	waitUntil(t, func() bool { return r.starter.count() == 4 }, "Chrome did not start again under the viewer")
+	if got := strings.Join(r.starter.live(), ","); got != "Xvfb,x11vnc,chromium" {
+		t.Fatalf("after Chrome ended under a viewer: live %s of %d started", got, r.starter.count())
+	}
+	if r.b.Viewers() != 1 || !r.b.Running() {
+		t.Fatalf("viewers = %d, running = %v", r.b.Viewers(), r.b.Running())
+	}
+	// The display and VNC server were not restarted: the viewer's stream still names the same socket.
+	for i, want := range []string{"Xvfb", "x11vnc", "chromium", "chromium"} {
+		if r.starter.started[i].name != want {
+			t.Fatalf("started %d is %s, want %s", i, r.starter.started[i].name, want)
+		}
+	}
+	// The new Chrome is watched too.
+	r.starter.started[3].ended()
+	waitUntil(t, func() bool { return r.starter.count() == 5 }, "the restarted Chrome was not watched")
+}
+
+// With no viewer, Chrome ending leaves the browser nothing to serve: the programs stop, the report says so, and the
+// next Open or browser call starts them together again.
+func TestBrowserStopsWhenChromeEndsWithNoViewer(t *testing.T) {
+	r := newBrowserRig(t)
+	if err := r.b.Acquire("sess-a", ""); err != nil {
+		t.Fatal(err)
+	}
+	r.starter.started[browserProgramChrome].ended()
+	waitUntil(t, func() bool { return !r.b.Running() }, "the browser did not stop")
+	if live := r.starter.live(); len(live) != 0 {
+		t.Fatalf("still running after Chrome ended: %v", live)
+	}
+	if err := r.b.Acquire("sess-a", ""); err != nil || !r.b.Running() {
+		t.Fatalf("acquire after Chrome ended: %v", err)
+	}
+}
+
+// The display ending ends the browser whatever else runs, viewer or not: the VNC server has nothing to show.
+func TestBrowserStopsWhenTheDisplayEndsUnderAViewer(t *testing.T) {
+	r := newBrowserRig(t)
+	if err := r.b.Open(); err != nil {
+		t.Fatal(err)
+	}
+	closeViewer := r.b.ViewerOpened()
+	defer closeViewer()
+	r.starter.started[browserProgramXvfb].ended()
+	waitUntil(t, func() bool { return !r.b.Running() }, "the browser did not stop")
+	if live := r.starter.live(); len(live) != 0 {
+		t.Fatalf("still running after the display ended: %v", live)
 	}
 }
 
@@ -442,7 +559,100 @@ func TestBrowserClearWireNamesAndCapability(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(body), `"browser":{"running":true,"holderSessionId":"s","viewers":2}`) {
+	if !strings.Contains(string(body), `"browser":{"running":true,"holderSessionId":"s","viewers":2,"savedLogins":false}`) {
 		t.Fatalf("heartbeat body: %s", body)
+	}
+}
+
+// browser_request_sign_in (board 03-agent-tools ①, Q2 = A): the asker gives the lease up while the owner is asked to
+// sign in, nobody's browser call is taken meanwhile, Chrome keeps running (the page stays), and after the answer the
+// asker takes the lease back.
+func TestBrowserSignInReleasesTheLeaseWhileWaitingAndTakesItBack(t *testing.T) {
+	r := newBrowserRig(t)
+	if err := r.b.Acquire("sess-a", "Export the monthly report"); err != nil {
+		t.Fatal(err)
+	}
+	held, err := r.b.YieldForSignIn("sess-a", "")
+	if err != nil || !held {
+		t.Fatalf("yield = %v, %v; want held, nil", held, err)
+	}
+	if h := r.b.Holder(); h != "" {
+		t.Fatalf("holder = %q while the owner is asked to sign in; want none", h)
+	}
+	if rep := r.b.Report(); rep.HolderSessionID != "" {
+		t.Fatalf("the heartbeat reports holder %q while the owner signs in", rep.HolderSessionID)
+	}
+	if w := r.b.SignInWaiting(); w != "sess-a" {
+		t.Fatalf("sign-in waiting = %q", w)
+	}
+	for _, s := range []string{"sess-a", "sess-b"} {
+		err := r.b.Acquire(s, "")
+		if err == nil || !strings.Contains(err.Error(), "waiting for the owner to sign in") ||
+			!strings.Contains(err.Error(), "Export the monthly report") {
+			t.Fatalf("%s's browser call while the owner signs in = %v; want a refusal naming the asker", s, err)
+		}
+	}
+	// The owner's Open browser and viewer are never refused.
+	if err := r.b.Open(); err != nil {
+		t.Fatalf("the owner's Open browser while a sign-in waits: %v", err)
+	}
+	// An hour with no viewer and no call: the browser keeps the agent's page for the owner.
+	r.clock.Advance(time.Hour)
+	if !r.b.Running() || len(r.starter.started) != 3 {
+		t.Fatalf("the browser stopped or restarted while the owner was asked to sign in: %v", r.starter.live())
+	}
+	if err := r.b.EndSignIn("sess-a", "", true); err != nil {
+		t.Fatalf("take back after the answer: %v", err)
+	}
+	if h := r.b.Holder(); h != "sess-a" {
+		t.Fatalf("holder = %q after the answer; want the asker back", h)
+	}
+	if rep := r.b.Report(); rep.HolderTitle != "Export the monthly report" {
+		t.Fatalf("holder title after the answer = %q", rep.HolderTitle)
+	}
+	if len(r.starter.started) != 3 {
+		t.Fatal("taking the lease back restarted the browser: the page the agent was on is lost")
+	}
+	if err := r.b.Acquire("sess-b", ""); err == nil || !strings.Contains(err.Error(), "in use by session") {
+		t.Fatalf("another session after the answer = %v; want refused by the asker's lease", err)
+	}
+	// Idle again once the wait is over: the lease's own clock and the idle stop apply.
+	r.b.Release("sess-a")
+	r.clock.Advance(15 * time.Minute)
+	if r.b.Running() {
+		t.Fatal("the browser does not idle-stop after the sign-in ended")
+	}
+}
+
+func TestBrowserSignInRefusedUnderAnotherHolderOrASecondWait(t *testing.T) {
+	r := newBrowserRig(t)
+	_ = r.b.Acquire("sess-b", "Other work")
+	if _, err := r.b.YieldForSignIn("sess-a", ""); err == nil || !strings.Contains(err.Error(), "Other work") {
+		t.Fatalf("a sign-in under another session's lease = %v; want refused naming the holder", err)
+	}
+	if r.b.Holder() != "sess-b" {
+		t.Fatal("a refused sign-in took the other session's lease")
+	}
+	r.b.Release("sess-b")
+	held, err := r.b.YieldForSignIn("sess-a", "Asker")
+	if err != nil || held {
+		t.Fatalf("a sign-in with no lease held = %v, %v; want not held, nil", held, err)
+	}
+	if _, err := r.b.YieldForSignIn("sess-b", ""); err == nil || !strings.Contains(err.Error(), "already waiting") {
+		t.Fatalf("a second sign-in while one waits = %v", err)
+	}
+	// Ending without retake (the asker did not hold it, or filing failed) frees the browser for anyone.
+	if err := r.b.EndSignIn("sess-a", "", false); err != nil {
+		t.Fatal(err)
+	}
+	if r.b.SignInWaiting() != "" || r.b.Holder() != "" {
+		t.Fatal("the wait or a lease outlived EndSignIn without retake")
+	}
+	if err := r.b.Acquire("sess-b", ""); err != nil {
+		t.Fatalf("acquire after the wait ended: %v", err)
+	}
+	var none *browserSupervisor
+	if _, err := none.YieldForSignIn("sess-a", ""); !errors.Is(err, errBrowserUnavailable) {
+		t.Fatalf("yield with no supervisor = %v", err)
 	}
 }

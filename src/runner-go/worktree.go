@@ -238,14 +238,24 @@ func currentBranch(wt *Worktree) string {
 }
 
 func (ops worktreeGitOps) currentBranch(wt *Worktree) string {
-	if wt == nil || wt.Path == "" {
-		return ""
-	}
-	b, err := ops.run(wt.Path, "symbolic-ref", "--short", "HEAD")
+	b, err := ops.checkedOutBranch(wt)
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(b)
+	return b
+}
+
+// checkedOutBranch distinguishes a detached HEAD (empty branch) from an unreadable checkout.
+func (ops worktreeGitOps) checkedOutBranch(wt *Worktree) (string, error) {
+	if wt == nil || wt.Path == "" {
+		return "", errors.New("worktree path is missing")
+	}
+	b, err := ops.run(wt.Path, "symbolic-ref", "--quiet", "--short", "HEAD")
+	var exit *exec.ExitError
+	if errors.As(err, &exit) && exit.ExitCode() == 1 {
+		return "", nil
+	}
+	return strings.TrimSpace(b), err
 }
 
 // effectiveBranch is the branch every live worktree computation (diff base, "already merged")
@@ -280,11 +290,14 @@ func (ops worktreeGitOps) effectiveBranchSha(wt *Worktree) string {
 	if wt == nil || wt.RepoDir == "" {
 		return ""
 	}
-	branch := ops.effectiveBranch(wt)
-	if branch == "" {
+	return ops.localBranchSha(wt.RepoDir, ops.effectiveBranch(wt))
+}
+
+func (ops worktreeGitOps) localBranchSha(repoDir, branch string) string {
+	if repoDir == "" || branch == "" {
 		return ""
 	}
-	sha, err := ops.run(wt.RepoDir, "rev-parse", "--verify", "refs/heads/"+branch)
+	sha, err := ops.run(repoDir, "rev-parse", "--verify", "refs/heads/"+branch)
 	if err != nil {
 		return ""
 	}
@@ -980,9 +993,8 @@ const parkCheckpointTrailer = "Orbit-Park-Checkpoint"
 // the checkout dir may then be removed. `checkpoint` tags the commit as an undo-on-resume park
 // checkpoint (see parkCheckpointTrailer) rather than a permanent end commit.
 //
-// A non-nil error means the work did NOT reach the branch, and the returned empty diff is
-// "unknown", not "the session changed nothing" — the caller must keep the checkout, which is
-// then the only copy of it.
+// A non-nil error means finalization could not put all the work on the branch. A detached
+// checkout can still report the branch's diff while its off-branch work is kept for recovery.
 //
 // The commit subject is derived from the diff, never the session title/prompt: a permanent end
 // gets an LLM-summarized Conventional-Commits message (diffstat fallback, same as the manual
@@ -995,13 +1007,29 @@ func finalizeWorktree(wt *Worktree, checkpoint bool) ([]ChangedFile, []FilePatch
 			return reportAbsentCheckout(wt)
 		}
 	}
-	// Staging is what puts the session's work under git's control, so a failure here makes every
-	// later question meaningless: nothing is staged, `diff --cached --quiet` reads that as "no
-	// changes to commit", and finalize would report a session that changed nothing while its whole
-	// output sits uncommitted in a checkout about to be deleted. An empty diff may only be
-	// reported when staging actually succeeded.
+	branch, err := unboundedWorktreeGitOps.checkedOutBranch(wt)
+	if err != nil {
+		return nil, nil, fmt.Errorf("reading the checkout of session %s failed: %w", wt.Session, err)
+	}
+	captureErr := commitForFinalize(wt, checkpoint && branch != "")
+	if branch == "" {
+		captureErr = errors.Join(captureErr, preserveDetachedHead(wt))
+	} else if captureErr != nil {
+		return nil, nil, captureErr
+	}
+	// A mid-session rebase moved the fork point — re-base the final diff on the new one.
+	baseSha := unboundedWorktreeGitOps.freshenBaseSha(wt)
+	recordWorktreeTaint(wt)
+	tip := effectiveBranchSha(wt)
+	files, patches := unboundedWorktreeGitOps.committedWorktreeDiff(wt, baseSha, tip, branch != "", true)
+	return files, patches, captureErr
+}
+
+func commitForFinalize(wt *Worktree, checkpoint bool) error {
+	// A failed stage can leave the index empty even while the checkout still holds work.
+	// Report the failure before treating an empty index as nothing to commit.
 	if err := stageForFinalize(wt.Path); err != nil {
-		return nil, nil, fmt.Errorf("staging the work of session %s failed: %w", wt.Session, err)
+		return fmt.Errorf("staging the work of session %s failed: %w", wt.Session, err)
 	}
 	// A file holding an owner-request secret is left out of the commit, and the session is told (secret_git.go).
 	unstageHeldSecrets(wt.Path, nil, wt.Session)
@@ -1020,64 +1048,67 @@ func finalizeWorktree(wt *Worktree, checkpoint bool) ([]ChangedFile, []FilePatch
 		}
 		// Use the user's git identity; --no-verify keeps hooks from blocking finalization.
 		if _, err := git(wt.Path, "commit", "--no-verify", "-m", msg); err != nil {
-			return nil, nil, fmt.Errorf("committing the work of session %s failed: %w", wt.Session, err)
+			return fmt.Errorf("committing the work of session %s failed: %w", wt.Session, err)
 		}
 	}
-	// A mid-session rebase moved the fork point — re-base the final diff on the new one.
-	freshenBaseSha(wt)
-	// The finished branch, recorded while the values are known (secret_taint.go).
-	recordWorktreeTaint(wt)
-	baseSha := wt.baseSha()
-	if baseSha == "" {
-		return nil, nil, nil
+	return nil
+}
+
+// A named branch, remote-tracking branch or tag distinguishes a detached read of existing history
+// from a commit held only by this checkout. Recovery refs do not count as capture on a branch.
+func detachedHeadHasNamedRef(dir, head string) (bool, error) {
+	refs, err := git(dir, "for-each-ref", "--count=1", "--contains="+head, "refs/heads/", "refs/remotes/", "refs/tags/")
+	return refs != "", err
+}
+
+func preserveDetachedHead(wt *Worktree) error {
+	head, err := git(wt.Path, "rev-parse", "--verify", "HEAD")
+	if err != nil {
+		return fmt.Errorf("reading detached HEAD: %w", err)
 	}
-	files := diffFiles(wt.Path, baseSha, "HEAD")
-	if len(files) > maxChangedFiles {
-		// Same bound as the live diff, for the same reason (maxChangedFiles): the finalize
-		// payload goes through the same body limit, and a base this old reports an upstream's
-		// work rather than this session's.
-		logln(fmt.Sprintf("finalize diff for %s spans %d files — reporting the first %d, without patches",
-			wt.Session, len(files), maxChangedFiles))
-		return files[:maxChangedFiles], nil, nil
+	named, err := detachedHeadHasNamedRef(wt.Path, head)
+	if err != nil {
+		return fmt.Errorf("checking references to detached HEAD: %w", err)
 	}
-	patchOut, _ := git(wt.Path, "diff", "--full-index", baseSha+"..HEAD")
-	// The committed pictures are what the checkout holds now: their placeholders come from it.
-	return files, withoutSecretPatches(withImagePreviews(wt.Path, files, buildFilePatches(files, splitPatch(patchOut))), wt.Session), nil
+	if named {
+		return nil
+	}
+	// A session can resume and detach again. Keep each distinct tip reachable.
+	ref := detachedRecoveryRef(wt.Session, head)
+	if _, err := git(wt.Path, "update-ref", ref, head); err != nil {
+		return fmt.Errorf("saving detached HEAD at %s: %w", ref, err)
+	}
+	return fmt.Errorf("detached work was saved at %s and still needs to be brought onto %s", ref, wt.Branch)
+}
+
+func detachedRecoveryRef(sessionID, head string) string {
+	return "refs/orbit/detached/" + decodeSessionID(sessionID) + "/" + head
 }
 
 // reportAbsentCheckout is finalizeWorktree for a session ended while its checkout was known to be away
 // (absentRefName): nothing in it is left to capture, and git has nothing to say about a path that is not
 // there, so the diff is read from the branch. There is no checkout to draw pictures from.
 func reportAbsentCheckout(wt *Worktree) ([]ChangedFile, []FilePatch, error) {
-	freshenBaseSha(wt)
-	baseSha := wt.baseSha()
-	if baseSha == "" {
-		return nil, nil, nil
-	}
-	tip := "refs/heads/" + wt.Branch
-	files := diffFiles(wt.RepoDir, baseSha, tip)
-	if len(files) > maxChangedFiles {
-		return files[:maxChangedFiles], nil, nil
-	}
-	patchOut, _ := git(wt.RepoDir, "diff", "--full-index", baseSha+".."+tip)
-	return files, withoutSecretPatches(buildFilePatches(files, splitPatch(patchOut)), wt.Session), nil
+	ops := unboundedWorktreeGitOps
+	baseSha := ops.freshenBaseSha(wt)
+	files, patches := ops.committedWorktreeDiff(wt, baseSha, ops.localBranchSha(wt.RepoDir, wt.Branch), false, true)
+	return files, patches, nil
 }
 
 // finalizeWorktreeReport commits the work of an ending session (finalizeWorktree) and fills the
 // worktree half of its finalize report from the checkout as finalization leaves it.
 //
-// A finalize that could not put the work on the branch reports no diff — which is
-// indistinguishable on the wire from a session that changed nothing, and is why no checkout
-// may be dropped on the server's say-so alone. Logged here; enforced where the removal
-// actually happens, by removeWorktree re-checking that the work reached the branch.
+// Report capture failures separately from the branch snapshot. removeWorktree verifies capture
+// independently before deleting the checkout.
 func finalizeWorktreeReport(req *RunFinalizeRequest, sessionID string, wt *Worktree, status string) {
 	req.Branch = wt.Branch
-	// The worktree's ACTUAL HEAD branch (before finalize/removal) differs from the reported
-	// branch when the agent ran `git checkout -b` inside the checkout, so the server can flag
-	// it / offer Adopt.
-	req.WorktreeBranch = currentBranch(wt)
 	var captureErr error
 	req.ChangedFiles, req.ChangedDiff, captureErr = finalizeWorktree(wt, status == stCancelled)
+	branch, branchErr := unboundedWorktreeGitOps.checkedOutBranch(wt)
+	if branchErr == nil {
+		req.WorktreeBranch = branch
+		req.WorktreeDetached = branch == ""
+	}
 	if captureErr != nil {
 		logln("worktree finalization failed for", sessionID+":", captureErr)
 		// Say it on the wire too. A log line on whichever machine happened to run this is not
@@ -1085,9 +1116,8 @@ func finalizeWorktreeReport(req *RunFinalizeRequest, sessionID string, wt *Workt
 		// produced nothing from one whose entire output is still uncommitted in a checkout.
 		req.CaptureError = clip(captureErr.Error(), 1000)
 	}
-	// Measured, not assumed: this is the checkout as it actually stands once finalization is
-	// done with it, and it is what tells the control plane the work still needs committing.
-	req.WorktreeDirty = worktreeIsDirty(wt)
+	// Pending files and saved detached commits both need further work to reach the branch.
+	req.WorktreeDirty = worktreeIsDirty(wt) || (captureErr != nil && req.WorktreeDetached)
 	// finalizeWorktree may heal a stale fork point while computing this snapshot.
 	req.BaseSha = wt.baseSha()
 	// Candidate merge targets for the ended session's "Merge to…" dropdown.
@@ -1098,10 +1128,13 @@ func finalizeWorktreeReport(req *RunFinalizeRequest, sessionID string, wt *Workt
 	// still reported: a run the control plane ends (a task its acceptance made DONE ends as
 	// `task_done`, which the runner sees as a cancel) has no later report, and the last live one
 	// may predate the run's own commits.
-	if status != stCancelled {
+	if status != stCancelled || req.WorktreeDetached {
 		req.BranchSha = effectiveBranchSha(wt)
 	} else {
 		req.BranchSha = tipUnderParkCheckpoint(wt)
+	}
+	if req.BaseSha != "" && req.BranchSha != "" {
+		req.BranchCommits = branchCommitsBetween(wt.RepoDir, req.BaseSha, req.BranchSha)
 	}
 }
 
@@ -1177,14 +1210,43 @@ func gitEnvCtx(ctx context.Context, dir string, env []string, args ...string) (s
 
 // diffFiles returns the per-file change summary for the committed `git diff base..head`.
 func diffFiles(dir, base, head string) []ChangedFile {
+	return unboundedWorktreeGitOps.diffFiles(dir, base, head)
+}
+
+func (ops worktreeGitOps) diffFiles(dir, base, head string) []ChangedFile {
 	rng := base + ".." + head
-	numOut, err := git(dir, "diff", "--numstat", rng)
+	numOut, err := ops.run(dir, "diff", "--numstat", rng)
 	if err != nil {
 		logln("worktree diff failed in", dir+":", err)
 		return nil
 	}
-	statusOut, _ := git(dir, "diff", "--name-status", rng)
+	statusOut, _ := ops.run(dir, "diff", "--name-status", rng)
 	return parseNumstat(numOut, statusOut)
+}
+
+// A committed diff can also be read with the checkout detached or absent. Only read image
+// previews from disk when the files there are the ones represented by the diff.
+func (ops worktreeGitOps) committedWorktreeDiff(wt *Worktree, base, tip string, previews, withPatch bool) ([]ChangedFile, []FilePatch) {
+	if base == "" || tip == "" || base == tip {
+		return nil, nil
+	}
+	files := ops.diffFiles(wt.RepoDir, base, tip)
+	if len(files) > maxChangedFiles {
+		if withPatch {
+			logln(fmt.Sprintf("committed diff for %s spans %d files — reporting the first %d, without patches",
+				wt.Session, len(files), maxChangedFiles))
+		}
+		return files[:maxChangedFiles], nil
+	}
+	if !withPatch || len(files) == 0 {
+		return files, nil
+	}
+	patchOut, _ := ops.run(wt.RepoDir, "diff", "--full-index", base+".."+tip)
+	patches := buildFilePatches(files, splitPatch(patchOut))
+	if previews {
+		patches = withImagePreviews(wt.Path, files, patches)
+	}
+	return files, withoutSecretPatches(patches, wt.Session)
 }
 
 // liveDiff returns the per-file stat summary AND the per-file unified-diff patches of the
@@ -1225,6 +1287,14 @@ func (ops worktreeGitOps) stagedLiveDiff(wt *Worktree, withPatch bool) ([]Change
 	baseSha := ops.freshenBaseSha(wt)
 	if wt == nil || baseSha == "" {
 		return nil, nil
+	}
+	branch, err := ops.checkedOutBranch(wt)
+	if err != nil {
+		return nil, nil
+	}
+	if branch == "" {
+		tip := ops.localBranchSha(wt.RepoDir, wt.Branch)
+		return ops.committedWorktreeDiff(wt, baseSha, tip, false, withPatch)
 	}
 	tmp, err := os.CreateTemp("", "orbit-idx-*")
 	if err != nil {
@@ -1500,9 +1570,8 @@ func removeWorktree(wt *Worktree, storage *checkoutStorage) {
 	// branch. Confirm that belief instead of acting on it: staging or committing can fail, and
 	// `worktree remove --force` is then the step that destroys the session's only copy of its
 	// work. A status we cannot read counts as unconfirmed for exactly the same reason.
-	if !checkoutWorkIsCaptured(wt) {
-		logln("worktree remove refused for", wt.Session+": work is not on", wt.Branch+
-			"; keeping the checkout", wt.Path)
+	if !checkoutWorkIsCaptured(wt) || !checkoutHeadIsCaptured(wt) {
+		logln("worktree remove refused for", wt.Session+": work is not captured; keeping the checkout", wt.Path)
 		return
 	}
 	teardownWorktreeProcesses(wt.Path)
@@ -1518,7 +1587,7 @@ func removeWorktree(wt *Worktree, storage *checkoutStorage) {
 	_, _ = git(wt.RepoDir, "update-ref", "-d", baseRefName(wt.Session))
 }
 
-// checkoutWorkIsCaptured reports whether everything in the checkout is already on the branch:
+// checkoutWorkIsCaptured reports whether the checkout has no pending file changes:
 // `git status --porcelain` ran and came back empty (.gitignore'd build output and the runner's
 // own scratch never counted as work, and still don't). A checkout that is already gone has
 // nothing left to lose and counts as captured. Anything else — pending changes, or a status that
@@ -1529,6 +1598,34 @@ func checkoutWorkIsCaptured(wt *Worktree) bool {
 	}
 	out, err := git(wt.Path, "status", "--porcelain")
 	return err == nil && out == ""
+}
+
+// A clean detached checkout can be reclaimed if its HEAD is reachable from a named ref.
+// A recovery checkout stays unless we can prove its HEAD reached the session branch.
+func checkoutHeadIsCaptured(wt *Worktree) bool {
+	if checkoutAbsent(wt.Path) {
+		return true
+	}
+	branch, err := unboundedWorktreeGitOps.checkedOutBranch(wt)
+	if err != nil {
+		return false
+	}
+	if branch != "" {
+		return true
+	}
+	if wt.Branch != "" && unboundedWorktreeGitOps.isAncestor(wt.Path, "HEAD", "refs/heads/"+wt.Branch) {
+		return true
+	}
+	head, err := git(wt.Path, "rev-parse", "--verify", "HEAD")
+	if err != nil {
+		return false
+	}
+	ref, err := git(wt.Path, "for-each-ref", "--count=1", detachedRecoveryRef(wt.Session, head))
+	if err != nil || ref != "" {
+		return false
+	}
+	named, err := detachedHeadHasNamedRef(wt.Path, head)
+	return err == nil && named
 }
 
 // dropEmptyChatBranch removes a wiki chat's checkout and deletes its branch when the run ends with
@@ -1621,6 +1718,87 @@ type mergeOutcome struct {
 	// plane that knows the flag records §13.7 MR2's `ALREADY_MERGED`, which exists to keep "the
 	// target moved" and "it was already there" different facts.
 	AlreadyMerged bool
+	// With Status "pull_request" (docs/design/protected-branch-landing.md §4.6): the commit the landing
+	// branch holds after the push, and GitHub's words for the refused target push.
+	PushedSha   string
+	PushRefusal string
+	// The command's landVia, echoed on "merged" and "pull_request" (mergeToMain), and with "merged" after a Push as
+	// me push GitHub took (§5.2): PushedAs "OWNER" and the rules GitHub said it bypassed.
+	LandVia       string
+	PushedAs      string
+	BypassedRules []string
+}
+
+// mergeLanding is a merge's pull-request fallback (docs/design/protected-branch-landing.md §4.6): how the control
+// plane said this merge reaches its target, the landing branch the replayed tip goes to when GitHub refuses the target
+// because of its rules, what Orbit last pushed there, and whether the session's pull request is already open. The
+// zero value is a merge with no fallback, which pushes the target as it always did.
+type mergeLanding struct {
+	landVia  string
+	ref      string
+	expected string
+	open     bool
+	// The merge operation this runner holds, which a Push as me request for the owner's token names (§5.2).
+	sessionID   string
+	operationID string
+	leaseOwner  string
+}
+
+func mergeLandingOf(req MergeCommand) mergeLanding {
+	return mergeLanding{
+		landVia: req.LandVia, ref: req.LandingRef, expected: req.LandingRefSha, open: req.PullRequestOpen,
+		sessionID: req.SessionID, operationID: req.OperationID, leaseOwner: req.LeaseOwner,
+	}
+}
+
+// viaPullRequest reports whether a refused target push falls back to the landing branch.
+func (l mergeLanding) viaPullRequest() bool {
+	return landsThroughPullRequest(l.landVia, l.ref, false)
+}
+
+// pushesAsOwner reports whether this merge's target push carries the owner's own GitHub token (Push as me, §5.2).
+func (l mergeLanding) pushesAsOwner() bool {
+	return pushesAsOwner(l.landVia, l.viaPullRequest(), l.open)
+}
+
+// ownerCredential asks for the owner's token for this merge's target push, naming the merge operation. A refusal
+// answers the sentence the landing branch's pull request says instead of GitHub's words.
+func (l mergeLanding) ownerCredential(tmp string) (*orbitGitCredential, string) {
+	credential, err := askOwnerGitCredential(tmp, "origin", RunnerGitCredentialRequest{
+		SessionID: l.sessionID, MergeOperationID: l.operationID, LeaseOwner: l.leaseOwner,
+	})
+	if err != nil {
+		logln("merge of session", l.sessionID, "could not have the owner's GitHub token for its push; pushing its landing branch:", err)
+		return nil, pushAsMeUnavailablePrefix + err.Error()
+	}
+	return credential, ""
+}
+
+// toLandingBranch pushes the replayed tip in the staging checkout tmp to the landing branch and answers
+// "pull_request" (§4.6 step 2). The local target and the root checkout are left where they are: the target on origin
+// did not move, and this machine's copy of it catches up at its next fetch.
+func (l mergeLanding) toLandingBranch(tmp, source, sourceSha, base, refusal string) mergeOutcome {
+	tip, err := git(tmp, "rev-parse", "HEAD")
+	if err != nil || tip == "" {
+		return mergeOutcome{Status: "error", SourceSha: sourceSha, Message: clip(fmt.Sprintf("could not read the rebased result of %s: %s", source, gitStderr(err)), 1000)}
+	}
+	tree, err := git(tmp, "rev-parse", "HEAD^{tree}")
+	if err != nil || tree == "" {
+		return mergeOutcome{Status: "error", SourceSha: sourceSha, Message: clip(fmt.Sprintf("could not read the rebased tree of %s: %s", source, gitStderr(err)), 1000)}
+	}
+	pushed, err := landingBranchPush{
+		dir: tmp, remote: "origin", landingRef: l.ref,
+		tested: tip, treeSha: tree, baseSha: base, expected: l.expected, reuse: l.open,
+	}.run()
+	if err != nil {
+		message := "could not push the landing branch " + strings.TrimPrefix(l.ref, "refs/heads/") + ": " + gitStderr(err)
+		if refusal != "" {
+			message = "GitHub refused the push to the target (" + refusal + "), and " + message
+		}
+		return mergeOutcome{Status: "error", SourceSha: sourceSha, Message: clip(message, 1000)}
+	}
+	logln(fmt.Sprintf("pushed %s to %s for session %s's pull request", shortSha(pushed), strings.TrimPrefix(l.ref, "refs/heads/"), source))
+	return mergeOutcome{Status: "pull_request", SourceSha: sourceSha, PushedSha: pushed, PushRefusal: refusal, RebaseBase: base}
 }
 
 // mergeToMain brings a session's branch into a target branch on the runner's local repo by
@@ -1651,7 +1829,13 @@ type mergeOutcome struct {
 // returns "error" with an actionable message; the UI keeps a copyable `git merge` fallback. The
 // session branch is never rewritten or deleted. Serialized by mergeLock so concurrent merges
 // don't race on the repo.
-func mergeToMain(req MergeCommand) mergeOutcome {
+func mergeToMain(req MergeCommand) (res mergeOutcome) {
+	// The command's landVia, echoed on every answer that landed or went to the landing branch (§5.4).
+	defer func() {
+		if res.Status == "merged" || res.Status == "pull_request" {
+			res.LandVia = req.LandVia
+		}
+	}()
 	mergeLock.Lock()
 	defer mergeLock.Unlock()
 	// And the checkout's own lock, which the main checkout actions (move, commit, push, Save & clean)
@@ -1836,7 +2020,7 @@ func mergeToMain(req MergeCommand) mergeOutcome {
 		return alreadyMergedOutcome(req.SessionID, target, sourceSha, targetBefore)
 	}
 
-	out := rebaseFastForward(repoRoot, req.Branch, sourceSha, target, req.SessionID, ffAtRoot, anchor, landed)
+	out := rebaseFastForward(repoRoot, req.Branch, sourceSha, target, req.SessionID, ffAtRoot, anchor, landed, mergeLandingOf(req))
 	out.TargetBranch = target
 	out.TargetShaBefore = targetBefore
 	// The base the source was replayed ONTO. For this merge that is the target tip: the rebase puts
@@ -2019,7 +2203,7 @@ func restageRebaseScratch(repoRoot, sourceSha string) (string, error) {
 // local branch, so the local target only ever moves to what origin already accepted — local merges
 // can't pile up unpushed and silently diverge from origin. A concurrent push that beats ours is
 // rejected (non-fast-forward); we re-sync to the new origin tip and replay, up to mergePushAttempts.
-func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ffAtRoot bool, onto string, landed map[string]bool) mergeOutcome {
+func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ffAtRoot bool, onto string, landed map[string]bool, landing mergeLanding) mergeOutcome {
 	// Staged once per repository and kept: the scratch is NOT removed afterwards, because the next
 	// merge restages it and paying a full checkout of the repository again is what pressing Merge
 	// mostly used to cost.
@@ -2032,6 +2216,10 @@ func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ff
 	// Whether origin already accepted the rebased commits. It decides what a failure to advance the
 	// LOCAL target means: the work is upstream either way, and only this machine's checkout lags.
 	pushed := false
+	// Push as me (§5.2): the owner's token, asked for once before the first target push and held for this merge's
+	// push attempts alone, and what GitHub said when it took the push.
+	var owner *orbitGitCredential
+	var ownerSaid string
 
 	// Replay the temp branch onto target and, when origin tracks target, push the result so
 	// origin/<target> advances in lockstep. A push that origin rejects (it moved under us) is
@@ -2062,6 +2250,12 @@ func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ff
 				Conflicts: splitLines(unmerged),
 			}
 		}
+		// docs/design/protected-branch-landing.md §4.6: the session's pull request for this target is open, so the
+		// merge updates it — the landing branch, never the target, and nothing local moves.
+		if pushToOrigin && landing.viaPullRequest() && landing.open {
+			base, _ := git(repoRoot, "rev-parse", "refs/heads/"+target)
+			return landing.toLandingBranch(tmp, source, sourceSha, base, "")
+		}
 		// The local fast-forward at the end writes exactly the paths this replay changed, and git
 		// refuses it if any of them is modified in that checkout. Finding that out AFTER the push
 		// would strand the merge half-done — the work on origin, the local target behind — so check
@@ -2077,14 +2271,46 @@ func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ff
 		if !pushToOrigin {
 			break // local-only target (or no origin): nothing to push.
 		}
+		if owner == nil && landing.pushesAsOwner() {
+			credential, refusal := landing.ownerCredential(tmp)
+			if refusal != "" {
+				base, _ := git(repoRoot, "rev-parse", "refs/heads/"+target)
+				return landing.toLandingBranch(tmp, source, sourceSha, base, refusal)
+			}
+			owner = credential
+		}
 		// Push the rebased commits, fast-forwarding origin/<target> (target == origin/<target> after
 		// the reconcile, so origin is an ancestor of the rebased tip unless it just moved).
-		out, err := pushMergeResult(tmp, target)
+		var out string
+		if owner != nil {
+			ownerSaid, err = pushAsOwner(tmp, "origin", owner, "HEAD:refs/heads/"+target)
+		} else {
+			out, err = pushMergeResult(tmp, target)
+		}
 		if err == nil {
 			pushed = true
 			break
 		}
 		combined := strings.TrimSpace(out + "\n" + gitStderr(err))
+		// §5.2 "No second credential": the owner's push refused by the branch's rules, or the owner's token not
+		// accepted, goes to the landing branch; the target is never pushed again with another credential.
+		if owner != nil {
+			if refusal, ok := ownerPushRefusal(ownerSaid, err); ok {
+				base, _ := git(repoRoot, "rev-parse", "refs/heads/"+target)
+				return landing.toLandingBranch(tmp, source, sourceSha, base, refusal)
+			}
+		}
+		// §4.6 step 2: GitHub refused the push because of the branch's rules, which is never a race to retry. A merge
+		// the control plane said goes through a pull request pushes its landing branch instead; any other one says
+		// the branch is protected, in GitHub's words. A control plane that named no landVia is told as before.
+		if landing.landVia != "" && isProtectedRefusal(combined) {
+			if landing.viaPullRequest() {
+				base, _ := git(repoRoot, "rev-parse", "refs/heads/"+target)
+				return landing.toLandingBranch(tmp, source, sourceSha, base, githubRefusalWords(combined))
+			}
+			return mergeOutcome{Status: "error", SourceSha: sourceSha, Message: clip(fmt.Sprintf(
+				"GitHub refused the push to %s because of the branch's rules: %s", target, githubRefusalWords(combined)), 1000)}
+		}
 		if !isNonFastForward(combined) {
 			// Auth/network/other — origin untouched, local target not yet advanced. Surface it.
 			return mergeOutcome{Status: "error", Message: clip(fmt.Sprintf("could not push %s to origin: %s", target, combined), 1000)}
@@ -2127,7 +2353,11 @@ func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ff
 
 	sha, _ := git(repoRoot, "rev-parse", target)
 	logln(fmt.Sprintf("rebased %s onto %s (%s) for session %s", source, target, shortSha(sha), sessionID))
-	return mergeOutcome{Status: "merged", MergedSha: sha, SourceSha: sourceSha}
+	merged := mergeOutcome{Status: "merged", MergedSha: sha, SourceSha: sourceSha}
+	if owner != nil && pushed {
+		merged.PushedAs, merged.BypassedRules = pushedAsOwner, bypassedRulesOf(ownerSaid)
+	}
+	return merged
 }
 
 // ffClash returns the paths that both the rebased result (in worktree `tmp`) and the target's
@@ -3190,17 +3420,15 @@ func isScratchCheckoutName(name string) bool {
 	return false
 }
 
-// resumableCheckoutIdle is how long nothing may have been written in a resumable session's checkout
-// before gcResumableCheckouts may take it: the owner's two weeks, and the same two weeks a clean
-// repair checkout gets (recoveryCheckoutRetention).
-const resumableCheckoutIdle = 14 * 24 * time.Hour
+// maxRetainedResumableCheckouts caps how many checkouts of resting sessions a roomy disk keeps, as
+// maxRetainedEligibleCheckouts does for ended ones. Without it "no pressure, no reclamation" let them grow without
+// bound: on the HPC runner on 2026-11-23, 378 checkouts held 471 GiB of a 915 GiB disk, almost all of them resting
+// sessions'. Past the cap the oldest go by the same rules as under the floor (gcResumableCheckouts), and come back
+// from their branch on the session's next claim. 64 is four per concurrent slot at the default max-concurrent of 16.
+const maxRetainedResumableCheckouts = 64
 
-// underBudgetFloor reports whether this reading is under a storage budget's floor. There gcResumableCheckouts sets two
-// of its rules aside for a resting session's checkout (docs/session-checkout-storage-design.md §5): it need not have
-// gone two weeks unwritten (resumableIdle), and a commit on the session's own branch counts as kept whether or not a
-// remote has it (checkoutHasNothingToLose), since the branch keeps it in the repository when the checkout goes and
-// the checkout is made again from the branch. A volume that open sessions fill would otherwise not be reclaimed in
-// time, and its channel would stop the runner first. Without a budget both rules stand.
+// underBudgetFloor reports whether this reading is under a storage budget's floor, where a look at resting checkouts
+// that found nothing waits minutes rather than an hour (worktreeSweeper.sweepResumable).
 func (p worktreeGCPressure) underBudgetFloor() bool {
 	return p.budget != nil && p.belowFloor()
 }
@@ -3211,15 +3439,6 @@ func (p worktreeGCPressure) measuredAfter(at time.Time) bool {
 	return ok && measured.After(at)
 }
 
-// resumableIdle is how long nothing may have been written in a resting session's checkout before a sweep may take
-// it: resumableCheckoutIdle, or no time at all under a storage budget's floor (underBudgetFloor).
-func resumableIdle(underBudget bool) time.Duration {
-	if underBudget {
-		return 0
-	}
-	return resumableCheckoutIdle
-}
-
 // checkoutProbeTimeout bounds the git probes on one checkout. The sweep runs on the claim loop, so a git
 // that hangs must cost it a checkout it could not judge, never the loop.
 const checkoutProbeTimeout = 30 * time.Second
@@ -3227,8 +3446,8 @@ const checkoutProbeTimeout = 30 * time.Second
 // resumableSweepWait is how long gcResumableCheckouts is left alone after a look that found nothing it could
 // take (worktreeSweeper.sweepResumable). A look runs on the claim loop, about 28 seconds over 149 checkouts at a
 // load of about 21, and on a host that stays under its floor with nothing to take, every five minutes would be
-// one message in eleven waiting behind it. What it finds changes slowly: a checkout has to go two weeks unwritten.
-// Under a storage budget's floor, where a checkout need not (underBudgetFloor), the wait is resumableBudgetSweepWait,
+// one message in eleven waiting behind it. A look that found nothing has kept every resting checkout for what it
+// holds, which changes only as sessions go cold. Under a storage budget's floor the wait is resumableBudgetSweepWait,
 // and a sweep run to make room for a new checkout (worktreeSweeper.makeRoom) does not wait at all: that checkout is
 // the change the wait assumes has not happened.
 const resumableSweepWait = time.Hour
@@ -3301,11 +3520,10 @@ var errKeepCheckout = errors.New("the checkout stays")
 // checkoutHasNothingToLose looks for one in the dependency directories, which this does not enter. So does
 // any error. A file gone between listing and reading was being written or removed just then.
 //
-// The walk stops at the first recent write. It runs on the claim loop, and most of its time would go on
-// checkouts in recent use, where the first file it reads will do: on a host with 157 checkouts at a
-// load of about 20, reading all of them took 49 to 101 seconds, and stopping there 17 to 25. With no
-// idle time to wait out (resumableIdle) only a write since the walk began is recent, so it reads the
-// whole checkout.
+// The walk stops at the first recent write. With no idle time to wait out, as gcResumableCheckouts asks, only
+// a write since the walk began is recent, so it reads the whole checkout: on a host with 157 checkouts at a
+// load of about 20, reading all of them took 49 to 101 seconds. So the sweep walks only the checkouts it is
+// about to take, oldest first (checkoutLastActivity), never all of them.
 func checkoutIdleSince(path string, idle time.Duration) (time.Time, bool) {
 	if info, err := os.Lstat(filepath.Join(path, ".git")); err != nil || !info.Mode().IsRegular() {
 		return time.Time{}, false
@@ -3551,34 +3769,37 @@ func (t *Transport) worktreesResumable(ids []string) (map[string]string, error) 
 	return branches, nil
 }
 
-// gcResumableCheckouts is the second half of a sweep, and runs only while the disk is still under
-// its floor after gcWorktrees: it reclaims the checkouts of sessions that can resume, oldest first,
-// and stops as soon as the disk is back above the floor. A session comes back from one of these with a
-// new checkout of its branch, so what it loses is installed dependencies and build output, which a reinstall
-// and a rebuild put back. Nothing that exists nowhere else goes.
+// gcResumableCheckouts is the second half of a sweep. It reclaims the checkouts of sessions that can resume, oldest
+// first, while the disk is still under its floor after gcWorktrees or more than maxRetainedResumableCheckouts of them
+// are on disk, and stops once neither holds. A session comes back from one of these with a new checkout of its branch,
+// so what it loses is installed dependencies and build output, which a reinstall and a rebuild put back. Nothing that
+// exists nowhere else goes.
 //
 // A checkout goes only if all of these hold: the control plane answers that its session is resumable
 // (worktreesResumable; that half is the only thing asked of it), nothing of the session is at work here
-// (checkoutDriven), no process or mount is in it (occupiedCheckouts), nothing was written in it for two
-// weeks (checkoutIdleSince) and it has nothing to lose (checkoutHasNothingToLose). Under a storage budget's
-// floor neither the two weeks nor a remote for its branch's commits is asked for (underBudgetFloor). All of
-// that is asked again immediately before it goes.
+// (checkoutDriven), no process or mount is in it (occupiedCheckouts), nothing was written in it while the sweep read it
+// (checkoutIdleSince) and it has nothing to lose (checkoutHasNothingToLose), a commit on the session's own branch
+// counting as kept: the branch and its commits stay in the repository when the checkout goes, and the checkout comes
+// back from the branch. All of that is asked again immediately before it goes. These were a storage budget's rules
+// until 2026-11-23; a machine's own floor asked for two weeks unwritten and a remote for every commit as well, and as
+// the runner pushes no session branch, that kept nearly every resting checkout that did any work.
 //
-// Its budget (resumableSweepBudget) starts with the first checkout that goes, or that could not be judged or
-// taken, and once it is spent the sweep stops between two checkouts. The next sweep judges what is left afresh,
-// which starts with the oldest. What the second look keeps ahead of that first one does not count: that time
-// takes nothing off the disk, and if it stopped a sweep it would stop the next at the same checkouts, and what is
-// behind them would never be reached. A sweep with nothing but those ends by itself, and then waits.
+// "Oldest" is checkoutLastActivity, which costs two stats, and not the newest write in the checkout, which costs a walk
+// of all of it: the sweep walks a checkout only when it is about to take it, never all of them.
 //
-// It reports whether it looked and found nothing: the rule kept every checkout and the disk is still under its
-// floor. A git command that failed or timed out on a checkout is the rule keeping it (checkoutHasNothingToLose),
-// and a look it could not finish is not this (reclaimResumableCheckout). With that it answers the reading that
-// found the disk still under its floor, which says how long the wait that follows is (worktreeSweeper.sweepResumable).
+// Its budget (resumableSweepBudget) starts with the first checkout that goes, or that could not be judged or taken, and
+// once it is spent the sweep stops between two checkouts. The next sweep judges what is left afresh, which starts with
+// the oldest. A checkout the rule keeps does not count: that time takes nothing off the disk, and if it stopped a sweep
+// it would stop the next at the same checkouts, and what is behind them would never be reached.
+//
+// It reports whether it looked and found nothing: the rule kept every checkout and the disk is still under its floor.
+// A git command that failed or timed out on a checkout is the rule keeping it (checkoutHasNothingToLose), and a look it
+// could not finish is not this (reclaimResumableCheckout). With that it answers the reading that found the disk still
+// under its floor, which says how long the wait that follows is (worktreeSweeper.sweepResumable). Over the cap alone
+// it never reports nothing found, so it waits for nothing: what it re-reads each sweep is the checkouts past the cap
+// that the rule kept.
 func gcResumableCheckouts(t *Transport, pool *sessionPool, pressure worktreeGCPressure) (bool, worktreeGCPressure) {
 	pressure = pressure.again()
-	if !pressure.belowFloor() {
-		return false, pressure
-	}
 	root := worktreesDir()
 	entries, err := os.ReadDir(root)
 	if err != nil {
@@ -3590,9 +3811,22 @@ func gcResumableCheckouts(t *Transport, pool *sessionPool, pressure worktreeGCPr
 			names = append(names, e.Name())
 		}
 	}
+	if !pressure.belowFloor() && len(names) <= maxRetainedResumableCheckouts {
+		return false, pressure
+	}
 	resumable, err := t.worktreesResumable(names)
 	if err != nil {
 		logln("gc: worktrees-removable query failed, keeping every resumable checkout:", err)
+		return false, pressure
+	}
+	// resting counts the checkouts on disk the control plane called resumable, the ones the cap is on.
+	resting := 0
+	for _, name := range names {
+		if _, ok := resumable[name]; ok {
+			resting++
+		}
+	}
+	if !pressure.belowFloor() && resting <= maxRetainedResumableCheckouts {
 		return false, pressure
 	}
 	occupied, err := occupiedCheckouts(root)
@@ -3601,40 +3835,43 @@ func gcResumableCheckouts(t *Transport, pool *sessionPool, pressure worktreeGCPr
 		return false, pressure
 	}
 	type candidate struct {
-		name      string
-		lastWrite time.Time
+		name, branch string
+		active       time.Time
 	}
 	var candidates []candidate
-	underBudget := pressure.underBudgetFloor()
 	for _, name := range names {
-		branch, canResume := resumable[name]
-		if !canResume || occupied[name] {
-			continue
-		}
-		path := filepath.Join(root, name)
-		if lastWrite, idle := checkoutIdleSince(path, resumableIdle(underBudget)); idle && checkoutHasNothingToLose(path, branch, false, underBudget) {
-			candidates = append(candidates, candidate{name: name, lastWrite: lastWrite})
+		if branch, canResume := resumable[name]; canResume && !occupied[name] {
+			candidates = append(candidates, candidate{name: name, branch: branch, active: checkoutLastActivity(filepath.Join(root, name))})
 		}
 	}
-	sort.Slice(candidates, func(i, j int) bool { return candidates[i].lastWrite.Before(candidates[j].lastWrite) })
+	sort.SliceStable(candidates, func(i, j int) bool { return candidates[i].active.Before(candidates[j].active) })
 	// spending is when the first checkout began that went, or that could not be judged or taken. It stays zero for
 	// as long as the rule has kept every one.
 	var spending time.Time
 	for i, c := range candidates {
+		// The first look, git's questions before the walk, which reads the whole checkout.
+		path := filepath.Join(root, c.name)
+		if !checkoutHasNothingToLose(path, c.branch, false, true) {
+			continue
+		}
+		if _, idle := checkoutIdleSince(path, 0); !idle {
+			continue
+		}
 		now := pool.clock.Now()
 		if !spending.IsZero() && now.Sub(spending) >= resumableSweepBudget {
 			logln(fmt.Sprintf("gc: stopping this sweep of resumable checkouts after %s, its budget is %s; the next sweep goes on with the oldest of the %d left",
 				now.Sub(spending).Round(time.Second), resumableSweepBudget, len(candidates)-i))
 			return false, pressure
 		}
-		taken, err := reclaimResumableCheckout(t, pool, root, c.name, pressure.storage, pressure.underBudgetFloor())
+		taken, err := reclaimResumableCheckout(t, pool, root, c.name, pressure.storage, resumableReclaimReason(pressure))
 		if (taken || err != nil) && spending.IsZero() {
 			spending = now
 		}
 		if !taken {
 			continue
 		}
-		if pressure = pressure.again(); !pressure.belowFloor() {
+		resting--
+		if pressure = pressure.again(); !pressure.belowFloor() && resting <= maxRetainedResumableCheckouts {
 			return false, pressure
 		}
 	}
@@ -3643,6 +3880,44 @@ func gcResumableCheckouts(t *Transport, pool *sessionPool, pressure worktreeGCPr
 	}
 	pressure = pressure.again()
 	return pressure.belowFloor(), pressure
+}
+
+// resumableReclaimReason says why gcResumableCheckouts takes a checkout on this reading.
+func resumableReclaimReason(p worktreeGCPressure) string {
+	switch {
+	case p.underBudgetFloor():
+		return "under the storage budget's floor"
+	case p.belowFloor():
+		return "under the free-space floor"
+	default:
+		return fmt.Sprintf("over the cap of %d resting checkouts", maxRetainedResumableCheckouts)
+	}
+}
+
+// checkoutLastActivity is when a checkout was last worked in, as far as two stats can tell: the newer of its directory's
+// modification time and that of its HEAD's reflog, which every commit the runner makes at the end of a turn writes.
+// Not the index, which a `git status` may rewrite, the sweep's own included. A time it cannot read is the zero time,
+// sorted as oldest: the sweep's rule still has to let the checkout go.
+func checkoutLastActivity(path string) time.Time {
+	var newest time.Time
+	if info, err := os.Stat(path); err == nil {
+		newest = info.ModTime()
+	}
+	dotGit, err := os.ReadFile(filepath.Join(path, ".git"))
+	if err != nil {
+		return newest
+	}
+	gitDir, ok := strings.CutPrefix(strings.TrimSpace(string(dotGit)), "gitdir: ")
+	if !ok {
+		return newest
+	}
+	if !filepath.IsAbs(gitDir) {
+		gitDir = filepath.Join(path, gitDir)
+	}
+	if info, err := os.Stat(filepath.Join(gitDir, "logs", "HEAD")); err == nil && info.ModTime().After(newest) {
+		newest = info.ModTime()
+	}
+	return newest
 }
 
 // reclaimResumableCheckout judges one checkout a second time and removes it. The session's branch stays,
@@ -3657,8 +3932,8 @@ func gcResumableCheckouts(t *Transport, pool *sessionPool, pressure worktreeGCPr
 // which is no answer about it and starts no wait: on a disk too full to write the mark, the next sweep may be able to.
 //
 // Under a storage budget, storage counts the checkout's bytes once it is gone (checkoutStorage.removing); nil counts
-// nothing. underBudget judges it by the rules of a storage budget's floor (underBudgetFloor).
-func reclaimResumableCheckout(t *Transport, pool *sessionPool, root, name string, storage *checkoutStorage, underBudget bool) (bool, error) {
+// nothing. reason is why it goes, for the log (resumableReclaimReason).
+func reclaimResumableCheckout(t *Transport, pool *sessionPool, root, name string, storage *checkoutStorage, reason string) (bool, error) {
 	if pool.checkoutDriven(name) {
 		return false, nil
 	}
@@ -3684,8 +3959,8 @@ func reclaimResumableCheckout(t *Transport, pool *sessionPool, root, name string
 		return false, nil
 	}
 	path := filepath.Join(root, name)
-	lastWrite, idle := checkoutIdleSince(path, resumableIdle(underBudget))
-	if !idle || !checkoutHasNothingToLose(path, branch, true, underBudget) {
+	lastWrite, idle := checkoutIdleSince(path, 0)
+	if !idle || !checkoutHasNothingToLose(path, branch, true, true) {
 		return false, nil
 	}
 	if _, err := git(path, "update-ref", absentRefName(name), "refs/heads/"+branch); err != nil {
@@ -3708,13 +3983,8 @@ func reclaimResumableCheckout(t *Transport, pool *sessionPool, root, name string
 	if repo != "" {
 		_, _ = git(repo, "worktree", "prune")
 	}
-	why := fmt.Sprintf("resumable session, clean and pushed, nothing written for %d days, no process or job in it; under the free-space floor",
-		int(time.Since(lastWrite).Hours()/24))
-	if underBudget {
-		why = fmt.Sprintf("resumable session, clean, its work on its branch, last written %s ago, no process or job in it; under the storage budget's floor",
-			humanDuration(time.Since(lastWrite)))
-	}
-	logln("gc: reclaimed checkout", name, "—", why+"; its branch and base ref are kept")
+	logln(fmt.Sprintf("gc: reclaimed checkout %s — resumable session, clean, its work on its branch, last written %s ago, no process or job in it; %s; its branch and base ref are kept",
+		name, humanDuration(time.Since(lastWrite)), reason))
 	return true, nil
 }
 

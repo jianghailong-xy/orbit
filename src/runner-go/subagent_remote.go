@@ -139,8 +139,35 @@ type remoteSubagentClaim struct {
 	Background       bool            `json:"background"`
 	Prompt           string          `json:"prompt"`
 	Exec             AgentExecConfig `json:"exec"`
+	// ParentPermissionMode is the parent session's mode, which a read-only child's requests are answered by
+	// (readonlySubagentAnswer); "" from a server that does not send it, when the child's own mode stands in.
+	ParentPermissionMode string `json:"parentPermissionMode"`
 	// InPlace runs the child read-only in WorkDir itself, which is not a git repository: no worktree is made.
 	InPlace bool `json:"inPlace"`
+}
+
+// remoteSubagentParent is the parent session's claim as far as a remote child needs one, and the child's exec:
+// approvals are filed under the parent's id (the server lets this runner, the run's target, file them), and the
+// server's exec is the child's engine and mode. The parent's mode is the one the claim names, as it was at the claim:
+// a read-only child's requests are answered by it (readonlySubagentAnswer), and the child's Plan gate reads it, as a
+// local child's reads the parent's socket — this machine hosts no socket for the parent session. A server that does
+// not name it leaves the child's own mode in its place.
+func remoteSubagentParent(claim remoteSubagentClaim, cwd string) (AgentExecConfig, *ClaimedSession) {
+	childExec := claim.Exec
+	childExec.Env = map[string]string{}
+	for k, v := range claim.Exec.Env {
+		childExec.Env[k] = v
+	}
+	parentMode := firstNonEmpty(strings.TrimSpace(claim.ParentPermissionMode), strings.TrimSpace(childExec.PermissionMode))
+	if parentMode != "" {
+		childExec.Env[envSubagentRemoteMode] = parentMode
+	}
+	parent := &ClaimedSession{
+		SessionID: claim.SessionID, Provider: childExec.Provider, Agent: childExec, WorkDir: cwd,
+		WatchesDisabled: true, WikiDisabled: true,
+	}
+	parent.Agent.PermissionMode = parentMode
+	return childExec, parent
 }
 
 // remoteSubagentTask is one remote run this process hosts.
@@ -420,13 +447,8 @@ func runClaimedRemoteSubagent(ctx context.Context, t *Transport, task *remoteSub
 		// Nothing discards what a run in place writes: it is read-only whatever the definition found here says.
 		def.Readonly = true
 	}
-	// The parent session's claim as far as a child needs one: approvals are filed under the parent's id (the server
-	// lets this runner, the run's target, file them), and the server's exec is the child's engine and mode.
-	parent := &ClaimedSession{
-		SessionID: claim.SessionID, Provider: claim.Exec.Provider, Agent: claim.Exec, WorkDir: cwd,
-		WatchesDisabled: true, WikiDisabled: true,
-	}
-	engine := subagentEngine(claim.Exec, parent)
+	childExec, parent := remoteSubagentParent(claim, cwd)
+	engine := subagentEngine(childExec, parent)
 	runChild, ok := subagentChildRunners[engine]
 	if !ok {
 		return fail(fmt.Sprintf("SubAgents cannot run on the %s engine on this runner.", engine))
@@ -477,7 +499,7 @@ func runClaimedRemoteSubagent(ctx context.Context, t *Transport, task *remoteSub
 		logln(fmt.Sprintf("remote SubAgent %s — running %s %s %s", claim.RunID, engine, where, workDir))
 		var conversation string
 		res, conversation, err = runChild(withSubagentApprovals(ctx, claim.RunID), subagentChild{
-			t: t, parent: parent, exec: claim.Exec, def: def, runID: claim.RunID, engineSession: rec.EngineSession,
+			t: t, parent: parent, exec: childExec, def: def, runID: claim.RunID, engineSession: rec.EngineSession,
 			resume: claim.ResumeOf != "", cwd: cwd, scratch: scratch, stateDir: rec.StateDir, prompt: prompt,
 			emit: relay.add, spawned: spawned,
 		})

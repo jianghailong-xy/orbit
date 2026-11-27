@@ -70,7 +70,7 @@ final class BackgroundJobsWiringTests: XCTestCase {
         XCTAssertTrue(controls.contains("bubble.turnId == nil || bubble.steer"),
                       "a steered wake waiting for the runner must not be offered a Cancel")
         let branch = try section(row,
-                                 from: "} else if let background = BackgroundWakeText.parse(wakeNote) {",
+                                 from: "} else if let jobNews = BackgroundWakeText.parse(wakeNote) {",
                                  to: "} else {")
         XCTAssertTrue(branch.contains("onCancelQueued: cancel,"), "the wake's Cancel is not the queue's")
         XCTAssertTrue(branch.contains("steerState: BackgroundWakeCard.steerState("),
@@ -78,9 +78,23 @@ final class BackgroundJobsWiringTests: XCTestCase {
         XCTAssertTrue(branch.contains("queued: queued != nil"), "and is drawn as not yet an event while queued")
 
         let card = try section(try source(Self.cardPath), from: "struct BackgroundWakeCardView",
-                               to: "private func jobRow")
+                               to: "private func wakeupRow")
         XCTAssertTrue(card.contains("if let steerState {"), "the line draws the state it is handed")
         XCTAssertTrue(card.contains("if queued {"), "and its dashed outline off `queued`, not off a Cancel")
+    }
+
+    /// A job's end, new output or stall draws no line (board C1): the branch draws the wake only once
+    /// `BgJobCard.wakeupsOnly` has left a wakeup in it, and a typed word keeps its bubble.
+    func testAJobsNewsDrawsNoLineOnlyAWakeupDoes() throws {
+        let row = try source(Self.rowPath)
+        let branch = try section(row, from: "} else if let jobNews = BackgroundWakeText.parse(wakeNote) {",
+                                 to: "} else if queued == nil, OrbitEvent.draws(b) {")
+        XCTAssertTrue(branch.contains("if let background = BgJobCard.wakeupsOnly(jobNews) {"),
+                      "a job's news is drawn as a line again")
+        XCTAssertFalse(row.contains("BackgroundWakeCardView(wake: jobs"),
+                       "a SubAgent's or a workflow's end draws the job's news beside it again")
+        let card = try source(Self.cardPath)
+        XCTAssertFalse(card.contains("wake.jobs"), "the wake line still reads jobs: their card says them")
     }
 
     /// The rule the bubble is drawn off, on its own: whitespace is not a message.

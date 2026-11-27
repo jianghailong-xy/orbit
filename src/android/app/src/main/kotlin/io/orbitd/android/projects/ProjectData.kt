@@ -93,12 +93,23 @@ class ProjectApi(private val auth: AuthSession, private val handle: SessionHandl
     /** An attachment's bytes, for a confirmation's screenshot thumbnail. */
     suspend fun attachmentBytes(attachmentId: String): ByteArray = auth.request(handle, ApiRequest(listOf("attachments", attachmentId), maxResponseBytes = 25L * 1024 * 1024)).body
     suspend fun updateIntegration(id: String, body: JsonObject, revision: String) = send(revision, listOf("projects", id, "integration"), HttpMethod.PATCH, body)
+    /** The owner's Revert on one of the coordinator's recorded landing-check changes (§12.15 P-R1): the old value goes back as the
+     * owner's own, so the coordinator needs a card for that field from then on. */
+    suspend fun revertSettingChange(id: String, changeId: String) =
+        send("revert:$changeId", listOf("projects", id, "setting-changes", changeId, "revert")) as? JsonObject
     suspend fun pause(id: String, paused: Boolean, revision: String) = send(revision, listOf("projects", id, if (paused) "pause" else "resume"))
     /** One answer to a crossing, from its row's second press: the crossing key travels with it, so an answer given on a list that
      * changed since it was read is refused rather than recorded against another crossing. A yes to a move IS the move. The answer is
      * not read here: the list the page reads again says what it left. */
     suspend fun decideCrossing(id: String, row: JsonObject, approve: Boolean) = send("crossing:${row.text("crossingKey")}",
         listOf("projects", id, "handoffs", ProjectCrossings.doorId(row), "decision"), body = ProjectCrossings.request(row, approve))
+    /** The task moves a session draws on its crossing cards (`GET /sessions/:id/task-moves`): every waiting batch, then the latest answered ones. */
+    suspend fun taskMoves(sessionId: String) = read(listOf("sessions", sessionId, "task-moves"))
+    /** One answer to a whole batch of moves, from the crossing card's review: every move with the crossing key the card read, so
+     * a batch that changed since the read is refused whole rather than answered in part (`POST /sessions/:id/task-moves/decision`). */
+    suspend fun decideMoveBatch(sessionId: String, batch: CrossingBatch, approve: Boolean) =
+        send("moves:${batch.pending.joinToString(",") { it.text("crossingKey").orEmpty() }}", listOf("sessions", sessionId, "task-moves", "decision"),
+            body = CrossingCards.moveRequest(batch, approve))
     /** The owner's Retry on a landing job the integration read says can be retried: its silent generation ends and the next one is
      * queued. Answers the integration view read again. */
     suspend fun retryJob(id: String, jobId: String) = send("retry:$jobId", listOf("projects", id, "integration", "jobs", jobId, "retry")) as? JsonObject
@@ -185,6 +196,86 @@ object ProjectMainBranch {
      * last choice there, else main — and null for a project with no repository (web's `storedUpstream`). */
     fun stored(view: JsonObject?): String? =
         if (repository(view) == null) null else RunSettings.mainBranchName(view?.text("upstreamRef") ?: lastChoice(view)?.branch)
+}
+
+/** A project that has started with no line (§12.15 P-M2, §12.16, ruling D2): no task has delivered a commit, so nothing has a line to
+ * land on. The page draws no landing card, no Landings row, no landing segment on its task rows and no landing lanes — and nothing
+ * in their place. Read off the server's integration view alone ([view] its line, null while undecided); nothing here asks whether
+ * the project has code. Until the line starts at the first committing DONE, then everything is drawn as before. */
+object ProjectLine {
+    fun none(view: JsonObject?, started: Boolean?): Boolean = started == true && view != null && view.text("line") == null
+}
+
+/** A project's landing check as revision 42 reads it (§12.15 P-C1, §12.16): which of the three values it holds — the merge check
+ * (null), a command, or none at all (`NONE`) — and who wrote it last, and when. A server that predates `landingCheck` sends none,
+ * and the value is read from `landingCheckCommand` and its absent reason with nobody named. Nothing here infers whether the
+ * project has code. */
+object ProjectLandingCheck {
+    enum class Mode { MERGE_CHECK, COMMAND, NONE }
+    /** [setBy] is OWNER, CARD, START or COORDINATOR, null when nobody is named; [setAt] null when the time is not recorded. */
+    data class Read(val mode: Mode, val command: String?, val setBy: String?, val setAt: String?)
+
+    fun of(view: JsonObject?): Read? {
+        view ?: return null
+        val check = view.obj("landingCheck")
+        if (check != null) {
+            val command = check.text("command")
+            val mode = when (command) { null -> Mode.MERGE_CHECK; "NONE" -> Mode.NONE; else -> Mode.COMMAND }
+            return Read(mode, command?.takeIf { mode == Mode.COMMAND },
+                check.text("setBy")?.takeIf { it in setOf("OWNER", "CARD", "START", "COORDINATOR") }, check.text("setAt"))
+        }
+        val command = view.text("landingCheckCommand")
+        val mode = when { command != null -> Mode.COMMAND; view.text("landingCheckCommandAbsentReason") == "NONE" -> Mode.NONE; else -> Mode.MERGE_CHECK }
+        return Read(mode, command, null, null)
+    }
+}
+
+/** The coordinator's landing-check changes as `GET /projects/:id` lists them, newest first (`settingChanges`, §12.15 P-R1): the
+ * project's landing check, or one task's exemption, from what to what, why, who and when, and whether the owner may still put it
+ * back. Null from a server that predates the list; every slot of a row but its id, field and time optional. */
+object ProjectSettingChanges {
+    sealed interface Value {
+        data class LandingCheck(val command: String?, val timeoutSeconds: Int?, val none: Boolean) : Value
+        data class Exempt(val exempt: Boolean, val reason: String?) : Value
+    }
+    data class Change(val id: String, val taskId: String?, val field: String, val origin: String, val old: Value?, val new: Value?,
+        val reason: String?, val revertsChangeId: String?, val revertedAt: String?, val revertible: Boolean, val createdAt: String)
+
+    fun of(doc: JsonObject?): List<Change>? {
+        val rows = doc?.get("settingChanges") as? JsonArray ?: return null
+        return rows.filterIsInstance<JsonObject>().mapNotNull { row ->
+            val field = row.text("field")?.takeIf { it == "LANDING_CHECK" || it == "TASK_LANDING_CHECK_EXEMPT" } ?: return@mapNotNull null
+            Change(row.text("id") ?: return@mapNotNull null, row.text("taskId"), field,
+                // The first rows were the coordinator's alone, and carried no origin.
+                row.text("origin") ?: "COORDINATOR", value(field, row.obj("oldValue")), value(field, row.obj("newValue")),
+                row.text("reason"), row.text("revertsChangeId"), row.text("revertedAt"), row.flag("revertible"),
+                row.text("createdAt") ?: return@mapNotNull null)
+        }
+    }
+
+    private fun value(field: String, read: JsonObject?): Value? = read?.let {
+        if (field == "LANDING_CHECK") Value.LandingCheck(it.text("command"), it.number("timeoutSeconds"), it.flag("none"))
+        else Value.Exempt(it.flag("exempt"), it.text("reason"))
+    }
+
+    /** The rows the list draws: an owner's revert is said on the row it put back ("Reverted by you", board ⑤ d), not as a row of its own. */
+    fun listed(changes: List<Change>): List<Change> = changes.filter { it.revertsChangeId == null }
+
+    /** Who exempted [taskId] and when: the newest record of its exemption that set it and was not reverted, as web's
+     *  `TaskLandingExempt` finds it. */
+    fun latestExemption(changes: List<Change>?, taskId: String): Change? =
+        changes?.firstOrNull { it.field == "TASK_LANDING_CHECK_EXEMPT" && it.taskId != null && io.orbitd.android.navigation.ObjectId.same(it.taskId, taskId) &&
+            (it.new as? Value.Exempt)?.exempt == true && it.revertedAt == null }
+}
+
+/** One task's exemption from its project's landing check, as the task read gives it (§12.15 P-C2): absent on a server that predates
+ * it, which reads as not exempt. [bySessionId] is the coordinator session that wrote it, null when the owner did. */
+data class TaskLandingExemption(val reason: String?, val bySessionId: String?) {
+    companion object {
+        fun of(task: JsonObject?): TaskLandingExemption? = task?.takeIf { it.flag("landingCheckExempt") }?.let {
+            TaskLandingExemption(it.text("landingCheckExemptReason"), it.text("landingCheckExemptBySessionId"))
+        }
+    }
 }
 
 /** `APIClient.failureReason`: the server's own sentence when it wrote one (`ComposerLogic.serverMessage`). */

@@ -27,7 +27,8 @@ import { BadRequestException, ConflictException, ForbiddenException, NotFoundExc
 import { createHash, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { type PrismaClient, type Runner, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, type Runner, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -45,6 +46,7 @@ import { RunnerSubagentsController } from './runner-subagents.controller';
 import { ScheduledWakeupWorker } from './scheduled-wakeup.worker';
 import { SUBAGENT_RESULT_SUMMARY_MAX, SubagentRunCreateDto, SubagentRunUpdateDto } from './subagent-run';
 import { WorkflowRunCreateDto, WorkflowRunUpdateDto } from './workflow-run';
+import { wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 process.env.PROVIDER_SECRET_KEY ??= 'subagent-lifecycle-spec';
@@ -111,7 +113,7 @@ test('SubAgent lifecycle: turn end, runner restart, the wake and its wording', {
       data: {
         id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
         title: 'split the parser work', prompt: 'split the parser work', provider: 'claude', engine: 'claude',
-        model: 'claude-opus-5-5', effort: 'high', status: RunStatus.AWAITING_INPUT, numTurns: 1,
+        model: 'claude-opus-5-5', effort: 'high', turnState: null, numTurns: 1,
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
       },
     });
@@ -280,9 +282,9 @@ test('SubAgent lifecycle: turn end, runner restart, the wake and its wording', {
         toolUseId: 'toolu_01Split', content: [{ type: 'text', text: `{"runId":"${opened.runId}","status":"running"}` }] } },
     ]);
     // The turn ended. The parent is parked, and still at work: the list's "Running Agent".
-    await prisma.session.update({ where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+    await prisma.session.update({ where: { id: sessionId }, data: { turnState: null } });
     const parked = await prisma.session.findUniqueOrThrow({ where: { id: sessionId } });
-    assert.equal(parked.status, RunStatus.AWAITING_INPUT);
+    assert.equal(wordOf(parked), RunStatus.AWAITING_INPUT);
     assert.deepEqual(parked.runningSubagents, ['toolu_01Split'], 'the running SubAgent keeps the parked session working');
     assert.equal((await prisma.subagentRun.findUniqueOrThrow({ where: { id: opened.runId } })).wakeOwed, true,
       'a background run owes its parent a wake from the start');
@@ -300,7 +302,7 @@ test('SubAgent lifecycle: turn end, runner restart, the wake and its wording', {
     assert.equal(turns[0].clientTurnId, `${BACKGROUND_WAKE_TURN_PREFIX}${uuidToBase62(opened.runId)}:exit`);
     assert.equal(turns[0].status, 'PENDING');
     assert.ok(!turns[0].content, 'the wake records no words as the person\'s');
-    assert.equal((await prisma.session.findUniqueOrThrow({ where: { id: sessionId } })).status, RunStatus.PENDING,
+    assert.equal(wordOf((await prisma.session.findUniqueOrThrow({ where: { id: sessionId } }))), RunStatus.PENDING,
       'the wake asked for a runner slot: the parent is woken');
     const content = await delivered(sessionId);
     assert.match(content, /<orbit-subagent-finished>/);
@@ -476,7 +478,7 @@ test('SubAgent lifecycle: turn end, runner restart, the wake and its wording', {
   await t.test('a parent that has ended is not woken, and its wake is settled so the sweep leaves it', async () => {
     const sessionId = await parkedParent();
     const opened = await subagents.createSubagentRun(runner, sessionId, create({ toolUseId: 'toolu_01Gone', background: true }));
-    await prisma.session.update({ where: { id: sessionId }, data: { status: RunStatus.CANCELLED, endReason: 'ended' } });
+    await prisma.session.update({ where: { id: sessionId }, data: { turnState: null, finishedAt: new Date(), endReason: 'ended' } });
     await subagents.updateSubagentRun(runner, sessionId, opened.runId, update({ status: 'DONE', wake: true }));
     assert.equal((await wakeTurns(sessionId)).length, 0);
     assert.ok((await prisma.subagentRun.findUniqueOrThrow({ where: { id: opened.runId } })).wakeFiledAt);

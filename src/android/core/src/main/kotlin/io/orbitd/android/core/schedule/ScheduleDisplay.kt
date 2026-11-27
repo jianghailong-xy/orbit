@@ -120,6 +120,7 @@ object ScheduleDisplay {
                 else fill(ScheduleConditionCopy.rulesLong, mapOf("condition" to lowerFirst(rule.condition.text)))
             is ScheduleRule.Once -> if (short) C.Rules.shortOnce else C.Rules.longOnce
             is ScheduleRule.Daily -> fill(daily, mapOf("time" to rule.time))
+            is ScheduleRule.Every -> everyRuleText(rule)
             is ScheduleRule.Weekly -> {
                 val time = rule.time
                 val days = weekdayOrder.filter { it in rule.weekdays }
@@ -136,6 +137,64 @@ object ScheduleDisplay {
                 }
             }
         }
+    }
+
+    /** An EVERY rule's sentence, the same in both forms: "Every 30 min, 09:00–18:00, Mon–Fri", "Every hour". */
+    internal fun everyRuleText(rule: ScheduleRule.Every): String {
+        val e = C.Every
+        val interval = when {
+            rule.minutes < 60 -> fill(e.minutes, mapOf("count" to rule.minutes.toString()))
+            rule.minutes == 60 -> e.hour
+            else -> fill(e.hours, mapOf("count" to (rule.minutes / 60).toString()))
+        }
+        val text = when {
+            rule.until != null -> fill(e.window, mapOf("interval" to interval, "time" to rule.time, "until" to rule.until))
+            rule.time == "00:00" -> interval
+            else -> fill(e.from, mapOf("interval" to interval, "time" to rule.time))
+        }
+        val days = weekdayOrder.filter { it in rule.weekdays }
+        if (days.size == 7) return text
+        val named = when {
+            days.size == 5 && days.containsAll(listOf("MON", "TUE", "WED", "THU", "FRI")) -> e.workweek
+            days.size == 2 && days.containsAll(listOf("SAT", "SUN")) -> e.weekend
+            else -> days.joinToString(C.Rules.daysSeparator) { C.weekdaysShort[it] ?: it }
+        }
+        return fill(e.days, mapOf("rule" to text, "days" to named))
+    }
+
+    /** A schedule's planned end as one line: "until 18:00 today", "until Nov 25", "3 runs left", or both; null without an end. */
+    fun endText(schedule: ScheduleView, now: Instant, timezone: String): String? {
+        val e = C.End
+        val parts = mutableListOf<String>()
+        schedule.endAt?.let(::parse)?.let { at ->
+            val time = localParts(at, timezone).time
+            val day = dayText(at, now, timezone)
+            val whenText = when (day) {
+                C.Dates.today -> fill(e.today, mapOf("time" to time))
+                C.Dates.tomorrow -> fill(e.tomorrow, mapOf("time" to time))
+                else -> dateText(at, timezone)
+            }
+            parts += fill(e.until, mapOf("when" to whenText))
+        }
+        schedule.maxRuns?.let {
+            val left = schedule.runsLeft ?: it
+            parts += if (left == 1) e.runLeft else fill(e.runsLeft, mapOf("count" to left.toString()))
+        }
+        return parts.takeIf { it.isNotEmpty() }?.joinToString(C.separator)
+    }
+
+    /** "16 slots missed, 01:00–08:30": consecutive MISSED runs of one schedule as one line. */
+    fun missedText(runs: List<ScheduleRunView>, timezone: String): String {
+        val times = runs.mapNotNull { parse(it.plannedAt) }.sorted()
+        val first = times.firstOrNull() ?: return fill(C.End.missed, mapOf("count" to runs.size.toString(), "from" to "", "to" to ""))
+        val last = times.last()
+        val a = localParts(first, timezone)
+        val b = localParts(last, timezone)
+        if (a.month == b.month && a.day == b.day) {
+            return fill(C.End.missed, mapOf("count" to runs.size.toString(), "from" to a.time, "to" to b.time))
+        }
+        return fill(C.End.missedDated, mapOf("count" to runs.size.toString(), "fromDate" to dateText(first, timezone), "from" to a.time,
+            "toDate" to dateText(last, timezone), "to" to b.time))
     }
 
     /** Whether a row shows the repeat mark before its rule: a one-off does not. */
@@ -367,6 +426,10 @@ object ScheduleDisplay {
         data class Run(val schedule: ScheduleView, val run: ScheduleRunView, override val at: String) : TimelineItem() {
             override val id: String get() = "run-${run.id}"
         }
+        /** Two or more consecutive MISSED runs of one schedule, as one line ([missedText]); [at] is the last one's slot. */
+        data class Missed(val schedule: ScheduleView, val runs: List<ScheduleRunView>, override val at: String) : TimelineItem() {
+            override val id: String get() = "missed-${runs.first().id}"
+        }
         data class Draft(val card: ScheduleCard, override val at: String) : TimelineItem() {
             override val id: String get() = "draft-${card.id}"
         }
@@ -428,13 +491,28 @@ object ScheduleDisplay {
 
         for (s in schedules) if (s.state == "ACTIVE") s.nextDueAt?.let { place(TimelineItem.Schedule(s, it), it) }
         for (card in drafts) card.`when`?.firstRunAt?.let { place(TimelineItem.Draft(card, it), it) }
+        // A streak of MISSED runs of one schedule (two or more, with no other run of it between) shows as one item at its last slot.
+        val streakOf = mutableMapOf<String, List<ScheduleRunView>>()
+        if (showPastRuns) {
+            for (list in runs.groupBy { it.scheduleId }.values) {
+                var streak = mutableListOf<ScheduleRunView>()
+                fun close() { if (streak.size > 1) streak.forEach { streakOf[it.id] = streak }; streak = mutableListOf() }
+                for (run in list.sortedBy { parse(it.plannedAt) ?: Instant.EPOCH }) if (run.state == "MISSED") streak += run else close()
+                close()
+            }
+        }
+        val collapsed = mutableSetOf<List<ScheduleRunView>>()
         for (run in runs) {
             val schedule = byId[run.scheduleId] ?: continue
             if (run.state in inProgress) {
                 place(TimelineItem.Run(schedule, run, run.plannedAt), run.plannedAt)
             } else if (showPastRuns) {
                 val planned = parse(run.plannedAt)
-                if (planned != null && localParts(planned, timezone).dayNumber == today) place(TimelineItem.Run(schedule, run, run.plannedAt), run.plannedAt)
+                if (planned != null && localParts(planned, timezone).dayNumber == today) {
+                    val streak = streakOf[run.id]
+                    if (streak == null) place(TimelineItem.Run(schedule, run, run.plannedAt), run.plannedAt)
+                    else if (collapsed.add(streak)) place(TimelineItem.Missed(schedule, streak, streak.last().plannedAt), streak.last().plannedAt)
+                }
             }
         }
 
@@ -648,6 +726,17 @@ object ScheduleDisplay {
     internal fun orderedFirst(fields: List<String>): String? =
         listOf("title", "prompt", "intent", "rule", "timezone", "endAt", "accessLevel", "runLimitMinutes", "workspaceId")
             .firstOrNull { it in fields } ?: fields.firstOrNull()
+
+    /** A person's rename as the history says it (§8.4 *Rename*): "Renamed from “Codex check”". Null for any other record,
+     * an agent's new title included (OrbitKit `renamedText`). */
+    fun renamedText(record: ScheduleChangeRecord): String? {
+        if (record.changedBy != "USER" || record.after.keys != setOf("title")) return null
+        val before = record.before ?: return null
+        return fill(C.History.renamed, mapOf("title" to (asString(before["title"]) ?: "")))
+    }
+
+    /** The title a rename field would save: trimmed, and null when that is empty or the name it opened with. */
+    fun renameTitle(draft: String, from: String): String? = draft.trim().takeIf { it.isNotEmpty() && it != from.trim() }
 
     fun recordText(record: ScheduleChangeRecord, names: Map<String, String> = emptyMap()): String =
         recordParts(record.revision, record.before, record.after, names).text

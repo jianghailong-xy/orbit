@@ -2,6 +2,7 @@ import type { ProjectCrossingRow } from './attribution';
 import {
   MOVE_TASK_APPROVE_CONSEQUENCE,
   MOVE_TASK_CRITERION_GONE,
+  MOVE_TASK_OUT_APPROVE_CONSEQUENCE,
   MOVE_TASK_REQUESTED_CRITERION_LABEL,
   MOVE_TASK_WITHDRAWN_CRITERION_LABEL,
 } from '../components/ProjectCrossingsCard';
@@ -36,18 +37,82 @@ export interface CrossingBatch {
   rows: ProjectCrossingRow[];
   /** The first row's requestedAt: where the card is drawn in the conversation. */
   moment: string;
+  /** The target project by name, in a conversation that does not coordinate it (the session that
+   *  asked for the moves); absent where the target is this conversation's own project. */
+  targetTitle?: string | null;
+}
+
+/**
+ * The task moves one session draws as one card, as `GET /sessions/:id/task-moves` serves them: one
+ * asker, one source project, one target project. While waiting it is every PENDING move of the
+ * three; once answered, the moves one answer settled. The same batch is read by the session that
+ * asked and by the target project's coordinator, and answered by one
+ * `POST /sessions/:id/task-moves/decision` with every move and its crossing key.
+ */
+export interface TaskMoveBatch {
+  batchKey: string;
+  requestedBySessionId: string;
+  fromProjectId: string;
+  /** null: the moves take their tasks out of every project, answered by the source's coordinator. */
+  toProjectId: string | null;
+  state: string;
+  since: string;
+  decidedAt: string | null;
+  /** Whether this session asked for these moves, coordinates the project they go into, or both. */
+  drawnAs: ReadonlyArray<'REQUESTER' | 'TARGET_COORDINATOR'>;
+  moves: ProjectCrossingRow[];
+}
+
+/** The card id a batch of moves keeps from waiting to answered: its oldest move's. */
+function batchId(first: ProjectCrossingRow): string {
+  return `crossing-batch-${first.publicId ?? first.id}`;
+}
+
+/** The session read's batches of task moves as the decision card draws them, oldest first. */
+export function moveBatches(read: readonly TaskMoveBatch[]): CrossingBatch[] {
+  return read
+    .filter((batch) => batch.moves.length > 0)
+    .map((batch) => {
+      const rows = [...batch.moves].sort((a, b) => a.requestedAt.localeCompare(b.requestedAt));
+      const first = rows[0];
+      return {
+        id: batchId(first),
+        kind: 'MOVE_TASK',
+        fromProjectId: batch.fromProjectId,
+        sourceTitle: first.fromProject?.title ?? UNNAMED_PROJECT,
+        rows,
+        moment: first.requestedAt,
+        out: batch.toProjectId == null,
+        targetTitle: batch.toProjectId == null || batch.drawnAs.includes('TARGET_COORDINATOR')
+          ? null
+          : first.toProject?.title ?? UNNAMED_PROJECT,
+      };
+    })
+    .sort((a, b) => a.moment.localeCompare(b.moment));
+}
+
+/** The batch answer: every waiting move with the crossing key the card was drawn from. */
+export function moveBatchAnswer(
+  batch: CrossingBatch,
+  decision: 'APPROVE' | 'DENY',
+): { decision: 'APPROVE' | 'DENY'; moves: Array<{ handoffId: string; crossingKey: string }> } {
+  return {
+    decision,
+    moves: pendingRows(batch).map((row) => ({ handoffId: row.publicId ?? row.id, crossingKey: row.crossingKey })),
+  };
 }
 
 export const UNNAMED_PROJECT = 'unnamed project';
-export const CROSSING_PROVENANCE = 'From Orbit — not the requesting agent.';
+/** Who wrote the card, not where the tasks come from: the From/To lines under it say that. */
+export const CROSSING_PROVENANCE = 'Written by Orbit — not the requesting agent.';
 export const CROSSING_TO_THIS_PROJECT = 'this project';
 export const CROSSING_APPROVE_LABEL = 'Approve';
 export const CROSSING_REFUSE_LABEL = 'Refuse';
 export const CROSSING_NO_PROJECT = 'No project';
-export const MOVE_OUT_APPROVE_CONSEQUENCE =
-  'Confirming takes the task out of this project as soon as you answer, and nobody has to send the request again.';
+/** The project page's confirm prompt says the same of one task. */
+export const MOVE_OUT_APPROVE_CONSEQUENCE = MOVE_TASK_OUT_APPROVE_CONSEQUENCE;
 export const MOVE_OUT_MANY_APPROVE_CONSEQUENCE =
-  'Confirming takes the tasks out of this project as soon as you answer, and nobody has to send the request again.';
+  "Confirming takes the tasks out of this project as soon as you answer; no project's acceptance counts them any more.";
 export const CROSSING_LINK_LIVE = 'View details & act';
 export const CROSSING_LINK_ANSWERED = 'View details';
 export const CROSSING_RECORDED = 'Decision recorded';
@@ -100,7 +165,7 @@ export function crossingBatches(
         current = [row];
         const first = row;
         batches.push({
-          id: `crossing-batch-${first.publicId ?? first.id}`,
+          id: batchId(first),
           kind: first.kind,
           fromProjectId: first.fromProjectId,
           sourceTitle: first.fromProject?.title ?? UNNAMED_PROJECT,
@@ -142,12 +207,45 @@ export function batchDecidedAt(batch: CrossingBatch): string | null {
 
 // ── copy ────────────────────────────────────────────────────────────────────────────────────────
 
-export function crossingTitle(kind: string, count: number, out = false): string {
+/** The card's question. `target` names the project the moves go into when it is not this
+ *  conversation's own (the session that asked for them); `out` is a request to take tasks out of
+ *  every project. */
+export function crossingTitle(kind: string, count: number, target?: string | null, out = false): string {
   const one = count === 1;
   if (out) return one ? 'Take this task out of the project?' : 'Take these tasks out of the project?';
   if (kind === 'FILE_TASK') return one ? 'File this task here?' : 'File these tasks here?';
   if (kind === 'DEPEND_ON_TASK') return one ? 'Allow this dependency?' : 'Allow these dependencies?';
+  if (target) return one ? `Move this task to ${target}?` : `Move these tasks to ${target}?`;
   return one ? 'Move this task here?' : 'Move these tasks here?';
+}
+
+/** An answered card's heading: what happened, no longer a question. A mixed answer says only that. */
+export function answeredTitle(
+  kind: string,
+  count: number,
+  verdict: CrossingVerdict,
+  target?: string | null,
+  out = false,
+): string {
+  const one = count === 1;
+  const noun = kind === 'DEPEND_ON_TASK' ? (one ? 'Dependency' : 'Dependencies') : one ? 'Task' : 'Tasks';
+  if (verdict === 'MIXED') return one ? 'Request answered' : 'Requests answered';
+  if (verdict === 'REFUSED') {
+    if (out) return `${noun} kept in the project`;
+    if (kind === 'FILE_TASK') return one ? 'Filing refused' : 'Filings refused';
+    if (kind === 'DEPEND_ON_TASK') return `${noun} refused`;
+    return one ? 'Move refused' : 'Moves refused';
+  }
+  if (out) return `${noun} taken out of the project`;
+  if (kind === 'FILE_TASK') return `${noun} filed here`;
+  if (kind === 'DEPEND_ON_TASK') return `${noun} allowed`;
+  if (target) return `${noun} moved to ${target}`;
+  return `${noun} moved here`;
+}
+
+/** The label over the quoted reasons: they are the agent's words, under a card Orbit wrote. */
+export function reasonsHead(count: number): string {
+  return count === 1 ? 'Reason given by the requesting agent' : 'Reasons given by the requesting agent';
 }
 
 export function crossingBadge(kind: string): string {
@@ -175,27 +273,45 @@ export function crossingListHead(kind: string, out = false): string {
   return 'Tasks to move';
 }
 
-/** The criteria a batch asks for: `4–11` when they are a run of numbers, else a list. */
-export function criteriaRange(keys: readonly string[]): string {
-  const distinct = [...new Set(keys)];
-  const numeric = distinct.every((key) => /^\d+$/.test(key));
-  if (numeric) {
-    const numbers = distinct.map(Number).sort((a, b) => a - b);
-    const contiguous = numbers.every((n, i) => i === 0 || n === numbers[i - 1] + 1);
-    if (numbers.length > 1 && contiguous) return `${numbers[0]}–${numbers[numbers.length - 1]}`;
-    return numbers.join(', ');
-  }
-  return distinct.sort((a, b) => a.localeCompare(b)).join(', ');
+/** The criteria a batch asks for, by number: `4–11` when they are a run, else `4, 6, 9`. */
+export function criteriaRange(ordinals: readonly number[]): string {
+  const numbers = [...new Set(ordinals)].sort((a, b) => a - b);
+  const contiguous = numbers.every((n, i) => i === 0 || n === numbers[i - 1] + 1);
+  if (numbers.length > 1 && contiguous) return `${numbers[0]}–${numbers[numbers.length - 1]}`;
+  return numbers.join(', ');
+}
+
+type NamedCriterion = { text: string | null; ordinal?: number | null };
+
+/** What a person calls a criterion: `Criterion 4`, or its words from a server that sends no
+ *  number. Never its key, which is an opaque id. Null when it has neither (deleted). */
+export function criterionName(criterion: NamedCriterion): string | null {
+  if (criterion.ordinal != null) return `Criterion ${criterion.ordinal}`;
+  return criterion.text?.trim() || null;
 }
 
 export function crossingSummary(batch: CrossingBatch): string {
   const count = batch.rows.length;
-  if (batch.out) return `${count} ${crossingNoun(batch.kind, count)} to take out of ${batch.sourceTitle}`;
+  if (batch.out) {
+    const noun = crossingNoun(batch.kind, count);
+    if (isLive(batch)) return `${count} ${noun} to take out of ${batch.sourceTitle}`;
+    const verdict = batchVerdict(batch);
+    if (verdict === 'APPROVED') return `${count} ${noun} taken out of ${batch.sourceTitle}`;
+    if (verdict === 'REFUSED') return `${count} ${noun} kept in ${batch.sourceTitle}`;
+    return `${count} ${noun} from ${batch.sourceTitle}`;
+  }
   const head = `${count} ${crossingNoun(batch.kind, count)} from ${batch.sourceTitle}`;
-  const keys = batch.rows.flatMap((row) => (row.requestedCriterion ? [row.requestedCriterion.key] : []));
-  if (keys.length === 0) return head;
-  const distinct = new Set(keys).size;
-  return `${head} · for ${distinct === 1 ? 'criterion' : 'criteria'} ${criteriaRange(keys)}`;
+  const distinct = new Map<string, NamedCriterion>();
+  for (const row of batch.rows) {
+    if (row.requestedCriterion) distinct.set(row.requestedCriterion.key, row.requestedCriterion);
+  }
+  const criteria = [...distinct.values()];
+  const ordinals = criteria.flatMap((c) => (c.ordinal != null ? [c.ordinal] : []));
+  const texts = criteria.flatMap((c) => (c.ordinal == null && c.text?.trim() ? [`“${c.text.trim()}”`] : []));
+  const named = new Set(ordinals).size + texts.length;
+  if (named === 0) return head;
+  const parts = [...(ordinals.length ? [criteriaRange(ordinals)] : []), ...texts];
+  return `${head} · for ${named === 1 ? 'criterion' : 'criteria'} ${parts.join(', ')}`;
 }
 
 export function waitingLine(batch: CrossingBatch): string {
@@ -209,15 +325,14 @@ export function subjectTitle(row: ProjectCrossingRow): string {
 export function requestedCriterionLine(row: ProjectCrossingRow): string | null {
   const requested = row.requestedCriterion;
   if (!requested) return null;
-  return `${MOVE_TASK_REQUESTED_CRITERION_LABEL}: ${requested.key}${
-    requested.text == null ? ` — ${MOVE_TASK_CRITERION_GONE}` : ''
-  }`;
+  return `${MOVE_TASK_REQUESTED_CRITERION_LABEL}: ${criterionName(requested) ?? MOVE_TASK_CRITERION_GONE}`;
 }
 
 export function withdrawnCriterionLine(row: ProjectCrossingRow): string | null {
-  return row.withdrawnCriterion
-    ? `${MOVE_TASK_WITHDRAWN_CRITERION_LABEL}: ${row.withdrawnCriterion.key}`
-    : null;
+  const withdrawn = row.withdrawnCriterion;
+  if (!withdrawn) return null;
+  const name = criterionName(withdrawn);
+  return name ? `${MOVE_TASK_WITHDRAWN_CRITERION_LABEL}: ${name}` : null;
 }
 
 /** Each distinct reason given, once. */

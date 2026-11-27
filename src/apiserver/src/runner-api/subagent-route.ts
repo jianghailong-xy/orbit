@@ -1,9 +1,11 @@
 import { basename } from 'node:path';
 import {
   AgentProvider,
+  antigravityBaseModel,
   credentialEngines,
   ENGINE_CLI_NAMES,
   type ProviderModelTier,
+  type RunnerModelInfo,
   type ProviderTierRow,
   type SubagentTiersResponse,
   providerPreset,
@@ -25,8 +27,11 @@ import { isPoolCandidate } from '../providers/pool-admission';
 import { followsRuntimeCatalog, withPreset } from '../providers/preset-overlay';
 import { COMPATIBILITY_GUARD_SLUGS } from '../providers/providers.service';
 import {
+  familyNewest,
   familyTier,
   MODEL_ROUTING_LEVELS,
+  type BuiltinModelTiers,
+  type ModelRoutingLevel,
   routeSubagent,
   subagentEngineRows,
   type ModelRoutingEngineState,
@@ -37,13 +42,35 @@ import {
   type SubagentProvider,
   type SubagentRoutingDecision,
   type SubagentRoutingInput,
+  type RoutingHealthEntry,
 } from '../tasks/model-routing';
+import { subjectKey } from '../providers/account-health';
 import { engineState, fullestWindow, quotaTiming, taskRouteReads } from '../tasks/task-route-decision';
+import { readModelIdentities, type ModelSighting } from './model-identity';
+import { addTally, emptyTally, qualityOf, readModelQuality, type QualityTally } from './model-quality';
+import { modelLabels } from './subagent-run';
 
 /** The account-level preference listing the providers SubAgents may not run on (docs/subagent-design.md §6.2). */
 export function subagentBlockedProviders(preferences: unknown): string[] {
   const list = (preferences as { subagentBlockedProviders?: unknown } | null)?.subagentBlockedProviders;
   return Array.isArray(list) ? list.filter((slug): slug is string => typeof slug === 'string') : [];
+}
+
+/** The account-level preference holding the owner's tiers for built-in engines' models, engine → model → tier
+ *  (docs/subagent-design.md §7), with anything that is not a tier dropped. Written only by
+ *  PATCH /providers/builtin/:engine/model-tier. */
+export function builtinModelTiers(preferences: unknown): BuiltinModelTiers {
+  const map = (preferences as { builtinModelTiers?: unknown } | null)?.builtinModelTiers;
+  const tiers: Record<string, Record<string, ModelRoutingLevel>> = {};
+  if (!map || typeof map !== 'object' || Array.isArray(map)) return tiers;
+  for (const [engine, models] of Object.entries(map)) {
+    if (!models || typeof models !== 'object' || Array.isArray(models)) continue;
+    for (const [model, tier] of Object.entries(models)) {
+      const level = MODEL_TIERS.find((entry) => entry === tier);
+      if (level) (tiers[engine] ??= {})[model] = level;
+    }
+  }
+  return tiers;
 }
 
 /** A tier row of a key's own list, with where its tier came from (the Tier column reads it; the router ignores it). */
@@ -116,6 +143,8 @@ export interface SubagentRouteArgs {
   /** routeSubagent's `runnerLabel` and `strictNamedModel`, which a remote SubAgent sets. */
   runnerLabel?: string;
   strictNamedModel?: boolean;
+  /** The owner's live account health by subject key (routingHealthIndex); absent, it is read here. */
+  health?: ReadonlyMap<string, RoutingHealthEntry[]>;
 }
 
 /** A built-in provider's credential, as the region check reads it: the engine's own sign-in, OpenCode's own
@@ -135,6 +164,8 @@ export async function subagentRouteInput(
   const owner = await reads.owner();
   const agent = args.workspaceId ? await reads.workspace(args.workspaceId) : null;
   const runner = args.runnerId ? await reads.runner(args.runnerId) : null;
+  // What account health learned of every account the owner has, read once (docs/routing-account-health-design.md §7.1).
+  const healthIndex = args.health ?? await reads.health();
 
   // The runner's word on each engine; for every engine that keeps accounts, the account a run there would use, as a
   // task run reads it: its sign-in and its quota.
@@ -142,7 +173,7 @@ export async function subagentRouteInput(
   const states: Record<string, ModelRoutingEngineState> = {};
   if (agent && runner) {
     for (const engine of ACCOUNT_ENGINES) {
-      states[engine] = engineState(engine, agent, runner, reads.now);
+      states[engine] = engineState(engine, agent, runner, reads.now, healthIndex);
     }
   }
   const engines: Record<string, SubagentEngineReport> | null = health
@@ -167,16 +198,21 @@ export async function subagentRouteInput(
     ...(states[slug] ? {
       account: {
         quota: states[slug].quota ?? null, paused: states[slug].paused === true, unreadable: states[slug].quotaUnread === true,
-        expiresAt: states[slug].expiresAt ?? null, nearLimit: states[slug].nearLimit === true,
+        expiresAt: states[slug].expiresAt ?? null, expiryWindowMins: states[slug].expiryWindowMins ?? null,
+        nearLimit: states[slug].nearLimit === true,
         opusUtilization: states[slug].opusUtilization ?? null,
+        ...(states[slug].health ? { health: states[slug].health } : {}),
       },
     } : {}),
   }));
 
   const catalog = (runner?.modelCatalog ?? null) as RunnerModelCatalog | null;
-  const configured = await readConfiguredProviders(db, ownerId, { catalog, planUsage: args.planUsage ?? null, now: reads.now });
+  const configured = await readConfiguredProviders(db, ownerId, {
+    catalog, planUsage: args.planUsage ?? null, now: reads.now, health: healthIndex,
+  });
 
   const optimizeFor: ModelRoutingOptimizeFor = optimizeForOf(owner);
+  const ownerTiers = builtinModelTiers(owner?.preferences);
   const level = (value: unknown) => (['S', 'M', 'L', 'XL'] as const).find((entry) => entry === value) ?? null;
   return {
     type: dto.type,
@@ -191,6 +227,8 @@ export async function subagentRouteInput(
     engines,
     modelCatalog: catalog,
     runtimeDefaultModels: sanitizeRuntimeDefaultModels(runner?.runtimeDefaultModels),
+    now: reads.now.getTime(),
+    ...(Object.keys(ownerTiers).length > 0 ? { builtinModelTiers: ownerTiers } : {}),
     ...(args.runnerLabel ? { runnerLabel: args.runnerLabel } : {}),
     ...(args.strictNamedModel ? { strictNamedModel: true } : {}),
   };
@@ -213,8 +251,16 @@ interface ConfiguredProvider {
 async function readConfiguredProviders(
   db: Prisma.TransactionClient,
   ownerId: string,
-  { catalog, planUsage, now }: { catalog: RunnerModelCatalog | null; planUsage: SubagentPlanUsageReader | null; now: Date },
+  { catalog, planUsage, now, health }: {
+    catalog: RunnerModelCatalog | null; planUsage: SubagentPlanUsageReader | null; now: Date;
+    /** Live account health by subject key; absent, every account reads healthy (the Tier column's view). */
+    health?: ReadonlyMap<string, RoutingHealthEntry[]>;
+  },
 ): Promise<ConfiguredProvider[]> {
+  const healthOf = (key: string) => {
+    const entries = health?.get(key);
+    return entries?.length ? { health: entries } : {};
+  };
   const rows = await db.modelProvider.findMany({
     where: { enabled: true, slug: { notIn: COMPATIBILITY_GUARD_SLUGS }, OR: [{ ownerId }, { ownerId: null }] },
     orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }, { id: 'asc' }],
@@ -234,6 +280,8 @@ async function readConfiguredProviders(
     // A subscription token's quota is the credential's own, read through the same cache as a pool member's.
     const usage = subscription ? planUsage?.snapshot(row) ?? null : null;
     const standing = subscription ? planUsage?.usageStanding(row) ?? null : null;
+    // A key's health is one row for the owner (§6.1): `provider:<id>`, on a subscription token and a metered key alike.
+    const keyHealth = healthOf(subjectKey({ type: 'provider', providerId: row.id }));
     const provider: SubagentProvider = {
       slug: row.slug,
       billing: subscription ? 'subscription' : 'key',
@@ -243,8 +291,9 @@ async function readConfiguredProviders(
           ...quotaTiming(usage, now),
           refused: standing === 'KEY_REFUSED',
           unreadable: usage === null || standing === 'USAGE_UNKNOWN',
+          ...keyHealth,
         },
-      } : {}),
+      } : 'health' in keyHealth ? { account: keyHealth } : {}),
       inScope: usable.has(row.id),
       credential,
       engines: runsOn.map((engine, index) => (
@@ -295,6 +344,7 @@ async function readConfiguredProviders(
           ...quotaTiming(usage, now),
           paused: later(login.pausedUntil) || later(login.throttledUntil),
           unreadable: !spent && !usage,
+          ...healthOf(subjectKey({ type: 'pool-login', poolId: pool.id, accountId: login.accountId })),
         };
       })
       : pool.members
@@ -310,6 +360,7 @@ async function readConfiguredProviders(
             paused: later(row.pausedUntil),
             refused: standing === 'KEY_REFUSED',
             unreadable: standing === 'USAGE_UNKNOWN' || usage === null,
+            ...healthOf(subjectKey({ type: 'provider', providerId: row.id })),
           };
         });
     return { label: pool.label, kind: 'pool', providerId: null,
@@ -319,24 +370,52 @@ async function readConfiguredProviders(
   return [...keys, ...poolProviders];
 }
 
+/** Marks each untiered model of a built-in engine whose family's newest model is tiered there: routing uses the
+ *  newest on purpose, so the page reads "Older · uses <newest>", not "Not set". An owner's tier makes a model
+ *  tiered, so it is never marked. Display only; no routing decision reads this. */
+export function markSuperseded(models: readonly ProviderModelTier[], catalog: readonly RunnerModelInfo[]): void {
+  for (const model of models) {
+    if (model.levels.length > 0) continue;
+    const newest = familyNewest(model.model, catalog);
+    if (newest && newest !== model.model && models.some((row) => row.model === newest && row.levels.length > 0)) {
+      model.supersededBy = newest;
+    }
+  }
+}
+
 /**
  * The Providers page's Tier column and the SubAgents settings' provider list (docs/subagent-design.md §7): every
  * provider routeSubagent considers, in its order, each with the tiers the router reads for its models. The
  * runner catalogue is the owner's most recently heard-from runner's that reported one, so the built-in table's
- * rows name the models a SubAgent would get there. Built-in engines without a tier table list no models:
- * nothing of theirs is routed onto. Reads only.
+ * rows name the models a SubAgent would get there. A built-in engine lists every model of that catalogue, each
+ * the owner's to tier (PATCH /providers/builtin/:engine/model-tier); a key lists its own models. Reads only.
+ *
+ * A model's Quality is pooled over every provider and engine it ran on, by its identity (model-identity.ts), so
+ * `claude-sonnet-5-5` reads the same on Claude Code and on Antigravity. `learn` is handed every model id the view
+ * saw, for the ids nobody has decided to be asked about off the request (learnModelIdentities).
  */
-export async function subagentTierView(db: Prisma.TransactionClient, ownerId: string, now = new Date()): Promise<SubagentTiersResponse> {
+export async function subagentTierView(
+  db: Prisma.TransactionClient,
+  ownerId: string,
+  now = new Date(),
+  learn?: (sightings: ModelSighting[]) => void,
+): Promise<SubagentTiersResponse> {
   const runner = await db.runner.findFirst({
     where: { ownerId, modelCatalog: { not: Prisma.DbNull } },
     orderBy: [{ lastHeartbeatAt: { sort: 'desc', nulls: 'last' } }, { id: 'desc' }],
     select: { modelCatalog: true, runtimeDefaultModels: true },
   });
+  const owner = await db.user.findUnique({ where: { id: ownerId }, select: { preferences: true } });
+  const ownerTiers = builtinModelTiers(owner?.preferences);
   const catalogInput = {
     modelCatalog: (runner?.modelCatalog ?? null) as RunnerModelCatalog | null,
     runtimeDefaultModels: sanitizeRuntimeDefaultModels(runner?.runtimeDefaultModels),
+    builtinModelTiers: ownerTiers,
   };
   const configured = await readConfiguredProviders(db, ownerId, { catalog: catalogInput.modelCatalog, planUsage: null, now });
+  // Display only (docs/subagent-design.md §7.1): read beside the tiers, never handed to routeSubagent.
+  const tallies = await readModelQuality(db, ownerId, now);
+  const labels = modelLabels([], catalogInput.modelCatalog);
   const builtins: ConfiguredProvider[] = Object.values(AgentProvider).map((slug) => ({
     label: ENGINE_CLI_NAMES[slug],
     kind: 'key',
@@ -345,27 +424,35 @@ export async function subagentTierView(db: Prisma.TransactionClient, ownerId: st
       slug, billing: isLoginEngine(slug) ? 'subscription' : 'key', inScope: true, credential: builtinCredential(slug), engines: [{ engine: slug }],
     },
   }));
-  return {
-    providers: [...builtins, ...configured]
+  const label = (model: string) => labels.get(model) ?? model;
+  const providers = [...builtins, ...configured]
       .filter(({ provider }) => provider.inScope)
       .map((entry, index): ProviderTierRow => {
         const builtin = index < builtins.length;
         const models = new Map<string, ProviderModelTier>();
         for (const engine of entry.provider.engines) {
-          // A built-in engine lists only its tiered rows: its untiered ones would read Not set, a tier the owner
-          // cannot give it.
           const rows = subagentEngineRows(engine, catalogInput) as Array<SubagentModelRow & Partial<KeyModelRow>>;
-          for (const row of engine.models ? rows : rows.filter((entry) => entry.level)) {
+          // A built-in engine lists its whole catalogue, the models no row tiers as Not set; a key on that catalogue
+          // lists only its tiered rows, since the tier is the engine's to set, not the key's.
+          const listed: Array<SubagentModelRow & Partial<KeyModelRow>> = builtin
+            ? [...rows, ...(catalogInput.modelCatalog?.[engine.engine as AgentProvider] ?? [])
+              .filter((model) => !rows.some((row) => row.model === model.value))
+              .map((model): SubagentModelRow => ({ model: model.value, effort: null, level: null }))]
+            : engine.models ? rows : rows.filter((row) => row.level);
+          const owned = engine.models ? undefined : ownerTiers[engine.engine];
+          for (const row of listed) {
             const seen = models.get(row.model) ?? {
               model: row.model,
               levels: [],
               source: null,
               editable: false,
               outputPricePerMTok: null,
+              // Pooled by identity below, once every row is known.
+              quality: qualityOf(emptyTally(), label),
             };
             if (row.level && !seen.levels.includes(row.level)) seen.levels.push(row.level);
-            seen.source = seen.source ?? row.source ?? (row.level ? 'catalogue' : null);
-            seen.editable = seen.editable || (row.editable === true && entry.providerId !== null);
+            seen.source = seen.source ?? row.source ?? (owned?.[row.model] ? 'owner' : row.level ? 'catalogue' : null);
+            seen.editable = seen.editable || builtin || (row.editable === true && entry.providerId !== null);
             seen.outputPricePerMTok = seen.outputPricePerMTok ?? row.outputPricePerMTok ?? null;
             models.set(row.model, seen);
           }
@@ -373,14 +460,45 @@ export async function subagentTierView(db: Prisma.TransactionClient, ownerId: st
         for (const model of models.values()) {
           model.levels.sort((a, b) => MODEL_ROUTING_LEVELS.indexOf(a) - MODEL_ROUTING_LEVELS.indexOf(b));
         }
+        // A built-in engine's older family models sort after its tiered ones and before the plain Not set ones.
+        if (builtin) markSuperseded([...models.values()], catalogInput.modelCatalog?.[entry.provider.slug as AgentProvider] ?? []);
+        const ordered = [...models.values()];
+        if (builtin) {
+          const rank = (model: ProviderModelTier) => (model.levels.length > 0 ? 0 : model.supersededBy ? 1 : 2);
+          ordered.sort((a, b) => rank(a) - rank(b));
+        }
         return {
           slug: entry.provider.slug,
           label: entry.label,
           kind: builtin ? 'builtin' : entry.kind,
           providerId: entry.providerId,
           billing: entry.provider.billing,
-          models: [...models.values()],
+          models: ordered,
         };
-      }),
-  };
+      });
+
+  const listed = providers.flatMap((provider) => provider.models.map((model) => ({ provider: provider.slug, model })));
+  const ran = [...tallies].map(([key, tally]) => {
+    const [provider, engine, model] = key.split('\u0000');
+    // Antigravity's ids may carry their level (`claude-opus-5-5-high`): the same model as its base row. Only here, where
+    // the engine is known: elsewhere a trailing `-max` is part of the name (`qwen3.7-max`).
+    return { provider, model: engine === AgentProvider.ANTIGRAVITY ? antigravityBaseModel(model) : model, tally };
+  });
+  const identities = await readModelIdentities(db, [...listed.map(({ model }) => model.model), ...ran.map(({ model }) => model)]);
+  const pooled = new Map<string, QualityTally>();
+  for (const { model, tally } of ran) {
+    const key = identities.get(model)!.key;
+    const sum = pooled.get(key) ?? emptyTally();
+    addTally(sum, tally);
+    pooled.set(key, sum);
+  }
+  for (const { model } of listed) {
+    model.identity = identities.get(model.model)!;
+    model.quality = qualityOf(pooled.get(model.identity.key) ?? emptyTally(), label);
+  }
+  learn?.([
+    ...listed.map(({ provider, model }) => ({ model: model.model, label: labels.get(model.model) ?? null, provider })),
+    ...ran.map(({ provider, model }) => ({ model, provider })),
+  ]);
+  return { providers };
 }

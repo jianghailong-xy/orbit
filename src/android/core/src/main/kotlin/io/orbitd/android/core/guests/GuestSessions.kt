@@ -5,9 +5,11 @@ import io.orbitd.android.core.auth.OrbitApi
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.net.ApiRequest
 import io.orbitd.android.core.net.HttpMethod
+import io.orbitd.android.core.protocol.SessionFacts
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.RunEvent
 import io.orbitd.android.core.realtime.SseFrame
+import io.orbitd.android.directory.SessionDisplay
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -37,9 +39,14 @@ data class GuestSessionSummary(
     val lifecycleState: String? = null,
     val addedAt: String = "",
     val lastTurnAt: String? = null,
+    val facts: JsonObject = JsonObject(emptyMap()),
 ) {
     /** How the session stands, read from the row's own fields the way the guest view reads its head. */
-    val state: GuestState get() = GuestState(runStatus = status, sessionState = sessionState, lifecycleState = lifecycleState)
+    val state: GuestState get() = GuestState(runStatus = status, sessionState = sessionState, lifecycleState = lifecycleState,
+        phase = SessionFacts.phase(facts), released = SessionFacts.released(facts), lastTurnOutcome = SessionFacts.lastTurnOutcome(facts),
+        waitingOn = SessionFacts.waitingOn(facts), endReason = SessionFacts.endReason(facts), workFinished = SessionFacts.workFinished(facts),
+        activity = SessionDisplay.facts(facts).activity, pendingApprovals = SessionDisplay.facts(facts).pendingApprovals,
+        runningBgCount = SessionDisplay.facts(facts).runningBgCount)
 }
 
 /** The head fields the guest door answers beside its events, and whether the agent waits on its owner. */
@@ -49,6 +56,17 @@ data class GuestState(
     val sessionState: String? = null,
     val lifecycleState: String? = null,
     val waitingOnOwner: Boolean = false,
+    // The session facts (contracts/session-state.contract.json); null from an older server or a word this build does not know.
+    val phase: String? = null,
+    val released: Boolean? = null,
+    val lastTurnOutcome: String? = null,
+    val waitingOn: String? = null,
+    val endReason: String? = null,
+    val workFinished: Boolean? = null,
+    // What a mark reads beside the facts, where the payload sends it.
+    val activity: String? = null,
+    val pendingApprovals: Int = 0,
+    val runningBgCount: Int = 0,
 )
 
 /** The guest view's root (`GET /guest-sessions/:id`): who shared it, how it stands, and the newest page of its transcript. */
@@ -82,13 +100,17 @@ object GuestWire {
         sessionState = obj.string("sessionState"),
         lifecycleState = obj.string("lifecycleState") ?: obj.string("filingState"),
         waitingOnOwner = obj.bool("waitingOnOwner") ?: false,
+        phase = SessionFacts.phase(obj), released = SessionFacts.released(obj), lastTurnOutcome = SessionFacts.lastTurnOutcome(obj),
+        waitingOn = SessionFacts.waitingOn(obj), endReason = SessionFacts.endReason(obj), workFinished = SessionFacts.workFinished(obj),
+        activity = SessionDisplay.facts(obj).activity, pendingApprovals = SessionDisplay.facts(obj).pendingApprovals,
+        runningBgCount = SessionDisplay.facts(obj).runningBgCount,
     )
 
     fun list(bytes: ByteArray): List<GuestSessionSummary> = (root(bytes)["sessions"] as? JsonArray).orEmpty()
         .filterIsInstance<JsonObject>().mapNotNull { row ->
             val id = row.string("id") ?: return@mapNotNull null
             GuestSessionSummary(id, row.string("title").orEmpty(), row.string("ownerName").orEmpty(), row.string("status"),
-                row.string("sessionState"), row.string("lifecycleState"), row.string("addedAt").orEmpty(), row.string("lastTurnAt"))
+                row.string("sessionState"), row.string("lifecycleState"), row.string("addedAt").orEmpty(), row.string("lastTurnAt"), row)
         }
 
     fun session(bytes: ByteArray): GuestSession = root(bytes).let {

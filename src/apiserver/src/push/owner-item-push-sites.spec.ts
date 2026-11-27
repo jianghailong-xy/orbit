@@ -49,11 +49,15 @@ const OWNER_ITEM_WRITERS: Record<string, string> = {
     + '(§4.6 X-E5), whose items are opened by projects/open-item-escalation.service.ts and announced '
     + 'there',
   'projects/project-fuse.service.ts': 'evaluate (F-T1), which announces after its transaction',
+  'projects/project-orphan-sweep.service.ts':
+    'openEvidenceItem: the EVIDENCE_UNDECIDED item for a revision nobody can decide, or that was handed '
+    + 'to nobody, still unanswered the project\'s window after its notice; escalateEvidence announces it '
+    + 'after the commit',
   'projects/owner-decision-signal.ts': 'a READ: it counts the owner’s items, it opens none',
   'runner-api/integration-job-relay.ts':
     'no item of its own: the string labels the timeline fact (`HANDED_TO`, §2.9 LS2) that this '
     + 'result handed the owner the card `recordPromotionApproval` opened in the same transaction — '
-    + 'the writer is project-open-item.ts, announced by runner-api.controller.ts after the commit',
+    + 'the writer is project-open-item.ts, announced by integration-aftermath.ts after the commit',
   'projects/project-done-request.ts':
     'a READ: the done check reads the owner’s open items to refuse over them, it opens none',
   'auth/tenant-isolation-fixtures.ts':
@@ -67,10 +71,14 @@ const ANNOUNCERS: Record<string, string> = {
     'a question filed for the owner (R9), an item handed over when nobody can read it (X-D6), and '
     + 'a failure opened with the owner on it already (X-C3)',
   'projects/project-fuse.service.ts': 'the coordinator pausing itself (F-T1)',
+  'projects/project-orphan-sweep.service.ts':
+    'the evidence nobody could decide, or nobody was handed, that waited out the window after its notice',
   'projects/open-item-escalation.service.ts':
     'the clock handing an item over (X-E1), and the one it opens for a claim whose runner stopped '
     + 'reporting (X-E5)',
-  'runner-api/runner-api.controller.ts': 'the merge approval an integration result opened (M-T2)',
+  'runner-api/integration-aftermath.ts':
+    'the merge approval an integration result opened (M-T2), after a runner\'s result or the pull request door\'s '
+    + 'landing (docs/design/protected-branch-landing.md §4.2)',
 };
 
 function sources(): Array<{ path: string; text: string }> {

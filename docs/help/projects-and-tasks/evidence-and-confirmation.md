@@ -2,18 +2,18 @@
 title: Evidence and confirmation
 summary: How an agent shows a task is done, and how you confirm it or send it back.
 category: projects-and-tasks
-routes: [/waiting, /tasks/:id, /projects/:id, /projects/:id/tasks/:taskId]
+routes: [/tasks/:id, /projects/:id, /projects/:id/tasks/:taskId]
 errors: []
 platforms: [web, macos, ios, android]
 common: false
-updated: 2026-11-14
+updated: 2026-11-17
 ---
 
 When an agent says a task is done, it attaches evidence: the commands it ran, their output, screenshots, commits. A task is not done because an agent says so; it is done when its definition of done is shown to hold.
 
 ## Where you see it
 
-Tasks waiting for you appear in [Waiting on you](orbit:/waiting) with a **Review** button. In a project with a coordinator, the coordinator usually decides first and only hands you the ones that need a person.
+The confirmation card appears in the task's session, and that session's row in the session list gets an amber dot and **Confirm for you**. A notification or link opens the session at the card. In a project with a coordinator, the coordinator usually decides first and only hands you the ones that need a person.
 
 ## Confirm or send it back
 

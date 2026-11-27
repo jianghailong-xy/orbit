@@ -94,6 +94,7 @@ final class OwnerItemCardsTests: XCTestCase {
             ("YOU_WITHDREW", CoordinatorQuestions.youWithdrew),
             ("YOUR_NOTE", CoordinatorQuestions.yourNote),
             ("VIEW_DETAILS", CoordinatorQuestions.viewDetails),
+            ("HIDE_DETAILS", CoordinatorQuestions.hideDetails),
         ]
         for (name, mine) in pairs {
             XCTAssertEqual(mine, try declaration(web, name),

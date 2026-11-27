@@ -218,11 +218,17 @@ public struct ProjectReadyToRun: Codable, Equatable, Sendable {
         public let pausedList: PausedList?
         /// How much unfinished work waits on this task; nil when the project is too large to rank.
         public let downstreamBlocked: Int?
+        /// Why a running row runs, and whether its background jobs went quiet (`ProjectPage.runningLabel`).
+        public let runReason: String?
+        public let runStalled: Bool?
 
         public var id: String { taskId }
 
         public init(taskId: String, title: String, status: String = "OPEN", runState: RunState = .ready,
-                    sessionId: String? = nil, pausedList: PausedList? = nil, downstreamBlocked: Int? = 0) {
+                    sessionId: String? = nil, pausedList: PausedList? = nil, downstreamBlocked: Int? = 0,
+                    runReason: String? = nil, runStalled: Bool? = nil) {
+            self.runReason = runReason
+            self.runStalled = runStalled
             self.taskId = taskId
             self.title = title
             self.status = status
@@ -241,6 +247,8 @@ public struct ProjectReadyToRun: Codable, Equatable, Sendable {
             sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId)
             pausedList = try? c.decodeIfPresent(PausedList.self, forKey: .pausedList)
             downstreamBlocked = try c.decodeIfPresent(Int.self, forKey: .downstreamBlocked)
+            runReason = try? c.decodeIfPresent(String.self, forKey: .runReason)
+            runStalled = try? c.decodeIfPresent(Bool.self, forKey: .runStalled)
         }
     }
 

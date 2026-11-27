@@ -348,13 +348,13 @@ describe('an engine whose Default is removed from Orbit', () => {
     expect(removedLine(page)?.querySelector('.re-removed-line')?.textContent).toBe('Default · ~/.codex isn’t used by Orbit');
 
     // Its Sign in is its own account's, by id, not the engine's.
+    // The press starts it: there is no second button to press.
     await click(button(workRow, 'Sign in'));
-    await click(button(page, 'Sign in to Codex'));
-    expect(
+    await vi.waitFor(() => expect(
       apiMock.mock.calls
         .filter(([path, options]) => path === `/runners/${RUNNER_ID}/login` && options?.method === 'POST')
         .map(([, options]) => options?.body),
-    ).toEqual([{ engine: 'codex', account: WORK.id }]);
+    ).toEqual([{ engine: 'codex', account: WORK.id }]));
   });
 
   it('draws the one remaining account’s quota from its own report, and Automatic starting there', () => {

@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { mock, test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import {
@@ -31,6 +32,7 @@ import { readProjectListAttention } from './project-list-attention';
 import { readOwnerDecisionSignals } from './owner-decision-signal';
 import { readOpenListVersion } from '../sessions/open-list-version';
 import '../test-support/dequeue-under-lease';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * The one clock this contract adds (docs/project-integration-line-contract.md §4.6): an exception
@@ -254,7 +256,7 @@ async function world(stack: Stack, label: string): Promise<World> {
       title: `coordinator: ${label}`,
       prompt: `coordinator: ${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
       numTurns: 1,
@@ -441,7 +443,7 @@ async function agentWork(db: PrismaClient): Promise<AgentWork> {
 async function handTurn(stack: Stack, w: World): Promise<{ turnId: string; content: string }> {
   await stack.db.session.update({
     where: { id: w.coordinatorSessionId },
-    data: { status: RunStatus.RUNNING },
+    data: { turnState: 'IN_FLIGHT' },
   });
   const handed = await (stack.api as unknown as {
     dequeueTurn(
@@ -503,7 +505,7 @@ test('an item unhandled for the default two hours escalates to the owner', { ski
     const item = await failedTask(stack, w, 'default-window');
     await handTurn(stack, w);
     // A live coordinator keeps a taken item; a failed run exercises the remaining escalation clock.
-    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { turnState: null, lastTurnOutcome: 'FAILED', finishedAt: new Date()} });
     assert.equal(frozenWindowMs(item), DEFAULT_WINDOW_SECONDS * 1_000,
       'the window is frozen into the item when it is opened');
 
@@ -554,9 +556,9 @@ test('a project-specific escalation time is honoured', { skip, timeout: 180_000 
     const long = await failedTask(stack, patient, 'default-beside-short');
     await handTurn(stack, w);
     // A live coordinator keeps a taken item; a failed run exercises the remaining escalation clock.
-    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { turnState: null, lastTurnOutcome: 'FAILED', finishedAt: new Date()} });
     await handTurn(stack, patient);
-    await stack.db.session.update({ where: { id: patient.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
+    await stack.db.session.update({ where: { id: patient.coordinatorSessionId }, data: { turnState: null, lastTurnOutcome: 'FAILED', finishedAt: new Date()} });
     assert.equal(frozenWindowMs(short), SHORT_WINDOW_SECONDS * 1_000,
       'the item froze this project\'s window, not the default');
     assert.equal(frozenWindowMs(long), DEFAULT_WINDOW_SECONDS * 1_000);
@@ -591,7 +593,7 @@ test('escalation writes no conversation_turn, session or wake row', { skip, time
     const item = await failedTask(stack, w, 'people-only');
     await handTurn(stack, w);
     // A live coordinator keeps a taken item; a failed run exercises the remaining escalation clock.
-    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { turnState: null, lastTurnOutcome: 'FAILED', finishedAt: new Date()} });
     await quiet(stack.db, w.coordinatorSessionId, 3 * 60 * MINUTE);
     await age(stack.db, item, 3 * 60 * MINUTE);
 
@@ -623,7 +625,7 @@ test('an item inside its window does not escalate', { skip, timeout: 180_000 }, 
     const item = await failedTask(stack, w, 'inside-window');
     await handTurn(stack, w);
     // A live coordinator keeps a taken item; a failed run exercises the remaining escalation clock.
-    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { turnState: null, lastTurnOutcome: 'FAILED', finishedAt: new Date()} });
     await quiet(stack.db, w.coordinatorSessionId, 2 * 60 * MINUTE - MINUTE);
     await age(stack.db, item, 2 * 60 * MINUTE - MINUTE);
 
@@ -758,7 +760,7 @@ test('an item whose coordinator went down after taking it escalates a window lat
       // Its run fails and nobody ends it: down, not over (§4.4 X-D6).
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId },
-        data: { status: RunStatus.FAILED, endReason: null },
+        data: { turnState: null, lastTurnOutcome: 'FAILED', finishedAt: new Date(), endReason: null },
       });
 
       const told: Array<{ method: string; args: unknown[] }> = [];
@@ -857,8 +859,9 @@ for (const state of ['retryAt', 'PENDING', 'RUNNING'] as const) {
         await handTurn(stack, w);
       }
       await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: {
-        status: state === 'retryAt' ? RunStatus.FAILED : RunStatus[state],
-        ...(state === 'retryAt' ? { retryAt: new Date(Date.now() + 60 * MINUTE) } : {}),
+        turnState: turnStateOfWord(state === 'retryAt' ? RunStatus.FAILED : RunStatus[state]),
+        ...(state === 'retryAt'
+          ? { finishedAt: new Date(), lastTurnOutcome: 'FAILED', retryAt: new Date(Date.now() + 60 * MINUTE) } : {}),
       } });
       const item = await failedTask(stack, w, `queued-${state}`);
       await age(stack.db, item, 24 * 60 * MINUTE);
@@ -888,7 +891,7 @@ test('an undelivered ITEM whose coordinator is down with no retry reaches the ow
     const stack = await connect();
     try {
       const w = await world(stack, 'down-no-retry');
-      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { turnState: null, lastTurnOutcome: 'FAILED', finishedAt: new Date()} });
       const item = await failedTask(stack, w, 'down-no-retry');
       assert.equal((await deadline(stack, item.id))?.getTime(), item.escalateAt!.getTime(),
         'the window runs from when the item opened');
@@ -997,7 +1000,8 @@ for (const state of ['FAILED', 'retryAt', 'completed', 'trash', 'missing'] as co
           where: { id: w.projectId }, data: { coordinatorSessionId: null },
         });
         else await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: {
-          status: state === 'FAILED' ? RunStatus.FAILED : RunStatus.PENDING,
+          turnState: turnStateOfWord(state === 'FAILED' ? RunStatus.FAILED : RunStatus.PENDING),
+          ...(state === 'FAILED' ? { finishedAt: new Date(), lastTurnOutcome: 'FAILED' } : {}),
           endReason: null,
           retryAt: state === 'retryAt' ? retryAt : null,
         } });
@@ -1027,7 +1031,7 @@ for (const state of ['FAILED', 'retryAt', 'completed', 'trash', 'missing'] as co
 
         // Recovery uses the existing turn-end drain, including concurrent triggers.
         await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: {
-          status: RunStatus.AWAITING_INPUT, endReason: null, retryAt: null,
+          turnState: null, finishedAt: null, endReason: null, retryAt: null,
         } });
         await Promise.all([
           stack.openItems.deliverOwedTo(w.coordinatorSessionId),
@@ -1070,7 +1074,7 @@ for (const ending of ['completed', 'trash', 'replaced', 'automatic-off'] as cons
             data: {
               ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId,
               assignedRunnerId: w.runnerId, title: 'replacement coordinator', prompt: 'coordinate',
-              provider: 'claude', status: RunStatus.AWAITING_INPUT,
+              provider: 'claude', turnState: null,
               dispatchOrigin: SessionDispatchOrigin.USER, titleManagedByProject: true,
             },
           });

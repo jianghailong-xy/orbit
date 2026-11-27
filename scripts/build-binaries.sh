@@ -79,7 +79,7 @@ fi
 # A Developer ID signature for the darwin binaries (docs/release-process.md, "macOS runner
 # signature"). The Go linker signs a darwin binary ad hoc, as "a.out", and macOS files a user's
 # privacy (TCC) answers for such a binary under its code hash, which every release changes: each
-# update asked for Documents, Desktop and the rest all over again. Signed under one identifier by
+# update asked for Drive, Desktop and the rest all over again. Signed under one identifier by
 # one team, every release meets the same designated requirement, and the answers carry over.
 # ORBIT_MACOS_SIGNING_P12 names the identity's .p12 and ORBIT_MACOS_SIGNING_PASSWORD_FILE a file
 # whose first line is its password; nothing here prints either. Unset, nothing is signed.

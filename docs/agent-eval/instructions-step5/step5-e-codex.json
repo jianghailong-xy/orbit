@@ -1,0 +1,2368 @@
+{
+  "reportVersion": 1,
+  "kind": "orbit.agent-contract-eval",
+  "generatedAt": "2026-11-24T16:03:15Z",
+  "source": {
+    "repoSha": "fe3f65a4aa",
+    "cliVersion": "dev"
+  },
+  "contract": {
+    "contractVersion": "1.13.0",
+    "primerVersion": "1.8.0",
+    "catalogVersion": "1.11.0",
+    "catalogHash": "7a71aec6c6b29fa0e10151973dee12f00c337e3971eed759045aff0393829fc6",
+    "guideVersion": "1.1.0"
+  },
+  "suite": {
+    "hash": "732385c0991c5f94c5cb0037c3cfee216c10886e9808618f3a359275b2a35ecd",
+    "scenarioHash": "3551e52e6a9aba362cb5eca571c988773d0651480b10426f2239023b61b79057",
+    "graderVersion": 7,
+    "scenarios": [
+      "E1-record-task",
+      "E1-record-task/acceptEdits",
+      "E1-record-task/dontAsk",
+      "E1-record-task/auto",
+      "E1-record-task/bypassPermissions",
+      "E2-private-plan",
+      "E3-create-no-start",
+      "E3-create-no-start/owner-starts",
+      "E4-batch-plan",
+      "E5-read-only-project",
+      "E5-read-only-project/plan",
+      "E6-immediate-delegation",
+      "E7-no-orchestration",
+      "E8-compaction-recovery",
+      "E8-compaction-recovery/resume",
+      "X1-mcp-missing-cli-fallback",
+      "X2-approval-declined",
+      "X3-approval-chat",
+      "X4-lost-answer-retry",
+      "X5-plan-mode-write",
+      "I1-wait-await",
+      "I2-notify-when-done",
+      "I3-delegate-subagent",
+      "I3-delegate-subagent/background",
+      "I4-reply-file-link",
+      "I5-evidence-file-upload",
+      "I6-progress-report",
+      "I7-wiki-path-search",
+      "I8-settings-propose",
+      "I9-no-project-for-ordinary-work"
+    ]
+  },
+  "matrix": [
+    {
+      "engine": "codex",
+      "engineVersion": "0.172.0",
+      "model": "engine-default",
+      "backend": "live",
+      "supported": false
+    }
+  ],
+  "runs": [
+    {
+      "scenario": "I1-wait-await",
+      "engine": "codex",
+      "engineVersion": "0.172.0",
+      "model": "engine-default",
+      "backend": "live",
+      "modes": [
+        "default"
+      ],
+      "repeat": 1,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I1.expect.await",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I1.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 1,
+        "followUps": 0,
+        "toolCalls": 2,
+        "orbitCalls": 2,
+        "orbitCallsCli": 0,
+        "orbitWrites": 1,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 6244,
+          "toolsList": 367453,
+          "toolsListed": 127,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 23030,
+          "cachedInputTokens": 22144,
+          "outputTokens": 22,
+          "durationMs": 0
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds",
+            "until"
+          ]
+        }
+      ],
+      "durationMs": 12742
+    },
+    {
+      "scenario": "I1-wait-await",
+      "engine": "codex",
+      "engineVersion": "0.172.0",
+      "model": "engine-default",
+      "backend": "live",
+      "modes": [
+        "default"
+      ],
+      "repeat": 2,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I1.expect.await",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I1.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 1,
+        "followUps": 0,
+        "toolCalls": 2,
+        "orbitCalls": 2,
+        "orbitCallsCli": 0,
+        "orbitWrites": 1,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 6244,
+          "toolsList": 367453,
+          "toolsListed": 127,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 24992,
+          "cachedInputTokens": 23936,
+          "outputTokens": 21,
+          "durationMs": 0
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds",
+            "until"
+          ]
+        }
+      ],
+      "durationMs": 12337
+    },
+    {
+      "scenario": "I1-wait-await",
+      "engine": "codex",
+      "engineVersion": "0.172.0",
+      "model": "engine-default",
+      "backend": "live",
+      "modes": [
+        "default"
+      ],
+      "repeat": 3,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I1.expect.await",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I1.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 1,
+        "followUps": 0,
+        "toolCalls": 2,
+        "orbitCalls": 2,
+        "orbitCallsCli": 0,
+        "orbitWrites": 1,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 6244,
+          "toolsList": 367453,
+          "toolsListed": 127,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 22982,
+          "cachedInputTokens": 21888,
+          "outputTokens": 29,
+          "durationMs": 0
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "taskIds",
+            "until"
+          ]
+        }
+      ],
+      "durationMs": 12295
+    },
+    {
+      "scenario": "I1-wait-await",
+      "engine": "codex",
+      "engineVersion": "0.172.0",
+      "model": "engine-default",
+      "backend": "live",
+      "modes": [
+        "default"
+      ],
+      "repeat": 4,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I1.expect.await",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I1.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 1,
+        "followUps": 0,
+        "toolCalls": 2,
+        "orbitCalls": 2,
+        "orbitCallsCli": 0,
+        "orbitWrites": 1,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 6244,
+          "toolsList": 367453,
+          "toolsListed": 127,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 24246,
+          "cachedInputTokens": 23168,
+          "outputTokens": 21,
+          "durationMs": 0
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds",
+            "until"
+          ]
+        }
+      ],
+      "durationMs": 14083
+    },
+    {
+      "scenario": "I1-wait-await",
+      "engine": "codex",
+      "engineVersion": "0.172.0",
+      "model": "engine-default",
+      "backend": "live",
+      "modes": [
+        "default"
+      ],
+      "repeat": 5,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I1.expect.await",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I1.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 1,
+        "followUps": 0,
+        "toolCalls": 2,
+        "orbitCalls": 2,
+        "orbitCallsCli": 0,
+        "orbitWrites": 1,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 6244,
+          "toolsList": 367453,
+          "toolsListed": 127,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 24201,
+          "cachedInputTokens": 23168,
+          "outputTokens": 21,
+          "durationMs": 0
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds",
+            "until"
+          ]
+        }
+      ],
+      "durationMs": 13714
+    },
+    {
+      "scenario": "I1-wait-await",
+      "engine": "codex",
+      "engineVersion": "0.172.0",
+      "model": "engine-default",
+      "backend": "live",
+      "modes": [
+        "default"
+      ],
+      "repeat": 6,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I1.expect.await",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I1.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 1,
+        "followUps": 0,
+        "toolCalls": 2,
+        "orbitCalls": 2,
+        "orbitCallsCli": 0,
+        "orbitWrites": 1,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 6244,
+          "toolsList": 367453,
+          "toolsListed": 127,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 22251,
+          "cachedInputTokens": 13696,
+          "outputTokens": 26,
+          "durationMs": 0
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds",
+            "until"
+          ]
+        }
+      ],
+      "durationMs": 11310
+    },
+    {
+      "scenario": "I1-wait-await",
+      "engine": "codex",
+      "engineVersion": "0.172.0",
+      "model": "engine-default",
+      "backend": "live",
+      "modes": [
+        "default"
+      ],
+      "repeat": 7,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I1.expect.await",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I1.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 1,
+        "followUps": 0,
+        "toolCalls": 2,
+        "orbitCalls": 2,
+        "orbitCallsCli": 0,
+        "orbitWrites": 1,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 6244,
+          "toolsList": 367453,
+          "toolsListed": 127,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 23757,
+          "cachedInputTokens": 22656,
+          "outputTokens": 22,
+          "durationMs": 0
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds",
+            "ttlSeconds",
+            "until"
+          ]
+        }
+      ],
+      "durationMs": 11348
+    },
+    {
+      "scenario": "I1-wait-await",
+      "engine": "codex",
+      "engineVersion": "0.172.0",
+      "model": "engine-default",
+      "backend": "live",
+      "modes": [
+        "default"
+      ],
+      "repeat": 8,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I1.expect.await",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I1.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 1,
+        "followUps": 0,
+        "toolCalls": 2,
+        "orbitCalls": 2,
+        "orbitCallsCli": 0,
+        "orbitWrites": 1,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 6244,
+          "toolsList": 367453,
+          "toolsListed": 127,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 23078,
+          "cachedInputTokens": 22144,
+          "outputTokens": 29,
+          "durationMs": 0
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds",
+            "ttlSeconds",
+            "until"
+          ]
+        }
+      ],
+      "durationMs": 13670
+    },
+    {
+      "scenario": "I1-wait-await",
+      "engine": "codex",
+      "engineVersion": "0.172.0",
+      "model": "engine-default",
+      "backend": "live",
+      "modes": [
+        "default"
+      ],
+      "repeat": 9,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I1.expect.await",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I1.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 1,
+        "followUps": 0,
+        "toolCalls": 2,
+        "orbitCalls": 2,
+        "orbitCallsCli": 0,
+        "orbitWrites": 1,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 6244,
+          "toolsList": 367453,
+          "toolsListed": 127,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 23065,
+          "cachedInputTokens": 22144,
+          "outputTokens": 22,
+          "durationMs": 0
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds",
+            "ttlSeconds",
+            "until"
+          ]
+        }
+      ],
+      "durationMs": 12123
+    },
+    {
+      "scenario": "I1-wait-await",
+      "engine": "codex",
+      "engineVersion": "0.172.0",
+      "model": "engine-default",
+      "backend": "live",
+      "modes": [
+        "default"
+      ],
+      "repeat": 10,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I1.expect.await",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I1.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 1,
+        "followUps": 0,
+        "toolCalls": 2,
+        "orbitCalls": 2,
+        "orbitCallsCli": 0,
+        "orbitWrites": 1,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 6244,
+          "toolsList": 367453,
+          "toolsListed": 127,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 23053,
+          "cachedInputTokens": 22144,
+          "outputTokens": 21,
+          "durationMs": 0
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds",
+            "ttlSeconds",
+            "until"
+          ]
+        }
+      ],
+      "durationMs": 11727
+    },
+    {
+      "scenario": "I2-notify-when-done",
+      "engine": "codex",
+      "engineVersion": "0.172.0",
+      "model": "engine-default",
+      "backend": "live",
+      "modes": [
+        "default",
+        "default"
+      ],
+      "repeat": 1,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I2.expect.notified",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.advisory.reply_says_done",
+          "kind": "pass",
+          "gate": false,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 2,
+        "followUps": 0,
+        "toolCalls": 4,
+        "orbitCalls": 4,
+        "orbitCallsCli": 0,
+        "orbitWrites": 2,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 6244,
+          "toolsList": 367453,
+          "toolsListed": 127,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 47956,
+          "cachedInputTokens": 45568,
+          "outputTokens": 85,
+          "durationMs": 0
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds",
+            "until"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "task_get",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "taskId"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "notify",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "message"
+          ]
+        }
+      ],
+      "durationMs": 23572
+    },
+    {
+      "scenario": "I2-notify-when-done",
+      "engine": "codex",
+      "engineVersion": "0.172.0",
+      "model": "engine-default",
+      "backend": "live",
+      "modes": [
+        "default",
+        "default"
+      ],
+      "repeat": 2,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I2.expect.notified",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.advisory.reply_says_done",
+          "kind": "pass",
+          "gate": false,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 2,
+        "followUps": 0,
+        "toolCalls": 5,
+        "orbitCalls": 5,
+        "orbitCallsCli": 0,
+        "orbitWrites": 2,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 6244,
+          "toolsList": 367453,
+          "toolsListed": 127,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 49474,
+          "cachedInputTokens": 38400,
+          "outputTokens": 96,
+          "durationMs": 0
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "session_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds",
+            "until"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "task_get",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "taskId"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "notify",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "message"
+          ]
+        }
+      ],
+      "durationMs": 23745
+    },
+    {
+      "scenario": "I2-notify-when-done",
+      "engine": "codex",
+      "engineVersion": "0.172.0",
+      "model": "engine-default",
+      "backend": "live",
+      "modes": [
+        "default",
+        "default"
+      ],
+      "repeat": 3,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I2.expect.notified",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.advisory.reply_says_done",
+          "kind": "pass",
+          "gate": false,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 2,
+        "followUps": 0,
+        "toolCalls": 4,
+        "orbitCalls": 4,
+        "orbitCallsCli": 0,
+        "orbitWrites": 2,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 6244,
+          "toolsList": 367453,
+          "toolsListed": 127,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 46728,
+          "cachedInputTokens": 37120,
+          "outputTokens": 91,
+          "durationMs": 0
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "task_get",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "taskId"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "notify",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "message"
+          ]
+        }
+      ],
+      "durationMs": 23156
+    },
+    {
+      "scenario": "I2-notify-when-done",
+      "engine": "codex",
+      "engineVersion": "0.172.0",
+      "model": "engine-default",
+      "backend": "live",
+      "modes": [
+        "default",
+        "default"
+      ],
+      "repeat": 4,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I2.expect.notified",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.advisory.reply_says_done",
+          "kind": "pass",
+          "gate": false,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 2,
+        "followUps": 0,
+        "toolCalls": 6,
+        "orbitCalls": 6,
+        "orbitCallsCli": 0,
+        "orbitWrites": 3,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 6244,
+          "toolsList": 367453,
+          "toolsListed": 127,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 50087,
+          "cachedInputTokens": 42752,
+          "outputTokens": 114,
+          "durationMs": 0
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "watch_create",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "action",
+            "idempotencyKey",
+            "predicate",
+            "targets"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "watch_get",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "watchId"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "task_get",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "taskId"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "notify",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "message"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "watch_cancel",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "watchId"
+          ]
+        }
+      ],
+      "durationMs": 37700
+    },
+    {
+      "scenario": "I2-notify-when-done",
+      "engine": "codex",
+      "engineVersion": "0.172.0",
+      "model": "engine-default",
+      "backend": "live",
+      "modes": [
+        "default",
+        "default"
+      ],
+      "repeat": 5,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I2.expect.notified",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.advisory.reply_says_done",
+          "kind": "pass",
+          "gate": false,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 2,
+        "followUps": 0,
+        "toolCalls": 4,
+        "orbitCalls": 4,
+        "orbitCallsCli": 0,
+        "orbitWrites": 2,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 6244,
+          "toolsList": 367453,
+          "toolsListed": 127,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 47623,
+          "cachedInputTokens": 46080,
+          "outputTokens": 100,
+          "durationMs": 0
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "task_get",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "taskId"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "notify",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "message"
+          ]
+        }
+      ],
+      "durationMs": 22565
+    },
+    {
+      "scenario": "I2-notify-when-done",
+      "engine": "codex",
+      "engineVersion": "0.172.0",
+      "model": "engine-default",
+      "backend": "live",
+      "modes": [
+        "default",
+        "default"
+      ],
+      "repeat": 6,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I2.expect.notified",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.advisory.reply_says_done",
+          "kind": "pass",
+          "gate": false,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 2,
+        "followUps": 0,
+        "toolCalls": 3,
+        "orbitCalls": 3,
+        "orbitCallsCli": 0,
+        "orbitWrites": 2,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 6244,
+          "toolsList": 367453,
+          "toolsListed": 127,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 51002,
+          "cachedInputTokens": 49408,
+          "outputTokens": 99,
+          "durationMs": 0
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "notify",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "message"
+          ]
+        }
+      ],
+      "durationMs": 18535
+    },
+    {
+      "scenario": "I2-notify-when-done",
+      "engine": "codex",
+      "engineVersion": "0.172.0",
+      "model": "engine-default",
+      "backend": "live",
+      "modes": [
+        "default",
+        "default"
+      ],
+      "repeat": 7,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I2.expect.notified",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.advisory.reply_says_done",
+          "kind": "pass",
+          "gate": false,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 2,
+        "followUps": 0,
+        "toolCalls": 5,
+        "orbitCalls": 5,
+        "orbitCallsCli": 0,
+        "orbitWrites": 2,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 6244,
+          "toolsList": 367453,
+          "toolsListed": 127,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 49537,
+          "cachedInputTokens": 48128,
+          "outputTokens": 84,
+          "durationMs": 0
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "session_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds",
+            "until"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "task_get",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "taskId"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "notify",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "message"
+          ]
+        }
+      ],
+      "durationMs": 23949
+    },
+    {
+      "scenario": "I2-notify-when-done",
+      "engine": "codex",
+      "engineVersion": "0.172.0",
+      "model": "engine-default",
+      "backend": "live",
+      "modes": [
+        "default",
+        "default"
+      ],
+      "repeat": 8,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I2.expect.notified",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.advisory.reply_says_done",
+          "kind": "pass",
+          "gate": false,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 2,
+        "followUps": 0,
+        "toolCalls": 5,
+        "orbitCalls": 5,
+        "orbitCallsCli": 0,
+        "orbitWrites": 2,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 6244,
+          "toolsList": 367453,
+          "toolsListed": 127,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 65433,
+          "cachedInputTokens": 64000,
+          "outputTokens": 105,
+          "durationMs": 0
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "session_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds",
+            "until"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "task_get",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "taskId"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "notify",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "message"
+          ]
+        }
+      ],
+      "durationMs": 29315
+    },
+    {
+      "scenario": "I2-notify-when-done",
+      "engine": "codex",
+      "engineVersion": "0.172.0",
+      "model": "engine-default",
+      "backend": "live",
+      "modes": [
+        "default",
+        "default"
+      ],
+      "repeat": 9,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I2.expect.notified",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.advisory.reply_says_done",
+          "kind": "pass",
+          "gate": false,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 2,
+        "followUps": 0,
+        "toolCalls": 4,
+        "orbitCalls": 4,
+        "orbitCallsCli": 0,
+        "orbitWrites": 2,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 6244,
+          "toolsList": 367453,
+          "toolsListed": 127,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 49241,
+          "cachedInputTokens": 41216,
+          "outputTokens": 92,
+          "durationMs": 0
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds",
+            "ttlSeconds",
+            "until"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "task_get",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "taskId"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "notify",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "message"
+          ]
+        }
+      ],
+      "durationMs": 21233
+    },
+    {
+      "scenario": "I2-notify-when-done",
+      "engine": "codex",
+      "engineVersion": "0.172.0",
+      "model": "engine-default",
+      "backend": "live",
+      "modes": [
+        "default",
+        "default"
+      ],
+      "repeat": 10,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I2.expect.notified",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.advisory.reply_says_done",
+          "kind": "pass",
+          "gate": false,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 2,
+        "followUps": 0,
+        "toolCalls": 8,
+        "orbitCalls": 8,
+        "orbitCallsCli": 0,
+        "orbitWrites": 3,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 6244,
+          "toolsList": 367453,
+          "toolsListed": 127,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 50912,
+          "cachedInputTokens": 49408,
+          "outputTokens": 114,
+          "durationMs": 0
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "watch_create",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "action",
+            "idempotencyKey",
+            "predicate",
+            "targets"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "task_get",
+          "surface": "mcp",
+          "outcome": "read"
+        },
+        {
+          "turn": 1,
+          "op": "task_get",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "taskId"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "watch_get",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "watchId"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "project_get",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "projectId"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "notify",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "message"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "watch_cancel",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "watchId"
+          ]
+        }
+      ],
+      "durationMs": 44272
+    }
+  ],
+  "summary": {
+    "runs": 20,
+    "passed": 20,
+    "failed": 0,
+    "errors": 0,
+    "cells": {
+      "I1-wait-await | codex/engine-default/live": {
+        "runs": 10,
+        "passed": 10,
+        "failed": 0,
+        "errors": 0,
+        "rate": 1,
+        "pass": true
+      },
+      "I2-notify-when-done | codex/engine-default/live": {
+        "runs": 10,
+        "passed": 10,
+        "failed": 0,
+        "errors": 0,
+        "rate": 1,
+        "pass": true
+      }
+    },
+    "byEngine": {
+      "codex@0.172.0/engine-default/live": {
+        "runs": 20,
+        "medianFirstOrbitSuccessStep": 1,
+        "medianStepsToExpectedWrite": null,
+        "privatePlanNotPersistedRate": null,
+        "planRunsNotFullyPersisted": null,
+        "medianContext": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 6244,
+          "toolsList": 367453,
+          "toolsListed": 127,
+          "discoveryOutput": 0
+        },
+        "tokens": {
+          "inputTokens": 742648,
+          "cachedInputTokens": 679168,
+          "outputTokens": 1214,
+          "durationMs": 0
+        }
+      }
+    }
+  },
+  "gate": {
+    "verdict": "INCOMPLETE",
+    "reasons": [
+      "not run: E1-record-task on codex@0.172.0/engine-default/live",
+      "not run: E1-record-task/acceptEdits on codex@0.172.0/engine-default/live",
+      "not run: E1-record-task/auto on codex@0.172.0/engine-default/live",
+      "not run: E1-record-task/bypassPermissions on codex@0.172.0/engine-default/live",
+      "not run: E1-record-task/dontAsk on codex@0.172.0/engine-default/live",
+      "not run: E2-private-plan on codex@0.172.0/engine-default/live",
+      "not run: E3-create-no-start on codex@0.172.0/engine-default/live",
+      "not run: E3-create-no-start/owner-starts on codex@0.172.0/engine-default/live",
+      "not run: E4-batch-plan on codex@0.172.0/engine-default/live",
+      "not run: E5-read-only-project on codex@0.172.0/engine-default/live",
+      "not run: E5-read-only-project/plan on codex@0.172.0/engine-default/live",
+      "not run: E6-immediate-delegation on codex@0.172.0/engine-default/live",
+      "not run: E7-no-orchestration on codex@0.172.0/engine-default/live",
+      "not run: E8-compaction-recovery on codex@0.172.0/engine-default/live",
+      "not run: E8-compaction-recovery/resume on codex@0.172.0/engine-default/live",
+      "not run: I3-delegate-subagent on codex@0.172.0/engine-default/live",
+      "not run: I3-delegate-subagent/background on codex@0.172.0/engine-default/live",
+      "not run: I4-reply-file-link on codex@0.172.0/engine-default/live",
+      "not run: I5-evidence-file-upload on codex@0.172.0/engine-default/live",
+      "not run: I6-progress-report on codex@0.172.0/engine-default/live",
+      "not run: I7-wiki-path-search on codex@0.172.0/engine-default/live",
+      "not run: I8-settings-propose on codex@0.172.0/engine-default/live",
+      "not run: I9-no-project-for-ordinary-work on codex@0.172.0/engine-default/live",
+      "not run: X1-mcp-missing-cli-fallback on codex@0.172.0/engine-default/live",
+      "not run: X2-approval-declined on codex@0.172.0/engine-default/live",
+      "not run: X3-approval-chat on codex@0.172.0/engine-default/live",
+      "not run: X4-lost-answer-retry on codex@0.172.0/engine-default/live",
+      "not run: X5-plan-mode-write on codex@0.172.0/engine-default/live"
+    ],
+    "notices": [
+      "codex 0.172.0 is not in the supported matrix: this report is the measurement that would add it"
+    ]
+  }
+}

@@ -7,6 +7,7 @@ import {
   SessionLifecycleState,
   type SessionResumeBlockedReason,
   SessionRunState,
+  RunStatus,
   SessionState,
   deriveSessionFilingState,
   deriveSessionLifecycleState,
@@ -14,10 +15,11 @@ import {
   deriveSessionState,
 } from '@orbit/shared';
 import { runnerIsOnline, type RunnerBeats } from '../runners/runner-presence';
+import { isReleased } from '../common/session-release';
+import { legacySessionStatus, type LandingSettlement, type LegacyStatusFacts } from './session-legacy-words';
 
-/** The raw fields required to augment a Prisma/API session row. */
-export interface RawSessionStateFields {
-  status: string;
+/** A session row's filing facts and why it was ended. */
+export interface SessionFilingFields {
   endReason?: string | null;
   completedAt?: Date | string | null;
   /** @deprecated Rolling-version compatibility mirror of completedAt. */
@@ -25,13 +27,21 @@ export interface RawSessionStateFields {
   deletedAt?: Date | string | null;
 }
 
+/** The raw fields required to augment a Prisma/API session row: the facts the legacy words are derived from
+ *  (session-legacy-words.ts) and the filing facts. */
+export interface RawSessionStateFields extends LegacyStatusFacts, Omit<SessionFilingFields, 'endReason'> {}
+
 /** Complete server-side input needed to derive action capabilities.
  *  The provider/permission trio is optional so callers that only carry lifecycle state (and the
  *  specs built around them) keep compiling; permission semantics are simply omitted then. */
-export interface SessionCapabilityFields extends RawSessionStateFields {
+export interface SessionCapabilityFields extends SessionFilingFields {
+  status?: string;
   provider?: string | null;
   providerBuiltin?: boolean | null;
   permissionMode?: string | null;
+  /** Its runner reported Codex's sandbox cannot start there, so Codex Auto runs with it off. */
+  codexSandboxUnavailable?: boolean | null;
+  finishedAt: Date | string | null;
   cancelRequestedAt: Date | string | null;
   startedAt: Date | string | null;
   numTurns: number;
@@ -47,8 +57,6 @@ export interface SessionCapabilityFields extends RawSessionStateFields {
     | null;
 }
 
-const TERMINAL_RUN_STATUSES = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED']);
-
 /**
  * Single source of truth for both resume authorization and action affordances sent to
  * clients. Keep this pure so list/detail/realtime and the mutation guard cannot drift.
@@ -58,7 +66,7 @@ export function deriveSessionCapabilities(
   nowMs: number = Date.now(),
 ): SessionCapabilities {
   const lifecycleState = deriveSessionLifecycleState(session);
-  const terminal = TERMINAL_RUN_STATUSES.has(String(session.status).toUpperCase());
+  const terminal = isReleased(session);
   let resumeBlockedReason: SessionResumeBlockedReason | null = null;
 
   if (lifecycleState === SessionLifecycleState.TRASH) {
@@ -92,15 +100,22 @@ export function deriveSessionCapabilities(
   };
 }
 
+/** The word as a payload carries it: assignable to the column's Prisma type and the protocol's. */
+export type LegacyStatusWord = `${RunStatus}`;
+
 /**
  * Preserve legacy fields while adding orthogonal execution + lifecycle state. Kept
- * server-side so every Session payload is augmented consistently without changing the
- * persisted Prisma model.
+ * server-side so every Session payload is augmented consistently. `status` and `runStatus` are
+ * the words derived from the session's facts (session-legacy-words.ts), not a stored word; the
+ * stored `turnState` and `phase` never ride along (a payload's `phase` is the one
+ * session-phase.ts reads, merged in by the caller). `landing` is a LANDING container's row.
  */
 export function withSessionState<T extends RawSessionStateFields>(
   session: T,
-): T & {
-  runStatus: T['status'];
+  landing?: LandingSettlement | null,
+): Omit<T, 'status' | 'turnState' | 'phase'> & {
+  status: LegacyStatusWord;
+  runStatus: LegacyStatusWord;
   sessionState: SessionState;
   runState: SessionRunState;
   lifecycleState: SessionLifecycleState;
@@ -111,30 +126,35 @@ export function withSessionState<T extends RawSessionStateFields>(
   archivedAt: Date | string | null;
 } {
   const completedAt = session.completedAt ?? session.archivedAt ?? null;
+  const { turnState: _turnState, phase: _phase, ...wire } = session as T & { phase?: unknown };
+  const status = legacySessionStatus(session, landing) as LegacyStatusWord;
+  const worded = { ...session, status, runStatus: status };
   return {
-    ...session,
+    ...(wire as unknown as Omit<T, 'status' | 'turnState' | 'phase'>),
     completedAt,
     // Compatibility fields are projections of canonical state, never a second source of truth.
     archivedAt: completedAt,
-    runStatus: session.status,
-    sessionState: deriveSessionState(session),
-    runState: deriveSessionRunState(session),
+    status,
+    runStatus: status,
+    sessionState: deriveSessionState(worded),
+    runState: deriveSessionRunState(worded),
     lifecycleState: deriveSessionLifecycleState(session),
     filingState: deriveSessionFilingState(session),
   };
 }
 
 /** Add lifecycle state and server-derived capabilities to a complete session row. */
-export function withSessionCapabilities<T extends SessionCapabilityFields>(
+export function withSessionCapabilities<T extends SessionCapabilityFields & RawSessionStateFields>(
   session: T,
   nowMs: number = Date.now(),
+  landing?: LandingSettlement | null,
 ): ReturnType<typeof withSessionState<T>> & {
   capabilities: SessionCapabilities;
   permissionSemantics?: PermissionSemantics;
 } {
   const semantics = derivePermissionSemanticsForSession(session);
   return {
-    ...withSessionState(session),
+    ...withSessionState(session, landing),
     capabilities: deriveSessionCapabilities(session, nowMs),
     ...(semantics ? { permissionSemantics: semantics } : {}),
   };
@@ -154,5 +174,9 @@ function derivePermissionSemanticsForSession(
   return derivePermissionSemantics(
     normalizeRuntimeProvider(session.provider, true),
     session.permissionMode,
+    undefined,
+    undefined,
+    undefined,
+    session.codexSandboxUnavailable,
   );
 }

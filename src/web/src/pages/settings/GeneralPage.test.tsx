@@ -1,9 +1,20 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { meQuery, type UserPreferences } from '../../lib/queries';
 import { GENERAL_HINTS, GeneralSettingsPage } from './GeneralPage';
+
+// The app Tooltip draws its words only while open: this file reads them off the trigger, as `data-tip`.
+vi.mock('../../components/ui/Tooltip', async () => {
+  const { cloneElement } = await import('react');
+  return {
+    CONTROL_TOOLTIP_DELAY_MS: 100,
+    TEXT_TOOLTIP_DELAY_MS: 600,
+    Tooltip: ({ children, content }: { children: import('react').ReactElement; content?: import('react').ReactNode }) =>
+      cloneElement(children, (content ? { 'data-tip': content } : {}) as object),
+  };
+});
 
 /** The page with the account it reads seeded, so nothing has to be fetched. */
 function render(preferences: UserPreferences, translationAvailable?: boolean) {
@@ -39,8 +50,6 @@ describe('Settings → General (docs/mocks/settings-redesign, board-2)', () => {
     const rows = [...html.matchAll(/<div class="settings-row-title">([^<]+)<\/div>/g)].map((m) => m[1]);
     expect(rows).toEqual([
       'Default permission mode',
-      'Smart model selection',
-      'Optimize For',
       'Suggested replies',
       'Prompt optimizer',
       'Session recaps',
@@ -70,7 +79,6 @@ describe('Settings → General (docs/mocks/settings-redesign, board-2)', () => {
     const html = render({});
     const rows: Array<[string, { short: string; full: string }]> = [
       ['Default permission mode', GENERAL_HINTS.defaultPermissionMode],
-      ['Smart model selection', GENERAL_HINTS.modelRouting],
       ['Suggested replies', GENERAL_HINTS.promptSuggestions],
       ['Session recaps', GENERAL_HINTS.recaps],
       ['Let sessions orchestrate', GENERAL_HINTS.enableOrchestration],
@@ -79,7 +87,7 @@ describe('Settings → General (docs/mocks/settings-redesign, board-2)', () => {
     for (const [label, hint] of rows) {
       const row = unescape(rowOf(html, label));
       expect(row).toContain(`<div class="settings-row-description">${hint.short}</div>`);
-      expect(row).toContain(`<div class="settings-row-control" title="${hint.full}">`);
+      expect(row).toContain(`<div class="settings-row-control" data-tip="${hint.full}">`);
     }
   });
 });

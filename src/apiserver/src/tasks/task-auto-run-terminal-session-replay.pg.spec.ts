@@ -5,11 +5,11 @@ import test from 'node:test';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -21,6 +21,7 @@ import { SessionsService } from '../sessions/sessions.service';
 import { TASK_RUN_TRIGGER } from './task-run-identity';
 import { TASK_RUN_ACTION } from './task-run-receipt';
 import { TasksService } from './tasks.service';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 /**
  * A reconcile pass must not report — or pay for — a dispatch it only replayed.
@@ -156,7 +157,7 @@ const workRuns = (db: PrismaClient, taskId: string) =>
   db.session.findMany({
     where: { taskId, startsTaskWork: true },
     orderBy: { createdAt: 'asc' },
-    select: { id: true, status: true, dispatchOrigin: true },
+    select: { id: true, ...WORD_SELECT, dispatchOrigin: true },
   });
 
 /** WHICH MOMENT a task is at, straight off the row the trigger writes. */
@@ -284,7 +285,7 @@ test('an auto-run whose session was CANCELLED is not replayed by the next reconc
     // A person stops the run: the task list's Stop, which cancels through SessionsService.
     assert.equal((await s.tasks.batchStop(ids.ownerId, [stopped])).stopped, 1);
     assert.equal(
-      (await s.db.session.findUniqueOrThrow({ where: { id: run.id } })).status,
+      wordOf((await s.db.session.findUniqueOrThrow({ where: { id: run.id } }))),
       RunStatus.CANCELLED,
     );
 
@@ -360,9 +361,9 @@ test('the dependency scan stops offering a task whose moment\'s run was filed aw
     // does not retry (task-auto-run-retry-after-run-ended.pg.spec.ts covers the failed run).
     await s.sessions.complete(ids.ownerId, run.id);
     const ended = await s.db.session.findUniqueOrThrow({
-      where: { id: run.id }, select: { status: true, endReason: true, completedAt: true },
+      where: { id: run.id }, select: { ...WORD_SELECT, endReason: true, completedAt: true },
     });
-    assert.equal(ended.status, RunStatus.CANCELLED);
+    assert.equal(wordOf(ended), RunStatus.CANCELLED);
     assert.equal(ended.endReason, 'completed');
     assert.ok(ended.completedAt, 'Complete did not file the run');
     assert.equal(

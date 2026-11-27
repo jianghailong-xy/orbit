@@ -16,6 +16,8 @@
 //     `link-stream-v1` (docs/runner-browser-design.md §4).
 //   - Paste into the browser of a stream (StreamPaste, StreamPasted), capability
 //     `link-stream-paste-v1` (docs/runner-browser-design.md §5).
+//   - The newest lines of a bg_run job's output, for its card in the app (BackgroundJobTailRequest,
+//     BackgroundJobTailResponse), capability `bg-output-tail/v1`.
 //
 // Units: times are Unix milliseconds (`*_unix_ms`), durations are milliseconds (`*_ms`).
 
@@ -303,6 +305,72 @@ func (StreamCloseCode) EnumDescriptor() ([]byte, []int) {
 	return file_v1_runner_link_proto_rawDescGZIP(), []int{3}
 }
 
+// What became of a BackgroundJobTailRequest.
+type BackgroundJobTailOutcome int32
+
+const (
+	// Not stated; read as BACKGROUND_JOB_TAIL_OUTCOME_NOT_FOUND.
+	BackgroundJobTailOutcome_BACKGROUND_JOB_TAIL_OUTCOME_UNSPECIFIED BackgroundJobTailOutcome = 0
+	// The runner read the job's output: status, exit_code and text say what it found.
+	BackgroundJobTailOutcome_BACKGROUND_JOB_TAIL_OUTCOME_OK BackgroundJobTailOutcome = 1
+	// The runner hosts no such job of the session any more: the session ended there, or the runner
+	// restarted without it. The job's wake still carries the end of its output.
+	BackgroundJobTailOutcome_BACKGROUND_JOB_TAIL_OUTCOME_NOT_FOUND BackgroundJobTailOutcome = 2
+	// Gateway: it holds no connection of the runner.
+	BackgroundJobTailOutcome_BACKGROUND_JOB_TAIL_OUTCOME_NO_CONNECTION BackgroundJobTailOutcome = 3
+	// Gateway: the runner's connections do not declare `bg-output-tail/v1`.
+	BackgroundJobTailOutcome_BACKGROUND_JOB_TAIL_OUTCOME_UNSUPPORTED BackgroundJobTailOutcome = 4
+	// Gateway: the runner did not answer in time.
+	BackgroundJobTailOutcome_BACKGROUND_JOB_TAIL_OUTCOME_TIMEOUT BackgroundJobTailOutcome = 5
+)
+
+// Enum value maps for BackgroundJobTailOutcome.
+var (
+	BackgroundJobTailOutcome_name = map[int32]string{
+		0: "BACKGROUND_JOB_TAIL_OUTCOME_UNSPECIFIED",
+		1: "BACKGROUND_JOB_TAIL_OUTCOME_OK",
+		2: "BACKGROUND_JOB_TAIL_OUTCOME_NOT_FOUND",
+		3: "BACKGROUND_JOB_TAIL_OUTCOME_NO_CONNECTION",
+		4: "BACKGROUND_JOB_TAIL_OUTCOME_UNSUPPORTED",
+		5: "BACKGROUND_JOB_TAIL_OUTCOME_TIMEOUT",
+	}
+	BackgroundJobTailOutcome_value = map[string]int32{
+		"BACKGROUND_JOB_TAIL_OUTCOME_UNSPECIFIED":   0,
+		"BACKGROUND_JOB_TAIL_OUTCOME_OK":            1,
+		"BACKGROUND_JOB_TAIL_OUTCOME_NOT_FOUND":     2,
+		"BACKGROUND_JOB_TAIL_OUTCOME_NO_CONNECTION": 3,
+		"BACKGROUND_JOB_TAIL_OUTCOME_UNSUPPORTED":   4,
+		"BACKGROUND_JOB_TAIL_OUTCOME_TIMEOUT":       5,
+	}
+)
+
+func (x BackgroundJobTailOutcome) Enum() *BackgroundJobTailOutcome {
+	p := new(BackgroundJobTailOutcome)
+	*p = x
+	return p
+}
+
+func (x BackgroundJobTailOutcome) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (BackgroundJobTailOutcome) Descriptor() protoreflect.EnumDescriptor {
+	return file_v1_runner_link_proto_enumTypes[4].Descriptor()
+}
+
+func (BackgroundJobTailOutcome) Type() protoreflect.EnumType {
+	return &file_v1_runner_link_proto_enumTypes[4]
+}
+
+func (x BackgroundJobTailOutcome) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use BackgroundJobTailOutcome.Descriptor instead.
+func (BackgroundJobTailOutcome) EnumDescriptor() ([]byte, []int) {
+	return file_v1_runner_link_proto_rawDescGZIP(), []int{4}
+}
+
 // One WebSocket binary message (§5.1). The first frame on a connection is the runner's Hello and
 // the gateway's first is Welcome (or Close); after that frames flow both ways in any order. A frame
 // the receiver cannot decode is a protocol error; a frame whose body the receiver does not know, a
@@ -345,6 +413,8 @@ type Frame struct {
 	//	*Frame_StreamClose
 	//	*Frame_StreamPaste
 	//	*Frame_StreamPasted
+	//	*Frame_BackgroundJobTailRequest
+	//	*Frame_BackgroundJobTailResponse
 	Body          isFrame_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -619,6 +689,24 @@ func (x *Frame) GetStreamPasted() *StreamPasted {
 	return nil
 }
 
+func (x *Frame) GetBackgroundJobTailRequest() *BackgroundJobTailRequest {
+	if x != nil {
+		if x, ok := x.Body.(*Frame_BackgroundJobTailRequest); ok {
+			return x.BackgroundJobTailRequest
+		}
+	}
+	return nil
+}
+
+func (x *Frame) GetBackgroundJobTailResponse() *BackgroundJobTailResponse {
+	if x != nil {
+		if x, ok := x.Body.(*Frame_BackgroundJobTailResponse); ok {
+			return x.BackgroundJobTailResponse
+		}
+	}
+	return nil
+}
+
 type isFrame_Body interface {
 	isFrame_Body()
 }
@@ -748,6 +836,16 @@ type Frame_StreamPasted struct {
 	StreamPasted *StreamPasted `protobuf:"bytes,26,opt,name=stream_pasted,json=streamPasted,proto3,oneof"`
 }
 
+type Frame_BackgroundJobTailRequest struct {
+	// Gateway to runner: the newest lines of one bg_run job's output.
+	BackgroundJobTailRequest *BackgroundJobTailRequest `protobuf:"bytes,27,opt,name=background_job_tail_request,json=backgroundJobTailRequest,proto3,oneof"`
+}
+
+type Frame_BackgroundJobTailResponse struct {
+	// Runner to gateway: the answer to a BackgroundJobTailRequest.
+	BackgroundJobTailResponse *BackgroundJobTailResponse `protobuf:"bytes,28,opt,name=background_job_tail_response,json=backgroundJobTailResponse,proto3,oneof"`
+}
+
 func (*Frame_Hello) isFrame_Body() {}
 
 func (*Frame_Welcome) isFrame_Body() {}
@@ -797,6 +895,10 @@ func (*Frame_StreamClose) isFrame_Body() {}
 func (*Frame_StreamPaste) isFrame_Body() {}
 
 func (*Frame_StreamPasted) isFrame_Body() {}
+
+func (*Frame_BackgroundJobTailRequest) isFrame_Body() {}
+
+func (*Frame_BackgroundJobTailResponse) isFrame_Body() {}
 
 // A piece of a frame too large for one WebSocket message (§5.1: a message carries at most
 // Limits.max_frame_bytes). The sender encodes the whole Frame, cuts the bytes into pieces and sends
@@ -3935,11 +4037,222 @@ func (x *StreamPasted) GetError() string {
 	return ""
 }
 
+// Gateway to runner: read the end of one job's output file. The runner answers with a
+// BackgroundJobTailResponse carrying the same request_id.
+type BackgroundJobTailRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Identifies the request; the answer carries it back.
+	RequestId string `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	// The session that ran the job.
+	SessionId string `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// The job, as bg_run named it (bgj_...).
+	JobId string `protobuf:"bytes,3,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	// At most this many of the output's last lines.
+	MaxLines uint32 `protobuf:"varint,4,opt,name=max_lines,json=maxLines,proto3" json:"max_lines,omitempty"`
+	// At most this many bytes of text, counted after colour codes are taken out.
+	MaxBytes      uint32 `protobuf:"varint,5,opt,name=max_bytes,json=maxBytes,proto3" json:"max_bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BackgroundJobTailRequest) Reset() {
+	*x = BackgroundJobTailRequest{}
+	mi := &file_v1_runner_link_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BackgroundJobTailRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BackgroundJobTailRequest) ProtoMessage() {}
+
+func (x *BackgroundJobTailRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_runner_link_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BackgroundJobTailRequest.ProtoReflect.Descriptor instead.
+func (*BackgroundJobTailRequest) Descriptor() ([]byte, []int) {
+	return file_v1_runner_link_proto_rawDescGZIP(), []int{45}
+}
+
+func (x *BackgroundJobTailRequest) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *BackgroundJobTailRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *BackgroundJobTailRequest) GetJobId() string {
+	if x != nil {
+		return x.JobId
+	}
+	return ""
+}
+
+func (x *BackgroundJobTailRequest) GetMaxLines() uint32 {
+	if x != nil {
+		return x.MaxLines
+	}
+	return 0
+}
+
+func (x *BackgroundJobTailRequest) GetMaxBytes() uint32 {
+	if x != nil {
+		return x.MaxBytes
+	}
+	return 0
+}
+
+// Runner to gateway, and gateway to apiserver: the end of one job's output.
+type BackgroundJobTailResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The request_id of the BackgroundJobTailRequest this answers.
+	RequestId string `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	// The session asked about.
+	SessionId string `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// The job asked about.
+	JobId string `protobuf:"bytes,3,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	// What became of the request; the fields below are set only for BACKGROUND_JOB_TAIL_OUTCOME_OK.
+	Outcome BackgroundJobTailOutcome `protobuf:"varint,4,opt,name=outcome,proto3,enum=orbit.runnerlink.v1.BackgroundJobTailOutcome" json:"outcome,omitempty"`
+	// The job as the runner holds it: running, completed, failed or killed.
+	Status string `protobuf:"bytes,5,opt,name=status,proto3" json:"status,omitempty"`
+	// Whether the job has exited with exit_code.
+	Exited bool `protobuf:"varint,6,opt,name=exited,proto3" json:"exited,omitempty"`
+	// The job's exit code, once exited is true.
+	ExitCode int32 `protobuf:"varint,7,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
+	// The output's last lines, without terminal colour codes or NUL bytes, at most max_lines of them
+	// and max_bytes long, each ended by a newline but a last line still being written.
+	Text string `protobuf:"bytes,8,opt,name=text,proto3" json:"text,omitempty"`
+	// Whether the output holds more than text: older lines were left out.
+	Truncated bool `protobuf:"varint,9,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	// How long the output file was when it was read, in bytes.
+	OutputBytes   uint64 `protobuf:"varint,10,opt,name=output_bytes,json=outputBytes,proto3" json:"output_bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BackgroundJobTailResponse) Reset() {
+	*x = BackgroundJobTailResponse{}
+	mi := &file_v1_runner_link_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BackgroundJobTailResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BackgroundJobTailResponse) ProtoMessage() {}
+
+func (x *BackgroundJobTailResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_runner_link_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BackgroundJobTailResponse.ProtoReflect.Descriptor instead.
+func (*BackgroundJobTailResponse) Descriptor() ([]byte, []int) {
+	return file_v1_runner_link_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *BackgroundJobTailResponse) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *BackgroundJobTailResponse) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *BackgroundJobTailResponse) GetJobId() string {
+	if x != nil {
+		return x.JobId
+	}
+	return ""
+}
+
+func (x *BackgroundJobTailResponse) GetOutcome() BackgroundJobTailOutcome {
+	if x != nil {
+		return x.Outcome
+	}
+	return BackgroundJobTailOutcome_BACKGROUND_JOB_TAIL_OUTCOME_UNSPECIFIED
+}
+
+func (x *BackgroundJobTailResponse) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *BackgroundJobTailResponse) GetExited() bool {
+	if x != nil {
+		return x.Exited
+	}
+	return false
+}
+
+func (x *BackgroundJobTailResponse) GetExitCode() int32 {
+	if x != nil {
+		return x.ExitCode
+	}
+	return 0
+}
+
+func (x *BackgroundJobTailResponse) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *BackgroundJobTailResponse) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
+}
+
+func (x *BackgroundJobTailResponse) GetOutputBytes() uint64 {
+	if x != nil {
+		return x.OutputBytes
+	}
+	return 0
+}
+
 var File_v1_runner_link_proto protoreflect.FileDescriptor
 
 const file_v1_runner_link_proto_rawDesc = "" +
 	"\n" +
-	"\x14v1/runner_link.proto\x12\x13orbit.runnerlink.v1\"\xff\f\n" +
+	"\x14v1/runner_link.proto\x12\x13orbit.runnerlink.v1\"\xe2\x0e\n" +
 	"\x05Frame\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x04R\x02id\x122\n" +
 	"\x05hello\x18\x02 \x01(\v2\x1a.orbit.runnerlink.v1.HelloH\x00R\x05hello\x128\n" +
@@ -3972,7 +4285,9 @@ const file_v1_runner_link_proto_rawDesc = "" +
 	"\rstream_credit\x18\x17 \x01(\v2!.orbit.runnerlink.v1.StreamCreditH\x00R\fstreamCredit\x12E\n" +
 	"\fstream_close\x18\x18 \x01(\v2 .orbit.runnerlink.v1.StreamCloseH\x00R\vstreamClose\x12E\n" +
 	"\fstream_paste\x18\x19 \x01(\v2 .orbit.runnerlink.v1.StreamPasteH\x00R\vstreamPaste\x12H\n" +
-	"\rstream_pasted\x18\x1a \x01(\v2!.orbit.runnerlink.v1.StreamPastedH\x00R\fstreamPastedB\x06\n" +
+	"\rstream_pasted\x18\x1a \x01(\v2!.orbit.runnerlink.v1.StreamPastedH\x00R\fstreamPasted\x12n\n" +
+	"\x1bbackground_job_tail_request\x18\x1b \x01(\v2-.orbit.runnerlink.v1.BackgroundJobTailRequestH\x00R\x18backgroundJobTailRequest\x12q\n" +
+	"\x1cbackground_job_tail_response\x18\x1c \x01(\v2..orbit.runnerlink.v1.BackgroundJobTailResponseH\x00R\x19backgroundJobTailResponseB\x06\n" +
 	"\x04body\"`\n" +
 	"\x05Chunk\x12\x19\n" +
 	"\bframe_id\x18\x01 \x01(\x04R\aframeId\x12\x14\n" +
@@ -4192,7 +4507,29 @@ const file_v1_runner_link_proto_rawDesc = "" +
 	"\fStreamPasted\x12\x1b\n" +
 	"\tstream_id\x18\x01 \x01(\tR\bstreamId\x12\x19\n" +
 	"\bpaste_id\x18\x02 \x01(\rR\apasteId\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error*:\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\"\xa9\x01\n" +
+	"\x18BackgroundJobTailRequest\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\x12\x15\n" +
+	"\x06job_id\x18\x03 \x01(\tR\x05jobId\x12\x1b\n" +
+	"\tmax_lines\x18\x04 \x01(\rR\bmaxLines\x12\x1b\n" +
+	"\tmax_bytes\x18\x05 \x01(\rR\bmaxBytes\"\xdb\x02\n" +
+	"\x19BackgroundJobTailResponse\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\x12\x15\n" +
+	"\x06job_id\x18\x03 \x01(\tR\x05jobId\x12G\n" +
+	"\aoutcome\x18\x04 \x01(\x0e2-.orbit.runnerlink.v1.BackgroundJobTailOutcomeR\aoutcome\x12\x16\n" +
+	"\x06status\x18\x05 \x01(\tR\x06status\x12\x16\n" +
+	"\x06exited\x18\x06 \x01(\bR\x06exited\x12\x1b\n" +
+	"\texit_code\x18\a \x01(\x05R\bexitCode\x12\x12\n" +
+	"\x04text\x18\b \x01(\tR\x04text\x12\x1c\n" +
+	"\ttruncated\x18\t \x01(\bR\ttruncated\x12!\n" +
+	"\foutput_bytes\x18\n" +
+	" \x01(\x04R\voutputBytes*:\n" +
 	"\x04Mode\x12\x14\n" +
 	"\x10MODE_UNSPECIFIED\x10\x00\x12\r\n" +
 	"\tMODE_HTTP\x10\x01\x12\r\n" +
@@ -4219,7 +4556,14 @@ const file_v1_runner_link_proto_rawDesc = "" +
 	"\"STREAM_CLOSE_CODE_TOO_MANY_STREAMS\x10\x04\x12$\n" +
 	" STREAM_CLOSE_CODE_FLOW_VIOLATION\x10\x05\x12%\n" +
 	"!STREAM_CLOSE_CODE_CONNECTION_LOST\x10\x06\x12\x1d\n" +
-	"\x19STREAM_CLOSE_CODE_TIMEOUT\x10\ab\x06proto3"
+	"\x19STREAM_CLOSE_CODE_TIMEOUT\x10\a*\x9b\x02\n" +
+	"\x18BackgroundJobTailOutcome\x12+\n" +
+	"'BACKGROUND_JOB_TAIL_OUTCOME_UNSPECIFIED\x10\x00\x12\"\n" +
+	"\x1eBACKGROUND_JOB_TAIL_OUTCOME_OK\x10\x01\x12)\n" +
+	"%BACKGROUND_JOB_TAIL_OUTCOME_NOT_FOUND\x10\x02\x12-\n" +
+	")BACKGROUND_JOB_TAIL_OUTCOME_NO_CONNECTION\x10\x03\x12+\n" +
+	"'BACKGROUND_JOB_TAIL_OUTCOME_UNSUPPORTED\x10\x04\x12'\n" +
+	"#BACKGROUND_JOB_TAIL_OUTCOME_TIMEOUT\x10\x05b\x06proto3"
 
 var (
 	file_v1_runner_link_proto_rawDescOnce sync.Once
@@ -4233,120 +4577,126 @@ func file_v1_runner_link_proto_rawDescGZIP() []byte {
 	return file_v1_runner_link_proto_rawDescData
 }
 
-var file_v1_runner_link_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_v1_runner_link_proto_msgTypes = make([]protoimpl.MessageInfo, 45)
+var file_v1_runner_link_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_v1_runner_link_proto_msgTypes = make([]protoimpl.MessageInfo, 47)
 var file_v1_runner_link_proto_goTypes = []any{
-	(Mode)(0),                  // 0: orbit.runnerlink.v1.Mode
-	(CloseCode)(0),             // 1: orbit.runnerlink.v1.CloseCode
-	(StreamKind)(0),            // 2: orbit.runnerlink.v1.StreamKind
-	(StreamCloseCode)(0),       // 3: orbit.runnerlink.v1.StreamCloseCode
-	(*Frame)(nil),              // 4: orbit.runnerlink.v1.Frame
-	(*Chunk)(nil),              // 5: orbit.runnerlink.v1.Chunk
-	(*Hello)(nil),              // 6: orbit.runnerlink.v1.Hello
-	(*WriteContract)(nil),      // 7: orbit.runnerlink.v1.WriteContract
-	(*ManagedInstance)(nil),    // 8: orbit.runnerlink.v1.ManagedInstance
-	(*SessionResume)(nil),      // 9: orbit.runnerlink.v1.SessionResume
-	(*Welcome)(nil),            // 10: orbit.runnerlink.v1.Welcome
-	(*Limits)(nil),             // 11: orbit.runnerlink.v1.Limits
-	(*SessionState)(nil),       // 12: orbit.runnerlink.v1.SessionState
-	(*AssignedRelease)(nil),    // 13: orbit.runnerlink.v1.AssignedRelease
-	(*TokenRefresh)(nil),       // 14: orbit.runnerlink.v1.TokenRefresh
-	(*Redirect)(nil),           // 15: orbit.runnerlink.v1.Redirect
-	(*Drain)(nil),              // 16: orbit.runnerlink.v1.Drain
-	(*Close)(nil),              // 17: orbit.runnerlink.v1.Close
-	(*Hint)(nil),               // 18: orbit.runnerlink.v1.Hint
-	(*InboxHint)(nil),          // 19: orbit.runnerlink.v1.InboxHint
-	(*ClaimHint)(nil),          // 20: orbit.runnerlink.v1.ClaimHint
-	(*CommandsHint)(nil),       // 21: orbit.runnerlink.v1.CommandsHint
-	(*ApprovalHint)(nil),       // 22: orbit.runnerlink.v1.ApprovalHint
-	(*WatchersHint)(nil),       // 23: orbit.runnerlink.v1.WatchersHint
-	(*HintState)(nil),          // 24: orbit.runnerlink.v1.HintState
-	(*Rpc)(nil),                // 25: orbit.runnerlink.v1.Rpc
-	(*TunnelRequest)(nil),      // 26: orbit.runnerlink.v1.TunnelRequest
-	(*RpcResult)(nil),          // 27: orbit.runnerlink.v1.RpcResult
-	(*TunnelResponse)(nil),     // 28: orbit.runnerlink.v1.TunnelResponse
-	(*Failure)(nil),            // 29: orbit.runnerlink.v1.Failure
-	(*Heartbeat)(nil),          // 30: orbit.runnerlink.v1.Heartbeat
-	(*Fact)(nil),               // 31: orbit.runnerlink.v1.Fact
-	(*HeartbeatAck)(nil),       // 32: orbit.runnerlink.v1.HeartbeatAck
-	(*EventBatch)(nil),         // 33: orbit.runnerlink.v1.EventBatch
-	(*Event)(nil),              // 34: orbit.runnerlink.v1.Event
-	(*EventAck)(nil),           // 35: orbit.runnerlink.v1.EventAck
-	(*RejectedEvent)(nil),      // 36: orbit.runnerlink.v1.RejectedEvent
-	(*Credit)(nil),             // 37: orbit.runnerlink.v1.Credit
-	(*LiveBatch)(nil),          // 38: orbit.runnerlink.v1.LiveBatch
-	(*LiveEvent)(nil),          // 39: orbit.runnerlink.v1.LiveEvent
-	(*TurnPrefixRequest)(nil),  // 40: orbit.runnerlink.v1.TurnPrefixRequest
-	(*TurnPrefixResponse)(nil), // 41: orbit.runnerlink.v1.TurnPrefixResponse
-	(*StreamOpen)(nil),         // 42: orbit.runnerlink.v1.StreamOpen
-	(*StreamOpened)(nil),       // 43: orbit.runnerlink.v1.StreamOpened
-	(*StreamData)(nil),         // 44: orbit.runnerlink.v1.StreamData
-	(*StreamCredit)(nil),       // 45: orbit.runnerlink.v1.StreamCredit
-	(*StreamClose)(nil),        // 46: orbit.runnerlink.v1.StreamClose
-	(*StreamPaste)(nil),        // 47: orbit.runnerlink.v1.StreamPaste
-	(*StreamPasted)(nil),       // 48: orbit.runnerlink.v1.StreamPasted
+	(Mode)(0),                         // 0: orbit.runnerlink.v1.Mode
+	(CloseCode)(0),                    // 1: orbit.runnerlink.v1.CloseCode
+	(StreamKind)(0),                   // 2: orbit.runnerlink.v1.StreamKind
+	(StreamCloseCode)(0),              // 3: orbit.runnerlink.v1.StreamCloseCode
+	(BackgroundJobTailOutcome)(0),     // 4: orbit.runnerlink.v1.BackgroundJobTailOutcome
+	(*Frame)(nil),                     // 5: orbit.runnerlink.v1.Frame
+	(*Chunk)(nil),                     // 6: orbit.runnerlink.v1.Chunk
+	(*Hello)(nil),                     // 7: orbit.runnerlink.v1.Hello
+	(*WriteContract)(nil),             // 8: orbit.runnerlink.v1.WriteContract
+	(*ManagedInstance)(nil),           // 9: orbit.runnerlink.v1.ManagedInstance
+	(*SessionResume)(nil),             // 10: orbit.runnerlink.v1.SessionResume
+	(*Welcome)(nil),                   // 11: orbit.runnerlink.v1.Welcome
+	(*Limits)(nil),                    // 12: orbit.runnerlink.v1.Limits
+	(*SessionState)(nil),              // 13: orbit.runnerlink.v1.SessionState
+	(*AssignedRelease)(nil),           // 14: orbit.runnerlink.v1.AssignedRelease
+	(*TokenRefresh)(nil),              // 15: orbit.runnerlink.v1.TokenRefresh
+	(*Redirect)(nil),                  // 16: orbit.runnerlink.v1.Redirect
+	(*Drain)(nil),                     // 17: orbit.runnerlink.v1.Drain
+	(*Close)(nil),                     // 18: orbit.runnerlink.v1.Close
+	(*Hint)(nil),                      // 19: orbit.runnerlink.v1.Hint
+	(*InboxHint)(nil),                 // 20: orbit.runnerlink.v1.InboxHint
+	(*ClaimHint)(nil),                 // 21: orbit.runnerlink.v1.ClaimHint
+	(*CommandsHint)(nil),              // 22: orbit.runnerlink.v1.CommandsHint
+	(*ApprovalHint)(nil),              // 23: orbit.runnerlink.v1.ApprovalHint
+	(*WatchersHint)(nil),              // 24: orbit.runnerlink.v1.WatchersHint
+	(*HintState)(nil),                 // 25: orbit.runnerlink.v1.HintState
+	(*Rpc)(nil),                       // 26: orbit.runnerlink.v1.Rpc
+	(*TunnelRequest)(nil),             // 27: orbit.runnerlink.v1.TunnelRequest
+	(*RpcResult)(nil),                 // 28: orbit.runnerlink.v1.RpcResult
+	(*TunnelResponse)(nil),            // 29: orbit.runnerlink.v1.TunnelResponse
+	(*Failure)(nil),                   // 30: orbit.runnerlink.v1.Failure
+	(*Heartbeat)(nil),                 // 31: orbit.runnerlink.v1.Heartbeat
+	(*Fact)(nil),                      // 32: orbit.runnerlink.v1.Fact
+	(*HeartbeatAck)(nil),              // 33: orbit.runnerlink.v1.HeartbeatAck
+	(*EventBatch)(nil),                // 34: orbit.runnerlink.v1.EventBatch
+	(*Event)(nil),                     // 35: orbit.runnerlink.v1.Event
+	(*EventAck)(nil),                  // 36: orbit.runnerlink.v1.EventAck
+	(*RejectedEvent)(nil),             // 37: orbit.runnerlink.v1.RejectedEvent
+	(*Credit)(nil),                    // 38: orbit.runnerlink.v1.Credit
+	(*LiveBatch)(nil),                 // 39: orbit.runnerlink.v1.LiveBatch
+	(*LiveEvent)(nil),                 // 40: orbit.runnerlink.v1.LiveEvent
+	(*TurnPrefixRequest)(nil),         // 41: orbit.runnerlink.v1.TurnPrefixRequest
+	(*TurnPrefixResponse)(nil),        // 42: orbit.runnerlink.v1.TurnPrefixResponse
+	(*StreamOpen)(nil),                // 43: orbit.runnerlink.v1.StreamOpen
+	(*StreamOpened)(nil),              // 44: orbit.runnerlink.v1.StreamOpened
+	(*StreamData)(nil),                // 45: orbit.runnerlink.v1.StreamData
+	(*StreamCredit)(nil),              // 46: orbit.runnerlink.v1.StreamCredit
+	(*StreamClose)(nil),               // 47: orbit.runnerlink.v1.StreamClose
+	(*StreamPaste)(nil),               // 48: orbit.runnerlink.v1.StreamPaste
+	(*StreamPasted)(nil),              // 49: orbit.runnerlink.v1.StreamPasted
+	(*BackgroundJobTailRequest)(nil),  // 50: orbit.runnerlink.v1.BackgroundJobTailRequest
+	(*BackgroundJobTailResponse)(nil), // 51: orbit.runnerlink.v1.BackgroundJobTailResponse
 }
 var file_v1_runner_link_proto_depIdxs = []int32{
-	6,  // 0: orbit.runnerlink.v1.Frame.hello:type_name -> orbit.runnerlink.v1.Hello
-	10, // 1: orbit.runnerlink.v1.Frame.welcome:type_name -> orbit.runnerlink.v1.Welcome
-	14, // 2: orbit.runnerlink.v1.Frame.token_refresh:type_name -> orbit.runnerlink.v1.TokenRefresh
-	15, // 3: orbit.runnerlink.v1.Frame.redirect:type_name -> orbit.runnerlink.v1.Redirect
-	16, // 4: orbit.runnerlink.v1.Frame.drain:type_name -> orbit.runnerlink.v1.Drain
-	17, // 5: orbit.runnerlink.v1.Frame.close:type_name -> orbit.runnerlink.v1.Close
-	18, // 6: orbit.runnerlink.v1.Frame.hint:type_name -> orbit.runnerlink.v1.Hint
-	25, // 7: orbit.runnerlink.v1.Frame.rpc:type_name -> orbit.runnerlink.v1.Rpc
-	27, // 8: orbit.runnerlink.v1.Frame.rpc_result:type_name -> orbit.runnerlink.v1.RpcResult
-	30, // 9: orbit.runnerlink.v1.Frame.heartbeat:type_name -> orbit.runnerlink.v1.Heartbeat
-	32, // 10: orbit.runnerlink.v1.Frame.heartbeat_ack:type_name -> orbit.runnerlink.v1.HeartbeatAck
-	33, // 11: orbit.runnerlink.v1.Frame.event_batch:type_name -> orbit.runnerlink.v1.EventBatch
-	35, // 12: orbit.runnerlink.v1.Frame.event_ack:type_name -> orbit.runnerlink.v1.EventAck
-	37, // 13: orbit.runnerlink.v1.Frame.credit:type_name -> orbit.runnerlink.v1.Credit
-	38, // 14: orbit.runnerlink.v1.Frame.live_batch:type_name -> orbit.runnerlink.v1.LiveBatch
-	40, // 15: orbit.runnerlink.v1.Frame.turn_prefix_request:type_name -> orbit.runnerlink.v1.TurnPrefixRequest
-	41, // 16: orbit.runnerlink.v1.Frame.turn_prefix_response:type_name -> orbit.runnerlink.v1.TurnPrefixResponse
-	5,  // 17: orbit.runnerlink.v1.Frame.chunk:type_name -> orbit.runnerlink.v1.Chunk
-	42, // 18: orbit.runnerlink.v1.Frame.stream_open:type_name -> orbit.runnerlink.v1.StreamOpen
-	43, // 19: orbit.runnerlink.v1.Frame.stream_opened:type_name -> orbit.runnerlink.v1.StreamOpened
-	44, // 20: orbit.runnerlink.v1.Frame.stream_data:type_name -> orbit.runnerlink.v1.StreamData
-	45, // 21: orbit.runnerlink.v1.Frame.stream_credit:type_name -> orbit.runnerlink.v1.StreamCredit
-	46, // 22: orbit.runnerlink.v1.Frame.stream_close:type_name -> orbit.runnerlink.v1.StreamClose
-	47, // 23: orbit.runnerlink.v1.Frame.stream_paste:type_name -> orbit.runnerlink.v1.StreamPaste
-	48, // 24: orbit.runnerlink.v1.Frame.stream_pasted:type_name -> orbit.runnerlink.v1.StreamPasted
-	7,  // 25: orbit.runnerlink.v1.Hello.write_contract:type_name -> orbit.runnerlink.v1.WriteContract
-	8,  // 26: orbit.runnerlink.v1.Hello.managed_instance:type_name -> orbit.runnerlink.v1.ManagedInstance
-	9,  // 27: orbit.runnerlink.v1.Hello.sessions:type_name -> orbit.runnerlink.v1.SessionResume
-	0,  // 28: orbit.runnerlink.v1.Welcome.mode:type_name -> orbit.runnerlink.v1.Mode
-	11, // 29: orbit.runnerlink.v1.Welcome.limits:type_name -> orbit.runnerlink.v1.Limits
-	37, // 30: orbit.runnerlink.v1.Welcome.credit:type_name -> orbit.runnerlink.v1.Credit
-	12, // 31: orbit.runnerlink.v1.Welcome.sessions:type_name -> orbit.runnerlink.v1.SessionState
-	24, // 32: orbit.runnerlink.v1.Welcome.hints:type_name -> orbit.runnerlink.v1.HintState
-	13, // 33: orbit.runnerlink.v1.Welcome.release:type_name -> orbit.runnerlink.v1.AssignedRelease
-	1,  // 34: orbit.runnerlink.v1.Close.code:type_name -> orbit.runnerlink.v1.CloseCode
-	19, // 35: orbit.runnerlink.v1.Hint.inbox:type_name -> orbit.runnerlink.v1.InboxHint
-	20, // 36: orbit.runnerlink.v1.Hint.claim:type_name -> orbit.runnerlink.v1.ClaimHint
-	21, // 37: orbit.runnerlink.v1.Hint.commands:type_name -> orbit.runnerlink.v1.CommandsHint
-	22, // 38: orbit.runnerlink.v1.Hint.approval:type_name -> orbit.runnerlink.v1.ApprovalHint
-	23, // 39: orbit.runnerlink.v1.Hint.watchers:type_name -> orbit.runnerlink.v1.WatchersHint
-	22, // 40: orbit.runnerlink.v1.HintState.approvals:type_name -> orbit.runnerlink.v1.ApprovalHint
-	23, // 41: orbit.runnerlink.v1.HintState.watchers:type_name -> orbit.runnerlink.v1.WatchersHint
-	26, // 42: orbit.runnerlink.v1.Rpc.tunnel:type_name -> orbit.runnerlink.v1.TunnelRequest
-	28, // 43: orbit.runnerlink.v1.RpcResult.tunnel:type_name -> orbit.runnerlink.v1.TunnelResponse
-	29, // 44: orbit.runnerlink.v1.RpcResult.failure:type_name -> orbit.runnerlink.v1.Failure
-	31, // 45: orbit.runnerlink.v1.Heartbeat.facts:type_name -> orbit.runnerlink.v1.Fact
-	0,  // 46: orbit.runnerlink.v1.HeartbeatAck.mode:type_name -> orbit.runnerlink.v1.Mode
-	24, // 47: orbit.runnerlink.v1.HeartbeatAck.hints:type_name -> orbit.runnerlink.v1.HintState
-	13, // 48: orbit.runnerlink.v1.HeartbeatAck.release:type_name -> orbit.runnerlink.v1.AssignedRelease
-	34, // 49: orbit.runnerlink.v1.EventBatch.events:type_name -> orbit.runnerlink.v1.Event
-	36, // 50: orbit.runnerlink.v1.EventAck.rejected:type_name -> orbit.runnerlink.v1.RejectedEvent
-	29, // 51: orbit.runnerlink.v1.EventAck.failure:type_name -> orbit.runnerlink.v1.Failure
-	39, // 52: orbit.runnerlink.v1.LiveBatch.events:type_name -> orbit.runnerlink.v1.LiveEvent
-	2,  // 53: orbit.runnerlink.v1.StreamOpen.kind:type_name -> orbit.runnerlink.v1.StreamKind
-	3,  // 54: orbit.runnerlink.v1.StreamClose.code:type_name -> orbit.runnerlink.v1.StreamCloseCode
-	55, // [55:55] is the sub-list for method output_type
-	55, // [55:55] is the sub-list for method input_type
-	55, // [55:55] is the sub-list for extension type_name
-	55, // [55:55] is the sub-list for extension extendee
-	0,  // [0:55] is the sub-list for field type_name
+	7,  // 0: orbit.runnerlink.v1.Frame.hello:type_name -> orbit.runnerlink.v1.Hello
+	11, // 1: orbit.runnerlink.v1.Frame.welcome:type_name -> orbit.runnerlink.v1.Welcome
+	15, // 2: orbit.runnerlink.v1.Frame.token_refresh:type_name -> orbit.runnerlink.v1.TokenRefresh
+	16, // 3: orbit.runnerlink.v1.Frame.redirect:type_name -> orbit.runnerlink.v1.Redirect
+	17, // 4: orbit.runnerlink.v1.Frame.drain:type_name -> orbit.runnerlink.v1.Drain
+	18, // 5: orbit.runnerlink.v1.Frame.close:type_name -> orbit.runnerlink.v1.Close
+	19, // 6: orbit.runnerlink.v1.Frame.hint:type_name -> orbit.runnerlink.v1.Hint
+	26, // 7: orbit.runnerlink.v1.Frame.rpc:type_name -> orbit.runnerlink.v1.Rpc
+	28, // 8: orbit.runnerlink.v1.Frame.rpc_result:type_name -> orbit.runnerlink.v1.RpcResult
+	31, // 9: orbit.runnerlink.v1.Frame.heartbeat:type_name -> orbit.runnerlink.v1.Heartbeat
+	33, // 10: orbit.runnerlink.v1.Frame.heartbeat_ack:type_name -> orbit.runnerlink.v1.HeartbeatAck
+	34, // 11: orbit.runnerlink.v1.Frame.event_batch:type_name -> orbit.runnerlink.v1.EventBatch
+	36, // 12: orbit.runnerlink.v1.Frame.event_ack:type_name -> orbit.runnerlink.v1.EventAck
+	38, // 13: orbit.runnerlink.v1.Frame.credit:type_name -> orbit.runnerlink.v1.Credit
+	39, // 14: orbit.runnerlink.v1.Frame.live_batch:type_name -> orbit.runnerlink.v1.LiveBatch
+	41, // 15: orbit.runnerlink.v1.Frame.turn_prefix_request:type_name -> orbit.runnerlink.v1.TurnPrefixRequest
+	42, // 16: orbit.runnerlink.v1.Frame.turn_prefix_response:type_name -> orbit.runnerlink.v1.TurnPrefixResponse
+	6,  // 17: orbit.runnerlink.v1.Frame.chunk:type_name -> orbit.runnerlink.v1.Chunk
+	43, // 18: orbit.runnerlink.v1.Frame.stream_open:type_name -> orbit.runnerlink.v1.StreamOpen
+	44, // 19: orbit.runnerlink.v1.Frame.stream_opened:type_name -> orbit.runnerlink.v1.StreamOpened
+	45, // 20: orbit.runnerlink.v1.Frame.stream_data:type_name -> orbit.runnerlink.v1.StreamData
+	46, // 21: orbit.runnerlink.v1.Frame.stream_credit:type_name -> orbit.runnerlink.v1.StreamCredit
+	47, // 22: orbit.runnerlink.v1.Frame.stream_close:type_name -> orbit.runnerlink.v1.StreamClose
+	48, // 23: orbit.runnerlink.v1.Frame.stream_paste:type_name -> orbit.runnerlink.v1.StreamPaste
+	49, // 24: orbit.runnerlink.v1.Frame.stream_pasted:type_name -> orbit.runnerlink.v1.StreamPasted
+	50, // 25: orbit.runnerlink.v1.Frame.background_job_tail_request:type_name -> orbit.runnerlink.v1.BackgroundJobTailRequest
+	51, // 26: orbit.runnerlink.v1.Frame.background_job_tail_response:type_name -> orbit.runnerlink.v1.BackgroundJobTailResponse
+	8,  // 27: orbit.runnerlink.v1.Hello.write_contract:type_name -> orbit.runnerlink.v1.WriteContract
+	9,  // 28: orbit.runnerlink.v1.Hello.managed_instance:type_name -> orbit.runnerlink.v1.ManagedInstance
+	10, // 29: orbit.runnerlink.v1.Hello.sessions:type_name -> orbit.runnerlink.v1.SessionResume
+	0,  // 30: orbit.runnerlink.v1.Welcome.mode:type_name -> orbit.runnerlink.v1.Mode
+	12, // 31: orbit.runnerlink.v1.Welcome.limits:type_name -> orbit.runnerlink.v1.Limits
+	38, // 32: orbit.runnerlink.v1.Welcome.credit:type_name -> orbit.runnerlink.v1.Credit
+	13, // 33: orbit.runnerlink.v1.Welcome.sessions:type_name -> orbit.runnerlink.v1.SessionState
+	25, // 34: orbit.runnerlink.v1.Welcome.hints:type_name -> orbit.runnerlink.v1.HintState
+	14, // 35: orbit.runnerlink.v1.Welcome.release:type_name -> orbit.runnerlink.v1.AssignedRelease
+	1,  // 36: orbit.runnerlink.v1.Close.code:type_name -> orbit.runnerlink.v1.CloseCode
+	20, // 37: orbit.runnerlink.v1.Hint.inbox:type_name -> orbit.runnerlink.v1.InboxHint
+	21, // 38: orbit.runnerlink.v1.Hint.claim:type_name -> orbit.runnerlink.v1.ClaimHint
+	22, // 39: orbit.runnerlink.v1.Hint.commands:type_name -> orbit.runnerlink.v1.CommandsHint
+	23, // 40: orbit.runnerlink.v1.Hint.approval:type_name -> orbit.runnerlink.v1.ApprovalHint
+	24, // 41: orbit.runnerlink.v1.Hint.watchers:type_name -> orbit.runnerlink.v1.WatchersHint
+	23, // 42: orbit.runnerlink.v1.HintState.approvals:type_name -> orbit.runnerlink.v1.ApprovalHint
+	24, // 43: orbit.runnerlink.v1.HintState.watchers:type_name -> orbit.runnerlink.v1.WatchersHint
+	27, // 44: orbit.runnerlink.v1.Rpc.tunnel:type_name -> orbit.runnerlink.v1.TunnelRequest
+	29, // 45: orbit.runnerlink.v1.RpcResult.tunnel:type_name -> orbit.runnerlink.v1.TunnelResponse
+	30, // 46: orbit.runnerlink.v1.RpcResult.failure:type_name -> orbit.runnerlink.v1.Failure
+	32, // 47: orbit.runnerlink.v1.Heartbeat.facts:type_name -> orbit.runnerlink.v1.Fact
+	0,  // 48: orbit.runnerlink.v1.HeartbeatAck.mode:type_name -> orbit.runnerlink.v1.Mode
+	25, // 49: orbit.runnerlink.v1.HeartbeatAck.hints:type_name -> orbit.runnerlink.v1.HintState
+	14, // 50: orbit.runnerlink.v1.HeartbeatAck.release:type_name -> orbit.runnerlink.v1.AssignedRelease
+	35, // 51: orbit.runnerlink.v1.EventBatch.events:type_name -> orbit.runnerlink.v1.Event
+	37, // 52: orbit.runnerlink.v1.EventAck.rejected:type_name -> orbit.runnerlink.v1.RejectedEvent
+	30, // 53: orbit.runnerlink.v1.EventAck.failure:type_name -> orbit.runnerlink.v1.Failure
+	40, // 54: orbit.runnerlink.v1.LiveBatch.events:type_name -> orbit.runnerlink.v1.LiveEvent
+	2,  // 55: orbit.runnerlink.v1.StreamOpen.kind:type_name -> orbit.runnerlink.v1.StreamKind
+	3,  // 56: orbit.runnerlink.v1.StreamClose.code:type_name -> orbit.runnerlink.v1.StreamCloseCode
+	4,  // 57: orbit.runnerlink.v1.BackgroundJobTailResponse.outcome:type_name -> orbit.runnerlink.v1.BackgroundJobTailOutcome
+	58, // [58:58] is the sub-list for method output_type
+	58, // [58:58] is the sub-list for method input_type
+	58, // [58:58] is the sub-list for extension type_name
+	58, // [58:58] is the sub-list for extension extendee
+	0,  // [0:58] is the sub-list for field type_name
 }
 
 func init() { file_v1_runner_link_proto_init() }
@@ -4380,6 +4730,8 @@ func file_v1_runner_link_proto_init() {
 		(*Frame_StreamClose)(nil),
 		(*Frame_StreamPaste)(nil),
 		(*Frame_StreamPasted)(nil),
+		(*Frame_BackgroundJobTailRequest)(nil),
+		(*Frame_BackgroundJobTailResponse)(nil),
 	}
 	file_v1_runner_link_proto_msgTypes[14].OneofWrappers = []any{
 		(*Hint_Inbox)(nil),
@@ -4400,8 +4752,8 @@ func file_v1_runner_link_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_runner_link_proto_rawDesc), len(file_v1_runner_link_proto_rawDesc)),
-			NumEnums:      4,
-			NumMessages:   45,
+			NumEnums:      5,
+			NumMessages:   47,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

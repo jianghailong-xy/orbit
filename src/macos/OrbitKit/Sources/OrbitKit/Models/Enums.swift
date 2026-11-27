@@ -14,6 +14,15 @@ public enum RunStatus: String, Codable, Sendable {
     case awaitingInput = "AWAITING_INPUT"
     /// A turn was interrupted by the user; the session stays alive.
     case interrupted = "INTERRUPTED"
+    /// Forward compatibility: a status word this build does not know. Decoding maps any such
+    /// word here instead of failing the whole row (and with it the whole list). It is neither
+    /// live nor terminal, and reads as the neutral ``SessionRunState/ended``.
+    case unknown = "UNKNOWN"
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = RunStatus(rawValue: raw) ?? .unknown
+    }
 
     /// Statuses where the session is live / resumable (composer should allow sending).
     public var isLive: Bool {
@@ -68,6 +77,39 @@ public enum SessionRunState: String, Codable, Sendable {
         }
     }
 
+    /// The run state a payload with the new session fields reads as (web `runStateFromPhaseFields`), or nil
+    /// when `phase` or `released` is absent (an older server), which keeps the legacy reading. A release is
+    /// Failed only when the last turn failed and nobody asked for an end; Finished only by `workFinished`
+    /// (else the end reason or a settled landing); any other release is Ended. A held session reads its
+    /// phase: queued, running, or waiting on its reply. `activity` is TURN on every queued or running row (and on
+    /// a parked session whose engine runs its own turn), so only another activity (a background job, a wait) on a
+    /// RUNNING phase means no turn is running: that reads as parked.
+    public static func fromPhaseFields(phase: SessionPhase?, released: Bool?,
+                                       lastTurnOutcome: SessionTurnOutcome?, endReason: String?,
+                                       workFinished: Bool? = nil, activity: String? = nil,
+                                       isLanding: Bool = false, legacyStatus: RunStatus? = nil) -> SessionRunState? {
+        guard let phase, let released else { return nil }
+        if released {
+            return afterRelease(endReason: endReason, lastTurnOutcome: lastTurnOutcome,
+                                workFinished: workFinished, isLanding: isLanding)
+        }
+        switch phase {
+        case .pending: return .queued
+        case .running:
+            // The legacy run status decides first, as web's `dispatchedTurnInFlight` does: a dispatched turn
+            // (RUNNING, PENDING) is running; a parked session (AWAITING_INPUT) stays parked even while its engine
+            // runs its own turn or a sub-agent (activity TURN). Any other word reads the activity.
+            switch legacyStatus {
+            case .running?, .pending?: return .running
+            case .awaitingInput?: return .awaitingInput
+            default:
+                let other = activity ?? ""
+                return other.isEmpty || other == "TURN" ? .running : .awaitingInput
+            }
+        case .idle:    return lastTurnOutcome == .interrupted ? .interrupted : .awaitingInput
+        }
+    }
+
     /// Resolve the new field first, then raw runner status + end reason. The legacy mixed
     /// `sessionState` is intentionally not allowed to override a raw state: an old completed row
     /// commonly says `sessionState=COMPLETED` while its actual run status is CANCELLED.
@@ -90,6 +132,9 @@ public enum SessionRunState: String, Codable, Sendable {
             // Every deliberate end — filed, ended, stopped, deleted, task-driven — plus the
             // retired PARKED-era 'idle'/'orphaned' reasons settle here. None of them differ in
             // what the user can do next.
+            return .ended
+        case .unknown:
+            // A status word this build does not know: never running, and no outcome is claimed.
             return .ended
         }
     }
@@ -166,9 +211,15 @@ public enum SessionWaitingKind: String, Codable, Sendable {
     /// A project that looks finished and that its coordinator did not ask about within the
     /// project's escalation window: the row says "Record as done…".
     case recordAsDone = "RECORD_AS_DONE"
-    /// An owner request this conversation filed and the owner has not ended (a step, a decision, a
-    /// key, a confirmation): the row says "Waiting on you", over the request's card.
+    /// Everything counted is one or more open `request_owner_action` requests this session asked,
+    /// all of ONE kind (`ownerRequests`): the row says that kind's word — "Decision for you",
+    /// "Key needed", "Steps for you" or "Confirm for you". Two kinds on one row are a mix and keep
+    /// "Waiting for approval" (the shared copy's `ownerRequestRowWord`).
     case ownerRequest = "OWNER_REQUEST"
+    /// Everything counted is PENDING task moves waiting on this session — the ones it asked for and
+    /// the ones into a project it coordinates (`taskMoves`): the row says "Approve task move" or
+    /// "Approve N task moves", and the card in the conversation approves them all at once.
+    case moveRequest = "MOVE_REQUEST"
     /// Forward-compatibility floor: no named kind, which is also what an older control plane sends.
     case unknown = "UNKNOWN"
 
@@ -201,6 +252,40 @@ public enum OwnerItemKind: String, Codable, Sendable {
     public init(from decoder: Decoder) throws {
         let raw = try decoder.singleValueContainer().decode(String.self)
         self = OwnerItemKind(rawValue: raw) ?? .unknown
+    }
+}
+
+/// What one `request_owner_action` request asks the owner for — the four kinds the owner request
+/// card and the session row both name (`@orbit/shared`'s `SessionOwnerRequestKind`).
+///
+/// A kind this client does not know decodes as ``unknown`` and is not named anywhere: a control
+/// plane that learns a fifth kind must not make a session row fail to decode.
+public enum SessionOwnerRequestKind: String, Codable, Sendable {
+    case decision = "DECISION"
+    case secret = "SECRET"
+    case manualStep = "MANUAL_STEP"
+    case confirm = "CONFIRM"
+    case wikiCreate = "WIKI_CREATE"
+    /// Forward-compatibility floor.
+    case unknown = "UNKNOWN"
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = SessionOwnerRequestKind(rawValue: raw) ?? .unknown
+    }
+
+    /// The session row's word for a request of this kind — `@orbit/shared`'s
+    /// `OWNER_REQUEST_ROW_WORDS`, word for word. Nil for a kind this build cannot name, and the row
+    /// then keeps its long-standing "Waiting for approval".
+    public var rowWord: String? {
+        switch self {
+        case .decision:   return "Decision for you"
+        case .secret:     return "Key needed"
+        case .manualStep: return "Steps for you"
+        case .confirm:    return "Confirm for you"
+        case .wikiCreate: return "Create wiki"
+        case .unknown:    return nil
+        }
     }
 }
 

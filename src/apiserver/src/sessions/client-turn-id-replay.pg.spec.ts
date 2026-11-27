@@ -28,11 +28,11 @@ import {
   type Prisma,
   type PrismaClient,
   type Runner,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   SessionRunSource,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { sha256 } from '../common/crypto.util';
@@ -93,7 +93,7 @@ test('one clientTurnId is one message and one interrupt, however many times it i
     await prisma.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
-        title, prompt: title, provider: 'claude', status: RunStatus.AWAITING_INPUT,
+        title, prompt: title, provider: 'claude', turnState: null,
         numTurns: 1, startedAt: new Date(), runtimeSessionId: `runtime-${id}`,
         dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
         ...data,
@@ -135,7 +135,7 @@ test('one clientTurnId is one message and one interrupt, however many times it i
     const clientTurnId = randomUUID();
     await sessions.createTurn(ownerId, id, { content: 'the running turn', clientTurnId } as never);
     await prisma.conversationTurn.updateMany({ where: { sessionId: id, clientTurnId }, data: { status: 'IN_FLIGHT' } });
-    await prisma.session.update({ where: { id }, data: { status: RunStatus.RUNNING } });
+    await prisma.session.update({ where: { id }, data: { turnState: 'IN_FLIGHT' } });
     return id;
   }
   const allTurns = (sessionId: string) => prisma.conversationTurn.count({ where: { sessionId } });

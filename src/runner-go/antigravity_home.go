@@ -154,6 +154,7 @@ func antigravityPermissionRules(job *ClaimedSession, orbitExe string) (allow, de
 	rules := appendUnique(job.Agent.AllowedTools, orbitCLIAllowedTools(
 		orbitCLIPermissionExecutable(orbitExe),
 		job.AllowOrchestration && strings.TrimSpace(job.OrchestrationToken) != "",
+		job.BrowserEnabled,
 	)...)
 	for _, rule := range rules {
 		allow = appendUnique(allow, antigravityRule(rule, false)...)
@@ -301,6 +302,9 @@ func antigravityMCPServers(agent AgentExecConfig, orbitExe string) map[string]in
 			// the server gets it whatever agy passes.
 			env[envSubagentRunID] = runID
 		}
+		if mode := strings.TrimSpace(agent.Env[envSubagentRemoteMode]); mode != "" {
+			env[envSubagentRemoteMode] = mode
+		}
 		servers["orbit"] = map[string]interface{}{
 			"command": orbitExe,
 			"args":    []string{"mcp"},
@@ -315,12 +319,11 @@ func antigravityMCPServers(agent AgentExecConfig, orbitExe string) map[string]in
 // system instruction under "user-defined rules that you MUST ALWAYS FOLLOW", ahead of the
 // workspace's own GEMINI.md/AGENTS.md (measured on 1.2.16).
 func antigravityInstructions(job *ClaimedSession, orbitExe string) string {
-	text := strings.Join(nonEmptyStrings(
+	// agy reaches an MCP tool through its generic call_mcp_tool rather than by the tool's own name (antigravityProfile).
+	return strings.Join(nonEmptyStrings(
 		job.Agent.SystemPrompt,
-		withOrbitCLIInstructions(job.appendSystemPrompt(), orbitExe, job.insideRecordedWork(), job.watchesOn(), agentDelegates(job.Agent)),
+		withOrbitInstructions(job.appendSystemPrompt(), compose(job.sessionShape(orbitExe), antigravityProfile).System),
 	), "\n\n")
-	// agy reaches an MCP tool through its generic call_mcp_tool rather than by the tool's own name.
-	return strings.Replace(text, "the `mcp__orbit__*` tools", "the tools of the `orbit` MCP server (call_mcp_tool with ServerName \"orbit\")", 1)
 }
 
 // linkAntigravitySharedBin points a Gemini directory's bin/ at one runner-wide directory. agy unpacks

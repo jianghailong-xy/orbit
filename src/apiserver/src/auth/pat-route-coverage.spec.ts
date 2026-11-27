@@ -129,7 +129,7 @@ const PAT_SELF_ROUTES = ['DELETE /pat/self', 'GET /pat/self'];
 // ── §6.3 v1: workspace confinement ─────────────────────────────────────────────────────────────
 // The lists a token confined to workspaces reads, narrowed by their handlers rather than judged by
 // the guard. Exact both ways: a route the guard waves through on its handler's word is listed here.
-const NARROWED_LISTS = ['GET /tasks', 'GET /sessions', 'GET /workspaces', 'GET /agents'];
+const NARROWED_LISTS = ['GET /tasks', 'GET /sessions', 'GET /sessions/listing', 'GET /sessions/project-placement', 'GET /workspaces', 'GET /agents'];
 /** v1 tells tasks, sessions and workspaces by workspace; projects and the wiki come later (§6.3 step 2). */
 const CONFINABLE_SCOPE = /^(tasks|sessions|workspaces):/;
 

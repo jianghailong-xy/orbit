@@ -89,6 +89,8 @@ export const LANDING_PAGE_COPY = {
   COULD_NOT_MERGE: 'Could not merge',
   CONFLICT: 'conflict',
   STOPPED_NOT_LANDED: 'Stopped · not landed',
+  /** An attempt held on its pull request: it stopped nothing, it waits for GitHub (design §4.2). */
+  WAITING_FOR_GITHUB: 'Waiting for GitHub',
   TASK_ACCEPTANCE_EXITED: (code: string, expected: string): string =>
     `Task acceptance exited ${code} (expected ${expected}) on the combined tree`,
   CHECKS_TIMED_OUT: 'A check timed out on the combined tree',
@@ -549,10 +551,13 @@ function terminalCard(
       || (result.exitCode != null && result.exitCode !== result.expectedExitCode);
   }) as {
     name?: string; exitCode?: number | null; expectedExitCode?: number;
-    timedOut?: boolean; durationMs?: number;
+    timedOut?: boolean; durationMs?: number; command?: string;
   } | undefined;
-  const label = failed?.name ? checkLabel(failed.name) : LANDING_PAGE_COPY.TASK_ACCEPTANCE;
-  const clause = failed?.timedOut
+  // A GITHUB_CHECK is a required check that failed on the pull request; its `command` is GitHub's name for it.
+  const githubCheck = failed?.name === 'GITHUB_CHECK' ? (failed.command ?? 'Required check') : null;
+  const label = githubCheck ? `Check failed: ${githubCheck}`
+    : failed?.name ? checkLabel(failed.name) : LANDING_PAGE_COPY.TASK_ACCEPTANCE;
+  const clause = githubCheck ? label : failed?.timedOut
     ? `${LANDING_PAGE_COPY.CHECKS_FAILED} · ${LANDING_PAGE_COPY.CHECKS_TIMED_OUT.toLowerCase()}`
     : failed
       ? `${LANDING_PAGE_COPY.CHECKS_FAILED} · ${LANDING_PAGE_COPY.EXIT} ${failed.exitCode ?? '—'} `
@@ -562,7 +567,11 @@ function terminalCard(
         : attempt.state === 'ERROR'
           ? LANDING_PAGE_COPY.STOPPED_WITH_AN_ERROR
           : LANDING_PAGE_COPY.STOPPED_NOT_LANDED;
-  const failure = failed
+  // Held on its pull request: nothing stopped it, and the pull request block under the card says where it stands.
+  const onPullRequest = attempt.state === 'PULL_REQUEST';
+  const failure = onPullRequest ? null : githubCheck
+    ? `${label} · ${LANDING_PAGE_COPY.NOTHING_PUSHED_CLAUSE}`
+    : failed
     ? `${failed.timedOut ? `${label} timed out ${LANDING_PAGE_COPY.ON_THE_COMBINED_TREE}` : LANDING_PAGE_COPY.TASK_ACCEPTANCE_EXITED(String(failed.exitCode ?? '—'), String(failed.expectedExitCode ?? 0))} · ${LANDING_PAGE_COPY.NOTHING_PUSHED_CLAUSE}`
     : attempt.state === 'CONFLICT' ? `${LANDING_PAGE_COPY.COULD_NOT_MERGE} · ${LANDING_PAGE_COPY.CONFLICT}`
       : attempt.state === 'ERROR' ? `${LANDING_PAGE_COPY.STOPPED_WITH_AN_ERROR} · ${LANDING_PAGE_COPY.NOTHING_PUSHED_CLAUSE}`
@@ -571,12 +580,13 @@ function terminalCard(
           : LANDING_PAGE_COPY.STOPPED_NOT_LANDED;
   return {
     word,
-    state: attempt.state === 'READY' ? LANDING_PAGE_COPY.READY : clause,
+    state: attempt.state === 'READY' ? LANDING_PAGE_COPY.READY : onPullRequest ? LANDING_PAGE_COPY.WAITING_FOR_GITHUB : clause,
     right: attempt.state === 'READY'
       ? LANDING_PAGE_COPY.READY
+      : onPullRequest ? LANDING_PAGE_COPY.WAITING_FOR_GITHUB
       : mergeJob ? LANDING_PAGE_COPY.NOT_MERGED : LANDING_PAGE_COPY.NOT_LANDED,
     rightIsClock: false,
-    detail: attempt.state === 'READY' ? LANDING_PAGE_COPY.PASSED_CHECK : clause,
+    detail: attempt.state === 'READY' ? LANDING_PAGE_COPY.PASSED_CHECK : onPullRequest ? LANDING_PAGE_COPY.WAITING_FOR_GITHUB : clause,
     budget: null,
     progress: null,
     live: null,
@@ -976,6 +986,13 @@ export function landingCheckPassed(entry: IntegrationTimelineEntry): boolean {
   return data.timedOut !== true
     && typeof data.exitCode === 'number'
     && data.exitCode === data.expectedExitCode;
+}
+
+/** A finished landing check that was not run because its task is exempt (§12.15 P-C2): the reason the
+ *  server recorded, or null for any other line. It is skipped, not failed. */
+export function landingCheckTaskExempt(entry: IntegrationTimelineEntry): { reason: string } | null {
+  if (entry.kind !== 'CHECK_FINISHED' || entry.data?.skipped !== 'TASK_EXEMPT') return null;
+  return { reason: typeof entry.data.reason === 'string' ? entry.data.reason : '' };
 }
 
 /**

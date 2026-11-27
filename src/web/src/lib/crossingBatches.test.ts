@@ -3,8 +3,11 @@ import type { ProjectCrossingRow } from './attribution';
 import {
   FILE_APPROVE_CONSEQUENCE,
   MOVE_TASKS_APPROVE_CONSEQUENCE,
+  MOVE_OUT_APPROVE_CONSEQUENCE,
+  MOVE_OUT_MANY_APPROVE_CONSEQUENCE,
   anotherEndLine,
   answeredBadge,
+  answeredTitle,
   approveConsequence,
   batchReasons,
   batchVerdict,
@@ -16,12 +19,14 @@ import {
   crossingTitle,
   decisionLabels,
   isLive,
+  moveBatches,
   notRecordedNote,
+  reasonsHead,
   requestedCriterionLine,
   waitingLine,
   withdrawnCriterionLine,
 } from './crossingBatches';
-import { MOVE_TASK_APPROVE_CONSEQUENCE } from '../components/ProjectCrossingsCard';
+import { MOVE_TASK_APPROVE_CONSEQUENCE, MOVE_TASK_OUT_APPROVE_CONSEQUENCE } from '../components/ProjectCrossingsCard';
 
 const TARGET = '0195c0de-0000-7000-8000-000000000010';
 const SOURCE = '0195c0de-0000-7000-8000-000000000020';
@@ -42,7 +47,8 @@ function row(over: Partial<ProjectCrossingRow> = {}): ProjectCrossingRow {
     kind: 'MOVE_TASK',
     subjectTaskId: `task-${n}`,
     subjectTask: { id: `task-${n}`, title: `Task ${n}` },
-    requestedCriterion: { key: String(3 + n), text: `criterion ${3 + n}` },
+    // Real keys are base62 ids; the card must name the criterion by its number instead.
+    requestedCriterion: { key: `2wndAAHBC95f4Al8rN${n}`, text: `criterion ${3 + n}`, ordinal: 3 + n },
     withdrawnCriterion: null,
     crossingKey: `key-${n}`,
     state: 'PENDING',
@@ -152,23 +158,62 @@ describe('crossingBatches — the words', () => {
     const [batch] = crossingBatches(rows, TARGET);
     const summary = crossingSummary(batch);
     expect(summary).toBe('8 tasks from Runner link v1 · for criteria 4–11');
-    expect(summary).not.toMatch(/Pub|SrcPub|TgtPub|row-|task-/);
+    expect(summary).not.toMatch(/Pub|SrcPub|TgtPub|row-|task-|2wnd/);
     expect(waitingLine(batch)).toBe('move · 8 waiting');
   });
 
   it('says criteria as a list when they are not a run, and one criterion in the singular', () => {
-    expect(criteriaRange(['9', '4', '6'])).toBe('4, 6, 9');
-    expect(criteriaRange(['5'])).toBe('5');
-    expect(criteriaRange(['b', 'a'])).toBe('a, b');
+    expect(criteriaRange([9, 4, 6])).toBe('4, 6, 9');
+    expect(criteriaRange([5])).toBe('5');
+    expect(criteriaRange([5, 4, 5])).toBe('4–5');
     n = 0;
-    const [one] = crossingBatches([row({ requestedCriterion: { key: '4', text: 'x' } })], TARGET);
+    const [one] = crossingBatches([row({ requestedCriterion: { key: '5QwwlrpmVQesF7jgVjMxe5', text: 'x', ordinal: 4 } })], TARGET);
     expect(crossingSummary(one)).toBe('1 task from Runner link v1 · for criterion 4');
+    n = 0;
+    const scattered = [9, 4, 6].map((ordinal) =>
+      row({ requestedCriterion: { key: `Key${ordinal}base62AAAAAAA`, text: `c${ordinal}`, ordinal } }));
+    const [list] = crossingBatches(scattered, TARGET);
+    expect(crossingSummary(list)).toBe('3 tasks from Runner link v1 · for criteria 4, 6, 9');
+    n = 0;
+    const same = [row(), row()].map((r) => ({ ...r, requestedCriterion: { key: 'SameKey', text: 'x', ordinal: 7 } }));
+    const [shared] = crossingBatches(same, TARGET);
+    expect(crossingSummary(shared)).toBe('2 tasks from Runner link v1 · for criterion 7');
     n = 0;
     const [none] = crossingBatches(
       [row({ kind: 'DEPEND_ON_TASK', requestedCriterion: null }), row({ kind: 'DEPEND_ON_TASK', requestedCriterion: null })],
       TARGET,
     );
     expect(crossingSummary(none)).toBe('2 dependencies from Runner link v1');
+  });
+
+  it('falls back to the criterion’s words, never its key, when the number is missing', () => {
+    n = 0;
+    // An older server sends no ordinal at all.
+    const [older] = crossingBatches(
+      [row({ requestedCriterion: { key: '5QwwlrpmVQesF7jgVjMxe5', text: 'A wedged drain restarts within a minute.' } })],
+      TARGET,
+    );
+    expect(crossingSummary(older)).toBe('1 task from Runner link v1 · for criterion “A wedged drain restarts within a minute.”');
+    expect(requestedCriterionLine(older.rows[0])).toBe(
+      'Target criterion requested: A wedged drain restarts within a minute.');
+    n = 0;
+    // Numbers and words together: the numbers first, then the words.
+    const [mixed] = crossingBatches([
+      row({ requestedCriterion: { key: 'AAAone', text: 'one', ordinal: 2 } }),
+      row({ requestedCriterion: { key: 'AAAtwo', text: 'two', ordinal: null } }),
+    ], TARGET);
+    expect(crossingSummary(mixed)).toBe('2 tasks from Runner link v1 · for criteria 2, “two”');
+    n = 0;
+    // A criterion that is gone has neither: the summary leaves it out, the row says so.
+    const [gone] = crossingBatches(
+      [row({ requestedCriterion: { key: '5QwwlrpmVQesF7jgVjMxe5', text: null, ordinal: null } })], TARGET);
+    expect(crossingSummary(gone)).toBe('1 task from Runner link v1');
+    expect(requestedCriterionLine(gone.rows[0])).toBe(
+      'Target criterion requested: The target project no longer states this criterion.');
+    for (const line of [crossingSummary(older), crossingSummary(mixed), crossingSummary(gone),
+      requestedCriterionLine(older.rows[0]), requestedCriterionLine(gone.rows[0])]) {
+      expect(line).not.toMatch(/5Qww|AAAone|AAAtwo/);
+    }
   });
 
   it('names a source with no title as an unnamed project, never by id', () => {
@@ -191,11 +236,17 @@ describe('crossingBatches — the words', () => {
 
   it('lists each criterion line and each distinct reason once', () => {
     n = 0;
-    const gone = row({ requestedCriterion: { key: '4', text: null }, withdrawnCriterion: { key: '2', text: 'old' } });
+    const gone = row({
+      requestedCriterion: { key: '2wndAAHBC95f4Al8rNFtR', text: null, ordinal: null },
+      withdrawnCriterion: { key: '5QwwlrpmVQesF7jgVjMxe5', text: 'old', ordinal: 2 },
+    });
     expect(requestedCriterionLine(gone)).toBe(
-      'Target criterion requested: 4 — The target project no longer states this criterion.',
+      'Target criterion requested: The target project no longer states this criterion.',
     );
-    expect(withdrawnCriterionLine(gone)).toBe('Source criterion it serves now: 2');
+    expect(withdrawnCriterionLine(gone)).toBe('Source criterion it serves now: Criterion 2');
+    expect(requestedCriterionLine(row())).toBe(`Target criterion requested: Criterion ${3 + n}`);
+    expect(withdrawnCriterionLine(row({ withdrawnCriterion: { key: '5QwwlrpmVQesF7jgVjMxe5', text: 'old' } })))
+      .toBe('Source criterion it serves now: old');
     const [batch] = crossingBatches([gone, row(), row({ reason: 'another' }), row({ reason: null })], TARGET);
     expect(batchReasons(batch)).toEqual([
       'These tasks serve criteria here; their old project is done.',
@@ -228,8 +279,8 @@ describe('crossingBatches — a task asked to be taken out of every project', ()
   it('says what it does: take the task out, or keep it here', () => {
     n = 0;
     const [one] = crossingBatches([out()], SOURCE);
-    expect(crossingTitle(one.kind, 1, true)).toBe('Take this task out of the project?');
-    expect(crossingTitle(one.kind, 2, true)).toBe('Take these tasks out of the project?');
+    expect(crossingTitle(one.kind, 1, null, true)).toBe('Take this task out of the project?');
+    expect(crossingTitle(one.kind, 2, null, true)).toBe('Take these tasks out of the project?');
     expect(crossingSummary(one)).toBe('1 task to take out of Runner link v1');
     expect(crossingListHead(one.kind, true)).toBe('Tasks to take out');
     expect(approveConsequence(one)).toMatch(/^Confirming takes the task out of this project/);
@@ -241,5 +292,53 @@ describe('crossingBatches — a task asked to be taken out of every project', ()
     const [into] = crossingBatches([row()], TARGET);
     expect(into.out).toBe(false);
     expect(decisionLabels(into)).toEqual({ approve: 'Approve', refuse: 'Refuse' });
+  });
+  it('summarises an answered take-out by what happened to the tasks', () => {
+    n = 0;
+    const [taken] = crossingBatches([out({ state: 'APPLIED', decidedAt: '2026-11-09T09:00:00.000Z' })], SOURCE);
+    expect(crossingSummary(taken)).toBe('1 task taken out of Runner link v1');
+    const [kept] = crossingBatches([out({ state: 'DENIED', decidedAt: '2026-11-09T09:00:00.000Z' })], SOURCE);
+    expect(crossingSummary(kept)).toBe('1 task kept in Runner link v1');
+  });
+
+});
+
+describe('moveBatches — a move out of every project, from the session read', () => {
+  it('is a take-out batch with no target, in the asking session and in the source coordinator alike', () => {
+    n = 0;
+    const move = row({ toProjectId: null, toProjectPublicId: null, toProject: null, requestedCriterion: null });
+    for (const drawnAs of [['REQUESTER'], ['TARGET_COORDINATOR']] as const) {
+      const [batch] = moveBatches([{
+        batchKey: 'k', requestedBySessionId: 's', fromProjectId: SOURCE, toProjectId: null, state: 'PENDING',
+        since: move.requestedAt, decidedAt: null, drawnAs, moves: [move],
+      }]);
+      expect(batch.out).toBe(true);
+      expect(batch.targetTitle).toBeNull();
+      expect(crossingTitle(batch.kind, 1, batch.targetTitle, batch.out)).toBe('Take this task out of the project?');
+      expect(decisionLabels(batch)).toEqual({ approve: 'Take it out', refuse: 'Keep it here' });
+    }
+  });
+});
+
+describe('an answered card says what happened', () => {
+  it('heads it in the past tense by kind and verdict, and a mixed answer only as answered', () => {
+    expect(answeredTitle('MOVE_TASK', 1, 'APPROVED', null, true)).toBe('Task taken out of the project');
+    expect(answeredTitle('MOVE_TASK', 2, 'APPROVED', null, true)).toBe('Tasks taken out of the project');
+    expect(answeredTitle('MOVE_TASK', 1, 'REFUSED', null, true)).toBe('Task kept in the project');
+    expect(answeredTitle('MOVE_TASK', 3, 'APPROVED')).toBe('Tasks moved here');
+    expect(answeredTitle('MOVE_TASK', 1, 'APPROVED', 'Runner hardening')).toBe('Task moved to Runner hardening');
+    expect(answeredTitle('MOVE_TASK', 1, 'REFUSED')).toBe('Move refused');
+    expect(answeredTitle('FILE_TASK', 1, 'APPROVED')).toBe('Task filed here');
+    expect(answeredTitle('FILE_TASK', 2, 'REFUSED')).toBe('Filings refused');
+    expect(answeredTitle('DEPEND_ON_TASK', 2, 'APPROVED')).toBe('Dependencies allowed');
+    expect(answeredTitle('DEPEND_ON_TASK', 1, 'REFUSED')).toBe('Dependency refused');
+    expect(answeredTitle('MOVE_TASK', 2, 'MIXED')).toBe('Requests answered');
+  });
+
+  it('labels the quoted reasons as the agent\'s, and takes a task out in the project page\'s words', () => {
+    expect(reasonsHead(1)).toBe('Reason given by the requesting agent');
+    expect(reasonsHead(2)).toBe('Reasons given by the requesting agent');
+    expect(MOVE_OUT_APPROVE_CONSEQUENCE).toBe(MOVE_TASK_OUT_APPROVE_CONSEQUENCE);
+    expect(MOVE_OUT_MANY_APPROVE_CONSEQUENCE).toMatch(/^Confirming takes the tasks out of this project as soon as you answer; /);
   });
 });

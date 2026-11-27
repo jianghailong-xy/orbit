@@ -7,9 +7,10 @@ import { fetchAttachmentObjectUrl } from '../api';
 import { ExpiredAttachmentError } from '../lib/evidenceFiles';
 import { saveUserFile } from '../lib/userFile';
 import { AttachmentImage, type RunEvent, Transcript } from './Transcript';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
- * What a reply's file leaves behind once its bytes have gone (docs/orbit-files-design.md §2.8): a read answers 410, and the
+ * What a reply's file leaves behind once its bytes have gone (docs/drive-design.md §2.8): a read answers 410, and the
  * conversation draws the grey tile an evidence card draws, in the card's words. Only that answer: anything else that goes wrong
  * with a read may come back, and stays what it has always been. Whether `fetchAttachmentObjectUrl` turns a 410 into this error
  * is asserted beside it, against a real `Response`.
@@ -66,7 +67,7 @@ describe('a picture in a reply', () => {
     await reply(IMAGE);
     const tile = container.querySelector('.chat-expired')!;
     expect(tile.textContent).toBe('ExpiredSep 14');
-    expect(tile.getAttribute('title')).toBe('menu-open.png');
+    expect(await hoverTooltip(tile)).toBe('menu-open.png');
     expect(container.querySelector('.md-image-loading'), 'no grey box beside it').toBeNull();
     expect(read, 'one read: a file that went does not come back by asking again').toHaveBeenCalledTimes(1);
   });

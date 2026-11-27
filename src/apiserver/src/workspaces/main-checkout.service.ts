@@ -41,9 +41,11 @@ import {
 } from '@orbit/shared';
 import { readRunnerRepoHealth, repoHealthForWorkspace } from '../common/runner-repo-health';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import { isHeldPastClaim } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { RUNNER_BEATS, runnerIsOnline, runnerLastBeatAt } from '../runners/runner-presence';
+import { TURN_STATE_SELECT } from '../sessions/session-turn-state';
 
 /**
  * The main checkout's read and its four actions (docs/main-checkout-git-contract.md §2, §5–§7, §10).
@@ -497,7 +499,8 @@ export class MainCheckoutService implements OnModuleInit, OnModuleDestroy {
     const session = await tx.session.findUniqueOrThrow({
       where: { id: sessionId },
       select: {
-        status: true,
+        // isHeldPastClaim's (common/session-release.ts).
+        ...TURN_STATE_SELECT,
         isolationStatus: true,
         assignedRunnerId: true,
         assignedRunner: { select: { capabilities: true } },
@@ -514,7 +517,7 @@ export class MainCheckoutService implements OnModuleInit, OnModuleDestroy {
     });
     const payload: MainCheckoutResultNotice = { noticeKind: MAIN_CHECKOUT_NOTICE_KINDS.result, notice: line.text, result };
     const live =
-      LIVE_STATUSES.has(session.status) &&
+      isHeldPastClaim(session) &&
       !!session.assignedRunnerId &&
       !!session.assignedRunner?.capabilities.includes(MAIN_CHECKOUT_GIT_CAPABILITY);
     if (live) {
@@ -660,8 +663,6 @@ export class MainCheckoutService implements OnModuleInit, OnModuleDestroy {
 }
 
 const NOT_REPORTED = "This workspace's runner hasn't reported its main checkout yet. Try again in a minute.";
-
-const LIVE_STATUSES: ReadonlySet<string> = new Set(['RUNNING', 'AWAITING_INPUT', 'INTERRUPTED']);
 
 function isUniqueViolation(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';

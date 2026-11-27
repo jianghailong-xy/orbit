@@ -23,9 +23,12 @@ import { uuidToBase62 } from '@orbit/shared';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { Client } from 'pg';
 
+import { isReleasedStatus } from '../common/session-release';
 import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-test-apiserver';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from './coordinator-pg-test-safety';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { type SessionFixture, WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -93,11 +96,13 @@ async function task(o: Owner, projectId: string): Promise<string> {
   return row.id;
 }
 
-async function session(o: Owner, fields: Partial<Prisma.SessionUncheckedCreateInput>): Promise<string> {
+async function session(o: Owner, fields: SessionFixture): Promise<string> {
+  const { status = 'AWAITING_INPUT', ...fieldsFacts } = fields;
   const row = await o.h.db.session.create({
     data: {
       ownerId: o.id, creatorId: o.id, title: 'a session', prompt: 'p',
-      status: 'AWAITING_INPUT', dispatchOrigin: 'USER', ...fields,
+      turnState: turnStateOfWord(status), dispatchOrigin: 'USER', ...fieldsFacts,
+      ...(isReleasedStatus(status) ? { finishedAt: fields.finishedAt ?? new Date()} : {}),
     },
   });
   return row.id;
@@ -170,7 +175,7 @@ async function snapshot(o: Owner, ids: string[]) {
   const rows = await o.h.db.session.findMany({
     where: { id: { in: ids } },
     select: {
-      id: true, status: true, endReason: true, cancelRequestedAt: true, finishedAt: true,
+      id: true, ...WORD_SELECT, endReason: true, cancelRequestedAt: true, finishedAt: true,
       completedAt: true, archivedAt: true, deletedAt: true,
     },
   });
@@ -248,7 +253,7 @@ test('DONE: the coordinator and every member still in Open, in every workspace, 
   }
   // Never ran: settled at once, as Complete settles a queued session.
   const settledQueued = after.get(queued)!;
-  assert.equal(settledQueued.status, 'CANCELLED');
+  assert.equal(wordOf(settledQueued), 'CANCELLED');
   assert.equal(settledQueued.endReason, 'completed');
   assert.ok(settledQueued.finishedAt);
   assert.deepEqual(settledQueued.endTurns, []);

@@ -1,0 +1,588 @@
+{
+  "description": "The session list's sections and their order, which the web, Apple and Android clients each test against. Server: session.listed_at (migration 1490, src/apiserver/src/sessions/session-listed-at.ts). Each row's serverFacts are the columns the server holds for it (docs/session-status-retirement-plan.md section 2.6); its status is the legacy wire word derived from them, which is what a client reads: no client reads serverFacts, and the server spec reads only them.",
+  "rule": [
+    "Input: the Open list's rows. A row with completedAt or deletedAt set is not in it (the Completed view orders by completedAt; Trash, the rows with deletedAt, is expectedTrash below).",
+    "Each row goes to the FIRST section that takes it, in this order: Pinned, Needs you, Working, then one date section.",
+    "Pinned: pinnedAt is set.",
+    "Needs you: needsOwner, which is pendingApprovals > 0 (a permission card, a question, an owner decision waiting on this row) OR status FAILED with no retryAt armed.",
+    "Working: phase RUNNING or PENDING when the row carries phase (RUNNING covers work outside a turn: a background job or a SubAgent still running), otherwise status RUNNING or PENDING; or status FAILED with retryAt armed (the server is retrying it).",
+    "Every other row goes to a date section by the calendar day of listedAt (createdAt when listedAt is null), counted back from today in the reader's time zone: 0 or a future instant 'Today', 1 'Yesterday', 2–7 '2–7 days ago', 8–30 '8–30 days ago', more 'Older'.",
+    "Within every section: listedAt descending (createdAt when null), then createdAt descending, then id ascending. pinnedAt counts only where the Pinned section is drawn: in every other section and view a pinned row is ordered like any other. lastTurnAt is never an order key: it is the liveness clock and moves with every streamed event.",
+    "Empty sections are not drawn.",
+    "With a tag filter on (expectedTagFilter: the same Open rows, as if every one carried the tag), the Pinned section is not drawn: a pinned row goes to Needs you, Working or its date section like any other. Needs you and Working stay.",
+    "listedAt moves only when the session changes for its owner: it is created; a person sends it a message; a turn ends on the owner (any turn answered with nothing queued behind it, a wake-up's or another session's included; a card or question raised; an owner request filed); it ends (SUCCEEDED, FAILED, CANCELLED) or is completed. Streamed text, tool calls, background-job output, a wake-up turn's arrival, queue claims and runner reconnects do not move it.",
+    "Trash (expectedTrash: the rows with deletedAt) has date sections only, by listedAt (createdAt when null), in the order above; no Pinned, Needs you or Working.",
+    "A row's time, at its trailing edge: a row with a turn in flight shows how long that turn has run (currentTurnStartedAt); every other row shows when it was listed, listedAt (createdAt when null), so the time it shows always agrees with where it sits. lastTurnAt is not shown."
+  ],
+  "sectionTitles": [
+    "Pinned",
+    "Needs you",
+    "Working",
+    "Today",
+    "Yesterday",
+    "2–7 days ago",
+    "8–30 days ago",
+    "Older"
+  ],
+  "now": "2026-11-20T12:00:00.000Z",
+  "timeZone": "UTC",
+  "sessions": [
+    {
+      "id": "pin-running",
+      "status": "RUNNING",
+      "serverFacts": {"finishedAt": null, "turnState": "IN_FLIGHT"},
+      "pinnedAt": "2026-11-02T00:00:00.000Z",
+      "pendingApprovals": 0,
+      "retryAt": null,
+      "completedAt": null,
+      "deletedAt": null,
+      "needsOwner": false,
+      "listedAt": "2026-11-19T10:00:00.000Z",
+      "lastTurnAt": "2026-11-20T11:59:59.000Z",
+      "createdAt": "2026-09-01T00:00:00.000Z",
+      "note": "Pinned outranks Working"
+    },
+    {
+      "id": "pin-asking",
+      "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null},
+      "pinnedAt": "2026-11-15T00:00:00.000Z",
+      "pendingApprovals": 1,
+      "retryAt": null,
+      "completedAt": null,
+      "deletedAt": null,
+      "needsOwner": true,
+      "listedAt": "2026-11-10T10:00:00.000Z",
+      "lastTurnAt": "2026-11-10T10:00:00.000Z",
+      "createdAt": "2026-09-01T00:00:00.000Z",
+      "note": "Pinned outranks Needs you"
+    },
+    {
+      "id": "pin-idle",
+      "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null},
+      "pinnedAt": "2026-11-19T00:00:00.000Z",
+      "pendingApprovals": 0,
+      "retryAt": null,
+      "completedAt": null,
+      "deletedAt": null,
+      "needsOwner": false,
+      "listedAt": "2026-11-01T10:00:00.000Z",
+      "lastTurnAt": "2026-11-01T10:00:00.000Z",
+      "createdAt": "2026-09-01T00:00:00.000Z",
+      "note": "Pinned rows are ordered by listedAt, not by when they were pinned"
+    },
+    {
+      "id": "needs-question",
+      "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null},
+      "pinnedAt": null,
+      "pendingApprovals": 1,
+      "retryAt": null,
+      "completedAt": null,
+      "deletedAt": null,
+      "needsOwner": true,
+      "listedAt": "2026-11-20T09:31:20.000Z",
+      "lastTurnAt": "2026-11-20T09:31:20.000Z",
+      "createdAt": "2026-09-01T00:00:00.000Z",
+      "note": "Asks: restart runner?"
+    },
+    {
+      "id": "needs-blocked",
+      "status": "RUNNING",
+      "serverFacts": {"finishedAt": null, "turnState": "IN_FLIGHT"},
+      "pinnedAt": null,
+      "pendingApprovals": 2,
+      "retryAt": null,
+      "completedAt": null,
+      "deletedAt": null,
+      "needsOwner": true,
+      "listedAt": "2026-11-20T08:00:00.000Z",
+      "lastTurnAt": "2026-11-20T11:59:58.000Z",
+      "createdAt": "2026-09-01T00:00:00.000Z",
+      "note": "A turn blocked on a permission card: Needs you outranks Working"
+    },
+    {
+      "id": "needs-failed",
+      "status": "FAILED",
+      "serverFacts": {"finishedAt": "2026-11-18T15:00:00.000Z", "turnState": null, "endReason": null, "lastTurnOutcome": "FAILED"},
+      "pinnedAt": null,
+      "pendingApprovals": 0,
+      "retryAt": null,
+      "completedAt": null,
+      "deletedAt": null,
+      "needsOwner": true,
+      "listedAt": "2026-11-18T15:00:00.000Z",
+      "lastTurnAt": "2026-11-18T15:00:00.000Z",
+      "createdAt": "2026-09-01T00:00:00.000Z",
+      "note": "Failed with no retry armed"
+    },
+    {
+      "id": "work-ui-copy",
+      "status": "RUNNING",
+      "serverFacts": {"finishedAt": null, "turnState": "IN_FLIGHT"},
+      "pinnedAt": null,
+      "pendingApprovals": 0,
+      "retryAt": null,
+      "completedAt": null,
+      "deletedAt": null,
+      "needsOwner": false,
+      "listedAt": "2026-11-20T09:20:00.000Z",
+      "lastTurnAt": "2026-11-20T11:59:59.000Z",
+      "createdAt": "2026-09-01T00:00:00.000Z",
+      "note": "Streaming: lastTurnAt is now, listedAt is the owner's send"
+    },
+    {
+      "id": "work-queued",
+      "status": "PENDING",
+      "serverFacts": {"finishedAt": null, "turnState": "QUEUED"},
+      "pinnedAt": null,
+      "pendingApprovals": 0,
+      "retryAt": null,
+      "completedAt": null,
+      "deletedAt": null,
+      "needsOwner": false,
+      "listedAt": "2026-11-20T09:05:00.000Z",
+      "lastTurnAt": "2026-11-20T11:59:57.000Z",
+      "createdAt": "2026-09-01T00:00:00.000Z",
+      "note": "Queued counts as Working"
+    },
+    {
+      "id": "work-retrying",
+      "status": "FAILED",
+      "serverFacts": {"finishedAt": "2026-11-20T08:58:00.000Z", "turnState": null, "endReason": null, "lastTurnOutcome": "FAILED"},
+      "pinnedAt": null,
+      "pendingApprovals": 0,
+      "retryAt": "2026-11-20T12:05:00.000Z",
+      "completedAt": null,
+      "deletedAt": null,
+      "needsOwner": false,
+      "listedAt": "2026-11-20T08:58:00.000Z",
+      "lastTurnAt": "2026-11-20T08:58:00.000Z",
+      "createdAt": "2026-09-01T00:00:00.000Z",
+      "note": "A failure the server will retry (retryAt armed) is Working, not Needs you"
+    },
+    {
+      "id": "work-ci",
+      "status": "RUNNING",
+      "serverFacts": {"finishedAt": null, "turnState": "IN_FLIGHT"},
+      "pinnedAt": null,
+      "pendingApprovals": 0,
+      "retryAt": null,
+      "completedAt": null,
+      "deletedAt": null,
+      "needsOwner": false,
+      "listedAt": "2026-11-20T08:31:00.000Z",
+      "lastTurnAt": "2026-11-20T12:00:00.000Z",
+      "createdAt": "2026-09-01T00:00:00.000Z",
+      "note": "The most recent activity of all, still last in Working: activity never reorders"
+    },
+    {
+      "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null, "runningWork": true},
+      "pinnedAt": null,
+      "pendingApprovals": 0,
+      "retryAt": null,
+      "completedAt": null,
+      "deletedAt": null,
+      "needsOwner": false,
+      "createdAt": "2026-09-01T00:00:00.000Z",
+      "id": "work-bg-job",
+      "phase": "RUNNING",
+      "listedAt": "2026-11-19T09:00:00.000Z",
+      "lastTurnAt": "2026-11-20T11:59:30.000Z",
+      "note": "Parked between turns with a background job running: phase RUNNING, status AWAITING_INPUT. Working, though its listedAt is yesterday's"
+    },
+    {
+      "id": "today-future",
+      "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null},
+      "pinnedAt": null,
+      "pendingApprovals": 0,
+      "retryAt": null,
+      "completedAt": null,
+      "deletedAt": null,
+      "needsOwner": false,
+      "listedAt": "2026-11-20T13:00:00.000Z",
+      "lastTurnAt": "2026-11-20T13:00:00.000Z",
+      "createdAt": "2026-09-01T00:00:00.000Z",
+      "note": "A future listedAt (clock skew) reads as Today"
+    },
+    {
+      "id": "today-answered",
+      "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null},
+      "pinnedAt": null,
+      "pendingApprovals": 0,
+      "retryAt": null,
+      "completedAt": null,
+      "deletedAt": null,
+      "needsOwner": false,
+      "listedAt": "2026-11-20T07:00:00.000Z",
+      "lastTurnAt": "2026-11-20T11:59:00.000Z",
+      "createdAt": "2026-09-01T00:00:00.000Z",
+      "note": "A background job keeps lastTurnAt fresh; its place is listedAt"
+    },
+    {
+      "id": "today-tie-later",
+      "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null},
+      "pinnedAt": null,
+      "pendingApprovals": 0,
+      "retryAt": null,
+      "completedAt": null,
+      "deletedAt": null,
+      "needsOwner": false,
+      "listedAt": "2026-11-20T05:00:00.000Z",
+      "lastTurnAt": "2026-11-20T05:00:00.000Z",
+      "createdAt": "2026-11-15T00:00:00.000Z",
+      "note": "Equal listedAt: the later createdAt first"
+    },
+    {
+      "id": "today-tie-earlier",
+      "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null},
+      "pinnedAt": null,
+      "pendingApprovals": 0,
+      "retryAt": null,
+      "completedAt": null,
+      "deletedAt": null,
+      "needsOwner": false,
+      "listedAt": "2026-11-20T05:00:00.000Z",
+      "lastTurnAt": "2026-11-20T05:00:00.000Z",
+      "createdAt": "2026-11-14T00:00:00.000Z"
+    },
+    {
+      "id": "today-null-listed",
+      "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null},
+      "pinnedAt": null,
+      "pendingApprovals": 0,
+      "retryAt": null,
+      "completedAt": null,
+      "deletedAt": null,
+      "needsOwner": false,
+      "listedAt": null,
+      "lastTurnAt": null,
+      "createdAt": "2026-11-20T03:00:00.000Z",
+      "note": "listedAt null (a row an older server wrote) reads as createdAt"
+    },
+    {
+      "id": "today-interrupted",
+      "status": "INTERRUPTED",
+      "serverFacts": {"finishedAt": null, "turnState": "ABANDONED"},
+      "pinnedAt": null,
+      "pendingApprovals": 0,
+      "retryAt": null,
+      "completedAt": null,
+      "deletedAt": null,
+      "needsOwner": false,
+      "listedAt": "2026-11-20T00:30:00.000Z",
+      "lastTurnAt": "2026-11-20T00:30:00.000Z",
+      "createdAt": "2026-09-01T00:00:00.000Z"
+    },
+    {
+      "id": "yesterday-late",
+      "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null},
+      "pinnedAt": null,
+      "pendingApprovals": 0,
+      "retryAt": null,
+      "completedAt": null,
+      "deletedAt": null,
+      "needsOwner": false,
+      "listedAt": "2026-11-19T23:59:00.000Z",
+      "lastTurnAt": "2026-11-19T23:59:00.000Z",
+      "createdAt": "2026-09-01T00:00:00.000Z"
+    },
+    {
+      "id": "yesterday-ended",
+      "status": "CANCELLED",
+      "serverFacts": {"finishedAt": "2026-11-19T01:00:00.000Z", "turnState": null, "endReason": "ended", "lastTurnOutcome": "ANSWERED"},
+      "pinnedAt": null,
+      "pendingApprovals": 0,
+      "retryAt": null,
+      "completedAt": null,
+      "deletedAt": null,
+      "needsOwner": false,
+      "listedAt": "2026-11-19T01:00:00.000Z",
+      "lastTurnAt": "2026-11-20T11:00:00.000Z",
+      "createdAt": "2026-09-01T00:00:00.000Z",
+      "note": "Ended but not completed: still in the Open list, placed by listedAt (when it ended)"
+    },
+    {
+      "id": "days-2",
+      "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null},
+      "pinnedAt": null,
+      "pendingApprovals": 0,
+      "retryAt": null,
+      "completedAt": null,
+      "deletedAt": null,
+      "needsOwner": false,
+      "listedAt": "2026-11-18T08:00:00.000Z",
+      "lastTurnAt": "2026-11-18T08:00:00.000Z",
+      "createdAt": "2026-09-01T00:00:00.000Z"
+    },
+    {
+      "id": "days-7",
+      "status": "SUCCEEDED",
+      "serverFacts": {"finishedAt": "2026-11-13T00:00:00.000Z", "turnState": null, "endReason": "task_done", "lastTurnOutcome": "ANSWERED", "startedAt": "2026-09-01T00:00:00.000Z"},
+      "pinnedAt": null,
+      "pendingApprovals": 0,
+      "retryAt": null,
+      "completedAt": null,
+      "deletedAt": null,
+      "needsOwner": false,
+      "listedAt": "2026-11-13T00:00:00.000Z",
+      "lastTurnAt": "2026-11-13T00:00:00.000Z",
+      "createdAt": "2026-09-01T00:00:00.000Z",
+      "note": "Seven calendar days back is still 2–7 days ago"
+    },
+    {
+      "id": "days-8",
+      "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null},
+      "pinnedAt": null,
+      "pendingApprovals": 0,
+      "retryAt": null,
+      "completedAt": null,
+      "deletedAt": null,
+      "needsOwner": false,
+      "listedAt": "2026-11-12T23:00:00.000Z",
+      "lastTurnAt": "2026-11-12T23:00:00.000Z",
+      "createdAt": "2026-09-01T00:00:00.000Z"
+    },
+    {
+      "id": "days-30",
+      "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null},
+      "pinnedAt": null,
+      "pendingApprovals": 0,
+      "retryAt": null,
+      "completedAt": null,
+      "deletedAt": null,
+      "needsOwner": false,
+      "listedAt": "2026-10-21T12:00:00.000Z",
+      "lastTurnAt": "2026-10-21T12:00:00.000Z",
+      "createdAt": "2026-09-01T00:00:00.000Z"
+    },
+    {
+      "id": "older-31",
+      "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null},
+      "pinnedAt": null,
+      "pendingApprovals": 0,
+      "retryAt": null,
+      "completedAt": null,
+      "deletedAt": null,
+      "needsOwner": false,
+      "listedAt": "2026-10-20T12:00:00.000Z",
+      "lastTurnAt": "2026-11-20T11:00:00.000Z",
+      "createdAt": "2026-09-01T00:00:00.000Z",
+      "note": "Old listing, fresh liveness: stays Older"
+    },
+    {
+      "id": "completed",
+      "status": "SUCCEEDED",
+      "serverFacts": {"finishedAt": "2026-11-20T11:00:00.000Z", "turnState": null, "endReason": "task_done", "lastTurnOutcome": "ANSWERED", "startedAt": "2026-09-01T00:00:00.000Z"},
+      "pinnedAt": null,
+      "pendingApprovals": 0,
+      "retryAt": null,
+      "completedAt": "2026-11-20T11:00:00.000Z",
+      "deletedAt": null,
+      "needsOwner": false,
+      "listedAt": "2026-11-20T11:00:00.000Z",
+      "lastTurnAt": "2026-11-20T11:00:00.000Z",
+      "createdAt": "2026-09-01T00:00:00.000Z",
+      "note": "Completed: not in the Open list (the Completed view orders by completedAt)"
+    },
+    {
+      "id": "trashed",
+      "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null},
+      "pinnedAt": null,
+      "pendingApprovals": 0,
+      "retryAt": null,
+      "completedAt": null,
+      "deletedAt": "2026-11-20T11:30:00.000Z",
+      "needsOwner": false,
+      "listedAt": "2026-11-20T11:30:00.000Z",
+      "lastTurnAt": "2026-11-20T11:30:00.000Z",
+      "createdAt": "2026-09-01T00:00:00.000Z",
+      "note": "Trashed: not in the Open list"
+    },
+    {
+      "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null},
+      "pinnedAt": "2026-11-01T00:00:00.000Z",
+      "pendingApprovals": 0,
+      "retryAt": null,
+      "completedAt": null,
+      "deletedAt": "2026-11-20T11:40:00.000Z",
+      "needsOwner": false,
+      "createdAt": "2026-09-01T00:00:00.000Z",
+      "id": "trashed-pinned",
+      "listedAt": "2026-11-20T06:00:00.000Z",
+      "lastTurnAt": "2026-11-20T11:40:00.000Z",
+      "note": "Trash ignores the pin: after a row listed later the same day"
+    },
+    {
+      "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null},
+      "pinnedAt": null,
+      "pendingApprovals": 0,
+      "retryAt": null,
+      "completedAt": null,
+      "deletedAt": "2026-11-20T10:00:00.000Z",
+      "needsOwner": false,
+      "createdAt": "2026-09-01T00:00:00.000Z",
+      "id": "trashed-fresh-liveness",
+      "listedAt": "2026-11-19T10:00:00.000Z",
+      "lastTurnAt": "2026-11-20T11:59:00.000Z",
+      "note": "Trash orders and buckets by listedAt, not lastTurnAt: Yesterday"
+    }
+  ],
+  "expected": [
+    {
+      "section": "Pinned",
+      "ids": [
+        "pin-running",
+        "pin-asking",
+        "pin-idle"
+      ]
+    },
+    {
+      "section": "Needs you",
+      "ids": [
+        "needs-question",
+        "needs-blocked",
+        "needs-failed"
+      ]
+    },
+    {
+      "section": "Working",
+      "ids": [
+        "work-ui-copy",
+        "work-queued",
+        "work-retrying",
+        "work-ci",
+        "work-bg-job"
+      ]
+    },
+    {
+      "section": "Today",
+      "ids": [
+        "today-future",
+        "today-answered",
+        "today-tie-later",
+        "today-tie-earlier",
+        "today-null-listed",
+        "today-interrupted"
+      ]
+    },
+    {
+      "section": "Yesterday",
+      "ids": [
+        "yesterday-late",
+        "yesterday-ended"
+      ]
+    },
+    {
+      "section": "2–7 days ago",
+      "ids": [
+        "days-2",
+        "days-7"
+      ]
+    },
+    {
+      "section": "8–30 days ago",
+      "ids": [
+        "days-8",
+        "days-30"
+      ]
+    },
+    {
+      "section": "Older",
+      "ids": [
+        "older-31"
+      ]
+    }
+  ],
+  "expectedTagFilter": [
+    {
+      "section": "Needs you",
+      "ids": [
+        "needs-question",
+        "needs-blocked",
+        "needs-failed",
+        "pin-asking"
+      ]
+    },
+    {
+      "section": "Working",
+      "ids": [
+        "work-ui-copy",
+        "work-queued",
+        "work-retrying",
+        "work-ci",
+        "pin-running",
+        "work-bg-job"
+      ]
+    },
+    {
+      "section": "Today",
+      "ids": [
+        "today-future",
+        "today-answered",
+        "today-tie-later",
+        "today-tie-earlier",
+        "today-null-listed",
+        "today-interrupted"
+      ]
+    },
+    {
+      "section": "Yesterday",
+      "ids": [
+        "yesterday-late",
+        "yesterday-ended"
+      ]
+    },
+    {
+      "section": "2–7 days ago",
+      "ids": [
+        "days-2",
+        "days-7"
+      ]
+    },
+    {
+      "section": "8–30 days ago",
+      "ids": [
+        "days-8",
+        "pin-idle",
+        "days-30"
+      ]
+    },
+    {
+      "section": "Older",
+      "ids": [
+        "older-31"
+      ]
+    }
+  ],
+  "expectedTrash": [
+    {
+      "section": "Today",
+      "ids": [
+        "trashed",
+        "trashed-pinned"
+      ]
+    },
+    {
+      "section": "Yesterday",
+      "ids": [
+        "trashed-fresh-liveness"
+      ]
+    }
+  ]
+}

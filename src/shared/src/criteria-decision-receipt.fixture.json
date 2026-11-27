@@ -1,0 +1,165 @@
+{
+  "about": [
+    "Project page and coordinator cards: iOS/web/Android parity (board docs/mocks/ios-project-page-and-coordinator-cards/,",
+    "owner decision D1 A). One settled APPROVE decision with one rewording and one addition, as the owner's read of",
+    "pending criteria decisions publishes it (`settled[]`), and what the receipt's fold \"What this approved · …\" says",
+    "about it. Web reads it in src/web/src/components/CriteriaDecisionCard.receiptFixture.test.tsx, OrbitKit in",
+    "CriteriaDecisionReceiptFixtureTests.swift.",
+    "",
+    "`snapshot`: a decision recorded since 0279, which carries the diff it was answered against (web `SettledDiff`).",
+    "`proposal`: an older one whose diff predates the snapshot, drawn from the proposal's own side (web `SettledProposal`).",
+    "",
+    "`expected.summary` is the fold's closed line. `expected.rows` are the moved criteria in order: `ordinal` (null for a",
+    "dropped one, which has no place), `text` (every run of the row's words joined, struck-through runs included) and",
+    "`badge`. `expected.unchanged` is the fold over the untouched criteria (snapshot only): its line and its rows.",
+    "`expected.legend` is the inline-diff legend, null where nothing is struck through. `expected.note` is the quiet",
+    "line under the rows, null where there is none."
+  ],
+  "cases": [
+    {
+      "name": "approve, one rewording and one addition, with the stored diff",
+      "settled": {
+        "intentId": "4TdXP1ChQx7vLmN3pR5sT8",
+        "decision": "APPROVE",
+        "decidedAt": "2026-11-19T15:45:00.000Z",
+        "baseSeal": "7219d1bad2120000000000000000000000000000000000000000000000000000",
+        "resultingSeal": "9c4f7a1bb0010000000000000000000000000000000000000000000000000000",
+        "proposal": {
+          "changed": [
+            { "change": "REWORDED", "definitionId": "def-2", "ordinal": 2, "text": "Every migration is replayed when someone asks" },
+            { "change": "ADDED", "definitionId": null, "ordinal": 4, "text": "The receipt folds out what it approved" }
+          ],
+          "rewordedCount": 1,
+          "addedCount": 1,
+          "droppedCount": 0,
+          "unchangedCount": 2
+        },
+        "diff": {
+          "state": "SNAPSHOT",
+          "diff": {
+            "entries": [
+              {
+                "change": "SAME", "definitionId": "def-1", "ordinal": 1,
+                "proposed": { "text": "The web suite passes", "verificationMethod": "EXECUTABLE", "completionCriterionOverrideReason": null },
+                "onRecord": { "text": "The web suite passes", "verificationMethod": "EXECUTABLE", "completionCriterionOverrideReason": null },
+                "changed": [], "rewrites": []
+              },
+              {
+                "change": "CHANGED", "definitionId": "def-2", "ordinal": 2,
+                "proposed": { "text": "Every migration is replayed when someone asks", "verificationMethod": "EXECUTABLE", "completionCriterionOverrideReason": null },
+                "onRecord": { "text": "Every migration is replayed on a loaded database", "verificationMethod": "EXECUTABLE", "completionCriterionOverrideReason": null },
+                "changed": ["text"],
+                "rewrites": [
+                  {
+                    "field": "text",
+                    "segments": [
+                      { "side": "KEPT", "text": "Every migration is replayed " },
+                      { "side": "REMOVED", "text": "on a loaded database" },
+                      { "side": "ADDED", "text": "when someone asks" }
+                    ]
+                  }
+                ]
+              },
+              {
+                "change": "SAME", "definitionId": "def-3", "ordinal": 3,
+                "proposed": { "text": "The macOS build passes", "verificationMethod": "EXECUTABLE", "completionCriterionOverrideReason": null },
+                "onRecord": { "text": "The macOS build passes", "verificationMethod": "EXECUTABLE", "completionCriterionOverrideReason": null },
+                "changed": [], "rewrites": []
+              },
+              {
+                "change": "NEW", "definitionId": null, "ordinal": 4,
+                "proposed": { "text": "The receipt folds out what it approved", "verificationMethod": "Screenshot", "completionCriterionOverrideReason": null },
+                "onRecord": null,
+                "changed": [], "rewrites": []
+              }
+            ],
+            "sameCount": 2,
+            "changedCount": 1,
+            "newCount": 1,
+            "removedCount": 0
+          }
+        }
+      },
+      "expected": {
+        "warningTone": true,
+        "summary": "What this approved · 1 reworded, 1 added, 2 unchanged",
+        "legend": "struck through is dropped · underlined is added",
+        "rows": [
+          { "ordinal": 2, "text": "Every migration is replayed on a loaded databasewhen someone asks", "badge": "reworded by this proposal" },
+          { "ordinal": 4, "text": "The receipt folds out what it approved", "badge": "new in this proposal" }
+        ],
+        "unchanged": {
+          "line": "2 criteria are unchanged by this proposal",
+          "rows": [
+            { "ordinal": 1, "text": "The web suite passes" },
+            { "ordinal": 3, "text": "The macOS build passes" }
+          ]
+        },
+        "note": null
+      }
+    },
+    {
+      "name": "approve, one rewording and one addition, recorded before the diff was stored",
+      "settled": {
+        "intentId": "4TdXP1ChQx7vLmN3pR5sT8",
+        "decision": "APPROVE",
+        "decidedAt": "2026-11-19T15:45:00.000Z",
+        "baseSeal": "7219d1bad2120000000000000000000000000000000000000000000000000000",
+        "resultingSeal": "9c4f7a1bb0010000000000000000000000000000000000000000000000000000",
+        "proposal": {
+          "changed": [
+            { "change": "REWORDED", "definitionId": "def-2", "ordinal": 2, "text": "Every migration is replayed when someone asks" },
+            { "change": "ADDED", "definitionId": null, "ordinal": 4, "text": "The receipt folds out what it approved" }
+          ],
+          "rewordedCount": 1,
+          "addedCount": 1,
+          "droppedCount": 0,
+          "unchangedCount": 2
+        },
+        "diff": { "state": "PREDATES_SNAPSHOT" }
+      },
+      "expected": {
+        "warningTone": true,
+        "summary": "What this approved · 1 reworded, 1 added · 2 criteria unchanged",
+        "legend": null,
+        "rows": [
+          { "ordinal": 2, "text": "Every migration is replayed when someone asks", "badge": "reworded" },
+          { "ordinal": 4, "text": "The receipt folds out what it approved", "badge": "added" }
+        ],
+        "unchanged": null,
+        "note": "This is the proposal’s own wording. The words it replaced were never stored, so what is here is one side of the change and not a before-and-after."
+      }
+    },
+    {
+      "name": "refuse, one rewording and one drop, recorded before the diff was stored",
+      "settled": {
+        "intentId": "5UeYQ2DiRy8wMnO4qS6tU9",
+        "decision": "REJECT",
+        "decidedAt": "2026-11-19T15:45:00.000Z",
+        "baseSeal": "7219d1bad2120000000000000000000000000000000000000000000000000000",
+        "resultingSeal": "7219d1bad2120000000000000000000000000000000000000000000000000000",
+        "proposal": {
+          "changed": [
+            { "change": "REWORDED", "definitionId": "def-2", "ordinal": 2, "text": "Every migration is replayed when someone asks" },
+            { "change": "DROPPED", "definitionId": "def-3", "ordinal": null, "text": null }
+          ],
+          "rewordedCount": 1,
+          "addedCount": 0,
+          "droppedCount": 1,
+          "unchangedCount": 1
+        }
+      },
+      "expected": {
+        "warningTone": true,
+        "summary": "What this refused · 1 reworded, 1 dropped · 1 criterion unchanged",
+        "legend": null,
+        "rows": [
+          { "ordinal": 2, "text": "Every migration is replayed when someone asks", "badge": "reworded" },
+          { "ordinal": null, "text": "its words are not on record", "badge": "dropped" }
+        ],
+        "unchanged": null,
+        "note": "None of this was applied — the criteria on record stayed exactly as they were. This is the proposal’s own wording. The words it replaced were never stored, so what is here is one side of the change and not a before-and-after."
+      }
+    }
+  ]
+}

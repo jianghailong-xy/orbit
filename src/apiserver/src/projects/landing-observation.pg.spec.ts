@@ -5,11 +5,11 @@ import { test } from 'node:test';
 import {
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import {
   RunEventType,
   RunStatus as SharedRunStatus,
@@ -41,10 +41,12 @@ import {
 } from './coordinator-pg-test-safety';
 import { taskLandingSql } from './project-criterion-landing';
 import { canonicalRepoUrl, configureProjectIntegration } from './project-integration-line';
+import { prerequisiteLandedSql } from '../tasks/task-dependencies';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { readTaskIntegrationViews } from './project-task-integration';
 import * as integrationJob from './project-integration-job';
 import '../test-support/dequeue-under-lease';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * The landing observation, server side (`docs/project-integration-line-contract.md` §10.6, §10.9):
@@ -246,7 +248,7 @@ async function world(
     data: {
       id: coordinatorSessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
       title: `coordinator: ${label}`, prompt: `coordinator: ${label}`, provider: 'claude',
-      status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+      turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true, numTurns: 1, startedAt: new Date(),
       runtimeSessionId: `runtime-${coordinatorSessionId}`,
     },
@@ -316,12 +318,12 @@ async function workSession(stack: Stack, w: World, taskId: string, s: WorkSessio
     data: {
       id, ownerId: w.ownerId, creatorId: w.ownerId, taskId, workspaceId: s.workspaceId ?? w.workspaceId,
       assignedRunnerId: w.runnerId, title: `work ${s.branch}`, prompt: 'work', provider: 'claude',
-      status: finished ? RunStatus.SUCCEEDED : RunStatus.RUNNING,
+      turnState: turnStateOfWord(finished ? RunStatus.SUCCEEDED : RunStatus.RUNNING),
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true, isolationStatus: 'worktree',
       branch: s.branch, branchSha: s.branchSha, baseSha: s.baseSha, numTurns: 1,
       startedAt: minutesAgo(30), createdAt: minutesAgo(30), runtimeSessionId: randomUUID(),
       ...(s.changedFiles ? { changedFiles: s.changedFiles as Prisma.InputJsonValue } : {}),
-      ...(finished ? { finishedAt: minutesAgo(s.finishedMinutesAgo!) } : {}),
+      ...(finished ? { finishedAt: minutesAgo(s.finishedMinutesAgo!)} : {}),
     },
   });
   return id;
@@ -610,7 +612,7 @@ test('(2) J-T9: a silent observation is ended ERROR · RUNNER_LOST by the next t
 
 // ═══ (3) §10.9 3: the empty branch ═══════════════════════════════════════════════════════════
 
-test('(3) §10.9 3, O-R2: an empty branch with no work reported gets a receipt; one whose session reported work gets WORK_ELSEWHERE; work in another repository is not observed',
+test('(3) §10.9 3, O-R2 at the DONE (§12.15 P-M1): an empty branch with no work of its own anywhere is not observed and reads as nothing to land; one whose other session has a commit of its own opens WORK_ELSEWHERE at its DONE; work in another repository is not observed',
   { skip, timeout: 240_000 }, async () => {
     const stack = await connect();
     try {
@@ -618,10 +620,19 @@ test('(3) §10.9 3, O-R2: an empty branch with no work reported gets a receipt; 
       const nothing = await finishedTask(stack, w, 'nothing of its own', {
         branch: 'orbit/nothing', branchSha: sha('1'), baseSha: sha('1'),
       });
-      const elsewhere = await finishedTask(stack, w, 'work done elsewhere', {
-        branch: 'orbit/elsewhere', branchSha: sha('2'), baseSha: sha('2'),
-        changedFiles: [{ path: 'src/elsewhere.ts', status: 'M' }],
+      // Work elsewhere, measured: an earlier attempt's own branch has a commit past its base, and the attempt
+      // that finished last — the one the identity is frozen from — has nothing past its own. A `changed_files`
+      // beside an empty branch of its own is not that (the 2026-11-20 regression: a checked-out commit's diff).
+      const elsewhereTaskId = await ownerTask(stack, w, 'work done elsewhere');
+      await workSession(stack, w, elsewhereTaskId, {
+        branch: 'orbit/elsewhere-first', branchSha: sha('7'), baseSha: sha('2'),
+        changedFiles: [{ path: 'src/elsewhere.ts', status: 'M' }], finishedMinutesAgo: 5,
       });
+      await workSession(stack, w, elsewhereTaskId, {
+        branch: 'orbit/elsewhere', branchSha: sha('2'), baseSha: sha('2'), finishedMinutesAgo: 2,
+      });
+      await confirm(stack, w, elsewhereTaskId);
+      const elsewhere = { taskId: elsewhereTaskId };
       const otherWorkspace = randomUUID();
       await stack.db.workspace.create({
         data: {
@@ -632,34 +643,30 @@ test('(3) §10.9 3, O-R2: an empty branch with no work reported gets a receipt; 
       const foreign = await finishedTask(stack, w, 'work in another repository', {
         branch: 'orbit/foreign', branchSha: sha('3'), baseSha: sha('4'), workspaceId: otherWorkspace,
       });
+      // A commit of its own, so there is an observation to read the waiting tasks off.
+      const committed = await finishedTask(stack, w, 'a commit of its own', {
+        branch: 'orbit/committed', branchSha: sha('5'), baseSha: sha('6'),
+      });
 
       const command = await claimObservation(stack, w.runnerId, 'observer');
       assert.ok(command);
-      assert.deepEqual(command.observeTasks?.map((task) => task.taskId).sort(),
-        [nothing.taskId, elsewhere.taskId].sort(), 'O-L7: work in another repository is not this line\'s');
+      assert.deepEqual(command.observeTasks?.map((task) => task.taskId), [committed.taskId],
+        'P-M1: neither empty branch is observed — their DONE decided them; O-L7: work in another repository is not this line\'s');
       assert.ok(!command.observeTasks?.some((task) => task.taskId === foreign.taskId));
-      const applied = await report(stack, w, command, observed(command, [
-        seen({ taskId: nothing.taskId, deliveredSha: sha('1'), baseSha: sha('1') }, { empty: true, onUpstream: true, fullyApplied: false }),
-        seen({ taskId: elsewhere.taskId, deliveredSha: sha('2'), baseSha: sha('2') }, { empty: true, onUpstream: true, fullyApplied: false }),
-      ]));
-      assert.equal(applied.answer.accepted, true);
 
-      const [receipt, ...extra] = await receiptsOf(stack, nothing.taskId);
-      assert.equal(extra.length, 0);
-      assert.equal(receipt.result, 'ALREADY_MERGED');
-      assert.equal(receipt.targetBranch, 'main');
-      assert.equal(receipt.sourceSha, sha('1'));
-      assert.deepEqual(receipt.detail, { integrationJobId: command.jobId, observed: true, empty: true });
-      assert.equal(await landingOf(stack, nothing.taskId), 'ON_UPSTREAM', 'J8: nothing to land releases J9');
+      assert.deepEqual(await receiptsOf(stack, nothing.taskId), [], 'nothing to land, and no receipt claims a landing');
+      const [released] = await stack.db.$queryRaw<Array<{ landed: boolean }>>(Prisma.sql`
+        SELECT ${Prisma.raw(prerequisiteLandedSql('t'))} AS "landed" FROM "task" t WHERE t."id" = ${nothing.taskId}::uuid`);
+      assert.equal(released?.landed, true, 'J9: nothing to land releases its dependents');
 
-      assert.deepEqual(await receiptsOf(stack, elsewhere.taskId), [], 'a session reported work: no receipt');
+      assert.deepEqual(await receiptsOf(stack, elsewhere.taskId), [], 'a session has a commit of its own: no receipt');
       const [unobserved, ...more] = await openItems(stack, w, 'LANDING_UNOBSERVED');
       assert.equal(more.length, 0);
       assert.equal(unobserved.taskId, elsewhere.taskId);
       assert.equal(unobserved.state, 'OPEN');
       assert.equal(unobserved.dedupeKey, `LU:${elsewhere.taskId}:${sha('2')}`);
-      assert.equal((unobserved.payload as { reason?: string }).reason, 'WORK_ELSEWHERE');
-      assert.deepEqual(applied.after?.openItemIds, [unobserved.id], 'the item is delivered to its holder');
+      assert.equal((unobserved.payload as { reason?: string }).reason, 'WORK_ELSEWHERE',
+        'opened by its DONE, where the empty branch was measured');
     } finally {
       await stack.db.$disconnect();
     }

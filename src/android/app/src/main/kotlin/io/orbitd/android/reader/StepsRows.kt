@@ -18,6 +18,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -34,7 +35,7 @@ import kotlinx.serialization.json.JsonObject
 internal object Steps {
     private val CARD_TOOLS = setOf("AskUserQuestion", "ExitPlanMode", "mcp__orbit__session_create", "mcp__orbit__task_create_batch",
         "mcp__orbit__task_create", "mcp__orbit__project_create", "Agent", "Task", "Workflow",
-        SubagentBlock.TOOL_NAME)
+        SubagentBlock.TOOL_NAME, WorkflowBlock.TOOL_NAME, io.orbitd.android.core.cards.BgJob.TOOL)
     private val FILE_KINDS = setOf("read", "edit", "write")
 
     /** A row one steps line can stand in for (web `isGroupableTool`): reasoning, or a plain call — not a call that is its own card,
@@ -148,7 +149,8 @@ internal fun StepsRowView(row: TranscriptRow, model: FullEvents, live: Transcrip
     val failed = settled.count(Steps::failed)
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val error = MaterialTheme.colorScheme.error
-    Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp).testTag("steps:${row.event.seq}"),
+    // Bare on the transcript, as iOS's line is: the list's own 16 at the sides and 12 between rows.
+    Column(Modifier.fillMaxWidth().padding(horizontal = if (highlighted) 10.dp else 0.dp).testTag("steps:${row.event.seq}"),
         verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (line.isNotEmpty()) Row(Modifier.fillMaxWidth().heightIn(min = 32.dp)
             .clickable(onClickLabel = if (expanded) "Hide steps" else "Show steps", role = Role.Button) { expanded = !expanded }
@@ -157,9 +159,11 @@ internal fun StepsRowView(row: TranscriptRow, model: FullEvents, live: Transcrip
             Text(buildAnnotatedString {
                 append(line)
                 if (failed > 0) withStyle(SpanStyle(color = error)) { append(" · $failed failed") }
-            }, Modifier.weight(1f, fill = false), color = muted, style = MaterialTheme.typography.labelLarge)
+            // iOS `StepsRowView.line`: the label size (footnote, regular), two lines at most; the chevron at meta size, semibold.
+            }, Modifier.weight(1f, fill = false), color = muted, style = MaterialTheme.typography.bodySmall, maxLines = 2,
+                overflow = TextOverflow.Ellipsis)
             Text("▸", Modifier.rotate(if (expanded) 90f else 0f).clearAndSetSemantics { }, color = MaterialTheme.colorScheme.outline,
-                style = MaterialTheme.typography.labelLarge)
+                style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
         }
         if (expanded) {
             val rule = MaterialTheme.colorScheme.outlineVariant

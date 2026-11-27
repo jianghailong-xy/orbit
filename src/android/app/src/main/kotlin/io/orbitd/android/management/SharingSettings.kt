@@ -69,8 +69,10 @@ internal fun sharingRead(value: JsonElement, kind: String, id: String): JsonObje
 internal fun sharingList(value: JsonElement): JsonObject {
     val read = value as? JsonObject ?: throw IllegalStateException("Invalid shared-links response")
     val links = read["links"] as? JsonArray ?: throw IllegalStateException("Missing shared-links list")
-    links.forEach(::sharingValidateLink)
-    return read
+    // A kind this build does not draw (DRIVE_FILE, say) is skipped, not listed with a Turn off that cannot reach it.
+    val known = JsonArray(links.filter { ((it as? JsonObject)?.get("kind") as? JsonPrimitive)?.contentOrNull.let { kind -> kind == null || kind in sharingKinds } })
+    known.forEach(::sharingValidateLink)
+    return JsonObject(read + ("links" to known))
 }
 
 private fun sharingValidateLink(value: JsonElement?) {

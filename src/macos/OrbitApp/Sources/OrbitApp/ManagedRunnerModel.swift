@@ -14,6 +14,10 @@ final class ManagedRunnerModel {
     /// The status as the server last answered, and its display (`ManagedRunnerLogic.display`).
     private(set) var status: ManagedRunnerStatus?
     private(set) var display: ManagedRunnerDisplay?
+    /// The build the last Update Now finished on, drawn as the Updated card for a day.
+    private(set) var updated: ManagedRunnerUpdated?
+    /// An Update Now the server took and the runner has not finished.
+    private(set) var pending: ManagedRunnerPendingUpdate?
     /// A Retry or Set up is in flight.
     private(set) var acting = false
     /// Why the last Retry or Set up did not go through, in the server's words.
@@ -83,11 +87,40 @@ final class ManagedRunnerModel {
         return accepted
     }
 
+    /// What pressing Update Now… came to.
+    enum UpdateNowResult: Equatable {
+        /// The server took it: the card turns to Restarting.
+        case started
+        /// The runner is busy: confirm, then `updateNow(interruptTurns: true)`.
+        case busy(ManagedRunnerBusy)
+        case failed(String)
+    }
+
+    /// The owner's Update Now. Without `interruptTurns` a busy runner answers `.busy` with what it would stop.
+    func updateNow(interruptTurns: Bool, turns: Int, to build: ManagedRunnerBuild) async -> UpdateNowResult {
+        guard !acting else { return .failed(RunnerPageCopy.RUNNER_UPDATE_NOW_FAILED) }
+        acting = true
+        defer { acting = false }
+        do {
+            let answer = try await api.updateManagedRunnerNow(interruptTurns: interruptTurns)
+            pending = ManagedRunnerPendingUpdate(at: Date(), interruptedTurns: turns, to: build)
+            adopt(answer)
+            return .started
+        } catch {
+            if let busy = ManagedRunnerUpdateLogic.busy(from: error) { return .busy(busy) }
+            await load()
+            return .failed(APIClient.failureReason(error))
+        }
+    }
+
     /// Signed out: nothing of this account's is shown to the next one.
     func reset() {
         status = nil
         display = nil
         ManagedRunnerIdentity.runnerID = nil
+        ManagedRunnerRunningBuild.build = nil
+        updated = nil
+        pending = nil
         errorText = nil
         offered = nil
         refreshNotBefore = .distantPast
@@ -109,11 +142,17 @@ final class ManagedRunnerModel {
     }
 
     private func adopt(_ answer: ManagedRunnerStatus?) {
+        let finished = ManagedRunnerUpdateLogic.observe(previous: status, next: answer, updated: updated, pending: pending, now: Date())
+        if finished != nil, finished != updated { pending = nil }
+        updated = finished
+        ManagedRunnerRunningBuild.build = answer?.update?.running
         status = answer
         display = ManagedRunnerLogic.display(answer)
         // Every screen that names a machine says Orbit Cloud for this one (RunnerPageFormat.displayName).
         ManagedRunnerIdentity.runnerID = display == nil ? nil : answer?.runnerId
-        refreshNotBefore = Date().addingTimeInterval(ManagedRunnerLogic.refreshInterval(display))
+        // An update on its way moves by itself too: read it soon, so the card turns to Updated.
+        refreshNotBefore = Date().addingTimeInterval(
+            answer?.update?.phase == "updating" ? ManagedRunnerLogic.pollSeconds.moving : ManagedRunnerLogic.refreshInterval(display))
         onStatusChanged(answer)
     }
 }

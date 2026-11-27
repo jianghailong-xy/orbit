@@ -6,6 +6,7 @@ import {
   ForbiddenException,
   Get,
   Headers,
+  NotFoundException,
   Optional,
   Param,
   Post,
@@ -14,7 +15,8 @@ import {
 } from '@nestjs/common';
 import { PublicIdPipe } from '../common/public-id';
 import { randomUUID } from 'crypto';
-import { Prisma, Runner, RunStatus } from '@prisma/client';
+import { Prisma, Runner } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { ProjectsService } from '../projects/projects.service';
 import { RunnerSessionScope, SessionsService } from '../sessions/sessions.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
@@ -360,6 +362,32 @@ export class RunnerSessionsController {
     return this.sessions.getForOrchestration(runner.ownerId, id);
   }
 
+  /**
+   * Revision 42 (§12.5 W6, §12.7): a task's own work session reading its task's landing — `session_get` on the landing
+   * session id its landing-fix turn names — whether or not the account has Session orchestration on. Not one of the
+   * orchestration doors: it reads one thing, a landing of the calling session's own task, and answers 404 for any other
+   * id, as for a calling session that is not a work session of this runner. The calling session is
+   * `X-Orbit-Session-Id`, as `project_integration_get` takes it.
+   */
+  @Get('landings/:id')
+  async getOwnTaskLanding(
+    @CurrentRunner() runner: Runner,
+    @CurrentServiceGrant() grant: ServiceTokenGrant | undefined,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+  ) {
+    this.assertNoServiceToken(grant);
+    const landing = await this.sessions.ownTaskLandingForWorkSession(runner.ownerId, runner.id, callingSessionId, id);
+    if (!landing) {
+      throw new NotFoundException({
+        code: 'LANDING_NOT_THIS_SESSIONS_TASK',
+        message: "no landing of this session's own task has that id: a work session reads its own task's landing "
+          + 'here, and any other session through session_get with Session orchestration on',
+      });
+    }
+    return landing;
+  }
+
   @Post('sessions/:id/turns')
   async sendMessage(
     @CurrentRunner() runner: Runner,
@@ -503,7 +531,7 @@ export class RunnerSessionsController {
     if (!this.requests) {
       throw new Error('session_reply needs SessionRequestService, which this controller was built without');
     }
-    return this.requests.reply(runner.ownerId, caller, id, { message: dto?.message, option: dto?.option });
+    return this.requests.reply(runner.ownerId, caller, id, { message: dto?.message, option: dto?.option, answers: dto?.answers });
   }
 
   // The lifecycle verbs below have NO headless path by design. They are the most damaging

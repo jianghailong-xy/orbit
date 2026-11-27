@@ -30,16 +30,21 @@ public struct ManagedRunnerCapability: Decodable, Equatable, Sendable {
 /// Reading it allocates nothing on the server.
 public struct ServerCapabilities: Decodable, Equatable, Sendable {
     public let managedRunners: ManagedRunnerCapability?
+    /// Drive (the drive, `/drive`), the deployment switch ORBIT_DRIVE_ENABLED. A server from before
+    /// the switch omits it; `DriveLogic.shown` reads that as on.
+    public let documents: DriveCapability?
 
-    public init(managedRunners: ManagedRunnerCapability?) {
+    public init(managedRunners: ManagedRunnerCapability?, documents: DriveCapability? = nil) {
         self.managedRunners = managedRunners
+        self.documents = documents
     }
 
-    private enum CodingKeys: String, CodingKey { case managedRunners }
+    private enum CodingKeys: String, CodingKey { case managedRunners, documents }
 
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         managedRunners = try? values.decode(ManagedRunnerCapability.self, forKey: .managedRunners)
+        documents = try? values.decode(DriveCapability.self, forKey: .documents)
     }
 }
 
@@ -100,6 +105,9 @@ public struct ManagedRunnerStatus: Decodable, Equatable, Sendable {
     public let usable: Bool
     public let reason: ManagedRunnerReason?
     public let retryAfter: String?
+    /// Its next automatic try, as the server stored it: a restart's backoff, or a FAILED runner's slow retry (which may
+    /// be past: it is taken once work is waiting). Nil when none is scheduled, and from a server that predates the field.
+    public let nextAttemptAt: String?
     /// What the runner was found ready with, which its first session starts on:
     /// a runtime signed in on it, or one of the owner's model keys (its slug). Nil until the runner
     /// has been READY.
@@ -109,7 +117,82 @@ public struct ManagedRunnerStatus: Decodable, Equatable, Sendable {
     /// session waits for the runner on. Nil when there is none (the server would refuse it with
     /// MODEL_UNAVAILABLE), and from a server that predates the field.
     public let firstSessionProvider: String?
+    /// The runner runs an older build than the current image's (docs/managed-runner-update-now-design.md).
+    /// Nil when it runs the current one, is not running, or the server cannot tell or predates the field.
+    public let update: ManagedRunnerUpdate?
     public let actions: ManagedRunnerActions
+}
+
+/// One build of the managed runner image: its source commit, and when it was built, if known. `version` is the
+/// release it was published for (`0.1.261-beta.83`); absent for an image built from a checkout.
+public struct ManagedRunnerBuild: Decodable, Equatable, Sendable {
+    public let sha: String
+    public let builtAt: String?
+    public let version: String?
+
+    public init(sha: String, builtAt: String? = nil, version: String? = nil) {
+        self.sha = sha
+        self.builtAt = builtAt
+        self.version = version
+    }
+}
+
+/// The managed runner's container was made from an older image than the current one. `available`: READY on
+/// the older build. `updating`: Update Now, or an image roll, is on its way to the next container.
+public struct ManagedRunnerUpdate: Decodable, Equatable, Sendable {
+    public let running: ManagedRunnerBuild
+    public let current: ManagedRunnerBuild
+    /// `available` or `updating`; a string, so a newer phase still decodes.
+    public let phase: String
+    /// `updating` on a busy runner whose backend cannot stop it: the update waits for idle.
+    public let waitsForIdle: Bool
+
+    public init(running: ManagedRunnerBuild, current: ManagedRunnerBuild, phase: String, waitsForIdle: Bool = false) {
+        self.running = running
+        self.current = current
+        self.phase = phase
+        self.waitsForIdle = waitsForIdle
+    }
+
+    private enum CodingKeys: String, CodingKey { case running, current, phase, waitsForIdle }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        running = try values.decode(ManagedRunnerBuild.self, forKey: .running)
+        current = try values.decode(ManagedRunnerBuild.self, forKey: .current)
+        phase = try values.decode(String.self, forKey: .phase)
+        waitsForIdle = (try? values.decode(Bool.self, forKey: .waitsForIdle)) ?? false
+    }
+}
+
+/// The body of POST /api/managed-runner/update-now.
+public struct ManagedRunnerUpdateNowRequest: Encodable, Equatable, Sendable {
+    public let interruptTurns: Bool
+
+    public init(interruptTurns: Bool) { self.interruptTurns = interruptTurns }
+}
+
+/// A turn running on the managed runner, as a busy Update Now's 409 lists it.
+public struct ManagedRunnerBusyTurn: Decodable, Equatable, Sendable {
+    public let sessionId: String
+    public let title: String?
+    public let startedAt: String?
+}
+
+/// The 409 `MANAGED_RUNNER_BUSY` body: what updating now would stop.
+public struct ManagedRunnerBusy: Decodable, Equatable, Sendable {
+    public let code: String
+    public let turns: [ManagedRunnerBusyTurn]
+    public let backgroundJobs: Int
+
+    private enum CodingKeys: String, CodingKey { case code, turns, backgroundJobs }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        code = try values.decode(String.self, forKey: .code)
+        turns = (try? values.decode([ManagedRunnerBusyTurn].self, forKey: .turns)) ?? []
+        backgroundJobs = (try? values.decode(Int.self, forKey: .backgroundJobs)) ?? 0
+    }
 }
 
 /// The body of every managed runner write: a key that makes a retried request the same request,

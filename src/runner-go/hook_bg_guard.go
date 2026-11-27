@@ -188,6 +188,10 @@ func bgGuardDecision(in hookInput) map[string]interface{} {
 			decision, reason = "deny", bgGuardOrbitPollReason
 		case asBool(in.ToolInput["run_in_background"]):
 			decision, reason = "deny", bgGuardAwaitAdvice(bgGuardDenyReason, watches)
+		// The Files drive is read-only in Plan (plan_drive.go). The permission prompt refuses such a command too;
+		// said here as well so that an allow rule, which skips the prompt, does not run it.
+		case in.PermissionMode == "plan" && planDriveWrite(in.ToolName, in.ToolInput):
+			decision, reason = "deny", planDriveRefusal
 		}
 	// Both keep something running, which is how a poll outlives the call that started it.
 	case "Monitor", "mcp__orbit__bg_run":

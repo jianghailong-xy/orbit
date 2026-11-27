@@ -7,6 +7,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WikiSpaceHealth } from '@orbit/shared';
 import { WikiPage } from '../pages/WikiPage';
 
+// The app Tooltip draws its words only while open: this file reads them off the trigger, as `data-tip`.
+vi.mock('./ui/Tooltip', async () => {
+  const { cloneElement } = await import('react');
+  return {
+    CONTROL_TOOLTIP_DELAY_MS: 100,
+    TEXT_TOOLTIP_DELAY_MS: 600,
+    Tooltip: ({ children, content }: { children: import('react').ReactElement; content?: import('react').ReactNode }) =>
+      cloneElement(children, (content ? { 'data-tip': content } : {}) as object),
+  };
+});
+
 vi.hoisted(() => {
   const noop = (): void => undefined;
   vi.stubGlobal('localStorage', { getItem: () => null, setItem: noop, removeItem: noop });
@@ -154,7 +165,7 @@ describe('Activity’s status line', () => {
 
   it('draws the repository’s part: the folder grey with its hint, a reason with its dot, Fix in Settings to Settings', () => {
     const folder = statusRow(paint(shared.cases.find((one) => one.health.repo?.tier === 'folder')!.health));
-    expect(folder).toMatch(new RegExp(`<a class="wk-maint-link wk-maint-link--muted" title="Commit anchors are not checked: ~/work/app is not a git checkout\\." href="/wiki/${shared.space.slug}/settings"[^>]*>Reading the folder, not git</a>`, 'u'));
+    expect(folder).toMatch(new RegExp(`<a class="wk-maint-link wk-maint-link--muted" data-tip="Commit anchors are not checked: ~/work/app is not a git checkout\\." href="/wiki/${shared.space.slug}/settings"[^>]*>Reading the folder, not git</a>`, 'u'));
     const wrong = statusRow(paint(shared.cases.find((one) => one.health.repo?.tier === 'wrong_repository')!.health));
     expect(wrong).toContain('<span class="wk-maint wk-maint--error"><span class="wk-maint-dot" aria-hidden="true"></span><b>~/work/app is a clone of github.com/x/y, not this wiki&#x27;s repository</b></span>');
     expect(wrong).toMatch(new RegExp(`<a class="wk-maint-link" href="/wiki/${shared.space.slug}/settings"[^>]*>Fix in Settings</a>`, 'u'));

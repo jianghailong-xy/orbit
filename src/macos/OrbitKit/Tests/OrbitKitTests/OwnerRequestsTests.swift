@@ -156,15 +156,50 @@ final class OwnerRequestsTests: XCTestCase {
     }
 
     func testEachKindsCardSaysWhatItAsksFor() {
-        XCTAssertEqual(OwnerRequestKind.allCases.map(OwnerRequests.kindTag), ["DECISION", "SECRET", "STEPS", "CONFIRM", "WIKI"])
+        XCTAssertEqual(OwnerRequestKind.allCases.map(OwnerRequests.kindTag), ["DECISION", "SECRET", "STEPS", "CONFIRM", "WIKI", "SETTINGS", "SIGN IN", "SETTING", "REOPEN"])
         XCTAssertEqual(OwnerRequestKind.allCases.map(OwnerRequests.primaryLabel),
-                       ["Send answer", "Provide key", "Mark done", "Confirm", "Create wiki"])
+                       ["Send answer", "Provide key", "Mark done", "Confirm", "Create wiki", "Save changes", "Open browser", "Apply", "Reopen"])
         XCTAssertEqual(OwnerRequestKind.allCases.map(OwnerRequests.declineLabel),
-                       ["Decline…", "Decline…", "Can’t do this…", "Decline…", "Decline…"])
-        XCTAssertEqual(OwnerRequestKind.allCases.map(OwnerRequests.inboxAction),
-                       ["Answer", "Provide", "Open steps", "Review", "Review"])
+                       ["Decline…", "Decline…", "Can’t do this…", "Decline…", "Decline…", "Decline…", "Decline…", "Decline…", "Decline…"])
         XCTAssertEqual(OwnerRequests.askedLine(secret(), now: now), "Asked 2m ago · expires in 2d 23h")
         XCTAssertEqual(OwnerRequests.removedText(secret()), "When the task ends, or after 7 days")
+    }
+
+    /// BROWSER_SIGN_IN (Orbit Cloud browser): the site, runner and asking session's title are read; the card's words are
+    /// the web's `BROWSER_SIGN_IN_COPY`; Open browser goes to the runner's browser tab; Not now reads as Not now.
+    func testBrowserSignInCardReadsItsFieldsAndSaysWhatTheWebSays() throws {
+        let json = #"{"id":"b1","kind":"BROWSER_SIGN_IN","state":"PENDING","title":"Sign in to github.com","why":"Needs to push the release notes","askedBySessionId":"s1","browserSite":"github.com","browserRunnerId":"runner-1","askedBySessionTitle":"Release notes","createdAt":"2026-11-19T00:00:00.000Z"}"#
+        let request = try JSONDecoder().decode(OwnerRequest.self, from: Data(json.utf8))
+        XCTAssertEqual(request.kind, .browserSignIn)
+        XCTAssertEqual(request.browserSite, "github.com")
+        XCTAssertEqual(request.browserRunnerId, "runner-1")
+        XCTAssertEqual(request.askedBySessionTitle, "Release notes")
+        XCTAssertEqual(Notifications.ownerRequestCategory(.browserSignIn), "ORBIT_OWNER_REQUEST_BROWSER_SIGN_IN")
+        XCTAssertTrue(OwnerRequests.canSubmit(request, draft: .init(spec: nil), option: nil, text: "", now: now))
+
+        XCTAssertEqual(BrowserSignInCopy.eyebrow, "Sign in needed · Orbit Cloud browser")
+        XCTAssertEqual(BrowserSignInCopy.fromSessionLine(request), "From session Release notes")
+        XCTAssertEqual(BrowserSignInCopy.note,
+                       "You sign in yourself; Orbit never sees your password. The login stays on this runner, and every agent on it can use it.")
+        XCTAssertEqual([BrowserSignInCopy.openBrowser, BrowserSignInCopy.notNow], ["Open browser", "Not now"])
+        XCTAssertEqual(BrowserSignInCopy.browserURL(baseURL: URL(string: "https://orbit.example.com/")!, runnerId: "runner-1")?.absoluteString,
+                       "https://orbit.example.com/runners/runner-1/browser?control=1")
+        XCTAssertNil(BrowserSignInCopy.browserURL(baseURL: URL(string: "https://orbit.example.com")!, runnerId: nil))
+
+        let untitled = OwnerRequest(id: "b2", kind: .browserSignIn, title: "Sign in to github.com", why: "w",
+                                    askedBySessionTitle: " ", askedBySessionId: sessionID, createdAt: "2026-11-19T00:00:00Z")
+        XCTAssertNil(BrowserSignInCopy.fromSessionLine(untitled))
+        let old = try JSONDecoder().decode(OwnerRequest.self, from: Data(#"{"id":"b3","kind":"BROWSER_SIGN_IN","state":"PENDING","title":"t","askedBySessionId":"s1","createdAt":"2026-11-19T00:00:00Z"}"#.utf8))
+        XCTAssertNil(old.browserSite)
+        XCTAssertNil(old.askedBySessionTitle)
+
+        let done = OwnerRequest(id: "b4", kind: .browserSignIn, state: .done, title: "t", why: "", browserSite: "github.com",
+                                askedBySessionId: sessionID, createdAt: "2026-11-19T00:00:00Z")
+        XCTAssertEqual(OwnerRequests.outcomeLine(done, runner: ""), "Signed in to github.com")
+        let declined = OwnerRequest(id: "b5", kind: .browserSignIn, state: .declined, title: "t", why: "",
+                                    browserSite: "github.com", askedBySessionId: sessionID, resolutionNote: "Not now",
+                                    createdAt: "2026-11-19T00:00:00Z")
+        XCTAssertEqual(OwnerRequests.outcomeLine(declined, runner: ""), "Not now")
     }
 
     /// The web's `ownerRequestChatContext` and composer copy, word for word.
@@ -305,24 +340,17 @@ final class OwnerRequestsTests: XCTestCase {
             .hasPrefix("Removal pending: HPC has not been online since"))
     }
 
-    // MARK: the inbox
+    // MARK: the account's reads
 
-    func testInboxRowsAndCount() {
-        XCTAssertEqual(OwnerRequests.InboxTab.allCases.map(\.label), ["Open", "Done", "Declined"])
-        XCTAssertEqual(OwnerRequests.inboxDetail(steps()), "3 steps")
-        XCTAssertEqual(OwnerRequests.holdsText(steps(), now: now), "holds 2 tasks for 1d 1h")
-        XCTAssertEqual(OwnerRequests.inboxDetail(decision()), "decision · recommended: auth")
-        XCTAssertEqual(OwnerRequests.holdsText(secret(), now: now), "holds 1 task")
+    func testTheAccountReadsMergeFindAndNarrowToASession() {
         let open = [secret(), steps(), decision()]
-        XCTAssertEqual(OwnerRequests.waitingCount(open, snoozes: [:], now: now), 3)
-        let later = [PublicID.storageKey(requestID): now.addingTimeInterval(3_600)]
-        XCTAssertEqual(OwnerRequests.waitingCount(open, snoozes: later, now: now), 2)
         XCTAssertEqual(OwnerRequests.forSession(open + [confirm()], sessionID: sessionID).map(\.id),
                        ["s2", "c4", requestID])
         let read = OwnerRequests.merged([secret()], [secret(state: .done)])
         XCTAssertEqual(read.count, 1)
         XCTAssertEqual(read.first?.state, .done)
         XCTAssertEqual(OwnerRequests.find(PublicID.toPublic(requestID), in: open)?.kind, .secret)
+        XCTAssertEqual(open.first?.askedBySessionId, sessionID)
     }
 
     /// A press on a session's needs-you notice opens the oldest request it asked that is still
@@ -339,7 +367,7 @@ final class OwnerRequestsTests: XCTestCase {
         let defaults = UserDefaults(suiteName: "owner-request-snoozes-\(UUID().uuidString)")!
         let store = OwnerRequestSnoozes(defaults: defaults)
         store.snooze(requestID, until: now.addingTimeInterval(3_600), now: now)
-        XCTAssertTrue(OwnerRequests.isSnoozed(PublicID.toPublic(requestID), snoozes: store.all(now: now), now: now))
+        XCTAssertEqual(store.all(now: now)[PublicID.storageKey(requestID)], now.addingTimeInterval(3_600))
         XCTAssertTrue(store.all(now: now.addingTimeInterval(3_601)).isEmpty, "a reminder that came due is gone")
         store.wake(requestID, now: now)
         XCTAssertTrue(store.all(now: now).isEmpty)
@@ -357,16 +385,21 @@ final class OwnerRequestsTests: XCTestCase {
                        .openOwnerRequest(requestID: requestID))
         XCTAssertEqual(Notifications.intent(actionId: Notifications.actionOwnerRequestLater, userInfo: info),
                        .snoozeOwnerRequest(requestID: requestID))
-        // The plain tap still opens the conversation that asked.
+        // A plain tap opens the conversation that asked, on the same card — it names the request,
+        // which is what the app turns into `askedBySessionId`.
         XCTAssertEqual(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier", userInfo: info),
-                       .open(.session(sessionID)))
+                       .openOwnerRequest(requestID: requestID))
         // The server's categories, one per kind, and the first action's words on each.
         XCTAssertEqual(OwnerRequestKind.allCases.map(Notifications.ownerRequestCategory), [
             "ORBIT_OWNER_REQUEST_DECISION", "ORBIT_OWNER_REQUEST_SECRET",
             "ORBIT_OWNER_REQUEST_MANUAL_STEP", "ORBIT_OWNER_REQUEST_CONFIRM", "ORBIT_OWNER_REQUEST_WIKI_CREATE",
+            "ORBIT_OWNER_REQUEST_SETTINGS_CHANGE",
+            "ORBIT_OWNER_REQUEST_BROWSER_SIGN_IN",
+            "ORBIT_OWNER_REQUEST_CHANGE",
+            "ORBIT_OWNER_REQUEST_PROJECT_REOPEN",
         ])
         XCTAssertEqual(OwnerRequestKind.allCases.map(Notifications.ownerRequestActionTitle),
-                       ["Answer", "Provide key", "Mark done", "Review", "Review"])
+                       ["Answer", "Provide key", "Mark done", "Review", "Review", "Review", "Sign in", "Review", "Review"])
         XCTAssertEqual(Notifications.ownerRequestLaterTitle, "Later")
         let reminder = Notifications.ownerRequestReminder(requestID: requestID, kind: .secret,
                                                           title: "Provide a DeepSeek API key", sessionID: sessionID)
@@ -374,79 +407,28 @@ final class OwnerRequestsTests: XCTestCase {
         XCTAssertEqual(reminder.userInfo["ownerRequestID"], requestID)
         XCTAssertEqual(Notifications.intent(actionId: Notifications.actionOwnerRequestOpen, userInfo: reminder.userInfo),
                        .openOwnerRequest(requestID: requestID))
+        // The Later reminder's own tap is the same door: the conversation that asked, on the card.
+        XCTAssertEqual(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
+                                            userInfo: reminder.userInfo),
+                       .openOwnerRequest(requestID: requestID))
     }
 
-    func testDeepLinkOpensTheCardFocusedOnItsInput() throws {
+    func testDeepLinkNamesTheRequestWhoseSessionOpens() throws {
         let url = OwnerRequestLink.url(requestID)
         XCTAssertEqual(url.absoluteString, "orbit://owner-request/\(PublicID.toPublic(requestID))")
         XCTAssertEqual(OwnerRequestLink.parse(url), PublicID.toPublic(requestID))
         XCTAssertNil(OwnerRequestLink.parse(URL(string: "orbit://owner-request/not-an-id")!))
         XCTAssertNil(OwnerRequestLink.parse(URL(string: "orbit://session/\(requestID)")!))
-        // Not a `Route`: the app's route door leaves it alone, and the owner-request door takes it.
+        // Not a `Route`: the app's route door leaves it alone, and the owner-request door reads
+        // the request it names for `askedBySessionId` before it navigates.
         XCTAssertNil(DeepLink.parse(url))
-        XCTAssertEqual(OwnerRequestLink.focus(.secret), .secret)
-        XCTAssertEqual(OwnerRequestLink.focus(.decision), .answer)
-        XCTAssertEqual(OwnerRequestLink.focus(.manualStep), .primary)
-        XCTAssertEqual(OwnerRequestLink.focus(.confirm), .primary)
+        XCTAssertEqual(secret().askedBySessionId, sessionID)
     }
 
     func testTheCardIsPlacedWhereItWasAsked() {
         let card = DeliveredDecisionCard(kind: .ownerRequest(requestID: requestID), placement: .at("2026-11-07T10:53:00Z"))
         XCTAssertEqual(card.id, "owner-request-\(PublicID.storageKey(requestID))")
         XCTAssertEqual(DeliveredDecisionCard(kind: .ownerRequest(requestID: PublicID.toPublic(requestID))).id, card.id)
-    }
-
-    // MARK: one inbox — the coordinators' questions beside the requests
-
-    private func question(_ id: String, project: ProjectSummary, waiting: String, recommended: Int? = 0) -> OwnerInboxQuestion {
-        let asked = CoordinatorQuestion(question: "Which branch lands **first**?",
-                                        options: [.init(label: "auth"), .init(label: "billing")],
-                                        recommendedOption: recommended)
-        return OwnerInboxQuestion(projectID: project.id, projectTitle: project.title, coordinatorSessionID: "coord-1",
-                                  row: ProjectOpenItemRow(itemId: id, kind: .coordinatorQuestion,
-                                                          title: "Coordinator asks", waitingSince: waiting,
-                                                          question: asked))
-    }
-
-    func testOpenQuestionsShareTheInboxAndTheCount() {
-        let asking = ProjectSummary(id: "p-pay", title: "Payments", attention: ProjectListAttention(
-            ownerItems: [ProjectListOwnerItem(kind: .coordinatorQuestion, count: 1, oldestWaitingSince: "2026-11-07T08:00:00Z")]))
-        let quiet = ProjectSummary(id: "p-quiet", title: "Quiet", attention: ProjectListAttention(
-            ownerItems: [ProjectListOwnerItem(kind: .escalated, count: 2, oldestWaitingSince: "2026-11-07T08:00:00Z")]))
-        let closed = ProjectSummary(id: "p-done", title: "Done", status: .done, attention: ProjectListAttention(
-            ownerItems: [ProjectListOwnerItem(kind: .coordinatorQuestion, count: 1, oldestWaitingSince: "2026-11-07T08:00:00Z")]))
-        // Only open projects with a question waiting are read.
-        XCTAssertEqual(OwnerRequests.projectsAsking([asking, quiet, closed]).map(\.id), ["p-pay"])
-
-        // A project's open items: only the owner's questions become rows.
-        let items = ProjectOpenItemsView(needsYou: [
-            question("q1", project: asking, waiting: "2026-11-07T08:00:00Z").row,
-            ProjectOpenItemRow(itemId: "e1", kind: .taskFailed, title: "Task failed", waitingSince: "2026-11-07T09:00:00Z"),
-        ])
-        let rows = OwnerRequests.questions(project: asking, items: items, coordinatorSessionID: "coord-1",
-                                           coordinatorWorkspaceID: "ws-1")
-        XCTAssertEqual(rows.map(\.id), ["q1"])
-        XCTAssertEqual(rows.first?.coordinatorSessionID, "coord-1")
-        XCTAssertEqual(OwnerRequests.questionTitle(rows[0]), "Which branch lands first?")
-        XCTAssertEqual(OwnerRequests.questionDetail(rows[0]), "Payments · decision · recommended: auth")
-        XCTAssertEqual(OwnerRequests.questionDetail(question("q2", project: asking, waiting: "2026-11-07T08:00:00Z",
-                                                             recommended: nil)), "Payments · decision")
-
-        // The Open tab: pending requests and questions, newest first; ended requests stay out.
-        let q = question("q1", project: asking, waiting: "2026-11-07T08:00:00Z")   // 08:00
-        let open = [secret(), steps(), confirm(), secret(state: .done)]           // 10:53, yesterday, 10:00
-        XCTAssertEqual(OwnerRequests.openEntries(open, questions: [q]).map(\.id), [
-            "request-\(PublicID.storageKey(requestID))", "request-\(PublicID.storageKey("c4"))", "question-q1",
-            "request-\(PublicID.storageKey("s2"))",
-        ])
-
-        // One count: requests not put off, plus every open question.
-        let pending = [secret(), steps(), confirm()]
-        XCTAssertEqual(OwnerRequests.waitingCount(pending, questions: [q], snoozes: [:], now: now), 4)
-        let later = [PublicID.storageKey(requestID): now.addingTimeInterval(3_600)]
-        XCTAssertEqual(OwnerRequests.waitingCount(pending, questions: [q], snoozes: later, now: now), 3)
-        XCTAssertEqual(OwnerRequests.waitingCount([], questions: [q, question("q3", project: asking, waiting: "x")],
-                                                  snoozes: [:], now: now), 2)
     }
 
     /// The turn Orbit queues when a request ends is a divider, not the owner's bubble (web: `resolutionTurnLabel`).

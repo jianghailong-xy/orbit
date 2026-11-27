@@ -25,7 +25,8 @@ import { seedPromotionRequest } from '../test-support/promotion-request';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { CreatorType, PrismaClient, RunStatus, TaskStatus } from '@prisma/client';
+import { CreatorType, PrismaClient, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated } from './coordinator-pg-test-safety';
@@ -79,7 +80,7 @@ async function doneTask(db: PrismaClient, w: World, title: string): Promise<{ ta
   await db.session.create({
     data: {
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId: task.id, title, prompt: title,
-      status: RunStatus.SUCCEEDED, startsTaskWork: true, completedAt: new Date(),
+      turnState: null, finishedAt: new Date(), startsTaskWork: true, completedAt: new Date(),
     },
   });
   return { taskId: task.id, sessionId };

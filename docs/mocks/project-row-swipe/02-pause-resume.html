@@ -1,0 +1,284 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Project row — Pause / Resume</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #e9e9ee; font-family: -apple-system, Inter, 'Noto Sans SC', sans-serif; color: #1c1c1e; }
+  .board { width: 1784px; padding: 48px; background: #f2f2f6; }
+  h1 { font-size: 34px; font-weight: 700; letter-spacing: -0.4px; }
+  .sub { font-size: 17px; color: #555; margin-top: 8px; line-height: 1.5; max-width: 1500px; }
+  h2 { font-size: 24px; font-weight: 700; margin: 44px 0 18px; display: flex; align-items: center; gap: 12px; }
+  h2 .tag { font-size: 14px; font-weight: 600; padding: 3px 10px; border-radius: 6px; color: #fff; }
+  .tag.today { background: #8e8e93; } .tag.new { background: #5856d6; }
+  .frames { display: flex; gap: 28px; align-items: flex-start; }
+  .frame { width: 393px; }
+  .cap { font-size: 16px; font-weight: 700; margin-bottom: 10px; }
+  .cap small { display: block; font-weight: 500; font-size: 13px; color: #6c6c70; margin-top: 3px; }
+  .note { font-size: 14px; line-height: 1.5; color: #333; margin-top: 12px; }
+  .note b { color: #000; }
+  .note .bad { color: #d70015; font-weight: 600; }
+  .note .good { color: #248a3d; font-weight: 600; }
+
+  /* phone strip */
+  .ph { background: #000; border-radius: 28px; overflow: hidden; color: #fff; padding-bottom: 10px;
+        box-shadow: 0 2px 10px rgba(0,0,0,.18); position: relative; }
+  .ph-sec { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px 6px;
+            font-size: 17px; font-weight: 600; color: #8e8e93; }
+  .ph-sec svg { width: 16px; height: 16px; }
+  .rw { position: relative; height: 78px; }
+  .rw + .rw::before { content: ''; position: absolute; left: 20px; right: 20px; top: 0; border-top: .5px solid #38383a; }
+  .rc { position: absolute; top: 0; bottom: 0; left: 0; width: 393px; padding: 12px 20px 0; background: #000; }
+  .rc.sw { background: #1c1c1e; border-radius: 22px; top: 3px; bottom: 3px; padding-top: 9px; }
+  .rc.full { background: #1c1c1e; }
+  .t1 { display: flex; justify-content: space-between; align-items: center; font-size: 17px; white-space: nowrap; }
+  .t1 .ttl { overflow: hidden; text-overflow: ellipsis; margin-right: 10px; }
+  .t1 .tm { color: #8e8e93; font-size: 13px; flex: none; }
+  .t2 { display: flex; align-items: center; gap: 8px; margin-top: 7px; font-size: 15px; color: #8e8e93; white-space: nowrap; overflow: hidden; }
+  .t2 .st { overflow: hidden; text-overflow: ellipsis; }
+  .t2 .st.blue { color: #0a84ff; }
+  .pill { display: inline-flex; align-items: center; gap: 5px; background: #2c2c2e; border-radius: 5px; padding: 2px 6px;
+          font-size: 12px; font-weight: 600; color: #aeaeb2; flex: none; font-variant-numeric: tabular-nums; }
+  .pill.done { background: rgba(48,209,88,.16); color: #30d158; }
+  .bar { width: 26px; height: 4px; border-radius: 2px; background: #48484a; overflow: hidden; display: flex; }
+  .bar i { display: block; height: 100%; }
+  .acts { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; gap: 8px; }
+  .acts.lead { left: 12px; } .acts.trail { right: 12px; }
+  .act { width: 62px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .circ { width: 50px; height: 50px; border-radius: 25px; display: flex; align-items: center; justify-content: center; }
+  .circ svg { width: 22px; height: 22px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .act span { font-size: 12px; white-space: nowrap; color: #aeaeb2; }
+  .act.off .circ { opacity: .35; }
+  .stretch { position: absolute; left: 10px; top: 10px; bottom: 10px; border-radius: 29px; display: flex; align-items: center;
+             justify-content: flex-end; padding-right: 18px; gap: 8px; font-size: 14px; font-weight: 600; }
+  .stretch svg { width: 22px; height: 22px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .mark { position: absolute; width: 26px; height: 26px; border-radius: 13px; background: #ff3b30; color: #fff; font-size: 14px;
+          font-weight: 700; display: flex; align-items: center; justify-content: center; z-index: 5; box-shadow: 0 0 0 2px #000; }
+  .mark.ok { background: #34c759; }
+  .ghost { position: absolute; left: 20px; right: 20px; border: 1.5px dashed #ff453a; border-radius: 14px; color: #ff6961;
+           font-size: 13px; padding: 7px 12px; }
+  .toast { margin: 10px 14px 4px; background: #2c2c2e; border-radius: 16px; padding: 11px 14px; font-size: 14px; display: flex;
+           align-items: center; gap: 10px; }
+  .toast svg { width: 18px; height: 18px; stroke: #30d158; fill: none; stroke-width: 2.4; flex: none; }
+  .toast small { display: block; color: #8e8e93; font-size: 12px; margin-top: 2px; }
+  .hint { position: absolute; top: 30px; font-size: 22px; color: #8e8e93; }
+
+  /* tables */
+  .two { display: flex; gap: 28px; margin-top: 44px; align-items: flex-start; }
+  .panel { background: #fff; border-radius: 16px; padding: 24px 26px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .panel h3 { font-size: 19px; margin-bottom: 14px; }
+  table { border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid #e5e5ea; vertical-align: top; line-height: 1.45; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .4px; color: #6c6c70; }
+  td.ch { background: #eeeeff; }
+  .k { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; background: #f2f2f7; padding: 1px 5px; border-radius: 4px; }
+  ol { padding-left: 22px; font-size: 15px; line-height: 1.55; }
+  ol li { margin-bottom: 12px; }
+  ol li .rec { color: #5856d6; font-weight: 600; }
+  ul.files { list-style: none; font-size: 14px; line-height: 1.7; }
+</style>
+</head><body>
+<style>
+  .board { width: 2200px; }
+  .t2 .st.amber { color: #ff9f0a; }
+  .t2 .st.grey { color: #8e8e93; }
+  .t2 .pg { display: inline-flex; align-items: center; gap: 5px; }
+  .t2 .pg svg { width: 13px; height: 13px; fill: currentColor; stroke: none; }
+  .pill.paused .bar i { filter: grayscale(1) brightness(.8); }
+  .pill.paused { color: #8e8e93; }
+  .menu { margin: 6px 14px 12px; background: #2c2c2e; border-radius: 14px; overflow: hidden; font-size: 15px; }
+  .menu div { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; border-top: .5px solid #3a3a3c; }
+  .menu div:first-child { border-top: 0; }
+  .menu div.gap { border-top: 7px solid #1c1c1e; }
+  .menu div.dim { color: #636366; }
+  .menu div.hl { background: #3a3a5c; }
+  .menu svg { width: 17px; height: 17px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .menu .dim svg { stroke: #636366; }
+  .toast b { font-weight: 600; }
+  .toast .undo { margin-left: auto; color: #0a84ff; font-weight: 600; font-size: 14px; }
+  .lift { box-shadow: 0 0 0 1.5px #5e5ce6 inset; border-radius: 16px; }
+  .order td:first-child { font-weight: 700; width: 30px; }
+  .newrow td { background: #eeeeff; }
+</style>
+<div class="board" id="board">
+  <h1>Project row — Pause / Resume, and the full action set</h1>
+  <div class="sub">The project row in the session list, iPhone (iOS 26 circles). Swipe right holds the one state change the project
+    can take right now (<b>Pause</b>, <b>Resume</b> or <b>Complete</b>) followed by Pin; swipe left stays <b>Move</b>. A full swipe fires nothing.
+    Pause here is the project page's existing <span class="k">Pause project</span>
+    (<span class="k">POST /projects/:id/pause</span>): it stops Orbit starting tasks and merging on its own. Runs already going finish.</div>
+
+  <h2><span class="tag new">① Swipe right</span> by project state</h2>
+  <div class="frames" id="states"></div>
+
+  <h2><span class="tag new">② Long press</span> and <span class="tag new">③ after the press</span></h2>
+  <div class="frames" id="after"></div>
+
+  <div class="two">
+    <div class="panel" style="width: 1240px">
+      <h3>Every action on a project row</h3>
+      <table>
+        <tr><th>Job</th><th>Action</th><th>Swipe</th><th>Long press</th><th>Shown when</th></tr>
+        <tr class="newrow"><td>Control</td><td>Pause</td><td>right, first</td><td>yes</td><td>started, OPEN, not paused; owner only</td></tr>
+        <tr class="newrow"><td>Control</td><td>Resume</td><td>right, first</td><td>yes</td><td>paused by you, or at the daily limit; owner only</td></tr>
+        <tr class="newrow"><td>Control</td><td>Complete</td><td>right, first</td><td>yes (first item)</td><td>DONE / CANCELLED, Open view</td></tr>
+        <tr><td>Organise</td><td>Pin / Unpin</td><td>right, second</td><td>yes</td><td>has a coordinator</td></tr>
+        <tr><td>Organise</td><td>Move…</td><td>left</td><td>yes</td><td>has a coordinator</td></tr>
+        <tr><td>Navigate</td><td>Open Session · Sessions · Open Project</td><td>—</td><td>yes</td><td>always (Open Session greys out without a session to open)</td></tr>
+        <tr><td style="color:#6c6c70">Left out</td><td style="color:#6c6c70">Start · Delete · Share · Stop running work · approve/answer</td><td style="color:#6c6c70">—</td><td style="color:#6c6c70">—</td>
+          <td style="color:#6c6c70">They spend money, can't be undone, or need context: the conversation or the project page</td></tr>
+      </table>
+      <h3 style="margin-top:22px">Second line: the order (§4.2), with the new rows shaded</h3>
+      <table class="order">
+        <tr><td>1</td><td>Coordinator waiting on you</td><td><i>Approve merge to main</i> · amber</td></tr>
+        <tr><td>2</td><td>A run waiting on you</td><td><i>Waiting for your confirmation · &lt;session&gt;</i> · amber</td></tr>
+        <tr class="newrow"><td>2a</td><td>Paused at the daily limit</td><td><i>Paused at the daily limit · 6/6 today</i> · amber, pause glyph</td></tr>
+        <tr class="newrow"><td>2b</td><td>Paused by you</td><td><i>Paused · 2h</i>, or <i>Paused · 2 runs finishing</i> · grey, pause glyph</td></tr>
+        <tr><td>3–7</td><td>Coordinator handling an exception, running, landing, last reply, no coordinator</td><td>unchanged</td></tr>
+      </table>
+    </div>
+    <div class="panel" style="width: 820px">
+      <h3>Waiting on you</h3>
+      <ol>
+        <li><b>Should Pause also offer to stop running work?</b> <span class="rec">Drawn: no.</span> The toast only says
+          <i>2 runs still going</i>. Stopping them stays on each session.</li>
+        <li><b>One Resume for both kinds of pause?</b> <span class="rec">Drawn: yes.</span> The row picks
+          <span class="k">/resume</span> or <span class="k">/fuse/:episode/resume</span>. A limit resume never raises the limit;
+          the toast says so and links to the project page.</li>
+        <li><b>Pause takes the first slot; Complete only appears there once the project has finished.</b> <span class="rec">Drawn: yes.</span></li>
+        <li><b>Undo on the Pause toast?</b> <span class="rec">Drawn: yes</span>, as Resume. Resume gets no Undo: pausing again is one swipe.</li>
+      </ol>
+      <h3 style="margin-top:18px">What it needs</h3>
+      <ul class="files">
+        <li><b>Server:</b> <span class="k">/projects/sidebar</span> adds <span class="k">pausedAt</span>, <span class="k">pausedReason</span>, <span class="k">fuse.paused</span> + <span class="k">episodeId</span></li>
+        <li><b>iOS:</b> <span class="k">SessionProjectPage.swift</span> SessionProjectRowActions, <span class="k">SessionProjectGrouping.swift</span> line</li>
+        <li><b>Android:</b> <span class="k">directory/SessionProjects.kt</span></li>
+        <li><b>Web (phone swipe + ⋯ menu):</b> <span class="k">WorkspaceView.tsx</span>, <span class="k">sessionProjects.ts</span></li>
+        <li><b>Docs:</b> <span class="k">session-list-projects-design.md</span> §4.2, §4.3, §6 copy</li>
+      </ul>
+    </div>
+  </div>
+</div>
+<script>
+const IC = {
+  pin: '<path d="M9 3h6l-1 6 4 4H6l4-4z"/><path d="M12 13v8"/>',
+  unpin: '<path d="M9 3h6l-1 6 4 4H6l4-4z"/><path d="M12 13v8"/><path d="M3 3l18 18"/>',
+  folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  tray: '<path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/><path d="M12 15V4"/><path d="M8 8l4-4 4 4"/>',
+  chev: '<path d="M6 9l6 6 6-6"/>',
+};
+const C = { indigo: '#5e5ce6', green: '#30d158', blue: '#0a84ff' };
+const svg = (k) => `<svg viewBox="0 0 24 24">${IC[k]}</svg>`;
+
+function bar(done, run, fail) {
+  return `<span class="bar"><i style="width:${done}%;background:#30d158"></i><i style="width:${run}%;background:#0a84ff"></i><i style="width:${fail}%;background:#ff453a"></i></span>`;
+}
+const ROWS = {
+  session: { t: 'Session state: three activity states an…', tm: 'just now', pill: [bar(25,8,0), '10/33'], st: 'Checks failed · 5h', blue: true },
+  feishu: { t: 'Feishu bot integration', tm: 'just now', pill: [bar(80,10,0), '38/43'], st: "Yes, it's doable. Before I outline it, I'm checki…" },
+  files: { t: 'Documents drive', tm: 'just now', pill: [bar(5,5,0), '1/19'], st: 'Watching Documents drive: can Orbit Cloud ru…' },
+  claude: { t: 'Set as default for Claude accounts', tm: '15m ago', done: true, pill: ['', 'Done'], st: 'Landed 13/13 · merged into main' },
+  cloud: { t: 'Orbit Cloud: new version available and Up…', tm: '8m ago', pill: [bar(30,0,10), '3/10'], st: 'Checks failed · 1d', blue: true },
+  browser: { t: 'Orbit Cloud browser: watch and take over t…', tm: '2h ago', done: true, pill: ['', 'Done'], st: "Removed prod's docker-compose.override.yml an…" },
+  nocoord: { t: 'Hide Orbit in shared chats', tm: '3d ago', pill: [bar(50,0,0), '2/4'], st: 'No coordinator · 2 sessions' },
+};
+function rowContent(r, cls = '', shift = 0) {
+  return `<div class="rc ${cls}" style="left:${shift}px">
+    <div class="t1"><span class="ttl">${r.t}</span><span class="tm">${r.tm}</span></div>
+    <div class="t2"><span class="pill ${r.done ? 'done' : ''}">${r.pill[0]}${r.pill[1]}</span><span class="st ${r.blue ? 'blue' : ''}">${r.st}</span></div>
+  </div>`;
+}
+function act(a) {
+  return `<div class="act ${a.off ? 'off' : ''}"><div class="circ" style="background:${C[a.c]}">${svg(a.i)}</div><span>${a.l}</span></div>`;
+}
+// opts: { lead: [...], trail: [...], full: {c,i,l}, marks: [[n,x,y,ok]] }
+function row(key, o = {}) {
+  const r = ROWS[key];
+  let inner = '';
+  if (o.lead) {
+    const w = o.lead.length * 70 + 16 + (o.lead.includes(REOPEN) ? 14 : 0);
+    inner = `<div class="acts lead">${o.lead.map(act).join('')}</div>` + rowContent(r, 'sw', w);
+  } else if (o.trail) {
+    const w = o.trail.length * 70 + 16;
+    inner = `<div class="acts trail">${o.trail.map(act).join('')}</div>` + rowContent(r, 'sw', -w);
+  } else if (o.full) {
+    inner = `<div class="stretch" style="width:300px;background:${C[o.full.c]}">${svg(o.full.i)}${o.full.l}</div>` + rowContent(r, 'sw', 318);
+  } else {
+    inner = rowContent(r);
+  }
+  const marks = (o.marks || []).map(([n, x, y, ok]) => `<div class="mark ${ok ? 'ok' : ''}" style="left:${x}px;top:${y}px">${n}</div>`).join('');
+  return `<div class="rw" style="${o.h ? `height:${o.h}px` : ''}">${inner}${marks}</div>`;
+}
+const sec = (t) => `<div class="ph-sec">${t}<svg viewBox="0 0 24 24" style="stroke:#8e8e93;fill:none;stroke-width:2">${IC.chev}</svg></div>`;
+function frame(cap, sub, body, note) {
+  return `<div class="frame"><div class="cap">${cap}<small>${sub}</small></div><div class="ph">${body}</div><div class="note">${note}</div></div>`;
+}
+const PIN = { c: 'indigo', i: 'pin', l: 'Pin' };
+const UNPIN = { c: 'indigo', i: 'unpin', l: 'Unpin' };
+const MOVE = { c: 'indigo', i: 'folder', l: 'Move' };
+const COMPLETE = { c: 'green', i: 'check', l: 'Complete' };
+const REOPEN = { c: 'blue', i: 'tray', l: 'Move to Open' };
+IC.pause = '<rect x="6.5" y="5" width="3.5" height="14" rx="1"/><rect x="14" y="5" width="3.5" height="14" rx="1"/>';
+IC.play = '<path d="M8 5.5v13l10.5-6.5z"/>';
+IC.bubble = '<path d="M4 5h16v11H9l-5 4z"/>';
+IC.list = '<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>';
+IC.grid = '<rect x="4" y="4" width="7" height="7"/><rect x="13" y="4" width="7" height="7"/><rect x="4" y="13" width="7" height="7"/><rect x="13" y="13" width="7" height="7"/>';
+C.orange = '#ff9f0a';
+const PG = '<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
+
+ROWS.notstarted = { t: 'Documents drive', tm: 'just now', pill: [bar(0,0,0), '0/19'], st: 'Ready to start', amber: true };
+ROWS.running = { t: 'Session state: three activity states an…', tm: 'just now', pill: [bar(25,8,0), '10/33'], st: 'Running · coordinator', blue: true };
+ROWS.pausedYou = { t: 'Feishu bot integration', tm: '2h ago', paused: true, pill: [bar(80,10,0), '38/43'], st: `<span class="pg">${PG}Paused · 2 runs finishing</span>`, grey: true };
+ROWS.pausedYou2 = { t: 'Feishu bot integration', tm: '2h ago', paused: true, pill: [bar(80,0,0), '38/43'], st: `<span class="pg">${PG}Paused · 2h</span>`, grey: true };
+ROWS.pausedLimit = { t: 'Orbit Cloud browser: agent tools (sign-in…', tm: '40m ago', paused: true, pill: [bar(10,0,0), '1/7'], st: `<span class="pg">${PG}Paused at the daily limit · 6/6 today</span>`, amber: true };
+
+// Re-define rowContent to know the new tones.
+rowContent = function (r, cls = '', shift = 0) {
+  const tone = r.blue ? 'blue' : r.amber ? 'amber' : r.grey ? 'grey' : '';
+  return `<div class="rc ${cls}" style="left:${shift}px">
+    <div class="t1"><span class="ttl">${r.t}</span><span class="tm">${r.tm}</span></div>
+    <div class="t2"><span class="pill ${r.done ? 'done' : ''} ${r.paused ? 'paused' : ''}">${r.pill[0]}${r.pill[1]}</span><span class="st ${tone}">${r.st}</span></div>
+  </div>`;
+};
+
+const PAUSE = { c: 'orange', i: 'pause', l: 'Pause' };
+const RESUME = { c: 'green', i: 'play', l: 'Resume' };
+
+document.getElementById('states').innerHTML = [
+  frame('Not started', 'the server refuses to pause it',
+    sec('Pinned') + row('notstarted', { lead: [UNPIN] }) + row('cloud'),
+    'Only <b>Pin</b>. Start spends money and opens a card, so it stays in the conversation (tap the row).'),
+  frame('Running', 'started, OPEN',
+    sec('Pinned') + row('running', { lead: [PAUSE, UNPIN], marks: [[1, 60, 6, true]] }) + row('feishu', { trail: [MOVE] }),
+    '<span class="good">①</span> <b>Pause</b> (orange) first, Pin next. Left is <b>Move</b>, as today. Tap Pause; a full swipe stretches the row and snaps back.'),
+  frame('Paused by you', 'POST /projects/:id/pause',
+    sec('Pinned') + row('pausedYou', { lead: [RESUME, UNPIN], marks: [[2, 60, 6, true]] }) + row('pausedYou2'),
+    '<span class="good">②</span> The second line says it in grey with a pause glyph, and the progress bar goes grey. <b>Resume</b> (green) takes the first slot.'),
+  frame('Paused at the daily limit', 'the spend fuse tripped',
+    sec('Pinned') + row('pausedLimit', { lead: [RESUME, UNPIN], marks: [[3, 60, 6, true]] }) + row('pausedLimit'),
+    '<span class="good">③</span> Amber, because this one needs you. The same <b>Resume</b>: it lifts this episode <b>without raising the limit</b>.'),
+  frame('Finished', 'DONE / CANCELLED, Open view',
+    sec('Pinned') + row('claude', { lead: [COMPLETE, UNPIN] }) + row('browser'),
+    'Pause no longer means anything, so <b>Complete</b> takes the first slot (decided on the first board).'),
+].join('');
+
+const menu = (items) => `<div class="menu">${items.map(([l, i, cls = '']) => `<div class="${cls}">${l}${svg(i)}</div>`).join('')}</div>`;
+document.getElementById('after').innerHTML = [
+  frame('Long press, running', 'same list as the swipe, plus navigation',
+    sec('Pinned') + `<div class="lift">${row('running')}</div>` + menu([
+      ['Open Session', 'bubble'], ['Sessions', 'list'], ['Open Project', 'grid'],
+      ['Pause', 'pause', 'gap hl'], ['Unpin', 'unpin'], ['Move…', 'folder'],
+    ]),
+    'Pause / Resume join the Pin and Move group. The menu stays the full list for VoiceOver and macOS, where there is no swipe.'),
+  frame('After Pause', 'toast with Undo',
+    sec('Pinned') + row('pausedYou')
+    + `<div class="toast"><svg viewBox="0 0 24 24" style="stroke:#ff9f0a;fill:#ff9f0a">${IC.pause}</svg><div><b>Project paused</b><small>2 runs still going · nothing new starts or merges</small></div><span class="undo">Undo</span></div>`,
+    'Says what still moves: the 2 runs already going. <b>Undo</b> is Resume. There is no confirmation because the action can be undone.'),
+  frame('After Resume at the limit', 'no limit raised',
+    sec('Pinned') + row('running')
+    + `<div class="toast"><svg viewBox="0 0 24 24">${IC.check}</svg><div><b>Resumed</b><small>The daily limit was not raised · Change on the project page</small></div></div>`,
+    'A limit resume approves spending again, but within the same limit. Raising the limit stays on the project page.'),
+  frame('Pause refused', 'guest, or the server says no',
+    sec('Pinned') + row('running')
+    + `<div class="toast" style="background:#3a1d1d"><svg viewBox="0 0 24 24" style="stroke:#ff6961">${IC.pause}</svg><div><b>Couldn't pause the project</b><small>Only the project's owner can pause it</small></div></div>`,
+    'A guest on a shared project never sees Pause. If the server still refuses, the toast gives its reason in words, never the code.'),
+].join('');
+</script>
+</body></html>

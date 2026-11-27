@@ -92,12 +92,14 @@ public struct UpdateAgentRequest: Encodable, Sendable {
     /// Worktree isolation for this workspace's sessions (`Agent.enableWorktree`): the worktree bar's
     /// notice turns it off for a folder kept as it is, and its Undo back on.
     public var enableWorktree: Bool?
-    /// Smart model selection for this Agent's task runs (`Agent.modelRouting`).
-    public var modelRouting: Bool?
     /// SubAgents for this Agent's sessions (docs/subagent-design.md §7).
     public var subagentsEnabled: Bool?
     /// How many of one session's SubAgents run at once, 1…16.
     public var subagentsMaxRunning: Int?
+    /// Workflows for this Agent's sessions (docs/subagent-workflow-design.md §6).
+    public var workflowsEnabled: Bool?
+    /// How finished work reaches main on GitHub: `PULL_REQUEST` or `PUSH_AS_ME`.
+    public var landingMode: String?
 
     public init(name: String? = nil, description: String? = nil,
                 model: String? = nil,
@@ -108,8 +110,9 @@ public struct UpdateAgentRequest: Encodable, Sendable {
                 targetRunnerId: String? = nil, targetLabels: [String]? = nil,
                 runnerId: String? = nil, workDir: String? = nil, env: [String: String]? = nil,
                 enabled: Bool? = nil, autoInitGit: Bool? = nil, enableWorktree: Bool? = nil,
-                modelRouting: Bool? = nil,
-                subagentsEnabled: Bool? = nil, subagentsMaxRunning: Int? = nil) {
+                subagentsEnabled: Bool? = nil, subagentsMaxRunning: Int? = nil, workflowsEnabled: Bool? = nil,
+                landingMode: String? = nil) {
+        self.landingMode = landingMode
         self.name = name
         self.description = description
         self.model = model
@@ -129,9 +132,9 @@ public struct UpdateAgentRequest: Encodable, Sendable {
         self.enabled = enabled
         self.autoInitGit = autoInitGit
         self.enableWorktree = enableWorktree
-        self.modelRouting = modelRouting
         self.subagentsEnabled = subagentsEnabled
         self.subagentsMaxRunning = subagentsMaxRunning
+        self.workflowsEnabled = workflowsEnabled
     }
 }
 

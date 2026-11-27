@@ -170,6 +170,8 @@ public struct OrbitLinkCardContent: Equatable, Sendable {
     /// A session's glyph — the view draws its shape and tone, so a card cannot invent a status
     /// vocabulary of its own.
     public let sessionGlyph: SessionStatusGlyph?
+    /// A session's marks after its state (`SessionDisplay.marks`); empty from an older server.
+    public let sessionMarks: [SessionMark]
     public let meter: [Segment]
     public let lines: [Line]
     public let foot: Foot?
@@ -183,12 +185,14 @@ public struct OrbitLinkCardContent: Equatable, Sendable {
 
     public init(state: State, kind: OrbitLinkKind, title: String?, pill: TaskPill?,
                 sessionGlyph: SessionStatusGlyph?, meter: [Segment], lines: [Line], foot: Foot?,
-                path: String, wikiKind: WikiEntryKind? = nil, wikiTrust: WikiTrust? = nil) {
+                path: String, wikiKind: WikiEntryKind? = nil, wikiTrust: WikiTrust? = nil,
+                sessionMarks: [SessionMark] = []) {
         self.state = state
         self.kind = kind
         self.title = title
         self.pill = pill
         self.sessionGlyph = sessionGlyph
+        self.sessionMarks = sessionMarks
         self.meter = meter
         self.lines = lines
         self.foot = foot
@@ -277,7 +281,8 @@ public struct OrbitLinkCardContent: Equatable, Sendable {
 
     /// How a task's newest run came out, in the words its own glyph would use.
     private static func runWord(_ run: LinkPreviewTaskRun) -> String {
-        SessionStatusGlyph.make(runState: run.effectiveRunState).label
+        // A task run stored SUCCEEDED is one whose task ended done: the approved word is Finished (web `stateWord`).
+        SessionStatusGlyph.make(runState: run.effectiveRunState, successLabel: "Finished").label
     }
 
     /// The status word, the Coordinator badge, and who ran it.
@@ -294,11 +299,14 @@ public struct OrbitLinkCardContent: Equatable, Sendable {
             sessionGlyph: statusWord(session, now: now), meter: [],
             lines: [Line(text: parts.joined(separator: OrbitLinkCopy.separator),
                          badge: session.projectId != nil ? OrbitLinkCopy.coordinator : nil)],
-            foot: nil, path: pathLabel(ref, host: host))
+            foot: nil, path: pathLabel(ref, host: host),
+            sessionMarks: SessionDisplay.marks(session.displayFacts) ?? [])
     }
 
+    /// The state from `phase` (`SessionDisplay`), else, from an older server, the glyph the row drew.
     private static func statusWord(_ session: LinkPreviewSession, now: Date) -> SessionStatusGlyph {
-        SessionStatusGlyph.make(runState: session.effectiveRunState,
+        if let state = SessionDisplay.state(session.displayFacts) { return state.glyph }
+        return SessionStatusGlyph.make(runState: session.effectiveRunState,
                                 pendingApprovals: session.pendingApprovals,
                                 runningBgCount: session.runningBgCount,
                                 runningBgJobCount: session.runningBgJobCount,

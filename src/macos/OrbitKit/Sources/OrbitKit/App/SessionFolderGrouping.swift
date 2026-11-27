@@ -83,13 +83,13 @@ public enum SessionFolderGrouping {
 
     /// What a folder's page lists: the sessions filed in `folderID`, in the scope of the list it
     /// was opened from. Ordered the way that list orders the scope
-    /// (`SessionFilter.forAgent(_:agentID:view:)`) — pinned first and then by latest activity,
+    /// (`SessionFilter.forAgent(_:agentID:view:)`) — pinned first in Open and then by `listedAt`,
     /// Completed in the server's order — so `SessionTimeGrouping.sections` gives the page the
     /// same Pinned and time sections the list draws.
     public static func sessions(_ sessions: [Session], inFolder folderID: String,
                                 view: SessionView) -> [Session] {
         let filed = sessions.filter { $0.folderId == folderID }
-        return view == .completed ? filed : SessionFilter.consoleSorted(filed)
+        return view == .completed ? filed : SessionFilter.consoleSorted(filed, pinnedFirst: view == .open)
     }
 
     /// A folder row's trailing slot: `WorkspaceNavigationStatusLogic` over the same per-session

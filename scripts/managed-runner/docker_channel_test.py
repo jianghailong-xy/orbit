@@ -5,7 +5,7 @@ listen.allowPeers, on a loopback port).
 
 Covers what the channel decides: its configuration (its listeners among them), the peers a TCP
 listener lets through, the bearer token, the template and its safety
-rules (an executable /tmp with a size limit among them), the refusal of every Docker parameter a
+rules (/tmp a directory of the data volume among them), the refusal of every Docker parameter a
 request may not carry, the instance label on everything it touches, one container per data volume
 and a cap on all of them, credentials, the stop and removal of a container, volume removal (off
 unless an operator turns it on), the disk limit and the disk it is measured on, and a create
@@ -31,6 +31,7 @@ import tarfile
 import tempfile
 import threading
 import unittest
+from unittest.mock import Mock
 import urllib.parse
 import uuid
 
@@ -63,6 +64,8 @@ class FakeDocker:
         self.ch = ch
         self.volumes_by_name = {}
         self.containers_by_name = {}
+        # volume name -> {directory: mode}: what is in a volume at its top, as far as a Subpath mount needs to know.
+        self.volume_dirs = {}
         self.images = {IMAGE: {"Id": IMAGE, "Config": {"Env": ["PATH=/usr/bin:/bin", "ORBIT_HOME=/home/orbit/.orbit"]}}}
         self.networks = {"orbit-mr-test": {"Name": "orbit-mr-test", "Driver": "bridge", "Internal": True,
                                            "Options": {"com.docker.network.bridge.enable_icc": "false"}}}
@@ -93,10 +96,11 @@ class FakeDocker:
     def volumes(self, labels):
         return [copy.deepcopy(v) for v in self.volumes_by_name.values() if self.matches(v.get("Labels"), labels)]
 
-    def create_volume(self, name, labels):
+    def create_volume(self, name, labels, options=None):
         self.calls.append(("create_volume", name))
         # Docker answers an existing name with the volume as it is.
-        self.volumes_by_name.setdefault(name, {"Name": name, "Driver": "local", "Labels": dict(labels), "CreatedAt": "2026-10-17T00:00:00Z"})
+        self.volumes_by_name.setdefault(name, {"Name": name, "Driver": "local", "Labels": dict(labels),
+                                               "Options": options, "CreatedAt": "2026-10-17T00:00:00Z"})
         return copy.deepcopy(self.volumes_by_name[name])
 
     def remove_volume(self, name):
@@ -122,7 +126,9 @@ class FakeDocker:
         return found
 
     def create_container(self, name, spec):
-        self.calls.append(("create_container", name))
+        # The channel's container that only makes the data volume's /tmp directory (ensure_tmp_directory) is told apart.
+        prep = [m["Target"] for m in spec["HostConfig"].get("Mounts") or []] == ["/home/orbit"]
+        self.calls.append(("create_tmp_prep" if prep else "create_container", name))
         if name in self.containers_by_name:
             raise self.ch.DockerError(409, "name in use")
         if spec["Image"] not in self.images:
@@ -131,6 +137,11 @@ class FakeDocker:
         if self.tamper:
             self.tamper(host)
         mounts = []
+        for m in host.get("Mounts") or []:
+            subpath = (m.get("VolumeOptions") or {}).get("Subpath")
+            if m["Type"] == "volume" and subpath and subpath not in self.volume_dirs.get(m["Source"], {}):
+                # Docker (Engine 29) refuses a Subpath that is not there.
+                raise self.ch.DockerError(500, f"cannot access path /var/lib/docker/volumes/{m['Source']}/_data/{subpath}: no such file or directory")
         for m in host.get("Mounts") or []:
             if m["Type"] == "volume":
                 if m["Source"] not in self.volumes_by_name:
@@ -155,10 +166,17 @@ class FakeDocker:
     def put_archive(self, name, path, tar_bytes):
         self.calls.append(("put_archive", name, path))
         files = {}
+        container = self.containers_by_name[name]
         with tarfile.open(fileobj=io.BytesIO(tar_bytes)) as tar:
             for member in tar.getmembers():
+                if member.isdir():
+                    files[member.name] = {"dir": True, "mode": member.mode, "uid": member.uid, "gid": member.gid}
+                    for m in container["Mounts"]:
+                        if m.get("Type") == "volume" and m["Destination"] == path:
+                            self.volume_dirs.setdefault(m["Name"], {})[member.name] = member.mode
+                    continue
                 files[member.name] = {"data": tar.extractfile(member).read().decode(), "mode": member.mode, "uid": member.uid, "gid": member.gid}
-        self.containers_by_name[name]["archives"][path] = files
+        container["archives"][path] = files
 
     def start_container(self, name):
         self.calls.append(("start_container", name))
@@ -172,12 +190,17 @@ class FakeDocker:
         self.exit(name, 143)
 
     def remove_container(self, name):
-        self.calls.append(("remove_container", name))
+        prep = [m["Destination"] for m in self.containers_by_name.get(name, {}).get("Mounts") or []] == ["/home/orbit"]
+        self.calls.append(("remove_tmp_prep" if prep else "remove_container", name))
         if self.containers_by_name[name]["State"]["Status"] in ("running", "paused", "restarting"):
             raise self.ch.DockerError(409, "stop the container before removing")
         del self.containers_by_name[name]
 
     # ── test controls ──
+    def tmp_dir_made(self, volume):
+        """The data volume's /tmp directory, as the channel makes it before its create."""
+        self.volume_dirs.setdefault(volume, {})[".orbit-tmp"] = 0o1777
+
     def exit(self, name, code=0):
         state = self.containers_by_name[name]["State"]
         state.update(Status="exited", Running=False, ExitCode=code, FinishedAt="2026-10-17T02:00:00.000000000Z", Pid=0)
@@ -455,9 +478,12 @@ class TemplateTest(ChannelFixture):
         self.assertEqual((host["NanoCpus"], host["Memory"], host["MemorySwap"], host["PidsLimit"]), (10 ** 9, 2 * 2 ** 30, 2 * 2 ** 30, 1024))
         self.assertEqual(host["NetworkMode"], "orbit-mr-test")
         self.assertEqual([(m["Type"], m["Target"]) for m in host["Mounts"]],
-                         [("volume", "/home/orbit"), ("volume", "/run/orbit-bootstrap"), ("tmpfs", "/tmp")])
-        # /tmp: executable (Docker keeps every tmpfs nosuid and nodev), sized, and held in the memory limit.
-        self.assertEqual(host["Mounts"][2]["TmpfsOptions"], {"SizeBytes": 256 * 2 ** 20, "Mode": 0o1777, "Options": [["exec"]]})
+                         [("volume", "/home/orbit"), ("volume", "/run/orbit-bootstrap"), ("volume", "/tmp")])
+        # /tmp: a directory of the runner's own data volume, so filling it is ENOSPC within the volume's limit, never
+        # memory taken by a tmpfs; there is no tmpfs left in the template.
+        self.assertEqual(host["Mounts"][2], {"Type": "volume", "Source": host["Mounts"][0]["Source"], "Target": "/tmp", "ReadOnly": False,
+                                             "VolumeOptions": {"NoCopy": True, "Subpath": ".orbit-tmp"}})
+        self.assertNotIn("tmpfs", json.dumps(spec).lower())
         self.assertEqual(spec["User"], "10001:10001")
         env = dict(e.split("=", 1) for e in spec["Env"])
         self.assertEqual(env["ORBIT_RUNNER_CREDENTIAL_FILE"], "/run/orbit-bootstrap/token")
@@ -492,8 +518,11 @@ class TemplateTest(ChannelFixture):
             "a missing CPU, memory or PID limit": lambda s: s["HostConfig"].update(PidsLimit=0),
             "published ports": lambda s: s["HostConfig"].update(PublishAllPorts=True),
             "a restart policy": lambda s: s["HostConfig"].update(RestartPolicy={"Name": "always"}),
-            "a /tmp without a size limit": lambda s: s["HostConfig"]["Mounts"][2]["TmpfsOptions"].pop("SizeBytes"),
-            "/tmp mount options other than exec": lambda s: s["HostConfig"]["Mounts"][2]["TmpfsOptions"].update(Options=[["exec"], ["suid"]]),
+            "a /tmp that is not the container's own data volume":
+                lambda s: s["HostConfig"]["Mounts"][2].update(Source="mr-data-" + OTHER_RUNNER),
+            "a /tmp that is not the data volume's .orbit-tmp directory":
+                lambda s: s["HostConfig"]["Mounts"][2]["VolumeOptions"].pop("Subpath"),
+            "a tmpfs mount at /tmp": lambda s: s["HostConfig"]["Mounts"].__setitem__(2, {"Type": "tmpfs", "Target": "/tmp", "TmpfsOptions": {"SizeBytes": 1}}),
         }
         for problem, change in cases.items():
             with self.subTest(problem=problem):
@@ -504,16 +533,19 @@ class TemplateTest(ChannelFixture):
     def test_what_docker_made_of_tmp_is_checked(self):
         spec = self.spec()
         inspected = {"Image": spec["Image"], "Config": {"User": spec["User"], "Env": spec["Env"]}, "HostConfig": spec["HostConfig"],
-                     "Mounts": [{"Type": "volume", "Name": m["Source"], "Destination": m["Target"]} for m in spec["HostConfig"]["Mounts"][:2]]
-                     + [{"Type": "tmpfs", "Destination": "/tmp"}]}
+                     "Mounts": [{"Type": "volume", "Name": m["Source"], "Destination": m["Target"]} for m in spec["HostConfig"]["Mounts"]]}
         self.assertEqual(self.ch.unsafe_container(self.config, inspected), [])
-        # An engine older than 27 drops the option: its /tmp stays noexec, which is no breach of the rules.
-        del inspected["HostConfig"]["Mounts"][2]["TmpfsOptions"]["Options"]
-        self.assertEqual(self.ch.unsafe_container(self.config, inspected), [])
-        inspected["HostConfig"]["Mounts"][2]["TmpfsOptions"]["Options"] = [["noexec"]]
-        self.assertIn("/tmp mount options other than exec", self.ch.unsafe_container(self.config, inspected))
-        inspected["HostConfig"]["Mounts"][2]["TmpfsOptions"] = {}
-        self.assertIn("a /tmp without a size limit", self.ch.unsafe_container(self.config, inspected))
+        # Docker's own mount list does not name the subdirectory: an engine that mounted the whole volume at /tmp
+        # without being asked for the subdirectory is caught by what it was asked for.
+        del inspected["HostConfig"]["Mounts"][2]["VolumeOptions"]["Subpath"]
+        self.assertIn("a /tmp that is not the data volume's .orbit-tmp directory", self.ch.unsafe_container(self.config, inspected))
+        inspected = {**inspected, "HostConfig": {**spec["HostConfig"], "Tmpfs": {"/tmp": "size=1g"}}}
+        self.assertIn("a tmpfs mount at /tmp", self.ch.unsafe_container(self.config, inspected))
+
+    def test_the_tmp_directory_is_root_owned_and_open_to_all_like_tmp(self):
+        with tarfile.open(fileobj=io.BytesIO(self.ch.tmp_directory_archive())) as tar:
+            members = tar.getmembers()
+        self.assertEqual([(m.name, m.isdir(), m.mode, m.uid, m.gid) for m in members], [(".orbit-tmp", True, 0o1777, 0, 0)])
 
     def test_the_bootstrap_files_are_root_owned_and_read_only(self):
         archive = self.ch.bootstrap_archive("the-token", 3, {"runnerId": RUNNER, "generation": 3, "instanceUid": "u"})
@@ -783,6 +815,29 @@ class ContainerTest(ChannelFixture):
         boot = self.docker.volumes_by_name[f"mr-boot-{RUNNER}-g1"]["Labels"]
         self.assertEqual((boot["orbit.managed-runner.instance"], boot["orbit.managed-runner.kind"]), (INSTANCE, "bootstrap"))
 
+    def test_the_data_volume_s_tmp_directory_is_made_before_the_container_that_mounts_it(self):
+        volume, created = self.running_container()
+        name = f"mr-{RUNNER}"
+        sequence = [c for c in self.docker.calls if c[0] in ("create_tmp_prep", "put_archive", "remove_tmp_prep", "create_container", "start_container")]
+        self.assertEqual(sequence, [("create_tmp_prep", name), ("put_archive", name, "/home/orbit"), ("remove_tmp_prep", name),
+                                    ("create_container", name), ("put_archive", name, "/run/orbit-bootstrap"), ("start_container", name)])
+        self.assertEqual(self.docker.volume_dirs[f"mr-data-{RUNNER}"], {".orbit-tmp": 0o1777})
+        tmp = [m for m in self.docker.containers_by_name[name]["HostConfig"]["Mounts"] if m["Target"] == "/tmp"]
+        self.assertEqual(tmp, [{"Type": "volume", "Source": f"mr-data-{RUNNER}", "Target": "/tmp", "ReadOnly": False,
+                                "VolumeOptions": {"NoCopy": True, "Subpath": ".orbit-tmp"}}])
+
+    def test_a_tmp_container_a_stopped_channel_left_is_removed_and_never_started(self):
+        volume = self.volume()
+        self.credential()
+        spec = self.ch.container_spec(self.config, self.request(volume["uid"]), str(uuid.uuid4()))
+        spec["HostConfig"]["Mounts"] = spec["HostConfig"]["Mounts"][:1]
+        self.docker.create_container(f"mr-{RUNNER}", spec)  # the channel stopped between making it and removing it
+        self.ch.Channel(self.config, self.docker, TOKEN).prepare()
+        self.assertNotIn(f"mr-{RUNNER}", self.docker.containers_by_name, "removed at start-up: it breaks the template")
+        self.assertNotIn(("start_container", f"mr-{RUNNER}"), self.docker.calls)
+        status, body = self.call("POST", "/v1/containers", self.request(volume["uid"]))
+        self.assertEqual(status, 201, body)
+
     def test_a_create_is_answered_once(self):
         volume, created = self.running_container()
         status, again = self.call("POST", "/v1/containers", self.request(volume["uid"]))
@@ -830,7 +885,7 @@ class ContainerTest(ChannelFixture):
             (self.request(uid, resources={"cpuMillis": 64000, "memoryBytes": 2 ** 30, "pids": 10, "tmpBytes": 10}), 403, "LIMIT_REFUSED"),
             (self.request(uid, resources={"cpuMillis": 1000, "memoryBytes": 2 ** 30, "pids": 10 ** 6, "tmpBytes": 10}), 403, "LIMIT_REFUSED"),
             (self.request(uid, resources={"cpuMillis": 1000, "memoryBytes": 2 ** 30, "pids": 0, "tmpBytes": 10}), 400, "PARAMETER_REFUSED"),
-            (self.request(uid, resources={"cpuMillis": 1000, "memoryBytes": 2 ** 20, "pids": 10, "tmpBytes": 2 ** 21}), 400, "PARAMETER_REFUSED"),
+            (self.request(uid, resources={"cpuMillis": 1000, "memoryBytes": 2 ** 30, "pids": 10, "tmpBytes": 0}), 400, "PARAMETER_REFUSED"),
             (self.request(uid, runner={"serverUrl": "http://user:pass@host", "maxConcurrent": 1}), 400, "PARAMETER_REFUSED"),
             (self.request(uid, runner={"serverUrl": "file:///var/run/docker.sock", "maxConcurrent": 1}), 400, "PARAMETER_REFUSED"),
             (self.request(uid, name=f"mr-{RUNNER}-second"), 409, "SINGLE_CONTAINER_GUARD"),
@@ -1022,7 +1077,84 @@ class ContainerLimitTest(ChannelFixture):
 
 
 class DiskLimitTest(ChannelFixture):
+    def filesystem_channel(self):
+        config = self.ch.parse_config({**self.config, "volumeFilesystemRoot": self.scratch.name, "allowVolumeRemoval": True})
+        channel = self.ch.Channel(config, self.docker, TOKEN)
+        # Keep the real driver options and report shape. The real Docker repro covers mkfs and mount.
+        channel.filesystems.root.mkdir(exist_ok=True)
+        channel.filesystems.create = Mock()
+        channel.filesystems.mount = Mock()
+        channel.filesystems.measure = Mock(return_value=20 * 2 ** 30)
+        channel.filesystems.remove = Mock()
+        channel.filesystems.prepare = Mock()
+        return channel
+
+    def test_a_filesystem_limited_volume_is_provisioned_once_and_never_evicted(self):
+        self.server.channel = self.channel = self.filesystem_channel()
+        said = []
+        self.ch.log = said.append
+        self.channel.prepare()
+        limit = 20 * 2 ** 30
+        volume = self.volume(limit=limit)
+        name, data, uid = f"mr-{RUNNER}", f"mr-data-{RUNNER}", volume["uid"]
+        self.assertEqual(self.volume(limit=limit)["uid"], uid)
+        self.channel.filesystems.create.assert_called_once_with(uid, limit)
+        stored = self.docker.volume(data)
+        self.assertEqual(stored["Options"], self.channel.filesystems.options(uid))
+        self.assertEqual(stored["Labels"][self.ch.FILESYSTEM_LABEL], "ext4")
+        self.docker.sizes[data] = limit + 1  # A Docker apparent-size measurement is irrelevant to this filesystem.
+        self.credential()
+        self.assertEqual(self.call("POST", "/v1/containers", self.request(uid))[0], 201)
+        self.assertEqual(self.channel.enforce_disk_limits(), [])
+        view = self.call("GET", f"/v1/containers/{name}")[1]
+        self.assertEqual((view["status"], view["evicted"]), ("running", None))
+        info = self.call("GET", "/v1/info")[1]
+        self.assertEqual(info["volumeLimitMode"], "filesystem")
+        self.assertEqual(info["host"]["managedVolumeBytes"], limit)
+        self.assertEqual(info["host"]["disk"]["path"], str(self.channel.filesystems.root))
+        self.assertTrue(any("volume limit mode: filesystem" in line for line in said))
+        self.assertNotIn(("df",), self.docker.calls)
+        self.assertEqual(self.call("GET", f"/v1/volumes/{data}")[1]["usageBytes"], limit)
+        self.assertEqual(self.call("DELETE", f"/v1/volumes/{data}?uid={uid}")[0], 409)
+        self.channel.filesystems.remove.assert_not_called()
+        self.docker.exit(name)
+        self.assertEqual(self.call("DELETE", f"/v1/containers/{name}?uid={view['uid']}")[0], 204)
+        self.assertEqual(self.call("DELETE", f"/v1/volumes/{data}?uid={uid}")[0], 204)
+        self.channel.filesystems.remove.assert_called_once_with(uid)
+
+    def test_a_filesystem_volume_with_a_missing_image_cannot_start(self):
+        self.server.channel = self.channel = self.filesystem_channel()
+        self.channel.prepare()
+        volume = self.volume()
+        self.channel.filesystems.mount.side_effect = FileNotFoundError("volume image is missing")
+        self.credential()
+        status, body = self.call("POST", "/v1/containers", self.request(volume["uid"]))
+        self.assertEqual((status, body["code"]), (503, "VOLUME_FILESYSTEM_UNAVAILABLE"))
+        self.assertFalse(self.docker.containers_by_name)
+
+    def test_a_failed_docker_volume_create_can_retry_the_same_image(self):
+        self.server.channel = self.channel = self.filesystem_channel()
+        self.channel.prepare()
+        create = self.docker.create_volume
+        self.docker.create_volume = Mock(side_effect=self.ch.DockerError(503, "try again"))
+        name = f"mr-data-{RUNNER}"
+        status, body = self.call("PUT", f"/v1/volumes/{name}", {"ownerId": OWNER, "runnerId": RUNNER, "limitBytes": 20 * 2 ** 30})
+        self.assertEqual((status, body["code"]), (502, "DOCKER_ERROR"))
+        uid = self.channel.filesystems.create.call_args.args[0]
+        self.docker.create_volume = create
+        restarted = self.filesystem_channel()
+        restarted.prepare()
+        self.server.channel = self.channel = restarted
+        self.assertEqual(self.volume(limit=20 * 2 ** 30)["uid"], uid)
+        restarted.filesystems.create.assert_called_once_with(uid, 20 * 2 ** 30)
+
+    def test_filesystem_mode_refuses_an_unmigrated_volume(self):
+        self.volume()
+        with self.assertRaisesRegex(ValueError, "does not match the host's volume limit mode"):
+            self.filesystem_channel().prepare()
+
     def test_a_container_over_its_volume_limit_is_stopped_and_not_started_again(self):
+        self.assertEqual(self.call("GET", "/v1/info")[1]["volumeLimitMode"], "measured")
         volume, created = self.running_container()
         name, data = f"mr-{RUNNER}", f"mr-data-{RUNNER}"
         self.docker.sizes[data] = 10 * 2 ** 30
@@ -1066,6 +1198,7 @@ class RestartTest(ChannelFixture):
         self.credential()
         request = self.request(volume["uid"])
         spec = self.ch.container_spec(self.config, request, str(uuid.uuid4()))
+        self.docker.tmp_dir_made(f"mr-data-{RUNNER}")
         self.docker.create_container(f"mr-{RUNNER}", spec)  # the channel stopped right after Docker's create
         restarted = self.ch.Channel(self.config, self.docker, TOKEN)
         restarted.prepare()
@@ -1077,6 +1210,7 @@ class RestartTest(ChannelFixture):
     def test_without_its_credential_it_is_left_never_started_for_the_manager(self):
         volume = self.volume()
         spec = self.ch.container_spec(self.config, self.request(volume["uid"]), str(uuid.uuid4()))
+        self.docker.tmp_dir_made(f"mr-data-{RUNNER}")
         self.docker.create_container(f"mr-{RUNNER}", spec)
         self.ch.Channel(self.config, self.docker, TOKEN).prepare()
         view = self.call("GET", f"/v1/containers/mr-{RUNNER}")[1]
@@ -1173,6 +1307,7 @@ class FirewallGateTest(ChannelFixture):
         volume = self.volume()
         self.credential()
         spec = self.ch.container_spec(self.config, self.request(volume["uid"]), str(uuid.uuid4()))
+        self.docker.tmp_dir_made(f"mr-data-{RUNNER}")
         self.docker.create_container(f"mr-{RUNNER}", spec)  # the channel stopped right after Docker's create
         (self.firewall / "status.json").unlink()
         restarted = self.ch.Channel(self.config, self.docker, TOKEN, firewall_dir=self.firewall)
@@ -1280,6 +1415,7 @@ class ImageSwitchTest(ChannelFixture):
         volume = self.volume()
         self.credential()
         spec = self.ch.container_spec(self.config, self.request(volume["uid"]), str(uuid.uuid4()))
+        self.docker.tmp_dir_made(f"mr-data-{RUNNER}")
         self.docker.create_container(f"mr-{RUNNER}", spec)  # the channel stopped right after Docker's create
         self.switch()  # ...and came back on the new image
         self.assertNotIn(f"mr-{RUNNER}", self.docker.containers_by_name)
@@ -1292,6 +1428,7 @@ class ImageSwitchTest(ChannelFixture):
         volume = self.volume()
         stale_uid = str(uuid.uuid4())
         spec = self.ch.container_spec(self.config, self.request(volume["uid"]), stale_uid)
+        self.docker.tmp_dir_made(f"mr-data-{RUNNER}")
         self.docker.create_container(f"mr-{RUNNER}", spec)
         self.switch()  # its credential was gone: left for the manager, never started
         self.assertEqual(self.docker.containers_by_name[f"mr-{RUNNER}"]["State"]["Status"], "created")
@@ -1327,11 +1464,29 @@ class ListingAndHostTest(ChannelFixture):
         self.docker.sizes["unrelated"] = 999
         info = self.call("GET", "/v1/info")[1]
         self.assertEqual((info["instanceId"], info["image"]), (INSTANCE, IMAGE))
+        self.assertIsNone(info["imageRevision"], "an image without the revision label: nothing to compare against")
+        self.assertIsNone(info["imageVersion"], "nor a version label")
         self.assertEqual(info["network"], {"name": "orbit-mr-test", "internal": True, "interContainer": False})
         self.assertEqual((info["host"]["cpus"], info["host"]["memoryBytes"]), (8, 16 * 2 ** 30))
         self.assertEqual(info["host"]["managedVolumeBytes"], 12345, "only this instance's data volumes")
         self.assertEqual(info["host"]["disk"]["path"], self.config["stateDir"], "the Docker root is not visible here, so the state dir")
         self.assertGreater(info["host"]["disk"]["totalBytes"], 0)
+
+    def test_info_reports_the_revision_label_of_the_image_it_serves(self):
+        self.docker.images[IMAGE]["Config"]["Labels"] = {"org.opencontainers.image.revision": "c0ffee1234", "other": "x"}
+        self.server.channel = self.channel = self.ch.Channel(self.ch.parse_config(self.config_value(Path(self.scratch.name))), self.docker, TOKEN)
+        self.channel.prepare()
+        self.assertEqual(self.call("GET", "/v1/info")[1]["imageRevision"], "c0ffee1234")
+        self.assertIsNone(self.call("GET", "/v1/info")[1]["imageVersion"], "a revision label alone: no release version")
+
+    def test_info_reports_the_release_version_label_and_not_an_empty_one(self):
+        for label, reported in (("0.1.261-beta.83", "0.1.261-beta.83"), ("", None)):
+            self.docker.images[IMAGE]["Config"]["Labels"] = {"org.opencontainers.image.revision": "c0ffee1234",
+                                                            "org.opencontainers.image.version": label}
+            self.server.channel = self.channel = self.ch.Channel(self.ch.parse_config(self.config_value(Path(self.scratch.name))), self.docker, TOKEN)
+            self.channel.prepare()
+            info = self.call("GET", "/v1/info")[1]
+            self.assertEqual((info["imageRevision"], info["imageVersion"]), ("c0ffee1234", reported), label)
 
     def test_the_disk_is_measured_where_the_probe_path_says(self):
         # Root Compose mounts an empty volume of the channel's own there: Docker keeps it beside the data volumes.
@@ -1357,7 +1512,6 @@ class ListingAndHostTest(ChannelFixture):
         self.channel.prepare()  # Docker 29, no probe path, a data root this process cannot see
         self.assertIn("containers of this instance: at most 8 (one per CPU and per GiB of this host's memory, whichever is fewer)", said)
         self.assertTrue(any("measures the disk under" in line and self.config["stateDir"] in line for line in said), said)
-        self.assertFalse(any("TmpfsOptions" in line for line in said), "Docker 29 makes /tmp executable")
         said.clear()
         self.docker.host.update(ServerVersion="26.1.4")
         probe = Path(self.scratch.name) / "docker-volumes"
@@ -1366,8 +1520,12 @@ class ListingAndHostTest(ChannelFixture):
                                               "limits": {**self.config_value(Path(self.scratch.name))["limits"], "maxContainers": 3}}),
                         self.docker, TOKEN).prepare()
         self.assertIn("containers of this instance: at most 3", said)
-        self.assertTrue(any("Docker 26.1.4 ignores TmpfsOptions.Options" in line for line in said), said)
         self.assertFalse(any("measures the disk under" in line for line in said), "a probe path is set")
+        # Docker 25 cannot mount a volume's subdirectory, which /tmp is: the channel does not serve on it.
+        self.docker.host.update(ServerVersion="25.0.5")
+        with self.assertRaisesRegex(ValueError, "Docker 25.0.5 cannot mount a volume's subdirectory, which runners' /tmp is: "
+                                                "this channel needs Docker 26 or later"):
+            self.ch.Channel(self.config, self.docker, TOKEN).prepare()
 
     def test_a_fencing_receipt_is_read_from_the_state_directory_only(self):
         self.assertEqual(self.call("GET", f"/v1/fencing-receipts/{RUNNER}")[0], 404)

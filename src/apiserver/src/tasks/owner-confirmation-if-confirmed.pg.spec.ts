@@ -45,23 +45,29 @@ import {
   CreatorType,
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
-import { RunEventType, uuidToBase62 } from '@orbit/shared';
+import { RunStatus } from '@orbit/shared';
+import { RunEventType } from '@orbit/shared';
 
+import { isReleasedStatus } from '../common/session-release';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated } from '../projects/coordinator-pg-test-safety';
+import { branchName } from '../projects/project-criterion-landing';
 import { configureProjectIntegration } from '../projects/project-integration-line';
+import { settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { readOwnerConfirmation } from './owner-confirmation-read';
 import { TaskOwnerConfirmationService } from './task-owner-confirmation.service';
+import { prerequisiteLandedSql } from './task-dependencies';
 import { TasksService } from './tasks.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import type { SessionFixture } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -164,17 +170,19 @@ async function waitingRun(
     declared?: string;
     stopped: string;
     legacy?: boolean;
-    session?: Partial<Prisma.SessionUncheckedCreateInput>;
+    session?: SessionFixture;
   },
 ): Promise<{ sessionId: string; requestId: string }> {
   const sessionId = randomUUID();
+  const { status = RunStatus.AWAITING_INPUT, ...session } = run.session ?? {};
   await db.session.create({
     data: {
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId, workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId, title: `run of ${taskId}`, prompt: 'do the work', provider: 'claude',
-      status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      turnState: turnStateOfWord(status), dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       startedAt: new Date(),
-      ...run.session,
+      ...session,
+      ...(isReleasedStatus(status) ? { finishedAt: session.finishedAt ?? new Date()} : {}),
     },
   });
   let seq = 1;
@@ -282,7 +290,7 @@ test('(1) the card names the dependents NOW / WHEN_SLOT_FREES / MANUAL exactly a
       data: {
         id: randomUUID(), ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: busy.workspaceId,
         assignedRunnerId: busy.runnerId, title: 'the run the busy runner is on', prompt: 'busy',
-        provider: 'claude', status: RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER,
+        provider: 'claude', turnState: 'IN_FLIGHT', dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
       },
     });
@@ -296,7 +304,7 @@ test('(1) the card names the dependents NOW / WHEN_SLOT_FREES / MANUAL exactly a
     const occupying = await s.db.task.count({
       where: {
         projectId, status: { notIn: [TaskStatus.DONE, TaskStatus.CANCELLED] },
-        sessions: { some: { status: { in: [RunStatus.AWAITING_INPUT] } } },
+        sessions: { some: { finishedAt: null, turnState: null } },
       },
     });
     assert.equal(occupying, 1, 'CONTROL: the project is at its limit, held by the confirmed task\'s own run');
@@ -476,7 +484,8 @@ test('(5) the landing is NONE outside a project, LINE_THEN_OWNER on a MAIN line 
       return { taskId, ...run };
     };
 
-    // NONE: in no project — and in a project, a codeless task or one whose run took no branch.
+    // NONE: in no project — and in a project, a task whose run took no branch. A task flagged codeless
+    // whose run made a branch is code work like any other (§12.15 P-M3) and lands.
     const outside = await codeTask(null, 'outside-any-project');
     assert.deepEqual(await landingOf(outside.taskId), { landing: 'NONE', startsAfterLanding: false });
     const mainLine = await lineProject(s.db, w, 'main-line', 'MAIN', true);
@@ -487,7 +496,7 @@ test('(5) the landing is NONE outside a project, LINE_THEN_OWNER on a MAIN line 
     await waitingRun(s.db, w, codeless, {
       declared: DECLARED_REPORT, stopped: DECLARED_REPORT, session: onBranch('orbit/codeless'),
     });
-    assert.deepEqual(await landingOf(codeless), { landing: 'NONE', startsAfterLanding: false });
+    assert.deepEqual(await landingOf(codeless), { landing: 'LINE_THEN_OWNER', startsAfterLanding: true });
     const noBranch = await confirmedTask(s.db, w, mainLine, 'no-worktree');
     await waitingRun(s.db, w, noBranch, { declared: DECLARED_REPORT, stopped: DECLARED_REPORT });
     assert.deepEqual(await landingOf(noBranch), { landing: 'NONE', startsAfterLanding: false });
@@ -504,10 +513,14 @@ test('(5) the landing is NONE outside a project, LINE_THEN_OWNER on a MAIN line 
     const autoBranch = await lineProject(s.db, w, 'branch-automatic-on', 'PROJECT_BRANCH', true);
     const onAutoBranch = await codeTask(autoBranch, 'on-a-project-branch-automatic-on');
     assert.deepEqual(await landingOf(onAutoBranch.taskId), { landing: 'AUTO_MAIN', startsAfterLanding: true });
-    // Once a receipt puts the work on the line, its dependents no longer wait for the landing.
+    // Once a receipt puts the work on the line, its dependents no longer wait for the landing. The line is the
+    // branch its binding stores (named from the project's title since 4f887a58d9), not one the spec spells itself.
+    const autoLine = await s.db.projectCodebase.findFirstOrThrow({
+      where: { projectId: autoBranch, slot: 'primary' }, select: { integrationRef: true },
+    });
     await mergedInto(s.db, w, {
       sessionId: onAutoBranch.sessionId, taskId: onAutoBranch.taskId, projectId: autoBranch,
-      sourceBranch: `orbit/on-a-project-branch-automatic-on-${RUN}`, targetBranch: `project/${uuidToBase62(autoBranch)}`,
+      sourceBranch: `orbit/on-a-project-branch-automatic-on-${RUN}`, targetBranch: branchName(autoLine.integrationRef),
     });
     assert.deepEqual(await landingOf(onAutoBranch.taskId), { landing: 'AUTO_MAIN', startsAfterLanding: false });
 
@@ -704,42 +717,51 @@ test('(7) a branch measured empty, on a task nothing says has commits, lands not
   }
 });
 
-test('(8) DONE on a branch with no changes queues the check or the landing it always did, and its '
-  + 'dependents wait for the line\'s answer',
+test('(8) DONE on a branch with no changes queues nothing while its work moves, and the finish that '
+  + 'measures no commit of its own queues nothing either and releases its dependents (§12.15 P-M1)',
 { skip, timeout: 300_000 }, async () => {
   assertCoordinatorPgUrlIsIsolated(URL!);
   const s = connect();
   try {
     const w = await world(s.db, 'no-changes-done');
-    for (const [line, kind] of [['MAIN', 'CHECK_PROMOTION'], ['PROJECT_BRANCH', 'LAND_TASK']] as const) {
+    for (const line of ['MAIN', 'PROJECT_BRANCH'] as const) {
       const projectId = await lineProject(s.db, w, `no-changes-done-${line}`, line, false);
       const taskId = await confirmedTask(s.db, w, projectId, `no-changes-done-${line}`);
       const branch = noChanges(`orbit/no-changes-done-${line}`);
-      const { requestId } = await waitingRun(s.db, w, taskId, {
+      const { sessionId, requestId } = await waitingRun(s.db, w, taskId, {
         declared: DECLARED_REPORT, stopped: DECLARED_REPORT, session: branch,
       });
       const dependent = await seedTask(s.db, w, projectId, `after-no-changes-${line}`, { autoRunWhenReady: true });
       await s.db.taskDependency.create({ data: { taskId: dependent, dependsOnTaskId: taskId } });
+      const released = async () => (await s.db.$queryRaw<Array<{ landed: boolean }>>(Prisma.sql`
+        SELECT ${Prisma.raw(prerequisiteLandedSql('t'))} AS "landed" FROM "task" t WHERE t."id" = ${taskId}::uuid`))[0]?.landed;
 
       const card = (await s.confirmations.read(w.ownerId, taskId)).ifConfirmed;
       assert.equal(card?.landing, 'NONE', `CONTROL: the card says nothing lands on a ${line} line`);
       assert.deepEqual(card?.startsTasks?.map((task) => task.id), [dependent]);
-      assert.equal(await s.db.projectIntegrationJob.count({ where: { projectId } }), 0,
-        `CONTROL: nothing is queued on a ${line} line before the DONE`);
 
       const receipt = await s.confirmations.decide(
         w.ownerId, taskId, { door: 'USER', userId: w.ownerId }, { decision: 'CONFIRM', requestId },
       );
       assert.equal(receipt.completed, true, 'CONTROL: the confirmation settled the task');
-      assert.deepEqual(
-        await s.db.projectIntegrationJob.findMany({
-          where: { projectId },
-          select: { kind: true, state: true, sourceRef: true },
-        }),
-        [{ kind, state: 'QUEUED', sourceRef: `refs/heads/${branch.branch}` }],
-        `DONE on a ${line} line asks the line once, as it does for a branch with work`,
-      );
-      assert.equal(await runs(s.db, dependent), 0, 'the dependent started before the line answered');
+      assert.equal(await s.db.projectIntegrationJob.count({ where: { projectId } }), 0,
+        `DONE on a ${line} line while its run is open decides nothing yet: the finish does`);
+      assert.equal(await runs(s.db, dependent), 0, 'the dependent does not start before the work settles');
+      assert.equal(await released(), false, 'J9: the work may still commit');
+
+      // The runner's finish: the tip it reports is the commit the branch forked at.
+      await s.db.$transaction(async (tx) => {
+        const finished = await tx.session.update({
+          where: { id: sessionId },
+          data: { turnState: null, finishedAt: new Date(), branchSha: 'b'.repeat(40) },
+          select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+        });
+        await settleDeliveredIdentityAfterFinish(tx, finished);
+      });
+      assert.equal(await s.db.projectIntegrationJob.count({ where: { projectId } }), 0,
+        `no commit of its own: nothing is queued on a ${line} line (§12.15 P-M1)`);
+      assert.equal(await s.db.projectPromotion.count({ where: { projectId } }), 0);
+      assert.equal(await released(), true, 'J9: nothing to land, so its dependents go');
     }
   } finally {
     await s.db.$disconnect();

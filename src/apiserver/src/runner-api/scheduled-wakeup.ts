@@ -7,7 +7,9 @@ import {
   SessionRunState,
 } from '@orbit/shared';
 import { IsBoolean, IsISO8601, IsNumber, IsOptional, IsString, MaxLength, MinLength, ValidateIf } from 'class-validator';
+import { isReleased, releaseWasFailure, sessionHasEnded } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
+import { TURN_STATE_SELECT } from '../sessions/session-turn-state';
 import { RETRY_CLAIM_WINDOW_MS } from '../sessions/session-request';
 import { stripNul } from './strip-nul';
 
@@ -296,9 +298,11 @@ export async function markScheduledWakeupDelivered(
 
 /** What a session a wakeup came due on reads as, for deciding what the wakeup does. */
 export const TICK_SESSION = {
+  // The turn state's columns, which sessionHasEnded reads (sessions/session-turn-state.ts), the release column among them.
+  ...TURN_STATE_SELECT,
   ownerId: true,
-  status: true,
   endReason: true,
+  lastTurnOutcome: true,
   completedAt: true,
   archivedAt: true,
   deletedAt: true,
@@ -317,12 +321,14 @@ export type TickSession = Prisma.SessionGetPayload<{ select: typeof TICK_SESSION
  */
 export function tickStanding(session: TickSession, now: Date): 'ENDED' | 'FAILED_RECOVERING' | 'FAILED' | 'LIVE' {
   if (deriveSessionLifecycleState(session) !== SessionLifecycleState.OPEN) return 'ENDED';
-  const run = deriveSessionRunState(session);
-  if (run === SessionRunState.SUCCEEDED || run === SessionRunState.ENDED) return 'ENDED';
-  if (run === SessionRunState.FAILED) {
+  // Released: by a failure (common/session-release.ts) is the one release a scheduled wake-up revives; every other
+  // release ended it, an end that was asked for and not honoured among them (design §12.3).
+  if (isReleased(session)) {
+    if (!releaseWasFailure(session)) return 'ENDED';
     const claimed = session.retryClaimedAt != null && now.getTime() - session.retryClaimedAt.getTime() < RETRY_CLAIM_WINDOW_MS;
     return session.retryAt != null || claimed ? 'FAILED_RECOVERING' : 'FAILED';
   }
+  if (sessionHasEnded(session)) return 'ENDED';
   return session.cancelRequestedAt != null ? 'ENDED' : 'LIVE';
 }
 

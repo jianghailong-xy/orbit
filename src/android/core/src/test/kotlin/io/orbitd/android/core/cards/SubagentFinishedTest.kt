@@ -58,7 +58,6 @@ class SubagentFinishedTest {
         for (block in listOf(DONE, FAILED, STOPPED, INTERRUPTED, TWO, STEER)) for (run in parse(block).runs) for (sentence in PROTOCOL) {
             assertFalse(run.result.contains(sentence))
             assertFalse(run.reason.orEmpty().contains(sentence))
-            assertFalse(SubagentFinishedCard.rowLine(run).contains(sentence))
         }
     }
 
@@ -120,39 +119,29 @@ class SubagentFinishedTest {
         assertNull(SubagentFinished.parse(TWO.replace("finished: FAILED", "finished: LOST")))
     }
 
-    @Test fun theLineSaysWhatHappenedAtAGlance() {
-        parse(DONE).let {
-            assertEquals("SubAgent finished", SubagentFinishedCard.title(it)); assertEquals("done", SubagentFinishedCard.status(it))
-            assertEquals("Deploy 6bb50a957 to production", SubagentFinishedCard.name(it)); assertFalse(SubagentFinishedCard.failed(it))
-        }
-        parse(INTERRUPTED).let {
-            assertEquals("SubAgent did not finish", SubagentFinishedCard.title(it)); assertEquals("interrupted", SubagentFinishedCard.status(it))
-            assertTrue(SubagentFinishedCard.failed(it))
-        }
-        assertEquals("stopped", SubagentFinishedCard.status(parse(STOPPED)))
-        assertEquals("failed", SubagentFinishedCard.status(parse(FAILED)))
-        parse(TWO).let {
-            assertEquals("2 SubAgents finished", SubagentFinishedCard.title(it)); assertEquals("1 of 2 failed", SubagentFinishedCard.status(it))
-            assertNull(SubagentFinishedCard.name(it)); assertFalse(SubagentFinishedCard.failed(it))
-            assertEquals("Three callers, all in `quota/`: poller.ts, account.ts, limits.ts.", SubagentFinishedCard.rowLine(it.runs[0]))
-            assertEquals("vitest could not resolve `../quota/poller`; nothing written.", SubagentFinishedCard.rowLine(it.runs[1]))
-        }
-        assertEquals("done", SubagentFinishedCard.status(parse(TWO.replace("finished: FAILED\n  It did not finish its work.", "finished: DONE"))))
-        // A run with no result names why it ended, else that there was none.
-        assertEquals("It was stopped before it finished.", SubagentFinishedCard.rowLine(parse(STOPPED).runs.single()))
-        assertEquals("No result", SubagentFinishedCard.rowLine(SubagentFinishedRun("r", "d", "DONE", null, "")))
-    }
-
-    @Test fun itIsACardOfItsOwnAndFoldsLikeAJobsNewsUnlessARunDidNotFinish() {
+    // Its turn is Orbit's — a card of its own, so never the reader's bubble or the From Orbit line — but it draws nothing and so folds
+    // under no line: the agent's answer reads on (web `orbitTurnOf`). A wakeup written beside it folds as its own.
+    @Test fun itIsACardOfItsOwnThatFoldsNoTurnButAJobsNewsBesideIt() {
         val event = io.orbitd.android.core.realtime.RunEvent("user", 9, kotlinx.serialization.json.buildJsonObject {
             put("text", JsonPrimitive(DONE)); put("controlPlaneNote", JsonPrimitive(DONE)) }, "turn-wake")
         assertEquals(listOf("record:9:subagent"), transcriptCards(event).map { it.key })
-        assertEquals("SubAgent finished: Deploy 6bb50a957 to production", OrbitExchangeFold.turnOf(event)?.what)
-        assertEquals("job", OrbitExchangeFold.turnOf(event)?.category)
-        val failed = event.copy(payload = kotlinx.serialization.json.buildJsonObject { put("controlPlaneNote", JsonPrimitive(INTERRUPTED)) })
-        assertNull(OrbitExchangeFold.turnOf(failed))
-        assertNull(OrbitExchangeFold.turnOf(event.copy(payload = kotlinx.serialization.json.buildJsonObject { put("controlPlaneNote", JsonPrimitive(TWO)) })))
-        assertEquals("2 SubAgents finished", OrbitExchangeFold.turnOf(event.copy(payload = kotlinx.serialization.json.buildJsonObject {
-            put("controlPlaneNote", JsonPrimitive(TWO.replace("finished: FAILED\n  It did not finish its work.", "finished: DONE"))) }))?.what)
+        for (block in listOf(DONE, INTERRUPTED, STOPPED, TWO)) {
+            assertNull(OrbitExchangeFold.turnOf(event.copy(payload = kotlinx.serialization.json.buildJsonObject {
+                put("controlPlaneNote", JsonPrimitive(block)) })))
+        }
+        val job = "<background-job-wake>\n  A background job you started with bg_run has news you were waiting for; the control plane opened this turn for it:\n" +
+            "    bgj_13c53745a88a｜job｜make test｜unit tests\n      ended｜completed｜exit code 0\n" +
+            "      output /root/.orbit/runs/4f50733a/bgj_13c53745a88a.output｜this covers bytes 0–10\n      (no output)\n" +
+            "  The control plane recorded this for you; the user did not say it.\n</background-job-wake>"
+        val both = event.copy(payload = kotlinx.serialization.json.buildJsonObject { put("controlPlaneNote", JsonPrimitive("$DONE\n\n$job")) })
+        assertEquals(listOf("record:9:subagent", "record:9:wake"), transcriptCards(both).map { it.key })
+        // A job's news draws nothing either (board C1, its Job card says it): only a wakeup coming due beside the end folds.
+        assertNull(OrbitExchangeFold.turnOf(both))
+        val wakeup = "<scheduled-wakeup>\n  The wakeup you asked for with schedule_wakeup is due; the control plane opened this turn for it:\n" +
+            "    2026-09-15T18:00:00.000Z scheduled 600 seconds out, due 2026-09-15T18:10:00.000Z\n    reason: waiting for CI run 4242\n" +
+            "  The control plane recorded this for you; the user did not say it.\n</scheduled-wakeup>"
+        val withWakeup = event.copy(payload = kotlinx.serialization.json.buildJsonObject { put("controlPlaneNote", JsonPrimitive("$DONE\n\n$job\n\n$wakeup")) })
+        assertEquals("job", OrbitExchangeFold.turnOf(withWakeup)?.category)
+        assertEquals("Scheduled wakeup: waiting for CI run 4242", OrbitExchangeFold.turnOf(withWakeup)?.what)
     }
 }

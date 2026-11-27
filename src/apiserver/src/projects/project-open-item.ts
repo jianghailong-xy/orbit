@@ -7,13 +7,13 @@ import {
   OpenItemDeliveryCard,
   OpenItemFacts,
   OpenItemStage,
+  OpenItemWorkSession,
+  OpenItemWorkSessionReturnReason,
   OwnerAnswerCard,
   OwnerItemKind,
   OwnerWordsTranslation,
   SessionLifecycleState,
-  SessionRunState,
   deriveSessionLifecycleState,
-  deriveSessionRunState,
   uuidToBase62,
 } from '@orbit/shared';
 
@@ -24,7 +24,12 @@ import {
   taskLanding,
   taskLandingSql,
 } from './project-criterion-landing';
-import { PROJECT_LIVE_SESSION_STATUS_SQL } from './live-session-status';
+import {
+  releaseWasFailure,
+  releaseWasFailureSql,
+  sessionHasEnded as releasedSessionHasEnded,
+  sessionHeldSql,
+} from '../common/session-release';
 import { evidenceUndecidedOwed } from './evidence-undecided';
 import { LIVE_PROMOTION_STATES } from './project-promotion';
 import {
@@ -37,6 +42,9 @@ import {
   type OpenItemDoorMessageNames,
 } from './open-item-doors';
 import type { PrismaService } from '../prisma/prisma.service';
+import { LANDING_FIX_TURN_KEY_PREFIX } from '../sessions/landing-fix-turn-key';
+import { TURN_STATE_SELECT } from '../sessions/session-turn-state';
+import { runLastWords } from './run-last-words';
 
 /** Nest token for the post-commit delivery edge, kept structural to avoid a service import cycle. */
 export const PROJECT_OPEN_ITEM_DELIVERY = 'PROJECT_OPEN_ITEM_DELIVERY';
@@ -204,6 +212,8 @@ export interface OpenItemActionsSource {
   phase?: string | null;
   jobKind?: string | null;
   payload?: unknown;
+  /** Revision 42 (W9): the item is in its task's own work session's hands (`inWorkSessionHands`). */
+  workSession?: boolean;
 }
 
 /**
@@ -289,6 +299,8 @@ export interface OpenItemDecisionRow {
   handover_note?: string | null;
   source_job?: string | null;
   failure_class?: string | null;
+  /** Revision 42 (W9): the item is in its task's own work session's hands (`inWorkSessionHands`). */
+  workSession?: boolean;
   /** The project's main branch by name (`mainBranchOf`), which the next step says a merge reaches;
    *  null or absent with no repository bound, and the sentence then says main. */
   mainBranch?: string | null;
@@ -307,6 +319,7 @@ function doorInputForRow(row: OpenItemDecisionRow): OpenItemDoorInput {
     phase: row.phase,
     jobKind: row.jobKind,
     payload: row.payload,
+    workSession: row.workSession,
   };
 }
 
@@ -786,8 +799,9 @@ const BLOCKING_TASKS_NAMED = 5;
 
 /** The columns "has this conversation ended" is decided from. */
 export const SESSION_ENDING_SELECT = {
-  status: true,
+  ...TURN_STATE_SELECT,
   endReason: true,
+  lastTurnOutcome: true,
   completedAt: true,
   archivedAt: true,
   deletedAt: true,
@@ -795,8 +809,11 @@ export const SESSION_ENDING_SELECT = {
 } as const;
 
 export interface SessionEnding {
-  status: string;
+  finishedAt: Date | null;
+  /** Read through turnStateOf (sessions/session-turn-state.ts). */
+  turnState: string | null;
   endReason: string | null;
+  lastTurnOutcome: string | null;
   completedAt: Date | null;
   archivedAt: Date | null;
   deletedAt: Date | null;
@@ -810,12 +827,7 @@ export interface SessionEnding {
  * onto, because from the outside those are conversations somebody closed.
  */
 export function sessionHasEnded(session: SessionEnding): boolean {
-  if (session.cancelRequestedAt) return true;
-  if (deriveSessionLifecycleState(session) !== SessionLifecycleState.OPEN) return true;
-  const run = deriveSessionRunState(session);
-  return run === SessionRunState.ENDED
-    || run === SessionRunState.SUCCEEDED
-    || run === SessionRunState.FAILED;
+  return Boolean(session.cancelRequestedAt) || releasedSessionHasEnded(session);
 }
 
 /** Read whether the chat can send now and whether Ask again can queue on this conversation. */
@@ -860,8 +872,8 @@ export function coordinatorUnreachable(reach: { askable: boolean; coordinator: {
  * the runner tear the process down, and neither is anybody ending the conversation.
  */
 export function conversationIsDown(session: SessionEnding): boolean {
-  return deriveSessionRunState(session) === SessionRunState.FAILED
-    && !session.endReason
+  // Released by a failure (common/session-release.ts), which already asks that no end was recorded.
+  return releaseWasFailure(session)
     && deriveSessionLifecycleState(session) === SessionLifecycleState.OPEN;
 }
 
@@ -938,10 +950,11 @@ export function openItemCoordinatorCanTake(alias: string): Prisma.Sql {
 
 /**
  * `openItemCoordinatorCanTake`'s rule for any project, named by the SQL expression `projectId`: its
- * coordinator conversation is switched on, not filed, trashed or completed, and live or FAILED with an
- * auto-retry pending. The one definition, shared by the open-item clock and the evidence clock
- * (`evidence-undecided.ts`), so the two cannot come to disagree about whether a coordinator can still
- * take its turn. Parameter-free when `projectId` is.
+ * coordinator conversation is switched on, not filed, trashed or completed, and live or released by a
+ * failure with an auto-retry pending. The one definition, shared by the open-item clock and the evidence
+ * clock (`evidence-undecided.ts`), so the two cannot come to disagree about whether a coordinator can still
+ * take its turn. Parameter-free when `projectId` is. Live is the release column (plan step 4.3) and the
+ * failure the release module's question (common/session-release.ts, design §12.3).
  */
 export function projectCoordinatorCanTake(projectId: Prisma.Sql): Prisma.Sql {
   return Prisma.sql`EXISTS (
@@ -953,8 +966,8 @@ export function projectCoordinatorCanTake(projectId: Prisma.Sql): Prisma.Sql {
        AND taker."deleted_at" IS NULL
        AND taker."completed_at" IS NULL
        AND taker."archived_at" IS NULL
-       AND (taker."status" IN (${Prisma.raw(PROJECT_LIVE_SESSION_STATUS_SQL)})
-            OR (taker."status" = 'FAILED' AND taker."retry_at" IS NOT NULL)))`;
+       AND (${sessionHeldSql('taker')}
+            OR (${releaseWasFailureSql('taker')} AND taker."retry_at" IS NOT NULL)))`;
 }
 
 /** Owner-facing lists omit coordinator items still waiting in the queue of a conversation that can
@@ -1023,7 +1036,6 @@ export function openItemOwed(alias: string): Prisma.Sql {
   const item = Prisma.raw(`"${alias}"`);
   const integration = Prisma.raw(INTEGRATION_ITEM_KINDS.map((kind) => `'${kind}'`).join(', '));
   const live = Prisma.raw(LIVE_PROMOTION_STATES.map((state) => `'${state}'`).join(', '));
-  const liveSessions = Prisma.raw(PROJECT_LIVE_SESSION_STATUS_SQL);
   const notKnown = Prisma.raw(`(${taskLandingSql('owed_task')}) = 'NOT_KNOWN'`);
   return Prisma.sql`(CASE
       WHEN ${item}."kind" = 'INTEGRATION_CHECK_FAILED' AND ${item}."dedupe_key" LIKE 'ICB:%' THEN true
@@ -1072,7 +1084,7 @@ export function openItemOwed(alias: string): Prisma.Sql {
              SELECT 1 FROM "session" owed_session
               WHERE owed_session."task_id" = owed_task."id"
                 AND owed_session."starts_task_work"
-                AND owed_session."status" IN (${liveSessions})
+                AND ${sessionHeldSql('owed_session')}
                 AND (owed_session."id" IS DISTINCT FROM ${item}."session_id"
                      OR EXISTS (
                        SELECT 1 FROM "conversation_turn" resumed_turn
@@ -1209,6 +1221,88 @@ export async function recordTaskFailure(
   return { itemId: created.id, projectId: task.projectId, taskId: failure.taskId, assignee };
 }
 
+/**
+ * Revision 42 (§12.4, W5): the item is in its task's own work session's hands — offered to it and not
+ * handed back. While it is, it is delivered to no coordinator (X-D4), carries no escalation time, and
+ * the coordinator's resolve and retry doors refuse it (W9, 409 OPEN_ITEM_WITH_WORK_SESSION).
+ */
+export function inWorkSessionHands(item: {
+  workSessionOfferedAt: Date | null;
+  workSessionReturnedAt: Date | null;
+}): boolean {
+  return item.workSessionOfferedAt !== null && item.workSessionReturnedAt === null;
+}
+
+/** `inWorkSessionHands` as SQL over the `project_open_item` row aliased `alias`: offered to its task's own work
+ *  session and not handed back. Parameter-free. */
+export function openItemInWorkSessionHands(alias: string): Prisma.Sql {
+  const item = Prisma.raw(`"${alias}"`);
+  return Prisma.sql`(${item}."work_session_offered_at" IS NOT NULL AND ${item}."work_session_returned_at" IS NULL)`;
+}
+
+/** The `work_session_*` columns, and what the item is about, an item's `workSession` is read from (§12.7). */
+export interface WorkSessionColumns {
+  id: string;
+  integrationJobId: string | null;
+  payload: unknown;
+  workSessionId: string | null;
+  workSessionOfferedAt: Date | null;
+  workSessionReturnedAt: Date | null;
+  workSessionReturnReason: string | null;
+}
+
+/**
+ * Revision 42 (§12.7): the `workSession` each item offered to its task's own work session is read with — the session,
+ * when it was offered and returned, why, and the rounds W8 counts. A handed-back item's rounds are the ones its
+ * hand-back wrote on the payload (`landingFixHandBackOf`, frozen with the reason); one still in the session's hands
+ * counts them now, the same way: the jobs of the failed job's landing segment that session asked for. Items never
+ * offered are absent from the map. One read for every item still held, whatever their number.
+ */
+export async function readOpenItemWorkSessions(
+  prisma: Pick<Prisma.TransactionClient, '$queryRaw'>,
+  items: readonly WorkSessionColumns[],
+): Promise<Map<string, OpenItemWorkSession<Date>>> {
+  const out = new Map<string, OpenItemWorkSession<Date>>();
+  const offered = items.filter((item) => item.workSessionId && item.workSessionOfferedAt);
+  const held = offered.filter((item) => item.workSessionReturnedAt === null);
+  const counted = held.length > 0
+    ? await prisma.$queryRaw<Array<{ id: string; rounds: number }>>(Prisma.sql`
+        SELECT item."id", (
+                 SELECT count(*)::int FROM "project_integration_job" asked
+                  WHERE asked."retry_requested_by_session_id" = item."work_session_id"
+                    AND (failed."landing_id" IS NULL OR asked."landing_id" = failed."landing_id")
+               ) AS "rounds"
+          FROM "project_open_item" item
+          LEFT JOIN "project_integration_job" failed ON failed."id" = item."integration_job_id"
+         WHERE item."id" IN (${Prisma.join(held.map((item) => Prisma.sql`${item.id}::uuid`))})`)
+    : [];
+  const rounds = new Map(counted.map((row) => [row.id, row.rounds]));
+  for (const item of offered) {
+    const returned = item.workSessionReturnedAt;
+    const hand = (item.payload as { workSession?: Partial<LandingFixHandBack> } | null)?.workSession;
+    const frozen = hand?.rounds;
+    const last = hand?.lastMessage;
+    out.set(item.id, {
+      sessionId: item.workSessionId!,
+      offeredAt: item.workSessionOfferedAt!,
+      ...(returned ? { returnedAt: returned } : {}),
+      ...(returned && item.workSessionReturnReason
+        ? { returnReason: item.workSessionReturnReason as OpenItemWorkSessionReturnReason }
+        : {}),
+      rounds: returned ? (typeof frozen === 'number' ? frozen : 0) : rounds.get(item.id) ?? 0,
+      ...(returned ? { lastMessage: typeof last === 'string' && last !== '' ? last : null } : {}),
+    });
+  }
+  return out;
+}
+
+/** W9's refusal: two sessions fixing the same failure at once have no winner. */
+export const OPEN_ITEM_WITH_WORK_SESSION = 'OPEN_ITEM_WITH_WORK_SESSION';
+export const OPEN_ITEM_WITH_WORK_SESSION_MESSAGE =
+  "this item is in the hands of its task's own work session, which is fixing it on its branch. "
+  + 'Orbit lands the fix by itself, or hands the item back to the coordinator if the session cannot fix it; '
+  + 'until then it cannot be resolved or retried.';
+
 /** An integration that stopped, as the transaction that finished the job knows it (§2.6). */
 export interface IntegrationFailure {
   projectId: string;
@@ -1229,6 +1323,166 @@ export interface IntegrationFailure {
    * with the reason and the wait it already had, rather than going back to the coordinator.
    */
   heldByOwner?: OwnerHeldItem | null;
+  /**
+   * Revision 42 (§12.5 W5): the task's own work session this failure is handed to first, when W4 holds
+   * (`landingFixWorkSession`). The item is opened in its hands: `work_session_id` and
+   * `work_session_offered_at` written, no `escalate_at`, and no coordinator delivery (X-D4) until it is
+   * handed back (W7).
+   */
+  workSessionId?: string | null;
+  /**
+   * W8 (§12.5, W-T4): the task's own work session W4 would hand this failure to, but whose rounds are used up
+   * (`landingFixWorkSession`). The item opens already handed back — `work_session_return_reason = ROUNDS_EXHAUSTED`,
+   * the coordinator's from the start — so it is delivered and its clock runs from the moment it opens.
+   */
+  roundsExhausted?: LandingFixHandBack | null;
+  /**
+   * docs/design/project-line-upstream-sync.md §4.1 / §4.5 L-T2: set for the line-sync item (`IMS:<serial_key>`). When
+   * that item is already OPEN, this conflict adds to it rather than opening a second one: the attempt is appended,
+   * the held task too (when there is one), and the item is delivered to its holder again (`assigned_at` moves;
+   * `waiting_since` and `escalate_at` stay, because the line has been held since the first conflict).
+   */
+  lineSync?: { heldTaskId: string | null; attempt: Record<string, unknown> } | null;
+}
+
+/** Why an item leaves its task's own work session's hands (§12.4 `work_session_return_reason`). */
+export type LandingFixReturnReason = 'NO_NEW_COMMIT' | 'TURN_FAILED' | 'SESSION_ENDED' | 'ROUNDS_EXHAUSTED' | 'TASK_MOVED_ON';
+
+/** What a handed-back item's payload says of the work session it comes back from (§12.5 W7, `workSession`). */
+export interface LandingFixHandBack {
+  sessionId: string;
+  /** The landing generations this work session asked for in the task segment (W8). */
+  rounds: number;
+  /** What the session said last in its landing-fix round, as revision 32's TASK_RUN_STOPPED takes it; null when it
+   *  had no such round or said nothing. */
+  lastMessage: string | null;
+}
+
+/**
+ * The `workSession` a handed-back item carries (§12.5 W7): the session, the rounds W8 counts — the jobs of the failed
+ * job's task segment that this session asked for, from committed rows — and its last words when it had a landing-fix
+ * round. A session that never got that turn said nothing about this failure, so its words from the work before it are
+ * not quoted.
+ */
+export async function landingFixHandBackOf(
+  tx: Prisma.TransactionClient,
+  input: { sessionId: string; integrationJobId: string | null; landingId?: string | null },
+): Promise<LandingFixHandBack> {
+  const failed = input.landingId === undefined && input.integrationJobId
+    ? await tx.projectIntegrationJob.findUnique({ where: { id: input.integrationJobId }, select: { landingId: true } })
+    : null;
+  const landingId = input.landingId !== undefined ? input.landingId : failed?.landingId ?? null;
+  const rounds = await tx.projectIntegrationJob.count({
+    where: { retryRequestedBySessionId: input.sessionId, ...(landingId ? { landingId } : {}) },
+  });
+  const turn = input.integrationJobId
+    ? await tx.conversationTurn.findUnique({
+        where: {
+          sessionId_clientTurnId: {
+            sessionId: input.sessionId, clientTurnId: `${LANDING_FIX_TURN_KEY_PREFIX}${input.integrationJobId}`,
+          },
+        },
+        select: { session: { select: { lastAssistantText: true } } },
+      })
+    : null;
+  return { sessionId: input.sessionId, rounds, lastMessage: turn ? runLastWords(turn.session.lastAssistantText) : null };
+}
+
+/**
+ * W7's hand-back (§12.5, W-T5), in the transaction that holds the fact it is about: an item still in its task's own
+ * work session's hands leaves them — `work_session_returned_at` and the reason written, and the payload's `workSession`
+ * (`landingFixHandBackOf`). From this moment it is the coordinator's as any item is (§4.4 X-D4): `waiting_since` and
+ * `assigned_at` move to now, and `escalate_at` is counted from now by the project's window. TASK_MOVED_ON is the one
+ * that is delivered to nobody and gets no clock: the task was reopened, cancelled or replaced, and §4.2's facts answer
+ * the item (`deliver` sends it nowhere).
+ *
+ * One compare-and-set UPDATE of the item (rank 60) on OPEN and still in the session's hands, so a second hand-back, or
+ * one racing the landing that closes it, writes nothing. Returns whether it wrote.
+ */
+export async function handBackLandingFix(
+  tx: Prisma.TransactionClient,
+  input: { itemId: string; reason: LandingFixReturnReason; now?: Date },
+): Promise<boolean> {
+  const item = await tx.projectOpenItem.findUnique({
+    where: { id: input.itemId },
+    select: {
+      state: true, assignee: true, workSessionId: true, workSessionOfferedAt: true, workSessionReturnedAt: true,
+      integrationJobId: true, project: { select: { exceptionEscalationSeconds: true } },
+    },
+  });
+  if (!item || item.state !== 'OPEN' || !item.workSessionId || !item.workSessionOfferedAt
+    || item.workSessionReturnedAt) return false;
+  const handBack = await landingFixHandBackOf(tx, {
+    sessionId: item.workSessionId, integrationJobId: item.integrationJobId,
+  });
+  const now = input.now ?? new Date();
+  const escalateAt = input.reason !== 'TASK_MOVED_ON' && item.assignee === 'COORDINATOR'
+    ? new Date(now.getTime() + item.project.exceptionEscalationSeconds * 1_000)
+    : null;
+  const written = await tx.$executeRaw(Prisma.sql`
+    UPDATE "project_open_item"
+       SET "work_session_returned_at" = ${now},
+           "work_session_return_reason" = ${input.reason},
+           "waiting_since" = ${now},
+           "assigned_at" = ${now},
+           "escalate_at" = ${escalateAt},
+           "payload" = COALESCE("payload", '{}'::jsonb) || jsonb_build_object('workSession', ${JSON.stringify(handBack)}::jsonb),
+           "updated_at" = now()
+     WHERE "id" = ${input.itemId}::uuid
+       AND "state" = 'OPEN'
+       AND "work_session_offered_at" IS NOT NULL
+       AND "work_session_returned_at" IS NULL`);
+  return written > 0;
+}
+
+/**
+ * W7 for every item a task's own work sessions hold in its project, in the transaction that moved the task on
+ * (`tasks.service#update`: reopened, cancelled, failed, replaced or moved out of the project — J-T8's facts). Plain
+ * reads of the task's work sessions and of the project's OPEN items (`project_open_item_project_state_idx`), then
+ * `handBackLandingFix` for each, in id order.
+ */
+export async function handBackLandingFixesOfTask(
+  tx: Prisma.TransactionClient,
+  input: { taskId: string; projectId: string; reason: LandingFixReturnReason },
+): Promise<void> {
+  const sessions = await tx.session.findMany({
+    where: { taskId: input.taskId, startsTaskWork: true },
+    select: { id: true },
+  });
+  if (sessions.length === 0) return;
+  const items = await tx.projectOpenItem.findMany({
+    where: {
+      projectId: input.projectId, state: 'OPEN', workSessionId: { in: sessions.map((session) => session.id) },
+      workSessionOfferedAt: { not: null }, workSessionReturnedAt: null,
+    },
+    select: { id: true },
+    orderBy: { id: 'asc' },
+  });
+  for (const item of items) await handBackLandingFix(tx, { itemId: item.id, reason: input.reason });
+}
+
+/**
+ * W7 for every item one work session holds, in the transaction that ended it some way its finish cannot decide (Trash,
+ * `sessions.transitionEnd`). By its task's project's OPEN items, as `project_open_item_project_state_idx` reads them.
+ */
+export async function handBackLandingFixesOfSession(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  reason: LandingFixReturnReason,
+): Promise<void> {
+  const session = await tx.session.findUnique({
+    where: { id: sessionId }, select: { task: { select: { projectId: true } } },
+  });
+  const projectId = session?.task?.projectId;
+  if (!projectId) return;
+  const items = await tx.projectOpenItem.findMany({
+    where: {
+      projectId, state: 'OPEN', workSessionId: sessionId, workSessionOfferedAt: { not: null }, workSessionReturnedAt: null,
+    },
+    select: { id: true },
+    orderBy: { id: 'asc' },
+  });
+  for (const item of items) await handBackLandingFix(tx, { itemId: item.id, reason });
 }
 
 /** An item the account owner holds, as the item that repeats its failure inherits it (§4.7 H4). */
@@ -1275,6 +1529,8 @@ export async function recordIntegrationFailure(
   const now = new Date();
   // §4.7 H4: a rerun's failure stays with the owner who already held the failure it repeats.
   const held = failure.heldByOwner ?? null;
+  const workSessionId = failure.workSessionId ?? null;
+  const exhausted = workSessionId ? null : failure.roundsExhausted ?? null;
   const [holder, holderBecause]: [OpenItemAssignee, OpenItemAssigneeReason] =
     held ? ['OWNER', held.assigneeReason] : [assignee, assigneeReason];
   const [created] = await tx.projectOpenItem.createManyAndReturn({
@@ -1293,20 +1549,52 @@ export async function recordIntegrationFailure(
       promotionId: failure.promotionId ?? null,
       dedupeKey: failure.dedupeKey,
       title: failure.title,
-      payload: failure.payload as unknown as Prisma.InputJsonValue,
+      payload: (exhausted ? { ...failure.payload, workSession: exhausted } : failure.payload) as unknown as Prisma.InputJsonValue,
       // The owner's wait goes on rather than starting over: it is the same failure, and the card that
       // says how long they have had it would otherwise reset on every rerun.
       waitingSince: held?.waitingSince ?? now,
       assignedAt: now,
       escalatedAt: held?.escalatedAt ?? null,
-      escalateAt: holder === 'COORDINATOR'
+      // W5: nobody owes an item the work session holds, so no clock runs for it.
+      escalateAt: holder === 'COORDINATOR' && !workSessionId
         ? new Date(now.getTime() + project.exceptionEscalationSeconds * 1_000)
         : null,
+      // W8: handed back the moment it opens, when the work session's rounds are used up.
+      workSessionId: workSessionId ?? exhausted?.sessionId ?? null,
+      workSessionOfferedAt: workSessionId || exhausted ? now : null,
+      workSessionReturnedAt: exhausted ? now : null,
+      workSessionReturnReason: exhausted ? ('ROUNDS_EXHAUSTED' satisfies LandingFixReturnReason) : null,
     }],
     skipDuplicates: true,
     select: { id: true },
   });
+  if (!created && failure.lineSync) {
+    const heldTaskIds = JSON.stringify(failure.lineSync.heldTaskId ? [failure.lineSync.heldTaskId] : []);
+    const [item] = await tx.$queryRaw<Array<{ id: string; assignee: OpenItemAssignee }>>(Prisma.sql`
+      UPDATE "project_open_item"
+         SET "payload" = jsonb_set(jsonb_set("payload", '{heldTaskIds}',
+               COALESCE("payload"->'heldTaskIds', '[]'::jsonb) ||
+               CASE WHEN COALESCE("payload"->'heldTaskIds', '[]'::jsonb) @> ${heldTaskIds}::jsonb
+                    THEN '[]'::jsonb ELSE ${heldTaskIds}::jsonb END),
+               '{attempts}',
+               COALESCE("payload"->'attempts', '[]'::jsonb) || jsonb_build_array(${JSON.stringify(failure.lineSync.attempt)}::jsonb)),
+             "assigned_at" = CASE WHEN "assignee" = 'COORDINATOR' THEN now() ELSE "assigned_at" END
+       WHERE "project_id" = ${failure.projectId}::uuid AND "dedupe_key" = ${failure.dedupeKey}
+         AND "state" = 'OPEN'
+       RETURNING "id", "assignee"`);
+    return item ? { itemId: item.id, projectId: failure.projectId, taskId: null, assignee: item.assignee } : null;
+  }
   if (!created && failure.dedupeKey.startsWith('ICB:') && failure.taskId) {
+    // K5 follow-up: the task filed to fix this item is exempt from its hold, so it is not added to `heldTaskIds`;
+    // its red landing puts the item in front of the coordinator again under a new key instead.
+    const [fixed] = await tx.$queryRaw<Array<{ id: string; assignee: OpenItemAssignee }>>(Prisma.sql`
+      UPDATE "project_open_item" i
+         SET "assigned_at" = CASE WHEN i."assignee" = 'COORDINATOR' THEN now() ELSE i."assigned_at" END
+        FROM "task" t
+       WHERE i."project_id" = ${failure.projectId}::uuid AND i."dedupe_key" = ${failure.dedupeKey}
+         AND i."state" = 'OPEN' AND t."id" = ${failure.taskId}::uuid AND t."fixes_open_item_id" = i."id"
+       RETURNING i."id", i."assignee"`);
+    if (fixed) return { itemId: fixed.id, projectId: failure.projectId, taskId: failure.taskId, assignee: fixed.assignee };
     const [held] = await tx.$queryRaw<Array<{ id: string; assignee: OpenItemAssignee }>>(Prisma.sql`
       UPDATE "project_open_item"
          SET "payload" = jsonb_set("payload", '{heldTaskIds}',
@@ -2166,6 +2454,11 @@ export interface OpenItemMessageSource {
   landedFixes?: readonly LandedFix[];
   /** The commit the item's own failed landing was handed (its job's `source_sha`), when it has one. */
   failedSourceSha?: string | null;
+  /** Revision 42 (W9): the item is in its task's own work session's hands, so its cell holds no
+   *  coordinator door and the text names none. */
+  workSession?: boolean;
+  /** Revision 42 (W7): why the item came back from its task's own work session, when it did. */
+  workSessionReturnReason?: string | null;
 }
 
 /**
@@ -2854,8 +3147,59 @@ function checkResult(value: IntegrationItemPayload['check']): IntegrationCheckRe
  * front of the coordinator again — and then says everything it said the first time.
  */
 export function openItemMessage(item: OpenItemMessageSource): string {
-  const landed = landedFixPreface(item);
-  return landed ? `${landed}\n\n${openItemBody(item)}` : openItemBody(item);
+  // Revision 42 (W5, W9): an item its task's own work session holds is not the coordinator's to act on
+  // yet, and its cell holds no coordinator door, so the text names none. `deliver` does not send it.
+  if (item.workSession) return workSessionItemMessage(item);
+  const prefaces = [handedBackPreface(item), landedFixPreface(item)].filter((text): text is string => text !== null);
+  return [...prefaces, openItemBody(item)].join('\n\n');
+}
+
+/** What each hand-back reason says happened (§12.4 `work_session_return_reason`). */
+const HANDED_BACK_BECAUSE: Readonly<Record<string, string>> = {
+  NO_NEW_COMMIT: 'its work settled without a new commit, so there is nothing new to land',
+  TURN_FAILED: 'its fix turn failed or was interrupted, or the session could not get its runner',
+  SESSION_ENDED: 'the session was ended or deleted by a person, or could not be revived',
+  ROUNDS_EXHAUSTED: 'it has already used its rounds of fixes for this landing, and this one failed again',
+  TASK_MOVED_ON: 'the task was reopened, cancelled or moved',
+};
+
+/**
+ * What a handed-back item says first (revision 42, §12.5 W7): that the task's own work session had it, why it came
+ * back, the rounds it used and its last words. Read from the payload's `workSession` and the item's return reason, both
+ * written once at the hand-back, so a replay of the same key words the same text (G6).
+ */
+function handedBackPreface(item: OpenItemMessageSource): string | null {
+  const workSession = (item.payload as { workSession?: Partial<LandingFixHandBack> } | null)?.workSession;
+  if (!workSession || typeof workSession.sessionId !== 'string') return null;
+  const reason = item.workSessionReturnReason ?? null;
+  const because = reason ? HANDED_BACK_BECAUSE[reason] ?? null : null;
+  const rounds = typeof workSession.rounds === 'number' ? workSession.rounds : 0;
+  const words = typeof workSession.lastMessage === 'string' && workSession.lastMessage !== ''
+    ? `Its last words: "${workSession.lastMessage}"`
+    : 'It said nothing about it.';
+  return lines(
+    `From Orbit · handed back: this failure went first to the task's own work session `
+      + `(session ${uuidToBase62(workSession.sessionId)}), which could not land it`
+      + `${because ? `: ${because}` : ''}${reason ? ` (${reason})` : ''}. `
+      + `It asked for ${rounds} ${rounds === 1 ? 'round' : 'rounds'} of landing.`,
+    words,
+    'It is yours from here, as below.',
+  );
+}
+
+/** What an item in its task's own work session's hands says (revision 42, §12.5 W9): where it is, and
+ *  that nothing is asked of the reader until it is handed back. */
+function workSessionItemMessage(item: OpenItemMessageSource): string {
+  const task = item.taskId ? ` of task ${uuidToBase62(item.taskId)}` : '';
+  return [
+    `From Orbit · exception item: ${item.title}`,
+    '',
+    `This failure is in the hands of the work session${task}, which is fixing it on its own branch. `
+      + 'Nothing is asked of you: Orbit lands the new commit and runs the checks again by itself, and if '
+      + 'the session cannot fix it, the item is handed back to the coordinator with the reason.',
+    '',
+    `Item id: ${uuidToBase62(item.id)}.`,
+  ].join('\n');
 }
 
 /**
@@ -2878,6 +3222,7 @@ function landedFixPreface(item: OpenItemMessageSource): string | null {
     phase: payload.phase ?? null,
     jobKind: payload.jobKind ?? null,
     failureClass: payload.failureClass ?? null,
+    workSession: item.workSession,
   });
   const projectId = uuidToBase62(item.projectId);
   const resolve = `${doors.resolveMcp} (projectId: ${projectId}, itemId: ${uuidToBase62(item.id)})`;
@@ -2961,6 +3306,58 @@ function observationFailureMessage(
     + `\n\n${notice}`;
 }
 
+/**
+ * The line-sync item's message (docs/design/project-line-upstream-sync.md §4.1): the project branch could not absorb
+ * the upstream. It says that no task caused it and none needs reopening, that the line's landings wait and then go by
+ * themselves, and how one sync task resolves it. Every door it names is its cell's (`openItemDoorMessageNames`).
+ *
+ * Read from the payload the item was opened with, plus the attempts appended to it. An attempt is appended in the same
+ * statement that moves `assigned_at` (L-T2), which is the delivery key, so a replay of one key words the same text
+ * (G6). The tasks it holds are not named here: that list grows without a new key, and the card reads it.
+ */
+function lineSyncMessage(
+  item: OpenItemMessageSource,
+  projectId: string,
+  payload: IntegrationItemPayload & { upstreamRef?: string; upstreamSha?: string | null; attempts?: unknown },
+  notice: string,
+  doors: OpenItemDoorMessageNames,
+): string {
+  const short = (ref: string | undefined, fallback: string): string => ref ? ref.replace(/^refs\/heads\//, '') : fallback;
+  const line = short(payload.targetRef, 'the project branch');
+  const upstream = short(payload.upstreamRef, 'the upstream');
+  const at = (sha: string | null | undefined): string => (sha ? ` at ${sha.slice(0, 7)}` : '');
+  const files = payload.files ?? [];
+  const itemId = uuidToBase62(item.id);
+  const attempts = Array.isArray(payload.attempts)
+    ? payload.attempts as Array<{ taskId?: string | null; sourceSha?: string | null }>
+    : [];
+  // A conflict reported after the first one, while the item was open, is a sync task's (only its landing is let
+  // through): its commit holds a resolution that main moved past.
+  const lastSync = attempts.length > 1 ? attempts[attempts.length - 1] : null;
+  const fileText = files.length > 0 ? ` in ${files.join(', ')}` : '';
+  const create = doors.taskCreateMcp == null ? null
+    : `To resolve it, file one sync task with ${doors.taskCreateMcp}, fixesOpenItemId: ${itemId}. It starts from the tip of ${line}, `
+      + `merges ${upstream} into its branch, resolves the conflicts in the files above, and commits that merge and nothing else. `
+      + 'Its evidence says how each file was resolved. Its landing is the only one allowed through while this item is open; '
+      + 'when it lands, this item closes and the waiting landings go ahead.'
+      + (lastSync?.sourceSha
+        ? ` A sync task already tried and its landing conflicted again, because ${upstream} moved on: start the new one by merging `
+          + `${lastSync.sourceSha.slice(0, 7)}, the earlier sync task's commit, which already holds a resolution, and file it with `
+          + 'supersedesTaskId naming the earlier sync task.'
+        : '');
+  const close = doors.resolveMcp == null ? null
+    : `If ${upstream} is about to change these files itself, you can close this item instead (${doors.resolveMcp}, projectId: ${projectId}, `
+      + `itemId: ${itemId}, with your reason). The next waiting landing then tries the sync again, and if it still conflicts, this item comes back.`;
+  return `From Orbit · exception item: ${item.title}\n\n`
+    + `The project branch ${line} could not absorb ${upstream}${at(payload.upstreamSha)}: merging ${upstream} into its tip`
+    + `${at(payload.targetSha)} conflicted${fileText}.\n\n`
+    + `The conflict is between the project branch and ${upstream}. No task's work caused it, and no task needs reopening or rework: `
+    + 'every DONE task stays as it was judged. The landings queued on this line wait until the project branch has absorbed '
+    + `${upstream}. Then they go ahead by themselves, in order.\n\n`
+    + lines(create, close, askOwnerFirst(projectId, itemId, doors))
+    + `\n\n${notice}`;
+}
+
 function openItemBody(item: OpenItemMessageSource): string {
   const projectId = uuidToBase62(item.projectId);
   const payload = (item.payload ?? {}) as {
@@ -2979,6 +3376,7 @@ function openItemBody(item: OpenItemMessageSource): string {
     phase: payload.phase ?? null,
     jobKind: payload.jobKind ?? null,
     failureClass: payload.failureClass ?? null,
+    workSession: item.workSession,
   });
   const notice = `Item id: ${uuidToBase62(item.id)}. This is a notice, not an interruption: the turn you were running was not interrupted by it, `
     + 'and you are reading it only after that turn ended, so go by the database state you have just read yourself.';
@@ -2990,6 +3388,9 @@ function openItemBody(item: OpenItemMessageSource): string {
     + `close it with ${doorNames.resolveMcp}, giving your reason: it is marked handled (HANDLED), and your session and reason stay on the item.`;
   if ((INTEGRATION_ITEM_KINDS as readonly string[]).includes(item.kind) && payload.jobKind === 'OBSERVE_LANDING') {
     return observationFailureMessage(item, projectId, payload, notice, doorNames);
+  }
+  if (item.kind === 'INTEGRATION_CONFLICT' && !item.taskId && !item.promotionId && payload.phase === 'MAIN_SYNC') {
+    return lineSyncMessage(item, projectId, payload, notice, doorNames);
   }
   if ((INTEGRATION_ITEM_KINDS as readonly string[]).includes(item.kind)) {
     const taskId = item.taskId ? uuidToBase62(item.taskId) : null;

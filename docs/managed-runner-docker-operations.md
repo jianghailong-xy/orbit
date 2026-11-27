@@ -1,7 +1,7 @@
 # Managed runners on Docker: backup, restore and failure handling
 
 This runbook is for a deployment whose managed runners run on its own Docker: a new deployment that
-`scripts/install-server.sh` installed, or one an administrator switched on with `--enable-managed-runners`
+`scripts/install-server.sh --managed-runners` installed, or one an administrator switched on with `--enable-managed-runners`
 ([Self-hosting](self-hosting.md#managed-runners)). Every account has a runner of its own: a container
 `mr-<runner uuid>` and a data volume `mr-data-<runner uuid>` on this host's disk. The volume holds the account's
 checkouts, sessions, uploads and engine sign-ins, and nothing else keeps a copy of it.
@@ -198,6 +198,9 @@ is missing fails with `PVC_MISSING` (if that has happened already, see [After `P
    (`docker ps -a --filter volume=$V` prints nothing).
 3. **Restore.**
 
+   On a host using filesystem mode, follow the [filesystem restore steps](#move-existing-volumes-to-filesystem-limits).
+   For an ordinary local volume, use:
+
    ```bash
    docker volume rm "$V"     # only to roll an existing volume back: the restore never writes into a volume that exists
    scripts/managed-runner/volume-backup.sh restore "$V" "$B"
@@ -272,18 +275,17 @@ take another volume of the same name.
 
 ## Session checkouts and the volume's limit
 
-Each session works in a checkout of its own on its runner's volume, and the runner reclaims checkouts before the
-channel stops it at the volume's limit ([A runner's volume is over its limit](#a-runners-volume-is-over-its-limit)).
-Inside the container, `statfs` reports this host's disk, which knows nothing of a volume's limit, so the runner works
-against the volume's **storage budget**:
+Each session works in a checkout of its own on its runner's volume. The runner reclaims checkouts before it runs
+short of space. In filesystem mode, `statfs` sees the runner's own ext4 filesystem. In measured mode, it sees the
+host's disk. In both modes, the runner uses the channel's **storage budget** to plan checkout reclamation:
 
 - **The measurement.** On each of its passes the manager reads the channel's view of the volume, its limit and the
-  size Docker last measured, and keeps it on the runner's mapping (`managed_runner.volume_measurement`) with the time
+  latest usage, and keeps it on the runner's mapping (`managed_runner.volume_measurement`) with the time
   it first read those figures: the same figures read again keep their time. Every heartbeat answer relays it to the
   runner as `storageBudget`, with the floor. The channel measures every `diskCheckSeconds`, 120 s by default.
 - **Free space** is the limit less the measured size, plus the checkouts the runner has removed since that time and
   less the ones it has made since, which the measurement does not count yet. It is never more than this host's disk
-  has free.
+  or runner filesystem has free.
 - **The floor** is the owner's **Keep Free** (the runner's page, Capacity) whenever one is set, higher or lower.
   Otherwise it is a quarter of the volume's limit: 5 GiB of the default 20 GiB. The default is worked out for each
   heartbeat answer and never stored, so the runner's page shows Keep Free only as its owner set it, and auto-run,
@@ -305,8 +307,8 @@ session checkout the runner estimates its size, that of the files its commit tra
 than the floor free, it runs the sweep first, until the new checkout fits. A look that finds no resting checkout to
 take makes the schedule wait 7.5 minutes, or less once a newer measurement comes in, before it looks again.
 
-**What it cannot do.** A checkout is never refused, and the checkout of a session at work, or of one whose engine is
-still warm, is never taken. An engine stays warm for up to four hours after its turn. Up to Max Concurrent engines are
+The sweep keeps the checkout of a session at work or with a warm engine. The daemon also pauses new claims and
+reclaimed turns while free space is below its reserve for runner state (1 GiB on the default 20 GiB volume). An engine stays warm for up to four hours after its turn. Up to Max Concurrent engines are
 at work or warm at once (on the runner's page; `runner.maxConcurrent` in `profile.json` starts it at 2), and a new
 session's checkout is made before its engine takes the place of the oldest warm one. So the volume has to hold:
 
@@ -314,14 +316,15 @@ session's checkout is made before its engine takes the place of the oldest warm 
 - Max Concurrent + 1 session checkouts;
 - what the sessions install and build in them.
 
-Below that size, a burst of sessions can pass the limit whatever the runner reclaims, and the channel stops the runner
-(`VOLUME_OVER_LIMIT`). A bigger volume is the answer then. Measured with the Orbit repository, whose session checkout
+Below that size, a burst of sessions can fill the volume whatever the runner reclaims. A write fails with `ENOSPC`
+in filesystem mode. In measured mode, exceeding the limit triggers `VOLUME_OVER_LIMIT`. Measured with the Orbit
+repository, whose session checkout
 is about 1.75 GiB (0.93 GiB with the paths it leaves out): an 8 GiB volume holding a 2.85 GiB workspace, with full
 checkouts and Max Concurrent 1, stayed under its limit, at 6.4 GiB at most. By the sum above, the default profile,
 20 GiB with Max Concurrent 2, holds a repository of that size: 2.85 + 3 × 1.75 GiB is about 8.1 GiB, before installs
 and builds.
 
-**Clones count at full size.** Where Docker's data root (`data-root` in `/etc/docker/daemon.json`) is on a filesystem
+**In measured mode, clones count at full size.** Where Docker's data root (`data-root` in `/etc/docker/daemon.json`) is on a filesystem
 that can clone files, such as XFS made with `reflink=1` or btrfs
 ([the list](runner-troubleshooting.md#e-every-session-checkout-takes-as-much-disk-as-a-full-copy)), the runner clones
 each session checkout from the workspace's checkout, with no privilege, and the clones share their blocks on this
@@ -355,12 +358,133 @@ The last is the session's next message bringing its checkout back. A finished se
 `gc: no resumable checkout can go and the storage budget is still under its floor; not looking again until <time>,
 or sooner once a newer measurement of the volume comes in or the budget is back above its floor`.
 
+## Filesystem limits for Docker data volumes
+
+Both `/home/orbit` and `/tmp` use the same data volume. Docker Engine 26 or later supports the volume subpath
+that mounts `.orbit-tmp` at `/tmp`. The channel logs the mode at startup and returns it as `volumeLimitMode`
+in `GET /v1/info`.
+
+| Mode | How the channel enforces the limit |
+| --- | --- |
+| `filesystem` | Ext4 enforces the capacity. A writer gets `ENOSPC`. The channel samples free blocks for storage budgets, and the runner pauses admission below its reserve. |
+| `measured` | Docker measures the apparent size of its ordinary local volumes. The channel stops a runner above its limit and refuses to recreate it until its volume fits. |
+
+A fixed-size ext4 image works on a Linux host with loop devices and a backing filesystem that supports reserving
+space in a regular file, such as ext4 or XFS. The channel reserves the full image size up front and mounts it with
+`nodev,nosuid`. Ext4 metadata uses some of the profile's capacity. Docker's local driver bind-mounts a directory
+inside the image, so the mount source is absent whenever the image is unmounted. The channel remounts existing
+images before serving after a host restart. The host storage budget measures the image backing disk and accounts
+for each image's reserved bytes.
+
+XFS project quotas would require XFS with project enforcement under Docker's volume directory, project ID
+management and a restriction on changing project attributes inside the runner. They could be applied to
+existing volumes with a quiesced tree walk. A volume plugin would need to be installed, configured and supported
+on each host, and existing local volumes would still need a copy to the new driver. With loop-backed ext4, the
+ordinary Docker local driver and the runner's volume name and UID can be retained.
+
+### Enable filesystem limits
+
+`scripts/install-server.sh` installs in measured mode. Enable filesystem mode on a rootful Linux Docker host
+by providing a private, persistent directory for the channel's images and mounts. These steps modify the
+channel host only. Keep free space on the backing disk for the sum of all images, including sleeping runners.
+
+For Compose, use the same absolute directory on both sides of the channel bind mount. For example:
+
+```bash
+install -d -m 0700 /srv/orbit-runner-filesystems
+mountpoint -q /srv/orbit-runner-filesystems ||
+  mount --bind /srv/orbit-runner-filesystems /srv/orbit-runner-filesystems
+mount --make-rshared /srv/orbit-runner-filesystems
+```
+
+Restore the shared mount before Compose starts after a reboot. Add
+`"volumeFilesystemRoot": "/srv/orbit-runner-filesystems"` to `channel.json`. Add the override below to
+`docker-compose.override.yml` for the root deployment or include it with the remote kit's Compose file.
+Keep it in the Compose file set for every channel recreate, including upgrades.
+
+```yaml
+services:
+  docker-channel:
+    privileged: true
+    volumes:
+      - /srv/orbit-runner-filesystems:/srv/orbit-runner-filesystems:rshared
+```
+
+The channel needs access to loop devices and mount operations. The runner containers continue to use the
+restricted template. A channel run directly on the host instead needs `mkfs.ext4`, `mount`, `umount` and
+`losetup`, and must see the same host mounts as Docker. In either case, keep the images and their
+parent directories accessible only to host administrators. An allocation or mount error is reported as
+`VOLUME_FILESYSTEM_UNAVAILABLE`. A mount failure never creates an ordinary replacement volume.
+
+### Move existing volumes to filesystem limits
+
+1. Quiesce the instance and ensure every affected volume has zero container holders. Follow
+   [the backup and check procedure](#back-up-a-runners-volume) for each one. Keep the checked backup off the host
+   until the migrated runner and its data have been verified.
+2. For each volume, read the instance ID, volume UID and byte limit from its saved `.volume.json` labels. Use
+   the recorded byte limit or choose a larger one if the backup needs more room. Prepare a new image under the
+   configured root using those values. Run the following only for a new image path.
+
+   ```bash
+   # INSTANCE, VOLUME_UID and LIMIT_BYTES come from the saved labels.
+   base=/srv/orbit-runner-filesystems/"$INSTANCE"
+   image="$base/$VOLUME_UID.ext4"
+   mount_dir="$base/$VOLUME_UID"
+   install -d -m 0700 "$base" "$mount_dir"
+   (set -o noclobber; umask 077; : > "$image") &&
+     fallocate -l "$LIMIT_BYTES" "$image" &&
+     mkfs.ext4 -q -F -m 0 -E nodiscard "$image" &&
+     mount -t ext4 -o loop,nosuid,nodev "$image" "$mount_dir" &&
+     install -d -m 0755 "$mount_dir/data"
+   ```
+
+3. Extract the checked backup with `tar --numeric-owner -xzpf "$BACKUP/$V.tar.gz" -C "$mount_dir/data"`.
+   Verify its files with `(cd "$mount_dir/data" && sha256sum -c "$BACKUP/$V.sha256")` before replacing the old
+   Docker volume. Keep `BACKUP` an absolute path.
+4. With the channel still stopped, remove the old Docker volume and recreate it with the same name and all its
+   original labels, including UID, owner, runner and instance. Add the label `orbit.managed-runner.volume-filesystem=ext4`
+   and set `orbit.managed-runner.disk-limit-bytes` to the image's byte length. Supply local driver options
+   `--opt type=none --opt o=bind --opt device="$mount_dir/data"`. Then run
+   `scripts/managed-runner/volume-backup.sh verify "$V"`.
+5. Start the configured channel after every data volume of its instance has been migrated. A mode mismatch
+   prevents startup. Re-enable the runners after verifying `volumeLimitMode` in `/v1/info`.
+
+For a filesystem-mode restore from archive, use the same image preparation, extraction and registration steps.
+The plain `volume-backup.sh restore` path creates an ordinary local volume. Backing images persist if an
+operator removes just the Docker volume record. Remove a retained image only after verifying that no Docker
+volume or container still uses it and unmounting its directory.
+
+### Verify disk-full behavior on an isolated runner
+
+Use a lab runner with the deployed profile values. With another session running, run the following in a session
+on this runner. Repeat for `/home/orbit` after freeing the first file. Leave the file in place for at least one
+channel check while you verify admission.
+
+```bash
+LC_ALL=C dd if=/dev/zero of=/tmp/orbit-disk-full-probe bs=8M conv=fsync
+```
+
+The write reports `No space left on device` and the second session keeps running. From the channel host:
+
+```bash
+docker inspect --format 'Running={{.State.Running}} RestartCount={{.RestartCount}}' "$RUNNER_CONTAINER"
+docker logs "$RUNNER_CONTAINER" 2>&1 | grep 'not taking new work:'
+docker compose logs --since 10m docker-channel | grep -E 'volume limit mode|VOLUME_OVER_LIMIT|stopping it'
+```
+
+Expect `Running=true RestartCount=0`, the daemon's English reserve reason, and no over-limit stop. Submit a new
+session while full to check that it waits. Remove the probe file, then verify the runner takes work again.
+Run the channel regression suite with `python3 scripts/managed-runner/docker_channel_test.py -v`.
+
 ## When something goes wrong
 
 ### A runner's volume is over its limit
 
-Docker's local volumes have no size limit of their own. The channel enforces each volume's limit (`storage.capacity`
-in `profile.json`, 20 GiB by default) by measuring:
+In filesystem mode, free space on the runner volume to resume admission. `volumeLimitOverrides` applies only at
+creation for an ext4 image. Use an offline backup and restore into a larger image to increase its capacity.
+
+In measured mode, the channel enforces each ordinary local volume's limit (`storage.capacity` in `profile.json`,
+20 GiB by default) by measuring:
 
 - every `diskCheckSeconds` (`channel.json`, 120 s by default), it reads Docker's size of every volume;
 - it stops (SIGTERM, then SIGKILL after `stopGraceSeconds`) the container of a volume over its limit;
@@ -437,9 +561,8 @@ What happens:
 - Writes in the runners fail with "no space left on device", and so do sessions in them.
 - Postgres and the apiserver fail too when their data is on the same disk.
 - New accounts wait for their runner: `MANAGED_RUNNER_CAPACITY_UNAVAILABLE` "(storage pool space)".
-- Nothing stops a running container because the disk is full. The per-volume limit above still stops a volume that
-  is over its own limit, even when the disk under the channel's state directory is full (fixed on 2026-10-17; before
-  that fix, a full disk stopped the check itself).
+- Existing filesystem-backed volumes have reserved backing space. In measured mode, a volume over its limit is
+  stopped even when the channel's state directory is full.
 
 What to do:
 
@@ -459,7 +582,7 @@ What to do:
 ### A container is over its memory limit
 
 The limit (`runner.resources.memory` in `profile.json`, 4 GiB by default, and no swap beyond it) covers the
-container's processes and its `/tmp`, a tmpfs counted in memory. `/tmp` is executable, so builds and `go test` run
+container's processes. Its `/tmp` lives on the data volume and is executable, so builds and `go test` run
 what they write there; Docker keeps it `nosuid` and `nodev`, and an engine older than Docker 27 keeps it `noexec`
 (the channel's log says so at start-up). At the limit, the kernel kills the container's
 largest process, which is usually an engine or a build, and Docker marks the container `OOMKilled`. Measured on the
@@ -472,8 +595,14 @@ HPC host with a 512 MiB limit: the allocating process was killed at the limit (`
   `… with exit code 137, out of memory; starting generation …` and starts the runner again on the same volume. Until
   it is up, its owner reads "The runner ran out of memory and stopped, so it is being started again on the same data
   volume." If it keeps running out, `lifecycle.maxAttempts` stops in a row (5 by default), it fails with
-  `POD_OUT_OF_MEMORY` ("The runner kept running out of memory …"), and its owner presses Retry once runners have more
-  memory (below).
+  `POD_OUT_OF_MEMORY` ("The runner kept running out of memory …"). It is then tried again by itself while work is
+  waiting for it, 15 minutes later, then after a doubling delay up to 6 hours. Its owner can press Retry to start it
+  at once, and runners can be given more memory (below).
+
+A tool that holds gigabytes of shared memory (`MAP_SHARED|MAP_ANONYMOUS`, memfd, tmpfs) keeps the container at its
+limit for a few hundred milliseconds after the kernel kills it, and the kernel may kill a second process meanwhile. The
+runner's emergency memory reserve covers that window on this backend too; the Kubernetes runbook describes it and its
+limits ([a second kill while a shared-memory victim drains](managed-runner-kubernetes-operations.md#a-second-kill-while-a-shared-memory-victim-drains-a-kernel-limit-and-the-reserve)).
 
 Docker keeps a container's OOM mark once any process in it was killed for memory. The manager says "out of memory"
 only for a runner that itself ended killed (exit 137), so a container whose session process was killed earlier and
@@ -615,7 +744,7 @@ one is gone.
 
 A managed runner keeps what it reports through a power loss. Before it tells the server that a turn was answered or a
 session ended, or that it made a checkout, a commit, a merge, a landing or a cleanup, it syncs its volume (`syncfs`),
-and the report waits for the sync. On this backend a runner's volume is a directory of this host's filesystem, so the
+and the report waits for the sync. In measured mode a runner's volume is a directory of the host's filesystem, so the
 sync writes back everything not yet written on that filesystem: every runner's volume, Postgres's data in
 `data/postgres` when the checkout is on the same filesystem, Docker's logs. (A runner on Kubernetes also syncs behind
 every tool its engine runs, in the background; on Docker it does not, because those syncs cost the others too much.)
@@ -720,7 +849,7 @@ traffic to private ranges (`DOCKER-USER`). Keep host services bound to loopback 
 
 ## The managed runners' firewall
 
-A new deployment firewalls its managed runners' network on this host (`managed-runner-firewall`,
+A new deployment with managed runners firewalls their network on this host (`managed-runner-firewall`,
 [deploy/managed-runner/firewall](../deploy/managed-runner/firewall/README.md)): from that network a runner reaches the
 gateway's published port at the network's gateway address, DNS, and public addresses. Every other port of this host,
 on any of its addresses, and every private, shared, link-local and reserved address behind it is refused, the cloud
@@ -879,12 +1008,13 @@ firewall's log says what is wrong (`docker compose logs managed-runner-firewall`
 
 | Setting | File | Applies after |
 | --- | --- | --- |
-| Each runner's CPU, memory (with `/tmp`), processes, `/tmp` size | `profile.json` `runner.resources`, `runner.tmpSizeLimit` | `docker compose up -d --force-recreate apiserver`, at each runner's next start |
+| Each runner's CPU, memory, processes, and its share of the ephemeral budget (`/tmp` itself is on its data volume) | `profile.json` `runner.resources`, `runner.tmpSizeLimit` | `docker compose up -d --force-recreate apiserver`, at each runner's next start |
 | The most any runner may be given | `channel.json` `limits` | `docker compose up -d --force-recreate docker-channel` |
 | The most containers there may be | `channel.json` `limits.maxContainers` (by default one per CPU and per GiB of memory, whichever is fewer) | `docker-channel` recreated, then the apiserver |
 | Whether the channel removes data volumes | `channel.json` `allowVolumeRemoval` (`false` unless set) | `docker-channel` recreated |
-| A new volume's limit and storage share | `profile.json` `storage.capacity` | apiserver recreated; existing volumes keep theirs (use `volumeLimitOverrides`) |
-| One volume's limit | `channel.json` `volumeLimitOverrides` | `docker-channel` recreated |
+| A new volume's limit and storage share | `profile.json` `storage.capacity` | apiserver recreated |
+| One volume's limit | `channel.json` `volumeLimitOverrides` | channel recreated in measured mode; at volume creation in filesystem mode |
+| Filesystem enforcement and image location | `channel.json` `volumeFilesystemRoot` | channel recreated after existing volumes are migrated |
 | The floor a runner reclaims session checkouts at | Its owner's **Keep Free** on the runner's page; with none, a quarter of the volume's limit | The runner's next heartbeat |
 | How often volumes are measured | `channel.json` `diskCheckSeconds` | `docker-channel` recreated |
 | How long a stop waits before SIGKILL | `channel.json` `stopGraceSeconds` | `docker-channel` recreated |

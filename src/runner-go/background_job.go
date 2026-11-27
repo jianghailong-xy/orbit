@@ -14,7 +14,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -86,6 +85,13 @@ const (
 	// which is what separates it from `drain`/`drain_cap`/session_cancelled: unlike those, a turn
 	// the person interrupted can be followed by another turn in the same session.
 	bgStopReason = "stop"
+
+	// bgStoppedByOwnerReason marks a kill the session's owner asked for from the app, one job at a
+	// time (POST /sessions/:id/background/jobs/:jobId/stop, delivered on the heartbeat as
+	// stopBackgroundJobs). Not bg_kill's "requested": the agent did not ask, so unlike that kill this
+	// one wakes the session when the job asked to be woken, and the wake says a person stopped it.
+	// Not bgStopReason either, which ends all of a session's background work with its turn.
+	bgStoppedByOwnerReason = "stopped_by_owner"
 
 	// bgJobOutputCap bounds one bg_output read.
 	bgJobOutputCap = 256 * 1024
@@ -167,10 +173,9 @@ type bgJobSpec struct {
 	// WakeOnStall, when set, asks for a wake once the job, still running, has written nothing for this
 	// long (bg_run's wakeOnStall.afterSeconds; watchForStall).
 	WakeOnStall time.Duration
-	// Limits is the CPU and memory the job runs under (bg_limits.go): the agent's ask within the runner's
-	// ceiling. LimitsNote says where the ask was lowered to that ceiling.
-	Limits     bgJobLimits
-	LimitsNote string
+	// BrowserOpener: the session's browser is on, so on the Orbit Cloud runner the job's pages open in its shared
+	// Chrome, as they do from the engine's own shell (browser_opener.go).
+	BrowserOpener bool
 }
 
 // bgStallConfig is a job's wakeOnStall as bg_run takes it and bg_list shows it.
@@ -199,12 +204,11 @@ type bgJobStatus struct {
 	WakeOnExit    bool           `json:"wakeOnExit,omitempty"`
 	WakeOnOutput  bool           `json:"wakeOnOutput,omitempty"`
 	WakeOnStall   *bgStallConfig `json:"wakeOnStall,omitempty"`
-	// Limits is the CPU and memory the job runs under, as applied; LimitsNote says where they were
-	// lowered to the runner's ceiling, or why they could not be applied at all.
-	Limits     *bgJobLimits `json:"limits,omitempty"`
-	LimitsNote string       `json:"limitsNote,omitempty"`
 	// Note says what to do about a job that is waiting for its card (bgGateWaitingNote).
 	Note string `json:"note,omitempty"`
+	// Reason is why a killed job was killed (killReason): "requested" for bg_kill,
+	// bgStoppedByOwnerReason for the owner's stop, and so on. Empty for a job that was not killed.
+	Reason string `json:"reason,omitempty"`
 }
 
 // bgJobOutput is one incremental read of a job's output file.
@@ -237,14 +241,6 @@ type bgJob struct {
 	// wakeOnStall is the silence that wakes the session for this job while it runs (watchForStall),
 	// zero for a job that did not ask.
 	wakeOnStall time.Duration
-
-	// limits is what the job runs under, applied in cgroup, and limitsNote what bg_run says about them
-	// (bgJobStatus). Set when the process starts, under bgTailer.mu.
-	limits     *bgJobLimits
-	limitsNote string
-	// cgroup is the job's own cgroup, nil for a job without one. Atomic: a kill may read it while the
-	// process is being started.
-	cgroup atomic.Pointer[bgJobCgroup]
 
 	status   string
 	exitCode *int
@@ -324,8 +320,6 @@ func (j *bgJob) statusLocked() bgJobStatus {
 		HoldsWorktree: j.status == bgStatusRunning,
 		WakeOnExit:    j.wakeOnExit,
 		WakeOnOutput:  j.wakeOnOutput,
-		Limits:        j.limits,
-		LimitsNote:    j.limitsNote,
 	}
 	if j.wakeOnStall > 0 {
 		st.WakeOnStall = &bgStallConfig{AfterSeconds: int(j.wakeOnStall / time.Second)}
@@ -336,6 +330,9 @@ func (j *bgJob) statusLocked() bgJobStatus {
 	if j.awaitingOwner {
 		st.Status = bgStatusWaitingForOwner
 		st.Note = bgGateWaitingNote
+	}
+	if j.status == bgStatusKilled {
+		st.Reason = j.killReason
 	}
 	return st
 }
@@ -429,9 +426,7 @@ func (b *bgTailer) prepareJob(spec bgJobSpec) (*bgPreparedJob, error) {
 	jobCtx, cancel := context.WithCancel(b.ctx)
 	cmd := exec.CommandContext(jobCtx, "bash", "-lc", spec.Command)
 	configureSessionProcessTree(cmd)
-	// The reap below reads the job's cgroup, set once its process starts (launchJob).
-	var job *bgJob
-	job = &bgJob{
+	job := &bgJob{
 		id:           jobID,
 		kind:         spec.Kind,
 		command:      spec.Command,
@@ -443,16 +438,9 @@ func (b *bgTailer) prepareJob(spec bgJobSpec) (*bgPreparedJob, error) {
 		wakeOnOutput: spec.WakeOnOutput,
 		wakeOnStall:  spec.WakeOnStall,
 		status:       bgStatusRunning,
-		kill: func() {
-			_ = terminateSessionProcessTree(cmd)
-			// What left the job's process group — a daemonized child — is still in its cgroup.
-			job.cgroup.Load().killAll()
-		},
+		kill:         func() { _ = terminateSessionProcessTree(cmd) },
 		reap: func() int {
 			waitErr := waitSessionProcessTree(cmd)
-			if cg := job.cgroup.Load(); cg != nil {
-				endBgJobCgroup(cg, job.limits, f)
-			}
 			f.Close()
 			return exitCodeFromWait(cmd, waitErr)
 		},
@@ -464,9 +452,7 @@ func (b *bgTailer) prepareJob(spec bgJobSpec) (*bgPreparedJob, error) {
 		if !b.killable(job) {
 			return os.ErrProcessDone
 		}
-		err := terminateSessionProcessTree(cmd)
-		job.cgroup.Load().killAll()
-		return err
+		return terminateSessionProcessTree(cmd)
 	}
 	cmd.WaitDelay = 0
 	cmd.Dir = spec.Dir
@@ -496,6 +482,7 @@ func (b *bgTailer) prepareJob(spec bgJobSpec) (*bgPreparedJob, error) {
 	// No `publicID` here: that encoding is for UUIDs, and this is already the opaque token the
 	// runner hands out (`newBgJobID`), the spelling `bg_list`/`bg_output` take.
 	cmd.Env = append(cmd.Env, envBgJobID+"="+jobID)
+	cmd.Env = browserOpenerEnv(cmd.Env, spec.BrowserOpener)
 	cmd.Stdout = f
 	cmd.Stderr = f
 	return &bgPreparedJob{job: job, cmd: cmd, output: f, ctx: jobCtx, cancel: cancel, spec: spec}, nil
@@ -507,33 +494,14 @@ func (b *bgTailer) prepareJob(spec bgJobSpec) (*bgPreparedJob, error) {
 func (b *bgTailer) launchJob(p *bgPreparedJob) (bgJobStatus, error) {
 	job, cmd, f, cancel, spec := p.job, p.cmd, p.output, p.cancel, p.spec
 	jobID, outputPath := job.id, job.outputPath
-	var cg *bgJobCgroup
-	var limits *bgJobLimits
-	limitsNote := spec.LimitsNote
-	if !spec.Limits.none() {
-		var err error
-		if cg, err = newBgJobCgroup(jobID, spec.Limits); err != nil {
-			limitsNote = fmt.Sprintf("Limits not applied (%s): %v.", spec.Limits, err)
-		} else {
-			cg.attach(cmd)
-			l := spec.Limits
-			limits = &l
-		}
-	}
+	checkOOM := watchMemoryTool(p.ctx, spec.SessionID)
 	if err := cmd.Start(); err != nil {
-		if cg != nil {
-			cg.remove()
-		}
 		cancel()
 		f.Close()
 		return bgJobStatus{}, err
 	}
-	if cg != nil {
-		cg.started()
-	}
+	trackMemoryRoots(spec.SessionID, true, cmd.Process.Pid)
 	b.mu.Lock()
-	job.limits, job.limitsNote = limits, limitsNote
-	job.cgroup.Store(cg)
 	job.pid = cmd.Process.Pid
 	job.startedAt = time.Now()
 	// A job that has produced nothing yet has produced nothing since it existed: its first report
@@ -547,9 +515,6 @@ func (b *bgTailer) launchJob(p *bgPreparedJob) (bgJobStatus, error) {
 		b.mu.Unlock()
 		cancel()
 		f.Close()
-		if cg != nil {
-			cg.remove()
-		}
 		if job.recorded {
 			removeBgJobRecord(b.sessionID, jobID)
 		}
@@ -600,6 +565,7 @@ func (b *bgTailer) launchJob(p *bgPreparedJob) (bgJobStatus, error) {
 		// Waits without reaping, so that a job handed on meanwhile stays unreaped for its next host.
 		awaitChildExit(job.pid)
 		if b.claimReap(job) {
+			checkOOM(job.pid)
 			b.finishJob(job, job.reap())
 		} else {
 			b.endKeptJob(job)
@@ -1251,6 +1217,13 @@ func (b *bgTailer) jobOutput(jobID string, tail int, sinceOffset int64) (bgJobOu
 // that already finished by itself is reported as it actually ended, never
 // relabelled as killed to match the request.
 func (b *bgTailer) killJob(jobID string, grace time.Duration) (bgJobStatus, error) {
+	return b.killJobFor(jobID, grace, "requested")
+}
+
+// killJobFor is killJob for whoever asked: bg_kill's "requested", or the owner's stop
+// (bgStoppedByOwnerReason). A job already being killed keeps the reason it is being killed for,
+// so a stop that arrives again, or after the agent's bg_kill, does not rename that kill.
+func (b *bgTailer) killJobFor(jobID string, grace time.Duration, reason string) (bgJobStatus, error) {
 	b.mu.Lock()
 	job, ok := b.jobs[jobID]
 	if !ok {
@@ -1262,7 +1235,9 @@ func (b *bgTailer) killJob(jobID string, grace time.Duration) (bgJobStatus, erro
 		b.mu.Unlock()
 		return status, nil
 	}
-	job.killReason = "requested"
+	if job.killReason == "" {
+		job.killReason = reason
+	}
 	cancel := job.cancel
 	done := job.done
 	b.mu.Unlock()

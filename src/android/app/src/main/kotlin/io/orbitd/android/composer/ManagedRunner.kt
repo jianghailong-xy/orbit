@@ -87,6 +87,12 @@ object ManagedRunner {
         val canEnsure: Boolean,
         val canWake: Boolean,
         val canRetry: Boolean,
+        /** The runner runs an older build than the current image's (docs/managed-runner-update-now-design.md); null when current or unknown. */
+        val update: ManagedUpdate? = null,
+        /** Whether the server's reason says a retry may cure it. */
+        val reasonRetryable: Boolean = false,
+        /** Its next automatic try, as the server stored it; null when none is scheduled (and from an older server). */
+        val nextAttemptAt: String? = null,
     )
 
     data class Display(
@@ -134,6 +140,9 @@ object ManagedRunner {
             canEnsure = actions?.bool("canEnsure") == true,
             canWake = actions?.bool("canWake") == true,
             canRetry = actions?.bool("canRetry") == true,
+            update = ManagedRunnerUpdateLogic.update(o),
+            reasonRetryable = reason?.bool("retryable") == true,
+            nextAttemptAt = o.str("nextAttemptAt"),
         )
     }
 
@@ -162,7 +171,9 @@ object ManagedRunner {
         val kind = kind(status) ?: return null
         val frozen = status.reasonCode == MANAGED_RUNNER_UNAVAILABLE
         val wakeable = status.managementState !in SLEEP_STATES || status.canWake
-        val acceptsWork = !frozen && wakeable && status.managementState in COMING_BACK
+        // FAILED with its slow retry scheduled comes back by itself too (managed-runner-demand.ts `slowRetryScheduled`).
+        val slowRetry = status.managementState == "FAILED" && !status.nextAttemptAt.isNullOrEmpty() && status.reasonRetryable
+        val acceptsWork = !frozen && wakeable && (status.managementState in COMING_BACK || slowRetry)
         return Display(
             kind = kind,
             title = TITLE.getValue(kind),
@@ -229,7 +240,8 @@ object ManagedRunner {
         const val COMPOSER = "Your managed runner is asleep. Sending wakes it (about 10 s)."
     }
 
-    const val REPOS_ROOT = "/home/orbit/orbit-repos"
+    /** The managed runner's home, fixed by its image: a new folder goes here before it has reported (@orbit/shared MANAGED_RUNNER_HOME). */
+    const val HOME = "/home/orbit"
     object Setup {
         val NOTICE = mapOf(
             "preparing" to "Orbit is setting up your managed runner. You can create the workspace now; your first session starts when it’s ready.",
@@ -243,7 +255,7 @@ object ManagedRunner {
 
     fun managedSetupState(runnerId: String?, status: Status?): String? {
         val row = row(runnerId, status) ?: return null
-        if (!row.acceptsWork || row.kind == "available" || row.kind == "unresponsive") return null
+        if (!row.acceptsWork || row.kind == "available" || row.kind == "unresponsive" || row.kind == "failed") return null
         return if (!status?.initialProvider.isNullOrEmpty()) "asleep" else "preparing"
     }
 

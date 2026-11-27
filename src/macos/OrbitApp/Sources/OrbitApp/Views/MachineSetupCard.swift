@@ -80,7 +80,7 @@ struct MachineDraftPage: View {
     var body: some View {
         Group {
             if let setup {
-                MachineDraftContent(setup: setup)
+                MachineDraftContent(setup: setup, addsWorkspace: addsWorkspace)
             } else {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -112,7 +112,8 @@ struct MachineDraftPage: View {
                     return
                 }
                 // More often while it is still connecting: its first heartbeat opens the folder field.
-                try? await Task.sleep(for: .seconds(MachineSetup.refreshSeconds(for: runner)))
+                // Not while the app cannot be seen (§4 R3): shown again, it reads once, at once.
+                await VisibilityGate.app.pause(MachineSetup.refreshSeconds(for: runner))
             }
         }
         .onChange(of: runner, initial: true) { _, _ in adopt() }
@@ -125,10 +126,14 @@ struct MachineDraftPage: View {
         }
     }
 
+    /// Opened as New workspace on a machine that has one (docs/mocks/new-workspace-form/02-apple-entry): the page
+    /// makes one more, so it neither moves on to the first nor calls itself a new session.
+    private var addsWorkspace: Bool { app.addsWorkspace(on: runnerID) }
+
     #if os(iOS)
     private var title: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(MachineSetupCopy.SETUP_PAGE_TITLE)
+            Text(addsWorkspace ? NewWorkspaceCopy.NEW_WORKSPACE : MachineSetupCopy.SETUP_PAGE_TITLE)
                 .font(.headline)
                 .lineLimit(1)
             if let runner {
@@ -148,7 +153,7 @@ struct MachineDraftPage: View {
     }
 
     private var movedOn: Bool {
-        guard app.agents?.firstWorkspace(onRunner: runnerID) != nil else { return false }
+        guard !addsWorkspace, app.agents?.firstWorkspace(onRunner: runnerID) != nil else { return false }
         return setup?.busy != true
     }
 
@@ -162,14 +167,16 @@ struct MachineDraftPage: View {
 private struct MachineDraftContent: View {
     @Environment(AppModel.self) private var app
     let setup: MachineSetupModel
+    /// New workspace on a machine that has one: the card's hint says a full path is taken too.
+    let addsWorkspace: Bool
 
     /// A new account's bare machine: the card greets it (web `machineWelcome`).
-    private var welcome: Bool { app.newAccount == true && setup.bare }
+    private var welcome: Bool { app.newAccount == true && setup.bare && !addsWorkspace }
 
     var body: some View {
         ScrollView {
-            MachineSetupCard(setup: setup, welcome: welcome)
-                .frame(maxWidth: 620)
+            MachineSetupCard(setup: setup, welcome: welcome, addsWorkspace: addsWorkspace)
+                .frame(maxWidth: ConversationCardWidth.max)
                 .frame(maxWidth: .infinity)
                 .padding(14)
         }
@@ -193,6 +200,9 @@ private struct MachineSetupCard: View {
     /// A new account's first machine (docs/mocks/new-user-onboarding): the welcome card's head in place
     /// of "New workspace on <machine>".
     var welcome = false
+    /// New workspace on a machine that has one (docs/mocks/new-workspace-form/02-apple-entry, owner A): the folder
+    /// hint says a full path is taken too, and on iOS, whose title bar names the machine, the card draws no head.
+    var addsWorkspace = false
 
     /// What the machine said about where the folder would go, for the path it was asked.
     @State private var answer: Answer?
@@ -219,10 +229,22 @@ private struct MachineSetupCard: View {
     private var root: String { MachineSetup.setupFolderRoot(runner, managedState: managedState) }
     private var folder: String { setup.folder }
 
-    /// The folder is asked about where it would go, as it is typed: a folder, or a file, may be there already.
+    /// A full path is asked about as typed; a name where it would go, as it is typed: a folder, or a file, may be
+    /// there already (docs/mocks/new-workspace-form, decision 2 A).
     private var question: String? {
-        guard managedState == nil, !disabled, MachineSetup.isValidNewFolder(folder) else { return nil }
-        return MachineSetup.newFolderPath(root: root, name: folder)
+        MachineSetup.folderQuestion(folder: folder, root: root, canAsk: managedState == nil && !disabled)
+    }
+
+    /// The folder field holds a whole path: no home prefix before it.
+    private var fullPath: Bool { MachineSetup.isFolderPath(folder) }
+
+    /// The card's own head: not on iOS's New workspace page, whose title bar names the machine.
+    private var headless: Bool {
+        #if os(iOS)
+        addsWorkspace
+        #else
+        false
+        #endif
     }
 
     /// The answer to the question standing now; one to an earlier name is no answer to this one.
@@ -240,14 +262,13 @@ private struct MachineSetupCard: View {
     private var github: GithubIntegration? { app.github?.available == true ? app.github : nil }
     /// The folder field is the repository picker.
     private var fromGithub: Bool { github != nil && setup.githubOpen }
-    /// The folder the Name follows: the typed one, or the picked repository's.
-    private var followed: String { fromGithub ? setup.followed : folder }
+    /// The folder the Name follows: the typed one (a full path's last segment), or the picked repository's.
+    private var followed: String { fromGithub ? setup.followed : MachineSetup.followedName(folder: folder) }
 
     private var candidate: PickedFolder? {
         if fromGithub { return setup.repository }
-        if managedState != nil { return MachineSetup.uncheckedFolder(name: folder, root: root) }
-        guard MachineSetup.isValidNewFolder(folder), let found else { return nil }
-        return MachineSetup.newFolderPick(found, name: folder, root: root, machine: machine)
+        // A managed runner that isn't up takes a name unchecked, but a full path only once it is checked.
+        return MachineSetup.typedPick(folder: folder, found: found, root: root, machine: machine, managedState: managedState)
     }
 
     private var canCreate: Bool {
@@ -265,9 +286,9 @@ private struct MachineSetupCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if welcome { WelcomeHead() } else { head }
+            if welcome { WelcomeHead() } else if !headless { head }
             if let notice { noticeLine(notice) }
-            Divider().padding(.top, 12)
+            if !headless { Divider().padding(.top, 12) }
             Group {
                 if let github, setup.githubOpen { githubField(github) } else { folderField }
             }
@@ -357,11 +378,13 @@ private struct MachineSetupCard: View {
         VStack(alignment: .leading, spacing: 3) {
             Text(MachineSetupCopy.SETUP_FOLDER).fontWeight(.semibold)
             HStack(spacing: 4) {
-                Text(MachineSetup.newFolderPath(root: root, name: ""))
-                    .font(.orbitMono)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.head)
+                if !fullPath {
+                    Text(MachineSetup.newFolderPath(root: root, name: ""))
+                        .font(.orbitMono)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                }
                 TextField(MachineSetupCopy.SETUP_NEW_FOLDER_NAME,
                           text: Binding(get: { setup.typed }, set: { setup.typed = $0 }))
                     .textFieldStyle(.roundedBorder)
@@ -382,7 +405,8 @@ private struct MachineSetupCard: View {
     /// would go; or, after a refused Create workspace, why.
     @ViewBuilder private var folderLine: some View {
         switch MachineSetup.folderLine(folder: folder, createError: setup.createError, found: found,
-                                       unanswered: current != nil && found == nil, machine: machine, managedState: managedState) {
+                                       unanswered: current != nil && found == nil, machine: machine, managedState: managedState,
+                                       pathHintRoot: addsWorkspace ? root : nil) {
         case .meta(let text):
             meta(text)
         case .verdict(let text, let tone):

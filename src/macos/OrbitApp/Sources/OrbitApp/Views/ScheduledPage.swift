@@ -141,6 +141,8 @@ struct ScheduleRowModel: Identifiable {
     let circle: ScheduleDisplay.CircleView
     let title: String
     let line: String
+    /// The planned end, on its own line so the row's line never cuts it off.
+    var end: String? = nil
     let repeats: Bool
     let time: String
     let draft: Bool
@@ -161,7 +163,20 @@ enum ScheduleTimelineRows {
     static func rows(_ group: ScheduleDisplay.TimelineGroup, scheduled: ScheduledModel, now: Date,
                      wide: Bool, openTask: @escaping (String) -> Void = { _ in }) -> [ScheduleRowModel] {
         let runs = scheduled.timelineRuns
-        return group.items.map { item -> ScheduleRowModel in
+        return ScheduleDisplay.collapseMissedItems(group.items).map { entry -> ScheduleRowModel in
+            guard case .item(let item) = entry else {
+                // A streak of missed slots is one faint row: "4 slots missed, 01:00–04:00".
+                guard case .missed(let s, let missedRuns, let at) = entry, let first = missedRuns.first else { fatalError() }
+                return ScheduleRowModel(
+                    id: "\(group.id)-missed-\(first.id)",
+                    circle: ScheduleDisplay.runCircle(state: first.state, newFinding: false),
+                    title: s.title,
+                    line: ScheduleDisplay.missedText(missedRuns, timezone: scheduled.timezone),
+                    repeats: false, time: scheduleClock(at), draft: false, paused: wide,
+                    scheduleID: wide ? nil : s.id,
+                    kind: .run(s, first),
+                    open: { Self.select(s.id, scheduled) })
+            }
             switch item {
             case .task(let t):
                 return ScheduleRowModel(
@@ -257,6 +272,7 @@ enum ScheduleTimelineRows {
                                                        accessLevel: s.accessLevel, state: s.state,
                                                        heldReason: s.heldReason, pausedAt: pausedAt,
                                                        timezone: scheduled.timezone),
+                    end: ScheduleDisplay.endText(s, now: now, timezone: scheduled.timezone),
                     repeats: ScheduleDisplay.ruleRepeats(s.rule), time: time, draft: false, paused: inPaused,
                     scheduleID: s.id,
                     kind: .schedule(s),
@@ -268,6 +284,7 @@ enum ScheduleTimelineRows {
     @MainActor
     private static func select(_ id: String, _ scheduled: ScheduledModel) {
         scheduled.draftPanel = nil
+        scheduled.changeDraft = nil
         scheduled.inspectedID = id
     }
 
@@ -286,6 +303,9 @@ struct ScheduledPage: View {
     /// The schedule a row's swipe or menu asked to delete, and the run it asked to stop, while the question is up.
     @State private var deleting: ScheduleView?
     @State private var stopping: ScheduleRunView?
+    /// The schedule a row's menu asked to rename, and the alert's text.
+    @State private var renaming: ScheduleView?
+    @State private var renameDraft = ""
     /// The round swipe buttons need the compact list (as the session list's do); a regular-width one keeps the system's.
     @Environment(\.horizontalSizeClass) private var hSize
     @State private var rowSwipe = RowSwipeState()
@@ -321,6 +341,10 @@ struct ScheduledPage: View {
                             .multilineTextAlignment(.leading)
                     }
                     .buttonStyle(.plain)
+                case .waiting(let item):
+                    ScheduleWaitingCardView(item: item).listRowSeparator(.hidden)
+                case .condition(let item):
+                    ConditionWaitingCardView(item: item).listRowSeparator(.hidden)
                 case .group(let group):
                     groupHeader(group).listRowSeparator(.hidden)
                 case .item(let item):
@@ -357,6 +381,7 @@ struct ScheduledPage: View {
         } message: { _ in
             Text(SC.StopConfirm.body)
         }
+        .scheduleRenameAlert($renaming, draft: $renameDraft)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -387,6 +412,10 @@ struct ScheduledPage: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
+        // The draft change conversation (board 03-change ② 3): a page of its own, back to Scheduled.
+        .fullScreenCover(item: $scheduled.changeDraft) { draft in
+            ScheduleChangePage(scheduleID: draft.scheduleID)
+        }
     }
 
     /// The page's rows, in order: the head, then the empty page's lead and examples, or each group's header and
@@ -395,6 +424,8 @@ struct ScheduledPage: View {
         case header
         case lead
         case example(String)
+        case waiting(ScheduleWaitingItem)
+        case condition(ConditionWaitingItem)
         case group(ScheduleDisplay.TimelineGroup)
         case item(ScheduleRowModel)
         case quickAdd
@@ -405,6 +436,8 @@ struct ScheduledPage: View {
             case .header: return "header"
             case .lead: return "lead"
             case .example(let text): return "example-\(text)"
+            case .waiting(let item): return "waiting-\(item.id)"
+            case .condition(let item): return "condition-\(item.id)"
             case .group(let group): return "group-\(group.id)"
             case .item(let row): return row.id
             case .quickAdd: return "quick-add"
@@ -416,6 +449,12 @@ struct ScheduledPage: View {
     private func pageRows(_ scheduled: ScheduledModel, groups: [ScheduleDisplay.TimelineGroup],
                           now: Date) -> [PageRow] {
         var out: [PageRow] = [.header]
+        // A condition's items (the can't-read card and the 30-day question, condition-triggers board ⑥ ①) and a
+        // scheduled task's (failed, held, a run's approval, a run asking for more), whole, under the head: each answers
+        // at its own door. There is no Waiting on you sheet (docs/mocks/waiting-on-you-removal; the owner, 2026-11-16);
+        // the run's session draws its own.
+        out += (model.ownerRequests?.conditionItems ?? []).map(PageRow.condition)
+        out += (model.ownerRequests?.scheduleItems ?? []).map(PageRow.waiting)
         let empty = scheduled.loaded && scheduled.shownSchedules.isEmpty && scheduled.drafts.isEmpty
             && scheduled.shownWaitingTasks.isEmpty && scheduled.workspaceFilter == nil
         if empty {
@@ -524,6 +563,10 @@ struct ScheduledPage: View {
                     .font(.orbitLabel)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    // The planned end on its own line: "until 23:00 today · 3 runs left" is never the part cut off.
+                    if let end = row.end {
+                        Text(end).font(.orbitLabel).foregroundStyle(.secondary).accessibilityIdentifier("schedule-row-end")
+                    }
                 }
             }
             .padding(.vertical, 4)
@@ -540,6 +583,11 @@ struct ScheduledPage: View {
     @ViewBuilder
     private func swipeable<V: View>(_ content: V, _ row: ScheduleRowModel, _ scheduled: ScheduledModel) -> some View {
         let actions = ScheduleRowActions(row.kind, model: model, scheduled: scheduled,
+                                         askRename: { s in
+                                             // Seeded in the action that presents the alert (SessionRenameAlert).
+                                             renameDraft = s.title
+                                             renaming = s
+                                         },
                                          askDelete: { deleting = $0 }, askStop: { stopping = $0 },
                                          openTask: { id in model.route(to: .task(id)) })
         if #available(iOS 26.0, *), hSize == .compact, !(actions.leading.isEmpty && actions.trailing.isEmpty) {
@@ -612,6 +660,46 @@ struct ScheduledPage: View {
 
 #endif
 
+#if os(iOS)
+/// Rename… on the phone (§8.4, board schedule-rename 01-board-2): the system alert with one field, the current name
+/// in it and selected, Save off while it is empty or unchanged. As `SessionRenameAlert`, the draft is the caller's,
+/// seeded in the action that presents the alert.
+private struct ScheduleRenameAlert: ViewModifier {
+    @Environment(AppModel.self) private var model
+    @Binding var renaming: ScheduleView?
+    @Binding var draft: String
+
+    func body(content: Content) -> some View {
+        content
+            .alert(SC.RenameAlert.title,
+                   isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } }),
+                   presenting: renaming) { schedule in
+                TextField(SC.History.fields["title"] ?? "", text: $draft)
+                Button(SC.RenameAlert.cancel, role: .cancel) {}
+                Button(SC.RenameAlert.save) {
+                    guard let title = ScheduleDisplay.renameTitle(draft, from: schedule.title) else { return }
+                    Task { @MainActor in await model.scheduled?.rename(schedule.id, title: title) }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(ScheduleDisplay.renameTitle(draft, from: schedule.title) == nil)
+            } message: { _ in
+                Text(SC.RenameAlert.body)
+            }
+            // SwiftUI has no way to select an alert field's text; UIKit says when it starts editing.
+            .onReceive(NotificationCenter.default.publisher(for: UITextField.textDidBeginEditingNotification)) { note in
+                guard renaming != nil, let field = note.object as? UITextField else { return }
+                DispatchQueue.main.async { field.selectAll(nil) }
+            }
+    }
+}
+
+private extension View {
+    func scheduleRenameAlert(_ renaming: Binding<ScheduleView?>, draft: Binding<String>) -> some View {
+        modifier(ScheduleRenameAlert(renaming: renaming, draft: draft))
+    }
+}
+#endif
+
 // MARK: - The detail panel (board 01 ③, 02 ③)
 
 /// A schedule's detail, from the bottom: what it does and was asked, notes for the next run, this month's use and
@@ -621,6 +709,10 @@ struct ScheduleDetailPanel: View {
     let scheduleID: String
     @State private var confirmingDelete = false
     @State private var busy = false
+    #if os(iOS)
+    @State private var renaming: ScheduleView?
+    @State private var renameDraft = ""
+    #endif
 
     var body: some View {
         #if os(iOS)
@@ -638,7 +730,17 @@ struct ScheduleDetailPanel: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        Button(SC.Actions.delete, role: .destructive) { confirmingDelete = true }
+                        Button {
+                            guard let s = model.scheduled?.schedule(scheduleID) else { return }
+                            renameDraft = s.title
+                            renaming = s
+                        } label: {
+                            Label(SC.Actions.rename, systemImage: "pencil")
+                        }
+                        Divider()
+                        Button(role: .destructive) { confirmingDelete = true } label: {
+                            Label(SC.Actions.delete, systemImage: "trash")
+                        }
                     } label: {
                         Image(systemName: "ellipsis")
                     }
@@ -648,6 +750,7 @@ struct ScheduleDetailPanel: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .modifier(ScheduleDeleteQuestion(scheduleID: scheduleID, asking: $confirmingDelete))
+        .scheduleRenameAlert($renaming, draft: $renameDraft)
         #else
         // The Mac's right-hand panel (web board 01 ②): no bar of its own — the doors carry ⋯ beside Change…, as
         // the web's inspector does, and the panel closes when another row or nothing is chosen.
@@ -710,12 +813,36 @@ extension ScheduleDetailPanel {
         return ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 4) {
+                    #if os(macOS)
+                    if scheduled.renamingID.map(PublicID.storageKey) == PublicID.storageKey(s.id) {
+                        ScheduleTitleField(
+                            title: s.title,
+                            save: { title in Task { @MainActor in await scheduled.rename(s.id, title: title) } },
+                            done: {
+                                // Another row's Rename… may already have taken it.
+                                if scheduled.renamingID.map(PublicID.storageKey) == PublicID.storageKey(s.id) {
+                                    scheduled.renamingID = nil
+                                }
+                            })
+                    } else {
+                        Text(s.title).font(.title2.weight(.bold))
+                            .onTapGesture { scheduled.renamingID = s.id }
+                            .help(SC.Actions.rename)
+                    }
+                    #else
                     Text(s.title).font(.title2.weight(.bold))
+                    #endif
                     HStack(spacing: 4) {
                         if ScheduleDisplay.ruleRepeats(s.rule) { Text("↻") }
                         Text(meta)
                     }
                     .font(.orbitLabel).foregroundStyle(.secondary)
+                }
+                if let end = ScheduleDisplay.endText(s, now: now, timezone: zone) {
+                    block {
+                        Text(SC.End.endLabel + SC.separator + end).font(.orbitLabel).foregroundStyle(.secondary)
+                            .accessibilityIdentifier("schedule-end-line")
+                    }
                 }
                 if conditionID != nil {
                     // A WHEN rule (condition-triggers board ⑥ ② ③): how far the reading is from firing, and how it
@@ -751,8 +878,10 @@ extension ScheduleDetailPanel {
                         model.openChangeConversation(for: s)
                     }
                     #if os(macOS)
-                    // The web inspector's ⋯ beside Change…: Delete, which asks first.
+                    // The web inspector's ⋯ beside Change…: Rename…, and Delete, which asks first.
                     Menu {
+                        Button(SC.Actions.rename) { scheduled.renamingID = s.id }
+                        Divider()
                         Button(SC.Actions.delete, role: .destructive) { confirmingDelete = true }
                     } label: {
                         Image(systemName: "ellipsis")
@@ -843,8 +972,11 @@ extension ScheduleDetailPanel {
         case record(ScheduleChangeRecord)
         /// A condition's line (board ⑥ ③): Fired, Ready again; a FIRED's run is drawn by its line, not twice.
         case event(ConditionEventView, ConditionDisplay.HistoryLine, index: Int)
+        /// Consecutive MISSED slots, newest first, as one line (design §9.2).
+        case missed([ScheduleRunView])
         var id: String {
             switch self {
+            case .missed(let runs): return "missed-\(runs[0].id)"
             case .run(let r): return "run-\(r.id)"
             case .record(let r): return "rev-\(r.revision)"
             case .event(let e, _, let index): return "event-\(index)-\(e.at)"
@@ -852,6 +984,7 @@ extension ScheduleDetailPanel {
         }
         var at: String {
             switch self {
+            case .missed(let runs): return runs[0].plannedAt
             case .run(let r): return r.startedAt ?? r.plannedAt
             case .record(let r): return r.createdAt
             case .event(let e, _, _): return e.at
@@ -866,8 +999,17 @@ extension ScheduleDetailPanel {
         }
         let firedRuns = Set((condition?.events ?? []).compactMap { $0.runId.map(PublicID.storageKey) })
         let runs = (detail?.recentRuns ?? []).filter { !firedRuns.contains(PublicID.storageKey($0.id)) }
-        let entries = (runs.map(HistoryEntry.run) + events + (detail?.history ?? []).map(HistoryEntry.record))
+        let sorted = (runs.map(HistoryEntry.run) + events + (detail?.history ?? []).map(HistoryEntry.record))
             .sorted { (ScheduleDisplay.parse($0.at) ?? .distantPast) > (ScheduleDisplay.parse($1.at) ?? .distantPast) }
+        // Consecutive missed slots, with nothing else between them, read as one line.
+        let entries = sorted.reduce(into: [HistoryEntry]()) { out, entry in
+            guard case .run(let run) = entry, run.state == "MISSED" else { return out.append(entry) }
+            switch out.last {
+            case .missed(let streak)?: out[out.count - 1] = .missed(streak + [run])
+            case .run(let last)? where last.state == "MISSED": out[out.count - 1] = .missed([last, run])
+            default: out.append(entry)
+            }
+        }
         return section(SC.Inspector.history) {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
@@ -885,6 +1027,12 @@ extension ScheduleDetailPanel {
                             detail: ScheduleDetailResponse?, now: Date, zone: String) -> some View {
         let when = ScheduleDisplay.parse(entry.at).map { ScheduleDisplay.whenText($0, now: now, timezone: zone) } ?? ""
         switch entry {
+        case .missed(let runs):
+            VStack(alignment: .leading, spacing: 2) {
+                Text(when).font(.orbitSubtext)
+                Text(ScheduleDisplay.missedText(runs, timezone: zone)).font(.orbitLabel).foregroundStyle(.secondary)
+            }
+            .accessibilityIdentifier("schedule-history-missed")
         case .event(let event, let line, _):
             let run = line.runId.flatMap { id in
                 detail?.recentRuns.first { PublicID.storageKey($0.id) == PublicID.storageKey(id) }
@@ -950,7 +1098,23 @@ extension ScheduleDetailPanel {
             let who = ScheduleDisplay.historyWho(changedBy: record.changedBy, before: record.before, after: record.after)
             HStack(alignment: .center, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(ScheduleDisplay.recordText(record)).font(.orbitSubtext)
+                    Text(ScheduleDisplay.renamedText(record) ?? ScheduleDisplay.recordText(record)).font(.orbitSubtext)
+                    if let asked = record.askedText {
+                        // Asked in the schedule's change conversation (§8.2): the person's words, and the way back.
+                        HStack(spacing: 0) {
+                            Text("“\(asked)”")
+                            if let sessionID = record.sessionId {
+                                Text(SC.separator)
+                                Button(SC.ChangeConversation.conversation) {
+                                    model.route(to: .session(sessionID))
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(Color.accentColor)
+                            }
+                        }
+                        .font(.orbitLabel).foregroundStyle(.secondary)
+                        .accessibilityIdentifier("schedule-history-asked")
+                    }
                     Text(when).font(.orbitLabel).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 6)
@@ -1017,7 +1181,7 @@ struct ScheduleDraftPanel: View {
             // The agent drafts the card in its conversation; read until it is there.
             while !Task.isCancelled, scheduled?.draft(forSession: panel.sessionID) == nil {
                 await scheduled?.load()
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                await VisibilityGate.app.pause(3)   // not while the app cannot be seen (§4 R3)
             }
         }
         .accessibilityIdentifier("schedule-draft-panel")

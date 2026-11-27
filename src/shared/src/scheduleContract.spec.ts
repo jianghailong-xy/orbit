@@ -7,6 +7,7 @@ import {
   SCHEDULE_CIRCLES,
   SCHEDULE_CONTROL_REFUSALS,
   SCHEDULE_COPY,
+  SCHEDULE_RUN_STATUS_COPY,
   SCHEDULE_ENDED_REASONS,
   SCHEDULE_ENVELOPE_PARTS,
   SCHEDULE_FAILURE_REASONS,
@@ -25,6 +26,8 @@ import {
   scheduleChangeLineText,
   scheduleCostsParts,
   scheduleCreateNotice,
+  scheduleEndText,
+  scheduleMissedText,
   scheduleFailedPush,
   scheduleGoalReachedPushTitle,
   scheduleEnvelopeNote,
@@ -67,6 +70,10 @@ function strings(value: unknown): string[] {
 describe('schedule contract', () => {
   it('SCHEDULE_COPY is the contract copy, byte for byte', () => {
     expect(CONTRACT.copy).toEqual(JSON.parse(JSON.stringify(SCHEDULE_COPY)));
+  });
+
+  it('SCHEDULE_RUN_STATUS_COPY is the contract runStatusCopy, byte for byte', () => {
+    expect(CONTRACT.runStatusCopy).toEqual(JSON.parse(JSON.stringify(SCHEDULE_RUN_STATUS_COPY)));
   });
 
   it('every line is English', () => {
@@ -132,7 +139,7 @@ describe('schedule contract', () => {
     const attention = read('src/apiserver/src/schedules/schedule-attention.ts');
     for (const fn of [
       'scheduleApprovalWaiting', 'scheduleFailedPush', 'scheduleFailedWaiting', 'scheduleHeldClause', 'scheduleHeldWaiting',
-      'scheduleWidenWaitingText', 'scheduleEnvelopeTitle', 'scheduleGoalReachedPushTitle',
+      'scheduleWidenWaitingText', 'scheduleEnvelopeTitle', 'scheduleGoalReachedPushTitle', 'scheduleStoppedAsPlannedText',
     ]) {
       expect(attention, fn).toContain(`  ${fn},`);
     }
@@ -253,5 +260,27 @@ describe('board phrases', () => {
     ]) {
       expect(all.has(s), s).toBe(true);
     }
+  });
+  it('words the planned end, the collapsed missed row and a maxRuns revision from the contract copy', () => {
+    const now = new Date('2025-11-14T04:30:00.000Z');
+    const end = (endAt: string | null, maxRuns: number | null, runsLeft: number | null) =>
+      scheduleEndText({ endAt, maxRuns, runsLeft }, now, 'Asia/Shanghai');
+    expect(end('2025-11-14T10:00:00.000Z', null, null)).toBe('until 18:00 today');
+    expect(end('2025-11-15T10:00:00.000Z', null, null)).toBe('until 18:00 tomorrow');
+    expect(end('2025-11-25T10:00:00.000Z', null, null)).toBe('until Nov 25');
+    expect(end(null, 6, 3)).toBe('3 runs left');
+    expect(end(null, 6, 1)).toBe('1 run left');
+    expect(end(null, null, null)).toBeNull();
+    expect(scheduleMissedText(
+      [{ plannedAt: '2025-11-13T17:00:00.000Z' }, { plannedAt: '2025-11-14T00:30:00.000Z' }], 'Asia/Shanghai',
+    )).toBe('2 slots missed, 01:00–08:30');
+    expect(scheduleMissedText(
+      [{ plannedAt: '2025-11-19T22:00:00.000Z' }, { plannedAt: '2025-11-20T06:30:00.000Z' }], 'UTC',
+    )).toBe('2 slots missed, Nov 19, 22:00–Nov 20, 06:30');
+    const record = (before: unknown, after: unknown) => ({
+      before: { maxRuns: before }, after: { maxRuns: after }, revision: 3,
+    } as unknown as ScheduleChangeRecord);
+    expect(scheduleRecordText(record(4, 6))).toContain('Runs 4 → 6');
+    expect(scheduleRecordText(record(4, null))).toContain('Runs 4 → no end');
   });
 });
