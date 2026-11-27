@@ -20,16 +20,18 @@ import UIKit
 
 /// The Workspace identity glyph shared by the iPhone drawer, the iPad sidebar and the Mac sidebar. Online/unknown is the
 /// calm native folder and stays decorative; an explicitly-offline Runner adds a small muted
-/// `wifi.slash` corner badge and exposes that state to VoiceOver.
+/// `wifi.slash` corner badge and exposes that state to VoiceOver. A workspace on Orbit Cloud wears its cloud in the
+/// folder's place: hosted, apart from your own machines' tools and keys (board docs/mocks/workspace-machine-icon, B).
 struct WorkspaceFolderIcon: View {
     let selected: Bool
     let offline: Bool
+    var cloud: Bool = false
     /// The account's managed runner, when this workspace runs on it (D4): Asleep is a moon, never the
     /// heartbeat's "Runner offline" slash.
     var managed: ManagedRunnerRow? = nil
 
     var body: some View {
-        Image(systemName: "folder")
+        Image(systemName: cloud ? "cloud" : "folder")
             .frame(width: 24)
             .foregroundStyle(selected ? Color.accentColor : .primary)
             .overlay(alignment: .bottomTrailing) {
@@ -98,7 +100,9 @@ struct WorkspaceNavigationRow: View {
         let status = WorkspaceNavigationStatusLogic.resolve(
             waiting: waiting, running: running, jobs: jobs, runnerOffline: offlineNow)
         HStack(spacing: 12) {
-            WorkspaceFolderIcon(selected: selected, offline: offlineNow, managed: managedRow)
+            WorkspaceFolderIcon(selected: selected, offline: offlineNow,
+                                cloud: RunnerPageFormat.isManaged(agent.runnerId, managedRunnerID: app.managedRunner?.status?.runnerId),
+                                managed: managedRow)
             HStack(spacing: 0) {
                 workspaceName
                 disabledBadge
