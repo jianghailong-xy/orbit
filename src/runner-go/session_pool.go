@@ -83,6 +83,10 @@ type liveSession struct {
 
 	active        bool // owns a turn permit
 	permitPending bool // server claim is installed but still waiting for local capacity
+	// slotWaitNotify, set by the session's supervisor (setSlotWaitNotifier), is told when waitActive first finds
+	// this session's claim waiting for a slot — with the slots background jobs hold of the rest — and again
+	// when the slot is granted, so the session can say why its claimed turn has not started.
+	slotWaitNotify func(waiting bool, heldByJobs int)
 	// Incremented for every server claim, including a claim that races the tail
 	// of the prior turn while active is still true locally. A late ack may release
 	// only the exact permit generation under which its turn ran.
@@ -406,7 +410,9 @@ func (p *sessionPool) admissionIdleCapacity() int {
 // admissionOccupancy reports ordinary idle capacity and sessions that occupy a slot only
 // through background jobs of their own — no turn permit, no reclaim under way — which
 // the heartbeat reports as backgroundJobSessionIds, so the control plane can show them
-// as running (sorted). A draining runner offers no capacity, and its job holders still
+// as running (sorted). Every holder is named, but together they take at most every slot
+// but one (backgroundSlotsLocked), so a runner whose jobs alone hold it still offers the
+// slot that is a turn's. A draining runner offers no capacity, and its job holders still
 // hold their slots.
 func (p *sessionPool) admissionOccupancy() (int, []string) {
 	p.mu.Lock()
@@ -434,12 +440,26 @@ func (p *sessionPool) admissionOccupancyLocked() (int, []string) {
 	var backgroundOnly []string
 	for sessionID := range p.backgroundJobCountsLocked() {
 		if !occupied[sessionID] {
-			occupied[sessionID] = true
 			backgroundOnly = append(backgroundOnly, sessionID)
 		}
 	}
 	sort.Strings(backgroundOnly)
-	return len(occupied), backgroundOnly
+	return len(occupied) + p.backgroundSlotsLocked(len(backgroundOnly)), backgroundOnly
+}
+
+// backgroundSlotsLocked is how many slots sessions held by background jobs alone take of the
+// admission count: one each, up to every slot but one. The last slot is always a turn's.
+//
+// A holder runs no turn and holds no permit, and nothing frees its slot but the job ending:
+// the job is the runner's own child, which no engine eviction ends (oldestWarmLocked), and
+// jobs run for hours. Counted in full, maxConcurrent of them left a claimed turn waiting
+// for a permit with nothing that would ever grant it (runner cdvn0, 2026-11-27). Capped, a
+// waiting turn waits only for another turn to end, and turns end. The holders still count
+// against the rest of the machine — a host whose builds run where its turns would is the
+// host that runs out of memory — and turns in flight are still capped at maxConcurrent,
+// since every turn takes a slot of its own.
+func (p *sessionPool) backgroundSlotsLocked(holders int) int {
+	return min(holders, max(0, p.max-1))
 }
 
 // canClaim leaves ordinary admission at max, while letting the server offer a
@@ -849,18 +869,33 @@ func (p *sessionPool) activeCountLocked() int {
 }
 
 // canAdmitTurnLocked counts actual permits and background holders other than
-// this session. A pending claim or reclaim has yet to acquire its own permit.
+// this session, the holders up to every slot but one (backgroundSlotsLocked). A
+// pending claim or reclaim has yet to acquire its own permit.
 func (p *sessionPool) canAdmitTurnLocked(job *ClaimedSession) bool {
-	occupied := p.activeCountLocked()
-	for id := range p.backgroundJobCountsLocked() {
-		if s := p.sessions[id]; id != job.SessionID && (s == nil || !s.active) {
-			occupied++
-		}
-	}
+	occupied := p.activeCountLocked() + p.otherBackgroundSlotsLocked(job)
 	if job.OverCapacity {
 		return occupied-p.max < p.burst
 	}
 	return occupied < p.max
+}
+
+// otherBackgroundSlotsLocked is the slots that sessions other than job's, with no permit, hold through
+// background jobs alone: what canAdmitTurnLocked counts beside the permits.
+func (p *sessionPool) otherBackgroundSlotsLocked(job *ClaimedSession) int {
+	holders := 0
+	for id := range p.backgroundJobCountsLocked() {
+		if s := p.sessions[id]; id != job.SessionID && (s == nil || !s.active) {
+			holders++
+		}
+	}
+	return p.backgroundSlotsLocked(holders)
+}
+
+// setSlotWaitNotifier installs the supervisor's slotWaitNotify for s.
+func (p *sessionPool) setSlotWaitNotifier(s *liveSession, notify func(waiting bool, heldByJobs int)) {
+	p.mu.Lock()
+	s.slotWaitNotify = notify
+	p.mu.Unlock()
 }
 
 // turnsInFlightLocked counts the sessions a turn is running in right now: every permit holder — a
@@ -1694,7 +1729,12 @@ func (p *sessionPool) expireWarm(s *liveSession, idleGeneration uint64) {
 //
 // Once the pool is closed for an update, a permit no longer starts a turn: the
 // wait goes on until the stop that follows, and ends on shutdown like any other.
+//
+// A claim that finds no slot is announced through the session's slotWaitNotify once, and the grant that
+// ends its wait once more. Not while the pool drains or is closed for an update: that wait is the
+// update's, and the session's row says so (runner_updating), not that a slot is full.
 func (p *sessionPool) waitActive(s *liveSession, sessionCtx, shutdown context.Context) bool {
+	announced := false
 	for {
 		p.mu.Lock()
 		if p.sessions[s.id] != s || s.detaching {
@@ -1706,9 +1746,19 @@ func (p *sessionPool) waitActive(s *liveSession, sessionCtx, shutdown context.Co
 			s.permitPending = false
 			cancels := p.evictWarmExcessLocked()
 			p.signalLocked(s)
+			notify := s.slotWaitNotify
 			p.mu.Unlock()
 			runCancels(cancels)
+			if announced && notify != nil {
+				notify(false, 0)
+			}
+			announced = false
 			continue
+		}
+		var announce func(bool, int)
+		heldByJobs := 0
+		if s.permitPending && !announced && !p.closedForUpdate && !p.drainingForUpdate && s.slotWaitNotify != nil {
+			announce, heldByJobs, announced = s.slotWaitNotify, p.otherBackgroundSlotsLocked(s.job), true
 		}
 		ready := s.active && !s.evictRequested && !p.closedForUpdate && !s.heldForUpdate
 		if ready && p.accountSwapHoldsLocked(s) {
@@ -1721,7 +1771,12 @@ func (p *sessionPool) waitActive(s *liveSession, sessionCtx, shutdown context.Co
 			if s.completingTurn {
 				s.startedWhileCompleting = true
 			}
+			notify := s.slotWaitNotify
 			p.mu.Unlock()
+			// A later claim can give the permit outright (activatePrepared) rather than through the grant above.
+			if announced && notify != nil {
+				notify(false, 0)
+			}
 			return true
 		}
 		wake := s.wake
@@ -1729,6 +1784,9 @@ func (p *sessionPool) waitActive(s *liveSession, sessionCtx, shutdown context.Co
 			wake = p.changed
 		}
 		p.mu.Unlock()
+		if announce != nil {
+			announce(true, heldByJobs)
+		}
 		select {
 		case <-wake:
 		case <-sessionCtx.Done():

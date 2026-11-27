@@ -1109,6 +1109,15 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		}
 	}
 	emit := emitOn(emissionGate)
+	// A claim this runner has no slot for yet says so, rather than reading as an engine starting: the control plane
+	// stores the phase (Session.enginePhase), and the clients name the wait and the slots background jobs hold.
+	pool.setSlotWaitNotifier(live, func(waiting bool, heldByJobs int) {
+		if waiting {
+			emit(evSystem, map[string]interface{}{"subtype": "status", "enginePhase": enginePhaseWaitingForSlot, "slotHeldByJobs": heldByJobs})
+			return
+		}
+		emit(evSystem, map[string]interface{}{"subtype": "status", "enginePhase": enginePhaseNone})
+	})
 	// Where a file left out of a commit for holding a secret is told about (secretUnstagedWarning).
 	defer registerSecretWarnings(sessionID, emit, func() string {
 		curTurnMu.Lock()
