@@ -11,9 +11,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import io.orbitd.android.OrbitApplication
-import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.protocol.SessionAction
-import io.orbitd.android.core.protocol.SessionFacts
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.projects.failureReason
 import io.orbitd.android.toast.OrbitToasts
@@ -21,9 +19,7 @@ import io.orbitd.android.toast.ToastGlyph
 import io.orbitd.android.toast.ToastTone
 import io.orbitd.android.toast.toastTitle
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.*
 
 sealed interface DirectoryDialog {
     /** [project]: the project of a member whose project has no row in the list it was pressed in (owner 2026-11-07, option A): its
@@ -81,9 +77,11 @@ fun DirectoryActionDialog(dialog: DirectoryDialog, api: DirectoryApi, data: Dire
         is DirectoryDialog.ConfirmMove -> {
             val from = data.workspaces.firstOrNull { ObjectId.same(it.id, dialog.session.workspace) }?.name ?: "this workspace"
             DirectoryQuestion(MoveCopy.confirmTitle(dialog.target), MoveCopy.confirmMessage(dialog.targets, dialog.target, from),
-                MoveCopy.confirmAction(dialog.targets), destructive = false) {
+                MoveCopy.CONFIRM_ACTION, destructive = false) {
                 perform(describe = { "Couldn't move the session\n${failureReason(it)}" }) {
-                    moveToWorkspace(api, dialog.session.id, dialog.target.workspaceId, dialog.folder?.id, dialog.targets.needsEnd, phase = { phase = it })
+                    // One request: the server lets a session still held go first and waits for it (SessionsService.releaseForMove).
+                    phase = MoveCopy.MOVING
+                    api.move(dialog.session.id, dialog.target.workspaceId, dialog.folder?.id)
                     OrbitToasts.show("Moved to ${dialog.target.name}", toastTitle(dialog.session.title), dialog.session.id,
                         tone = ToastTone.INFO, glyph = ToastGlyph.FOLDER)
                 }
@@ -244,16 +242,13 @@ internal object MoveCopy {
     /** It names no number: every session filed in the folder goes back to the list. */
     const val DELETE_FOLDER_MESSAGE = "Its sessions move back to the list. No session is deleted."
     const val DELETE_FOLDER_CONFIRM = "Delete"
-    const val ENDING = "Ending the session…"
     const val MOVING = "Moving…"
-    const val END_TIMED_OUT = "The session hasn’t finished ending, so it wasn’t moved. Try again once it has ended."
-    fun endFailed(reason: String) = "The session couldn’t be ended, so it wasn’t moved: ${reason.trimEnd('.')}."
     fun confirmTitle(target: MoveTarget) = "Move to ${target.name}?"
-    /** End and Move for a session that has to be ended first. */
-    fun confirmAction(targets: MoveTargets) = if (targets.needsEnd) "End and Move" else "Move"
+    /** Move, also for a session still held: the server lets it go first, which is nothing for the person to decide. */
+    const val CONFIRM_ACTION = "Move"
 
     /** The conversation goes, the agent's memory of it is summarized when another runner rebuilds it, the changes stay on their
-     * branch in the old workspace — with how many aren't merged yet when some aren't — and an idle session ends first. An away
+     * branch in the old workspace — with how many aren't merged yet when some aren't. An away
      * runner, which iOS says on the workspace's page, is said here, where Android chooses the workspace. */
     fun confirmMessage(targets: MoveTargets, target: MoveTarget, from: String): String {
         val paragraphs = mutableListOf("The conversation moves with it. Your next message continues it in ${target.name}.")
@@ -267,43 +262,6 @@ internal object MoveCopy {
             } else "Changes made so far stay on branch $branch in $from."
         }
         if (!target.runnerOnline) paragraphs += "The runner is offline: your next message waits for it."
-        if (targets.needsEnd) paragraphs += "The session ends first."
         return paragraphs.joinToString("\n\n")
     }
-}
-
-/**
- * SessionWorkspaceMove.run: move the session to another workspace — ending it first for End and Move, since the move only takes an
- * ended session, and waiting until its run is over rather than for the end to be answered: ending is when its runner commits what it
- * left. A 409 on the end is a session already ending, so the wait goes on; a status read that fails is a missed look. A session
- * still not ended after [timeoutMs] is not moved.
- */
-internal suspend fun moveToWorkspace(api: DirectoryApi, id: String, workspace: String, folder: String?, endingFirst: Boolean,
-    phase: (String) -> Unit, timeoutMs: Long = 60_000, intervalMs: Long = 1_000) {
-    if (endingFirst) {
-        phase(MoveCopy.ENDING)
-        try { api.end(id) }
-        catch (e: CancellationException) { throw e }
-        catch (e: ApiError) { if (e.status != 409) throw DirectoryMoveFailure(MoveCopy.endFailed(directoryError(e))) }
-        catch (e: Exception) { throw DirectoryMoveFailure(MoveCopy.endFailed(directoryError(e))) }
-        var waited = 0L
-        while (!sessionEnded(api, id)) {
-            if (waited >= timeoutMs) throw DirectoryMoveFailure(MoveCopy.END_TIMED_OUT)
-            delay(intervalMs)
-            waited += intervalMs
-        }
-    }
-    phase(MoveCopy.MOVING)
-    api.move(id, workspace, folder)
-}
-
-/** Whether the session's run is over, as the server has it now; a failed read is not yet. `released` (no runner holds it) says so
- * when sent; an older server's SUCCEEDED, FAILED or CANCELLED status says it otherwise. */
-private suspend fun sessionEnded(api: DirectoryApi, id: String): Boolean = try {
-    runEnded(api.objectRead(listOf("sessions", id)))
-} catch (e: CancellationException) { throw e } catch (_: Exception) { false }
-
-internal fun runEnded(session: JsonObject): Boolean = SessionFacts.released(session) ?: run {
-    val status = (session["runStatus"] as? JsonPrimitive)?.contentOrNull ?: (session["status"] as? JsonPrimitive)?.contentOrNull
-    status in setOf("SUCCEEDED", "FAILED", "CANCELLED")
 }

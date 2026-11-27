@@ -542,7 +542,7 @@ final class ExceptionCardsWiringTests: XCTestCase {
         let body = try source(Self.whoFixesPath)
         XCTAssertTrue(body.contains("await console.replaceProjectCoordinator(inWorkspace: workspaceID)"))
         XCTAssertTrue(body.contains("CoordinatorChangeSheet(projectTitle: console.projectTitle,"))
-        XCTAssertTrue(body.contains("await model.moveSession(sessionID, to: target, folder: nil,"))
+        XCTAssertTrue(body.contains("await model.moveSession(sessionID, to: target, folder: nil)"))
         XCTAssertTrue(body.contains("model.openProjectFromConversation(projectID, overConsole: overConsole)"),
                       "Set up a coordinator… opens the project page")
         let console = try source(Self.consolePath)

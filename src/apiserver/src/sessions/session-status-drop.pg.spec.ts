@@ -39,6 +39,9 @@ const skip = !URL;
 const API = join(__dirname, '..', '..');
 const MIGRATIONS = join(API, 'prisma', 'migrations');
 const D4 = '1711_session_status_drop';
+// The first migration after D4, where "deploy D4" stops: this spec is about 1711 and its down script, and a later
+// migration (1720's owner_card_push, 1730's client_request_id) is no part of the catalog that script gives back.
+const AFTER_D4 = readdirSync(MIGRATIONS).filter((name) => /^\d{4}_/.test(name) && name > D4).sort()[0] ?? null;
 const MIGRATION_SQL = readFileSync(join(MIGRATIONS, D4, 'migration.sql'), 'utf8');
 const D3_DOWN = readFileSync(join(REPO_SCRIPTS, 'session-status-from-facts-down.sql'), 'utf8');
 
@@ -243,7 +246,7 @@ test('D4: session.status and run_status are dropped, and the down script gives t
   const rowsAtD3 = (await sql.query(`SELECT count(*)::int AS n, sum(xmin::text::bigint) AS x FROM "session"`)).rows[0];
 
   await t.test('(2) 1711 drops the column, the type and their objects, writing no row; every word stays', async () => {
-    const out = migrateDeploy(url, null);
+    const out = migrateDeploy(url, AFTER_D4);
     assert.match(out, new RegExp(D4));
     assert.deepEqual(await columnAndType(sql), { columns: 0, types: 0 });
     const left = (await sql.query(
@@ -306,7 +309,7 @@ test('D4: session.status and run_status are dropped, and the down script gives t
     await sql.query(`UPDATE "session" SET "status" = 'RUNNING', "turn_state" = 'IN_FLIGHT' WHERE "id" = $1`, [held]);
     // Forward again from D2: 1671 and then 1711 are applied once their records are gone.
     await sql.query(`DELETE FROM _prisma_migrations WHERE migration_name = '1671_session_status_from_facts'`);
-    const out = migrateDeploy(url, null);
+    const out = migrateDeploy(url, AFTER_D4);
     assert.match(out, /1671_session_status_from_facts/);
     assert.match(out, new RegExp(D4));
     assert.deepEqual(await columnAndType(sql), { columns: 0, types: 0 });
