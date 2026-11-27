@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -233,18 +234,38 @@ func TestTUIApprovalCard(t *testing.T) {
 	}
 }
 
+// TestTUIBashRulePrefixes walks the cases every client's Always allow is proved against, the six
+// commands recorded on 2026-11-18 among them, as @orbit/shared's bashRules.spec.ts does.
 func TestTUIBashRulePrefixes(t *testing.T) {
-	cases := map[string][]string{
-		"npm test -- login":            {"npm test"},
-		"cd src && git add -A; npm ci": {"cd src", "git add", "npm ci"},
-		"FOO=1 go test ./...":          {"go test"},
-		"ls -la | grep x":              {"ls", "grep x"},
-		"bash -lc 'rm -rf /'":          nil,
+	raw, err := os.ReadFile(filepath.Join("..", "shared", "src", "bash-rules.fixture.json"))
+	if err != nil {
+		t.Fatal(err)
 	}
-	for cmd, want := range cases {
-		if got := bashRulePrefixes(cmd); fmt.Sprint(got) != fmt.Sprint(want) {
-			t.Errorf("%q: got %q, want %q", cmd, got, want)
+	var fixture struct {
+		Cases []struct {
+			Name    string   `json:"name"`
+			Command string   `json:"command"`
+			Rules   []string `json:"rules"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	recorded := 0
+	for _, c := range fixture.Cases {
+		if strings.HasPrefix(c.Name, "recorded card ") {
+			recorded++
 		}
+		if got := bashRulePrefixes(c.Command); fmt.Sprint(got) != fmt.Sprint(c.Rules) {
+			t.Errorf("%s: got %q, want %q", c.Name, got, c.Rules)
+		}
+	}
+	if recorded != 6 {
+		t.Fatalf("the fixture holds %d recorded cards, want 6", recorded)
+	}
+	a := tuiApproval{ToolName: "Bash", Input: map[string]any{"command": "cd src && git add -A; npm ci; cp a b"}}
+	if got := rememberLabel(a.rememberRules()); got != "cd, git add, npm ci" {
+		t.Fatalf("[a] remembers %q", got)
 	}
 }
 
