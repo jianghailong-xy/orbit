@@ -1327,9 +1327,12 @@ type ParkedWork = { text: string; kind: OutlivingWork; active: boolean };
 // The words for a wait that will resume this parked session: the caller's own for the watches it
 // holds (`watching`), else the server's word when it says something else will (activity WAITING — a
 // scheduled wake-up, an armed auto-retry, a watch the caller did not hand in). Null when nothing
-// will, which is the only parked session that is really waiting for your reply.
+// will, which is the only parked session that is really waiting for your reply. Null for a session the server calls
+// IDLE: a wake to come is no reason to say anything special about it (the owner, 2026-11-27).
 const resumeWords = (s: any, watching?: string | null): string | null =>
-  watching ?? (sessionActivityOf(s) === 'WAITING' ? SESSION_ACTIVITY_WORD.WAITING : null);
+  sessionDisplayState(s)?.phase === 'IDLE'
+    ? null
+    : watching ?? (sessionActivityOf(s) === 'WAITING' ? SESSION_ACTIVITY_WORD.WAITING : null);
 const parkedWorkLabel = (s: any): ParkedWork | null => {
   const kind = outlivingSessionWork(s);
   if (!kind) return null;

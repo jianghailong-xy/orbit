@@ -21,7 +21,8 @@ describe('state wording, with the new fields and without them', () => {
     ['waiting on an approval', 'Running', ['Needs you'], 'Waiting for approval'],
     // Held by the dispatch pause or a hold notice, which no runner gate names: only the new field can say it.
     ['on hold', 'Queued', ['On hold'], 'Queued'],
-    ['will wake', 'Idle', ['Will resume'], 'Waiting to resume'],
+    // Idle is Idle: a watch or wake-up to come draws no mark (the owner, 2026-11-27).
+    ['will wake', 'Idle', [], 'Waiting to resume'],
     // An end was asked for; the runner's silence is not a failure of the conversation (design §12).
     ['ended, runner never confirmed', 'Idle', ['Ended'], 'Failed'],
     // D2: a plain conversation is Ended or Failed. An older server cannot tell it from a task's finished run.

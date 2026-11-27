@@ -35,7 +35,7 @@ const EXPECTED: Record<string, [state: string, marks: string[]]> = {
   CANCELLED: ['Idle', ['Ended']],
   'job running': ['Running', ['Background']],
   'waiting on an approval': ['Running', ['Needs you']],
-  'watch armed': ['Idle', ['Will resume']],
+  'watch armed': ['Idle', []],
   'paused account': ['Queued', ['On hold']],
   'ended, runner never confirmed': ['Idle', ['Ended']],
   'old plain row stored SUCCEEDED': ['Idle', ['Ended']],
@@ -43,11 +43,11 @@ const EXPECTED: Record<string, [state: string, marks: string[]]> = {
   'parked, engine started its own turn': ['Running', []],
   'parked, sub-agent running': ['Running', []],
   'parked, background process left up': ['Idle', ['Background']],
-  'parked, retry armed': ['Idle', ['Will resume']],
+  'parked, retry armed': ['Idle', []],
   'failed, retry armed': ['Idle', ['Retrying']],
   'failed, runner offline': ['Idle', ['Failed']],
   'approval beside a background job': ['Running', ['Needs you', 'Background']],
-  'interrupted, a process up, retry armed': ['Idle', ['Interrupted', 'Background', 'Will resume']],
+  'interrupted, a process up, retry armed': ['Idle', ['Interrupted', 'Background']],
 };
 
 const FACTS = ['phase', 'released', 'lastTurnOutcome', 'waitingOn', 'workFinished', 'activity', 'runningBgCount'];
