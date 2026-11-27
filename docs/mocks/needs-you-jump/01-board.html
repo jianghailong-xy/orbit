@@ -1,0 +1,61 @@
+<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>Needs-you row → where you act</title>
+<style>
+body{margin:0;background:#eef0f3;font:15px/1.55 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:#1d1d1f}
+.m-sheet{display:inline-block;padding:36px 40px 44px;background:#eef0f3}
+h1{font-size:26px;margin:0 0 6px} h2{font-size:19px;margin:34px 0 12px} .sub{color:#555;max-width:1680px}
+.row{display:flex;gap:28px;align-items:flex-start}
+.fr{margin:0;background:#fff;border-radius:14px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.shot{position:relative;border:1px solid #d9dbe0;border-radius:6px;overflow:hidden} .shot img{display:block}
+figcaption{margin-top:10px;width:820px;color:#333}
+.ring{position:absolute;border:3px solid;border-radius:10px;box-sizing:border-box}
+.num{position:absolute;width:24px;height:24px;border-radius:12px;color:#fff;font:700 14px/24px Inter,sans-serif;text-align:center}
+.red{border-color:#e5484d} .num.red{background:#e5484d} .blue{border-color:#2f6bff} .num.blue{background:#2f6bff}
+.green{border-color:#1f9d55} .num.green{background:#1f9d55}
+.tag{display:inline-block;padding:1px 8px;border-radius:6px;font-size:13px;font-weight:600;margin-right:6px}
+.t{background:#fde8e8;color:#b42318} .n{background:#e3edff;color:#1d4ed8}
+table{border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;width:1680px}
+td,th{padding:9px 14px;border-bottom:1px solid #eceef2;text-align:left;vertical-align:top} th{background:#f6f7f9;font-weight:600}
+code{font:13px "JetBrains Mono",monospace;background:#f1f2f5;padding:1px 5px;border-radius:4px}
+.ask{background:#fff7e6;border:1px solid #f5c26b;border-radius:12px;padding:14px 18px;width:1650px}
+</style></head><body><div class="m-sheet">
+<h1>Needs-you 行 → 直接到能操作的地方（Web）</h1>
+<div class="sub">2026-11-26 你的反馈：① 需要你操作的行（如 <b>Approve merge to main</b>），点开后要到能操作的位置；② 项目右栏默认展开。
+你已定：手动收起<b>不记住</b>（只对当前会话有效）；跳转的关键就是右栏不能是收起的。
+以下画面都是今天 main 的真实 Web 控制台（假数据），提案画面是今天的代码在改动后会处在的状态，没有手绘。</div>
+
+<div id="part-1">
+<h2>① 今天</h2>
+<div class="row">
+<figure class="fr"><div class="shot" style="width:820px;height:467px"><img src="shots/t-wide.png" width="820" height="467"><div class="ring red" style="left:167px;top:98px;width:167px;height:44px"></div><div class="num red" style="left:324px;top:88px">1</div><div class="ring red" style="left:732px;top:5px;width:44px;height:26px"></div><div class="num red" style="left:766px;top:-5px">2</div></div><figcaption><span class="tag t">宽窗口 1440</span>以前在任何项目里手动收起过右栏（存在浏览器里 <code>orbit.projectColumnFolded</code>），从此每个项目都收着。点 ① 进协调者会话，能合并的卡片在收起的右栏里，看不到；只有 ② ⊞ 6 能打开它。这就是你截图里的情况。</figcaption></figure>
+<figure class="fr"><div class="shot" style="width:820px;height:600px"><img src="shots/t-narrow.png" width="820" height="600"><div class="ring red" style="left:216px;top:127px;width:213px;height:55px"></div><div class="num red" style="left:419px;top:117px">1</div><div class="ring red" style="left:708px;top:8px;width:54px;height:31px"></div><div class="num red" style="left:752px;top:-2px">2</div></div><figcaption><span class="tag t">窄窗口 1120</span>没手动收起过，但会话区放不下 480px，右栏自己收起。点 ① 同样看不到合并卡片，要再按 ② ⊞。</figcaption></figure>
+</div></div>
+
+<div id="part-2">
+<h2>② 提案</h2>
+<div class="row">
+<figure class="fr"><div class="shot" style="width:820px;height:467px"><img src="shots/n-wide.png" width="820" height="467"><div class="ring blue" style="left:167px;top:98px;width:167px;height:44px"></div><div class="num blue" style="left:324px;top:88px">1</div><div class="ring green" style="left:634px;top:-4px;width:190px;height:475px"></div><div class="num green" style="left:814px;top:-14px">2</div><div class="ring blue" style="left:645px;top:63px;width:163px;height:141px"></div><div class="num blue" style="left:798px;top:53px">3</div></div><figcaption><span class="tag n">宽窗口</span>点 ① 进协调者会话，② 右栏总是展开（不再读浏览器里的收起记录），③ Merge into main? 卡片和 Merge to main 按钮就在眼前。</figcaption></figure>
+<figure class="fr"><div class="shot" style="width:820px;height:600px"><img src="shots/n-narrow.png" width="820" height="600"><div class="ring blue" style="left:216px;top:127px;width:213px;height:55px"></div><div class="num blue" style="left:419px;top:117px">1</div><div class="ring green" style="left:582px;top:-4px;width:242px;height:608px"></div><div class="num green" style="left:814px;top:-14px">2</div><div class="ring blue" style="left:597px;top:82px;width:206px;height:179px"></div><div class="num blue" style="left:793px;top:72px">3</div></div><figcaption><span class="tag n">窄窗口</span>点的是等你操作、且操作在右栏里的行时，② 右栏盖在会话区右侧展开（就是今天按 ⊞ 的样子），③ 卡片可见。点 ✕ / ⊞ / Esc 收起。</figcaption></figure>
+</div></div>
+
+<div id="part-3">
+<h2>规则</h2>
+<table>
+<tr><th style="width:300px">情况</th><th>今天</th><th>提案</th></tr>
+<tr><td>打开项目里的任意会话（宽窗口）</td><td>手动收起过就一直收着，跨项目、跨刷新</td><td><b>右栏展开</b>。收起状态不再存进浏览器</td></tr>
+<tr><td>手动收起（✕、⊞、Esc）</td><td>写入 <code>orbit.projectColumnFolded=1</code>，永久</td><td>只对当前会话有效：切到别的会话（同项目也算）或刷新，右栏回来</td></tr>
+<tr><td>窄窗口（会话区不足 480px）</td><td>自己收起，按 ⊞ 盖在上面展开</td><td>不变：普通打开仍收起</td></tr>
+<tr><td>窄窗口里点 Needs-you 行，且操作在右栏</td><td>收起，看不到卡片</td><td>右栏<b>盖在会话区上展开</b>（同按 ⊞）</td></tr>
+<tr><td>操作在右栏的类型</td><td colspan="2">Approve merge to main（合并卡片）、Ready to start（进度卡里的 Start 行）、Ready to close（结算卡片）</td></tr>
+<tr><td>操作在会话里的类型</td><td colspan="2">Question from coordinator、Escalated to you、Paused、request_owner_action 的卡片：本来就在会话里，置顶的那条线指向它们，不改</td></tr>
+<tr><td>手机</td><td colspan="2">不变：项目列表是底部弹窗，⊞ 打开</td></tr>
+</table>
+<h2>改动的文件</h2>
+<table>
+<tr><td style="width:300px"><code>src/web/src/components/WorkspaceView.tsx</code></td><td>去掉 <code>PROJECT_COLUMN_FOLDED_KEY</code> 的读写；收起状态在所选会话改变时复位；Needs-you 行点击时，如果它的类型在右栏里操作，在窄窗口设 <code>projectColumnOnDemand</code></td></tr>
+<tr><td><code>WorkspaceView.projectSessions.test.tsx</code></td><td>改“手动收起后一直收着”那条；加“切会话后右栏回来”“刷新后展开”“窄窗口点 Approve merge 行时右栏盖上来”</td></tr>
+<tr><td>iOS / macOS / Android</td><td>不动：手机没有右栏；macOS 如有同样的记忆另开任务</td></tr>
+</table>
+<h2>待你定</h2>
+<div class="ask">窄窗口里，<b>普通</b>打开项目会话（不是从 Needs-you 行进来）右栏是否也盖上来？<b>建议：不</b>——窄窗口里一盖就挡住半个会话，只在有事要你操作时才值得挡。</div>
+</div>
+</div></body></html>

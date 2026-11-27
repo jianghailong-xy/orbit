@@ -4,10 +4,10 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
-import { SESSION_PHASE_FIELD_NAMES } from '@orbit/shared';
+import { SESSION_BACKGROUND_FIELD_NAMES, SESSION_PHASE_FIELD_NAMES } from '@orbit/shared';
 
 import { assertCoordinatorPgUrlIsIsolated } from '../projects/coordinator-pg-test-safety';
-import { buildWorld, connect, FIXTURE_CASES, PAYLOAD_KINDS, readPayloads } from './session-payloads.fixture';
+import { buildWorld, connect, FIXTURE_CASES, PAYLOAD_KINDS, readPayloads, SEARCH_HIT } from './session-payloads.fixture';
 
 /**
  * Plan step 5.1 of docs/session-three-state-plan.md: every session payload kind carries `phase`, `released`,
@@ -21,6 +21,9 @@ import { buildWorld, connect, FIXTURE_CASES, PAYLOAD_KINDS, readPayloads } from 
  * the detail, `session.created`/`session.updated`, `session.ended`, the link preview, the guest's Shared with me row
  * and the shared header, and each kind must carry the six fields with the values below — the same values on every
  * kind. contracts/session-state.contract.json states the same table as its vectors; this holds the two equal.
+ *
+ * Task 353YrK2AEGTm6mfl8GrW9 adds the search hit (`GET /sessions/search`) to the kinds, and the Background mark's two
+ * inputs, `activity` and `runningBgCount`, to every kind, each with the values BACKGROUND gives — the list row's.
  */
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -53,25 +56,51 @@ const EXPECTED: Record<string, Expected> = {
   'settled landing': { phase: 'IDLE', released: true, lastTurnOutcome: 'ANSWERED', waitingOn: null, endReason: null, workFinished: true },
 };
 
+/** The Background mark's inputs per case: `sessionActivitySql` and the jobs and shells still running. */
+const BACKGROUND: Record<string, { activity: string | null; runningBgCount: number }> = {
+  PENDING: { activity: 'TURN', runningBgCount: 0 },
+  RUNNING: { activity: 'TURN', runningBgCount: 0 },
+  AWAITING_INPUT: { activity: null, runningBgCount: 0 },
+  INTERRUPTED: { activity: null, runningBgCount: 0 },
+  SUCCEEDED: { activity: null, runningBgCount: 0 },
+  FAILED: { activity: null, runningBgCount: 0 },
+  CANCELLED: { activity: null, runningBgCount: 0 },
+  'job running': { activity: 'BACKGROUND_JOB', runningBgCount: 1 },
+  'waiting on an approval': { activity: 'TURN', runningBgCount: 0 },
+  'watch armed': { activity: 'WAITING', runningBgCount: 0 },
+  'paused account': { activity: 'TURN', runningBgCount: 0 },
+  'settled landing': { activity: null, runningBgCount: 0 },
+};
+
+/** Every kind the phase fields are read on: the legacy golden's, then the search hit. */
+const KINDS = [...PAYLOAD_KINDS, SEARCH_HIT] as const;
+
 test('the fixture, the expectations and the contract name the same cases and payload kinds', () => {
   assert.deepEqual(FIXTURE_CASES.map((c) => c.label), Object.keys(EXPECTED));
-  assert.deepEqual(Object.keys(CONTRACT.payloads), [...PAYLOAD_KINDS]);
+  assert.deepEqual(FIXTURE_CASES.map((c) => c.label), Object.keys(BACKGROUND));
+  assert.deepEqual(Object.keys(CONTRACT.payloads), [...KINDS]);
   assert.deepEqual(CONTRACT.vectors.map((v) => v.id), Object.keys(EXPECTED));
   for (const vector of CONTRACT.vectors) assert.deepEqual(vector.expect, EXPECTED[vector.id], vector.id);
 });
 
-test('every payload kind carries the six fields, alike, for every case', { skip }, async () => {
+test('every payload kind carries the six fields and the background inputs, alike, for every case', { skip }, async () => {
   assertCoordinatorPgUrlIsIsolated(URL!);
   const stack = connect(URL!);
   try {
     const world = await buildWorld(stack.db, randomUUID().slice(0, 8));
     const payloads = await readPayloads(stack, world);
     const differences: string[] = [];
+    const names = [...SESSION_PHASE_FIELD_NAMES, ...SESSION_BACKGROUND_FIELD_NAMES];
     for (const c of FIXTURE_CASES) {
-      for (const kind of PAYLOAD_KINDS) {
+      for (const kind of KINDS) {
         const payload = payloads.get(c.label)![kind];
-        const got = Object.fromEntries(SESSION_PHASE_FIELD_NAMES.map((field) => [field, payload[field]]));
-        const want = EXPECTED[c.label];
+        // Search answers CONVERSATION rows only: the landing container is never a hit, and every other case is one.
+        if (kind === SEARCH_HIT && payload === null) {
+          if (c.label !== 'settled landing') differences.push(`${c.label} / ${kind}: no hit`);
+          continue;
+        }
+        const got = Object.fromEntries(names.map((field) => [field, payload![field]]));
+        const want = { ...EXPECTED[c.label], ...BACKGROUND[c.label] };
         if (JSON.stringify(got) !== JSON.stringify(want)) {
           differences.push(`${c.label} / ${kind}: want ${JSON.stringify(want)}, got ${JSON.stringify(got)}`);
         }

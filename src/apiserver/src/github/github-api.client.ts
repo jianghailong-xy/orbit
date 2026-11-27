@@ -33,6 +33,167 @@ export interface GithubApp {
   id: number;
   slug: string;
   clientId: string;
+  /** The repository and account permissions the App asks for, as GitHub reports them (`pull_requests: 'write'`). */
+  permissions: Record<string, string>;
+  /** The webhook events the App subscribes to. */
+  events: string[];
+}
+
+/**
+ * What an installation must have granted before its landings go through pull requests
+ * (docs/design/protected-branch-landing.md §3 rule 3, §10): open, merge and read Orbit's pull request, and read the
+ * head's checks and statuses. Contents: write the App always had. Until the installation's owner accepts these, its
+ * workspaces land exactly as before.
+ */
+export const PULL_REQUEST_LANDING_PERMISSIONS: Readonly<Record<string, 'read' | 'write'>> = {
+  pull_requests: 'write',
+  checks: 'read',
+  statuses: 'read',
+};
+
+/** One installation as the App itself reads it (GET /app/installations/{id}): its account and what it granted. */
+export interface GithubInstallationGrant {
+  id: number;
+  account: string;
+  /** `User` | `Organization`. */
+  type: string;
+  permissions: Record<string, string>;
+}
+
+/** One pull request, as GET /repos/{repo}/pulls lists it or POST creates it. */
+export interface GithubPullRequestRef {
+  number: number;
+  url: string;
+  headSha: string;
+}
+
+/** A required check on a pull request's head, folded to what a landing needs (§4.3). */
+export interface GithubPullRequestCheck {
+  name: string;
+  required: boolean;
+  /** PASSED (success, neutral, skipped), FAILED, or PENDING (not finished, or expected and not reported). */
+  state: 'PASSED' | 'FAILED' | 'PENDING';
+  url: string | null;
+  /** GitHub's own word, lower case: a check run's conclusion, or a commit status's state; null while running. */
+  conclusion: string | null;
+  /** A check run GitHub Actions ran: its job id, whose log Orbit downloads for a failure (§4.5). Null otherwise. */
+  actionsJobId: number | null;
+  /** What the check said about itself: a check run's title, summary and text, or a status's description. */
+  summary: string | null;
+}
+
+/** One read of a pull request in full (§4.3): what GitHub says now, which is all Orbit acts on. */
+export interface GithubPullRequestReading {
+  number: number;
+  url: string;
+  /** OPEN | CLOSED | MERGED. */
+  state: string;
+  merged: boolean;
+  mergedBy: string | null;
+  mergeCommitSha: string | null;
+  mergeCommitTreeSha: string | null;
+  headSha: string;
+  baseRef: string;
+  /** The base branch's tip as GitHub has it now. */
+  baseSha: string | null;
+  /** MERGEABLE | CONFLICTING | UNKNOWN. */
+  mergeable: string;
+  /** BEHIND | BLOCKED | CLEAN | DIRTY | DRAFT | HAS_HOOKS | UNKNOWN | UNSTABLE. */
+  mergeStateStatus: string;
+  /** APPROVED | CHANGES_REQUESTED | REVIEW_REQUIRED, or null when the branch requires no review. */
+  reviewDecision: string | null;
+  inMergeQueue: boolean;
+  mergeQueueEnabled: boolean;
+  /** Who closed it, for one closed without merging (§4.2 J-T19); null when GitHub does not say. */
+  closedBy: string | null;
+  checks: GithubPullRequestCheck[];
+  /** The merge methods the repository allows. */
+  allowed: { merge: boolean; rebase: boolean; squash: boolean };
+}
+
+/** The one read of a pull request (§4.3), with every fact the decision needs in one answer. */
+export const PULL_REQUEST_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    mergeCommitAllowed
+    rebaseMergeAllowed
+    squashMergeAllowed
+    pullRequest(number: $number) {
+      number
+      url
+      state
+      merged
+      mergedBy { login }
+      mergeCommit { oid tree { oid } }
+      headRefOid
+      baseRefName
+      baseRef { target { oid } }
+      mergeable
+      mergeStateStatus
+      reviewDecision
+      isInMergeQueue
+      isMergeQueueEnabled
+      timelineItems(last: 1, itemTypes: [CLOSED_EVENT]) { nodes { ... on ClosedEvent { actor { login } } } }
+      commits(last: 1) {
+        nodes {
+          commit {
+            statusCheckRollup {
+              contexts(first: 100) {
+                nodes {
+                  __typename
+                  ... on CheckRun {
+                    name status conclusion detailsUrl databaseId title summary text isRequired(pullRequestNumber: $number)
+                    checkSuite { app { slug } }
+                  }
+                  ... on StatusContext { context state targetUrl description isRequired(pullRequestNumber: $number) }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}`;
+
+/** A check run's or a status's answer, folded (§4.3): what failed, what passed, and what is not done yet. */
+function checkState(node: Record<string, unknown>): GithubPullRequestCheck['state'] {
+  if (node.__typename === 'StatusContext') {
+    const state = String(node.state ?? '');
+    if (state === 'SUCCESS') return 'PASSED';
+    if (state === 'ERROR' || state === 'FAILURE') return 'FAILED';
+    return 'PENDING';
+  }
+  if (node.status !== 'COMPLETED') return 'PENDING';
+  const conclusion = String(node.conclusion ?? '');
+  if (conclusion === 'SUCCESS' || conclusion === 'NEUTRAL' || conclusion === 'SKIPPED') return 'PASSED';
+  return conclusion === '' ? 'PENDING' : 'FAILED';
+}
+
+/** One context of the head's status rollup, folded (§4.3, §4.5). */
+function checkOf(node: Record<string, unknown>): GithubPullRequestCheck {
+  const status = node.__typename === 'StatusContext';
+  const text = (value: unknown) => (typeof value === 'string' && value.trim() !== '' ? value.trim() : null);
+  const app = (node.checkSuite as { app?: { slug?: unknown } | null } | null | undefined)?.app?.slug;
+  const said = status
+    ? [text(node.description)]
+    : [text(node.title), text(node.summary), text(node.text)];
+  const conclusion = status ? text(node.state) : text(node.conclusion);
+  return {
+    name: String(status ? node.context ?? '' : node.name ?? ''),
+    required: node.isRequired === true,
+    state: checkState(node),
+    url: typeof (node.detailsUrl ?? node.targetUrl) === 'string' ? String(node.detailsUrl ?? node.targetUrl) : null,
+    conclusion: conclusion ? conclusion.toLowerCase() : null,
+    actionsJobId: !status && app === 'github-actions' && typeof node.databaseId === 'number' ? node.databaseId : null,
+    summary: said.filter((line): line is string => line !== null).join('\n\n') || null,
+  };
+}
+
+/** The login of whoever closed the pull request, from its last CLOSED_EVENT. */
+function closedByOf(timeline: unknown): string | null {
+  const nodes = (timeline as { nodes?: Array<{ actor?: { login?: unknown } | null } | null> } | null | undefined)?.nodes ?? [];
+  const login = nodes[nodes.length - 1]?.actor?.login;
+  return typeof login === 'string' && login !== '' ? login : null;
 }
 
 /** A user-to-server token, as GitHub hands it out. Null expiries: the App's user tokens do not expire. */
@@ -79,6 +240,19 @@ export function isPrivateKey(pem: string): boolean {
   }
 }
 
+/** An object of string values out of an answer, anything else dropped. */
+function stringRecord(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
+}
+
+/** A pull request out of GitHub's REST answer, or null when it is not one. */
+function pullRequestRef(row: Record<string, unknown>): GithubPullRequestRef | null {
+  const head = (row?.head ?? {}) as { sha?: unknown };
+  if (typeof row?.number !== 'number' || typeof row.html_url !== 'string') return null;
+  return { number: row.number, url: row.html_url, headSha: typeof head.sha === 'string' ? head.sha : '' };
+}
+
 const expiry = (seconds: unknown, now: number): Date | null =>
   typeof seconds === 'number' && Number.isFinite(seconds) && seconds > 0 ? new Date(now + seconds * 1000) : null;
 
@@ -101,9 +275,178 @@ export class GithubClient {
 
   /** GET /app with the App's JWT (§5.1). A 401 is a key that is not this App's. */
   async app(appId: string, privateKeyPem: string): Promise<GithubApp> {
-    const answer = await this.api<{ id?: unknown; slug?: unknown; client_id?: unknown }>('GET', '/app', `Bearer ${appJwt(appId, privateKeyPem)}`);
+    const answer = await this.api<{ id?: unknown; slug?: unknown; client_id?: unknown; permissions?: unknown; events?: unknown }>(
+      'GET', '/app', `Bearer ${appJwt(appId, privateKeyPem)}`,
+    );
     if (typeof answer.id !== 'number' || typeof answer.slug !== 'string') throw new GithubCallError(502, 'unexpected answer');
-    return { id: answer.id, slug: answer.slug, clientId: typeof answer.client_id === 'string' ? answer.client_id : '' };
+    return {
+      id: answer.id,
+      slug: answer.slug,
+      clientId: typeof answer.client_id === 'string' ? answer.client_id : '',
+      permissions: stringRecord(answer.permissions),
+      events: Array.isArray(answer.events) ? answer.events.filter((event): event is string => typeof event === 'string') : [],
+    };
+  }
+
+  /**
+   * GET /app/installations/{id} with the App's JWT (docs/design/protected-branch-landing.md §10 step 3): the
+   * permissions this installation granted, which are the old ones until its owner accepts the new ones.
+   */
+  async installationGrant(input: { appId: string; privateKey: string; installationId: string }): Promise<GithubInstallationGrant> {
+    const answer = await this.api<{ id?: unknown; account?: { login?: unknown; type?: unknown }; permissions?: unknown }>(
+      'GET', `/app/installations/${encodeURIComponent(input.installationId)}`, `Bearer ${appJwt(input.appId, input.privateKey)}`,
+    );
+    if (typeof answer.id !== 'number') throw new GithubCallError(502, 'unexpected answer');
+    return {
+      id: answer.id,
+      account: typeof answer.account?.login === 'string' ? answer.account.login : '',
+      type: typeof answer.account?.type === 'string' ? answer.account.type : 'User',
+      permissions: stringRecord(answer.permissions),
+    };
+  }
+
+  /**
+   * The server's own installation token for one repository's pull request (§12): contents, pull requests, checks
+   * and commit statuses, nothing an agent ever sees. Never answered to any runner route; GitHub refuses it (422)
+   * for an installation that has not granted these.
+   */
+  async pullRequestToken(input: {
+    appId: string; privateKey: string; installationId: string; repoId: string;
+    /** The installation granted Workflows: write (D4): a pull request that changes a workflow file merges only so. */
+    workflows?: boolean;
+  }): Promise<{ token: string; expiresAt: Date }> {
+    const answer = await this.api<{ token?: unknown; expires_at?: unknown }>(
+      'POST',
+      `/app/installations/${encodeURIComponent(input.installationId)}/access_tokens`,
+      `Bearer ${appJwt(input.appId, input.privateKey)}`,
+      {
+        repository_ids: [Number(input.repoId)],
+        permissions: {
+          contents: 'write', metadata: 'read', ...PULL_REQUEST_LANDING_PERMISSIONS,
+          ...(input.workflows ? { workflows: 'write' } : {}),
+        },
+      },
+    );
+    const expiresAt = typeof answer.expires_at === 'string' ? new Date(answer.expires_at) : null;
+    if (typeof answer.token !== 'string' || answer.token === '' || !expiresAt || Number.isNaN(expiresAt.getTime())) {
+      throw new GithubCallError(502, 'unexpected answer');
+    }
+    return { token: answer.token, expiresAt };
+  }
+
+  /** GET /repositories/{id}: the repository's name now, which a rename or a transfer changes and its id does not. */
+  async repositoryById(token: string, repoId: string): Promise<{ fullName: string; defaultBranch: string }> {
+    const answer = await this.api<{ full_name?: unknown; default_branch?: unknown }>(
+      'GET', `/repositories/${encodeURIComponent(repoId)}`, `Bearer ${token}`,
+    );
+    if (typeof answer.full_name !== 'string' || answer.full_name === '') throw new GithubCallError(502, 'unexpected answer');
+    return { fullName: answer.full_name, defaultBranch: typeof answer.default_branch === 'string' ? answer.default_branch : '' };
+  }
+
+  /** The open pull requests from `head` (a branch of this repository) into `base`. */
+  async openPullRequests(token: string, fullName: string, head: string, base: string): Promise<GithubPullRequestRef[]> {
+    const owner = fullName.split('/')[0] ?? '';
+    const query = new URLSearchParams({ state: 'open', head: `${owner}:${head}`, base, per_page: '10' });
+    const answer = await this.api<Array<Record<string, unknown>>>('GET', `/repos/${fullName}/pulls?${query}`, `Bearer ${token}`);
+    return (Array.isArray(answer) ? answer : []).map(pullRequestRef).filter((ref): ref is GithubPullRequestRef => ref !== null);
+  }
+
+  /** POST /repos/{repo}/pulls: Orbit's pull request from `head` into `base`, opened as the App (§4.4 Approvals). */
+  async createPullRequest(token: string, fullName: string, input: { head: string; base: string; title: string; body: string }): Promise<GithubPullRequestRef> {
+    const answer = await this.api<Record<string, unknown>>('POST', `/repos/${fullName}/pulls`, `Bearer ${token}`, {
+      title: input.title, head: input.head, base: input.base, body: input.body, maintainer_can_modify: false, draft: false,
+    });
+    const ref = pullRequestRef(answer);
+    if (!ref) throw new GithubCallError(502, 'unexpected answer');
+    return ref;
+  }
+
+  /** The pull request read in full, in one GraphQL answer (§4.3). A pull request GitHub does not find is a 404. */
+  async pullRequest(token: string, fullName: string, number: number): Promise<GithubPullRequestReading> {
+    const [owner, name] = fullName.split('/');
+    const answer = await this.api<{ data?: { repository?: Record<string, unknown> | null }; errors?: Array<{ type?: unknown; message?: unknown }> }>(
+      'POST', '/graphql', `Bearer ${token}`, { query: PULL_REQUEST_QUERY, variables: { owner, name, number } },
+    );
+    const repository = answer.data?.repository ?? null;
+    const pr = (repository?.pullRequest ?? null) as Record<string, unknown> | null;
+    if (!repository || !pr) {
+      const notFound = (answer.errors ?? []).some((error) => error.type === 'NOT_FOUND');
+      throw new GithubCallError(notFound ? 404 : 502, notFound ? 'not found' : 'unexpected answer');
+    }
+    const commits = ((pr.commits as { nodes?: unknown[] } | undefined)?.nodes ?? []) as Array<{ commit?: { statusCheckRollup?: { contexts?: { nodes?: unknown[] } } | null } }>;
+    const contexts = (commits[0]?.commit?.statusCheckRollup?.contexts?.nodes ?? []) as Array<Record<string, unknown>>;
+    const mergeCommit = pr.mergeCommit as { oid?: unknown; tree?: { oid?: unknown } } | null;
+    const baseTarget = (pr.baseRef as { target?: { oid?: unknown } } | null)?.target;
+    return {
+      number: Number(pr.number),
+      url: String(pr.url ?? ''),
+      state: String(pr.state ?? ''),
+      merged: pr.merged === true,
+      mergedBy: typeof (pr.mergedBy as { login?: unknown } | null)?.login === 'string' ? (pr.mergedBy as { login: string }).login : null,
+      mergeCommitSha: typeof mergeCommit?.oid === 'string' ? mergeCommit.oid : null,
+      mergeCommitTreeSha: typeof mergeCommit?.tree?.oid === 'string' ? mergeCommit.tree.oid : null,
+      headSha: String(pr.headRefOid ?? ''),
+      baseRef: String(pr.baseRefName ?? ''),
+      baseSha: typeof baseTarget?.oid === 'string' ? baseTarget.oid : null,
+      mergeable: String(pr.mergeable ?? 'UNKNOWN'),
+      mergeStateStatus: String(pr.mergeStateStatus ?? 'UNKNOWN'),
+      reviewDecision: typeof pr.reviewDecision === 'string' ? pr.reviewDecision : null,
+      inMergeQueue: pr.isInMergeQueue === true,
+      mergeQueueEnabled: pr.isMergeQueueEnabled === true,
+      closedBy: closedByOf(pr.timelineItems),
+      checks: contexts.map(checkOf),
+      allowed: {
+        merge: repository.mergeCommitAllowed !== false,
+        rebase: repository.rebaseMergeAllowed !== false,
+        squash: repository.squashMergeAllowed !== false,
+      },
+    };
+  }
+
+  /**
+   * PUT /repos/{repo}/pulls/{n}/merge with `sha` = the commit Orbit pushed (§4.1 step 8): GitHub merges only that
+   * head, so a commit somebody else pushed meanwhile is refused (409) rather than merged. A method the repository does
+   * not allow, or a pull request GitHub will not merge yet, is 405.
+   */
+  async mergePullRequest(token: string, fullName: string, number: number, input: { sha: string; method: 'merge' | 'rebase' | 'squash' }): Promise<{ sha: string }> {
+    const answer = await this.api<{ sha?: unknown; merged?: unknown }>(
+      'PUT', `/repos/${fullName}/pulls/${number}/merge`, `Bearer ${token}`, { sha: input.sha, merge_method: input.method },
+    );
+    if (answer.merged !== true || typeof answer.sha !== 'string') throw new GithubCallError(502, 'unexpected answer');
+    return { sha: answer.sha };
+  }
+
+  /**
+   * GET /repos/{repo}/actions/jobs/{id}/logs: the plain-text log of the GitHub Actions job behind a failed check run
+   * (§4.5, Actions: read). GitHub answers with a redirect to a short-lived download, which is followed; the
+   * authorization header is not sent across that redirect. Only the last `maxBytes` are kept.
+   */
+  async actionsJobLog(token: string, fullName: string, jobId: number, maxBytes = 262_144): Promise<string> {
+    const route = `/repos/${fullName}/actions/jobs/${encodeURIComponent(String(jobId))}/logs`;
+    let response: Response;
+    try {
+      response = await this.request(`${GITHUB_API}${route}`, {
+        method: 'GET',
+        headers: { authorization: `Bearer ${token}`, 'user-agent': 'Orbit', 'x-github-api-version': '2022-11-28' },
+        redirect: 'follow',
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+    } catch {
+      throw new GithubCallError(502, 'unreachable');
+    }
+    if (!response.ok) throw new GithubCallError(response.status, null);
+    const text = await response.text();
+    return text.length > maxBytes ? text.slice(text.length - maxBytes) : text;
+  }
+
+  /** DELETE the landing branch once its pull request merged (§4.8). Already gone (404, 422) is done too. */
+  async deleteBranch(token: string, fullName: string, branch: string): Promise<void> {
+    try {
+      await this.api('DELETE', `/repos/${fullName}/git/refs/heads/${branch.split('/').map(encodeURIComponent).join('/')}`, `Bearer ${token}`);
+    } catch (error) {
+      if (error instanceof GithubCallError && (error.status === 404 || error.status === 422)) return;
+      throw error;
+    }
   }
 
   /** Trade the callback's code for the user's tokens (§5.2). */

@@ -55,11 +55,11 @@ import { test } from 'node:test';
 import { HttpException } from '@nestjs/common';
 import {
   Prisma,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   type PrismaClient,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type {
   IntegrationJobResultRequest,
   ProjectStartFinding,
@@ -313,9 +313,9 @@ test('work with nothing to land stops holding its criterion — on a declaration
         branch,
         isolationStatus: 'worktree',
         ...(finish === 'DIED'
-          ? { status: RunStatus.RUNNING }
+          ? { turnState: 'IN_FLIGHT' }
           : {
-            status: RunStatus.SUCCEEDED, 
+            turnState: null, 
             finishedAt: new Date(Date.now() - 60_000),
             worktreeBranch: finish.worktreeBranch ?? branch,
             worktreeDirty: false,
@@ -640,7 +640,7 @@ test('work with nothing to land stops holding its criterion — on a declaration
         title: 'the coordinator',
         prompt: 'coordinate',
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
         runtimeSessionId: randomUUID(),

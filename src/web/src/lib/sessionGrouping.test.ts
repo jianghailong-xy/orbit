@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import fixture from '../../../../contracts/session-list-order.fixtures.json';
 import {
+  sessionListedAt,
+  sessionListSectionOptions,
   sessionNeedsOwner,
   sessionTagSections,
   sessionTimeSections,
@@ -202,5 +204,56 @@ describe('session list order fixture', () => {
     const out = shape(asked);
     expect(out.find((s) => s.section === 'Needs you')?.ids[0]).toBe('work-ci');
     expect(out.find((s) => s.section === 'Working')?.ids).not.toContain('work-ci');
+  });
+
+  // The rows as the list draws them in each view: the options the workspace list passes, over the rows in any order.
+  const view = (rows: typeof fixture.sessions, name: string, tagFiltered = false) =>
+    sessionTimeSections([...rows].reverse(), { ...sessionListSectionOptions(name, tagFiltered), now: new Date(fixture.now) })
+      .map((s) => ({ section: s.title, ids: s.sessions.map((x) => x.id) }));
+
+  it('draws the Open list with the options the workspace list passes', () => {
+    expect(view(open, 'open')).toEqual(fixture.expected);
+  });
+
+  it('with a tag filter, drops only Pinned: a pinned row is placed like any other', () => {
+    expect(view(open, 'open', true)).toEqual(fixture.expectedTagFilter);
+  });
+
+  it('orders and buckets Trash by listedAt, with no pin and no attention sections', () => {
+    expect(view(fixture.sessions.filter((s) => !!s.deletedAt && !s.completedAt), 'trash')).toEqual(fixture.expectedTrash);
+  });
+
+  it('dates every row by listedAt (createdAt when null), never lastTurnAt', () => {
+    for (const s of fixture.sessions) expect(sessionListedAt(s), s.id).toBe(s.listedAt ?? s.createdAt);
+  });
+});
+
+// A failure in "Needs you" is read from the session facts when the payload carries them (the same rule as the state
+// word); from the legacy status when it does not. Rows are shaped as the server sends them.
+describe('Needs you failure reading', () => {
+  const row = (o: Record<string, unknown>) => ({
+    id: 's',
+    createdAt: at(2026, 7, 8, 9),
+    status: 'FAILED',
+    runStatus: 'FAILED',
+    ...o,
+  });
+  const facts = { phase: 'IDLE', released: true, lastTurnOutcome: 'FAILED' };
+  const needs = (o: Record<string, unknown>) =>
+    sessionTimeSections([row(o)], { attention: true, now: NOW }).map((x) => x.title)[0] === 'Needs you';
+
+  it('keeps an end the runner never confirmed out of Needs you', () => {
+    expect(needs({ ...facts, endReason: 'user_ended' })).toBe(false);
+  });
+  it('puts a real failure under Needs you', () => {
+    expect(needs({ ...facts, endReason: null })).toBe(true);
+  });
+  it('keeps a failure being retried out of Needs you', () => {
+    expect(needs({ ...facts, endReason: null, retryAt: at(2026, 7, 8, 13) })).toBe(false);
+  });
+  it('groups as before when the facts are absent', () => {
+    expect(needs({})).toBe(true);
+    expect(needs({ endReason: 'user_ended' })).toBe(true);
+    expect(needs({ retryAt: at(2026, 7, 8, 13) })).toBe(false);
   });
 });

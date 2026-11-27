@@ -35,7 +35,8 @@ import { Spinner } from './ui/Spinner';
 import { Switch } from './ui/Switch';
 import { Textarea } from './ui/Textarea';
 import { Tooltip } from './ui/Tooltip';
-import { Fragment, lazy, type MouseEvent as ReactMouseEvent, type ReactElement, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, lazy, type MouseEvent as ReactMouseEvent, type ReactElement, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { TaskAccountHoldNote, RelaxedRunNote } from './TaskAccountHold';
 import { Link, useNavigate } from 'react-router-dom';
 import Markdown from './Markdown';
 import rehypeHighlight from 'rehype-highlight';
@@ -86,6 +87,8 @@ import {
   type SessionRunState,
 } from '../lib/sessionState';
 import { QUEUED_LABEL } from '../lib/runnerSlots';
+import { sessionDisplayState, sessionDisplayText, sessionMarks } from '../lib/sessionDisplay';
+import { SessionMarkChips } from './SessionStateDisplay';
 import { refreshTaskScheduleViews, scheduledStart } from '../lib/taskSchedule';
 import { MD } from './Transcript';
 import { LandingLink } from './LandingLink';
@@ -139,6 +142,10 @@ export const SESSION_STATE_META: Record<SessionRunState, { label: string; tone: 
 // The run's badge reads the same run state as the session header; a queued run the server says is on hold
 // (`waitingOn` HOLD) wears the header's word for it.
 export const sessionStatusMeta = (session: any) => {
+  // With the facts, the badge says the state from `phase` alone (lib/sessionDisplay): blue while it runs, muted
+  // otherwise. The run's marks are drawn beside it. What follows is the reading for an older control plane.
+  const shown = sessionDisplayState(session);
+  if (shown) return { label: shown.word, tone: shown.phase === 'RUNNING' ? 'blue' : 'muted' };
   const state = sessionRunStateOf(session);
   if (state === 'QUEUED' && sessionWaitingOnOf(session) === 'HOLD' && !session.queuedReason) {
     return { label: 'On hold', tone: SESSION_STATE_META.QUEUED.tone };
@@ -277,7 +284,9 @@ export function taskMarkdown(task: any, link: string): string {
   if (runs.length === 0) out.push('No runs yet');
   else out.push(`${runs.length} run${runs.length === 1 ? '' : 's'}`, '');
   for (const s of runs.slice(0, MARKDOWN_RUNS)) {
-    out.push(`- ${sessionStatusMeta(s).label} · ${fmt(s.createdAt)}${s.workspace?.name ? ` · ${s.workspace.name}` : ''}`);
+    // With the facts, the state word and the run's marks, " · " between them (lib/sessionDisplay).
+    const runLabel = sessionDisplayText(s) ?? sessionStatusMeta(s).label;
+    out.push(`- ${runLabel} · ${fmt(s.createdAt)}${s.workspace?.name ? ` · ${s.workspace.name}` : ''}`);
   }
   if (runs.length > MARKDOWN_RUNS) out.push(`- …and ${runs.length - MARKDOWN_RUNS} earlier`);
   return `${out.join('\n')}\n`;
@@ -735,6 +744,12 @@ interface WorkspaceRow {
   modelRouting?: boolean;
 }
 
+/** A run row: a link to its session, or — for the conversation the panel is docked beside — the same row, not a link. */
+function SessionRowLink({ here, to, className, children }: { here: boolean; to: string; className: string; children: ReactNode }) {
+  if (here) return <div className={`${className} is-here`} aria-current="page">{children}</div>;
+  return <Link to={to} className={className}>{children}</Link>;
+}
+
 export function TaskDetailPanel({
   taskId,
   summary,
@@ -742,6 +757,8 @@ export function TaskDetailPanel({
   onClose,
   onDelete,
   deleting,
+  docked = false,
+  hereSessionId = null,
 }: {
   taskId: string;
   summary?: TaskSummary;
@@ -750,6 +767,11 @@ export function TaskDetailPanel({
   /** The list owns the delete, so the row selection and the open panel are cleared in one place. */
   onDelete: () => void;
   deleting: boolean;
+  /** A column of fixed width beside the conversation it was opened from (docs/mocks/session-task-column):
+   *  no drag handle, and the width the Tasks page stores is not applied. */
+  docked?: boolean;
+  /** The conversation the panel sits beside: its run row says so instead of linking to itself. */
+  hereSessionId?: string | null;
 }) {
   const qc = useQueryClient();
   const message = useToast();
@@ -1507,7 +1529,10 @@ export function TaskDetailPanel({
 
   // The run going now, if any, and what it last reported (task_progress_report).
   const liveRun: any = sessions.find((s: any) => isSessionBusy(s)) ?? null;
-  const liveRunning = liveRun != null && sessionRunStateOf(liveRun) === 'RUNNING';
+  // With the facts, the run going now is Running or Queued by `phase` alone (lib/sessionDisplay), and its marks are
+  // drawn beside the Now card's line; from an older control plane, the run state as before.
+  const liveShown = liveRun != null ? sessionDisplayState(liveRun) : null;
+  const liveRunning = liveRun != null && (liveShown ? liveShown.phase === 'RUNNING' : sessionRunStateOf(liveRun) === 'RUNNING');
   const progress = q.data?.progress?.revision > 0 ? q.data.progress : null;
   const progressStep = progress?.current != null
     ? progress.total != null ? `Step ${progress.current} of ${progress.total}` : `Step ${progress.current}`
@@ -1591,7 +1616,12 @@ export function TaskDetailPanel({
   };
 
   const runRow = (s: any) => {
-    const state = sessionRunStateOf(s);
+    // With the facts, the row's dot is the state (`phase`) and a failure is its red mark (lib/sessionDisplay); from
+    // an older control plane, the run state as before.
+    const shown = sessionDisplayState(s);
+    const marks = sessionMarks(s);
+    const dot = shown ? shown.phase : sessionRunStateOf(s);
+    const failed = marks ? marks.includes('FAILED') : sessionRunStateOf(s) === 'FAILED';
     const meta = sessionStatusMeta(s);
     // The decision behind this run, when it named a tier (model routing §9). Applied,
     // the run is on its pick; not, the run kept the Agent's own model and the pick is
@@ -1602,6 +1632,8 @@ export function TaskDetailPanel({
     const ranOn: string | null = s.model || (applied ? route?.model : null) || null;
     const ranAt: string | null = s.effort || (applied ? route?.effort : null) || null;
     const whyShown = route != null && whyOpen === s.id;
+    // The conversation this panel is docked beside: the row names it, and is not a link to the page already open.
+    const here = hereSessionId != null && encodeId(s.id) === encodeId(hereSessionId);
     // The row is the way into the run; its tier answers why instead.
     const toggleWhy = (e: ReactMouseEvent) => {
       e.preventDefault();
@@ -1610,16 +1642,17 @@ export function TaskDetailPanel({
     };
     return (
       <Fragment key={s.id}>
-        <Link
+        <SessionRowLink
+          here={here}
           to={`/sessions/${encodeId(s.id)}`}
-          className={`tdp-session${state === 'FAILED' ? ' is-failed' : ''}`}
+          className={`tdp-session${failed ? ' is-failed' : ''}`}
         >
-          <span className={`tdp-dot ${state}`} />
+          <span className={`tdp-dot ${dot}`} />
           <div className="tdp-session-main">
             {/* Workspace leads — it's what tells two runs of the same task apart; the
                 system-generated title just repeats the task name. */}
             <div className="tdp-session-title">
-              {s.workspace?.name || s.title || 'Untitled session'}
+              {here ? 'This conversation' : s.workspace?.name || s.title || 'Untitled session'}
             </div>
             <div className="tdp-session-sub">
               {fmt(s.createdAt)}
@@ -1648,7 +1681,9 @@ export function TaskDetailPanel({
             )}
           </div>
           <span className={`tdp-badge tone-${meta.tone}`}>{meta.label}</span>
-        </Link>
+          <SessionMarkChips marks={marks} />
+        </SessionRowLink>
+        {s.route?.relaxedRun && <RelaxedRunNote sentence={s.route.relaxedRun} />}
         {route && whyShown && (
           <div className="tdp-route-why">
             <div className="tdp-route-why-title">Why {routePick(route)}</div>
@@ -1717,13 +1752,14 @@ export function TaskDetailPanel({
             {q.data?.creatorSession ? (
               <>
                 {' from '}
-                <Link
-                  to={`/sessions/${encodeId(q.data.creatorSession.id)}`}
-                  className="tdp-field-link"
-                  title="Go to the session that created this task"
-                >
-                  {q.data.creatorSession.title || 'Untitled session'}
-                </Link>
+                <Tooltip content="Go to the session that created this task">
+                  <Link
+                    to={`/sessions/${encodeId(q.data.creatorSession.id)}`}
+                    className="tdp-field-link"
+                  >
+                    {q.data.creatorSession.title || 'Untitled session'}
+                  </Link>
+                </Tooltip>
               </>
             ) : null}
           </span>
@@ -1765,13 +1801,15 @@ export function TaskDetailPanel({
   return (
     <aside
       ref={asideRef}
-      className="task-detail-panel"
-      style={width != null ? { width } : undefined}
+      className={`task-detail-panel${docked ? ' is-docked' : ''}`}
+      style={width != null && !docked ? { width } : undefined}
     >
-      <div
-        className={`tdp-resizer${resizing ? ' resizing' : ''}`}
-        onMouseDown={startResize}
-      />
+      {!docked && (
+        <div
+          className={`tdp-resizer${resizing ? ' resizing' : ''}`}
+          onMouseDown={startResize}
+        />
+      )}
       <div className="tdp-head">
         <div className="tdp-head-main">
           {/* The project it is filed under. Its tasks are not listed on the Tasks page, so a task
@@ -1811,6 +1849,8 @@ export function TaskDetailPanel({
           {/* A task forked from a session says where its checkout came from, in the server's own
               words (docs/task-fork-from-session-design.md §2.3). Absent on an older server. */}
           {q.data?.forkSource && <div className="tdp-fork-source">{q.data.forkSource}</div>}
+          {/* No account that could run it can run now (§7.5): the provider's words, the next try, and where to look. */}
+          {q.data?.accountHold && <div className="tdp-account-hold"><TaskAccountHoldNote hold={q.data.accountHold} /></div>}
           {/* A task that starts when its condition holds says what it waits for (condition-triggers design §6.2):
               "Waiting for: 3 or more OSDs are in", in the server's own words, while the condition has not fired. */}
           {q.data?.startWhen?.waitingLine && (
@@ -2036,7 +2076,12 @@ export function TaskDetailPanel({
                     <div className="tdp-now-title">
                       {liveRunning
                         ? `${liveRun.workspace?.name ?? task?.assignee?.name ?? 'The agent'} is working`
-                        : QUEUED_LABEL}
+                        : liveShown
+                          ? liveShown.word
+                          : sessionRunStateOf(liveRun) === 'QUEUED'
+                            ? sessionStatusMeta(liveRun).label
+                            : QUEUED_LABEL}
+                      <SessionMarkChips marks={sessionMarks(liveRun)} />
                     </div>
                     <div className="tdp-now-sub">
                       {[

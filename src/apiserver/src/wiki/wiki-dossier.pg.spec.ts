@@ -254,9 +254,9 @@ async function session(h: Harness, ownerId: string, shape: SessionShape): Promis
   const id = randomUUID();
   await h.sql.query(
     `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","workspace_id","assigned_runner_id",
-                            "task_id","status","last_turn_at","dispatch_origin","created_at","updated_at","wiki_chat_space_id", "finished_at")
-     VALUES ($1,$2,'p',$3,$3,$4,$5,$6,$7::run_status,$8,'USER',$9,now(),$10,
-             CASE WHEN $7::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN COALESCE($8::timestamp, $9::timestamp) END)`,
+                            "task_id","turn_state","last_turn_at","dispatch_origin","created_at","updated_at","wiki_chat_space_id", "finished_at")
+     VALUES ($1,$2,'p',$3,$3,$4,$5,$6,(CASE ($7)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END),$8,'USER',$9,now(),$10,
+             CASE WHEN $7::text IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN COALESCE($8::timestamp, $9::timestamp) END)`,
     [
       id,
       shape.title ?? 'a session',
@@ -784,7 +784,7 @@ test('each committed fact — settled session, settled task, answered approval, 
   assert.equal((await backlog()).backlog, state.backlog, "another repository's criterion is not this space's");
 
   // What a maintenance task of that list left is no fact either: its session, its task and its receipt.
-  await h.sql.query(`UPDATE "session" SET "status" = 'AWAITING_INPUT', "finished_at" = NULL, "last_turn_at" = $2 WHERE "id" = $1`, [run, utc(minutesAgo(5))]);
+  await h.sql.query(`UPDATE "session" SET "turn_state" = NULL, "finished_at" = NULL, "last_turn_at" = $2 WHERE "id" = $1`, [run, utc(minutesAgo(5))]);
   await receipt(h, owner.id, run, minutesAgo(5));
   await h.sql.query(`UPDATE "task" SET "status" = 'CANCELLED', "updated_at" = $2 WHERE "list_id" = $1`, [listId, utc(minutesAgo(5))]);
   assert.equal((await backlog()).backlog, state.backlog, 'nothing of the old maintenance run is a fact');
@@ -1230,6 +1230,9 @@ test('a read of the wiki is left out with its result, under any engine\'s name a
         ['orbit__wiki_get', { ids: ['34abc'] }],
         ['wiki_search', { query: 'release script' }],
         ['wiki_get', { ids: ['34abc'] }],
+        ['mcp__orbit__wiki_read', { id: '34abc' }],
+        ['wiki_read', { id: '34abc' }],
+        ['Bash', { command: 'orbit wiki read 34abc' }],
         ['Bash', { command: 'orbit wiki search release' }],
         ['Bash', { command: 'orbit wiki get 34abc --json' }],
         ['Bash', { command: "'/usr/local/bin/orbit' wiki search release | head -20" }],

@@ -46,6 +46,7 @@ import {
 } from '../lib/projectMerge';
 import { DEFAULT_MAIN_BRANCH, RUN_DELIVERY_ANCHOR, mainBranchName, revealRunDelivery } from '../lib/projectStart';
 import { useProjectIntegration } from '../lib/pollOwner';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * The card that asks the account owner to merge a project branch into main (mock 4,
@@ -817,12 +818,11 @@ export function ProjectPromotionCard({
     >
       <div className="approval-head project-promotion-head">
         <span className="criteria-decision-heading">{promotionHeading(promotion)}</span>
-        <span
-          className={`criteria-provenance${merged ? ' prov-neutral' : ''}`}
-          title={FROM_ORBIT_TITLE}
-        >
-          {FROM_ORBIT}
-        </span>
+        <Tooltip content={FROM_ORBIT_TITLE} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className={`criteria-provenance${merged ? ' prov-neutral' : ''}`}>
+            {FROM_ORBIT}
+          </span>
+        </Tooltip>
       </div>
       <div className="approval-body is-plan project-promotion-body">
         {merged ? (
@@ -1070,9 +1070,11 @@ export function ProjectPromotionReceipt({
     >
       <div className="approval-head project-promotion-head">
         <span className="criteria-decision-heading">{promotionHeading(promotion)}</span>
-        <span className="criteria-provenance prov-neutral" title={FROM_ORBIT_TITLE}>
-          {FROM_ORBIT}
-        </span>
+        <Tooltip content={FROM_ORBIT_TITLE} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="criteria-provenance prov-neutral">
+            {FROM_ORBIT}
+          </span>
+        </Tooltip>
       </div>
       <div className="approval-body is-plan project-promotion-body">
         <MergedRows promotion={promotion} project={null} now={now} />

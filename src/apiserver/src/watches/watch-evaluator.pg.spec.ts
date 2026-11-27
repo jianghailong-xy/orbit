@@ -32,7 +32,8 @@ import { after, before, beforeEach, test } from 'node:test';
 import { BadRequestException, ForbiddenException, Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import {
   NormalizedRunEvent,
   RunEventType,
@@ -62,8 +63,10 @@ import {
   watchHintFor,
 } from './watch-evaluator.service';
 import { WATCH_PREDICATE_VERSION } from './watch-predicate';
+import { vectorSessionStatus } from './watch-vector.fixture';
 import { redactReason, redactSnapshot } from './watch-redaction';
 import { WatchesService } from './watches.service';
+import { wordSql } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -271,11 +274,11 @@ async function insertSession(row: {
 }): Promise<string> {
   const id = randomUUID();
   await sql.query(
-    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","status","end_reason",
+    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","turn_state","end_reason",
                            "completed_at","deleted_at","assigned_runner_id", "finished_at")
-     VALUES ($1,'watched session','p',$2,$2,now(),$3,$4,
+     VALUES ($1,'watched session','p',$2,$2,now(),(CASE ($3)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END),$4,
              CASE WHEN $5::boolean THEN now() END, CASE WHEN $6::boolean THEN now() END, $7,
-             CASE WHEN $3::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END)`,
+             CASE WHEN $3::text IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END)`,
     [id, row.owner ?? ownerId, row.status, row.endReason ?? null, row.completedAt ?? false, row.deletedAt ?? false, row.runnerId ?? null],
   );
   return id;
@@ -528,7 +531,7 @@ test('every leaf decides the contract vectors from the rows the evaluator reads'
     vectors += 1;
     const session = givenSession
       ? await insertSession({
-          status: givenSession.status,
+          status: vectorSessionStatus(givenSession),
           endReason: givenSession.endReason ?? null,
           completedAt: givenSession.completedAt != null,
           deletedAt: givenSession.deletedAt != null,
@@ -673,8 +676,9 @@ test('a published event only schedules an evaluation: a status it claims is not 
   assert.equal(hinted.state, 'ACTIVE', 'a Match was derived from an event payload');
   assert.equal((await readMatches(watchId)).length, 0);
 
-  // The row fails too, and the same event now finds it.
-  await sql.query(`UPDATE "session" SET "status" = 'FAILED', "finished_at" = COALESCE("finished_at", now()) WHERE "id" = $1`, [session]);
+  // The row fails too, released as a failure is (its turn records it), and the same event now finds it.
+  await sql.query(`UPDATE "session" SET "turn_state" = NULL, "last_turn_outcome" = 'FAILED', "finished_at" = COALESCE("finished_at", now())
+                    WHERE "id" = $1`, [session]);
   realtime.publish(session, event(RunEventType.STATUS, { status: 'FAILED' }));
   const [match] = await eventually('the Match', () => readMatches(watchId), (m) => m.length === 1);
   assert.equal(match.snapshot.targets[0].observed?.status, 'FAILED');
@@ -1032,7 +1036,7 @@ test('a worker killed holding a lease, an apiserver restarted around waiting wat
 
   // While it is down both conditions come true, and the event that would have hinted reaches nobody.
   await sql.query(`UPDATE "task" SET "status" = 'FAILED' WHERE "id" = $1`, [work]);
-  await sql.query(`UPDATE "session" SET "status" = 'AWAITING_INPUT' WHERE "id" = $1`, [conversation]);
+  await sql.query(`UPDATE "session" SET "turn_state" = NULL WHERE "id" = $1`, [conversation]);
   firstServer.realtime.publish(conversation, event(RunEventType.STATUS, { status: 'AWAITING_INPUT' }));
   // Due, and nobody takes them: the closed application really did stop its loop.
   for (const id of waiting) await eventually('its sweep to come due', () => readWatch(id), (w) => w.due === true, 10_000);
@@ -1061,7 +1065,7 @@ test('a worker killed holding a lease, an apiserver restarted around waiting wat
   assert.equal(beforeRestart.state, 'ACTIVE');
   await sql.query(`UPDATE "runner" SET "last_heartbeat_at" = NULL WHERE "id" = $1`, [runnerId]);
   await sql.query(`UPDATE "runner" SET "last_heartbeat_at" = now() WHERE "id" = $1`, [runnerId]);
-  await sql.query(`UPDATE "session" SET "status" = 'AWAITING_INPUT' WHERE "id" = $1`, [onRunner]);
+  await sql.query(`UPDATE "session" SET "turn_state" = NULL WHERE "id" = $1`, [onRunner]);
   const [parked] = await eventually('the watch to see the parked session', () => readMatches(watched), (m) => m.length === 1);
   assert.ok(parked.matchedAt >= beforeRestart.nextEvaluateAt!, 'matched before its sweep, so something other than the row decided');
   await secondServer.close();
@@ -1287,7 +1291,7 @@ async function jobHost(prisma: PrismaClient) {
       title: 'a session waiting on its job',
       prompt: 'run the soak test and tell me how it went',
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: false,
       assignedRunnerId: runner.id,
@@ -1498,7 +1502,7 @@ test('a job that ended is not quiet: the leaf does not hold, no deadline is sche
     { predicateVersion: 3 },
   );
   assert.equal((await evaluator.evaluate(eitherWay)).outcome, 'SCHEDULED');
-  await sql.query(`UPDATE "session" SET "status" = 'SUCCEEDED', "finished_at" = COALESCE("finished_at", now()) WHERE "id" = $1`, [host.sessionId]);
+  await sql.query(`UPDATE "session" SET "turn_state" = NULL, "finished_at" = COALESCE("finished_at", now()) WHERE "id" = $1`, [host.sessionId]);
   assert.equal((await evaluator.evaluate(eitherWay)).outcome, 'MATCHED');
   const [match] = await readMatches(eitherWay);
   assert.equal(match.reason, `ANY_OF(ANY SESSION_JOB_NO_OUTPUT_FOR(300s, ${JOB}) 0/1, ANY SESSION_RUN_TERMINAL 1/1)`);
@@ -1538,7 +1542,7 @@ test('the job leaf is checked where a watch is created: its version, its window,
 });
 
 async function sessionStatus(sessionId: string): Promise<string> {
-  const { rows: [row] } = await sql.query<{ status: string }>(`SELECT "status"::text AS "status" FROM "session" WHERE "id" = $1`, [sessionId]);
+  const { rows: [row] } = await sql.query<{ status: string }>(`SELECT ${wordSql()} AS "status" FROM "session" WHERE "id" = $1`, [sessionId]);
   return row.status;
 }
 
@@ -1592,11 +1596,11 @@ interface QuiescentSessionRow {
 async function quiescentSession(row: QuiescentSessionRow = {}): Promise<string> {
   const id = randomUUID();
   await sql.query(
-    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","status","end_reason",
+    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","turn_state","end_reason",
                            "completed_at","running_bg_jobs","running_subagents","engine_turn_active","retry_at", "finished_at")
-     VALUES ($1,'a child session','p',$2,$2,now(),$3,$4,CASE WHEN $5::boolean THEN now() END,$6::text[],$7::text[],$8,
+     VALUES ($1,'a child session','p',$2,$2,now(),(CASE ($3)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END),$4,CASE WHEN $5::boolean THEN now() END,$6::text[],$7::text[],$8,
              CASE WHEN $9::int IS NOT NULL THEN now() + make_interval(secs => $9::int) END,
-             CASE WHEN $3::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END)`,
+             CASE WHEN $3::text IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END)`,
     [
       id, ownerId, row.status ?? 'AWAITING_INPUT', row.endReason ?? null, row.completed ?? false,
       row.jobs ?? [], row.subagents ?? [], row.engineTurn ?? false, row.retryInSeconds ?? null,
@@ -1754,7 +1758,7 @@ test('the contract vectors that ask SESSION_QUIESCENT are decided as they say', 
     if (!('SESSION_QUIESCENT' in vector.expect)) continue;
     const given = vector.given.session;
     const target = await quiescentSession({
-      status: given.status,
+      status: vectorSessionStatus(given),
       endReason: given.endReason ?? null,
       jobs: (vector.given.jobs ?? []).map((job: { id: string }) => job.id),
       subagents: given.runningSubagents ?? [],

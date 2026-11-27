@@ -44,6 +44,13 @@ import (
 // reconfigure or steer the engine a second time. A fetch over the link that got no answer at all is therefore
 // followed by one under its request id, however long the link stays down, until one is answered (linkRequestIDs).
 //
+// A message or shell turn waits for the session's turn permit before it is handed to the session loop (holdTurns,
+// docs/runner-update-drain-design.md §7.2). While the permit does not come — the pool drains for an update
+// (heldForUpdate), a Claude login swap holds the folder, the runner has no capacity yet — the poller holds the turn and
+// goes on fetching, so a control turn filed behind it (interrupt, end, steer, withdraw, setconfig, diff) is handed to
+// the session loop all the same. An interrupt hands the held turn back unrun, as INTERRUPTED (handBackHeldTurn), before
+// the loop acts on it as it acts on any interrupt. A turn whose permit is there at once is handed on at once, as before.
+//
 // A fetch refused for the lease (isLeaseOwnershipError: 409, 403, 404) ends the poller: the generation never owns the
 // inbox again. Nor does a poller whose context has ended, or that has been closed, ever fetch again: the engine it
 // fetched for is gone, and a control turn handed to it would have no receiver (retirePendingGeneration in
@@ -82,6 +89,23 @@ type inboxPoller struct {
 	handed string
 	// once are the turns of every other kind handed to this generation, by id: each is handed to the session loop once.
 	once map[string]bool
+
+	// permit and handBack are what holdTurns set: the session loop's wait for its turn permit, and what hands a held
+	// turn back unrun. Nil on a poller the loop waits for its permits behind itself.
+	permit   turnPermitWaiter
+	handBack func(*RunInboxResponse)
+	// held is the message or shell turn fetched whose permit has not come yet. Under mu, so that close can end its wait.
+	held *heldTurn
+}
+
+// heldTurn is a message or shell turn waiting for its permit (holdTurns).
+type heldTurn struct {
+	resp   *RunInboxResponse
+	cancel context.CancelFunc
+	done   chan struct{} // closed when the wait has returned
+	// What the wait came to, read once done is closed: whether the permit came, and whether the wait ended only
+	// because the context of the fetch that started it did.
+	ok, ctxEnded bool
 }
 
 // newInboxPoller is the inbox of the engine generation leaseGeneration of a session. close ends it with the generation.
@@ -101,9 +125,21 @@ func (p *inboxPoller) next(ctx context.Context) (*RunInboxResponse, error) {
 		if err := p.stopped(ctx); err != nil {
 			return nil, err
 		}
+		if resp := p.permitted(ctx); resp != nil {
+			return resp, nil
+		}
 		if p.gate != nil {
-			due, err := p.t.link.gates.take(ctx, func() *linkGate { return p.gate }, linkHintWait)
+			// A held turn whose permit comes ends the wait for a hint: it is handed on at once.
+			takeCtx, stopTake := ctx, func() {}
+			if h := p.heldTurn(); h != nil {
+				takeCtx, stopTake = contextUntilClosed(ctx, h.done)
+			}
+			due, err := p.t.link.gates.take(takeCtx, func() *linkGate { return p.gate }, linkHintWait)
+			stopTake()
 			if err != nil {
+				if ctx.Err() == nil && takeCtx.Err() != nil {
+					continue // the held turn's wait ended
+				}
 				return nil, err
 			}
 			if !due {
@@ -154,8 +190,160 @@ func (p *inboxPoller) next(ctx context.Context) (*RunInboxResponse, error) {
 		if takeMainCheckoutNotice(p.sessionID, resp) {
 			continue
 		}
+		if p.waitsForPermit(resp) {
+			if h := p.heldTurn(); h != nil {
+				if h.resp.TurnID == resp.TurnID {
+					continue // the held turn, handed over again while it waits
+				}
+				// The control plane hands out one executable turn at a time, so this is not expected: the session
+				// loop waits for this one's permit itself, as it always did.
+				return resp, nil
+			}
+			if p.permit(permitProbe) {
+				return resp, nil // its permit is here: nothing waits
+			}
+			p.hold(ctx, resp)
+			continue
+		}
+		if resp.Kind == "interrupt" {
+			p.handBackHeld()
+			// Stopped while its queued message waits for the update, the session holds a slot nothing runs under:
+			// it is given back, and the control plane, which the Stop left idle, says so (§7.4).
+			if p.t.draining != nil && p.t.draining() && p.t.returnHeldSlot != nil {
+				go p.t.returnHeldSlot(p.sessionID)
+			}
+		}
 		return resp, nil
 	}
+}
+
+// permitProbe is a context that has ended: a permit wait asked under it answers whether the permit is there now,
+// without waiting for it (waitActive checks before it waits). It is the same check the loop's own wait makes.
+var permitProbe = func() context.Context {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	return ctx
+}()
+
+// isPermitProbe is whether a permit wait is the poller asking whether the permit is there now (permitProbe), rather
+// than a wait for it.
+func isPermitProbe(ctx context.Context) bool { return ctx == permitProbe }
+
+// holdTurns makes the poller wait for the turn permit of every message or shell turn it fetches before it hands the
+// turn to the session loop, and go on fetching meanwhile, so that a control turn filed behind a held turn is handed on
+// (docs/runner-update-drain-design.md §7.2). wait is the loop's waitTurnPermit; an interrupt that arrives while a turn
+// is held hands that turn back unrun through completeTurn (handBackHeldTurn). Called once, before the first next.
+//
+// The loop still asks waitTurnPermit for each message or shell turn it is handed: the poller hands on a held turn
+// once its wait has returned, and the loop's own wait then decides, at once, whether it runs.
+func (p *inboxPoller) holdTurns(wait turnPermitWaiter, job *ClaimedSession, completeTurn turnCompleter) {
+	p.permit = wait
+	p.handBack = func(resp *RunInboxResponse) { handBackHeldTurn(resp, job, completeTurn) }
+}
+
+// heldTurnStoppedResult is the result of a turn an interrupt handed back while it waited for its permit.
+const heldTurnStoppedResult = "Stopped before it started: nothing ran."
+
+// handBackHeldTurn answers a message or shell turn that never started because an interrupt arrived while it waited for
+// its permit: INTERRUPTED, under the subtype an interrupted turn is reported with, and with nothing run. The control
+// plane settles it as it settles a stopped turn, which is not a turn lost without a word.
+func handBackHeldTurn(resp *RunInboxResponse, job *ClaimedSession, completeTurn turnCompleter) {
+	logln(fmt.Sprintf("an interrupt arrived while %s turn %s of %s waited for its permit; handing it back unrun", resp.Kind, resp.TurnID, job.SessionID))
+	if err := completeTurn(TurnCompleteRequest{
+		TurnID:           resp.TurnID,
+		Status:           stInterrupted,
+		Result:           heldTurnStoppedResult,
+		Subtype:          "interrupted",
+		RuntimeSessionID: currentRuntimeSessionID(job),
+		BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
+	}); err != nil {
+		logln("held turn turn-complete failed for", job.SessionID+":", err)
+	}
+}
+
+// waitsForPermit is whether resp is a turn the poller holds until its permit comes: a message or shell turn, once
+// holdTurns has been called, and not one being processed already (a redelivery of a running turn goes straight on).
+func (p *inboxPoller) waitsForPermit(resp *RunInboxResponse) bool {
+	return p.permit != nil && (resp.Kind == "message" || resp.Kind == "shell") && !p.isInflight(resp.TurnID)
+}
+
+// heldTurn is the turn held for its permit, nil when none is.
+func (p *inboxPoller) heldTurn() *heldTurn {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.held
+}
+
+// hold starts the wait for resp's permit, under ctx.
+func (p *inboxPoller) hold(ctx context.Context, resp *RunInboxResponse) {
+	waitCtx, cancel := context.WithCancel(ctx)
+	h := &heldTurn{resp: resp, cancel: cancel, done: make(chan struct{})}
+	p.mu.Lock()
+	if p.closed {
+		p.mu.Unlock()
+		cancel()
+		return
+	}
+	p.held = h
+	p.mu.Unlock()
+	logln(fmt.Sprintf("%s turn %s of %s waits for its permit; its inbox is read meanwhile", resp.Kind, resp.TurnID, p.sessionID))
+	go func() {
+		h.ok = p.permit(waitCtx)
+		h.ctxEnded = !h.ok && ctx.Err() != nil
+		close(h.done)
+	}()
+}
+
+// permitted is the held turn once its wait has returned, for the session loop, and nil while it still waits. A wait
+// that ended only with the context of an earlier call starts again under ctx.
+func (p *inboxPoller) permitted(ctx context.Context) *RunInboxResponse {
+	h := p.heldTurn()
+	if h == nil {
+		return nil
+	}
+	select {
+	case <-h.done:
+	default:
+		return nil
+	}
+	p.mu.Lock()
+	p.held = nil
+	p.mu.Unlock()
+	h.cancel()
+	if h.ctxEnded {
+		p.hold(ctx, h.resp)
+		return nil
+	}
+	// The permit came, or the wait said no (the session left the pool): the loop's own wait decides which.
+	return h.resp
+}
+
+// handBackHeld hands back unrun the turn held for its permit, if one is: an interrupt arrived behind it. Its wait ends
+// first, so it cannot be handed on as well.
+func (p *inboxPoller) handBackHeld() {
+	p.mu.Lock()
+	h := p.held
+	p.held = nil
+	p.mu.Unlock()
+	if h == nil {
+		return
+	}
+	h.cancel()
+	<-h.done
+	p.handBack(h.resp)
+}
+
+// contextUntilClosed is ctx, ended early when done is closed. stop releases it.
+func contextUntilClosed(ctx context.Context, done <-chan struct{}) (context.Context, func()) {
+	c, cancel := context.WithCancel(ctx)
+	go func() {
+		select {
+		case <-done:
+			cancel()
+		case <-c.Done():
+		}
+	}()
+	return c, cancel
 }
 
 // handover is what handedOver made of a turn a fetch brought back.
@@ -221,6 +409,9 @@ func (p *inboxPoller) close() {
 		return
 	}
 	p.closed = true
+	if p.held != nil {
+		p.held.cancel() // the generation ends: nothing will run the held turn here
+	}
 	if p.t.link != nil {
 		p.t.link.gates.closeInbox(p.sessionID, p.gate)
 		if p.handed != "" {

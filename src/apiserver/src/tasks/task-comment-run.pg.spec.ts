@@ -16,11 +16,11 @@ import test from 'node:test';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import { ConvergenceLedgerService } from '../projects/convergence-ledger.service';
 import { EMPTY_PROGRESS_VECTOR, scopeHash } from '../projects/convergence-progress';
@@ -66,7 +66,7 @@ async function session(db: PrismaClient, ownerId: string, taskId: string | null)
       taskId,
       title: taskId ? 'a run of a task' : 'a session with no task',
       prompt: 'do the work',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startedAt: new Date(),
     },

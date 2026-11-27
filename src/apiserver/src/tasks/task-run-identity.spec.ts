@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { dispatchDesiredSessionId } from '../projects/project-dispatch-identity';
 import { TASK_OCCUPYING } from './reclaim-stalled-task';

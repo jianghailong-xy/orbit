@@ -48,7 +48,7 @@ export const FILES_CONFIG = Symbol('FILES_CONFIG');
 
 /** An attachment's bytes, ready to be answered with. */
 export interface OpenedFile {
-  /** A stream from the file store, or the bytes of a row from before Orbit Files. */
+  /** A stream from the file store, or the bytes of a row from before Drive. */
   content: Readable | Buffer;
   mimeType: string;
   sizeBytes: number;
@@ -80,7 +80,7 @@ const FILE_LIST_LIMIT = 200;
 const STORE_FALLBACK_WARNING_MS = 60_000;
 const STORE_USAGE_CACHE_MS = 3 * 60_000;
 
-/** The code of an upload refused because the account has used its quota (ORBIT_FILES_QUOTA_BYTES). */
+/** The code of an upload refused because the account has used its quota (ORBIT_DRIVE_QUOTA_BYTES). */
 export const FILE_QUOTA_EXCEEDED = 'FILE_QUOTA_EXCEEDED';
 
 /** How many projects and tasks the usage read names, largest first. */
@@ -94,7 +94,7 @@ export interface StorageUsage {
   /** What the account keeps now, each content once. */
   totalBytes: number;
   fileCount: number;
-  /** ORBIT_FILES_QUOTA_BYTES, when this deployment sets one. */
+  /** ORBIT_DRIVE_QUOTA_BYTES, when this deployment sets one. */
   quotaBytes: number | null;
   /** Largest first. A file counts under its task, and its task's project. */
   projects: { projectId: string; title: string; bytes: number; fileCount: number }[];
@@ -186,7 +186,7 @@ export interface FileView {
   label: string | null;
   mimeType: string;
   sizeBytes: number;
-  /** Null on a row from before Orbit Files, until its bytes are moved. */
+  /** Null on a row from before Drive, until its bytes are moved. */
   sha256: string | null;
   sessionId: string | null;
   taskId: string | null;
@@ -290,7 +290,7 @@ type EvidenceFileSection =
   | { fileCount: 1; totalBytes: number; file: EvidenceFileView }
   | { fileCount: number; totalBytes: number; folder: EvidenceFileRow };
 
-/** A folder bundle's manifest: what its bytes are (docs/orbit-files-design.md §2.2). Ids are public ids. */
+/** A folder bundle's manifest: what its bytes are (docs/drive-design.md §2.2). Ids are public ids. */
 export interface FileBundleManifest {
   kind: 'orbit-file-bundle';
   version: 1;
@@ -310,10 +310,10 @@ function assertBundlePath(filePath: string): void {
 }
 
 /**
- * Orbit Files' storage layer (docs/orbit-files-design.md §2.1): an attachment row describes a file, and
+ * Drive' storage layer (docs/drive-design.md §2.1): an attachment row describes a file, and
  * its bytes are kept once per content in a file store — the files directory, or an S3-compatible bucket —
  * under their sha256, with a `file_blob` row saying which. Every attachment upload is kept here; every read
- * of an attachment's bytes comes through `open`, which serves a row from before Orbit Files from its own
+ * of an attachment's bytes comes through `open`, which serves a row from before Drive from its own
  * `data` column until the copy of old attachments reaches it (attachment-migration.ts). What agents keep with
  * `file_upload` and find with `file_list` is the same rows, with the doors at the end of this class.
  */
@@ -565,7 +565,7 @@ export class FilesService implements OnApplicationBootstrap {
 
   /**
    * What citing these files as evidence takes from the file store (§2.4), before the transaction that saves it, which holds
-   * the task's lock: a row from before Orbit Files gets the sha256 the citation binds, and an image's header says how big
+   * the task's lock: a row from before Drive gets the sha256 the citation binds, and an image's header says how big
    * it is, which is kept on the citation so that no later read of it has to come here. Keyed by file. The citation
    * itself is judged in that transaction, so this reads the owner's rows whether or not it will hold. An expired row has
    * nothing to take: that transaction refuses a new version citing it. It answers a retry of the version that already did,

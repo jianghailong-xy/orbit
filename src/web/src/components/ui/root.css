@@ -46,3 +46,13 @@
   color: var(--orbit-control-disabled-text);
   cursor: not-allowed;
 }
+
+/* A clickable list row shows keyboard focus as its hover tint, never a ring. Chrome draws :focus-visible after a
+   click followed by any key press, and Safari when focus comes back to a pressed row, so a ring reads as a stray
+   blue border round the row the mouse picked (the session rows, 24b5c3c53; the schedule rows). Every such row
+   carries data-row-focus; rowFocus.test.ts fails on a row without it. Here, ahead of every page stylesheet, a row's
+   own selected or active tint still wins over this one. */
+[data-row-focus]:focus-visible {
+  outline: none;
+  background-color: var(--bg-hover);
+}

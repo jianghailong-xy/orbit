@@ -8,6 +8,7 @@ import {
   SESSION_CODEX_STEER_V1,
   SESSION_CURRENT_WORK_ROUTING_V1,
 } from '@orbit/shared';
+import { wordSql } from '../test-support/session-word';
 import '../test-support/dequeue-under-lease';
 
 /**
@@ -93,10 +94,10 @@ async function seedStartingWindow(): Promise<void> {
   await admin.query(
     `INSERT INTO "session"(
        id, title, prompt, owner_id, creator_id, assigned_runner_id, provider,
-       provider_builtin, status, num_turns, updated_at
+       provider_builtin, turn_state, num_turns, updated_at
      ) VALUES (
        $1::uuid, 'race', 'opening prompt', $2::uuid, $2::uuid, $3::uuid, 'codex',
-       TRUE, 'RUNNING', 0, clock_timestamp()
+       TRUE, 'IN_FLIGHT', 0, clock_timestamp()
      )`,
     [SESSION_ID, OWNER_ID, RUNNER_ID],
   );
@@ -113,8 +114,8 @@ async function seedCrossSessionTarget(): Promise<void> {
   await admin.query(`DELETE FROM "session" WHERE id = $1::uuid`, [OTHER_SESSION_ID]);
   await admin.query(
     `INSERT INTO "session"(
-       id, title, prompt, owner_id, creator_id, status, num_turns, updated_at
-     ) VALUES ($1::uuid, 'other', 'other', $2::uuid, $2::uuid, 'RUNNING', 1, clock_timestamp())`,
+       id, title, prompt, owner_id, creator_id, turn_state, num_turns, updated_at
+     ) VALUES ($1::uuid, 'other', 'other', $2::uuid, $2::uuid, 'IN_FLIGHT', 1, clock_timestamp())`,
     [OTHER_SESSION_ID, OWNER_ID],
   );
   await admin.query(
@@ -252,7 +253,7 @@ pgTest('steer dequeue commit with a lost response re-enters the queue at target 
   // And it is genuinely claimable — an executable turn the session is now RUNNING for, rather
   // than a PENDING row parked behind an idle session nothing will come back for.
   const session = await admin.query<{ status: string }>(
-    'SELECT status FROM "session" WHERE id = $1::uuid',
+    `SELECT ${wordSql()} AS status FROM "session" WHERE id = $1::uuid`,
     [SESSION_ID],
   );
   assert.equal(session.rows[0].status, 'RUNNING');

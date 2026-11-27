@@ -376,7 +376,7 @@ private fun ListedTask(task: JsonObject, selecting: Boolean, checked: Boolean, t
             onClick = { if (selecting) toggle(id) else open(OrbitRoute(Destination.TASK, id)) },
             onLongClick = { if (!selecting) menu = true }), verticalAlignment = Alignment.CenterVertically) {
             if (selecting) Checkbox(checked, { toggle(id) })
-            TaskRowView(task, Modifier.weight(1f))
+            TaskRowView(task, Modifier.weight(1f), open)
         }
         DropdownMenu(menu, { menu = false }) {
             // A task already going offers its run instead of a press that can only be refused.

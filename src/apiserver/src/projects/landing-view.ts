@@ -13,6 +13,8 @@ import { readInFlightJobs } from './project-integration-line';
 import { pushBoundaryPassed } from './project-integration-job';
 import { readLandingTimeline } from './landing-timeline';
 import { INTEGRATION_ITEM_KINDS, openItemInWorkSessionHands, openItemOwed, openItemVisible } from './project-open-item';
+import { isInFlightJobState } from './in-flight-job-states';
+import { PULL_REQUEST_VIEW_SELECT, pullRequestViewOf } from './pull-request-landing';
 
 /**
  * The landing view (docs/project-integration-line-contract.md §2.9 LS1, LS6; errata E4):
@@ -83,9 +85,15 @@ export async function readLandingView(
   // The write-side liveness/blocking rules are `readInFlightJobs`' and are read here rather than
   // re-derived: only a QUEUED or RUNNING attempt has a claim to judge, and that read also
   // carries the queue-wide facts (serial slot, runner wait) a reason is built from.
-  const inFlight = job && (job.state === 'RUNNING' || job.state === 'QUEUED')
+  const inFlight = job && isInFlightJobState(job.state)
     ? (await readInFlightJobs(prisma, landing.projectId)).find((row) => row.jobId === job.id) ?? null
     : null;
+  // docs/design/protected-branch-landing.md §8: the subject's newest pull request, open or settled.
+  const pullRequestRow = await prisma.githubPullRequest.findFirst({
+    where: { landingId: landing.id, ownerId },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    select: PULL_REQUEST_VIEW_SELECT,
+  });
 
   const [runner, sourceSession, jobRows] = await Promise.all([
     job?.runnerId
@@ -175,6 +183,7 @@ export async function readLandingView(
     todos,
     generations,
     timeline,
+    pullRequest: pullRequestRow ? pullRequestViewOf(pullRequestRow) : null,
   };
 }
 

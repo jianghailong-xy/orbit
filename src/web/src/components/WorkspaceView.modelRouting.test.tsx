@@ -281,9 +281,11 @@ describe('the model chip on a task run smart selection picked', { timeout: 60_00
 
     await click(row('Open task ›'), 'Open task');
     await act(async () => {
-      // The task opens over this conversation (lib/taskInPlace, owner 2026-11-12), not on a page apart.
-      await vi.waitFor(() => expect(where).toBe(`/sessions/${SESSION}?task=${TASK}`), { timeout: 20_000, interval: 20 });
+      // The task opens beside this conversation (lib/taskInPlace), not on a page apart, and the address
+      // stays the conversation's (owner 2026-11-27): the header's Task badge reads it as open.
+      await vi.waitFor(() => expect(document.querySelector('button.coordinator-badge-link')?.getAttribute('aria-pressed')).toBe('true'), { timeout: 20_000, interval: 20 });
     });
+    expect(where).toBe(`/sessions/${SESSION}`);
     expect(chip()).not.toBeNull();
   });
 

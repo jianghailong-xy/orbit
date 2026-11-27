@@ -137,7 +137,7 @@ async function session(w: World, fields: Partial<Prisma.SessionUncheckedCreateIn
   const row = await w.h.db.session.create({
     data: {
       ownerId: w.ownerId, creatorId: w.ownerId, title: 'recap session', prompt: 'p',
-      status: 'AWAITING_INPUT', dispatchOrigin: 'USER', ...fields,
+      turnState: null, dispatchOrigin: 'USER', ...fields,
     },
   });
   return row.id;

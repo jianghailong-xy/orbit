@@ -144,8 +144,8 @@ test('GET /sessions/:id/background lists bg_run jobs beside shells, agents and w
   ]);
   const sessionId = randomUUID();
   await sql.query(
-    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","status","dispatch_origin","created_at","updated_at")
-     VALUES ($1,'background jobs','p',$2,$2,'AWAITING_INPUT'::run_status,'USER',now(),now())`,
+    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","turn_state","dispatch_origin","created_at","updated_at")
+     VALUES ($1,'background jobs','p',$2,$2,NULL,'USER',now(),now())`,
     [sessionId, ownerId],
   );
 

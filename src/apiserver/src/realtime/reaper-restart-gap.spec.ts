@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { AgentProvider } from '@orbit/shared';
 import { ReaperService } from './reaper.service';
 import { runtimeStartupClock } from './runtime-startup-clock';
@@ -25,7 +25,7 @@ function sweepWith(opts: {
           id: SESSION,
           taskId: null,
           assignedRunnerId: RUNNER,
-          status: RunStatus.RUNNING,
+          turnState: 'IN_FLIGHT', status: RunStatus.RUNNING,
           provider: AgentProvider.OPENCODE,
           engine: AgentProvider.OPENCODE,
           runtimeSessionId: null,

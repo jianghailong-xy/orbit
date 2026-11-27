@@ -1,5 +1,5 @@
 /**
- * The drive's chunked, streamed store (docs/orbit-files-drive-technical-design.md §2.2–§2.4; migration 1283;
+ * The drive's chunked, streamed store (docs/drive-technical-design.md §2.2–§2.4; migration 1283;
  * drive/drive-chunks.service.ts, files/file-store.ts, files/s3-file-store.ts, files/file-retention-sweep.ts), over a real
  * PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty, once with each store:
  *
@@ -407,7 +407,7 @@ function storeCases(leg: Leg) {
   };
 }
 
-test('Orbit Files drive: the chunked streamed store, on the local files directory and on an S3-compatible server', {
+test('Documents drive: the chunked streamed store, on the local files directory and on an S3-compatible server', {
   skip: !URL, concurrency: 1, timeout: 3_600_000,
 }, async (t) => {
   const url = URL!;

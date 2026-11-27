@@ -39,8 +39,10 @@ internal object EngineErrors {
      * clears on its own, so the text is retried. */
     internal val edgeBlockMarkers = listOf("attention required", "cloudflare")
     internal val connectionDroppedMarkers = listOf("econnreset")
+    /** A provider's gateway that timed out on its own upstream and passed Go's transport error on under a 406 (DashScope). */
+    internal val connectionTimedOutMarkers = listOf("read: connection timed out")
 
-    internal val connectionFailureMarkers = listOf(edgeBlockMarkers, connectionDroppedMarkers)
+    internal val connectionFailureMarkers = listOf(edgeBlockMarkers, connectionDroppedMarkers, connectionTimedOutMarkers)
 
     /** Mirrors `isConnectionFailureText` in @orbit/shared and the runner's `isConnectionFailure`. Anchored at
      * the start, like the other classifications: a reply that merely quotes one is an ordinary reply. */

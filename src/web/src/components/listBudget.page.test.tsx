@@ -9,6 +9,8 @@ import { CREATED_RENAME } from '../lib/machineSetupCopy';
 import { sessionsQuery, watchesQuery } from '../lib/queries';
 import { createAppQueryClient } from '../lib/queryClient';
 import { ControlPlaneProvider } from '../lib/useControlPlane';
+import * as listingRules from '../../../apiserver/src/sessions/session-listing';
+import { answerListing } from '../test/sessionListingAnswer';
 
 /**
  * The list budget (docs/list-freshness-design.md §4) on the console's own pages, counted by a request
@@ -106,6 +108,8 @@ function answer(path: string): unknown {
   if (path.endsWith('/acceptance/criteria-decisions/pending')) {
     return { projectId: PROJECT_ID, readAt: new Date().toISOString(), count: 0, oldestAgeSeconds: null, decidableCount: 0, pending: [], settled: [] };
   }
+  // A workspace that shows its projects reads its listing a page at a time (docs/session-list-scale-design.md §3).
+  if (path.startsWith('/sessions/listing?')) return answerListing(listingRules, rows as never, [], path);
   if (path.startsWith('/sessions/search?')) return { q: '', contentSearched: false, total: 0, hits: [] };
   if (path.startsWith('/sessions/') && path.includes('/events/page')) return { events: [], hasMore: false };
   if (path.startsWith('/sessions/') && path.includes('/created-tasks')) return { total: 0, running: 0, failed: 0, done: 0, items: [], projects: [] };
@@ -157,6 +161,12 @@ const isOpenList = (path: string): boolean => {
   const params = new URLSearchParams(path.split('?')[1]);
   return params.get('workspaceId') === WORKSPACE_ID && !params.has('projectId') && !params.has('scheduled')
     && (params.get('view') ?? 'open') === 'open';
+};
+/** The listing's first page for the workspace: what a list that shows folders or projects reads on load. */
+const isFirstListingPage = (path: string): boolean => {
+  if (!path.startsWith('/sessions/listing?')) return false;
+  const params = new URLSearchParams(path.split('?')[1]);
+  return params.get('workspaceId') === WORKSPACE_ID && !params.has('after') && !params.has('folderId');
 };
 /** The Scheduled runs folder's own read (owner 2026-11-18): a workspace's runs, which the Open list never holds. */
 const isScheduledRuns = (path: string): boolean =>
@@ -296,13 +306,14 @@ describe('W5: a page load reads the Open list once', () => {
     });
   }
 
-  it('on a workspace that shows its projects (the whole list)', async () => {
+  it('on a workspace that shows its projects (the listing, a page at a time)', async () => {
     rows = [LOOSE, COORDINATOR];
     sidebarProjects = [SIDEBAR_PROJECT];
     await load(`/workspaces/${WORKSPACE_ID}`);
-    expect(calls.filter((call) => isOpenList(call.path)).map((call) => call.path), 'the Open list was read more than once').toHaveLength(1);
-    expect(new URLSearchParams(calls.find((call) => isOpenList(call.path))!.path.split('?')[1]).has('limit'),
-      'the splash warmed a page while the console reads the whole list').toBe(false);
+    expect(calls.filter((call) => isOpenList(call.path)).map((call) => call.path),
+      'the splash or the console read the flat Open list the listing replaces').toEqual([]);
+    expect(calls.filter((call) => isFirstListingPage(call.path)).map((call) => call.path), 'the listing was read more than once')
+      .toEqual([`/sessions/listing?workspaceId=${WORKSPACE_ID}&view=open&limit=40`]);
   }, 30_000);
 
   it('on a workspace with neither projects nor folders (one page)', async () => {
@@ -318,11 +329,11 @@ describe('W5: a page load reads the Open list once', () => {
     rows = [LOOSE, COORDINATOR];
     sidebarProjects = [SIDEBAR_PROJECT];
     await load(`/sessions/${LOOSE.id}`);
-    const lists = calls.filter((call) => call.path.startsWith('/sessions?') && !call.path.includes('projectId=')
-      && !isScheduledRuns(call.path));
+    const lists = calls.filter((call) => (call.path.startsWith('/sessions?') || call.path.startsWith('/sessions/listing?'))
+      && !call.path.includes('projectId=') && !isScheduledRuns(call.path));
     expect(calls.filter((call) => isScheduledRuns(call.path)), 'the Scheduled runs row reads once').toHaveLength(1);
     expect(lists.map((call) => call.path), 'the session page read a list it does not show, or its own twice').toHaveLength(1);
-    expect(isOpenList(lists[0].path)).toBe(true);
+    expect(isFirstListingPage(lists[0].path)).toBe(true);
   }, 30_000);
 });
 

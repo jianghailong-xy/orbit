@@ -16,6 +16,7 @@ import {
   dropHistoricalDispatchTouch,
   installHistoricalDispatchTouch,
 } from './pre-0132-dispatch-touch';
+import { wordSql } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -324,7 +325,7 @@ test('the three-party plan blocks where the fixture says it does', { skip: !URL,
       [ids.telemetrySessionId, ids.telemetryTurnAt],
     );
     await admin.query(
-      `UPDATE "session" SET "status" = 'AWAITING_INPUT'::run_status, "updated_at" = $2 WHERE "id" = $1::uuid`,
+      `UPDATE "session" SET "turn_state" = NULL, "updated_at" = $2 WHERE "id" = $1::uuid`,
       [ids.telemetrySessionId, ids.telemetryTurnAt],
     );
     await admin.query(
@@ -337,7 +338,7 @@ test('the three-party plan blocks where the fixture says it does', { skip: !URL,
       [ids.dependencyId, ids.dependentTaskId, ids.prerequisiteTaskId],
     );
     const state = await admin.query<{ session_status: string; task_status: string; edges: string; outbox: string | null }>(
-      `SELECT s."status"::text AS session_status,
+      `SELECT ${wordSql('s')} AS session_status,
               t."status"::text AS task_status,
               (SELECT count(*) FROM "task_dependency" d
                 WHERE d."id" = $3::uuid)::text AS edges,

@@ -57,6 +57,10 @@ import io.orbitd.android.tasks.TasksScreen
 import io.orbitd.android.projects.ProjectAttention
 import io.orbitd.android.projects.ProjectsScreen
 import io.orbitd.android.wiki.PageBar
+import io.orbitd.android.drive.DRIVE_SECTION
+import io.orbitd.android.drive.DriveDestination
+import io.orbitd.android.drive.driveShown
+import io.orbitd.android.drive.isDrive
 import io.orbitd.android.wiki.WikiDrawerCount
 import io.orbitd.android.wiki.WikiDrawerRow
 import io.orbitd.android.wiki.WikiDestination
@@ -86,6 +90,8 @@ import io.orbitd.android.management.RunnerCopy
 import io.orbitd.android.composer.rememberManagedRunner
 import io.orbitd.android.composer.rememberNewAccount
 import io.orbitd.android.text.LocalReaderResources
+import io.orbitd.android.reader.LandingPullRequestEnv
+import io.orbitd.android.reader.LocalLandingPullRequest
 import io.orbitd.android.text.ReaderResources
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
@@ -177,7 +183,8 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
             if (OrbitLinks.ownerRequest(raw) != null) { ownerRequestLink = incoming; return@LaunchedEffect }
             OrbitLinks.parse(raw, signedIn?.handle?.account?.server, Origin.EXTERNAL)?.let { route ->
                 if (navigation.current != route) LastPageMarks.arrived(route, raw)
-                navigation = navigation.receive(route)
+                // The upload notification's Show lands on Drive, its uploads sheet open, whatever was showing.
+                navigation = if (route.isDrive && navigation.account != null) navigation.land(DRIVE_SECTION, route) else navigation.receive(route)
             }
         }
     }
@@ -288,6 +295,49 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         .push(OrbitRoute(Destination.FOLDER, ScheduledRunsFolder.ID, id, sessionView = view.query))
                         .push(route)
                 }
+            }
+        }
+        // A filed session opened from outside the app (a link, a push, a share) lands with its folder's page under it, so Back
+        // reaches its row: the workspace's list hides a filed session behind its folder. A link inside the app opens over the page
+        // it was on, which Back returns to. Its folder is the directory row's, else the detail's once read. Once per open, and
+        // only while the session is still on top: a page opened over it, or Back, ends the open, and a return to it is no new one
+        // (iOS `nav.path == openingPath`).
+        var filedOpening by remember(signedIn.handle) { mutableStateOf<OrbitRoute?>(null) }
+        var shownTop by remember(signedIn.handle) { mutableStateOf<Pair<String, List<OrbitRoute>>?>(null) }
+        LaunchedEffect(navigation.section, navigation.frames) {
+            val before = shownTop
+            shownTop = navigation.section to navigation.frames
+            if (before?.second?.lastOrNull() == route) return@LaunchedEffect
+            val returned = before != null && before.first == navigation.section && before.second.size > navigation.frames.size &&
+                before.second.take(navigation.frames.size) == navigation.frames
+            filedOpening = route.takeIf {
+                !returned && it.destination == Destination.SESSION && it.id != null && it.folderId == null &&
+                    it.origin == Origin.EXTERNAL
+            }
+        }
+        filedOpening?.let { opening ->
+            val read by remember(app, signedIn.handle, opening.id) {
+                app.realtime.state.map { state ->
+                    state.session?.takeIf { state.handle === signedIn.handle && ObjectId.same(it.id, opening.id) }
+                        ?.snapshot?.detail?.let { detail ->
+                            val workspace = sequenceOf(detail.text("workspaceId"), detail.obj("workspace")?.text("id"),
+                                detail.text("agentId"), detail.obj("agent")?.text("id")).firstOrNull { !it.isNullOrEmpty() }
+                            Triple(workspace, detail.text("folderId"), detail.text("lifecycleState"))
+                        }
+                }.distinctUntilChanged()
+            }.collectAsState(null)
+            LaunchedEffect(opening, read, data.sessions, data.folders, data.workspaces) {
+                if (navigation.current != opening) return@LaunchedEffect
+                val row = data.sessions.values.firstNotNullOfOrNull { rows -> rows.firstOrNull { ObjectId.same(it.id, opening.id) } }
+                val (workspace, folderId, lifecycle) = row?.let { Triple(it.workspace, it.folderId, it.lifecycleState) } ?: read ?: return@LaunchedEffect
+                val view = SessionView.entries.firstOrNull { it.query == lifecycle.orEmpty().lowercase() } ?: SessionView.OPEN
+                if (folderId.isNullOrEmpty() || !listShowsFolders(false, view, null, Grouping.RECENCY)) { filedOpening = null; return@LaunchedEffect }
+                val folder = data.folders.firstOrNull { ObjectId.same(it.id, folderId) && ObjectId.same(it.workspaceId, workspace) } ?: return@LaunchedEffect
+                val id = data.workspaces.firstOrNull { ObjectId.same(it.id, workspace) }?.id ?: return@LaunchedEffect
+                filedOpening = null
+                val beneath = navigation.frames.getOrNull(navigation.frames.lastIndex - 1)
+                if (beneath?.destination != Destination.FOLDER || !ObjectId.same(beneath.id, folder.id))
+                    navigation = navigation.underFolder(id, folder.id, view.query)
             }
         }
         // A drawer row: the destination already showing only closes the drawer, any other opens at its root (A05-8) — a
@@ -419,6 +469,10 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                             }
                             if (dest == Destination.WIKI) WikiDrawerRow(app, signedIn.handle, drawer.isOpen, row) else row()
                         }
+                        // Documents (board 04-android ①): right after Wiki, no count; away while the server says documents.enabled: false.
+                        if (driveShown(app, signedIn.handle)) DrawerRow(selected = navigation.section == DRIVE_SECTION, icon = R.drawable.ic_folder,
+                            onClick = { select(DRIVE_SECTION, OrbitRoute(Destination.DRIVE, origin = Origin.DRAWER)) },
+                            modifier = Modifier.testTag("drawer:drive")) { DrawerLabel(DRIVE_SECTION) }
                         DrawerWorkspacesHeading("Workspaces") {
                             NewWorkspaceButton(newWorkspaceMachines) { machine ->
                                 select(machineDraftDestination(machine.id), newWorkspaceRoute(machine.id, machine.workspaces > 0, Origin.DRAWER))
@@ -429,8 +483,10 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         workspaces.forEach { workspace ->
                             val runner = data.runners.firstOrNull { ObjectId.same(it.id, workspace.runnerId) }
                             val sessions = data.sessions["open"].orEmpty().filter { ObjectId.same(it.workspace, workspace.id) }
+                            val onCloud = runner != null && RunnerPage.isManaged(runner.id, managed = runner.managed)
                             DrawerWorkspaceRow(name = workspace.name,
-                                runner = runner?.let { if (RunnerPage.isManaged(it.id, managed = it.managed)) RunnerCopy.MANAGED_RUNNER_LABEL else it.name },
+                                runner = runner?.let { if (onCloud) RunnerCopy.MANAGED_RUNNER_LABEL else it.name },
+                                cloud = onCloud,
                                 disabled = !workspace.enabled,
                                 stateLabel = if (runner?.online == false) ManagedRunner.row(runner.id, managedForLanding.shown?.status)?.label ?: "Offline" else null,
                                 waiting = sessions.sumOf { it.pendingApprovals },
@@ -497,7 +553,9 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         PageBar.Actions(route, this)
                         // A workspace's new session page has back alone in its bar, as iOS's draft does, and a session page back and
                         // its own ⋯ (iOS `ConsoleView`'s toolbar): neither carries the drawer or a refresh.
-                        val draftPage = route.destination == Destination.DRAFT && route.workspaceId != null || route.destination == Destination.SESSION
+                        val draftPage = route.destination == Destination.DRAFT && route.workspaceId != null || route.destination == Destination.SESSION ||
+                            // Drive' pages carry their own buttons (board 04-android ② ③): New folder and ⋮, nothing of the shell's.
+                            route.isDrive
                         if (navigation.canGoBack && !draftPage) IconButton(onClick = { scope.launch { focus.clearFocus(); drawer.open() } }) { NeedsYouMenuIcon(app, "Open navigation") }
                         // iOS: a session list is refreshed by pulling it.
                         if (route.destination != Destination.WORKSPACES && route.destination != Destination.WORKSPACE && route.destination != Destination.FOLDER && !draftPage)
@@ -507,7 +565,9 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                 Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding(), contentAlignment = Alignment.TopCenter) {
                     Box(Modifier.fillMaxHeight().widthIn(max = 840.dp).fillMaxWidth()) {
                         CompositionLocalProvider(LocalReaderResources provides remember(signedIn.handle) { ReaderResources(app.session, signedIn.handle) },
-                            LocalManagedRunnerStatus provides managedForLanding.shown?.status) {
+                            LocalManagedRunnerStatus provides managedForLanding.shown?.status,
+                            LocalLandingPullRequest provides LandingPullRequestEnv(
+                                { id -> data.workspaces.firstOrNull { ObjectId.same(it.id, id) }?.landingMode }, ::open)) {
                         holder.SaveableStateProvider(Wire.json.encodeToString(route)) {
                             when (route.destination) {
                                 Destination.WORKSPACES -> WorkspaceHome(data, management, startSession = { openNewSession() }) { app.realtime.refreshDirectory() }
@@ -544,6 +604,8 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 }
                                 Destination.BUILD -> BuildInformation { navigation = navigation.back() }
                                 Destination.GUEST_SESSION -> route.id?.let { GuestSessionPage(app, signedIn.handle, route, it) }
+                                Destination.DRIVE, Destination.DRIVE_FILE, Destination.DRIVE_TRASH, Destination.DRIVE_STORAGE ->
+                                    DriveDestination(app, signedIn.handle, route, api, data, ::open) { navigation = navigation.back() }
                                 // The timeline (board 01 ②) has its own bottom sheet. Change… opens the schedule's draft
                                 // change conversation (§8.2), no longer a blank new session.
                                 // A scheduled task's and a condition's pending items head the page (no Waiting on you page): the account's
@@ -626,6 +688,10 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
     // The page draws its own "Change {title}" once the opening has been read (board 03-change ③).
     Destination.SCHEDULE_CHANGE -> ""
     Destination.GUEST_SESSION -> io.orbitd.android.core.guests.GuestCopy.SHARED_WITH_ME
+    Destination.DRIVE -> route.id?.let { route.recordId } ?: "Drive"
+    Destination.DRIVE_FILE -> route.recordId ?: "Drive"
+    Destination.DRIVE_TRASH -> "Trash"
+    Destination.DRIVE_STORAGE -> "Storage"
     Destination.SETTINGS -> if (route.id == "workspace") data.workspaces.firstOrNull { ObjectId.same(it.id, route.workspaceId) }?.name
         ?.let { "$it settings" } ?: settingsTitle(route.id) else settingsTitle(route.id, route.recordId)
     Destination.RUNNER -> runnerTitle(route.recordId, route.id, data.runners.firstOrNull { ObjectId.same(it.id, route.id) }?.let { RunnerPage.nameOf(it.id, it.name, it.displayName, managed = it.managed) })

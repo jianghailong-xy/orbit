@@ -98,7 +98,7 @@ export interface ManagedRunnerWorkload {
   operations: number;
   /** Events buffered for the control plane and not yet acknowledged by it. */
   unflushedEvents: number;
-  /** Orbit Files drive handles holding bytes no commit has taken yet; absent from a runner that has no drive. */
+  /** drive handles holding bytes no commit has taken yet; absent from a runner that has no drive. */
   driveWrites?: number;
   /** How long, in whole seconds, all four have been zero; 0 while any is not. */
   idleSeconds: number;
@@ -165,8 +165,16 @@ export interface ManagedRunnerCapability {
   contractVersion: number;
 }
 
+/** `GET /api/auth/capabilities` → `documents`: whether this server offers the Drive (ORBIT_DRIVE_ENABLED,
+ *  off by default). A server that predates the field always had it on. */
+export interface DocumentsCapability {
+  enabled: boolean;
+}
+
 export interface ServerCapabilities {
   managedRunners: ManagedRunnerCapability;
+  /** Absent on a server that predates the switch: read that as on. */
+  documents?: DocumentsCapability;
 }
 
 /** A safe, structured cause. Never a raw infrastructure error, endpoint or credential. */
@@ -207,6 +215,16 @@ export interface ManagedRunnerStatus {
   usable: boolean;
   reason: ManagedRunnerReason | null;
   retryAfter: string | null;
+  /**
+   * Its next automatic try, kept as the manager stored it: a restart's backoff, or a FAILED runner's slow retry
+   * (taken once it is due and work is waiting, so it may be past). Null when none is scheduled. FAILED with a
+   * retryable reason and this set, it comes back by itself, and work sent to it waits for it. Absent from an older
+   * server.
+   */
+  nextAttemptAt?: string | null;
+  /** How many tries in a row it has spent on its way up or restarting since it last stood up; 0 when none. Absent
+   *  from an older server. */
+  attempt?: number;
   /** What the runner was found ready with when it became READY: a runtime installed and signed in
    *  on it (its name), or else one of the owner's own model keys a runtime installed on it runs (the
    *  key's slug). A default workspace with no history starts its first session on it. Null until then. */

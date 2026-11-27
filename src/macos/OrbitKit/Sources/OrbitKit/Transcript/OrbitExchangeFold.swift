@@ -62,6 +62,7 @@ public struct OrbitExchange: Identifiable, Equatable, Sendable {
             case .item(let item): ids.insert(item.id)
             case .steps(let items): items.forEach { ids.insert($0.id) }
             case .agents(let cards): cards.forEach { ids.insert($0.id) }
+            case .transfer(_, let cards): cards.forEach { ids.insert($0.id) }
             default: ids.insert(row.id)
             }
         }
@@ -388,7 +389,7 @@ public enum OrbitExchangeFold {
                 }
             case .steps(let items):
                 if items.contains(where: needsReader) { return nil }
-            case .statusCard, .decisionCard:
+            case .statusCard, .decisionCard, .chatCard:
                 return nil
             default:
                 break

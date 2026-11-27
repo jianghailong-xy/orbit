@@ -1,7 +1,8 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus, SessionRunSource } from '@prisma/client';
+import { SessionRunSource } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, type TaskStartCriterion } from '@orbit/shared';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from '../sessions/sessions.service';

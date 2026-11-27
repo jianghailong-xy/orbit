@@ -17,6 +17,12 @@ import okio.Buffer
 
 /** A read a page makes as it opens, tried three times — 300 ms, then 600 ms apart — before it fails (A07-18, iOS bc790273c
  * `fetchRunners`): one transient failure, common on a phone, would otherwise leave what it reads missing until the page opens again. */
+/** A send's endpoint that is a page chat's own create door ([ChatDoor]): the prefix, then the path. */
+internal const val CHAT_CREATE = "chat-create:"
+
+/** A send that makes a session — the draft's `POST /sessions` or a page chat's door: never replayed when its answer is lost. */
+internal fun isCreate(endpoint: String): Boolean = endpoint == "create" || endpoint.startsWith(CHAT_CREATE)
+
 internal suspend fun <T> threeTries(read: suspend () -> T): T {
     repeat(2) { attempt ->
         try { return read() } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { delay(300L * (attempt + 1)) }
@@ -54,7 +60,12 @@ class ComposerApi(private val auth: OrbitApi, private val handle: SessionHandle,
             sleep = { ms -> delay(ms) },
         )
     suspend fun mutation(endpoint: String, body: JsonObject? = null, method: HttpMethod = HttpMethod.POST): JsonObject {
-        val response = auth.request(handle, ApiRequest(if (endpoint == "create") listOf("sessions") else listOf("sessions", sessionId) + endpoint.split('/'), method,
+        val path = when {
+            endpoint == "create" -> listOf("sessions")
+            endpoint.startsWith(CHAT_CREATE) -> endpoint.removePrefix(CHAT_CREATE).split('/')
+            else -> listOf("sessions", sessionId) + endpoint.split('/')
+        }
+        val response = auth.request(handle, ApiRequest(path, method,
             body = body?.toString()?.encodeToByteArray()))
         return if (response.body.isEmpty()) JsonObject(emptyMap()) else Wire.json.parseToJsonElement(response.body.decodeToString()).jsonObject
     }
@@ -82,6 +93,8 @@ class ComposerApi(private val auth: OrbitApi, private val handle: SessionHandle,
                 catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
         return ComposerCatalog(runner, rows, own, runners)
     }
+    /** A sent file's bytes, to stage it again. */
+    suspend fun attachment(id: String): ByteArray = auth.request(handle, ApiRequest(listOf("attachments", id), maxResponseBytes = 25L * 1024 * 1024)).body
     suspend fun upload(attachment: StagedAttachment, bytes: ByteArray, progress: (Float) -> Unit): String = withContext(Dispatchers.IO) {
         val multipart = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart("file", attachment.name, bytes.toRequestBody(attachment.mime.toMediaType())).build()

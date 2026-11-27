@@ -337,18 +337,21 @@ func TestTaskProgressAgentTextSaysWhatProgressIs(t *testing.T) {
 	inside := orbitCLIInstructions(exe, true, true, true, true)
 	for _, phrase := range []string{
 		"report it with task_progress_report",
-		"never from your Bash output or transcript",
-		"only a change of phase, current or total counts as progress",
-		"409 PROGRESS_REVISION_CONFLICT, read the progress again, then report",
+		"from that report alone, not from your output or replies",
 	} {
 		if !strings.Contains(inside, phrase) {
 			t.Errorf("a task session's instructions do not say %q", phrase)
 		}
 	}
+	// What a report's answer means is said by its receipt (primer 1.5.0): whether it counted as progress, and what to do
+	// on a moved revision (TestReceiptNoteForAProgressRevisionConflict).
+	if lead := taskProgressLead(taskProgressAnswer{TaskID: "t1", Changed: boolPtr(true)}); !strings.Contains(lead, "only a change of phase, current or total is progress") {
+		t.Errorf("a report that changed only its message is not told it is no progress: %q", lead)
+	}
 	if strings.Contains(orbitCLIInstructions(exe, false, true, true, true), "task_progress_report") {
 		t.Error("a session running no task is told to report a task's progress")
 	}
-	paragraph := orbitProgressInstructions(true)
+	paragraph := orbitProgressInstructions
 	for i := 0; i < len(paragraph); i++ {
 		if paragraph[i] > 127 {
 			t.Fatalf("the progress paragraph must stay ASCII for codex's context value; byte %d is %q", i, paragraph[i])

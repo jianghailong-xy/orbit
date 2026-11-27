@@ -48,7 +48,7 @@ func TestSalvageMovesADeadDaemonsChunksIntoUnsent(t *testing.T) {
 		t.Fatalf("record %s", meta)
 	}
 	log, _ := os.ReadFile(filepath.Join(root, "errors.log"))
-	if !strings.Contains(string(log), "/run/orbit-files/unsent/"+kept[0]) || strings.Count(string(log), "EIO salvage ") != 3 {
+	if !strings.Contains(string(log), "/run/orbit-drive/unsent/"+kept[0]) || strings.Count(string(log), "EIO salvage ") != 3 {
 		t.Fatalf("errors.log:\n%s", log)
 	}
 	if Salvage(root, spool, 1<<30) != 0 {

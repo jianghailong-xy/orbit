@@ -17,7 +17,7 @@ import (
 
 // Plan usage is kept per Codex account slot (codex_account_usage.go): an account's windows come from
 // its own reads and its own sessions, land in its own snapshot, and reach the heartbeat under that
-// account — never in Default's windows, and never as a reset block, which is Default's alone.
+// account — never in Default's windows. Its reset block is its own as well (contract v2 §12.1).
 
 // codexAccountQuotaRead is an account/rateLimits/read answer whose plan bucket has spent used% of
 // its 5h window, with reset credits and an account id beside it as a real read has them.
@@ -151,7 +151,7 @@ func TestCodexAccountQuotaSessionRateLimitsFeedOnlyTheirOwnSlot(t *testing.T) {
 	}
 	answerInCodexHome(t, work.Dir, "rateLimits.json", codexAccountQuotaRead(8))
 
-	// Each account as its own probe reads it: Default's windows with its reset block, Work's without.
+	// Each account as its own probe reads it: each one's windows with its own reset block.
 	reads := newCodexAccountUsage(codexResetTestLeaseOwner)
 	defaultRead, err := reads.def.fetch(context.Background(), reads.def.client)
 	if err != nil {
@@ -160,11 +160,11 @@ func TestCodexAccountQuotaSessionRateLimitsFeedOnlyTheirOwnSlot(t *testing.T) {
 	if defaultRead.RateLimitReset == nil || defaultRead.Primary == nil || defaultRead.Primary.Utilization != 100 {
 		t.Fatalf("Default's read produced %+v", defaultRead)
 	}
-	workRead, _, err := fetchCodexAccountPlanUsage(context.Background(), work.Dir)
+	workRead, _, err := fetchCodexAccountPlanUsage(context.Background(), work.Dir, &codexResetReader{leaseOwner: codexResetTestLeaseOwner})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if workRead.RateLimitReset != nil || workRead.Primary == nil || workRead.Primary.Utilization != 8 {
+	if workRead.RateLimitReset == nil || workRead.Primary == nil || workRead.Primary.Utilization != 8 {
 		t.Fatalf("Work's read produced %+v", workRead)
 	}
 	inbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -196,8 +196,9 @@ func TestCodexAccountQuotaSessionRateLimitsFeedOnlyTheirOwnSlot(t *testing.T) {
 			t.Fatalf("accounts %+v, want Work's alone", accounts)
 		}
 		refreshed(t, accounts[work.ID])
+		// A rolling update makes no block: only a read does.
 		if accounts[work.ID].RateLimitReset != nil {
-			t.Fatalf("Work's snapshot carries a reset block: %+v", accounts[work.ID].RateLimitReset)
+			t.Fatalf("Work's session made a reset block: %+v", accounts[work.ID].RateLimitReset)
 		}
 	})
 
@@ -268,8 +269,11 @@ func TestCodexAccountQuotaEachSlotIsReadInItsOwnHomeAndPartition(t *testing.T) {
 	if len(got.Accounts) != 1 || got.Accounts[work.ID] == nil {
 		t.Fatalf("accounts %+v, want Work's", got.Accounts)
 	}
-	if w := got.Accounts[work.ID]; w.Primary == nil || w.Primary.Utilization != 8 || w.RateLimitReset != nil {
-		t.Fatalf("Work's snapshot %+v, want its own 8%% and no reset block", w)
+	// Work's reset block is its own read's (contract v2 §12.1): its account, not Default's.
+	workFingerprint := codexAccountFingerprint(codexResetTestKey(t), "acct_orbit_test_quota")
+	if w := got.Accounts[work.ID]; w.Primary == nil || w.Primary.Utilization != 8 || w.RateLimitReset == nil ||
+		w.RateLimitReset.AccountFingerprint != workFingerprint {
+		t.Fatalf("Work's snapshot %+v, want its own 8%% and its own reset block", w)
 	}
 
 	// On the wire: Default's windows where every reader has always found them, Work's under its id.
@@ -294,8 +298,8 @@ func TestCodexAccountQuotaEachSlotIsReadInItsOwnHomeAndPartition(t *testing.T) {
 	if beat.PlanUsage.Primary.Utilization != 62 || len(beat.PlanUsage.RateLimitReset) == 0 || workPrimary.Utilization != 8 {
 		t.Fatalf("heartbeat planUsage %s", wire)
 	}
-	if _, ok := beat.PlanUsage.Accounts[work.ID]["rateLimitReset"]; ok {
-		t.Fatalf("Work carries a reset block on the wire: %s", wire)
+	if _, ok := beat.PlanUsage.Accounts[work.ID]["rateLimitReset"]; !ok {
+		t.Fatalf("Work carries no reset block on the wire: %s", wire)
 	}
 
 	// Every app-server of Work's ran in Work's CODEX_HOME on Work's own partition, and every other one
@@ -347,7 +351,7 @@ func TestCodexAccountQuotaSlotReadHoldsItsOwnPartitionsHandshakeLock(t *testing.
 	answerInCodexHome(t, work.Dir, "rateLimits.json", codexAccountQuotaRead(8))
 	ctx := context.Background()
 	// The first read bootstraps the slot's partition; later ones take only the handshake lock.
-	if _, _, err := fetchCodexAccountPlanUsage(ctx, work.Dir); err != nil {
+	if _, _, err := fetchCodexAccountPlanUsage(ctx, work.Dir, &codexResetReader{leaseOwner: codexResetTestLeaseOwner}); err != nil {
 		t.Fatal(err)
 	}
 	workSpawns := func() int {
@@ -374,7 +378,7 @@ func TestCodexAccountQuotaSlotReadHoldsItsOwnPartitionsHandshakeLock(t *testing.
 	read := func() chan error {
 		done := make(chan error, 1)
 		go func() {
-			usage, _, err := fetchCodexAccountPlanUsage(ctx, work.Dir)
+			usage, _, err := fetchCodexAccountPlanUsage(ctx, work.Dir, &codexResetReader{leaseOwner: codexResetTestLeaseOwner})
 			if err == nil && (usage.Primary == nil || usage.Primary.Utilization != 8) {
 				err = fmt.Errorf("Work's read came back as %+v, not its own 8%%", usage)
 			}

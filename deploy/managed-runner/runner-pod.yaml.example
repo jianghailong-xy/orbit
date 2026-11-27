@@ -5,7 +5,7 @@
 # (admission/pod-admission-webhook.template.json) refuses it unless the manager reserved its
 # generation, and must be installed before any managed PVC is usable.
 # Uses an EXISTING per-user PVC; installs no Ceph/CSI/StorageClass or server infrastructure. Its one CSI
-# volume needs the files.orbit.dev node plugin already installed (files-csi/).
+# volume needs the drive.orbit.dev node plugin already installed (drive-csi/).
 apiVersion: v1
 kind: Pod
 metadata:
@@ -58,8 +58,10 @@ spec:
       volumeMounts:
         - name: user-state
           mountPath: /home/orbit
-        - name: temporary
+        # /tmp is a directory of the data volume: filled, it gives the writer ENOSPC and evicts nothing.
+        - name: user-state
           mountPath: /tmp
+          subPath: .orbit-tmp
   containers:
     - name: runner
       image: __RUNNER_IMAGE_AT_SHA256_DIGEST__
@@ -108,25 +110,24 @@ spec:
       volumeMounts:
         - name: user-state
           mountPath: /home/orbit
-        - name: temporary
+        # /tmp is a directory of the data volume: filled, it gives the writer ENOSPC and evicts nothing.
+        - name: user-state
           mountPath: /tmp
+          subPath: .orbit-tmp
         - name: bootstrap
           mountPath: /run/orbit-bootstrap
           readOnly: true
-        # The Orbit Files drive, only where the profile has `files` and the files.orbit.dev CSI plugin is installed
-        # (files-csi/README.md); without them the manager leaves out this mount and the orbit-files volume, and
+        # The Drive, only where the profile has `files` and the drive.orbit.dev CSI plugin is installed
+        # (drive-csi/README.md); without them the manager leaves out this mount and the orbit-drive volume, and
         # nothing else differs. A plain directory: the drive's FUSE mount is below it at drive/, made by the plugin,
         # never in this container. HostToContainer lets a remount after a plugin restart reach the running runner.
-        - name: orbit-files
-          mountPath: /run/orbit-files
+        - name: orbit-drive
+          mountPath: /run/orbit-drive
           mountPropagation: HostToContainer
   volumes:
     - name: user-state
       persistentVolumeClaim:
         claimName: __EXISTING_PER_USER_TEST_PVC__
-    - name: temporary
-      emptyDir:
-        sizeLimit: __AUTHORIZED_TMP_SIZE__
     - name: bootstrap
       secret:
         # mr-boot-<runner uuid>: replaced by the manager when the generation advances.
@@ -139,10 +140,10 @@ spec:
             path: token
           - key: generation
             path: generation
-    - name: orbit-files
+    - name: orbit-drive
       csi:
-        driver: files.orbit.dev
+        driver: drive.orbit.dev
         # Exactly this attribute: the plugin refuses any other, and reads the mount credential from Secret
-        # mrf-<runner uuid> in orbit-files-system, never this namespace.
+        # mrf-<runner uuid> in orbit-drive-system, never this namespace.
         volumeAttributes:
           runnerId: __RUNNER_UUID__

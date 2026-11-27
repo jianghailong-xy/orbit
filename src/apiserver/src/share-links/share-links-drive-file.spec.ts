@@ -1,5 +1,5 @@
 /**
- * One-file share links (docs/orbit-files-drive-technical-design.md §9), without a database: the owner shares a file and a
+ * One-file share links (docs/drive-technical-design.md §9), without a database: the owner shares a file and a
  * planted key warns without blocking, the scan reads what a share is pinned to, only the owner's controller makes a link,
  * and a client that does not ask for the new kind still lists its links. The rows themselves are held by
  * share-links-drive-file.pg.spec.ts.
@@ -15,6 +15,9 @@ import { issued } from '../files/file-secret-samples.spec';
 import { SHARE_ROOT_KINDS } from './share-link';
 import { ShareLinksController } from './share-links.controller';
 import { ShareLinksService } from './share-links.service';
+
+// These specs share drive files, which Drive must be on for (drive/drive-switch.ts).
+process.env.ORBIT_DRIVE_ENABLED = 'true';
 
 /** A drive version of `parts`, one chunk each, in a fake store. */
 function contentOf(parts: Buffer[]) {

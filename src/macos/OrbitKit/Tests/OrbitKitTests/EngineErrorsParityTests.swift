@@ -156,6 +156,11 @@ final class EngineErrorsParityTests: XCTestCase {
                        "the dropped-socket markers drifted — first is "
                            + "EngineErrors.connectionDroppedMarkers (this client), second is "
                            + "CONNECTION_DROPPED_MARKERS in events.ts.")
+        XCTAssertEqual(EngineErrors.connectionTimedOutMarkers.sorted(),
+                       try sharedStrings("CONNECTION_TIMED_OUT_MARKERS").sorted(),
+                       "the gateway-timeout markers drifted — first is "
+                           + "EngineErrors.connectionTimedOutMarkers (this client), second is "
+                           + "CONNECTION_TIMED_OUT_MARKERS in events.ts.")
     }
 
     /// The quota sentences. One end knowing a phrasing the other does not is a spent quota shown as

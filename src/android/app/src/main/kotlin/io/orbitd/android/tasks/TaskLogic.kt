@@ -1,6 +1,7 @@
 package io.orbitd.android.tasks
 
 import io.orbitd.android.core.protocol.SessionFacts
+import io.orbitd.android.directory.SessionDisplay
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.navigation.ObjectId
@@ -137,14 +138,23 @@ sealed interface TaskRowPhrase {
 
 /** A session ref's run state: the modern `runState`, else the raw runner status, else the legacy mix. */
 fun resolvedRunState(session: JsonObject): String? {
-    // The session facts first when sent: a released session is Finished (its work finished), Failed (a failed turn nobody asked to
-    // end) or Ended, and an unreleased one reads its phase, an interrupted turn staying Interrupted until the release lands.
-    if (SessionFacts.present(session)) {
-        if (SessionFacts.released(session) == true) return SessionFacts.afterRelease(session)
-        when (SessionFacts.phase(session)) {
-            "PENDING" -> return "QUEUED"
-            "RUNNING" -> return "RUNNING"
-            "IDLE" -> return if (SessionFacts.lastTurnOutcome(session) == "INTERRUPTED") "INTERRUPTED" else "AWAITING_INPUT"
+    // The session facts first when sent, as web's task panel reads them (sessionRunStateOf): they count when the phase is a known word
+    // and `released` is present. A released session is Finished (`workFinished`, else the end reason or a settled landing), Failed (a failed turn nobody asked to end) or Ended; an unreleased one reads its phase, RUNNING with
+    // a non-TURN `activity` (TURN is on every queued or running row) being parked work outside a turn, an interrupted turn staying Interrupted until the release lands.
+    val phase = SessionFacts.phase(session)
+    val released = SessionFacts.released(session)
+    if (phase != null && released != null) {
+        if (released) return SessionFacts.afterRelease(session)
+        return when (phase) {
+            "PENDING" -> "QUEUED"
+            // The legacy run status decides first, as web's dispatchedTurnInFlight does: a dispatched turn is running, a parked session
+            // stays parked even while its engine runs its own turn (activity TURN); any other word reads the activity.
+            "RUNNING" -> when (session.text("runStatus") ?: session.text("status")) {
+                "RUNNING", "PENDING", "QUEUED" -> "RUNNING"
+                "AWAITING_INPUT" -> "AWAITING_INPUT"
+                else -> session.text("activity").let { if (it.isNullOrEmpty() || it == "TURN") "RUNNING" else "AWAITING_INPUT" }
+            }
+            else -> if (SessionFacts.lastTurnOutcome(session) == "INTERRUPTED") "INTERRUPTED" else "AWAITING_INPUT"
         }
     }
     session.text("runState")?.takeIf { it != "UNKNOWN" && it in RUN_STATES }?.let { return it }
@@ -917,7 +927,9 @@ object TaskDetailLogic {
         return (listOf("Policy v${route.number("policyVersion") ?: 0}", "decided $decided") +
             if (route.flag("escalated")) listOf(TaskDetailCopy.usageLimitNote) else emptyList()).joinToString(" · ")
     }
-    fun runLabel(session: JsonObject) = when (resolvedRunState(session)) {
+    /** A run's state as words: with the session facts, the state from `phase` and its marks (`Idle · Finished`, [SessionDisplay.text]);
+     * from an older server, today's word. */
+    fun runLabel(session: JsonObject) = SessionDisplay.text(SessionDisplay.facts(session)) ?: when (resolvedRunState(session)) {
         "QUEUED" -> if (SessionFacts.present(session) && SessionFacts.waitingOn(session) == "HOLD") "On hold" else "Queued"; "FINISHED" -> "Finished"; "RUNNING" -> "Running"; "AWAITING_INPUT" -> "Awaiting reply"; "SUCCEEDED" -> "Finished"
         "FAILED" -> "Failed"; "INTERRUPTED" -> "Interrupted"; "ENDED" -> "Ended"; else -> "—"
     }

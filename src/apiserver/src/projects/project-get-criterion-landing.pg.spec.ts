@@ -52,7 +52,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { ProjectStatus, RunStatus, type PrismaClient } from '@prisma/client';
+import { ProjectStatus, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -171,7 +172,7 @@ test('GET /projects/:id says whether the work settled AND whether it landed, sep
         taskId,
         title: `ran ${branch}`,
         prompt: 'do the work',
-        status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
+        turnState: null, finishedAt: new Date(), 
         branch,
         isolationStatus: 'worktree',
       },

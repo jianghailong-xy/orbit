@@ -178,6 +178,13 @@ struct ScheduledMacPage: View {
     private func rowView(_ row: ScheduleRowModel, _ scheduled: ScheduledModel, selected: Bool) -> some View {
         // The phone's long-press menu on a right-click (ScheduleRowActions); the Mac has no row swipes.
         let actions = ScheduleRowActions(row.kind, model: model, scheduled: scheduled,
+                                         askRename: { s in
+                                             // The schedule's detail opens, its title already a field.
+                                             scheduled.draftPanel = nil
+                                             scheduled.changeDraft = nil
+                                             scheduled.inspectedID = s.id
+                                             scheduled.renamingID = s.id
+                                         },
                                          askDelete: { deleting = $0 }, askStop: { stopping = $0 },
                                          openTask: { id in model.route(to: .task(id)) })
         return Button(action: row.open) {
@@ -289,6 +296,61 @@ struct ScheduledMacPage: View {
         .overlay(alignment: .bottom) {
             Rectangle().fill(typed.isEmpty ? Color.secondary.opacity(0.25) : Color.accentColor).frame(height: 1)
         }
+    }
+}
+
+/// The detail panel's title while it is renamed (§8.4, board schedule-rename ②): a field in place. Return or
+/// leaving it saves the trimmed text; Esc, an empty field or unchanged text saves nothing.
+struct ScheduleTitleField: View {
+    let title: String
+    let save: (String) -> Void
+    let done: () -> Void
+
+    @State private var draft: String
+    /// The name the field opened with: left as it was, it saves nothing even if renamed elsewhere meanwhile.
+    @State private var opened: String
+    @State private var finished = false
+    @FocusState private var focused: Bool
+
+    init(title: String, save: @escaping (String) -> Void, done: @escaping () -> Void) {
+        self.title = title
+        self.save = save
+        self.done = done
+        _draft = State(initialValue: title)
+        _opened = State(initialValue: title)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            TextField(SC.History.fields["title"] ?? "", text: $draft)
+                .textFieldStyle(.plain)
+                .font(.title2.weight(.bold))
+                .padding(.horizontal, 6).padding(.vertical, 3)
+                .background(Color.scheduleCardFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Color.accentColor, lineWidth: 2))
+                .focused($focused)
+                .onSubmit { finish(saving: true) }
+                .onExitCommand { finish(saving: false) }
+                .onChange(of: draft) { _, text in
+                    if text.count > 200 { draft = String(text.prefix(200)) }
+                }
+                .accessibilityIdentifier("schedule-title-field")
+            Text(SessionFolderCopy.editHint).font(.orbitMeta).foregroundStyle(.secondary)
+        }
+        // On the next turn of the run loop, after a menu that asked for the field has given focus back.
+        .onAppear { DispatchQueue.main.async { focused = true } }
+        .onChange(of: focused) { was, now in
+            if was && !now { finish(saving: true) }
+        }
+        // A click on another row keeps this field focused until the panel goes.
+        .onDisappear { finish(saving: true) }
+    }
+
+    private func finish(saving: Bool) {
+        guard !finished else { return }
+        finished = true
+        if saving, let renamed = ScheduleDisplay.renameTitle(draft, from: opened) { save(renamed) }
+        done()
     }
 }
 

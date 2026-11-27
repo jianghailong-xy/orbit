@@ -228,12 +228,12 @@ suite('(h) an ordinary task, session and run_event write still commits', async (
       `UPDATE task SET title = 'still writable' WHERE id = $1::uuid`, [taskId]);
     await client.query(
       `INSERT INTO session (id, owner_id, creator_id, task_id, workspace_id, title, prompt,
-                            provider, status, dispatch_origin, starts_task_work, updated_at)
+                            provider, turn_state, dispatch_origin, starts_task_work, updated_at)
        VALUES ($1::uuid, $2::uuid, $2::uuid, $3::uuid, $4::uuid, 'probe', 'probe',
-               'claude', 'PENDING', 'USER', true, now())`,
+               'claude', 'QUEUED', 'USER', true, now())`,
       [sessionId, ownerId, taskId, workspaceId]);
     await client.query(
-      `UPDATE session SET status = 'RUNNING' WHERE id = $1::uuid`, [sessionId]);
+      `UPDATE session SET "turn_state" = 'IN_FLIGHT' WHERE id = $1::uuid`, [sessionId]);
     const event = await client.query(
       `INSERT INTO run_event (id, session_id, seq, type, payload)
        VALUES (gen_random_uuid(), $1::uuid, 1, 'stdout', '{"text":"ok"}'::jsonb)

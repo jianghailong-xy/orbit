@@ -9,16 +9,16 @@ import {
   OnModuleInit,
   Optional,
 } from '@nestjs/common';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import {
   CONTINUE_MESSAGE,
   RUNNER_UPDATE_INTERRUPT_REASON,
   RunEventType,
   isAccountEngine,
-  isAuthErrorText,
   isRetryableApiErrorText,
-  isUsageLimitErrorText,
   planUsageBlockedUntil,
+  RunFailureKind,
+  runFailureIs,
   withEnginePlanUsage,
   type PlanUsage,
   type SessionMessageCard,
@@ -59,6 +59,7 @@ import {
   isConfirmationReviewContentTurn,
 } from '../tasks/owner-confirmation-review-turn';
 import { withActiveSessions } from '../providers/active-sessions';
+import { withAccountHealth } from '../providers/account-health-blocked';
 import { ACCOUNT_RESET_WAIT_MS, accountAfterUsageLimitAt, runAccount } from '../providers/plan-usage-accounts';
 import { ACCOUNT_CHOICE, ACCOUNT_PINNED } from '../providers/account';
 import { ACCOUNT_MOVE_CAPABILITY } from '../providers/account-move-capability';
@@ -78,6 +79,16 @@ import {
   type ReleaseFailureFacts,
 } from '../common/session-release';
 import { ControlPlaneLeader } from '../realtime/control-plane-leader';
+import { LEGACY_STATUS_SELECT, legacySessionStatus, type LegacyStatusFacts } from './session-legacy-words';
+import {
+  isParked,
+  sessionTurnStateSql,
+  TURN_STATE_SELECT,
+  turnStateFilter,
+  turnStateOf,
+  type TurnState,
+  type TurnStateFacts,
+} from './session-turn-state';
 
 const SWEEP_INTERVAL_MS = 30_000;
 /** How often the retries held for a far reset are looked at again (AutoRetryService.releaseHeldRetries). */
@@ -237,9 +248,31 @@ function workspaceReplyText(row: { payload: unknown }): string {
  */
 type AggregateSettleOutcome = 'SETTLED' | 'RELEASED' | 'BUSY';
 
-/** A session parked waiting on its retry, as read: its status for the compare-and-set, its release facts for whether it failed. */
-interface ParkedRow extends ReleaseFailureFacts {
-  status: RunStatus;
+/**
+ * A session parked waiting on its retry, as read: where it stood for the compare-and-set (`parkedAsOf`), its release
+ * facts for whether it failed, and the facts the word its settlement publishes is projected from.
+ */
+type ParkedRow = ReleaseFailureFacts & LegacyStatusFacts;
+
+/**
+ * Where a parked row stood when the sweep read it, which every compare-and-set after the read asks of it again: released
+ * or held, and a held row's turn state (plan §2.1). Idle reads held with none (A); released by a failure reads released.
+ */
+interface ParkedAs {
+  released: boolean;
+  turnState: TurnState | null;
+}
+
+function parkedAsOf(row: TurnStateFacts): ParkedAs {
+  return { released: row.finishedAt != null, turnState: turnStateOf(row) };
+}
+
+/**
+ * Prisma: the row still stands where `parked` says. Its keys are `finishedAt` and, for a held row, `OR`
+ * (turnStateFilter), so it goes in an `AND` list.
+ */
+function stillParkedAs(parked: ParkedAs): Prisma.SessionWhereInput {
+  return parked.released ? { finishedAt: { not: null } } : turnStateFilter([parked.turnState]);
 }
 
 @Injectable()
@@ -322,7 +355,8 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         completedAt: null,
         sessionKind: 'CONVERSATION',
         OR: [
-          { status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null },
+          // Parked (plan §2.1: A), no end asked.
+          { ...turnStateFilter([null]), cancelRequestedAt: null },
           // Released by a failure (common/session-release.ts).
           releaseWasFailureFilter(),
         ],
@@ -332,12 +366,14 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       take: MAX_PER_SWEEP,
       select: {
         id: true,
+        ownerId: true,
         engine: true,
         provider: true,
         providerBuiltin: true,
         retryAt: true,
         retryAttempts: true,
         ...RELEASE_FAILURE_SELECT,
+        ...TURN_STATE_SELECT,
         taskId: true,
         startsTaskWork: true,
         assignedRunnerId: true,
@@ -376,15 +412,17 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       const account = runAccount(engine, engineBaseEnv(session.workspace?.env as Record<string, string> | null, session.env), { [column]: session[column] ?? session.workspace?.[column] }, runner, now);
       const usage = withEnginePlanUsage(runner.planUsage as PlanUsage | null, sanitizeRunnerEngines(runner.engines));
       if (!planUsageBlockedUntil(usage, engine, now, account)) continue;
+      // An account that account health takes out has no room for it, as a paused one has none (§7.6): the dispatch
+      // would not move the session there (accountBeforeDispatch).
       const elsewhere = accountAfterUsageLimitAt(
         engine,
         { account: session[column], pinned: session[ACCOUNT_PINNED[engine]] },
         session.workspace,
-        await withActiveSessions(this.prisma, runnerId, runner, now),
+        await withActiveSessions(this.prisma, runnerId, await withAccountHealth(this.prisma, session.ownerId, runnerId, runner, now), now),
         now,
       );
       if (!elsewhere || elsewhere > now) continue;
-      const claimed = await this.rearm(session.id, session.status, now, session.retryAttempts, {
+      const claimed = await this.rearm(session.id, parkedAsOf(session), now, session.retryAttempts, {
         taskId: session.taskId ?? null,
         startsTaskWork: session.startsTaskWork,
         retryAt: session.retryAt,
@@ -433,8 +471,10 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         // generation; this is the narrow version that keeps THIS path from adding the same bug.
         retryAt: true,
         assignedRunnerId: true,
-        // The status, and whether the row is parked released by a failure or idle: what giving the retry up announces.
+        // Whether the row is parked released by a failure or idle, for the compare-and-sets and for what giving the
+        // retry up announces, and the facts the word it announces is projected from.
         ...RELEASE_FAILURE_SELECT,
+        ...LEGACY_STATUS_SELECT,
         // §13.6 SU6's two columns, so the sweep can answer "is this task's work still this task's
         // to do" itself instead of finding out from a trigger that refuses the write.
         taskId: true,
@@ -522,6 +562,8 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       // This sweep's claim on the row, once it has one: every write after the claim is a
       // compare-and-set on it, so none of them lands on a retry somebody has since taken back.
       let claimedAt: Date | null = null;
+      // Where the row stood as this sweep read it, which every compare-and-set below asks of it again.
+      const parkedAs = parkedAsOf(session);
       try {
         // §13.6 SU6 FIRST, ahead of every resource question below.
         //
@@ -555,7 +597,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         if (session.taskId && aggregateParents.has(session.taskId)) {
           const outcome = session.retryAt == null ? 'RELEASED' as const
             : await this.disarmIfStillAggregateParent(
-                session.id, session.status, session.taskId, attempts, session.retryAt,
+                session.id, parkedAs, session.taskId, attempts, session.retryAt,
               );
           if (outcome === 'SETTLED') {
             this.log.warn(`auto-retry of ${session.id} disarmed: task is completed by `
@@ -600,7 +642,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         if (this.managedDemand) {
           const managed = await this.managedDemand.requested(session.assignedRunnerId, 'auto-retry');
           if (managed.comingBack && managed.state !== 'READY') {
-            await this.rearm(session.id, session.status, new Date(now.getTime() + SWEEP_INTERVAL_MS), attempts, observed);
+            await this.rearm(session.id, parkedAs, new Date(now.getTime() + SWEEP_INTERVAL_MS), attempts, observed);
             continue;
           }
         }
@@ -611,7 +653,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           } else {
             await this.rearm(
               session.id,
-              session.status,
+              parkedAs,
               new Date(now.getTime() + SWEEP_INTERVAL_MS),
               attempts,
               observed,
@@ -679,8 +721,14 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
               engine,
               { account: session[ACCOUNT_CHOICE[engine]], pinned: session[ACCOUNT_PINNED[engine]] },
               session.workspace,
+              // An account that account health takes out has no room for it (§7.6), as above.
               session.assignedRunnerId && session.assignedRunner
-                ? await withActiveSessions(this.prisma, session.assignedRunnerId, session.assignedRunner, now)
+                ? await withActiveSessions(
+                    this.prisma,
+                    session.assignedRunnerId,
+                    await withAccountHealth(this.prisma, session.ownerId, session.assignedRunnerId, session.assignedRunner, now),
+                    now,
+                  )
                 : session.assignedRunner,
               now,
             )
@@ -689,7 +737,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           ? (elsewhere > now ? elsewhere : null)
           : ownBlockedUntil;
         if (blockedUntil) {
-          await this.rearm(session.id, session.status, blockedUntil, attempts, observed);
+          await this.rearm(session.id, parkedAs, blockedUntil, attempts, observed);
           continue;
         }
 
@@ -765,8 +813,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
             retryAt: session.retryAt,
             // ...and the rest of the row this sweep decided about. A claim that asserted only the
             // instant could still land on a session that had been re-pointed at another task,
-            // demoted to a salvage conversation, or moved to a different parked status in between.
-            status: session.status,
+            // demoted to a salvage conversation, or moved to a different parked state in between.
             retryAttempts: attempts,
             taskId: session.taskId ?? null,
             startsTaskWork: session.startsTaskWork,
@@ -779,7 +826,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
             // strength of a reading taken before it. Zero rows is already the "somebody else owns
             // this retry" path — the arm is left standing, no attempt is spent, and the sweep
             // after the pause lifts decides.
-            AND: [NOT_DISPATCH_HELD, NOT_IN_CANCELLED_PROJECT],
+            AND: [stillParkedAs(parkedAs), NOT_DISPATCH_HELD, NOT_IN_CANCELLED_PROJECT],
           },
           // `retry_claimed_at` is what tells the claim apart from a retry given up while the resume
           // below is in flight: both leave the session parked with `retry_at` NULL, and a reader of
@@ -914,7 +961,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           // non-retired, task-linked WORK session goes through it and takes its answer.
           const settle = !retiredNow && session.taskId && session.startsTaskWork
             ? await this.refundIfStillAggregateParent(
-                session.id, session.taskId, attempts, session.status,
+                session.id, session.taskId, attempts, parkedAs,
               )
             : 'RELEASED' as const;
           if (settle === 'BUSY') {
@@ -922,7 +969,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
             // `retry_at` and spent an attempt, so leaving it there would strand the row. Put both
             // back, compare-and-set on exactly what this sweep wrote, and let the next tick decide.
             if (session.retryAt != null) {
-              await this.rearm(session.id, session.status, session.retryAt, attempts, {
+              await this.rearm(session.id, parkedAs, session.retryAt, attempts, {
                 taskId: session.taskId ?? null,
                 startsTaskWork: session.startsTaskWork,
                 retryAt: null,
@@ -941,7 +988,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
             : (await this.prisma.session.updateMany({
                 where: {
                   id: session.id,
-                  status: session.status,
+                  AND: [stillParkedAs(parkedAs)],
                   taskId: session.taskId ?? null,
                   startsTaskWork: session.startsTaskWork,
                   retryAt: null,
@@ -976,7 +1023,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         // anything else on the row now is somebody else's, and this backoff must not land on top
         // of it. A backoff that cannot be written leaves the claim standing, and its lease running
         // out is what gives the retry up (`releaseExpiredClaims`).
-        await this.rearm(session.id, session.status, new Date(now.getTime() + delay), spent, {
+        await this.rearm(session.id, parkedAs, new Date(now.getTime() + delay), spent, {
           taskId: session.taskId ?? null,
           startsTaskWork: session.startsTaskWork,
           retryAt: null,
@@ -1129,8 +1176,8 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
    * (§8 criterion 22), and the moment the message it would re-send is the failed one. A run that FAILED
    * is; so is one parked idle with a retry armed or claimed for it, or whose latest reply is one of the
    * failures the card offers Retry on — a spent quota, a provider that could not answer, a sign-in that
-   * lapsed — read the way the transcript reads them (`isUsageLimitErrorText`, `isRetryableApiErrorText`,
-   * `isAuthErrorText`). Anything else is not: a session working on a turn, the re-send of a press among
+   * lapsed — read the way the transcript reads them (runFailureIs over USAGE_LIMIT and CREDENTIAL_REFUSED, and
+   * `isRetryableApiErrorText`). Anything else is not: a session working on a turn, the re-send of a press among
    * them, or one whose latest message was answered.
    */
   private async stoppedOnFailure(
@@ -1139,11 +1186,12 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
   ): Promise<boolean> {
     const session = await db.session.findUnique({
       where: { id: sessionId },
-      select: { ...RELEASE_FAILURE_SELECT, retryAt: true, retryClaimedAt: true, cancelRequestedAt: true },
+      select: { ...RELEASE_FAILURE_SELECT, ...TURN_STATE_SELECT, retryAt: true, retryClaimedAt: true, cancelRequestedAt: true, failureKind: true },
     });
     if (!session) return false;
     if (releaseWasFailure(session)) return true;
-    if (session.status !== RunStatus.AWAITING_INPUT || session.cancelRequestedAt) return false;
+    // Parked (plan §2.1: A), no end asked.
+    if (!isParked(session) || session.cancelRequestedAt) return false;
     if (session.retryAt != null) return true;
     if (session.retryClaimedAt && Date.now() - session.retryClaimedAt.getTime() < RETRY_CLAIM_WINDOW_MS) {
       return true;
@@ -1155,7 +1203,14 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       select: { payload: true },
     });
     const latest = replies.map(workspaceReplyText).find((text) => text);
-    return !!latest && (isUsageLimitErrorText(latest) || isRetryableApiErrorText(latest) || isAuthErrorText(latest));
+    if (!latest) return false;
+    // A spent quota or a refused credential, by the runner's kind or else the reply's own words as this check always
+    // read them: the quota sentence opening it, or the runtime's "Failed to authenticate" (isAuthErrorText) alone.
+    return runFailureIs(
+      { failureKind: session.failureKind, error: latest },
+      [RunFailureKind.USAGE_LIMIT, RunFailureKind.CREDENTIAL_REFUSED],
+      { credential: 'authenticate' },
+    ) || isRetryableApiErrorText(latest);
   }
 
   /**
@@ -1510,7 +1565,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       select,
     });
     const answer = own.map(replyText).find((text) => text);
-    return !!answer && !isRetryableApiErrorText(answer) && !isUsageLimitErrorText(answer);
+    return !!answer && !isRetryableApiErrorText(answer) && !runFailureIs({ error: answer }, [RunFailureKind.USAGE_LIMIT]);
   }
 
   /** The opening turn, found by the fixed seed id. */
@@ -1540,7 +1595,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
    * deletes it. Moving the rows would put the only copy of the user's image behind that, so the
    * failed attempt's bubble would lose its picture the first time a retry was cancelled. The
    * copies die with the session either way. A copy names the same stored bytes (`sha256`) as the
-   * row it copies; only a row from before Orbit Files carries its bytes in `data`, and its copy too.
+   * row it copies; only a row from before Drive carries its bytes in `data`, and its copy too.
    */
   private async copyAttachments(
     sessionId: string,
@@ -1588,17 +1643,17 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
    * Push the retry out to `at`. Gated on the session still being parked rather than on it
    * still being armed: the failure path runs *after* the claim has already cleared retryAt, so
    * an "is it still armed" guard here would silently drop every backoff and strand the session
-   * forever. `parkedAs` is the status the sweep read, so the gate says "no one has taken over
-   * since" for either shape of parked — a session whose user has since replied is no longer
-   * waiting on us. Passing it in rather than re-asserting one status is what keeps a FAILED
-   * row's backoff from being dropped by a filter it can never satisfy.
+   * forever. `parkedAs` is where the sweep read the row standing (released or held, and its turn
+   * state), so the gate says "no one has taken over since" for either shape of parked — a session
+   * whose user has since replied is no longer waiting on us. Passing it in rather than re-asserting
+   * one shape is what keeps a released row's backoff from being dropped by a filter it can never satisfy.
    */
   /**
    * @param expect the row this sweep believes it is writing to, when it has already CLAIMED it.
    *
-   * `id + status` alone is not enough after a claim. Between clearing `retry_at` and putting a new
+   * `id + parkedAs` alone is not enough after a claim. Between clearing `retry_at` and putting a new
    * one back, the row can be re-pointed at another task, demoted to a salvage conversation, or
-   * armed by hand to a future instant — and a rearm that asserts only the status would overwrite
+   * armed by hand to a future instant — and a rearm that asserts only where it is parked would overwrite
    * any of those with a decision made about the retry they replaced. The deferral paths that run
    * BEFORE the claim pass nothing and keep their old behaviour, because there the arm they are
    * preserving is still the one they read.
@@ -1613,7 +1668,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
    */
   private async rearm(
     sessionId: string,
-    parkedAs: RunStatus,
+    parkedAs: ParkedAs,
     at: Date,
     attempts: number,
     expect?: {
@@ -1626,7 +1681,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     const claimed = await this.prisma.session.updateMany({
       where: {
         id: sessionId,
-        status: parkedAs,
+        AND: [stillParkedAs(parkedAs)],
         ...(expect
           ? {
               taskId: expect.taskId,
@@ -1645,7 +1700,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Stop retrying. The session keeps its transcript, keeps the status it was parked in and
+   * Stop retrying. The session keeps its transcript, keeps the state it was parked in and
    * stays resumable; the card in the UI flips to a manual retry. `retryAttempts` is left where
    * it stopped so the card can say how many tries it took to get here.
    *
@@ -1698,7 +1753,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     sessionId: string,
     taskId: string,
     attempts: number,
-    parkedAs: RunStatus,
+    parkedAs: ParkedAs,
   ): Promise<AggregateSettleOutcome> {
     return this.underAggregateParentLock(
       taskId, sessionId,
@@ -1713,7 +1768,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
 
   private async disarmIfStillAggregateParent(
     sessionId: string,
-    parkedAs: RunStatus,
+    parkedAs: ParkedAs,
     taskId: string,
     attempts: number,
     observedRetryAt: Date,
@@ -1742,14 +1797,14 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
    *
    * Everything the caller's compare-and-set depends on is re-read INSIDE these locks — the task's
    * project (so a task moved between the scope read and the lock cannot leave this holding the old
-   * project), the task's shape, and the session's own task, role, status and claim. `null` means
+   * project), the task's shape, and the session's own task, role, parked state and claim. `null` means
    * the world moved; the caller leaves the retry armed.
    */
   private async underAggregateParentLock(
     taskId: string,
     sessionId: string,
     expect: {
-      parkedAs: RunStatus; attempts: number; observedRetryAt: Date | null;
+      parkedAs: ParkedAs; attempts: number; observedRetryAt: Date | null;
       requireArmed: boolean;
     },
     write: (tx: Prisma.TransactionClient) => Promise<number>,
@@ -1812,18 +1867,21 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         if (task.projectId !== scope.projectId) return 'RELEASED';
 
         const [session] = await tx.$queryRaw<Array<{
-          taskId: string | null; startsTaskWork: boolean; status: string; retryAt: Date | null;
-          retryAttempts: number;
+          taskId: string | null; startsTaskWork: boolean; released: boolean; turnState: string | null;
+          retryAt: Date | null; retryAttempts: number;
         }>>(Prisma.sql`
           SELECT s."task_id" AS "taskId", s."starts_task_work" AS "startsTaskWork",
-                 s."status"::text AS "status", s."retry_at" AS "retryAt",
+                 (s."finished_at" IS NOT NULL) AS "released", ${sessionTurnStateSql('s')} AS "turnState",
+                 s."retry_at" AS "retryAt",
                  s."retry_attempts" AS "retryAttempts"
             FROM "session" s WHERE s."id" = ${sessionId}::uuid
            FOR UPDATE NOWAIT
         `);
         if (!session) return 'RELEASED';
         if (session.taskId !== taskId || !session.startsTaskWork) return 'RELEASED';
-        if (session.status !== expect.parkedAs) return 'RELEASED';
+        // Still where the sweep read it parked: released or held, and the same turn state (none, when idle).
+        if (session.released !== expect.parkedAs.released) return 'RELEASED';
+        if ((session.turnState ?? null) !== expect.parkedAs.turnState) return 'RELEASED';
         if (session.retryAttempts !== expect.attempts) return 'RELEASED';
         // A cancel followed by a re-arm to a NEW instant is a different retry, and the claim this
         // sweep observed is what says so. (The full durable generation is G3's; this is the narrow
@@ -1871,7 +1929,10 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     why: string,
   ): Promise<void> {
     const { count } = await this.prisma.session.updateMany({
-      where: { id: sessionId, status: parked.status, retryAt: null, retryAttempts: attempts + 1, retryClaimedAt: claimedAt },
+      where: {
+        id: sessionId, AND: [stillParkedAs(parkedAsOf(parked))], retryAt: null, retryAttempts: attempts + 1,
+        retryClaimedAt: claimedAt,
+      },
       // The attempt goes back in the same statement that drops the claim: from here the sweep is not
       // going to write the turn, so the session must not read as on its way to one (migration 0354).
       data: { retryAttempts: attempts, retryClaimedAt: null },
@@ -1931,18 +1992,18 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         // Only a conversation can hold a retry claim; the landing container never gets one.
         sessionKind: 'CONVERSATION',
         // Parked: idle, or released by a failure (common/session-release.ts).
-        OR: [{ status: RunStatus.AWAITING_INPUT }, releaseWasFailureFilter()],
+        OR: [turnStateFilter([null]), releaseWasFailureFilter()],
       },
       orderBy: { retryClaimedAt: 'asc' },
       take: MAX_PER_SWEEP,
-      select: { id: true, ...RELEASE_FAILURE_SELECT, retryAttempts: true, retryClaimedAt: true },
+      select: { id: true, ...RELEASE_FAILURE_SELECT, ...LEGACY_STATUS_SELECT, retryAttempts: true, retryClaimedAt: true },
     });
     const released: string[] = [];
     for (const session of lapsed) {
       const { count } = await this.prisma.session.updateMany({
         where: {
           id: session.id,
-          status: session.status,
+          AND: [stillParkedAs(parkedAsOf(session))],
           retryAt: null,
           retryAttempts: session.retryAttempts,
           retryClaimedAt: session.retryClaimedAt,
@@ -1967,7 +2028,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     // A row read with no arm has no retry of this sweep's to end (the due read selects armed rows only).
     if (armedAt === null) return;
     const cleared = await this.prisma.session.updateMany({
-      where: { id: sessionId, status: parked.status, retryAt: armedAt },
+      where: { id: sessionId, AND: [stillParkedAs(parkedAsOf(parked))], retryAt: armedAt },
       // The retry is over, so nothing is on its way to a turn any more: a claim that had not been
       // resolved yet ends here too (migration 0354).
       data: { retryAt: null, retryClaimedAt: null },
@@ -1980,18 +2041,18 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
   /** What a row that has stopped waiting owes its clients; see `disarm` for why it is published. */
   private announceSettled(sessionId: string, parked: ParkedRow): void {
     // Giving up is the moment the failure becomes the outcome, so this is where it is announced.
-    // The row moves no status — it has been FAILED since the turn died — but the clients have
+    // The row moves no state — it has been released by the failure since the turn died — but the clients have
     // been drawing it as "Retrying" off the `retryAt` that just went away, so they need to be
     // told that the wait is over as much as the owner's phone does. Publishing the STATUS does
     // both: `final` with no `retryAt` beside it is exactly the settlement signal the failing
     // turn withheld, and RealtimeService.publish turns it into the one push notification.
-    // Released by a failure (common/session-release.ts): its stored status is the word sent.
+    // Released by a failure (common/session-release.ts): the word sent is the one its facts project (FAILED).
     if (releaseWasFailure(parked)) {
       this.realtime.publish(sessionId, {
         seq: Number.MAX_SAFE_INTEGER,
         type: RunEventType.STATUS,
         ts: new Date().toISOString(),
-        payload: { status: parked.status, final: true },
+        payload: { status: legacySessionStatus(parked), final: true },
       });
       return;
     }

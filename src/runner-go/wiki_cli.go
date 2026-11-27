@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// `orbit wiki search|get|propose|note|draft`: the CLI half of the wiki tools (wiki_tools.go), for shell
+// `orbit wiki search|get|propose|note|draft|read`: the CLI half of the wiki tools (wiki_tools.go), for shell
 // composition inside a session. Like the MCP tools they act for the session they run in — what a
 // session may read is what its bound workspace shares, and a proposal is recorded against it — so
 // there is no headless form: at a terminal outside a session there is nowhere to read from and
@@ -27,6 +27,7 @@ Usage:
   orbit wiki note (<text> | --text TEXT | --text-file -) [--path PATH]... [--corrects ID] [--replaces ID] [--json]
   orbit wiki draft --kind rewrite --section DOC/KEY... --reason TEXT --idempotency-key KEY [--replaces ID]
                    [--change JSON] [--json]
+  orbit wiki read [--q WORDS | --doc SLUG [--section KEY] | --draft ID] [--more CURSOR] [--json]
   orbit wiki import --from <dir|file> --space ID [--max-ops N] [--concurrency N] [--json]
   orbit wiki verify --space ID [--json]
 
@@ -38,7 +39,8 @@ the Orbit server runs and 'orbit wiki verify' waits for. What is live, other ses
 what each op's status says, and never call a pending op saved. A note is not a write to the wiki at
 all: it is a claim that maintenance checks later against this session's records. In a wiki chat,
 propose and a note's corrects make a card for the owner to press instead, and draft makes one that
-rewrites sections from main: nothing changes until the owner presses it.
+rewrites sections from main: nothing changes until the owner presses it. In a wiki chat, read
+reads the wiki's documents: a view, never a source.
 
 These commands act for the session they run in (ORBIT_SESSION_ID): what it may read is what that
 session's workspace is bound to, and its proposal is recorded against it.
@@ -162,6 +164,23 @@ Options:
 
 ` + wikiDraftDescription + `
 `,
+	"read": `orbit wiki read — read this wiki chat's wiki: its documents, sections and cards
+
+Usage:
+  orbit wiki read [--q WORDS | --doc SLUG [--section KEY] | --draft ID] [--more CURSOR] [--json]
+
+Options:
+  --q WORDS                A search: the sections whose title, covers and sentences hold every word
+  --doc SLUG               A document: its whole definition, and its written sentences with footnotes
+  --section KEY            With --doc: that one section alone
+  --draft ID               A card of this chat: its state and result, and the sections it rewrote
+  --more CURSOR            The cursor an answer ended with, with the same other arguments, for the rest
+  --json
+
+With no option it lists the wiki's contents. At most one of --q, --doc and --draft.
+
+` + wikiReadDescription + `
+`,
 	"verify": `orbit wiki verify — have the Orbit server verify what this session proposed into an automatic space
 
 Usage:
@@ -246,6 +265,8 @@ func cmdWikiCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliWikiNote(args[1:], in, out, ctx)
 	case "draft":
 		return cliWikiDraft(args[1:], out, ctx)
+	case "read":
+		return cliWikiRead(args[1:], out, ctx)
 	case "verify":
 		return cliWikiVerify(args[1:], out, ctx)
 	default:
@@ -383,6 +404,29 @@ func cliWikiDraft(args []string, out io.Writer, ctx cliOrchestrationContext) err
 		toolArgs["change"] = parsed
 	}
 	return runWikiCLIAnswer("wiki_draft", toolArgs, out, *jsonOut, ctx)
+}
+
+func cliWikiRead(args []string, out io.Writer, ctx cliOrchestrationContext) error {
+	fs := newCLIFlagSet("orbit wiki read")
+	q := fs.String("q", "", "a search: words every one of which a section holds")
+	doc := fs.String("doc", "", "a document's slug")
+	section := fs.String("section", "", "with --doc: one section's key")
+	draft := fs.String("draft", "", "a card of this chat, by its id")
+	more := fs.String("more", "", "the cursor an earlier answer ended with")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := rejectTrailing(fs); err != nil {
+		return err
+	}
+	toolArgs := map[string]interface{}{}
+	for name, value := range map[string]string{"q": *q, "doc": *doc, "section": *section, "draft": *draft, "more": *more} {
+		if strings.TrimSpace(value) != "" {
+			toolArgs[name] = strings.TrimSpace(value)
+		}
+	}
+	return runWikiCLIAnswer("wiki_read", toolArgs, out, *jsonOut, ctx)
 }
 
 // runWikiCLIAnswer runs one wiki tool for the CLI: the same runWikiTool the MCP door calls, and the

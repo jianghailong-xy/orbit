@@ -21,7 +21,9 @@
     "test:ui-toasts": "playwright test --config ui-migration/toasts.config.mjs",
     "pretest:ui-toasts": "npm run build -w @orbit/shared",
     "test:ui-composer": "playwright test --config ui-migration/composer.config.mjs",
-    "pretest:ui-composer": "npm run build -w @orbit/shared"
+    "pretest:ui-composer": "npm run build -w @orbit/shared",
+    "test:session-list-scale": "playwright test --config ui-migration/session-list-scale.config.mjs",
+    "pretest:session-list-scale": "npm run build -w @orbit/shared && npm run build"
   },
   "dependencies": {
     "@ant-design/icons": "^6.3.4",
@@ -33,6 +35,7 @@
     "@novnc/novnc": "1.7.0",
     "@orbit/shared": "*",
     "@tanstack/react-query": "^5.103.2",
+    "@tanstack/react-virtual": "^3.14.28",
     "@xyflow/react": "^12.12.0",
     "highlight.js": "^11.11.1",
     "mermaid": "^12.2.0",

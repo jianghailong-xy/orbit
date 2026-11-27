@@ -614,6 +614,7 @@ func startKimiACP(ctx context.Context, t *Transport, job *ClaimedSession, execDi
 		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
 		envWatches+"="+watchesEnv(job.WatchesDisabled),
 		envWiki+"="+wikiEnv(job.WikiDisabled),
+		envDocuments+"="+documentsEnv(job.DocumentsDisabled),
 		envBrowser+"="+browserEnv(job.BrowserEnabled),
 		envWorkflows+"="+workflowsEnv(job.WorkflowsDisabled),
 		envScheduleRun+"="+scheduleRunEnv(job.ScheduleRun),
@@ -679,7 +680,7 @@ func startKimiACP(ctx context.Context, t *Transport, job *ClaimedSession, execDi
 	app.permission = func(permissionCtx context.Context, params map[string]interface{}) map[string]interface{} {
 		return app.bridgeKimiPermission(permissionCtx, t, job, params)
 	}
-	if err := startSessionProcess(cmd); err != nil {
+	if err := startSessionEngine(cmd, job.SessionID); err != nil {
 		_ = stdin.Close()
 		_ = stdout.Close()
 		_ = stderr.Close()
@@ -1076,12 +1077,12 @@ func kimiNameValuePairs(value interface{}) []map[string]string {
 	return pairs
 }
 
-func kimiAgentInstructions(agent AgentExecConfig, orbitExe string, insideRecordedWork, watches, workflows bool) string {
+func kimiAgentInstructions(agent AgentExecConfig, shape SessionShape) string {
 	parts := []string{}
 	if strings.TrimSpace(agent.SystemPrompt) != "" {
 		parts = append(parts, agent.SystemPrompt)
 	}
-	if appendPrompt := strings.TrimSpace(withOrbitCLIInstructions(agent.AppendSystemPrompt, orbitExe, insideRecordedWork, watches, agentDelegates(agent), workflows)); appendPrompt != "" {
+	if appendPrompt := strings.TrimSpace(withOrbitInstructions(agent.AppendSystemPrompt, compose(shape, kimiProfile).System)); appendPrompt != "" {
 		parts = append(parts, appendPrompt)
 	}
 	if len(agent.AllowedTools) > 0 {
@@ -1093,12 +1094,12 @@ func kimiAgentInstructions(agent AgentExecConfig, orbitExe string, insideRecorde
 	return strings.Join(parts, "\n\n")
 }
 
-func kimiPromptText(agent AgentExecConfig, orbitExe, text string, insideRecordedWork, watches, workflows bool) string {
-	instructions := kimiAgentInstructions(agent, orbitExe, insideRecordedWork, watches, workflows)
+func kimiPromptText(agent AgentExecConfig, shape SessionShape, text string) string {
+	instructions := kimiAgentInstructions(agent, shape)
 	if instructions == "" {
 		return text
 	}
-	return "<orbit-agent-instructions>\n" + instructions + "\n</orbit-agent-instructions>\n\n" + text
+	return kimiInstructionsOpen + instructions + "\n</orbit-agent-instructions>\n\n" + text
 }
 
 type kimiPreparedPrompt struct {
@@ -1106,7 +1107,9 @@ type kimiPreparedPrompt struct {
 	refs   []map[string]interface{}
 }
 
-func prepareKimiPrompt(ctx context.Context, t *Transport, job *ClaimedSession, resp *RunInboxResponse, pendingShellCtx []string) kimiPreparedPrompt {
+// prepareKimiPrompt builds the prompt for one turn. It carries Orbit's instructions when instructions says the
+// conversation does not hold them (kimiInstructionLedger.due; a nil ledger: always).
+func prepareKimiPrompt(ctx context.Context, t *Transport, job *ClaimedSession, resp *RunInboxResponse, pendingShellCtx []string, instructions *kimiInstructionLedger) kimiPreparedPrompt {
 	blocks := []map[string]interface{}{}
 	refs := []map[string]interface{}{}
 	writtenPaths := []string{}
@@ -1146,7 +1149,9 @@ func prepareKimiPrompt(ctx context.Context, t *Transport, job *ClaimedSession, r
 			feedText = note
 		}
 	}
-	feedText = kimiPromptText(job.instructionAgent(), orbitCLIExecutable(), feedText, job.insideRecordedWork(), job.watchesOn(), job.workflowsOn())
+	if instructions.due() {
+		feedText = kimiPromptText(job.instructionAgent(), job.sessionShape(orbitCLIExecutable()), feedText)
+	}
 	if feedText != "" || len(blocks) == 0 {
 		blocks = append(blocks, map[string]interface{}{"type": "text", "text": feedText})
 	}
@@ -1480,8 +1485,10 @@ type kimiTurnOutcome struct {
 	// ran is true when a turn opened for this prompt reached its end record. False with read true is
 	// the prompt Kimi never ran (kimiNoTurn).
 	ran bool
-	// failure is the sentence the turn failed with, "" when it did not fail.
-	failure string
+	// failure is the sentence the turn failed with, "" when it did not fail; classified is what its
+	// error's name says it was (kimiFailureRules), zero when it did not fail or the name is not mapped.
+	failure    string
+	classified engineFailure
 	// compactionDropped is true when the turn failed because Kimi dropped the compaction it was
 	// waiting on, before its model was asked anything (kimiTurnRecord.compactionDropped).
 	compactionDropped bool
@@ -1506,7 +1513,7 @@ func readKimiTurnOutcome(ctx context.Context, wire string, from int64, turns *ki
 			if ended.Reason != "failed" {
 				return kimiTurnOutcome{read: true, ran: true, text: ended.text}
 			}
-			return kimiTurnOutcome{read: true, ran: true, failure: kimiFailureSentence(ended.Error), compactionDropped: ended.compactionDropped, text: ended.text}
+			return kimiTurnOutcome{read: true, ran: true, failure: kimiFailureSentence(ended.Error), classified: kimiTurnFailureOf(ended.Error), compactionDropped: ended.compactionDropped, text: ended.text}
 		}
 		if turns.running() && time.Since(began) < kimiQueuedTurnWait {
 			deadline = time.Now().Add(kimiTurnOutcomeWait)
@@ -1559,12 +1566,44 @@ func kimiFailureSentence(err *kimiTurnError) string {
 	return sentence
 }
 
+// kimiFailureRules is Kimi Code's table (§5.3): matched by the error's name, which Kimi records as data, never
+// by its words. Each row's recorded sample is in kimi_failure_test.go. Not mapped, for want of a recorded turn:
+// APIProviderOverloadedError, APIConnectionError, APIProviderRateLimitError.
+var kimiFailureRules = []failureRule{
+	{Code: kimiQuotaExhaustedError, Kind: failureUsageLimit, Text: func(said string) string {
+		return kimiFailureSentence(&kimiTurnError{Name: kimiQuotaExhaustedError, Message: said})
+	}},
+}
+
+// kimiTurnFailureOf is what a turn Kimi recorded as failed failed with, by its error's name; zero when the name is
+// not mapped. Its Text is kimiFailureSentence's.
+func kimiTurnFailureOf(err *kimiTurnError) engineFailure {
+	if err == nil {
+		return engineFailure{}
+	}
+	failure := matchFailure(kimiFailureRules, err.Message, err.Name)
+	if failure.Kind == "" {
+		return engineFailure{}
+	}
+	failure.Text = kimiFailureSentence(err)
+	return failure
+}
+
 // kimiTurnError is the error a turn.ended record carries when the turn failed: the engine's own
 // name for it and the provider's sentence.
 type kimiTurnError struct {
 	Name    string `json:"name"`
 	Code    string `json:"code"`
 	Message string `json:"message"`
+}
+
+// kimiFinishedFailure is the classification of a turn that failed with errorText: the record's, when that is
+// the sentence the turn failed with, else none (a refusal, a prompt that failed, a turn that never opened).
+func kimiFinishedFailure(errorText string, outcome kimiTurnOutcome) engineFailure {
+	if errorText == "" || errorText != outcome.failure {
+		return engineFailure{}
+	}
+	return outcome.classified
 }
 
 // kimiTurnSaidNothing: whether the turn's stream carried no text, no reasoning, no tool call and no
@@ -1787,6 +1826,8 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 	}
 	turns.setSession(sessionID)
 	job.RuntimeSessionID = sessionID
+	// Whether the conversation holds Orbit's instructions, read from its own history (a resumed one's included).
+	instructions := newKimiInstructionLedger(realHome, sessionID)
 	expectedSessionID.Store(sessionID)
 	writeKimiSessionMeta(scratchDir, job, execDir)
 	if err := app.configureSession(ctx, sessionID, job.Agent); err != nil {
@@ -1809,6 +1850,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 	defer pollCancel()
 	// The generation's inbox: what fetches its turns, and the turnIds being processed.
 	inbox := newInboxPoller(t, job.SessionID, leaseGeneration)
+	inbox.holdTurns(waitTurnPermit, job, completeTurn) // a turn waiting for its permit does not stop the inbox being read
 	defer inbox.close()
 	inboxCh := make(chan *RunInboxResponse, 8)
 	app.wg.Add(1)
@@ -1881,6 +1923,11 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 		}
 		// A prompt Kimi queued behind a turn of its own ran with nothing streamed (kimiTurnLedger):
 		// its answer is the one its record holds.
+		// §5.2: measured before the record's answer is added to the turn below.
+		var admission *bool
+		if status == stFailed {
+			admission = turnAdmission(!kimiTurnSaidNothing(turn), nil, 0)
+		}
 		if done.outcome.ran && done.outcome.text != "" && kimiTurnSaidNothing(turn) {
 			turn.text.WriteString(done.outcome.text)
 			resultText = done.outcome.text
@@ -1911,7 +1958,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 			BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 			BranchMerged:   branchMergedInto(job.WT),
 			WorktreeBranch: currentBranch(job.WT),
-		}); completeErr != nil {
+		}.withFailure(kimiFinishedFailure(errorText, done.outcome), admission)); completeErr != nil {
 			logln("turn-complete failed for", job.SessionID+":", completeErr)
 		}
 		inbox.clearInflight(done.turnID)
@@ -2015,7 +2062,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 					continue
 				}
 				inbox.markInflight(resp.TurnID)
-				prepared := prepareKimiPrompt(ctx, t, job, resp, pendingShellCtx)
+				prepared := prepareKimiPrompt(ctx, t, job, resp, pendingShellCtx, instructions)
 				pendingShellCtx = nil
 				userEvent := map[string]interface{}{"text": resp.Content}
 				if len(prepared.refs) > 0 {
@@ -2373,6 +2420,13 @@ func (a *kimiACPClient) bridgeKimiPermission(ctx context.Context, t *Transport, 
 				"options":  questionOptions,
 			}},
 		}
+		// One plan to approve is Orbit's plan card, which renders the plan as Markdown: its Approve is
+		// Kimi's allow_once plan_approve and its Keep planning the first reject_once, plan_revise
+		// (kimiPermissionOption). A choice between plans (plan_opt_*) stays a question.
+		if kimiHasOption(options, "plan_approve") {
+			toolName = "ExitPlanMode"
+			input = map[string]interface{}{"plan": question}
+		}
 	}
 	if ctx.Err() != nil {
 		return kimiCancelledPermissionResult()
@@ -2518,6 +2572,13 @@ func kimiQuestionFromPermission(toolCall map[string]interface{}, options []inter
 			}
 		}
 	}
+	// Kimi heads a plan review with where it saved the plan, a path in the engine's own home that
+	// nobody reading the card can open.
+	if strings.HasPrefix(question, "Plan saved to: ") {
+		if _, plan, ok := strings.Cut(question, "\n\n"); ok {
+			question = strings.TrimSpace(plan)
+		}
+	}
 	questionOptions := []map[string]interface{}{}
 	for _, optionValue := range options {
 		option := mapValue(optionValue)
@@ -2533,6 +2594,15 @@ func kimiQuestionFromPermission(toolCall map[string]interface{}, options []inter
 		return "", nil
 	}
 	return question, questionOptions
+}
+
+func kimiHasOption(options []interface{}, optionID string) bool {
+	for _, optionValue := range options {
+		if firstString(mapValue(optionValue), "optionId", "option_id") == optionID {
+			return true
+		}
+	}
+	return false
 }
 
 func kimiPermissionOption(options []interface{}, decision *ApprovalDecisionResponse, question string) string {

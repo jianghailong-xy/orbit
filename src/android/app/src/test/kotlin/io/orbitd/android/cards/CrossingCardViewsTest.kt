@@ -103,7 +103,7 @@ class CrossingCardViewsTest {
     private fun textOf(tag: String) = tag(tag).fetchSemanticsNode().config[SemanticsProperties.Text].joinToString("") { it.text }
     private fun loaded(predicate: () -> Boolean) {
         store.load(PROJECT); store.loadMoves(SESSION)
-        compose.waitUntil(10_000) { shows("here?") && predicate() }
+        compose.waitUntil(10_000) { shows("Runner v1") && predicate() }
     }
 
     private fun shot(name: String) {
@@ -127,7 +127,8 @@ class CrossingCardViewsTest {
 
         show { Review() }
         assertEquals("move · 8 waiting", textOf("$batchId:review:waiting"))
-        compose.onNodeWithText("From Orbit — not the requesting agent.", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("Written by Orbit — not the requesting agent.", useUnmergedTree = true).assertExists()
+        assertEquals("Reason given by the requesting agent", textOf("$batchId:review:reasons-head"))
         assertEquals("From Runner v1: control plane", textOf("$batchId:review:from"))
         compose.onNodeWithText("To this project", useUnmergedTree = true).assertExists()
         compose.onNodeWithText("Tasks to move", useUnmergedTree = true).assertExists()
@@ -261,6 +262,42 @@ class CrossingCardViewsTest {
         assertEquals("2 dependencies from Runner v1: control plane · for criterion 3", textOf("crossing-batch-Pd1:summary"))
         assertEquals("depend", textOf("crossing-batch-Pd1:badge"))
         compose.onNodeWithText("File this task here?", useUnmergedTree = true).assertExists()
+    }
+
+
+    /** A move out of every project, served by the session read: the card the screenshot compares (before/after kit). */
+    private fun outMove(id: String) = buildJsonObject {
+        put("id", "uuid-$id"); put("publicId", "P$id"); put("fromProjectId", "AAASource"); put("toProjectId", JsonNull); put("kind", "MOVE_TASK")
+        put("crossingKey", "key-$id"); put("state", "PENDING"); put("title", "integration_retry answers HTTP 500 on a BASELINE_RED landing")
+        put("requestedAt", "2026-11-10T09:01:00.000Z"); put("decidedAt", JsonNull)
+        put("reason", "A platform bug found while coordinating this project; its fix should land on main on its own.")
+        putJsonObject("fromProject") { put("title", "Main checkout bar") }
+        putJsonObject("subjectTask") { put("title", "integration_retry answers HTTP 500 on a BASELINE_RED landing") }
+    }
+
+    @Test fun aTakeOutBatchShots() {
+        fixture.held.clear(); fixture.hold(listOf(outMove("o1")))
+        show { Review(project = null) }
+        store.loadMoves(SESSION)
+        compose.waitUntil(10_000) { shows("Main checkout bar") }
+        shot("crossing-take-out-review")
+        // Waiting, it asks to take the task out of its project, to no project, in buttons that say so.
+        compose.onNodeWithText("Take this task out of the project?", useUnmergedTree = true).assertExists()
+        assertEquals("To No project", textOf("crossing-batch-Po1:review:to"))
+        assertEquals("Tasks to take out", compose.onNodeWithText("Tasks to take out", useUnmergedTree = true).fetchSemanticsNode().config[SemanticsProperties.Text].joinToString(""))
+        compose.onNodeWithText("Take it out", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("Keep it here", useUnmergedTree = true).assertExists()
+        assertEquals(io.orbitd.android.projects.ProjectCrossings.moveOutApproveConsequence, textOf("crossing-batch-Po1:review:consequence"))
+        fixture.answerAll("APPLIED")
+        store.loadMoves(SESSION)
+        compose.waitUntil(10_000) { shows("Approved") }
+        shot("crossing-take-out-answered-review")
+        // Answered, it says what happened: a past-tense heading, no "Confirming…", no per-row state, the reason labelled as the agent's.
+        compose.onNodeWithText("Task taken out of the project", useUnmergedTree = true).assertExists()
+        assertEquals(0, compose.onAllNodesWithTag("crossing-batch-Po1:review:consequence", useUnmergedTree = true).fetchSemanticsNodes().size)
+        compose.onAllNodesWithText(io.orbitd.android.projects.ProjectCrossings.label("APPLIED"), useUnmergedTree = true).assertCountEquals(0)
+        assertEquals("Reason given by the requesting agent", textOf("crossing-batch-Po1:review:reasons-head"))
+        assertEquals("To No project", textOf("crossing-batch-Po1:review:to"))
     }
 
     private fun move(id: String, criterion: Int, kind: String = "MOVE_TASK", minute: Int = criterion) = buildJsonObject {

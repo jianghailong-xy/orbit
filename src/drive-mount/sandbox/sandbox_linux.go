@@ -1,6 +1,6 @@
 //go:build linux
 
-// Package sandbox locks the mount daemon down once it holds what it needs (docs/orbit-files-drive-technical-design.md
+// Package sandbox locks the mount daemon down once it holds what it needs (docs/drive-technical-design.md
 // §5.1): the daemon parses what agents write, so it keeps no privilege. It already runs as an unprivileged user with
 // no capabilities; this adds no_new_privs, makes it undumpable (so no process of the same user can read its memory or
 // its /proc files, where another runner's daemon would find its credential), and a seccomp filter refusing the

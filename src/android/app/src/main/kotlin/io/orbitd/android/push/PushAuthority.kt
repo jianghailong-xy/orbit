@@ -105,6 +105,11 @@ class PushAuthority(private val api: OrbitApi, private val handle: SessionHandle
                 val row = objectRead(listOf("schedules", payload.scheduleId!!)).obj("schedule") ?: throw ProtocolException()
                 if (ObjectId.same(row.text("id"), payload.scheduleId)) PushCheck.ACTIVE else throw ProtocolException()
             }
+            // The block stands while GET /account-health lists it; once cleared (Check again, a success) the push is stale.
+            payload.kind == PushPayload.ACCOUNT_NEEDS_ACTION -> {
+                val blocks = array(objectRead(listOf("account-health"))["blocks"])
+                if (blocks.any { it.text("id") == payload.accountHealthId }) PushCheck.ACTIVE else PushCheck.STALE
+            }
             payload.runnerId != null -> {
                 val runner = array(get(listOf("runners"))).firstOrNull { ObjectId.same(it.text("id"), payload.runnerId) }
                 if (runner == null) PushCheck.MISSING

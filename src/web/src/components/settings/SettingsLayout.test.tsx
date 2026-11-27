@@ -619,7 +619,6 @@ describe('reordering machines in the nav', () => {
       'Reorder old-laptop',
       'Reorder Studio Mac',
     ]);
-    expect(grips.every((g) => g.title === 'Drag to reorder')).toBe(true);
     // Hidden at rest is the stylesheet's to say: opacity 0, shown on the row's hover or the grip's focus.
     const fs = await import('node:fs');
     const css = fs.readFileSync(

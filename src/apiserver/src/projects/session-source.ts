@@ -4,8 +4,9 @@ import {
   ForbiddenException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import {
+  RunStatus,
   SessionSourceSnapshot,
   SourceKind,
   SourcePinRequest,
@@ -17,7 +18,7 @@ import {
   SOURCE_REFUSAL_CODES,
 } from '@orbit/shared';
 import { retireSessionInboxGeneration } from '../common/session-inbox-fence';
-import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
+import { heldFilter } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
 import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
 import { carryingTurnOf, recordCarryingTurnOutcome } from '../common/carrying-turn';
@@ -691,7 +692,7 @@ export async function freezeSessionSourcePin(
     // unset (`retireSessionInboxGeneration`; the session keeps pointing at the tombstone, which is
     // what lets a later revive prove the prior engine is gone).
     //
-    // `status` is the fence, not a second CAS: the compare-and-set above stays exactly as SR30
+    // `finished_at` (held) is the fence, not a second CAS: the compare-and-set above stays exactly as SR30
     // states it (this function's whole job), and a row somebody already ended — a user's cancel
     // landing between the claim and this request — is left as it is, rather than overwritten by a
     // runner that reported a refusal about a run that is no longer live.
@@ -701,9 +702,10 @@ export async function freezeSessionSourcePin(
       // started reads exactly like every other refused start.
       const error = `${refusal.code}: ${reason}`;
       const closed = await tx.session.updateMany({
-        where: { id: actor.sessionId, status: { in: OPEN_SESSION_STATUSES } },
+        where: { id: actor.sessionId, ...heldFilter() },
         data: {
-          status: RunStatus.FAILED,
+          // Released: no turn (plan §2.2 #4).
+          turnState: null,
           error,
           finishedAt: new Date(),
           // The run never started (design §4.2).

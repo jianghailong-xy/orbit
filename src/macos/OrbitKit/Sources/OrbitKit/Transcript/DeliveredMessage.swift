@@ -105,6 +105,10 @@ public func describeNote(_ note: String) -> String {
             // Skipped past below, unnamed.
         } else if let tag, WikiChatLogic.noteTags.values.contains(tag) {
             names.append(WikiChatLogic.parseNoteTag(rest).map(WikiChatLogic.noteLabel) ?? "context")
+        } else if tag == DriveChatLogic.noteTag {
+            // A Drive chat's folder and selection (board drive-chat 02 ②: "Folder · Scans · 12 files"); its guidance
+            // alone is the chat's own words, unnamed like the wiki chat's.
+            if let name = DriveChatLogic.noteLabel(rest) { names.append(name) }
         } else {
             names.append(blockName(tag))
         }

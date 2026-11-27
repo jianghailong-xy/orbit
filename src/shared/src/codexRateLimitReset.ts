@@ -37,12 +37,42 @@ import type {
   RunnerHeartbeatResponse,
 } from './dto';
 
-export const CODEX_RATE_LIMIT_RESET_PROTOCOL_VERSION = 1;
+/** The newest contract version. Contract v2 (§12) gives every Codex account its own block and has
+ *  each command name the account slot it runs in. */
+export const CODEX_RATE_LIMIT_RESET_PROTOCOL_VERSION = 2;
+
+/** The versions each wire object may carry. A block's format is unchanged by v2, so blocks stay at 1
+ *  and v1 heartbeats decode as they did. Commands and results are 1 or 2: a result carries its
+ *  command's version. */
+export const CODEX_RATE_LIMIT_RESET_PROTOCOL_VERSIONS = {
+  block: [1],
+  command: [1, 2],
+  result: [1, 2],
+} as const satisfies Record<string, readonly number[]>;
 
 /** Declared in X-Orbit-Runner-Capabilities by a runner binary that implements BOTH the heartbeat
  *  command/result relay and the idempotent consume with its authoritative refresh. Declaring it
  *  before both exist would get the machine handed consumes it cannot carry out. */
 export const CODEX_RATE_LIMIT_RESET_CAPABILITY_V1 = 'codex-rate-limit-reset-v1';
+
+/** Declared, beside v1, by a runner binary that reads, consumes and refreshes in every Codex account
+ *  slot and takes protocol v2 commands. Only such a runner is handed an added slot's operation, and
+ *  only it is sent version 2 commands. */
+export const CODEX_RATE_LIMIT_RESET_CAPABILITY_V2 = 'codex-rate-limit-reset-v2';
+
+/** The runner's own Codex login (its process CODEX_HOME). Every other slot is an 8-hex id, the key of
+ *  its entry under the Codex snapshot's `accounts`. */
+export const CODEX_DEFAULT_ACCOUNT_SLOT = 'default';
+export const CODEX_ACCOUNT_SLOT_ID_PATTERN = /^[0-9a-f]{8}$/;
+
+/** What still makes a workspace or session context an ACCOUNT_OVERRIDE under v2: a provider other
+ *  than the built-in one, or an env credential of its own. A chosen added account no longer is; it
+ *  is the slot the reset is for. */
+export const CODEX_RATE_LIMIT_RESET_ACCOUNT_OVERRIDE = {
+  builtinProvider: 'codex',
+  envKeys: ['CODEX_HOME', 'CODEX_API_KEY'],
+  envPrefixes: ['OPENAI_'],
+} as const;
 
 export const CODEX_ACCOUNT_READ_METHOD = 'account/read';
 export const CODEX_RATE_LIMITS_READ_METHOD = 'account/rateLimits/read';
@@ -346,6 +376,7 @@ export const CODEX_RATE_LIMIT_RESET_WIRE: {
     claimGeneration: ['required', 'non-null'],
     phase: ['required', 'non-null'],
     accountFingerprint: ['required', 'non-null'],
+    accountSlot: ['optional', 'non-null'],
     providerIdempotencyKey: ['optional', 'non-null'],
     requestedAt: ['required', 'non-null'],
   },
@@ -372,6 +403,7 @@ export const CODEX_RATE_LIMIT_RESET_WIRE: {
     runnerId: ['required', 'non-null'],
     clientRequestId: ['required', 'non-null'],
     accountFingerprint: ['required', 'non-null'],
+    accountSlot: ['optional', 'non-null'],
     status: ['required', 'non-null'],
     consumeState: ['required', 'non-null'],
     consumeOutcome: ['required', 'nullable'],
@@ -386,6 +418,7 @@ export const CODEX_RATE_LIMIT_RESET_WIRE: {
   CreateCodexRateLimitResetRequest: {
     clientRequestId: ['required', 'non-null'],
     accountFingerprint: ['required', 'non-null'],
+    accountSlot: ['optional', 'non-null'],
     workspaceId: ['optional', 'non-null'],
   },
   CodexRateLimitResetOperations: {
@@ -434,6 +467,11 @@ export function isCodexAccountFingerprint(value: unknown): value is string {
   return typeof value === 'string' && CODEX_ACCOUNT_FINGERPRINT_PATTERN.test(value);
 }
 
+/** `default` or an added slot's 8-hex id. */
+export function isCodexAccountSlot(value: unknown): value is string {
+  return value === CODEX_DEFAULT_ACCOUNT_SLOT || (typeof value === 'string' && CODEX_ACCOUNT_SLOT_ID_PATTERN.test(value));
+}
+
 /** The pattern alone accepts 2026-02-30; the round trip does not. */
 function realInstant(value: string, canonical: string): boolean {
   const at = Date.parse(value);
@@ -470,7 +508,7 @@ function shapeViolations(path: string, value: unknown, fields: FieldSpec): strin
   if (!isObject(value)) return [`${path} must be an object`];
   const out: string[] = [];
   for (const key of Object.keys(value)) {
-    if (!Object.hasOwn(fields, key)) out.push(`${path}.${key} is not a protocol v1 field`);
+    if (!Object.hasOwn(fields, key)) out.push(`${path}.${key} is not a protocol field`);
   }
   for (const [key, [presence, nullability]] of Object.entries(fields)) {
     const field = value[key];
@@ -513,13 +551,15 @@ function creditsViolations(value: unknown, path: string): string[] {
   return out;
 }
 
-/** Why `value` is not a protocol v1 reset block; empty when it is one. */
+function versionViolations(value: JsonObject, path: string, versions: readonly number[], out: string[]): void {
+  if (!versions.includes(value.protocolVersion as number)) out.push(`${path}.protocolVersion must be ${versions.join(' or ')}`);
+}
+
+/** Why `value` is not a reset block (format version 1, the same under v1 and v2); empty when it is one. */
 export function codexRateLimitResetViolations(value: unknown, path = 'rateLimitReset'): string[] {
   const out = shapeViolations(path, value, CODEX_RATE_LIMIT_RESET_WIRE.PlanUsageRateLimitReset);
   if (!isObject(value)) return out;
-  if (value.protocolVersion !== CODEX_RATE_LIMIT_RESET_PROTOCOL_VERSION) {
-    out.push(`${path}.protocolVersion must be ${CODEX_RATE_LIMIT_RESET_PROTOCOL_VERSION}`);
-  }
+  versionViolations(value, path, CODEX_RATE_LIMIT_RESET_PROTOCOL_VERSIONS.block, out);
   if (!oneOf(CODEX_RATE_LIMIT_RESET_ENUMS.support, value.support)) out.push(`${path}.support is not a support value`);
   const identified = value.support === 'SUPPORTED' || value.support === 'CREDITS_UNAVAILABLE';
   if (value.accountFingerprint !== undefined && !isCodexAccountFingerprint(value.accountFingerprint)) {
@@ -542,22 +582,24 @@ export function codexRateLimitResetViolations(value: unknown, path = 'rateLimitR
   return out;
 }
 
-function envelopeViolations(value: JsonObject, path: string, out: string[]): void {
-  if (value.protocolVersion !== CODEX_RATE_LIMIT_RESET_PROTOCOL_VERSION) {
-    out.push(`${path}.protocolVersion must be ${CODEX_RATE_LIMIT_RESET_PROTOCOL_VERSION}`);
-  }
+function envelopeViolations(value: JsonObject, path: string, versions: readonly number[], out: string[]): void {
+  versionViolations(value, path, versions, out);
   if (!isCodexResetUuid(value.operationId)) out.push(`${path}.operationId must be a canonical lowercase UUID`);
   if (!isCodexResetUuid(value.leaseOwner)) out.push(`${path}.leaseOwner must be a canonical lowercase UUID`);
   if (!isInteger(value.claimGeneration, 1)) out.push(`${path}.claimGeneration must be an integer of at least 1`);
   if (!oneOf(CODEX_RATE_LIMIT_RESET_ENUMS.phase, value.phase)) out.push(`${path}.phase must be CONSUME or REFRESH`);
 }
 
-/** Why `value` is not a protocol v1 command; empty when it is one. */
+/** Why `value` is not a protocol v1 or v2 command; empty when it is one. A v2 command names its
+ *  account slot, a v1 command never does (it is Default's). */
 export function codexResetCommandViolations(value: unknown, path = 'command'): string[] {
   const out = shapeViolations(path, value, CODEX_RATE_LIMIT_RESET_WIRE.CodexRateLimitResetCommand);
   if (!isObject(value)) return out;
-  envelopeViolations(value, path, out);
+  envelopeViolations(value, path, CODEX_RATE_LIMIT_RESET_PROTOCOL_VERSIONS.command, out);
   if (!isCodexAccountFingerprint(value.accountFingerprint)) out.push(`${path}.accountFingerprint must match cxa1_ + 32 lowercase hex`);
+  if (value.protocolVersion === 2 ? !isCodexAccountSlot(value.accountSlot) : value.accountSlot !== undefined) {
+    out.push(`${path}.accountSlot must be default or an 8-hex slot id on protocolVersion 2 and absent on 1`);
+  }
   if (!isTimestampMs(value.requestedAt)) out.push(`${path}.requestedAt must be ISO-8601 UTC with milliseconds`);
   const consume = value.phase === 'CONSUME';
   if (consume ? !isCodexResetUuid(value.providerIdempotencyKey) : value.providerIdempotencyKey !== undefined) {
@@ -566,11 +608,11 @@ export function codexResetCommandViolations(value: unknown, path = 'command'): s
   return out;
 }
 
-/** Why `value` is not a protocol v1 result; empty when it is one. */
+/** Why `value` is not a protocol v1 or v2 result; empty when it is one. */
 export function codexResetResultViolations(value: unknown, path = 'result'): string[] {
   const out = shapeViolations(path, value, CODEX_RATE_LIMIT_RESET_WIRE.CodexRateLimitResetResultRequest);
   if (!isObject(value)) return out;
-  envelopeViolations(value, path, out);
+  envelopeViolations(value, path, CODEX_RATE_LIMIT_RESET_PROTOCOL_VERSIONS.result, out);
   if (!oneOf(CODEX_RATE_LIMIT_RESET_ENUMS.resultKind, value.kind)) return [...out, `${path}.kind is not a result kind`];
   const rule = CODEX_RATE_LIMIT_RESET_RESULT_KINDS[value.kind];
   if (!rule.phases.includes(value.phase as CodexRateLimitResetPhase)) out.push(`${path}.kind ${value.kind} is not a ${String(value.phase)} result`);
@@ -629,6 +671,9 @@ export function codexResetOperationViewViolations(value: unknown, path = 'operat
   }
   if (!isCodexResetUuid(value.clientRequestId)) out.push(`${path}.clientRequestId must be a canonical lowercase UUID`);
   if (!isCodexAccountFingerprint(value.accountFingerprint)) out.push(`${path}.accountFingerprint must match cxa1_ + 32 lowercase hex`);
+  if (value.accountSlot !== undefined && !(typeof value.accountSlot === 'string' && CODEX_ACCOUNT_SLOT_ID_PATTERN.test(value.accountSlot))) {
+    out.push(`${path}.accountSlot must be an added slot's 8-hex id, or absent for Default`);
+  }
   if (!oneOf(CODEX_RATE_LIMIT_RESET_ENUMS.operationStatus, value.status)) out.push(`${path}.status is not an operation status`);
   if (value.consumeOutcome !== null && !oneOf(CODEX_RATE_LIMIT_RESET_CONSUME_OUTCOMES, value.consumeOutcome)) {
     out.push(`${path}.consumeOutcome must be null or a provider outcome`);
@@ -673,6 +718,9 @@ export function createCodexResetRequestViolations(value: unknown, path = 'body')
   if (!isObject(value)) return out;
   if (!isCodexResetUuid(value.clientRequestId)) out.push(`${path}.clientRequestId must be a canonical lowercase UUID`);
   if (!isCodexAccountFingerprint(value.accountFingerprint)) out.push(`${path}.accountFingerprint must match cxa1_ + 32 lowercase hex`);
+  if (value.accountSlot !== undefined && !isCodexAccountSlot(value.accountSlot)) {
+    out.push(`${path}.accountSlot must be default or an 8-hex slot id`);
+  }
   if (value.workspaceId !== undefined && !(typeof value.workspaceId === 'string' && value.workspaceId.length > 0)) {
     out.push(`${path}.workspaceId must be a non-empty id`);
   }
@@ -681,12 +729,20 @@ export function createCodexResetRequestViolations(value: unknown, path = 'body')
 
 // ── reading a block ─────────────────────────────────────────────────────────────────────────
 
-/** The Codex block a runner reported, nested (`codex`) or flat (`provider: 'codex'`), the same
- *  selection planUsage.ts makes. Undefined from older runners and from non-Codex snapshots. */
-export function codexRateLimitResetOf(usage: PlanUsage | null | undefined): PlanUsageRateLimitReset | undefined {
+/** The block of one Codex account a runner reported: Default's beside the Codex snapshot's windows,
+ *  an added slot's in that snapshot's `accounts` entry (v2 §12). The snapshot is nested (`codex`) or
+ *  flat (`provider: 'codex'`), the same selection planUsage.ts makes. Undefined from older runners,
+ *  from non-Codex snapshots, and for a slot the runner reports no block for. */
+export function codexRateLimitResetOf(
+  usage: PlanUsage | null | undefined,
+  accountSlot: string = CODEX_DEFAULT_ACCOUNT_SLOT,
+): PlanUsageRateLimitReset | undefined {
   if (!usage) return undefined;
   const snapshot: PlanUsageSnapshot | undefined = usage.codex ?? (usage.provider === 'codex' ? usage : undefined);
-  return snapshot?.rateLimitReset;
+  if (accountSlot === CODEX_DEFAULT_ACCOUNT_SLOT) return snapshot?.rateLimitReset;
+  if (!CODEX_ACCOUNT_SLOT_ID_PATTERN.test(accountSlot)) return undefined;
+  const accounts = snapshot?.accounts;
+  return accounts && Object.hasOwn(accounts, accountSlot) ? accounts[accountSlot]?.rateLimitReset : undefined;
 }
 
 export interface CodexResetCreditDetails {
@@ -715,31 +771,51 @@ export function codexResetCreditDetails(block: PlanUsageRateLimitReset | null | 
   };
 }
 
-/** Whether a workspace or session context runs on something other than the runner's default
- *  Codex account: a configured (non built-in) provider, a Codex account other than Default picked
- *  for it (`codexAccount`, a slot id), or an env naming another CODEX_HOME, CODEX_API_KEY or any
- *  OPENAI_* value. Reset is refused there (ACCOUNT_OVERRIDE). */
+/** Whether a workspace or session context runs on a Codex login no runner slot holds: a configured
+ *  (non built-in) provider, or an env naming a CODEX_HOME, CODEX_API_KEY or any OPENAI_* value of its
+ *  own. Reset is refused there (ACCOUNT_OVERRIDE). Since contract v2 a Codex account the context
+ *  picked (its `codexAccount`) is not an override: it is the slot the reset is for
+ *  (codexResetContextSlot). */
 export function codexResetAccountOverride(context: {
   provider?: string | null;
-  codexAccount?: string | null;
   env?: Readonly<Record<string, string | null | undefined>> | null;
 }): boolean {
-  if (context.provider != null && context.provider !== 'codex') return true;
-  // Judged on the choice, not on whether this runner still reports that account: a pick that
-  // does not resolve falls back to Default at dispatch, but the reset would still be spent on an
-  // account the workspace said it does not use.
-  const account = context.codexAccount?.trim();
-  if (account && account !== 'default') return true;
+  const rule = CODEX_RATE_LIMIT_RESET_ACCOUNT_OVERRIDE;
+  if (context.provider != null && context.provider !== rule.builtinProvider) return true;
   return Object.entries(context.env ?? {}).some(
     ([key, value]) =>
-      (key === 'CODEX_HOME' || key === 'CODEX_API_KEY' || key.startsWith('OPENAI_')) &&
+      ((rule.envKeys as readonly string[]).includes(key) || rule.envPrefixes.some((prefix) => key.startsWith(prefix))) &&
       typeof value === 'string' &&
       value.trim() !== '',
   );
 }
 
-export function codexResetCapabilityDeclared(capabilities: readonly string[] | null | undefined): boolean {
-  return (capabilities ?? []).some((value) => value.trim().toLowerCase() === CODEX_RATE_LIMIT_RESET_CAPABILITY_V1);
+/** The account slot a workspace or session context runs on, by its pick (`codexAccount`): Default when
+ *  it picked none. Judged on the pick, not on whether the runner still reports that slot: a pick that
+ *  does not resolve falls back to Default at dispatch, but the context said it does not use Default. */
+export function codexResetContextSlot(context: { codexAccount?: string | null }): string {
+  const account = context.codexAccount?.trim();
+  return account ? account : CODEX_DEFAULT_ACCOUNT_SLOT;
+}
+
+/** Whether the capabilities declare `capability` (v1 unless named). */
+export function codexResetCapabilityDeclared(
+  capabilities: readonly string[] | null | undefined,
+  capability: string = CODEX_RATE_LIMIT_RESET_CAPABILITY_V1,
+): boolean {
+  return (capabilities ?? []).some((value) => value.trim().toLowerCase() === capability);
+}
+
+/** The command version a runner declaring `capabilities` is handed for an operation on `accountSlot`:
+ *  2 when it declares v2; 1 for Default's when it declares only v1; null when it cannot take it (no
+ *  capability, or an added slot on a v1-only runner, which would consume in Default's login). */
+export function codexResetCommandVersion(
+  capabilities: readonly string[] | null | undefined,
+  accountSlot: string,
+): 1 | 2 | null {
+  if (codexResetCapabilityDeclared(capabilities, CODEX_RATE_LIMIT_RESET_CAPABILITY_V2)) return 2;
+  if (accountSlot === CODEX_DEFAULT_ACCOUNT_SLOT && codexResetCapabilityDeclared(capabilities)) return 1;
+  return null;
 }
 
 export function codexResetSnapshotFresh(block: PlanUsageRateLimitReset, now: Date): boolean {
@@ -751,7 +827,9 @@ export function codexResetSnapshotFresh(block: PlanUsageRateLimitReset, now: Dat
 }
 
 /**
- * Whether `incoming` may replace `stored` in Runner.planUsage. Order is by fetchedAt (when the
+ * Whether `incoming` may replace `stored` in Runner.planUsage. Each account's block is ordered on its
+ * own (v2 §12.2): `stored` and `incoming` are the same slot's, and a block never moves between slots.
+ * Order is by fetchedAt (when the
  * read started), then by sequence within one runner process; an equal fetchedAt from a different
  * process keeps what is stored. A stored block dated beyond the future-skew window is untrusted
  * and any sane block replaces it. `transportLeaseOwner` is the leaseOwner of the heartbeat or
@@ -798,10 +876,13 @@ export interface CodexResetEligibilityInput {
   heartbeatLeaseOwner: string | null | undefined;
   /** The draining flag the last heartbeat carried. */
   runnerDraining: boolean;
-  /** The runner's stored Codex block (codexRateLimitResetOf(Runner.planUsage)). */
+  /** The stored block of the slot the reset is for (codexRateLimitResetOf(Runner.planUsage, accountSlot)). */
   rateLimitReset: PlanUsageRateLimitReset | null | undefined;
   /** CreateCodexRateLimitResetRequest.accountFingerprint. */
   expectedAccountFingerprint: string;
+  /** The slot the reset is for (CreateCodexRateLimitResetRequest.accountSlot); absent means Default.
+   *  An added slot needs a runner that declares CODEX_RATE_LIMIT_RESET_CAPABILITY_V2. */
+  accountSlot?: string;
   /** When this runner and account's latest operation that may have spent a credit no refresh confirmed
    *  (UNRESOLVED, or REFRESH_FAILED) settled; null or absent when there is none. A block read no later
    *  than that may count credits from before that spend, so it cannot back another confirmation. */
@@ -814,7 +895,9 @@ export function codexResetRefusal(input: CodexResetEligibilityInput): CodexRateL
   if (input.accountOverride) return 'ACCOUNT_OVERRIDE';
   if (input.activeOperation) return 'OPERATION_IN_FLIGHT';
   if (!input.runnerOnline) return 'RUNNER_OFFLINE';
-  if (!codexResetCapabilityDeclared(input.runnerCapabilities)) return 'CAPABILITY_MISSING';
+  if (codexResetCommandVersion(input.runnerCapabilities, input.accountSlot ?? CODEX_DEFAULT_ACCOUNT_SLOT) === null) {
+    return 'CAPABILITY_MISSING';
+  }
   if (!isCodexResetUuid(input.heartbeatLeaseOwner)) return 'NO_ACTIVE_LEASE';
   if (input.runnerDraining) return 'RUNNER_DRAINING';
   const block = input.rateLimitReset;
@@ -839,6 +922,8 @@ export interface CodexRateLimitResetOperationState {
   ownerId: string;
   runnerId: string;
   accountFingerprint: string;
+  /** The Codex login the reset runs in: `default` or an added slot's 8-hex id. Immutable. */
+  accountSlot: string;
   /** Idempotency of the POST: unique per owner, replayed rather than re-created. */
   clientRequestId: string;
   /** Idempotency of the provider consume: generated with the row, never replaced, never shown. */
@@ -869,6 +954,8 @@ export function newCodexResetOperation(input: {
   ownerId: string;
   runnerId: string;
   accountFingerprint: string;
+  /** Absent means Default. */
+  accountSlot?: string;
   clientRequestId: string;
   providerIdempotencyKey: string;
   now: Date;
@@ -877,12 +964,15 @@ export function newCodexResetOperation(input: {
     if (!isCodexResetUuid(input[key])) throw new Error(`${key} must be a canonical lowercase UUID`);
   }
   if (!isCodexAccountFingerprint(input.accountFingerprint)) throw new Error('accountFingerprint must match cxa1_ + 32 lowercase hex');
+  const accountSlot = input.accountSlot ?? CODEX_DEFAULT_ACCOUNT_SLOT;
+  if (!isCodexAccountSlot(accountSlot)) throw new Error('accountSlot must be default or an 8-hex slot id');
   const at = input.now.toISOString();
   return {
     id: input.id,
     ownerId: input.ownerId,
     runnerId: input.runnerId,
     accountFingerprint: input.accountFingerprint,
+    accountSlot,
     clientRequestId: input.clientRequestId,
     providerIdempotencyKey: input.providerIdempotencyKey,
     consumeState: 'PENDING',
@@ -902,12 +992,14 @@ export function newCodexResetOperation(input: {
 }
 
 /** A POST whose (owner, clientRequestId) already exists: the same confirmation replayed, or the id
- *  reused for a different runner or account (refused, the existing operation untouched). */
+ *  reused for a different runner, account or slot (refused, the existing operation untouched). */
 export function codexResetCreateReplay(
-  existing: Pick<CodexRateLimitResetOperationState, 'runnerId' | 'accountFingerprint'>,
-  request: { runnerId: string; accountFingerprint: string },
+  existing: Pick<CodexRateLimitResetOperationState, 'runnerId' | 'accountFingerprint' | 'accountSlot'>,
+  request: { runnerId: string; accountFingerprint: string; accountSlot?: string },
 ): 'REPLAY' | 'REQUEST_ID_REUSED' {
-  return existing.runnerId === request.runnerId && existing.accountFingerprint === request.accountFingerprint
+  return existing.runnerId === request.runnerId &&
+    existing.accountFingerprint === request.accountFingerprint &&
+    existing.accountSlot === (request.accountSlot ?? CODEX_DEFAULT_ACCOUNT_SLOT)
     ? 'REPLAY'
     : 'REQUEST_ID_REUSED';
 }
@@ -956,6 +1048,7 @@ export function codexResetOperationView(state: CodexRateLimitResetOperationState
     runnerId: state.runnerId,
     clientRequestId: state.clientRequestId,
     accountFingerprint: state.accountFingerprint,
+    ...(state.accountSlot === CODEX_DEFAULT_ACCOUNT_SLOT ? {} : { accountSlot: state.accountSlot }),
     status,
     consumeState: state.consumeState,
     consumeOutcome: state.consumeOutcome,
@@ -974,6 +1067,7 @@ const IMMUTABLE_FIELDS = [
   'ownerId',
   'runnerId',
   'accountFingerprint',
+  'accountSlot',
   'clientRequestId',
   'providerIdempotencyKey',
   'createdAt',
@@ -1016,7 +1110,8 @@ export interface CodexResetHeartbeat {
   draining: boolean;
   /** The capabilities THIS heartbeat request declared. */
   capabilities: readonly string[] | null | undefined;
-  /** The runner's stored Codex block after this heartbeat's own compare-and-set. */
+  /** The stored block of the operation's slot (codexRateLimitResetOf(planUsage, op.accountSlot)) after
+   *  this heartbeat's own compare-and-set. */
   rateLimitReset: PlanUsageRateLimitReset | null | undefined;
   now: Date;
 }
@@ -1089,19 +1184,25 @@ export function expireCodexResetOperation(
   return settle(op, codexResetOperationPhase(op) === 'CONSUME' ? 'CONSUME_EXPIRED' : 'REFRESH_EXPIRED', now);
 }
 
-/** The command a claimed, active operation hands its claimer. Only CONSUME carries the key. */
-export function codexResetCommand(op: CodexRateLimitResetOperationState): CodexRateLimitResetCommand {
+/** The command a claimed, active operation hands its claimer, in `protocolVersion`
+ *  (codexResetCommandVersion). Only CONSUME carries the key; only a v2 command names the slot, and a
+ *  v1 command exists only for Default's operations. */
+export function codexResetCommand(op: CodexRateLimitResetOperationState, protocolVersion: 1 | 2 = 1): CodexRateLimitResetCommand {
   const phase = codexResetOperationPhase(op);
   if (!phase || op.claimLeaseOwner === null || op.claimGeneration < 1) {
     throw new Error('only a claimed, active operation has a command');
   }
+  if (protocolVersion === 1 && op.accountSlot !== CODEX_DEFAULT_ACCOUNT_SLOT) {
+    throw new Error('a protocol v1 command cannot name an added account slot');
+  }
   return {
-    protocolVersion: CODEX_RATE_LIMIT_RESET_PROTOCOL_VERSION,
+    protocolVersion,
     operationId: op.id,
     leaseOwner: op.claimLeaseOwner,
     claimGeneration: op.claimGeneration,
     phase,
     accountFingerprint: op.accountFingerprint,
+    ...(protocolVersion === 2 ? { accountSlot: op.accountSlot } : {}),
     ...(phase === 'CONSUME' ? { providerIdempotencyKey: op.providerIdempotencyKey } : {}),
     requestedAt: op.createdAt,
   };
@@ -1123,7 +1224,8 @@ export function decideCodexResetDispatch(op: CodexRateLimitResetOperationState, 
   if (!phase) return { kind: 'NONE', reason: 'SETTLED' };
   const leaseOwner = heartbeat.leaseOwner;
   if (!isCodexResetUuid(leaseOwner)) return { kind: 'NONE', reason: 'NO_ACTIVE_LEASE' };
-  if (!codexResetCapabilityDeclared(heartbeat.capabilities)) return { kind: 'NONE', reason: 'CAPABILITY_MISSING' };
+  const version = codexResetCommandVersion(heartbeat.capabilities, op.accountSlot);
+  if (version === null) return { kind: 'NONE', reason: 'CAPABILITY_MISSING' };
   if (heartbeat.draining) return { kind: 'NONE', reason: 'RUNNER_DRAINING' };
   const block = heartbeat.rateLimitReset;
   if (!block || codexRateLimitResetViolations(block).length > 0 || block.accountFingerprint === undefined) {
@@ -1142,7 +1244,7 @@ export function decideCodexResetDispatch(op: CodexRateLimitResetOperationState, 
     if (deadline === null || heartbeat.now.getTime() >= deadline) return { kind: 'NONE', reason: 'DEADLINE_PASSED' };
     const renewedAt = heartbeat.now.toISOString();
     const renewed: CodexRateLimitResetOperationState = { ...op, claimedAt: renewedAt, updatedAt: renewedAt };
-    return { kind: 'DELIVER', operation: renewed, command: codexResetCommand(renewed) };
+    return { kind: 'DELIVER', operation: renewed, command: codexResetCommand(renewed, version) };
   }
   if (fresh) return { kind: 'NONE', reason: 'CLAIM_HELD' };
   const at = heartbeat.now.toISOString();
@@ -1155,7 +1257,7 @@ export function decideCodexResetDispatch(op: CodexRateLimitResetOperationState, 
     claimsWithUnknownCall: op.claimsWithUnknownCall + (phase === 'CONSUME' ? 1 : 0),
     updatedAt: at,
   };
-  return { kind: 'DELIVER', operation: claimed, command: codexResetCommand(claimed) };
+  return { kind: 'DELIVER', operation: claimed, command: codexResetCommand(claimed, version) };
 }
 
 export type CodexResetResultApplication =

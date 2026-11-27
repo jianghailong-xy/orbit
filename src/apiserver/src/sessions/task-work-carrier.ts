@@ -1,5 +1,5 @@
-import { Prisma, RunStatus } from '@prisma/client';
-import type { SessionActivity, TaskRunReason } from '@orbit/shared';
+import { Prisma } from '@prisma/client';
+import type { RunStatus, SessionBackgroundFields, TaskRunReason } from '@orbit/shared';
 
 import {
   ARMED_RETRY,
@@ -10,14 +10,20 @@ import {
   RUNNING_BG_JOB,
   RUNNING_SUBAGENT,
 } from '../common/session-working';
+import { DISPATCH_PAUSED } from '../queue/dispatch-pause';
 import type { PrismaService } from '../prisma/prisma.service';
+import { runnerUnavailableSql, sessionIsHeld } from './session-phase';
+import { heldSessionWord, sessionTurnStateSql } from './session-turn-state';
+
+/** The turn state of `session` as text SQL (session-turn-state.ts): NULL when released or parked. */
+const turnSql = (session: string): string => sessionTurnStateSql(session).sql;
 
 /**
  * Whether a work session is still CARRYING its task: the one definition behind every surface that
  * shows a task as running, and every Run door that decides whether a press would start it.
  *
- * `session.status` answers a narrower question, and answers it correctly: is a turn queued or
- * executing. Runner slots (`ACTIVE_TURN_STATUSES`), spawn admission and `session_create(wait)`
+ * A session's status word answers a narrower question, and answers it correctly: is a turn queued or
+ * executing. Runner slots (the turn state IN_FLIGHT), spawn admission and `session_create(wait)`
  * (`UNSETTLED_SESSION_STATUSES`), a watch's SESSION_TURN_SETTLED and the stall reclaim
  * (`TASK_OCCUPYING`) are about turns and claims, and stay on them — see
  * common/session-scheduling.ts. Whether the TASK is being worked on is a different question, and
@@ -80,7 +86,7 @@ export function sessionWakeSourceSql(session: string): string {
  *
  * The three-status list is implied by the clause after it and is stated anyway: it is what lets the
  * planner read it as an index condition (`session_owner_status_task_idx`), which it cannot see
- * through the OR. `finished_at IS NULL` is implied by the status list (session_release_fact_chk) and
+ * through the OR. `finished_at IS NULL` is implied by the status list (a held word) and
  * is stated anyway for the same kind of reason: it is the execution claim index's predicate
  * (`session_task_execution_claim_idx_finished_at`, migration 1426, beside `deleted_at IS NULL`), and
  * the planner matches a partial index only by a predicate it can read here, never through a CHECK.
@@ -88,11 +94,16 @@ export function sessionWakeSourceSql(session: string): string {
  * `project_event_session_task_provider_idx`, every run the task ever had.
  */
 export function sessionCarriesTaskSql(session: string): string {
+  // Held, never with its turn abandoned (the out-of-memory stop), and a turn queued or in flight or, parked, a wake
+  // source (plan §1.4's carrier). `finished_at IS NULL` is the claim index's predicate and the held index's
+  // (`session_owner_held_task_idx`), which the planner matches only by a predicate it can read here. Never NULL:
+  // callers negate it (a paused run to continue is NOT carried), and a parked row's NULL turn state compared with IN
+  // would make the whole predicate NULL, which NOT keeps NULL.
   return `(${session}."starts_task_work" = true
     AND ${session}."deleted_at" IS NULL
     AND ${session}."finished_at" IS NULL
-    AND ${session}."status" IN ('PENDING'::"run_status", 'RUNNING'::"run_status", 'AWAITING_INPUT'::"run_status")
-    AND (${session}."status" <> 'AWAITING_INPUT'::"run_status" OR ${sessionWakeSourceSql(session)}))`;
+    AND (COALESCE(${turnSql(session)}, 'PARKED') IN ('QUEUED', 'IN_FLIGHT')
+      OR (${turnSql(session)} IS NULL AND ${sessionWakeSourceSql(session)})))`;
 }
 
 /** Some work session carries the task row `task`. `session` names the correlated session row. */
@@ -124,24 +135,39 @@ export function sessionRunReasonSql(session: string): string {
  * reply".
  */
 export function sessionActivitySql(session: string): string {
+  // A turn queued or in flight is TURN; released or abandoned is nothing; parked reads its wake sources.
   return `CASE
-    WHEN ${session}."status" IN ('PENDING'::"run_status", 'RUNNING'::"run_status") THEN 'TURN'
-    WHEN ${session}."status" <> 'AWAITING_INPUT'::"run_status" THEN NULL
+    WHEN ${turnSql(session)} IN ('QUEUED', 'IN_FLIGHT') THEN 'TURN'
+    WHEN ${session}."finished_at" IS NOT NULL OR ${turnSql(session)} IS NOT NULL THEN NULL
     ${WAKE_SOURCES.map((source) => `WHEN ${source.sql(session)} THEN '${source.reason}'`).join('\n    ')}
   END`;
 }
 
-/** `sessionActivitySql` for the sessions `ids`, by id; a session that is not there is absent. */
-export async function readSessionActivities(
+/**
+ * The Background mark's inputs for the sessions `ids`, by id, under the list row's own expressions: `activity`
+ * (`sessionActivitySql`) and `runningBgCount` (`cardinality(running_bg_shells)`). Every payload kind that does not
+ * read them in its own row query reads them here, so a session answers alike on all of them. A session that is not
+ * there is absent.
+ */
+export async function readSessionBackgroundFields(
   prisma: Pick<PrismaService, '$queryRaw'>,
   ids: readonly string[],
-): Promise<Map<string, SessionActivity | null>> {
+): Promise<Map<string, SessionBackgroundFields>> {
   if (ids.length === 0) return new Map();
-  const rows = await prisma.$queryRaw<Array<{ id: string; activity: SessionActivity | null }>>(Prisma.sql`
-    SELECT s."id" AS "id", (${Prisma.raw(sessionActivitySql('s'))}) AS "activity"
+  const rows = await prisma.$queryRaw<Array<{ id: string } & SessionBackgroundFields>>(Prisma.sql`
+    SELECT s."id" AS "id", (${Prisma.raw(sessionActivitySql('s'))}) AS "activity",
+           cardinality(s."running_bg_shells")::int AS "runningBgCount"
       FROM "session" s
      WHERE s."id" IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})`);
-  return new Map(rows.map((row) => [row.id, row.activity]));
+  return new Map(rows.map(({ id, activity, runningBgCount }) => [id, { activity, runningBgCount }]));
+}
+
+/** `readSessionBackgroundFields` for one session; null when it is not there. */
+export async function readOneSessionBackgroundFields(
+  prisma: Pick<PrismaService, '$queryRaw'>,
+  id: string,
+): Promise<SessionBackgroundFields | null> {
+  return (await readSessionBackgroundFields(prisma, [id])).get(id) ?? null;
 }
 
 /** The session columns `runStalled` reads, as a reader selects them beside the run reason. */
@@ -170,6 +196,8 @@ export interface TaskWorkCarrier {
   status: RunStatus;
   runReason: TaskRunReason;
   runStalled: boolean;
+  /** The queued turn is held (`sessionIsHeld`, the rule behind `waitingOn: 'HOLD'`); false for any other status. */
+  held: boolean;
   /** When the session's run first started; null while it never has. */
   startedAt: Date | null;
 }
@@ -177,9 +205,14 @@ export interface TaskWorkCarrier {
 interface CarrierRow extends RunStallFacts {
   taskId: string;
   sessionId: string;
-  status: RunStatus;
+  finishedAt: null;
+  /** QUEUED, IN_FLIGHT or null (parked), resolved in SQL. */
+  turnState: string | null;
   runReason: TaskRunReason;
   startedAt: Date | null;
+  error: string | null;
+  runnerUnavailable: boolean;
+  dispatchPaused: boolean;
 }
 
 /**
@@ -198,20 +231,27 @@ export async function readTaskWorkCarriers(
   const rows = await prisma.$queryRaw<CarrierRow[]>(Prisma.sql`
     SELECT carrier."task_id" AS "taskId",
            carrier."id" AS "sessionId",
-           carrier."status"::text AS "status",
+           carrier."finished_at" AS "finishedAt",
+           ${Prisma.raw(turnSql('carrier'))} AS "turnState",
            (${Prisma.raw(sessionRunReasonSql('carrier'))}) AS "runReason",
            carrier."running_bg_jobs" AS "runningBgJobs",
            carrier."running_bg_job_activity" AS "runningBgJobActivity",
-           carrier."started_at" AS "startedAt"
+           carrier."started_at" AS "startedAt",
+           carrier."error" AS "error",
+           ${runnerUnavailableSql('r')} AS "runnerUnavailable",
+           ${DISPATCH_PAUSED} AS "dispatchPaused"
       FROM "session" carrier
+      LEFT JOIN "runner" r ON r."id" = carrier."assigned_runner_id"
      WHERE carrier."task_id" IS NOT NULL
        AND ${scope}
        AND ${Prisma.raw(sessionCarriesTaskSql('carrier'))}`);
   return new Map(rows.map((row) => [row.taskId, {
     sessionId: row.sessionId,
-    status: row.status,
+    // The held word of its turn state (a carrier is held): PENDING, RUNNING or AWAITING_INPUT.
+    status: heldSessionWord({ finishedAt: null, turnState: row.turnState }),
     runReason: row.runReason,
     runStalled: runStalled(row, nowMs),
+    held: sessionIsHeld(row, { dispatchPaused: row.dispatchPaused === true, runnerUnavailable: row.runnerUnavailable === true }),
     startedAt: row.startedAt,
   }]));
 }
@@ -239,10 +279,12 @@ export interface TaskRunOverlay {
   queued: boolean;
   runReason: TaskRunReason | null;
   runStalled: boolean;
+  /** Additive: the queued run is held (waitingOn HOLD). `queued` keeps its value. */
+  queuedOnHold: boolean;
 }
 
 export function taskRunOverlay(carrier: TaskWorkCarrier | undefined): TaskRunOverlay {
-  if (!carrier) return { running: false, queued: false, runReason: null, runStalled: false };
-  const queued = carrier.status === RunStatus.PENDING;
-  return { running: !queued, queued, runReason: carrier.runReason, runStalled: carrier.runStalled };
+  if (!carrier) return { running: false, queued: false, runReason: null, runStalled: false, queuedOnHold: false };
+  const queued = carrier.status === 'PENDING';
+  return { running: !queued, queued, runReason: carrier.runReason, runStalled: carrier.runStalled, queuedOnHold: queued && carrier.held };
 }

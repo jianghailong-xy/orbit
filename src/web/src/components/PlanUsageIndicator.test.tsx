@@ -21,6 +21,11 @@ import {
   RESET_FINGERPRINT,
   RESET_REQUEST_ID,
   RESET_RUNNER_ID,
+  SIDE_FINGERPRINT,
+  SIDE_SLOT,
+  WORK_FINGERPRINT,
+  WORK_SLOT,
+  resetAccountsRunner,
   resetBlock,
   resetCredit,
   resetOperation,
@@ -45,6 +50,8 @@ vi.mock('../api', async (importOriginal) => ({
 const apiMock = vi.mocked(api);
 
 const BASE = `/runners/${RESET_RUNNER_ID}/codex-rate-limit-reset`;
+/** The operations read, which names the one account it is about. */
+const LIST = `${BASE}?accountFingerprint=`;
 const ACTIVE = new Set<CodexRateLimitResetOperationStatus>(['PENDING', 'CONSUMING', 'REFRESHING']);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const OTHER_REQUEST_ID = '11111111-1111-4111-8111-111111111111';
@@ -78,6 +85,11 @@ class FakeResetApi {
     return this.calls.filter((call) => call.method === 'POST');
   }
 
+  /** The accounts the operations read has been asked about. */
+  listed(): Set<string> {
+    return new Set(this.calls.filter((call) => call.path.startsWith(LIST)).map((call) => call.path.slice(LIST.length)));
+  }
+
   reads(id: string): Call[] {
     return this.calls.filter((call) => call.method === 'GET' && call.path === `${BASE}/${id}`);
   }
@@ -101,8 +113,8 @@ class FakeResetApi {
     if (method === 'POST' && path === BASE) {
       return this.create(options.body as { clientRequestId: string; accountFingerprint: string });
     }
-    if (method === 'GET' && path === BASE) {
-      const rows = [...this.ops.values()];
+    if (method === 'GET' && path.startsWith(LIST)) {
+      const rows = [...this.ops.values()].filter((op) => op.accountFingerprint === path.slice(LIST.length));
       const active =
         this.listedActive !== undefined ? this.listedActive : (rows.find((op) => ACTIVE.has(op.status)) ?? null);
       return { active: withTwins(active), latest: withTwins(rows.at(-1) ?? null) };
@@ -178,6 +190,7 @@ async function mount(
   reset = true,
   account?: PlanUsageAccount,
   model?: string,
+  accountSlot?: string,
 ): Promise<void> {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   container = document.createElement('div');
@@ -189,9 +202,9 @@ async function mount(
       <QueryClientProvider client={client}>
         <MemoryRouter>
           <PlanUsageIndicator
-            usage={runner.planUsage!.codex!}
+            usage={accountSlot ? runner.planUsage!.codex!.accounts![accountSlot]! : runner.planUsage!.codex!}
             model={model}
-            reset={reset ? { runner, workspaceId: 'Workspace1' } : undefined}
+            reset={reset ? { runner, workspaceId: 'Workspace1', accountSlot } : undefined}
             account={account}
           />
           <ToastViewport />
@@ -286,7 +299,7 @@ async function confirmReset(): Promise<void> {
 }
 
 function stored(): Record<string, unknown> | null {
-  const raw = localStorage.getItem(`orbit.codexReset:${RESET_RUNNER_ID}`);
+  const raw = localStorage.getItem(`orbit.codexReset:${RESET_RUNNER_ID}:${RESET_FINGERPRINT}`);
   return raw === null ? null : (JSON.parse(raw) as Record<string, unknown>);
 }
 
@@ -299,7 +312,7 @@ function remembered(overrides: Partial<CodexResetIntent>): void {
     clientRequestId: RESET_REQUEST_ID,
     ...overrides,
   };
-  localStorage.setItem(`orbit.codexReset:${RESET_RUNNER_ID}`, JSON.stringify(intent));
+  localStorage.setItem(`orbit.codexReset:${RESET_RUNNER_ID}:${intent.accountFingerprint}`, JSON.stringify(intent));
 }
 
 describe('the Plan usage pill', () => {
@@ -571,9 +584,15 @@ describe('confirming a reset', () => {
     expect(server.posts()).toHaveLength(1);
     const body = server.posts()[0].body!;
     // The browser sends its own request id and the fingerprint it confirmed against — never a provider key.
-    expect(Object.keys(body).sort()).toEqual(['accountFingerprint', 'clientRequestId', 'workspaceId']);
+    expect(Object.keys(body).sort()).toEqual(['accountFingerprint', 'accountSlot', 'clientRequestId', 'workspaceId']);
     expect(body.clientRequestId).toMatch(UUID);
-    expect(body).toMatchObject({ accountFingerprint: RESET_FINGERPRINT, workspaceId: 'Workspace1' });
+    expect(body).toMatchObject({
+      accountFingerprint: RESET_FINGERPRINT,
+      accountSlot: 'default',
+      workspaceId: 'Workspace1',
+    });
+    // One account on the runner: the confirmation needs no line naming it.
+    expect(dialog.textContent).not.toContain('Account');
     expect(server.inserted).toBe(1);
     expect(stored()).toMatchObject({ clientRequestId: body.clientRequestId, operationId: 'Op1' });
     await until('focus on the status line', () => document.activeElement?.getAttribute('role') === 'status');
@@ -920,3 +939,109 @@ describe('the reset entry', () => {
     expect(server.posts()).toHaveLength(0);
   });
 });
+
+describe('a reset card for each GPT account', () => {
+  /** The session account's card: the one drawn straight under the popover's windows. */
+  const ownCard = () => usagePanel()!.querySelector<HTMLElement>(':scope > section.cu-rc');
+  const otherAccounts = () => Array.from(usagePanel()!.querySelectorAll<HTMLElement>('.cu-other'));
+  const accountNamed = (name: string) => otherAccounts().find((each) => each.getAttribute('aria-label') === name)!;
+  const useIn = (scope: Element) =>
+    Array.from(scope.querySelectorAll('button')).find((each) => each.textContent?.trim() === 'Use reset credit') ?? null;
+  const count = (scope: Element | null) => scope?.querySelector('.cu-rc-count')?.textContent;
+
+  it('draws Default and two added accounts, each with its usage and its own card', async () => {
+    const server = new FakeResetApi();
+    await mount(resetAccountsRunner(new Date()), true, { label: 'Default' });
+    await openUsage();
+    expect(usagePanel()!.querySelectorAll('section.cu-rc')).toHaveLength(3);
+    expect(count(ownCard())).toBe('1 available');
+    expect(otherAccounts().map((each) => each.getAttribute('aria-label'))).toEqual(['work@example.com', 'side@example.com']);
+    const work = accountNamed('work@example.com');
+    expect(work.querySelector('.cu-head')?.textContent).toBe('Accountwork@example.com');
+    expect(work.querySelector('.cu-other-usage')?.textContent).toBe('5h 38% · Weekly 100%');
+    expect(work.querySelector('.cu-other-usage b.spent')?.textContent).toBe('100%');
+    expect(count(work)).toBe('2 available');
+    expect(accountNamed('side@example.com').querySelector('.cu-other-usage')?.textContent).toBe('5h 6% · Weekly 21%');
+    expect(count(accountNamed('side@example.com'))).toBe('3 available');
+    for (const card of [ownCard()!, ...otherAccounts()]) expect(useIn(card)!.disabled).toBe(false);
+    await until('a read per account', () => server.listed().size === 3);
+    expect(server.listed()).toEqual(new Set([RESET_FINGERPRINT, WORK_FINGERPRINT, SIDE_FINGERPRINT]));
+  });
+
+  it("puts the session's own account first, as its windows are", async () => {
+    new FakeResetApi();
+    await mount(resetAccountsRunner(new Date()), true, { label: 'side@example.com' }, undefined, SIDE_SLOT);
+    await openUsage();
+    expect(count(ownCard())).toBe('3 available');
+    expect(otherAccounts().map((each) => each.getAttribute('aria-label'))).toEqual(['Default', 'work@example.com']);
+    expect(accountNamed('Default').querySelector('.cu-other-usage')?.textContent).toBe('5h 92% · Weekly 68%');
+    expect(count(accountNamed('Default'))).toBe('1 available');
+  });
+
+  it("confirms, sends and follows one account's reset without touching the others", async () => {
+    const server = new FakeResetApi();
+    await mount(resetAccountsRunner(new Date()), true, { label: 'Default' });
+    await openUsage();
+    await click(useIn(accountNamed('work@example.com'))!);
+    await until('the confirmation', () => confirmation() !== null);
+    expect(confirmation()!.textContent).toContain('Accountwork@example.com');
+    expect(confirmation()!.textContent).toContain('Current usage100% → reset');
+    expect(confirmation()!.textContent).toContain('2 available');
+    await click(button('Use reset')!);
+    await until('pending on Work', () => accountNamed('work@example.com').textContent!.includes('Starting reset…'));
+    expect(server.posts()).toHaveLength(1);
+    expect(server.posts()[0].body).toMatchObject({ accountFingerprint: WORK_FINGERPRINT, accountSlot: WORK_SLOT });
+    expect(pill().getAttribute('aria-expanded')).toBe('true');
+    expect(pill().getAttribute('aria-label')).toBe('Plan usage 92%, reset in progress');
+    // Default and Side still offer theirs, and say nothing of Work's.
+    for (const card of [ownCard()!, accountNamed('side@example.com')]) {
+      expect(card.textContent).not.toContain('Starting reset…');
+      expect(useIn(card)!.disabled).toBe(false);
+    }
+    expect(stored()).toBeNull();
+    expect(
+      JSON.parse(localStorage.getItem(`orbit.codexReset:${RESET_RUNNER_ID}:${WORK_FINGERPRINT}`)!),
+    ).toMatchObject({ accountSlot: WORK_SLOT, operationId: 'Op1' });
+
+    // A second account's reset runs beside it, under its own request id, and each settles by itself.
+    await click(useIn(accountNamed('side@example.com'))!);
+    await until('the second confirmation', () => button('Use reset') !== null);
+    expect(confirmation()!.textContent).toContain('Accountside@example.com');
+    await click(button('Use reset')!);
+    await until('pending on Side', () => accountNamed('side@example.com').textContent!.includes('Starting reset…'));
+    expect(server.posts()[1].body).toMatchObject({ accountFingerprint: SIDE_FINGERPRINT, accountSlot: SIDE_SLOT });
+    expect(server.posts()[1].body!.clientRequestId).not.toBe(server.posts()[0].body!.clientRequestId);
+    server.advance('Op1', 'SUCCEEDED');
+    await until('Work done', () => accountNamed('work@example.com').textContent!.includes('Usage limits reset'));
+    expect(accountNamed('side@example.com').textContent).toContain('Starting reset…');
+    expect(useIn(ownCard()!)!.disabled).toBe(false);
+  });
+
+  it("follows another device's reset on the account it is on, and picks a confirmation back up on its card", async () => {
+    const server = new FakeResetApi();
+    server.ops.set(
+      'Op5',
+      resetOperation('REFRESHING', { id: 'Op5', clientRequestId: OTHER_REQUEST_ID, accountFingerprint: SIDE_FINGERPRINT }),
+    );
+    server.ops.set('Op6', resetOperation('SUCCEEDED', { id: 'Op6', accountFingerprint: WORK_FINGERPRINT }));
+    remembered({ accountFingerprint: WORK_FINGERPRINT, accountSlot: WORK_SLOT, operationId: 'Op6' });
+    await mount(resetAccountsRunner(new Date()));
+    await openUsage();
+    await until('both', () => panelText().includes('Limits reset — refreshing usage…') && panelText().includes('Usage limits reset'));
+    expect(accountNamed('side@example.com').textContent).toContain('Limits reset — refreshing usage…');
+    expect(accountNamed('work@example.com').textContent).toContain('Usage limits reset');
+    expect(ownCard()!.querySelector('.cu-rc-status')).toBeNull();
+    expect(useIn(ownCard()!)!.disabled).toBe(false);
+    expect(server.posts()).toHaveLength(0);
+  });
+
+  it('draws no section for an account with no credit', async () => {
+    new FakeResetApi();
+    await mount(resetAccountsRunner(new Date(), { work: { rateLimitResetCredits: { availableCount: 0, credits: [] } } }));
+    await openUsage();
+    expect(otherAccounts().map((each) => each.getAttribute('aria-label'))).toEqual(['side@example.com']);
+    expect(usagePanel()!.querySelectorAll('section.cu-rc')).toHaveLength(2);
+    expect(panelText()).not.toContain('work@example.com');
+  });
+});
+

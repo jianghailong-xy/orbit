@@ -397,18 +397,39 @@ describe('Rename… on a session row', () => {
     expect(apiModule.renameSession).not.toHaveBeenCalled();
   });
 
-  it("the open conversation's More actions offers Rename…, which opens the title editor", async () => {
+  // docs/mocks/session-settings-column ④: a session is renamed in its settings' Name field.
+  it("the open conversation's More actions offers Rename…, which opens the settings with Name selected", async () => {
     await mount();
-    await click(container!.querySelector('.workspace-header button[title="More actions"]'));
+    await click(container!.querySelector('.workspace-header button[aria-label="More actions"]'));
     const rename = () => openMenuItems().find((el) => el.textContent?.trim() === 'Rename…');
     await until(() => expect(rename()).toBeTruthy());
     await click(rename());
-    await until(() => expect(container!.querySelector('.workspace-name-input')).not.toBeNull());
-    const input = container!.querySelector<HTMLInputElement>('.workspace-name-input')!;
+    await until(() => expect(document.activeElement?.id).toBe('ss-name'));
+    expect(document.querySelector('aside[aria-label="Session settings"]')).not.toBeNull();
+    const input = document.activeElement as HTMLInputElement;
     expect(input.value).toBe('Open conversation');
-    expect(document.activeElement).toBe(input);
     await type(input, 'Renamed in the header');
     await press(input, 'Enter');
     await until(() => expect(apiModule.renameSession).toHaveBeenCalledExactlyOnceWith(OPEN_ID, 'Renamed in the header'));
+  });
+
+  // docs/mocks/session-settings-column ②③: the title opens the settings beside the conversation, and closes them.
+  it('a click on the title opens the settings column, a second closes it, and so does Esc', async () => {
+    await mount();
+    const title = () => container!.querySelector<HTMLButtonElement>('.workspace-header .workspace-name-button')!;
+    const column = () => document.querySelector('aside[aria-label="Session settings"]');
+    await until(() => expect(title()).not.toBeNull());
+    expect(title().getAttribute('aria-expanded')).toBe('false');
+    await click(title());
+    await until(() => expect(column()).not.toBeNull());
+    expect(title().getAttribute('aria-expanded')).toBe('true');
+    expect(document.querySelector('.orbit-drawer.ss-drawer')).toBeNull();
+    await click(title());
+    await until(() => expect(column()).toBeNull());
+
+    await click(title());
+    await until(() => expect(column()).not.toBeNull());
+    await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+    await until(() => expect(column()).toBeNull());
   });
 });

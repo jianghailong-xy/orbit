@@ -16,21 +16,21 @@ func TestErrorsLogSaysWhyAndKeepsTheLastLines(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Date(2026, 11, 20, 10, 0, 0, 0, time.UTC)
 	r := NewReporter(ReporterOptions{Dir: dir, MaxLines: 10, Now: func() time.Time { return now }})
-	r.Log(fuse.Status(syscall.EOPNOTSUPP), "write", "/home/orbit/Files/Proj/app.db", "at offset 4096",
+	r.Log(fuse.Status(syscall.EOPNOTSUPP), "write", "/home/orbit/Drive/Proj/app.db", "at offset 4096",
 		"the drive does not change a file in place; write a new file and rename it over the old one")
 	data, _ := os.ReadFile(filepath.Join(dir, "errors.log"))
-	want := "2026-11-20T10:00:00Z EOPNOTSUPP write /home/orbit/Files/Proj/app.db at offset 4096: the drive does not change a file in place; write a new file and rename it over the old one\n"
+	want := "2026-11-20T10:00:00Z EOPNOTSUPP write /home/orbit/Drive/Proj/app.db at offset 4096: the drive does not change a file in place; write a new file and rename it over the old one\n"
 	if string(data) != want {
 		t.Fatalf("errors.log:\n%q\nwant\n%q", data, want)
 	}
 	// The same line within a second is not repeated.
-	r.Log(fuse.Status(syscall.EOPNOTSUPP), "write", "/home/orbit/Files/Proj/app.db", "at offset 4096", "again")
+	r.Log(fuse.Status(syscall.EOPNOTSUPP), "write", "/home/orbit/Drive/Proj/app.db", "at offset 4096", "again")
 	if n := len(r.Lines()); n != 1 {
 		t.Fatalf("lines %d", n)
 	}
 	for i := 0; i < 30; i++ {
 		now = now.Add(2 * time.Second)
-		r.Log(fuse.EPERM, "chmod", "/home/orbit/Files/x", "", "line")
+		r.Log(fuse.EPERM, "chmod", "/home/orbit/Drive/x", "", "line")
 	}
 	data, _ = os.ReadFile(filepath.Join(dir, "errors.log"))
 	if lines := strings.Count(string(data), "\n"); lines > 12 || lines < 10 {
@@ -46,14 +46,14 @@ func TestErrorsLogSaysWhyAndKeepsTheLastLines(t *testing.T) {
 func TestUnsentKeepsTheBytesUnderItsLimit(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Date(2026, 11, 20, 10, 0, 0, 0, time.UTC)
-	r := NewReporter(ReporterOptions{Dir: dir, ShownDir: "/run/orbit-files", UnsentLimit: 25, Now: func() time.Time { return now }})
+	r := NewReporter(ReporterOptions{Dir: dir, ShownDir: "/run/orbit-drive", UnsentLimit: 25, Now: func() time.Time { return now }})
 	first := r.SaveUnsent("a.txt", []byte("0123456789"), UnsentRecord{CommitID: "c1", EntryID: "e1"})
 	now = now.Add(time.Second)
 	second := r.SaveUnsent("b.txt", []byte("0123456789"), UnsentRecord{CommitID: "c2", EntryID: "e2"})
 	if data, err := os.ReadFile(filepath.Join(dir, "unsent", first)); err != nil || string(data) != "0123456789" {
 		t.Fatalf("first: %q %v", data, err)
 	}
-	if r.UnsentPath(first) != "/run/orbit-files/unsent/"+first {
+	if r.UnsentPath(first) != "/run/orbit-drive/unsent/"+first {
 		t.Fatalf("shown as %s", r.UnsentPath(first))
 	}
 	now = now.Add(time.Second)

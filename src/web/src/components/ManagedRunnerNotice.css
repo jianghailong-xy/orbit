@@ -41,6 +41,10 @@
   color: var(--text-1);
   font-weight: 600;
 }
+.managed-runner-notice-next {
+  margin-top: 2px;
+  color: var(--text-3);
+}
 .managed-runner-notice-actions {
   display: flex;
   flex: none;

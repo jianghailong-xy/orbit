@@ -11,6 +11,7 @@ import {
 } from '../common/session-tree-sql';
 import { workspaceCloneHoldSql, workspaceCloneReasonSql } from '../common/workspace-clone-gate';
 import { runnerOfflineSql } from '../runners/runner-presence';
+import { sessionTurnStateSql } from './session-turn-state';
 
 /**
  * Which gate holds a queued session, as SQL, in one place: the session list names it to the person waiting
@@ -78,7 +79,7 @@ export async function sessionHeldByCapacity(
       FROM "session" s
       LEFT JOIN runner r ON r.id = s.assigned_runner_id
      WHERE s.id = ${sessionId}::uuid
-       AND s.status = 'PENDING'
+       AND ${sessionTurnStateSql('s')} = 'QUEUED'
        AND s.cancel_requested_at IS NULL`);
   const reason = rows[0]?.reason ?? null;
   return reason !== null && CAPACITY_QUEUED_REASONS.has(reason);
@@ -126,7 +127,7 @@ export async function sessionCapacityGate(
       FROM "session" s
       LEFT JOIN runner r ON r.id = s.assigned_runner_id
      WHERE s.id = ${sessionId}::uuid
-       AND s.status = 'PENDING'
+       AND ${sessionTurnStateSql('s')} = 'QUEUED'
        AND s.cancel_requested_at IS NULL`);
   const row = rows[0];
   if (!row?.reason || !CAPACITY_QUEUED_REASONS.has(row.reason)) return null;

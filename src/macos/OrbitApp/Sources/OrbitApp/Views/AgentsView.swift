@@ -20,16 +20,18 @@ import UIKit
 
 /// The Workspace identity glyph shared by the iPhone drawer, the iPad sidebar and the Mac sidebar. Online/unknown is the
 /// calm native folder and stays decorative; an explicitly-offline Runner adds a small muted
-/// `wifi.slash` corner badge and exposes that state to VoiceOver.
+/// `wifi.slash` corner badge and exposes that state to VoiceOver. A workspace on Orbit Cloud wears its cloud in the
+/// folder's place: hosted, apart from your own machines' tools and keys (board docs/mocks/workspace-machine-icon, B).
 struct WorkspaceFolderIcon: View {
     let selected: Bool
     let offline: Bool
+    var cloud: Bool = false
     /// The account's managed runner, when this workspace runs on it (D4): Asleep is a moon, never the
     /// heartbeat's "Runner offline" slash.
     var managed: ManagedRunnerRow? = nil
 
     var body: some View {
-        Image(systemName: "folder")
+        Image(systemName: cloud ? "cloud" : "folder")
             .frame(width: 24)
             .foregroundStyle(selected ? Color.accentColor : .primary)
             .overlay(alignment: .bottomTrailing) {
@@ -98,7 +100,9 @@ struct WorkspaceNavigationRow: View {
         let status = WorkspaceNavigationStatusLogic.resolve(
             waiting: waiting, running: running, jobs: jobs, runnerOffline: offlineNow)
         HStack(spacing: 12) {
-            WorkspaceFolderIcon(selected: selected, offline: offlineNow, managed: managedRow)
+            WorkspaceFolderIcon(selected: selected, offline: offlineNow,
+                                cloud: RunnerPageFormat.isManaged(agent.runnerId, managedRunnerID: app.managedRunner?.status?.runnerId),
+                                managed: managedRow)
             HStack(spacing: 0) {
                 workspaceName
                 disabledBadge
@@ -423,6 +427,8 @@ struct AgentPanes: View {
     /// state: this pane is rebuilt per workspace (`.id(a.id)`), so @State would unfold it on every
     /// switch, and on every launch.
     @AppStorage("sessionList.pinnedCollapsed") private var pinnedCollapsed = false
+    /// Whether the Needs you section is folded to its header, stored for the same reason.
+    @AppStorage("sessionList.needsYouCollapsed") private var needsYouCollapsed = false
     /// The last grouping drawn and its inputs (see `body`).
     @State private var listingMemo = SessionListingMemo<SessionListGrouping>()
     /// The clock the session list's terminal line is filtered against.
@@ -507,6 +513,9 @@ struct AgentPanes: View {
         #endif
         .focused($listFocused)
         .onChange(of: app.sessionListFocusRequest) { _, _ in listFocused = true }
+        // A session opened by id puts this list on its folder's page only where this list would
+        // draw the folder's row; the model asks (`AppModel.folderForOpening`).
+        .onChange(of: listShowsFolders, initial: true) { _, shows in app.sessionListShowsFolders = shows }
         #if os(macOS)
         .modifier(TerminalRequestsCurrent(now: $terminalNow))
         #endif
@@ -807,17 +816,17 @@ struct AgentPanes: View {
                     listRow(session, projects: projectRows, marks: projectMarks)
                 }
             }
-        } else if section.title == "Pinned" {
-            // Pinned folds to its header, as Notes' Pinned does: the rows leave the
-            // list, the header stays to bring them back. The rows are dropped here
-            // rather than through `Section(isExpanded:)`, whose disclosure only draws in
-            // the sidebar list style.
+        } else if let folded = sectionFold(section.title) {
+            // Pinned and Needs you fold to their header, as Notes' Pinned does: the rows
+            // leave the list, the header stays to bring them back. The rows are dropped
+            // here rather than through `Section(isExpanded:)`, whose disclosure only draws
+            // in the sidebar list style.
             TitledListSection {
-                if !pinnedCollapsed {
+                if !folded.wrappedValue {
                     ForEach(section.sessions) { listRow($0, projects: projectRows, marks: projectMarks) }
                 }
             } title: {
-                pinnedSectionHeader(section.title)
+                foldSectionHeader(section.title, folded: folded)
             }
         } else {
             TitledListSection {
@@ -982,7 +991,8 @@ struct AgentPanes: View {
     /// rendered without its title (see the list body). Over what is left after the folders take
     /// theirs — a session inside a folder is drawn behind its row, not here (§3.3).
     private static func timeSections(_ folderListing: SessionFolderListing, _ inputs: SessionListInputs) -> [SessionTimeSection] {
-        SessionTimeGrouping.sections(folderListing.sessions, pinnedFirst: inputs.view == .open && inputs.tagFilter == nil)
+        SessionTimeGrouping.sections(folderListing.sessions, pinnedFirst: inputs.view == .open && inputs.tagFilter == nil,
+                                     attention: inputs.view == .open)
     }
 
     /// This workspace's list, split by folder (§3.3): the folder rows the list draws at its top,
@@ -1126,10 +1136,16 @@ struct AgentPanes: View {
             onTag: { taggingSession = $0 }, onShare: { sharingSession = $0 }, onMove: { movingSession = $0 })
     }
 
+    /// Whether this list is drawing folder rows: not Trash, and not under a tag filter, Group by
+    /// Tag or search (`SessionFolderGrouping.listShowsFolders`). Also written back to the model, so
+    /// a session opened by id knows whether this list has a folder's page to show.
+    private var listShowsFolders: Bool {
+        !isSearching && SessionFolderGrouping.listShowsFolders(view: view, byTag: tagFilter != nil || groupByTag)
+    }
+
     /// Somewhere to drop a row: this workspace's folder rows over the list (none in Trash or by tag).
     private var folderDropTargets: Bool {
-        !isSearching && SessionFolderGrouping.listShowsFolders(view: view, byTag: tagFilter != nil || groupByTag)
-            && app.sessionFolders.contains { $0.workspaceId == agent.id }
+        listShowsFolders && app.sessionFolders.contains { $0.workspaceId == agent.id }
     }
 
     /// New Folder…: make the folder in this workspace and keep it, so its row draws at
@@ -1174,25 +1190,37 @@ struct AgentPanes: View {
         }
     }
 
-    /// The Pinned section's header: its title, and at the trailing edge a chevron that points down
-    /// while the rows show and right once they are folded away (one glyph turned, never two
-    /// swapped — as the cards' chevrons). The whole band is the button, not just the chevron.
-    private func pinnedSectionHeader(_ title: String) -> some View {
-        Button {
-            withAnimation { pinnedCollapsed.toggle() }
+    /// A folding section's header (Pinned, Needs you): its title, and at the trailing edge a chevron
+    /// that points down while the rows show and right once they are folded away (one glyph turned,
+    /// never two swapped — as the cards' chevrons). The whole band is the button, not just the chevron.
+    private func foldSectionHeader(_ title: String, folded: Binding<Bool>) -> some View {
+        let pinned = title == "Pinned"
+        let shows = pinned ? "Shows the pinned sessions" : "Shows the sessions waiting for you"
+        let hides = pinned ? "Hides the pinned sessions" : "Hides the sessions waiting for you"
+        return Button {
+            withAnimation { folded.wrappedValue.toggle() }
         } label: {
             HStack {
                 Text(title).textCase(nil)
                 Spacer()
                 Image(systemName: "chevron.right")
-                    .rotationEffect(.degrees(pinnedCollapsed ? 0 : 90))
+                    .rotationEffect(.degrees(folded.wrappedValue ? 0 : 90))
                     .accessibilityHidden(true)
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(.isHeader)
-        .accessibilityHint(pinnedCollapsed ? "Shows the pinned sessions" : "Hides the pinned sessions")
+        .accessibilityHint(folded.wrappedValue ? shows : hides)
+    }
+
+    /// The fold of a section that folds to its header (Pinned, Needs you); nil for one that doesn't.
+    private func sectionFold(_ title: String) -> Binding<Bool>? {
+        switch title {
+        case "Pinned": return $pinnedCollapsed
+        case "Needs you": return $needsYouCollapsed
+        default: return nil
+        }
     }
 }
 
@@ -1413,9 +1441,6 @@ struct NewSessionView: View {
     let workspaceTitleInBar: Bool
     @State private var draft: ConsoleModel
     @Environment(AppModel.self) private var app
-    #if os(macOS)
-    @State private var showSwitcher = false
-    #endif
     @State private var showEnginePicker = false
 
     init(agent: Agent, registry: ConsoleRegistry, defaultModel: String,
@@ -1477,6 +1502,7 @@ struct NewSessionView: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Engine: \(currentEngine.label). Switch")
+                        placePill
                     }
                     VStack(spacing: 5) {
                         // The draft moved off what the workspace last ran on, which can't run here
@@ -1537,13 +1563,6 @@ struct NewSessionView: View {
                                 .font(.callout).buttonStyle(.plain).foregroundStyle(Color.accentColor)
                         }
                     }
-                    #if os(macOS)
-                    // macOS renders this inline in the Agents detail pane, which has no navigation
-                    // bar to host the agent switcher, so it stays in the layout — demoted to a quiet
-                    // pill under the hero rather than competing with it.
-                    agentSwitcher
-                        .padding(.top, 2)
-                    #endif
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.horizontal, 24)
@@ -1652,14 +1671,6 @@ struct NewSessionView: View {
         .task(id: defaultEffort) {
             draft.adoptDraftDefaultEffort(defaultEffort, legacyWorkspaceDefault: agent.effort)
         }
-        #if os(macOS)
-        .sheet(isPresented: $showSwitcher) {
-            AgentSwitchSheet(agents: app.orderedAgents, currentID: agent.id,
-                             configuredProviders: app.agents?.configuredProviders ?? []) { id in
-                app.composeWithAgent(id)
-            }
-        }
-        #endif
         .sheet(isPresented: $showEnginePicker) {
             // The draft's own runnerID is only set for a live session, so take the agent's — it is
             // the machine this draft would run on, and the one whose engine page fixes a row.
@@ -1673,12 +1684,77 @@ struct NewSessionView: View {
         }
     }
 
-    #if os(macOS)
-    /// Switches the draft's workspace from below the hero on macOS.
-    private var agentSwitcher: some View {
-        WorkspaceTitleSwitcher(name: agent.name) { showSwitcher = true }
+    /// Where the session runs, under the engine (docs/mocks/new-session-place, option A; web's
+    /// `PlacePill`): one bordered pill, `[workspace] / [folder] ▾`, naming the folder only when one is
+    /// picked — a folder is a sidebar group, so none is the quiet default. Its one menu lists the
+    /// workspaces, then this workspace's folders under None.
+    private var placePill: some View {
+        let folders = app.sessionFolders.filter { $0.workspaceId == agent.id }
+        let folder = folders.first { $0.id == folderID }
+        let label = folder.map { "\(agent.name) / \($0.name)" } ?? agent.name
+        return Menu {
+            Section("Workspace") {
+                ForEach(app.orderedAgents) { other in
+                    Button { pickWorkspace(other.id) } label: { placeRow(other.name, on: other.id == agent.id) }
+                }
+            }
+            if !folders.isEmpty {
+                Section("Folder in \(agent.name) · optional") {
+                    Button { pickFolder(nil) } label: { placeRow("None", on: folder == nil) }
+                    ForEach(folders) { each in
+                        Button { pickFolder(each.id) } label: { placeRow(each.name, on: each.id == folder?.id) }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "terminal").foregroundStyle(.secondary)
+                Text(agent.name).lineLimit(1).frame(maxWidth: 200)
+                if let folder {
+                    Text("/").foregroundStyle(.tertiary)
+                    Image(systemName: "folder").foregroundStyle(.secondary)
+                    Text(folder.name).lineLimit(1).frame(maxWidth: 200)
+                }
+                Image(systemName: "chevron.down").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+            }
+            .font(.callout).foregroundStyle(.primary)
+            .padding(.horizontal, 12)
+            .frame(height: 30)
+            .overlay(Capsule().strokeBorder(Color.secondary.opacity(0.35)))
+            .contentShape(Capsule())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .accessibilityLabel("Runs in: \(label)")
     }
-    #endif
+
+    /// A row of the place menu: its name, ticked when it is the draft's.
+    @ViewBuilder private func placeRow(_ name: String, on: Bool) -> some View {
+        if on { Label(name, systemImage: "checkmark") } else { Text(name) }
+    }
+
+    /// Another workspace opens its own draft, which files in no folder; what was typed goes along.
+    private func pickWorkspace(_ id: String) {
+        guard id != agent.id else { return }
+        carryDraftText(to: id)
+        app.composeWithAgent(id)
+    }
+
+    /// Another folder refiles this draft: the same workspace's draft under the folder's identity.
+    private func pickFolder(_ id: String?) {
+        guard id != folderID else { return }
+        carryDraftText(to: agent.id)
+        app.composeInFolder(id, of: agent.id)
+    }
+
+    /// The draft the pick opens is a new one (its identity names the workspace and the folder), so
+    /// the words typed here are handed to it as a main checkout line's are (`pendingDraftText`).
+    private func carryDraftText(to agentID: String) {
+        guard !draft.composerText.isEmpty else { return }
+        app.consoleRegistry?.pendingDraftText[agentID] = draft.composerText
+    }
 
     /// What the hero judges the engines and their credentials by: the draft's own snapshot — so the
     /// list matches the model space the pills are already resolving against — with this workspace's
@@ -1757,6 +1833,15 @@ struct AgentSessionRow: View {
     /// The machine the session runs on: a session held for the Claude region names it ("Anthropic
     /// unavailable on HPC", web `sessionLine`'s `machine`).
     private var machine: String? { app.agents?.machineName(for: session) }
+    /// The state from `phase` and the marks beside it (`SessionDisplay`); nil from an older server,
+    /// which keeps the glyph and the value the row always had.
+    private var displayState: SessionDisplayState? { SessionDisplay.state(session.displayFacts) }
+    private var marks: [SessionMark] { SessionDisplay.marks(session.displayFacts) ?? [] }
+    /// The row's VoiceOver value: "Idle, Interrupted", else, from an older server, `statusWord`.
+    private var statusValue: String {
+        if let displayState { return SessionDisplay.spoken(displayState, marks) }
+        return SessionHeader.statusWord(for: session, watching: watching, machine: machine)
+    }
 
     var body: some View {
         #if os(iOS)
@@ -1770,7 +1855,7 @@ struct AgentSessionRow: View {
         #else
         HStack(spacing: 0) {
             HStack(spacing: 8) {
-                StatusGlyphView(glyph: .make(for: session, watching: watching, machine: machine))
+                StatusGlyphView(glyph: displayState?.glyph ?? .make(for: session, watching: watching, machine: machine))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(session.title ?? "Untitled session").lineLimit(1)
                     HStack(spacing: 7) {
@@ -1779,6 +1864,10 @@ struct AgentSessionRow: View {
                             .foregroundStyle(lineColor(line.tone)).lineLimit(1)
                             // A full runner, run or batch: which one, and how its slots are taken.
                             .help(QueuedCapacity.rowHint(session, machine: machine, now: Date()) ?? "")
+                        if !marks.isEmpty {
+                            Spacer(minLength: 4)
+                            SessionMarkPills(marks: marks)
+                        }
                     }
                 }
                 Spacer()
@@ -1826,11 +1915,12 @@ struct AgentSessionRow: View {
                     .font(.orbitListSubtitle)
                     .foregroundStyle(lineColor(line.tone))
                     .lineLimit(1)
+                phoneMarks
             }
         }
         .padding(.vertical, 5)
         .accessibilityElement(children: .combine)
-        .accessibilityValue(SessionHeader.statusWord(for: session, watching: watching, machine: machine))
+        .accessibilityValue(statusValue)
     }
 
     /// The compact (iPhone) row for the ChatGPT-style grouped list: a flush-left title with a
@@ -1852,6 +1942,7 @@ struct AgentSessionRow: View {
                 if let projectMark { SessionProjectMarkChip(mark: projectMark) }
                 SessionCoordinatorBadge(session: session)
                 Text(line.text).font(.orbitListSubtitle).foregroundStyle(lineColor(line.tone)).lineLimit(1)
+                phoneMarks
             }
         }
         .padding(.vertical, 2)
@@ -1860,7 +1951,16 @@ struct AgentSessionRow: View {
         // done, queued) would otherwise no longer announce their status the way the dropped leading
         // glyph did. `statusWord` is the shared, tested port of web's `statusLabel`.
         .accessibilityElement(children: .combine)
-        .accessibilityValue(SessionHeader.statusWord(for: session, watching: watching, machine: machine))
+        .accessibilityValue(statusValue)
+    }
+
+    /// The marks at the right end of a phone row's second line: at most two, then "+N".
+    @ViewBuilder private var phoneMarks: some View {
+        if !marks.isEmpty {
+            let row = SessionDisplay.phoneRowMarks(marks)
+            Spacer(minLength: 4)
+            SessionMarkPills(marks: row.shown, more: row.more)
+        }
     }
 
     /// The slim trailing status cue for the compact row — the shared `SessionLiveIndicator` (spinner
@@ -1938,6 +2038,21 @@ struct SessionLiveIndicator: View {
     /// holds none, which keeps the reading it always had.
     var watching: WatchSessionSummary? = nil
     @ViewBuilder var body: some View {
+        // With the session facts, the slot always draws the state icon from `phase`, in the quiet
+        // tone; the marks go to the row's second line (`SessionDisplay`).
+        if let state = SessionDisplay.state(session.displayFacts) {
+            switch state {
+            case .running: SpinnerGlyph(color: .secondary)
+            case .queued:  Image(systemName: "clock").font(.orbitGlyph).foregroundStyle(.secondary)
+            case .idle:    Image(systemName: "circle").font(.orbitGlyph).foregroundStyle(.secondary)
+            }
+        } else {
+            legacyCue
+        }
+    }
+
+    /// What the slot drew before the session facts, and still draws against an older server.
+    @ViewBuilder private var legacyCue: some View {
         let glyph = SessionStatusGlyph.make(for: session, watching: watching)
         switch (glyph.shape, glyph.tone) {
         // Working is the one live state that does *not* want you — the row is making progress on
@@ -2146,6 +2261,8 @@ struct AgentFormContent: View {
                 // holds what new sessions would no longer see.
                 WorktreeIsolationSwitch(workspace: agent)
             }
+
+            WorkspaceLandingSection(agent: agent)
 
             Section("Instructions") {
                 TextEditor(text: $instructions)

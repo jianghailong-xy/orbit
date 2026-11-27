@@ -28,7 +28,7 @@ type ManagedWorkload struct {
 	BackgroundJobs  int `json:"backgroundJobs"`
 	Operations      int `json:"operations"`
 	UnflushedEvents int `json:"unflushedEvents"`
-	// DriveWrites is how many handles of the Orbit Files drive hold bytes no commit has taken yet (status.json's
+	// DriveWrites is how many handles of the drive hold bytes no commit has taken yet (status.json's
 	// uncommittedHandles): a runner with one is not idle, so it is neither drained nor put to sleep with them pending.
 	DriveWrites int    `json:"driveWrites,omitempty"`
 	IdleSeconds int64  `json:"idleSeconds"`

@@ -6,13 +6,12 @@
  * English sentences the clients show exactly as they are.
  */
 import { AgentProvider, ENGINE_CLI_NAMES } from '@orbit/shared';
-import { RunStatus } from '@prisma/client';
-import { isSessionGenerating } from '../common/session-generating';
 import { sanitizeRunnerEngines } from '../common/runner-engines';
 import { reportedRunAccount } from '../providers/plan-usage-accounts';
 import { makeBranchName } from './naming';
 import { branchName } from '../projects/project-criterion-landing';
 import { isReleased, releaseWasFailure } from '../common/session-release';
+import { isParked, type TurnStateFacts, turnStateOf } from './session-turn-state';
 
 /** What a runner declares when it can take in a session moved from another workspace: it checks an
  *  old checkout's repository and branch before reusing it, and carries a Claude conversation over to
@@ -50,8 +49,7 @@ export const MOVE_REFUSAL = {
 } as const;
 
 /** The session's own state, as §5.2 judges it. */
-export interface SessionMoveFacts {
-  status: RunStatus;
+export interface SessionMoveFacts extends TurnStateFacts {
   /** The release column (common/session-release.ts): set on an ended session. */
   finishedAt: Date | null;
   /** Why an end was asked for, and the last turn's outcome: with the status and the release column, what "released by a
@@ -124,14 +122,18 @@ export function sessionMoveVerdict(s: SessionMoveFacts): SessionMoveVerdict {
     return refuse(`Moving ${RUNTIME_LABEL[s.runtime]} sessions isn't supported yet.`);
   }
   const ended = isReleased(s);
+  const turn = turnStateOf(s);
   // Held for its runner's region: its queue is what moves with it.
-  const regionHeld = !!s.regionHeld && s.status === RunStatus.PENDING && s.liveApprovals === 0;
+  const regionHeld = !!s.regionHeld && turn === 'QUEUED' && s.liveApprovals === 0;
   if (!ended) {
     if (s.cancelRequestedAt) return refuse(MOVE_REFUSAL.ENDING);
+    // Generating (isSessionGenerating's rule, common/session-generating.ts, on the turn state): a dispatched turn, or
+    // the engine's own turn on a parked session.
+    const generating = turn === 'IN_FLIGHT' || (turn === null && s.engineTurnActive);
     if (
       !regionHeld &&
-      (s.status === RunStatus.PENDING ||
-        isSessionGenerating(s) ||
+      (turn === 'QUEUED' ||
+        generating ||
         s.liveApprovals > 0 ||
         s.queuedTurns > 0)
     ) {
@@ -147,7 +149,7 @@ export function sessionMoveVerdict(s: SessionMoveFacts): SessionMoveVerdict {
   const retryArmed =
     s.retryAt != null &&
     s.completedAt == null &&
-    ((s.status === RunStatus.AWAITING_INPUT && s.cancelRequestedAt == null)
+    ((isParked(s) && s.cancelRequestedAt == null)
       || releaseWasFailure({ ...s, endReason: s.endReason ?? null, lastTurnOutcome: s.lastTurnOutcome ?? null }));
   if (retryArmed) return refuse(MOVE_REFUSAL.RETRY);
   return { reason: null, needsEnd: !ended && !regionHeld };

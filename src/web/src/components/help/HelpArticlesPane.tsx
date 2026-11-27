@@ -7,6 +7,7 @@ import { useHelpDrawer } from '../../lib/helpDrawer';
 import { forThisPage, getStartedArticles, highlightPieces, routeLabel } from '../../lib/help/drawerArticles';
 import { articleMeta } from '../../lib/help/helpContent';
 import { useHelpVote } from '../../lib/help/helpFeedback';
+import { useHelpLanguage } from '../../lib/help/helpLanguage';
 import { helpArticleQuery, helpIndexQuery, helpSearchQuery } from '../../lib/help/helpQueries';
 import { useHelpAccount } from '../../lib/help/useHelpAccount';
 import { useVisibleHelpErrors } from '../../lib/help/useVisibleHelpErrors';
@@ -82,7 +83,8 @@ function ArticleRow({ article, icon, warn }: { article: HelpArticleMeta; icon: R
 function ArticleGroups() {
   const { pathname } = useLocation();
   const errors = useVisibleHelpErrors();
-  const index = useQuery(helpIndexQuery());
+  const { language } = useHelpLanguage();
+  const index = useQuery(helpIndexQuery(language));
   if (index.isPending) return <Spinner className="help-pane-loading" aria-busy="true" />;
   if (!index.data) return <p className="help-pane-empty">Help articles could not be loaded.</p>;
   const page = forThisPage(index.data.articles, pathname, errors);
@@ -131,7 +133,8 @@ function Highlighted({ text, matches }: { text: string; matches: readonly HelpMa
 /** The search's hits with their matches marked, and always last, Ask "<query>". */
 function SearchResults({ query }: { query: string }) {
   const help = useHelpDrawer();
-  const search = useQuery(helpSearchQuery(query));
+  const { language } = useHelpLanguage();
+  const search = useQuery(helpSearchQuery(query, language));
   const hits = search.data?.hits ?? [];
   return (
     <section aria-label="Search results">
@@ -173,7 +176,8 @@ function SearchResults({ query }: { query: string }) {
 /** One article read in the drawer: breadcrumb, title, read time and date, the body, Did this help? and Ask instead. */
 function DrawerArticle({ slug }: { slug: string }) {
   const help = useHelpDrawer();
-  const article = useQuery(helpArticleQuery(slug));
+  const { language } = useHelpLanguage();
+  const article = useQuery(helpArticleQuery(slug, language));
   const { links } = useHelpAccount();
   const { vote, choose } = useHelpVote('article', slug);
   if (article.isPending) {

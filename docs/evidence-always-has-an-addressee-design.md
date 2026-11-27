@@ -158,3 +158,11 @@ P1 独立且很小，可以先做。P2、P3 改的是同一个判定入口，需
 - 不改计时规则，不加倒计时卡（§5）。
 - 不改证据的独立性规则、熔断、协调者暂时不可用时的排队。
 - 不改证据的 checks 和 citations。
+
+## 10. Addendum (2026-11-24): masked revisions and the owner escalation
+
+Project 34xLkkpjrrFbUzGhsgy7f, criterion 34qvp8SfHnGfeJ34xvuOWw. The owner agreed on 2026-11-14 that undecided evidence escalates to the owner after the project's `exceptionEscalationSeconds`; this changes §4's "no clock" for evidence only.
+
+- **Why M2 got no notice.** The §4 read gives each task one pending item, and an open exception item comes first. M2 (34wRI2JqCvMMQ4hruFvch) had an open MAIN_SYNC conflict item that its coordinator had been handed, so its undecidable revision 3 was never read as an orphan. W2 and D2 had no exception item of their own, so their revisions were read and reported.
+- **Masked revisions.** `readPendingWithEvidence` also reads every unanswered latest revision as an item of its own, and the orphan sweep reports one that is an orphan even when its task's own item is something else.
+- **The clock.** If a revision nobody can decide, or one handed to nobody, is still unanswered `exceptionEscalationSeconds` after its first notice (the sweep's report, or `tellEvidenceUndecidable`'s turn), the sweep opens one owner `EVIDENCE_UNDECIDED` item, keyed `EV:<evidenceId>` like 1110's, and pushes it. A decidable revision that a coordinator holds stays under §5's rule. Spec: `src/apiserver/src/projects/undecidable-evidence-escalation.pg.spec.ts`.

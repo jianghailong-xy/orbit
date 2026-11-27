@@ -1,5 +1,5 @@
 /**
- * A folder of 100,000 entries to Trash, back, and deleted for good (docs/orbit-files-drive-technical-design.md
+ * A folder of 100,000 entries to Trash, back, and deleted for good (docs/drive-technical-design.md
  * §1.4, §3.3, §3.5), over a real
  * PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty, through the owner's routes on the real controller:
  *
@@ -48,6 +48,10 @@ import { DriveDownloadLinks } from './drive-download-links';
 import { DriveUploadsService } from './drive-uploads.service';
 import { DriveController, DriveDownloadController } from './drive.controller';
 import { DriveService } from './drive.service';
+import { DriveSyncsService } from './drive-syncs.service';
+
+// Drive is off unless switched on (drive-switch.ts); this harness mounts its controller, so it switches it on.
+process.env.ORBIT_DRIVE_ENABLED = 'true';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -63,7 +67,7 @@ interface SeenTransaction {
   accountLock?: boolean;
 }
 
-test('Orbit Files drive: bounded Trash operations on folders of 100,000 entries', {
+test('Documents drive: bounded Trash operations on folders of 100,000 entries', {
   skip: !URL, concurrency: 1, timeout: 1_200_000,
 }, async (t) => {
   const url = URL!;
@@ -119,7 +123,7 @@ test('Orbit Files drive: bounded Trash operations on folders of 100,000 entries'
       { provide: ConfigService, useValue: new ConfigService({ JWT_SECRET: `secret-${RUN}` }) },
       { provide: PrismaService, useValue: db },
       { provide: FilesService, useValue: files },
-      DriveService, DriveChunksService, DriveUploadsService, DriveContentService, DriveDownloadLinks,
+      DriveService, DriveChunksService, DriveUploadsService, DriveContentService, DriveDownloadLinks, DriveSyncsService,
     ],
   })
   class DriveHarness {}
@@ -138,7 +142,7 @@ test('Orbit Files drive: bounded Trash operations on folders of 100,000 entries'
 
   const call = (who: string, method: string, route: string) => {
     caller = who;
-    return fetch(`${origin}/api/drive${route}`, { method, headers: { authorization: 'Bearer signed-in' } });
+    return fetch(`${origin}/api/documents${route}`, { method, headers: { authorization: 'Bearer signed-in' } });
   };
   const one = async (text: string, ...values: unknown[]) => (await sql.query(text, values)).rows[0] as Record<string, number | string | boolean | null>;
   /** The drive transactions since `from`, each bounded as §1.4 says. */

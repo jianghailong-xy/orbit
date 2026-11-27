@@ -16,17 +16,18 @@
  *
  * Not destructive: every case owns freshly generated ids and asserts over its own project.
  */
+import { asLegacyMainSyncItem } from '../test-support/legacy-main-sync';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import {
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import {
@@ -231,7 +232,7 @@ async function doneTask(stack: Stack, w: World, label: string, finished = true):
       title,
       prompt: title,
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
@@ -280,7 +281,7 @@ async function finishWork(stack: Stack, sessionId: string, branch?: string) {
     // (§10.5 O-L4 3, §12.15 P-M1).
     const finished = await tx.session.update({
       where: { id: sessionId },
-      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), worktreeBranch: branch ?? session.branch, worktreeDirty: false },
+      data: { turnState: null, finishedAt: new Date(), worktreeBranch: branch ?? session.branch, worktreeDirty: false },
       select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
     });
     await settleDeliveredIdentityAfterFinish(tx, finished);
@@ -595,6 +596,10 @@ test('an open MAIN_SYNC conflict holds the next landing as a project-line sync, 
         where: { id: conflicted.sessionId }, data: { endReason: 'ended', finishedAt: new Date() },
       });
       await report(stack, w, claimed[0]!, SYNC_CONFLICT);
+      // Revision 45 opens the task-less line-sync item for this (line-sync-hold.pg.spec.ts). This case pins the LEGACY
+      // task-level item's rule, still in force for items opened before it (docs/design/project-line-upstream-sync.md
+      // §4.6 item 7): the conflicted task's own next generation is exempt.
+      await asLegacyMainSyncItem(stack.db, { projectId: w.projectId, taskId: conflicted.taskId });
       const stopped = await read(stack, w, conflicted);
       assert.equal(stopped.state, 'CONFLICT');
       assert.ok(stopped.openItemId, 'the conflict opened its item');

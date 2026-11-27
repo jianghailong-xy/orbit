@@ -200,7 +200,7 @@ func TestNoDescriptionSaysADeclaredMoveIsRefused(t *testing.T) {
 	assertSaysNoStaleMoveClaim(t, "the MCP tool descriptors", string(tools))
 
 	for _, list := range [][]cliCapabilitySpec{
-		baseCLICapabilities, providerCLICapabilities, projectCLICapabilities, notifyCLICapabilities,
+		baseCLICapabilities, providerCLICapabilities, projectCLICapabilities, notifyCLICapabilities, ownerRequestCLICapabilities,
 		mergeReceiptCLICapabilities, sessionCLICapabilities, agentCLICapabilities, runnerCLICapabilities,
 		watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities,
 		userCLICapabilities,

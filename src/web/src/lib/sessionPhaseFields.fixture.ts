@@ -58,6 +58,8 @@ export const SITUATIONS: Record<string, Payload> = {
   'a task run that finished': {
     id: 's', status: 'SUCCEEDED', runStatus: 'SUCCEEDED', runState: 'SUCCEEDED', endReason: 'task_done',
     phase: 'IDLE', released: true, lastTurnOutcome: 'ANSWERED', waitingOn: null, capabilities: resumable,
+    // The server's releaseFinishedTheWork, which every payload carries beside the facts above.
+    workFinished: true,
   },
   'running a job with no turn': {
     id: 's', status: 'AWAITING_INPUT', runStatus: 'AWAITING_INPUT', runState: 'AWAITING_INPUT',
@@ -119,17 +121,31 @@ export const SITUATIONS: Record<string, Payload> = {
     id: 's', status: 'SUCCEEDED', runStatus: 'SUCCEEDED', runState: 'SUCCEEDED', startedAt: '2026-11-22T00:00:00Z',
     phase: 'IDLE', released: true, lastTurnOutcome: 'ANSWERED', waitingOn: null, capabilities: resumable,
   },
-  // A failed release with an automatic retry armed: released, and something will wake it.
+  // A failed release with an automatic retry armed: released, and something will wake it. Waiting for that retry is
+  // PENDING (the owner, 2026-11-26), waiting on the wake.
   'released with a retry armed': {
     id: 's', status: 'FAILED', runStatus: 'FAILED', runState: 'FAILED', retryAt: '2099-01-01T00:00:00Z',
     startedAt: '2026-11-22T00:00:00Z',
-    phase: 'IDLE', released: true, lastTurnOutcome: 'FAILED', waitingOn: 'WAKE', capabilities: resumable,
+    phase: 'PENDING', released: true, lastTurnOutcome: 'FAILED', waitingOn: 'WAKE', capabilities: resumable,
+  },
+  // A spent quota parked at AWAITING_INPUT with the retry armed for its reset: held, no turn queued, PENDING on the wake.
+  'parked with a retry armed': {
+    id: 's', status: 'AWAITING_INPUT', runStatus: 'AWAITING_INPUT', runState: 'AWAITING_INPUT', activity: 'WAITING',
+    retryAt: '2099-01-01T00:00:00Z',
+    phase: 'PENDING', released: false, lastTurnOutcome: 'FAILED', waitingOn: 'WAKE', capabilities: held,
+  },
+  // The same with an owner decision open (a coordinator): PERSON outranks the wake, and the armed retry still says it
+  // is no queued turn.
+  'parked with a retry armed, an answer owed': {
+    id: 's', status: 'AWAITING_INPUT', runStatus: 'AWAITING_INPUT', runState: 'AWAITING_INPUT', activity: 'WAITING',
+    retryAt: '2099-01-01T00:00:00Z', pendingApprovals: 1,
+    phase: 'PENDING', released: false, lastTurnOutcome: 'FAILED', waitingOn: 'PERSON', capabilities: held,
   },
 };
 
-/** The same payload from a control plane that predates the four fields. */
+/** The same payload from a control plane that predates the four fields (and `workFinished`, which came after them). */
 export const olderServer = (payload: Payload): Payload => {
-  const { phase: _p, released: _r, lastTurnOutcome: _o, waitingOn: _w, ...rest } = payload;
+  const { phase: _p, released: _r, lastTurnOutcome: _o, waitingOn: _w, workFinished: _f, ...rest } = payload;
   return rest;
 };
 

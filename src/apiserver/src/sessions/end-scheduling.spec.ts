@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { SessionEndReason } from '@orbit/shared';
 import { currentWorkTerminalizationDouble } from '../test-support/prisma-transaction-double';
 import { SessionsService } from './sessions.service';
+import { writtenWord } from '../test-support/session-word';
 
 test('end linearizes after a concurrent send and finalizes the now-PENDING session', async () => {
   const id = '11111111-1111-4111-8111-111111111111';
@@ -16,7 +17,7 @@ test('end linearizes after a concurrent send and finalizes the now-PENDING sessi
     cancelRequestedAt: null,
     assignedRunnerId: runnerId,
   };
-  const lockedRead = { ...fastRead, status: RunStatus.PENDING };
+  const lockedRead = { ...fastRead, turnState: 'QUEUED', status: RunStatus.PENDING };
   let statusWrite: Record<string, unknown> | undefined;
   let drained = 0;
   let cancelRequests = 0;
@@ -61,7 +62,7 @@ test('end linearizes after a concurrent send and finalizes the now-PENDING sessi
   const service = new SessionsService(prisma, {} as never, realtime);
 
   assert.deepEqual(await service.end(ownerId, id), { ok: true });
-  assert.equal(statusWrite?.status, RunStatus.CANCELLED);
+  assert.equal(writtenWord(statusWrite), RunStatus.CANCELLED);
   assert.equal(statusWrite?.endReason, SessionEndReason.ENDED);
   // CANCELLED is the end of the line for the session, so it is the end of what its last run left
   // running too — a job parked with it that nobody reaped. The runner learns to stop from the same

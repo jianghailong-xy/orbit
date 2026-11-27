@@ -123,7 +123,10 @@ func runKimiChild(ctx context.Context, c subagentChild) (ExecResult, string, err
 	activeMu.Unlock()
 	app.beginPermissionTurn()
 	wire, wireFrom := kimiTurnWire(realHome, sessionID)
-	text := kimiPromptText(child.instructionAgent(), orbitExe, c.prompt, child.insideRecordedWork(), child.watchesOn(), child.workflowsOn())
+	text := c.prompt
+	if newKimiInstructionLedger(realHome, sessionID).due() {
+		text = kimiPromptText(child.instructionAgent(), child.sessionShape(orbitExe), c.prompt)
+	}
 	result, promptErr := app.request(ctx, "session/prompt", map[string]interface{}{
 		"sessionId": sessionID,
 		"prompt":    []map[string]interface{}{{"type": "text", "text": text}},
@@ -157,7 +160,10 @@ func runKimiChild(ctx context.Context, c subagentChild) (ExecResult, string, err
 	}
 	switch {
 	case outcome.failure != "":
-		return subagentChildResult(stFailed, reply, outcome.failure, 0, nil), sessionID, nil
+		res := subagentChildResult(stFailed, reply, outcome.failure, 0, nil)
+		res.Failure = outcome.classified.wire()
+		res.Admission = turnAdmission(turn != nil && !kimiTurnSaidNothing(turn), nil, 0)
+		return res, sessionID, nil
 	case outcome.read && !outcome.ran && turn != nil && kimiTurnSaidNothing(turn):
 		return subagentChildResult(stFailed, "", kimiNoTurn, 0, nil), sessionID, nil
 	}

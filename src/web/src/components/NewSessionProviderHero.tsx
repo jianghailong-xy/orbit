@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { CheckOutlined, CodeOutlined, FolderOutlined } from '@ant-design/icons';
+import { useState, type ComponentPropsWithRef, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { AgentProvider } from '@orbit/shared';
 import { CLAUDE_REGION_DETAILS, CLAUDE_REGION_USE_ANOTHER_PROVIDER, anthropicUnavailableOn } from '../lib/claudeRegionCopy';
@@ -6,6 +7,7 @@ import { encodeId } from '../lib/idCodec';
 import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
 import { providerNameOn, type EngineChoice } from '../lib/sessionProviderChoices';
 import { Popover } from './ui/Popover';
+import { Tooltip } from './ui/Tooltip';
 
 /** The brand mark. Same artwork and tile as /providers, sized up: at hero size it carries a soft
  *  shadow in its own brand colour, which a 20px row chip can't. The composer's Provider menu draws
@@ -50,6 +52,130 @@ function hexAlpha(hex: string, alpha: number): string {
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
 }
 
+/** Where a new session will run: its workspace and, where the workspace has folders, its folder. */
+export interface NewSessionPlace {
+  workspace: { id: string; name: string };
+  /** Every workspace a session can start in, in sidebar order. */
+  workspaces: { id: string; name: string }[];
+  onPickWorkspace: (id: string) => void;
+  /** The folder the session starts in; null is none. */
+  folder: { id: string; name: string } | null;
+  /** This workspace's folders. With none, the line names the workspace alone. */
+  folders: { id: string; name: string }[];
+  onPickFolder: (id: string | null) => void;
+}
+
+/** Past this many rows the place menu gets a search box (docs/mocks/new-session-place ③). */
+const PLACE_SEARCH_FROM = 9;
+
+/** A component rather than a wrapped element, so the popover's trigger props reach the button through
+ *  the tooltip. */
+function PlaceButton({ place, label, ...props }: ComponentPropsWithRef<'button'> & { place: NewSessionPlace; label: string }) {
+  return (
+    <Tooltip content={label} truncatedOnly>
+      <button {...props}>
+        <CodeOutlined />
+        <span className="np-place-name">{place.workspace.name}</span>
+        {place.folder && (
+          <>
+            <span className="np-place-slash">/</span>
+            <FolderOutlined />
+            <span className="np-place-name">{place.folder.name}</span>
+          </>
+        )}
+        <span className="np-chev">▾</span>
+      </button>
+    </Tooltip>
+  );
+}
+
+/**
+ * Under the engine (docs/mocks/new-session-place, option A): one bordered pill that says where the
+ * session runs, `[workspace] / [folder] ▾`, naming the folder only when one is picked (a folder is a
+ * sidebar group, so none is the quiet default rather than a "No folder" state). It opens one menu: the
+ * workspaces, then this workspace's folders. A pick closes it: another workspace opens its own draft, whose
+ * folders the menu lists once it is opened again.
+ */
+function PlacePill({ place }: { place: NewSessionPlace }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const label = place.folder ? `${place.workspace.name} / ${place.folder.name}` : place.workspace.name;
+  const searchable = place.workspaces.length + place.folders.length + 1 >= PLACE_SEARCH_FROM;
+  const needle = searchable ? query.trim().toLowerCase() : '';
+  const matches = (name: string) => !needle || name.toLowerCase().includes(needle);
+  const workspaces = place.workspaces.filter((w) => matches(w.name));
+  const folders = place.folders.filter((f) => matches(f.name));
+  const row = (key: string, icon: ReactNode, name: string, on: boolean, pick: () => void) => (
+    <button
+      key={key}
+      type="button"
+      className={`np-row${on ? ' on' : ''}${icon ? '' : ' np-place-none'}`}
+      data-row-focus=""
+      onClick={() => {
+        setOpen(false);
+        setQuery('');
+        if (!on) pick();
+      }}
+    >
+      {icon}
+      <span className="np-row-name">{name}</span>
+      {on && <CheckOutlined className="np-place-check" />}
+    </button>
+  );
+  return (
+    <div className="np-place">
+      <Popover
+        title={null}
+        trigger={
+          <PlaceButton
+            type="button"
+            className={`np-place-pill${open ? ' open' : ''}`}
+            aria-haspopup="menu"
+            aria-expanded={open}
+            aria-label={`Runs in: ${label}`}
+            place={place}
+            label={label}
+          />
+        }
+        side="bottom"
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) setQuery('');
+        }}
+        arrow={false}
+        popupClassName="np-pop"
+      >
+        <div className="np-list np-place-list">
+          {searchable && (
+            <input
+              className="np-place-search"
+              type="search"
+              placeholder="Find a workspace or folder"
+              aria-label="Find a workspace or folder"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          )}
+          {workspaces.length > 0 && <div className="np-place-head">Workspace</div>}
+          {workspaces.map((w) =>
+            row(w.id, <CodeOutlined />, w.name, w.id === place.workspace.id, () => place.onPickWorkspace(w.id)))}
+          {place.folders.length > 0 && (!needle || folders.length > 0) && (
+            <>
+              {workspaces.length > 0 && <div className="np-sep" />}
+              <div className="np-place-head">{`Folder in ${place.workspace.name} · optional`}</div>
+              {!needle && row('none', null, 'None', !place.folder, () => place.onPickFolder(null))}
+              {folders.map((f) =>
+                row(f.id, <FolderOutlined />, f.name, f.id === place.folder?.id, () => place.onPickFolder(f.id)))}
+            </>
+          )}
+          {workspaces.length === 0 && folders.length === 0 && <div className="np-place-empty">No matches</div>}
+        </div>
+      </Popover>
+    </div>
+  );
+}
+
 /**
  * The New Session middle area: which engine runs this session — fixed for its life once it starts.
  *
@@ -72,6 +198,7 @@ export function NewSessionProviderHero({
   fellBackFrom = null,
   machine,
   cantRun = false,
+  place = null,
 }: {
   /** The engine the draft runs on, landing on the provider it will spend. */
   current: EngineChoice;
@@ -96,6 +223,8 @@ export function NewSessionProviderHero({
   currentModelLabel?: string;
   /** The Projects entry point still uses this same picker; only its framing copy changes. */
   projectIntent?: boolean;
+  /** Where the session runs, said and picked under the engine; none before the workspace is known. */
+  place?: NewSessionPlace | null;
 }) {
   const [open, setOpen] = useState(false);
   const displayed = engines.some((engine) => engine.slug === current.slug) ? engines : [current, ...engines];
@@ -115,22 +244,24 @@ export function NewSessionProviderHero({
   // rather than disappearing and leaving the absence to be explained.
   const row = (engine: EngineChoice) =>
     engine.unavailable || !engine.provider ? (
-      <Link
-        key={engine.slug}
-        to={fixLink(engine)}
-        className="np-row np-unavailable"
-        title={`${engine.label}: ${engine.unavailable}${onRunner(engine)}${engine.regionBlocked ? '' : ' — fix it on the Machines & models page'}`}
-        onClick={() => setOpen(false)}
-      >
-        <BrandMark choice={engine} size={20} />
-        <span className="np-row-name">{engine.label}</span>
-        <span className="np-row-model np-fix">{engine.unavailable}</span>
-      </Link>
+      <Tooltip key={engine.slug} content={`${engine.label}: ${engine.unavailable}${onRunner(engine)}${engine.regionBlocked ? '' : ' — fix it on the Machines & models page'}`}>
+        <Link
+          to={fixLink(engine)}
+          className="np-row np-unavailable"
+          data-row-focus=""
+          onClick={() => setOpen(false)}
+        >
+          <BrandMark choice={engine} size={20} />
+          <span className="np-row-name">{engine.label}</span>
+          <span className="np-row-model np-fix">{engine.unavailable}</span>
+        </Link>
+      </Tooltip>
     ) : (
       <button
         key={engine.slug}
         type="button"
         className={`np-row${engine.slug === current.slug ? ' on' : ''}`}
+        data-row-focus=""
         onClick={() => {
           setOpen(false);
           if (engine.slug !== current.slug && engine.provider) onPick(engine.slug, engine.provider.slug);
@@ -146,7 +277,7 @@ export function NewSessionProviderHero({
     <div className="np-list">
       {displayed.map(row)}
       <div className="np-sep" />
-      <Link to="/settings/providers/new" className="np-row np-connect" onClick={() => setOpen(false)}>
+      <Link to="/settings/providers/new" className="np-row np-connect" data-row-focus="" onClick={() => setOpen(false)}>
         <span className="np-plus">+</span>
         <span className="np-row-name">Connect a provider…</span>
       </Link>
@@ -247,6 +378,7 @@ export function NewSessionProviderHero({
           {list}
         </Popover>
       )}
+      {place && <PlacePill place={place} />}
       {fixSummary ??
         fallbackSummary ??
         (projectIntent ? (
@@ -258,10 +390,8 @@ export function NewSessionProviderHero({
             <Link to={`/settings/machines/${encodeId(runnerId)}`}>Manage</Link>
           </div>
         ) : (
-          <>
-            <div className="np-empty-copy">Send a task to get started.</div>
-            <div className="np-current-model">{modelLabel}</div>
-          </>
+          // The model is said once, in the composer, where it is changed (docs/mocks/new-session-top ③).
+          <div className="np-empty-copy">Send a task to get started.</div>
         ))}
       {cantRunNote}
       {note && <div className="np-note">{note}</div>}

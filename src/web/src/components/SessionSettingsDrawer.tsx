@@ -1,4 +1,4 @@
-import { useEffect, useState, type FocusEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { CloseOutlined, CopyOutlined, DeleteOutlined, GlobalOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { SessionNotifyOverride, SessionSettings, SessionSettingsPatch } from '@orbit/shared';
@@ -24,6 +24,7 @@ import { Input } from './ui/Input';
 import { Menu } from './ui/Menu';
 import { Select } from './ui/Select';
 import { Switch } from './ui/Switch';
+import { Tooltip } from './ui/Tooltip';
 import './SessionSettingsDrawer.css';
 
 /** The session-env key rule the server enforces (PATCH /sessions/:id/settings). */
@@ -123,6 +124,69 @@ function NewVariable({ onAdd, onCancel }: { onAdd: (name: string, value: string)
   );
 }
 
+/**
+ * The session's name, at the top of its settings: where a session is renamed since a click on its title opens
+ * this (docs/mocks/session-settings-column ④). Return saves, Esc puts the name back; leaving the field saves a
+ * changed name. Return saves even an unchanged name, which takes a project-managed title out of the project's
+ * hands, as the header's editor did. `focusRequest` going up (⋯ Rename…) puts focus here with the text selected
+ * and the caret at its start, so a long name shows its head.
+ */
+function NameField({ title, onRename, focusRequest }: { title: string; onRename: (title: string) => void; focusRequest: number }) {
+  const [draft, setDraft] = useState(title);
+  const input = useRef<HTMLInputElement>(null);
+  const reverting = useRef(false);
+  useEffect(() => setDraft(title), [title]);
+  useEffect(() => {
+    const el = input.current;
+    if (!focusRequest || !el) return;
+    el.focus();
+    el.setSelectionRange(0, el.value.length, 'backward');
+    el.scrollLeft = 0;
+  }, [focusRequest]);
+  const save = (force: boolean) => {
+    const next = draft.trim();
+    if (!next) return setDraft(title);
+    if (force || next !== title) onRename(next);
+  };
+  return (
+    <div className="ss-row ss-row-top">
+      <div className="ss-row-text">
+        <label className="ss-row-label" htmlFor="ss-name">Name</label>
+        <Input
+          ref={input}
+          id="ss-name"
+          className="ss-name"
+          value={draft}
+          maxLength={200}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing) return; // the IME (pinyin) keeps its Enter
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              save(true);
+              reverting.current = true;
+              e.currentTarget.blur();
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              e.stopPropagation();
+              setDraft(title);
+              reverting.current = true;
+              e.currentTarget.blur();
+            }
+          }}
+          onBlur={() => {
+            if (reverting.current) {
+              reverting.current = false;
+              return;
+            }
+            save(false);
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export interface SessionSettingsDrawerProps {
   open: boolean;
   onClose: () => void;
@@ -137,6 +201,17 @@ export interface SessionSettingsDrawerProps {
   engineName: string | null;
   runnerName: string | null;
   accountLabel: string | null;
+  /** The session's title and the rename it writes (the Name field). */
+  title: string;
+  onRename: (title: string) => void;
+  /** Goes up each time something asks for the Name field to take focus (⋯ Rename…). */
+  focusNameRequest?: number;
+  /** `column` beside the conversation on a wide screen (docs/mocks/session-settings-column), `drawer` on a phone,
+   *  where it takes the whole screen. `overlay` lays the column over the conversation's right edge when the window
+   *  has no room beside it. */
+  variant?: 'drawer' | 'column';
+  width?: number;
+  overlay?: boolean;
 }
 
 /**
@@ -145,6 +220,7 @@ export interface SessionSettingsDrawerProps {
  */
 export function SessionSettingsDrawer({
   open, onClose, sessionId, sessionTags, tagLibrary, onToggleTag, tagsSaving, engineName, runnerName, accountLabel,
+  title, onRename, focusNameRequest = 0, variant = 'drawer', width, overlay = false,
 }: SessionSettingsDrawerProps) {
   const message = useToast();
   const qc = useQueryClient();
@@ -290,10 +366,10 @@ export function SessionSettingsDrawer({
   const inTokens = usage ? usage.inputTokens + cacheTokens : 0;
   const totalTokens = usage ? inTokens + usage.outputTokens : 0;
 
-  return (
-    <Drawer open={open} onClose={onClose} title="Session settings" width={440} className="ss-drawer">
+  const body = (
       <div className="ss-body">
         <Section title="Session">
+          <NameField title={title} onRename={onRename} focusRequest={focusNameRequest} />
           <div className="ss-row ss-row-top">
             <div className="ss-row-text">
               <div className="ss-row-label">Labels</div>
@@ -350,7 +426,9 @@ export function SessionSettingsDrawer({
 
         <Section title="Environment" note="Applies when the engine next starts">
           <Row label="Working directory" hint={workDir.hint}>
-            <span className="ss-mono ss-value ss-path" title={workDir.path}>{workDir.path}</span>
+            <Tooltip content={workDir.path} truncatedOnly mono align="end">
+              <span className="ss-mono ss-value ss-path">{workDir.path}</span>
+            </Tooltip>
           </Row>
           <Row label="Compact at" hint="Claude Code summarizes the conversation near this size">
             <Select
@@ -366,7 +444,10 @@ export function SessionSettingsDrawer({
             <div className="ss-env-head">Variables</div>
             {inheritedRows.map(([k, v]) => (
               <div key={k} className="ss-env-row inherited">
-                <span className="ss-mono">{k}</span><span className="ss-mono ss-env-val" title={v}>{v}</span>
+                <span className="ss-mono">{k}</span>
+                <Tooltip content={v} truncatedOnly mono>
+                  <span className="ss-mono ss-env-val">{v}</span>
+                </Tooltip>
                 <span className="ss-env-from">Workspace</span>
               </div>
             ))}
@@ -444,23 +525,45 @@ export function SessionSettingsDrawer({
             </dd>
             <dt>Session ID</dt>
             <dd className="ss-mono ss-copy">
-              <button type="button" className="ss-copy-btn" title={sessionId} aria-label="Copy session ID"
-                onClick={() => copy(session?.id ?? sessionId, 'Session ID copied')}>
-                {tail(session?.id ?? sessionId)} <CopyOutlined />
-              </button>
+              <Tooltip content={session?.id ?? sessionId} mono align="end">
+                <button type="button" className="ss-copy-btn" aria-label="Copy session ID"
+                  onClick={() => copy(session?.id ?? sessionId, 'Session ID copied')}>
+                  {tail(session?.id ?? sessionId)} <CopyOutlined />
+                </button>
+              </Tooltip>
             </dd>
             <dt>Engine session</dt>
             <dd className="ss-mono ss-copy">
               {session?.runtimeSessionId ? (
-                <button type="button" className="ss-copy-btn" title={session.runtimeSessionId} aria-label="Copy engine session ID"
-                  onClick={() => copy(session.runtimeSessionId!, 'Engine session ID copied')}>
-                  {tail(session.runtimeSessionId)} <CopyOutlined />
-                </button>
+                <Tooltip content={session.runtimeSessionId} mono align="end">
+                  <button type="button" className="ss-copy-btn" aria-label="Copy engine session ID"
+                    onClick={() => copy(session.runtimeSessionId!, 'Engine session ID copied')}>
+                    {tail(session.runtimeSessionId)} <CopyOutlined />
+                  </button>
+                </Tooltip>
               ) : '—'}
             </dd>
           </dl>
         </Section>
       </div>
+  );
+
+  if (variant === 'column') {
+    if (!open) return null;
+    return (
+      <aside className={`session-col ss-column${overlay ? ' ss-column-over' : ''}`}
+        style={{ width } as CSSProperties} aria-label="Session settings">
+        <div className="ss-column-head">
+          <span className="ss-column-title">Session settings</span>
+          <Button size="small" variant="text" icon={<CloseOutlined />} aria-label="Close session settings" onClick={onClose} />
+        </div>
+        <div className="ss-column-body autohide-scrollbar">{body}</div>
+      </aside>
+    );
+  }
+  return (
+    <Drawer open={open} onClose={onClose} title="Session settings" width={440} className="ss-drawer">
+      {body}
     </Drawer>
   );
 }

@@ -45,6 +45,13 @@ export const PERSONAL_SETTINGS = {
     'Optimize For',
     'What to favour when a model is picked at a tier.',
   ),
+  // docs/routing-account-health-design.md §7.5: off by default; the providers the owner blocked stay out either way.
+  relaxBlockedPins: setting(
+    'relaxBlockedPins',
+    '/settings/providers/routing',
+    'Run pinned tasks elsewhere',
+    "When the account a task is pinned to can't run, let it run on another account. Providers you've blocked stay out either way.",
+  ),
   promptSuggestions: setting(
     'promptSuggestions',
     '/settings/general',
@@ -96,6 +103,14 @@ export const PERSONAL_SETTINGS = {
     '/settings/notifications',
     'When a session finishes',
     'Alert your devices when a session you started finishes on its own or fails for good. Task, coordinator and agent-started sessions stay quiet; Project done still rings.',
+  ),
+  // This browser's own switch (docs/web-push-design.md): a row only where the server sends web push, so search finds it
+  // only there too (settingsSearch's `webPush`).
+  browserNotifications: setting(
+    'browserNotifications',
+    '/settings/notifications',
+    'Notifications in this browser',
+    'Show Orbit alerts on this computer, even with no Orbit tab open.',
   ),
   notifyAgentMessage: setting(
     'notifyAgentMessage',

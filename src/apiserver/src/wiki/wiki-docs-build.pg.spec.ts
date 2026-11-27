@@ -237,8 +237,8 @@ async function session(h: Harness, ownerId: string, workspaceId: string, runnerI
   const id = randomUUID();
   await h.sql.query(
     `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","workspace_id","assigned_runner_id",
-                            "task_id","status","dispatch_origin","updated_at")
-     VALUES ($1,$2,'p',$3,$3,$4,$5,$6,'RUNNING'::run_status,'USER',now())`,
+                            "task_id","turn_state","dispatch_origin","updated_at")
+     VALUES ($1,$2,'p',$3,$3,$4,$5,$6,'IN_FLIGHT','USER',now())`,
     [id, title, ownerId, workspaceId, runnerId, taskId],
   );
   return id;
@@ -561,6 +561,38 @@ test('every record handed out is redacted and placed where a footnote\'s check r
   // A section with no session condition has no server half.
   const mechanism = await gathered(h, s, keys[1]);
   assert.deepEqual([mechanism.condition, mechanism.entries, mechanism.records], [null, [], []]);
+});
+
+test('a call that reads the wiki, cited by a picked entry, is no record of the section\'s material; a call of another tool is', { skip }, async () => {
+  const h = await boot();
+  const s = await scene(h);
+  const { keys } = await confirmPlan(h, s);
+  const long = await h.prisma.toolCall.findUniqueOrThrow({ where: { id: s.r.long }, select: { sessionId: true } });
+  const READ = 'WIKI-READ-WORDS the suite must run on the runner 宿主';
+  const reads = [
+    await toolCall(h, long.sessionId, 'mcp__orbit__wiki_get', { ids: ['34abc'] }, READ),
+    await toolCall(h, long.sessionId, 'wiki_read', { id: '34abc' }, READ),
+    await toolCall(h, long.sessionId, 'Bash', { command: 'orbit wiki read 34abc' }, READ),
+  ];
+  const fine = await toolCall(h, long.sessionId, 'Bash', { command: 'cat notes.txt' }, 'WIKI-NOT-READ words the suite must run on the runner 宿主');
+  // Cited by the entry the keyword finds (written by hand: no door takes a wiki read as a source any more).
+  const entry = await h.prisma.wikiEntry.findUniqueOrThrow({ where: { id: s.entries.keyword }, select: { currentRevision: true } });
+  const revision = await h.prisma.wikiEntryRevision.findFirstOrThrow({ where: { entryId: s.entries.keyword, revision: entry.currentRevision }, select: { id: true } });
+  // An entry takes at most `sourcesPerEntry` records, so each read is cited on its own beside the one source it already has.
+  for (const read of reads) {
+    const added = [];
+    for (const ref of [read, fine]) {
+      added.push(await h.prisma.wikiSource.create({ data: { revisionId: revision.id, ownerId: s.owner.id, kind: 'tool_call', ref, locator: {}, quote: null, state: 'live' }, select: { id: true } }));
+    }
+    const material = await gathered(h, s, keys[2]);
+    const refs = material.records.map((record) => toUuid(record.ref));
+    assert.ok(!refs.includes(toUuid(read)), `a wiki read ${read} is not in the material`);
+    assert.ok(!JSON.stringify(material).includes('WIKI-READ-WORDS'), 'nor its words');
+    assert.ok(refs.includes(toUuid(fine)), 'a call of another tool is');
+    assert.ok(refs.includes(toUuid(s.r.long)), 'and so are the entry\'s other records');
+    assert.ok(material.unresolved.every((one) => toUuid(one.ref) !== toUuid(read)), 'a dropped record is not counted unresolved');
+    await h.prisma.wikiSource.deleteMany({ where: { id: { in: added.map((row) => row.id) } } });
+  }
 });
 
 // ── 3. another tenant ───────────────────────────────────────────────────────────────────────────

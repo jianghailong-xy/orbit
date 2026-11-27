@@ -17,7 +17,7 @@ import { copyText } from '../lib/clipboard';
 import { runnersQuery } from '../lib/queries';
 import { openRunnerBrowserTab, runnerBrowserQuery } from '../lib/runnerBrowser';
 
-const loginKey = (runnerId: string) => ['runner-login', runnerId] as const;
+export const loginKey = (runnerId: string) => ['runner-login', runnerId] as const;
 
 /** Kimi Code's two sites, in the words Kimi's own sign-in uses: each keeps accounts of its own, so
  *  the user picks the one they signed up on. */
@@ -70,7 +70,7 @@ export function GoogleSignInTerms() {
 
 /** A sign-in still under way: the card polls while one of these is current, and seeing one is
  *  what makes the outcome that follows this card's own news rather than a leftover (see below). */
-const inFlight = (s: RunnerLoginState['status'] | null | undefined) =>
+export const inFlight = (s: RunnerLoginState['status'] | null | undefined) =>
   s === 'pending' || s === 'awaiting_code' || s === 'awaiting_approval';
 
 /** The slice of GET /runners this card reads back: whether that machine's probe has caught up, and

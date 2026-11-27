@@ -36,12 +36,26 @@ export const PAT_SCOPES = [
   'wiki:read',
   'wiki:write',
   'events:read',
-  // The owner's Orbit Files drive (/drive/*): one scope for reading and writing it, so it is not a `:read` and the read-only preset leaves it out.
-  'files',
+  // The owner's Drive (/drive/*, and its /documents/* alias): one scope for reading and writing them, so it is not a `:read`
+  // and the read-only preset leaves it out. It was called `files`, then `documents`; PAT_SCOPE_ALIASES keeps both names working.
+  'drive',
   // POST /notify: a push to the account owner's Orbit apps, and nothing else — the narrow grant a monitoring system holds.
   'notify',
 ] as const;
 export type PatScopeName = (typeof PAT_SCOPES)[number];
+
+/**
+ * Scope names a scope was once called, each with what it is called now. Migrations 1550 (`files` → `documents`) and 1590
+ * (`files` and `documents` → `drive`) rewrote the stored tokens, and a name here is still read as its scope wherever a
+ * scope arrives: a token row an older apiserver wrote during a rolling deploy, and a client built before the rename asking
+ * for it. A token is always minted and shown with the current name.
+ */
+export const PAT_SCOPE_ALIASES: Readonly<Record<string, PatScopeName>> = { files: 'drive', documents: 'drive' };
+
+/** `scopes` with every old name read as the scope it names now, each once. */
+export function currentScopeNames(scopes: readonly string[]): string[] {
+  return [...new Set(scopes.map((scope) => PAT_SCOPE_ALIASES[scope] ?? scope))];
+}
 
 /**
  * The presets `orbit login --scopes` names (§4, §7.3), as the settings dialog offers them: every read
@@ -221,7 +235,7 @@ export class PatService {
       tokenId: row.id,
       userId: row.ownerId,
       email: row.owner.email,
-      scopes: row.scopes,
+      scopes: currentScopeNames(row.scopes),
       workspaceIds: row.workspaceIds,
     };
   }
@@ -271,6 +285,7 @@ export class PatService {
     const now = Date.now();
     return rows.map((row) => ({
       ...row,
+      scopes: currentScopeNames(row.scopes),
       workspaces: row.workspaceIds.flatMap((id) => (names.has(id) ? [{ id, name: names.get(id)! }] : [])),
       state: stateOf(row, now),
     }));
@@ -385,7 +400,7 @@ const limitReached = () =>
   });
 
 export function parseScopes(scopes: string[]): PatScopeName[] {
-  const requested = [...new Set(scopes.map((scope) => scope.trim()).filter(Boolean))];
+  const requested = currentScopeNames(scopes.map((scope) => scope.trim()).filter(Boolean));
   if (requested.length === 0) throw new BadRequestException('at least one scope is required');
   const allowed = new Set<string>(PAT_SCOPES);
   const unknown = requested.filter((scope) => !allowed.has(scope));

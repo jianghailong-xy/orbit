@@ -1,17 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import {
-  ACTIVE_TURN_STATUSES,
   OPEN_SESSION_STATUSES,
   runnerOfflineIsFatal,
   statusAfterTurnCompleted,
   statusAfterTurnEnqueued,
 } from './session-scheduling';
-
-test('only RUNNING consumes an active-turn slot', () => {
-  assert.deepEqual(ACTIVE_TURN_STATUSES, [RunStatus.RUNNING]);
-});
+import { turnStateAfterTurnEnqueued, turnStateOfWord } from '../sessions/session-turn-state';
 
 test('reclaim retains every open session while only RUNNING is active', () => {
   assert.deepEqual(OPEN_SESSION_STATUSES, [
@@ -35,7 +31,14 @@ test('turn completion retains a slot only for an already queued executable turn'
 });
 
 test('an offline runner does not invalidate an idle warm-or-cold session', () => {
-  assert.equal(runnerOfflineIsFatal(RunStatus.RUNNING), true);
-  assert.equal(runnerOfflineIsFatal(RunStatus.AWAITING_INPUT), false);
-  assert.equal(runnerOfflineIsFatal(RunStatus.INTERRUPTED), false);
+  assert.equal(runnerOfflineIsFatal('IN_FLIGHT'), true);
+  assert.equal(runnerOfflineIsFatal(null), false);
+  assert.equal(runnerOfflineIsFatal('ABANDONED'), false);
+  assert.equal(runnerOfflineIsFatal('QUEUED'), false);
+});
+
+test('the turn-state helpers give the turn state of the word the word helpers give, one for one', () => {
+  for (const word of [RunStatus.PENDING, RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED]) {
+    assert.equal(turnStateAfterTurnEnqueued(turnStateOfWord(word)), turnStateOfWord(statusAfterTurnEnqueued(word)), word);
+  }
 });

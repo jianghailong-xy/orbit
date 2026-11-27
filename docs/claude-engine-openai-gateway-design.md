@@ -61,7 +61,8 @@ Orbit already runs a gateway of its own for Codex pools, `/api/gw/codex` (`pool-
 - **A general translation proxy.** The gateway serves Orbit's own Claude Code sessions, authenticated by Orbit's own
   tokens. It is not an endpoint for other clients.
 - **Changing what `codex` does with an OpenAI key.** Codex stays the default engine for it (D7).
-- **Gemini and Moonshot keys.** The same gateway shape could carry them later. Not in this design.
+- **Gemini and Moonshot keys.** The same gateway shape could carry them later. Not in this design. (OpenAI-compatible
+  keys that serve only Chat Completions were added later, §10.)
 
 ## 3. What a person sees
 
@@ -123,7 +124,8 @@ claude ── Messages (SSE) ──▶ /api/gw/anthropic/v1/messages
 
   It is a new table rather than a nullable `poolId` on `PoolGatewayToken`, so the pool tables' invariants and
   tenant-isolation cases stay as they are.
-- **Compatibility.** `keyEngines` adds `claude` for the `openai` dialect, after `codex`, only when the deployment has
+- **Compatibility.** `keyEngines` adds `claude` for the `openai` dialect, after `codex` (and, since §10, for the
+  `openai-compatible` dialect, after `kimi`), only when the deployment has
   the gateway on (D6): `ORBIT_CLAUDE_OPENAI_GATEWAY=true` (docs/configuration.md), and only for a key whose endpoint
   the gateway may call (§5.3). `EngineCredential` gains no
   field: the server passes the switch (`EngineTableOptions.anthropicGateway`) when it builds the `engines` list. The
@@ -365,7 +367,7 @@ memory and connection counts with 20 concurrent sessions.
 | # | Question | Options | Recommendation |
 |---|---|---|---|
 | D1 | Who translates | **A** a translator written in the API server · B a LiteLLM container behind the gateway, which still does tokens, keys and usage | **A**: no new container in Compose, Kubernetes or self-hosted installs, and errors, quota and haiku mapping stay in Orbit's code. LiteLLM's mapping serves as a reference in tests. |
-| D2 | Upstream API | **A** Responses · B Chat Completions | **A**: OpenAI's current API, encrypted reasoning that survives turns, and the same API the Codex gateway already reads. |
+| D2 | Upstream API | **A** Responses · B Chat Completions | **A**: OpenAI's current API, encrypted reasoning that survives turns, and the same API the Codex gateway already reads. **Amended 2026-11-23:** an OpenAI key stays on Responses; an OpenAI-compatible key, whose endpoint often serves only Chat Completions, goes to Chat Completions (§10). |
 | D3 | Which keys may use the gateway | **A** host `api.openai.com`, plus hosts an admin lists · B any OpenAI-dialect row, with private addresses blocked | **A** first (§5.3); B later if people ask for Azure or other Responses-compatible hosts. |
 | D4 | ChatGPT logins (Codex pools) on Claude Code | **A** not offered · B offered later as an opt-in | **A**: ChatGPT's Codex backend is not a public API, and on a hosted multi-user service an account ban is the owner's risk. **Amended 2026-11-11:** offered on the account owner's own Codex login pool only, behind its own flag, with no disguise (§9). |
 | D5 | Claude Code's web search (an Anthropic server tool) | **A** first release: the tool reports "not available on this model"; mapped to OpenAI's `web_search` in P3 · B mapped from P1 | **A**: the mapping is the largest single piece and the rest does not depend on it. P3 mapped it (§4.7). |
@@ -543,3 +545,111 @@ your ChatGPT account outside the official Codex CLI. OpenAI may restrict the acc
   and other people's pools are refused. The request on the wire is Claude Code's own, usage and cost are booked,
   and the spent and refresh paths work.
 
+## 10. OpenAI-compatible keys through Chat Completions
+
+Added 2026-11-23 (task 352QzNCAJ3iKivhypBD98). Many third-party gateways and self-hosted servers serve only
+`POST /v1/chat/completions`. Such a key is added as an OpenAI-compatible key: `runtime: 'kimi'`, dialect
+`openai-compatible` (`keyDialect`, `src/shared/src/openCodeKeys.ts`). Until now it ran on Kimi CLI and OpenCode only.
+It now also runs on Claude Code, through the same `/api/gw/anthropic` gateway, which speaks Chat Completions to it.
+
+### 10.1 Routing and dispatch
+
+- **By dialect.** The key's dialect decides the upstream. An `openai` key keeps the Responses path (§4.3–§4.7). An
+  `openai-compatible` key goes to `{baseUrl}/chat/completions`. Nothing else in the gateway forks:
+  - the same `orbit-gwk-` tokens, minted at claim, reclaim and reload (`withKeyGatewayToken`);
+  - the same upstream rule (§5.3): https, `api.openai.com` or a host in `ORBIT_GATEWAY_UPSTREAM_HOSTS`, public
+    addresses only, pinned, no redirects;
+  - the same failure table (§5.4), worded with the endpoint's host where it says "OpenAI" for an OpenAI key:
+    `api.example.com refused the key "<label>": …`, `You hit your usage limit on the key "<label>" · resets …`;
+  - the same usage and cost records (§5.5).
+- **Which code reads the dialect.** `gatewayKeyDialect` (`key-gateway.ts`) names the two dialects. Dispatch
+  (`runsThroughAnthropicGateway`), the token check (`AnthropicGatewayService.caller`) and revocation on a key's edit
+  (`ProvidersService.update`: disabled, a new secret, endpoint or protocol) all read it, so an OpenAI-compatible
+  key's tokens are revoked exactly as an OpenAI key's are. The claim SQL accepts `runtime = 'kimi'` for engine
+  `claude` only with the flag on, as it does `codex`.
+- **Engines.** `keyEngines` gives an OpenAI-compatible key `kimi`, `claude`, `opencode` when
+  `EngineTableOptions.anthropicGateway` is passed, which the server does only when the flag is on and the endpoint
+  passes the upstream rule (`engineTableOptions(baseUrl)`). Kimi stays the default (D7). A Moonshot key at
+  `api.moonshot.ai` is therefore offered Claude Code only if an admin lists that host. With the flag off, nothing
+  differs (`gateway-flag-parity.spec.ts` still holds).
+
+### 10.2 Request mapping (Messages → Chat Completions)
+
+`toChatCompletionsRequest` (`anthropic-gateway/chat-request.ts`), pure like `toResponsesRequest`:
+
+| Anthropic | Chat Completions |
+|---|---|
+| `system`, and the CLI's `role: "system"` messages (`basic.json` `messages[1]`) | one leading `system` message. Many chat templates refuse a system message anywhere but first. The billing block is dropped, as in §4.3. |
+| user text and images | a `user` message: a string when it is text alone, else `text` and `image_url` parts (a data URL for base64). A PDF goes as a `file` part. |
+| `tool_use` blocks | the assistant message's `tool_calls` (`function.arguments` is the input as a JSON string). The turn's text is its `content`, or `null`. |
+| `tool_result` blocks | one `tool` message each, right after the assistant message, in the order of the calls (`inCallOrder`, as in §4.3). `is_error` prefixes "Error: ". Text in the same user turn follows them as a `user` message. |
+| an image inside a tool result (Read on a PNG) | a `tool` message cannot carry one: its text says the image is in the next message, and the image goes in the `user` message after the tool messages. |
+| `tool_reference` (ToolSearch) | "Tool loaded: <name>", and the deferred tool is declared from then on, as in §4.3. |
+| custom tools | `{type: "function", function: {name, description, parameters}}`. The placeholder is never declared. |
+| `tool_choice` | `auto`, `required`, `none`, `{type: "function", function: {name}}`. `disable_parallel_tool_use` sends `parallel_tool_calls: false`; nothing else sends the field, since some servers refuse it. |
+| `max_tokens`, `stop_sequences`, `temperature`, `top_p` | `max_tokens`, `stop` (at most four), `temperature`, `top_p`. `top_k` is dropped. |
+| always | `stream: true`, `stream_options: {include_usage: true}`. An unstreamed request is answered from the stream read whole, as in §4.1. |
+| `thinking`, `output_config.effort` | not sent. Chat Completions has no common effort field, and a self-hosted server passes an unknown one to its chat template, which may refuse the request (see `declaredReasoningLevels`). The model's own default applies. |
+| web search and other server tools | dropped and reported: Chat Completions has no server tools. |
+
+### 10.3 Stream mapping (Chat Completions → Messages)
+
+`ChatStreamConverter` (`anthropic-gateway/chat-stream.ts`) reads `chat.completion.chunk`s and writes one block at a
+time, as Anthropic's own stream does:
+
+- `delta.reasoning_content` (or `delta.reasoning`, as some servers name it) → a `thinking` block. At its end the
+  block gets the signature `orbitcc1`, which only says the block is ours.
+- `delta.content` → a `text` block.
+- `delta.tool_calls` → a `tool_use` block per call, named by its first fragment's `id` and `function.name`. Its
+  `arguments` fragments stream as `input_json_delta`s. A new `index`, or a new `id` at the same index (some servers
+  number every call 0), starts the next block.
+- `finish_reason` → `stop_reason`: `tool_calls` (or any tool call seen) is `tool_use`, `length` is `max_tokens`,
+  `content_filter` is `refusal`, anything else is `end_turn`. The response ends at `data: [DONE]`, or at the end of
+  the stream once a `finish_reason` came. A stream that ends with neither is an `api_error`, never a silent stop.
+- Usage: the last `usage` seen, on a usage-only last chunk (`include_usage`) or on the choice (Moonshot does both).
+  Cached input is read from `prompt_tokens_details.cached_tokens` (OpenAI, vLLM), `cached_tokens` (Moonshot) or
+  `prompt_cache_hit_tokens` (DeepSeek). It is reported to the CLI as in §4.4 and booked as in §5.5, priced with
+  `openai-prices.ts` at the model the chunks name. A model `openai-prices.ts` does not list is charged its fallback
+  price (§5.5), so a third-party model's cost line is an estimate.
+- Errors: a chunk carrying `error` before any output is answered with the §5.4 status (`chatFirstWord`, read by
+  `earlyFailure` before the head goes out); after output has begun it is an SSE `error` event, as in §5.4. A server
+  that ignores `stream: true` and answers one `chat.completion` object is read as that answer.
+
+**Reasoning across turns.** Recorded against Moonshot's Kimi coding endpoint (`fixtures/chat-completions/`): a
+thinking model that called a tool and is sent its result without the reasoning it streamed calls the same tool
+again (`kimi-tool-result-without-reasoning.json`). With the reasoning sent back as the assistant message's
+`reasoning_content`, it answers (`kimi-tool-result-with-reasoning.json`). So a `thinking` block signed `orbitcc1`
+goes back as `reasoning_content` on its assistant message. The text travels in the transcript, as the Responses
+envelope does (§4.3), and the gateway keeps no state.
+
+### 10.4 What this path cannot carry
+
+- **Encrypted reasoning.** Chat Completions has no `encrypted_content`. Reasoning survives a turn only as the plain
+  text a provider chose to stream, and only to providers that read `reasoning_content` back. A model that reasons
+  without streaming its reasoning loses it at every turn. A `thinking` block from the Responses path (an `orbit1.`
+  envelope, after the session moved keys) or from Anthropic is dropped.
+- **Tool-call streaming depends on the provider.** Some servers stream arguments in fragments (Moonshot, OpenAI);
+  others send a call whole in one chunk, and the CLI then sees it at once. A server that interleaves the fragments
+  of parallel calls cannot be written as Anthropic's one-block-at-a-time stream: a fragment for a call already
+  closed is dropped, and that call's input is cut.
+- **Effort.** Not sent (§10.2). The effort control has no effect on such a session.
+- **Web search.** Not available: the request Claude Code's WebSearch tool sends reaches the model without the search
+  tool, so no search runs and no results come back.
+- **count_tokens.** Chat Completions has no count endpoint. `count_tokens` answers the characters ÷ 4 estimate
+  (§4.6), as on the Codex login pool (§9.3).
+- **Prompt caching.** Not asked for: there is no common cache key in Chat Completions. Whatever the provider caches
+  on its own is read back from the usage and booked as cached input.
+
+### 10.5 Specs
+
+- `anthropic-gateway-chat.spec.ts`: the request converter on the recorded CLI requests (`basic`, `parallel`,
+  `image-r2`, `toolsearch-r2`, `websearch`, `thinkturns`), and the stream converter on the recorded Kimi streams,
+  including the round trip in which the converted answer, sent back as the CLI keeps it, converts to the same
+  messages and tools as the request Kimi then answered. Hand-built chunks cover what no recording shows (OpenAI's and DeepSeek's cache counts,
+  parallel and whole calls, errors in the stream, a whole JSON answer).
+- `anthropic-gateway-chat-cli.pg.e2e.ts` (by hand: `bash scripts/run-pg-spec.sh
+  src/apiserver/src/providers/anthropic-gateway-chat-cli.pg.e2e.ts`; it needs the claude CLI, so it is not in CI's
+  pg roster): on real PostgreSQL, the key's `engines` with an allowed, an unlisted and an `http` endpoint, a Claude
+  Code session claimed on it, a real CLI turn with a tool call and its result against a stand-in for
+  `/v1/chat/completions` that answers the recorded streams, the usage, key usage and cost rows, and revocation when
+  the key is switched off.

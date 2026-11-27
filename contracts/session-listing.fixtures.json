@@ -1,0 +1,384 @@
+{
+  "description": "GET /sessions/listing (docs/session-list-scale-design.md §3.2): one workspace's session list as top-level entries with its folder rows. The server's pg spec (src/apiserver/src/sessions/session-listing.pg.spec.ts) seeds each case and reads it through the route, page by page; the web's Vitest spec (src/web/src/lib/sessionListingFixture.test.ts) feeds the same sessions through sessionProjectListing / sessionFolderListing. Both must give exactly `expected`.",
+  "rule": [
+    "Scope: the owner's sessions in this workspace in the read's view (open: not completed, not trashed; completed: completed, not trashed), conversations only, no scheduled runs.",
+    "A session whose membership names a project is held by that project's entry when the project's coordinator runs in this workspace, or the project has no coordinator. A held session is no entry of its own. A member whose coordinator runs in another workspace is a session entry.",
+    "The coordinator is the project's coordinator session in either lifecycle (never one in Trash), wherever it runs.",
+    "A project entry is filed in its coordinator's folder; a session in its own. A folder that is not a live folder of this workspace counts as no folder.",
+    "Without folderId: the entries in no live folder. With folderId: the entries filed in that folder, and no folder rows.",
+    "Order: in the Open view, entries go by the section the web's sessionTimeSections (attention on) draws them in: Pinned (a project entry is pinned when its coordinator is), then Needs you, then Working, then the rest. A session's section is its list row's (`rows`), by src/web/src/lib/sessionGrouping.ts sessionNeedsOwner and sessionIsWorking; a project entry is in Needs you when a member it holds has pendingApprovals, in Working when its `running` is set. Within a section, as the web's compareListed sorts it: placement (listedAt, else createdAt) descending; then createdAt descending; then id ascending.",
+    "The Completed view has no Pinned, and its order switches on whether any session of the view in this workspace (every folder counted) is held by a project: none held, GET /sessions?view=completed's order — COALESCE(completedAt, archivedAt) descending, then createdAt descending, then id ascending; any held, placement (listedAt, else createdAt) descending; at the same placement a session before a project (the order sessionProjectListing leaves); then createdAt descending; then id ascending. A cursor written under one order and read under the other starts again from the first page.",
+    "A project entry's placedAt is the greatest listedAt (else createdAt) of the members it holds; its spokeAt the greatest lastTurnAt (else createdAt); memberCount how many members it holds here; its createdAt (for order) its coordinator's, else that of the member that placed it; running / jobs whether any member it holds runs / has a background job moving, by workspaceSessionCounts' predicates.",
+    "Folder rows (first page, no folderId): every live folder in Open, only those holding a session of the view in Completed, by name (case-insensitive, digits by value), the id settling a tie. rowCount: the rows the folder's page lists (a project is one row). needsYou: how many of its sessions (held members filed with their project) need you; running / jobs: whether any of them runs / has a background job moving — workspaceSessionCounts' predicates.",
+    "Paging: each page's `next` is the sort key of its last entry; the next page lists the entries strictly after it, so no entry is skipped or repeated however many share a place."
+  ],
+  "sessionFields": {
+    "id": "the session's name in the case; the server spec gives each case's sessions ids that sort as these names do",
+    "workspace": "'here' (default) or 'elsewhere'",
+    "lifecycle": "'open' (default) or 'completed'",
+    "folder": "a folder of `folders` (this workspace) or of `foreignFolders` (the other workspace), or absent",
+    "project": "the project its membership names, or absent",
+    "role": "COORDINATOR (the project's coordinator) or TASK (a run of one of its tasks, the default when `project` is set)",
+    "activity": "what workspaceSessionCounts counts it as: needsYou (a pending approval on a turn in flight), running or jobs; absent for none. `rows` says what an Open session's list row carries for each",
+    "createdAt": "defaults to `defaultCreatedAt`",
+    "completedAt": "when a completed session was completed; defaults to its listedAt",
+    "archivedAt": "set instead of completedAt on a legacy archived-only row"
+  },
+  "rows": {
+    "description": "What an Open session's list row (GET /sessions, and the listing's own rows) carries for each `activity`: the fields sessionNeedsOwner and sessionIsWorking read. The pg spec asserts the rows the route answers agree; the web spec builds its rows from them.",
+    "none": { "status": "AWAITING_INPUT", "phase": "IDLE", "released": false, "pendingApprovals": 0 },
+    "needsYou": { "status": "RUNNING", "phase": "RUNNING", "released": false, "pendingApprovals": 1 },
+    "running": { "status": "RUNNING", "phase": "RUNNING", "released": false, "pendingApprovals": 0 },
+    "jobs": { "status": "AWAITING_INPUT", "phase": "RUNNING", "released": false, "pendingApprovals": 0 }
+  },
+  "defaultCreatedAt": "2026-11-19T00:00:00.000Z",
+  "cases": [
+    {
+      "name": "coordinator here holds its members; a pinned coordinator pins its project",
+      "folders": [],
+      "foreignFolders": [],
+      "projects": ["P1"],
+      "sessions": [
+        { "id": "c1", "project": "P1", "role": "COORDINATOR", "pinnedAt": "2026-11-20T07:00:00.000Z", "listedAt": "2026-11-20T10:00:00.000Z", "createdAt": "2026-11-18T00:00:00.000Z" },
+        { "id": "m1a", "project": "P1", "activity": "running", "listedAt": "2026-11-20T12:00:00.000Z" },
+        { "id": "m1b", "project": "P1", "listedAt": "2026-11-20T09:00:00.000Z", "lastTurnAt": "2026-11-20T13:00:00.000Z" },
+        { "id": "s1a", "listedAt": "2026-11-20T11:00:00.000Z" },
+        { "id": "s1b", "listedAt": "2026-11-20T14:00:00.000Z" },
+        { "id": "s1z", "pinnedAt": "2026-11-20T06:00:00.000Z", "listedAt": "2026-11-20T08:00:00.000Z" }
+      ],
+      "reads": [
+        {
+          "view": "open",
+          "folderId": null,
+          "expected": {
+            "folders": [],
+            "entries": [
+              { "kind": "project", "id": "P1", "coordinator": "c1", "memberCount": 3, "placedAt": "2026-11-20T12:00:00.000Z", "spokeAt": "2026-11-20T13:00:00.000Z", "running": true, "jobs": false },
+              { "kind": "session", "id": "s1z" },
+              { "kind": "session", "id": "s1b" },
+              { "kind": "session", "id": "s1a" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "coordinator elsewhere leaves members as rows; no coordinator and a Completed coordinator here still hold them",
+      "folders": [],
+      "foreignFolders": [],
+      "projects": ["P2", "P3", "P4"],
+      "sessions": [
+        { "id": "c2", "workspace": "elsewhere", "project": "P2", "role": "COORDINATOR", "listedAt": "2026-11-20T15:00:00.000Z" },
+        { "id": "m2a", "project": "P2", "listedAt": "2026-11-20T12:00:00.000Z" },
+        { "id": "m2b", "project": "P2", "listedAt": "2026-11-20T10:00:00.000Z" },
+        { "id": "m3a", "project": "P3", "listedAt": "2026-11-20T11:00:00.000Z", "lastTurnAt": "2026-11-20T11:30:00.000Z" },
+        { "id": "m3b", "project": "P3", "activity": "jobs", "listedAt": "2026-11-20T09:00:00.000Z", "createdAt": "2026-11-20T08:00:00.000Z" },
+        { "id": "c4", "lifecycle": "completed", "project": "P4", "role": "COORDINATOR", "listedAt": "2026-11-20T16:00:00.000Z" },
+        { "id": "m4a", "project": "P4", "listedAt": "2026-11-20T08:00:00.000Z" },
+        { "id": "s2a", "listedAt": "2026-11-20T10:30:00.000Z" }
+      ],
+      "reads": [
+        {
+          "view": "open",
+          "folderId": null,
+          "expected": {
+            "folders": [],
+            "entries": [
+              { "kind": "session", "id": "m2a" },
+              { "kind": "project", "id": "P3", "coordinator": null, "memberCount": 2, "placedAt": "2026-11-20T11:00:00.000Z", "spokeAt": "2026-11-20T11:30:00.000Z", "running": false, "jobs": true },
+              { "kind": "session", "id": "s2a" },
+              { "kind": "session", "id": "m2b" },
+              { "kind": "project", "id": "P4", "coordinator": "c4", "memberCount": 1, "placedAt": "2026-11-20T08:00:00.000Z", "spokeAt": "2026-11-19T00:00:00.000Z", "running": false, "jobs": false }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "folders: tallies, a project filed with its coordinator, an unknown folder, and the folder's own page",
+      "folders": [
+        { "id": "F1", "name": "Sprint 10" },
+        { "id": "F2", "name": "Sprint 2" },
+        { "id": "F3", "name": "empty" }
+      ],
+      "foreignFolders": [{ "id": "FX", "name": "Elsewhere" }],
+      "projects": ["P5"],
+      "sessions": [
+        { "id": "f1a", "folder": "F1", "activity": "needsYou", "listedAt": "2026-11-20T10:00:00.000Z" },
+        { "id": "f1b", "folder": "F1", "activity": "running", "listedAt": "2026-11-20T11:00:00.000Z" },
+        { "id": "f2a", "folder": "F2", "activity": "jobs", "listedAt": "2026-11-20T09:00:00.000Z" },
+        { "id": "c5", "folder": "F2", "project": "P5", "role": "COORDINATOR", "listedAt": "2026-11-20T08:00:00.000Z" },
+        { "id": "m5a", "project": "P5", "activity": "needsYou", "listedAt": "2026-11-20T12:00:00.000Z" },
+        { "id": "m5b", "folder": "F1", "project": "P5", "listedAt": "2026-11-20T07:00:00.000Z" },
+        { "id": "u1", "folder": "FX", "listedAt": "2026-11-20T13:00:00.000Z" },
+        { "id": "l1", "listedAt": "2026-11-20T06:00:00.000Z" }
+      ],
+      "reads": [
+        {
+          "view": "open",
+          "folderId": null,
+          "expected": {
+            "folders": [
+              { "folderId": "F3", "rowCount": 0, "needsYou": 0, "running": false, "jobs": false },
+              { "folderId": "F2", "rowCount": 2, "needsYou": 1, "running": false, "jobs": true },
+              { "folderId": "F1", "rowCount": 2, "needsYou": 1, "running": true, "jobs": false }
+            ],
+            "entries": [
+              { "kind": "session", "id": "u1" },
+              { "kind": "session", "id": "l1" }
+            ]
+          }
+        },
+        {
+          "view": "open",
+          "folderId": "F2",
+          "expected": {
+            "folders": null,
+            "entries": [
+              { "kind": "project", "id": "P5", "coordinator": "c5", "memberCount": 3, "placedAt": "2026-11-20T12:00:00.000Z", "spokeAt": "2026-11-19T00:00:00.000Z", "running": false, "jobs": false },
+              { "kind": "session", "id": "f2a" }
+            ]
+          }
+        },
+        {
+          "view": "open",
+          "folderId": "F1",
+          "expected": {
+            "folders": null,
+            "entries": [
+              { "kind": "session", "id": "f1a" },
+              { "kind": "session", "id": "f1b" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "ties: in Open, same placement goes createdAt, then id, a project entry by its own createdAt like a session (the web's compareListed)",
+      "folders": [],
+      "foreignFolders": [],
+      "projects": ["P6"],
+      "sessions": [
+        { "id": "tA", "listedAt": "2026-11-20T10:00:00.000Z", "createdAt": "2026-11-20T09:00:00.000Z" },
+        { "id": "tB", "listedAt": "2026-11-20T10:00:00.000Z", "createdAt": "2026-11-20T09:30:00.000Z" },
+        { "id": "tC", "listedAt": "2026-11-20T10:00:00.000Z", "createdAt": "2026-11-20T08:00:00.000Z" },
+        { "id": "tD", "listedAt": "2026-11-20T10:00:00.000Z", "createdAt": "2026-11-20T08:00:00.000Z" },
+        { "id": "m6a", "project": "P6", "listedAt": "2026-11-20T10:00:00.000Z", "createdAt": "2026-11-20T09:45:00.000Z" },
+        { "id": "tE", "listedAt": "2026-11-20T09:00:00.000Z" }
+      ],
+      "reads": [
+        {
+          "view": "open",
+          "folderId": null,
+          "expected": {
+            "folders": [],
+            "entries": [
+              { "kind": "project", "id": "P6", "coordinator": null, "memberCount": 1, "placedAt": "2026-11-20T10:00:00.000Z", "spokeAt": "2026-11-20T09:45:00.000Z", "running": false, "jobs": false },
+              { "kind": "session", "id": "tB" },
+              { "kind": "session", "id": "tA" },
+              { "kind": "session", "id": "tC" },
+              { "kind": "session", "id": "tD" },
+              { "kind": "session", "id": "tE" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "completed view with a held project: listedAt order for every entry (completedAt says otherwise), no Pinned, folders only where a completed session is, an Open coordinator still files its project",
+      "folders": [
+        { "id": "F7", "name": "Done" },
+        { "id": "F8", "name": "Idle" },
+        { "id": "F9", "name": "Coordinated" }
+      ],
+      "foreignFolders": [],
+      "projects": ["P7", "P8"],
+      "sessions": [
+        { "id": "k1", "lifecycle": "completed", "completedAt": "2026-11-20T08:00:00.000Z", "listedAt": "2026-11-20T10:00:00.000Z" },
+        { "id": "k2", "lifecycle": "completed", "pinnedAt": "2026-11-20T05:00:00.000Z", "completedAt": "2026-11-20T12:00:00.000Z", "listedAt": "2026-11-20T09:00:00.000Z" },
+        { "id": "kf", "lifecycle": "completed", "folder": "F7", "listedAt": "2026-11-20T08:00:00.000Z" },
+        { "id": "o1", "folder": "F8", "listedAt": "2026-11-20T12:00:00.000Z" },
+        { "id": "c7", "project": "P7", "role": "COORDINATOR", "pinnedAt": "2026-11-20T05:00:00.000Z", "listedAt": "2026-11-20T15:00:00.000Z" },
+        { "id": "km1", "lifecycle": "completed", "project": "P7", "listedAt": "2026-11-20T11:00:00.000Z" },
+        { "id": "c8", "folder": "F9", "project": "P8", "role": "COORDINATOR", "listedAt": "2026-11-20T15:00:00.000Z" },
+        { "id": "km2", "lifecycle": "completed", "project": "P8", "listedAt": "2026-11-20T07:00:00.000Z" }
+      ],
+      "reads": [
+        {
+          "view": "completed",
+          "folderId": null,
+          "expected": {
+            "folders": [
+              { "folderId": "F9", "rowCount": 1, "needsYou": 0, "running": false, "jobs": false },
+              { "folderId": "F7", "rowCount": 1, "needsYou": 0, "running": false, "jobs": false }
+            ],
+            "entries": [
+              { "kind": "project", "id": "P7", "coordinator": "c7", "memberCount": 1, "placedAt": "2026-11-20T11:00:00.000Z", "spokeAt": "2026-11-19T00:00:00.000Z", "running": false, "jobs": false },
+              { "kind": "session", "id": "k1" },
+              { "kind": "session", "id": "k2" }
+            ]
+          }
+        },
+        {
+          "view": "open",
+          "folderId": null,
+          "expected": {
+            "folders": [
+              { "folderId": "F9", "rowCount": 1, "needsYou": 0, "running": false, "jobs": false },
+              { "folderId": "F7", "rowCount": 0, "needsYou": 0, "running": false, "jobs": false },
+              { "folderId": "F8", "rowCount": 1, "needsYou": 0, "running": false, "jobs": false }
+            ],
+            "entries": [
+              { "kind": "project", "id": "P7", "coordinator": "c7", "memberCount": 1, "placedAt": "2026-11-20T15:00:00.000Z", "spokeAt": "2026-11-19T00:00:00.000Z", "running": false, "jobs": false }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "completed view, nothing held: GET /sessions?view=completed's order, even where listedAt moved after Complete, and an archived-only row",
+      "folders": [{ "id": "F10", "name": "Kept" }],
+      "foreignFolders": [],
+      "projects": [],
+      "sessions": [
+        { "id": "ka", "lifecycle": "completed", "completedAt": "2026-11-20T10:00:00.000Z", "listedAt": "2026-11-20T15:00:00.000Z" },
+        { "id": "kb", "lifecycle": "completed", "completedAt": "2026-11-20T11:00:00.000Z", "listedAt": "2026-11-20T11:00:00.000Z" },
+        { "id": "kc", "lifecycle": "completed", "archivedAt": "2026-11-20T12:00:00.000Z", "listedAt": "2026-11-20T08:00:00.000Z" },
+        { "id": "kd", "lifecycle": "completed", "pinnedAt": "2026-11-20T05:00:00.000Z", "completedAt": "2026-11-20T09:00:00.000Z", "listedAt": "2026-11-20T09:00:00.000Z", "createdAt": "2026-11-18T00:00:00.000Z" },
+        { "id": "kf", "lifecycle": "completed", "completedAt": "2026-11-20T09:00:00.000Z", "listedAt": "2026-11-20T07:00:00.000Z" },
+        { "id": "kg", "lifecycle": "completed", "folder": "F10", "completedAt": "2026-11-20T13:00:00.000Z", "listedAt": "2026-11-20T13:00:00.000Z" },
+        { "id": "ko", "listedAt": "2026-11-20T16:00:00.000Z" }
+      ],
+      "reads": [
+        {
+          "view": "completed",
+          "folderId": null,
+          "expected": {
+            "folders": [
+              { "folderId": "F10", "rowCount": 1, "needsYou": 0, "running": false, "jobs": false }
+            ],
+            "entries": [
+              { "kind": "session", "id": "kc" },
+              { "kind": "session", "id": "kb" },
+              { "kind": "session", "id": "ka" },
+              { "kind": "session", "id": "kf" },
+              { "kind": "session", "id": "kd" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "attention sections: Needs you and Working lead the Open list from below forty entries, a pinned working session stays Pinned, a working project is Working",
+      "folders": [],
+      "foreignFolders": [],
+      "projects": ["P9"],
+      "sessions": [
+        { "id": "n01", "listedAt": "2026-11-21T10:40:00.000Z" },
+        { "id": "n02", "listedAt": "2026-11-21T10:39:00.000Z" },
+        { "id": "n03", "listedAt": "2026-11-21T10:38:00.000Z" },
+        { "id": "n04", "listedAt": "2026-11-21T10:37:00.000Z" },
+        { "id": "n05", "listedAt": "2026-11-21T10:36:00.000Z" },
+        { "id": "n06", "listedAt": "2026-11-21T10:35:00.000Z" },
+        { "id": "n07", "listedAt": "2026-11-21T10:34:00.000Z" },
+        { "id": "n08", "listedAt": "2026-11-21T10:33:00.000Z" },
+        { "id": "n09", "listedAt": "2026-11-21T10:32:00.000Z" },
+        { "id": "n10", "listedAt": "2026-11-21T10:31:00.000Z" },
+        { "id": "n11", "listedAt": "2026-11-21T10:30:00.000Z" },
+        { "id": "n12", "listedAt": "2026-11-21T10:29:00.000Z" },
+        { "id": "n13", "listedAt": "2026-11-21T10:28:00.000Z" },
+        { "id": "n14", "listedAt": "2026-11-21T10:27:00.000Z" },
+        { "id": "n15", "listedAt": "2026-11-21T10:26:00.000Z" },
+        { "id": "n16", "listedAt": "2026-11-21T10:25:00.000Z" },
+        { "id": "n17", "listedAt": "2026-11-21T10:24:00.000Z" },
+        { "id": "n18", "listedAt": "2026-11-21T10:23:00.000Z" },
+        { "id": "n19", "listedAt": "2026-11-21T10:22:00.000Z" },
+        { "id": "n20", "listedAt": "2026-11-21T10:21:00.000Z" },
+        { "id": "n21", "listedAt": "2026-11-21T10:20:00.000Z" },
+        { "id": "n22", "listedAt": "2026-11-21T10:19:00.000Z" },
+        { "id": "n23", "listedAt": "2026-11-21T10:18:00.000Z" },
+        { "id": "n24", "listedAt": "2026-11-21T10:17:00.000Z" },
+        { "id": "n25", "listedAt": "2026-11-21T10:16:00.000Z" },
+        { "id": "n26", "listedAt": "2026-11-21T10:15:00.000Z" },
+        { "id": "n27", "listedAt": "2026-11-21T10:14:00.000Z" },
+        { "id": "n28", "listedAt": "2026-11-21T10:13:00.000Z" },
+        { "id": "n29", "listedAt": "2026-11-21T10:12:00.000Z" },
+        { "id": "n30", "listedAt": "2026-11-21T10:11:00.000Z" },
+        { "id": "n31", "listedAt": "2026-11-21T10:10:00.000Z" },
+        { "id": "n32", "listedAt": "2026-11-21T10:09:00.000Z" },
+        { "id": "n33", "listedAt": "2026-11-21T10:08:00.000Z" },
+        { "id": "n34", "listedAt": "2026-11-21T10:07:00.000Z" },
+        { "id": "n35", "listedAt": "2026-11-21T10:06:00.000Z" },
+        { "id": "n36", "listedAt": "2026-11-21T10:05:00.000Z" },
+        { "id": "n37", "listedAt": "2026-11-21T10:04:00.000Z" },
+        { "id": "n38", "listedAt": "2026-11-21T10:03:00.000Z" },
+        { "id": "n39", "listedAt": "2026-11-21T10:02:00.000Z" },
+        { "id": "n40", "listedAt": "2026-11-21T10:01:00.000Z" },
+        { "id": "a1", "activity": "needsYou", "listedAt": "2026-11-21T09:00:00.000Z" },
+        { "id": "w1", "activity": "running", "listedAt": "2026-11-21T08:00:00.000Z" },
+        { "id": "wj", "activity": "jobs", "listedAt": "2026-11-21T07:30:00.000Z" },
+        { "id": "pw", "activity": "running", "pinnedAt": "2026-11-21T06:00:00.000Z", "listedAt": "2026-11-21T05:00:00.000Z" },
+        { "id": "c9", "project": "P9", "role": "COORDINATOR", "listedAt": "2026-11-21T04:00:00.000Z" },
+        { "id": "m9", "project": "P9", "activity": "running", "listedAt": "2026-11-21T07:00:00.000Z" },
+        { "id": "z1", "listedAt": "2026-11-21T03:00:00.000Z" }
+      ],
+      "reads": [
+        {
+          "view": "open",
+          "folderId": null,
+          "expected": {
+            "folders": [],
+            "entries": [
+              { "kind": "session", "id": "pw" },
+              { "kind": "session", "id": "a1" },
+              { "kind": "session", "id": "w1" },
+              { "kind": "session", "id": "wj" },
+              { "kind": "project", "id": "P9", "coordinator": "c9", "memberCount": 2, "placedAt": "2026-11-21T07:00:00.000Z", "spokeAt": "2026-11-19T00:00:00.000Z", "running": true, "jobs": false },
+              { "kind": "session", "id": "n01" },
+              { "kind": "session", "id": "n02" },
+              { "kind": "session", "id": "n03" },
+              { "kind": "session", "id": "n04" },
+              { "kind": "session", "id": "n05" },
+              { "kind": "session", "id": "n06" },
+              { "kind": "session", "id": "n07" },
+              { "kind": "session", "id": "n08" },
+              { "kind": "session", "id": "n09" },
+              { "kind": "session", "id": "n10" },
+              { "kind": "session", "id": "n11" },
+              { "kind": "session", "id": "n12" },
+              { "kind": "session", "id": "n13" },
+              { "kind": "session", "id": "n14" },
+              { "kind": "session", "id": "n15" },
+              { "kind": "session", "id": "n16" },
+              { "kind": "session", "id": "n17" },
+              { "kind": "session", "id": "n18" },
+              { "kind": "session", "id": "n19" },
+              { "kind": "session", "id": "n20" },
+              { "kind": "session", "id": "n21" },
+              { "kind": "session", "id": "n22" },
+              { "kind": "session", "id": "n23" },
+              { "kind": "session", "id": "n24" },
+              { "kind": "session", "id": "n25" },
+              { "kind": "session", "id": "n26" },
+              { "kind": "session", "id": "n27" },
+              { "kind": "session", "id": "n28" },
+              { "kind": "session", "id": "n29" },
+              { "kind": "session", "id": "n30" },
+              { "kind": "session", "id": "n31" },
+              { "kind": "session", "id": "n32" },
+              { "kind": "session", "id": "n33" },
+              { "kind": "session", "id": "n34" },
+              { "kind": "session", "id": "n35" },
+              { "kind": "session", "id": "n36" },
+              { "kind": "session", "id": "n37" },
+              { "kind": "session", "id": "n38" },
+              { "kind": "session", "id": "n39" },
+              { "kind": "session", "id": "n40" },
+              { "kind": "session", "id": "z1" }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

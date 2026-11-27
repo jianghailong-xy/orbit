@@ -69,7 +69,7 @@ export async function findCredentialInReads(
 }
 
 /**
- * Refuses an upload that holds a credential (docs/orbit-files-design.md §2.9). The file is refused as it is and never
+ * Refuses an upload that holds a credential (docs/drive-design.md §2.9). The file is refused as it is and never
  * edited, because a kept file is the one its agent saw and its sha256 names. The route's cleanup removes the temporary
  * file, so nothing of it stays. The answer says what the credential looks like and where, and never repeats it.
  */

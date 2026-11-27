@@ -70,7 +70,8 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
     var action by remember { mutableStateOf<DirectoryDialog?>(null) }
     var projectMenu by remember { mutableStateOf<SessionProjectRow?>(null) }
     var pulling by remember { mutableStateOf(false) }
-    var pinnedCollapsed by rememberPinnedCollapsed()
+    var pinnedCollapsed by rememberSectionCollapsed("pinnedCollapsed")
+    var needsYouCollapsed by rememberSectionCollapsed("needsYouCollapsed")
     val sidebar by rememberProjectSidebar(app, handle, api)
     val asks by app.realtime.directoryAsks.collectAsState()
     val trashing by app.trashing.ids.collectAsState()
@@ -143,7 +144,7 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
                 contentSessions = sessions, watching = watching, recaps = recaps, workspaceId = workspace)
         }
         val groups = directoryGroups(listing?.entries?.map { it.groupingSession } ?: visibleSessions(local, data.folders, workspace,
-            folderId, view, tag, grouping == Grouping.TAG), view, grouping)
+            folderId, view, tag, grouping == Grouping.TAG), view, grouping, tagFiltered = tag != null)
         // A folder counts a project's members where their coordinator is filed.
         val counted = listing?.assigned ?: local
         val folders = if (!showFolders) emptyList() else data.folders.filter { f ->
@@ -223,16 +224,20 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
                             }
                             content.groups.forEachIndexed { index, group ->
                                 val pinned = group.id == "time:0"
+                                val needsYou = group.id == NEEDS_YOU_GROUP
                                 // iOS: a list that opens on today would be saying what its rows say, and the title costs half a row.
                                 if (index != 0 || group.id != "time:1") stickyHeader(key = "heading:${group.id}") {
                                     when {
-                                        pinned -> PinnedHeading(group.title, pinnedCollapsed) { pinnedCollapsed = !pinnedCollapsed }
+                                        pinned -> FoldHeading(group.title, pinnedCollapsed, SessionListCopy.PINNED_SHOWS, SessionListCopy.PINNED_HIDES,
+                                            "pinned-heading") { pinnedCollapsed = !pinnedCollapsed }
+                                        needsYou -> FoldHeading(group.title, needsYouCollapsed, SessionListCopy.NEEDS_YOU_SHOWS, SessionListCopy.NEEDS_YOU_HIDES,
+                                            "needs-you-heading") { needsYouCollapsed = !needsYouCollapsed }
                                         group.id.startsWith("tag:") -> TagHeading(group.sessions.first().tags.first())
                                         group.id == "bucket:untagged" -> TagHeading(null)
                                         else -> ListHeading(group.title)
                                     }
                                 }
-                                if (!pinned || !pinnedCollapsed) items(group.sessions, key = { it.id }) { session ->
+                                if (!(pinned && pinnedCollapsed) && !(needsYou && needsYouCollapsed)) items(group.sessions, key = { it.id }) { session ->
                                     val project = content.projects[session.id]
                                     // A project's row opens its coordinator's conversation (owner 2026-11-11, docs/mocks/project-sessions-column
                                     // board 5), whose bar opens the project's sessions; a project with no coordinator opens them as a page. A row
@@ -353,13 +358,32 @@ private fun SearchResultsList(query: String, api: DirectoryApi, open: (OrbitRout
             if (result.hits.isEmpty()) item { StatusMessage(if (query.isBlank()) "No sessions yet" else "No matches",
                 if (query.isBlank()) "Recent sessions will appear here." else "Try another name or message.") }
             items(result.hits, key = { it.id }) { hit ->
-                ListItem(headlineContent = { Text(hit.title) }, supportingContent = {
-                    Column { Text(listOfNotNull(hit.agent?.name, hit.lifecycleState, hit.runState ?: hit.status).joinToString(" · "))
-                        hit.snippet?.let { Text(it, style = MaterialTheme.typography.bodyMedium) } }
-                }, modifier = Modifier.clickable(role = Role.Button) { open(OrbitRoute(Destination.SESSION, hit.id, hit.agent?.id, origin = Origin.SEARCH)) })
+                SearchHitRow(hit) { open(OrbitRoute(Destination.SESSION, hit.id, hit.agent?.id, origin = Origin.SEARCH)) }
             }
         }
     }
+}
+
+/** One search result. With the session facts it leads with the state icon and says the state word and then every mark (iOS
+ * `SessionSearchRow`), a screen reader hearing both as the row's value, as [SessionRow]'s; from an older server, today's line. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun SearchHitRow(hit: SearchHit, onOpen: () -> Unit) {
+    val state = SessionDisplay.state(hit.displayFacts)
+    val value = SessionDisplay.text(hit.displayFacts, ", ")
+    val line = listOfNotNull(hit.agent?.name, hit.lifecycleState, state?.word ?: hit.runState ?: hit.status).joinToString(" · ")
+    ListItem(headlineContent = { Text(hit.title) }, supportingContent = {
+        Column {
+            // The marks wrap under the line where they do not fit beside it, so none is clipped.
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+                Text(line)
+                SessionMarkChips(SessionDisplay.marks(hit.displayFacts))
+            }
+            hit.snippet?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+        }
+    }, leadingContent = state?.let { { SessionStateGlyph(it) } },
+        modifier = Modifier.clickable(role = Role.Button, onClick = onOpen)
+            .then(if (value == null) Modifier else Modifier.semantics { stateDescription = value }))
 }
 
 /** The machine a workspace's sessions run on, by the name its page gives it (web `machineName(runner)`): what a session held for the

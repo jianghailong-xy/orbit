@@ -62,7 +62,7 @@ fun SessionTasksCard(app: OrbitApplication, handle: SessionHandle, sessionId: St
             if (single != null) {
                 Text(single.title, Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, color = accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (single.watched) Eye(single.stale)
-                single.pill?.let { WatchTaskStatusPill(it) }
+                single.pill?.let { LineEnd(it) }
             } else {
                 if (card.watching > 0) Row(Modifier.testTag("session-tasks:watching"), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -72,7 +72,7 @@ fun SessionTasksCard(app: OrbitApplication, handle: SessionHandle, sessionId: St
                 val band = card.band
                 if (band != null) {
                     BandLine(band, Modifier.weight(1f))
-                    band.row.pill?.let { WatchTaskStatusPill(it) }
+                    band.row.pill?.let { LineEnd(it) }
                 } else Spacer(Modifier.weight(1f))
             }
             Icon(if (opened) WatchIcons.chevronDown else WatchIcons.chevronRight, null, Modifier.size(14.dp), tint = secondary)
@@ -96,6 +96,16 @@ fun SessionTasksCard(app: OrbitApplication, handle: SessionHandle, sessionId: St
 
 @Composable
 private fun LocalOrbitColorsNeedsYou() = io.orbitd.android.ui.LocalOrbitColors.current.needsYou
+
+/** The line's right edge: a running task is the spinner alone, the Background row's running mark (13dp, a 2dp stroke, the accent) in
+ * the same column; any other state is its pill. The opened list keeps every pill. */
+@Composable
+internal fun LineEnd(pill: WatchTaskPill) {
+    if (pill.kind == WatchTaskPill.Kind.RUNNING)
+        CircularProgressIndicator(Modifier.size(13.dp).semantics { contentDescription = pill.label }.testTag("session-tasks:spinner"),
+            strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
+    else WatchTaskStatusPill(pill)
+}
 
 /** The eye a watched row carries, orange while the watch over it goes unchecked. */
 @Composable

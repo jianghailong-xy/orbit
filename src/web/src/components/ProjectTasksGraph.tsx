@@ -1,6 +1,7 @@
 import { lazy } from 'react';
 import type { ProjectDependencyGraphResponse } from '../lib/projectDependencyGraph';
 import { LazyBoundary } from './ErrorBoundary';
+import { Tooltip } from './ui/Tooltip';
 import './ui/Typography.css';
 
 /**
@@ -54,12 +55,11 @@ export function ProjectTasksGraph({
         <h4 className="orbit-typography pdg-section-title" style={{ margin: 0 }}>
           Task graph
         </h4>
-        <span
-          className="pdg-legend"
-          title="Prerequisite → dependent · boxes are parent tasks"
-        >
-          Prerequisite → dependent · boxes are parent tasks
-        </span>
+        <Tooltip content="Prerequisite → dependent · boxes are parent tasks" truncatedOnly side="bottom">
+          <span className="pdg-legend">
+            Prerequisite → dependent · boxes are parent tasks
+          </span>
+        </Tooltip>
       </div>
 
       <LazyBoundary

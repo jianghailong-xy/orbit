@@ -118,7 +118,8 @@ final class CrossingBatchesTests: XCTestCase {
         XCTAssertEqual(CrossingBatches.listHead(for: one), "Tasks to take out")
         XCTAssertEqual(CrossingBatches.consequence(one), CrossingBatches.takeOutConsequence)
         XCTAssertEqual(CrossingBatches.consequence(one),
-                       "Confirming takes the task out of this project as soon as you answer, and nobody has to send the request again.")
+                       "Confirming takes the task out of this project as soon as you answer; no project's acceptance counts it any more.")
+        XCTAssertEqual(CrossingBatches.takeOutConsequence, ProjectCrossings.moveOutApproveConsequence)
         XCTAssertEqual(CrossingBatches.approveLabel(for: one), "Take it out")
         XCTAssertEqual(CrossingBatches.refuseLabel(for: one), "Keep it here")
         XCTAssertEqual(CrossingBatches.badge(one), "move")
@@ -129,13 +130,21 @@ final class CrossingBatchesTests: XCTestCase {
         XCTAssertEqual(CrossingBatches.title(many), "Take these tasks out of the project?")
         XCTAssertEqual(CrossingBatches.summary(many), "2 tasks to take out of Runner v1")
         XCTAssertEqual(CrossingBatches.consequence(many),
-                       "Confirming takes the tasks out of this project as soon as you answer, and nobody has to send the request again.")
+                       "Confirming takes the tasks out of this project as soon as you answer; no project's acceptance counts them any more.")
         XCTAssertEqual(CrossingBatches.approveLabel(for: many), "Take them out")
         XCTAssertEqual(CrossingBatches.refuseLabel(for: many), "Keep them here")
 
         let answered = CrossingBatches.batches([outRow("O3", state: "APPLIED", requestedAt: at(1),
                                                        decidedAt: at(5))], projectID: "34bSource")[0]
         XCTAssertEqual(CrossingBatches.badge(answered), "taken out")
+        // Answered, the card says what happened, and the rows leave their state to the receipt.
+        XCTAssertEqual(CrossingBatches.title(answered), "Task taken out of the project")
+        XCTAssertEqual(CrossingBatches.summary(answered), "1 task taken out of Runner v1")
+        XCTAssertNil(CrossingBatches.stateLine(answered.rows[0], in: answered))
+        let kept = CrossingBatches.batches([outRow("O4", state: "DENIED", requestedAt: at(1),
+                                                   decidedAt: at(5))], projectID: "34bSource")[0]
+        XCTAssertEqual(CrossingBatches.title(kept), "Task kept in the project")
+        XCTAssertEqual(CrossingBatches.summary(kept), "1 task kept in Runner v1")
         // Into-batches keep their current words.
         let into = CrossingBatches.batches([row("A", requestedAt: at(1))], projectID: Self.here)[0]
         XCTAssertFalse(into.out)
@@ -351,7 +360,9 @@ final class CrossingBatchesTests: XCTestCase {
                        ProjectCrossings.label("APPLIED"))
         XCTAssertEqual(CrossingBatches.showMore(5), "Show 5 more")
         XCTAssertEqual(CrossingBatches.shownRows, 3)
-        XCTAssertEqual(CrossingBatches.provenance, "From Orbit — not the requesting agent.")
+        XCTAssertEqual(CrossingBatches.provenance, "Written by Orbit — not the requesting agent.")
+        XCTAssertEqual(CrossingBatches.reasonsHead(1), "Reason given by the requesting agent")
+        XCTAssertEqual(CrossingBatches.reasonsHead(2), "Reasons given by the requesting agent")
     }
 
     func testReasonsAreDistinctAndQuoted() {

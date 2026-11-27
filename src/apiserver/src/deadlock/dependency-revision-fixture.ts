@@ -201,11 +201,11 @@ export const DELETE_EDGE =
  * at COMMIT.
  */
 export const INSERT_COORDINATOR_SESSION = `
-  INSERT INTO "session" ("id", "title", "prompt", "status", "provider", "provider_builtin",
+  INSERT INTO "session" ("id", "title", "prompt", "turn_state", "provider", "provider_builtin",
     "uses_runtime_default_model", "source", "creator_id", "owner_id", "task_id", "workspace_id",
     "assigned_runner_id", "dispatch_origin", "run_source", "resolution",
     "snapshot_frozen_at", "updated_at")
-  VALUES ($1::uuid, 'dispatch', 'dispatch', 'PENDING', 'claude', true, true, 'user',
+  VALUES ($1::uuid, 'dispatch', 'dispatch', 'QUEUED', 'claude', true, true, 'user',
     $2::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid,
     'PROJECT_COORDINATOR', 'PROJECT_COORDINATOR', '{"v": 1}'::jsonb,
     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`;

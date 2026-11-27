@@ -18,7 +18,6 @@ import {
   CreatorType,
   Prisma,
   ProjectStatus,
-  RunStatus,
   SessionDispatchOrigin,
   SessionRunSource,
   Task,
@@ -32,11 +31,13 @@ import {
   keyDialect,
   PermissionMode,
   planUsageBlockedUntil,
+  PROJECT_REOPEN_TOOL,
   planUsageReported,
   RunEventType,
+  RunStatus,
   SessionEndReason,
   TaskStatus,
-  USAGE_LIMIT_ERROR_MARKERS,
+  RunFailureKind,
   uuidToBase62,
   type ControlTaskChanged,
   type PlanUsage,
@@ -106,6 +107,8 @@ import {
 } from './project-pause-dispatch';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { CoordinatorFactQueueService } from '../projects/coordinator-fact-queue.service';
+import { TaskRunIdleService } from '../projects/task-run-idle.service';
+import { ProjectLineBlockedService } from '../projects/project-line-blocked.service';
 import { CoordinatorEvidenceQueueService } from '../projects/coordinator-evidence-queue.service';
 import { EvidenceReviewService } from './evidence-review.service';
 import { OwnerConfirmationReviewService } from './owner-confirmation-review.service';
@@ -139,8 +142,18 @@ import {
   signedOutEngineRefusal,
 } from '../sessions/engine-signin-preflight';
 import { RUNNER_BEATS } from '../runners/runner-presence';
+import { readSessionPhaseFields } from '../sessions/session-phase';
+import {
+  LEGACY_STATUS_SELECT,
+  legacySessionStatus,
+  legacySessionStatusSql,
+  readLandingSettlements,
+  withoutWordFacts,
+} from '../sessions/session-legacy-words';
+import { sessionTurnStateSql, turnStateFilter } from '../sessions/session-turn-state';
 import { withSessionState } from '../sessions/session-state';
 import {
+  readSessionBackgroundFields,
   readTaskWorkCarriers,
   sessionCarriesTaskSql,
   taskRunOverlay,
@@ -256,9 +269,11 @@ import {
   QUOTA_BLIND_RETRY_BACKOFF_MS,
   autoRunEnd,
 } from './task-retry-policy';
+import { failureKindIs } from '../common/run-failure-kind-filter';
+import { countedFilter } from '../common/run-not-counted';
 import {
   heldFilter,
-  heldStatusFilter,
+  isHeld,
   isReleased,
   releasedFilter,
   releaseFinishedTheWorkFilter,
@@ -271,7 +286,13 @@ export {
   MAX_AUTO_RUN_FAILURES,
   QUOTA_BLIND_RETRY_BACKOFF_MS,
 } from './task-retry-policy';
-import { TASK_OCCUPYING } from './reclaim-stalled-task';
+import {
+  postReplacementComment,
+  REPLACEMENT_WINDOW_MS,
+  replacementComment,
+  replacementOf,
+  replacementRoom,
+} from './refused-run-replacement';
 import {
   clearDispatchRefusal,
   FORK_REFUSAL_STANDS_SQL,
@@ -308,11 +329,17 @@ import {
   readModelHintOptions,
   readTaskRouteSummaries,
   recordTaskRouteDecision,
+  routeOfPlan,
   taskRouteReads,
+  withTrialHeld,
+  type PlannedTaskRunRoute,
   type TaskRouteReads,
   type TaskRouteSubject,
 } from './task-route-decision';
+import { claimTrialByKey } from '../providers/account-health.service';
+import type { ModelRoutingHold } from './model-routing';
 import {
+  REPLACEMENT_TOKEN,
   TASK_RUN_TRIGGER,
   taskRunBatchId,
   taskRunDesiredSessionId,
@@ -341,6 +368,7 @@ import { readTaskProgress } from './task-progress.service';
 import { DagOp, effectiveOps, findCycle, resultingEdges, stateChanges } from './task-dag';
 import { manualRunnableTaskSql } from './manual-runnable-task-sql';
 import { automaticAccount, runAccount } from '../providers/plan-usage-accounts';
+import { withAccountHealth } from '../providers/account-health-blocked';
 import { ACCOUNT_CHOICE, accountEnvVar } from '../providers/account';
 import { sanitizeRunnerEngines } from '../common/runner-engines';
 import { readOwnerConfirmationRows } from './owner-confirmation-read';
@@ -388,6 +416,7 @@ import {
   taskCriterionChangeRefusalBody,
   taskSelfRewrittenStandardRefusalBody,
 } from './task-completion-criterion-change-guard';
+import { IN_FLIGHT_JOB_STATES, IN_FLIGHT_JOB_STATES_SQL } from '../projects/in-flight-job-states';
 import {
   DAG_CHANGE_CARD_TOOL,
   TASK_BATCH_CARD_TOOL,
@@ -884,6 +913,13 @@ export type TaskRunAnswer =
         | 'project-not-started'
         | 'project-paused'
         /**
+         * Nothing can run it now: every account that could has been set aside by account health
+         * (docs/routing-account-health-design.md §7.5). Automatic callers only; a person's start is
+         * refused with ACCOUNT_NEEDS_ACTION. Released, not frozen: the hold lifts when the first of those
+         * accounts' trials is due, and the same moment then starts the task.
+         */
+        | 'account-needs-action'
+        /**
          * The moment this request names has passed: `task_dispatch_epoch` has moved since the scan
          * that produced this delivery. Terminal, and the one automatic stand-down that is — the
          * epoch only goes up, so the moment this token names can never come back, and every later
@@ -1287,6 +1323,9 @@ export function mayBeSweepCandidate(task: {
   return task.status === TaskStatus.OPEN && task.autoRunWhenReady === true
     && (task.assigneeId ?? task.assignee?.id) != null;
 }
+
+/** How many accounts a dispatch may find already being tried before it takes the route it has (§6.5). */
+const TRIAL_CLAIM_ROUNDS = 3;
 
 const AUTO_RUN_READY_SQL = Prisma.sql`
   t.status = 'OPEN'::task_status
@@ -1739,6 +1778,12 @@ const INDEPENDENT_DISPATCH_MAX_PER_SWEEP = 200;
 export interface AutoDispatch {
   /** `task_dispatch_epoch.epoch` as the candidate scan read it, and the epoch its token names. */
   observedEpoch: bigint;
+  /**
+   * This start continues one a person made: the replacement of a run they started that its account refused
+   * (docs/routing-account-health-design.md §7.3). A project not started yet does not hold it back, as it did not
+   * hold back the person's start; a paused one still does.
+   */
+  continuesManualStart?: boolean;
 }
 
 /**
@@ -2329,6 +2374,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
      */
     @Optional() conditions?: ConditionsService,
     @Optional() private readonly coordinatorFacts?: CoordinatorFactQueueService,
+    @Optional() private readonly runIdle?: TaskRunIdleService,
+    @Optional() private readonly lineBlocked?: ProjectLineBlockedService,
   ) {
     this.conditions = conditions ?? new ConditionsService(prisma);
     // A task's startWhen fired (docs/condition-triggers-design.md §5.2): in the firing's own transaction, the task
@@ -2802,6 +2849,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // has no turn ending is not left with revisions waiting (coordinator-evidence-queue.service.ts).
       .then(() => this.deliverLooksFinishedOwedTo())
       .then(() => this.coordinatorFacts?.deliverOwedTo())
+      .then(() => this.runIdle?.tick())
+      .then(() => this.lineBlocked?.tick())
       .then(() => this.evidenceQueue?.deliverToIdleCoordinators())
       .then(() => this.evidenceReviews?.deliverOwedTo())
       .then(() => this.evidenceReviews?.deliverSendBacksOwedTo())
@@ -2813,7 +2862,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // The orphan sweep, last and on this timer for the reason at the top of this block: it reads
       // what the sweeps before it have just delivered, so it does not report as untold what this
       // same tick handed over. It runs every few ticks (`ORPHAN_SWEEP_INTERVAL_MS`) and never rejects.
-      .then(() => this.orphanSweep?.tick());
+      .then(() => this.orphanSweep?.tick())
+      // The decision cards that became the owner's since the last tick, pushed once each (push/owner-cards.ts): after
+      // the deliveries above, so a revision this tick just handed to its reviewer is held, not pushed. Never rejects.
+      .then(async () => { await this.push?.notifyDecisionCards(); });
   }
 
   onModuleDestroy(): void {
@@ -3418,7 +3470,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       SELECT job."id"
         FROM "task" waited_on
         JOIN "project_integration_job" job
-          ON job."state" IN ('QUEUED', 'RUNNING')
+          ON job."state" IN ${IN_FLIGHT_JOB_STATES_SQL}
          AND (job."task_id" = waited_on."id"
               OR (job."kind" = 'OBSERVE_LANDING' AND job."project_id" = waited_on."project_id")
               OR job."promotion_id" IN (
@@ -3869,7 +3921,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     taskId: string,
   ): Promise<void> {
     const live = await tx.$queryRaw<Array<{ id: string; status: string }>>(Prisma.sql`
-      SELECT s."id", s."status"::text AS "status" FROM "session" s
+      SELECT s."id", ${legacySessionStatusSql('s')} AS "status" FROM "session" s
        WHERE s."task_id" = ${taskId}::uuid AND s."owner_id" = ${ownerId}::uuid
          AND s."deleted_at" IS NULL
          -- Every task-linked session this release creates starts the task's work, so "any live
@@ -7107,7 +7159,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             + `${uuidToBase62(from)}, which is settled, and a settled project gives up only work `
             + 'none of its criteria count'
           : `project ${to ? uuidToBase62(to) : '(none)'} is not open, and a settled project takes no work until `
-            + 'it is reopened');
+            + 'the account owner reopens it. The session that asked for this move can ask them with '
+            + `${PROJECT_REOPEN_TOOL} (the project id, why, and the work it plans to add)`);
     }
     await this.handoffs.assertMoveNotLanding(tx, ownerId, taskId, {
       handoffId: row.id,
@@ -8307,7 +8360,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // The Ready tab is served by RUNNABLE_TASK_SQL, not a Prisma where — see that constant for
     // why. Every other tab keeps its Prisma filter.
     const filteredWhere: Prisma.TaskWhereInput = runningOnly
-      ? { ...scopedWhere, sessions: { some: { status: RunStatus.RUNNING } } }
+      ? { ...scopedWhere, sessions: { some: turnStateFilter(['IN_FLIGHT']) } }
       : { ...scopedWhere };
     if (statuses) filteredWhere.status = { in: statuses };
     const search = query.q?.trim().slice(0, 200);
@@ -8369,7 +8422,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const hasMore = rows.length > limit;
     const pageTasks = hasMore ? rows.slice(0, limit) : rows;
     const openIds = pageTasks.filter(mayBeSweepCandidate).map((task) => task.id);
-    const [withRun, states, runnableIds, awaitingIds, holds] = await Promise.all([
+    const [withRun, states, runnableIds, awaitingIds, holds, accountHolds] = await Promise.all([
       this.withRunning(ownerId, pageTasks),
       this.dependencyStatesFor(ownerId, pageTasks.map((task) => task.id)),
       this.runnableTaskIds(ownerId, pageTasks.map((task) => task.id)),
@@ -8377,6 +8430,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       openIds.length > 0
         ? this.signInHolds(ownerId, Prisma.sql`t.id = ANY(${openIds}::uuid[])`)
         : new Map<string, SignInHold>(),
+      this.accountHoldsFor(ownerId, openIds),
     ]);
     const items = withRun.map((task) => {
       const dependencyState = states.get(task.id) ?? 'NONE';
@@ -8389,6 +8443,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         confirmationUnderReview: awaitingIds.underReview.has(task.id),
         // The row's Held pill: the task read's `hold`, by the same read (signInHolds).
         hold: holds.get(task.id) ?? null,
+        // Why its next automatic start stands down: no account that could run it can run now (§7.5).
+        accountHold: accountHolds.get(task.id) ?? null,
       };
     });
     const nextCursor =
@@ -8413,13 +8469,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const [statusGroups, running, queued, runnable] = await Promise.all([
       this.prisma.task.groupBy({ by: ['status'], where: scope, _count: { _all: true } }),
       this.prisma.task.count({
-        where: { ...scope, sessions: { some: { status: RunStatus.RUNNING } } },
+        where: { ...scope, sessions: { some: turnStateFilter(['IN_FLIGHT']) } },
       }),
       this.prisma.task.count({
         where: {
           ...scope,
-          sessions: { some: { status: RunStatus.PENDING } },
-          NOT: { sessions: { some: { status: RunStatus.RUNNING } } },
+          sessions: { some: turnStateFilter(['QUEUED']) },
+          NOT: { sessions: { some: turnStateFilter(['IN_FLIGHT']) } },
         },
       }),
       this.runnableTaskCount(scope),
@@ -8559,7 +8615,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const where: Prisma.TaskWhereInput = {
       ...scope,
       OR: [
-        { sessions: { some: { status: { in: [RunStatus.RUNNING, RunStatus.PENDING] } } } },
+        { sessions: { some: turnStateFilter(['IN_FLIGHT', 'QUEUED']) } },
         { status: { in: [TaskStatus.IN_PROGRESS, TaskStatus.FAILED] } },
       ],
     };
@@ -9677,12 +9733,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         sessions: {
           orderBy: { createdAt: 'desc' },
           select: {
+            // What the run's word on the wire is derived from (sessions/session-legacy-words.ts). Its
+            // `endReason` is on the wire too: a graceful recycle and a hard stop both read CANCELLED, so
+            // the panel's run chip needs the reason to tell "dormant" from "cancelled" (TaskDetailPanel).
+            ...LEGACY_STATUS_SELECT,
             id: true,
             title: true,
-            status: true,
-            // A graceful recycle and a hard stop both settle CANCELLED, so the panel's run
-            // chip needs the reason to tell "dormant" from "cancelled" (see TaskDetailPanel).
-            endReason: true,
             completedAt: true,
             archivedAt: true,
             deletedAt: true,
@@ -9698,10 +9754,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         },
         creatorSession: {
           select: {
+            ...LEGACY_STATUS_SELECT,
             id: true,
             title: true,
-            status: true,
-            endReason: true,
             completedAt: true,
             archivedAt: true,
             deletedAt: true,
@@ -9735,7 +9790,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // and a row with work of its own is one whose detail has a verifier state like any other.
     const [
       dependencyFacts, supersession, autoRunSkipped, workState, progress, verifier, routes, modelHintOptions, integrations,
-      forkSource, runsWith, signInHolds,
+      forkSource, runsWith, signInHolds, accountHold,
     ] =
       await Promise.all([
         this.dependencyFactsFor(ownerId, [id]),
@@ -9757,15 +9812,27 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         mayBeSweepCandidate(task)
           ? this.signInHolds(ownerId, Prisma.sql`t.id = ${task.id}::uuid`)
           : new Map<string, SignInHold>(),
+        mayBeSweepCandidate(task) ? this.accountHold(ownerId, task) : null,
       ]);
     const dependencyState = computeDependencyState(dependencyFacts.get(id) ?? []);
+    // The session facts of every run, from the function every other session payload reads
+    // (sessions/session-phase.ts), so a run here answers as the same session does elsewhere.
+    const runIds = (task.sessions ?? []).map((session) => session.id);
+    const [runFacts, runBackground, landings] = await Promise.all([
+      readSessionPhaseFields(this.prisma, runIds),
+      // And the Background mark's inputs, activity and runningBgCount, as the list row reads them.
+      readSessionBackgroundFields(this.prisma, runIds),
+      readLandingSettlements(this.prisma, task.sessions ?? []),
+    ]);
     return {
       ...task,
       sessions: (task.sessions ?? []).map((session) => ({
-        ...withSessionState(session),
+        ...withoutWordFacts(withSessionState(session, landings.get(session.id))),
+        ...runFacts.get(session.id),
+        ...runBackground.get(session.id),
         route: routes.get(session.id) ?? null,
       })),
-      creatorSession: task.creatorSession ? withSessionState(task.creatorSession) : null,
+      creatorSession: task.creatorSession ? withoutWordFacts(withSessionState(task.creatorSession)) : null,
       comments: await this.resolveCommentAuthors(task.comments),
       dependencyState,
       blocked: !canRun(dependencyState),
@@ -9773,6 +9840,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // Why the auto-run sweep holds this task although it reads Ready: its engine is signed out on its
       // runner (signInHolds, the sweep's own rule). Null while nothing of the kind holds it.
       hold: signInHolds.get(task.id) ?? null,
+      // Why its next automatic start stands down although it reads Ready: no account that could run it can run now
+      // (docs/routing-account-health-design.md §7.5), with each account's line and when the first is tried again.
+      // Null while an account can run it.
+      accountHold: accountHold ?? null,
       // While it waits for its condition: "Waiting for: <text>", with the condition's lastValue and lastSampleAt.
       // Not a dependency state, and not read by the dependency gate: a peer of runAt (task-start-when.ts).
       startWhen: startWhenView(task.startWhenCondition),
@@ -11220,7 +11291,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                   ownerId,
                   taskId: id,
                   kind: 'LAND_TASK',
-                  state: { in: ['QUEUED', 'RUNNING'] },
+                  state: { in: [...IN_FLIGHT_JOB_STATES] },
                 },
                 select: { id: true, projectId: true },
               });
@@ -11979,6 +12050,91 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * §7.3 of docs/routing-account-health-design.md: a run its account refused at admission is replaced by a new run of
+   * its task at once, with no backoff, for every task whether or not it auto-runs (owner decision Q3). Called by the
+   * runner API once the run's release and its account health are committed, so the new dispatch routes on what the
+   * refusal taught it.
+   *
+   * Which runs are replaced, and how they count, is replacementOf's. The bound: at most REPLACEMENTS_PER_HOUR a task
+   * per hour, refused trials excepted (§6.5). Past it an auto-run task is the retry policy's again, which holds it for
+   * the same window (autoRunRetryDecisions), and any other task stops with the last refusal shown.
+   *
+   * The dispatch is an automatic one at the task's current moment, under a request named after the refused run
+   * (TASK_RUN_TRIGGER.replacement): both ends that report one refusal are one request, and every stand-down the
+   * automatic doors take applies to it, the hold of §7.5 included (nothing can run it: no run is started, and the
+   * task waits for the first trial). A task that does not auto-run records the replacement on its timeline.
+   */
+  async replaceRefusedRun(sessionId: string): Promise<TaskRunAnswer | null> {
+    const run = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+      select: {
+        id: true, ownerId: true, taskId: true, ...LEGACY_STATUS_SELECT, startsTaskWork: true, runSource: true,
+        failureKind: true, error: true, accountHealthEffect: true, admissionFailure: true, retryAt: true, createdAt: true,
+      },
+    });
+    // Not until it is released: a failed turn's report can precede its release, and the run still holds the task until
+    // then. The release asks again.
+    if (!run?.finishedAt) return null;
+    // The word derived from the facts (plan §3.1): FAILED exactly when it was released by a failure, which is what
+    // replacementOf asks of it. A task's run is never a LANDING container, so no landing row.
+    const kind = replacementOf({ ...run, status: legacySessionStatus(run) });
+    if (!kind || !run.taskId) return null;
+    const taskId = run.taskId;
+    const task = await this.prisma.task.findFirst({
+      where: { id: taskId, ownerId: run.ownerId },
+      select: { status: true, autoRunWhenReady: true, dispatchEpoch: { select: { epoch: true } } },
+    });
+    if (!task || (task.status !== TaskStatus.OPEN && task.status !== TaskStatus.IN_PROGRESS)) return null;
+    const now = this.now();
+    if (kind === 'REPLACE') {
+      const counted = (await this.replacementStarts(run.ownerId, [taskId], now)).get(taskId) ?? [];
+      const room = replacementRoom(counted, now);
+      if (!room.room) {
+        this.logger.log(`task ${taskId}: run ${run.id} was refused by its account; not replaced, the bound of `
+          + `replacements an hour is spent until ${room.until.toISOString()}`);
+        return null;
+      }
+    }
+    const answer = await this.execute(
+      run.ownerId,
+      taskId,
+      { observedEpoch: task.dispatchEpoch?.epoch ?? 0n, continuesManualStart: run.runSource === 'MANUAL' },
+      TASK_RUN_TRIGGER.replacement(taskId, run.id, kind === 'TRIAL'),
+    );
+    if (answer.ok) {
+      this.logger.log(`task ${taskId}: run ${run.id} was refused by its account; replaced by ${answer.sessionId}`);
+      if (!task.autoRunWhenReady) {
+        const ordinal = await this.prisma.session.count({
+          where: { taskId, startsTaskWork: true, createdAt: { lte: run.createdAt } },
+        });
+        await postReplacementComment(this.prisma, taskId, replacementComment(ordinal)).catch((e) =>
+          this.logger.warn(`task ${taskId}: replacement not recorded on the task: ${e?.message ?? e}`));
+      }
+    }
+    return answer;
+  }
+
+  /**
+   * The starts of each task's replacements in the last hour that count against the bound (§7.3): the replacement
+   * requests that started a run, a refused trial's excepted (its token is its own kind).
+   */
+  private async replacementStarts(ownerId: string, taskIds: string[], now: Date): Promise<Map<string, Date[]>> {
+    const starts = new Map<string, Date[]>();
+    if (taskIds.length === 0) return starts;
+    const rows = await this.prisma.$queryRaw<Array<{ taskId: string; createdAt: Date }>>`
+      SELECT split_part(r."request_token", ':', 2) AS "taskId", r."created_at" AS "createdAt"
+        FROM "task_run_request" r
+       WHERE r."owner_id" = ${ownerId}::uuid
+         AND r."action_kind" = ${TASK_RUN_ACTION.execute}
+         AND r."created_at" > ${new Date(now.getTime() - REPLACEMENT_WINDOW_MS)}
+         AND r."request_token" LIKE ${`${REPLACEMENT_TOKEN}%`}
+         AND split_part(r."request_token", ':', 2) IN (${Prisma.join(taskIds)})
+         AND r."result"->>'sessionId' IS NOT NULL`;
+    for (const row of rows) starts.set(row.taskId, [...(starts.get(row.taskId) ?? []), row.createdAt]);
+    return starts;
+  }
+
+  /**
    * Move one task's dispatch epoch past the moment the retry policy read, and only past that one.
    *
    * A compare-and-set on the epoch the scan saw. Two passes that both decided to re-arm the same
@@ -12396,13 +12552,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         SELECT r.id, r."max_concurrent" - count(s.id)::int AS free
         FROM "runner" r
         LEFT JOIN "session" s
-          ON s."assigned_runner_id" = r.id AND s.status IN ('RUNNING', 'PENDING')
+          ON s."assigned_runner_id" = r.id AND ${sessionTurnStateSql('s')} IN ('IN_FLIGHT', 'QUEUED')
         GROUP BY r.id, r."max_concurrent"`,
       this.prisma.$queryRaw<Array<{ id: string; free: number }>>`
         SELECT tl.id, tl."max_concurrent" - count(s.id)::int AS free
         FROM "task_list" tl
         LEFT JOIN "session" s
-          ON s."batch_id" = tl.id AND s.status IN ('RUNNING', 'PENDING')
+          ON s."batch_id" = tl.id AND ${sessionTurnStateSql('s')} IN ('IN_FLIGHT', 'QUEUED')
         WHERE tl."max_concurrent" IS NOT NULL
         GROUP BY tl.id, tl."max_concurrent"`,
     ]);
@@ -12768,9 +12924,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // A bound plan was routed (or not) when it was bound, and is carried out with what it names.
       if (task && c.runnerId && !bound) {
         if (!reads.has(c.ownerId)) reads.set(c.ownerId, taskRouteReads(this.prisma, c.ownerId, this.now()));
-        const route = await this.routeFreshRun(
+        const route = routeOfPlan(await this.routeFreshRun(
           reads.get(c.ownerId)!, task, { id: c.workspaceId, runnerId: c.runnerId }, '',
-        );
+        ));
         // The routed engine and the credential it runs on: the baseline's, or that engine's own sign-in.
         if (route?.applied && route.provider) {
           credential = {
@@ -12889,7 +13045,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           continue;
         }
       }
-      const runner = runnerById.get(assignee.runnerId);
+      // Automatic's pick skips an account health set aside, as sessions.create's does (§7.6 of
+      // docs/routing-account-health-design.md), so that is the quota the run would spend.
+      const reported = runnerById.get(assignee.runnerId);
+      const runner = reported ? await withAccountHealth(this.prisma, t.ownerId, assignee.runnerId, reported, now) : reported;
       // Antigravity's quota travels with its engine health, and is weighed with the rest here.
       const usage = withEnginePlanUsage(
         runner?.planUsage as unknown as PlanUsage | null | undefined,
@@ -13107,7 +13266,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const runners = await this.prisma.runner.findMany({
       where: { id: { in: [...new Set(judged.map((t) => t.assignee!.runnerId!))] } },
       select: {
-        id: true, name: true, displayName: true, status: true, ...RUNNER_BEATS, engines: true, accountNames: true,
+        id: true, ownerId: true, name: true, displayName: true, status: true, ...RUNNER_BEATS, engines: true, accountNames: true,
         accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true,
       },
     });
@@ -13126,9 +13285,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const now = this.now();
     for (const t of judged) {
       const { provider, runnerId, workspaceId } = t.assignee!;
-      const runner = runnerById.get(runnerId!);
+      const reported = runnerById.get(runnerId!);
       const workspace = workspaceById.get(workspaceId);
-      if (!runner || !workspace || !isAccountEngine(provider)) continue;
+      if (!reported || !workspace || !isAccountEngine(provider)) continue;
+      // The account sessions.create would pick: Automatic skips one account health set aside (§7.6).
+      const runner = await withAccountHealth(this.prisma, reported.ownerId, runnerId, reported, now);
       const automatic = automaticAccount(provider, workspace, runner, now);
       const refusal = signedOutEngineRefusal({
         runtime: provider,
@@ -13236,24 +13397,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const held = new Map<string, Date | null>();
     const uniqueIds = [...new Set(taskIds)];
     const now = this.now().getTime();
-    const usageLimitIs = (negated: boolean) => {
-      const clauses = USAGE_LIMIT_ERROR_MARKERS.map((marker) => ({
-        error: { contains: marker, mode: Prisma.QueryMode.insensitive },
-      }));
-      return negated ? { NOT: { OR: clauses } } : { OR: clauses };
-    };
     for (let offset = 0; offset < uniqueIds.length; offset += TASK_ID_QUERY_CHUNK) {
       const ids = uniqueIds.slice(offset, offset + TASK_ID_QUERY_CHUNK);
       const failures = await this.prisma.session.groupBy({
         by: ['taskId'],
         where: {
           taskId: { in: ids },
-          // Released by a failure (common/session-release.ts).
-          AND: [releaseWasFailureFilter()],
-          // A run that failed with no error text matches no usage-limit marker, so it is an
-          // ordinary failure and counts. Said explicitly: the runner's /finalize omits `error` when
-          // its engine died without a message, and a negated match alone is not true of a NULL.
-          OR: [{ error: null }, usageLimitIs(true)],
+          // Released by a failure (common/session-release.ts) that counts against the task: the one definition tier
+          // escalation reads too (common/run-not-counted.ts, routing-account-health-design §7.4). A spent quota, a model
+          // at capacity, an account's refusal or a failure account health acted on is not the task's. A run that failed
+          // with no kind and no error text is an ordinary failure and counts (countedFilter keeps those NULLs).
+          AND: [releaseWasFailureFilter(), countedFilter()],
         },
         _count: { _all: true },
         _max: { createdAt: true },
@@ -13316,8 +13470,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         by: ['taskId'],
         where: {
           taskId: { in: blindIds },
-          AND: [releaseWasFailureFilter()],
-          ...usageLimitIs(false),
+          AND: [releaseWasFailureFilter(), failureKindIs([RunFailureKind.USAGE_LIMIT])],
         },
         _max: { createdAt: true },
       });
@@ -13350,7 +13503,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.$queryRaw<EndedAutoRunMoment[]>(Prisma.sql`
       SELECT t.id, t.owner_id AS "ownerId", t.assignee_id AS "workspaceId",
              a.runner_id AS "runnerId", current_moment.epoch AS "dispatchEpoch",
-             receipt.result->>'sessionId' AS "sessionId", run.status AS "sessionStatus",
+             receipt.result->>'sessionId' AS "sessionId",
+             -- The word derived from the facts (plan §3.1); null once the run's row is gone.
+             CASE WHEN run.id IS NOT NULL THEN ${legacySessionStatusSql('run')} END AS "sessionStatus",
              run.finished_at AS "finishedAt", run.kind AS "sessionKind", run.end_reason AS "endReason",
              run.completed_at AS "completedAt",
              run.archived_at AS "archivedAt", run.deleted_at AS "deletedAt",
@@ -13417,10 +13572,24 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       blind,
       { countUnrequestedEnds: true },
     );
+    // A task whose runs its accounts keep refusing has spent its replacements for the hour (§7.3): those failures
+    // are not counted against it, so without this the policy would start it again every pass. It waits until the
+    // window has room, then is retried like any other.
+    const now = this.now();
+    const replacedUntil = new Map<string, Date>();
+    for (const ownerId of new Set(assigned.map((t) => t.ownerId))) {
+      const ids = assigned.filter((t) => t.ownerId === ownerId).map((t) => t.id);
+      for (const [taskId, starts] of await this.replacementStarts(ownerId, ids, now)) {
+        const room = replacementRoom(starts, now);
+        if (!room.room) replacedUntil.set(taskId, room.until);
+      }
+    }
     for (const t of assigned) {
       const quotaResetsAt = blocked.get(t.id);
       if (quotaResetsAt) {
         decisions.set(t.id, { code: 'QUOTA_EXHAUSTED', retryAt: quotaResetsAt });
+      } else if (replacedUntil.has(t.id) && !heldOff.has(t.id)) {
+        decisions.set(t.id, { code: 'RETRY_BACKOFF', retryAt: replacedUntil.get(t.id)! });
       } else if (heldOff.has(t.id)) {
         const until = heldOff.get(t.id) ?? null;
         decisions.set(
@@ -13770,7 +13939,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   ): Promise<void> {
     if (!actingSessionId) return;
     const live = await this.prisma.session.findMany({
-      where: { ...runs, ownerId, status: { in: TASK_OCCUPYING } },
+      where: { ...runs, ownerId, ...heldFilter() },
       select: { id: true },
     });
     for (const run of live) await this.sessions.assertMayReach(ownerId, actingSessionId, run.id, act);
@@ -13938,7 +14107,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // widens which of them the scan reports rather than adding an acquisition of its own.
         const doomed = await cascadedTaskClosure(tx, ownerId, ids);
         const occupying = await tx.session.findMany({
-          where: { ownerId, taskId: { in: doomed }, status: { in: TASK_OCCUPYING } },
+          where: { ownerId, taskId: { in: doomed }, ...heldFilter() },
           select: { id: true },
         });
         const res = await tx.task.deleteMany({ where: { ownerId, id: { in: ids } } });
@@ -14187,13 +14356,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         const holder = await this.prisma.session.findFirst({
           where: { taskId: task.id, deletedAt: null, ...heldFilter() },
           select: {
-            id: true, status: true, workspaceId: true, engine: true, provider: true, providerBuiltin: true,
+            id: true, ...LEGACY_STATUS_SELECT, workspaceId: true, engine: true, provider: true, providerBuiltin: true,
             ownerId: true, model: true, startsTaskWork: true, cancelRequestedAt: true,
           },
         });
         if (holder) {
           throw this.foreignClaimRefusal(task, workspace, {
             ...holder,
+            // The word derived from the facts (plan §3.1); a task's run is never a LANDING container.
+            status: legacySessionStatus(holder),
             engine: await sessionEngine(this.prisma, holder),
           });
         }
@@ -14258,7 +14429,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           mimeType: source.mimeType,
           sizeBytes: source.sizeBytes,
           fileName: source.fileName,
-          // The same stored bytes as the source; only a row from before Orbit Files carries `data`.
+          // The same stored bytes as the source; only a row from before Drive carries `data`.
           sha256: source.sha256,
           data: source.data,
         },
@@ -14280,7 +14451,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * already scoped to it, which is what `createTurn`/`resume` require of an attachment they link.
    * Returns [] for a task with no inputs, so a caller pays one indexed read and nothing else.
    *
-   * A copy is a ROW, never the bytes again (docs/orbit-files-design.md §2.1): it names the template's
+   * A copy is a ROW, never the bytes again (docs/drive-design.md §2.1): it names the template's
    * stored bytes by their sha256, and the bytes are read by neither. A template from before Orbit
    * Files, whose bytes are still in `data`, has them kept in the file store the first time it is
    * copied (`FilesService.referenceOf`), and is copied the same way from then on.
@@ -14747,11 +14918,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   ): Promise<{ id: string; status: RunStatus } | null> {
     const row = await this.prisma.session.findUnique({
       where: { id: desiredSessionId },
-      select: { id: true, taskId: true, ownerId: true, status: true },
+      select: { id: true, taskId: true, ownerId: true, ...LEGACY_STATUS_SELECT },
     });
     if (!row || row.ownerId !== ownerId) return null;
     if (row.taskId != null && row.taskId !== task.id) return null;
-    return { id: row.id, status: row.status };
+    // The word derived from the facts (plan §3.1), for the log lines that name it.
+    return { id: row.id, status: legacySessionStatus(row) };
   }
 
   /**
@@ -15068,7 +15240,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const remembered = rememberedId
       ? await this.prisma.session.findFirst({
         where: { id: rememberedId, ownerId: delivery.ownerId },
-        select: { id: true, status: true, deletedAt: true, contextTaskId: true },
+        select: { id: true, ...LEGACY_STATUS_SELECT, deletedAt: true, contextTaskId: true },
       })
       : null;
     if (remembered) {
@@ -15107,9 +15279,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // the teardown left on it: the ledger says so and the sweep re-homes the message.
         const consumed = already.deliveredAt != null;
         if (consumed) return { sessionId: remembered.id, turnId: already.id, consumed: true };
-        const alive = !remembered.deletedAt
-          && (SessionsService.LIVE.includes(remembered.status)
-            || remembered.status === RunStatus.PENDING);
+        // Held: LIVE and PENDING together (plan §2.1: H).
+        const alive = !remembered.deletedAt && isHeld(remembered);
         if (alive) return { sessionId: remembered.id, turnId: already.id, consumed: false };
         throw new MentionUndeliverable(
           'TURN_STRANDED',
@@ -15126,9 +15297,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // turn when the runner claims the session. Between the claim (PENDING → RUNNING) and that
       // seed the row is live and turn-less, and sending into it there would deliver the same text a
       // second time, beside the opening prompt it is about to grow.
-      const live = !remembered.deletedAt
-        && (SessionsService.LIVE.includes(remembered.status)
-          || remembered.status === RunStatus.PENDING);
+      const live = !remembered.deletedAt && isHeld(remembered);
       if (ours && live) return { sessionId: remembered.id, turnId: null, consumed: false };
       if (live) {
         // A run that existed BEFORE this delivery. The comment is owed a turn of its own under the
@@ -15146,7 +15315,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         UPDATE "task_comment_mention_delivery"
            SET "desired_session_id" = ${rotated}::uuid,
                "target_session_id" = NULL, "turn_id" = NULL,
-               "last_error" = ${`ROTATED: ${uuidToBase62(remembered.id)} ended (${remembered.status}) before carrying this mention`},
+               "last_error" = ${`ROTATED: ${uuidToBase62(remembered.id)} ended (${legacySessionStatus(remembered)}) before carrying this mention`},
                "updated_at" = ${new Date()}
          WHERE "id" = ${delivery.id}::uuid
            AND "status" = 'DELIVERING' AND "lease_holder" = ${holder}`;
@@ -15167,7 +15336,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           ownerId: delivery.ownerId,
           deletedAt: null,
           startsTaskWork: true,
-          status: heldStatusFilter(),
+          ...heldFilter(),
         },
         orderBy: { createdAt: 'desc' },
         select: { id: true },
@@ -15446,7 +15615,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Everything the refusal names, so this door and the post-conflict one describe the row in the
     // way identically rather than one of them guessing.
     const [occupying] = await this.prisma.$queryRaw<TaskRunHolder[]>(Prisma.sql`
-      SELECT s."id", s."status"::text AS "status", s."workspace_id" AS "workspaceId",
+      SELECT s."id", ${legacySessionStatusSql('s')} AS "status", s."workspace_id" AS "workspaceId",
              s."engine", s."provider", s."provider_builtin" AS "providerBuiltin",
              s."owner_id"::text AS "ownerId", s."model", s."starts_task_work" AS "startsTaskWork",
              s."cancel_requested_at" AS "cancelRequestedAt"
@@ -15512,7 +15681,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
          AND s."workspace_id" = ${workspace.id}::uuid
          AND s."owner_id" = ${ownerId}::uuid
          AND s."deleted_at" IS NULL
-         AND s."status" IN ('AWAITING_INPUT'::"run_status", 'INTERRUPTED'::"run_status")
+         -- Paused: held, and parked or its turn abandoned (plan §2.1: AI).
+         AND s."finished_at" IS NULL
+         AND COALESCE(${sessionTurnStateSql('s')}, 'PARKED') IN ('PARKED', 'ABANDONED')
          -- A paused WORK run is the one this call continues. A paused conversation is somebody
          -- else's thread about the task, and handing it the task's prompt would hijack it.
          AND s."starts_task_work" = true
@@ -16093,7 +16264,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // the same moment starts the task once the project moves again. A person's Run is not held.
     if (auto && task.projectId) {
       const still = await projectStandsStill(this.prisma, ownerId, task.projectId);
-      if (still) return this.standDownReleasing(lease, { ok: false as const, skipped: still });
+      if (still && !(still === 'project-not-started' && auto.continuesManualStart)) {
+        return this.standDownReleasing(lease, { ok: false as const, skipped: still });
+      }
     }
     // An agent does not start a project its owner has not started (`projectAwaitingStart`), nor one
     // its owner has paused (`pausedProjectOf`). Ahead of the prerequisites, because each holds every
@@ -16190,14 +16363,32 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // pins and names no effort, as before routing. A RESUME or ADOPT is never
     // routed: that run has already started. With the account's switch off there is no decision at
     // all (planTaskRunRoute), and the run is planned as before routing existed.
-    const route = planned.kind === 'CREATE'
+    const plannedRoute = planned.kind === 'CREATE'
       ? await this.routeFreshRun(
         taskRouteReads(this.prisma, ownerId, this.now()),
         task,
         { id: task.assignee!.id, runnerId: task.assignee!.runnerId! },
         prompt,
+        { ownerId, sessionId: planned.sessionId },
       )
       : null;
+    // Nothing can run it (docs/routing-account-health-design.md §7.5): no run is started on an account that cannot run,
+    // and the task waits for the first trial due. An automatic start stands down, released, so the same moment starts
+    // it then; a person's start is told why and when.
+    if (plannedRoute?.hold) {
+      const hold = plannedRoute.hold;
+      if (auto) {
+        return this.standDownReleasing(lease, { ok: false as const, skipped: 'account-needs-action' as const });
+      }
+      throw new ConflictException({
+        statusCode: 409,
+        code: 'ACCOUNT_NEEDS_ACTION',
+        message: hold.reason,
+        taskId: task.id,
+        hold,
+      });
+    }
+    const route = routeOfPlan(plannedRoute);
     // A fresh run starts in Auto. A paused run keeps its own mode.
     if (actingSessionId && planned.kind === 'CREATE') {
       await this.sessions.assertMayStartInMode(
@@ -16363,6 +16554,78 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * The hold a dispatch of this task would meet now (§7.5), routed as the dispatch routes it but claiming nothing.
+   * Asked only while the owner has an account health sets aside, so an owner whose accounts are all healthy pays one
+   * indexed read. A decoration: a failure reads as no hold, logged.
+   */
+  private async accountHold(
+    ownerId: string,
+    task: TaskRouteSubject & { title: string; description?: string | null; assigneeId?: string | null },
+  ): Promise<ModelRoutingHold | null> {
+    try {
+      const reads = taskRouteReads(this.prisma, ownerId, this.now());
+      const health = await reads.health();
+      if (![...health.values()].some((entries) => entries.some((entry) => entry.state !== 'suspect' && entry.state !== 'trial-due'))) {
+        return null;
+      }
+      // The task's own run is an account's trial now: it is not waiting, it is taking the trial (§7.5).
+      const [ownTrial] = await this.prisma.$queryRaw<Array<{ one: number }>>`
+        SELECT 1 AS "one" FROM "account_health" h JOIN "session" s ON s."id" = h."trial_session_id"
+         WHERE h."owner_id" = ${ownerId}::uuid AND h."cleared_at" IS NULL AND s."task_id" = ${task.id}::uuid
+         LIMIT 1`;
+      if (ownTrial) return null;
+      const workspace = task.assigneeId
+        ? await this.prisma.workspace.findFirst({ where: { id: task.assigneeId, ownerId }, select: { id: true, runnerId: true } })
+        : null;
+      if (!workspace?.runnerId) return null;
+      const route = await planTaskRunRoute(reads, task, { id: workspace.id, runnerId: workspace.runnerId },
+        `${task.title}\n\n${task.description ?? ''}`, health);
+      return route?.hold ?? null;
+    } catch (e) {
+      this.logger.warn(`task ${task.id}: account hold not read: ${(e as Error)?.message ?? e}`);
+      return null;
+    }
+  }
+
+  /**
+   * The account holds among a project's open auto-run tasks (§8 item 3), for the project's Needs you row.
+   */
+  async accountHolds(ownerId: string, projectId: string): Promise<Map<string, ModelRoutingHold>> {
+    const tasks = await this.prisma.task.findMany({
+      where: { ownerId, projectId, status: TaskStatus.OPEN, autoRunWhenReady: true, assigneeId: { not: null } },
+      select: { id: true },
+      orderBy: { createdAt: 'asc' },
+      take: 50,
+    });
+    return this.accountHoldsFor(ownerId, tasks.map((t) => t.id));
+  }
+
+  /**
+   * What `accountHold` says of each of these tasks (§7.5), for a list page or a project's tasks: the row's own account
+   * hold, by the same read as the task view. Nothing at all while the owner has no blocked account, which is one
+   * indexed read; at most 50 tasks are asked.
+   */
+  async accountHoldsFor(ownerId: string, taskIds: readonly string[]): Promise<Map<string, ModelRoutingHold>> {
+    const held = new Map<string, ModelRoutingHold>();
+    if (taskIds.length === 0) return held;
+    const [blocked] = await this.prisma.$queryRaw<Array<{ one: number }>>`
+      SELECT 1 AS "one" FROM "account_health" WHERE "owner_id" = ${ownerId}::uuid AND "cleared_at" IS NULL AND "state" = 'BLOCKED' LIMIT 1`;
+    if (!blocked) return held;
+    const tasks = await this.prisma.task.findMany({
+      where: { ownerId, id: { in: [...taskIds].slice(0, 50) }, status: TaskStatus.OPEN, autoRunWhenReady: true, assigneeId: { not: null } },
+      select: {
+        id: true, title: true, description: true, assigneeId: true, engine: true, provider: true, model: true, modelHint: true,
+        modelHintReason: true, completionCriterion: true, acceptanceCommand: true, verifiesTaskId: true, isForeman: true,
+      },
+    });
+    for (const task of tasks) {
+      const hold = await this.accountHold(ownerId, task);
+      if (hold) held.set(task.id, hold);
+    }
+    return held;
+  }
+
+  /**
    * The route for one fresh run, or null when it could not be worked out — or when the account has
    * smart model selection off, which routes nothing. Routing never refuses (contract §7.2 P7): a
    * failure here is logged and the run is planned exactly as without it.
@@ -16372,9 +16635,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     task: TaskRouteSubject,
     workspace: { id: string; runnerId: string },
     prompt: string,
-  ): Promise<TaskRunRoute | null> {
+    run?: { ownerId: string; sessionId: string },
+  ): Promise<PlannedTaskRunRoute | null> {
     try {
-      return await planTaskRunRoute(reads, task, workspace, prompt);
+      let health = await reads.health();
+      // An account whose block ran out is tried by one run at a time (§6.5): the pick claims its trial for this run's
+      // Session, and a dispatch that loses the claim routes again with that account read as being tried. Bounded:
+      // each round excludes one more account.
+      for (let round = 0; ; round += 1) {
+        const route = await planTaskRunRoute(reads, task, workspace, prompt, health);
+        if (!route?.trial || !run || round >= TRIAL_CLAIM_ROUNDS) return route;
+        const claim = await claimTrialByKey(this.prisma, run.ownerId, route.trial.subject, route.trial.scopeModel, run.sessionId, reads.now);
+        if (claim !== 'HELD') return route;
+        health = withTrialHeld(health, route.trial.subject);
+      }
     } catch (e) {
       this.logger.warn(`task ${task.id}: no route decided: ${(e as Error)?.message ?? e}`);
       return null;
@@ -16607,17 +16881,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     routeReads: TaskRouteReads,
     t: BatchRunTask,
     pressToken: string,
-  ): Promise<TaskRunBatchItemPlan> {
+  ): Promise<TaskRunBatchItemPlan | { held: string }> {
     const prompt = this.buildExecutePrompt(t);
     const workspace = { id: t.assignee!.id, runnerId: t.assignee!.runnerId! };
     const itemPlan = await this.planWorkspaceRun(
       ownerId, t, workspace, TASK_RUN_TRIGGER.batch(pressToken, t.id),
     );
     // Routed per item, exactly as the single Run does it: a fresh run only, and dispatched with
-    // the route whenever it decided a tier.
-    const route = itemPlan.kind === 'CREATE'
-      ? await this.routeFreshRun(routeReads, t, workspace, prompt)
+    // the route whenever it decided a tier. As at the single Run, an account whose trial is due is claimed for the
+    // item's Session, and an item nothing can run is not started (docs/routing-account-health-design.md §6.5, §7.5):
+    // it is skipped with the hold's sentence, where a single press is refused with it.
+    const planned = itemPlan.kind === 'CREATE'
+      ? await this.routeFreshRun(routeReads, t, workspace, prompt, { ownerId, sessionId: itemPlan.sessionId })
       : null;
+    if (planned?.hold) return { held: planned.hold.reason };
+    const route = routeOfPlan(planned);
     return {
       taskId: t.id,
       title: `Task: ${t.title}`,
@@ -16793,7 +17071,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     };
     // One set of reads for the whole press: its tasks share a few Agents, runners and one account.
     const routeReads = taskRouteReads(this.prisma, ownerId, this.now());
-    for (const t of runnable) planned.items.push(await this.planBatchItem(ownerId, routeReads, t, pressToken));
+    for (const t of runnable) {
+      const item = await this.planBatchItem(ownerId, routeReads, t, pressToken);
+      if ('held' in item) planned.skipped.push({ id: t.id, title: t.title, reason: item.held });
+      else planned.items.push(item);
+    }
     const bound = await this.bindRunRequest(lease.claim, planned);
     if (!bound) throw taskRunInProgress(TASK_RUN_ACTION.batchExecute, pressToken);
     const plan = readBatchPlan(bound);
@@ -16867,7 +17149,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       }
       if (!t.assignee) skipped.push({ id: t.id, title: t.title, reason: 'No assignee' });
       else if (!t.assignee.runnerId) skipped.push({ id: t.id, title: t.title, reason: 'Assignee not bound to a runner' });
-      else items.push(await this.planBatchItem(ownerId, routeReads, t, pressToken));
+      else {
+        const replannedItem = await this.planBatchItem(ownerId, routeReads, t, pressToken);
+        if ('held' in replannedItem) skipped.push({ id: t.id, title: t.title, reason: replannedItem.held });
+        else items.push(replannedItem);
+      }
     }
     const { fromVersion: _fromVersion, ...bound } = plan;
     const replanned: TaskRunBatchPlan = {
@@ -17059,7 +17345,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    */
   async batchStop(ownerId: string, taskIds: string[]) {
     const sessions = await this.prisma.session.findMany({
-      where: { ownerId, taskId: { in: taskIds }, status: { in: TASK_OCCUPYING } },
+      where: { ownerId, taskId: { in: taskIds }, ...heldFilter() },
       select: { id: true, taskId: true },
     });
     const results = await Promise.all(

@@ -1093,9 +1093,7 @@ private struct EvidenceDecisionCard: View {
                            title: EvidenceDecisions.heading(standing), tone: .blue)
             // The ruler card's mark, for its reason: this card is Orbit's rather than the agent's
             // typing, and a press goes to the door rather than into the conversation.
-            Text(CriteriaDecisions.provenanceLabel)
-                .font(.orbitLabel).foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            provenance(standing)
             facts(standing)
 
             ApprovalActions {
@@ -1115,9 +1113,7 @@ private struct EvidenceDecisionCard: View {
         ApprovalReviewLayout(title: EvidenceDecisions.heading(standing),
                              symbol: "checkmark.seal.fill", tone: .blue,
                              summary: EvidenceDecisions.heading(standing)) {
-            Text(CriteriaDecisions.provenanceLabel)
-                .font(.orbitLabel).foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            provenance(standing)
             facts(standing)
             if case .sent(let sent) = standing.state {
                 SentToCoordinatorLine(sent: sent)
@@ -1135,6 +1131,20 @@ private struct EvidenceDecisionCard: View {
 
     /// The card's body: the row, or — once the read no longer publishes one — its address and why
     /// it can no longer be answered.
+    /// The mark, and when the version was submitted at the line's other end (board
+    /// evidence-waits-for-coordinator: `FROM ORBIT … submitted 7:59 PM`).
+    private func provenance(_ standing: EvidenceDecisionStanding) -> some View {
+        HStack(spacing: 8) {
+            Text(CriteriaDecisions.provenanceLabel)
+            Spacer(minLength: 0)
+            if let submitted = EvidenceDecisions.submittedLine(standing) {
+                Text(submitted).lineLimit(1)
+            }
+        }
+        .font(.orbitLabel).foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     @ViewBuilder private func facts(_ standing: EvidenceDecisionStanding) -> some View {
         if let row = standing.row {
             EvidenceDecisionFacts(console: console, row: row)
@@ -3495,7 +3505,8 @@ private struct StartProjectCardView: View {
 private struct ProjectDoneCardView: View {
     let console: ConsoleModel
     @Environment(AppModel.self) private var model
-    /// Settings › Translation: the coordinator's judgment and gaps flip back to its own words.
+    /// Settings › Translation: the project's title and criteria, and the coordinator's judgment and
+    /// gaps, flip back to the words they were written in.
     @State private var showOriginal = false
     @Environment(\.opensPagesOverConsole) private var overConsole
     @State private var doneCheck: ProjectDoneCheck?
@@ -3531,8 +3542,8 @@ private struct ProjectDoneCardView: View {
             let row = console.doneRequestRow
             let owner = OwnerCardTranslations.ownerLanguage(model.user)
             ProjectDoneCard(
-                subject: subject,
                 // Drawn translated; Record as done sends the console's own request, as written.
+                subject: subject.shown(owner: owner, showOriginal: showOriginal),
                 request: row?.shownDoneRequest(owner: owner, showOriginal: showOriginal),
                 askedAt: row?.waitingSince,
                 confirmedAt: console.acceptanceConfirmation?.confirmation?.confirmedAt,
@@ -3547,7 +3558,8 @@ private struct ProjectDoneCardView: View {
                 onNotYet: row == nil ? nil : { await console.declineDoneRequest(note: $0) },
                 onReopen: { await console.reopenProject() },
                 followUps: followUps,
-                translationFoot: row?.translationFoot(owner: owner, showOriginal: showOriginal) ?? [],
+                translationFoot: OwnerCardTranslations.doneCardFoot(subject: subject, request: row, owner: owner,
+                                                                    showOriginal: showOriginal),
                 onFlipTranslation: { showOriginal.toggle() },
                 notYetRefused: console.doneDeclineRefusedUntranslated,
                 onNotYetAsWritten: row == nil ? nil : { await console.declineDoneRequest(note: $0, sendAsWritten: true) })
@@ -3564,11 +3576,13 @@ private struct ProjectDoneCardView: View {
 /// hands the card's facts to the coordinator this conversation is with.
 private struct ProjectNotDoneCardView: View {
     let console: ConsoleModel
+    @Environment(AppModel.self) private var model
 
     var body: some View {
         if let subject = console.projectDone {
             ProjectNotDoneCard(
                 subject: subject,
+                owner: OwnerCardTranslations.ownerLanguage(model.user),
                 withCoordinator: console.openItems?.withCoordinator.count ?? 0,
                 askedAt: nil,
                 onAskCoordinator: { Task { await console.askCoordinatorAboutDone() } })
@@ -4595,11 +4609,12 @@ private struct CoordinatorQuestionCardView: View {
 
     private var questionCard: some View {
         let standing = self.standing
-        // Orange while it waits on the owner, the colour of the `open question below` capsule
-        // that points at it; blue once it is no longer a question.
+        // The brand tone while it waits on the owner — the product's "somebody is being asked"
+        // colour, the same reason its icon and mark are blue — with the heavier edge carrying the
+        // emphasis. The answered card is the grey record (`CoordinatorQuestionRecordView`).
         let open = CoordinatorQuestions.isOpen(standing)
         return ApprovalReviewLayout(title: CoordinatorQuestions.heading,
-                             symbol: "questionmark.bubble.fill", tone: open ? .orange : .blue,
+                             symbol: "questionmark.bubble.fill", tone: .blue,
                              summary: previewSummary,
                              dimmed: !open, emphasized: open) {
             Text(CoordinatorQuestions.provenance)

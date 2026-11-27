@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunnerStatus, RunStatus as SharedRunStatus } from '@orbit/shared';
 import { RunnerApiController } from './runner-api.controller';
 import { noSessionRequests } from '../test-support/prisma-transaction-double';
@@ -125,7 +125,7 @@ test('heartbeat preserves an exact source marker behind the process-owner fence'
           where: {
             id: SESSION_ID,
             assignedRunnerId: RUNNER_ID,
-            status: { in: ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'] },
+            finishedAt: null,
             mergeStatus: 'merged',
             inboxLeaseOwner: LEASE_OWNER,
           },
@@ -140,7 +140,7 @@ test('heartbeat preserves an exact source marker behind the process-owner fence'
       assert.deepEqual(writes[0].where, {
         id: SESSION_ID,
         assignedRunnerId: RUNNER_ID,
-        status: { in: ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'] },
+        finishedAt: null,
         sessionKind: 'CONVERSATION',
         inboxLeaseOwner: LEASE_OWNER,
       });
@@ -241,7 +241,7 @@ test('a changed source tip retires the previous merged state', async () => {
   assert.deepEqual(h.writes[0].where, {
     id: SESSION_ID,
     assignedRunnerId: RUNNER_ID,
-    status: { in: ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'] },
+    finishedAt: null,
     mergeStatus: 'merged',
     mergedSourceSha: SOURCE_SHA,
     mergeOperationId: OPERATION_ID,
@@ -310,7 +310,7 @@ test('a stale reconcile cannot clear a newer merge attempt with the same source 
   assert.deepEqual(writes[0].where, {
     id: SESSION_ID,
     assignedRunnerId: RUNNER_ID,
-    status: { in: ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'] },
+    finishedAt: null,
     mergeStatus: 'merged',
     mergedSourceSha: SOURCE_SHA,
     mergeOperationId: OPERATION_ID,

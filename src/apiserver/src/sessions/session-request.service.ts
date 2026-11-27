@@ -13,6 +13,7 @@ import { RunEventType, uuidToBase62, type SessionRequestView } from '@orbit/shar
 
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { RELEASE_FAILURE_SELECT } from '../common/session-release';
+import { TURN_STATE_SELECT } from './session-turn-state';
 import { PrismaService } from '../prisma/prisma.service';
 import { derivedUuid } from '../projects/project-dispatch-identity';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -296,7 +297,7 @@ export class SessionRequestService {
       const asker = await tx.session.findFirst({
         where: { id: request.fromSessionId, ownerId: request.ownerId },
         select: {
-          ...RELEASE_FAILURE_SELECT, retryAt: true, retryClaimedAt: true, cancelRequestedAt: true,
+          ...RELEASE_FAILURE_SELECT, ...TURN_STATE_SELECT, retryAt: true, retryClaimedAt: true, cancelRequestedAt: true,
           completedAt: true, archivedAt: true, deletedAt: true,
         },
       });
@@ -333,7 +334,7 @@ export class SessionRequestService {
     const asker = await this.prisma.session.findFirst({
       where: { id: request.fromSessionId, ownerId: request.ownerId },
       select: {
-        title: true, taskId: true, ...RELEASE_FAILURE_SELECT,
+        title: true, taskId: true, ...RELEASE_FAILURE_SELECT, ...TURN_STATE_SELECT,
         cancelRequestedAt: true, retryAt: true, retryClaimedAt: true, completedAt: true, archivedAt: true, deletedAt: true,
       },
     });
@@ -378,7 +379,7 @@ export class SessionRequestService {
       const asker = await tx.session.findFirst({
         where: { id: request.fromSessionId, ownerId: request.ownerId },
         select: {
-          ...RELEASE_FAILURE_SELECT, retryAt: true, retryClaimedAt: true, cancelRequestedAt: true,
+          ...RELEASE_FAILURE_SELECT, ...TURN_STATE_SELECT, retryAt: true, retryClaimedAt: true, cancelRequestedAt: true,
           completedAt: true, archivedAt: true, deletedAt: true,
         },
       });
@@ -426,7 +427,7 @@ export class SessionRequestService {
     const asker = await this.prisma.session.findFirst({
       where: { id: request.fromSessionId, ownerId: request.ownerId },
       select: {
-        title: true, taskId: true, ...RELEASE_FAILURE_SELECT,
+        title: true, taskId: true, ...RELEASE_FAILURE_SELECT, ...TURN_STATE_SELECT,
         cancelRequestedAt: true, retryAt: true, retryClaimedAt: true, completedAt: true, archivedAt: true, deletedAt: true,
       },
     });

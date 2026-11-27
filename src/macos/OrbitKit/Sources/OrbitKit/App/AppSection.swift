@@ -8,6 +8,9 @@ public enum AppSection: String, CaseIterable, Sendable, Identifiable {
     /// Scheduled tasks (docs/scheduled-tasks-design.md §9.2): account-wide, in the drawer only — never a row of a
     /// workspace's session list. The phone's drawer adds it (`DrawerWorkLogic.rows(scheduled:)`).
     case scheduled
+    /// Documents, the account's drive (docs/mocks/drive, 03-mac ①): on the Mac, a row right under the Wiki,
+    /// with Trash and Storage under it (`DrivePlace`); only where the server has Drive on.
+    case drive
 
     public var id: String { rawValue }
 
@@ -25,6 +28,7 @@ public enum AppSection: String, CaseIterable, Sendable, Identifiable {
         case .admin:    return "Admin"
         case .wiki:     return "Wiki"
         case .scheduled: return ScheduleCopy.Nav.scheduled
+        case .drive: return DriveLogic.title
         }
     }
 
@@ -43,6 +47,7 @@ public enum AppSection: String, CaseIterable, Sendable, Identifiable {
         // `BookOutlined`, on the drawer row and on every `orbit-wiki:` card alike.
         case .wiki:     return "book.closed"
         case .scheduled: return "calendar"
+        case .drive: return "folder"
         }
     }
 

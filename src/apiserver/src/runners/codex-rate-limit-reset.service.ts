@@ -10,13 +10,16 @@ import {
 } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import {
+  CODEX_DEFAULT_ACCOUNT_SLOT,
   codexRateLimitResetOf,
   codexResetAccountOverride,
+  codexResetContextSlot,
   codexResetCreateReplay,
   codexResetOperationStatus,
   codexResetOperationView,
   codexResetRefusal,
   createCodexResetRequestViolations,
+  isCodexAccountFingerprint,
   newCodexResetOperation,
   type CodexRateLimitResetOperations,
   type CodexRateLimitResetOperationState,
@@ -71,7 +74,9 @@ export class CodexRateLimitResetService {
    * One confirmation, in one transaction and in the contract's order: the runner must be the
    * caller's; a request id that already exists is answered with its operation — replayed without
    * asking eligibility again or generating a key — or refused as REQUEST_ID_REUSED when it named
-   * another runner or account; otherwise `codexResetRefusal` decides, and the operation is inserted
+   * another runner, account or slot. Otherwise the slot the reset is for is resolved — the one the
+   * request names, else the one its workspace picked, else the one whose stored block is of the
+   * confirmed fingerprint (§12.4) — `codexResetRefusal` decides on that slot's block, and the operation is inserted
    * with a provider key generated for that insert alone. Eligibility includes the runner and account's
    * last operation that may have spent a credit no refresh confirmed: the block it is judged on has to be
    * a read that started after that operation settled.
@@ -106,24 +111,35 @@ export class CodexRateLimitResetService {
         if (!runner) throw new NotFoundException('runner not found');
         const now = new Date();
         const replayOf = (existing: CodexRateLimitResetOperationState) => {
-          const replay = codexResetCreateReplay(existing, { runnerId, accountFingerprint: request.accountFingerprint });
+          // A retry that names no slot is the confirmation its first POST was, whichever slot that resolved to;
+          // one that names another slot is the request id reused (§12.4).
+          const replay = codexResetCreateReplay(existing, {
+            runnerId,
+            accountFingerprint: request.accountFingerprint,
+            accountSlot: request.accountSlot ?? existing.accountSlot,
+          });
           if (replay === 'REQUEST_ID_REUSED') throw refused(replay, existing.id);
           return { operation: existing, replayed: true };
         };
+        const planUsage = runner.planUsage as PlanUsage | null;
         for (let pass = 1; pass <= INSERT_PASSES; pass += 1) {
           const existing = await this.operations.byClientRequest(tx, ownerId, request.clientRequestId);
           if (existing) return replayOf(existing);
+          const context =
+            request.workspaceId === undefined ? null : await workspaceContext(tx, ownerId, runnerId, request.workspaceId);
+          const accountSlot =
+            request.accountSlot ?? context?.slot ?? codexResetSlotOfFingerprint(planUsage, request.accountFingerprint);
           const active = await this.operations.activeFor(tx, runnerId, request.accountFingerprint);
           const refusal = codexResetRefusal({
             now,
-            accountOverride:
-              request.workspaceId !== undefined && (await accountOverride(tx, ownerId, runnerId, request.workspaceId)),
+            accountOverride: context?.override === true,
             activeOperation: active !== null,
             runnerOnline: runnerIsOnline(runner, now.getTime()),
             runnerCapabilities: runner.capabilities,
             heartbeatLeaseOwner: runner.heartbeatLeaseOwner,
             runnerDraining: runner.heartbeatDraining === true,
-            rateLimitReset: codexRateLimitResetOf(runner.planUsage as PlanUsage | null),
+            accountSlot,
+            rateLimitReset: codexRateLimitResetOf(planUsage, accountSlot),
             expectedAccountFingerprint: request.accountFingerprint,
             readRequiredAfter: await this.operations.unrefreshedSpendSettledAt(tx, runnerId, request.accountFingerprint),
           });
@@ -140,6 +156,7 @@ export class CodexRateLimitResetService {
             ownerId,
             runnerId,
             accountFingerprint: request.accountFingerprint,
+            accountSlot,
             clientRequestId: request.clientRequestId,
             providerIdempotencyKey: randomUUID(),
             now,
@@ -172,10 +189,17 @@ export class CodexRateLimitResetService {
     return { operation: codexResetOperationView(created.operation), replayed: created.replayed };
   }
 
-  /** The runner's active operation and its most recent one: what a page polls while one is active. */
-  async operationsFor(ownerId: string, runnerId: string): Promise<CodexRateLimitResetOperations> {
+  /**
+   * The runner's active operation and its most recent one: what a page polls while one is active. With
+   * `accountFingerprint`, that account's alone — a page drawing one card per account asks per account, or
+   * one account's operation would stand in for another's. Without it, the runner's, whichever account.
+   */
+  async operationsFor(ownerId: string, runnerId: string, accountFingerprint?: unknown): Promise<CodexRateLimitResetOperations> {
+    if (accountFingerprint !== undefined && !isCodexAccountFingerprint(accountFingerprint)) {
+      throw new BadRequestException('query.accountFingerprint must match cxa1_ + 32 lowercase hex');
+    }
     await this.ownRunner(ownerId, runnerId);
-    const { active, latest } = await this.operations.forRunner(ownerId, runnerId);
+    const { active, latest } = await this.operations.forRunner(ownerId, runnerId, accountFingerprint);
     return {
       active: active && codexResetOperationView(active),
       latest: latest && codexResetOperationView(latest),
@@ -209,31 +233,47 @@ export class CodexRateLimitResetService {
 }
 
 /**
- * Whether the workspace a confirmation came from runs on something other than the runner's default
- * Codex account (§3). A workspace holds no provider, so its provider is the derived default a new
- * session there starts on; a configured provider is never the runner's own login, whatever its slug.
- * A Codex account the workspace picked other than Default is the other account, which reset v1 does
- * not read: confirming here would spend Default's credit for it.
+ * What the workspace a confirmation came from says about the reset (§3, §12.4). `override`: it runs on
+ * a Codex login no runner slot holds. A workspace holds no provider, so its provider is the derived
+ * default a new session there starts on; a configured provider is never the runner's own login, whatever
+ * its slug, and an env with credentials of its own is not either. `slot`: the account it picked, which is
+ * the slot its reset is for — Default included; undefined when it picked none (Automatic), where the
+ * account Orbit put a session on is the one the confirmed fingerprint names.
  */
-async function accountOverride(
+async function workspaceContext(
   tx: Prisma.TransactionClient,
   ownerId: string,
   runnerId: string,
   workspaceId: string,
-): Promise<boolean> {
+): Promise<{ override: boolean; slot: string | undefined }> {
   const workspace = await tx.workspace.findFirst({
     where: { id: workspaceId, ownerId, runnerId, deletedAt: null },
     select: { env: true, codexAccount: true },
   });
   if (!workspace) throw new NotFoundException('workspace not found');
   const seed = (await lastProviderByWorkspace(tx, [workspaceId])).get(workspaceId) ?? DEFAULT_AGENT_PROVIDER;
+  return {
+    override:
+      !seed.providerBuiltin ||
+      codexResetAccountOverride({ provider: seed.provider, env: workspace.env as Record<string, string> | null }),
+    slot: workspace.codexAccount?.trim() ? codexResetContextSlot({ codexAccount: workspace.codexAccount }) : undefined,
+  };
+}
+
+/**
+ * The slot whose stored block is of the account the client confirmed, for a confirmation that names no
+ * slot and comes from no workspace that picked one: Default when its block is of that account, else the
+ * first added slot (by id) whose block is. One ChatGPT account signed in to two slots has one set of
+ * credits (§12.1), so either slot spends the same one. Default when no block is of that account, which
+ * admission then refuses on Default's block as it always has.
+ */
+export function codexResetSlotOfFingerprint(planUsage: PlanUsage | null | undefined, accountFingerprint: string): string {
+  if (codexRateLimitResetOf(planUsage)?.accountFingerprint === accountFingerprint) return CODEX_DEFAULT_ACCOUNT_SLOT;
+  const codex = planUsage?.codex ?? (planUsage?.provider === 'codex' ? planUsage : undefined);
+  const slots = Object.keys(codex?.accounts ?? {}).sort();
   return (
-    !seed.providerBuiltin ||
-    codexResetAccountOverride({
-      provider: seed.provider,
-      codexAccount: workspace.codexAccount,
-      env: workspace.env as Record<string, string> | null,
-    })
+    slots.find((slot) => codexRateLimitResetOf(planUsage, slot)?.accountFingerprint === accountFingerprint) ??
+    CODEX_DEFAULT_ACCOUNT_SLOT
   );
 }
 

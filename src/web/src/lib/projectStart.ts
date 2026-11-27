@@ -3,6 +3,7 @@ import type {
   ProjectIntegrationView,
   ProjectOpenItemRow,
   ProjectOpenItemsView,
+  ProjectStartRequest,
   ProjectStartSettingKey,
   ProjectStartSettings,
   StartProjectRequestBody,
@@ -611,12 +612,27 @@ export const RUN_SUMMARY_NO_MERGE_CHECK = 'no merge check';
 /** What a setting that is not what the coordinator suggested says when it is pointed at. */
 export const RUN_SETTING_DIFFERS = 'Not what the coordinator suggested';
 
-/** A project branch as a line names it: without `refs/heads/`, and `project/<id>` down to the first
- *  five characters of the id, which is how a reader tells two of them apart. */
+/** A project branch as a line names it: without `refs/heads/`. A readable name
+ *  (`project/<title slug>-<8 characters>`) is shown whole; only the old bare-id form,
+ *  `project/<public id>`, is cut down to the first five characters of the id, which is how a reader
+ *  tells two of those apart. */
 export function shortBranch(ref: string): string {
   const name = ref.replace(/^refs\/heads\//u, '');
-  const project = /^project\/(.{6,})$/u.exec(name);
+  const project = /^project\/([0-9A-Za-z]{20,})$/u.exec(name);
   return project ? `project/${project[1]!.slice(0, 5)}…` : name;
+}
+
+/** The project branch a start card names, without `refs/heads/`: the one the request names, else
+ *  the server's default for the project (`defaultProjectBranchName`), else — from a server that
+ *  predates that field — `project/<project id>`, the name such a server gave it. */
+export function startCardBranch(
+  request: Pick<ProjectStartRequest, 'settings' | 'defaultProjectBranchName'>,
+  projectId: string,
+): string {
+  const ref = request.settings.projectBranchName
+    ?? request.defaultProjectBranchName
+    ?? `refs/heads/project/${projectId}`;
+  return ref.replace(/^refs\/heads\//u, '');
 }
 
 /** One setting of the one-line summary, and whether it is not what the start was asked for. */

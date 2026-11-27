@@ -21,6 +21,7 @@ import {
   saveState, sendTurn, sleep, until,
 } from '../landing-measured/lib.mjs';
 import { P as projectBy } from '../landing-measured/queries.mjs';
+import { sessionWordSql } from '../../lib/session-word.mjs';
 
 const ev = evidence('lfx-cases');
 const state = readState();
@@ -368,7 +369,7 @@ const rTurnsAfter = row(`select count(*) from conversation_turn where session_id
   and created_at > ${lit(r1.finished)}::timestamptz`);
 check('case 3: R\'s session got no landing-fix turn and no turn at all after its landing', fixTurns(rSession).length === 0 && rTurnsAfter === '0',
   `landing-fix turns ${fixTurns(rSession).length}, turns after the landing ${rTurnsAfter}`);
-const rSessionNow = rows(`select status, coalesce(end_reason, ''), finished_at is not null from session where id = ${lit(rSession)}::uuid`)[0];
+const rSessionNow = rows(`select ${sessionWordSql('session')}, coalesce(end_reason, ''), finished_at is not null from session where id = ${lit(rSession)}::uuid`)[0];
 check('case 3: R\'s session stayed ended by its task\'s DONE (not revived)', rSessionNow?.[1] === 'task_done' && rSessionNow?.[2] === 't', JSON.stringify(rSessionNow));
 
 // ── case 4: a fresh line's first landing on a red main (T0 = U, no absorb) never reaches the task's session ─────
@@ -482,7 +483,7 @@ for (const k of [X, Y, 'R']) {
   left(t.content, 160) as content_head
 from conversation_turn t where t.session_id = ${sess(k)} order by t.seq`, true);
 }
-ev.query('session rows of X, Y and R', `select t.title as task, s.id, s.status, s.end_reason, s.finished_at, s.base_sha, s.branch_sha,
+ev.query('session rows of X, Y and R', `select t.title as task, s.id, ${sessionWordSql('s')} as status, s.end_reason, s.finished_at, s.base_sha, s.branch_sha,
   left(s.last_assistant_text, 200) as last_words
 from session s join task t on t.id = s.task_id where s.id in (${sess(X)}, ${sess(Y)}, ${sess('R')}) order by t.title`, true);
 ev.query('conversation_turn of the coordinator session', `select t.seq, t.client_turn_id, t.kind, t.status, t.created_at,
@@ -490,7 +491,7 @@ ev.query('conversation_turn of the coordinator session', `select t.seq, t.client
   position(${lit(DECLINE_WORDS)} in coalesce(t.content, '')) > 0 as quotes_the_decline
 from conversation_turn t where t.session_id = (select coordinator_session_id from project where id = ${P}) order by t.seq`, true);
 ev.query('the engine each session of the project ran on', `select coalesce(t.title, 'coordinator') as task, s.id, s.provider, s.engine,
-  s.model, s.permission_mode, s.status, s.end_reason
+  s.model, s.permission_mode, ${sessionWordSql('s')} as status, s.end_reason
 from session s left join task t on t.id = s.task_id
 where s.task_id in (select id from task where project_id = ${P}) or s.id = (select coordinator_session_id from project where id = ${P})
 order by s.created_at`, true);

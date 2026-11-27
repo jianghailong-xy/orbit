@@ -9,6 +9,10 @@ export const MOBILE_QUERY = '(max-width: 960px)';
 // A phone, narrower than that: the width index.css already treats as one (its
 // `@media (max-width: 600px)` rules, where a card's actions stack full-width). Keep them identical.
 export const PHONE_QUERY = '(max-width: 600px)';
+// Wide enough for a task to sit beside its conversation as a column (docs/mocks/session-task-column):
+// nav 280 + session list 320 + a 560px conversation + the 420px column and the gaps between them.
+// Narrower, the task lies over the page as before. TaskOverPagePanel reads it and sets .is-docked.
+export const TASK_COLUMN_QUERY = '(min-width: 1640px)';
 
 export function useMediaQuery(query: string): boolean {
   // Guarded rather than read straight: this also runs under `renderToStaticMarkup`, where there

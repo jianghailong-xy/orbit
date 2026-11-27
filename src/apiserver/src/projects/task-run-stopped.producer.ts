@@ -1,15 +1,17 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma, RunStatus, TaskStatus } from '@prisma/client';
+import { Prisma, TaskStatus } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { turnStateFilter } from '../sessions/session-turn-state';
 import { sessionWakeSourceSql } from '../sessions/task-work-carrier';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { CoordinatorDeliveryService, type CoordinatorDeliveryOutcome } from './coordinator-delivery.service';
-import { type WakeFact, taskRunStoppedFact } from './coordinator-wake';
+import { type WakeFact, taskRunIdleFact, taskRunStoppedFact } from './coordinator-wake';
 import type { WakeAuthorization, WakeAuthorizer } from './coordinator-wake.service';
 import { isDerivedUuid } from './project-dispatch-identity';
 import { SESSION_ENDING_SELECT, sessionHasEnded } from './project-open-item';
 import { runLastWords } from './run-last-words';
+import { findIdleRuns } from './task-run-idle';
 
 /** The project disappeared between the committed read and the wake's authorization. */
 export const RUN_STOPPED_WAKE_PROJECT_GONE = 'PROJECT_GONE';
@@ -103,12 +105,19 @@ export class TaskRunStoppedProducer {
     return fact ? this.deliveries.queue(fact, this.authorize, { holdWhilePaused: true }) : null;
   }
 
+  /** The idle fact of this session's run as of `now`, or null when it is not idle (`task-run-idle.ts`). */
+  async idleFactFor(sessionId: string, now: Date): Promise<WakeFact | null> {
+    const [idle] = await findIdleRuns(this.prisma, now, { sessionId });
+    return idle ? taskRunIdleFact(idle) : null;
+  }
+
   async factFor(sessionId: string, stop: RunStop): Promise<WakeFact | null> {
     const run = await this.prisma.session.findFirst({
       where: {
         id: sessionId,
         startsTaskWork: true,
-        status: RunStatus.AWAITING_INPUT,
+        // Parked (plan §2.1: A).
+        ...turnStateFilter([null]),
         task: {
           projectId: { not: null },
           completionCriterion: 'EVIDENCE_JUDGMENT',

@@ -6,8 +6,9 @@
  *      Asked read 7 and 168, and nothing changes until the owner's Allow, which writes the rule and the envelope;
  *   2. EVERY 30 → EVERY 60 halves the runs a week (336 → 168): it applies at once with a revision that reads the rule
  *      change, shrinks the envelope, and the owner's Undo puts both back;
- *   3. EVERY 6 hours in Berlin across the autumn change fills its envelope of 28 without a slot MISSED; once the
- *      owner's Run now fills the trailing local 7 days, the next slot is MISSED (OVER_BUDGET), and the one after runs.
+ *   3. EVERY 6 hours in Berlin across the autumn change fills its envelope of 28 without a slot MISSED; the owner's
+ *      Run now takes no slot's place; one slot more than the rhythm, from a rule moved inside the envelope, is MISSED
+ *      (OVER_BUDGET), and the one after runs.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/schedules/schedule-every-envelope.pg.spec.ts
  *
@@ -245,7 +246,7 @@ test('2. EVERY 30 → EVERY 60 applies at once with a revision, shrinks the enve
   assert.equal(restored.nextDueAt?.toISOString(), '2026-11-16T08:30:00.000Z');
 });
 
-test('3. EVERY 6 hours in Berlin across the autumn change: none MISSED at the envelope, then Run now makes the next slot OVER_BUDGET', { skip }, async () => {
+test('3. EVERY 6 hours in Berlin across the autumn change: none MISSED at the envelope, Run now takes no slot, one slot more is OVER_BUDGET', { skip }, async () => {
   // 23:00 on Monday 19 October in Berlin (UTC+2); the clocks go back at 03:00 on Sunday 25 October.
   at('2026-10-19T21:00:00Z');
   const w = await world('every-budget');
@@ -263,7 +264,7 @@ test('3. EVERY 6 hours in Berlin across the autumn change: none MISSED at the en
   assert.equal(list[0].plannedAt.toISOString(), '2026-10-19T22:00:00.000Z', 'Tuesday 00:00 in Berlin (UTC+2)');
   assert.equal(list[35].plannedAt.toISOString(), '2026-10-28T17:00:00.000Z', 'Wednesday 18:00 in Berlin (UTC+1)');
 
-  // Before the next slot, the owner's Run now: the 28th start in the trailing local 7 days.
+  // Before the next slot, the owner's Run now. That slot has 27 automatic starts in its trailing local 7 days.
   advance(MINUTE);
   const press = await runs.runNow(w.owner, s.id);
   const pressed = await db.scheduleRun.findUniqueOrThrow({ where: { id: press.id } });
@@ -272,16 +273,26 @@ test('3. EVERY 6 hours in Berlin across the autumn change: none MISSED at the en
   advance(MINUTE);
   await runs.report(w.ownerId, pressed.sessionId!, { outcome: 'NO_CHANGE', summary: 'same' });
 
-  // The schedule is at its envelope's runs per week: the next slot is MISSED, for the budget.
+  // The press is not the 28th (§4: no Run now is in the count): the rhythm the owner approved still runs.
+  const slot = await nextSlot(w, s.id);
+  assert.equal(slot.outcome, 'STARTED');
+  const started = await db.scheduleRun.findUniqueOrThrow({ where: { id: slot.runId } });
+  assert.equal(started.plannedAt.toISOString(), '2026-10-28T23:00:00.000Z', 'Thursday 00:00 in Berlin');
+
+  // The rule moved inside the envelope to 03:00, 09:00, …: the 03:00 slot is one more than the rhythm, with 28
+  // automatic starts in its trailing local 7 days. It is MISSED, for the budget.
+  const moved = await schedules.update(w.session, s.id, { rule: { ...every(360), time: '03:00' } });
+  assert.equal(moved.outcome, 'APPLIED');
   const missed = await nextSlot(w, s.id);
   assert.equal(missed.outcome, 'MISSED');
   const row = await db.scheduleRun.findUniqueOrThrow({ where: { id: missed.runId } });
   assert.equal(row.failureReason, 'OVER_BUDGET');
   assert.equal(row.startedAt, null);
-  assert.equal(row.plannedAt.toISOString(), '2026-10-28T23:00:00.000Z', 'Thursday 00:00 in Berlin');
+  assert.equal(row.plannedAt.toISOString(), '2026-10-29T02:00:00.000Z', 'Thursday 03:00 in Berlin');
   assert.equal((await db.schedule.findUniqueOrThrow({ where: { id: s.id } })).state, 'ACTIVE');
 
-  // Six hours on, a slot has left the window and the missed one never started: it runs again.
+  // Six hours on, slots have left the window and the missed one never started: it runs again, at 27 automatic starts
+  // (the owner's press, still inside the window, would make it 28).
   const next = await nextSlot(w, s.id);
   assert.equal(next.outcome, 'STARTED');
 });

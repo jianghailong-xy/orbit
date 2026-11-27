@@ -1,4 +1,4 @@
-import type { CriterionLandingReason, DoneRequest, ProjectDoneFinding, ProjectDoneBy, ProjectOpenItemsView, ProjectOpenItemRow } from '@orbit/shared';
+import type { CriterionLandingReason, DoneRequest, ProjectDoneFinding, ProjectDoneBy, ProjectOpenItemsView, ProjectOpenItemRow, ProjectTextTranslation } from '@orbit/shared';
 import { api } from '../api';
 import { DEFAULT_MAIN_BRANCH } from './projectStart';
 import { formatSpan } from './watches';
@@ -27,6 +27,7 @@ export const DONE_CHECK_TASKS = '{n} tasks are still running';
 export const DONE_CHECK_TASK = '1 task is still running';
 export const DONE_CHECK_OWNER_ITEMS = 'Open owner items: {n}';
 export const DONE_CHECK_LANDINGS = 'Landings in flight: {n}';
+export const DONE_CHECK_DEFERRED_LANDINGS = 'Landings waiting for work sessions to finish: {n}';
 export const DONE_CARD_FINDINGS_HEADING = 'Orbit can’t prove {n} things';
 export const DONE_CARD_FINDINGS_ACCEPTED = 'These will be kept as the gaps you accepted.';
 export const DONE_CARD_RECORD_ANYWAY = 'Record as done anyway';
@@ -351,6 +352,7 @@ export function doneFindingLine(
     case 'DONE_TASKS_IN_FLIGHT': return finding.tasks.length === 1 ? DONE_CHECK_TASK : DONE_CHECK_TASKS.replace('{n}', String(finding.tasks.length));
     case 'DONE_OWNER_ITEMS_OPEN': return DONE_CHECK_OWNER_ITEMS.replace('{n}', String(finding.items.length));
     case 'DONE_INTEGRATION_IN_FLIGHT': return DONE_CHECK_LANDINGS.replace('{n}', String(finding.jobs.length));
+    case 'DONE_LANDING_DEFERRED': return DONE_CHECK_DEFERRED_LANDINGS.replace('{n}', String(finding.tasks.length));
     default: return finding.message;
   }
 }
@@ -455,6 +457,8 @@ export type ProjectDoneDocument = {
   doneBy?: ProjectDoneBy | null;
   doneAt?: string | null;
   acceptedGaps?: readonly Record<string, unknown>[] | null;
+  /** `title` and the criteria's text in the owner's language (Settings › Translation). */
+  translation?: ProjectTextTranslation | null;
   /** The project's main branch, which the cards' "on main" names. */
   integration?: { upstreamRef?: string | null } | null;
   /** The explicit non-code mark (migration 0535) and who set it, when. */

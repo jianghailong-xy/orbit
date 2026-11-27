@@ -6,8 +6,8 @@
  * under that snapshot's `accounts`, by the account's id (src/runner-go/{codex,claude}_account_usage.go),
  * and Kimi Code's and Cursor CLI's the same way under `kimi` and `cursor` (src/runner-go/cursor_usage.go).
  */
-import type { PlanUsage, PlanUsageSnapshot } from '@orbit/shared';
-import { ENGINE_ACCOUNTS_MAX, namedRunnerEngines, sanitizeRunnerEngines } from '../common/runner-engines';
+import { codexRateLimitResetViolations, type PlanUsage, type PlanUsageSnapshot } from '@orbit/shared';
+import { ACCOUNT_ENGINES, ENGINE_ACCOUNTS_MAX, namedRunnerEngines, sanitizeRunnerEngines } from '../common/runner-engines';
 import {
   accountDir,
   accountOfEnv,
@@ -15,11 +15,13 @@ import {
   accountToMoveToAt,
   isAccountEngine,
   planUsageBlockedUntil,
+  spentPlanUsage,
   type AccountEngine,
 } from '@orbit/shared';
 import {
   ACCOUNT_CHOICE,
   DEFAULT_ACCOUNT,
+  accountBlockOn,
   accountEnvVar,
   accountOnRunner,
   accountsOn,
@@ -27,6 +29,7 @@ import {
   defaultRemovedOn,
   remainingAccount,
   weighedPlanUsage,
+  type AccountBlockReason,
   type AccountRunner,
 } from './account';
 import { runnerAccountPausedUntil } from '../common/account-pause';
@@ -40,21 +43,22 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 
 /**
  * `usage` with each engine snapshot's other accounts as they are stored: each under the id of an
- * account the runner added, and each as that account's own windows only — no `accounts` of its own,
- * and no reset block, which is Default's alone (docs/codex-rate-limit-reset-contract.md §3) and the
- * only one the stored-block ordering covers (§8). An entry under any other key, that is not an
- * object, or that names another account than its key (a Cursor CLI snapshot's `account`), is dropped
- * whole; at most ENGINE_ACCOUNTS_MAX are kept, as for the accounts the engine report lists. Snapshots
- * carrying no accounts are returned as they came, so a heartbeat that reported none still stores the
- * same object.
+ * account the runner added, and each as that account's own windows only — no `accounts` of its own.
+ * A Codex account keeps its own reset block when the block is well formed (contract v2,
+ * docs/codex-rate-limit-reset-contract.md §12.1), which the stored-block ordering then orders per
+ * account (§12.2); a malformed one is dropped, and so is any block on another engine's account, which
+ * no reader takes. An entry under any other key, that is not an object, or that names another account
+ * than its key (a Cursor CLI snapshot's `account`), is dropped whole; at most ENGINE_ACCOUNTS_MAX are
+ * kept, as for the accounts the engine report lists. Snapshots carrying no accounts are returned as
+ * they came, so a heartbeat that reported none still stores the same object.
  */
 export function sanitizePlanUsageAccounts(usage: PlanUsage): PlanUsage {
   // A runner older than nested snapshots reports its Codex quota as the payload itself.
-  if (usage.provider === 'codex' && !usage.codex) return sanitizeAccountsOf(usage) ?? usage;
-  const codex = sanitizeAccountsOf(usage.codex);
-  const claude = sanitizeAccountsOf(usage.claude);
-  const kimi = sanitizeAccountsOf(usage.kimi);
-  const cursor = sanitizeAccountsOf(usage.cursor);
+  if (usage.provider === 'codex' && !usage.codex) return sanitizeAccountsOf(usage, true) ?? usage;
+  const codex = sanitizeAccountsOf(usage.codex, true);
+  const claude = sanitizeAccountsOf(usage.claude, false);
+  const kimi = sanitizeAccountsOf(usage.kimi, false);
+  const cursor = sanitizeAccountsOf(usage.cursor, false);
   if (codex === usage.codex && claude === usage.claude && kimi === usage.kimi && cursor === usage.cursor) return usage;
   return {
     ...usage,
@@ -66,8 +70,9 @@ export function sanitizePlanUsageAccounts(usage: PlanUsage): PlanUsage {
 }
 
 /** One engine snapshot with its `accounts` as they are stored, or the same object when it carries
- *  none (the caller uses that identity to leave the whole payload untouched). */
-function sanitizeAccountsOf(snapshot: PlanUsageSnapshot | undefined): PlanUsageSnapshot | undefined {
+ *  none (the caller uses that identity to leave the whole payload untouched). `resetBlocks`: the
+ *  snapshot is Codex's, whose accounts keep a well-formed reset block. */
+function sanitizeAccountsOf(snapshot: PlanUsageSnapshot | undefined, resetBlocks: boolean): PlanUsageSnapshot | undefined {
   if (!snapshot || !('accounts' in snapshot)) return snapshot;
   const { accounts: reported, ...rest } = snapshot;
   const accounts: Record<string, PlanUsageSnapshot> = {};
@@ -76,13 +81,51 @@ function sanitizeAccountsOf(snapshot: PlanUsageSnapshot | undefined): PlanUsageS
     if (kept === ENGINE_ACCOUNTS_MAX) break;
     if (!ADDED_ACCOUNT_ID.test(id) || !isObject(entry)) continue;
     if (entry.account !== undefined && entry.account !== id) continue;
-    const { accounts: _nested, rateLimitReset: _block, ...own } = entry as PlanUsageSnapshot;
-    accounts[id] = own;
+    const { accounts: _nested, rateLimitReset: block, ...own } = entry as PlanUsageSnapshot;
+    const keepBlock = resetBlocks && block !== undefined && codexRateLimitResetViolations(block).length === 0;
+    accounts[id] = keepBlock ? { ...own, rateLimitReset: block } : own;
     kept += 1;
   }
   return kept ? { ...rest, accounts } : rest;
 }
 
+/**
+ * The accounts whose plan a usage reading says changed since the one stored before it: what makes a blocked
+ * account's trial due now (docs/routing-account-health-design.md §6.3), since a new plan may be the owner's fix for
+ * what the provider refused — a payment method added, a plan that includes the engine. The plan is the one a
+ * snapshot names (`planName`, Cursor CLI's; `planType`, Codex's); only an account whose old and new plan are both
+ * known and differ counts, so a reading that failed to name one, or a first reading, changes nothing. Each by its
+ * engine and account id, as the health subject `runner:<runner>:<engine>:<account>` names it.
+ */
+export function changedPlans(before: unknown, after: unknown): Array<{ engine: AccountEngine; account: string }> {
+  const prior = isObject(before) ? (before as PlanUsage) : null;
+  const next = isObject(after) ? (after as PlanUsage) : null;
+  if (!prior || !next) return [];
+  const changed: Array<{ engine: AccountEngine; account: string }> = [];
+  for (const engine of ACCOUNT_ENGINES as readonly AccountEngine[]) {
+    // Default, and every other account the reading names (codexAccountSnapshot).
+    const others = engineSnapshot(next, engine)?.accounts;
+    for (const account of new Set([DEFAULT_ACCOUNT, ...Object.keys(isObject(others) ? others : {})])) {
+      const was = planOf(spentPlanUsage(prior, engine, account));
+      const now = planOf(spentPlanUsage(next, engine, account));
+      if (was && now && was !== now) changed.push({ engine, account });
+    }
+  }
+  return changed;
+}
+
+/** The plan a snapshot names, trimmed; null when it names none. */
+function planOf(snapshot: PlanUsageSnapshot | undefined): string | null {
+  const plan = (snapshot?.planName ?? snapshot?.planType)?.trim();
+  return plan ? plan : null;
+}
+
+/** `engine`'s snapshot in a reading: nested under its name, or the payload itself for an older runner's lone one. */
+function engineSnapshot(usage: PlanUsage, engine: AccountEngine): PlanUsageSnapshot | undefined {
+  const nested = (usage as Record<string, unknown>)[engine];
+  if (isObject(nested)) return nested as PlanUsageSnapshot;
+  return usage.provider === engine ? usage : undefined;
+}
 
 /**
  * The account a run on `provider` spends, which is the account dispatch runs it on — what
@@ -158,7 +201,9 @@ export type AccountWorkspace = { env?: unknown } & WorkspaceAccountChoices;
  * leaves the account to Orbit. Null otherwise: the session then runs where the workspace's choice and
  * env say. SessionsService.create stores the answer on the session; the task quota gate asks the same
  * question of a task that is about to get one. While the owner has removed Default from Orbit, the pick
- * is among the accounts that remain (automaticPick), and there is one even when one remains.
+ * is among the accounts that remain (automaticPick), and there is one even when one remains. A runner
+ * read with its account health (AccountRunner.blockedAccounts) has its blocked accounts passed over as
+ * paused ones are (§7.6), unless every account is blocked.
  */
 export function automaticAccount(
   engine: AccountEngine,
@@ -192,6 +237,8 @@ export interface AccountMove {
   signedOut?: boolean;
   /** Left because the account it was on is being removed from its runner (moveOffRemovedAccount). */
   removed?: boolean;
+  /** Left because account health takes the account it was on out (accountBlockOn), and why. */
+  blocked?: AccountBlockReason;
 }
 
 /**
@@ -242,6 +289,10 @@ function removedDefaultMove(
  *
  * A session on a Default the owner removed from Orbit moves whatever else holds: pinned or not, and
  * whether or not the pick has room (removedDefaultMove).
+ *
+ * So is an account that account health takes out (accountBlockOn, docs/routing-account-health-design.md
+ * §7.6), on a runner read with it: as a paused one is, so a runner with two Cursor accounts moves a
+ * session off the one that asks its owner to add a payment method, onto the other.
  */
 export function accountBeforeDispatch(
   engine: AccountEngine,
@@ -259,10 +310,12 @@ export function accountBeforeDispatch(
   const accounts = accountsOn(engine, runner, now);
   const paused = runnerAccountPausedUntil(runner?.accountPauses, engine, from, now) !== null;
   const signedOut = accounts?.find((account) => account.id === from)?.auth === 'no';
-  if (!paused && !signedOut && !planUsageBlockedUntil(usage, engine, now, from)) return null;
+  const block = accountBlockOn(engine, runner, from, now);
+  if (!paused && !signedOut && !block && !planUsageBlockedUntil(usage, engine, now, from)) return null;
   // A turn is on its way, and on this account it would only fail: an account past its share still beats that.
   const to = accountToMoveTo(engine, accounts, usage, now, from, { beyondShare: true });
-  return to ? { from, to, ...(paused ? { paused: true } : signedOut ? { signedOut: true } : {}) } : null;
+  if (!to) return null;
+  return { from, to, ...(paused ? { paused: true } : signedOut ? { signedOut: true } : block ? { blocked: block.reason } : {}) };
 }
 
 export function accountAfterUsageLimit(
@@ -366,7 +419,8 @@ export function accountLabel(engine: AccountEngine, id: string, runner: NamedRun
  * pool-select.ts poolSwitchNotice, in the same words, and like it never a possessive on a label. Without
  * it the quota gauge jumping between two turns reads as a broken gauge. A session moved off a Default the
  * owner removed from Orbit is told so, by the name Default goes by, and one moved off a signed-out
- * account is told that.
+ * account is told that. One moved off an account that account health took out is told why in health's terms,
+ * never as "paused": the pause is the owner's own setting, and they set none.
  */
 export function accountSwitchNotice(
   engine: AccountEngine,
@@ -381,6 +435,15 @@ export function accountSwitchNotice(
   }
   if (move.signedOut) {
     return `Switched to ${accountLabel(engine, move.to, runner)} — ${accountLabel(engine, move.from, runner)} is signed out`;
+  }
+  if (move.blocked && move.blocked !== 'usage-limit') {
+    const from = accountLabel(engine, move.from, runner);
+    const why = move.blocked === 'needs-action'
+      ? `${from} needs action`
+      : move.blocked === 'failing'
+        ? `${from} failed to start its last runs`
+        : `${from} is being tried by another run`;
+    return `Switched to ${accountLabel(engine, move.to, runner)} — ${why}`;
   }
   return move.paused
     ? `Switched to ${accountLabel(engine, move.to, runner)} — ${accountLabel(engine, move.from, runner)} is paused`

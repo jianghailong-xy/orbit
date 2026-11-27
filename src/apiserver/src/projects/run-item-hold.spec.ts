@@ -8,7 +8,7 @@ const readAt = new Date(dueAt.getTime() - 1);
 const facts: RunItemFacts = {
   kind: 'CONFIRMATION', project: { automatic: true, coordinatorEnabled: true },
   coordinatorSessionId: 'coordinator', coordinatorSession: {
-    status: 'AWAITING_INPUT', finishedAt: null, lastTurnOutcome: 'ANSWERED', endReason: null, completedAt: null, archivedAt: null,
+    turnState: null, finishedAt: null, lastTurnOutcome: 'ANSWERED', endReason: null, completedAt: null, archivedAt: null,
     deletedAt: null, cancelRequestedAt: null, retryAt: null,
   },
   answered: false, delivery: 'PENDING', deliveryRefusal: null, deliveredTurn: null,

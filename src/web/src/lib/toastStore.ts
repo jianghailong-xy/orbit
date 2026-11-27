@@ -24,6 +24,12 @@ const dwells = new Map<string, ReturnType<typeof setTimeout>>();
 let folding: ReturnType<typeof setTimeout> | null = null;
 let held = false;
 let seq = 0;
+/** The route on screen, kept by ToastViewport: the place a toast raised now is about. */
+let route: string | undefined;
+
+export function setToastRoute(next: string): void {
+  route = next;
+}
 
 function set(next: ToastFeed): void {
   if (next === feed) return;
@@ -78,7 +84,7 @@ function foldLater(id: string): void {
 
 /** Puts a toast up; answers its id, or null when it repeated what went up under two seconds ago. */
 export function showToast(item: Omit<ToastItem, 'id'>): string | null {
-  const { feed: next, id } = post(feed, { ...item, id: `toast-${++seq}` }, Date.now());
+  const { feed: next, id } = post(feed, { origin: route, ...item, id: `toast-${++seq}` }, Date.now());
   if (id === null) return null;
   set(next);
   const shown = next.pinned.find((one) => one.id === id) ?? next.transient.find((one) => one.id === id);

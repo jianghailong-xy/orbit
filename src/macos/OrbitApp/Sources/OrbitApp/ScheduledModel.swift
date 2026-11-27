@@ -39,6 +39,8 @@ final class ScheduledModel {
     var workspaceFilter: String?
     /// The schedule whose detail panel is up.
     var inspectedID: String?
+    /// The schedule whose title the Mac's detail panel is editing in place (Rename…, §8.4).
+    var renamingID: String?
     /// The draft panel: the sentence typed and the session it opened.
     var draftPanel: DraftPanel?
     /// The draft change conversation (§8.2, board 03-change ③): Orbit's opening and a composer, before any
@@ -226,6 +228,17 @@ final class ScheduledModel {
         await control(id) { try await self.api.runScheduleNow(id) }
     }
 
+    /// Run now from a run's session: the refusal's sentence, or the session of the run it started (web opens it).
+    func runNowSession(_ id: String) async -> (said: String?, sessionID: String?) {
+        var started: String?
+        let said = await control(id) {
+            let answer = try await self.api.runScheduleNow(id)
+            started = answer.run.sessionId
+            return answer
+        }
+        return (said, said == nil ? started : nil)
+    }
+
     @discardableResult func pause(_ id: String) async -> String? {
         await control(id) { try await self.api.pauseSchedule(id) }
     }
@@ -242,6 +255,11 @@ final class ScheduledModel {
 
     @discardableResult func undo(_ id: String, revision: Int) async -> String? {
         await control(id) { try await self.api.undoSchedule(id, revision: revision) }
+    }
+
+    /// Rename (§8.4): the title alone, applied at once.
+    @discardableResult func rename(_ id: String, title: String) async -> String? {
+        await control(id) { try await self.api.renameSchedule(id, title: title) }
     }
 
     @discardableResult func stop(runID: String, scheduleID: String) async -> String? {

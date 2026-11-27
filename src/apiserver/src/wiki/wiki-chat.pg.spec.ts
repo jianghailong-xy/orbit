@@ -46,12 +46,13 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 
 import { toUuid, uuidToBase62, WIKI_CHAT_COPY, WIKI_CHAT_PROMPT } from '@orbit/shared';
+import { appendWikiChatNotes, WIKI_CHAT_CONTENTS_MAX_CHARS, WIKI_CHAT_PROMPT_DIGEST, WIKI_CONTENTS_HEADER } from './wiki-chat-notes';
 import type { PrismaClient } from '@prisma/client';
 import { Client } from 'pg';
 
@@ -62,7 +63,15 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import { controlPlaneNoteOf } from '../runner-api/control-plane-note';
 import { SessionsService } from '../sessions/sessions.service';
 import { isOwnerTurn } from './wiki.service';
+import { wordSql } from '../test-support/session-word';
 import '../test-support/daemon-routes-over-http';
+
+/** When WIKI_CHAT_PAYLOADS names a file, each server answer a client draws is appended to it as one JSON line (src/shared/src/wiki-chat.server-payloads.json is built from it). */
+const capture = (name: string, value: unknown): void => {
+  const out = process.env.WIKI_CHAT_PAYLOADS;
+  if (out) appendFileSync(out, `${JSON.stringify({ name, value })}\n`);
+};
+
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -257,7 +266,9 @@ test('the wiki chat is an ordinary session of the workspace the space chose, sta
   const create = (body: Record<string, unknown>, bearer = ownerToken, headers?: Record<string, string>) =>
     api('POST', chats, bearer, { clientTurnId: randomUUID(), content: 'Is the lease really ninety seconds?', ...body }, headers);
   const list = (bearer = ownerToken, headers?: Record<string, string>) => api('GET', chats, bearer, undefined, headers);
-  const sessionRow = async (id: string) => (await sql.query(`SELECT * FROM "session" WHERE "id" = $1::uuid`, [id])).rows[0];
+  /** The session's row, with `status` the word its facts give. */
+  const sessionRow = async (id: string) =>
+    (await sql.query(`SELECT *, ${wordSql()} AS status FROM "session" WHERE "id" = $1::uuid`, [id])).rows[0];
   const turnsOf = async (sessionId: string) =>
     (await sql.query(`SELECT * FROM "conversation_turn" WHERE "session_id" = $1::uuid ORDER BY "seq"`, [sessionId])).rows;
   const sessionsIn = async (workspaceId: string) =>
@@ -518,9 +529,9 @@ test('the wiki chat is an ordinary session of the workspace the space chose, sta
       /SOURCE_PIN_IMMUTABLE/u, 'and its selector is frozen like every other');
     // The CHECKs: the chat's is the one SOURCE shape with no codebase, and it is a ref.
     const insert = (columns: Record<string, unknown>) => sql.query(
-      `INSERT INTO "session" (id, title, prompt, owner_id, creator_id, workspace_id, status, dispatch_origin, updated_at, source_state,
+      `INSERT INTO "session" (id, title, prompt, owner_id, creator_id, workspace_id, turn_state, dispatch_origin, updated_at, source_state,
          source_kind, source_codebase_id, source_repo_url, source_ref, source_revision_sha, source_config_revision, source_ref_authority)
-       VALUES ($1, 'shape', 'p', $2, $2, $3, 'PENDING', 'USER', now(), 'SELECTED', 'CHAT_UPSTREAM', $4, $5, $6, $7, $8, 'REMOTE')`,
+       VALUES ($1, 'shape', 'p', $2, $2, $3, 'QUEUED', 'USER', now(), 'SELECTED', 'CHAT_UPSTREAM', $4, $5, $6, $7, $8, 'REMOTE')`,
       [randomUUID(), owner.id, wsDelivery, columns.codebase ?? null, REPO_URL, columns.ref === undefined ? 'refs/heads/main' : columns.ref,
         columns.revision ?? null, columns.config ?? null],
     );
@@ -550,6 +561,17 @@ test('the wiki chat is an ordinary session of the workspace the space chose, sta
     '</orbit_wiki_selection>',
   ].join('\n');
 
+  // The wiki's structure as the chat's first message carries it: no covers, no sentences (chat.notes.contents).
+  const CONTENTS = [
+    '<orbit_wiki_contents planVersion="1">',
+    WIKI_CONTENTS_HEADER,
+    '1.1 sessions-runtime · Sessions runtime · Runtime',
+    '  §1 overview · Overview · not written',
+    `  §2 turn-delivery · Turn delivery · written, repoSha ${SHA.slice(0, 12)}`,
+    `  §3 leases · Leases · written, repoSha ${SHA.slice(0, 12)}`,
+    '</orbit_wiki_contents>',
+  ].join('\n');
+
   const answered = (turnId: string) =>
     sql.query(`UPDATE "conversation_turn" SET "status" = 'ANSWERED', "answered_at" = now() WHERE "id" = $1::uuid`, [turnId]);
   const send = (body: Record<string, unknown>, sessionId = deliveryChat, bearer = ownerToken) =>
@@ -573,9 +595,10 @@ test('the wiki chat is an ordinary session of the workspace the space chose, sta
     const [turn] = await turnsOf(deliveryChat);
     firstTurn = turn.id;
     assert.equal(handed.turnId, turn.id);
-    assert.equal(handed.content, `${WORDS}\n\n${WIKI_CHAT_PROMPT}\n\n${PAGE}\n\n${SELECTION}`, 'the words, then the three blocks');
+    assert.equal(handed.content, `${WORDS}\n\n${WIKI_CHAT_PROMPT}\n\n${CONTENTS}\n\n${PAGE}\n\n${SELECTION}`, 'the words, then the four blocks');
     assert.equal(turn.content, WORDS, "the turn's content is the owner's words alone");
-    assert.equal(controlPlaneNoteOf(handed.content, turn.content), `\n\n${WIKI_CHAT_PROMPT}\n\n${PAGE}\n\n${SELECTION}`,
+    capture('chat.delivered.contents', handed.content);
+    assert.equal(controlPlaneNoteOf(handed.content, turn.content), `\n\n${WIKI_CHAT_PROMPT}\n\n${CONTENTS}\n\n${PAGE}\n\n${SELECTION}`,
       'and the note recorded beside the echo is exactly what delivery appended');
   });
 
@@ -603,6 +626,95 @@ test('the wiki chat is an ordinary session of the workspace the space chose, sta
     assert.deepEqual([turn.content, turn.send_intent, isOwnerTurn({ kind: turn.kind, sendIntent: turn.send_intent, clientTurnId: turn.client_turn_id })],
       [later, 'NEXT_TURN', true], "the words alone, and the owner's own");
     await answered(turn.id);
+  });
+
+  await t.test('5. the contents note comes again only when the confirmed plan version changes (D3)', async () => {
+    const quiet = await send({ content: 'Nothing new here.' });
+    assert.equal(quiet.status, 201, quiet.text);
+    const same = await inbox();
+    assert.equal(same.content, 'Nothing new here.', 'the same version, the same chat: no rules and no contents again');
+    await answered(same.turnId);
+
+    await sql.query(`UPDATE "wiki_plan" SET "version" = 2 WHERE "id" = $1::uuid`, [planId]);
+    const changed = await send({ content: 'And now?' });
+    assert.equal(changed.status, 201, changed.text);
+    const next = await inbox();
+    assert.equal(next.content, `And now?\n\n${CONTENTS.replace('planVersion="1"', 'planVersion="2"')}`, 'version 2: the contents alone, not the rules');
+    assert.ok(!next.content.includes('covers') && !next.content.includes('A lease expires'), 'no covers and no sentences');
+    await answered(next.turnId);
+    const again = await send({ content: 'Still version 2.' });
+    assert.equal(again.status, 201, again.text);
+    const last = await inbox();
+    assert.equal(last.content, 'Still version 2.');
+    await answered(last.turnId);
+  });
+
+  await t.test("5. a chat opened before the change gets the rules once; a delivery rolled back sends both again", async () => {
+    const markers = async () => (await sql.query(
+      `SELECT "wiki_chat_prompt_digest" AS digest, "wiki_chat_contents_version" AS version FROM "session" WHERE "id" = $1::uuid`, [deliveryChat])).rows[0];
+    assert.deepEqual(await markers(), { digest: WIKI_CHAT_PROMPT_DIGEST, version: 2 }, 'what was last delivered');
+    const deliver = (seq: number, fail = false) => prisma.$transaction(async (tx) => {
+      const out = await appendWikiChatNotes(tx as never, {
+        ownerId: owner.id, spaceId, sessionId: deliveryChat, turn: { seq, kind: 'message', wikiContext: null },
+      }, 'words');
+      if (fail) throw new Error('claim rolled back');
+      return out;
+    });
+    // A chat opened before this release has neither marker.
+    await sql.query(`UPDATE "session" SET "wiki_chat_prompt_digest" = NULL, "wiki_chat_contents_version" = NULL WHERE "id" = $1::uuid`, [deliveryChat]);
+    await assert.rejects(deliver(9000, true), /claim rolled back/u);
+    assert.deepEqual(await markers(), { digest: null, version: null }, 'a rolled-back delivery wrote neither marker');
+    const contents2 = CONTENTS.replace('planVersion="1"', 'planVersion="2"');
+    assert.equal(await deliver(9000), `words\n\n${WIKI_CHAT_PROMPT}\n\n${contents2}`, 'so the next one sends both');
+    assert.deepEqual(await markers(), { digest: WIKI_CHAT_PROMPT_DIGEST, version: 2 });
+    assert.equal(await deliver(9001), 'words', 'and exactly once');
+    // The prompt changing is the digest differing, with the plan unchanged: the rules alone.
+    await sql.query(`UPDATE "session" SET "wiki_chat_prompt_digest" = 'an older prompt' WHERE "id" = $1::uuid`, [deliveryChat]);
+    assert.equal(await deliver(9002), `words\n\n${WIKI_CHAT_PROMPT}`);
+    assert.equal(await deliver(9003), 'words');
+  });
+
+  await t.test('5. the contents note on a realistic plan (35 documents, 8 sections each) stays under its cap', async () => {
+    const owned = await prisma.wikiPlanDoc.findFirst({ where: { planId, slug: 'sessions-runtime' }, select: { id: true } });
+    assert.ok(owned);
+    const extra: string[] = [];
+    for (let d = 0; d < 34; d += 1) {
+      const row = await prisma.wikiPlanDoc.create({
+        data: {
+          planId, ownerId: owner.id, position: d + 1, category: 'runtime', slug: `component-${d}-runtime-behaviour`, title: `Component ${d} runtime behaviour`,
+          question: 'q', audience: ['a'], scopeIn: ['s'], scopeOut: [] as never, lengthMin: 100, lengthMax: 2000,
+        },
+      });
+      extra.push(row.id);
+      for (let k = 0; k < 8; k += 1) {
+        await prisma.wikiPlanSection.create({
+          data: { docId: row.id, ownerId: owner.id, position: k, key: `section-key-${k}`, title: `How the ${k}th concern is handled`, kind: 'flow', covers: 'c', length: 200, sources: {} },
+        });
+      }
+      const written = await prisma.wikiDoc.create({
+        data: { spaceId, ownerId: owner.id, slug: `component-${d}-runtime-behaviour`, planId, planVersion: 2, planDocId: row.id, status: 'ok', repoSha: SHA },
+      });
+      for (let k = 0; k < 8; k += 1) {
+        await prisma.wikiDocSection.create({
+          data: { docId: written.id, ownerId: owner.id, key: `section-key-${k}`, planSectionId: randomUUID(), materialSha256: 'f'.repeat(64), blocks: [{ kind: 'paragraph' }] as never, repoSha: SHA, model: 'spec-model' },
+        });
+      }
+    }
+    await sql.query(`UPDATE "session" SET "wiki_chat_contents_version" = NULL WHERE "id" = $1::uuid`, [deliveryChat]);
+    const out = (await prisma.$transaction(async (tx) => appendWikiChatNotes(tx as never, {
+      ownerId: owner.id, spaceId, sessionId: deliveryChat, turn: { seq: 9100, kind: 'message', wikiContext: null },
+    }, 'x')))!;
+    const note = out.slice(out.indexOf('<orbit_wiki_contents'));
+    console.log(`# contents note on 35 documents × 8 sections: ${note.length} characters, ${note.split('\n').length} lines`);
+    assert.ok(note.length <= WIKI_CHAT_CONTENTS_MAX_CHARS + 300, `${note.length} characters`);
+    assert.match(note, /repoSha [0-9a-f]{12}\n/u, 'the full form holds at this size');
+    await sql.query(`DELETE FROM "wiki_doc_section" WHERE "doc_id" IN (SELECT id FROM "wiki_doc" WHERE "slug" LIKE 'component-%')`);
+    await sql.query(`DELETE FROM "wiki_doc" WHERE "slug" LIKE 'component-%'`);
+    await sql.query(`DELETE FROM "wiki_plan_section" WHERE "doc_id" = ANY($1::uuid[])`, [extra]);
+    await sql.query(`DELETE FROM "wiki_plan_doc" WHERE "id" = ANY($1::uuid[])`, [extra]);
+    // Back to version 1, as the cases after this one read it; the chat has been told it.
+    await sql.query(`UPDATE "wiki_plan" SET "version" = 1 WHERE "id" = $1::uuid`, [planId]);
+    await sql.query(`UPDATE "session" SET "wiki_chat_contents_version" = 1 WHERE "id" = $1::uuid`, [deliveryChat]);
   });
 
   await t.test('5. an entry page carries the entry as wiki_get holds it, and a plan page the document\'s definition', async () => {
@@ -757,7 +869,7 @@ test('the wiki chat is an ordinary session of the workspace the space chose, sta
       undefined, { 'x-orbit-runner-capabilities': CAPABILITIES });
     assert.equal(handed.status, 200, handed.text);
     assert.equal(toUuid(handed.json.turnId), turns[0].id);
-    assert.equal(handed.json.content, `${words}\n\n${WIKI_CHAT_PROMPT}`, 'the words, then the chat\'s rules');
+    assert.equal(handed.json.content, `${words}\n\n${WIKI_CHAT_PROMPT}\n\n${CONTENTS}`, 'the words, then the chat\'s rules and the wiki\'s contents');
     assert.deepEqual(
       (handed.json.attachments as Array<{ id: string; mimeType: string; fileName?: string }>).map((a) => [toUuid(a.id), a.mimeType, a.fileName]),
       [[picture, 'image/png', 'lease-timeline.png'], [log, 'text/plain', 'runner.log']],

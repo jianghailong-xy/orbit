@@ -117,10 +117,12 @@ export function tableOfContents(body: string): Array<{ id: string; text: string 
   return out;
 }
 
-/** Minutes to read, at 200 words a minute, never less than one. */
+/** Minutes to read, at 200 words a minute, never less than one. Chinese is written without spaces, so two of its
+ *  characters count as a word. */
 export function readMinutes(body: string): number {
-  const words = body.split(/\s+/).filter(Boolean).length;
-  return Math.max(1, Math.ceil(words / 200));
+  const han = body.match(/[㐀-䶿一-鿿]/g)?.length ?? 0;
+  const words = body.replace(/[㐀-䶿一-鿿]/g, ' ').split(/\s+/).filter(Boolean).length;
+  return Math.max(1, Math.ceil((words + han / 2) / 200));
 }
 
 const PLATFORM_LABEL: Record<HelpPlatform, string> = { web: 'Web', macos: 'macOS', ios: 'iPhone', android: 'Android' };

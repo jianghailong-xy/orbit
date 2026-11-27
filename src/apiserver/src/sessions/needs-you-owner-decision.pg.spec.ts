@@ -71,6 +71,12 @@
  *       run out, and goes dark again by itself the moment new work is filed. The delivery itself,
  *       over the real producer, is `projects/project-looks-finished.pg.spec.ts`.
  *
+ *   Each card that lights a row here also pushes the owner, once, opening the row it lights
+ *   (`PushService.notifyDecisionCards`, task 354adqnR5U6CZFIfyR5df): the held proposal (1), the evidence
+ *   of a project whose coordinator is switched off (6b) — and not while a paused coordinator keeps it,
+ *   until it is switched off (6f) — the moved standard set (7c) and Record as done… (8b). A start request
+ *   (7a) lights its row and pushes nothing, as it lights no tally.
+ *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/needs-you-owner-decision.pg.spec.ts
  *
  * Not destructive: every id is freshly generated and every assertion is scoped to this owner.
@@ -82,11 +88,11 @@ import { test } from 'node:test';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -105,6 +111,7 @@ import { ProjectAcceptanceService } from '../projects/project-acceptance.service
 import { ProjectsService } from '../projects/projects.service';
 import { readPendingEvidenceJudgments } from '../tasks/pending-evidence-judgments';
 import { TaskCompletionEvidenceService } from '../tasks/task-completion-evidence.service';
+import { recordedPush } from '../push/test-support/recorded-push';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -199,7 +206,7 @@ async function fixture(db: PrismaClient, label: string): Promise<Fixture> {
       title: `协调：${label}`,
       prompt: `协调：${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
       startedAt: new Date(),
@@ -228,6 +235,17 @@ async function fixture(db: PrismaClient, label: string): Promise<Fixture> {
   });
   await db.projectRuntime.upsert({ where: { projectId }, create: { projectId }, update: {} });
   return { ownerId, workspaceId, projectId, coordinatorSessionId };
+}
+
+/** The owner's one iPhone, and a PushService over this database whose deliveries are recorded. */
+async function pushesTo(db: PrismaClient, f: Fixture) {
+  await db.deviceToken.create({
+    data: { userId: f.ownerId, token: `apns-${randomUUID()}`, platform: 'ios', bundleId: 'io.orbitd.app', environment: 'sandbox' },
+  });
+  const recorded = recordedPush(db);
+  /** One sweep's pushes to this owner, as `[cardKind, sessionID]`. */
+  return async (readAt?: Date) => (await recorded.sweep(f.ownerId, readAt))
+    .map((one) => [one.payload.cardKind, one.payload.sessionID]);
 }
 
 /** The owner's confirmation door, over the production wiring. */
@@ -288,6 +306,7 @@ test('the badge counts an owner decision, points at it, and hands out no key', {
   });
   const db = stack.db;
   const f = await fixture(db, 'badge');
+  const sweep = await pushesTo(db, f);
 
   /** State the whole collection through the owner's path — the only writer of a definition. */
   async function state(items: Array<{ id?: string; text: string }>): Promise<Held | null> {
@@ -364,6 +383,10 @@ test('the badge counts an owner decision, points at it, and hands out no key', {
     assert.deepEqual(signals,
       [{ sessionId: f.coordinatorSessionId, projectId: f.projectId, count: 1, kind: 'PROJECT_DECISION' }],
       'a count, an address and its kind, and nothing else in the row');
+
+    // And the owner is pushed about it, once, opening the conversation the card is drawn in.
+    assert.deepEqual(await sweep(), [['CRITERIA_DECISION', f.coordinatorSessionId]]);
+    assert.deepEqual(await sweep(), [], 'a second sweep pushes nothing');
   });
 
   await t.test('(2) deciding it puts both counts back, and only the decision changed', async () => {
@@ -480,6 +503,7 @@ test('the badge counts evidence waiting on the coordinator’s card, and only wh
   });
   const db = stack.db;
   const f = await fixture(db, 'evidence');
+  const sweep = await pushesTo(db, f);
 
   // Which session rows the evidence door asked clients to re-draw. Everything else here reads the
   // counts directly, so without this a count that is right but never pushed would pass.
@@ -550,7 +574,7 @@ test('the badge counts evidence waiting on the coordinator’s card, and only wh
         title: `${label} 执行会话`,
         prompt: `${label} 执行会话`,
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: true,
       },
@@ -630,6 +654,7 @@ test('the badge counts evidence waiting on the coordinator’s card, and only wh
     assert.equal(await countOn(f.coordinatorSessionId), 0,
       'and the badge agrees with the card: a lit row that opens onto nothing is worse than a dark one');
     assert.deepEqual(await readOwnerDecisionSignals(db as never, f.ownerId), []);
+    assert.deepEqual(await sweep(), [], 'and nothing pushes the owner about a card nobody can answer');
     assert.deepEqual(nudged, [f.coordinatorSessionId],
       'the row is still re-drawn: whether it lights is the count’s call, not the nudge’s');
   });
@@ -648,6 +673,9 @@ test('the badge counts evidence waiting on the coordinator’s card, and only wh
         [{ sessionId: f.coordinatorSessionId, projectId: f.projectId, count: 1, kind: 'PROJECT_DECISION' }]);
       assert.deepEqual(nudged, [f.coordinatorSessionId],
         'and the submission asked for that row to be re-drawn, so it lights without a reload');
+      // The coordinator is switched off, so the card is the owner's at once: one push, in its conversation.
+      assert.deepEqual(await sweep(), [['EVIDENCE', f.coordinatorSessionId]]);
+      assert.deepEqual(await sweep(), [], 'once');
     });
 
   await t.test('(6c) confirming it puts the count back, and re-draws the row again', async () => {
@@ -769,6 +797,27 @@ test('the badge counts evidence waiting on the coordinator’s card, and only wh
       sendThrows = false;
     }
   });
+
+  await t.test('(6f) a paused coordinator keeps the revision and nobody is pushed; switched off, the owner is', async () => {
+    // Automatic again, with its conversation parked on a retry it armed (a usage limit): PAUSED
+    // (`conversationIsPaused`). The revision waits for it rather than becoming the owner's card.
+    await db.project.update({ where: { id: f.projectId }, data: { coordinatorEnabled: true } });
+    await db.session.update({
+      where: { id: f.coordinatorSessionId }, data: { retryAt: new Date(Date.now() + 3_600_000) },
+    });
+    const waiting = await judgedTask('paused');
+    await submit(waiting);
+    assert.deepEqual(await cardRows(), [], 'it waits for the coordinator: no owner card');
+    assert.deepEqual(await sweep(new Date(Date.now() + 86_400_000)), [],
+      'and no push, however long the pause lasts: the coordinator decides it once it is back');
+
+    // The owner switches the coordinator off: the revision is theirs now, and one push says so.
+    await db.project.update({ where: { id: f.projectId }, data: { coordinatorEnabled: false } });
+    assert.deepEqual(await cardRows(), [waiting.taskId]);
+    assert.deepEqual(await sweep(), [['EVIDENCE', f.coordinatorSessionId]]);
+    assert.deepEqual(await sweep(), [], 'once');
+    await db.session.update({ where: { id: f.coordinatorSessionId }, data: { retryAt: null } });
+  });
 });
 
 /**
@@ -794,6 +843,7 @@ test('the badge counts the standard set waiting to be confirmed, and falls when 
   const db = stack.db;
   const f = await fixture(db, 'confirmation');
   const acceptance = acceptanceOf(stack);
+  const sweep = await pushesTo(db, f);
 
   /** State the whole collection through the owner's path — the only writer of a definition. */
   async function state(items: Array<{ id?: string; text: string }>): Promise<Held | null> {
@@ -910,6 +960,7 @@ test('the badge counts the standard set waiting to be confirmed, and falls when 
     assert.deepEqual(await readOwnerDecisionSignals(db as never, f.ownerId), [{
       sessionId: f.coordinatorSessionId, projectId: f.projectId, count: 1, kind: 'START_REQUEST',
     }], 'and it lands on the conversation the card is drawn in, as a start');
+    assert.deepEqual(await sweep(), [], 'a start is the owner’s to make when they choose: nothing pushes');
   });
 
   await t.test('(7b) starting the project puts the count back', async () => {
@@ -935,6 +986,8 @@ test('the badge counts the standard set waiting to be confirmed, and falls when 
     assert.deepEqual(await readOwnerDecisionSignals(db as never, f.ownerId), [{
       sessionId: f.coordinatorSessionId, projectId: f.projectId, count: 1, kind: 'PROJECT_DECISION',
     }]);
+    assert.deepEqual(await sweep(), [['STANDARD_SET', f.coordinatorSessionId]], 'one push, for the set that moved');
+    assert.deepEqual(await sweep(), [], 'once');
   });
 
   await t.test('(7d) the count is not the door: a refused press leaves it standing', async () => {
@@ -975,6 +1028,7 @@ test('the badge says Record as done… once a finished-looking project has waite
   });
   const db = stack.db;
   const f = await fixture(db, 'looks-finished');
+  const sweep = await pushesTo(db, f);
 
   // One criterion, confirmed, and the one task serving it DONE through the DONE fence — with no
   // receipt anywhere, so the projection withholds DONE while every criterion is met. Its work ran
@@ -1010,7 +1064,7 @@ test('the badge says Record as done… once a finished-looking project has waite
       taskId: served.id,
       title: 'The work the ruler asks for',
       prompt: 'Do the work',
-      status: RunStatus.SUCCEEDED,
+      turnState: null,
       startsTaskWork: true,
       finishedAt: new Date(),
       changedFiles: ['work.md'],
@@ -1036,7 +1090,7 @@ test('the badge says Record as done… once a finished-looking project has waite
       title: 'the work the ruler asks for',
       prompt: 'the work the ruler asks for',
       provider: 'claude',
-      status: RunStatus.SUCCEEDED,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       isolationStatus: 'worktree',
@@ -1090,6 +1144,7 @@ test('the badge says Record as done… once a finished-looking project has waite
     assert.deepEqual(await readOwnerDecisionSignals(db as never, f.ownerId), []);
     assert.equal((await rowOf()).pendingApprovals, 0);
     assert.equal(await needsYou(), 0);
+    assert.deepEqual(await sweep(), [], 'and the owner is not pushed while the coordinator has it');
   });
 
   await t.test('(8b) once the window has run out with no request, the row lights as Record as done…', async () => {
@@ -1105,6 +1160,9 @@ test('the badge says Record as done… once a finished-looking project has waite
     assert.equal(row.pendingApprovals, 1);
     assert.equal(row.waitingKind, 'RECORD_AS_DONE', 'and the row names it in words of its own');
     assert.equal(await needsYou(), 1);
+    // The window ran out with no write at all: the sweep is the only thing that can say so.
+    assert.deepEqual(await sweep(), [['RECORD_AS_DONE', f.coordinatorSessionId]]);
+    assert.deepEqual(await sweep(), [], 'once');
   });
 
   await t.test('(8c) new work takes it back off the owner by itself', async () => {

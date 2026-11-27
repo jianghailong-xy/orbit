@@ -17,6 +17,7 @@ import { encodeId } from '../lib/idCodec';
 import { TASK_START_OPEN_TASK } from '../lib/taskStartCard';
 import { SharedSessionPage } from './SharedSessionPage';
 import * as rows from './SharedSessionPage.fixtures';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
  * The public page of a shared session (`/s/<token>`), mounted whole on the routes T1 gave it:
@@ -686,7 +687,7 @@ describe('the header', () => {
       'Read-only',
     ]);
     expect(header.querySelector('button')).toBeNull();
-    expect(header.querySelector('.share-live')!.getAttribute('title')).toBe(
+    expect(await hoverTooltip(header.querySelector('.share-live')!)).toBe(
       'Live — viewers see changes as they happen',
     );
     expect(container.querySelector('footer')!.textContent).toBe('Shared from Orbit · read-only');

@@ -3,6 +3,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Drive uploads run as background work in the foreground-service slot, with the one upload notification (board 04-android ⑥). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <!-- In-app updates hand verified GitHub release APKs to PackageInstaller. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <queries>
@@ -38,6 +41,9 @@
         </provider>
         <receiver android:name=".update.UpdateInstallReceiver" android:exported="false" />
         <receiver android:name=".push.OwnerRequestLaterReceiver" android:exported="false" />
+        <receiver android:name=".drive.DrivePauseReceiver" android:exported="false" />
+        <service android:name="androidx.work.impl.foreground.SystemForegroundService" android:foregroundServiceType="dataSync"
+            tools:node="merge" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -6,11 +6,11 @@ import { ConflictException } from '@nestjs/common';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { uuidToBase62 } from '@orbit/shared';
@@ -42,6 +42,7 @@ import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskDispatchRefusalProducer } from './task-dispatch-refusal.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * THE SERVER BINDS THE STANDARD A REVISION IS JUDGED AGAINST.
@@ -70,6 +71,8 @@ import { WakeDispositionService } from './wake-disposition.service';
  *       coordinator's CONFIRM settles it DONE.
  *   (2) An envelope with no `criterion` at all is accepted for a declared task, bound to that
  *       criterion, and decidable: the coordinator's CONFIRM settles it.
+ *   (2b) Task M2's case: a declared task whose envelope quotes its own task id and acceptanceCriteria
+ *       is stored with the declared key and live text, and the coordinator's CONFIRM settles it.
  *   (3) Rewording the declared criterion after submission makes the revision undecidable: the
  *       predicate, the pending read and the door all refuse it, and nothing is written.
  *   (4) A revision stored before the server bound the standard — the submitter's quote in the row —
@@ -188,7 +191,7 @@ async function conversation(
       title,
       prompt: title,
       provider: 'claude',
-      status: taskId === undefined ? RunStatus.AWAITING_INPUT : RunStatus.RUNNING,
+      turnState: turnStateOfWord(taskId === undefined ? RunStatus.AWAITING_INPUT : RunStatus.RUNNING),
       dispatchOrigin: SessionDispatchOrigin.USER,
       ...(taskId === undefined ? { titleManagedByProject: true } : {}),
     },
@@ -447,6 +450,35 @@ test('(2) an envelope without `criterion` is accepted, bound to the declared cri
       assert.equal(replay.evidenceDigest, receipt.evidenceDigest);
 
       await confirm(stack, w, t, '1');
+      assert.equal(await taskStatus(stack, t), TaskStatus.DONE);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('(2b) task M2\'s case: a declared task quoting its own task id and acceptanceCriteria is bound to the declared criterion and decidable',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack.db, 'm2-wrong-quote');
+      const t = await judgedTask(stack.db, w, 'm2-wrong-quote', w.declaredDefinitionId);
+      // What M2's revision 3 did: key = the task's own id, text = its own acceptanceCriteria.
+      const wrongQuote = { key: uuidToBase62(t.taskId), text: OWN_CRITERIA };
+      const envelope = { ...taskDRevisionOne(w, t), criterion: wrongQuote };
+      const receipt = await submit(stack, w, t, envelope, `${t.taskId}-evidence-m2`);
+      assert.equal(receipt.revision, '1');
+
+      const declared = { key: criterionKeyOf(w.declaredDefinitionId), text: DECLARED_CRITERION };
+      assert.notDeepEqual(declared, wrongQuote);
+      assert.deepEqual((receipt.evidence as Record<string, unknown>).criterion, declared);
+      assert.deepEqual(receipt.criterionMatch, { ...declared, matchesLive: true });
+      const stored = await standing(stack, t, 1n);
+      assert.deepEqual(stored.evidence.criterion, declared);
+      assert.equal(stored.refusal, null, `the shared predicate refuses it: ${stored.refusal?.reason}`);
+
+      // The decide that returned 409 EVIDENCE_JUDGMENT_CRITERION_MOVED for M2 now settles it.
+      const decided = await confirm(stack, w, t, '1');
+      assert.equal(decided.decision, 'CONFIRM');
       assert.equal(await taskStatus(stack, t), TaskStatus.DONE);
     } finally {
       await stack.db.$disconnect();

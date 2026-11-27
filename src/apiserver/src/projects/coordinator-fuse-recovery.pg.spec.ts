@@ -4,11 +4,11 @@ import { test } from 'node:test';
 
 import {
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -257,7 +257,7 @@ async function fixture(db: PrismaClient, label: string): Promise<Fixture> {
       title: `协调：${label}`,
       prompt: `协调：${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
       startedAt: new Date(),
@@ -373,7 +373,7 @@ async function finishServingWork(db: PrismaClient, f: Fixture, n: number): Promi
     data: {
       id: randomUUID(), ownerId: f.ownerId, creatorId: f.ownerId, taskId, workspaceId: f.workspaceId,
       assignedRunnerId: f.runnerId, title: `serving work ${n}`, prompt: `serving work ${n}`, provider: 'claude',
-      status: RunStatus.SUCCEEDED, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      turnState: null, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       isolationStatus: 'worktree', branch: `orbit/serving-work-${n}-${taskId}`, changedFiles: ['src/work.ts'],
       // Its own branch tip is past the commit it forked from: commits of its own, not a checkout.
       baseSha: 'b'.repeat(40), branchSha: 'c'.repeat(40), worktreeBranch: `orbit/serving-work-${n}-${taskId}`,
@@ -417,7 +417,7 @@ async function strandWork(db: PrismaClient, f: Fixture): Promise<string> {
       title: 'the attempt that failed',
       prompt: 'the attempt that failed',
       provider: 'claude',
-      status: RunStatus.FAILED, finishedAt: new Date(), 
+      turnState: null, finishedAt: new Date(), 
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
     },

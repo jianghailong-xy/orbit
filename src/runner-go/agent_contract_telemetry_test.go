@@ -188,3 +188,37 @@ func TestOrbitCLIInvocationReadsInsideAShell(t *testing.T) {
 		}
 	}
 }
+
+func TestAgentContractTelemetryRecordsTheInstructionManifest(t *testing.T) {
+	t.Setenv(agentContractTelemetryEnv, "")
+	shape := SessionShape{Role: roleTaskRun, InsideRecordedWork: true, Watches: true, Wiki: true, CLI: "/usr/local/bin/orbit"}
+	m := composeManifest(shape, claudeCodeProfile)
+	if m.Hash == "" || len(m.UnitIDs) == 0 || len(m.UnitIDs) != len(m.UnitHashes) {
+		t.Fatalf("manifest = %#v", m)
+	}
+	if !reflect.DeepEqual(m, composeManifest(shape, claudeCodeProfile)) {
+		t.Errorf("the manifest is not deterministic")
+	}
+	// A shape served fewer units has fewer ids and another hash.
+	other := composeManifest(SessionShape{Role: roleSubAgent, CLI: shape.CLI}, claudeCodeProfile)
+	if other.Hash == m.Hash {
+		t.Errorf("two shapes share manifest hash %s", m.Hash)
+	}
+	// An empty CLI path leaves no system text, so no manifest.
+	if none := composeManifest(SessionShape{Role: roleTaskRun}, claudeCodeProfile); none.Hash != "" || len(none.UnitIDs) != 0 {
+		t.Errorf("a shape with no CLI path has manifest %#v", none)
+	}
+
+	exe := "/opt/orbit/bin/orbit"
+	obs := newAgentContractTelemetry(providerClaude, exe, nil, true, 10)
+	obs.manifest = m
+	payload := observeTurn(obs, telemetryTurnEvents(exe))
+	raw, _ := json.Marshal(payload["agentContractTelemetry"])
+	var got agentContractTurnTelemetry
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.InstructionManifestHash != m.Hash || !reflect.DeepEqual(got.InstructionUnits, m.UnitIDs) {
+		t.Errorf("telemetry recorded %q %v, want %q %v", got.InstructionManifestHash, got.InstructionUnits, m.Hash, m.UnitIDs)
+	}
+}

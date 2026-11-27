@@ -158,6 +158,10 @@ const ALLOWED_READERS: Readonly<Record<string, string>> = {
   // alone; the value is never compared.
   'src/apiserver/src/projects/evidence-undecided.ts':
     "copies completion-evidence's source session onto the owner item it files; decides nothing",
+  // The orphan sweep files the same EVIDENCE_UNDECIDED item for evidence nobody can decide, or nobody
+  // was handed, past the window after its notice, and copies the source session the same way.
+  'src/apiserver/src/projects/project-orphan-sweep.service.ts':
+    "copies completion-evidence's source session onto the owner item it files; decides nothing",
   // §2.9 LS6's landing view reuses the same `sourceSessionId` spelling for a different fact: the
   // work session a landing attempt is about (`project_integration_job.session_id`, a history
   // reference). The view copies it into the attempt for a reader to display and answers NULL when

@@ -5,6 +5,7 @@ import { ApiOutlined, GithubOutlined, LeftOutlined, LoginOutlined, MailOutlined,
 import { api } from '../../api';
 import { settingsReturnPath } from '../../lib/settingsReturn';
 import { useMediaQuery } from '../../lib/useMediaQuery';
+import { sidebarWidthStyle } from '../../lib/sidebarWidth';
 import { feishuAdminQuery } from '../../pages/AdminIntegrationsPage';
 import { githubAppOn, githubAppQuery } from '../../pages/AdminGithubPage';
 import { googleSignInSettingsQuery } from '../../pages/AdminSignInPage';
@@ -12,18 +13,20 @@ import { emailSettingsQuery } from '../../pages/AdminEmailPage';
 import { ImpersonationBanner } from '../ImpersonationBanner';
 import { HelpDrawer } from '../HelpDrawer';
 import { NARROW_SETTINGS_QUERY, NavGroup, NavRow } from './SettingsLayout';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from '../ui/Tooltip';
 import './Settings.css';
 
 /** A row's On / Off, drawn as the Machines group draws a machine's state. */
 function OnDot({ on }: { on: boolean | undefined }) {
   if (on === undefined) return null;
   return (
-    <span
-      className={`settings-dot settings-dot--${on ? 'online' : 'offline'}`}
-      role="img"
-      aria-label={on ? 'On' : 'Off'}
-      title={on ? 'On' : 'Off'}
-    />
+    <Tooltip content={on ? 'On' : 'Off'} delay={TEXT_TOOLTIP_DELAY_MS}>
+      <span
+        className={`settings-dot settings-dot--${on ? 'online' : 'offline'}`}
+        role="img"
+        aria-label={on ? 'On' : 'Off'}
+      />
+    </Tooltip>
   );
 }
 
@@ -89,7 +92,7 @@ function AdminNav() {
     ? google.data.enabled && google.data.clientId !== '' && google.data.hasSecret && !google.data.secretUnreadable
     : undefined;
   return (
-    <nav className="settings-nav autohide-scrollbar" aria-label="Admin">
+    <nav className="settings-nav autohide-scrollbar" aria-label="Admin" style={sidebarWidthStyle()}>
       <button type="button" className="settings-back" onClick={() => navigate(settingsReturnPath())}>
         <LeftOutlined />
         <span>Back to Orbit</span>

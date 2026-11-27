@@ -36,7 +36,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
-import { Prisma, PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { RunnerEngineHealth } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -141,7 +142,7 @@ test('Fix with an agent on PostgreSQL', { skip, concurrency: 1, timeout: 300_000
     await db.session.create({
       data: {
         id: randomUUID(), ownerId: m.ownerId, creatorId: m.ownerId, workspaceId, assignedRunnerId: m.runnerId, title: 'earlier work',
-        prompt: 'earlier work', status: RunStatus.AWAITING_INPUT, provider: 'claude', providerBuiltin: true, engine: 'claude',
+        prompt: 'earlier work', turnState: null, provider: 'claude', providerBuiltin: true, engine: 'claude',
         createdAt: at,
       },
     });
@@ -222,7 +223,7 @@ test('Fix with an agent on PostgreSQL', { skip, concurrency: 1, timeout: 300_000
     );
     assert.equal((await fixSessions(m)).length, 1);
     // Waiting on the owner (the agent asked before installing) is still open.
-    await db.session.update({ where: { id: started.sessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+    await db.session.update({ where: { id: started.sessionId }, data: { turnState: null } });
     await assert.rejects(controller.fix(m.user, m.runnerId, 'engineNotUpdating', { engine: 'codex' }), refusedWith('AGENT_FIX_RUNNING'));
 
     // Once it is over, the warning is free again.
@@ -419,13 +420,18 @@ test('Fix with an agent on PostgreSQL', { skip, concurrency: 1, timeout: 300_000
     await assert.rejects(controller.fix(m.user, m.runnerId, 'sandboxMissing', { engine: 'codex' }), refusedWith('AGENT_FIX_RUNNING'));
 
     // Once it is over, the transcript's history row reads what was done with it instead of a second agent.
-    // Ended as the server ends one: a terminal status with its release column (session_release_fact_chk, 1401).
+    // Ended as the server ends one when its person ends it: the end asked (reason `ended`), the word gracefulEndStatus
+    // gives it, and the release column (session_release_fact_chk, 1401). The handled row reads the projector's word
+    // (sessions/session-legacy-words.ts), the same one every session payload carries.
     const over = new Date();
-    await db.session.update({ where: { id: started.sessionId }, data: { status: RunStatus.SUCCEEDED, finishedAt: over, completedAt: over } });
+    await db.session.update({
+      where: { id: started.sessionId },
+      data: { turnState: null, endReason: 'ended', cancelRequestedAt: over, finishedAt: over, completedAt: over },
+    });
     const after = await runners.getRunner(m.ownerId, m.runnerId);
     assert.deepEqual(after.agentFix?.fixing, []);
     assert.deepEqual(after.agentFix?.handled, [
-      { kind: 'sandboxMissing', engine: 'codex', sessionId: started.sessionId, workspaceId: dev, workspaceName: 'orbit-develop', status: 'SUCCEEDED' },
+      { kind: 'sandboxMissing', engine: 'codex', sessionId: started.sessionId, workspaceId: dev, workspaceName: 'orbit-develop', status: 'CANCELLED' },
     ]);
   });
 });

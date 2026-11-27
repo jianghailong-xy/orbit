@@ -498,7 +498,7 @@ public enum LandingFix {
         let prefix = "project/"
         guard branch.hasPrefix(prefix) else { return branch }
         let id = branch.dropFirst(prefix.count)
-        guard id.count > 13 else { return branch }
+        guard id.count >= 20, id.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) }) else { return branch }
         return "\(prefix)\(id.prefix(5))...\(id.suffix(5))"
     }
 

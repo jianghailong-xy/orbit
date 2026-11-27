@@ -589,7 +589,8 @@ type HeartbeatResponse struct {
 	// The one Codex rate-limit reset step claimed for this process
 	// (docs/codex-rate-limit-reset-contract.md §6). Nil from older control planes and whenever no
 	// operation is claimed for it; nothing acts on it until this binary declares
-	// codex-rate-limit-reset-v1.
+	// codex-rate-limit-reset-v1. A protocol version 2 command names its account slot (AccountSlot,
+	// contract v2 §12) and is sent only to a binary that declares codex-rate-limit-reset-v2.
 	CodexRateLimitResetRequest *CodexRateLimitResetCommand `json:"codexRateLimitResetRequest,omitempty"`
 	// Integration jobs this process has just been handed: the platform's own git work, putting a
 	// task's branch onto its project's integration line
@@ -779,6 +780,18 @@ type IntegrationJobCommand struct {
 	// waiting to be observed, each with the commit its work was delivered as. Absent on every other
 	// kind. TargetRef and SourceRef both name the integration line on such a job.
 	ObserveTasks []IntegrationObserveTask `json:"observeTasks,omitempty"`
+	// LandVia is how a LAND_TASK or LAND_PROMOTION reaches its target (docs/design/protected-branch-landing.md §3):
+	// PUSH, PULL_REQUEST or PUSH_AS_ME, fixed when the control plane handed the attempt out. Sent only to a runner
+	// that declared integrationPullRequestCapabilityV1; empty, the target is pushed as it always was.
+	LandVia string `json:"landVia,omitempty"`
+	// LandingRef is the branch the tested commit goes to when GitHub refuses the target because of the branch's
+	// rules: refs/heads/orbit/land/<landing session id> (§4.1).
+	LandingRef string `json:"landingRef,omitempty"`
+	// LandingRefSha is what Orbit last pushed to LandingRef, the landing push's lease; empty when it pushed none.
+	LandingRefSha string `json:"landingRefSha,omitempty"`
+	// PullRequestOpen says the landing subject's pull request is open: the target is not tried, only the landing
+	// branch is pushed, and a commit already there with the tested tree on the same base is reused (§9 item 2).
+	PullRequestOpen bool `json:"pullRequestOpen,omitempty"`
 	// scratchRoot is where this job stages its throwaway worktree; empty means the runner's
 	// worktreesDir. It is never on the wire and no control plane sets it: it exists so a test
 	// that runs in parallel — and so cannot set ORBIT_HOME for the whole process — can give each
@@ -1007,6 +1020,16 @@ type IntegrationJobResultRequest struct {
 	// (§10.6 O-S3). A pointer so an observation of no task still says so with an empty list, while
 	// every other answer leaves the field out.
 	Observations *[]IntegrationObservation `json:"observations,omitempty"`
+	// With PULL_REQUEST, and only there (docs/design/protected-branch-landing.md §4.2 J-T14): the commit the landing
+	// branch holds after the push, read back from the remote, and GitHub's words for the refused target push ("" when
+	// the subject's pull request was already open and the target was not tried).
+	LandingRefSha string `json:"landingRefSha,omitempty"`
+	PushRefusal   string `json:"pushRefusal,omitempty"`
+	// With LANDED, and only for a Push as me landing (§5.2): "OWNER" when the target push carried the owner's own
+	// GitHub token and GitHub took it, and the rules GitHub said that push bypassed, its "Bypassed rule violations"
+	// lines.
+	PushedAs      string   `json:"pushedAs,omitempty"`
+	BypassedRules []string `json:"bypassedRules,omitempty"`
 }
 
 // IntegrationUpstreamMovedCommits is the list of commits that moved the upstream under a landing, as
@@ -1110,8 +1133,17 @@ type AccountRemoveCommand struct {
 	// The engine whose account store holds the slot (codex, claude). Empty on the field older
 	// control planes use, which only ever meant Codex.
 	Engine string `json:"engine,omitempty"`
-	// "default", or the id of a slot this runner added. Default is never removable.
+	// "default", or the id of a slot this runner added. Default is never removable; it is only ever
+	// signed out (Action "sign-out").
 	Account string `json:"account"`
+	// What to do with the account: "remove" (also empty, from a control plane older than sign-out)
+	// takes an added slot off this machine; "sign-out" deletes Default's login credential and nothing
+	// else (signOutDefault, docs/default-sign-out-design.md). Only a runner that declares
+	// `<engine>-default-sign-out/v1` is handed a sign-out.
+	Action string `json:"action,omitempty"`
+	// With a sign-out: go ahead although sessions are running on Default, which the person confirmed
+	// after a refusal named them. They fail on their next turn.
+	Force bool `json:"force,omitempty"`
 	// Identifies this request (the server's codexAccountRemoveAt), so a report can be matched to the
 	// request it answers.
 	Attempt string `json:"attempt,omitempty"`
@@ -1130,7 +1162,8 @@ type AccountRemoveMove struct {
 
 // AccountRemoveResultRequest is the runner's word on a removal: "done" once the slot's
 // directory and record are gone, or "failed" with the machine's own reason — Default, a slot a live
-// session is in, or a directory that would not go away.
+// session is in, or a directory that would not go away. A sign-out is answered the same way: "done"
+// once Default's credential is gone, "failed" with sessions on Default or a credential that stayed.
 type AccountRemoveResultRequest struct {
 	// The engine the removal was for; empty when it was answered on the codex-named route an older
 	// control plane reads.
@@ -1139,8 +1172,8 @@ type AccountRemoveResultRequest struct {
 	Status  string `json:"status"` // "done" | "failed"
 	Message string `json:"message,omitempty"`
 	Attempt string `json:"attempt,omitempty"`
-	// With a removal refused because the account is in use: the sessions using it, so the control
-	// plane can name them in Message.
+	// With a removal or a sign-out refused because the account is in use: the sessions using it, so
+	// the control plane can name them in Message.
 	SessionIDs []string `json:"sessionIds,omitempty"`
 }
 
@@ -1242,6 +1275,14 @@ type MergeCommand struct {
 	RecoveryAction    string                  `json:"recoveryAction,omitempty"`
 	Recovery          *MergeRecovery          `json:"recovery,omitempty"`
 	Check             *MergeRecoveryCheckSpec `json:"check,omitempty"`
+	// How this merge reaches its target (docs/design/protected-branch-landing.md §3, §4.6), and the landing branch
+	// the replayed tip goes to when GitHub refuses the target because of its rules — refs/heads/orbit/land/<session
+	// id> — with what Orbit last pushed there. Sent only to a runner that declared sessionMergePullRequestCapabilityV1.
+	LandVia       string `json:"landVia,omitempty"`
+	LandingRef    string `json:"landingRef,omitempty"`
+	LandingRefSha string `json:"landingRefSha,omitempty"`
+	// PullRequestOpen: the session's pull request for this target is open, so only the landing branch is pushed.
+	PullRequestOpen bool `json:"pullRequestOpen,omitempty"`
 }
 
 // ImportResultRequest settles a session's pending transcript import: ok clears the
@@ -1347,9 +1388,23 @@ type MergeResultRequest struct {
 	OperationID string `json:"operationId,omitempty"`
 	LeaseOwner  string `json:"leaseOwner,omitempty"`
 	// "released" is not an outcome: this process drained before touching the repo, so the
-	// request goes back to unclaimed and the successor performs it.
-	Status    string `json:"status"` // "merged" | "conflict" | "error" | "released"
+	// request goes back to unclaimed and the successor performs it. "pull_request" is reported only
+	// for a command that named LandVia: GitHub refused the target because of its rules and the
+	// replayed tip went to the landing branch instead (PushedSha).
+	Status    string `json:"status"` // "merged" | "conflict" | "error" | "released" | "pull_request"
 	MergedSha string `json:"mergedSha,omitempty"`
+	// With "pull_request": the commit the landing branch holds, read back from the remote, and GitHub's
+	// words for the refused target push ("" when the session's pull request was open and the target was
+	// not tried).
+	PushedSha   string `json:"pushedSha,omitempty"`
+	PushRefusal string `json:"pushRefusal,omitempty"`
+	// LandVia is the command's own, echoed on a "merged" or "pull_request" answer: PUSH_AS_ME says the target push
+	// that was refused, or taken, was the owner's (docs/design/protected-branch-landing.md §5.4). With "merged" and a
+	// target push GitHub took with the owner's token, PushedAs is "OWNER" and BypassedRules what GitHub said it
+	// bypassed.
+	LandVia       string   `json:"landVia,omitempty"`
+	PushedAs      string   `json:"pushedAs,omitempty"`
+	BypassedRules []string `json:"bypassedRules,omitempty"`
 	// SourceSha is the immutable source-branch tip captured before the rebase. A successful
 	// merge records exactly which version of the session branch landed in the target.
 	SourceSha string `json:"sourceSha,omitempty"`
@@ -1614,6 +1669,10 @@ type ClaimedSession struct {
 	// ORBIT_WIKI=off, which leaves the wiki tools out of the MCP server and the wiki commands out of
 	// `orbit capabilities` (wiki_tools.go). Absent means on.
 	WikiDisabled bool `json:"wikiDisabled,omitempty"`
+	// DocumentsDisabled is the same statement about Drive (the apiserver's
+	// ORBIT_DRIVE_ENABLED); injected as ORBIT_DOCUMENTS=off, which leaves the drive tools and `orbit drive` out
+	// (drive_switch.go). Absent means on, which is also what a server that predates the switch means.
+	DocumentsDisabled bool `json:"documentsDisabled,omitempty"`
 	// BrowserEnabled is set while the Orbit Cloud browser is switched on on the server (its
 	// ORBIT_MANAGED_RUNNER_BROWSER_ENABLED with managed runners on); injected as ORBIT_BROWSER=on, which is what puts the
 	// browser tools in the MCP server and `orbit browser` in the CLI (browser_tools.go). Absent means off: absent tools.
@@ -1879,6 +1938,8 @@ type ReclaimSession struct {
 	// may have moved since the session was first claimed.
 	WatchesDisabled bool `json:"watchesDisabled,omitempty"`
 	WikiDisabled    bool `json:"wikiDisabled,omitempty"`
+	// DocumentsDisabled, cf. ClaimedSession.
+	DocumentsDisabled bool `json:"documentsDisabled,omitempty"`
 	// BrowserEnabled, cf. ClaimedSession.BrowserEnabled, said on reclaim for the same reason.
 	BrowserEnabled bool `json:"browserEnabled,omitempty"`
 	// WorkflowsDisabled, cf. ClaimedSession: the Agent's switch may have moved since the session was first claimed.
@@ -1918,6 +1979,12 @@ type TurnCompleteRequest struct {
 	// rather than as a reply (Codex). Result is then whatever the turn said before it died, so
 	// without this the control plane recorded the agent's last sentence as the failure's reason.
 	Error string `json:"error,omitempty"`
+	// Failure is what a FAILED turn failed with, as its engine adapter classified it (engine_failure.go,
+	// docs/routing-account-health-design.md §5.1); nil when it is not classified. Error keeps its words.
+	Failure *RunFailure `json:"failure,omitempty"`
+	// Admission is sent on a FAILED turn only, false included: whether the turn ended before the engine
+	// produced any reply, tool call or billed token (§5.2). Nil on every other turn.
+	Admission *bool `json:"admission,omitempty"`
 	// ShellExitCode/ShellOutput are populated for synchronous shell turns. Pointers preserve
 	// the difference between a real zero/empty result and an older runner that sent neither.
 	ShellExitCode *int                   `json:"shellExitCode,omitempty"`
@@ -1963,6 +2030,10 @@ type TurnCompleteRequest struct {
 	// turn's report, by turnCompleteReporting, while the server offers it. The body says it because the runner link
 	// carries no request header of its own.
 	ReleaseProtocol string `json:"releaseProtocol,omitempty"`
+	// Draining says the pool drains for an update as the turn ends (docs/runner-update-drain-design.md §7.3): the
+	// control plane then keeps no slot for a queued follow-up and answers PENDING, which parks the session here instead
+	// of holding the follow-up. Set by turnComplete on every completion it sends, as the inbox fetch says draining=1.
+	Draining bool `json:"draining,omitempty"`
 }
 
 // TurnCompleteResponse carries the control-plane status after the ack. Newer
@@ -2028,6 +2099,8 @@ type RunFinalizeRequest struct {
 	Result           string                 `json:"result,omitempty"`
 	Subtype          string                 `json:"subtype,omitempty"`
 	Error            string                 `json:"error,omitempty"`
+	Failure          *RunFailure            `json:"failure,omitempty"`   // the run's last FAILED turn's, on a FAILED end (§5.1)
+	Admission        *bool                  `json:"admission,omitempty"` // the same turn's (§5.2)
 	ClaudeSessionID  string                 `json:"claudeSessionId,omitempty"`
 	RuntimeSessionID string                 `json:"runtimeSessionId,omitempty"`
 	NumTurns         int                    `json:"numTurns"`
@@ -2049,6 +2122,8 @@ type RunFinalizeRequest struct {
 	// WorktreeBranch: the worktree's actual HEAD branch at completion (see SessionLiveState); lets
 	// the server flag / offer "Adopt" for a session that finished on an in-worktree checkout -b branch.
 	WorktreeBranch string `json:"worktreeBranch,omitempty"`
+	// WorktreeDetached reports a verified detached HEAD without supplying an empty branch name.
+	WorktreeDetached bool `json:"worktreeDetached,omitempty"`
 	// BranchSha is the tip of the effective branch once finalizeWorktree has committed what the
 	// session left (see SessionLiveState.BranchSha): the commit a finished task's work is frozen as
 	// (contract §10.5 O-L4). Empty on a park checkpoint (a CANCELLED end), which the next resume
@@ -2057,8 +2132,8 @@ type RunFinalizeRequest struct {
 	// BranchCommits are the branch's commits from its base to BranchSha, newest first (branch_commits.go); null
 	// when the runner could not read them, which leaves the stored list as it was.
 	BranchCommits []BranchCommit `json:"branchCommits"`
-	// CaptureError is why the session's work did NOT reach its branch: finalizeWorktree could not
-	// stage or could not commit. Empty on every finalize that captured the work.
+	// CaptureError is why the session's work did not reach its branch, including a save on a
+	// detached HEAD. Empty on every finalize that captured the work on its branch.
 	//
 	// Without it the two outcomes are the same bytes on the wire — a run that changed nothing and a
 	// run whose whole output is still sitting uncommitted both send no changedFiles — and the only
@@ -2066,9 +2141,7 @@ type RunFinalizeRequest struct {
 	// an acceptance command that passed, with not one commit on its branch, and nothing anywhere
 	// says so.
 	CaptureError string `json:"captureError,omitempty"`
-	// WorktreeDirty is the checkout's measured `git status` after finalization, not the assumption
-	// that finalizing made it clean. False for a captured session; true means the checkout still
-	// holds the only copy of something, which is what re-opens the Commit door on the ended session.
+	// WorktreeDirty reports pending changes or detached work that still needs to reach the branch.
 	// No omitempty: a clean checkout has to say false, or a server reads the field as unreported.
 	WorktreeDirty bool `json:"worktreeDirty"`
 }

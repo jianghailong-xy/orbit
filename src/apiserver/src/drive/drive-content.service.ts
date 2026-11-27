@@ -14,7 +14,7 @@ export interface DriveContent {
 
 type Span = { start: number; end: number };
 
-/** How much of a version the share check reads (docs/orbit-files-drive-technical-design.md §9): the evidence scan's bound. */
+/** How much of a version the share check reads (docs/drive-technical-design.md §9): the evidence scan's bound. */
 export const SHARE_CHECK_MAX_BYTES = 25 * 1024 * 1024;
 /** How long the share check may take before it answers with what it has read. */
 export const SHARE_CHECK_MAX_MS = 20_000;
@@ -53,7 +53,7 @@ export function parseRange(header: string | undefined, size: number): Span | nul
 }
 
 /**
- * The owner's downloads (docs/orbit-files-drive-technical-design.md §4.1): a file's current version, or one named
+ * The owner's downloads (docs/drive-technical-design.md §4.1): a file's current version, or one named
  * version, streamed chunk by chunk with `Range`, so no byte range is ever read whole into memory and no file whole to disk.
  */
 @Injectable()

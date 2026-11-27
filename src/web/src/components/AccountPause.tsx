@@ -9,6 +9,7 @@ import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
 import { NumberInput } from './ui/NumberInput';
 import { Radio, RadioGroup } from './ui/Radio';
+import { Tooltip } from './ui/Tooltip';
 
 // A status colour as the status helpers name it (lib/providerPools memberStatus, RunnerEngines), as a
 // badge tone: the preset colours draw as themselves, `processing` in the primary colour.
@@ -36,13 +37,17 @@ export function AccountPauseStatus({ until, now, status, detail, className = '',
   return (
     <div className={`re-status ${className}`.trim()}>
       {dot ? (
-        <span className={`account-status-dot account-status-dot-${tone}`} title={label}>
-          {label}
-        </span>
+        <Tooltip content={label} truncatedOnly>
+          <span className={`account-status-dot account-status-dot-${tone}`}>
+            {label}
+          </span>
+        </Tooltip>
       ) : (
-        <Badge tone={tone} title={label}>
-          {label}
-        </Badge>
+        <Tooltip content={label} truncatedOnly>
+          <Badge tone={tone}>
+            {label}
+          </Badge>
+        </Tooltip>
       )}
       {paused && <div className="account-pause-remaining">{pauseRemaining(until!, now)}{extra && ` · ${extra}`}</div>}
     </div>
