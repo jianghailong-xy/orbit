@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { workspaceCloneReason } from '../common/workspace-clone-gate';
 import { diskBelowFloor } from '../common/runner-disk-gate';
-import { taskRunAnchor, taskRunAnchors } from '../workspaces/start-anchor';
+import { projectTaskRunAnchor, taskRunAnchor, taskRunAnchors } from '../workspaces/start-anchor';
 import { PushService } from '../push/push.service';
 import { ProjectOrphanSweepService } from '../projects/project-orphan-sweep.service';
 import {
@@ -2971,6 +2971,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if ((subject.engine != null && subject.engine !== AgentProvider.CLAUDE)
       || (subject.provider != null && subject.provider !== AgentProvider.CLAUDE)) {
       return false;
+    }
+    // With no assignee and no pin, only the project's coordinator can give the run an engine (start-anchor.ts):
+    // with none, there is nothing to resolve.
+    if (!subject.assigneeId) {
+      const anchor = subject.projectId !== undefined
+        ? (subject.projectId ? await projectTaskRunAnchor(this.prisma, subject.projectId) : null)
+        : (subject.id ? await taskRunAnchor(this.prisma, subject.id) : null);
+      if (!anchor) return false;
     }
     const runsWith = await this.sessions.taskRunsWith(ownerId, {
       id: subject.id,
