@@ -244,6 +244,8 @@ func (c *conn) handshake() bool {
 		Release:             release,
 		ConnectionId:        c.id,
 		Browser:             browser,
+		// A gateway that forwards keeps the process's facts across its connections (facts.go).
+		ProcessFacts: c.link != nil,
 	}}}, true)
 	c.welcomed = true
 	c.welcomedAt = time.Now()

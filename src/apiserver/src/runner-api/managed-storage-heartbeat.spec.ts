@@ -156,6 +156,8 @@ test('a self-registered runner\'s answer is unchanged: its owner\'s floor, no bu
       commitRequests: [],
       artifactRequests: [],
       agentDirs: [],
+      // A word about this server on every answer (a full runner's claim scope and its returned claims).
+      capacityClaims: true,
     }, 'the members a runner with nothing to do has always been answered with, and no other');
     assert.deepEqual(w.mappingReads, []);
   }

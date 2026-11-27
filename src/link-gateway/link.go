@@ -46,9 +46,9 @@ type linkState struct {
 	beats chan *linkpb.Heartbeat
 	// beating says a heartbeat worker is running (heartbeatWorker).
 	beating atomic.Bool
-	// facts is the last full value of each fact kind, for beats that send a digest only. Only the heartbeat worker
-	// touches it.
-	facts factCache
+	// facts is the last full value of each fact kind the connection's process sent, for beats that send a digest only:
+	// the process's, shared with its other connections on this node (facts.go). Set by start.
+	facts *processFacts
 
 	mu        sync.Mutex
 	hello     *linkpb.Hello
@@ -75,7 +75,6 @@ func newLinkState(c *conn) *linkState {
 		rpcSlots:    make(chan struct{}, tune.MaxRPCsInFlight),
 		ingestSlots: make(chan struct{}, tune.MaxIngestPerConn),
 		beats:       make(chan *linkpb.Heartbeat, 1),
-		facts:       newFactCache(),
 		sessions:    map[string]bool{},
 		sessionQ:    map[string]*sessionIngest{},
 		prefixes:    map[string]*pendingPrefix{},
@@ -93,6 +92,7 @@ func (l *linkState) greeted(hello *linkpb.Hello) {
 
 // start runs once Welcome is queued: credit is what Welcome granted, and a change since then is told here, behind it.
 func (l *linkState) start(credit creditLevel) {
+	l.facts = l.c.g.facts.acquire(l.c.claims.RunnerID, l.c.claims.LeaseOwner)
 	l.mu.Lock()
 	l.credit = credit
 	if level := l.c.g.credit.current(); level != credit {
@@ -102,8 +102,9 @@ func (l *linkState) start(credit creditLevel) {
 }
 
 // close lets go of what the connection held: its unacknowledged events no longer count against the gateway's ingest
-// queue once their calls end (events.go), its sessions leave the queue's line, and the turn prefix requests nobody
-// will answer now are answered empty, and its background job tail requests NO_CONNECTION.
+// queue once their calls end (events.go), its sessions leave the queue's line, its process's facts are kept only for
+// factKeepAfterClose unless another connection uses them (facts.go), and the turn prefix requests nobody will answer
+// now are answered empty, and its background job tail requests NO_CONNECTION.
 func (l *linkState) close() {
 	l.mu.Lock()
 	l.closed = true
@@ -113,6 +114,9 @@ func (l *linkState) close() {
 	l.tails = map[string]*pendingTail{}
 	l.mu.Unlock()
 	l.c.g.credit.leave(l)
+	if l.facts != nil {
+		l.c.g.facts.release(l.facts)
+	}
 	for _, p := range prefixes {
 		p.answerEmpty(l.c.g, "closed")
 	}

@@ -288,6 +288,8 @@ test('the quiet answer hands out nothing and states the runner\'s settings, with
     mergeRequests: [],
     commitRequests: [],
     artifactRequests: [],
+    // A word about this server, said on every answer (runner-go sessionPool.setCapacityClaims): it hands out nothing.
+    capacityClaims: true,
     linkHints: hints,
   });
   assert.equal(heartbeatAnswerHandsOut(quiet), false);
