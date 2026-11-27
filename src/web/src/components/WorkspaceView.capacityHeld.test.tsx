@@ -2,7 +2,8 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { CapacityGate } from '../lib/queuedCapacity';
+import { slotWaitGate, type CapacityGate } from '../lib/queuedCapacity';
+import { waitingNoticeFor } from '../lib/runnerSlots';
 import { PendingTray } from './PendingTray';
 import type { AcceptedUserTurn } from '../lib/acceptedUserTurn';
 import { cancellableHeldTurn, CapacityHeldTag, HeldFoot, QueuedTurnMeta, sessionLine, statusLabel } from './WorkspaceView';
@@ -149,5 +150,55 @@ describe('a session a full runner, run or batch holds', () => {
     );
     expect(el.querySelector('.pending-tray-state')?.textContent).toBe('Queued·runner full');
     expect(el.textContent).not.toContain('Queued for next turn');
+  });
+});
+
+// Runner cdvn0, 2026-11-27: four sessions running background jobs filled its four slots. A claim the full runner could
+// not give back — a message already handed out under it — waits for its slot RUNNING, and the control plane names that
+// wait (enginePhase waiting_for_slot, with the runner's counts). It is the same wait as a claim it did give back, which
+// waits queued (runner_at_capacity), so it reads in the same words, by the same tag: never "Getting the session ready".
+describe('a claim a full runner keeps waiting for its slot', () => {
+  const waiting = {
+    status: 'RUNNING',
+    engineStartedAt: null,
+    enginePhase: 'waiting_for_slot',
+    enginePhaseSince: new Date(Date.now() - 28 * 60_000 - 5_000).toISOString(),
+    runClaimedAt: new Date(Date.now() - 29 * 60_000).toISOString(),
+    slotWait: { active: 4, heldByJobs: 4, limit: 4 },
+  };
+
+  it('reads as the queued row a full runner holds: Waiting for a free slot, its counts, Runner full', () => {
+    expect(waitingNoticeFor(waiting)).toBeNull();
+    expect(sessionLine(waiting, true, null, true, 'cdvn0')).toEqual({
+      text: 'Waiting for a free slot',
+      tone: 'queued',
+      hint:
+        'Runner full\ncdvn0 is using all 4 slots: 0 sessions are running a turn and 4 hold a slot with a background job. This message is sent as soon as one frees up.\nWaiting 28 min',
+    });
+    expect(statusLabel(waiting)).toBe('Runner full');
+  });
+
+  it('tags the waiting message `Queued · runner full`, with the same popover and no Run now', async () => {
+    const el = mount(<CapacityHeldTag gate={slotWaitGate(waiting)!} machine="cdvn0" onRunNow={() => {}} />);
+    expect(el.textContent).toBe('Queued·runner full');
+    await act(async () => (el.querySelector('button.chat-runner-updating-reason') as HTMLButtonElement).click());
+    const pop = document.querySelector('.runner-updating-pop');
+    expect(pop?.textContent).toBe(
+      'cdvn0 is using all 4 slots: 0 sessions are running a turn and 4 hold a slot with a background job. This message is sent as soon as one frees up.Waiting 28 min.',
+    );
+    expect(pop?.querySelectorAll('button')).toHaveLength(0);
+  });
+
+  it('without the counts (an older server) still says the runner is full', () => {
+    const bare = { ...waiting, slotWait: undefined };
+    expect(sessionLine(bare, true, null, true, 'cdvn0').hint?.split('\n').slice(0, 2)).toEqual([
+      'Runner full',
+      'cdvn0 is using all its slots. This message is sent as soon as one frees up.',
+    ]);
+  });
+
+  it('is no wait once the slot is granted and the phase is gone', () => {
+    expect(slotWaitGate({ ...waiting, enginePhase: null })).toBeNull();
+    expect(slotWaitGate({ ...waiting, status: 'AWAITING_INPUT' })).toBeNull();
   });
 });

@@ -213,6 +213,13 @@ message Welcome {
   // carried a ManagedInstance the manager authorized. False for every self-managed runner, and from a gateway or
   // apiserver older than the field.
   bool browser = 10;
+  // Whether the gateway keeps the heartbeat Facts it was sent whole for the connecting process (the
+  // runner and Hello.process_id), not for this connection alone (§15.17). The process's first
+  // Heartbeat on this connection may then send by digest alone every Fact it sent whole on an earlier
+  // connection, to this gateway node or another; a digest the gateway no longer holds is named in
+  // HeartbeatAck.want_facts, as always. False from a gateway older than the field: it holds a
+  // connection's Facts for that connection alone, so the first Heartbeat on each sends them all whole.
+  bool process_facts = 11;
 }
 
 // Which transport carries a runner's daemon work: claiming sessions, fetching messages, heartbeats,

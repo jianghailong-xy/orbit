@@ -329,3 +329,75 @@ test('a dependent started right after its prerequisite was promoted requires the
       rmSync(repo, { recursive: true, force: true });
     }
   });
+
+/**
+ * The 2026-11-27 incident (project INV-A), on the receipt's half. The batch queue merged the
+ * prerequisite's branch into main; the project line was a mirror of an older main; the LAND_TASK
+ * found the source only inside the main sync it had just made and answered ALREADY_LANDED. The
+ * runner now pushes that sync (J-S3), so the line's tip is main's, and reports it as `landedSha`.
+ * The receipt has to say where the line ended up — before, an ALREADY_MERGED receipt always wrote
+ * `target_sha_after` NULL — and the dependent's start has to find its prerequisite on the line.
+ */
+test('an ALREADY_LANDED that pushed the main sync records where the line ended up, and the dependent starts from a tip that holds its prerequisite',
+  { skip, timeout: 120_000 }, async () => {
+    assertCoordinatorPgUrlIsIsolated(URL!);
+    const stack = connect();
+    const repo = repository('already-landed-main-sync');
+    try {
+      const ids = await world(stack.db, 'already-landed-sync');
+      const base = commitFile(repo, 'base');
+      git(repo, 'branch', ids.branch);
+
+      // The prerequisite's work, merged into main by the batch queue, never through the line.
+      const prerequisite = await donePrerequisite(stack, ids, 'orbit/v13');
+      git(repo, 'checkout', '--quiet', '-b', 'orbit/v13', base);
+      const source = commitFile(repo, 'v13-work');
+      git(repo, 'checkout', '--quiet', 'main');
+      git(repo, 'merge', '--quiet', '--no-ff', '-m', 'batch merge of orbit/v13', source);
+      commitFile(repo, 'main-moved-on');
+      const upstream = git(repo, 'rev-parse', 'HEAD');
+      assert.equal(contains(repo, ids.branch, source), false, 'the fixture is not the shape seen in production');
+
+      // What the runner's J-S3 now does on a line with nothing of its own: fast-forward it to main.
+      git(repo, 'branch', '--force', ids.branch, upstream);
+      const [receiptId] = await MergeReceiptService.fromIntegrationJob(stack.db, {
+        ownerId: ids.ownerId, sessionId: prerequisite.sessionId, taskId: prerequisite.taskId,
+        projectId: ids.projectId, jobId: randomUUID(), state: 'ALREADY_LANDED',
+        sourceBranch: 'orbit/v13', targetBranch: ids.branch,
+        sourceSha: source, targetShaBefore: base, landedSha: upstream, rebaseBaseSha: base,
+        testedTreeSha: null, landedTreeSha: git(repo, 'rev-parse', `${upstream}^{tree}`), mainSyncSha: null,
+      });
+      const receipt = await stack.db.sessionMergeReceipt.findUniqueOrThrow({
+        where: { id: receiptId }, select: { result: true, targetShaAfter: true },
+      });
+      assert.equal(receipt.result, 'ALREADY_MERGED');
+      assert.equal(receipt.targetShaAfter, upstream, 'the receipt does not name the commit the line was synced to');
+      assert.ok(contains(repo, receipt.targetShaAfter!, source), 'the receipt names a line that lacks the source');
+
+      const dependent = await resolvedSource(stack, await dependentOf(stack, ids, prerequisite.taskId, 'V14'));
+      assert.equal(dependent.reason.rank, 'P4', 'the dependent under test is not resolving on P4');
+      assert.equal(dependent.columns.sourceRef, `refs/heads/${ids.branch}`);
+      const lineTip = git(repo, 'rev-parse', ids.branch);
+      assert.deepEqual(dependent.columns.sourceRequiredContains, [source]);
+      for (const sha of dependent.columns.sourceRequiredContains) {
+        assert.ok(contains(repo, lineTip, sha), `DEPENDENCY_BASE_NOT_LANDED: ${lineTip} does not contain ${sha}`);
+      }
+
+      // An ALREADY_LANDED that pushed nothing keeps writing no `target_sha_after`.
+      const unpushed = await donePrerequisite(stack, ids, 'orbit/unpushed');
+      const [unpushedId] = await MergeReceiptService.fromIntegrationJob(stack.db, {
+        ownerId: ids.ownerId, sessionId: unpushed.sessionId, taskId: unpushed.taskId,
+        projectId: ids.projectId, jobId: randomUUID(), state: 'ALREADY_LANDED',
+        sourceBranch: 'orbit/unpushed', targetBranch: ids.branch,
+        sourceSha: base, targetShaBefore: upstream, landedSha: null, rebaseBaseSha: upstream,
+        testedTreeSha: null, landedTreeSha: null, mainSyncSha: null,
+      });
+      const unpushedReceipt = await stack.db.sessionMergeReceipt.findUniqueOrThrow({
+        where: { id: unpushedId }, select: { result: true, targetShaAfter: true },
+      });
+      assert.deepEqual(unpushedReceipt, { result: 'ALREADY_MERGED', targetShaAfter: null });
+    } finally {
+      await stack.db.$disconnect();
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });

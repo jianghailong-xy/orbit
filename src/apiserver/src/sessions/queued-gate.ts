@@ -38,7 +38,9 @@ export function queuedGateLateral(): Prisma.Sql {
         -- The gate itself is queuedReasonSql: one CASE for the list, a scheduled run's watch and this door.
         ${queuedReasonSql()} AS reason,
         ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`)} AS runner_active,
-        ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`)} AS runner_held,
+        -- Other sessions' holders, as the gate itself and the runner count them: a session's own job holds no slot
+        -- against its own message, so counted here it read one over the limit (5/4).
+        ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`, Prisma.sql`s.id`)} AS runner_held,
         r.max_concurrent AS runner_limit,
         -- What Run now decides on beside the counts: the runner's Extra sessions on demand, whether its process
         -- admits a turn claimed over its limit, and whether this session already holds a pass for its queued turn.

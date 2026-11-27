@@ -18,8 +18,9 @@ import (
 // each Fact's JSON becomes the member it is named after. The route does everything it did then, the runner's presence
 // included, and its answer, the HeartbeatResponse, goes back as HeartbeatAck.reconcile_json for the runner to apply.
 //
-// A Fact may come by digest only, when the runner sent its content before. The connection keeps the last full value of
-// each kind, and a digest it holds is filled from it. A digest it does not hold is named in want_facts, and that beat
+// A Fact may come by digest only, when the runner sent its content before. The gateway keeps the last full value of
+// each kind for the runner process, across its connections (facts.go), and a digest it holds is filled from it; one it
+// does not hold is asked of the other gateway nodes. A digest none of them holds is named in want_facts, and that beat
 // is not forwarded: an absent heartbeat member has a meaning (it keeps or clears what the server holds), so a body
 // missing one would say something the runner did not. The runner sends those parts whole in its next beat, at once.
 
@@ -30,15 +31,15 @@ var heartbeatTypedMembers = map[string]bool{
 	"status": true, "version": true, "leaseOwner": true, "idleCapacity": true, "supervisedSessionIds": true, "draining": true,
 }
 
-// factCache is the last full value of each fact kind a connection's runner sent.
+// factCache is the last full value of each fact kind a runner process sent.
 type factCache struct {
 	byKind map[string]cachedFact
 	bytes  int
 }
 
-// cachedFact is one fact a connection holds. Its digest and content are interned: the shared parts of every runner's
-// heartbeat (engines, model catalogs, commands: about 7 KB) are alike across most runners, and are held once for all
-// the connections that sent them rather than once each.
+// cachedFact is one fact a process's cache holds. Its digest and content are interned: the shared parts of every
+// runner's heartbeat (engines, model catalogs, commands: about 7 KB) are alike across most runners, and are held once
+// for all the processes that sent them rather than once each.
 type cachedFact struct {
 	sha  unique.Handle[string]
 	json unique.Handle[string]
@@ -58,7 +59,7 @@ func (f cachedFact) content() json.RawMessage {
 
 func (f cachedFact) size() int { return len(f.json.Value()) }
 
-// Bounds on what one connection's cache holds. A fact past them is used for its beat and not kept, so its next
+// Bounds on what one process's cache holds. A fact past them is used for its beat and not kept, so its next
 // digest-only beat asks for it again.
 const (
 	maxFactKinds = 64
@@ -67,10 +68,12 @@ const (
 
 func newFactCache() factCache { return factCache{byKind: map[string]cachedFact{}} }
 
-// resolve is each Fact's JSON by kind, and the kinds whose digest the cache does not hold (want).
-func (fc *factCache) resolve(facts []*linkpb.Fact, m *gatewayMetrics) (members map[string]json.RawMessage, want []string) {
+// resolve is each Fact's JSON by kind, the digest-only Facts whose digest the cache does not hold (missing), and the
+// kinds whose content is not JSON (want).
+func (fc *factCache) resolve(facts []*linkpb.Fact, m *gatewayMetrics) (members map[string]json.RawMessage, missing []*linkpb.Fact, want []string) {
 	members = map[string]json.RawMessage{}
 	wanted := map[string]bool{}
+	lacking := map[string]*linkpb.Fact{}
 	for _, f := range facts {
 		kind := f.GetKind()
 		if kind == "" || heartbeatTypedMembers[kind] {
@@ -79,12 +82,12 @@ func (fc *factCache) resolve(facts []*linkpb.Fact, m *gatewayMetrics) (members m
 		}
 		raw := f.GetJson()
 		if len(raw) == 0 {
-			if cached, ok := fc.byKind[kind]; ok && cached.sha.Value() == f.GetSha256() {
+			if cached, ok := fc.byKind[kind]; ok && cached.sha.Value() == strings.ToLower(f.GetSha256()) {
 				members[kind] = cached.content()
+				delete(lacking, kind)
 				m.heartbeatFacts.inc("cached")
 			} else {
-				wanted[kind] = true
-				m.heartbeatFacts.inc("unknown_digest")
+				lacking[kind] = f
 			}
 			continue
 		}
@@ -95,6 +98,7 @@ func (fc *factCache) resolve(facts []*linkpb.Fact, m *gatewayMetrics) (members m
 			continue
 		}
 		delete(wanted, kind)
+		delete(lacking, kind)
 		members[kind] = json.RawMessage(raw)
 		sum := sha256.Sum256(raw)
 		if hex.EncodeToString(sum[:]) != strings.ToLower(f.GetSha256()) {
@@ -109,7 +113,13 @@ func (fc *factCache) resolve(facts []*linkpb.Fact, m *gatewayMetrics) (members m
 		want = append(want, kind)
 	}
 	sort.Strings(want)
-	return members, want
+	for _, f := range lacking {
+		if !wanted[f.GetKind()] {
+			missing = append(missing, f)
+		}
+	}
+	sort.Slice(missing, func(i, j int) bool { return missing[i].GetKind() < missing[j].GetKind() })
+	return members, missing, want
 }
 
 func (fc *factCache) keep(kind string, f cachedFact) {
@@ -182,7 +192,13 @@ func (l *linkState) forwardHeartbeat(hb *linkpb.Heartbeat) {
 		l.logFailure("a heartbeat names another process than its connection's; it is forwarded for the connection's", "named", p)
 	}
 	l.noteHeartbeat(hb)
-	members, want := l.facts.resolve(hb.GetFacts(), m)
+	members, missing, want := l.facts.resolve(hb.GetFacts(), m)
+	if len(missing) > 0 {
+		// Sent whole on a connection to another node, or before this node restarted: asked of the others first.
+		answered := c.g.askPeers(c.claims.RunnerID, c.claims.LeaseOwner, missing)
+		want = append(want, l.facts.fill(members, missing, answered, m)...)
+		sort.Strings(want)
+	}
 	// Every answer names the beat it answers, so the runner can tell it from the answer to another (proto beat_id).
 	ack := &linkpb.HeartbeatAck{Mode: linkpb.Mode_MODE_LINK, BeatId: hb.GetBeatId()}
 	if len(want) > 0 {

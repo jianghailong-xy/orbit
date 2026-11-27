@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -63,6 +64,17 @@ func probeEngineHealthOf(engine string) []EngineHealthReport {
 }
 
 func probeEngines(specs []engineSpec, servicePath string) []EngineHealthReport {
+	reports, _ := probeEnginesTimed(specs, servicePath)
+	return reports
+}
+
+// engineProbeTiming is how long one engine's probe took, and the part of it spent asking its added accounts.
+type engineProbeTiming struct {
+	total, accounts time.Duration
+}
+
+// probeEnginesTimed is probeEngines with each engine's timing, in the specs' order.
+func probeEnginesTimed(specs []engineSpec, servicePath string) ([]EngineHealthReport, []engineProbeTiming) {
 	// What the updater last managed to do here, read fresh each probe: the update loop and
 	// `orbit engine-update` both write it, and neither can reach into this snapshot.
 	updates := loadEngineUpdateLog()
@@ -70,20 +82,46 @@ func probeEngines(specs []engineSpec, servicePath string) []EngineHealthReport {
 	// a managed runner's first heartbeat, which waits for this probe (managedStartupBeat), went 8–10 s after its
 	// start in production on 2026-11-25, the sum of every CLI's start; at once it is about the slowest one's.
 	out := make([]EngineHealthReport, len(specs))
+	timings := make([]engineProbeTiming, len(specs))
 	var wg sync.WaitGroup
 	for i, spec := range specs {
 		wg.Add(1)
 		go func(i int, spec engineSpec) {
 			defer wg.Done()
-			out[i] = probeEngine(spec, servicePath, updates)
+			started := time.Now()
+			out[i], timings[i].accounts = probeEngine(spec, servicePath, updates)
+			timings[i].total = time.Since(started)
 		}(i, spec)
 	}
 	wg.Wait()
-	return out
+	return out, timings
 }
 
-// probeEngine is probeEngines' answer for one engine.
-func probeEngine(spec engineSpec, servicePath string, updates map[string]EngineUpdateReport) EngineHealthReport {
+// engineProbeTimingLine is what the runner logs of its first engine probe: how long it took, and each engine's share,
+// so that a start whose first heartbeat is late says which engine held it (managedStartupBeat waits for this probe).
+func engineProbeTimingLine(total time.Duration, specs []engineSpec, timings []engineProbeTiming) string {
+	parts := make([]string, 0, len(specs))
+	for i, spec := range specs {
+		if i >= len(timings) {
+			break
+		}
+		part := spec.bin + " " + roundedDuration(timings[i].total)
+		if timings[i].accounts.Round(time.Millisecond) > 0 {
+			part += " (accounts " + roundedDuration(timings[i].accounts) + ")"
+		}
+		parts = append(parts, part)
+	}
+	return "engine probe: first answer in " + roundedDuration(total) + ": " + strings.Join(parts, ", ")
+}
+
+// roundedDuration is d to the millisecond, as the startup lines say their times.
+func roundedDuration(d time.Duration) string {
+	return d.Round(time.Millisecond).String()
+}
+
+// probeEngine is probeEngines' answer for one engine, and how long it spent asking the engine's added accounts.
+func probeEngine(spec engineSpec, servicePath string, updates map[string]EngineUpdateReport) (EngineHealthReport, time.Duration) {
+	var accountsTook time.Duration
 	h := checkEngine(spec, servicePath)
 	report := EngineHealthReport{
 		Engine:            spec.bin,
@@ -119,12 +157,14 @@ func probeEngine(spec engineSpec, servicePath string, updates map[string]EngineU
 			defaultAuth = authNo
 		}
 		var usage map[string]*PlanUsage
+		accountsStarted := time.Now()
 		report.Accounts, usage = accountHealthWithUsage(kind, h.path, defaultAuth, h.kimiRegion)
+		accountsTook = time.Since(accountsStarted)
 		if len(usage) > 0 {
 			report.PlanUsage = withAccountUsage(report.PlanUsage, spec.bin, usage)
 		}
 	}
-	return report
+	return report, accountsTook
 }
 
 // accountHealth asks every added account slot on this machine whether it is signed in. An account's
@@ -339,6 +379,8 @@ type engineHealthProbe struct {
 	kimiRegions map[string]string
 	// Closed once a probe has completed (`probed`), made on first use; kept under mu.
 	done chan struct{}
+	// Whether the first probe's timing has been logged (engineProbeTimingLine); kept under refreshMu.
+	timingLogged bool
 	// What run also starts at its start and on every tick: the Claude region check (claude_region.go),
 	// on a goroutine of its own, so that a proxy slow to answer never holds the probe up. Nil where
 	// nothing checks, as in tests.
@@ -367,11 +409,18 @@ func (p *engineHealthProbe) refresh() {
 }
 
 func (p *engineHealthProbe) refreshLocked() {
-	probe := p.probe
-	if probe == nil {
-		probe = probeEngineHealth
+	var next []EngineHealthReport
+	if p.probe != nil {
+		next = p.probe()
+	} else {
+		started := time.Now()
+		var timings []engineProbeTiming
+		next, timings = probeEnginesTimed(engineSpecs, serviceLoginPath())
+		if !p.timingLogged {
+			p.timingLogged = true
+			logln(engineProbeTimingLine(time.Since(started), engineSpecs, timings))
+		}
 	}
-	next := probe()
 	p.mu.Lock()
 	p.snapshot = next
 	select {
