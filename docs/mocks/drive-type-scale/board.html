@@ -200,6 +200,28 @@ tr.pend td { color:var(--text-3); } .rowbar { display:inline-block; width:120px;
 .bstates { display:flex; gap:28px; align-items:flex-start; background:#fff; border-radius:12px; padding:16px 20px; margin-top:20px; }
 .bstates .bs { display:flex; flex-direction:column; gap:8px; font-size:12.5px; color:#646a73; width:250px; } .bstates .bs b { color:#1f2329; font-size:13px; }
 .bstates .win { display:block; height:auto; box-shadow:none; background:transparent; padding:4px; }
+
+.tbtn .badge { min-width:18px; height:18px; padding:0 5px; border-radius:9px; background:var(--warning-solid,#fa8c16); color:#fff; font-size:11.5px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; }
+.tabs { display:flex; gap:4px; padding:3px; background:var(--fill-muted); border-radius:8px; }
+.tabs span { padding:4px 12px; border-radius:6px; font-size:13.5px; color:var(--text-2); display:inline-flex; gap:6px; align-items:center; }
+.tabs span.on { background:var(--bg-base); color:var(--text-1); font-weight:600; box-shadow:0 1px 2px rgba(0,0,0,.08); }
+.tabs .badge { min-width:17px; height:17px; padding:0 5px; border-radius:9px; background:var(--warning-solid,#fa8c16); color:#fff; font-size:11px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; }
+.xpanel .xh { padding:20px 16px 10px 20px; }
+.xpanel .scroll { overflow:hidden; flex:1; }
+.xpanel .acts2 { display:flex; gap:6px; margin-top:8px; }
+.xpanel .sbtn { height:28px; padding:0 10px; border-radius:7px; border:1px solid var(--border); font-size:13px; display:inline-flex; align-items:center; background:var(--bg-base); }
+.xpanel .sbtn.pri { background:var(--brand); border-color:var(--brand); color:#fff; }
+.xpanel .grp { padding:6px 20px 8px; }
+.xpanel .gh2 { display:flex; align-items:center; gap:6px; font-size:13.5px; font-weight:600; padding:8px 0 4px; min-width:0; }
+.xpanel .gh2 span.t { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.xpanel .gh2 .tm { font-weight:400; }
+.xpanel .gh2 .ag { color:var(--text-3); }
+.xpanel .ln { display:flex; gap:8px; align-items:baseline; font-size:13.5px; color:var(--text-2); padding:3px 0 3px 22px; }
+.xpanel .ln .op { color:var(--text-1); }
+.xpanel .ln .q { color:var(--text-3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+.xpanel .ln .r { margin-left:auto; color:var(--brand); font-size:13px; white-space:nowrap; }
+.xpanel .grp + .grp { border-top:1px solid var(--border-subtle); }
+.rmark { width:7px; height:7px; border-radius:50%; background:var(--brand); flex:none; margin-left:-2px; }
 </style></head><body>
 <div class="board">
 <h1 class="bt">Drive · one type scale and rhythm with the session console</h1>
@@ -234,7 +256,7 @@ tr.pend td { color:var(--text-3); } .rowbar { display:inline-block; width:120px;
         <div class="search"><svg class="ic sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>Search Drive<kbd>/</kbd></div>
         <div class="btn"><svg class="ic sm" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 11v5M9.5 13.5h5"/></svg>New folder</div>
         <div class="btn tint"><svg class="ic sm" viewBox="0 0 24 24"><path d="M12 16V5M7 10l5-5 5 5M5 19h14"/></svg>Upload</div>
-        <div class="tbtn" style="position:relative"><span class="mk abs" style="left:-10px;top:-12px">6</span><svg class="ic sm" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M14.5 4.5v15"/></svg>Transfers<i class="dot"></i></div>
+        <div class="tbtn" style="position:relative"><span class="mk abs" style="left:-10px;top:-12px">6</span><svg class="ic sm" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg>Agents<span class="badge">3</span></div>
       </div>
     </div>
     <div class="body">
@@ -291,11 +313,11 @@ tr.pend td { color:var(--text-3); } .rowbar { display:inline-block; width:120px;
 <h3>What changes, by mark</h3>
 <ol>
 <li><b>Header.</b> No full-width rule; padding 24px like the session column. The title shows the path: “Drive”, or “Drive / Books” inside a folder, with the parent in grey. It replaces the 12px breadcrumb line above the table, so the page names its place once and not three times.</li>
-<li><b>Controls</b>: Search, New folder, Upload, and the Transfers toggle at the end, 34px with 14px text. Upload is tinted like the session list’s New session button, not solid blue. Search is named <b>“Search Drive”</b> (it said “Search all of Files”, an old name).</li>
+<li><b>Controls</b>: Search, New folder, Upload, and the Agents toggle at the end, 34px with 14px text. Upload is tinted like the session list’s New session button, not solid blue. Search is named <b>“Search Drive”</b> (it said “Search all of Files”, an old name).</li>
 <li><b>Tree</b> rows are 34px and 14px, with the same outline folder icons as the app nav. The selected row looks like a selected nav item.</li>
 <li><b>Rows</b> are 48px with 14px names. The table uses fixed column widths: Name takes the remaining space and the other columns stay together on the right, so a wide window no longer opens a gap of about 900px between “Last written by” and Size.</li>
 <li><b>Last written by</b> is grey (text-2), with a small agent glyph in place of the words “Agent in”. The session title turns into a blue underlined link only when you hover the row. Blue is left for selection and actions, as in the session list. The “···” menu also shows only on hover.</li>
-<li><b>Transfers</b> is no longer a floating tray over the list. It is a button at the end of the header that opens and closes a right-hand panel with the sync and upload records, the same way the session title bar opens its project column (a second panel on the canvas, pressed while open). The button carries the state: a progress ring while something runs, an amber dot when something failed, plain when idle. Frame 4.</li>
+<li><b>Agents</b> is the one way into agent work on this page: a header button that opens and closes the right-hand panel, which has two tabs, Chat (the Drive chat as it is today) and Activity. Its amber number counts everything waiting on you: changes held for Apply, overwrite questions and failed syncs. It replaces the round floating button and the sync tray, so nothing floats over the list any more. Frame 4.</li>
 <li><b>Trash</b> is not a folder row or a button. It is the grey segment’s own legend line under the storage bar (“■ Trash › 3.1 GB”, 12.5px grey), so it appears once, that turns blue on hover and opens Trash. While you drag a file it becomes a drop target. Row menus keep “Move to Trash”, and the toast’s Undo is the usual way back.</li>
 <li><b>Storage meter</b> sits at the foot of the tree and opens Storage. It reads <code>GET /drive/usage</code>, which the Storage page already calls. With no limit set (the default) the bar is the account’s total split into Drive, Trash and Other, with no grey track, so it does not read as “full”. Hover shows the numbers. States: frame 3.</li>
 <li style="list-style:none;margin-left:-18px;color:#646a73">Frame 2: when a file is selected and the details pane opens, the table drops “Last written by” (the pane shows it as “By”), so names are not cut off.</li>
@@ -340,7 +362,7 @@ tr.pend td { color:var(--text-3); } .rowbar { display:inline-block; width:120px;
         <div class="search"><svg class="ic sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>Search Drive<kbd>/</kbd></div>
         <div class="btn"><svg class="ic sm" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 11v5M9.5 13.5h5"/></svg>New folder</div>
         <div class="btn tint"><svg class="ic sm" viewBox="0 0 24 24"><path d="M12 16V5M7 10l5-5 5 5M5 19h14"/></svg>Upload</div>
-        <div class="tbtn"><svg class="ic sm" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M14.5 4.5v15"/></svg>Transfers</div>
+        <div class="tbtn"><svg class="ic sm" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg>Agents</div>
       </div>
     </div>
     <div class="body pane">
@@ -392,8 +414,8 @@ tr.pend td { color:var(--text-3); } .rowbar { display:inline-block; width:120px;
 <div class="lab"><span>92.4 GB of 100 GB</span><b>92%</b></div><div class="bar track"><i class="c-drive" style="width:80%"></i><i class="c-trash" style="width:9.6%"></i><i class="c-other" style="width:2.8%"></i></div><div class="lg"><span style="--dot:var(--brand)">Drive</span><span style="--dot:#a8acb3">Trash</span><span style="--dot:#0d9488">Other</span></div><div class="msg">Uploads stop at 100 GB. <a>Empty Trash</a> to free 9.6 GB.</div></div></div></div><div class="st-card"><h5>D · Full</h5><p>Red. Uploads are refused; agents’ drive writes fail the same way.</p><div class="win"><div class="meter full" style="border-top:0;padding-top:4px">
 <div class="lab"><span>100 GB of 100 GB</span><b>Full</b></div><div class="bar track"><i class="c-drive" style="width:86%"></i><i class="c-trash" style="width:10%"></i><i class="c-other" style="width:4%"></i></div><div class="lg"><span style="--dot:var(--brand)">Drive</span><span style="--dot:#a8acb3">Trash</span><span style="--dot:#0d9488">Other</span></div><div class="msg">Uploads are refused. <a>Empty Trash</a> or <a>open Storage</a>.</div></div></div></div><div class="st-card"><h5>E · The server’s disk nearly full</h5><p>nearQuota from the operator’s store, not this account. Same amber, different remedy.</p><div class="win"><div class="meter warn" style="border-top:0;padding-top:4px">
 <div class="lab"><span>Storage</span><b>47.1 GB</b></div><div class="bar"><i class="c-drive" style="flex:41.6"></i><i class="c-trash" style="flex:3.1"></i><i class="c-other" style="flex:2.4"></i></div><div class="lg"><span style="--dot:var(--brand)">Drive</span><span style="--dot:#a8acb3">Trash</span><span style="--dot:#0d9488">Other</span></div><div class="msg">Orbit’s storage is 94% full. Ask the operator to raise the limit.</div></div></div></div></div>
-<div class="fh" style="margin-top:36px"><span class="n">4</span>Transfers as a right-hand panel: the header button opens and closes it; the sync records live inside</div>
-<div class="win three" style="height:820px">
+<div class="fh" style="margin-top:36px"><span class="n">4</span>Agents panel, Activity tab: what every session did to the drive, with what needs you pinned on top</div>
+<div class="win three" style="height:900px;grid-template-columns:268px minmax(0,1fr) 420px">
   <nav class="nav">
     <div class="brand"><i></i>Orbit</div>
     <div class="it"><svg class="ic" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></svg>Projects<span class="k">⌘P</span></div>
@@ -406,52 +428,65 @@ tr.pend td { color:var(--text-3); } .rowbar { display:inline-block; width:120px;
     <div class="head">
       <div class="crumb"><span class="up">Drive</span><span class="sep">/</span>Books</div>
       <div class="acts">
-        <div class="search" style="width:220px"><svg class="ic sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>Search Drive<kbd>/</kbd></div>
+        <div class="search" style="width:200px"><svg class="ic sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>Search Drive<kbd>/</kbd></div>
         <div class="btn"><svg class="ic sm" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 11v5M9.5 13.5h5"/></svg>New folder</div>
         <div class="btn tint"><svg class="ic sm" viewBox="0 0 24 24"><path d="M12 16V5M7 10l5-5 5 5M5 19h14"/></svg>Upload</div>
-        <div class="tbtn on"><svg class="ic sm" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M14.5 4.5v15"/></svg>Transfers<i class="dot"></i></div>
+        <div class="tbtn on"><svg class="ic sm" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg>Agents<span class="badge">3</span></div>
       </div>
     </div>
-    <div class="body" style="grid-template-columns:220px minmax(0,1fr)">
+    <div class="body" style="grid-template-columns:200px minmax(0,1fr)">
       <div class="tree">
         <div class="tr"><span class="tg">▾</span><svg class="ic sm fd" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Drive</div>
         <div class="tr l2 on"><span class="tg">▾</span><svg class="ic sm fd" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Books</div>
         <div class="tr l2"><span class="tg">›</span><svg class="ic sm fd" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Video</div>
+        <div class="tr l2"><span class="tg">›</span><svg class="ic sm fd" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>scratch</div>
       </div>
       <div class="list">
         <table>
-          <colgroup><col><col style="width:200px"><col class="c-s"><col class="c-m"><col class="c-x"></colgroup>
+          <colgroup><col><col style="width:190px"><col class="c-s"><col class="c-m"><col class="c-x"></colgroup>
           <thead><tr><th>Name</th><th>Last written by</th><th class="r">Size</th><th class="r">Modified</th><th></th></tr></thead>
           <tbody>
-            <tr class="pend"><td><div class="nm"><span class="doc"></span><span>scan-0412.pdf</span></div></td><td><span class="rowbar"><i style="width:52%"></i></span>52%</td><td class="r dim">410 MB</td><td class="r dim">Uploading</td><td class="more"></td></tr>
-            <tr class=""><td><div class="nm"><span class="thumb"></span><span>cover-001.jpg</span></div></td><td><div class="wr"><svg class="ic sm ag" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg><span>同步书格到 Orbit</span></div></td><td class="r dim">1.2 MB</td><td class="r dim">Yesterday</td><td class="more"></td></tr>
-            <tr class=""><td><div class="nm"><span class="thumb"></span><span>cover-002.jpg</span></div></td><td><div class="wr"><svg class="ic sm ag" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg><span>同步书格到 Orbit</span></div></td><td class="r dim">980 KB</td><td class="r dim">Yesterday</td><td class="more"></td></tr>
+            <tr class="pend"><td><div class="nm"><span class="doc"></span><span>scan-0412.pdf</span></div></td><td><span class="rowbar" style="width:90px"><i style="width:52%"></i></span>52%</td><td class="r dim">410 MB</td><td class="r dim">Uploading</td><td class="more"></td></tr>
+            <tr class=""><td><div class="nm"><span class="thumb"></span><span>0412-cover.jpg</span><i class="rmark"></i></div></td><td><div class="wr"><svg class="ic sm ag" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg><span>Tidy up Books</span></div></td><td class="r dim">1.2 MB</td><td class="r dim">2m ago</td><td class="more"></td></tr>
+            <tr class=""><td><div class="nm"><span class="thumb"></span><span>0413-cover.jpg</span><i class="rmark"></i></div></td><td><div class="wr"><svg class="ic sm ag" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg><span>Tidy up Books</span></div></td><td class="r dim">980 KB</td><td class="r dim">2m ago</td><td class="more"></td></tr>
+            <tr class=""><td><div class="nm"><span class="doc"></span><span>catalog.md</span></div></td><td><div class="wr"><span>You</span></div></td><td class="r dim">14 KB</td><td class="r dim">Nov 26</td><td class="more"></td></tr>
             <tr class=""><td><div class="nm"><span class="thumb"></span><span>book-0412.pdf</span></div></td><td><div class="wr"><svg class="ic sm ag" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg><span>同步书格到 Orbit</span></div></td><td class="r dim">212 MB</td><td class="r dim">Yesterday</td><td class="more"></td></tr>
           </tbody>
         </table>
-        <div class="foot">Your own drops show here as they upload, so the panel never has to open for them.</div>
+        <div class="foot">A blue dot marks what an agent changed since you last opened it, as the page does today.</div>
       </div>
     </div>
   </main>
-  <aside class="xpanel">
-    <div class="xh"><b>Transfers</b><span class="ib"><svg class="ic sm" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span></div>
-    <div class="sec">In progress</div>
-    <div class="it"><svg class="ic st" viewBox="0 0 24 24" style="color:var(--brand)"><circle cx="12" cy="12" r="8.5" style="opacity:.2"/><path d="M12 3.5a8.5 8.5 0 0 1 8.5 8.5"/></svg><div style="min-width:0;flex:1"><div class="t1">scan-0412.pdf <span class="to">→ Books</span></div><div class="t2">212 MB of 410 MB · You</div><div class="pbar"><i style="width:52%"></i></div></div></div>
-    <div class="sec">Needs attention</div>
+  <aside class="xpanel" style="position:relative">
+    <div class="xh"><div class="tabs"><span>Chat</span><span class="on">Activity<i class="badge">3</i></span></div><span class="ib"><svg class="ic sm" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span></div>
+    <div class="scroll">
+    <div class="sec">Needs you</div>
+    <div class="it att"><svg class="ic st warn" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M10 9v6M14 9v6"/></svg><div style="min-width:0;flex:1"><div style="display:flex"><div class="t1">12 changes waiting for Apply</div><span class="tm">2m ago</span></div><div class="t2">Rename 12 covers in Books</div><div class="by"><svg class="ic sm ag" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg><span>Tidy up Books · Drive chat</span></div>
+      <div class="acts2"><span class="sbtn pri">Review</span><span class="sbtn">Undo</span></div></div></div>
     <div class="it att"><svg class="ic st warn" viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg><div style="min-width:0;flex:1"><div style="display:flex"><div class="t1">books-stage/ <span class="to">→ Books</span></div><span class="tm">2h ago</span></div><div class="t2">11,271 files · <span class="w">4 failed</span></div><div class="by"><svg class="ic sm ag" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg><span>同步书格到 Orbit</span></div>
-      <div class="fails"><code>0412/scan.tiff</code> · file changed while reading<br><code>0977/cover.png</code> · permission denied<br><a style="color:var(--brand)">2 more</a></div></div></div>
-    <div class="it"><svg class="ic st warn" viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg><div style="min-width:0;flex:1"><div style="display:flex"><div class="t1">anime-stage/ <span class="to">→ Video/鬼灭之刃 游郭篇</span></div><span class="tm">3h ago</span></div><div class="t2">7 files · <span class="w">4 failed</span> · <a>Details</a></div><div class="by"><svg class="ic sm ag" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg><span>同步书格到 Orbit</span></div></div></div>
-    <div class="sec">Finished<span class="a">Clear</span></div>
-    <div class="it"><svg class="ic st ok" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 12.2l2.4 2.4 4.6-4.8"/></svg><div style="min-width:0;flex:1"><div style="display:flex"><div class="t1">anime-stage/ <span class="to">→ Video/鬼灭之刃 游郭篇</span></div><span class="tm">Yesterday</span></div><div class="t2">4 files · 4.2 GB</div><div class="by"><svg class="ic sm ag" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg><span>同步书格到 Orbit</span></div></div></div>
-    <div class="it"><svg class="ic st ok" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 12.2l2.4 2.4 4.6-4.8"/></svg><div style="min-width:0;flex:1"><div style="display:flex"><div class="t1">books-stage/ <span class="to">→ Books</span></div><span class="tm">Yesterday</span></div><div class="t2">4 files · 566 MB</div><div class="by"><svg class="ic sm ag" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg><span>同步书格到 Orbit</span></div></div></div>
+      <div class="fails"><code>0412/scan.tiff</code> · file changed while reading<br><code>0977/cover.png</code> · permission denied<br><a style="color:var(--brand)">2 more</a> · <a style="color:var(--brand)">Retry failed</a></div></div></div>
+    <div class="it att"><svg class="ic st warn" viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg><div style="min-width:0;flex:1"><div style="display:flex"><div class="t1">anime-stage/ <span class="to">→ Video/鬼灭之刃 游郭篇</span></div><span class="tm">3h ago</span></div><div class="t2">7 files · <span class="w">4 failed</span> · <a>Details</a></div><div class="by"><svg class="ic sm ag" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg><span>同步书格到 Orbit</span></div></div></div>
+    <div class="sec">Running</div>
+    <div class="it"><svg class="ic st" viewBox="0 0 24 24" style="color:var(--brand)"><circle cx="12" cy="12" r="8.5" style="opacity:.2"/><path d="M12 3.5a8.5 8.5 0 0 1 8.5 8.5"/></svg><div style="min-width:0;flex:1"><div class="t1">scan-0412.pdf <span class="to">→ Books</span></div><div class="t2">212 MB of 410 MB · You</div><div class="pbar"><i style="width:52%"></i></div></div></div>
+    <div class="sec">Today</div>
+    <div class="grp"><div class="gh2"><svg class="ic sm ag" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg><span class="t">Tidy up Books</span><span class="tm">2m ago</span></div>
+      <div class="ln"><span class="op">Renamed 12 files</span><span class="q">in Books</span><span class="r">Undo</span></div>
+      <div class="ln"><span class="op">Deleted 2 files</span><span class="q">in scratch</span><span class="r">Restore</span></div></div>
+    <div class="grp"><div class="gh2"><svg class="ic sm ag" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg><span class="t">查找背景标签展示类型</span><span class="tm">5h ago</span></div>
+      <div class="ln"><span class="op">Wrote 3 files</span><span class="q">in scratch · 48 KB</span></div></div>
+    <div class="sec">Yesterday</div>
+    <div class="grp"><div class="gh2"><svg class="ic sm ag" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg><span class="t">同步书格到 Orbit</span><span class="tm">21:14</span></div>
+      <div class="ln"><span class="op">Synced 4 files</span><span class="q">to Video/鬼灭之刃 游郭篇 · 4.2 GB</span></div>
+      <div class="ln"><span class="op">Synced 4 files</span><span class="q">to Books · 566 MB</span></div></div>
+    </div>
   </aside>
 </div>
 <div class="bstates">
-  <div class="bs"><b>Idle, closed</b><div class="win"><div class="tbtn"><svg class="ic sm" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M14.5 4.5v15"/></svg>Transfers</div></div>Nothing running, nothing failed.</div>
-  <div class="bs"><b>Running</b><div class="win"><div class="tbtn"><svg class="ring" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5" fill="none" stroke="#eceef1" stroke-width="2.4"/><circle cx="10" cy="10" r="7.5" fill="none" stroke="#3370ff" stroke-width="2.4" stroke-dasharray="28.7 47.1" transform="rotate(-90 10 10)" stroke-linecap="round"/></svg>Transfers <span class="pct">61%</span></div></div>The icon becomes a ring with the overall progress. An agent’s sync or your upload: the panel does not open by itself.</div>
-  <div class="bs"><b>Something failed</b><div class="win"><div class="tbtn"><svg class="ic sm" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M14.5 4.5v15"/></svg>Transfers<i class="dot"></i></div></div>An amber dot until you open the panel and look; it is not cleared by time.</div>
-  <div class="bs"><b>Open</b><div class="win"><div class="tbtn on"><svg class="ic sm" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M14.5 4.5v15"/></svg>Transfers</div></div>Pressed, like the session title bar’s Project sessions button. Open or closed is remembered on this browser.</div>
-  <div class="bs" style="width:520px"><b>Rules</b>① The panel opens only from the button (or a “Details” link in an agent’s sync card). ② Sections: In progress, Needs attention (failures, expanded inline), Finished (newest first, with time and the session that ran it). ③ “Clear” empties Finished; failures leave only when you clear them one by one. ④ A narrow window lays the panel over the list instead of squeezing it. ⑤ When a file is selected, its details pane and Transfers share the right-hand slot: the last one opened wins.<br><b>Open for you:</b> label “Transfers” beside the icon, or icon only? How far back should Finished go (the server keeps recent syncs only)?</div>
+  <div class="bs"><b>Closed, nothing waiting</b><div class="win"><div class="tbtn"><svg class="ic sm" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg>Agents</div></div>Plain.</div>
+  <div class="bs"><b>Closed, agents working</b><div class="win"><div class="tbtn"><svg class="ring" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5" fill="none" stroke="#eceef1" stroke-width="2.4"/><circle cx="10" cy="10" r="7.5" fill="none" stroke="#3370ff" stroke-width="2.4" stroke-dasharray="28.7 47.1" transform="rotate(-90 10 10)" stroke-linecap="round"/></svg>Agents</div></div>A ring while a Drive chat, a sync or your upload is running. It never opens the panel by itself.</div>
+  <div class="bs"><b>Closed, needs you</b><div class="win"><div class="tbtn"><svg class="ic sm" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg>Agents<span class="badge">3</span></div></div>One count for held changes, overwrite questions and failed syncs. Opening the panel lands on the tab that holds them.</div>
+  <div class="bs"><b>Open</b><div class="win"><div class="tbtn on"><svg class="ic sm" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg>Agents<span class="badge">3</span></div></div>Pressed, like Project sessions in the session title bar. Open or closed and the last tab are remembered on this browser.</div>
+  <div class="bs" style="width:560px"><b>Rules</b><div>① <b>Chat</b> is today’s Drive chat, unchanged; <b>Activity</b> is new. ② Activity covers every session that wrote to the drive, not only Drive chats, grouped by session and by day; a session’s name opens it. ③ Needs you is pinned on top and leaves only when acted on: Review/Undo for held changes, Retry or clear for failed syncs. ④ Deletes carry Restore and changes carry Undo where the server can undo them, so Trash stays a back room. ⑤ File details overlay the list while the panel is open, as they do with the chat today.<br><b>Needs a server read:</b> <code>GET /drive/changes</code> carries no writer or session and is kept only briefly, so Activity needs a feed grouped by session from the entries’ writers, the syncs and the held change groups.</div></div>
 </div>
 </div>
 </body></html>
