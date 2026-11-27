@@ -3565,6 +3565,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // without `status` in their column lists. Only `session` is touched; no row is written, and no preserved
       // relation, trigger, function or DONE fence changes.
       '1711_session_status_drop',
+      // 1720 creates `owner_card_push` only (the decision-card push ledger), with no foreign key; no existing table,
+      // trigger, function or DONE fence is touched.
+      '1720_owner_card_push',
       // 1730 adds the nullable `session.client_request_id` (no row is rewritten) and a partial unique index on
       // (owner_id, client_request_id) over the rows that carry one. Only `session` is touched; no trigger, function of
       // one, preserved relation or DONE fence changes.
