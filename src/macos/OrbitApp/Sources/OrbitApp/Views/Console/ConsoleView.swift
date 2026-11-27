@@ -1186,6 +1186,11 @@ struct TranscriptView: View {
         .environment(\.runnerUpdatingFoot, runnerUpdatingFoot)
         // …and where that message is one no runner has taken, Cancel beside the tag (`HeldCancel`).
         .environment(\.heldCancel, { [console] bubble in Task { await console.cancelHeld(bubble) } })
+        // A `Not sent` message's Retry and Put back; Retry waits while another send is on its way.
+        .environment(\.notSentActions, NotSentActions(
+            retry: { [console] bubble in Task { await console.retryUnsent(bubble) } },
+            putBack: { [console] bubble in console.putBackUnsent(bubble) },
+            retryEnabled: !console.sending))
         .overlay { runnerUpdatingPage }
         // macOS shows the session state in this band. iOS gave the state up with the nav-bar title,
         // for reading space (see `ConsoleView`'s toolbar), so the band is retired there.

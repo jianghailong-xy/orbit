@@ -22,6 +22,8 @@ internal const val CHAT_CREATE = "chat-create:"
 
 /** A send that makes a session — the draft's `POST /sessions` or a page chat's door: never replayed when its answer is lost. */
 internal fun isCreate(endpoint: String): Boolean = endpoint == "create" || endpoint.startsWith(CHAT_CREATE)
+/** Whether a send waits as a Sending… / Not sent bubble and may be retried: all but a chat door's create, which cannot be replayed. */
+internal fun bubbled(endpoint: String): Boolean = !endpoint.startsWith(CHAT_CREATE)
 
 internal suspend fun <T> threeTries(read: suspend () -> T): T {
     repeat(2) { attempt ->
@@ -59,14 +61,16 @@ class ComposerApi(private val auth: OrbitApi, private val handle: SessionHandle,
             read = { readDirProbe(runnerId, path) },
             sleep = { ms -> delay(ms) },
         )
-    suspend fun mutation(endpoint: String, body: JsonObject? = null, method: HttpMethod = HttpMethod.POST): JsonObject {
+    /** [answerSeconds]: how long the transport itself may wait for the answer, where its own 10 s read timeout is too short — a
+     * message's send, which its 20 s deadline ends instead ([PendingSendCopy.ANSWER_TIMEOUT_MS]). */
+    suspend fun mutation(endpoint: String, body: JsonObject? = null, method: HttpMethod = HttpMethod.POST, answerSeconds: Long? = null): JsonObject {
         val path = when {
             endpoint == "create" -> listOf("sessions")
             endpoint.startsWith(CHAT_CREATE) -> endpoint.removePrefix(CHAT_CREATE).split('/')
             else -> listOf("sessions", sessionId) + endpoint.split('/')
         }
         val response = auth.request(handle, ApiRequest(path, method,
-            body = body?.toString()?.encodeToByteArray()))
+            body = body?.toString()?.encodeToByteArray(), readTimeoutSeconds = answerSeconds, callTimeoutSeconds = answerSeconds))
         return if (response.body.isEmpty()) JsonObject(emptyMap()) else Wire.json.parseToJsonElement(response.body.decodeToString()).jsonObject
     }
     /** The runner [id] as GET /runners lists it, or null where the list no longer holds it. */

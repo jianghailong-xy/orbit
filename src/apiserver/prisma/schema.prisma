@@ -3355,6 +3355,9 @@ model ConversationTurn {
   // Image blobs sent with this turn (web composer). Linked when the turn is enqueued;
   // the inbox hands their refs to the runner. Cascade so withdrawing/ending drops them.
   attachments Attachment[]
+  /// The acceptance round this turn was, when it is a server-queued acceptance shell turn (migration 1672). At most
+  /// one: task_acceptance_round.turn_id is unique.
+  acceptanceRounds TaskAcceptanceRound[]
 
   @@unique([sessionId, clientTurnId])
   @@unique([sessionId, seq])
@@ -6161,6 +6164,30 @@ model TaskDispatchEpoch {
 /// progress. The `task_progress_epoch_advance` trigger starts the next epoch, with nothing reported in
 /// it, whenever a Task leaves DONE, CANCELLED or FAILED for OPEN or IN_PROGRESS. Nothing here is derived
 /// from a transcript or from a shell's output: progress is what a reporter states.
+model TaskAcceptanceRound {
+  /// One EXECUTABLE acceptance round, recorded by POST /runner/sessions/:id/turn-complete outside the exit-code
+  /// comparison (migration 1672, tasks/task-acceptance-round.ts). A record of what ran: nothing derives state from it.
+  id               String           @id @default(uuid(7)) @db.Uuid
+  ownerId          String           @map("owner_id") @db.Uuid
+  taskId           String           @map("task_id") @db.Uuid
+  task             Task             @relation(fields: [taskId], references: [id], onDelete: Cascade, map: "task_acceptance_round_task_fkey")
+  sessionId        String           @map("session_id") @db.Uuid
+  turnId           String           @unique @map("turn_id") @db.Uuid
+  turn             ConversationTurn @relation(fields: [sessionId, turnId], references: [sessionId, id], onDelete: Cascade, map: "task_acceptance_round_turn_fkey")
+  /// Null when the runner reported no exit code.
+  exitCode         Int?             @map("exit_code")
+  /// The code the turn was queued to expect (its client_turn_id).
+  expectedExitCode Int              @map("expected_exit_code")
+  /// The branch SHA reported with the completion; null when none was, or it was not a SHA.
+  branchSha        String?          @map("branch_sha")
+  finishedAt       DateTime         @default(now()) @map("finished_at") @db.Timestamptz(3)
+  /// The last 16 KB of the output, redacted (runner-api/check-output-redaction.ts#clipCheckTail).
+  outputTail       String           @map("output_tail")
+
+  @@index([taskId, finishedAt(sort: Desc)])
+  @@map("task_acceptance_round")
+}
+
 model TaskProgress {
   taskId String @id @map("task_id") @db.Uuid
   task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
@@ -7005,6 +7032,8 @@ model Task {
   /// Public links with this task as their root, ended ones included (migration 0306).
   shareLinks   ShareLink[]
   completionEvidence TaskCompletionEvidence[]
+  /// Each EXECUTABLE acceptance round its runs ran (migration 1672).
+  acceptanceRounds TaskAcceptanceRound[]
   routeDecisions TaskRouteDecision[]
   legacyEvidenceImports TaskLegacyEvidenceImport[]
   evidenceDecisions TaskEvidenceDecision[]

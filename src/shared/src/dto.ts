@@ -4181,6 +4181,29 @@ export interface OrchestrationCredentialResponse {
 export const SESSION_RELEASE_V1 = 'session-release/v1';
 
 /**
+ * One EXECUTABLE acceptance round: what the runner's turn-complete reported for a server-queued acceptance shell turn
+ * (migration 1672). GET /tasks/:id lists them on each of its runs, as `sessions[].acceptanceRounds`, newest first; a
+ * run that ran none has an empty list. A record for a reader: the task's status is still decided by the exit-code
+ * comparison alone.
+ */
+export interface TaskAcceptanceRound {
+  id: string;
+  /** The acceptance shell turn of the run's conversation that this round was. */
+  turnId: string;
+  /** What the command exited with; null when the runner reported no code. -1 is the runner's "no comparable code"
+   *  (a start failure, a timeout kill, a signal). */
+  exitCode: number | null;
+  /** The code the declaration asked for when the round was queued. */
+  expectedExitCode: number;
+  /** The commit the run's branch stood at when the round finished; null when the runner reported none. */
+  branchSha: string | null;
+  /** ISO time the server recorded the round's completion. */
+  finishedAt: string;
+  /** The last 16 KB of the command's combined output, with secrets redacted; empty when it printed nothing. */
+  outputTail: string;
+}
+
+/**
  * Runner → control plane: a single interactive turn finished (the per-turn `result`),
  * distinct from /complete which finalizes the whole session. Carries per-turn billing.
  */

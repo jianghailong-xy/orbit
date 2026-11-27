@@ -90,8 +90,19 @@ fun NewSessionComposer(
             // First the engine — the CLI this session runs on for good — then, in the composer's model menu, the credential it spends.
             // The engine is the hero, as iOS draws it: the vendor's mark, the engine's name as the one tappable identity, then the line
             // that says what to do and the model it starts on.
-            Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 24.dp), contentAlignment = Alignment.Center) {
-                detail?.let { workspace ->
+            // A first message waiting on the server takes the picker's place, top-aligned
+            // (docs/mocks/composer-sending-bubble/03-new-session.html): Sending…, then Not sent with Retry / Put back.
+            val waiting = state.draft.pending?.takeIf { bubbled(it.endpoint) }
+            Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = if (waiting != null) 16.dp else 24.dp),
+                contentAlignment = if (waiting != null) Alignment.TopEnd else Alignment.Center) {
+                if (waiting != null) {
+                    val ready = state.loaded && !state.sending && !state.busy
+                    Box(Modifier.verticalScroll(rememberScrollState()).padding(top = 12.dp)) {
+                        io.orbitd.android.reader.PendingSendBubble(waiting.words, waiting.attachments, state.sending, state.notSentReason,
+                            retry = if (ready) model::retrySend else null, putBack = if (ready) model::putBackUnsent else null,
+                            open = { })
+                    }
+                } else detail?.let { workspace ->
                     val effective = JsonObject(workspace + state.draft.resumeConfig)
                     val engine = state.catalog?.engineOf(effective)
                         ?: ProviderEngines.sessionEngine(effective.text("engine") ?: effective.text("lastEngine"), effective.text("provider"), emptyList())

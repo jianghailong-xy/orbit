@@ -1739,6 +1739,10 @@ public struct CreateSessionRequest: Codable, Sendable {
     /// Prompt optimizer (D2): the opening message is the reading copy Use inserted; this is its agent-language
     /// prompt. Nil omits it.
     public let optimizedTranslation: String?
+    /// A UUID minted at the press of the new-session Send: POST /sessions answers a repeat of it with the
+    /// session the first made (migration 1730), so Retry sends the same one and never makes a second
+    /// session. Nil omits it — a `!cmd` first message and every create that is not a first-message send.
+    public let clientRequestId: String?
     public init(prompt: String, title: String? = nil, agentId: String? = nil, assignedRunnerId: String? = nil,
                 engine: String? = nil, provider: String? = nil,
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
@@ -1747,7 +1751,8 @@ public struct CreateSessionRequest: Codable, Sendable {
                 claudeAccount: String? = nil, antigravityAccount: String? = nil, kimiAccount: String? = nil,
                 cursorAccount: String? = nil, folderId: String? = nil,
                 newWorkspace: NewWorkspaceRequest? = nil, skipTranslation: Bool? = nil,
-                optimizedTranslation: String? = nil) {
+                optimizedTranslation: String? = nil, clientRequestId: String? = nil) {
+        self.clientRequestId = clientRequestId
         self.skipTranslation = skipTranslation
         self.optimizedTranslation = optimizedTranslation
         self.prompt = prompt

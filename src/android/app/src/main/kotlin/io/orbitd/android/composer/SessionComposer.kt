@@ -105,6 +105,15 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
         if (field.text != draft.text) field = TextFieldValue(draft.text,
             TextRange(draft.selectionStart.coerceIn(0, draft.text.length), draft.selectionEnd.coerceIn(0, draft.text.length)))
     }
+    // The conversation this box sends into, as the page reads it (docs/mocks/composer-sending-bubble): the seq a message sent now is
+    // recognised after, and each change of it settles the bubbles — an echo replaces a Not sent one; the queue or the echo takes over
+    // from a sent one. Only once the server's own tail is in: a copy off the disk could be older than what was said since.
+    val liveEvents = session?.takeIf { target == null && it.transcript.seeded && !it.seededFromCache }?.transcript?.events
+    val listedTurns = session?.snapshot?.queuedTurns
+    LaunchedEffect(model, liveEvents, listedTurns, state.sending, state.draft.pending, state.sent) {
+        model.seenSeq = liveEvents?.let(::newestSeq)
+        if (liveEvents != null) model.settle(liveEvents, listedTurns.orEmpty())
+    }
     var menu by remember { mutableStateOf(false) }
     var drivePicker by remember { mutableStateOf(false) }
     val driveOffered = io.orbitd.android.drive.driveShown(app, handle)
@@ -278,10 +287,11 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                     }
                 }
                 if (!session.canCompose()) Text("Reconnect to send. Your draft is saved.", style = MaterialTheme.typography.bodySmall)
-                draft.pending?.let { pending ->
+                // A message into the session waits in the conversation as its bubble, Retry in its foot (owner decision 1, 2026-11-27);
+                // only a chat's create, which has no bubble,, still says it above the box.
+                draft.pending?.takeIf { !bubbled(it.endpoint) }?.let { pending ->
                     Text("Delivery unconfirmed: ${pending.text.take(120)}", style = MaterialTheme.typography.bodySmall)
-                    if (isCreate(pending.endpoint)) Text("Creation is unconfirmed. Check this workspace's sessions before creating another session.")
-                    else Button(enabled = !state.busy && !state.waiting && session?.accessDenied != true, onClick = model::retrySend) { Text("Retry saved send") }
+                    Text("Creation is unconfirmed. Check this workspace's sessions before creating another session.")
                 }
                 // Frame 6: the press failed; the draft below is untouched.
                 if (optimizer.failed) PromptOptimizationFailureLine(retry = model::retryOptimize, dismiss = model::dismissOptimization)
@@ -420,7 +430,8 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                         var queueMenu by remember { mutableStateOf(false) }
                         LaunchedEffect(queueOffered) { if (!queueOffered) queueMenu = false }
                         Box {
-                            RoundSend(stop = stop, waiting = state.waiting || state.busy, enabled = sendEnabled,
+                            // Uploading is the one wait Send draws; a message on its way is its bubble's, and Send a plain disabled arrow.
+                            RoundSend(stop = stop, waiting = state.waiting, enabled = sendEnabled,
                                 label = if (state.waiting) "Uploading…" else if (state.busy) "Sending…" else if (stop) "Stop" else "Send",
                                 modifier = Modifier.testTag("composer-send").holdToOffer(queueOffered) { queueMenu = true }.semantics {
                                     if (queueOffered) customActions = listOf(CustomAccessibilityAction(PendingTray.QUEUE_FOR_NEXT_TURN) { send(true); true })

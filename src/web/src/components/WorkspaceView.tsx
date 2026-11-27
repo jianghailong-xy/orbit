@@ -125,7 +125,8 @@ import { useLocation, useMatch, useNavigate, useSearchParams } from 'react-route
 import { copyText } from '../lib/clipboard';
 import { REPO_CLEANUP_QUEUED, repoCleanupConfirm } from '../lib/repoCleanup';
 import { routeId, encodeId } from '../lib/idCodec';
-import { useIsMobile, useMediaQuery } from '../lib/useMediaQuery';
+import { TASK_COLUMN_QUERY, useIsMobile, useMediaQuery } from '../lib/useMediaQuery';
+import { rememberTaskRunSidebar, taskRunSidebarClosed } from '../lib/taskRunSidebar';
 import {
   dragOffset,
   isFullSwipe,
@@ -749,7 +750,7 @@ import { type QueuedTurn, type RunEvent, useSessionStream } from '../lib/useSess
 import { SessionConversation } from './SessionConversation';
 import { useWikiChatSessionCards } from './WikiDraftCard';
 import { currentPromptSuggestion, offeredPromptSuggestion } from '../lib/promptSuggestion';
-import { useCloseTaskOverPage, useOpenTaskOverPage, useTaskOverPage } from '../lib/taskInPlace';
+import { useCloseTaskOverPage, useOpenTaskOverPage, useShowTaskOverPage, useTaskOverPage } from '../lib/taskInPlace';
 import {
   OPTIMIZE_SHORTCUT,
   optimizedSendOf,
@@ -3050,6 +3051,9 @@ export function WorkspaceView({
   const openTaskOverPage = useOpenTaskOverPage();
   const taskOverPage = useTaskOverPage();
   const closeTaskOverPage = useCloseTaskOverPage();
+  const showTaskOverPage = useShowTaskOverPage();
+  // Wide enough for the task to sit beside the conversation as a column (TaskOverPagePanel docks it then).
+  const taskColumnRoomy = useMediaQuery(TASK_COLUMN_QUERY);
   const [searchParams, setSearchParams] = useSearchParams();
   // How this console names its machine: Orbit Cloud for the account's managed runner (machineName).
   const managedRunnerId = useManagedRunnerId() ?? managed?.status.runnerId ?? null;
@@ -4033,6 +4037,17 @@ export function WorkspaceView({
   // Whether this session's own task is open beside (or over) it: the Task badge reads pressed then.
   const selectedTaskOpen =
     !!selected?.taskId && taskOverPage != null && routeId(taskOverPage) === routeId(selected.taskId);
+  // A task's own run conversation opens its task beside it (docs/task-run-sidebar-design.md, D2 = B): while
+  // the window has room for the column, nothing else is open over the page or in the column's slot, and the
+  // task was not closed in this conversation before (lib/taskRunSidebar). Below that width it stays closed
+  // until asked for: the overlay would cover the conversation it was opened for.
+  const ownRunSessionId: string | null = selected?.taskId && !selectedTrashed ? selected.id : null;
+  const ownRunTaskId: string | null = ownRunSessionId ? selected!.taskId! : null;
+  useEffect(() => {
+    if (!ownRunSessionId || !ownRunTaskId || !taskColumnRoomy || settingsOpen || taskOverPage != null) return;
+    if (taskRunSidebarClosed(ownRunSessionId)) return;
+    showTaskOverPage(encodeId(ownRunTaskId));
+  }, [ownRunSessionId, ownRunTaskId, taskColumnRoomy, settingsOpen, taskOverPage, showTaskOverPage]);
   const selectedCompleted = selectedLifecycleState === 'COMPLETED';
   // Whether a public link opens this conversation right now: the detail's open link once it has
   // been read, the list row's flag until then. The Trash pauses a link, so a trashed one is not.
@@ -12014,10 +12029,13 @@ export function WorkspaceView({
                     // opening it takes the column session settings had.
                     aria-pressed={selectedTaskOpen}
                     onClick={() => {
+                      // Closed or opened here, the choice is this conversation's (lib/taskRunSidebar).
                       if (selectedTaskOpen) {
+                        rememberTaskRunSidebar(selected.id, true);
                         closeTaskOverPage();
                         return;
                       }
+                      rememberTaskRunSidebar(selected.id, false);
                       setSettingsOpen(false);
                       openTaskOverPage(encodeId(selected.taskId));
                     }}
