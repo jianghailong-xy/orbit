@@ -1,0 +1,18 @@
+{
+  "today": {
+    "nav": "rgb(23, 23, 26) div.tp-group-head",
+    "gutter": "rgb(23, 23, 26) div.app-shell",
+    "list": "rgb(32, 32, 35) aside.session-col",
+    "main": "rgb(32, 32, 35) div.workspace-view",
+    "code": "rgb(23, 23, 26) code.",
+    "composer": "rgb(43, 43, 46) div.composer-box"
+  },
+  "proposal": {
+    "nav": "rgb(23, 23, 26) div.tp-group-head",
+    "gutter": "rgb(23, 23, 26) div.app-shell",
+    "list": "rgb(28, 28, 31) aside.session-col",
+    "main": "rgb(32, 32, 35) div.workspace-view",
+    "code": "rgba(255, 255, 255, 0.06) code.",
+    "composer": "rgb(43, 43, 46) div.composer-box"
+  }
+}

@@ -15,7 +15,7 @@ const CSS = readFileSync(new URL('./Scheduled.css', import.meta.url), 'utf8');
 
 describe('a workspace’s session list', () => {
   it('draws run sessions only on the Scheduled runs folder’s page, even ones a server sent elsewhere', () => {
-    expect(SOURCE).toContain("const onScheduledRuns = !listProjectId && searchParams.get('folder') === SCHEDULED_RUNS_FOLDER;");
+    expect(SOURCE).toContain('const onScheduledRuns = !listProjectId && folderParam === SCHEDULED_RUNS_FOLDER;');
     expect(SOURCE).toContain("row.runSource !== 'SCHEDULE_CHANGE' && (row.runSource === 'SCHEDULE') === onScheduledRuns);");
     expect(SOURCE).toContain('scheduled: onScheduledRuns,');
     // Every list the column draws comes from those rows; nothing re-reads the raw answer for rows.
@@ -23,8 +23,11 @@ describe('a workspace’s session list', () => {
   });
 
   it('has one Scheduled runs row on the list, only while the view has a run, and no folder rows on its page', () => {
-    expect(SOURCE).toContain('{!listProjectId && !openFolder && !onScheduledRuns && scheduledRuns.length > 0 && scheduledRunsRowView()}');
-    expect(SOURCE).toContain('{!listProjectId && !onScheduledRuns && folderListing?.folders.map((row) =>');
+    // The column's items (docs/session-list-scale-design.md §4): the row, then the folder rows, off its own page.
+    expect(SOURCE).toContain('const hasScheduledRuns = scheduledRuns.length > 0;');
+    expect(SOURCE).toContain("...(!listProjectId && !openFolder && !onScheduledRuns && hasScheduledRuns\n      ? [{ kind: 'scheduled' as const, key: 'scheduled-runs' }] : []),");
+    expect(SOURCE).toContain("case 'scheduled':\n        return scheduledRunsRowView();");
+    expect(SOURCE).toContain('...(!listProjectId && !onScheduledRuns ? liveListing.folders.map((row): ColumnItem =>');
     // A run's start reaches no list's stream, so the row's read polls.
     expect(SOURCE).toMatch(/sessionsQuery\(\{ runnerId: runner\.id, workspaceId: scopeWorkspaceId, view: effectiveView, scheduled: true \}\),\n\s+enabled: [^\n]+,\n\s+refetchInterval: 30_000,/);
   });
@@ -55,10 +58,13 @@ describe('a run’s session (board 2/2 ⑤ ⑥)', () => {
     expect(SOURCE).not.toContain("searchParams.get('schedule')");
   });
 
-  it('has an ordinary session’s header: no crumb, its own line and its Follow chip (owner 2026-11-19)', () => {
+  it('has an ordinary session’s header: no crumb, the title’s row and Follow in ⋯ (2026-11-19; one row 2026-11-26)', () => {
     expect(SOURCE).not.toContain('ScheduleRunCrumb');
     expect(SOURCE).not.toContain('scheduleRunHeadText');
-    expect(SOURCE).toContain('!composing && selectedId && !selectedTrashed && !selectedMissing && (\n                <SessionWatchBadges sessionId={selectedId} />');
+    // The header is the title's row alone now, and Follow is a ⋯ item on every width, so no pill
+    // is drawn on a phone for a schedule run's session either.
+    expect(SOURCE).toContain('<SessionWatchBadges sessionId={selectedId} follow={false} />');
+    expect(SOURCE).not.toContain('follow={isMobile}');
   });
 
   it('keeps the session column: a run’s session is an ordinary session page (owner 2026-11-19)', () => {

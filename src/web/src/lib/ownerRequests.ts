@@ -1,4 +1,4 @@
-import { SCHEDULE_COPY, type OwnerCardTranslation } from '@orbit/shared';
+import { SCHEDULE_COPY, type OwnerCardTranslation, type OwnerRequestChangeSpec } from '@orbit/shared';
 import { CONDITION_COPY } from './conditions';
 import { useEffect, useSyncExternalStore } from 'react';
 import { formatSpan, sameResourceId } from './watches';
@@ -13,8 +13,12 @@ export type OwnerRequestKind =
   | 'DECISION' | 'SECRET' | 'MANUAL_STEP' | 'CONFIRM' | 'WIKI_CREATE'
   // A change to the owner's own Settings, proposed by a session (docs/settings-from-conversation-design.md §5.1).
   | 'SETTINGS_CHANGE'
+  // A session asking the owner to reopen a DONE or CANCELLED project (docs/project-reopen-request-design.md).
+  | 'PROJECT_REOPEN'
   // An agent on the Orbit Cloud runner asking the owner to sign in to a site in its browser (browser_request_sign_in).
   | 'BROWSER_SIGN_IN'
+  // An agent proposing one setting of a runner, which the owner applies with one press (docs/design/owner-request-change.md).
+  | 'CHANGE'
   // A scheduled task's items, which no session can file (apiserver schedules/schedule-attention.ts).
   | 'SCHEDULE_FAILED' | 'SCHEDULE_HELD' | 'SCHEDULE_APPROVAL' | 'SCHEDULE_WIDEN'
   // A condition's items (apiserver conditions/condition-attention.ts): it cannot be read, or a task's condition has
@@ -81,6 +85,8 @@ export interface OwnerRequest {
   /** SECRET: what ends the key (design §6.1) — its task, or, for a session with no task, the session. */
   secretScope?: 'TASK' | 'SESSION';
   secretGrant: OwnerRequestSecretGrant | null;
+  /** CHANGE: the runner setting asked for, and its value when it was asked (the server reads `before`). */
+  changeSpec?: OwnerRequestChangeSpec | null;
   verifyHint: string | null;
   /** WIKI_CREATE: the repository the wiki is asked for, and the asking session's workspace it would read it from. */
   repoUrlNorm?: string | null;
@@ -106,7 +112,7 @@ export interface OwnerRequest {
   resolvedBySessionId: string | null;
   resolutionNote: string | null;
   /** DECISION: the option and text; WIKI_CREATE once DONE: the wiki made. */
-  answer: { option?: number; text?: string; spaceId?: string; name?: string } | null;
+  answer: { option?: number; text?: string; spaceId?: string; name?: string; applied?: number; actualBefore?: number } | null;
   /** The client that ended it, from `X-Orbit-Client`. Not served yet: without it the summary names no device. */
   resolvedClient?: string | null;
   /** The agent-written fields in the owner's language (Settings › Translation); null or absent until translated. */
@@ -123,7 +129,9 @@ export const KIND_TAGS: Readonly<Record<OwnerRequestKind, string>> = {
   CONFIRM: 'CONFIRM',
   WIKI_CREATE: 'WIKI',
   SETTINGS_CHANGE: 'SETTINGS',
+  PROJECT_REOPEN: 'REOPEN',
   BROWSER_SIGN_IN: 'SIGN IN',
+  CHANGE: 'SETTING',
   SCHEDULE_FAILED: SCHEDULE_COPY.waiting.kinds.schedule,
   SCHEDULE_HELD: SCHEDULE_COPY.waiting.kinds.schedule,
   SCHEDULE_APPROVAL: SCHEDULE_COPY.waiting.kinds.run,
@@ -142,6 +150,26 @@ export const BROWSER_SIGN_IN_COPY = {
   signedIn: (site: string) => `Signed in to ${site}`,
   action: 'Sign in',
 } as const;
+
+/** The CHANGE card's words; OrbitKit's and Android's cards say the same ones. */
+export const CHANGE_COPY = {
+  tag: 'SETTING',
+  primary: 'Apply',
+  setting: (runner: string) => `${runner} · Max Concurrent`,
+  runningNow: (n: number) => `${n} running now`,
+  wasWhenAsked: (before: number) => `Was ${before} when asked.`,
+  lowering: (n: number) => `Nothing running stops. New sessions wait until fewer than ${n} run.`,
+  raising: (n: number) => `Up to ${n} sessions can run at once on this machine.`,
+  numberLabel: 'Max Concurrent',
+  applied: (runner: string, from: number, to: number, requested: number) =>
+    `Applied: ${runner} Max Concurrent ${from} → ${to}${to !== requested ? ` (asked for ${requested})` : ''}`,
+} as const;
+
+/** The number typed on a CHANGE card: an integer of at least 1, or null. */
+export function changeNumber(text: string): number | null {
+  const n = /^\d+$/.test(text.trim()) ? Number(text.trim()) : NaN;
+  return Number.isSafeInteger(n) && n >= 1 ? n : null;
+}
 
 const DEVICES: Readonly<Record<string, string>> = {
   web: 'Web',

@@ -8,10 +8,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { PushService } from '../push/push.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
+import { RunnerSessionsController } from '../runner-api/runner-sessions.controller';
 import { SessionRequestService } from './session-request.service';
 import { SessionsService } from './sessions.service';
 import { appendRunQuestionContext, questionAnswers, questionHolds } from './run-question';
-import { countLiveApprovals } from './abandoned-approvals';
+import { countLiveApprovals, countLiveApprovalsBySession } from './abandoned-approvals';
 
 const url = process.env.COORDINATOR_PG_URL;
 const input = { questions: [{ question: 'Which port?', options: [{ label: '3000' }, { label: '4000' }] }] };
@@ -37,10 +38,10 @@ test('Automatic run question reaches coordinator, answer reaches runner, same-se
   try {
     await db.user.create({ data: { id: ownerId, email: `${ownerId}@question.invalid`, passwordHash: 'x', name: 'Question spec' } });
     const runner = await db.runner.create({ data: { ownerId, name: 'Runner', tokenHash: randomUUID(), status: 'ONLINE' } });
-    const coordinator = await db.session.create({ data: { ownerId, creatorId: ownerId, title: 'Coordinator', prompt: 'Coordinate', provider: 'codex', status: 'AWAITING_INPUT' } });
+    const coordinator = await db.session.create({ data: { ownerId, creatorId: ownerId, title: 'Coordinator', prompt: 'Coordinate', provider: 'codex', turnState: null } });
     const project = await db.project.create({ data: { ownerId, title: 'Automatic', goal: 'Answer run', coordinatorEnabled: true, coordinatorSessionId: coordinator.id, exceptionEscalationSeconds: 300 } });
     const task = await db.task.create({ data: { ownerId, creatorId: ownerId, creatorType: 'USER', title: 'Choose port', projectId: project.id, completionCriterion: 'EVIDENCE_JUDGMENT' } });
-    const run = await db.session.create({ data: { ownerId, creatorId: ownerId, title: 'Run', prompt: 'Work', provider: 'claude', taskId: task.id, assignedRunnerId: runner.id, status: 'RUNNING', engineTurnActive: true } });
+    const run = await db.session.create({ data: { ownerId, creatorId: ownerId, title: 'Run', prompt: 'Work', provider: 'claude', taskId: task.id, assignedRunnerId: runner.id, turnState: 'IN_FLIGHT', engineTurnActive: true } });
     const caller = { id: runner.id, ownerId };
     async function ask() { return api.createApproval(caller, run.id, { toolName: 'AskUserQuestion', toolUseId: randomUUID(), input }); }
     const question = await ask();
@@ -62,6 +63,7 @@ test('Automatic run question reaches coordinator, answer reaches runner, same-se
     assert.equal(frames.some(args => (args[1] as { type?: string })?.type === 'approval_request'), false);
     assert.deepEqual(await badges.needsYouSessions(ownerId), []);
     assert.equal(await countLiveApprovals(db, run), 0);
+    assert.equal((await countLiveApprovalsBySession(db, [run])).get(run.id), 0, 'the batched count agrees');
     assert.deepEqual(await sessions.listApprovals(ownerId, run.id, 'PENDING'), []);
 
     const permission = await api.createApproval(caller, run.id, { toolName: 'Bash', input: { command: 'pwd' }, toolUseId: randomUUID() });
@@ -69,6 +71,7 @@ test('Automatic run question reaches coordinator, answer reaches runner, same-se
     assert.equal(pushes[0][1], permission.id);
     assert.deepEqual(await badges.needsYouSessions(ownerId), [run.id]);
     assert.equal(await countLiveApprovals(db, run), 1);
+    assert.equal((await countLiveApprovalsBySession(db, [run])).get(run.id), 1, 'the batched count agrees');
     assert.equal(await (badges as unknown as { claimApprovalAlert(s: string, a: string): Promise<boolean> }).claimApprovalAlert(run.id, permission.id), true,
       'a held question cannot swallow the security approval alert edge');
     await assert.rejects(requests.reply(ownerId, run.id, request.id, { option: 0 }), /only the session/);
@@ -123,11 +126,65 @@ test('Automatic run question reaches coordinator, answer reaches runner, same-se
     assert.equal((await db.approval.findUniqueOrThrow({ where: { id: ordinary.id } })).coordinatorFallback, null);
     assert.notEqual(pushes.at(-1)?.[3], true);
     const outside = await db.task.create({ data: { ownerId, creatorId: ownerId, creatorType: 'USER', title: 'No project', completionCriterion: 'EVIDENCE_JUDGMENT' } });
-    const outsideRun = await db.session.create({ data: { ownerId, creatorId: ownerId, taskId: outside.id, title: 'Standalone run', prompt: 'Work', provider: 'claude', assignedRunnerId: runner.id, status: 'RUNNING' } });
+    const outsideRun = await db.session.create({ data: { ownerId, creatorId: ownerId, taskId: outside.id, title: 'Standalone run', prompt: 'Work', provider: 'claude', assignedRunnerId: runner.id, turnState: 'IN_FLIGHT' } });
     const standalone = await api.createApproval(caller, outsideRun.id, { toolName: 'AskUserQuestion', input });
     assert.equal((await db.approval.findUniqueOrThrow({ where: { id: standalone.id } })).coordinatorFallback, null);
     assert.notEqual(pushes.at(-1)?.[3], true);
     assert.deepEqual(questionAnswers(input, { message: '5000' }).answers, { 'Which port?': ['5000'] });
+  } finally {
+    await db.$disconnect();
+    await sql.end();
+  }
+});
+
+test('A coordinator answers a multi-question run question through POST /runner/session-requests/:id/reply', { skip: !url, timeout: 120_000 }, async () => {
+  assertCoordinatorPgUrlIsIsolated(url);
+  const sql = new Client({ connectionString: url });
+  await sql.connect();
+  await verifyCoordinatorPgIdentity(sql);
+  const db = prismaClientFor(url);
+  const prisma = db as unknown as PrismaService;
+  const ownerId = randomUUID();
+  const realtime = new Proxy({}, { get: () => () => undefined });
+  const queue = new Proxy({}, { get: () => () => undefined });
+  const push = { notifyApprovalRequest: async () => undefined };
+  const sessions = new SessionsService(prisma, queue as never, realtime as never);
+  const api = new RunnerApiController(prisma, queue as never, realtime as never, push as never, {} as never, {} as never);
+  Object.assign(api, { sessions });
+  const requests = new SessionRequestService(prisma, sessions, realtime as never);
+  try {
+    await db.user.create({ data: { id: ownerId, email: `${ownerId}@question.invalid`, passwordHash: 'x', name: 'Question spec' } });
+    const runner = await db.runner.create({ data: { ownerId, name: 'Runner', tokenHash: randomUUID(), status: 'ONLINE' } });
+    const coordinator = await db.session.create({ data: { ownerId, creatorId: ownerId, title: 'Coordinator', prompt: 'Coordinate', provider: 'codex', turnState: null } });
+    const project = await db.project.create({ data: { ownerId, title: 'Automatic', goal: 'Answer run', coordinatorEnabled: true, coordinatorSessionId: coordinator.id, exceptionEscalationSeconds: 300 } });
+    const task = await db.task.create({ data: { ownerId, creatorId: ownerId, creatorType: 'USER', title: 'Decide', projectId: project.id, completionCriterion: 'EVIDENCE_JUDGMENT' } });
+    const run = await db.session.create({ data: { ownerId, creatorId: ownerId, title: 'Run', prompt: 'Work', provider: 'claude', taskId: task.id, assignedRunnerId: runner.id, turnState: 'IN_FLIGHT', engineTurnActive: true } });
+    const caller = { id: runner.id, ownerId };
+    const multi = { questions: [
+      { question: 'Which port?', options: [{ label: '3000' }, { label: '4000' }] },
+      { question: 'Which name?', options: [{ label: 'a' }, { label: 'b' }] },
+      { question: 'Which flags?', multiSelect: true, options: [{ label: 'x' }, { label: 'y' }, { label: 'z' }] },
+    ] };
+    // The route as the runner's HTTP door reaches it: the calling session is proven by the orchestration credential.
+    const route = new RunnerSessionsController(sessions, { assert: async (_r: unknown, id: string) => id } as never, {} as never, {} as never, undefined, requests);
+    const post = (requestId: string, body: Parameters<RunnerSessionsController['replyToRequest']>[5]) =>
+      route.replyToRequest(runner as never, undefined, coordinator.id, 'token', requestId, body);
+    const ask = async () => {
+      const approval = await api.createApproval(caller, run.id, { toolName: 'AskUserQuestion', toolUseId: randomUUID(), input: multi });
+      const request = await db.sessionRequest.findFirstOrThrow({ where: { approvalId: approval.id } });
+      return { approval, request };
+    };
+    const { approval, request } = await ask();
+    const refused = /answer each question exactly once/;
+    await assert.rejects(post(request.id, { answers: [{ question: 0, option: 0 }, { question: 1, text: 'c' }] }), refused);
+    await assert.rejects(post(request.id, { answers: [{ question: 0, option: 0 }, { question: 0, option: 1 }, { question: 2, options: [0] }] }), refused);
+    await assert.rejects(post(request.id, { option: 0 }), refused);
+    assert.equal((await db.approval.findUniqueOrThrow({ where: { id: approval.id } })).status, 'PENDING');
+    await post(request.id, { answers: [{ question: 0, option: 0 }, { question: 1, text: 'custom' }, { question: 2, options: [0, 2] }] });
+    const decided = await db.approval.findUniqueOrThrow({ where: { id: approval.id } });
+    assert.equal(decided.status, 'ALLOWED');
+    assert.deepEqual(decided.answers, { 'Which port?': ['3000'], 'Which name?': ['custom'], 'Which flags?': ['x', 'z'] });
+    assert.equal((await db.sessionRequest.findUniqueOrThrow({ where: { id: request.id } })).state, 'REPLIED');
   } finally {
     await db.$disconnect();
     await sql.end();

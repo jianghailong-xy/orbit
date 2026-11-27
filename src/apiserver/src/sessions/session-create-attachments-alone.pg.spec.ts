@@ -196,7 +196,7 @@ scenario('a session no runner has claimed lists its opening, under the id its tu
 
   // Ended before any runner took it: nothing is waiting any more, so nothing is listed.
   const ended = await sessions.create(OWNER_ID, { prompt: 'never claimed', workspaceId: WORKSPACE_ID, effort: '' });
-  await admin.query(`UPDATE "session" SET status = 'CANCELLED', finished_at = now() WHERE id = $1::uuid`, [ended.id]);
+  await admin.query(`UPDATE "session" SET "turn_state" = NULL, finished_at = now() WHERE id = $1::uuid`, [ended.id]);
   assert.deepEqual(await sessions.listQueuedTurns(OWNER_ID, ended.id, 'active'), []);
 });
 

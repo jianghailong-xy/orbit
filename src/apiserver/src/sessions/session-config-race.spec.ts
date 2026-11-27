@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { SessionsService } from './sessions.service';
 
 test('config update seeds the prompt before the control turn when claim just changed PENDING to RUNNING', async () => {

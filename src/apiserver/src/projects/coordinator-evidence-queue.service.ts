@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { RunStatus, TaskStatus } from '@prisma/client';
+import { TaskStatus } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { turnStateFilter } from '../sessions/session-turn-state';
 import { readEvidenceWaitingForCoordinator } from '../tasks/pending-evidence-judgments';
 import { CompletionEvidenceProducer } from './completion-evidence.producer';
 import { completionEvidenceRevisedFact } from './completion-input';
@@ -73,7 +74,8 @@ export class CoordinatorEvidenceQueueService {
         where: {
           coordinatorEnabled: true,
           coordinatorSession: {
-            status: { in: [RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED] },
+            // Held and idle: parked, or its turn abandoned (plan §2.1: AI).
+            ...turnStateFilter([null, 'ABANDONED']),
             endReason: null,
             retryAt: null,
             cancelRequestedAt: null,

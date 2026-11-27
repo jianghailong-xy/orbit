@@ -9,12 +9,13 @@ import {
   SessionLifecycleState,
   SessionRunState,
 } from '@orbit/shared';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { isHeld } from '../common/session-release';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { conversationIsDown, sessionHasEnded as projectSessionHasEnded } from '../projects/project-open-item';
 import { RETRY_CLAIM_WINDOW_MS } from '../sessions/session-request';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 import { observerRefusal } from '../watches/watch-delivery.service';
 import { sessionHasEnded } from './background-job-wake';
 import { tickStanding } from './scheduled-wakeup';
@@ -41,6 +42,7 @@ const OUTCOMES: readonly (string | null)[] = ['ANSWERED', 'FAILED', 'CANCELLED',
 
 interface Row {
   status: RunStatus;
+  turnState: string | null;
   finishedAt: Date | null;
   endReason: string | null;
   lastTurnOutcome: string | null;
@@ -50,6 +52,10 @@ interface Row {
   cancelRequestedAt: Date | null;
   retryAt: Date | null;
   retryClaimedAt: Date | null;
+  /** What the watch refusal derives its run state from, beside the above (session-legacy-words.ts). */
+  startedAt: Date | null;
+  importSourceCwd: string | null;
+  sessionKind: string;
   ownerId: string;
 }
 
@@ -67,6 +73,8 @@ function outcomesOf(status: string, endReason: string | null, filing: string): r
 function rowOf(status: string, lastTurnOutcome: string | null, endReason: string | null, cancelled: boolean, filing: string, retry: string): Row {
   return {
     status: status as RunStatus,
+    // As the D1 trigger keeps it from the word (migration 1611).
+    turnState: turnStateOfWord(status),
     finishedAt: ['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(status) ? new Date(NOW.getTime() - 60_000) : null,
     endReason,
     // The outcome of the turn that carries the release (design §12.1): the failure is the turn's.
@@ -78,6 +86,9 @@ function rowOf(status: string, lastTurnOutcome: string | null, endReason: string
     retryAt: retry === 'armed' ? NOW : null,
     retryClaimedAt: retry === 'claimed' ? new Date(NOW.getTime() - 1000)
       : retry === 'claim lapsed' ? new Date(NOW.getTime() - RETRY_CLAIM_WINDOW_MS - 1000) : null,
+    startedAt: NOW,
+    importSourceCwd: null,
+    sessionKind: 'CONVERSATION',
     ownerId: 'owner',
   };
 }
@@ -124,7 +135,7 @@ function oldConversationIsDown(session: Row): boolean {
 }
 
 /** The gateways' "open" test of a session row, before: the status in the open set. After: the release column unset. */
-const oldGatewayOpen = (session: Row): boolean => OPEN_SESSION_STATUSES.includes(session.status);
+const oldGatewayOpen = (session: Row): boolean => (OPEN_SESSION_STATUSES as readonly string[]).includes(session.status);
 const newGatewayOpen = (session: Row): boolean => isHeld(session);
 
 function newObserverRefusal(session: Row): string | null {

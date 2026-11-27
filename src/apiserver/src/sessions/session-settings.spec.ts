@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { isReleasedStatus } from '../common/session-release';
 import { SessionsService } from './sessions.service';
 import { parseSessionSettingsPatch, sessionSettingsOf } from './session-settings';

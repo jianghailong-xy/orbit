@@ -27,7 +27,8 @@ import test from 'node:test';
 import { Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { toUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -52,6 +53,7 @@ import { ProviderPlanUsageService } from './plan-usage.service';
 import { ProvidersController } from './providers.controller';
 import { ProvidersService } from './providers.service';
 import { encryptSecret } from './provider-crypto';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const PG_URL = process.env.COORDINATOR_PG_URL;
 const skip = !PG_URL;
@@ -99,7 +101,7 @@ async function sessionOn(db: PrismaClient, owner: Person, provider: string, stat
     data: {
       title: 'codex login scope',
       prompt: 'hello',
-      status,
+      turnState: turnStateOfWord(status),
       ownerId: owner.id,
       creatorId: owner.id,
       workspaceId: owner.workspaceId,

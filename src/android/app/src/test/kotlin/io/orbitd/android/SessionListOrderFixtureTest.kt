@@ -2,6 +2,7 @@ package io.orbitd.android
 
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.directory.*
+import io.orbitd.android.wiki.WikiDate
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
@@ -9,7 +10,7 @@ import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
 
-/** The Open list's sections and order, held to `contracts/session-list-order.fixtures.json` (the file web and OrbitKit test against). */
+/** The list's sections, order and row times, held to `contracts/session-list-order.fixtures.json` (the file web and OrbitKit test against). */
 class SessionListOrderFixtureTest {
     private val fixture: JsonObject = generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
         .map { File(it, "contracts/session-list-order.fixtures.json") }.firstOrNull { it.isFile }
@@ -24,11 +25,24 @@ class SessionListOrderFixtureTest {
     private fun groups(rows: List<DirectorySession>) = directoryGroups(open(rows), SessionView.OPEN, Grouping.RECENCY, now, zone)
     private fun shape(groups: List<SessionGroup>) = groups.map { it.title to it.sessions.map { s -> s.id } }
 
+    private fun expected(key: String) = fixture.getValue(key).jsonArray.map { e ->
+        e.jsonObject.getValue("section").jsonPrimitive.content to e.jsonObject.getValue("ids").jsonArray.map { it.jsonPrimitive.content } }
+
     @Test fun sectionsAndOrderMatchTheSharedFixture() {
-        val expected = fixture.getValue("expected").jsonArray.map { e ->
-            e.jsonObject.getValue("section").jsonPrimitive.content to e.jsonObject.getValue("ids").jsonArray.map { it.jsonPrimitive.content } }
-        assertEquals(expected, shape(groups(rows())))
+        assertEquals(expected("expected"), shape(groups(rows())))
         assertEquals(fixture.getValue("sectionTitles").jsonArray.map { it.jsonPrimitive.content }.take(3), groups(rows()).map { it.title }.take(3))
+    }
+
+    @Test fun aTagFilterDrawsNoPinnedSection() = assertEquals(expected("expectedTagFilter"),
+        shape(directoryGroups(open(rows()), SessionView.OPEN, Grouping.RECENCY, now, zone, tagFiltered = true)))
+
+    @Test fun trashIsDatedAndOrderedByListing() = assertEquals(expected("expectedTrash"),
+        shape(directoryGroups(rows().filter { it.deletedAt != null }, SessionView.TRASH, Grouping.RECENCY, now, zone)))
+
+    @Test fun aSettledRowShowsWhenItWasListed() {
+        val settled = rows().filterNot { it.isRunning() }
+        assertTrue(settled.any { it.listedAt != it.lastTurnAt })
+        settled.forEach { assertEquals(it.id, WikiDate.relative((it.listedAt ?: it.createdAt)!!, now), SessionListTime.format(it, now)) }
     }
 
     @Test fun activityOnlyUpdatesLeaveTheOrderUnchanged() {

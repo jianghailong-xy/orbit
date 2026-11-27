@@ -340,7 +340,12 @@ function MotifSamples({ mark }: { mark: ProjectMotifMark }) {
       {mark.samples.map((sample) => (
         <TaskLink key={sample.taskId} className="pdg-fold-sample" taskId={sample.taskId}>
           <span className="pdg-fold-sample-title">{sample.title}</span>
-          <TaskStatusPill status={sample.status} running={sample.running} queued={sample.queued} />
+          <TaskStatusPill
+            status={sample.status}
+            running={sample.running}
+            queued={sample.queued}
+            runReason={sample.runReason}
+          />
         </TaskLink>
       ))}
     </div>
@@ -402,14 +407,8 @@ function FoldNode({ data }: NodeProps<FoldFlowNode>) {
         />
       )}
       {mark.kind !== 'MOTIF' ? (
-        <button
-          type="button"
-          className="pdg-fold-main nodrag nopan"
-          onClick={() => data.onToggle(mark.id, mark.members[0]?.taskId ?? null)}
-          disabled={mark.kind === 'RUN' && !mark.expandable}
-          aria-label={label}
-          title={
-            mark.kind === 'SETTLED'
+        // The span takes the pointer while a long run is disabled, so why it cannot open still shows.
+        <Tooltip content={mark.kind === 'SETTLED'
               ? data.expanded
                 ? 'Fold this finished work back up'
                 : 'Show the finished tasks'
@@ -417,11 +416,19 @@ function FoldNode({ data }: NodeProps<FoldFlowNode>) {
                 ? data.expanded
                   ? 'Fold these steps back up'
                   : 'Show these steps'
-                : 'Too long to open here — the task list below has all of it'
-          }
-        >
-          {mark.kind === 'SETTLED' ? settledBody : body}
-        </button>
+                : 'Too long to open here — the task list below has all of it'}>
+          <span className="nodrag nopan" style={{ display: 'flex', width: '100%', height: '100%', minWidth: 0 }}>
+            <button
+              type="button"
+              className="pdg-fold-main nodrag nopan"
+              onClick={() => data.onToggle(mark.id, mark.members[0]?.taskId ?? null)}
+              disabled={mark.kind === 'RUN' && !mark.expandable}
+              aria-label={label}
+            >
+              {mark.kind === 'SETTLED' ? settledBody : body}
+            </button>
+          </span>
+        </Tooltip>
       ) : (
         <Popover
           title={mark.title}
@@ -465,7 +472,12 @@ function GroupNode({ data }: NodeProps<GroupFlowNode>) {
         aria-label={`${data.task.title}, ${taskStatusLabel(live.status, live.running, live.queued)}, ${data.memberCount} subtask${data.memberCount === 1 ? '' : 's'}`}
       >
         <span className="pdg-group-title">{data.task.title}</span>
-        <TaskStatusPill status={live.status} running={live.running} queued={live.queued} />
+        <TaskStatusPill
+          status={live.status}
+          running={live.running}
+          queued={live.queued}
+          runReason={live.runReason}
+        />
       </TaskLink>
       {data.hasOutgoing && (
         <Handle

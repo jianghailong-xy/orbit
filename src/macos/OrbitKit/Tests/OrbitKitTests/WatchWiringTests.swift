@@ -81,8 +81,9 @@ final class WatchWiringTests: XCTestCase {
     func testTheHeaderRowAndGlyphAreHandedTheWatch() throws {
         let subtitleCalls = code(try source("Views/Console/ConsoleView.swift"))
             .components(separatedBy: "SessionHeader.subtitle(for:").dropFirst()
-        // The macOS status bar. The iOS nav bar has carried no title or status line since 2026-10-15.
-        XCTAssertEqual(subtitleCalls.count, 1, "the macOS status bar")
+        // The macOS status bar, read once with the session facts (`headerStatusLine`) and once without them
+        // (`headerStatus`). The iOS nav bar has carried no title or status line since 2026-10-15.
+        XCTAssertEqual(subtitleCalls.count, 2, "the macOS status bar")
         for call in subtitleCalls {
             XCTAssertTrue(call.prefix(120).contains("watching:"), String(call.prefix(120)))
         }
@@ -92,7 +93,8 @@ final class WatchWiringTests: XCTestCase {
         // The account's Session recaps switch is read from the row, off only when explicitly off.
         XCTAssertTrue(row.contains("recaps: app.user?.preferences?.showRecaps ?? true"))
         // …and the machine, whose name a session held for the Claude region says (ClaudeRegionTests).
-        XCTAssertTrue(row.contains("StatusGlyphView(glyph: .make(for: session, watching: watching, machine: machine))"))
+        // (With the session facts the glyph is the state's, from `phase` alone: `SessionDisplay`.)
+        XCTAssertTrue(row.contains("StatusGlyphView(glyph: displayState?.glyph ?? .make(for: session, watching: watching, machine: machine))"))
         // The phone and iPad rows have no leading glyph: their trailing cue is where the eye goes.
         XCTAssertTrue(row.contains("SessionLiveIndicator(session: session, watching: watching)"))
         let indicator = code(try slice(source("Views/AgentsView.swift"),

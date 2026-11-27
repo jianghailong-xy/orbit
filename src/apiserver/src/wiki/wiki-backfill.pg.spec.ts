@@ -33,6 +33,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { wikiMaintainJobPrincipal } from '../wiki-worker/wiki-maintain-job';
 import { WikiService, type WikiNoteDowngradeReport, type WikiPrincipal } from './wiki.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const skip = !URL_;
@@ -111,7 +112,7 @@ async function session(h: Harness, workspaceId: string, over: { status?: 'RUNNIN
   const id = randomUUID();
   await h.prisma.session.create({
     data: {
-      id, title: 'a session', prompt: 'p', ownerId: h.ownerId, creatorId: h.ownerId, dispatchOrigin: 'USER', status: over.status ?? 'SUCCEEDED',
+      id, title: 'a session', prompt: 'p', ownerId: h.ownerId, creatorId: h.ownerId, dispatchOrigin: 'USER', turnState: turnStateOfWord(over.status ?? 'SUCCEEDED'),
       ...(over.status === 'RUNNING' ? {} : { finishedAt: new Date()}),
       lastTurnAt: new Date(), workspaceId, ...(over.deleted ? { deletedAt: new Date() } : {}),
     },

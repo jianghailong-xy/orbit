@@ -15,7 +15,8 @@ import {
 } from '@nestjs/common';
 import { PublicIdPipe } from '../common/public-id';
 import { randomUUID } from 'crypto';
-import { Prisma, Runner, RunStatus } from '@prisma/client';
+import { Prisma, Runner } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { ProjectsService } from '../projects/projects.service';
 import { RunnerSessionScope, SessionsService } from '../sessions/sessions.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
@@ -530,7 +531,7 @@ export class RunnerSessionsController {
     if (!this.requests) {
       throw new Error('session_reply needs SessionRequestService, which this controller was built without');
     }
-    return this.requests.reply(runner.ownerId, caller, id, { message: dto?.message, option: dto?.option });
+    return this.requests.reply(runner.ownerId, caller, id, { message: dto?.message, option: dto?.option, answers: dto?.answers });
   }
 
   // The lifecycle verbs below have NO headless path by design. They are the most damaging

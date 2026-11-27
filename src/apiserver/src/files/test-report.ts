@@ -1,5 +1,5 @@
 /**
- * What `file_upload --as test-report` keeps of a test report (docs/orbit-files-design.md §2.5): the numbers a judge
+ * What `file_upload --as test-report` keeps of a test report (docs/drive-design.md §2.5): the numbers a judge
  * needs, as metadata on the file's row, so that they are still there when the report's bytes have expired (§2.8).
  *
  * Two formats are read, told apart by what the file holds and never by its name: Playwright's JSON reporter, and JUnit

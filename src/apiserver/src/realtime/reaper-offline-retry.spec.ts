@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus, TaskStatus } from '@prisma/client';
+import { TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RUNNER_REAP_AFTER_MS, ReaperService } from './reaper.service';
+import { writtenWord } from '../test-support/session-word';
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
 const RUNNER_ID = '22222222-2222-4222-8222-222222222222';
@@ -78,7 +80,7 @@ function sweepWithOfflineRunner(task: { autoRunWhenReady: boolean } | null) {
             id: SESSION_ID,
             taskId: task ? TASK_ID : null,
             assignedRunnerId: RUNNER_ID,
-            status: RunStatus.RUNNING,
+            turnState: 'IN_FLIGHT', status: RunStatus.RUNNING,
             provider: 'claude',
             providerBuiltin: true,
             runtimeSessionId: 'runtime-1',
@@ -117,7 +119,7 @@ function sweepWithOfflineRunner(task: { autoRunWhenReady: boolean } | null) {
 // that AutoRetryService can undo by itself once the machine is back.
 test('hands a runner-offline session to auto-retry', async () => {
   const { data } = await sweepWithOfflineRunner(null);
-  assert.equal(data?.status, RunStatus.FAILED);
+  assert.equal(writtenWord(data), RunStatus.FAILED);
   assert.ok(data?.retryAt instanceof Date, 'armed, so a returning runner resumes it with no one asked');
 });
 
@@ -147,7 +149,7 @@ test('leaves an auto-running task\'s session to the task scheduler', async () =>
   const { data, taskChanges, readsAutoRunOptIn } = await sweepWithOfflineRunner({
     autoRunWhenReady: true,
   });
-  assert.equal(data?.status, RunStatus.FAILED);
+  assert.equal(writtenWord(data), RunStatus.FAILED);
   assert.ok(readsAutoRunOptIn, 'the standing-down is decided from the opt-in, not from having a task');
   assert.equal(data?.retryAt, undefined, 'the task going back to OPEN is already the retry');
   assert.deepEqual(taskChanges, [TASK_ID], 'dependents receive the coarse post-commit invalidation');
@@ -161,7 +163,7 @@ test('leaves an auto-running task\'s session to the task scheduler', async () =>
 // patch export saved — the retry the reaper is standing aside FOR has to exist.
 test('arms a task-bound session whose task will not auto-run', async () => {
   const { data, taskChanges } = await sweepWithOfflineRunner({ autoRunWhenReady: false });
-  assert.equal(data?.status, RunStatus.FAILED);
+  assert.equal(writtenWord(data), RunStatus.FAILED);
   assert.ok(
     data?.retryAt instanceof Date,
     'no substitute retry exists, so this session keeps its own — with its worktree and branch',

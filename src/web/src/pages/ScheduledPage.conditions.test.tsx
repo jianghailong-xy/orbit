@@ -177,7 +177,7 @@ describe("the inspector's Condition and How it checks blocks, and the history (b
     expect(lines[1]).toEqual({ kind: 'condition', what: 'Fired · 90.4% for 10 min · Run of Nov 21', who: 'Run' });
     expect(lines[2]!.who).toBe('You');
     await click([...block('history').querySelectorAll('button')].find((b) => b.textContent === 'Run of Nov 21')!);
-    expect(text(host.querySelector('[data-where]'))).toContain(`/sessions/${CEPH_RUN.sessionId}?folder=scheduled`);
+    expect(text(host.querySelector('[data-where]'))).toContain(`/sessions/${CEPH_RUN.sessionId}`);
   });
 
   it('says a repeat in words, Fired again in the history, and keeps a cloud workspace awake', async () => {

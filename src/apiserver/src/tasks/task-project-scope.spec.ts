@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException } from '@nestjs/common';
-import { RunStatus } from '@prisma/client';
 import { TaskStatus } from '@orbit/shared';
 import { projectNotCancelledSql } from './project-cancelled-dispatch';
 import { TASK_LIST_SELECT, TasksService } from './tasks.service';
 import { recordingQueryRaw } from './query-raw-test-helper';
+import { turnStateFilter } from '../sessions/session-turn-state';
 
 /**
  * Scoping a task list to one project.
@@ -306,6 +306,6 @@ test('the running tab keeps its live-session filter and the project scope togeth
   assert.deepEqual(findManyArgs[0].where, {
     ownerId: OWNER_ID,
     projectId: PROJECT_ID,
-    sessions: { some: { status: RunStatus.RUNNING } },
+    sessions: { some: turnStateFilter(['IN_FLIGHT']) },
   });
 });

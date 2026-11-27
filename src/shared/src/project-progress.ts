@@ -12,6 +12,7 @@
  * lets both sides name the same interface instead of keeping two that drift.
  */
 import type { IntegrationCheckResult, IntegrationJobKind, IntegrationJobOutputCheck, IntegrationJobPhase, IntegrationJobState } from './dto';
+import type { LandingPullRequestView } from './pull-request-landing';
 import type { ProjectStartRequest, ProjectStartSettingKey, ProjectStartSettings } from './project-start';
 import type { DoneRequest } from './project-done';
 import type { OwnerCardTranslation } from './translation';
@@ -47,6 +48,14 @@ export interface ProjectIntegrationSettings<Instant = string> {
   lineAbsentReason: 'NOT_DECIDED' | null;
   /** The integration line's branch, spelled as a merge receipt spells it (no `refs/heads/`). */
   ref: string | null;
+  /**
+   * The branch a project branch line is on, short (no `refs/heads/`): the line's own once it is
+   * decided on one, and otherwise the default the server would choose for a project branch nobody
+   * named, `project/<title slug>-<8 characters of the project id>`. Clients show it rather than
+   * building a name themselves. Absent on servers that predate it, which named the branch
+   * `project/<project id>`.
+   */
+  defaultProjectBranch?: string;
   /** The project's main branch, short (no `refs/heads/`); null while it has no binding. */
   upstreamRef: string | null;
   /**
@@ -212,8 +221,11 @@ export interface ProjectIntegrationInFlight<Instant = string> {
   kind?: IntegrationJobKind;
   /** The runner's reported step; null before its first report, absent on older servers. */
   phase?: IntegrationJobPhase | null;
-  /** `RUNNING` while the runner performs the job; `QUEUED` while it waits its turn. */
-  state: 'RUNNING' | 'QUEUED';
+  /** `RUNNING` while the runner performs the job; `QUEUED` while it waits its turn; `PULL_REQUEST` while it waits for
+   *  GitHub (docs/design/protected-branch-landing.md §4.2). */
+  state: 'RUNNING' | 'QUEUED' | 'PULL_REQUEST';
+  /** With `PULL_REQUEST`: the pull request it waits on (§8). Absent from a server that predates it. */
+  pullRequest?: LandingPullRequestView | null;
   /** What "for how long" counts from: the claim for a running job, the enqueue for a queued one. */
   startedAt: Instant;
   /** Last report from the runner; absent on older servers and null before a claim. */
@@ -293,7 +305,10 @@ export const LAND_TASK_ROUNDS_PER_CLAIM = 3;
 export interface ProjectIntegrationJob<Instant = string> {
   jobId: string;
   kind: IntegrationJobKind;
-  state: 'RUNNING' | 'QUEUED';
+  /** `PULL_REQUEST`: the landing waits for GitHub (docs/design/protected-branch-landing.md §4.2); no runner holds it. */
+  state: 'RUNNING' | 'QUEUED' | 'PULL_REQUEST';
+  /** With `PULL_REQUEST`: the pull request it waits on (§8). Absent from a server that predates it. */
+  pullRequest?: LandingPullRequestView | null;
   /** The step it last reported, or the one a claim starts at; null before its first claim. */
   phase: IntegrationJobPhase | null;
   /** The task it lands; null for a promotion or a merge check, which land no single task. */
@@ -456,7 +471,9 @@ export type IntegrationJobEventKind =
   | 'STOP_REQUESTED'
   | 'CANCELLED'
   | 'ABANDONED'
-  | 'TIMED_OUT';
+  | 'TIMED_OUT'
+  // The landing's pull request (docs/design/protected-branch-landing.md §14): `data.step` is PUSHED, OPENED or MERGED.
+  | 'PULL_REQUEST';
 
 /** A line read-time derived from another row rather than stored as its own event (LS4): a rerun's
  *  requester and reason (`retry_*`), an item being handled (`handling_*`), the owner's
@@ -632,6 +649,9 @@ export interface SessionLandingView<Instant = string> {
    *  decisions. Read-only, and bounded — `truncated` says the read returned less than the subject
    *  holds. Absent on servers that predate the timeline (contract §2.9: a new field is optional). */
   timeline?: SessionLandingTimeline<Instant>;
+  /** The subject's newest pull request, open or settled (docs/design/protected-branch-landing.md §8); null when it
+   *  never needed one. Absent from a server that predates it. */
+  pullRequest?: LandingPullRequestView | null;
 }
 
 /**
@@ -869,7 +889,9 @@ export type TaskIntegrationHandler = 'COORDINATOR' | 'OWNER';
 export type LandTaskBlockingReasonCode =
   | 'CANCELLING' | 'WAITING_TASK_WORK' | 'WAITING_MAIN_SYNC' | 'WAITING_BASELINE' | 'WAITING_RUNNER'
   | 'WAITING_AUTOMATIC_RUNNER' | 'WAITING_SERIAL_SLOT' | 'WAITING_DISPATCH'
-  | 'WAITING_LOCAL_LOCK' | 'CONFLICT' | 'CHECK_FAILED' | 'ERROR';
+  | 'WAITING_LOCAL_LOCK' | 'CONFLICT' | 'CHECK_FAILED' | 'ERROR'
+  // A landing waiting on its pull request (docs/design/protected-branch-landing.md §8): the required checks, or a review.
+  | 'WAITING_FOR_CHECKS' | 'WAITING_FOR_REVIEW';
 
 /** Why any integration job — of any of the three kinds — waits or where it stopped. The shape
  *  `landTask.blockingReason` has always used, carried on `inFlightJobs` entries as well (§7.2 V6). */
@@ -884,6 +906,9 @@ export type IntegrationJobBlockingReason = LandTaskBlockingReason;
 export interface LandTaskIntegrationView<Instant = string> {
   jobId: string;
   state: IntegrationJobState;
+  /** The pull request this generation waits on or landed through (docs/design/protected-branch-landing.md §8); null
+   *  when it pushed directly. Absent from a server that predates it. */
+  pullRequest?: LandingPullRequestView | null;
   /**
    * The landing session this generation belongs to (§2.9): `project_landing.session_id`, which is
    * pre-generated when the subject opens, so it is present even before the session row is inserted
@@ -1457,6 +1482,22 @@ export interface ProjectSignInWait {
   detailLine: string;
 }
 
+/**
+ * The project's tasks held because no account that could run them can run now
+ * (docs/routing-account-health-design.md §7.5, §8 item 3), as one Needs you row: "2 tasks wait for an account" over the
+ * provider's words and when the first account is tried again. Derived on every read: empty once an account can run them.
+ */
+export interface ProjectAccountWait<Instant = string> {
+  /** The held tasks, oldest first. */
+  taskIds: string[];
+  /** "2 tasks wait for an account". */
+  title: string;
+  /** The hold's own sentence: "Waiting for an account: Cursor said "Add a payment method to continue". Next try at 21:19." */
+  detailLine: string;
+  /** The earliest end among the accounts: the hold lifts then and the held task takes the trial. */
+  until: Instant;
+}
+
 /** The project's open exceptions, split by who is expected to act (§4.8). */
 export interface ProjectOpenItemsView<Instant = string> {
   needsYou: Array<ProjectOpenItemRow<Instant>>;
@@ -1512,6 +1553,8 @@ export interface ProjectOpenItemsView<Instant = string> {
    * Absent from a server that predates it.
    */
   signIns?: ProjectSignInWait[];
+  /** The held-for-an-account Needs you row (`ProjectAccountWait`), or null when no task is held so. Absent from a server that predates it. */
+  accountWait?: ProjectAccountWait<Instant> | null;
 }
 
 /**

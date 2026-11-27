@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api';
 import { type RunEvent, Transcript } from './Transcript';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
  * A reply that links a file by the path it wrote it to — the mock an agent drew, most of the time.
@@ -131,14 +132,14 @@ describe('a path in the session’s own directories', () => {
     expect(resolve).not.toHaveBeenCalled(); // nothing is fetched until it is clicked
     const button = container.querySelector('button.chat-file');
     expect(button).not.toBeNull();
-    expect(button?.getAttribute('title')).toBe('Download out.json');
+    expect(button?.getAttribute('aria-label')).toBe('Download out.json');
   });
 
   it('removes a source line suffix before requesting a local file', async () => {
     resolve.mockResolvedValue('blob:mock-file');
     await renderReply(`[Automatic blocker 通知](${CHECKOUT_SOURCE})\n`);
     const button = container.querySelector<HTMLButtonElement>('button.chat-file');
-    expect(button?.getAttribute('title')).toBe('Download ProjectBlockers.tsx');
+    expect(button?.getAttribute('aria-label')).toBe('Download ProjectBlockers.tsx');
 
     await act(async () => {
       button?.click();
@@ -169,7 +170,7 @@ describe('a path in the session’s own directories', () => {
     const failed = container.querySelector<HTMLButtonElement>('button.chat-file');
     expect(failed?.dataset.downloadState).toBe('error');
     expect(failed?.classList.contains('is-error')).toBe(true);
-    expect(failed?.getAttribute('title')).toBe('Retry download out.json');
+    expect(failed?.getAttribute('aria-label')).toBe('Retry download out.json');
   });
 
   it('shows the same retry state for a sent attachment', async () => {
@@ -207,6 +208,6 @@ describe('a path in the session’s own directories', () => {
     expect(container.querySelector('a')).toBeNull();
     const chip = container.querySelector('.md-image-unavailable');
     expect(chip?.textContent).toContain('contact-sheet.png');
-    expect(chip?.getAttribute('title')).toBe(path);
+    expect(await hoverTooltip(chip!)).toBe(path);
   });
 });

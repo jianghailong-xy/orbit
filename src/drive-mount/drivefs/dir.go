@@ -425,7 +425,7 @@ func (fs *FS) Rename(cancel <-chan struct{}, input *fuse.RenameIn, oldName strin
 // offline answers EIO at once for what needs the server while it cannot be reached (§5.7).
 func (fs *FS) offline(op, drivePath string) fuse.Status {
 	return fs.refuse(fuse.EIO, op, drivePath, "",
-		"the drive's server cannot be reached; reads of cached files and folders still work, and /run/orbit-files/status.json says since when")
+		"the drive's server cannot be reached; reads of cached files and folders still work, and /run/orbit-drive/status.json says since when")
 }
 
 // failed answers a door error, logging what an agent could not otherwise tell apart.
@@ -442,6 +442,9 @@ func (fs *FS) failed(op, drivePath string, err error) fuse.Status {
 		fs.rep.Log(fuse.EIO, op, fs.display(drivePath), "", "the drive's server did not answer: "+err.Error())
 	case st == fuse.Status(syscall.ENOSPC):
 		fs.rep.Log(st, op, fs.display(drivePath), "", "the drive's storage is full")
+	case isDriveChatRefusal(err):
+		// The door's own words: which files, what the owner is asked, and not to retry.
+		fs.rep.Log(st, op, fs.display(drivePath), "", door.MessageOf(err))
 	}
 	return st
 }

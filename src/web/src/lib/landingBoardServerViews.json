@@ -1,0 +1,3931 @@
+{
+ "workspaceLanding": {
+  "pullRequest": {
+   "mode": "PULL_REQUEST",
+   "pushAsMe": {
+    "available": true
+   },
+   "lastRefusal": null
+  },
+  "pushAsMe": {
+   "mode": "PUSH_AS_ME",
+   "pushAsMe": {
+    "available": true
+   },
+   "lastRefusal": null
+  },
+  "refused": {
+   "mode": "PUSH_AS_ME",
+   "pushAsMe": {
+    "available": true
+   },
+   "lastRefusal": {
+    "at": "2026-11-23T23:39:13.199Z",
+    "branch": "main",
+    "message": "GH006: Protected branch update failed for refs/heads/main. Changes must be made through a pull request."
+   }
+  },
+  "notFromGithub": {
+   "mode": null,
+   "pushAsMe": {
+    "available": false,
+    "reason": "WORKSPACE_NOT_FROM_GITHUB"
+   },
+   "lastRefusal": null
+  },
+  "permissionsPending": {
+   "mode": "PULL_REQUEST",
+   "pushAsMe": {
+    "available": true
+   },
+   "lastRefusal": null,
+   "permissionsPending": {
+    "account": "owner",
+    "reviewUrl": "https://github.com/settings/installations/7556295"
+   }
+  },
+  "notConnected": {
+   "mode": "PULL_REQUEST",
+   "pushAsMe": {
+    "available": false,
+    "reason": "GITHUB_NOT_CONNECTED"
+   },
+   "lastRefusal": null
+  }
+ },
+ "integration": {
+  "a": {
+   "line": "MAIN",
+   "lineAbsentReason": null,
+   "ref": "main",
+   "upstreamRef": "main",
+   "upstreamChosenAt": null,
+   "source": "EXPLICIT",
+   "locked": true,
+   "startedAt": "2026-11-23T23:38:11.826Z",
+   "landingCheckCommand": null,
+   "landingCheckTimeoutSeconds": null,
+   "landingCheckCommandAbsentReason": "FALLS_BACK_TO_MERGE_CHECK",
+   "landingCheck": {
+    "command": null,
+    "setBy": null,
+    "setBySessionId": null,
+    "setAt": null
+   },
+   "mergeCheckCommand": null,
+   "mergeCheckCommandAbsentReason": "NOT_CONFIGURED",
+   "mergeCheckTimeoutSeconds": null,
+   "escalationSeconds": 7200,
+   "deliveryMode": "PLATFORM",
+   "deliveryModeChosenAt": null,
+   "lastMainBranch": null,
+   "repository": "owner/opened-with-checks-running",
+   "branches": null,
+   "commitsAheadOfUpstream": null,
+   "commitsAheadOfUpstreamAbsentReason": "NO_LANDING_YET",
+   "lastUpstreamSyncAt": null,
+   "lastUpstreamSyncAbsentReason": "NEVER_SYNCED",
+   "integratingCount": 0,
+   "queuedCount": 0,
+   "mergeCheckOnTip": "UNKNOWN",
+   "landTasks": [],
+   "inFlight": {
+    "taskTitle": null,
+    "kind": "LAND_PROMOTION",
+    "phase": "PUSH",
+    "state": "PULL_REQUEST",
+    "pullRequest": {
+     "number": 100,
+     "url": "https://github.com/owner/opened-with-checks-running/pull/100",
+     "state": "OPEN",
+     "condition": "CHECKS_PENDING",
+     "checks": {
+      "passed": 2,
+      "required": 6,
+      "failed": []
+     },
+     "mergeMethod": null,
+     "mergedSha": null,
+     "workspaceId": "a9Hfku2kaKJYcPlFc3ujQ",
+     "refusal": {
+      "via": "PULL_REQUEST",
+      "message": "GH006: Protected branch update failed for refs/heads/main. Changes must be made through a pull request."
+     },
+     "workspacePublicId": "a9Hfku2kaKJYcPlFc3ujQ",
+     "agentId": "a9Hfku2kaKJYcPlFc3ujQ"
+    },
+    "startedAt": "2026-11-23T23:39:12.042Z",
+    "heartbeatAt": "2026-11-23T23:39:12.071Z",
+    "waitMs": null,
+    "jobId": "5j4ILXjvW0dSzIr4K2pwdz",
+    "landingSessionId": "dc8d1bdf-2001-47d5-967d-b3b9db043287",
+    "taskId": null,
+    "promotionId": "3cpNUK6i9J5Z4lskEfIy8X",
+    "runner": null,
+    "claim": 1,
+    "round": null,
+    "check": null,
+    "stepStartedAt": null,
+    "outputMovedAt": null,
+    "progressProtocol": null,
+    "typicalMs": null,
+    "liveness": null,
+    "blockingReason": {
+     "code": "WAITING_FOR_CHECKS",
+     "summary": "Waiting for the required checks on pull request #100 \u00b7 2 of 6"
+    },
+    "promotionPublicId": "3cpNUK6i9J5Z4lskEfIy8X",
+    "taskPublicId": null,
+    "jobPublicId": "5j4ILXjvW0dSzIr4K2pwdz"
+   },
+   "inFlightJobs": [
+    {
+     "jobId": "5j4ILXjvW0dSzIr4K2pwdz",
+     "kind": "LAND_PROMOTION",
+     "state": "PULL_REQUEST",
+     "pullRequest": {
+      "number": 100,
+      "url": "https://github.com/owner/opened-with-checks-running/pull/100",
+      "state": "OPEN",
+      "condition": "CHECKS_PENDING",
+      "checks": {
+       "passed": 2,
+       "required": 6,
+       "failed": []
+      },
+      "mergeMethod": null,
+      "mergedSha": null,
+      "workspaceId": "a9Hfku2kaKJYcPlFc3ujQ",
+      "refusal": {
+       "via": "PULL_REQUEST",
+       "message": "GH006: Protected branch update failed for refs/heads/main. Changes must be made through a pull request."
+      },
+      "workspacePublicId": "a9Hfku2kaKJYcPlFc3ujQ",
+      "agentId": "a9Hfku2kaKJYcPlFc3ujQ"
+     },
+     "landingSessionId": "dc8d1bdf-2001-47d5-967d-b3b9db043287",
+     "phase": "PUSH",
+     "taskId": null,
+     "taskTitle": null,
+     "promotionId": "3cpNUK6i9J5Z4lskEfIy8X",
+     "generation": 1,
+     "startedAt": "2026-11-23T23:39:12.042Z",
+     "queuedAt": "2026-11-23T23:39:12.008Z",
+     "heartbeatAt": "2026-11-23T23:39:12.071Z",
+     "runnerName": null,
+     "retriedBy": null,
+     "timedOut": false,
+     "limitSeconds": null,
+     "progressProtocol": null,
+     "claim": 1,
+     "round": null,
+     "check": null,
+     "stepStartedAt": null,
+     "outputMovedAt": null,
+     "typicalMs": null,
+     "liveness": null,
+     "blockingReason": {
+      "code": "WAITING_FOR_CHECKS",
+      "summary": "Waiting for the required checks on pull request #100 \u00b7 2 of 6"
+     },
+     "retryable": false,
+     "skippable": false,
+     "skipCheck": null,
+     "promotionPublicId": "3cpNUK6i9J5Z4lskEfIy8X",
+     "taskPublicId": null,
+     "jobPublicId": "5j4ILXjvW0dSzIr4K2pwdz"
+    }
+   ]
+  },
+  "b": {
+   "line": "MAIN",
+   "lineAbsentReason": null,
+   "ref": "main",
+   "upstreamRef": "main",
+   "upstreamChosenAt": null,
+   "source": "EXPLICIT",
+   "locked": true,
+   "startedAt": "2026-11-23T23:38:12.315Z",
+   "landingCheckCommand": null,
+   "landingCheckTimeoutSeconds": null,
+   "landingCheckCommandAbsentReason": "FALLS_BACK_TO_MERGE_CHECK",
+   "landingCheck": {
+    "command": null,
+    "setBy": null,
+    "setBySessionId": null,
+    "setAt": null
+   },
+   "mergeCheckCommand": null,
+   "mergeCheckCommandAbsentReason": "NOT_CONFIGURED",
+   "mergeCheckTimeoutSeconds": null,
+   "escalationSeconds": 7200,
+   "deliveryMode": "PLATFORM",
+   "deliveryModeChosenAt": null,
+   "lastMainBranch": null,
+   "repository": "owner/waiting-for-the-owner-review",
+   "branches": null,
+   "commitsAheadOfUpstream": null,
+   "commitsAheadOfUpstreamAbsentReason": "NO_LANDING_YET",
+   "lastUpstreamSyncAt": null,
+   "lastUpstreamSyncAbsentReason": "NEVER_SYNCED",
+   "integratingCount": 0,
+   "queuedCount": 0,
+   "mergeCheckOnTip": "UNKNOWN",
+   "landTasks": [],
+   "inFlight": {
+    "taskTitle": null,
+    "kind": "LAND_PROMOTION",
+    "phase": "PUSH",
+    "state": "PULL_REQUEST",
+    "pullRequest": {
+     "number": 102,
+     "url": "https://github.com/owner/waiting-for-the-owner-review/pull/102",
+     "state": "OPEN",
+     "condition": "REVIEW_REQUIRED",
+     "checks": {
+      "passed": 6,
+      "required": 6,
+      "failed": []
+     },
+     "mergeMethod": null,
+     "mergedSha": null,
+     "workspaceId": "5gAEyBnP0qngxJbgxXJ26V",
+     "refusal": {
+      "via": "PULL_REQUEST",
+      "message": "GH006: Protected branch update failed for refs/heads/main. Changes must be made through a pull request."
+     },
+     "workspacePublicId": "5gAEyBnP0qngxJbgxXJ26V",
+     "agentId": "5gAEyBnP0qngxJbgxXJ26V"
+    },
+    "startedAt": "2026-11-23T23:39:12.432Z",
+    "heartbeatAt": "2026-11-23T23:39:12.457Z",
+    "waitMs": null,
+    "jobId": "1dy8ZXxQWzDu0X9CHeGuFr",
+    "landingSessionId": "70c08074-cbf5-464d-9b11-ea71324aeef4",
+    "taskId": null,
+    "promotionId": "3R9zP5DkGKOOhn4MbPoJWV",
+    "runner": null,
+    "claim": 1,
+    "round": null,
+    "check": null,
+    "stepStartedAt": null,
+    "outputMovedAt": null,
+    "progressProtocol": null,
+    "typicalMs": null,
+    "liveness": null,
+    "blockingReason": {
+     "code": "WAITING_FOR_REVIEW",
+     "summary": "Waiting for review on pull request #102"
+    },
+    "promotionPublicId": "3R9zP5DkGKOOhn4MbPoJWV",
+    "taskPublicId": null,
+    "jobPublicId": "1dy8ZXxQWzDu0X9CHeGuFr"
+   },
+   "inFlightJobs": [
+    {
+     "jobId": "1dy8ZXxQWzDu0X9CHeGuFr",
+     "kind": "LAND_PROMOTION",
+     "state": "PULL_REQUEST",
+     "pullRequest": {
+      "number": 102,
+      "url": "https://github.com/owner/waiting-for-the-owner-review/pull/102",
+      "state": "OPEN",
+      "condition": "REVIEW_REQUIRED",
+      "checks": {
+       "passed": 6,
+       "required": 6,
+       "failed": []
+      },
+      "mergeMethod": null,
+      "mergedSha": null,
+      "workspaceId": "5gAEyBnP0qngxJbgxXJ26V",
+      "refusal": {
+       "via": "PULL_REQUEST",
+       "message": "GH006: Protected branch update failed for refs/heads/main. Changes must be made through a pull request."
+      },
+      "workspacePublicId": "5gAEyBnP0qngxJbgxXJ26V",
+      "agentId": "5gAEyBnP0qngxJbgxXJ26V"
+     },
+     "landingSessionId": "70c08074-cbf5-464d-9b11-ea71324aeef4",
+     "phase": "PUSH",
+     "taskId": null,
+     "taskTitle": null,
+     "promotionId": "3R9zP5DkGKOOhn4MbPoJWV",
+     "generation": 1,
+     "startedAt": "2026-11-23T23:39:12.432Z",
+     "queuedAt": "2026-11-23T23:39:12.418Z",
+     "heartbeatAt": "2026-11-23T23:39:12.457Z",
+     "runnerName": null,
+     "retriedBy": null,
+     "timedOut": false,
+     "limitSeconds": null,
+     "progressProtocol": null,
+     "claim": 1,
+     "round": null,
+     "check": null,
+     "stepStartedAt": null,
+     "outputMovedAt": null,
+     "typicalMs": null,
+     "liveness": null,
+     "blockingReason": {
+      "code": "WAITING_FOR_REVIEW",
+      "summary": "Waiting for review on pull request #102"
+     },
+     "retryable": false,
+     "skippable": false,
+     "skipCheck": null,
+     "promotionPublicId": "3R9zP5DkGKOOhn4MbPoJWV",
+     "taskPublicId": null,
+     "jobPublicId": "1dy8ZXxQWzDu0X9CHeGuFr"
+    }
+   ]
+  },
+  "c": {
+   "line": "MAIN",
+   "lineAbsentReason": null,
+   "ref": "main",
+   "upstreamRef": "main",
+   "upstreamChosenAt": null,
+   "source": "EXPLICIT",
+   "locked": true,
+   "startedAt": "2026-11-23T23:38:12.500Z",
+   "landingCheckCommand": null,
+   "landingCheckTimeoutSeconds": null,
+   "landingCheckCommandAbsentReason": "FALLS_BACK_TO_MERGE_CHECK",
+   "landingCheck": {
+    "command": null,
+    "setBy": null,
+    "setBySessionId": null,
+    "setAt": null
+   },
+   "mergeCheckCommand": null,
+   "mergeCheckCommandAbsentReason": "NOT_CONFIGURED",
+   "mergeCheckTimeoutSeconds": null,
+   "escalationSeconds": 7200,
+   "deliveryMode": "PLATFORM",
+   "deliveryModeChosenAt": null,
+   "lastMainBranch": null,
+   "repository": "owner/a-required-check-failed",
+   "branches": null,
+   "commitsAheadOfUpstream": null,
+   "commitsAheadOfUpstreamAbsentReason": "NO_LANDING_YET",
+   "lastUpstreamSyncAt": null,
+   "lastUpstreamSyncAbsentReason": "NEVER_SYNCED",
+   "integratingCount": 0,
+   "queuedCount": 0,
+   "mergeCheckOnTip": "UNKNOWN",
+   "landTasks": [],
+   "inFlight": null,
+   "inFlightJobs": []
+  },
+  "d": {
+   "line": "MAIN",
+   "lineAbsentReason": null,
+   "ref": "main",
+   "upstreamRef": "main",
+   "upstreamChosenAt": null,
+   "source": "EXPLICIT",
+   "locked": true,
+   "startedAt": "2026-11-23T23:38:12.119Z",
+   "landingCheckCommand": null,
+   "landingCheckTimeoutSeconds": null,
+   "landingCheckCommandAbsentReason": "FALLS_BACK_TO_MERGE_CHECK",
+   "landingCheck": {
+    "command": null,
+    "setBy": null,
+    "setBySessionId": null,
+    "setAt": null
+   },
+   "mergeCheckCommand": null,
+   "mergeCheckCommandAbsentReason": "NOT_CONFIGURED",
+   "mergeCheckTimeoutSeconds": null,
+   "escalationSeconds": 7200,
+   "deliveryMode": "PLATFORM",
+   "deliveryModeChosenAt": null,
+   "lastMainBranch": null,
+   "repository": "owner/main-moved-meanwhile",
+   "branches": null,
+   "commitsAheadOfUpstream": null,
+   "commitsAheadOfUpstreamAbsentReason": "NO_LANDING_YET",
+   "lastUpstreamSyncAt": null,
+   "lastUpstreamSyncAbsentReason": "NEVER_SYNCED",
+   "integratingCount": 0,
+   "queuedCount": 0,
+   "mergeCheckOnTip": "UNKNOWN",
+   "landTasks": [],
+   "inFlight": {
+    "taskTitle": null,
+    "kind": "LAND_PROMOTION",
+    "phase": "PUSH",
+    "state": "PULL_REQUEST",
+    "pullRequest": {
+     "number": 101,
+     "url": "https://github.com/owner/main-moved-meanwhile/pull/101",
+     "state": "OPEN",
+     "condition": "BEHIND",
+     "checks": {
+      "passed": 0,
+      "required": 6,
+      "failed": []
+     },
+     "mergeMethod": null,
+     "mergedSha": null,
+     "workspaceId": "6qpVGEeJN2x1NerJzxkkhr",
+     "refusal": {
+      "via": "PULL_REQUEST",
+      "message": "GH006: Protected branch update failed for refs/heads/main. Changes must be made through a pull request."
+     },
+     "workspacePublicId": "6qpVGEeJN2x1NerJzxkkhr",
+     "agentId": "6qpVGEeJN2x1NerJzxkkhr"
+    },
+    "startedAt": "2026-11-23T23:39:12.241Z",
+    "heartbeatAt": "2026-11-23T23:39:12.268Z",
+    "waitMs": null,
+    "jobId": "7cxPsOoGcoYg7bjIXw8xwj",
+    "landingSessionId": "0bbf0e08-c123-4147-8eee-988320dafcd4",
+    "taskId": null,
+    "promotionId": "4gYrY74Br4DwIT8bRZP0mV",
+    "runner": null,
+    "claim": 1,
+    "round": null,
+    "check": null,
+    "stepStartedAt": null,
+    "outputMovedAt": null,
+    "progressProtocol": null,
+    "typicalMs": null,
+    "liveness": null,
+    "blockingReason": {
+     "code": "WAITING_FOR_CHECKS",
+     "summary": "main moved since pull request #101 was opened"
+    },
+    "promotionPublicId": "4gYrY74Br4DwIT8bRZP0mV",
+    "taskPublicId": null,
+    "jobPublicId": "7cxPsOoGcoYg7bjIXw8xwj"
+   },
+   "inFlightJobs": [
+    {
+     "jobId": "7cxPsOoGcoYg7bjIXw8xwj",
+     "kind": "LAND_PROMOTION",
+     "state": "PULL_REQUEST",
+     "pullRequest": {
+      "number": 101,
+      "url": "https://github.com/owner/main-moved-meanwhile/pull/101",
+      "state": "OPEN",
+      "condition": "BEHIND",
+      "checks": {
+       "passed": 0,
+       "required": 6,
+       "failed": []
+      },
+      "mergeMethod": null,
+      "mergedSha": null,
+      "workspaceId": "6qpVGEeJN2x1NerJzxkkhr",
+      "refusal": {
+       "via": "PULL_REQUEST",
+       "message": "GH006: Protected branch update failed for refs/heads/main. Changes must be made through a pull request."
+      },
+      "workspacePublicId": "6qpVGEeJN2x1NerJzxkkhr",
+      "agentId": "6qpVGEeJN2x1NerJzxkkhr"
+     },
+     "landingSessionId": "0bbf0e08-c123-4147-8eee-988320dafcd4",
+     "phase": "PUSH",
+     "taskId": null,
+     "taskTitle": null,
+     "promotionId": "4gYrY74Br4DwIT8bRZP0mV",
+     "generation": 1,
+     "startedAt": "2026-11-23T23:39:12.241Z",
+     "queuedAt": "2026-11-23T23:39:12.215Z",
+     "heartbeatAt": "2026-11-23T23:39:12.268Z",
+     "runnerName": null,
+     "retriedBy": null,
+     "timedOut": false,
+     "limitSeconds": null,
+     "progressProtocol": null,
+     "claim": 1,
+     "round": null,
+     "check": null,
+     "stepStartedAt": null,
+     "outputMovedAt": null,
+     "typicalMs": null,
+     "liveness": null,
+     "blockingReason": {
+      "code": "WAITING_FOR_CHECKS",
+      "summary": "main moved since pull request #101 was opened"
+     },
+     "retryable": false,
+     "skippable": false,
+     "skipCheck": null,
+     "promotionPublicId": "4gYrY74Br4DwIT8bRZP0mV",
+     "taskPublicId": null,
+     "jobPublicId": "7cxPsOoGcoYg7bjIXw8xwj"
+    }
+   ]
+  },
+  "e": {
+   "line": "MAIN",
+   "lineAbsentReason": null,
+   "ref": "main",
+   "upstreamRef": "main",
+   "upstreamChosenAt": null,
+   "source": "EXPLICIT",
+   "locked": true,
+   "startedAt": "2026-11-23T23:38:12.697Z",
+   "landingCheckCommand": null,
+   "landingCheckTimeoutSeconds": null,
+   "landingCheckCommandAbsentReason": "FALLS_BACK_TO_MERGE_CHECK",
+   "landingCheck": {
+    "command": null,
+    "setBy": null,
+    "setBySessionId": null,
+    "setAt": null
+   },
+   "mergeCheckCommand": null,
+   "mergeCheckCommandAbsentReason": "NOT_CONFIGURED",
+   "mergeCheckTimeoutSeconds": null,
+   "escalationSeconds": 7200,
+   "deliveryMode": "PLATFORM",
+   "deliveryModeChosenAt": null,
+   "lastMainBranch": null,
+   "repository": "owner/merged-by-pull-request",
+   "branches": null,
+   "commitsAheadOfUpstream": null,
+   "commitsAheadOfUpstreamAbsentReason": "NO_LANDING_YET",
+   "lastUpstreamSyncAt": null,
+   "lastUpstreamSyncAbsentReason": "NEVER_SYNCED",
+   "integratingCount": 0,
+   "queuedCount": 0,
+   "mergeCheckOnTip": "UNKNOWN",
+   "landTasks": [],
+   "inFlight": null,
+   "inFlightJobs": []
+  },
+  "closed": {
+   "line": "MAIN",
+   "lineAbsentReason": null,
+   "ref": "main",
+   "upstreamRef": "main",
+   "upstreamChosenAt": null,
+   "source": "EXPLICIT",
+   "locked": true,
+   "startedAt": "2026-11-23T23:38:12.913Z",
+   "landingCheckCommand": null,
+   "landingCheckTimeoutSeconds": null,
+   "landingCheckCommandAbsentReason": "FALLS_BACK_TO_MERGE_CHECK",
+   "landingCheck": {
+    "command": null,
+    "setBy": null,
+    "setBySessionId": null,
+    "setAt": null
+   },
+   "mergeCheckCommand": null,
+   "mergeCheckCommandAbsentReason": "NOT_CONFIGURED",
+   "mergeCheckTimeoutSeconds": null,
+   "escalationSeconds": 7200,
+   "deliveryMode": "PLATFORM",
+   "deliveryModeChosenAt": null,
+   "lastMainBranch": null,
+   "repository": "owner/closed-on-github-without-merging",
+   "branches": null,
+   "commitsAheadOfUpstream": null,
+   "commitsAheadOfUpstreamAbsentReason": "NO_LANDING_YET",
+   "lastUpstreamSyncAt": null,
+   "lastUpstreamSyncAbsentReason": "NEVER_SYNCED",
+   "integratingCount": 0,
+   "queuedCount": 0,
+   "mergeCheckOnTip": "UNKNOWN",
+   "landTasks": [],
+   "inFlight": null,
+   "inFlightJobs": []
+  },
+  "f": {
+   "line": "MAIN",
+   "lineAbsentReason": null,
+   "ref": "main",
+   "upstreamRef": "main",
+   "upstreamChosenAt": null,
+   "source": "EXPLICIT",
+   "locked": true,
+   "startedAt": "2026-11-23T23:38:13.072Z",
+   "landingCheckCommand": null,
+   "landingCheckTimeoutSeconds": null,
+   "landingCheckCommandAbsentReason": "FALLS_BACK_TO_MERGE_CHECK",
+   "landingCheck": {
+    "command": null,
+    "setBy": null,
+    "setBySessionId": null,
+    "setAt": null
+   },
+   "mergeCheckCommand": null,
+   "mergeCheckCommandAbsentReason": "NOT_CONFIGURED",
+   "mergeCheckTimeoutSeconds": null,
+   "escalationSeconds": 7200,
+   "deliveryMode": "PLATFORM",
+   "deliveryModeChosenAt": null,
+   "lastMainBranch": null,
+   "repository": "owner/push-refused",
+   "branches": null,
+   "commitsAheadOfUpstream": null,
+   "commitsAheadOfUpstreamAbsentReason": "NO_LANDING_YET",
+   "lastUpstreamSyncAt": null,
+   "lastUpstreamSyncAbsentReason": "NEVER_SYNCED",
+   "integratingCount": 0,
+   "queuedCount": 0,
+   "mergeCheckOnTip": "UNKNOWN",
+   "landTasks": [],
+   "inFlight": {
+    "taskTitle": null,
+    "kind": "LAND_PROMOTION",
+    "phase": "PUSH",
+    "state": "PULL_REQUEST",
+    "pullRequest": {
+     "number": 106,
+     "url": "https://github.com/owner/push-refused/pull/106",
+     "state": "OPEN",
+     "condition": "REVIEW_REQUIRED",
+     "checks": {
+      "passed": 6,
+      "required": 6,
+      "failed": []
+     },
+     "mergeMethod": null,
+     "mergedSha": null,
+     "workspaceId": "3XfGhudsdt542lsfmXuK8y",
+     "refusal": {
+      "via": "PUSH_AS_ME",
+      "message": "GH006: Protected branch update failed for refs/heads/main. Changes must be made through a pull request."
+     },
+     "workspacePublicId": "3XfGhudsdt542lsfmXuK8y",
+     "agentId": "3XfGhudsdt542lsfmXuK8y"
+    },
+    "startedAt": "2026-11-23T23:39:13.151Z",
+    "heartbeatAt": "2026-11-23T23:39:13.174Z",
+    "waitMs": null,
+    "jobId": "1sRX20JFfYIciwwlkkDniU",
+    "landingSessionId": "9eb517bc-68ef-4258-8662-487de917f47e",
+    "taskId": null,
+    "promotionId": "3fgbmZ8bbePxd2BgZYrhnZ",
+    "runner": null,
+    "claim": 1,
+    "round": null,
+    "check": null,
+    "stepStartedAt": null,
+    "outputMovedAt": null,
+    "progressProtocol": "v2",
+    "typicalMs": null,
+    "liveness": null,
+    "blockingReason": {
+     "code": "WAITING_FOR_REVIEW",
+     "summary": "Waiting for review on pull request #106"
+    },
+    "promotionPublicId": "3fgbmZ8bbePxd2BgZYrhnZ",
+    "taskPublicId": null,
+    "jobPublicId": "1sRX20JFfYIciwwlkkDniU"
+   },
+   "inFlightJobs": [
+    {
+     "jobId": "1sRX20JFfYIciwwlkkDniU",
+     "kind": "LAND_PROMOTION",
+     "state": "PULL_REQUEST",
+     "pullRequest": {
+      "number": 106,
+      "url": "https://github.com/owner/push-refused/pull/106",
+      "state": "OPEN",
+      "condition": "REVIEW_REQUIRED",
+      "checks": {
+       "passed": 6,
+       "required": 6,
+       "failed": []
+      },
+      "mergeMethod": null,
+      "mergedSha": null,
+      "workspaceId": "3XfGhudsdt542lsfmXuK8y",
+      "refusal": {
+       "via": "PUSH_AS_ME",
+       "message": "GH006: Protected branch update failed for refs/heads/main. Changes must be made through a pull request."
+      },
+      "workspacePublicId": "3XfGhudsdt542lsfmXuK8y",
+      "agentId": "3XfGhudsdt542lsfmXuK8y"
+     },
+     "landingSessionId": "9eb517bc-68ef-4258-8662-487de917f47e",
+     "phase": "PUSH",
+     "taskId": null,
+     "taskTitle": null,
+     "promotionId": "3fgbmZ8bbePxd2BgZYrhnZ",
+     "generation": 1,
+     "startedAt": "2026-11-23T23:39:13.151Z",
+     "queuedAt": "2026-11-23T23:39:13.141Z",
+     "heartbeatAt": "2026-11-23T23:39:13.174Z",
+     "runnerName": null,
+     "retriedBy": null,
+     "timedOut": false,
+     "limitSeconds": null,
+     "progressProtocol": "v2",
+     "claim": 1,
+     "round": null,
+     "check": null,
+     "stepStartedAt": null,
+     "outputMovedAt": null,
+     "typicalMs": null,
+     "liveness": null,
+     "blockingReason": {
+      "code": "WAITING_FOR_REVIEW",
+      "summary": "Waiting for review on pull request #106"
+     },
+     "retryable": false,
+     "skippable": false,
+     "skipCheck": null,
+     "promotionPublicId": "3fgbmZ8bbePxd2BgZYrhnZ",
+     "taskPublicId": null,
+     "jobPublicId": "1sRX20JFfYIciwwlkkDniU"
+    }
+   ]
+  }
+ },
+ "landing": {
+  "a": {
+   "sessionId": "6iAnWrfV2s4mqYWdnPpDqZ",
+   "projectId": "55nPhnU5adHWEtv77YURw9",
+   "subject": "TASK",
+   "taskId": "352pxFH6GCTZQsX9CAqlj",
+   "promotionId": null,
+   "episode": 1,
+   "openedAt": "2026-11-23T23:39:11.913Z",
+   "settledAt": null,
+   "settledAs": null,
+   "phase": "PUSH",
+   "round": null,
+   "checks": [],
+   "liveness": null,
+   "blockingReason": {
+    "code": "WAITING_FOR_CHECKS",
+    "summary": "Waiting for the required checks on pull request #100 \u00b7 2 of 6"
+   },
+   "currentAttempt": {
+    "jobId": "5j4ILXjvW0dSzIr4K2pwdz",
+    "kind": "LAND_PROMOTION",
+    "state": "PULL_REQUEST",
+    "generation": 1,
+    "phase": "PUSH",
+    "round": null,
+    "step": null,
+    "claim": 1,
+    "runnerName": "opened-with-checks-running",
+    "sourceSessionId": "3NumtLZHESzk6DcOqy4SGr",
+    "targetRef": "refs/heads/main",
+    "startedAt": "2026-11-23T23:39:12.042Z",
+    "heartbeatAt": "2026-11-23T23:39:12.071Z",
+    "outputMovedAt": null,
+    "progressProtocol": null,
+    "check": null,
+    "liveness": null,
+    "blockingReason": {
+     "code": "WAITING_FOR_CHECKS",
+     "summary": "Waiting for the required checks on pull request #100 \u00b7 2 of 6"
+    },
+    "timedOut": false,
+    "limitSeconds": null,
+    "retryable": false,
+    "pushBoundaryPassed": false,
+    "sourceSessionPublicId": "3NumtLZHESzk6DcOqy4SGr",
+    "jobPublicId": "5j4ILXjvW0dSzIr4K2pwdz"
+   },
+   "todos": [],
+   "generations": [
+    {
+     "sessionId": "6iAnWrfV2s4mqYWdnPpDqZ",
+     "episode": 1,
+     "openedAt": "2026-11-23T23:39:11.913Z",
+     "settledAt": null,
+     "settledAs": null,
+     "sessionPublicId": "6iAnWrfV2s4mqYWdnPpDqZ"
+    }
+   ],
+   "timeline": {
+    "sections": [
+     {
+      "title": "Merge check \u00b7 1",
+      "jobId": "4UZVZXfGVXkkfGHvd8AjMs",
+      "kind": "CHECK_PROMOTION",
+      "generation": 1,
+      "state": "READY",
+      "entries": [
+       {
+        "id": "7RS9CuqeFVWgE1tOOldg4g",
+        "seq": 1,
+        "kind": "ENQUEUED",
+        "at": "2026-11-23T23:39:11.917Z",
+        "claim": 0,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "kind": "CHECK_PROMOTION",
+         "sourceRef": "refs/heads/orbit/work-696cef19",
+         "targetRef": "refs/heads/main",
+         "generation": 1
+        },
+        "text": "Merge check queued \u00b7 orbit/work-696cef19 \u2192 main",
+        "publicId": "7RS9CuqeFVWgE1tOOldg4g"
+       },
+       {
+        "id": "3z6vxQpbuQoF0XZ46XOYDl",
+        "seq": 3,
+        "kind": "CHECK_STARTED",
+        "at": "2026-11-23T23:39:10.782Z",
+        "claim": 1,
+        "round": null,
+        "check": {
+         "name": "MERGE_CHECK",
+         "index": 1
+        },
+        "phase": "CHECK",
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "name": "MERGE_CHECK",
+         "index": 1,
+         "startedAt": "2026-11-23T23:39:10.782Z",
+         "derivedFromDuration": true
+        },
+        "text": "Merge check started \u00b7 claim 1 \u00b7 opened-with-checks-running",
+        "publicId": "3z6vxQpbuQoF0XZ46XOYDl"
+       },
+       {
+        "id": "3qt646lSbeahMNU9ZVJbKA",
+        "seq": 2,
+        "kind": "CLAIMED",
+        "at": "2026-11-23T23:39:11.946Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "FETCH",
+        "step": null,
+        "actor": {
+         "type": "RUNNER",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "runnerId": "7HnzQSLPar8DKbOOajZcIL",
+         "runnerName": "opened-with-checks-running",
+         "previousState": "QUEUED",
+         "claimGeneration": 1,
+         "runnerPublicId": "7HnzQSLPar8DKbOOajZcIL"
+        },
+        "text": "Claimed by runner opened-with-checks-running \u00b7 claim 1",
+        "publicId": "3qt646lSbeahMNU9ZVJbKA"
+       },
+       {
+        "id": "1S0FnnNWYchOf2e6p2Sgry",
+        "seq": 4,
+        "kind": "CHECK_FINISHED",
+        "at": "2026-11-23T23:39:11.982Z",
+        "claim": 1,
+        "round": null,
+        "check": {
+         "name": "MERGE_CHECK",
+         "index": 1
+        },
+        "phase": "CHECK",
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "name": "MERGE_CHECK",
+         "index": 1,
+         "exitCode": 0,
+         "timedOut": false,
+         "durationMs": 1200,
+         "finishedAt": "2026-11-23T23:39:11.982Z",
+         "expectedExitCode": 0
+        },
+        "text": "Merge check passed \u00b7 0m 01s",
+        "publicId": "1S0FnnNWYchOf2e6p2Sgry"
+       },
+       {
+        "id": "4sYLyBnN30yPAMCZ0ZjS1n",
+        "seq": 5,
+        "kind": "RESULT",
+        "at": "2026-11-23T23:39:11.982Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "CHECK",
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "state": "READY",
+         "errorCode": null,
+         "landedSha": null,
+         "finishedAt": "2026-11-23T23:39:11.982Z",
+         "requestedState": "READY",
+         "targetShaBefore": "aa8c96b9bda52cd91cd3996edf18788f797c9ee0",
+         "sourceFullyApplied": null
+        },
+        "text": "Ready to merge into main",
+        "publicId": "4sYLyBnN30yPAMCZ0ZjS1n"
+       },
+       {
+        "id": "BExVJ477FK0kMX8f336YR",
+        "seq": 6,
+        "kind": "HANDED_TO",
+        "at": "2026-11-23T23:39:11.982Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "CHECK",
+        "step": null,
+        "actor": {
+         "type": "OWNER",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "itemId": "352pxFVWmCkcZ9SnbyF3l",
+         "assignee": "OWNER",
+         "itemKind": "PROMOTION_APPROVAL",
+         "itemPublicId": "352pxFVWmCkcZ9SnbyF3l"
+        },
+        "text": "Asked the owner to merge into main",
+        "publicId": "BExVJ477FK0kMX8f336YR"
+       }
+      ],
+      "trigger": {
+       "at": "2026-11-23T23:39:11.915Z",
+       "sourceRef": "refs/heads/orbit/work-696cef19",
+       "sourceSha": "1355ae83a85e7c25f2db32b95e1fef431bc8ba7d",
+       "sessionId": null,
+       "reason": null,
+       "cause": "CHECK",
+       "by": "ORBIT",
+       "sessionPublicId": null
+      },
+      "jobPublicId": "4UZVZXfGVXkkfGHvd8AjMs"
+     },
+     {
+      "title": "Merge to main \u00b7 1",
+      "jobId": "5j4ILXjvW0dSzIr4K2pwdz",
+      "kind": "LAND_PROMOTION",
+      "generation": 1,
+      "state": "PULL_REQUEST",
+      "entries": [
+       {
+        "id": null,
+        "kind": "CONFIRMATION",
+        "at": "2026-11-23T23:39:12.004Z",
+        "claim": 0,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": {
+         "type": "OWNER",
+         "userId": "4fmDa3rQ8sJlUDH1G3Ngxr",
+         "userPublicId": "4fmDa3rQ8sJlUDH1G3Ngxr"
+        },
+        "reason": null,
+        "data": {
+         "promotionId": "3cpNUK6i9J5Z4lskEfIy8X",
+         "confirmedByUserId": "4fmDa3rQ8sJlUDH1G3Ngxr",
+         "confirmedAutomatically": false,
+         "confirmedAt": "2026-11-23T23:39:12.004Z",
+         "promotionPublicId": "3cpNUK6i9J5Z4lskEfIy8X",
+         "confirmedByUserPublicId": "4fmDa3rQ8sJlUDH1G3Ngxr"
+        },
+        "text": "Merge to main confirmed by the owner",
+        "derived": true,
+        "publicId": null
+       },
+       {
+        "id": "6pUEpl6xS97t7HbUf1Xuyu",
+        "seq": 7,
+        "kind": "ENQUEUED",
+        "at": "2026-11-23T23:39:12.009Z",
+        "claim": 0,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "kind": "LAND_PROMOTION",
+         "sourceRef": "refs/heads/orbit/work-696cef19",
+         "targetRef": "refs/heads/main",
+         "generation": 1
+        },
+        "text": "Queued to merge into main",
+        "publicId": "6pUEpl6xS97t7HbUf1Xuyu"
+       },
+       {
+        "id": "3tpQ3aDqrw5WycheRZOGB1",
+        "seq": 8,
+        "kind": "CLAIMED",
+        "at": "2026-11-23T23:39:12.051Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "FETCH",
+        "step": null,
+        "actor": {
+         "type": "RUNNER",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "runnerId": "7HnzQSLPar8DKbOOajZcIL",
+         "runnerName": "opened-with-checks-running",
+         "previousState": "QUEUED",
+         "claimGeneration": 1,
+         "runnerPublicId": "7HnzQSLPar8DKbOOajZcIL"
+        },
+        "text": "Claimed by runner opened-with-checks-running \u00b7 claim 1",
+        "publicId": "3tpQ3aDqrw5WycheRZOGB1"
+       },
+       {
+        "id": "14e3FlS0ba0uNDp00sMsFG",
+        "seq": 9,
+        "kind": "PULL_REQUEST",
+        "at": "2026-11-23T23:39:12.075Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "PUSH",
+        "step": null,
+        "actor": {
+         "type": "RUNNER",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "step": "PUSHED",
+         "headSha": "e9868a90a9f45d4a1ee1d300e549b64a661fc5e0",
+         "refusal": "GH006: Protected branch update failed for refs/heads/main. Changes must be made through a pull request.",
+         "landingRef": "refs/heads/orbit/land/dc8d1bdf-2001-47d5-967d-b3b9db043287"
+        },
+        "text": "Pushed e9868a9 for a pull request",
+        "publicId": "14e3FlS0ba0uNDp00sMsFG"
+       },
+       {
+        "id": "6ApWFEjHIvPzox3fXIGf8T",
+        "seq": 10,
+        "kind": "PULL_REQUEST",
+        "at": "2026-11-23T23:39:12.093Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": {
+         "type": "PLATFORM",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "url": "https://github.com/owner/opened-with-checks-running/pull/100",
+         "step": "OPENED",
+         "number": 100
+        },
+        "text": "Opened pull request #100",
+        "publicId": "6ApWFEjHIvPzox3fXIGf8T"
+       }
+      ],
+      "trigger": {
+       "at": "2026-11-23T23:39:12.008Z",
+       "sourceRef": "refs/heads/orbit/work-696cef19",
+       "sourceSha": "1355ae83a85e7c25f2db32b95e1fef431bc8ba7d",
+       "sessionId": null,
+       "reason": null,
+       "cause": "CONFIRMED",
+       "by": "OWNER",
+       "sessionPublicId": null
+      },
+      "jobPublicId": "5j4ILXjvW0dSzIr4K2pwdz"
+     }
+    ],
+    "facts": [],
+    "truncated": false
+   },
+   "pullRequest": {
+    "number": 100,
+    "url": "https://github.com/owner/opened-with-checks-running/pull/100",
+    "state": "OPEN",
+    "condition": "CHECKS_PENDING",
+    "checks": {
+     "passed": 2,
+     "required": 6,
+     "failed": []
+    },
+    "mergeMethod": null,
+    "mergedSha": null,
+    "workspaceId": "a9Hfku2kaKJYcPlFc3ujQ",
+    "refusal": {
+     "via": "PULL_REQUEST",
+     "message": "GH006: Protected branch update failed for refs/heads/main. Changes must be made through a pull request."
+    },
+    "workspacePublicId": "a9Hfku2kaKJYcPlFc3ujQ",
+    "agentId": "a9Hfku2kaKJYcPlFc3ujQ"
+   },
+   "sessionPublicId": "6iAnWrfV2s4mqYWdnPpDqZ",
+   "promotionPublicId": null,
+   "taskPublicId": "352pxFH6GCTZQsX9CAqlj",
+   "projectPublicId": "55nPhnU5adHWEtv77YURw9"
+  },
+  "b": {
+   "sessionId": "3Ql74uy2xWR2LJHgX7ZD2C",
+   "projectId": "3PCoIcR1vEGEKV06vQrpCp",
+   "subject": "TASK",
+   "taskId": "352pxG1zBLcvVvFRnPvJk",
+   "promotionId": null,
+   "episode": 1,
+   "openedAt": "2026-11-23T23:39:12.348Z",
+   "settledAt": null,
+   "settledAs": null,
+   "phase": "PUSH",
+   "round": null,
+   "checks": [],
+   "liveness": null,
+   "blockingReason": {
+    "code": "WAITING_FOR_REVIEW",
+    "summary": "Waiting for review on pull request #102"
+   },
+   "currentAttempt": {
+    "jobId": "1dy8ZXxQWzDu0X9CHeGuFr",
+    "kind": "LAND_PROMOTION",
+    "state": "PULL_REQUEST",
+    "generation": 1,
+    "phase": "PUSH",
+    "round": null,
+    "step": null,
+    "claim": 1,
+    "runnerName": "waiting-for-the-owner-review",
+    "sourceSessionId": "28AEOyRLDTVKZvbUKUKcMc",
+    "targetRef": "refs/heads/main",
+    "startedAt": "2026-11-23T23:39:12.432Z",
+    "heartbeatAt": "2026-11-23T23:39:12.457Z",
+    "outputMovedAt": null,
+    "progressProtocol": null,
+    "check": null,
+    "liveness": null,
+    "blockingReason": {
+     "code": "WAITING_FOR_REVIEW",
+     "summary": "Waiting for review on pull request #102"
+    },
+    "timedOut": false,
+    "limitSeconds": null,
+    "retryable": false,
+    "pushBoundaryPassed": false,
+    "sourceSessionPublicId": "28AEOyRLDTVKZvbUKUKcMc",
+    "jobPublicId": "1dy8ZXxQWzDu0X9CHeGuFr"
+   },
+   "todos": [],
+   "generations": [
+    {
+     "sessionId": "3Ql74uy2xWR2LJHgX7ZD2C",
+     "episode": 1,
+     "openedAt": "2026-11-23T23:39:12.348Z",
+     "settledAt": null,
+     "settledAs": null,
+     "sessionPublicId": "3Ql74uy2xWR2LJHgX7ZD2C"
+    }
+   ],
+   "timeline": {
+    "sections": [
+     {
+      "title": "Merge check \u00b7 1",
+      "jobId": "3Xb5sdyKNyBXES99sHCjUh",
+      "kind": "CHECK_PROMOTION",
+      "generation": 1,
+      "state": "READY",
+      "entries": [
+       {
+        "id": "3PPITfTNkt7HXe2ACDrRve",
+        "seq": 21,
+        "kind": "ENQUEUED",
+        "at": "2026-11-23T23:39:12.350Z",
+        "claim": 0,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "kind": "CHECK_PROMOTION",
+         "sourceRef": "refs/heads/orbit/work-69b39427",
+         "targetRef": "refs/heads/main",
+         "generation": 1
+        },
+        "text": "Merge check queued \u00b7 orbit/work-69b39427 \u2192 main",
+        "publicId": "3PPITfTNkt7HXe2ACDrRve"
+       },
+       {
+        "id": "7eHziKBDzAZDYyTwzjGZNJ",
+        "seq": 23,
+        "kind": "CHECK_STARTED",
+        "at": "2026-11-23T23:39:11.201Z",
+        "claim": 1,
+        "round": null,
+        "check": {
+         "name": "MERGE_CHECK",
+         "index": 1
+        },
+        "phase": "CHECK",
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "name": "MERGE_CHECK",
+         "index": 1,
+         "startedAt": "2026-11-23T23:39:11.201Z",
+         "derivedFromDuration": true
+        },
+        "text": "Merge check started \u00b7 claim 1 \u00b7 waiting-for-the-owner-review",
+        "publicId": "7eHziKBDzAZDYyTwzjGZNJ"
+       },
+       {
+        "id": "4mLyYTFsp76zYz9saHWqRB",
+        "seq": 22,
+        "kind": "CLAIMED",
+        "at": "2026-11-23T23:39:12.374Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "FETCH",
+        "step": null,
+        "actor": {
+         "type": "RUNNER",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "runnerId": "i1gikbnEy6A8fZgapml6K",
+         "runnerName": "waiting-for-the-owner-review",
+         "previousState": "QUEUED",
+         "claimGeneration": 1,
+         "runnerPublicId": "i1gikbnEy6A8fZgapml6K"
+        },
+        "text": "Claimed by runner waiting-for-the-owner-review \u00b7 claim 1",
+        "publicId": "4mLyYTFsp76zYz9saHWqRB"
+       },
+       {
+        "id": "2N059cSQmIXu4u4zOKqjFv",
+        "seq": 24,
+        "kind": "CHECK_FINISHED",
+        "at": "2026-11-23T23:39:12.401Z",
+        "claim": 1,
+        "round": null,
+        "check": {
+         "name": "MERGE_CHECK",
+         "index": 1
+        },
+        "phase": "CHECK",
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "name": "MERGE_CHECK",
+         "index": 1,
+         "exitCode": 0,
+         "timedOut": false,
+         "durationMs": 1200,
+         "finishedAt": "2026-11-23T23:39:12.401Z",
+         "expectedExitCode": 0
+        },
+        "text": "Merge check passed \u00b7 0m 01s",
+        "publicId": "2N059cSQmIXu4u4zOKqjFv"
+       },
+       {
+        "id": "7auIqesp80s5NgwwhNWOaP",
+        "seq": 25,
+        "kind": "RESULT",
+        "at": "2026-11-23T23:39:12.401Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "CHECK",
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "state": "READY",
+         "errorCode": null,
+         "landedSha": null,
+         "finishedAt": "2026-11-23T23:39:12.401Z",
+         "requestedState": "READY",
+         "targetShaBefore": "aa8c96b9bda52cd91cd3996edf18788f797c9ee0",
+         "sourceFullyApplied": null
+        },
+        "text": "Ready to merge into main",
+        "publicId": "7auIqesp80s5NgwwhNWOaP"
+       },
+       {
+        "id": "78KMZDYWDeJTi8eZt26klz",
+        "seq": 26,
+        "kind": "HANDED_TO",
+        "at": "2026-11-23T23:39:12.401Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "CHECK",
+        "step": null,
+        "actor": {
+         "type": "OWNER",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "itemId": "352pxGAAs77rL8c2AEM3l",
+         "assignee": "OWNER",
+         "itemKind": "PROMOTION_APPROVAL",
+         "itemPublicId": "352pxGAAs77rL8c2AEM3l"
+        },
+        "text": "Asked the owner to merge into main",
+        "publicId": "78KMZDYWDeJTi8eZt26klz"
+       }
+      ],
+      "trigger": {
+       "at": "2026-11-23T23:39:12.349Z",
+       "sourceRef": "refs/heads/orbit/work-69b39427",
+       "sourceSha": "1355ae83a85e7c25f2db32b95e1fef431bc8ba7d",
+       "sessionId": null,
+       "reason": null,
+       "cause": "CHECK",
+       "by": "ORBIT",
+       "sessionPublicId": null
+      },
+      "jobPublicId": "3Xb5sdyKNyBXES99sHCjUh"
+     },
+     {
+      "title": "Merge to main \u00b7 1",
+      "jobId": "1dy8ZXxQWzDu0X9CHeGuFr",
+      "kind": "LAND_PROMOTION",
+      "generation": 1,
+      "state": "PULL_REQUEST",
+      "entries": [
+       {
+        "id": null,
+        "kind": "CONFIRMATION",
+        "at": "2026-11-23T23:39:12.416Z",
+        "claim": 0,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": {
+         "type": "OWNER",
+         "userId": "4fmDa3rQ8sJlUDH1G3Ngxr",
+         "userPublicId": "4fmDa3rQ8sJlUDH1G3Ngxr"
+        },
+        "reason": null,
+        "data": {
+         "promotionId": "3R9zP5DkGKOOhn4MbPoJWV",
+         "confirmedByUserId": "4fmDa3rQ8sJlUDH1G3Ngxr",
+         "confirmedAutomatically": false,
+         "confirmedAt": "2026-11-23T23:39:12.416Z",
+         "promotionPublicId": "3R9zP5DkGKOOhn4MbPoJWV",
+         "confirmedByUserPublicId": "4fmDa3rQ8sJlUDH1G3Ngxr"
+        },
+        "text": "Merge to main confirmed by the owner",
+        "derived": true,
+        "publicId": null
+       },
+       {
+        "id": "2Eu6L7zdiiiQrUdaUFEI3w",
+        "seq": 27,
+        "kind": "ENQUEUED",
+        "at": "2026-11-23T23:39:12.418Z",
+        "claim": 0,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "kind": "LAND_PROMOTION",
+         "sourceRef": "refs/heads/orbit/work-69b39427",
+         "targetRef": "refs/heads/main",
+         "generation": 1
+        },
+        "text": "Queued to merge into main",
+        "publicId": "2Eu6L7zdiiiQrUdaUFEI3w"
+       },
+       {
+        "id": "7YUtC10Cx1iumyzwxSfGur",
+        "seq": 28,
+        "kind": "CLAIMED",
+        "at": "2026-11-23T23:39:12.438Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "FETCH",
+        "step": null,
+        "actor": {
+         "type": "RUNNER",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "runnerId": "i1gikbnEy6A8fZgapml6K",
+         "runnerName": "waiting-for-the-owner-review",
+         "previousState": "QUEUED",
+         "claimGeneration": 1,
+         "runnerPublicId": "i1gikbnEy6A8fZgapml6K"
+        },
+        "text": "Claimed by runner waiting-for-the-owner-review \u00b7 claim 1",
+        "publicId": "7YUtC10Cx1iumyzwxSfGur"
+       },
+       {
+        "id": "5lYx30SXqW4J2bjZR2E78K",
+        "seq": 29,
+        "kind": "PULL_REQUEST",
+        "at": "2026-11-23T23:39:12.459Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "PUSH",
+        "step": null,
+        "actor": {
+         "type": "RUNNER",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "step": "PUSHED",
+         "headSha": "d47d5964ba89c67f7425b7b5fe14d1c542e40638",
+         "refusal": "GH006: Protected branch update failed for refs/heads/main. Changes must be made through a pull request.",
+         "landingRef": "refs/heads/orbit/land/70c08074-cbf5-464d-9b11-ea71324aeef4"
+        },
+        "text": "Pushed d47d596 for a pull request",
+        "publicId": "5lYx30SXqW4J2bjZR2E78K"
+       },
+       {
+        "id": "3da80bWBexMjFZdi2djYFY",
+        "seq": 30,
+        "kind": "PULL_REQUEST",
+        "at": "2026-11-23T23:39:12.474Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": {
+         "type": "PLATFORM",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "url": "https://github.com/owner/waiting-for-the-owner-review/pull/102",
+         "step": "OPENED",
+         "number": 102
+        },
+        "text": "Opened pull request #102",
+        "publicId": "3da80bWBexMjFZdi2djYFY"
+       },
+       {
+        "id": "48rlCUxn2PWiV9bmDlGact",
+        "seq": 31,
+        "kind": "PULL_REQUEST",
+        "at": "2026-11-23T23:39:12.486Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": {
+         "type": "PLATFORM",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "url": "https://github.com/owner/waiting-for-the-owner-review/pull/102",
+         "step": "WAITING_FOR_REVIEW",
+         "number": 102
+        },
+        "text": "Waiting for review on pull request #102",
+        "publicId": "48rlCUxn2PWiV9bmDlGact"
+       }
+      ],
+      "trigger": {
+       "at": "2026-11-23T23:39:12.418Z",
+       "sourceRef": "refs/heads/orbit/work-69b39427",
+       "sourceSha": "1355ae83a85e7c25f2db32b95e1fef431bc8ba7d",
+       "sessionId": null,
+       "reason": null,
+       "cause": "CONFIRMED",
+       "by": "OWNER",
+       "sessionPublicId": null
+      },
+      "jobPublicId": "1dy8ZXxQWzDu0X9CHeGuFr"
+     }
+    ],
+    "facts": [],
+    "truncated": false
+   },
+   "pullRequest": {
+    "number": 102,
+    "url": "https://github.com/owner/waiting-for-the-owner-review/pull/102",
+    "state": "OPEN",
+    "condition": "REVIEW_REQUIRED",
+    "checks": {
+     "passed": 6,
+     "required": 6,
+     "failed": []
+    },
+    "mergeMethod": null,
+    "mergedSha": null,
+    "workspaceId": "5gAEyBnP0qngxJbgxXJ26V",
+    "refusal": {
+     "via": "PULL_REQUEST",
+     "message": "GH006: Protected branch update failed for refs/heads/main. Changes must be made through a pull request."
+    },
+    "workspacePublicId": "5gAEyBnP0qngxJbgxXJ26V",
+    "agentId": "5gAEyBnP0qngxJbgxXJ26V"
+   },
+   "sessionPublicId": "3Ql74uy2xWR2LJHgX7ZD2C",
+   "promotionPublicId": null,
+   "taskPublicId": "352pxG1zBLcvVvFRnPvJk",
+   "projectPublicId": "3PCoIcR1vEGEKV06vQrpCp"
+  },
+  "c": {
+   "sessionId": "2m9rPvpt3caOGsUWslGyXm",
+   "projectId": "NYzgNsUZJ0UwjGPsMoS1S",
+   "subject": "TASK",
+   "taskId": "352pxGJvNAqkk2T5HUfnt",
+   "promotionId": null,
+   "episode": 1,
+   "openedAt": "2026-11-23T23:39:12.530Z",
+   "settledAt": null,
+   "settledAs": null,
+   "phase": "PUSH",
+   "round": null,
+   "checks": [
+    {
+     "name": "GITHUB_CHECK",
+     "github": {
+      "url": "https://github.com/owner/a-required-check-failed/actions/runs/1/job/9101",
+      "headSha": "74073f3222997a2e40f234f4feaba14c04f8ed9f",
+      "conclusion": "failure",
+      "pullRequest": {
+       "url": "https://github.com/owner/a-required-check-failed/pull/103",
+       "number": 103
+      }
+     },
+     "command": "PostgreSQL specs",
+     "exitCode": 1,
+     "timedOut": false,
+     "durationMs": 0,
+     "outputTail": "2026-11-23T10:00:00.0000000Z ##[group]Run npm run test:pg\n2026-11-23T10:00:01.0000000Z > orbit@ test:pg\n2026-11-23T10:00:02.0000000Z token=[redacted]\n2026-11-23T10:00:03.0000000Z not ok 14 - the review wait merges after approval\n2026-11-23T10:00:04.0000000Z ##[error]AssertionError: expected LANDED, got PULL_REQUEST\n2026-11-23T10:00:05.0000000Z ##[error]Process completed with exit code 1.\n\nFailure lines from the whole output:\nAssertionError: expected LANDED, got PULL_REQUEST\nProcess completed with exit code 1.",
+     "expectedExitCode": 0
+    }
+   ],
+   "liveness": null,
+   "blockingReason": null,
+   "currentAttempt": {
+    "jobId": "1ZysGtpjHjAX26CCVEcrWN",
+    "kind": "LAND_PROMOTION",
+    "state": "CHECK_FAILED",
+    "generation": 1,
+    "phase": "PUSH",
+    "round": null,
+    "step": null,
+    "claim": 1,
+    "runnerName": "a-required-check-failed",
+    "sourceSessionId": "4R7ociUcaFHxLQF33lgJ2i",
+    "targetRef": "refs/heads/main",
+    "startedAt": "2026-11-23T23:39:12.596Z",
+    "heartbeatAt": "2026-11-23T23:39:12.658Z",
+    "outputMovedAt": null,
+    "progressProtocol": null,
+    "check": null,
+    "liveness": null,
+    "blockingReason": null,
+    "timedOut": false,
+    "limitSeconds": null,
+    "retryable": false,
+    "pushBoundaryPassed": false,
+    "sourceSessionPublicId": "4R7ociUcaFHxLQF33lgJ2i",
+    "jobPublicId": "1ZysGtpjHjAX26CCVEcrWN"
+   },
+   "todos": [
+    {
+     "id": "352pxGZoUu1TeRytKTKvM",
+     "kind": "INTEGRATION_CHECK_FAILED",
+     "state": "OPEN",
+     "title": "Checks failed on the combined tree: merging \u201cA required check failed\u201d into main",
+     "waitingSince": "2026-11-23T23:39:12.667Z",
+     "workSessionId": null,
+     "publicId": "352pxGZoUu1TeRytKTKvM",
+     "workSessionPublicId": null
+    }
+   ],
+   "generations": [
+    {
+     "sessionId": "2m9rPvpt3caOGsUWslGyXm",
+     "episode": 1,
+     "openedAt": "2026-11-23T23:39:12.530Z",
+     "settledAt": null,
+     "settledAs": null,
+     "sessionPublicId": "2m9rPvpt3caOGsUWslGyXm"
+    }
+   ],
+   "timeline": {
+    "sections": [
+     {
+      "title": "Merge check \u00b7 1",
+      "jobId": "3jMsHMCF7w9p2sVRJP63qX",
+      "kind": "CHECK_PROMOTION",
+      "generation": 1,
+      "state": "READY",
+      "entries": [
+       {
+        "id": "2RRDbS48ZTn7kIUOUZtJGr",
+        "seq": 32,
+        "kind": "ENQUEUED",
+        "at": "2026-11-23T23:39:12.531Z",
+        "claim": 0,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "kind": "CHECK_PROMOTION",
+         "sourceRef": "refs/heads/orbit/work-4c495a2d",
+         "targetRef": "refs/heads/main",
+         "generation": 1
+        },
+        "text": "Merge check queued \u00b7 orbit/work-4c495a2d \u2192 main",
+        "publicId": "2RRDbS48ZTn7kIUOUZtJGr"
+       },
+       {
+        "id": "7Wyr5IevxiHCjbUnMJdxOj",
+        "seq": 34,
+        "kind": "CHECK_STARTED",
+        "at": "2026-11-23T23:39:11.371Z",
+        "claim": 1,
+        "round": null,
+        "check": {
+         "name": "MERGE_CHECK",
+         "index": 1
+        },
+        "phase": "CHECK",
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "name": "MERGE_CHECK",
+         "index": 1,
+         "startedAt": "2026-11-23T23:39:11.371Z",
+         "derivedFromDuration": true
+        },
+        "text": "Merge check started \u00b7 claim 1 \u00b7 a-required-check-failed",
+        "publicId": "7Wyr5IevxiHCjbUnMJdxOj"
+       },
+       {
+        "id": "binVrjhNaSxox4AioRhJF",
+        "seq": 33,
+        "kind": "CLAIMED",
+        "at": "2026-11-23T23:39:12.548Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "FETCH",
+        "step": null,
+        "actor": {
+         "type": "RUNNER",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "runnerId": "5ryfFGb0G7PV2zZkpLTqWN",
+         "runnerName": "a-required-check-failed",
+         "previousState": "QUEUED",
+         "claimGeneration": 1,
+         "runnerPublicId": "5ryfFGb0G7PV2zZkpLTqWN"
+        },
+        "text": "Claimed by runner a-required-check-failed \u00b7 claim 1",
+        "publicId": "binVrjhNaSxox4AioRhJF"
+       },
+       {
+        "id": "6CfWsAtyqcngj32YbuPdyh",
+        "seq": 35,
+        "kind": "CHECK_FINISHED",
+        "at": "2026-11-23T23:39:12.571Z",
+        "claim": 1,
+        "round": null,
+        "check": {
+         "name": "MERGE_CHECK",
+         "index": 1
+        },
+        "phase": "CHECK",
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "name": "MERGE_CHECK",
+         "index": 1,
+         "exitCode": 0,
+         "timedOut": false,
+         "durationMs": 1200,
+         "finishedAt": "2026-11-23T23:39:12.571Z",
+         "expectedExitCode": 0
+        },
+        "text": "Merge check passed \u00b7 0m 01s",
+        "publicId": "6CfWsAtyqcngj32YbuPdyh"
+       },
+       {
+        "id": "3LI4VVfHxZSCgpPBU7e1jS",
+        "seq": 36,
+        "kind": "RESULT",
+        "at": "2026-11-23T23:39:12.571Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "CHECK",
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "state": "READY",
+         "errorCode": null,
+         "landedSha": null,
+         "finishedAt": "2026-11-23T23:39:12.571Z",
+         "requestedState": "READY",
+         "targetShaBefore": "aa8c96b9bda52cd91cd3996edf18788f797c9ee0",
+         "sourceFullyApplied": null
+        },
+        "text": "Ready to merge into main",
+        "publicId": "3LI4VVfHxZSCgpPBU7e1jS"
+       },
+       {
+        "id": "4PVGWbDkZmoCgKwF6QltWt",
+        "seq": 37,
+        "kind": "HANDED_TO",
+        "at": "2026-11-23T23:39:12.571Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "CHECK",
+        "step": null,
+        "actor": {
+         "type": "OWNER",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "itemId": "352pxGQeGeiE66DJBX6Bd",
+         "assignee": "OWNER",
+         "itemKind": "PROMOTION_APPROVAL",
+         "itemPublicId": "352pxGQeGeiE66DJBX6Bd"
+        },
+        "text": "Asked the owner to merge into main",
+        "publicId": "4PVGWbDkZmoCgKwF6QltWt"
+       }
+      ],
+      "trigger": {
+       "at": "2026-11-23T23:39:12.531Z",
+       "sourceRef": "refs/heads/orbit/work-4c495a2d",
+       "sourceSha": "1355ae83a85e7c25f2db32b95e1fef431bc8ba7d",
+       "sessionId": null,
+       "reason": null,
+       "cause": "CHECK",
+       "by": "ORBIT",
+       "sessionPublicId": null
+      },
+      "jobPublicId": "3jMsHMCF7w9p2sVRJP63qX"
+     },
+     {
+      "title": "Merge to main \u00b7 1",
+      "jobId": "1ZysGtpjHjAX26CCVEcrWN",
+      "kind": "LAND_PROMOTION",
+      "generation": 1,
+      "state": "CHECK_FAILED",
+      "entries": [
+       {
+        "id": null,
+        "kind": "CONFIRMATION",
+        "at": "2026-11-23T23:39:12.583Z",
+        "claim": 0,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": {
+         "type": "OWNER",
+         "userId": "4fmDa3rQ8sJlUDH1G3Ngxr",
+         "userPublicId": "4fmDa3rQ8sJlUDH1G3Ngxr"
+        },
+        "reason": null,
+        "data": {
+         "promotionId": "tl4pV2EhKaVNM36wXVdoa",
+         "confirmedByUserId": "4fmDa3rQ8sJlUDH1G3Ngxr",
+         "confirmedAutomatically": false,
+         "confirmedAt": "2026-11-23T23:39:12.583Z",
+         "promotionPublicId": "tl4pV2EhKaVNM36wXVdoa",
+         "confirmedByUserPublicId": "4fmDa3rQ8sJlUDH1G3Ngxr"
+        },
+        "text": "Merge to main confirmed by the owner",
+        "derived": true,
+        "publicId": null
+       },
+       {
+        "id": "3fpQrk9aqOvcoSfKtmT9dM",
+        "seq": 38,
+        "kind": "ENQUEUED",
+        "at": "2026-11-23T23:39:12.585Z",
+        "claim": 0,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "kind": "LAND_PROMOTION",
+         "sourceRef": "refs/heads/orbit/work-4c495a2d",
+         "targetRef": "refs/heads/main",
+         "generation": 1
+        },
+        "text": "Queued to merge into main",
+        "publicId": "3fpQrk9aqOvcoSfKtmT9dM"
+       },
+       {
+        "id": "5nsewbtATR5MylgHOK2PED",
+        "seq": 39,
+        "kind": "CLAIMED",
+        "at": "2026-11-23T23:39:12.601Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "FETCH",
+        "step": null,
+        "actor": {
+         "type": "RUNNER",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "runnerId": "5ryfFGb0G7PV2zZkpLTqWN",
+         "runnerName": "a-required-check-failed",
+         "previousState": "QUEUED",
+         "claimGeneration": 1,
+         "runnerPublicId": "5ryfFGb0G7PV2zZkpLTqWN"
+        },
+        "text": "Claimed by runner a-required-check-failed \u00b7 claim 1",
+        "publicId": "5nsewbtATR5MylgHOK2PED"
+       },
+       {
+        "id": "79ZqyS1j8bQmuH3ygRu0DF",
+        "seq": 40,
+        "kind": "PULL_REQUEST",
+        "at": "2026-11-23T23:39:12.620Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "PUSH",
+        "step": null,
+        "actor": {
+         "type": "RUNNER",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "step": "PUSHED",
+         "headSha": "74073f3222997a2e40f234f4feaba14c04f8ed9f",
+         "refusal": "GH006: Protected branch update failed for refs/heads/main. Changes must be made through a pull request.",
+         "landingRef": "refs/heads/orbit/land/5b3c4e49-23eb-4ad6-9783-180e37caa7ce"
+        },
+        "text": "Pushed 74073f3 for a pull request",
+        "publicId": "79ZqyS1j8bQmuH3ygRu0DF"
+       },
+       {
+        "id": "6ns6qb3VpfsSHyy5BJZKxD",
+        "seq": 41,
+        "kind": "PULL_REQUEST",
+        "at": "2026-11-23T23:39:12.639Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": {
+         "type": "PLATFORM",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "url": "https://github.com/owner/a-required-check-failed/pull/103",
+         "step": "OPENED",
+         "number": 103
+        },
+        "text": "Opened pull request #103",
+        "publicId": "6ns6qb3VpfsSHyy5BJZKxD"
+       },
+       {
+        "id": "266cO3Vzp3vwIg7eB2uSy9",
+        "seq": 42,
+        "kind": "RESULT",
+        "at": "2026-11-23T23:39:12.658Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "PUSH",
+        "step": null,
+        "actor": {
+         "type": "PLATFORM",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "state": "CHECK_FAILED",
+         "errorCode": null,
+         "landedSha": null,
+         "finishedAt": "2026-11-23T23:39:12.658Z",
+         "pullRequest": {
+          "url": "https://github.com/owner/a-required-check-failed/pull/103",
+          "number": 103
+         },
+         "requestedState": "CHECK_FAILED",
+         "targetShaBefore": "aa8c96b9bda52cd91cd3996edf18788f797c9ee0",
+         "sourceFullyApplied": null
+        },
+        "text": "Check failed \u00b7 nothing was pushed",
+        "publicId": "266cO3Vzp3vwIg7eB2uSy9"
+       },
+       {
+        "id": "31R9DEQLMFhhha7oNC0sJC",
+        "seq": 43,
+        "kind": "HANDED_TO",
+        "at": "2026-11-23T23:39:12.658Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "PUSH",
+        "step": null,
+        "actor": {
+         "type": "OWNER",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "itemId": "352pxGZoUu1TeRytKTKvM",
+         "assignee": "OWNER",
+         "itemKind": "INTEGRATION_CHECK_FAILED",
+         "itemPublicId": "352pxGZoUu1TeRytKTKvM"
+        },
+        "text": "Asked the owner to fix it",
+        "publicId": "31R9DEQLMFhhha7oNC0sJC"
+       },
+       {
+        "id": "6scGeJ9juKjuzs1pONax4H",
+        "seq": 44,
+        "kind": "PULL_REQUEST",
+        "at": "2026-11-23T23:39:12.678Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": {
+         "type": "PLATFORM",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "step": "CHECK_FAILED",
+         "checks": [
+          {
+           "url": "https://github.com/owner/a-required-check-failed/actions/runs/1/job/9101",
+           "name": "PostgreSQL specs"
+          }
+         ],
+         "number": 103
+        },
+        "text": "Required check \"PostgreSQL specs\" failed on pull request #103",
+        "publicId": "6scGeJ9juKjuzs1pONax4H"
+       }
+      ],
+      "trigger": {
+       "at": "2026-11-23T23:39:12.585Z",
+       "sourceRef": "refs/heads/orbit/work-4c495a2d",
+       "sourceSha": "1355ae83a85e7c25f2db32b95e1fef431bc8ba7d",
+       "sessionId": null,
+       "reason": null,
+       "cause": "CONFIRMED",
+       "by": "OWNER",
+       "sessionPublicId": null
+      },
+      "jobPublicId": "1ZysGtpjHjAX26CCVEcrWN"
+     }
+    ],
+    "facts": [],
+    "truncated": false
+   },
+   "pullRequest": {
+    "number": 103,
+    "url": "https://github.com/owner/a-required-check-failed/pull/103",
+    "state": "OPEN",
+    "condition": "CHECK_FAILED",
+    "checks": {
+     "passed": 5,
+     "required": 6,
+     "failed": [
+      {
+       "name": "PostgreSQL specs",
+       "url": "https://github.com/owner/a-required-check-failed/actions/runs/1/job/9101"
+      }
+     ]
+    },
+    "mergeMethod": null,
+    "mergedSha": null,
+    "workspaceId": "4GPNuSBiGiVNZOBxursMWx",
+    "refusal": {
+     "via": "PULL_REQUEST",
+     "message": "GH006: Protected branch update failed for refs/heads/main. Changes must be made through a pull request."
+    },
+    "workspacePublicId": "4GPNuSBiGiVNZOBxursMWx",
+    "agentId": "4GPNuSBiGiVNZOBxursMWx"
+   },
+   "sessionPublicId": "2m9rPvpt3caOGsUWslGyXm",
+   "promotionPublicId": null,
+   "taskPublicId": "352pxGJvNAqkk2T5HUfnt",
+   "projectPublicId": "NYzgNsUZJ0UwjGPsMoS1S"
+  },
+  "d": {
+   "sessionId": "MAE81Y6AplbGaf8AErXim",
+   "projectId": "1OrikRomLbfrltE1SnJttp",
+   "subject": "TASK",
+   "taskId": "352pxFisjmRnmm9QzPZYK",
+   "promotionId": null,
+   "episode": 1,
+   "openedAt": "2026-11-23T23:39:12.161Z",
+   "settledAt": null,
+   "settledAs": null,
+   "phase": "PUSH",
+   "round": null,
+   "checks": [],
+   "liveness": null,
+   "blockingReason": {
+    "code": "WAITING_FOR_CHECKS",
+    "summary": "main moved since pull request #101 was opened"
+   },
+   "currentAttempt": {
+    "jobId": "7cxPsOoGcoYg7bjIXw8xwj",
+    "kind": "LAND_PROMOTION",
+    "state": "PULL_REQUEST",
+    "generation": 1,
+    "phase": "PUSH",
+    "round": null,
+    "step": null,
+    "claim": 1,
+    "runnerName": "main-moved-meanwhile",
+    "sourceSessionId": "70ZpKZCTLMv7kVVysQa0bn",
+    "targetRef": "refs/heads/main",
+    "startedAt": "2026-11-23T23:39:12.241Z",
+    "heartbeatAt": "2026-11-23T23:39:12.268Z",
+    "outputMovedAt": null,
+    "progressProtocol": null,
+    "check": null,
+    "liveness": null,
+    "blockingReason": {
+     "code": "WAITING_FOR_CHECKS",
+     "summary": "main moved since pull request #101 was opened"
+    },
+    "timedOut": false,
+    "limitSeconds": null,
+    "retryable": false,
+    "pushBoundaryPassed": false,
+    "sourceSessionPublicId": "70ZpKZCTLMv7kVVysQa0bn",
+    "jobPublicId": "7cxPsOoGcoYg7bjIXw8xwj"
+   },
+   "todos": [],
+   "generations": [
+    {
+     "sessionId": "MAE81Y6AplbGaf8AErXim",
+     "episode": 1,
+     "openedAt": "2026-11-23T23:39:12.161Z",
+     "settledAt": null,
+     "settledAs": null,
+     "sessionPublicId": "MAE81Y6AplbGaf8AErXim"
+    }
+   ],
+   "timeline": {
+    "sections": [
+     {
+      "title": "Merge check \u00b7 1",
+      "jobId": "7AIEsosTzXOgDicp3wSQbv",
+      "kind": "CHECK_PROMOTION",
+      "generation": 1,
+      "state": "READY",
+      "entries": [
+       {
+        "id": "18Qew2hmaanA3NzC1qSiT7",
+        "seq": 11,
+        "kind": "ENQUEUED",
+        "at": "2026-11-23T23:39:12.163Z",
+        "claim": 0,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "kind": "CHECK_PROMOTION",
+         "sourceRef": "refs/heads/orbit/work-3cc6b1f8",
+         "targetRef": "refs/heads/main",
+         "generation": 1
+        },
+        "text": "Merge check queued \u00b7 orbit/work-3cc6b1f8 \u2192 main",
+        "publicId": "18Qew2hmaanA3NzC1qSiT7"
+       },
+       {
+        "id": "3ORg3tDcesPfpV3hVLx3Dr",
+        "seq": 13,
+        "kind": "CHECK_STARTED",
+        "at": "2026-11-23T23:39:10.998Z",
+        "claim": 1,
+        "round": null,
+        "check": {
+         "name": "MERGE_CHECK",
+         "index": 1
+        },
+        "phase": "CHECK",
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "name": "MERGE_CHECK",
+         "index": 1,
+         "startedAt": "2026-11-23T23:39:10.998Z",
+         "derivedFromDuration": true
+        },
+        "text": "Merge check started \u00b7 claim 1 \u00b7 main-moved-meanwhile",
+        "publicId": "3ORg3tDcesPfpV3hVLx3Dr"
+       },
+       {
+        "id": "5YDHWgABkugs5MyiX4WV8z",
+        "seq": 12,
+        "kind": "CLAIMED",
+        "at": "2026-11-23T23:39:12.178Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "FETCH",
+        "step": null,
+        "actor": {
+         "type": "RUNNER",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "runnerId": "cqvjZ9J2qZ6GpmnMiUW2g",
+         "runnerName": "main-moved-meanwhile",
+         "previousState": "QUEUED",
+         "claimGeneration": 1,
+         "runnerPublicId": "cqvjZ9J2qZ6GpmnMiUW2g"
+        },
+        "text": "Claimed by runner main-moved-meanwhile \u00b7 claim 1",
+        "publicId": "5YDHWgABkugs5MyiX4WV8z"
+       },
+       {
+        "id": "1DyQsSF1x4wfZagJfEwtVe",
+        "seq": 14,
+        "kind": "CHECK_FINISHED",
+        "at": "2026-11-23T23:39:12.198Z",
+        "claim": 1,
+        "round": null,
+        "check": {
+         "name": "MERGE_CHECK",
+         "index": 1
+        },
+        "phase": "CHECK",
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "name": "MERGE_CHECK",
+         "index": 1,
+         "exitCode": 0,
+         "timedOut": false,
+         "durationMs": 1200,
+         "finishedAt": "2026-11-23T23:39:12.198Z",
+         "expectedExitCode": 0
+        },
+        "text": "Merge check passed \u00b7 0m 01s",
+        "publicId": "1DyQsSF1x4wfZagJfEwtVe"
+       },
+       {
+        "id": "2Nh7E9meoZ6IsB7R5NuX3O",
+        "seq": 15,
+        "kind": "RESULT",
+        "at": "2026-11-23T23:39:12.198Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "CHECK",
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "state": "READY",
+         "errorCode": null,
+         "landedSha": null,
+         "finishedAt": "2026-11-23T23:39:12.198Z",
+         "requestedState": "READY",
+         "targetShaBefore": "aa8c96b9bda52cd91cd3996edf18788f797c9ee0",
+         "sourceFullyApplied": null
+        },
+        "text": "Ready to merge into main",
+        "publicId": "2Nh7E9meoZ6IsB7R5NuX3O"
+       },
+       {
+        "id": "FiS9d3sp8q8misFxENRfe",
+        "seq": 16,
+        "kind": "HANDED_TO",
+        "at": "2026-11-23T23:39:12.198Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "CHECK",
+        "step": null,
+        "actor": {
+         "type": "OWNER",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "itemId": "352pxFqI0gbyfG41RHafI",
+         "assignee": "OWNER",
+         "itemKind": "PROMOTION_APPROVAL",
+         "itemPublicId": "352pxFqI0gbyfG41RHafI"
+        },
+        "text": "Asked the owner to merge into main",
+        "publicId": "FiS9d3sp8q8misFxENRfe"
+       }
+      ],
+      "trigger": {
+       "at": "2026-11-23T23:39:12.162Z",
+       "sourceRef": "refs/heads/orbit/work-3cc6b1f8",
+       "sourceSha": "1355ae83a85e7c25f2db32b95e1fef431bc8ba7d",
+       "sessionId": null,
+       "reason": null,
+       "cause": "CHECK",
+       "by": "ORBIT",
+       "sessionPublicId": null
+      },
+      "jobPublicId": "7AIEsosTzXOgDicp3wSQbv"
+     },
+     {
+      "title": "Merge to main \u00b7 1",
+      "jobId": "7cxPsOoGcoYg7bjIXw8xwj",
+      "kind": "LAND_PROMOTION",
+      "generation": 1,
+      "state": "PULL_REQUEST",
+      "entries": [
+       {
+        "id": null,
+        "kind": "CONFIRMATION",
+        "at": "2026-11-23T23:39:12.211Z",
+        "claim": 0,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": {
+         "type": "OWNER",
+         "userId": "4fmDa3rQ8sJlUDH1G3Ngxr",
+         "userPublicId": "4fmDa3rQ8sJlUDH1G3Ngxr"
+        },
+        "reason": null,
+        "data": {
+         "promotionId": "4gYrY74Br4DwIT8bRZP0mV",
+         "confirmedByUserId": "4fmDa3rQ8sJlUDH1G3Ngxr",
+         "confirmedAutomatically": false,
+         "confirmedAt": "2026-11-23T23:39:12.211Z",
+         "promotionPublicId": "4gYrY74Br4DwIT8bRZP0mV",
+         "confirmedByUserPublicId": "4fmDa3rQ8sJlUDH1G3Ngxr"
+        },
+        "text": "Merge to main confirmed by the owner",
+        "derived": true,
+        "publicId": null
+       },
+       {
+        "id": "2P3rKHxAyhJwmQ9I6Za4QG",
+        "seq": 17,
+        "kind": "ENQUEUED",
+        "at": "2026-11-23T23:39:12.216Z",
+        "claim": 0,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "kind": "LAND_PROMOTION",
+         "sourceRef": "refs/heads/orbit/work-3cc6b1f8",
+         "targetRef": "refs/heads/main",
+         "generation": 1
+        },
+        "text": "Queued to merge into main",
+        "publicId": "2P3rKHxAyhJwmQ9I6Za4QG"
+       },
+       {
+        "id": "5BWUZw1QPcf6lvNpvXr0A",
+        "seq": 18,
+        "kind": "CLAIMED",
+        "at": "2026-11-23T23:39:12.251Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "FETCH",
+        "step": null,
+        "actor": {
+         "type": "RUNNER",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "runnerId": "cqvjZ9J2qZ6GpmnMiUW2g",
+         "runnerName": "main-moved-meanwhile",
+         "previousState": "QUEUED",
+         "claimGeneration": 1,
+         "runnerPublicId": "cqvjZ9J2qZ6GpmnMiUW2g"
+        },
+        "text": "Claimed by runner main-moved-meanwhile \u00b7 claim 1",
+        "publicId": "5BWUZw1QPcf6lvNpvXr0A"
+       },
+       {
+        "id": "4MvLBKq09LPrZsThBe006y",
+        "seq": 19,
+        "kind": "PULL_REQUEST",
+        "at": "2026-11-23T23:39:12.270Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "PUSH",
+        "step": null,
+        "actor": {
+         "type": "RUNNER",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "step": "PUSHED",
+         "headSha": "fdaf1fadb32663286ae06bce7f500b0f56e38ff3",
+         "refusal": "GH006: Protected branch update failed for refs/heads/main. Changes must be made through a pull request.",
+         "landingRef": "refs/heads/orbit/land/0bbf0e08-c123-4147-8eee-988320dafcd4"
+        },
+        "text": "Pushed fdaf1fa for a pull request",
+        "publicId": "4MvLBKq09LPrZsThBe006y"
+       },
+       {
+        "id": "1dcN1xhebgtNV1YOOBw2JI",
+        "seq": 20,
+        "kind": "PULL_REQUEST",
+        "at": "2026-11-23T23:39:12.283Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": {
+         "type": "PLATFORM",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "url": "https://github.com/owner/main-moved-meanwhile/pull/101",
+         "step": "OPENED",
+         "number": 101
+        },
+        "text": "Opened pull request #101",
+        "publicId": "1dcN1xhebgtNV1YOOBw2JI"
+       }
+      ],
+      "trigger": {
+       "at": "2026-11-23T23:39:12.215Z",
+       "sourceRef": "refs/heads/orbit/work-3cc6b1f8",
+       "sourceSha": "1355ae83a85e7c25f2db32b95e1fef431bc8ba7d",
+       "sessionId": null,
+       "reason": null,
+       "cause": "CONFIRMED",
+       "by": "OWNER",
+       "sessionPublicId": null
+      },
+      "jobPublicId": "7cxPsOoGcoYg7bjIXw8xwj"
+     }
+    ],
+    "facts": [],
+    "truncated": false
+   },
+   "pullRequest": {
+    "number": 101,
+    "url": "https://github.com/owner/main-moved-meanwhile/pull/101",
+    "state": "OPEN",
+    "condition": "BEHIND",
+    "checks": {
+     "passed": 0,
+     "required": 6,
+     "failed": []
+    },
+    "mergeMethod": null,
+    "mergedSha": null,
+    "workspaceId": "6qpVGEeJN2x1NerJzxkkhr",
+    "refusal": {
+     "via": "PULL_REQUEST",
+     "message": "GH006: Protected branch update failed for refs/heads/main. Changes must be made through a pull request."
+    },
+    "workspacePublicId": "6qpVGEeJN2x1NerJzxkkhr",
+    "agentId": "6qpVGEeJN2x1NerJzxkkhr"
+   },
+   "sessionPublicId": "MAE81Y6AplbGaf8AErXim",
+   "promotionPublicId": null,
+   "taskPublicId": "352pxFisjmRnmm9QzPZYK",
+   "projectPublicId": "1OrikRomLbfrltE1SnJttp"
+  },
+  "e": {
+   "sessionId": "3QqcFqywzVdvbkKXdecfeL",
+   "projectId": "5CSGW0YOcTKbAbNeJXrGbd",
+   "subject": "TASK",
+   "taskId": "352pxGdE27gLSCCcPEmYd",
+   "promotionId": null,
+   "episode": 1,
+   "openedAt": "2026-11-23T23:39:12.731Z",
+   "settledAt": "2026-11-23T23:39:12.879Z",
+   "settledAs": "LANDED",
+   "phase": "VERIFY",
+   "round": null,
+   "checks": [],
+   "liveness": null,
+   "blockingReason": null,
+   "currentAttempt": {
+    "jobId": "6OLCQPgRk0repULSlJXUro",
+    "kind": "LAND_PROMOTION",
+    "state": "LANDED",
+    "generation": 1,
+    "phase": "VERIFY",
+    "round": null,
+    "step": null,
+    "claim": 1,
+    "runnerName": "merged-by-pull-request",
+    "sourceSessionId": "5joqOekGx9oFjKBG40g8mU",
+    "targetRef": "refs/heads/main",
+    "startedAt": "2026-11-23T23:39:12.803Z",
+    "heartbeatAt": "2026-11-23T23:39:12.867Z",
+    "outputMovedAt": null,
+    "progressProtocol": null,
+    "check": null,
+    "liveness": null,
+    "blockingReason": null,
+    "timedOut": false,
+    "limitSeconds": null,
+    "retryable": false,
+    "pushBoundaryPassed": false,
+    "sourceSessionPublicId": "5joqOekGx9oFjKBG40g8mU",
+    "jobPublicId": "6OLCQPgRk0repULSlJXUro"
+   },
+   "todos": [],
+   "generations": [
+    {
+     "sessionId": "3QqcFqywzVdvbkKXdecfeL",
+     "episode": 1,
+     "openedAt": "2026-11-23T23:39:12.731Z",
+     "settledAt": "2026-11-23T23:39:12.879Z",
+     "settledAs": "LANDED",
+     "sessionPublicId": "3QqcFqywzVdvbkKXdecfeL"
+    }
+   ],
+   "timeline": {
+    "sections": [
+     {
+      "title": "Merge check \u00b7 1",
+      "jobId": "61FAyebFYPEJqWEpXZ3V2W",
+      "kind": "CHECK_PROMOTION",
+      "generation": 1,
+      "state": "READY",
+      "entries": [
+       {
+        "id": "4kR7YsjwK5pYhHpBiNYQyk",
+        "seq": 45,
+        "kind": "ENQUEUED",
+        "at": "2026-11-23T23:39:12.733Z",
+        "claim": 0,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "kind": "CHECK_PROMOTION",
+         "sourceRef": "refs/heads/orbit/work-a868d211",
+         "targetRef": "refs/heads/main",
+         "generation": 1
+        },
+        "text": "Merge check queued \u00b7 orbit/work-a868d211 \u2192 main",
+        "publicId": "4kR7YsjwK5pYhHpBiNYQyk"
+       },
+       {
+        "id": "3gaNNqDRXSkx7Zzkefurmg",
+        "seq": 47,
+        "kind": "CHECK_STARTED",
+        "at": "2026-11-23T23:39:11.575Z",
+        "claim": 1,
+        "round": null,
+        "check": {
+         "name": "MERGE_CHECK",
+         "index": 1
+        },
+        "phase": "CHECK",
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "name": "MERGE_CHECK",
+         "index": 1,
+         "startedAt": "2026-11-23T23:39:11.575Z",
+         "derivedFromDuration": true
+        },
+        "text": "Merge check started \u00b7 claim 1 \u00b7 merged-by-pull-request",
+        "publicId": "3gaNNqDRXSkx7Zzkefurmg"
+       },
+       {
+        "id": "6QFqUcCisqRECEAVk45ucd",
+        "seq": 46,
+        "kind": "CLAIMED",
+        "at": "2026-11-23T23:39:12.747Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "FETCH",
+        "step": null,
+        "actor": {
+         "type": "RUNNER",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "runnerId": "3hcsflfC1bFgsRd1TqcY0z",
+         "runnerName": "merged-by-pull-request",
+         "previousState": "QUEUED",
+         "claimGeneration": 1,
+         "runnerPublicId": "3hcsflfC1bFgsRd1TqcY0z"
+        },
+        "text": "Claimed by runner merged-by-pull-request \u00b7 claim 1",
+        "publicId": "6QFqUcCisqRECEAVk45ucd"
+       },
+       {
+        "id": "6Zmne9KU6BCECJiUEvNsVn",
+        "seq": 48,
+        "kind": "CHECK_FINISHED",
+        "at": "2026-11-23T23:39:12.775Z",
+        "claim": 1,
+        "round": null,
+        "check": {
+         "name": "MERGE_CHECK",
+         "index": 1
+        },
+        "phase": "CHECK",
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "name": "MERGE_CHECK",
+         "index": 1,
+         "exitCode": 0,
+         "timedOut": false,
+         "durationMs": 1200,
+         "finishedAt": "2026-11-23T23:39:12.775Z",
+         "expectedExitCode": 0
+        },
+        "text": "Merge check passed \u00b7 0m 01s",
+        "publicId": "6Zmne9KU6BCECJiUEvNsVn"
+       },
+       {
+        "id": "A1kYZbkWAPDdnvbUlgGwB",
+        "seq": 49,
+        "kind": "RESULT",
+        "at": "2026-11-23T23:39:12.775Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "CHECK",
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "state": "READY",
+         "errorCode": null,
+         "landedSha": null,
+         "finishedAt": "2026-11-23T23:39:12.775Z",
+         "requestedState": "READY",
+         "targetShaBefore": "aa8c96b9bda52cd91cd3996edf18788f797c9ee0",
+         "sourceFullyApplied": null
+        },
+        "text": "Ready to merge into main",
+        "publicId": "A1kYZbkWAPDdnvbUlgGwB"
+       },
+       {
+        "id": "2v9Zj6vHXmQ0cboOUemF4X",
+        "seq": 50,
+        "kind": "HANDED_TO",
+        "at": "2026-11-23T23:39:12.775Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "CHECK",
+        "step": null,
+        "actor": {
+         "type": "OWNER",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "itemId": "352pxGkXDcz1TIyF9KHOE",
+         "assignee": "OWNER",
+         "itemKind": "PROMOTION_APPROVAL",
+         "itemPublicId": "352pxGkXDcz1TIyF9KHOE"
+        },
+        "text": "Asked the owner to merge into main",
+        "publicId": "2v9Zj6vHXmQ0cboOUemF4X"
+       }
+      ],
+      "trigger": {
+       "at": "2026-11-23T23:39:12.732Z",
+       "sourceRef": "refs/heads/orbit/work-a868d211",
+       "sourceSha": "1355ae83a85e7c25f2db32b95e1fef431bc8ba7d",
+       "sessionId": null,
+       "reason": null,
+       "cause": "CHECK",
+       "by": "ORBIT",
+       "sessionPublicId": null
+      },
+      "jobPublicId": "61FAyebFYPEJqWEpXZ3V2W"
+     },
+     {
+      "title": "Merge to main \u00b7 1",
+      "jobId": "6OLCQPgRk0repULSlJXUro",
+      "kind": "LAND_PROMOTION",
+      "generation": 1,
+      "state": "LANDED",
+      "entries": [
+       {
+        "id": null,
+        "kind": "CONFIRMATION",
+        "at": "2026-11-23T23:39:12.787Z",
+        "claim": 0,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": {
+         "type": "OWNER",
+         "userId": "4fmDa3rQ8sJlUDH1G3Ngxr",
+         "userPublicId": "4fmDa3rQ8sJlUDH1G3Ngxr"
+        },
+        "reason": null,
+        "data": {
+         "promotionId": "7UpXHIaAHPAhD3YnTmnXhh",
+         "confirmedByUserId": "4fmDa3rQ8sJlUDH1G3Ngxr",
+         "confirmedAutomatically": false,
+         "confirmedAt": "2026-11-23T23:39:12.787Z",
+         "promotionPublicId": "7UpXHIaAHPAhD3YnTmnXhh",
+         "confirmedByUserPublicId": "4fmDa3rQ8sJlUDH1G3Ngxr"
+        },
+        "text": "Merge to main confirmed by the owner",
+        "derived": true,
+        "publicId": null
+       },
+       {
+        "id": "7Q8M5v2lwfv6IKPVIEwHHo",
+        "seq": 51,
+        "kind": "ENQUEUED",
+        "at": "2026-11-23T23:39:12.792Z",
+        "claim": 0,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "kind": "LAND_PROMOTION",
+         "sourceRef": "refs/heads/orbit/work-a868d211",
+         "targetRef": "refs/heads/main",
+         "generation": 1
+        },
+        "text": "Queued to merge into main",
+        "publicId": "7Q8M5v2lwfv6IKPVIEwHHo"
+       },
+       {
+        "id": "7c7BffGCyzBurz6AthpmAg",
+        "seq": 52,
+        "kind": "CLAIMED",
+        "at": "2026-11-23T23:39:12.808Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "FETCH",
+        "step": null,
+        "actor": {
+         "type": "RUNNER",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "runnerId": "3hcsflfC1bFgsRd1TqcY0z",
+         "runnerName": "merged-by-pull-request",
+         "previousState": "QUEUED",
+         "claimGeneration": 1,
+         "runnerPublicId": "3hcsflfC1bFgsRd1TqcY0z"
+        },
+        "text": "Claimed by runner merged-by-pull-request \u00b7 claim 1",
+        "publicId": "7c7BffGCyzBurz6AthpmAg"
+       },
+       {
+        "id": "7UHZ0ADYNhdnPzxBncxr10",
+        "seq": 53,
+        "kind": "PULL_REQUEST",
+        "at": "2026-11-23T23:39:12.825Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "PUSH",
+        "step": null,
+        "actor": {
+         "type": "RUNNER",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "step": "PUSHED",
+         "headSha": "18f08c766406ddcb96542ca9e1ffafe790bcf908",
+         "refusal": "GH006: Protected branch update failed for refs/heads/main. Changes must be made through a pull request.",
+         "landingRef": "refs/heads/orbit/land/70cc8b01-09a3-4a7e-a834-63dcd0ca9a19"
+        },
+        "text": "Pushed 18f08c7 for a pull request",
+        "publicId": "7UHZ0ADYNhdnPzxBncxr10"
+       },
+       {
+        "id": "77EA61OLoPQmQGtNWyvQjJ",
+        "seq": 54,
+        "kind": "PULL_REQUEST",
+        "at": "2026-11-23T23:39:12.838Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": {
+         "type": "PLATFORM",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "url": "https://github.com/owner/merged-by-pull-request/pull/104",
+         "step": "OPENED",
+         "number": 104
+        },
+        "text": "Opened pull request #104",
+        "publicId": "77EA61OLoPQmQGtNWyvQjJ"
+       },
+       {
+        "id": "7XENdnpj3ICEIDAvjxV98c",
+        "seq": 55,
+        "kind": "RESULT",
+        "at": "2026-11-23T23:39:12.867Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "VERIFY",
+        "step": null,
+        "actor": {
+         "type": "PLATFORM",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "state": "LANDED",
+         "errorCode": null,
+         "landedSha": "69601b43f0c0eddfee9f80cbd12e52d79358a4d7",
+         "finishedAt": "2026-11-23T23:39:12.867Z",
+         "pullRequest": {
+          "url": "https://github.com/owner/merged-by-pull-request/pull/104",
+          "number": 104
+         },
+         "requestedState": "LANDED",
+         "targetShaBefore": "aa8c96b9bda52cd91cd3996edf18788f797c9ee0",
+         "sourceFullyApplied": null
+        },
+        "text": "Landed on main \u00b7 69601b4",
+        "publicId": "7XENdnpj3ICEIDAvjxV98c"
+       },
+       {
+        "id": "6Qpe9IvvxBxfLHlSMJ2WkH",
+        "seq": 56,
+        "kind": "PULL_REQUEST",
+        "at": "2026-11-23T23:39:12.867Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "VERIFY",
+        "step": null,
+        "actor": {
+         "type": "PLATFORM",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "url": "https://github.com/owner/merged-by-pull-request/pull/104",
+         "step": "MERGED",
+         "number": 104,
+         "mergedBy": "orbitd-cloud[bot]",
+         "landedSha": "69601b43f0c0eddfee9f80cbd12e52d79358a4d7",
+         "mergeMethod": "rebase"
+        },
+        "text": "Merged pull request #104 (orbitd-cloud[bot])",
+        "publicId": "6Qpe9IvvxBxfLHlSMJ2WkH"
+       }
+      ],
+      "trigger": {
+       "at": "2026-11-23T23:39:12.791Z",
+       "sourceRef": "refs/heads/orbit/work-a868d211",
+       "sourceSha": "1355ae83a85e7c25f2db32b95e1fef431bc8ba7d",
+       "sessionId": null,
+       "reason": null,
+       "cause": "CONFIRMED",
+       "by": "OWNER",
+       "sessionPublicId": null
+      },
+      "jobPublicId": "6OLCQPgRk0repULSlJXUro"
+     }
+    ],
+    "facts": [],
+    "truncated": false
+   },
+   "pullRequest": {
+    "number": 104,
+    "url": "https://github.com/owner/merged-by-pull-request/pull/104",
+    "state": "MERGED",
+    "condition": null,
+    "checks": {
+     "passed": 6,
+     "required": 6,
+     "failed": []
+    },
+    "mergeMethod": "rebase",
+    "mergedSha": "69601b43f0c0eddfee9f80cbd12e52d79358a4d7",
+    "workspaceId": "1XrLQJDt2z4WqdmfbCRYFO",
+    "refusal": {
+     "via": "PULL_REQUEST",
+     "message": "GH006: Protected branch update failed for refs/heads/main. Changes must be made through a pull request."
+    },
+    "workspacePublicId": "1XrLQJDt2z4WqdmfbCRYFO",
+    "agentId": "1XrLQJDt2z4WqdmfbCRYFO"
+   },
+   "sessionPublicId": "3QqcFqywzVdvbkKXdecfeL",
+   "promotionPublicId": null,
+   "taskPublicId": "352pxGdE27gLSCCcPEmYd",
+   "projectPublicId": "5CSGW0YOcTKbAbNeJXrGbd"
+  },
+  "closed": {
+   "sessionId": "DYgIiQvdhehSh9EvjsFeg",
+   "projectId": "1NMRcheG8iXp7f67WhgjqG",
+   "subject": "TASK",
+   "taskId": "352pxGyBKCHqLUdSNpumG",
+   "promotionId": null,
+   "episode": 1,
+   "openedAt": "2026-11-23T23:39:12.938Z",
+   "settledAt": null,
+   "settledAs": null,
+   "phase": "PUSH",
+   "round": null,
+   "checks": [],
+   "liveness": null,
+   "blockingReason": null,
+   "currentAttempt": {
+    "jobId": "4gsGFhcAn6Fmsv0HSpp4w6",
+    "kind": "LAND_PROMOTION",
+    "state": "ERROR",
+    "generation": 1,
+    "phase": "PUSH",
+    "round": null,
+    "step": null,
+    "claim": 1,
+    "runnerName": "closed-on-github-without-merging",
+    "sourceSessionId": "E0MVmda5jiBDAzbBPw8bJ",
+    "targetRef": "refs/heads/main",
+    "startedAt": "2026-11-23T23:39:13.000Z",
+    "heartbeatAt": "2026-11-23T23:39:13.046Z",
+    "outputMovedAt": null,
+    "progressProtocol": null,
+    "check": null,
+    "liveness": null,
+    "blockingReason": null,
+    "timedOut": false,
+    "limitSeconds": null,
+    "retryable": false,
+    "pushBoundaryPassed": false,
+    "sourceSessionPublicId": "E0MVmda5jiBDAzbBPw8bJ",
+    "jobPublicId": "4gsGFhcAn6Fmsv0HSpp4w6"
+   },
+   "todos": [
+    {
+     "id": "352pxHBFLbvQIuCrI9gXe",
+     "kind": "INTEGRATION_ERROR",
+     "state": "OPEN",
+     "title": "Integration error: merging \u201cClosed on GitHub without merging\u201d into main",
+     "waitingSince": "2026-11-23T23:39:13.051Z",
+     "workSessionId": null,
+     "publicId": "352pxHBFLbvQIuCrI9gXe",
+     "workSessionPublicId": null
+    }
+   ],
+   "generations": [
+    {
+     "sessionId": "DYgIiQvdhehSh9EvjsFeg",
+     "episode": 1,
+     "openedAt": "2026-11-23T23:39:12.938Z",
+     "settledAt": null,
+     "settledAs": null,
+     "sessionPublicId": "DYgIiQvdhehSh9EvjsFeg"
+    }
+   ],
+   "timeline": {
+    "sections": [
+     {
+      "title": "Merge check \u00b7 1",
+      "jobId": "760bj1G6qi8DveDzPmmHHD",
+      "kind": "CHECK_PROMOTION",
+      "generation": 1,
+      "state": "READY",
+      "entries": [
+       {
+        "id": "5WmKpbjaOWY3iNJPwQaw9o",
+        "seq": 57,
+        "kind": "ENQUEUED",
+        "at": "2026-11-23T23:39:12.939Z",
+        "claim": 0,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "kind": "CHECK_PROMOTION",
+         "sourceRef": "refs/heads/orbit/work-fa5dfd68",
+         "targetRef": "refs/heads/main",
+         "generation": 1
+        },
+        "text": "Merge check queued \u00b7 orbit/work-fa5dfd68 \u2192 main",
+        "publicId": "5WmKpbjaOWY3iNJPwQaw9o"
+       },
+       {
+        "id": "1pFeJqUelgm5NLb7siSdgP",
+        "seq": 59,
+        "kind": "CHECK_STARTED",
+        "at": "2026-11-23T23:39:11.779Z",
+        "claim": 1,
+        "round": null,
+        "check": {
+         "name": "MERGE_CHECK",
+         "index": 1
+        },
+        "phase": "CHECK",
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "name": "MERGE_CHECK",
+         "index": 1,
+         "startedAt": "2026-11-23T23:39:11.779Z",
+         "derivedFromDuration": true
+        },
+        "text": "Merge check started \u00b7 claim 1 \u00b7 closed-on-github-without-merging",
+        "publicId": "1pFeJqUelgm5NLb7siSdgP"
+       },
+       {
+        "id": "5lcdAcUT3td8BPuVuJoJUj",
+        "seq": 58,
+        "kind": "CLAIMED",
+        "at": "2026-11-23T23:39:12.952Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "FETCH",
+        "step": null,
+        "actor": {
+         "type": "RUNNER",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "runnerId": "5wRWsOL9zagimyzM08MPHU",
+         "runnerName": "closed-on-github-without-merging",
+         "previousState": "QUEUED",
+         "claimGeneration": 1,
+         "runnerPublicId": "5wRWsOL9zagimyzM08MPHU"
+        },
+        "text": "Claimed by runner closed-on-github-without-merging \u00b7 claim 1",
+        "publicId": "5lcdAcUT3td8BPuVuJoJUj"
+       },
+       {
+        "id": "6Hi2a3tpGuVmwQIppEKkaD",
+        "seq": 60,
+        "kind": "CHECK_FINISHED",
+        "at": "2026-11-23T23:39:12.979Z",
+        "claim": 1,
+        "round": null,
+        "check": {
+         "name": "MERGE_CHECK",
+         "index": 1
+        },
+        "phase": "CHECK",
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "name": "MERGE_CHECK",
+         "index": 1,
+         "exitCode": 0,
+         "timedOut": false,
+         "durationMs": 1200,
+         "finishedAt": "2026-11-23T23:39:12.979Z",
+         "expectedExitCode": 0
+        },
+        "text": "Merge check passed \u00b7 0m 01s",
+        "publicId": "6Hi2a3tpGuVmwQIppEKkaD"
+       },
+       {
+        "id": "1iDLY1heLXyM8pzkxYN5lY",
+        "seq": 61,
+        "kind": "RESULT",
+        "at": "2026-11-23T23:39:12.979Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "CHECK",
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "state": "READY",
+         "errorCode": null,
+         "landedSha": null,
+         "finishedAt": "2026-11-23T23:39:12.979Z",
+         "requestedState": "READY",
+         "targetShaBefore": "aa8c96b9bda52cd91cd3996edf18788f797c9ee0",
+         "sourceFullyApplied": null
+        },
+        "text": "Ready to merge into main",
+        "publicId": "1iDLY1heLXyM8pzkxYN5lY"
+       },
+       {
+        "id": "7Fs7svPhps7tBzZRnmgxNv",
+        "seq": 62,
+        "kind": "HANDED_TO",
+        "at": "2026-11-23T23:39:12.979Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "CHECK",
+        "step": null,
+        "actor": {
+         "type": "OWNER",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "itemId": "352pxH4QAUEpbx0GapfKv",
+         "assignee": "OWNER",
+         "itemKind": "PROMOTION_APPROVAL",
+         "itemPublicId": "352pxH4QAUEpbx0GapfKv"
+        },
+        "text": "Asked the owner to merge into main",
+        "publicId": "7Fs7svPhps7tBzZRnmgxNv"
+       }
+      ],
+      "trigger": {
+       "at": "2026-11-23T23:39:12.939Z",
+       "sourceRef": "refs/heads/orbit/work-fa5dfd68",
+       "sourceSha": "1355ae83a85e7c25f2db32b95e1fef431bc8ba7d",
+       "sessionId": null,
+       "reason": null,
+       "cause": "CHECK",
+       "by": "ORBIT",
+       "sessionPublicId": null
+      },
+      "jobPublicId": "760bj1G6qi8DveDzPmmHHD"
+     },
+     {
+      "title": "Merge to main \u00b7 1",
+      "jobId": "4gsGFhcAn6Fmsv0HSpp4w6",
+      "kind": "LAND_PROMOTION",
+      "generation": 1,
+      "state": "ERROR",
+      "entries": [
+       {
+        "id": null,
+        "kind": "CONFIRMATION",
+        "at": "2026-11-23T23:39:12.989Z",
+        "claim": 0,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": {
+         "type": "OWNER",
+         "userId": "4fmDa3rQ8sJlUDH1G3Ngxr",
+         "userPublicId": "4fmDa3rQ8sJlUDH1G3Ngxr"
+        },
+        "reason": null,
+        "data": {
+         "promotionId": "5Nzt4BsQyvL6J4S2G8OlXy",
+         "confirmedByUserId": "4fmDa3rQ8sJlUDH1G3Ngxr",
+         "confirmedAutomatically": false,
+         "confirmedAt": "2026-11-23T23:39:12.989Z",
+         "promotionPublicId": "5Nzt4BsQyvL6J4S2G8OlXy",
+         "confirmedByUserPublicId": "4fmDa3rQ8sJlUDH1G3Ngxr"
+        },
+        "text": "Merge to main confirmed by the owner",
+        "derived": true,
+        "publicId": null
+       },
+       {
+        "id": "1owoNdRkwHcbJyhV0j0A8S",
+        "seq": 63,
+        "kind": "ENQUEUED",
+        "at": "2026-11-23T23:39:12.991Z",
+        "claim": 0,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "kind": "LAND_PROMOTION",
+         "sourceRef": "refs/heads/orbit/work-fa5dfd68",
+         "targetRef": "refs/heads/main",
+         "generation": 1
+        },
+        "text": "Queued to merge into main",
+        "publicId": "1owoNdRkwHcbJyhV0j0A8S"
+       },
+       {
+        "id": "5ZzO6Y1Y6uSSEUE8AneTkN",
+        "seq": 64,
+        "kind": "CLAIMED",
+        "at": "2026-11-23T23:39:13.005Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "FETCH",
+        "step": null,
+        "actor": {
+         "type": "RUNNER",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "runnerId": "5wRWsOL9zagimyzM08MPHU",
+         "runnerName": "closed-on-github-without-merging",
+         "previousState": "QUEUED",
+         "claimGeneration": 1,
+         "runnerPublicId": "5wRWsOL9zagimyzM08MPHU"
+        },
+        "text": "Claimed by runner closed-on-github-without-merging \u00b7 claim 1",
+        "publicId": "5ZzO6Y1Y6uSSEUE8AneTkN"
+       },
+       {
+        "id": "3hYzwJTMex6jVH5dEE6j7d",
+        "seq": 65,
+        "kind": "PULL_REQUEST",
+        "at": "2026-11-23T23:39:13.020Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "PUSH",
+        "step": null,
+        "actor": {
+         "type": "RUNNER",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "step": "PUSHED",
+         "headSha": "5a4a35a2eaa5a8137a00606b4540ae8eef8d36a4",
+         "refusal": "GH006: Protected branch update failed for refs/heads/main. Changes must be made through a pull request.",
+         "landingRef": "refs/heads/orbit/land/072f8fee-415c-4dde-9f6c-7051d1ff9116"
+        },
+        "text": "Pushed 5a4a35a for a pull request",
+        "publicId": "3hYzwJTMex6jVH5dEE6j7d"
+       },
+       {
+        "id": "1Wd6JIu8s1CriiOJcWDEa",
+        "seq": 66,
+        "kind": "PULL_REQUEST",
+        "at": "2026-11-23T23:39:13.033Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": {
+         "type": "PLATFORM",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "url": "https://github.com/owner/closed-on-github-without-merging/pull/105",
+         "step": "OPENED",
+         "number": 105
+        },
+        "text": "Opened pull request #105",
+        "publicId": "1Wd6JIu8s1CriiOJcWDEa"
+       },
+       {
+        "id": "3bmMvmdCXrjxSIozLpMPun",
+        "seq": 67,
+        "kind": "RESULT",
+        "at": "2026-11-23T23:39:13.046Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "PUSH",
+        "step": null,
+        "actor": {
+         "type": "PLATFORM",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "state": "ERROR",
+         "errorCode": "PULL_REQUEST_CLOSED",
+         "landedSha": null,
+         "finishedAt": "2026-11-23T23:39:13.046Z",
+         "pullRequest": {
+          "url": "https://github.com/owner/closed-on-github-without-merging/pull/105",
+          "number": 105
+         },
+         "requestedState": "ERROR",
+         "targetShaBefore": "aa8c96b9bda52cd91cd3996edf18788f797c9ee0",
+         "sourceFullyApplied": null
+        },
+        "text": "Stopped with an error \u00b7 PULL_REQUEST_CLOSED",
+        "publicId": "3bmMvmdCXrjxSIozLpMPun"
+       },
+       {
+        "id": "1z3Ats511GhUe6U467IDGp",
+        "seq": 68,
+        "kind": "HANDED_TO",
+        "at": "2026-11-23T23:39:13.046Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "PUSH",
+        "step": null,
+        "actor": {
+         "type": "OWNER",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "itemId": "352pxHBFLbvQIuCrI9gXe",
+         "assignee": "OWNER",
+         "itemKind": "INTEGRATION_ERROR",
+         "itemPublicId": "352pxHBFLbvQIuCrI9gXe"
+        },
+        "text": "Asked the owner to fix it",
+        "publicId": "1z3Ats511GhUe6U467IDGp"
+       },
+       {
+        "id": "3X7ooqifgUQd2kPKUcmpkI",
+        "seq": 69,
+        "kind": "PULL_REQUEST",
+        "at": "2026-11-23T23:39:13.056Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": {
+         "type": "PLATFORM",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "step": "CLOSED",
+         "number": 105,
+         "closedBy": "sam"
+        },
+        "text": "pull request #105 was closed on GitHub",
+        "publicId": "3X7ooqifgUQd2kPKUcmpkI"
+       }
+      ],
+      "trigger": {
+       "at": "2026-11-23T23:39:12.991Z",
+       "sourceRef": "refs/heads/orbit/work-fa5dfd68",
+       "sourceSha": "1355ae83a85e7c25f2db32b95e1fef431bc8ba7d",
+       "sessionId": null,
+       "reason": null,
+       "cause": "CONFIRMED",
+       "by": "OWNER",
+       "sessionPublicId": null
+      },
+      "jobPublicId": "4gsGFhcAn6Fmsv0HSpp4w6"
+     }
+    ],
+    "facts": [],
+    "truncated": false
+   },
+   "pullRequest": {
+    "number": 105,
+    "url": "https://github.com/owner/closed-on-github-without-merging/pull/105",
+    "state": "CLOSED",
+    "condition": null,
+    "checks": {
+     "passed": 0,
+     "required": 1,
+     "failed": []
+    },
+    "mergeMethod": null,
+    "mergedSha": null,
+    "workspaceId": "17VR0duraJXMGvwMD5Ms19",
+    "refusal": {
+     "via": "PULL_REQUEST",
+     "message": "GH006: Protected branch update failed for refs/heads/main. Changes must be made through a pull request."
+    },
+    "workspacePublicId": "17VR0duraJXMGvwMD5Ms19",
+    "agentId": "17VR0duraJXMGvwMD5Ms19"
+   },
+   "sessionPublicId": "DYgIiQvdhehSh9EvjsFeg",
+   "promotionPublicId": null,
+   "taskPublicId": "352pxGyBKCHqLUdSNpumG",
+   "projectPublicId": "1NMRcheG8iXp7f67WhgjqG"
+  },
+  "f": {
+   "sessionId": "4pTXvhCMDbQOtYevW9BcQY",
+   "projectId": "3Lk5ro4QTHSmcSWe5DQlt5",
+   "subject": "TASK",
+   "taskId": "352pxHDaFBwO0NI6VF81J",
+   "promotionId": null,
+   "episode": 1,
+   "openedAt": "2026-11-23T23:39:13.098Z",
+   "settledAt": null,
+   "settledAs": null,
+   "phase": "PUSH",
+   "round": null,
+   "checks": [],
+   "liveness": null,
+   "blockingReason": {
+    "code": "WAITING_FOR_REVIEW",
+    "summary": "Waiting for review on pull request #106"
+   },
+   "currentAttempt": {
+    "jobId": "1sRX20JFfYIciwwlkkDniU",
+    "kind": "LAND_PROMOTION",
+    "state": "PULL_REQUEST",
+    "generation": 1,
+    "phase": "PUSH",
+    "round": null,
+    "step": null,
+    "claim": 1,
+    "runnerName": "push-refused",
+    "sourceSessionId": "6yUNEJV5dhEPfSpz7Y8kcl",
+    "targetRef": "refs/heads/main",
+    "startedAt": "2026-11-23T23:39:13.151Z",
+    "heartbeatAt": "2026-11-23T23:39:13.174Z",
+    "outputMovedAt": null,
+    "progressProtocol": "v2",
+    "check": null,
+    "liveness": null,
+    "blockingReason": {
+     "code": "WAITING_FOR_REVIEW",
+     "summary": "Waiting for review on pull request #106"
+    },
+    "timedOut": false,
+    "limitSeconds": null,
+    "retryable": false,
+    "pushBoundaryPassed": false,
+    "sourceSessionPublicId": "6yUNEJV5dhEPfSpz7Y8kcl",
+    "jobPublicId": "1sRX20JFfYIciwwlkkDniU"
+   },
+   "todos": [],
+   "generations": [
+    {
+     "sessionId": "4pTXvhCMDbQOtYevW9BcQY",
+     "episode": 1,
+     "openedAt": "2026-11-23T23:39:13.098Z",
+     "settledAt": null,
+     "settledAs": null,
+     "sessionPublicId": "4pTXvhCMDbQOtYevW9BcQY"
+    }
+   ],
+   "timeline": {
+    "sections": [
+     {
+      "title": "Merge check \u00b7 1",
+      "jobId": "5nA2cveJ8343StuxpRC8We",
+      "kind": "CHECK_PROMOTION",
+      "generation": 1,
+      "state": "READY",
+      "entries": [
+       {
+        "id": "1hnCmDKuEQKe9BBfcGNoMv",
+        "seq": 70,
+        "kind": "ENQUEUED",
+        "at": "2026-11-23T23:39:13.099Z",
+        "claim": 0,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "kind": "CHECK_PROMOTION",
+         "sourceRef": "refs/heads/orbit/work-0abeb73c",
+         "targetRef": "refs/heads/main",
+         "generation": 1
+        },
+        "text": "Merge check queued \u00b7 orbit/work-0abeb73c \u2192 main",
+        "publicId": "1hnCmDKuEQKe9BBfcGNoMv"
+       },
+       {
+        "id": "ItHDPqTCH3QgpqdR4i7dx",
+        "seq": 72,
+        "kind": "CHECK_STARTED",
+        "at": "2026-11-23T23:39:11.931Z",
+        "claim": 1,
+        "round": null,
+        "check": {
+         "name": "MERGE_CHECK",
+         "index": 1
+        },
+        "phase": "CHECK",
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "name": "MERGE_CHECK",
+         "index": 1,
+         "startedAt": "2026-11-23T23:39:11.931Z",
+         "derivedFromDuration": true
+        },
+        "text": "Merge check started \u00b7 claim 1 \u00b7 push-refused",
+        "publicId": "ItHDPqTCH3QgpqdR4i7dx"
+       },
+       {
+        "id": "4v5YoLYJ8iAZ5XUWDuwa3y",
+        "seq": 71,
+        "kind": "CLAIMED",
+        "at": "2026-11-23T23:39:13.112Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "FETCH",
+        "step": null,
+        "actor": {
+         "type": "RUNNER",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "runnerId": "5gV7vfbqEyZg9lq8vPZfHW",
+         "runnerName": "push-refused",
+         "previousState": "QUEUED",
+         "claimGeneration": 1,
+         "runnerPublicId": "5gV7vfbqEyZg9lq8vPZfHW"
+        },
+        "text": "Claimed by runner push-refused \u00b7 claim 1",
+        "publicId": "4v5YoLYJ8iAZ5XUWDuwa3y"
+       },
+       {
+        "id": "1UWLhjeZ9PV467mWY3erkP",
+        "seq": 73,
+        "kind": "CHECK_FINISHED",
+        "at": "2026-11-23T23:39:13.131Z",
+        "claim": 1,
+        "round": null,
+        "check": {
+         "name": "MERGE_CHECK",
+         "index": 1
+        },
+        "phase": "CHECK",
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "name": "MERGE_CHECK",
+         "index": 1,
+         "exitCode": 0,
+         "timedOut": false,
+         "durationMs": 1200,
+         "finishedAt": "2026-11-23T23:39:13.131Z",
+         "expectedExitCode": 0
+        },
+        "text": "Merge check passed \u00b7 0m 01s",
+        "publicId": "1UWLhjeZ9PV467mWY3erkP"
+       },
+       {
+        "id": "4pAflOfmWGFYtPxvvGvYin",
+        "seq": 74,
+        "kind": "RESULT",
+        "at": "2026-11-23T23:39:13.131Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "CHECK",
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "state": "READY",
+         "errorCode": null,
+         "landedSha": null,
+         "finishedAt": "2026-11-23T23:39:13.131Z",
+         "requestedState": "READY",
+         "targetShaBefore": "aa8c96b9bda52cd91cd3996edf18788f797c9ee0",
+         "sourceFullyApplied": null
+        },
+        "text": "Ready to merge into main",
+        "publicId": "4pAflOfmWGFYtPxvvGvYin"
+       },
+       {
+        "id": "4bziI1dggxQn6L40wOYjxu",
+        "seq": 75,
+        "kind": "HANDED_TO",
+        "at": "2026-11-23T23:39:13.131Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "CHECK",
+        "step": null,
+        "actor": {
+         "type": "OWNER",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "itemId": "352pxHJEmfUNckeMuP6tE",
+         "assignee": "OWNER",
+         "itemKind": "PROMOTION_APPROVAL",
+         "itemPublicId": "352pxHJEmfUNckeMuP6tE"
+        },
+        "text": "Asked the owner to merge into main",
+        "publicId": "4bziI1dggxQn6L40wOYjxu"
+       }
+      ],
+      "trigger": {
+       "at": "2026-11-23T23:39:13.099Z",
+       "sourceRef": "refs/heads/orbit/work-0abeb73c",
+       "sourceSha": "1355ae83a85e7c25f2db32b95e1fef431bc8ba7d",
+       "sessionId": null,
+       "reason": null,
+       "cause": "CHECK",
+       "by": "ORBIT",
+       "sessionPublicId": null
+      },
+      "jobPublicId": "5nA2cveJ8343StuxpRC8We"
+     },
+     {
+      "title": "Merge to main \u00b7 1",
+      "jobId": "1sRX20JFfYIciwwlkkDniU",
+      "kind": "LAND_PROMOTION",
+      "generation": 1,
+      "state": "PULL_REQUEST",
+      "entries": [
+       {
+        "id": null,
+        "kind": "CONFIRMATION",
+        "at": "2026-11-23T23:39:13.140Z",
+        "claim": 0,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": {
+         "type": "OWNER",
+         "userId": "4fmDa3rQ8sJlUDH1G3Ngxr",
+         "userPublicId": "4fmDa3rQ8sJlUDH1G3Ngxr"
+        },
+        "reason": null,
+        "data": {
+         "promotionId": "3fgbmZ8bbePxd2BgZYrhnZ",
+         "confirmedByUserId": "4fmDa3rQ8sJlUDH1G3Ngxr",
+         "confirmedAutomatically": false,
+         "confirmedAt": "2026-11-23T23:39:13.140Z",
+         "promotionPublicId": "3fgbmZ8bbePxd2BgZYrhnZ",
+         "confirmedByUserPublicId": "4fmDa3rQ8sJlUDH1G3Ngxr"
+        },
+        "text": "Merge to main confirmed by the owner",
+        "derived": true,
+        "publicId": null
+       },
+       {
+        "id": "2JrCqbtYatwtDZKUDgiF2v",
+        "seq": 76,
+        "kind": "ENQUEUED",
+        "at": "2026-11-23T23:39:13.142Z",
+        "claim": 0,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": null,
+        "reason": null,
+        "data": {
+         "kind": "LAND_PROMOTION",
+         "sourceRef": "refs/heads/orbit/work-0abeb73c",
+         "targetRef": "refs/heads/main",
+         "generation": 1
+        },
+        "text": "Queued to merge into main",
+        "publicId": "2JrCqbtYatwtDZKUDgiF2v"
+       },
+       {
+        "id": "7bQgrqfIUvLl0YReMAzAZc",
+        "seq": 77,
+        "kind": "CLAIMED",
+        "at": "2026-11-23T23:39:13.157Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "FETCH",
+        "step": null,
+        "actor": {
+         "type": "RUNNER",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "runnerId": "5gV7vfbqEyZg9lq8vPZfHW",
+         "runnerName": "push-refused",
+         "previousState": "QUEUED",
+         "claimGeneration": 1,
+         "runnerPublicId": "5gV7vfbqEyZg9lq8vPZfHW"
+        },
+        "text": "Claimed by runner push-refused \u00b7 claim 1",
+        "publicId": "7bQgrqfIUvLl0YReMAzAZc"
+       },
+       {
+        "id": "3ya4ajjGPpGOk0JMWUQuRH",
+        "seq": 78,
+        "kind": "PULL_REQUEST",
+        "at": "2026-11-23T23:39:13.176Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": "PUSH",
+        "step": null,
+        "actor": {
+         "type": "RUNNER",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "step": "PUSHED",
+         "headSha": "4238c6948cb03266bbe3e6e3818314556037a640",
+         "refusal": "GH006: Protected branch update failed for refs/heads/main. Changes must be made through a pull request.",
+         "landingRef": "refs/heads/orbit/land/9eb517bc-68ef-4258-8662-487de917f47e"
+        },
+        "text": "Pushed 4238c69 for a pull request",
+        "publicId": "3ya4ajjGPpGOk0JMWUQuRH"
+       },
+       {
+        "id": "1EmXW0QITZgBSem2ylrcDo",
+        "seq": 79,
+        "kind": "PULL_REQUEST",
+        "at": "2026-11-23T23:39:13.187Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": {
+         "type": "PLATFORM",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "url": "https://github.com/owner/push-refused/pull/106",
+         "step": "OPENED",
+         "number": 106
+        },
+        "text": "Opened pull request #106",
+        "publicId": "1EmXW0QITZgBSem2ylrcDo"
+       },
+       {
+        "id": "ToQJV4j1sSTv0eQkvuLH0",
+        "seq": 80,
+        "kind": "PULL_REQUEST",
+        "at": "2026-11-23T23:39:13.194Z",
+        "claim": 1,
+        "round": null,
+        "check": null,
+        "phase": null,
+        "step": null,
+        "actor": {
+         "type": "PLATFORM",
+         "sessionId": null,
+         "userId": null,
+         "userPublicId": null,
+         "sessionPublicId": null
+        },
+        "reason": null,
+        "data": {
+         "url": "https://github.com/owner/push-refused/pull/106",
+         "step": "WAITING_FOR_REVIEW",
+         "number": 106
+        },
+        "text": "Waiting for review on pull request #106",
+        "publicId": "ToQJV4j1sSTv0eQkvuLH0"
+       }
+      ],
+      "trigger": {
+       "at": "2026-11-23T23:39:13.141Z",
+       "sourceRef": "refs/heads/orbit/work-0abeb73c",
+       "sourceSha": "1355ae83a85e7c25f2db32b95e1fef431bc8ba7d",
+       "sessionId": null,
+       "reason": null,
+       "cause": "CONFIRMED",
+       "by": "OWNER",
+       "sessionPublicId": null
+      },
+      "jobPublicId": "1sRX20JFfYIciwwlkkDniU"
+     }
+    ],
+    "facts": [],
+    "truncated": false
+   },
+   "pullRequest": {
+    "number": 106,
+    "url": "https://github.com/owner/push-refused/pull/106",
+    "state": "OPEN",
+    "condition": "REVIEW_REQUIRED",
+    "checks": {
+     "passed": 6,
+     "required": 6,
+     "failed": []
+    },
+    "mergeMethod": null,
+    "mergedSha": null,
+    "workspaceId": "3XfGhudsdt542lsfmXuK8y",
+    "refusal": {
+     "via": "PUSH_AS_ME",
+     "message": "GH006: Protected branch update failed for refs/heads/main. Changes must be made through a pull request."
+    },
+    "workspacePublicId": "3XfGhudsdt542lsfmXuK8y",
+    "agentId": "3XfGhudsdt542lsfmXuK8y"
+   },
+   "sessionPublicId": "4pTXvhCMDbQOtYevW9BcQY",
+   "promotionPublicId": null,
+   "taskPublicId": "352pxHDaFBwO0NI6VF81J",
+   "projectPublicId": "3Lk5ro4QTHSmcSWe5DQlt5"
+  }
+ }
+}

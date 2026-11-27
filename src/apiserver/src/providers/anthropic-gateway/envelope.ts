@@ -32,3 +32,11 @@ export function decodeReasoningSignature(signature: unknown): ReasoningEnvelope 
     return null;
   }
 }
+
+/**
+ * The signature of a `thinking` block the Chat Completions path wrote (design §10.3): the provider streamed its
+ * reasoning as plain text (`reasoning_content`), which the block's `thinking` already holds whole, so the
+ * signature only says the block is ours. Sent back, that text goes out again as the assistant message's
+ * `reasoning_content`, which thinking models such as Kimi's need to carry a tool call's reasoning to its result.
+ */
+export const CHAT_REASONING_SIGNATURE = 'orbitcc1';

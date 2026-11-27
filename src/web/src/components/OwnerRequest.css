@@ -380,3 +380,35 @@
   background: var(--warning-bg);
   color: var(--warning-solid);
 }
+
+/* CHANGE: the setting block (docs/mocks/owner-request-change, board 1). */
+.owner-request-change {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.owner-request-change-setting,
+.owner-request-change-was,
+.owner-request-change-effect {
+  margin: 0;
+  color: var(--text-2);
+}
+.owner-request-change-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.owner-request-change-live {
+  color: var(--text-2);
+  font-size: 22px;
+}
+.owner-request-change-input {
+  width: 84px;
+}
+.owner-request-change-running {
+  margin-left: auto;
+  color: var(--text-2);
+}

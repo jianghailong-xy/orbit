@@ -88,7 +88,7 @@ func TestAcceptanceTimeoutDeclaredBudgetOutlivesTheDefault(t *testing.T) {
 	}
 	output, exitCode := runShellTurn(
 		context.Background(), t.TempDir(), resp.Content,
-		func(string, map[string]interface{}) {}, resp.TurnID, nil, budget,
+		func(string, map[string]interface{}) {}, resp.TurnID, nil, budget, "",
 	)
 	// The command outlives the default and fits the declaration, which under the old single
 	// hard-coded ceiling was not a state a command could be in.

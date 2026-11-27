@@ -1,0 +1,215 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<!-- DESIGN MOCK (2026-11-24). An agent's directory sync drawn in the conversation, beside the Documents tray
+     (docs/drive-directory-sync-design.md S4; docs/mocks/drive-sync-tray). Same family as the transfer card of
+     docs/mocks/agent-drive-transfer. Names, sizes and times are demo data.
+     Render: node docs/mocks/drive/render.mjs $PWD/docs/mocks/drive-sync-card/board.html $PWD/docs/mocks/drive-sync-card/board.png -->
+<title>Documents sync card in the conversation</title>
+<style>
+body{margin:0;background:#eef0f4;font-family:-apple-system,BlinkMacSystemFont,Inter,'PingFang SC','Noto Sans SC','WenQuanYi Zen Hei',sans-serif}
+.board{width:2200px;padding:40px 48px 56px;background:#eef0f4;color:#1d2330}
+h1{font-size:30px;margin:0 0 6px} .sub{font-size:15px;color:#5b6475;margin:0 0 28px;line-height:1.6;max-width:1500px}
+h2{font-size:20px;margin:34px 0 14px;padding-top:18px;border-top:1px solid #d5d9e2}
+.row{display:flex;gap:36px;align-items:flex-start;flex-wrap:wrap}
+.fr{margin:0} figcaption{font-size:14px;color:#3a4252;margin:0 0 8px;line-height:1.5;max-width:660px}
+figcaption b{color:#c0392b} figcaption em{font-style:normal;color:#1a7f37;font-weight:600}
+.conv{background:#fff;border-radius:12px;padding:14px 18px;box-shadow:0 1px 3px rgba(0,0,0,.08);font-size:14px;color:#1d2330}
+.conv.dark{background:#1c1d21;color:#e6e7ea}
+.say{font-size:14.5px;line-height:1.7;margin:6px 0}
+.say code{font-family:'JetBrains Mono',monospace;font-size:12.5px;background:#f2f3f5;border:1px solid #e3e6ec;border-radius:4px;padding:1px 5px}
+.steps{font-size:13px;color:#8a909c;margin:8px 0}
+.mdlist{margin:4px 0 0;padding-left:20px;font-size:14.5px;line-height:2}
+.mdlist li::marker{color:#9aa0aa}
+.mdlist li.dim::marker{color:#d6d9df}
+table{border-collapse:collapse;font-size:13.5px;background:#fff;border-radius:10px;overflow:hidden}
+td,th{border-bottom:1px solid #e3e6ec;padding:8px 12px;text-align:left;vertical-align:top;line-height:1.55}
+th{background:#f6f7f9;font-weight:600} code{font-family:'JetBrains Mono',monospace;font-size:12.5px}
+.ask{background:#fff7e6;border:1px solid #f0c36d;border-radius:10px;padding:14px 18px;font-size:14px;line-height:1.7;max-width:1100px}
+
+/* ---- proposed transfer card (mock-only classes; bar/row look borrowed from .files-tray) ---- */
+.xfer{border:1px solid #e3e6ec;border-radius:10px;background:#fff;font-size:13px;margin:8px 0;overflow:hidden}
+.xfer-head{display:flex;align-items:center;gap:8px;padding:10px 14px 0}
+.xfer-icon{width:22px;height:22px;border-radius:6px;background:#eef2ff;color:#4f5bd5;display:grid;place-items:center;font-size:13px;font-weight:700;flex:none}
+.xfer-icon.down{background:#eaf6ef;color:#1a7f37}
+.xfer-icon.ok{background:#eaf6ef;color:#1a7f37}
+.xfer-icon.bad{background:#fdecec;color:#c0392b}
+.xfer-title{font-weight:600;color:#1d2330}
+.xfer-dest{font-family:'JetBrains Mono',monospace;font-size:12px;color:#4f5bd5;background:#f4f5ff;border-radius:4px;padding:1px 6px}
+.xfer-act{margin-left:auto;display:flex;gap:12px}
+.xfer-act a{color:#4f5bd5;text-decoration:none;font-size:12.5px;cursor:pointer}
+.xfer-sum{padding:8px 14px 10px}
+.xfer-bar{height:6px;border-radius:3px;background:#eceef2;overflow:hidden}
+.xfer-bar span{display:block;height:100%;background:#4f5bd5;border-radius:3px}
+.xfer-bar.live span{background:linear-gradient(90deg,#4f5bd5 0%,#6f7af0 50%,#4f5bd5 100%)}
+.xfer-bar.warn span{background:#d48806}
+.xfer-bar.bad span{background:#c0392b}
+.xfer-bar.ok span{background:#2da44e}
+.xfer-stats{display:flex;gap:6px;margin-top:6px;color:#6b7280;font-variant-numeric:tabular-nums}
+.xfer-stats b{color:#1d2330;font-weight:600}
+.xfer-stats .r{margin-left:auto}
+.xfer-list{list-style:none;margin:0;padding:2px 14px 8px;border-top:1px solid #f0f1f4;max-height:none}
+.xfer-group{font-size:11.5px;color:#8a909c;padding:8px 0 2px;font-family:'JetBrains Mono',monospace}
+.xfer-row{display:grid;grid-template-columns:16px 1fr auto;gap:8px;align-items:center;padding:4px 0;font-variant-numeric:tabular-nums}
+.xfer-row .st{font-size:12px;text-align:center}
+.xfer-row .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#1d2330}
+.xfer-row .sz{color:#8a909c;font-size:12px;white-space:nowrap}
+.xfer-row.done .st{color:#2da44e}
+.xfer-row.done .nm{color:#3a4252}
+.xfer-row.wait .nm,.xfer-row.wait .st{color:#a2a7b1}
+.xfer-row.fail .st,.xfer-row.fail .sz{color:#c0392b}
+.xfer-row.cur .st{color:#4f5bd5}
+.xfer-row .mini{grid-column:2/4;display:flex;align-items:center;gap:8px;margin-top:-1px}
+.xfer-row .mini .xfer-bar{flex:1;height:3px}
+.xfer-row .mini small{color:#6b7280;font-size:11.5px;white-space:nowrap}
+.xfer-more{color:#8a909c;font-size:12px;padding:4px 0 2px 24px}
+.xfer-err{margin:0 14px 10px;padding:8px 10px;border-radius:6px;background:#fdecec;color:#a5281b;font-size:12.5px;line-height:1.5}
+.xfer-note{margin:0 14px 10px;padding:8px 10px;border-radius:6px;background:#fff7e6;color:#8a5a00;font-size:12.5px;line-height:1.5}
+/* folded: one line, like a steps line but with a tick and a link */
+.xfer-fold{display:flex;align-items:center;gap:8px;font-size:13px;color:#3a4252;padding:4px 0;margin:6px 0}
+.xfer-fold .tick{color:#2da44e;font-weight:700}
+.xfer-fold .muted{color:#8a909c;font-variant-numeric:tabular-nums}
+.xfer-fold a{color:#4f5bd5;text-decoration:none}
+.xfer-fold .caret{color:#8a909c;font-size:10px}
+.chip-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+.spark{display:flex;align-items:flex-end;gap:2px;height:16px}
+.spark i{display:block;width:3px;background:#c7ccf7;border-radius:1px}
+/* dark */
+.dark .xfer{background:#24262b;border-color:#34363d}
+.dark .xfer-title,.dark .xfer-row .nm,.dark .xfer-stats b{color:#e6e7ea}
+.dark .xfer-bar{background:#34363d}
+.dark .xfer-list{border-color:#2e3036}
+.dark .xfer-dest{background:#2c2f45;color:#a9b0ff}
+.dark .xfer-icon{background:#2c2f45;color:#a9b0ff}
+.dark .steps{color:#7d828c}
+.dark .say{color:#e6e7ea}
+.phone{width:390px;border-radius:28px;padding:18px 14px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+
+/* ---- sync card additions (mock-only) ---- */
+.xfer-icon.sync{background:#eef2ff;color:#4f5bd5;font-size:12px}
+.xfer-chip{font-size:11px;font-weight:600;color:#4f5bd5;background:#eef2ff;border-radius:5px;padding:1px 6px}
+.xfer-bar.ind{position:relative}
+.xfer-bar.ind span{width:30%;margin-left:25%;background:linear-gradient(90deg,#c7ccf7,#4f5bd5,#c7ccf7)}
+.xfer-bar.grey span{background:#a2a7b1}
+.xfer-cur{margin-top:6px;color:#6b7280;font-size:12px;display:flex;gap:6px;align-items:center;white-space:nowrap;overflow:hidden}
+.xfer-cur .p{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#3a4252;overflow:hidden;text-overflow:ellipsis}
+.xfer-meta{display:flex;gap:14px;margin-top:6px;color:#8a909c;font-size:12px}
+.xfer-meta b{color:#3a4252;font-weight:600}
+.turn-end{font-size:12px;color:#8a909c;margin:4px 0 14px;border-bottom:1px dashed #e3e6ec;padding-bottom:10px}
+.wake{display:flex;gap:8px;align-items:center;font-size:12.5px;color:#6b7280;background:#f6f7f9;border-radius:8px;padding:6px 10px;margin:10px 0 6px}
+.wake b{color:#3a4252}
+.ann{display:inline-flex;width:18px;height:18px;border-radius:50%;background:#c0392b;color:#fff;font:700 11px/18px Inter,sans-serif;justify-content:center;margin-right:4px;vertical-align:1px}
+.side{background:#fff;border-radius:12px;padding:16px 18px;font-size:13.5px;line-height:1.65;color:#3a4252;max-width:560px}
+.side h3{margin:0 0 8px;font-size:14.5px;color:#1d2330} .side ol{margin:0;padding-left:20px} .side li{margin-bottom:6px}
+.w680{width:680px}
+.dark .xfer-cur .p,.dark .xfer-meta b{color:#c9ccd2}
+.dark .wake{background:#2a2c31;color:#9aa0aa}
+.dark .xfer-chip{background:#2c2f45;color:#a9b0ff}
+</style></head><body><div class="board">
+
+<h1>Documents sync: a card in the conversation</h1>
+<p class="sub">When an agent calls <code>documents_sync</code>, the conversation shows one sync card where the call was made. It carries the same live progress as the
+Documents page's tray, and it keeps updating after the agent's turn ends, because the sync runs in the background. When the sync ends, the card folds to
+one line, and the agent's next turn (its wake) replies with the summary. It is the transfer card's family (<code>documents_put</code> / <code>documents_get</code>):
+same header, bar and stats line, folded the same way when done. All copy in English; names, sizes and times are demo data.</p>
+
+<h2>① Where it sits: the call, the turn that ends, and the wake</h2>
+<div class="row">
+<figure class="fr"><figcaption><span class="ann">1</span>While the sync runs. The card replaces the plain tool-call line. The agent's turn ends right after (the sync is a background job), but the card stays <em>live</em>, fed by <code>drive.sync</code> like the tray.</figcaption>
+<div class="conv w680">
+<div class="say">Syncing <code>/data/书格</code> into Documents <code>/书格</code>: 28,705 files, 2.6 TB. It runs in the background; I'll report when it finishes.</div>
+<div class="steps">Thought for 6s, used 3 tools</div>
+<div class="xfer"><div class="xfer-head"><span class="xfer-icon sync">⟳</span><span class="xfer-title">Syncing to Documents</span><span class="xfer-dest">/书格</span><span class="xfer-chip">Background</span><span class="xfer-act"><a>Open folder</a></span></div>
+<div class="xfer-sum"><div class="xfer-bar live"><span style="width:9%"></span></div>
+<div class="xfer-stats"><b>412 of 28,701 files</b>· 238 GB of 2.6 TB<span class="r"><b>48 MB/s</b> · about 14 h left</span></div>
+<div class="xfer-cur">↑ <span class="p">PDF/不完整宋元本专题/谢宣城诗集.五卷.南北朝.谢朓撰.宋嘉定十三年洪汲宣州.pdf</span></div>
+<div class="xfer-meta"><span><b>4</b> already the same</span><span>from <b>stage/</b></span><span>job <b>bgj_65b6ac4c2869</b></span></div></div></div>
+<div class="say">The sync is running in the background, and I'll reply with the result when it finishes.</div>
+<div class="turn-end">Turn ended · 14:57</div>
+</div></figure>
+<figure class="fr"><figcaption><span class="ann">2</span>After the wake, 14 hours later. The same card, in the same place, now shows how it ended (here: 3 files failed, so it stays open). The wake turn is a separate reply below it, in the agent's own words.</figcaption>
+<div class="conv w680">
+<div class="say">Syncing <code>/data/书格</code> into Documents <code>/书格</code>: 28,705 files, 2.6 TB. It runs in the background; I'll report when it finishes.</div>
+<div class="steps">Thought for 6s, used 3 tools</div>
+<div class="xfer"><div class="xfer-head"><span class="xfer-icon bad">!</span><span class="xfer-title">Synced 28,694 of 28,701 files</span><span class="xfer-dest">/书格</span><span class="xfer-act"><a>Open folder</a></span></div>
+<div class="xfer-sum"><div class="xfer-bar ok"><span style="width:100%"></span></div><div class="xfer-stats"><b>3 failed</b> · 2.6 TB in 14 h 06 min<span class="r">4 already the same</span></div></div>
+<ul class="xfer-list"><li class="xfer-row fail"><span class="st">✕</span><span class="nm">PDF/永乐大典.卷一万三千.明嘉靖钞本.pdf</span><span class="sz">The file is larger than 5 GB.</span></li>
+<li class="xfer-row fail"><span class="st">✕</span><span class="nm">PDF/四库全书.经部.卷一.pdf</span><span class="sz">The file is larger than 5 GB.</span></li>
+<li class="xfer-row fail"><span class="st">✕</span><span class="nm">古图/清明上河图.宋张择端.tif</span><span class="sz">Changed while uploading.</span></li></ul></div>
+<div class="say">The sync is running in the background, and I'll reply with the result when it finishes.</div>
+<div class="turn-end">Turn ended · 14:57</div>
+<div class="wake">⏰ <span>Woken by background job <b>bgj_65b6ac4c2869</b> · ended after 14 h 06 min</span></div>
+<div class="say">Done: <b>28,694</b> files uploaded to <code>/书格</code>, 4 were already the same, <b>3 failed</b>: two PDF volumes are over 5 GB, and one file changed while it was uploading. The failed paths are in the card above.</div>
+</div></figure>
+</div>
+<div class="row" style="margin-top:18px"><div class="side" style="max-width:1420px"><h3>What this decides</h3><ol>
+<li><b>One card per <code>documents_sync</code> call</b>, in place of its tool-call line. It is never grouped with other tools: a sync is not one of many quick calls.</li>
+<li><b>It outlives the turn.</b> The transfer card is live only while its tool call runs; the sync card is live until the sync ends, however many turns later. The conversation page reads it from the server like the tray, so it is right after a reload and on another device.</li>
+<li><b>The wake reply stays the agent's own words.</b> The card holds the numbers; the reply says what matters.</li>
+<li><b>Background</b> chip: says it goes on without the agent. <b>Open folder</b> opens the destination in Documents.</li></ol></div></div>
+
+<h2>② Every state of the card</h2>
+<div class="row">
+<figure class="fr w680"><figcaption>a · Checking: listing Documents and walking the folder. No total yet, so the bar moves without a percentage.</figcaption>
+<div class="conv"><div class="xfer"><div class="xfer-head"><span class="xfer-icon sync">⟳</span><span class="xfer-title">Syncing to Documents</span><span class="xfer-dest">/书格</span><span class="xfer-chip">Background</span></div>
+<div class="xfer-sum"><div class="xfer-bar ind"><span></span></div><div class="xfer-stats"><b>Checking files…</b> 12,480 so far</div>
+<div class="xfer-meta"><span>from <b>stage/</b></span><span>job <b>bgj_65b6ac4c2869</b></span></div></div></div></div></figure>
+
+<figure class="fr w680"><figcaption>b · Uploading: files and bytes still to send, rate, time left, and the file going up now. No per-file list: a sync can hold tens of thousands of files.</figcaption>
+<div class="conv"><div class="xfer"><div class="xfer-head"><span class="xfer-icon sync">⟳</span><span class="xfer-title">Syncing to Documents</span><span class="xfer-dest">/书格</span><span class="xfer-chip">Background</span><span class="xfer-act"><a>Open folder</a></span></div>
+<div class="xfer-sum"><div class="xfer-bar live"><span style="width:9%"></span></div>
+<div class="xfer-stats"><b>412 of 28,701 files</b>· 238 GB of 2.6 TB<span class="r"><b>48 MB/s</b> · about 14 h left</span></div>
+<div class="xfer-cur">↑ <span class="p">PDF/不完整宋元本专题/谢宣城诗集.五卷.南北朝.谢朓撰.宋嘉定十三年洪汲宣州.pdf</span></div>
+<div class="xfer-meta"><span><b>4</b> already the same</span><span>from <b>stage/</b></span><span>job <b>bgj_65b6ac4c2869</b></span></div></div></div></div></figure>
+
+<figure class="fr w680"><figcaption>c · Done: folds to one line, like the transfer card's ② b. Click it to unfold the summary.</figcaption>
+<div class="conv"><div class="xfer-fold"><span class="tick">✓</span>Synced <b>28,701</b> files to <a>/书格</a><span class="muted">· 2.6 TB in 14 h 06 min · 4 already the same</span><span class="caret">▸</span></div></div></figure>
+
+<figure class="fr w680"><figcaption>d · Nothing to send: a repeat sync says so, so it does not read as having done nothing by mistake.</figcaption>
+<div class="conv"><div class="xfer-fold"><span class="tick">✓</span>Already up to date: <a>/书格</a><span class="muted">· 28,701 files checked in 41 s</span><span class="caret">▸</span></div></div></figure>
+
+<figure class="fr w680"><figcaption>e · With <code>--delete</code>: the line also says what went to Trash (the owner can restore it).</figcaption>
+<div class="conv"><div class="xfer-fold"><span class="tick">✓</span>Synced <b>18</b> files to <a>/Website/build</a><span class="muted">· 3 moved to Trash · 4.2 MB in 3 s</span><span class="caret">▸</span></div></div></figure>
+
+<figure class="fr w680"><figcaption>f · Done with failures: stays open, red, with the failed paths (the first 5, then a "Show all" link, up to the 100 the server keeps) and their reasons.</figcaption>
+<div class="conv"><div class="xfer"><div class="xfer-head"><span class="xfer-icon bad">!</span><span class="xfer-title">Synced 28,694 of 28,701 files</span><span class="xfer-dest">/书格</span><span class="xfer-act"><a>Open folder</a></span></div>
+<div class="xfer-sum"><div class="xfer-bar ok"><span style="width:100%"></span></div><div class="xfer-stats"><b>3 failed</b> · 2.6 TB in 14 h 06 min<span class="r">4 already the same</span></div></div>
+<ul class="xfer-list"><li class="xfer-row fail"><span class="st">✕</span><span class="nm">PDF/永乐大典.卷一万三千.明嘉靖钞本.pdf</span><span class="sz">The file is larger than 5 GB.</span></li>
+<li class="xfer-row fail"><span class="st">✕</span><span class="nm">PDF/四库全书.经部.卷一.pdf</span><span class="sz">The file is larger than 5 GB.</span></li>
+<li class="xfer-row fail"><span class="st">✕</span><span class="nm">古图/清明上河图.宋张择端.tif</span><span class="sz">Changed while uploading.</span></li></ul></div></div></figure>
+
+<figure class="fr w680"><figcaption>g · Stopped: the agent ran <code>bg_kill</code>, the session ended, or the runner went quiet for 2 minutes. What got through stays; the grey bar shows how far.</figcaption>
+<div class="conv"><div class="xfer"><div class="xfer-head"><span class="xfer-icon">■</span><span class="xfer-title">Sync stopped</span><span class="xfer-dest">/书格</span><span class="xfer-act"><a>Open folder</a></span></div>
+<div class="xfer-sum"><div class="xfer-bar grey"><span style="width:9%"></span></div><div class="xfer-stats"><b>412 of 28,701 files</b> synced · 238 GB of 2.6 TB</div></div></div></div></figure>
+
+<figure class="fr w680"><figcaption>h · Failed: the sync could not go on at all (Documents unreachable, the destination is a file, Documents turned off). The server's reason, in its words.</figcaption>
+<div class="conv"><div class="xfer"><div class="xfer-head"><span class="xfer-icon bad">!</span><span class="xfer-title">Sync failed</span><span class="xfer-dest">/书格</span></div>
+<div class="xfer-err">/书格 is a file in Documents, not a folder.</div></div></div></figure>
+</div>
+
+<h2>③ Dark mode, and the phone width</h2>
+<div class="row">
+<figure class="fr w680"><figcaption>Dark: the transfer card's dark colours.</figcaption>
+<div class="conv dark"><div class="xfer"><div class="xfer-head"><span class="xfer-icon sync">⟳</span><span class="xfer-title">Syncing to Documents</span><span class="xfer-dest">/书格</span><span class="xfer-chip">Background</span><span class="xfer-act"><a>Open folder</a></span></div>
+<div class="xfer-sum"><div class="xfer-bar live"><span style="width:9%"></span></div>
+<div class="xfer-stats"><b>412 of 28,701 files</b>· 238 GB of 2.6 TB<span class="r"><b>48 MB/s</b> · about 14 h left</span></div>
+<div class="xfer-cur">↑ <span class="p">PDF/不完整宋元本专题/谢宣城诗集.五卷.南北朝.谢朓撰.宋嘉定十三年洪汲宣州.pdf</span></div>
+<div class="xfer-meta"><span><b>4</b> already the same</span><span>from <b>stage/</b></span><span>job <b>bgj_65b6ac4c2869</b></span></div></div></div></div></figure>
+<figure class="fr" style="width:380px"><figcaption>Phone width: the destination wraps under the title; stats on two lines.</figcaption>
+<div class="conv"><div class="xfer"><div class="xfer-head" style="flex-wrap:wrap"><span class="xfer-icon sync">⟳</span><span class="xfer-title">Syncing to Documents</span><span class="xfer-chip">Background</span><span style="flex-basis:100%;padding-left:30px"><span class="xfer-dest">/书格</span></span></div>
+<div class="xfer-sum"><div class="xfer-bar live"><span style="width:9%"></span></div><div class="xfer-stats"><b>412 of 28,701</b> · 238 GB of 2.6 TB</div><div class="xfer-stats"><b>48 MB/s</b> · about 14 h left</div></div></div></div></figure>
+</div>
+
+<h2>How it works</h2>
+<table style="width:1500px"><tr><th style="width:220px">Part</th><th>What</th><th style="width:420px">From</th></tr>
+<tr><td>Which call</td><td>A tool call named <code>documents_sync</code> (or its MCP name <code>mcp__orbit__documents_sync</code>), and an <code>orbit documents sync</code> run through Bash when its result names a sync.</td><td>transcript tool_use node</td></tr>
+<tr><td>Which sync</td><td>The tool result carries <code>syncId</code>. Today the sync's row is opened by the background job after the call returns, so the call cannot name it: the runner opens the row first (<code>POST /runner/documents/syncs</code>, as now) and hands the id to the job (<code>--sync-id</code>), which reports into that row.</td><td>runner: documents_sync.go, documents_cli.go</td></tr>
+<tr><td>Live numbers</td><td>The same <code>GET /documents/syncs</code> store the tray uses (<code>lib/documentsSyncs.ts</code>), plus <code>GET /documents/syncs/:id</code> for a sync older than the tray's 24 hours; <code>drive.sync</code> re-reads it.</td><td>apiserver: one new read route</td></tr>
+<tr><td>Done line</td><td>Folds when the status ends with no failures; stays open for failures, Stopped and Failed. Duration = endedAt − startedAt.</td><td>DocumentsSyncView</td></tr>
+<tr><td>Clients</td><td>Web first, as the tray. iOS, macOS and Android draw the plain tool-call line until they get the card.</td><td>web: Transcript.tsx, new DocumentsSyncCard.tsx</td></tr>
+</table>
+
+<h2>For you to decide</h2>
+<div class="ask"><ol style="margin:0;padding-left:20px">
+<li>Fold to one line when it ends cleanly (recommended, like the transfer card), or keep it open?</li>
+<li>Add a <b>Stop</b> link on the card (it would run the job's <code>bg_kill</code> for you)? Recommended: not now; the tray has none either.</li>
+<li>Web first (recommended), or all four clients together?</li></ol></div>
+</div></body></html>

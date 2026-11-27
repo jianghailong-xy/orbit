@@ -75,6 +75,57 @@ func TestTheMessageAfterACompactionCarriesTheContextResetNote(t *testing.T) {
 	}
 }
 
+// A slash command after a compaction reaches the CLI as the person typed it: the CLI runs `/compact` only when the
+// text starts with it, so the note in front turned it into a plain message the agent answered. The note waits for
+// the next ordinary message instead.
+func TestASlashCommandAfterACompactionIsFedBareAndTheNoteWaits(t *testing.T) {
+	pool := newSessionPoolWithClock(1, newFakePoolClock())
+	s := superviseClaudeSession(t, pool,
+		fakeStep{Await: "user"},
+		fakeStep{Emit: "replay_user"},
+		fakeStep{Emit: "system_init"},
+		fakeStep{Emit: "system_status", Subtype: "compact_boundary"},
+		fakeStep{Emit: "result", Text: "compacted"},
+		fakeStep{Await: "user"},
+		fakeStep{Emit: "replay_user"},
+		fakeStep{Emit: "result", Text: "compacted again"},
+		fakeStep{Await: "user"},
+		fakeStep{Emit: "replay_user"},
+		fakeStep{Emit: "result", Text: "continued"},
+	)
+	claimAndSend := func(turnID, content string) {
+		claim := *s.job
+		if _, ok := pool.activate(&claim); !ok {
+			t.Fatalf("the parked session could not be claimed for %s", turnID)
+		}
+		s.queue(RunInboxResponse{TurnID: turnID, Kind: "message", Content: content})
+		s.awaitParked(turnID)
+	}
+	s.awaitParked("turn-1")
+	claimAndSend("turn-2", "/compact")
+	claimAndSend("turn-3", "Continue.")
+
+	if second := fedText(t, s, 1); second != "/compact" {
+		t.Errorf("the slash command after the compaction = %q, want it bare", second)
+	}
+	note := withContextResetNote("", true, s.job.insideRecordedWork())
+	if third := fedText(t, s, 2); third != note+"\n\nContinue." {
+		t.Errorf("the message after the slash command = %q, want the note and then the person's words", third)
+	}
+}
+
+// What the CLI reads as a slash command: a leading `/name`, not a path such as `/root/x is missing`.
+func TestIsClaudeSlashCommand(t *testing.T) {
+	for text, want := range map[string]bool{
+		"/compact": true, "/compact keep the plan": true, "/review 12": true, "/plugin:skill": true,
+		"Continue.": false, "": false, "/": false, " /compact": false, "/root/x is missing": false,
+	} {
+		if got := isClaudeSlashCommand(text); got != want {
+			t.Errorf("isClaudeSlashCommand(%q) = %v, want %v", text, got, want)
+		}
+	}
+}
+
 // A turn that touched Orbit files its counts-only telemetry just ahead of its turn_end, through the session's own
 // emit path, as every engine's turns do.
 func TestATurnThatTouchedOrbitFilesItsTelemetryBeforeItsTurnEnd(t *testing.T) {

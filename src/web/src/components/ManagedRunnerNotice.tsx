@@ -1,5 +1,11 @@
 import { Link } from 'react-router-dom';
-import { MANAGED_RUNNER_COPY, type ManagedRunnerStatus } from '@orbit/shared';
+import {
+  MANAGED_RUNNER_COPY,
+  MANAGED_RUNNER_NEXT_TRY_COPY,
+  managedRunnerNextTry,
+  type ManagedRunnerNextTry,
+  type ManagedRunnerStatus,
+} from '@orbit/shared';
 import { encodeId } from '../lib/idCodec';
 import { useManagedRunnerActions, type ManagedRunner } from '../lib/managedRunner';
 import { Button } from './ui/Button';
@@ -7,12 +13,20 @@ import { useConfirm } from './ui/ConfirmDialog';
 import { Spinner } from './ui/Spinner';
 import './ManagedRunnerNotice.css';
 
+/** "Attempt 6 · next automatic try at Oct 9, 8:30 AM", under the cause of a runner restarting or failed with a next try. */
+export function nextTryLine(next: ManagedRunnerNextTry): string {
+  const when = next.at
+    ? MANAGED_RUNNER_NEXT_TRY_COPY.at(next.at.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }))
+    : MANAGED_RUNNER_NEXT_TRY_COPY.due;
+  return `${MANAGED_RUNNER_NEXT_TRY_COPY.attempt(next.attempt)} · ${when}`;
+}
+
 /** The kinds that ask for somebody's attention rather than time. */
 const ATTENTION = new Set(['failed', 'waitingOperator', 'removed', 'removing', 'notOffered', 'modelUnavailable']);
 
 /**
  * The managed runner's state in the shared display's words, with only the actions the server
- * allows: Retry (POST /managed-runner/retry), Set up (POST /managed-runner/ensure), and the way to
+ * allows: Retry (POST /managed-runner/retry; Retry now while an automatic try is scheduled anyway), Set up (POST /managed-runner/ensure), and the way to
  * the runner's runtimes when what it lacks is one signed in. Above the composer of a workspace on
  * the managed runner, and on the default landing of an account with nothing to open yet.
  */
@@ -47,6 +61,8 @@ export function ManagedRunnerNotice({
     });
   };
   const tone = ATTENTION.has(display.kind) ? ' attention' : '';
+  // A stopped instance restarting, or failed with its slow retry scheduled: the attempt and when it is tried again.
+  const next = managedRunnerNextTry(status);
   return (
     <div
       className={`managed-runner-notice${tone}${className ? ` ${className}` : ''}`}
@@ -61,6 +77,7 @@ export function ManagedRunnerNotice({
       <div className="managed-runner-notice-text">
         <div className="managed-runner-notice-title">{display.title}</div>
         <div className="managed-runner-notice-detail">{display.detail}</div>
+        {next && <div className="managed-runner-notice-next">{nextTryLine(next)}</div>}
       </div>
       {(display.retry || display.ensure || display.signIn) && (
         <div className="managed-runner-notice-actions">
@@ -69,7 +86,7 @@ export function ManagedRunnerNotice({
           )}
           {display.retry && (
             <Button size="small" loading={retry.isPending} onClick={() => retry.mutate(status)}>
-              {MANAGED_RUNNER_COPY.retry}
+              {next ? MANAGED_RUNNER_NEXT_TRY_COPY.retryNow : MANAGED_RUNNER_COPY.retry}
             </Button>
           )}
           {display.ensure && (

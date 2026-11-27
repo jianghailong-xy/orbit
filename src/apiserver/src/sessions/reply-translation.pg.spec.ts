@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, afterEach, before, beforeEach, test } from 'node:test';
 import { resetTranslationBreaker } from './translation';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, type NormalizedRunEvent } from '@orbit/shared';
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -125,7 +125,7 @@ async function liveSession(): Promise<string> {
     data: {
       id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
       title: 'reply translation', prompt: 'opening', provider: 'claude', providerBuiltin: true, engine: 'claude',
-      status: RunStatus.RUNNING, numTurns: 1, dispatchOrigin: 'USER', startsTaskWork: false,
+      turnState: 'IN_FLIGHT', numTurns: 1, dispatchOrigin: 'USER', startsTaskWork: false,
     },
   });
   return sessionId;

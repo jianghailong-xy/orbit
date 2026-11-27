@@ -28,6 +28,7 @@ import { MainCheckoutResultRow } from './MainCheckout';
 import { WorktreeDiffDrawer } from './SessionOutputs';
 import { Menu, type MenuItem } from './ui/Menu';
 import { useConfirm } from './ui/ConfirmDialog';
+import { Tooltip } from './ui/Tooltip';
 
 const POLL_MS = 2000;
 
@@ -492,14 +493,15 @@ export function MainCheckoutDrawer({
       ) : loading ? (
         'Reading the main checkout…'
       ) : (
+        <Tooltip content={allOn ? 'Choose none' : 'Choose all'}>
         <button
           type="button"
           className="mck-choose-toggle"
-          title={allOn ? 'Choose none' : 'Choose all'}
           onClick={() => setUnchecked(allOn ? new Set(files.map((f) => f.path)) : new Set())}
         >
           {mainCheckoutChooseFiles(chosen.length, files.length)}
         </button>
+        </Tooltip>
       )}
     </div>
   );

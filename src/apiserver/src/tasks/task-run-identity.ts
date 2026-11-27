@@ -87,6 +87,10 @@ export function taskRunDesiredSessionId(requestKey: string): string {
  * dispatch finds. That is the point: `execute` compares them, and a delivery whose moment has since
  * been overtaken is answered as stale rather than allowed to start work for a moment that is gone.
  */
+/** The prefixes of TASK_RUN_TRIGGER.replacement: a refused run's replacement, and a refused trial's. */
+export const REPLACEMENT_TOKEN = 'replace:';
+export const REPLACEMENT_TRIAL_TOKEN = 'replace-trial:';
+
 export const TASK_RUN_TRIGGER = {
   /**
    * The appointment being kept, at the epoch the sweep read it under.
@@ -128,6 +132,14 @@ export const TASK_RUN_TRIGGER = {
     `first-run:${taskId}:${epoch}`,
   /** One press of a bulk Run, scoped to the task inside it that this dispatch is for. */
   batch: (pressToken: string, taskId: string): string => `batch:${pressToken}:${taskId}`,
+  /**
+   * The run that replaces one its account refused at admission (docs/routing-account-health-design.md §7.3). The
+   * refused Session is the durable fact: both ends that report it (a failed turn, the finalize) name one request, so
+   * it is replaced once. A refused trial's replacement is its own kind, because it is not counted against the
+   * per-hour bound (§6.5): the task did not choose to be the test.
+   */
+  replacement: (taskId: string, refusedSessionId: string, trial: boolean): string =>
+    `${trial ? REPLACEMENT_TRIAL_TOKEN : REPLACEMENT_TOKEN}${taskId}:${refusedSessionId}`,
 } as const;
 
 /** Every turn a run request delivers is keyed under this, which is how a reader recognises one. */
@@ -165,10 +177,10 @@ export function taskRunResumeToken(clientTurnId: string, sessionId: string): str
 
 /**
  * Whether a request token names one of the AUTOMATIC doors (`TASK_RUN_TRIGGER`'s schedule,
- * dependency and first-run kinds) rather than a press — a bulk Run's `batch:` token is a press.
+ * dependency, first-run and replacement kinds) rather than a press — a bulk Run's `batch:` token is a press.
  */
 export function isAutomaticTaskRunToken(requestToken: string): boolean {
-  return ['sched:', 'dep:', 'first-run:'].some((kind) => requestToken.startsWith(kind));
+  return ['sched:', 'dep:', 'first-run:', REPLACEMENT_TOKEN, REPLACEMENT_TRIAL_TOKEN].some((kind) => requestToken.startsWith(kind));
 }
 
 /**

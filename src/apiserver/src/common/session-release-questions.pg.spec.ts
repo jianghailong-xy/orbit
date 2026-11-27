@@ -21,7 +21,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { Prisma, PrismaClient, ProjectStatus, RunStatus, RunnerStatus } from '@prisma/client';
+import { Prisma, PrismaClient, ProjectStatus, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
@@ -33,6 +34,7 @@ import type { RealtimeService } from '../realtime/realtime.service';
 import { AutoRetryService } from '../sessions/auto-retry.service';
 import { RETRY_CLAIM_WINDOW_MS } from '../sessions/session-request';
 import { SessionsService } from '../sessions/sessions.service';
+import { turnStateFilter } from '../sessions/session-turn-state';
 import {
   RELEASE_FACTS_SELECT,
   releaseFinishedTheWork,
@@ -43,6 +45,7 @@ import {
   releaseWasFailureSql,
 } from './session-release';
 import { RELEASE_SHAPES } from './session-release-shapes.fixture';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -92,7 +95,7 @@ test('the release questions answer alike in every spelling, and the auto-retry s
       await db.session.create({
         data: {
           id, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, title: shape.name, prompt: shape.what,
-          status: shape.status,
+          turnState: turnStateOfWord(shape.status),
           ...(landing
             ? { sessionKind: 'LANDING', provider: 'orbit', providerBuiltin: true, engine: null, startsTaskWork: false }
             : { provider: 'claude', providerBuiltin: true, engine: 'claude', assignedRunnerId: w.runnerId }),
@@ -150,7 +153,8 @@ test('the release questions answer alike in every spelling, and the auto-retry s
     const now = new Date();
 
     // The where clauses of the three queries (sessions/auto-retry.service.ts), with the failure arm given: the module's
-    // filter. Their other halves are copied as they stand.
+    // filter. Their other halves are copied as they stand. The parked arm is on the turn state since task T10 (turnStateFilter([null]):
+    // held with none, a row not yet backfilled by its stored word).
     const NOT_DISPATCH_HELD: Prisma.SessionWhereInput = {
       OR: [{ taskId: null }, { startsTaskWork: false }, { task: { dispatchHold: false } }],
     };
@@ -166,7 +170,7 @@ test('the release questions answer alike in every spelling, and the auto-retry s
         copy: (failed: Prisma.SessionWhereInput) => logged.session.findMany({
           where: {
             retryAt: { lte: now }, deletedAt: null, completedAt: null, sessionKind: 'CONVERSATION',
-            OR: [{ status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null }, failed],
+            OR: [{ ...turnStateFilter([null]), cancelRequestedAt: null }, failed],
             AND: [NOT_DISPATCH_HELD, NOT_IN_CANCELLED_PROJECT],
           },
           orderBy: { retryAt: 'asc' }, take: 50, select: { id: true },
@@ -180,7 +184,7 @@ test('the release questions answer alike in every spelling, and the auto-retry s
           where: {
             retryAt: { gt: new Date(now.getTime() + ACCOUNT_RESET_WAIT_MS) }, deletedAt: null, completedAt: null,
             sessionKind: 'CONVERSATION',
-            OR: [{ status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null }, failed],
+            OR: [{ ...turnStateFilter([null]), cancelRequestedAt: null }, failed],
             AND: [NOT_DISPATCH_HELD, NOT_IN_CANCELLED_PROJECT],
           },
           orderBy: { retryAt: 'desc' }, take: 50, select: { id: true },
@@ -193,7 +197,7 @@ test('the release questions answer alike in every spelling, and the auto-retry s
         copy: (failed: Prisma.SessionWhereInput) => logged.session.findMany({
           where: {
             retryClaimedAt: { lte: new Date(now.getTime() - RETRY_CLAIM_WINDOW_MS) }, retryAt: null, deletedAt: null,
-            completedAt: null, sessionKind: 'CONVERSATION', OR: [{ status: RunStatus.AWAITING_INPUT }, failed],
+            completedAt: null, sessionKind: 'CONVERSATION', OR: [turnStateFilter([null]), failed],
           },
           orderBy: { retryClaimedAt: 'asc' }, take: 50, select: { id: true },
         }),
@@ -224,12 +228,12 @@ test('the release questions answer alike in every spelling, and the auto-retry s
     // rest released for an end or the work, with nothing armed.
     const bulk = await world(db, 'bulk');
     await sql.query(`
-      INSERT INTO "session" ("id", "owner_id", "creator_id", "workspace_id", "title", "prompt", "status", "provider",
+      INSERT INTO "session" ("id", "owner_id", "creator_id", "workspace_id", "title", "prompt", "turn_state", "provider",
                              "provider_builtin", "kind", "finished_at", "end_reason", "last_turn_outcome",
                              "retry_at", "retry_claimed_at", "cancel_requested_at", "created_at", "updated_at")
       SELECT gen_random_uuid(), $1::uuid, $1::uuid, $2::uuid, 'bulk', 'bulk',
-             (CASE WHEN g % 100 = 0 THEN 'FAILED' WHEN g % 100 = 1 THEN 'AWAITING_INPUT'
-                   WHEN g % 3 = 0 THEN 'SUCCEEDED' ELSE 'CANCELLED' END)::run_status,
+             -- FAILED, AWAITING_INPUT, SUCCEEDED and CANCELLED all hold no turn; the word follows the release facts.
+             NULL,
              'claude', true, 'CONVERSATION',
              CASE WHEN g % 100 = 1 THEN NULL ELSE now() - make_interval(secs => g) END,
              CASE WHEN g % 100 IN (0, 1) THEN NULL WHEN g % 3 = 0 THEN 'task_done' ELSE 'ended' END,

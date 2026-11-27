@@ -5,6 +5,7 @@ import { deriveSessionRunState, SessionRunState } from '@orbit/shared';
 
 import { combinations } from '../sessions/session-state-legacy-fields.fixture';
 import { leafHolds, type WatchTargetFact } from './watch-predicate';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * Plan step 4.8: the SESSION_RUN_TERMINAL leaf reads "the run is over" from the release column (and an interrupted
@@ -22,6 +23,7 @@ function fact(row: ReturnType<typeof combinations>[number]['row']): WatchTargetF
     kind: 'SESSION',
     sessionKind: 'CONVERSATION',
     status: row.status,
+    turnState: turnStateOfWord(row.status),
     finishedAt: at(row.finishedAt),
     endReason: row.endReason,
     completedAt: at(row.completedAt),

@@ -25,7 +25,8 @@ import {
 } from '@orbit/shared';
 
 import { generateToken, sha256 } from '../common/crypto.util';
-import { heldStatusFilter } from '../common/session-release';
+import { heldFilter } from '../common/session-release';
+import { turnStateFilter } from '../sessions/session-turn-state';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -42,6 +43,7 @@ import type { ManagedRunnerManager } from './managed-runner-manager';
 import { MANAGED_RUNNER_NAME } from './managed-runner-resources';
 import { placeNewMapping } from './managed-runner-placement';
 import { MANAGED_RUNNER_RUNTIME, type ManagedRunnerRuntime } from './managed-runner-runtime';
+import { clampManagedConcurrency, managedConcurrencyCeiling } from './managed-runner-concurrency';
 import type { ManagedRunnerSignIn } from './managed-runner-sign-in';
 import { SIGNED_IN_PAGE, SIGNED_IN_PASS_SECONDS, SignedInPassTimer, signedInWithoutMapping } from './managed-runner-signed-in';
 import { managedRunnerWork, recordManagedDemand } from './managed-runner-work';
@@ -451,12 +453,12 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
    */
   private async busyWith(runnerId: string, report: StoredManagedWorkload | null): Promise<{ turns: ManagedRunnerBusyTurn[]; backgroundJobs: number }> {
     const running = await this.prisma.session.findMany({
-      where: { assignedRunnerId: runnerId, status: 'RUNNING' },
+      where: { assignedRunnerId: runnerId, ...turnStateFilter(['IN_FLIGHT']) },
       select: { id: true, title: true, startedAt: true },
       orderBy: [{ startedAt: 'asc' }, { id: 'asc' }],
     });
     const open = await this.prisma.session.findMany({
-      where: { assignedRunnerId: runnerId, status: heldStatusFilter() },
+      where: { assignedRunnerId: runnerId, ...heldFilter() },
       select: { runningBgShells: true },
     });
     const recorded = open.reduce((sum, s) => sum + s.runningBgShells.length, 0);
@@ -593,7 +595,8 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
               name: MANAGED_RUNNER_NAME,
               tokenHash: sha256(generateToken(32)),
               status: 'OFFLINE',
-              maxConcurrent: profile.runner.maxConcurrent,
+              // The profile's seed, at most what the runner's memory allows (managed-runner-concurrency.ts).
+              maxConcurrent: clampManagedConcurrency(profile.runner.maxConcurrent, managedConcurrencyCeiling(runtime)),
               // Not the column's 10 GB default: with no floor set, a managed runner keeps a share of its volume free
               // (managed-runner-storage.ts).
               minFreeDiskMb: null,

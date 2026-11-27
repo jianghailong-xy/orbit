@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus, TaskStatus } from '@prisma/client';
+import { TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { SessionEndReason, SessionLifecycleState } from '@orbit/shared';
 import { ReaperService } from './reaper.service';
 

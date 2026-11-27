@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Commits not pushed: iOS, macOS and Android</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; background: #e9e9ee; }
+.board { width: 1800px; padding: 44px 48px 56px; background: #f4f4f7; color: #16161a;
+  font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; -webkit-font-smoothing: antialiased; }
+h1 { font-size: 28px; line-height: 1.3; margin: 0 0 10px; }
+.lede { color: #4a4a54; font-size: 15.5px; max-width: 1560px; margin: 0 0 24px; }
+code { font: 12.5px "JetBrains Mono", monospace; background: #e3e3ea; border-radius: 4px; padding: 1px 5px; }
+.section { display: flex; align-items: baseline; gap: 14px; margin: 34px 0 16px; padding-top: 18px; border-top: 1px solid #dcdce3; }
+.section.first { border-top: 0; padding-top: 0; margin-top: 0; }
+.sec { flex: none; font-size: 15px; font-weight: 700; border-radius: 999px; padding: 3px 14px; }
+.sec.now { background: #ffe0dc; color: #8f1d13; }
+.sec.ios { background: #d9e6ff; color: #14428f; }
+.sec.and { background: #dcf3e3; color: #13612e; }
+.sec.ask { background: #fff0c2; color: #6b4a00; }
+.sec-sub { color: #5a5a64; font-size: 14.5px; }
+.row { display: flex; gap: 26px; align-items: flex-start; }
+.cap { width: 340px; }
+.cap-t { font-size: 15px; font-weight: 650; margin: 0 0 8px; display: flex; gap: 8px; align-items: center; }
+.num { display: inline-flex; width: 22px; height: 22px; border-radius: 50%; background: #e5372b; color: #fff;
+  font-size: 12.5px; font-weight: 700; align-items: center; justify-content: center; flex: none; }
+.fr { display: inline-flex; width: 22px; height: 22px; border-radius: 6px; background: #16161a; color: #fff;
+  font-size: 12.5px; font-weight: 700; align-items: center; justify-content: center; flex: none; }
+.notes { list-style: none; margin: 10px 0 0; padding: 0; font-size: 13.5px; line-height: 1.55; color: #34343c; }
+.notes li { display: flex; gap: 8px; margin: 5px 0; }
+.notes .num { width: 19px; height: 19px; font-size: 11px; margin-top: 1px; }
+.cmp { width: 100%; border-collapse: collapse; font-size: 14px; background: #fff; border-radius: 14px; overflow: hidden;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.05); }
+.cmp th, .cmp td { text-align: left; vertical-align: top; padding: 10px 12px; border-top: 1px solid #ececf1; line-height: 1.55; }
+.cmp th { border-top: 0; color: #6a6a74; font-size: 13px; font-weight: 600; }
+.cmp td:first-child { width: 230px; font-weight: 600; }
+
+/* ---------- phone shell ---------- */
+.phone { width: 340px; height: 700px; border-radius: 44px; background: #111; padding: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.18); }
+.scr { position: relative; width: 100%; height: 100%; border-radius: 34px; overflow: hidden; background: #fff; display: flex; flex-direction: column; }
+.status { height: 40px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 26px; font: 600 14px Inter; }
+.mono { font-family: "JetBrains Mono", monospace; }
+.dim { color: #8e8e93; }
+.add { color: #2a9d4b; } .del { color: #d1453b; }
+
+/* iOS */
+.ios { font-family: Inter, sans-serif; color: #1c1c1e; }
+.ios .nav { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 6px 16px 10px; font-size: 16px; }
+.ios .nav b { font-size: 16.5px; font-weight: 600; }
+.ios .link { color: #007aff; }
+.ios .transcript { flex: 1; padding: 6px 16px; font-size: 14px; color: #3a3a3c; line-height: 1.5; }
+.ios .bubble { background: #f2f2f7; border-radius: 16px; padding: 9px 12px; margin: 6px 0; }
+.ios .bar { margin: 0 12px 6px; border: 1px solid #e5e5ea; border-radius: 12px; background: #fafafa; display: flex; align-items: center;
+  gap: 6px; padding: 7px 8px; font-size: 12.5px; white-space: nowrap; overflow: hidden; }
+.ios .pill { display: inline-block; padding: 1px 6px; border-radius: 6px; background: rgba(0,0,0,.05); border: 1px solid rgba(0,0,0,.08); font: 11.5px "JetBrains Mono", monospace; min-width: 34px; max-width: 46%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; }
+.ios .btn { flex: none; background: #007aff; color: #fff; border-radius: 8px; padding: 3px 10px; font-weight: 600; font-size: 12.5px; }
+.ios .composer { flex: none; margin: 0 12px 18px; border: 1px solid #e5e5ea; border-radius: 20px; padding: 10px 14px; color: #aeaeb2; font-size: 14.5px; }
+.ios .sheet { position: absolute; inset: 52px 0 0 0; background: #f2f2f7; border-radius: 14px 14px 0 0; box-shadow: 0 -2px 18px rgba(0,0,0,.15);
+  display: flex; flex-direction: column; }
+.ios .grab { width: 36px; height: 5px; border-radius: 3px; background: #c7c7cc; margin: 6px auto 2px; }
+.ios .seg { margin: 4px 16px 10px; background: #e3e3e8; border-radius: 9px; padding: 2px; display: flex; font-size: 13px; }
+.ios .seg span { flex: 1; text-align: center; padding: 5px 0; border-radius: 7px; color: #3a3a3c; }
+.ios .seg span.on { background: #fff; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.ios .group { margin: 0 16px 12px; background: #fff; border-radius: 12px; overflow: hidden; }
+.ios .gh { margin: 0 16px 6px 30px; font-size: 12px; color: #8e8e93; text-transform: uppercase; letter-spacing: .02em; }
+.ios .cell { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-top: 0.5px solid #e5e5ea; font-size: 14px; }
+.ios .cell:first-child { border-top: 0; }
+.ios .cell .t { flex: 1; min-width: 0; }
+.ios .cell .s { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ios .cell .m { font-size: 12px; color: #8e8e93; display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+.ios .chev { color: #c7c7cc; font-size: 16px; }
+.ios .file { font: 12px "JetBrains Mono", monospace; }
+.ios .body { padding: 2px 16px 12px; }
+.ios .h2 { font-size: 19px; font-weight: 700; line-height: 1.3; margin: 0 0 4px; }
+.ios .why { font-size: 14px; color: #3a3a3c; margin: 8px 0 0; }
+.ios .note { font-size: 12px; color: #8e8e93; margin: 8px 0 0; }
+.ios .diff { margin: 0 16px; background: #fff; border-radius: 12px; overflow: hidden; font: 11px/1.65 "JetBrains Mono", monospace; }
+.ios .diff div { padding: 0 10px; white-space: pre; overflow: hidden; }
+
+/* shared rows */
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #8e8e93; flex: none; }
+.dot.auto { background: transparent; border: 1.5px solid #aeaeb2; }
+.dot.pend { background: transparent; border: 1.5px dashed #c2710c; }
+.tag { font-size: 11px; border-radius: 4px; padding: 0 5px; background: #ececf0; color: #555; }
+.tag.pend { background: #fff4e6; color: #c2710c; }
+.hd { background: #f3f6fb; color: #8e8e93; }
+.ad { background: #e9f7ee; } .rm { background: #fdecea; }
+
+/* Android (Material 3) */
+.and { font-family: Roboto, Inter, sans-serif; color: #1b1b1f; }
+.and .scr { background: #fdfbff; }
+.and .top { flex: none; display: flex; align-items: center; gap: 10px; padding: 6px 12px 8px; font-size: 18px; }
+.and .top b { font-weight: 500; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.and .tbtn { color: #3a5ba9; font-size: 14px; font-weight: 500; padding: 4px 6px; }
+.and .transcript { flex: 1; padding: 6px 16px; font-size: 14px; color: #46464f; line-height: 1.5; }
+.and .bubble { background: #eef0f8; border-radius: 16px; padding: 9px 12px; margin: 6px 0; }
+.and .bar { margin: 0 10px 6px; border: 1px solid #e1e2ec; border-radius: 12px; background: #f6f7fb; display: flex; align-items: center;
+  gap: 6px; padding: 7px 8px; font-size: 12.5px; white-space: nowrap; overflow: hidden; }
+.and .pill { display: inline-block; padding: 1px 6px; border-radius: 6px; background: rgba(0,0,0,.05); border: 1px solid rgba(0,0,0,.08); font: 11.5px "JetBrains Mono", monospace; min-width: 34px; max-width: 46%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; }
+.and .btn { flex: none; background: #3a5ba9; color: #fff; border-radius: 16px; padding: 3px 12px; font-weight: 500; font-size: 12.5px; }
+.and .composer { flex: none; margin: 0 10px 18px; border-radius: 24px; background: #eef0f8; padding: 12px 16px; color: #8a8a94; font-size: 14.5px; }
+.and .tabs { flex: none; display: flex; border-bottom: 1px solid #e1e2ec; font-size: 14px; font-weight: 500; }
+.and .tabs span { flex: 1; text-align: center; padding: 10px 0 9px; color: #46464f; position: relative; }
+.and .tabs span.on { color: #3a5ba9; }
+.and .tabs span.on::after { content: ""; position: absolute; left: 30%; right: 30%; bottom: -1px; height: 3px; border-radius: 3px 3px 0 0; background: #3a5ba9; }
+.and .li { display: flex; align-items: center; gap: 12px; padding: 10px 16px; font-size: 14px; border-bottom: 1px solid #f0f0f5; }
+.and .li .t { flex: 1; min-width: 0; }
+.and .li .s { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.and .li .m { font-size: 12px; color: #77777f; display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+.and .sub { padding: 10px 16px 4px; font-size: 12.5px; color: #3a5ba9; font-weight: 500; }
+.and .body { padding: 6px 16px 10px; }
+.and .h2 { font-size: 19px; font-weight: 500; line-height: 1.3; margin: 0 0 4px; }
+.and .why { font-size: 14px; color: #46464f; margin: 8px 0 0; }
+.and .note { font-size: 12px; color: #77777f; margin: 8px 0 0; }
+.and .diff { font: 11px/1.65 "JetBrains Mono", monospace; border-top: 1px solid #e1e2ec; }
+.and .diff div { padding: 0 12px; white-space: pre; overflow: hidden; }
+.and .file { font: 12px "JetBrains Mono", monospace; }
+/* ---- this board ---- */
+.chip { display: inline-block; font-size: 11.5px; border-radius: 999px; padding: 2px 8px; background: rgba(0,0,0,.06); color: #3a3a3c; white-space: nowrap; }
+.chip.mono { font-family: "JetBrains Mono", monospace; font-size: 11px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; padding: 4px 16px 10px; align-items: center; }
+.sheet-h { display: flex; align-items: center; justify-content: space-between; padding: 6px 16px 6px; font-size: 16px; }
+.sheet-h b { font-weight: 600; }
+.ios .empty { margin: 4px 30px; font-size: 13px; color: #8e8e93; }
+.ios .gfoot { margin: -6px 16px 12px 30px; font-size: 12px; color: #8e8e93; }
+.ios .bbtn { flex: none; background: rgba(0,122,255,.12); color: #007aff; border-radius: 8px; padding: 3px 7px; font-weight: 600; font-size: 11.5px; }
+.bar { gap: 4px !important; padding: 7px 6px !important; font-size: 11.5px !important; }
+.bar .pill { font-size: 10.5px !important; padding: 1px 4px !important; }
+.bar .bbtn { font-size: 11px !important; padding: 3px 6px !important; }
+.bar > span:not(.pill):not(.bbtn) { white-space: nowrap; }
+.and .bbtn { flex: none; border: 1px solid #c4c6d0; color: #3a5ba9; border-radius: 16px; padding: 2px 8px; font-weight: 500; font-size: 11.5px; }
+.and .shdr { padding: 12px 16px 2px; font-size: 18px; font-weight: 500; }
+.and .grab { width: 32px; height: 4px; border-radius: 2px; background: #c4c6d0; margin: 8px auto 4px; }
+.and .bsheet { position: absolute; left: 0; right: 0; bottom: 0; top: 120px; background: #f4f3fa; border-radius: 28px 28px 0 0; box-shadow: 0 -2px 18px rgba(0,0,0,.18); display: flex; flex-direction: column; }
+.and .shade, .ios .shade { position: absolute; inset: 0; background: rgba(0,0,0,.28); }
+.and .foot2 { padding: 8px 16px; font-size: 12px; color: #77777f; }
+.wave { text-decoration: underline wavy #e5372b; text-underline-offset: 3px; }
+.mkr { position: absolute; z-index: 9; }
+.mkr .num { box-shadow: 0 0 0 2.5px #fff, 0 2px 6px rgba(0,0,0,.3); }
+.ph-wrap { position: relative; }
+</style>
+</head>
+<body>
+<div class="board">
+<h1>Commits not pushed on iOS, macOS and Android</h1>
+<p class="lede">Board 01 opens the web's Main checkout bar into its commits. This brings the same list to the native apps in the shape they already use for the worktree bar (<code>session-commits-first</code> board 02): tap the bar, and a sheet lists the commits. Tap one, and today's commit screen opens with its message, files and diff. iOS is the reference and Android follows it with Material parts. macOS shares the iOS code (<code>MainCheckoutViews.swift</code>, <code>WorktreeBar.swift</code>) and gets the same, as a sheet over the window. Hand-drawn draft; nothing is built.</p>
+
+<div class="section first"><span class="sec now">Today</span><span class="sec-sub">A count. iOS taps into an empty Review sheet; on Android the text can't be tapped at all.</span></div>
+<div class="row">
+  <div class="cap"><div class="cap-t">iOS · bar</div>
+    <div class="phone ios"><div class="scr">
+      <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+      <div class="nav"><span class="link">‹ Sessions</span><b>Share tray</b><span class="link">⋯</span></div>
+      <div class="transcript"><div class="bubble">The Share tray now opens 14 px from the ⋯, as on the reference.</div></div>
+      <div class="bar"><span class="dot" style="width:6px;height:6px;opacity:.6"></span><span class="pill" style="flex:none;max-width:none">develop</span><span class="dim wave">4 not pushed</span><span style="flex:1"></span><span class="bbtn">Push to origin/develop</span></div>
+      <div class="composer">Reply…</div>
+    </div></div></div>
+  <div class="cap"><div class="cap-t">iOS · tap → Review</div>
+    <div class="phone ios"><div class="scr">
+      <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+      <div class="shade"></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <div class="sheet-h"><span class="link">Cancel</span><b>Main checkout</b><span style="width:46px"></span></div>
+        <div class="chips"><span class="chip mono">/root/orbit</span><span class="chip mono">develop · 0f2a60f</span><span class="dim" style="font-size:12px">Checked 4s ago</span></div>
+        <div class="gh">Choose files · 0 of 0</div>
+        <div class="empty">No uncommitted files.</div>
+      </div>
+    </div></div>
+    <ul class="notes"><li><span class="num">!</span><span>A dead end. The 4 commits the bar just counted aren't on this sheet.</span></li></ul>
+  </div>
+  <div class="cap"><div class="cap-t">Android · bar</div>
+    <div class="phone and"><div class="scr">
+      <div class="status"><span>9:41</span><span>▾▮</span></div>
+      <div class="top"><span>←</span><b>Share tray</b><span>⋮</span></div>
+      <div class="transcript"><div class="bubble">The Share tray now opens 14 px from the ⋯, as on the reference.</div></div>
+      <div class="bar"><span class="dot" style="width:7px;height:7px;opacity:.5"></span><span>Main checkout</span><span class="pill" style="flex:none;max-width:none">develop</span><span class="dim wave" style="overflow:hidden;text-overflow:ellipsis;min-width:34px;flex:1 1 0">Clean · 4 commits not pushed</span><span style="flex:1"></span><span class="bbtn">Push to origin/develop</span></div>
+      <div class="composer">Reply…</div>
+    </div></div>
+    <ul class="notes"><li><span class="num">!</span><span>Only Push responds. The row itself has no tap, and the status is cut down to "Cle…".</span></li></ul>
+  </div>
+</div>
+
+<div class="section"><span class="sec ios">iOS proposal</span><span class="sec-sub">The reference. Tap the bar → a sheet of the commits → today's commit screen.</span></div>
+<div class="row">
+  <div class="cap"><div class="cap-t"><span class="fr">A</span>Bar</div>
+    <div class="phone ios"><div class="scr">
+      <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+      <div class="nav"><span class="link">‹ Sessions</span><b>Share tray</b><span class="link">⋯</span></div>
+      <div class="transcript"><div class="bubble">The Share tray now opens 14 px from the ⋯, as on the reference.</div></div>
+      <div class="bar"><span class="dot" style="width:6px;height:6px;opacity:.6"></span><span class="pill" style="flex:none;max-width:none">develop</span><span style="color:#3a3a3c">4 not pushed</span><span class="chev" style="font-size:13px">›</span><span style="flex:1"></span><span class="bbtn">Push to origin/develop</span></div>
+      <div class="composer">Reply…</div>
+    </div></div>
+    <ul class="notes">
+      <li><span class="num">1</span><span>Same words as today and the same give-way order (label, then status, then truncation). A › says the row opens, as list rows do on iOS.</span></li>
+    </ul>
+  </div>
+  <div class="cap"><div class="cap-t"><span class="fr">B</span>Tap → Not pushed</div>
+    <div class="phone ios"><div class="scr">
+      <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+      <div class="shade"></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <div class="sheet-h"><span class="link">Done</span><b>Main checkout</b><span style="width:38px"></span></div>
+        <div class="chips"><span class="chip mono">/root/orbit</span><span class="chip mono">develop · 0f2a60f</span><span class="dim" style="font-size:12px">Checked 4s ago</span></div>
+        <div class="gh">Not pushed · 4</div>
+        <div class="group">
+          <div class="cell"><span class="dot"></span><span class="t"><div class="s">fix(web): Settings and Admin nav take…</div><div class="m"><span class="mono">0f2a60f</span>· 18m · 2 files</div></span><span class="chev">›</span></div>
+          <div class="cell"><span class="dot"></span><span class="t"><div class="s">fix(web): centre the account menu's…</div><div class="m"><span class="mono">503a4f0</span>· 41m · 1 file</div></span><span class="chev">›</span></div>
+          <div class="cell"><span class="dot"></span><span class="t"><div class="s">feat(web): session header Share is an…</div><div class="m"><span class="mono">c03a5c0</span>· 1h · 5 files</div></span><span class="chev">›</span></div>
+          <div class="cell"><span class="dot"></span><span class="t"><div class="s">docs(mocks): session header Share as…</div><div class="m"><span class="mono">35574d8</span>· 1h · 3 files</div></span><span class="chev">›</span></div>
+        </div>
+        <div class="gfoot">On develop, not on origin/develop.</div>
+      </div>
+    </div></div>
+    <ul class="notes">
+      <li><span class="num">2</span><span>Today's Review sheet with a new group. When nothing is uncommitted, the empty file chooser is left out and the commits are the sheet.</span></li>
+      <li><span class="num">3</span><span>Rows like the worktree sheet's Commits list: subject, sha, age, files. No Push here; it stays on the bar.</span></li>
+    </ul>
+  </div>
+  <div class="cap"><div class="cap-t"><span class="fr">C</span>A commit (pushed)</div>
+    <div class="phone ios"><div class="scr">
+      <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+      <div class="shade"></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <div class="nav"><span class="link">‹ Not pushed</span><b class="mono" style="font-size:14px">0f2a60f</b><span class="link"><b>Done</b></span></div>
+        <div class="body">
+          <div class="h2">fix(web): Settings and Admin nav take the sidebar's width</div>
+          <div class="m dim" style="font-size:12px">18 minutes ago · <span class="add">+24</span> <span class="del">−9</span> · 2 files</div>
+          <div class="why">Opening Settings swapped the sidebar for a narrower nav, so the page panel moved 24 px left and back.</div>
+        </div>
+        <div class="gh">Files</div>
+        <div class="group">
+          <div class="cell"><span class="t file">src/web/src/index.css</span><span class="mono" style="font-size:11px"><span class="add">+18</span> <span class="del">−6</span></span><span class="chev">›</span></div>
+          <div class="cell"><span class="t file">…/SettingsLayout.tsx</span><span class="mono" style="font-size:11px"><span class="add">+6</span> <span class="del">−3</span></span><span class="chev">›</span></div>
+        </div>
+      </div>
+    </div></div>
+    <ul class="notes">
+      <li><span class="num">4</span><span>The worktree's commit screen, unchanged. A file opens today's diff view; its back button names the commit.</span></li>
+    </ul>
+  </div>
+  <div class="cap"><div class="cap-t"><span class="fr">D</span>Uncommitted + not pushed</div>
+    <div class="phone ios"><div class="scr">
+      <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+      <div class="shade"></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <div class="sheet-h"><span class="link">Cancel</span><b>Main checkout</b><span style="width:46px"></span></div>
+        <div class="chips"><span class="chip mono">develop · 0f2a60f</span><span class="chip" style="color:#c2710c;background:#fff4e6">3 uncommitted</span></div>
+        <div class="gh">Choose files · 3 of 3</div>
+        <div class="group">
+          <div class="cell"><span style="color:#007aff">✓</span><span class="t file">src/web/src/Nav.tsx</span><span class="mono add" style="font-size:11px">+31</span></div>
+          <div class="cell"><span style="color:#007aff">✓</span><span class="t file">src/web/src/index.css</span><span class="mono add" style="font-size:11px">+8</span></div>
+          <div class="cell"><span style="color:#007aff">✓</span><span class="t file">docs/nav.md</span><span class="mono add" style="font-size:11px">+2</span></div>
+        </div>
+        <div class="gh">Not pushed · 4</div>
+        <div class="group">
+          <div class="cell"><span class="dot"></span><span class="t"><div class="s">fix(web): Settings and Admin nav…</div><div class="m"><span class="mono">0f2a60f</span>· 18m</div></span><span class="chev">›</span></div>
+          <div class="cell"><span class="t dim" style="font-size:13px">3 more</span><span class="chev">›</span></div>
+        </div>
+        <div style="flex:1"></div>
+        <div style="margin:0 16px 22px;background:#007aff;color:#fff;border-radius:12px;text-align:center;padding:10px;font-weight:600;font-size:14.5px">Commit 3 files to develop</div>
+      </div>
+    </div></div>
+    <ul class="notes">
+      <li><span class="num">5</span><span>Review keeps its files and its Commit button. The commits group sits below them, folded to one row plus "N more".</span></li>
+    </ul>
+  </div>
+</div>
+
+<div class="section"><span class="sec and">Android proposal</span><span class="sec-sub">The same three steps with Material parts: a bottom sheet, list items, the top bar's back arrow.</span></div>
+<div class="row">
+  <div class="cap"><div class="cap-t"><span class="fr">E</span>Bar</div>
+    <div class="phone and"><div class="scr">
+      <div class="status"><span>9:41</span><span>▾▮</span></div>
+      <div class="top"><span>←</span><b>Share tray</b><span>⋮</span></div>
+      <div class="transcript"><div class="bubble">The Share tray now opens 14 px from the ⋯, as on the reference.</div></div>
+      <div class="bar"><span class="dot" style="width:7px;height:7px;opacity:.5"></span><span class="pill" style="flex:none;max-width:none">develop</span><span style="color:#46464f">4 not pushed</span><span style="color:#77777f">›</span><span style="flex:1"></span><span class="bbtn">Push to origin/develop</span></div>
+      <div class="composer">Reply…</div>
+    </div></div>
+    <ul class="notes"><li><span class="num">6</span><span>The row gets a tap and a ›, as on iOS. Today's bar shows "Main checkout · Clean · 4 commits…" and truncates. It takes iOS's short form instead, so the count survives.</span></li></ul>
+  </div>
+  <div class="cap"><div class="cap-t"><span class="fr">F</span>Tap → Not pushed</div>
+    <div class="phone and"><div class="scr">
+      <div class="status"><span>9:41</span><span>▾▮</span></div>
+      <div class="shade"></div>
+      <div class="bsheet">
+        <div class="grab"></div>
+        <div class="shdr">Main checkout</div>
+        <div class="chips" style="padding-top:6px"><span class="chip mono">/root/orbit</span><span class="chip mono">develop · 0f2a60f</span><span style="font-size:12px;color:#77777f">Checked 4s ago</span></div>
+        <div class="sub">Not pushed · 4</div>
+        <div class="li"><span class="dot"></span><span class="t"><div class="s">fix(web): Settings and Admin nav take…</div><div class="m"><span class="mono">0f2a60f</span>· 18m · 2 files</div></span></div>
+        <div class="li"><span class="dot"></span><span class="t"><div class="s">fix(web): centre the account menu's…</div><div class="m"><span class="mono">503a4f0</span>· 41m · 1 file</div></span></div>
+        <div class="li"><span class="dot"></span><span class="t"><div class="s">feat(web): session header Share is an…</div><div class="m"><span class="mono">c03a5c0</span>· 1h · 5 files</div></span></div>
+        <div class="li"><span class="dot"></span><span class="t"><div class="s">docs(mocks): session header Share as…</div><div class="m"><span class="mono">35574d8</span>· 1h · 3 files</div></span></div>
+        <div class="foot2">On develop, not on origin/develop.</div>
+      </div>
+    </div></div>
+    <ul class="notes"><li><span class="num">7</span><span>Today's review bottom sheet with the same group as B. Rows and order are iOS's.</span></li></ul>
+  </div>
+  <div class="cap"><div class="cap-t"><span class="fr">G</span>A commit</div>
+    <div class="phone and"><div class="scr">
+      <div class="status"><span>9:41</span><span>▾▮</span></div>
+      <div class="top"><span>←</span><b class="mono" style="font-size:15px">0f2a60f</b><span class="tbtn">Done</span></div>
+      <div class="body">
+        <div class="h2">fix(web): Settings and Admin nav take the sidebar's width</div>
+        <div class="m" style="font-size:12px;color:#77777f">18 minutes ago · <span class="add">+24</span> <span class="del">−9</span> · 2 files</div>
+        <div class="why">Opening Settings swapped the sidebar for a narrower nav, so the page panel moved 24 px left and back.</div>
+      </div>
+      <div class="sub">Files</div>
+      <div class="li"><span class="t file">src/web/src/index.css</span><span class="mono" style="font-size:11px"><span class="add">+18</span> <span class="del">−6</span></span></div>
+      <div class="li"><span class="t file">…/SettingsLayout.tsx</span><span class="mono" style="font-size:11px"><span class="add">+6</span> <span class="del">−3</span></span></div>
+    </div></div>
+    <ul class="notes"><li><span class="num">8</span><span>The worktree's commit screen (<code>WorktreeBar.kt</code>), reused. ← and the system back gesture both return to the list.</span></li></ul>
+  </div>
+</div>
+
+<div class="section"><span class="sec ios">Rules</span><span class="sec-sub">Both platforms, matching the web.</span></div>
+<table class="cmp">
+  <tr><th>Case</th><th>Bar</th><th>Tap opens</th></tr>
+  <tr><td>Clean, commits ahead</td><td>N not pushed › · Push</td><td>Sheet: Not pushed group only</td></tr>
+  <tr><td>Uncommitted, nothing ahead</td><td>today's</td><td>today's Review</td></tr>
+  <tr><td>Uncommitted + ahead</td><td>today's status, with a ›</td><td>Review: files, Commit, then Not pushed folded (D)</td></tr>
+  <tr><td>More than 20 ahead</td><td>N not pushed ›</td><td>20 rows, then "and K more not listed"</td></tr>
+  <tr><td>Runner without the field</td><td>today's, no ›</td><td>iOS: today's Review; Android: no tap, as today</td></tr>
+</table>
+
+<div class="section"><span class="sec ask">For you to decide</span><span class="sec-sub">Each changes what gets built.</span></div>
+<table class="cmp">
+  <tr><th>Decision</th><th>Recommended</th><th>Otherwise</th></tr>
+  <tr><td>A. Where the list lives on native</td><td>In the Review sheet the bar already opens (B, F): one sheet for the main checkout and no new screen.</td><td>A sheet of its own, "Commits not pushed". Simpler to read, but the bar then opens two sheets depending on state.</td></tr>
+  <tr><td>B. macOS</td><td>The same sheet, from the shared SwiftUI code (one code path for iOS and macOS).</td><td>Unfold the list under the bar, like the web. That's a Mac-only layout to maintain.</td></tr>
+</table>
+
+<div class="section"><span class="sec ios">Would touch</span><span class="sec-sub">For sizing only.</span></div>
+<table class="cmp">
+  <tr><td>Apple</td><td><code>OrbitKit/Models/MainCheckout.swift</code> (decode <code>commits</code>), <code>MainCheckoutCopy.swift</code> (copy), <code>OrbitApp/Views/MainCheckoutViews.swift</code> (Not pushed group, push to the commit screen of <code>WorktreeBar.swift</code>), the bar's ›.</td></tr>
+  <tr><td>Android</td><td><code>reader/MainCheckout.kt</code> (parse, short status), <code>reader/MainCheckoutViews.kt</code> (row tap, group), commit screen from <code>reader/WorktreeBar.kt</code>.</td></tr>
+  <tr><td>Runner, server, web</td><td>Board 01.</td></tr>
+</table>
+</div>
+</body>
+</html>

@@ -21,6 +21,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
 import { Fatal, RunnerMachine, callApi, eventually, fileLog, freePort, lookPath, migrate, startApiserver, startPostgres } from './codex-reset-e2e/harness.mjs';
+import { sessionWordSql } from './lib/session-word.mjs';
 
 export const SCENARIOS = [
   'D1-S1 current runner declares dsh on claim, reclaim and heartbeat',
@@ -224,7 +225,7 @@ exit 97
     say(`==> provider ${harness} (a DeepSeek key, run on DeepSeek Harness) → ${mockURL}`);
     const createSession = (workspaceId, providerSlug, prompt, extra = {}) =>
       call('POST', '/sessions', { workspaceId, provider: providerSlug, ...(providerSlug === harness ? { engine: 'dsh' } : {}), prompt, ...extra });
-    const sessionRow = (prompt) => one(`SELECT id::text AS id, status::text AS status, num_turns, result, error, runtime_session_id,
+    const sessionRow = (prompt) => one(`SELECT id::text AS id, ${sessionWordSql('session')} AS status, num_turns, result, error, runtime_session_id,
       assigned_runner_id::text AS runner, finished_at, end_reason::text AS end_reason FROM session WHERE prompt = $1`, [prompt]);
     const answerEvents = (id, runner) => one(`SELECT count(*)::int AS n, array_agg(DISTINCT type) AS types FROM run_event
       WHERE session_id = $1 AND ingested_by_runner_id = $2 AND payload::text LIKE $3`, [id, runner, `%${MOCK_ANSWER}%`]);

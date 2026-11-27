@@ -1,0 +1,431 @@
+<!-- DESIGN MOCK (2026-11-19). Documents on the web console, following the iPhone board (01-ios), from
+     docs/drive-product-design.md (D1-D23). File names, sessions, sizes and dates are demo data.
+     Render: node docs/mocks/drive/render.mjs $PWD/docs/mocks/drive/02-web.html $PWD/docs/mocks/drive/02-web.png -->
+<!doctype html><html lang="en"><meta charset="utf-8">
+<title>Documents - web</title>
+<link rel="stylesheet" href="board.css">
+<body><div class="board wide">
+<h1>Documents · web console</h1>
+<p class="lede">Follows the iPhone board (<code>01-ios.png</code>) in a wide window: the folder tree on the left, the list in the middle, the selected
+file's preview and details on the right. Labels in green name the decisions each frame shows (<code>docs/drive-product-design.md</code>).
+All names, sessions, sizes and dates are demo data.</p>
+
+<!-- W1 -->
+<div class="grid2">
+<div>
+  <div class="fh"><span class="n">1</span>Sidebar and the Files page <span class="dec">Files under Wiki · no count</span><span class="dec">Tree + list + picture preview</span><span class="dec">Rule 6 · with session</span></div>
+  <div class="win" style="height:660px">
+    <div class="sb" data-on="files" data-mkfiles="1"></div>
+    <div class="main">
+      <div class="wtop"><span class="title">Files</span><span class="sp"></span>
+        <span class="field" style="width:220px;padding:4px 10px;color:var(--t2)"><i data-ic="search" class="sm"></i>Search Files</span>
+        <span class="wbtn" data-mk="2"><i data-ic="newfolder" class="sm"></i>New folder</span><span class="wbtn pri"><i data-ic="up" class="sm"></i>Upload</span>
+        <span class="wbtn"><i data-ic="trash" class="sm"></i>Trash</span><span class="wbtn"><i data-ic="chart" class="sm"></i>Storage</span></div>
+      <div class="cols">
+        <div class="tree">
+          <div class="tn"><span class="tw">▾</span><i data-ic="drive" class="sm"></i>Files</div>
+          <div class="tn on" style="padding-left:20px"><span class="tw">▾</span><i data-ic="folder" class="sm"></i>Orbit UI migration</div>
+          <div class="tn" style="padding-left:34px"><span class="tw">▸</span><i data-ic="folder" class="sm"></i>screens</div>
+          <div class="tn" style="padding-left:20px"><span class="tw">▸</span><i data-ic="folder" class="sm"></i>Documents drive</div>
+          <div class="tn" style="padding-left:20px"><span class="tw">▸</span><i data-ic="folder" class="sm"></i>Datasets</div>
+          <div class="tn" style="padding-left:20px"><span class="tw">▸</span><i data-ic="folder" class="sm"></i>Receipts 2026</div>
+        </div>
+        <div class="list">
+          <div class="crumb">Files › <b>Orbit UI migration</b></div>
+          <div class="lh"><span>Name</span><span>Last written by</span><span style="text-align:right">Size</span><span style="text-align:right">Modified</span></div>
+          <div class="lr"><span class="nm"><i data-ic="folder"></i><span>screens</span></span><span class="w">—</span><span class="s">9 items</span><span class="d">14:02</span></div>
+          <div class="lr sel"><span class="nm"><span class="thumb" style="width:20px;height:20px;border-radius:4px"></span><span>sign-in-v3.png</span></span><span class="w"><span class="av agent" style="width:18px;height:18px;line-height:18px;font-size:9px">C</span><a data-mk="3">Agent in Redesign the sign-in page</a></span><span class="s">1.2 MB</span><span class="d">14:02</span></div>
+          <div class="lr"><span class="nm"><i data-ic="md"></i><span>migration-notes.md</span></span><span class="w" data-mk="4">An agent on Orbit Cloud</span><span class="s">18 KB</span><span class="d">11:40</span></div>
+          <div class="lr"><span class="nm"><i data-ic="csv"></i><span>route-inventory.csv</span></span><span class="w"><a>Agent in Inventory web routes</a></span><span class="s">96 KB</span><span class="d">Yesterday</span></div>
+          <div class="lr"><span class="nm"><i data-ic="md"></i><span>brief.md</span></span><span class="w">You</span><span class="s">3 KB</span><span class="d">Nov 16</span></div>
+          <div class="lr"><span class="nm"><span class="thumb g" style="width:20px;height:20px;border-radius:4px"></span><span>palette.png</span></span><span class="w">An agent on Orbit Cloud</span><span class="s">340 KB</span><span class="d">Nov 15</span></div>
+          <div class="lr"><span class="nm"><i data-ic="zip"></i><span>figma-export.zip</span></span><span class="w">You</span><span class="s">212 MB</span><span class="d">Nov 14</span></div>
+        </div>
+        <div class="pane">
+          <div style="background:#0f0f12;border-radius:10px;padding:14px 50px"><div class="pic" style="height:200px"></div></div>
+          <div class="pt" style="margin-top:12px">sign-in-v3.png</div>
+          <div class="sub">PNG · 1.2 MB · 1179 × 2556</div>
+          <div class="kv">
+            <span class="k">Last written</span><span>Today 14:02</span>
+            <span class="k">By</span><span><a class="lk">Agent in Redesign the sign-in page</a></span>
+            <span class="k">Path</span><span class="mono" style="font-size:11px">~/Files/Orbit UI migration/sign-in-v3.png</span>
+            <span class="k">Earlier versions</span><span><a class="lk">2 in Trash</a></span>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:14px"><span class="wbtn"><i data-ic="down" class="sm"></i>Download</span><span class="wbtn pri"><i data-ic="link" class="sm"></i>Share link…</span><span class="wbtn"><i data-ic="more" class="sm"></i></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="side" style="margin-top:34px">
+  <h3>What this frame decides</h3>
+  <ol>
+    <li><b>Files</b> is the sidebar row directly under <b>Wiki</b>, with no count and no shortcut slot taken from Wiki. Nothing in the drive waits on the
+      owner, so it never carries an amber number.</li>
+    <li>The page's own bar holds Upload (files or folders, D3), New folder, and the ways into <b>Trash</b> and <b>Storage</b>. Storage replaces Settings →
+      Storage (D13); the Settings row is removed and its old address redirects here.</li>
+    <li><b>Last written by</b> is a list column (rule 6). Where the Cloud runner could tell the session, "Agent in" + the session's title links to it.</li>
+    <li>Where it could not: plain "An agent on Orbit Cloud", no link. The owner's uploads say "You".</li>
+  </ol>
+  <p>Clicking a row selects it and fills the right pane; double-click opens a folder or the file full-window. Pictures preview in the pane; Markdown in frame 2.
+  The tree is the drive's real folders, with no imposed structure; project folders such as <i>Orbit UI migration</i> are made by agents from the project
+  title (D8, D22).</p>
+</div>
+</div>
+
+<!-- W2 -->
+<div class="grid2">
+<div>
+  <div class="fh"><span class="n">2</span>Markdown preview and the row menu <span class="dec">Preview: Markdown</span><span class="dec">Rule 6 · plain form</span><span class="dec">Rename · Move · D6 Trash</span></div>
+  <div class="win" style="height:620px">
+    <div class="sb" data-on="files"></div>
+    <div class="main">
+      <div class="wtop"><span class="title">Files</span><span class="sp"></span>
+        <span class="wbtn"><i data-ic="newfolder" class="sm"></i>New folder</span><span class="wbtn pri"><i data-ic="up" class="sm"></i>Upload</span>
+        <span class="wbtn"><i data-ic="trash" class="sm"></i>Trash</span><span class="wbtn"><i data-ic="chart" class="sm"></i>Storage</span></div>
+      <div class="cols">
+        <div class="list">
+          <div class="crumb">Files › <b>Orbit UI migration</b></div>
+          <div class="lh" style="grid-template-columns:minmax(0,1fr) 200px 70px"><span>Name</span><span>Last written by</span><span style="text-align:right">Size</span></div>
+          <div class="lr" style="grid-template-columns:minmax(0,1fr) 200px 70px"><span class="nm"><i data-ic="folder"></i><span>screens</span></span><span class="w">—</span><span class="s">9 items</span></div>
+          <div class="lr" style="grid-template-columns:minmax(0,1fr) 200px 70px"><span class="nm"><span class="thumb" style="width:20px;height:20px;border-radius:4px"></span><span>sign-in-v3.png</span></span><span class="w"><a>Agent in Redesign the sign-in page</a></span><span class="s">1.2 MB</span></div>
+          <div class="lr sel" style="grid-template-columns:minmax(0,1fr) 200px 70px"><span class="nm"><i data-ic="md"></i><span>migration-notes.md</span></span><span class="w">An agent on Orbit Cloud</span><span class="s">18 KB</span></div>
+          <div class="lr" style="grid-template-columns:minmax(0,1fr) 200px 70px;background:#fff"><span class="nm"><i data-ic="md"></i><span class="field" data-mk="3" style="padding:1px 6px;border-color:var(--brand);background:#fff;box-shadow:0 0 0 3px #dfe7fe">brief-v2|.md</span></span><span class="w">You</span><span class="s">3 KB</span></div>
+          <div class="lr" style="grid-template-columns:minmax(0,1fr) 200px 70px"><span class="nm"><span class="thumb g" style="width:20px;height:20px;border-radius:4px"></span><span>palette.png</span></span><span class="w">An agent on Orbit Cloud</span><span class="s">340 KB</span></div>
+          <div class="lr" style="grid-template-columns:minmax(0,1fr) 200px 70px"><span class="nm"><i data-ic="zip"></i><span>figma-export.zip</span></span><span class="w">You</span><span class="s">212 MB</span></div>
+        </div>
+        <div class="pane" style="width:440px">
+          <div class="pt">migration-notes.md</div>
+          <div class="who" data-mk="1" style="margin:6px 0 10px;font-size:12.5px;color:#55555e"><span class="av cloud" style="width:18px;height:18px"><i data-ic="cloud" class="sm" style="width:12px;height:12px;margin:3px auto 0;color:#fff"></i></span>Last written today 11:40 by <b style="color:var(--t1)">an agent on Orbit Cloud</b></div>
+          <div class="md" style="border:1px solid var(--sep);border-radius:10px;padding:12px 14px;background:#fff;font-size:13px">
+            <h2 style="font-size:17px">Migration notes</h2>
+            <p>The console moves from antd tables to the shared list rows. Three pages are left.</p>
+            <h3 style="font-size:14px">Left to move</h3>
+            <ul><li><code>SharedLinksPage</code>: kind column</li><li>Settings → Storage: replaced by Files</li><li>Machines &amp; models: account rows</li></ul>
+            <table><tr><th>Page</th><th>Rows</th><th>State</th></tr><tr><td>Tasks</td><td>1,204</td><td>done</td></tr><tr><td>Wiki</td><td>318</td><td>done</td></tr></table>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:12px"><span class="wbtn"><i data-ic="down" class="sm"></i>Download</span><span class="wbtn pri"><i data-ic="link" class="sm"></i>Share link…</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="wmenu" data-mk="2" style="left:470px;top:200px">
+      <div class="mi">Open</div><div class="mi">Download</div><div class="mi">Share link…</div><hr>
+      <div class="mi on">Rename <span class="k">↵</span></div><div class="mi">Move to…</div><div class="mi">New folder here</div><hr>
+      <div class="mi red">Move to Trash <span class="k">⌫</span></div>
+    </div>
+  </div>
+</div>
+<div class="side" style="margin-top:34px">
+  <h3>What this frame decides</h3>
+  <ol>
+    <li>Markdown previews in the pane, rendered as the Wiki renders it. The plain form of rule 6 heads it: "an agent on Orbit Cloud", with no link
+      because Orbit could not tell the session. HTML, logs and test reports are not previewed this round.</li>
+    <li>Right-click (or the row's <b>⋯</b>) opens the row menu: Open, Download, Share link…, Rename, Move to…, New folder here, Move to Trash. Several
+      selected rows get the same menu without Share link. A folder's menu has no Share link (folder links are a later decision).</li>
+    <li><b>Rename</b> edits the name in the row (Enter, or the menu). <b>Move to Trash</b> asks nothing and shows an Undo toast: nothing is lost until
+      Trash is emptied (D6, rule 3).</li>
+  </ol>
+  <p>Rows can also be dragged onto a folder in the tree to move them (frame 3 shows the drop highlight); <b>Move to…</b> opens the folder picker in frame 4.</p>
+</div>
+</div>
+
+<!-- W3 -->
+<div class="grid2">
+<div>
+  <div class="fh"><span class="n">3</span>Drag-and-drop upload, resumable <span class="dec">D3 upload files or folders</span><span class="dec">D12 no size limit · resumable</span></div>
+  <div class="win" style="height:600px">
+    <div class="sb" data-on="files"></div>
+    <div class="main">
+      <div class="wtop"><span class="title">Files</span><span class="sp"></span>
+        <span class="wbtn"><i data-ic="newfolder" class="sm"></i>New folder</span><span class="wbtn pri"><i data-ic="up" class="sm"></i>Upload</span>
+        <span class="wbtn"><i data-ic="trash" class="sm"></i>Trash</span><span class="wbtn"><i data-ic="chart" class="sm"></i>Storage</span></div>
+      <div class="cols">
+        <div class="tree">
+          <div class="tn"><span class="tw">▾</span><i data-ic="drive" class="sm"></i>Files</div>
+          <div class="tn" style="padding-left:20px"><span class="tw">▸</span><i data-ic="folder" class="sm"></i>Orbit UI migration</div>
+          <div class="tn" style="padding-left:20px"><span class="tw">▸</span><i data-ic="folder" class="sm"></i>Documents drive</div>
+          <div class="tn on" style="padding-left:20px"><span class="tw">▾</span><i data-ic="folder" class="sm"></i>Datasets</div>
+          <div class="tn" style="padding-left:34px"><span class="tw">▸</span><i data-ic="folder" class="sm"></i>raw</div>
+          <div class="tn" style="padding-left:20px"><span class="tw">▸</span><i data-ic="folder" class="sm"></i>Receipts 2026</div>
+        </div>
+        <div class="list" style="position:relative">
+          <div class="crumb">Files › <b>Datasets</b></div>
+          <div class="lh"><span>Name</span><span>Last written by</span><span style="text-align:right">Size</span><span style="text-align:right">Modified</span></div>
+          <div class="lr"><span class="nm"><i data-ic="folder"></i><span>raw</span></span><span class="w">—</span><span class="s">212 items</span><span class="d">Nov 17</span></div>
+          <div class="lr"><span class="nm"><i data-ic="csv"></i><span>labels.csv</span></span><span class="w">You</span><span class="s">84 MB</span><span class="d">Just now</span></div>
+          <div class="lr" style="color:var(--t2)"><span class="nm"><i data-ic="zip" style="opacity:.5"></i><span>eval-runs-2026-11.zip</span></span><span class="w">Uploading · 41%</span><span class="s">11.8 GB</span><span class="d">—</span></div>
+          <div class="lr" style="color:var(--t2)"><span class="nm"><i data-ic="video" style="opacity:.5"></i><span>demo-recording.mov</span></span><span class="w" style="color:var(--amber)">Paused · 50%</span><span class="s">2.4 GB</span><span class="d">—</span></div>
+          <div class="lr"><span class="nm"><i data-ic="zip"></i><span>eval-runs-2026-10.zip</span></span><span class="w">An agent on Orbit Cloud</span><span class="s">9.6 GB</span><span class="d">Oct 31</span></div>
+          <div class="dropzone" data-mk="1" style="left:8px;right:8px;top:34px;bottom:8px;justify-content:flex-end;align-items:flex-start;padding:0 0 60px 40px;flex-direction:column"><div style="width:100%">Drop to upload to Datasets<br><span style="font-weight:400;font-size:12.5px;color:#55555e">Files or folders, any size</span></div></div>
+          <div class="drag-ghost" style="left:150px;top:330px"><i data-ic="folder" class="sm"></i>survey-2026 (3 files, 1 folder)</div>
+        </div>
+      </div>
+    </div>
+    <div class="tray">
+      <div class="th"><span>Uploading 2 of 3 · 6.1 of 14.3 GB</span><span style="color:var(--t2);font-weight:400">Hide</span></div>
+      <div class="tr" data-mk="2"><div class="top"><span><b>eval-runs-2026-11.zip</b> → Datasets</span><span style="color:var(--t2)">Pause</span></div><div class="bar"><i style="width:41%"></i></div><div class="sub">4.9 of 11.8 GB · 38 MB/s · about 3 min left</div></div>
+      <div class="tr" data-mk="3"><div class="top"><span><b>demo-recording.mov</b> → Datasets</span><span style="color:var(--brand);font-weight:600">Resume</span></div><div class="bar amber"><i style="width:50%"></i></div><div class="sub" style="white-space:normal">Connection lost. 1.2 of 2.4 GB is kept; it goes on from there.</div></div>
+      <div class="tr"><div class="top"><span><b>labels.csv</b> → Datasets</span><i data-ic="check" class="sm" style="color:var(--green)"></i></div><div class="sub">Uploaded · 84 MB</div></div>
+    </div>
+  </div>
+</div>
+<div class="side" style="margin-top:34px">
+  <h3>What this frame decides</h3>
+  <ol>
+    <li>Dragging files or folders from the computer over the list shows the drop zone for the open folder; dropping onto a folder in the tree uploads
+      there instead. A dropped folder keeps its structure (D3).</li>
+    <li>The upload tray stays in the corner across pages until everything is up. Large files go up in parts, so there is no per-file limit (D12) and the
+      bar counts bytes and time left. Rows being uploaded show greyed in the list.</li>
+    <li>A lost connection or a closed tab keeps the parts already sent. <b>Resume</b> continues from there; picking the same file again after a reload also
+      resumes rather than starting over.</li>
+  </ol>
+  <p>A name already taken in the folder gets a suffix ("labels 2.csv"), as a restore does; nothing is overwritten silently by an upload.</p>
+</div>
+</div>
+
+<!-- W4 -->
+<div class="grid2">
+<div>
+  <div class="fh"><span class="n">4</span>Move to… with New folder <span class="dec">Move · New folder</span></div>
+  <div class="win" style="height:560px">
+    <div class="sb" data-on="files"></div>
+    <div class="main">
+      <div class="wtop"><span class="title">Files</span><span class="sp"></span><span class="wbtn pri"><i data-ic="up" class="sm"></i>Upload</span></div>
+      <div class="crumb">Files › <b>Orbit UI migration</b></div>
+      <div class="lr"><span class="nm"><i data-ic="folder"></i><span>screens</span></span><span class="w">—</span><span class="s">9 items</span><span class="d">14:02</span></div>
+      <div class="lr sel"><span class="nm"><i data-ic="md"></i><span>migration-notes.md</span></span><span class="w">An agent on Orbit Cloud</span><span class="s">18 KB</span><span class="d">11:40</span></div>
+      <div class="lr sel"><span class="nm"><i data-ic="csv"></i><span>route-inventory.csv</span></span><span class="w">Agent in Inventory web routes</span><span class="s">96 KB</span><span class="d">Yesterday</span></div>
+    </div>
+    <div class="modal-dim"></div>
+    <div class="modal" style="left:390px;top:70px;width:460px">
+      <h4>Move 2 items</h4>
+      <div class="sub" style="margin-bottom:10px">migration-notes.md, route-inventory.csv</div>
+      <div style="border:1px solid var(--sep);border-radius:10px;padding:6px;height:240px;width:auto" class="tree">
+        <div class="tn"><span class="tw">▾</span><i data-ic="drive" class="sm"></i>Files</div>
+        <div class="tn" style="padding-left:20px;color:var(--t3)"><span class="tw">▸</span><i data-ic="folder" class="sm" style="opacity:.5"></i>Orbit UI migration (here now)</div>
+        <div class="tn" style="padding-left:20px"><span class="tw">▾</span><i data-ic="folder" class="sm"></i>Documents drive</div>
+        <div class="tn" style="padding-left:34px"><span class="tw">▸</span><i data-ic="folder" class="sm"></i>board</div>
+        <div class="tn on" style="padding-left:34px"><span class="tw"></span><i data-ic="folder" class="sm"></i><span class="field" style="padding:0 6px;border-color:var(--brand);background:#fff">Notes|</span></div>
+        <div class="tn" style="padding-left:20px"><span class="tw">▸</span><i data-ic="folder" class="sm"></i>Datasets</div>
+        <div class="tn" style="padding-left:20px"><span class="tw">▸</span><i data-ic="folder" class="sm"></i>Receipts 2026</div>
+      </div>
+      <div class="foot" style="justify-content:space-between"><span class="wbtn" data-mk="1"><i data-ic="newfolder" class="sm"></i>New folder</span><span style="display:flex;gap:8px"><span class="wbtn">Cancel</span><span class="wbtn pri">Move to Notes</span></span></div>
+    </div>
+  </div>
+</div>
+<div class="side" style="margin-top:34px">
+  <h3>What this frame decides</h3>
+  <ol>
+    <li><b>New folder</b> in the picker adds a folder under the selected one and names it in place; it is selected, so Move goes straight there.</li>
+  </ol>
+  <p>The picker lists folders only; the current folder is greyed. Moving several rows at once is one move. A name already taken where they land gets a
+  suffix. Agents do the same with an ordinary <span class="mono">mv</span> in <span class="mono">~/Files</span> (D5); last write wins (rule 1).</p>
+</div>
+</div>
+
+<!-- W5 -->
+<div class="grid2">
+<div>
+  <div class="fh"><span class="n">5</span>Share link for one file, with a secret warning <span class="dec">D18 owner only · one file</span><span class="dec">Scan warns, does not block</span><span class="dec">Rule 8 new link kind</span></div>
+  <div class="win" style="height:560px">
+    <div class="sb" data-on="files"></div>
+    <div class="main">
+      <div class="wtop"><span class="title">Files</span><span class="sp"></span><span class="wbtn pri"><i data-ic="up" class="sm"></i>Upload</span></div>
+      <div class="crumb">Files › <b>Documents drive</b></div>
+      <div class="lr"><span class="nm"><i data-ic="folder"></i><span>board</span></span><span class="w">—</span><span class="s">6 items</span><span class="d">Today</span></div>
+      <div class="lr sel"><span class="nm"><i data-ic="md"></i><span>deploy-checklist.md</span></span><span class="w">Agent in Deploy the drive service</span><span class="s">7 KB</span><span class="d">10:31</span></div>
+    </div>
+    <div class="modal-dim"></div>
+    <div class="modal" style="left:300px;top:40px;width:500px">
+      <h4>Share "deploy-checklist.md"</h4>
+      <div class="sub" style="white-space:normal;margin-bottom:12px">Anyone with the link can view and download this one file without signing in. The link follows the file, so a later overwrite is what they see.</div>
+      <div class="wwarn" data-mk="1"><div style="display:flex;gap:8px;align-items:center;margin-bottom:4px"><i data-ic="warn"></i><b>This file looks like it holds secrets</b></div>
+        Anyone with the link could read them:
+        <div style="background:#fff;border-radius:8px;padding:6px 10px;margin-top:6px;line-height:1.7">
+          <div style="display:flex;justify-content:space-between"><span>AWS access key</span><span class="mono" style="color:var(--t2)">line 14 · AKIA…7QX2</span></div>
+          <div style="display:flex;justify-content:space-between"><span>Private key block</span><span class="mono" style="color:var(--t2)">line 31</span></div>
+          <div style="display:flex;justify-content:space-between"><span>Database URL with a password</span><span class="mono" style="color:var(--t2)">line 52</span></div>
+        </div>
+        <div style="margin-top:6px">You can still share it. Remove them from the file first if they should stay private.</div>
+      </div>
+      <div class="foot"><span class="wbtn">Cancel</span><span class="wbtn pri" data-mk="2" style="background:#b86e00;border-color:#b86e00">Share anyway</span></div>
+    </div>
+    <div class="modal" data-mk="3" style="left:830px;top:40px;width:330px;padding:16px 18px">
+      <div style="font-weight:600;margin-bottom:8px">After "Share anyway", or when nothing is found</div>
+      <div class="field"><i data-ic="link" class="sm" style="color:var(--brand)"></i><span class="mono" style="flex:1">orbitd.io/s/f/Gk2m8TqW…</span><span style="color:var(--brand);font-weight:600">Copy</span></div>
+      <div class="sub" style="white-space:normal;margin-top:8px">Listed in Settings → Shared links as <b>File</b>.</div>
+      <div class="foot" style="margin-top:12px"><span class="wbtn red">Stop sharing</span><span class="wbtn pri">Done</span></div>
+    </div>
+  </div>
+</div>
+<div class="side" style="margin-top:34px">
+  <h3>What this frame decides</h3>
+  <ol>
+    <li>Only the owner makes a share link, from the Files page, and only for one file (D18). The secret scan runs before the link is made. A match
+      <b>names what it found</b>, by kind and line, with values masked.</li>
+    <li>It warns and <b>does not block</b>: Share anyway makes the link. Cancel makes nothing.</li>
+    <li>The link: copy, stop sharing. When the scan finds nothing this is the first and only step. The link is a new kind, <b>File</b>, next to session,
+      task, project and wiki links; released apps that don't know the kind skip it (rule 8).</li>
+  </ol>
+  <p>Agents cannot make share links (D18). Folder links are a later decision: a folder link is live, so whatever an agent writes there later would be
+  shared too.</p>
+</div>
+</div>
+
+<!-- W6 -->
+<div class="grid2">
+<div>
+  <div class="fh"><span class="n">6</span>Trash <span class="dec">D6 · D11 owner only</span><span class="dec">Rule 3 grouped by folder and time</span><span class="dec">D17 earlier versions</span></div>
+  <div class="win" style="height:640px">
+    <div class="sb" data-on="files"></div>
+    <div class="main">
+      <div class="wtop"><span class="title">Trash</span><span style="color:var(--t2)">23 items · 2.6 GB</span><span class="sp"></span><span class="wbtn">‹ Files</span><span class="wbtn red" data-mk="4"><i data-ic="trash" class="sm"></i>Empty Trash…</span></div>
+      <div style="padding:14px 18px;overflow:hidden">
+        <div class="tgroup" data-mk="1">
+          <div class="tgh"><i data-ic="folder"></i><div class="l"><b>From Orbit UI migration</b> <span class="sub" style="display:inline">· deleted today 14:20 by an agent on Orbit Cloud · 1 folder, 18 items · 46 MB</span></div><span class="wbtn"><i data-ic="restore" class="sm"></i>Restore all</span><span class="wbtn"><i data-ic="more" class="sm"></i></span></div>
+          <div class="ti"><i data-ic="folder" class="sm"></i><div class="l"><b>old-screens</b> <span style="color:var(--t2)">· 18 items</span></div><span class="v">46 MB</span></div>
+        </div>
+        <div class="tgroup" data-mk="2">
+          <div class="tgh"><i data-ic="restore" style="color:var(--t2)"></i><div class="l"><b>From Orbit UI migration</b> <span class="sub" style="display:inline">· replaced today 09:12 · 2 earlier versions</span></div><span class="wbtn"><i data-ic="restore" class="sm"></i>Restore all</span><span class="wbtn"><i data-ic="more" class="sm"></i></span></div>
+          <div class="ti"><span class="thumb" style="width:18px;height:18px;border-radius:4px"></span><div class="l">sign-in-v3.png <span style="color:var(--t2)">· earlier version, written Nov 18 by you · replaced by <a class="lk">Agent in Redesign the sign-in page</a></span></div><span class="v">1.1 MB</span><span class="wbtn">Restore as current</span><span class="wbtn">Restore as a copy</span></div>
+          <div class="ti"><i data-ic="md" class="sm"></i><div class="l">migration-notes.md <span style="color:var(--t2)">· earlier version · replaced by an agent on Orbit Cloud</span></div><span class="v">16 KB</span><span class="wbtn">Restore as current</span><span class="wbtn">Restore as a copy</span></div>
+        </div>
+        <div class="tgroup">
+          <div class="tgh"><i data-ic="folder"></i><div class="l"><b>From Datasets</b> <span class="sub" style="display:inline">· deleted Nov 17 by you · 2 items · 2.6 GB</span></div><span class="wbtn"><i data-ic="restore" class="sm"></i>Restore all</span><span class="wbtn"><i data-ic="more" class="sm"></i></span></div>
+          <div class="ti"><i data-ic="zip" class="sm"></i><div class="l">eval-runs-draft.zip</div><span class="v">2.5 GB</span><span class="wbtn">Restore</span><span class="wbtn red" data-mk="3">Delete for good</span></div>
+          <div class="ti"><i data-ic="csv" class="sm"></i><div class="l">labels-old.csv</div><span class="v">80 MB</span></div>
+        </div>
+        <div class="sub" style="white-space:normal">Only you see Trash; agents do not. Everything here counts toward Storage until you empty it. A restore whose name is taken gets a suffix.</div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="side" style="margin-top:34px">
+  <h3>What this frame decides</h3>
+  <ol>
+    <li>Trash groups items by <b>the folder they were deleted from and when</b> (rule 3). What one <span class="mono">rm -rf</span> removed is one group,
+      shown as the folder it was, though the mount saw it as many deletes; <b>Restore all</b> puts it back whole.</li>
+    <li>Overwriting a file (<span class="mono">&gt;</span>, <span class="mono">cp</span> over it, <span class="mono">mv</span> onto it) puts its previous version
+      here (D17); appending does not. Each version says who wrote it and who replaced it. <b>Restore as current</b> sends today's file to Trash in turn.</li>
+    <li>Each group and each row can be restored, or deleted for good (in the row's or group's <b>⋯</b>; shown inline on one row here).</li>
+    <li><b>Empty Trash…</b> asks once and is the only bulk way bytes leave. Nothing empties itself this round (rule 4; cleanup is a later design).</li>
+  </ol>
+  <p>Agents cannot see Trash (D11): the mount has no Trash folder, and the drive tools don't list it.</p>
+</div>
+</div>
+
+<!-- W7 -->
+<div class="grid2">
+<div>
+  <div class="fh"><span class="n">7</span>Storage <span class="dec">D13 replaces Settings → Storage</span><span class="dec">D19 earlier uploads listed, not imported</span></div>
+  <div class="win" style="height:720px">
+    <div class="sb" data-on="files"></div>
+    <div class="main">
+      <div class="wtop"><span class="title">Storage</span><span class="sp"></span><span class="wbtn">‹ Files</span></div>
+      <div style="padding:16px 22px;display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="card" data-mk="1" style="grid-column:1 / 3;padding:16px 18px">
+          <div style="display:flex;align-items:baseline;gap:10px"><span style="font-size:28px;font-weight:700">18.4 GB</span><span style="color:var(--t2)">in this account</span></div>
+          <div class="stack" style="margin-top:10px"><i style="width:59%;background:#3E69F6"></i><i style="width:7%;background:#9db5fa"></i><i style="width:11%;background:#8a8a90"></i><i style="width:8%;background:#a8a8b0"></i><i style="width:5%;background:#c2c2c8"></i><i style="width:10%;background:#d6d6db"></i></div>
+          <div class="legend" data-mk="2"><span style="--c:#3E69F6"><b>Files</b> 10.9 GB</span><span style="--c:#9db5fa">Trash 1.3 GB</span><span style="--c:#8a8a90">Conversation pictures 2.1 GB</span><span style="--c:#a8a8b0">Attachments 1.4 GB</span><span style="--c:#c2c2c8">Evidence files 0.9 GB</span><span style="--c:#d6d6db">Files agents uploaded 1.8 GB</span></div>
+          <div class="sub" style="white-space:normal;margin-top:8px">Each file counts once, however many sessions use it. Everything outside Files and Trash is kept under its own rules and is not in the drive; the lists below are those files.</div>
+        </div>
+        <div class="card" data-mk="3"><div class="ch">Largest projects</div>
+          <div class="cr"><span>Orbit UI migration</span><span class="v">1.9 GB ›</span></div><div class="cr"><span>Documents drive</span><span class="v">640 MB ›</span></div><div class="cr"><span>Wiki chat</span><span class="v">410 MB ›</span></div><div class="cr"><span>Scheduled tasks</span><span class="v">220 MB ›</span></div></div>
+        <div class="card"><div class="ch">Largest tasks</div>
+          <div class="cr"><span>Record the sign-in walkthrough</span><span class="v">820 MB ›</span></div><div class="cr"><span>Capture the Wiki board</span><span class="v">410 MB ›</span></div><div class="cr"><span>Nightly pg spec sweep</span><span class="v">190 MB ›</span></div><div class="cr"><span>Release notes draft</span><span class="v">60 MB ›</span></div></div>
+        <div class="card" style="grid-column:1 / 3"><div class="ch">Added each week</div>
+          <div class="cr"><span>Week of Nov 16</span><span class="v">1.2 GB ›</span></div><div class="cr"><span>Week of Nov 9</span><span class="v">880 MB ›</span></div><div class="cr"><span>Week of Nov 2</span><span class="v">1.4 GB ›</span></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="side" style="margin-top:34px">
+  <h3>What this frame decides</h3>
+  <ol>
+    <li>The account's total, with the drive's share first (Files, and Trash apart because it counts until emptied, rule 4).</li>
+    <li>The rest by kind: conversation pictures, attachments, evidence files, and files agents uploaded with <span class="mono">file_upload</span> before
+      the drive (D19: listed where they are, not imported). Each byte is counted once.</li>
+    <li>The per-project, per-task and per-week lists that Settings → Storage shows today (<span class="mono">StoragePage.tsx</span>: Largest projects,
+      Largest tasks, Added each week), each row opening the same detail page as today.</li>
+  </ol>
+  <p>Settings → Storage goes away (D13): its row leaves Settings and <span class="mono">/settings/storage</span> redirects here. The "Stored files" copy about
+  14-day expiry stays true only of agents' uploads, so it moves under that row. No quota bar this round (quotas are a later design).</p>
+</div>
+</div>
+
+<!-- W8 -->
+<div class="grid2">
+<div>
+  <div class="fh"><span class="n">8</span>Composer drive picker, and a reply that links a drive file <span class="dec">D21 picker puts the path in</span><span class="dec">D21 reply renders the drive file</span></div>
+  <div class="win" style="height:700px">
+    <div class="sb" data-on="session"></div>
+    <div class="main" style="background:#fff">
+      <div class="wtop"><span class="title" style="font-size:16px">Redesign the sign-in page</span><span class="pill p-grey">apiserver</span><span class="sp"></span></div>
+      <div style="padding:16px 60px;flex:1;font-size:14px;position:relative">
+        <div class="bub" style="margin-right:0;font-size:14px"><span class="chip" style="background:rgba(255,255,255,.2);color:#fff"><i data-ic="md" class="sm"></i>migration-notes.md</span> Follow these for the copy</div>
+        <div style="margin:12px 0;line-height:1.55">I followed the notes and saved the final screens to your drive:
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <div class="fcard" data-mk="3" style="width:300px"><div class="thumb"></div><div class="l"><div class="t1 b">sign-in-v3.png</div><div class="sub">Files › Orbit UI migration · 1.2 MB</div></div></div>
+            <div class="fcard" style="width:300px"><i data-ic="md" class="lg"></i><div class="l"><div class="t1 b">sign-in-copy.md</div><div class="sub">Files › Orbit UI migration · 4 KB</div></div></div>
+            <div class="fcard" data-mk="4" style="width:250px;background:#fafafb;color:var(--t2)"><i data-ic="file" class="lg" style="opacity:.5"></i><div class="l"><div class="t1">sign-in-v1.png</div><div class="sub">No longer in Files</div></div></div>
+          </div>
+          Two strings changed from the notes; they are marked in <a class="lk">sign-in-copy.md</a>.
+        </div>
+        <div class="wmenu" data-mk="2" style="left:60px;bottom:8px;width:640px;padding:10px;position:absolute">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><b>Add from Files</b><span class="field" style="width:240px;padding:3px 8px;color:var(--t2)"><i data-ic="search" class="sm"></i>Search Files</span></div>
+          <div class="crumb" style="padding:4px 2px;border:0">Files › <b>Orbit UI migration</b></div>
+          <div class="lr" style="grid-template-columns:minmax(0,1fr) 210px 70px;padding:5px 8px"><span class="nm"><i data-ic="folder" class="sm"></i><span>screens</span></span><span class="w">—</span><span class="s">›</span></div>
+          <div class="lr" style="grid-template-columns:minmax(0,1fr) 210px 70px;padding:5px 8px"><span class="nm"><i data-ic="md" class="sm"></i><span>migration-notes.md</span></span><span class="w">An agent on Orbit Cloud</span><span class="s">18 KB</span></div>
+          <div class="lr sel" style="grid-template-columns:minmax(0,1fr) 210px 70px;padding:5px 8px"><span class="nm"><i data-ic="check" class="sm" style="color:var(--brand)"></i><i data-ic="md" class="sm"></i><span>brief.md</span></span><span class="w">You</span><span class="s">3 KB</span></div>
+          <div class="lr" style="grid-template-columns:minmax(0,1fr) 210px 70px;padding:5px 8px;border:0"><span class="nm"><i data-ic="csv" class="sm"></i><span>route-inventory.csv</span></span><span class="w">Agent in Inventory web routes</span><span class="s">96 KB</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px"><span class="sub">Puts the file's path in your message; nothing is uploaded again.</span><span class="wbtn pri">Add 1</span></div>
+        </div>
+      </div>
+      <div class="composer" style="margin:0 60px 16px;border-radius:14px">
+        <div><span class="chip"><i data-ic="md" class="sm"></i>brief.md</span> <span>Check the screens against the brief too</span></div>
+        <div class="tools"><span style="display:flex;gap:12px;align-items:center"><i data-ic="clip" class="sm"></i><span class="chip" data-mk="1" style="background:#e6ecfd"><i data-ic="drive" class="sm"></i>Files</span></span><span class="send">↑</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="side" style="margin-top:34px">
+  <h3>What this frame decides</h3>
+  <ol>
+    <li>The composer gets a <b>Files</b> button next to the paperclip (and "From Files" in the attach menu). It opens on the folder of the session's
+      project when there is one (D22).</li>
+    <li>The picker (open here for the next message) browses and searches the drive. Picking a file puts a chip in the message; what is sent is the path,
+      <span class="mono">/home/orbit/Files/Orbit UI migration/brief.md</span>, which a Cloud agent reads from its mount and an agent on another
+      runner gets with the drive tools (D20, D21).</li>
+    <li>A path under <span class="mono">~/Files</span> in a reply renders as that drive file: preview, name, folder, size. Clicking opens it on the Files page,
+      live, so a later overwrite shows.</li>
+    <li>A file that has since moved or gone to Trash says so instead of breaking. A drive link is not evidence: to cite a file the agent still passes it to
+      <span class="mono">file_upload</span>, which keeps its own copy (rule 5).</li>
+  </ol>
+</div>
+</div>
+
+</div>
+<script>
+const SB = (on, mk) => `
+  <div class="brand"><i data-ic="logo"></i>Orbit</div>
+  <div class="it"><i data-ic="projects" class="sm"></i>Projects<span class="k">⌘P</span></div>
+  <div class="it"><i data-ic="tasks" class="sm"></i>Tasks</div>
+  <div class="it"><i data-ic="cal" class="sm"></i>Scheduled</div>
+  <div class="it"><i data-ic="hand" class="sm"></i>Waiting on you<span class="cnt">3</span></div>
+  <div class="it"><i data-ic="book" class="sm"></i>Wiki<span class="cnt">2</span></div>
+  <div class="it ${on === 'files' ? 'on' : ''}" ${mk ? 'data-mk="1"' : ''}><i data-ic="drive" class="sm"></i>Files</div>
+  <div class="sec">Workspaces</div>
+  <div class="it"><i data-ic="ws" class="sm"></i>apiserver</div>
+  ${on === 'session' ? '<div class="it on" style="padding-left:24px;font-size:12.5px">Redesign the sign-in page</div>' : ''}
+  <div class="it"><i data-ic="ws" class="sm"></i>web</div>
+  <div class="it"><i data-ic="ws" class="sm"></i>Orbit baseline</div>
+  <div class="sec">Wiki</div>
+  <div class="it"><i data-ic="book" class="sm"></i>orbit</div>
+  <div class="sec">Projects</div>
+  <div class="it"><span style="width:7px;height:7px;border-radius:50%;background:#b4b4ba;margin:0 4px"></span>Orbit UI migration</div>
+  <div class="me"><span class="av">M</span>Mia Chen</div>`;
+for (const el of document.querySelectorAll('.sb[data-on]')) el.innerHTML = SB(el.dataset.on, el.dataset.mkfiles);
+</script>
+<script src="icons.js"></script>
+<script src="marks.js"></script>
+</body></html>

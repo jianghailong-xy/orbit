@@ -40,6 +40,8 @@ extension EnvironmentValues {
 struct WikiChatFab: View {
     let look: WikiChatLogic.FabLook
     let diameter: CGFloat
+    /// The page's name for it: the Wiki's, or Drive's (`drive-chat-fab`).
+    var identifier = "wiki-chat-fab"
     let action: () -> Void
 
     @State private var turning = false
@@ -70,7 +72,7 @@ struct WikiChatFab: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(look.label)
-        .accessibilityIdentifier("wiki-chat-fab")
+        .accessibilityIdentifier(identifier)
         .help(look.label)
     }
 
@@ -217,7 +219,7 @@ struct WikiChatHost: ViewModifier {
     /// `presentationBackgroundInteraction`, design §9), the trailing column beside the page elsewhere.
     @ViewBuilder
     private func presented<Page: View>(_ content: Page, chat: WikiChatModel, space: WikiSpace) -> some View {
-        let panel = WikiChatPanel(chat: chat, space: space, compact: compact)
+        let panel = WikiChatPanel(chat: chat, scope: space.id, compact: compact)
         #if os(iOS)
         if compact {
             content
@@ -304,7 +306,8 @@ struct WikiChatUpdatedPill: View {
 struct WikiChatPanel: View {
     @Environment(AppModel.self) private var model
     let chat: WikiChatModel
-    let space: WikiSpace
+    /// The space whose chats it shows, or Drive's one scope (`DriveChatLogic.scope`).
+    let scope: String
     /// A phone's sheet: the board's head and no line under it.
     let compact: Bool
 
@@ -313,13 +316,13 @@ struct WikiChatPanel: View {
             head
             Divider()
             if chat.history != nil {
-                WikiChatHistoryList(chat: chat, space: space)
+                WikiChatHistoryList(chat: chat)
             } else if let asking = chat.asking {
                 WikiChatAskSheet(request: asking, chat: chat)
             } else if chat.chat == WikiChatLogic.newChat {
-                WikiChatNewBody(chat: chat, space: space)
+                WikiChatNewBody(chat: chat, scope: scope)
             } else {
-                WikiChatRunningBody(chat: chat, space: space, sessionID: chat.chat)
+                WikiChatRunningBody(chat: chat, sessionID: chat.chat)
                     .id(chat.chat)
             }
         }
@@ -386,7 +389,7 @@ struct WikiChatPanel: View {
         .buttonStyle(.plain)
         .keyboardShortcut(chat.history != nil ? .cancelAction : nil)
         .accessibilityLabel(title)
-        .accessibilityHint(WikiChatCopy.history)
+        .accessibilityHint(chat.copy.history)
     }
 
     /// A phone's sheet keeps the title's menu of chats.
@@ -397,10 +400,10 @@ struct WikiChatPanel: View {
                 } label: {
                     Label(WikiChatCopy.newChat, systemImage: "plus")
                 }
-                let rows = chat.list(space.id)?.chats ?? []
-                Section(WikiChatCopy.history) {
+                let rows = chat.list(scope)?.chats ?? []
+                Section(chat.copy.history) {
                     if rows.isEmpty {
-                        Text(WikiChatCopy.noHistory)
+                        Text(chat.copy.noHistory)
                     }
                     ForEach(rows) { row in
                         Button {
@@ -427,7 +430,7 @@ struct WikiChatPanel: View {
             .menuStyle(.button)
             .buttonStyle(.plain)
             .accessibilityLabel(title)
-            .accessibilityHint(WikiChatCopy.history)
+            .accessibilityHint(chat.copy.history)
     }
 
     private func headButton(_ symbol: String, _ label: String, disabled: Bool = false,
@@ -454,7 +457,6 @@ struct WikiChatPanel: View {
 struct WikiChatHistoryList: View {
     @Environment(AppModel.self) private var model
     let chat: WikiChatModel
-    let space: WikiSpace
 
     @State private var words = ""
     @State private var completedOpen = false
@@ -483,7 +485,7 @@ struct WikiChatHistoryList: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     if read.loaded && read.rows.isEmpty {
-                        Text(searching ? WikiChatCopy.noMatch : WikiChatCopy.noHistory)
+                        Text(searching ? WikiChatCopy.noMatch : chat.copy.noHistory)
                             .font(.orbitListSubtitle)
                             .foregroundStyle(.secondary)
                             .padding(8)
@@ -661,10 +663,10 @@ struct WikiChatHistoryList: View {
 /// first message makes the chat.
 private struct WikiChatNewBody: View {
     let chat: WikiChatModel
-    let space: WikiSpace
+    let scope: String
 
     var body: some View {
-        let runsIn = chat.runsIn(space.id)
+        let runsIn = chat.runsIn(scope)
         VStack(spacing: 0) {
             switch runsIn {
             case .chosen(let workspace, _, let choices)?:
@@ -679,16 +681,21 @@ private struct WikiChatNewBody: View {
                 VStack(spacing: 16) {
                     switch runsIn {
                     case .noWorktree?:
-                        Text(WikiChatCopy.noWorktree)
+                        Text(chat.copy.noWorkspace)
                             .multilineTextAlignment(.center)
                             .foregroundStyle(.secondary)
                     case .choose(let choices, _)?:
                         choose(choices)
                     case .chosen?, nil:
-                        (Text(WikiChatCopy.emptyHint) + Text("\n") + Text(WikiChatCopy.emptyNote))
+                        (Text(chat.copy.emptyHint) + Text("\n") + Text(chat.copy.emptyNote))
                             .multilineTextAlignment(.center)
                             .foregroundStyle(.secondary)
                             .accessibilityIdentifier("wiki-chat-empty")
+                        // Examples while the box is empty: a press fills it and sends nothing (board drive-chat 02 ①).
+                        if case .chosen? = runsIn, !chat.copy.examples.isEmpty,
+                           chat.draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            examples
+                        }
                     }
                 }
                 .font(.orbitSubtext)
@@ -698,7 +705,7 @@ private struct WikiChatNewBody: View {
                 .frame(maxWidth: .infinity)
             }
             if case .chosen(let workspace, _, _)? = runsIn {
-                WikiChatNewComposer(chat: chat, spaceID: space.id, workspaceID: workspace.id)
+                WikiChatNewComposer(chat: chat, spaceID: scope, workspaceID: workspace.id)
                     .id(workspace.id)
             }
         }
@@ -735,7 +742,7 @@ private struct WikiChatNewBody: View {
 
     private func choose(_ choices: [WikiChatWorkspace]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(WikiChatCopy.chooseWorkspace)
+            Text(chat.copy.chooseWorkspace)
                 .font(.orbitSubtext.weight(.semibold))
             ForEach(choices) { choice in
                 Button {
@@ -757,6 +764,29 @@ private struct WikiChatNewBody: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// The origin's examples, one outlined line each, centred (board drive-chat 02 ① ⑥).
+    private var examples: some View {
+        VStack(spacing: 8) {
+            ForEach(chat.copy.examples, id: \.self) { example in
+                Button {
+                    chat.fillDraft(example)
+                } label: {
+                    Text(example)
+                        .font(.orbitLabel)
+                        .foregroundStyle(Color.primary.opacity(0.75))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .overlay(Capsule().strokeBorder(Color.secondary.opacity(0.3)))
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("chat-example")
+            }
+        }
+        .padding(.top, 2)
+    }
+
     private func note(_ text: String) -> some View {
         Text(text)
             .font(.orbitLabel)
@@ -772,7 +802,6 @@ private struct WikiChatNewBody: View {
 private struct WikiChatRunningBody: View {
     @Environment(AppModel.self) private var model
     let chat: WikiChatModel
-    let space: WikiSpace
     let sessionID: String
 
     var body: some View {
@@ -788,6 +817,8 @@ private struct WikiChatRunningBody: View {
             }
             if let console {
                 WikiChatConversation(console: console, registry: model.consoleRegistry)
+                    // Drive's change cards and overwrite questions, each after its turn (board drive-chat 02 ② ③).
+                    .environment(\.transcriptChatCards, chat.origin == .drive ? driveCards : nil)
                 if let ended = endedLine(console) {
                     WikiChatEndedLine(text: ended) { chat.newChat() }
                 } else {
@@ -805,6 +836,13 @@ private struct WikiChatRunningBody: View {
     }
 
     private var session: Session? { model.session(id: sessionID) }
+
+    private var driveCards: TranscriptChatCards {
+        let chat = chat
+        return TranscriptChatCards(
+            cards: chat.driveCards(sessionID).map { TranscriptChatCard(id: $0.id, turnId: $0.turnId) },
+            render: { id in AnyView(DriveChatCardSlot(chat: chat, id: id)) })
+    }
 
     /// Why the chat takes no more messages, once it does not (C8 review): in Trash, or ended and not about to be
     /// retried. Nil until its record is read.
@@ -902,8 +940,8 @@ struct WikiChatComposer: View {
                 .padding(.bottom, .composerBandGap)
             }
             ComposerView(console: console,
-                         emptyPlaceholder: creates == nil ? chat.placeholder : WikiChatCopy.placeholder,
-                         leadingAttachments: shown.page == nil && shown.quote == nil
+                         emptyPlaceholder: creates == nil ? chat.placeholder : chat.copy.placeholder,
+                         leadingAttachments: shown.page == nil && shown.quote == nil && WikiChatLogic.shownFiles(chat.attachments) == nil
                              ? nil : AnyView(WikiChatChips(chat: chat)))
         }
         .onAppear { console.wikiChat = composing }
@@ -912,7 +950,8 @@ struct WikiChatComposer: View {
 
     private var composing: WikiChatComposing {
         let chat = chat
-        var composing = WikiChatComposing(context: { chat.context }, accepted: { chat.sent() })
+        var composing = WikiChatComposing(context: { chat.context }, driveContext: { chat.driveContext },
+                                          accepted: { chat.sent() })
         if let creates {
             composing.create = { first in
                 await chat.create(spaceID: creates.spaceID, workspaceID: creates.workspaceID, first)
@@ -960,6 +999,10 @@ private struct WikiChatNewComposer: View {
         .onChange(of: draft?.composerText) { _, text in
             if let text { chat.draftText = text }
         }
+        // An example pressed fills the box.
+        .onChange(of: chat.draftText) { _, text in
+            if let draft, draft.composerText != text { draft.composerText = text }
+        }
     }
 }
 
@@ -986,13 +1029,24 @@ private struct WikiChatChips: View {
         HStack(spacing: 8) {
             if let page = shown.page { pageChip(page) }
             if let quote = shown.quote { quoteChip(quote) }
+            if let files = WikiChatLogic.shownFiles(chat.attachments) { filesChip(files) }
         }
+    }
+
+    /// Drive: the files beside the folder — `lease-2026.pdf`, or `12 files` (board drive-chat 02 ③).
+    private func filesChip(_ files: WikiChatLogic.Files) -> some View {
+        let label = DriveChatCopy.selection(files.names)
+        return chip(remove: WikiChatCopy.remove(label), cross: { chat.crossFiles() }) {
+            Text(label).lineLimit(1).truncationMode(.middle)
+        }
+        .help(files.names.joined(separator: "\n"))
+        .accessibilityIdentifier("drive-chat-files-chip")
     }
 
     private func pageChip(_ page: WikiChatLogic.Page) -> some View {
         chip(remove: WikiChatCopy.remove(page.label), cross: { chat.crossPage() }) {
             HStack(spacing: 4) {
-                Image(systemName: "book")
+                Image(systemName: { if case .folder = page { return "folder" } else { return "book" } }())
                     .font(.orbitMeta)
                 Text(page.label)
                     .lineLimit(1)

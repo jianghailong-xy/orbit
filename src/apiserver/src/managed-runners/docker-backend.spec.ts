@@ -82,7 +82,6 @@ test('every Docker field is required and checked, and Kubernetes sections are re
     ['a server with credentials', (p) => (p.runner.serverUrl = 'https://u:p@orbit.example.com'), /must not carry credentials/],
     ['no PID limit', (p) => delete p.runner.resources.pids, /runner\.resources\.pids must be an integer from 16/],
     ['a CPU that is no quantity', (p) => (p.runner.resources.cpu = 'one'), /runner\.resources\.cpu is not a quantity/],
-    ['/tmp beyond memory', (p) => (p.runner.tmpSizeLimit = '3Gi'), /tmpSizeLimit is a tmpfs held in memory/],
     ['a reserve above 0.9', (p) => (p.capacity = { reserve: { cpu: 0.95 } }), /capacity\.reserve\.cpu must be a fraction from 0 to 0\.9/],
     ['a stated budget that is no quantity', (p) => (p.capacity = { compute: { memory: 'lots' } }), /capacity\.compute\.memory is not a quantity/],
     ['no attempt budget', (p) => delete p.lifecycle.maxAttempts, /lifecycle\.maxAttempts must be an integer/],
@@ -94,6 +93,8 @@ test('every Docker field is required and checked, and Kubernetes sections are re
     assert.equal(result.ok, false, what);
     assert.ok(!result.ok && result.problems.some((p) => expected.test(p)), `${what}: ${JSON.stringify(!result.ok && result.problems)}`);
   }
+  // /tmp is a directory of the data volume, not a tmpfs in the container's memory: its share may exceed the memory limit.
+  assert.equal(withChange((p) => (p.runner.tmpSizeLimit = '3Gi')).ok, true, '/tmp beyond memory');
   for (const serverUrl of ['http://172.30.0.1:3000', 'http://10.1.2.3', 'http://192.168.1.12:2086', 'http://apiserver:3000', 'http://[fd00::1]:3000', 'http://127.0.0.1:3000', 'https://orbit.example.com']) {
     assert.equal(withChange((p) => (p.runner.serverUrl = serverUrl)).ok, true, serverUrl);
   }
@@ -123,7 +124,7 @@ test('the budget is derived from the host less its reserve, and every stated dim
   assert.deepEqual(dockerCapacityBudget(host, profile), {
     cpuMillis: 18_000,
     memoryBytes: 12 * GiB,
-    ephemeralBytes: 12 * GiB, // /tmp is a tmpfs: it lives in the memory budget
+    ephemeralBytes: 12 * GiB, // unless stated, the ephemeral budget is the memory budget
     pods: 6, attachments: 6, activeUsers: 6, // memory fits six 2 GiB runners, CPU eighteen
     storageUsableBytes: 320 * GiB, // free, plus what this instance's volumes already hold
     storageHeadroomBytes: 100 * GiB, // a tenth of the disk kept free

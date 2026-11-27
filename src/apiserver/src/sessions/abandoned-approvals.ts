@@ -464,6 +464,62 @@ export async function countLiveApprovals(
     - (subagentQuestions.length - (await visibleQuestions(db, subagentQuestions)).length);
 }
 
+/** The session columns `countLiveApprovals` reads. */
+export type LiveApprovalReader = {
+  id: string;
+  taskId?: string | null;
+  runningBgShells: readonly string[];
+  /** The delegate calls of SubAgents still running: a parked conversation can be holding their cards too.
+   *  Every caller selects it; absent reads as none. */
+  runningSubagents?: readonly string[] | null;
+} & Parameters<typeof isSessionGenerating>[0];
+
+/**
+ * `countLiveApprovals` for many sessions at once, by id, in a number of statements that does not grow with them: one
+ * read of the turn and job cards, one of the SubAgent cards (and their runs), and one of the question holds. A
+ * session whose cards nothing could be holding reads nothing. The rule is the one above, read for a page: the PG specs
+ * that count with `countLiveApprovals` (abandoned-approvals, subagent-approvals, run-question, session-search-statements)
+ * hold the two equal on every shape they build.
+ */
+export async function countLiveApprovalsBySession(
+  db: Prisma.TransactionClient,
+  sessions: readonly LiveApprovalReader[],
+): Promise<Map<string, number>> {
+  const counts = new Map(sessions.map((session) => [session.id, 0]));
+  const generating = new Set(sessions.filter((session) => isSessionGenerating(session)).map((session) => session.id));
+  const shellsOf = new Map(sessions.map((session) => [session.id, session.runningBgShells]));
+  const taskRuns = new Set(sessions.filter((session) => !!session.taskId).map((session) => session.id));
+  // A generating session holds every pending card of its turn, and a job's only while its job is up; any other
+  // holds only the cards of a runner-hosted job still up. A job's card counts on that fact alone, generating or not:
+  // its reader is the job, and the card listing (`SessionsService.stillBeingAsked`) shows it the same way.
+  const askers = sessions
+    .filter((session) => generating.has(session.id) || session.runningBgShells.length > 0)
+    .map((session) => session.id);
+  const asked = askers.length === 0 ? [] : await db.approval.findMany({
+    where: { sessionId: { in: askers }, status: 'PENDING' },
+    select: { id: true, toolName: true, sessionId: true, backgroundJobId: true },
+  });
+  const held = asked.filter((card) => (card.backgroundJobId === null
+    ? generating.has(card.sessionId)
+    : readByLiveBackgroundJob(card, shellsOf.get(card.sessionId) ?? [])));
+  // A conversation that is not generating holds the cards a reader outside its turn is still polling for: a running
+  // SubAgent's too (docs/subagent-design.md §5.3).
+  const withSubagents = sessions
+    .filter((session) => !generating.has(session.id) && (session.runningSubagents?.length ?? 0) > 0)
+    .map((session) => session.id);
+  const subagentCards = withSubagents.length === 0 ? [] : await liveSubagentCards(db, { sessionId: { in: withSubagents } });
+  const cards = [...held, ...subagentCards];
+  // A task run's question a coordinator holds is not asked of the person: of those, only the visible ones count.
+  const questions = cards.filter((card) => taskRuns.has(card.sessionId) && card.toolName === 'AskUserQuestion');
+  const visible = questions.length === 0 ? new Set<string>()
+    : new Set((await visibleQuestions(db, questions)).map((card) => card.id));
+  for (const card of cards) {
+    if (questions.includes(card) && !visible.has(card.id)) continue;
+    counts.set(card.sessionId, (counts.get(card.sessionId) ?? 0) + 1);
+  }
+  return counts;
+}
+
 /**
  * The PENDING cards a SubAgent asked whose run is still RUNNING (docs/subagent-design.md §5.3), among the
  * approvals `where` names: cards whose reader, the SubAgent's child engine, is still there whatever its parent's

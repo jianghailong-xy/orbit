@@ -1,0 +1,40 @@
+/* A shared Drive file's public page (SharedDriveFilePage). */
+.share-file {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+.share-file-name {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+.share-file-size {
+  margin: 4px 0 16px;
+  color: var(--text-3);
+  font-size: 13px;
+}
+.share-file-pdf {
+  display: block;
+  width: 100%;
+  height: calc(100vh - 200px);
+  min-height: 420px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+.share-file-picture {
+  display: block;
+  max-width: 100%;
+  margin: 0 auto;
+  border-radius: 8px;
+  background: var(--bg-sunken);
+}
+.share-file-none {
+  padding: 40px 0;
+  color: var(--text-3);
+  text-align: center;
+  font-size: 13px;
+}

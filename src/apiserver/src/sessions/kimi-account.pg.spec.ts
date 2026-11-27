@@ -28,7 +28,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { AgentProvider, KIMI_LOGIN_REGION_V1, type PlanUsage, type RunnerEngineHealth } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -47,6 +48,7 @@ import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { RunnersService } from '../runners/runners.service';
 import { SessionsService } from './sessions.service';
 import '../test-support/dequeue-under-lease';
+import { turnStateOfWord } from './session-turn-state';
 
 const KIMI_ACCOUNT_LOGIN_V1 = 'kimi-account-login/v1';
 const URL = process.env.COORDINATOR_PG_URL;
@@ -173,7 +175,7 @@ test('which of its runner’s Kimi Code accounts a session runs on', { skip, con
         prompt: 'fix the flaky test',
         provider: AgentProvider.KIMI,
         providerBuiltin: true,
-        status,
+        turnState: turnStateOfWord(status),
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
         runtimeSessionId: randomUUID(),

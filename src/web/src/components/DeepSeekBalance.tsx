@@ -14,7 +14,7 @@ import type { ProviderRow } from '../lib/providerAdmin';
 import { useToast } from '../lib/toast';
 import { useNow } from './WatchParts';
 import { Button, LinkButton } from './ui/Button';
-import { Tooltip } from './ui/Tooltip';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 import './DeepSeekBalance.css';
 
 // The DeepSeek account balance behind a DeepSeek key, on Infrastructure's API keys (one line under the
@@ -53,12 +53,14 @@ function BalanceLine({ view, ask, asking, now }: { view: BalanceView; ask: () =>
   if (view.kind === 'loading') return <div className="dsb-line">Checking account balance…</div>;
   if (view.kind === 'failed') {
     return (
-      <div className="dsb-line fail" title={view.message}>
-        Balance unavailable: {view.label} <span className="dsb-sep">·</span>{' '}
-        <button type="button" className="re-link" disabled={asking} onClick={ask}>
-          Retry
-        </button>
-      </div>
+      <Tooltip content={view.message} delay={TEXT_TOOLTIP_DELAY_MS}>
+        <div className="dsb-line fail">
+          Balance unavailable: {view.label} <span className="dsb-sep">·</span>{' '}
+          <button type="button" className="re-link" disabled={asking} onClick={ask}>
+            Retry
+          </button>
+        </div>
+      </Tooltip>
     );
   }
   const { balances, isAvailable, fetchedAt } = view.balance;

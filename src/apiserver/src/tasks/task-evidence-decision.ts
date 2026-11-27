@@ -440,7 +440,7 @@ export async function assertRunMayDecide(
 
 /**
  * Whether this task's evidence is this session's to judge, which is what lets it read the files that evidence cites
- * (docs/orbit-files-design.md §2.7), and what lets a run decide it (`runDecisionDisqualification`).
+ * (docs/drive-design.md §2.7), and what lets a run decide it (`runDecisionDisqualification`).
  *
  * For a session that is no run, narrower than the door, on purpose. The door asks who may not answer and takes an answer
  * from everybody else, which is the right question for an answer: it is recorded under a name and anyone can read why. Asked

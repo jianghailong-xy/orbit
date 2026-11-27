@@ -32,6 +32,10 @@ export interface TranslationActions {
   agentLanguage?: TranslationLanguage;
   retryTurn: (turnId: string) => Promise<unknown>;
   sendAsWritten: (turnId: string) => Promise<unknown>;
+  /** Withdraw a held message that failed to translate; its words go back to the composer. Absent, or
+   *  `canCancelTurn` false (a session's opening prompt, which the server keeps), draws no Cancel. */
+  cancelTurn?: (turnId: string) => Promise<unknown>;
+  canCancelTurn?: (turnId: string) => boolean;
   retryReply: (seq: number) => Promise<unknown>;
 }
 
@@ -113,7 +117,7 @@ const Sep = () => <span className="chat-translate-sep">·</span>;
  * The owner's message: "Show original" ↔ "Show translation" once delivered (with both languages on,
  * "Sent to the agent in English · Hide original" ↔ "· Show both"), the press alone after
  * the copy button and time (docs/mocks/translation-foot-one-line, B); the "Translating…" chip while held; and, held because the translation
- * failed (1A), "Couldn't translate, so it wasn't sent · Retry · Send as written" — the first sentence saying why
+ * failed (1A), "Couldn't translate, so it wasn't sent · Retry · Send as written · Cancel" — the first sentence saying why
  * when the turn carries `failureReason` (docs/ux/translation-failure-policy.html, frames 4B and 7).
  */
 export function UserTranslationFoot({
@@ -140,7 +144,8 @@ export function UserTranslationFoot({
           <span className="chat-translate-chip">{COPY.translating}</span>
         </span>
       );
-    case 'FAILED':
+    case 'FAILED': {
+      const cancelTurn = actions?.cancelTurn;
       return (
         <span className="chat-translate-foot is-error">
           <span>{translationFailureSentence('message', translation.failureReason, translation.httpStatus)}</span>
@@ -151,8 +156,15 @@ export function UserTranslationFoot({
             label={COPY.sendAsWritten}
             onPress={actions && turnId ? () => actions.sendAsWritten(turnId) : undefined}
           />
+          {cancelTurn && turnId && actions?.canCancelTurn?.(turnId) && (
+            <>
+              <Sep />
+              <FootAction label={COPY.cancel} onPress={() => cancelTurn(turnId)} />
+            </>
+          )}
         </span>
       );
+    }
     case 'DONE':
       // Both languages on: the English is in the bubble, so there is nothing to flip to.
       if (actions?.bilingual) {

@@ -15,7 +15,6 @@ import {
   ProjectIdentitySource,
   ProjectRole,
   ProjectStatus,
-  RunStatus,
   TaskStatus,
 } from '@prisma/client';
 import {
@@ -27,6 +26,7 @@ import {
   type ProjectSidebarFuse,
   type ProjectPauseState,
   RunEventType,
+  type RunStatus,
   SessionLifecycleState,
   type SessionFilingState,
   type SessionRunState,
@@ -78,7 +78,8 @@ import {
   verificationEpochNeedsHumanSql,
   verificationEpochOpenSql,
 } from '../tasks/verification-dependency';
-import { type CoordinatorHandoffSuccessor, ProjectStatus as SharedProjectStatus, uuidToBase62 } from '@orbit/shared';
+import { type CoordinatorHandoffSuccessor, PROJECT_REOPEN_NOTES, ProjectStatus as SharedProjectStatus, uuidToBase62 } from '@orbit/shared';
+import { settlePendingProjectReopens, type SettledProjectReopen } from '../owner-requests/project-reopen';
 import {
   CRITERIA_DECISIONS,
   CreateProjectDto,
@@ -112,6 +113,12 @@ import {
 } from './criteria-pending-decisions';
 import { CRITERIA_CHANGE_FIELDS, queueOwnerCardTranslation, translatedInto } from '../sessions/card-translation';
 import { translationLanguages, type TranslationLanguages } from '../sessions/turn-translation';
+import {
+  PROJECT_TEXT_FIELDS,
+  projectTextDigest,
+  type StoredProjectTextTranslation,
+  usableProjectTextTranslation,
+} from './project-text-translation';
 import { type CriteriaEditDirection, classifyCriteriaEdit } from './criteria-edit-classification';
 import { type CriteriaDecisionReply, sendCriteriaDecisionReply } from './criteria-decision-reply';
 import {
@@ -146,6 +153,8 @@ import {
   refuseProjectStatusWrite,
   refuseSessionAuthoredCriteriaDecision,
 } from './coordinator-authority';
+import { LEGACY_STATUS_SELECT } from '../sessions/session-legacy-words';
+import { isParked, TURN_STATE_SELECT } from '../sessions/session-turn-state';
 import { withSessionState } from '../sessions/session-state';
 import { readSessionProjectMembership } from '../sessions/session-project-membership';
 import { chargeSessionMessage, SessionMessageRateLimited } from '../sessions/session-message';
@@ -516,7 +525,8 @@ const COORDINATION_INCLUDE = {
  */
 /** The coordinator conversation's columns `coordinatorActivityOf` reads, and nothing else of it. */
 const COORDINATOR_ACTIVITY_SELECT = {
-  status: true,
+  // isSessionGenerating's (common/session-generating.ts) and isParked's.
+  ...TURN_STATE_SELECT,
   engineTurnActive: true,
   runningSubagents: true,
   lastTurnAt: true,
@@ -715,7 +725,7 @@ function coordinatorActivityOf(
   const working =
     session._count.approvals === 0 &&
     (isSessionGenerating(session) ||
-      (session.status === RunStatus.AWAITING_INPUT && session.runningSubagents.length > 0));
+      (isParked(session) && session.runningSubagents.length > 0));
   return { working, lastTurnAt: session.lastTurnAt };
 }
 
@@ -856,12 +866,9 @@ const NO_LANDING_WORKSPACE_CODE = 'NO_LANDING_WORKSPACE';
 /** The session columns the coordinator status read needs. `archivedAt` is here only because
  *  `withSessionState` folds it into `completedAt`; it is never served under its own name. */
 const COORDINATOR_STATUS_SESSION_SELECT = {
+  ...LEGACY_STATUS_SELECT,
   id: true,
   title: true,
-  status: true,
-  endReason: true,
-  startedAt: true,
-  finishedAt: true,
   completedAt: true,
   archivedAt: true,
   deletedAt: true,
@@ -897,7 +904,7 @@ export interface ProjectCoordinatorStatus {
     session: {
       id: string;
       title: string;
-      runStatus: RunStatus;
+      runStatus: `${RunStatus}`;
       runState: SessionRunState;
       lifecycleState: SessionLifecycleState;
       /** @deprecated Compatibility mirror of `lifecycleState`, as on every Session payload. */
@@ -1989,6 +1996,62 @@ export class ProjectsService {
   }
 
   /**
+   * Queue the translation of a project's title and its criteria's text into the owner's language
+   * (sessions/card-translation.ts, project-text-translation.ts), kept in project_text_translation with the digest of
+   * the words it was made from. A stored one made from the words the project still has, in this language, is left
+   * alone; one made from older words is replaced. Once written, the project is announced changed, as an edit of it
+   * is, so the clients read the document again. Returns at once: true when it queued one.
+   */
+  queueProjectTextTranslation(ownerId: string, projectId: string, langs: TranslationLanguages): boolean {
+    // What read() saw, so write() attaches the ids and the digest of exactly the words that were translated.
+    let ids: string[] = [];
+    let texts: string[] = [];
+    let digest = '';
+    return queueOwnerCardTranslation({
+      key: `project-text:${projectId}`,
+      read: async () => {
+        const project = await this.prisma.project.findFirst({
+          where: { id: projectId, ownerId },
+          select: {
+            title: true,
+            acceptanceCriterionDefinitions: { orderBy: { ordinal: 'asc' }, select: { id: true, text: true } },
+            textTranslation: { select: { translation: true } },
+          },
+        });
+        if (!project) return null;
+        const criteria = project.acceptanceCriterionDefinitions;
+        ids = criteria.map((criterion) => criterion.id);
+        texts = criteria.map((criterion) => criterion.text);
+        digest = projectTextDigest(project.title, criteria);
+        const stored = (project.textTranslation?.translation ?? null) as { sourceDigest?: unknown } | null;
+        return {
+          source: { title: project.title, criteria: texts.map((text) => ({ text })) },
+          fields: PROJECT_TEXT_FIELDS,
+          translation: stored?.sourceDigest === digest ? stored : null,
+        };
+      },
+      write: async (translation) => {
+        const translated = translation as { criteria?: Array<{ text?: string }> };
+        const stored = {
+          ...translation,
+          ...(translated.criteria
+            ? { criteria: translated.criteria.map((entry, at) => ({ id: ids[at], text: entry.text ?? texts[at] })) }
+            : {}),
+          sourceDigest: digest,
+        } as StoredProjectTextTranslation;
+        const value = stored as unknown as Prisma.InputJsonValue;
+        await this.prisma.projectTextTranslation.upsert({
+          where: { projectId },
+          create: { projectId, ownerId, translation: value },
+          update: { translation: value },
+        });
+        return true;
+      },
+      published: () => this.realtime?.publishForUser(ownerId, RunEventType.PROJECT_CHANGED, projectId),
+    }, langs);
+  }
+
+  /**
    * ── THE DECISION DOOR ──────────────────────────────────────────────────────────────────────
    *
    * The account owner answering one held criteria proposal. `APPROVE` applies the edit that was
@@ -2952,6 +3015,8 @@ export class ProjectsService {
       moveRecord,
       rulings,
       settingChanges,
+      langs,
+      storedTextTranslation,
     ] = await Promise.all([
       // One lookup by primary key, not a tally of this project's tasks.
       //
@@ -3018,7 +3083,19 @@ export class ProjectsService {
       readLiveRulings(this.prisma, ownerId, id),
       // And the coordinator's cardless landing-check changes, newest first (§12.15 P-R1): one statement.
       readSettingChanges(this.prisma, ownerId, id),
+      // Settings › Translation (migration 1600): the owner's languages, one statement (none with no translator
+      // configured), and the stored translation of the title and criteria, one statement by primary key.
+      translationLanguages(this.prisma, ownerId),
+      this.prisma.projectTextTranslation.findUnique({ where: { projectId: id }, select: { translation: true } }),
     ]);
+    // Served only in the owner's current language and while made from the words the project has now; otherwise one
+    // is queued (decision 1A), and this read serves none.
+    const textTranslation = langs && usableProjectTextTranslation(
+      storedTextTranslation?.translation,
+      langs,
+      projectTextDigest(project.title, project.acceptanceCriterionDefinitions),
+    );
+    if (langs && !textTranslation) this.queueProjectTextTranslation(ownerId, id, langs);
     const landingAnswers = criterionLandingWithReasons(
       landingFacts,
       landingBranchesFor(codebase),
@@ -3074,9 +3151,11 @@ export class ProjectsService {
       rulings,
       // The coordinator's cardless landing-check changes, newest first, each one the owner can revert.
       settingChanges,
+      // The title and criteria in the owner's language (ProjectTextTranslation); absent with translation off.
+      ...(textTranslation ? { translation: textTranslation } : {}),
       blockers,
       integration: {
-        ...projectIntegrationView(codebase, project.exceptionEscalationSeconds),
+        ...projectIntegrationView(codebase, project.exceptionEscalationSeconds, project),
         lastMainBranch: lastMainBranchView(mainBranchMemory),
       },
       // The projection itself, whole: `withheld` is every clause that does not hold — ALL of them,
@@ -3161,7 +3240,7 @@ export class ProjectsService {
   async integration(ownerId: string, id: string): Promise<ProjectIntegrationView> {
     const project = await this.prisma.project.findFirst({
       where: { id, ownerId },
-      select: { exceptionEscalationSeconds: true },
+      select: { exceptionEscalationSeconds: true, title: true },
     });
     if (!project) throw new NotFoundException('project not found');
     return readProjectIntegrationView(
@@ -3170,6 +3249,7 @@ export class ProjectsService {
       projectIntegrationView(
         await readProjectCodebase(this.prisma, id),
         project.exceptionEscalationSeconds,
+        { id, title: project.title },
       ),
     );
   }
@@ -3463,7 +3543,7 @@ export class ProjectsService {
     // sits at is a fact about the graph rather than about the row, so it cannot be answered by
     // selecting more columns of `task`.
     const openIds = page.filter(mayBeSweepCandidate).map((task) => task.id);
-    const [dependencies, workStates, integrations, holds] = await Promise.all([
+    const [dependencies, workStates, integrations, holds, accountHolds] = await Promise.all([
       this.taskDependencyFields(
         ownerId,
         projectId,
@@ -3488,6 +3568,10 @@ export class ProjectsService {
       openIds.length > 0 && this.openItems
         ? this.openItems.signInHolds(ownerId, Prisma.sql`t.id = ANY(${openIds}::uuid[])`)
         : new Map<string, TaskSignInHold>(),
+      // Why its next automatic start stands down: no account that could run it can run now (§7.5).
+      openIds.length > 0 && this.openItems
+        ? this.openItems.accountHoldsFor(ownerId, openIds)
+        : new Map(),
     ]);
     const items = page.map(({ _count, ...task }) => {
       const dependency = dependencies.get(task.id) ?? UNCONNECTED_TASK;
@@ -3519,6 +3603,7 @@ export class ProjectsService {
         ...dependency,
         blocked: dependency.dependencyState !== 'READY',
         hold: holds.get(task.id) ?? null,
+        accountHold: accountHolds.get(task.id) ?? null,
       };
     });
     return {
@@ -4185,6 +4270,15 @@ export class ProjectsService {
         const reopen = await ProjectsService.reopenRecord(
           tx, ownerId, id, dto.status, locked.status, credential,
         );
+        // A write that takes the project out of DONE or CANCELLED answers every agent's waiting request to reopen it
+        // (PROJECT_REOPEN, docs/project-reopen-request-design.md §4.3), in this transaction: no card stays up for a
+        // project that is already open.
+        const reopenRequests = dto.status === SharedProjectStatus.OPEN && locked.status !== SharedProjectStatus.OPEN
+          ? await settlePendingProjectReopens(tx, ownerId, id, 'DONE', {
+            resolvedByUserId: credential?.kind === 'LOGIN' ? ownerId : null,
+            resolutionNote: PROJECT_REOPEN_NOTES.reopenedFromPage,
+          }, new Date())
+          : [];
         const project = await tx.project.update({
           where: { id },
           data: { ...data, ...pause, ...reopen },
@@ -4218,7 +4312,7 @@ export class ProjectsService {
         const switchedOn = dto.coordinatorEnabled === true
           && (locked.coordinator_enabled === false || pause?.pausedAt === null)
           && projectMoves(project);
-        return { project, changedSessionId, held, switchedOn, pauseMoved: pause !== null };
+        return { project, changedSessionId, held, switchedOn, pauseMoved: pause !== null, reopenRequests };
       }, loggedRetry(this.logger, 'projects.update'));
     try {
       let projectResult: {
@@ -4227,6 +4321,7 @@ export class ProjectsService {
         held: HeldCriteriaEdit | null;
         switchedOn: boolean;
         pauseMoved: boolean;
+        reopenRequests: SettledProjectReopen[];
       } | null = null;
       for (let bindingAttempt = 1; bindingAttempt <= 4; bindingAttempt += 1) {
         try {
@@ -4248,8 +4343,12 @@ export class ProjectsService {
         }
       }
       if (!projectResult) throw new CoordinatorBindingChanged();
-      const { project, changedSessionId, held, switchedOn, pauseMoved } = projectResult;
+      const { project, changedSessionId, held, switchedOn, pauseMoved, reopenRequests } = projectResult;
       if (changedSessionId) this.sessions?.announceProjectSessionChanged?.(changedSessionId);
+      // The answered reopen requests' askers read their waiting state again; the delivery worker's poll sends the endings.
+      if (reopenRequests.length > 0) {
+        this.realtime?.publishOwnerSignalChanged(ownerId, reopenRequests.flatMap((request) => request.askers));
+      }
       // The older switch paused or resumed the project: every other client of the owner re-reads it.
       if (pauseMoved) this.realtime?.publishForUser(ownerId, RunEventType.PROJECT_CHANGED, id);
       // The Automatic switch is the other press that starts a project (`project-started.ts`), and
@@ -4851,6 +4950,7 @@ export class ProjectsService {
    */
   async remove(ownerId: string, id: string) {
     let releasedCoordinatorSessionId: string | null = null;
+    let withdrawnReopenRequests: SettledProjectReopen[] = [];
     try {
       // Retried whole: a delete re-reads what it is deleting under the row lock, and deleting
       // something already gone is the same answer on any attempt.
@@ -4866,6 +4966,10 @@ export class ProjectsService {
         releasedCoordinatorSessionId = locked[0].coordinator_session_id;
         const tasks = await tx.task.count({ where: { projectId: id } });
         if (tasks > 0) throw new ConflictException(this.notEmptyRefusal(id, tasks));
+        // An agent's waiting request to reopen it has nothing left to reopen (PROJECT_REOPEN, design §4.3).
+        withdrawnReopenRequests = await settlePendingProjectReopens(tx, ownerId, id, 'WITHDRAWN', {
+          resolutionNote: PROJECT_REOPEN_NOTES.projectDeleted,
+        }, new Date());
         await tx.project.delete({ where: { id } });
       }, loggedRetry(this.logger, 'projects.remove'));
     } catch (e) {
@@ -4875,6 +4979,9 @@ export class ProjectsService {
         throw new ConflictException(this.notEmptyRefusal(id));
       }
       throw e;
+    }
+    if (withdrawnReopenRequests.length > 0) {
+      this.realtime?.publishOwnerSignalChanged(ownerId, withdrawnReopenRequests.flatMap((request) => request.askers));
     }
     if (releasedCoordinatorSessionId) {
       // The Project is already durably gone. Provenance cleanup is best effort: surfacing its

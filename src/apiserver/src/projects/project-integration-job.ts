@@ -1,6 +1,6 @@
 import { Prisma, TaskStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
-import { INTEGRATION_CLAIM_STALE_MS } from '@orbit/shared';
+import { INTEGRATION_CLAIM_STALE_MS, type IntegrationGithubCheck } from '@orbit/shared';
 import { RELEASE_WORK_SELECT, releaseFinishedTheWork } from '../common/session-release';
 import { LANDING_FIX_TURN_KEY_PREFIX } from '../sessions/landing-fix-turn-key';
 import { notifyRunnerWakeOnCommit } from '../realtime/runner-wake';
@@ -38,6 +38,7 @@ import { queueLandingObservationIfPending } from './landing-observation';
 // Type-only, so the two modules do not import each other at run time: this one needs the two closed
 // sets a candidate is written with, and `project-promotion.ts` needs the shape a check reports.
 import type { PromotionSourceKind, PromotionState } from './project-promotion';
+import { IN_FLIGHT_JOB_STATES } from './in-flight-job-states';
 
 /**
  * Integration jobs: the platform's own git work (`docs/project-integration-line-contract.md` §2).
@@ -83,8 +84,12 @@ export const INTEGRATION_JOB_STATES = [
   'CANCELLED',
   'SUPERSEDED',
   // How an OBSERVE_LANDING job ends when it has looked (§10.6 O-J3, 0453). Final like every state
-  // but the first two.
+  // but the first two and the last.
   'OBSERVED',
+  // The attempt's tested commit is on its landing branch and the landing waits for GitHub
+  // (docs/design/protected-branch-landing.md §4.2, 1527). In flight and not final, but not RUNNING: no runner,
+  // no lease and no J1 slot. J-T14 writes it from a runner's result; the pull request door ends it (J-T15).
+  'PULL_REQUEST',
 ] as const;
 export type IntegrationJobState = (typeof INTEGRATION_JOB_STATES)[number];
 
@@ -128,6 +133,14 @@ export const INTEGRATION_ERROR_CODES = [
   // A TASK_BRANCH candidate's check or landing named by its commit (§10.5 O-L5) found that commit
   // missing from the claiming runner's object store. Nothing is fetched to look for it elsewhere.
   'WORK_COMMIT_MISSING',
+  // GitHub refused the direct push because of the branch's rules (GH006, GH013) and the attempt had no pull
+  // request to fall back to (docs/design/protected-branch-landing.md §3 rules 1 to 3). Replaces PUSH_REJECTED
+  // for that case; the detail quotes GitHub and says what would let the landing through.
+  'PUSH_PROTECTED',
+  // The landing's pull request was closed on GitHub without being merged (§4.2 J-T19).
+  'PULL_REQUEST_CLOSED',
+  // The landing's pull request holds a head Orbit did not push: Orbit merges only what it checked (§4.2 J-T20).
+  'PULL_REQUEST_HEAD_CHANGED',
 ] as const;
 export type IntegrationErrorCode = (typeof INTEGRATION_ERROR_CODES)[number];
 
@@ -255,7 +268,9 @@ export interface IntegrationCheckResult {
   skipped?: 'PATHS_EXEMPT' | 'TASK_EXEMPT';
   files?: string[];
   reason?: string;
-  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK';
+  /** GITHUB_CHECK: a required check that failed on the landing's pull request, written by the server (J-T16). */
+  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK' | 'GITHUB_CHECK';
+  github?: IntegrationGithubCheck;
   command: string;
   expectedExitCode: number;
   exitCode: number | null;
@@ -1108,6 +1123,26 @@ export async function queueBaselineHeld(
 }
 
 /**
+ * docs/design/project-line-upstream-sync.md §4.2: a landing that stopped at MAIN_SYNC is held, not failed. The result
+ * transaction queues the same delivery again behind the line-sync item (`lineSyncHoldSql`), without a retry decision,
+ * the twin of K5's `queueBaselineHeld`. The task stays DONE; nothing about its branch, session or identity changes.
+ */
+export async function queueMainSyncHeld(
+  tx: Prisma.TransactionClient,
+  input: { ownerId: string; projectId: string; taskId: string; sessionId: string; sourceRef: string; runnerId: string | null },
+): Promise<void> {
+  const codebase = await tx.projectCodebase.findFirstOrThrow({
+    where: { projectId: input.projectId, slot: 'primary' },
+    select: { id: true, canonicalRepoUrl: true, integrationRef: true, upstreamRef: true },
+  });
+  await queueLandTask(tx, {
+    ...input, codebase,
+    session: { id: input.sessionId, branch: shortBranchName(input.sourceRef), runnerId: input.runnerId },
+    cause: 'MAIN_SYNC_HELD',
+  });
+}
+
+/**
  * Queue the next generation of a task's landing because its coordinator asked for it (§2.3 J-T1b) —
  * the explicit retry door for a stopped landing (J5) — or because the task's own work session fixed
  * it (§12.5 W7, `landAgainAfterLandingFix`); K5 queues baseline-held work in its result transaction.
@@ -1224,9 +1259,14 @@ export async function landingFixWorkSession(
     candidateSourceKind: string | null;
     /** The generation this job reruns, when it is one: the landing-fix round the session's last words are from. */
     retryOfJobId?: string | null;
+    /** The phase the job stopped in. */
+    phase?: string | null;
   },
 ): Promise<{ sessionId: string; roundsExhausted: LandingFixHandBack | null } | null> {
   if (!input.failureClass || !HANDED_OFF_FAILURE_CLASSES.has(input.failureClass)) return null;
+  // docs/design/project-line-upstream-sync.md §4.2: a task landing's MAIN_SYNC conflict is the line's, not the work's.
+  // It opens the line-sync item for the coordinator, and the finished task's session is not revived for it.
+  if (input.jobKind === 'LAND_TASK' && input.phase === 'MAIN_SYNC') return null;
   const promotion = input.jobKind === 'CHECK_PROMOTION' || input.jobKind === 'LAND_PROMOTION';
   if (!(input.jobKind === 'LAND_TASK' || (promotion && input.candidateSourceKind === 'TASK_BRANCH'))) return null;
   if (!input.sessionId || !input.taskId) return null;
@@ -2101,7 +2141,7 @@ async function queueForDoneTask(
     // marker has done its work.
     const stopped = await tx.projectIntegrationJob.findFirst({
       where: {
-        taskId, kind: 'LAND_TASK', state: { in: ['QUEUED', 'RUNNING'] },
+        taskId, kind: 'LAND_TASK', state: { in: [...IN_FLIGHT_JOB_STATES] },
         cancelRequestedAt: { not: null },
       },
       select: { id: true },
@@ -2384,7 +2424,7 @@ async function queueLandTask(
   },
 ): Promise<{ jobId: string; landingSessionId: string } | null> {
   const inflight = await tx.projectIntegrationJob.count({
-    where: { taskId: input.taskId, kind: 'LAND_TASK', state: { in: ['QUEUED', 'RUNNING'] } },
+    where: { taskId: input.taskId, kind: 'LAND_TASK', state: { in: [...IN_FLIGHT_JOB_STATES] } },
   });
   if (inflight > 0) return null;
 

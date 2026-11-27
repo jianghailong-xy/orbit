@@ -249,7 +249,7 @@ internal object AccountCopy {
     const val ENV_KEY_LINE = "env key · runs on your Gemini key"
     const val NOT_SUPPORTED_YET = "Not supported yet"
     const val UPDATE_RUNNER = "Update runner"
-    const val HINT_UNSUPPORTED = "Google sign-in is not supported on macOS runners yet. Use a Gemini API key."
+    const val HINT_UNSUPPORTED = "Google sign-in is not supported on this runner's operating system. Use a Gemini API key."
     const val HINT_UPDATE = "Update this runner to sign in with Google."
     const val GOOGLE_TERMS_WARNING = "Google terms restrict personal account sign-in through third-party tools; your account may be suspended."
     const val GOOGLE_TERMS = "Google terms"
@@ -346,6 +346,22 @@ internal object RunnerAccountCopy {
     /** What a former Default is called — the account a Set as default moved out of ~/.claude into an added folder — while the owner has
      * not named it and no email is known for it. */
     const val FORMER_DEFAULT = "Former default"
+
+    /** The question in front of Default's Sign out…, which deletes its login from the machine. */
+    fun defaultSignOutTitle(name: String) = "Sign out of $name?"
+    /** What Sign out of Default does to the machine: the login goes, the history and settings stay. */
+    fun defaultSignOutDetail(runner: String) = "Its login is deleted from $runner. Its history and settings stay."
+    /** Added for Claude Code and Codex, whose CLI shares Default's login; [command] is `claude` or `codex`. */
+    fun defaultSignOutTerminal(runner: String, command: String) = "$command in a terminal on $runner is signed out too."
+    const val DEFAULT_SIGN_OUT_CONFIRM = "Sign out"
+    /** The menu item, and the row's state while the runner takes the login off the machine. */
+    const val DEFAULT_SIGN_OUT = "Sign out…"
+    const val DEFAULT_SIGNING_OUT = "Signing out…"
+    /** The second question, after the runner refused because sessions are running on Default. */
+    fun defaultSignOutRunningOne(name: String) = "1 session is running on $name. Sign out anyway?"
+    fun defaultSignOutRunningMany(count: Int, name: String) = "$count sessions are running on $name. Sign out anyway?"
+    const val DEFAULT_SIGN_OUT_RUNNING_DETAIL = "They will stop working until you sign in again."
+    fun defaultSignOutFailed(name: String) = "Couldn’t sign out of $name"
 }
 
 /**
@@ -1555,6 +1571,32 @@ internal object RunnerPage {
             else -> RunnerAccountCopy.movingMany(engineName(engine), count)
         }
     }
+
+    /** What a runner declares when it signs [engine]'s Default out on request (runner-go default_sign_out.go). */
+    fun defaultSignOutCapability(engine: String) = "$engine-default-sign-out/v1"
+
+    /** Whether [line]'s menu offers Sign out…: the Default row of an engine, while it is signed in and its runner declares it can sign it
+     * out — an older runner would read the request as a removal. */
+    fun offersSignOut(engine: String, line: AccountLine, runner: JsonObject) =
+        line.isDefault && line.auth == "yes" && !line.envKey && defaultSignOutCapability(engine) in runner.strings("capabilities")
+
+    /** Whether Sign out… can be pressed: the runner deletes the credential, so it is online, and one request at a time is in flight. */
+    fun canSignOut(offline: Boolean, pending: Boolean) = !offline && !pending
+
+    /** The question before Default's Sign out…, title and body; Claude Code and Codex name their CLI in a terminal, which shares the login. */
+    fun signOutQuestion(runner: JsonObject, engine: String, line: AccountLine): Pair<String, String> {
+        val machine = displayName(runner)
+        var message = RunnerAccountCopy.defaultSignOutDetail(machine)
+        if (engine == "claude" || engine == "codex") message += " " + RunnerAccountCopy.defaultSignOutTerminal(machine, engine)
+        return RunnerAccountCopy.defaultSignOutTitle(line.name) to message
+    }
+
+    /** The second question, once the runner named [count] sessions running on Default. */
+    fun signOutAgainQuestion(line: AccountLine, count: Int): Pair<String, String> =
+        signOutInUse(line.name, count) to RunnerAccountCopy.DEFAULT_SIGN_OUT_RUNNING_DETAIL
+
+    fun signOutInUse(name: String, count: Int) =
+        if (count == 1) RunnerAccountCopy.defaultSignOutRunningOne(name) else RunnerAccountCopy.defaultSignOutRunningMany(count, name)
 
     /** What a runner declares when it can make an added Claude Code account the Default: the swap itself, and moving a session into its
      * account's new folder (RunnersService.setDefaultAccount asks for both). */

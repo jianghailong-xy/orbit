@@ -110,7 +110,11 @@ const VENDOR_NAMES: Record<string, string> = {
 /** The vendor a key is counted and grouped under: the preset it was made from — a row from the retired
  *  DeepSeek Harness preset is a DeepSeek key like any other — or `custom` for an endpoint of its own. */
 export const vendorOf = (presetSlug: string | null | undefined): string =>
-  !presetSlug ? 'custom' : presetSlug === DSH_PRESET_SLUG ? 'deepseek' : presetSlug;
+  !presetSlug
+    ? 'custom'
+    : presetSlug === DSH_PRESET_SLUG
+      ? 'deepseek'
+      : (PROVIDER_PRESETS.find((p) => p.slug === presetSlug)?.planOf ?? presetSlug);
 
 export const vendorName = (vendor: string): string =>
   VENDOR_NAMES[vendor] ?? PROVIDER_PRESETS.find((p) => p.slug === vendor)?.label ?? vendor;
@@ -128,11 +132,12 @@ export const newKeyEngines = (key: { runtime?: string | null; presetSlug: string
     subscriptionToken: false,
   });
 
-/** The vendors offered to connect: every preset but the retired DeepSeek Harness one, less any whose keys
+/** The vendors offered to connect: every preset but the retired DeepSeek Harness one and a vendor's coding
+ *  plan (offered on that vendor's own connect page), less any whose keys
  *  run on no engine this page draws — Cursor's run on Cursor CLI alone, which the web draws once a runner
  *  of the account knows it (webShowsEngine). */
 const offeredPresets = (runners: readonly SignedInRunner[]) =>
-  PROVIDER_PRESETS.filter((p) => p.slug !== DSH_PRESET_SLUG
+  PROVIDER_PRESETS.filter((p) => p.slug !== DSH_PRESET_SLUG && !p.planOf
     && newKeyEngines({ runtime: p.runtime, presetSlug: p.slug, baseUrl: p.baseUrl })
       .some((engine) => webShowsEngine(engine, runners)));
 

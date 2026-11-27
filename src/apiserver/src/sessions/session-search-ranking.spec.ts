@@ -99,10 +99,12 @@ test('the match count is taken before the quota and the limit', async () => {
 
 test('an empty query answers with recents and reports its own length as the total', async () => {
   const prisma = {
-    $queryRaw: async () => [
+    // The recents statement answers two rows; the session facts read beside them (readSessionPhaseFields,
+    // readSessionBackgroundFields) find neither, and the hits carry the facts as absent.
+    $queryRaw: async (sql: Prisma.Sql) => (sql.sql.includes('"matchField"') ? [
       { id: 'a', matchField: 'recent' },
       { id: 'b', matchField: 'recent' },
-    ],
+    ] : []),
   };
   const service = new SessionsService(prisma as never, {} as never, {} as never);
   const res = await service.search(OWNER_ID, '', 20);

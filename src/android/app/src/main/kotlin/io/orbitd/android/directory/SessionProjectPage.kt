@@ -102,7 +102,7 @@ internal fun SessionProjectRowView(row: SessionProjectRow, onOpen: () -> Unit, o
             Text(row.title, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
             ProjectIndicator(row.indicator)
             // An instant this clock cannot read draws no time at all.
-            (row.lastTurnAt ?: row.createdAt)?.let { WikiDate.relative(it, Instant.now()) }?.let {
+            (row.listedAt ?: row.createdAt)?.let { WikiDate.relative(it, Instant.now()) }?.let {
                 Text(it, style = MaterialTheme.typography.labelMedium, color = muted, maxLines = 1, softWrap = false)
             }
         }

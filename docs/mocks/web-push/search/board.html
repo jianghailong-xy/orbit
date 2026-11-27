@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>Web Push · 设置搜索入口</title>
+<style>
+  body { margin:0; background:#e9e9ee; }
+  section.b-part { width:1360px; margin:0 auto 24px; padding:32px 40px; background:#fff; font:15px/1.6 Inter,"Noto Sans SC",sans-serif; color:#1d1d1f; box-sizing:border-box; }
+  h1 { font-size:26px; margin:0 0 4px; } h2 { font-size:20px; margin:0 0 6px; }
+  .b-sub { color:#6e6e73; margin:0 0 18px; }
+  .b-row { display:flex; gap:24px; }
+  .b-col { flex:1; min-width:0; }
+  .b-col img { width:100%; border:1px solid #d2d2d7; border-radius:8px; display:block; }
+  .b-cap { font-size:14px; margin:8px 0 0; }
+  .b-tag { display:inline-block; font-size:12px; font-weight:600; padding:2px 8px; border-radius:6px; background:#eef4ff; color:#0a84ff; margin-bottom:8px; }
+  code { font-family:"JetBrains Mono",monospace; font-size:12.5px; background:#f2f2f5; padding:1px 5px; border-radius:4px; }
+</style></head><body>
+<section class="b-part" id="part-1">
+  <h1>设置搜索入口 · 真实页面截图</h1>
+  <p class="b-sub">当前分支构建的真实 Web，假数据（ui-migration fixtures），1280×760 @2x。搜索 “browser” / “notifications” / “alerts” 都能找到这一行。</p>
+  <div class="b-row">
+    <div class="b-col"><span class="b-tag">① 搜索</span><img src="search.png"><p class="b-cap">Personal 组里出现「Notifications in this browser」，第二行是它所在的页面 Notifications。跟其它设置行同一个样式，没有新外观。</p></div>
+    <div class="b-col"><span class="b-tag">② 点开</span><img src="opened.png"><p class="b-cap">跳到 Notifications，滚到这一行并闪一下（跟其它搜索结果一样）。浏览器还没被问过权限时，开关是关的，说明文字是默认那句。</p></div>
+  </div>
+</section>
+<section class="b-part" id="part-2">
+  <h2>另外两种情况</h2>
+  <div class="b-row">
+    <div class="b-col"><span class="b-tag">③ 服务器没配置 Web Push</span><img src="search-unconfigured.png"><p class="b-cap">比如还没配密钥的自建部署：页面上没有这一行，搜索也就不列它，不会把人带到一个找不到的地方。</p></div>
+    <div class="b-col"><span class="b-tag">④ 浏览器里点过「阻止」</span><img src="opened-blocked.png"><p class="b-cap">开关变灰，说明文字告诉他去浏览器的站点设置里改。</p></div>
+  </div>
+</section>
+</body></html>

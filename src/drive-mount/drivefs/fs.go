@@ -1,4 +1,4 @@
-// Package drivefs is the mount daemon's file system (docs/orbit-files-drive-technical-design.md §5): the account's
+// Package drivefs is the mount daemon's file system (docs/drive-technical-design.md §5): the account's
 // drive, served over FUSE (go-fuse's raw protocol) from the runner drive door.
 //
 //   - Inode numbers come from a per-mount table from entry id to inode, never reused while the mount lives (§5.4).
@@ -50,7 +50,7 @@ const (
 type Options struct {
 	// UID and GID are what every entry shows (10001, the runner's user).
 	UID, GID uint32
-	// DisplayRoot is the path agents know the drive by, for errors.log (/home/orbit/Files).
+	// DisplayRoot is the path agents know the drive by, for errors.log (/home/orbit/Drive).
 	DisplayRoot string
 	// SpoolDir holds the chunks of open writes and the chunk cache.
 	SpoolDir string
@@ -83,7 +83,7 @@ func (o *Options) defaults() {
 		o.GID = 10001
 	}
 	if o.DisplayRoot == "" {
-		o.DisplayRoot = "/home/orbit/Files"
+		o.DisplayRoot = "/home/orbit/Drive"
 	}
 	if o.SpoolLimit == 0 {
 		o.SpoolLimit = 4 << 30
@@ -229,15 +229,15 @@ func MountOptions(debug bool) *fuse.MountOptions {
 		MaxWrite:             1 << 20,
 		EnableLocks:          true,
 		IgnoreSecurityLabels: true,
-		FsName:               "orbit-files",
-		Name:                 "orbit-files",
+		FsName:               "orbit-drive",
+		Name:                 "orbit-drive",
 		ExtraCapabilities:    fuse.CAP_ATOMIC_O_TRUNC,
 		Debug:                debug,
 		Options:              []string{"default_permissions"},
 	}
 }
 
-func (fs *FS) String() string { return "orbit-files" }
+func (fs *FS) String() string { return "orbit-drive" }
 
 // Init is the kernel's first request: from here on the file system can notify the kernel.
 func (fs *FS) Init(server *fuse.Server) { fs.server = server }
@@ -317,6 +317,12 @@ func errno(err error) fuse.Status {
 		return fuse.EPERM
 	case door.CodeStorageFull:
 		return fuse.Status(syscall.ENOSPC)
+	case door.CodeDriveChatNoOverwrite:
+		// A Drive chat never replaces a file: the name is taken, and the owner is asked (§5.8).
+		return fuse.Status(syscall.EEXIST)
+	case door.CodeDriveChatHeld, door.CodeDriveChatTurnFull:
+		// The turn's limit: nothing was changed, and the owner's Apply makes what is held.
+		return fuse.Status(syscall.EDQUOT)
 	}
 	if s := door.StatusOf(err); s == 404 {
 		return fuse.ENOENT
@@ -324,6 +330,16 @@ func errno(err error) fuse.Status {
 		return fuse.EINVAL
 	}
 	return fuse.EIO
+}
+
+// isDriveChatRefusal is a Drive chat's write the door refused by the chat's rules rather than the drive's: the agent
+// reads why in errors.log, since the errno alone cannot say it.
+func isDriveChatRefusal(err error) bool {
+	switch door.CodeOf(err) {
+	case door.CodeDriveChatNoOverwrite, door.CodeDriveChatHeld, door.CodeDriveChatTurnFull:
+		return true
+	}
+	return false
 }
 
 // statusError carries a status of the daemon's own choosing through a Go error.

@@ -29,6 +29,7 @@ function mapping(change: Partial<ManagedRunner> = {}): ManagedRunner {
     defaultWorkspaceId: 'w',
     desiredState: 'RUNNING',
     managementState: 'FAILED',
+    concurrencyCap: null,
     generation: 3,
     revision: 7,
     backend: 'kubernetes',

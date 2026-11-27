@@ -146,7 +146,7 @@ function NewTokenForm({
               </div>
             ))}
             <div className="access-token-scope-row">
-              <span>Files</span>
+              <span>Drive</span>
               <Checkbox checked={picked.includes(FILES_SCOPE)} onCheckedChange={(on) => toggle(FILES_SCOPE, on)}>
                 Read &amp; write
               </Checkbox>

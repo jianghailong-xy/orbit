@@ -112,6 +112,19 @@ class ProjectMergeTest {
         assertEquals(grouping.map { it.id }, out.map { it.id })
     }
 
+    /** A member is placed and ordered by when it was listed, as its row's time reads (OrbitKit
+     * `testTheTimelinePlacesMembersByListedAtNotLastTurnAt`): output that only moved lastTurnAt lifts it nowhere. */
+    @Test fun theTimelinePlacesMembersByListedAtNotLastTurnAt() {
+        fun member(id: String, listed: String, turn: String) =
+            DirectorySession(id, title = id, status = "AWAITING_INPUT", createdAt = "2026-09-01T00:00:00Z", lastTurnAt = turn, listedAt = listed)
+        val sessions = listOf(member("busy-old", "2026-10-03T08:00:00Z", "2026-10-06T04:00:00Z"),
+            member("quiet-new", "2026-10-06T03:00:00Z", "2026-10-06T03:00:00Z"),
+            member("busy-new", "2026-10-06T02:00:00Z", "2026-10-06T04:00:30Z"))
+        val out = ProjectTimeline.sections(sessions, at("2026-10-06T04:01:00Z"), ZoneOffset.UTC)
+        assertEquals(listOf("Today", "2–7 days ago"), out.map { it.title })
+        assertEquals(listOf(listOf("quiet-new", "busy-new"), listOf("busy-old")), out.map { s -> s.sessions.map { it.id } })
+    }
+
     /** iOS `ProjectMergeModel.load`: the candidate every poll; the merges when it moved or once a minute; the holder's items every
      * 20 s while it is blocked; the criteria once a minute while it asks. */
     @Test fun eachPollReadsWhatTheCardIsDrawnFromAndNoMore() {

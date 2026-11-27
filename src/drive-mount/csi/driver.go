@@ -1,6 +1,6 @@
 //go:build linux
 
-// Package csi is files.orbit.dev, the Orbit Files CSI node plugin (docs/orbit-files-drive-technical-design.md §6.1): it
+// Package csi is drive.orbit.dev, the Drive CSI node plugin (docs/drive-technical-design.md §6.1): it
 // gives a managed runner Pod its drive as one inline CSI volume. Identity and Node services only, no controller.
 //
 //   - NodePublishVolume refuses unless the Pod is in the managed-runner namespace (the kubelet's pod info) and the
@@ -42,7 +42,7 @@ import (
 )
 
 // DriverName is the CSI driver every runner Pod's drive volume names.
-const DriverName = "files.orbit.dev"
+const DriverName = "drive.orbit.dev"
 
 // The kubelet's pod info on NodePublishVolume (CSIDriver podInfoOnMount), and its ephemeral marker.
 const (
@@ -73,11 +73,11 @@ type Secrets interface {
 type Config struct {
 	NodeID           string
 	ManagedNamespace string // the managed-runner namespace: the only one whose Pods may have the drive
-	SecretsNamespace string // where Secret mrf-<runnerId> is (orbit-files-system)
+	SecretsNamespace string // where Secret mrf-<runnerId> is (orbit-drive-system)
 	Server           string // the Orbit server the daemons speak to
-	Root             string // /var/lib/orbit-files: <runnerId>/ is what a Pod receives as /run/orbit-files
-	SpoolRoot        string // /var/lib/orbit-files-spool
-	StateDir         string // /var/lib/orbit-files-state
+	Root             string // /var/lib/orbit-drive: <runnerId>/ is what a Pod receives as /run/orbit-drive
+	SpoolRoot        string // /var/lib/orbit-drive-spool
+	StateDir         string // /var/lib/orbit-drive-state
 	Daemon           string // the daemon's executable (this one)
 	DaemonArgs       []string
 	// UIDBase is the first uid a runner's daemon may run as; each runner on the node gets its own (65532 is never
@@ -132,7 +132,7 @@ func New(cfg Config) *Driver {
 		cfg.MountTimeout = 30 * time.Second
 	}
 	if cfg.Log == nil {
-		cfg.Log = log.New(os.Stderr, "orbit-files-csi: ", log.LstdFlags)
+		cfg.Log = log.New(os.Stderr, "orbit-drive-csi: ", log.LstdFlags)
 	}
 	if cfg.Run == nil {
 		cfg.Run = parent.Run
@@ -398,7 +398,7 @@ func (d *Driver) start(v *volume, token string) <-chan struct{} {
 		Root: d.runnerRoot(v.RunnerID), SpoolDir: filepath.Join(d.cfg.SpoolRoot, v.RunnerID), Daemon: d.cfg.Daemon,
 		Args: args, Token: token, UID: v.DaemonUID, GID: v.DaemonUID, PodUID: v.PodUID, KeepMountOnStop: true,
 		OnMount: func() { once.Do(func() { close(mounted) }) },
-		Log:     log.New(d.cfg.Log.Writer(), fmt.Sprintf("orbit-files-mount[%s]: ", v.RunnerID), log.LstdFlags),
+		Log:     log.New(d.cfg.Log.Writer(), fmt.Sprintf("orbit-drive-mount[%s]: ", v.RunnerID), log.LstdFlags),
 	}
 	d.mu.Lock()
 	d.volumes[v.RunnerID] = v

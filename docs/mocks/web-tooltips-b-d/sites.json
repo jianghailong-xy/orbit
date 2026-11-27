@@ -1,0 +1,1024 @@
+{
+"B-c may be disabled": [
+{
+"file": "pages/AdminEmailPage.tsx",
+"line": 229,
+"tag": "Button",
+"title": "{changed ? 'Save your changes first' : undefined}"
+},
+{
+"file": "components/CardAction.tsx",
+"line": 77,
+"tag": "button",
+"title": "{title}"
+}
+],
+"B-b repeats the visible name": [
+{
+"file": "pages/ScheduledPage.tsx",
+"line": 956,
+"tag": "button",
+"title": "{C.actions.rename}"
+},
+{
+"file": "pages/WikiPage.tsx",
+"line": 503,
+"tag": "button",
+"title": "{WIKI_SPACE_PICKER_HINT}"
+},
+{
+"file": "components/SessionOutputs.tsx",
+"line": 1252,
+"tag": "button",
+"title": "{node.path}"
+},
+{
+"file": "components/LandingLink.tsx",
+"line": 30,
+"tag": "Link",
+"title": "{title}"
+},
+{
+"file": "components/WikiDraftCard.tsx",
+"line": 294,
+"tag": "button",
+"title": "{link.title ?? undefined}"
+},
+{
+"file": "components/SessionTagPicker.tsx",
+"line": 180,
+"tag": "button",
+"title": "{label}"
+},
+{
+"file": "components/SessionCreatedTasksStrip.tsx",
+"line": 149,
+"tag": "Link",
+"title": "{project.title}"
+},
+{
+"file": "components/WorkspaceView.tsx",
+"line": 1660,
+"tag": "button",
+"title": "{SESSION_PROJECT_COPY.startHint}"
+},
+{
+"file": "components/WorkspaceView.tsx",
+"line": 11283,
+"tag": "Button",
+"title": "{PROJECT_COLUMN_COPY.label}"
+},
+{
+"file": "components/WikiMaintenanceStatus.tsx",
+"line": 51,
+"tag": "Link",
+"title": "{part.hint}"
+},
+{
+"file": "components/WikiChatPanel.tsx",
+"line": 245,
+"tag": "button",
+"title": "{WIKI_CHAT_HISTORY}"
+},
+{
+"file": "lib/markdownLinks.tsx",
+"line": 78,
+"tag": "AppLink",
+"title": "{to.label}"
+},
+{
+"file": "lib/markdownLinks.tsx",
+"line": 84,
+"tag": "SameOriginLink",
+"title": "{title}"
+}
+],
+"D-a status mark in a list row": [
+{
+"file": "pages/WikiPage.tsx",
+"line": 441,
+"tag": "span",
+"title": "{wikiStatusText(dots)}"
+},
+{
+"file": "pages/WikiPage.tsx",
+"line": 443,
+"tag": "span",
+"title": "{wikiWaitingOnYou(waiting)}"
+},
+{
+"file": "pages/WikiPage.tsx",
+"line": 484,
+"tag": "span",
+"title": "{wikiWaitingOnYou(waiting)}"
+},
+{
+"file": "components/WorkspaceView.tsx",
+"line": 1741,
+"tag": "span",
+"title": "{SESSION_PROJECT_COPY.progressHint(project.sessionCount, project.runningCount)}"
+},
+{
+"file": "components/WorkspaceView.tsx",
+"line": 9336,
+"tag": "span",
+"title": "\"Running\""
+},
+{
+"file": "components/WorkspaceView.tsx",
+"line": 9338,
+"tag": "span",
+"title": "\"Background job running\""
+},
+{
+"file": "components/WorkspaceView.tsx",
+"line": 9343,
+"tag": "span",
+"title": "{waiting}"
+},
+{
+"file": "components/WorkspaceView.tsx",
+"line": 9394,
+"tag": "span",
+"title": "\"Running\""
+},
+{
+"file": "components/WorkspaceView.tsx",
+"line": 9398,
+"tag": "span",
+"title": "{waiting}"
+},
+{
+"file": "components/WikiActivityPage.tsx",
+"line": 334,
+"tag": "span",
+"title": "{wikiWaitingOnYou(waiting)}"
+},
+{
+"file": "components/TasksSidePanel.tsx",
+"line": 983,
+"tag": "span",
+"title": "{wikiWaitingOnYou(wikiWaitingCount)}"
+},
+{
+"file": "components/TasksSidePanel.tsx",
+"line": 1048,
+"tag": "span",
+"title": "{wikiWaitingOnYou(wikiWaitingCount)}"
+},
+{
+"file": "components/TasksSidePanel.tsx",
+"line": 1512,
+"tag": "span",
+"title": "{working ? 'Work in flight' : undefined}"
+},
+{
+"file": "components/TasksSidePanel.tsx",
+"line": 1516,
+"tag": "span",
+"title": "{waiting}"
+},
+{
+"file": "components/TasksSidePanel.tsx",
+"line": 1562,
+"tag": "span",
+"title": "{waitingOnYou}"
+},
+{
+"file": "components/TasksSidePanel.tsx",
+"line": 1807,
+"tag": "span",
+"title": "\"Running\""
+},
+{
+"file": "components/TasksSidePanel.tsx",
+"line": 1815,
+"tag": "span",
+"title": "{`${jobs} background ${jobs === 1 ? 'job' : 'jobs'} running`}"
+}
+],
+"D-b explains a label, badge or count": [
+{
+"file": "pages/ProjectsPage.tsx",
+"line": 714,
+"tag": "span",
+"title": "{bucket.label}"
+},
+{
+"file": "pages/AdminUsersPage.tsx",
+"line": 146,
+"tag": "span",
+"title": "\"No password: the Google account of this email address is linked at its first Go"
+},
+{
+"file": "pages/AdminUsersPage.tsx",
+"line": 155,
+"tag": "span",
+"title": "{google.email}"
+},
+{
+"file": "pages/AdminUsersPage.tsx",
+"line": 191,
+"tag": "span",
+"title": "{`${exact} \u00b7 ${ACTIVE_VIA[last.via] ?? last.via}`}"
+},
+{
+"file": "pages/TaskListView.tsx",
+"line": 1542,
+"tag": "span",
+"title": "{`${SESSION_CREATED_TASKS_COPY.createdInChip}${createdInTitle}`}"
+},
+{
+"file": "pages/settings/ModelRoutingPage.tsx",
+"line": 432,
+"tag": "i",
+"title": "{`${tier.tier}: ${plural(tier.runs, 'run')}${percent(tier.done, tier.ended) === "
+},
+{
+"file": "components/ProviderKeyCards.tsx",
+"line": 123,
+"tag": "span",
+"title": "{stampOf(row.lastUsedAt)}"
+},
+{
+"file": "components/SessionOutputs.tsx",
+"line": 780,
+"tag": "span",
+"title": "{`Merged into ${mergeTarget || 'main'}`}"
+},
+{
+"file": "components/SessionOutputs.tsx",
+"line": 794,
+"tag": "span",
+"title": "{`This branch is already in ${landed}`}"
+},
+{
+"file": "components/SessionOutputs.tsx",
+"line": 1594,
+"tag": "div",
+"title": "\"Drag to resize \u00b7 double-click to reset\""
+},
+{
+"file": "components/SessionOutputs.tsx",
+"line": 1637,
+"tag": "div",
+"title": "\"Drag to resize \u00b7 double-click to reset\""
+},
+{
+"file": "components/EvidenceDecisionCard.tsx",
+"line": 619,
+"tag": "span",
+"title": "{EVIDENCE_PROVENANCE_TITLE}"
+},
+{
+"file": "components/EvidenceDecisionCard.tsx",
+"line": 934,
+"tag": "span",
+"title": "{sent.title}"
+},
+{
+"file": "components/EvidenceDecisionCard.tsx",
+"line": 1010,
+"tag": "span",
+"title": "{EVIDENCE_PROVENANCE_TITLE}"
+},
+{
+"file": "components/ProjectBlockers.tsx",
+"line": 306,
+"tag": "span",
+"title": "{blockerTaskStateTitle}"
+},
+{
+"file": "components/ProjectBlockers.tsx",
+"line": 551,
+"tag": "span",
+"title": "{`${open.length} open`}"
+},
+{
+"file": "components/SessionStateDisplay.tsx",
+"line": 33,
+"tag": "span",
+"title": "{label}"
+},
+{
+"file": "components/SessionStateDisplay.tsx",
+"line": 39,
+"tag": "span",
+"title": "{label}"
+},
+{
+"file": "components/SessionStateDisplay.tsx",
+"line": 44,
+"tag": "span",
+"title": "{label}"
+},
+{
+"file": "components/WikiMarks.tsx",
+"line": 59,
+"tag": "span",
+"title": "{WIKI_KIND_LABELS[kind as WikiEntryKind] ?? kind}"
+},
+{
+"file": "components/AcceptanceConfirmationCard.tsx",
+"line": 550,
+"tag": "span",
+"title": "{ACCEPTANCE_PROVENANCE_TITLE}"
+},
+{
+"file": "components/AcceptanceConfirmationCard.tsx",
+"line": 655,
+"tag": "span",
+"title": "{ACCEPTANCE_PROVENANCE_TITLE}"
+},
+{
+"file": "components/ProjectMergeStrip.tsx",
+"line": 277,
+"tag": "div",
+"title": "{current.sourceRef}"
+},
+{
+"file": "components/ProjectSettlementCard.tsx",
+"line": 539,
+"tag": "span",
+"title": "{PROVENANCE_TITLE}"
+},
+{
+"file": "components/ProjectSettlementCard.tsx",
+"line": 1295,
+"tag": "span",
+"title": "{PROVENANCE_TITLE}"
+},
+{
+"file": "components/WikiRunsCard.tsx",
+"line": 133,
+"tag": "td",
+"title": "{`${call.step} \u00b7 ${call.unit}`}"
+},
+{
+"file": "components/SharedPool.tsx",
+"line": 75,
+"tag": "span",
+"title": "{pool.people.map((person) => person.name).join(', ')}"
+},
+{
+"file": "components/SessionCreatedTasksStrip.tsx",
+"line": 88,
+"tag": "span",
+"title": "\"Watched by this session\""
+},
+{
+"file": "components/SessionCreatedTasksStrip.tsx",
+"line": 94,
+"tag": "span",
+"title": "{band.row.title}"
+},
+{
+"file": "components/EvidenceFiles.tsx",
+"line": 291,
+"tag": "span",
+"title": "{evidenceFileName(file)}"
+},
+{
+"file": "components/EvidenceFiles.tsx",
+"line": 454,
+"tag": "span",
+"title": "{EVIDENCE_FILE_PINNED}"
+},
+{
+"file": "components/EvidenceFiles.tsx",
+"line": 460,
+"tag": "div",
+"title": "{name}"
+},
+{
+"file": "components/AccessTokenTable.tsx",
+"line": 57,
+"tag": "span",
+"title": "{token.scopes.join(', ')}"
+},
+{
+"file": "components/AccessTokenTable.tsx",
+"line": 81,
+"tag": "div",
+"title": "{token.lastUsedUserAgent ?? undefined}"
+},
+{
+"file": "components/CriteriaDecisionCard.tsx",
+"line": 668,
+"tag": "del",
+"title": "{DROPPED_RUN_TITLE}"
+},
+{
+"file": "components/CriteriaDecisionCard.tsx",
+"line": 675,
+"tag": "ins",
+"title": "{ADDED_RUN_TITLE}"
+},
+{
+"file": "components/CriteriaDecisionCard.tsx",
+"line": 842,
+"tag": "span",
+"title": "{PROVENANCE_TITLE}"
+},
+{
+"file": "components/CriteriaDecisionCard.tsx",
+"line": 1218,
+"tag": "span",
+"title": "{PROVENANCE_TITLE}"
+},
+{
+"file": "components/WorkspaceView.tsx",
+"line": 1547,
+"tag": "span",
+"title": "\"This session coordinates a project\""
+},
+{
+"file": "components/WorkspaceView.tsx",
+"line": 1593,
+"tag": "span",
+"title": "{SESSION_SHARED_TIP}"
+},
+{
+"file": "components/WorkspaceView.tsx",
+"line": 1598,
+"tag": "span",
+"title": "{SESSION_GUESTS_TIP}"
+},
+{
+"file": "components/WorkspaceView.tsx",
+"line": 2451,
+"tag": "span",
+"title": "{deliveryReason}"
+},
+{
+"file": "components/WorkspaceView.tsx",
+"line": 9360,
+"tag": "span",
+"title": "{FOLDER_COPY.more}"
+},
+{
+"file": "components/WorkspaceView.tsx",
+"line": 10209,
+"tag": "span",
+"title": "\"Switch view, filter and group\""
+},
+{
+"file": "components/WorkspaceView.tsx",
+"line": 10821,
+"tag": "div",
+"title": "{line.hint}"
+},
+{
+"file": "components/WorkspaceView.tsx",
+"line": 10981,
+"tag": "span",
+"title": "{managedHeadRow.detail ? `${managedHeadRow.label} \u00b7 ${managedHeadRow.detail}` : "
+},
+{
+"file": "components/WorkspaceView.tsx",
+"line": 12003,
+"tag": "span",
+"title": "\"Restore unavailable right now\""
+},
+{
+"file": "components/WorkspaceView.tsx",
+"line": 12996,
+"tag": "div",
+"title": "\"Drag to resize \u00b7 double-click to reset\""
+},
+{
+"file": "components/ProjectAcceptanceCard.tsx",
+"line": 359,
+"tag": "span",
+"title": "{code}"
+},
+{
+"file": "components/OrbitExchangeFold.tsx",
+"line": 85,
+"tag": "div",
+"title": "{ex.reply ? `${ex.what} \u2014 ${ex.reply}` : ex.what}"
+},
+{
+"file": "components/ProjectProgressStatus.tsx",
+"line": 2182,
+"tag": "span",
+"title": "{FROM_ORBIT_TITLE}"
+},
+{
+"file": "components/ProjectProgressStatus.tsx",
+"line": 2861,
+"tag": "span",
+"title": "{FROM_ORBIT_TITLE}"
+},
+{
+"file": "components/ProjectProgressStatus.tsx",
+"line": 3066,
+"tag": "div",
+"title": "{row.handling.reason}"
+},
+{
+"file": "components/PublicShell.tsx",
+"line": 84,
+"tag": "span",
+"title": "{PUBLIC_LIVE_NOTE}"
+},
+{
+"file": "components/BackgroundShellsTray.tsx",
+"line": 315,
+"tag": "span",
+"title": "{shell.command || title}"
+},
+{
+"file": "components/RunnerEngines.tsx",
+"line": 490,
+"tag": "span",
+"title": "{`Cursor doesn\u2019t report how much of ${ quota.cursor.plan ? `the ${quota.cursor.p"
+},
+{
+"file": "components/RunnerEngines.tsx",
+"line": 500,
+"tag": "span",
+"title": "{kind === 'unknown' && signIn ? 'No quota reading \u2014 the sign-in check didn\u2019t ans"
+},
+{
+"file": "components/RunnerEngines.tsx",
+"line": 1385,
+"tag": "span",
+"title": "\"Automatic starts new sessions here\""
+},
+{
+"file": "components/WikiChatPanel.tsx",
+"line": 753,
+"tag": "span",
+"title": "{quote.selected > quote.sentenceIds.length ? wikiChatCapped(quote.selected) : un"
+},
+{
+"file": "components/AccountPools.tsx",
+"line": 142,
+"tag": "span",
+"title": "{`The next session starts on ${member.label}`}"
+},
+{
+"file": "components/AccountPools.tsx",
+"line": 383,
+"tag": "div",
+"title": "{`What the others spent on this key this month${cap === null ? '' : `, of the $$"
+},
+{
+"file": "components/CriteriaChangeCard.tsx",
+"line": 128,
+"tag": "span",
+"title": "{ACCEPTANCE_PROVENANCE_TITLE}"
+},
+{
+"file": "components/SessionCommits.tsx",
+"line": 125,
+"tag": "span",
+"title": "{saved.title}"
+},
+{
+"file": "components/SessionCommits.tsx",
+"line": 262,
+"tag": "span",
+"title": "{saved.title}"
+},
+{
+"file": "components/Transcript.tsx",
+"line": 2638,
+"tag": "div",
+"title": "{node.text}"
+},
+{
+"file": "components/Transcript.tsx",
+"line": 3660,
+"tag": "div",
+"title": "{node.deliveryReason}"
+},
+{
+"file": "components/Transcript.tsx",
+"line": 3926,
+"tag": "span",
+"title": "{name}"
+},
+{
+"file": "components/Transcript.tsx",
+"line": 4335,
+"tag": "span",
+"title": "{artifactPath}"
+},
+{
+"file": "components/Transcript.tsx",
+"line": 5316,
+"tag": "div",
+"title": "{tooltip}"
+},
+{
+"file": "components/ProjectPanoramaHeader.tsx",
+"line": 1221,
+"tag": "span",
+"title": "{`${segment.label} ${segment.value}`}"
+},
+{
+"file": "components/SessionFind.tsx",
+"line": 477,
+"tag": "span",
+"title": "{capped ? `${totalLabel} matches \u2014 the newest ${hits.length} are listed` : undef"
+},
+{
+"file": "components/ProjectTasksGraph.tsx",
+"line": 57,
+"tag": "span",
+"title": "\"Prerequisite \u2192 dependent \u00b7 boxes are parent tasks\""
+},
+{
+"file": "components/TasksSidePanel.tsx",
+"line": 1619,
+"tag": "span",
+"title": "{title}"
+},
+{
+"file": "components/SessionAgentsStrip.tsx",
+"line": 77,
+"tag": "span",
+"title": "{run.description ?? run.type}"
+},
+{
+"file": "components/SessionAgentsStrip.tsx",
+"line": 199,
+"tag": "span",
+"title": "{name && !label.startsWith(name) ? `${name} \u00b7 ${label}` : label}"
+},
+{
+"file": "components/SessionAgentsStrip.tsx",
+"line": 222,
+"tag": "span",
+"title": "{title}"
+},
+{
+"file": "components/StartProjectCard.tsx",
+"line": 459,
+"tag": "span",
+"title": "{ACCEPTANCE_PROVENANCE_TITLE}"
+},
+{
+"file": "components/ProjectPromotionCard.tsx",
+"line": 820,
+"tag": "span",
+"title": "{FROM_ORBIT_TITLE}"
+},
+{
+"file": "components/ProjectPromotionCard.tsx",
+"line": 1073,
+"tag": "span",
+"title": "{FROM_ORBIT_TITLE}"
+},
+{
+"file": "components/CoordinatorQuestionCard.tsx",
+"line": 277,
+"tag": "span",
+"title": "{FROM_COORDINATOR_TITLE}"
+},
+{
+"file": "components/CoordinatorQuestionCard.tsx",
+"line": 651,
+"tag": "span",
+"title": "{FROM_COORDINATOR_TITLE}"
+},
+{
+"file": "components/OwnerConfirmationCard.tsx",
+"line": 692,
+"tag": "span",
+"title": "{OWNER_CONFIRMATION_AUTHORSHIP_TITLE}"
+},
+{
+"file": "components/OwnerConfirmationCard.tsx",
+"line": 887,
+"tag": "span",
+"title": "{OWNER_CONFIRMATION_AUTHORSHIP_TITLE}"
+},
+{
+"file": "components/OwnerConfirmationCard.tsx",
+"line": 944,
+"tag": "span",
+"title": "{OWNER_CONFIRMATION_AUTHORSHIP_TITLE}"
+},
+{
+"file": "components/drive/DriveTransferCard.tsx",
+"line": 110,
+"tag": "li",
+"title": "{file.path.slice(folder.length - 1)}"
+},
+{
+"file": "components/ui/Menu.tsx",
+"line": 145,
+"tag": "div",
+"title": "{item.title}"
+},
+{
+"file": "components/ui/Segmented.tsx",
+"line": 63,
+"tag": "span",
+"title": "{typeof option.label === 'string' ? option.label : undefined}"
+},
+{
+"file": "components/settings/SettingsLayout.tsx",
+"line": 585,
+"tag": "span",
+"title": "{MACHINE_STATE_LABEL[state]}"
+},
+{
+"file": "components/settings/SettingsLayout.tsx",
+"line": 675,
+"tag": "span",
+"title": "{MANAGED_UPDATE_ROW_TITLE}"
+},
+{
+"file": "components/settings/SettingsLayout.tsx",
+"line": 682,
+"tag": "span",
+"title": "{row.detail ?? row.label}"
+},
+{
+"file": "components/settings/MachineSettingsPage.tsx",
+"line": 789,
+"tag": "span",
+"title": "{claudeRegionChecked(ago(runner.region.checkedAt, nowMs), runner.region.name, ru"
+},
+{
+"file": "components/settings/AdminLayout.tsx",
+"line": 21,
+"tag": "span",
+"title": "{on ? 'On' : 'Off'}"
+},
+{
+"file": "components/settings/SettingsBlocks.tsx",
+"line": 92,
+"tag": "div",
+"title": "{tooltip}"
+}
+],
+"D-c exact time, date or error detail": [
+{
+"file": "pages/ProjectsPage.tsx",
+"line": 2551,
+"tag": "time",
+"title": "{starts.iso}"
+},
+{
+"file": "pages/AdminUsersPage.tsx",
+"line": 162,
+"tag": "span",
+"title": "{`Disabled on ${fullDate(disabledAt)}`}"
+},
+{
+"file": "pages/AdminUsersPage.tsx",
+"line": 174,
+"tag": "span",
+"title": "{`${welcomeEmail.lastError ?? 'Unknown error'}\\nLast attempt ${attemptTime(at)}`"
+},
+{
+"file": "pages/TaskListView.tsx",
+"line": 323,
+"tag": "div",
+"title": "{`Show the ${row.total.toLocaleString()} tasks labelled ${row.label}`}"
+},
+{
+"file": "pages/TaskListView.tsx",
+"line": 1250,
+"tag": "time",
+"title": "{`Starts once, at ${starts.local} in your own time zone (${starts.iso})`}"
+},
+{
+"file": "components/SessionOutputs.tsx",
+"line": 465,
+"tag": "div",
+"title": "{detail.mergeError ?? undefined}"
+},
+{
+"file": "components/SessionOutputs.tsx",
+"line": 502,
+"tag": "span",
+"title": "{detail.mergeError ?? undefined}"
+},
+{
+"file": "components/DeepSeekBalance.tsx",
+"line": 56,
+"tag": "div",
+"title": "{view.message}"
+},
+{
+"file": "components/DshRunnerStatus.tsx",
+"line": 55,
+"tag": "span",
+"title": "{health.update?.message}"
+},
+{
+"file": "components/RunnerEngines.tsx",
+"line": 977,
+"tag": "span",
+"title": "{health?.update?.message}"
+},
+{
+"file": "components/Transcript.tsx",
+"line": 2970,
+"tag": "div",
+"title": "{log && node.message}"
+},
+{
+"file": "components/CodexResetCredit.tsx",
+"line": 498,
+"tag": "div",
+"title": "{expiry.at ? fmtFull(expiry.at) : undefined}"
+},
+{
+"file": "components/CodexResetCredit.tsx",
+"line": 503,
+"tag": "div",
+"title": "{fmtFull(card.block.fetchedAt)}"
+},
+{
+"file": "components/TaskProgressBlock.tsx",
+"line": 89,
+"tag": "div",
+"title": "{agent.error || undefined}"
+},
+{
+"file": "components/drive/DriveFileCard.tsx",
+"line": 40,
+"tag": "span",
+"title": "{entry.error instanceof ApiError ? entry.error.message : undefined}"
+}
+],
+"B-a explains or extends the action": [
+{
+"file": "pages/TaskListView.tsx",
+"line": 1368,
+"tag": "Button",
+"title": "\"Open the conversation this list is steered from\""
+},
+{
+"file": "components/SessionOutputs.tsx",
+"line": 1310,
+"tag": "button",
+"title": "{`View diff \u00b7 ${file.path}`}"
+},
+{
+"file": "components/WatchParts.tsx",
+"line": 116,
+"tag": "Link",
+"title": "{`${noun} ${shown}`}"
+},
+{
+"file": "components/NewSessionProviderHero.tsx",
+"line": 218,
+"tag": "Link",
+"title": "{`${engine.label}: ${engine.unavailable}${onRunner(engine)}${engine.regionBlocke"
+},
+{
+"file": "components/WatchRelations.tsx",
+"line": 164,
+"tag": "button",
+"title": "\"Follow this session: be notified, or resume another session, when it reaches a "
+},
+{
+"file": "components/PendingTray.tsx",
+"line": 99,
+"tag": "button",
+"title": "\"Send into the current turn now\""
+},
+{
+"file": "components/ProjectLandingsWindow.tsx",
+"line": 416,
+"tag": "Button",
+"title": "{cards.some((card) => card.state === 'FIXING') ? LANDING_FIX_COPY.DECISIONS_SESS"
+},
+{
+"file": "components/TaskDependencyGraph.tsx",
+"line": 185,
+"tag": "button",
+"title": "{`Open task: ${data.task.title}`}"
+},
+{
+"file": "components/WorkspaceView.tsx",
+"line": 10804,
+"tag": "button",
+"title": "{SESSION_PROJECT_COPY.markHint(mark.title)}"
+},
+{
+"file": "components/WorkspaceView.tsx",
+"line": 11031,
+"tag": "button",
+"title": "{FOLDER_COPY.clearTag(activeTag.name)}"
+},
+{
+"file": "components/WorkspaceView.tsx",
+"line": 11187,
+"tag": "button",
+"title": "\"Session settings\""
+},
+{
+"file": "components/WorkspaceView.tsx",
+"line": 11207,
+"tag": "button",
+"title": "{projectBack.title ? `Open project \u00b7 ${projectBack.title}` : 'Open project'}"
+},
+{
+"file": "components/WorkspaceView.tsx",
+"line": 11220,
+"tag": "button",
+"title": "\"Anyone with the link can view this session \u2014 open its sharing settings\""
+},
+{
+"file": "components/WorkspaceView.tsx",
+"line": 11238,
+"tag": "button",
+"title": "\"The agent here cannot reach Orbit's tools \u2014 open Agent tools\""
+},
+{
+"file": "components/WorkspaceView.tsx",
+"line": 13370,
+"tag": "button",
+"title": "\"Use this suggestion\""
+},
+{
+"file": "components/TaskDetailPanel.tsx",
+"line": 1739,
+"tag": "Link",
+"title": "\"Go to the session that created this task\""
+},
+{
+"file": "components/DecisionRail.tsx",
+"line": 987,
+"tag": "button",
+"title": "{here < 0 || ways.length < 2 ? GO_TO_CARD_HINT : GO_TO_NEXT_CARD_HINT}"
+},
+{
+"file": "components/SessionCommits.tsx",
+"line": 105,
+"tag": "button",
+"title": "{commit.body ? `${commit.subject}\\n\\n${commit.body}` : commit.subject}"
+},
+{
+"file": "components/SessionCommits.tsx",
+"line": 141,
+"tag": "button",
+"title": "\"Changes in the worktree that no commit holds yet\""
+},
+{
+"file": "components/Transcript.tsx",
+"line": 3707,
+"tag": "button",
+"title": "{copied ? 'Copied' : 'Copy message'}"
+},
+{
+"file": "components/Transcript.tsx",
+"line": 3793,
+"tag": "button",
+"title": "{copied ? 'Copied' : 'Copy reply'}"
+},
+{
+"file": "components/Transcript.tsx",
+"line": 4035,
+"tag": "button",
+"title": "{failed ? `Retry download ${label}` : `Download ${label}`}"
+},
+{
+"file": "components/Transcript.tsx",
+"line": 4142,
+"tag": "button",
+"title": "{copied ? 'Copied' : 'Copy code'}"
+},
+{
+"file": "components/ProjectShareControls.tsx",
+"line": 163,
+"tag": "button",
+"title": "\"Anyone with the link can view this project \u2014 open its sharing settings\""
+}
+],
+"D-d keyboard shortcut": [
+{
+"file": "components/TasksSidePanel.tsx",
+"line": 966,
+"tag": "div",
+"title": "{`${t.label}${t.shortcut ? ` ${t.shortcut}` : ''}`}"
+},
+{
+"file": "components/TasksSidePanel.tsx",
+"line": 1005,
+"tag": "div",
+"title": "{`${a.name} \u00b7 ${runnerLabel}${shortcutLabel ? ` ${shortcutLabel}` : ''}`}"
+},
+{
+"file": "components/TasksSidePanel.tsx",
+"line": 1057,
+"tag": "kbd",
+"title": "{`Open ${t.label} with ${t.shortcut}`}"
+},
+{
+"file": "components/TasksSidePanel.tsx",
+"line": 1753,
+"tag": "kbd",
+"title": "{`Open workspace with ${shortcutLabel}`}"
+}
+]
+}

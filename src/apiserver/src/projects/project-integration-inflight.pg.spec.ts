@@ -43,7 +43,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { CreatorType, Prisma, PrismaClient, RunStatus, RunnerStatus, TaskStatus } from '@prisma/client';
+import { CreatorType, Prisma, PrismaClient, RunnerStatus, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { IntegrationJobKind, IntegrationJobPhase } from '@orbit/shared';
 import { Client } from 'pg';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -54,6 +55,7 @@ import {
 } from './coordinator-pg-test-safety';
 import { readProjectIntegrationLines, readProjectIntegrationView } from './project-integration-line';
 import { medianMs } from './project-promotion';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -269,7 +271,7 @@ async function sessionOf(
     data: {
       id, ownerId: f.ownerId, creatorId: f.ownerId, workspaceId,
       taskId: opts.taskId ?? null, title: 'landing fixture', prompt: 'landing fixture',
-      provider: 'claude', status: opts.finished ? RunStatus.SUCCEEDED : RunStatus.RUNNING,
+      provider: 'claude', turnState: turnStateOfWord(opts.finished ? RunStatus.SUCCEEDED : RunStatus.RUNNING),
       startsTaskWork: opts.startsTaskWork ?? false,
       startedAt: new Date(), ...(opts.finished ? { finishedAt: new Date()} : {}),
     },

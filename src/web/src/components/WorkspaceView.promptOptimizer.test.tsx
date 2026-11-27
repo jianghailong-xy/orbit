@@ -411,7 +411,11 @@ describe('Optimizing… (frame 3)', () => {
 
   it('Tab in the box presses it, and says so to the eye and to a screen reader', async () => {
     await ready();
-    expect(optimizeButton()!.title).toContain('Optimize this draft · Tab ·');
+    // The app's tooltip, not the browser's `title`, names the shortcut.
+    expect(optimizeButton()!.hasAttribute('title')).toBe(false);
+    await act(async () => { optimizeButton()!.focus(); await new Promise((resolve) => setTimeout(resolve, 150)); });
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toContain('Optimize this draft · Tab ·');
+    await act(async () => { box().focus(); });
     const hint = document.getElementById(box().getAttribute('aria-describedby')!);
     expect(hint?.textContent).toBe('Press Tab to optimize this draft.');
     expect((await tab()).defaultPrevented).toBe(true);

@@ -7,6 +7,7 @@ import {
   type SessionTurnOutcome,
   type SessionWaitingOn,
 } from '@orbit/shared';
+import { sessionDisplayState } from './sessionDisplay';
 
 /**
  * A session has two independent product dimensions:
@@ -85,6 +86,8 @@ export interface SessionStateSource {
   sessionKind?: string | null;
   lastTurnOutcome?: string | null;
   waitingOn?: string | null;
+  /** The server's answer to "did this release finish the work" (releaseFinishedTheWork); absent from an older control plane. */
+  workFinished?: boolean | null;
 }
 
 const SESSION_PHASE_SET: ReadonlySet<string> = new Set(SESSION_PHASES);
@@ -103,6 +106,20 @@ export const sessionPhaseOf = (session: SessionStateSource): SessionPhase | null
  *  control plane (tell the two apart with sessionPhaseOf). */
 export const sessionWaitingOnOf = (session: SessionStateSource): SessionWaitingOn | null =>
   knownValue<SessionWaitingOn>(session.waitingOn, SESSION_WAITING_ON_SET);
+
+/**
+ * Whether phase PENDING is an armed retry waiting to re-send the session rather than a queued turn (the owner,
+ * 2026-11-26: waiting for retry is PENDING, held or released). The server says so with `waitingOn` WAKE, which a
+ * queued turn never carries; behind an answer owed (PERSON) it is the armed `retryAt` on a run that is not queued.
+ */
+export const sessionWaitsOnRetry = (session: SessionStateSource): boolean => {
+  if (sessionPhaseOf(session) !== 'PENDING') return false;
+  const waitingOn = sessionWaitingOnOf(session);
+  if (waitingOn === 'WAKE') return true;
+  if (waitingOn !== 'PERSON' || !session.retryAt) return false;
+  const runStatus = sessionRunStatusOf(session);
+  return runStatus !== 'PENDING' && runStatus !== 'QUEUED';
+};
 
 /** How the last turn ended (`lastTurnOutcome`), or null before any turn recorded one or from an older server. */
 export const sessionLastTurnOutcomeOf = (session: SessionStateSource): SessionTurnOutcome | null =>
@@ -230,23 +247,27 @@ export function sessionRunStateOf(session: SessionStateSource): SessionRunState 
 /** Whether a released session finished its work: its task ended DONE, or it is a landing that settled
  *  (the server's releaseFinishedTheWork). The only release worded "Finished" (decision D2). */
 export const sessionFinishedTheWork = (session: SessionStateSource): boolean =>
-  session.released === true &&
-  ((session.endReason ?? '') === 'task_done' ||
-    ((session.sessionKind ?? '') === 'LANDING' && !session.endReason));
+  typeof session.workFinished === 'boolean'
+    ? session.workFinished
+    : session.released === true &&
+      ((session.endReason ?? '') === 'task_done' ||
+        ((session.sessionKind ?? '') === 'LANDING' && !session.endReason));
 
 /**
  * Whether phase RUNNING is a dispatched turn rather than work outside one. The server's `activity` cannot tell
  * them apart: it answers TURN for every stored PENDING or RUNNING row and also for a parked session whose engine
  * runs its own turn or a sub-agent. The legacy run status can: a dispatched turn is stored RUNNING, work outside a
  * turn is stored AWAITING_INPUT (or INTERRUPTED) with an activity. This is the ONE legacy read left in this
- * function, kept until the server sends a turn-in-flight fact. With no run status at all, an activity means
- * work outside a turn.
+ * function, kept until the server sends a turn-in-flight fact. With no run status at all (or one this client does
+ * not know), no activity or TURN is a dispatched turn and any other activity is work outside one.
  */
 function dispatchedTurnInFlight(session: SessionStateSource): boolean {
   const runStatus = sessionRunStatusOf(session);
   if (runStatus === 'RUNNING' || runStatus === 'PENDING' || runStatus === 'QUEUED') return true;
   if (runStatus === 'AWAITING_INPUT') return false;
-  return !session.activity;
+  // A status word this client does not know: the server sends activity TURN for every dispatched turn, so no
+  // activity or TURN is a turn in flight; any other activity is work outside one (Apple and Android read it so).
+  return !session.activity || session.activity === 'TURN';
 }
 
 /**
@@ -264,7 +285,8 @@ function runStateFromPhaseFields(session: SessionStateSource): SessionRunState |
     if (!session.endReason && outcome === 'FAILED') return 'FAILED';
     return sessionFinishedTheWork(session) ? 'SUCCEEDED' : 'ENDED';
   }
-  if (phase === 'PENDING') return 'QUEUED';
+  // A held session waiting on its armed retry has no turn queued: it reads parked, as it did before the retry.
+  if (phase === 'PENDING' && !sessionWaitsOnRetry(session)) return 'QUEUED';
   if (phase === 'RUNNING') return dispatchedTurnInFlight(session) ? 'RUNNING' : 'AWAITING_INPUT';
   return outcome === 'INTERRUPTED' ? 'INTERRUPTED' : 'AWAITING_INPUT';
 }
@@ -340,6 +362,10 @@ const SESSION_RUN_WORD: Record<SessionRunState, string> = {
  * says how its latest run stands.
  */
 export function sessionStateWord(session: SessionStateSource, opts: { canReply?: boolean } = {}): string {
+  // With the facts, the state word is `phase` alone (lib/sessionDisplay), and a filed session says Completed after
+  // it rather than instead of it (the caller draws that and the marks). What follows is an older control plane's.
+  const shown = sessionDisplayState(session);
+  if (shown) return shown.word;
   if (sessionLifecycleStateOf(session) === 'COMPLETED') return sessionLifecycleLabel('COMPLETED');
   // Parked is not idle: say what it is still doing (sessionActivityOf).
   const activity = sessionActivityOf(session);
@@ -419,19 +445,20 @@ export const isSessionLive = (session: SessionStateSource): boolean => !sessionR
 export const isSessionTerminal = (session: SessionStateSource): boolean => sessionReleasedOf(session);
 
 /** Whether something is executing or queued for this session now. With `phase`, anything but IDLE: a turn, the
- *  engine's own turn, a sub-agent or a background job (decision D8). From an older control plane: a dispatched
- *  turn, or one the engine started for itself while parked (activity TURN). */
+ *  engine's own turn, a sub-agent or a background job (decision D8), except a retry waiting to re-send it, which
+ *  can be hours out on a spent quota. From an older control plane: a dispatched turn, or one the engine started for
+ *  itself while parked (activity TURN). */
 export const isSessionWorking = (session: SessionStateSource): boolean => {
   const phase = sessionPhaseOf(session);
-  if (phase) return phase !== 'IDLE';
+  if (phase) return phase !== 'IDLE' && !sessionWaitsOnRetry(session);
   return isSessionBusy(session) || sessionActivityOf(session) === 'TURN';
 };
 
-/** Whether a turn is queued and nothing executes yet (`phase` PENDING); from an older control plane, the raw
- *  status PENDING. */
+/** Whether a turn is queued and nothing executes yet (`phase` PENDING, not a retry's); from an older control plane,
+ *  the raw status PENDING. */
 export const isSessionQueued = (session: SessionStateSource): boolean => {
   const phase = sessionPhaseOf(session);
-  return phase ? phase === 'PENDING' : sessionRunStatusOf(session) === 'PENDING';
+  return phase ? phase === 'PENDING' && !sessionWaitsOnRetry(session) : sessionRunStatusOf(session) === 'PENDING';
 };
 
 /** Task execution is busy only while waiting for a runner or actively generating. */

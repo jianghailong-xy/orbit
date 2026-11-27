@@ -31,6 +31,9 @@ final class TranslationWiringTests: XCTestCase {
         XCTAssertTrue(bubbles.contains("SessionTranslation.replyFoot(bubble.translation, pending: awaiting, flipped: flipped,"))
         XCTAssertTrue(bubbles.contains("case .retryTurn: if let id = bubble.turnId { translationActions?.retryTurn(id) }"))
         XCTAssertTrue(bubbles.contains("case .sendAsWritten: if let id = bubble.turnId { translationActions?.sendAsWritten(id) }"))
+        XCTAssertTrue(bubbles.contains("case .cancelTurn: translationActions?.cancelTurn(bubble)"))
+        XCTAssertTrue(bubbles.contains("cancellable: translationActions != nil && SessionTranslation.offersCancel(bubble))"),
+                      "no Cancel without a door, or under the opening prompt")
         XCTAssertTrue(bubbles.contains("case .retryReply: if let seq = bubble.seq { translationActions?.retryReply(seq) }"))
     }
 
@@ -83,6 +86,17 @@ final class TranslationWiringTests: XCTestCase {
         XCTAssertTrue(model.contains("api.retryTurnTranslation(sessionID: sessionID, turnId: turnId)"))
         XCTAssertTrue(model.contains("api.sendTurnAsWritten(sessionID: sessionID, turnId: turnId)"))
         XCTAssertTrue(model.contains("api.retryReplyTranslation(sessionID: sessionID, seq: seq)"))
+        XCTAssertTrue(console.contains("cancelTurn: { bubble in Task { await console.cancelUntranslated(bubble) } },"))
+        let start = try XCTUnwrap(model.range(of: "func cancelUntranslated(_ bubble: UserBubble) async {"))
+        let cancel = String(model[start.upperBound...].prefix(1600))
+        // Files are read before the DELETE, which deletes them with the turn.
+        let read = try XCTUnwrap(cancel.range(of: "attachments.data(for: ref.id)"))
+        let withdraw = try XCTUnwrap(cancel.range(of: "try await api.withdrawTurn(sessionID: sessionID, turnId: turnId)"))
+        XCTAssertLessThan(read.lowerBound, withdraw.lowerBound)
+        XCTAssertTrue(cancel.contains("ToastRequest(message: \"Couldn't cancel the message\""))
+        XCTAssertTrue(cancel.contains("reducer.removeWithdrawnSteer(turnId: turnId)"))
+        XCTAssertTrue(cancel.contains("composerText = HeldCancel.composer(composerText, restoring: words)"))
+        XCTAssertTrue(cancel.contains("attach(filename: ref.name"))
         XCTAssertTrue(model.contains("translation: accepted.turnTranslation)"), "the send answer's chip")
         XCTAssertTrue(model.contains("catch where SessionTranslation.refusedUntranslated(error) {"))
     }

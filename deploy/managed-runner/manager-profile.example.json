@@ -15,7 +15,7 @@
     "capacity": "REPLACE_ME"
   },
   "files": {
-    "namespace": "orbit-files-system"
+    "namespace": "orbit-drive-system"
   },
   "runner": {
     "image": "REPLACE_ME@sha256:REPLACE_ME",

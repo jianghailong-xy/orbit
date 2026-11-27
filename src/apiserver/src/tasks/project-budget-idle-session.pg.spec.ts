@@ -6,11 +6,11 @@ import {
   CreatorType,
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -21,6 +21,8 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { reclaimStalledTask } from './reclaim-stalled-task';
 import { TasksService } from './tasks.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordOf, WORD_SELECT, withWord } from '../test-support/session-word';
 
 /**
  * A project's "At most N tasks at a time" is spent on work that is moving, not on a task session
@@ -188,7 +190,7 @@ async function holding(
     data: {
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId,
       workspaceId: w.workspaceId, assignedRunnerId: w.runnerId, title: `${title} run`,
-      prompt: 'the task brief', provider: 'claude', status,
+      prompt: 'the task brief', provider: 'claude', turnState: turnStateOfWord(status),
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       startedAt: new Date(Date.now() - 60 * 60_000), numTurns: 1,
       ...parked,
@@ -268,9 +270,9 @@ test('(1) the 2026-10-26 incident: a session parked with nothing to wake it free
     // Nobody ended or started anything by hand: the waiting session is exactly where it was, and
     // each of the three tasks still has the one run it had.
     const waiting = await s.db.session.findUniqueOrThrow({
-      where: { id: c1b.sessionId }, select: { status: true, endReason: true },
+      where: { id: c1b.sessionId }, select: { ...WORD_SELECT, endReason: true },
     });
-    assert.deepEqual(waiting, { status: RunStatus.AWAITING_INPUT, endReason: null },
+    assert.deepEqual(withWord(waiting, 'endReason'), { status: RunStatus.AWAITING_INPUT, endReason: null },
       'the waiting session was ended or woken to make room');
     for (const held of [o3, a6, c1b]) {
       assert.equal(await runs(s.db, held.taskId), 1, 'a slot holder was given a second run');
@@ -304,9 +306,9 @@ test('(2) a session a person INTERRUPTED does not hold a slot either',
       assert.equal(await runs(s.db, ready), 1,
         'the project\'s one slot is still held by a run a person stopped');
       const after = await s.db.session.findUniqueOrThrow({
-        where: { id: stopped.sessionId }, select: { status: true },
+        where: { id: stopped.sessionId }, select: { ...WORD_SELECT },
       });
-      assert.equal(after.status, RunStatus.INTERRUPTED, 'the stopped session was moved to make room');
+      assert.equal(wordOf(after), RunStatus.INTERRUPTED, 'the stopped session was moved to make room');
     } finally {
       await s.db.$disconnect();
     }
@@ -331,7 +333,7 @@ const observingWatch = (db: PrismaClient, ownerId: string, sessionId: string) =>
 
 /** Its turn ended with nothing left to wake it. */
 const turnEnded = (db: PrismaClient, sessionId: string) => db.session.update({
-  where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT },
+  where: { id: sessionId }, data: { turnState: null },
 });
 
 /**
@@ -575,9 +577,9 @@ test('(5) the owner\'s message to an idle task session is not held by the budget
       clientTurnId: randomUUID(), content: 'the fix has landed; go on',
     });
     const woken = await s.db.session.findUniqueOrThrow({
-      where: { id: waiting.sessionId }, select: { status: true },
+      where: { id: waiting.sessionId }, select: { ...WORD_SELECT },
     });
-    assert.equal(woken.status, RunStatus.PENDING, 'the owner\'s message did not queue a turn');
+    assert.equal(wordOf(woken), RunStatus.PENDING, 'the owner\'s message did not queue a turn');
     assert.equal(await s.db.conversationTurn.count({ where: { sessionId: waiting.sessionId } }), 2);
 
     // Working again, it counts again: two tasks on a cap of one, and no automatic door adds a third.
@@ -587,7 +589,7 @@ test('(5) the owner\'s message to an idle task session is not held by the budget
 
     // The first task's run ends with nothing to wake it: the woken session alone holds the slot.
     await s.db.session.updateMany({
-      where: { taskId: first }, data: { status: RunStatus.AWAITING_INPUT },
+      where: { taskId: first }, data: { turnState: null },
     });
     await readySweep(s);
     assert.equal(await runs(s.db, second), 0, 'the woken session stopped counting while it works');
@@ -629,9 +631,9 @@ test('(6) an idle session frees its budget slot, while the candidate scans, the 
     // resumed its session or opened a second run beside it.
     assert.equal(await runs(s.db, parkedOpen.taskId), 1, 'a second run was opened beside a parked one');
     const parked = await s.db.session.findUniqueOrThrow({
-      where: { id: parkedOpen.sessionId }, select: { status: true },
+      where: { id: parkedOpen.sessionId }, select: { ...WORD_SELECT },
     });
-    assert.equal(parked.status, RunStatus.AWAITING_INPUT, 'the sweep resumed a parked session');
+    assert.equal(wordOf(parked), RunStatus.AWAITING_INPUT, 'the sweep resumed a parked session');
     assert.equal(await s.db.conversationTurn.count({ where: { sessionId: parkedOpen.sessionId } }), 1,
       'the sweep handed the task brief to its parked session');
     assert.equal(await s.db.taskRunRequest.count({
@@ -652,7 +654,7 @@ test('(6) an idle session frees its budget slot, while the candidate scans, the 
         data: {
           id: randomUUID(), ownerId: w.ownerId, creatorId: w.ownerId, taskId: stalled.taskId,
           workspaceId: w.workspaceId, assignedRunnerId: w.runnerId, title: 'a second run',
-          prompt: 'the task brief', provider: 'claude', status: RunStatus.PENDING,
+          prompt: 'the task brief', provider: 'claude', turnState: 'QUEUED',
           dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
         },
       }),

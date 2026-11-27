@@ -5,6 +5,7 @@ import { hasDeepSeekBalance } from '../lib/deepseekBalance';
 import type { ProviderRow } from '../lib/providerAdmin';
 import { foldFromAnywhere } from '../lib/foldHead';
 import { ago } from '../lib/watches';
+import { AccountHealthProviderLine } from './AccountHealthLine';
 import { CursorKeyCheckLine } from './CursorKeyCheck';
 import { DeepSeekBalanceLine, useBalance } from './DeepSeekBalance';
 import { EngineTile } from './ProviderGallery';
@@ -12,6 +13,7 @@ import { SettingsCard, SettingsRow } from './settings/SettingsBlocks';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
 import { Menu, type MenuItem } from './ui/Menu';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /** The exact time behind a key's relative Used, for its tooltip. */
 const stampOf = (iso: string): string =>
@@ -119,9 +121,11 @@ export function ProviderKeyRows({
                   <span className="vk-used-item">
                     {' '}<span className="prov-engine-sep">·</span>{' '}
                     {row.lastUsedAt ? (
-                      <span className="vk-used" title={stampOf(row.lastUsedAt)}>
-                        last used {ago(row.lastUsedAt, nowMs)}
-                      </span>
+                      <Tooltip content={stampOf(row.lastUsedAt)} delay={TEXT_TOOLTIP_DELAY_MS}>
+                        <span className="vk-used">
+                          last used {ago(row.lastUsedAt, nowMs)}
+                        </span>
+                      </Tooltip>
                     ) : (
                       <span className="vk-used never">never used</span>
                     )}
@@ -131,6 +135,8 @@ export function ProviderKeyRows({
                 {hasDeepSeekBalance(row) && <DeepSeekBalanceLine row={row} />}
                 {/* A Cursor key, what Cursor answered its last check (CursorKeyCheck.tsx). */}
                 {row.runtime === 'cursor' && <CursorKeyCheckLine row={row} />}
+                {/* A key an account refused runs on: the provider's words, the next trial, Check again (§8). */}
+                <AccountHealthProviderLine providerId={row.id} />
               </>
             }
             // A press anywhere on the row opens the key's page, but not one on a control of its own (the

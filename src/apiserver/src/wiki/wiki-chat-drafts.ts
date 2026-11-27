@@ -11,6 +11,7 @@ import {
   type WikiChatDraftToolAnswer,
   type WikiChatDraftView,
   type WikiChatProposeAnswer,
+  type WikiChatRewriteHeld,
   type WikiChatSectionRef,
   type WikiEntryChanges,
   type WikiFieldError,
@@ -34,6 +35,7 @@ import {
   draftStateOf,
   draftViews,
   planCardSectionViews,
+  pressedSections,
   sectionViews,
   storedOps,
   storedPlanChange,
@@ -42,7 +44,7 @@ import {
   type StoredDraftOp,
 } from './wiki-chat-cards';
 import { WikiDocs } from './wiki-docs';
-import { followWikiDocsPress, wikiDocsFollowFactsOf } from './wiki-docs-follow';
+import { followWikiDocsPress, wikiDocsFollowDayStart, wikiDocsFollowFactsOf } from './wiki-docs-follow';
 import { wikiPlanCardBase, wikiPlanCardChangeOf, wikiPlanCardSections, WikiPlans } from './wiki-plan';
 import { assertWikiSpaceInUse } from './wiki-trash';
 import { WikiRefusalError, WikiService, type CheckedChatOps, type WikiPrincipal, type WikiProposeInput } from './wiki.service';
@@ -116,6 +118,7 @@ function notOpen(state: WikiChatDraftState, press: string): ConflictException {
     replaced: 'a newer card of the chat replaced it',
     changed: 'what it changes changed since it was drafted',
     applied: 'it is applied already',
+    rewritten: 'it was written from main without a press',
     discarded: 'it was discarded',
     not_applied: 'its chat ended with it unpressed',
     undone: 'it was undone',
@@ -266,7 +269,11 @@ export class WikiChatDrafts {
       async (tx) => {
         const replayed = await this.replayCard(tx, principal, key, requestSha256);
         if (replayed) {
-          return { status: 'draft' as const, draftId: replayed.draftId as string, kind: 'rewrite' as const, replayed: true, rewrites: replayed.rewrites as WikiChatDraftToolAnswer['rewrites'] };
+          const card = await tx.wikiChatDraft.findFirstOrThrow({ where: { id: replayed.draftId as string, ownerId: principal.ownerId }, select: { autoQueuedAt: true, held: true } });
+          return {
+            status: 'draft' as const, draftId: replayed.draftId as string, kind: 'rewrite' as const, replayed: true, rewrites: replayed.rewrites as WikiChatDraftToolAnswer['rewrites'],
+            state: card.autoQueuedAt !== null ? 'rewritten' as const : 'draft' as const, held: (card.held as WikiChatRewriteHeld | null) ?? null,
+          };
         }
         // Each a written section of the confirmed plan (contract `agentSurface.chat.draft.params.sections`).
         const plan = await confirmedPlanOf(tx, principal.ownerId, spaceId);
@@ -284,6 +291,11 @@ export class WikiChatDrafts {
           throw refusal('WIKI_SCHEMA', 'a rewrite names written sections of the confirmed plan, as the documents read names them', missing);
         }
         await this.lockReplaced(tx, principal, replaces);
+        // Option A's bounds (contract `chat.drafts.auto`): written when drafted, with no press, unless one fails.
+        const tainted = await this.wiki.chatWasTainted(tx, principal.sessionId);
+        const bounds = tainted
+          ? { held: 'web' as const, heldById: null }
+          : await this.autoBounds(tx, principal, spaceId, sections, replaces);
         const created = await tx.wikiChatDraft.create({
           data: {
             ownerId: principal.ownerId,
@@ -293,14 +305,20 @@ export class WikiChatDrafts {
             rationale: reason,
             sections: sections as unknown as Prisma.InputJsonValue,
             rewrites: sections as unknown as Prisma.InputJsonValue,
-            tainted: await this.wiki.chatWasTainted(tx, principal.sessionId),
+            tainted,
             replacesId: replaces,
             idempotencyKey: key,
             requestSha256,
+            held: bounds.held,
+            heldById: bounds.heldById,
           },
           select: { id: true },
         });
-        return { status: 'draft' as const, draftId: created.id, kind: 'rewrite' as const, replayed: false, rewrites: sectionViews(plan, sections) };
+        if (bounds.held === null) await this.queueAuto(tx, principal.ownerId, { id: created.id, spaceId, sessionId: principal.sessionId, rewrites: sections });
+        return {
+          status: 'draft' as const, draftId: created.id, kind: 'rewrite' as const, replayed: false, rewrites: sectionViews(plan, sections),
+          state: bounds.held === null ? 'rewritten' as const : 'draft' as const, held: bounds.held,
+        };
       },
       loggedRetry(this.logger, 'wiki.draftChatRewrite'),
     );
@@ -330,7 +348,7 @@ export class WikiChatDrafts {
     const replaces = input.replaces === undefined || input.replaces === null ? null : idAt(input.replaces, 'replaces');
     const requestSha256 = sha256(sortedJson({ kind: 'plan', spaceId, change: input.change ?? null, reason, replaces }));
     const replayedAnswer = (replayed: Record<string, unknown>): WikiChatDraftToolAnswer => ({
-      status: 'draft', draftId: replayed.draftId as string, kind: 'plan', replayed: true, rewrites: replayed.rewrites as WikiChatDraftToolAnswer['rewrites'],
+      status: 'draft', draftId: replayed.draftId as string, kind: 'plan', replayed: true, rewrites: replayed.rewrites as WikiChatDraftToolAnswer['rewrites'], state: 'draft', held: null,
     });
     const earlier = await this.replayCard(this.prisma as unknown as Prisma.TransactionClient, principal, key, requestSha256);
     if (earlier) return replayedAnswer(earlier);
@@ -361,12 +379,111 @@ export class WikiChatDrafts {
           select: { id: true },
         });
         const plan = await confirmedPlanOf(tx, principal.ownerId, spaceId);
-        return { status: 'draft' as const, draftId: created.id, kind: 'plan' as const, replayed: false, rewrites: planCardSectionViews(plan, view, sections) };
+        return { status: 'draft' as const, draftId: created.id, kind: 'plan' as const, replayed: false, rewrites: planCardSectionViews(plan, view, sections), state: 'draft' as const, held: null };
       },
       loggedRetry(this.logger, 'wiki.draftChatPlan'),
     );
     if (!answer.replayed) this.realtime?.publishWikiChanged(principal.ownerId, spaceId);
     return answer;
+  }
+
+  /**
+   * Option A's last two bounds for a rewrite card of an untainted chat (contract `chat.drafts.auto`, design §7.2): whether
+   * another open card of the chat would rewrite one of its sections — it waits on that card, held FOR SHARE so that card's
+   * press cannot decide it unseen — and whether its sections fit in what is left of the space's automatic sections today.
+   * The day's count is read under the space's advisory lock, taken before any document lock and held to the commit, so two
+   * drafts at once cannot both take the last of it. Answers why it is held, or null when it is written now.
+   */
+  private async autoBounds(
+    tx: Prisma.TransactionClient,
+    principal: WikiPrincipal & { sessionId: string },
+    spaceId: string,
+    sections: readonly WikiChatSectionRef[],
+    replaces: string | null,
+  ): Promise<{ held: WikiChatRewriteHeld | null; heldById: string | null }> {
+    const blocker = await this.openBlocker(tx, principal.ownerId, principal.sessionId, sections, [replaces].filter((id): id is string => id !== null));
+    await tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${`wiki_chat_auto:${spaceId}`}, 0))`);
+    const [used] = await tx.$queryRaw<Array<{ n: number }>>(Prisma.sql`
+      SELECT COALESCE(sum(jsonb_array_length(d."rewrites")), 0)::int AS "n" FROM "wiki_chat_draft" d
+       WHERE d."owner_id" = ${principal.ownerId}::uuid AND d."space_id" = ${spaceId}::uuid AND d."kind" = 'rewrite'
+         AND d."created_at" >= ${wikiDocsFollowDayStart(new Date())}
+         AND (d."auto_queued_at" IS NOT NULL OR d."held" = 'draft')`);
+    if ((used?.n ?? 0) + sections.length > WIKI_CHAT_RULES.chatAutoSectionsPerDay) return { held: 'budget', heldById: null };
+    return blocker ? { held: 'draft', heldById: blocker } : { held: null, heldById: null };
+  }
+
+  /**
+   * The open card of a chat — a draft nobody pressed, replaced or queued, whose base has not moved — that would rewrite
+   * one of these sections, other than the ones named; held FOR SHARE and read again under the lock. Null when there is none.
+   * `waitingToo` counts a rewrite card that is itself held waiting as one: true when a card is drafted (it waits behind it,
+   * and is released with it), false when cards are released (two cards waiting on the same one are both written, in one job).
+   */
+  private async openBlocker(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    sessionId: string,
+    sections: readonly WikiChatSectionRef[],
+    besides: readonly string[],
+    waitingToo = true,
+  ): Promise<string | null> {
+    const wanted = new Set(sections.map((section) => sectionKey(section.doc, section.key)));
+    const shares = (row: DraftRow) => pressedSections(row).some((section) => wanted.has(sectionKey(section.doc, section.key)));
+    const candidates = (await tx.wikiChatDraft.findMany({
+      where: { ownerId, sessionId, decision: null, autoQueuedAt: null, ...(besides.length > 0 ? { id: { notIn: [...besides] } } : {}) },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: DRAFT_SELECT,
+    })).filter((row) => shares(row) && (waitingToo || row.held !== 'draft'));
+    for (const candidate of candidates) {
+      await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "wiki_chat_draft" WHERE "id" = ${candidate.id}::uuid AND "owner_id" = ${ownerId}::uuid FOR SHARE`);
+      const row = await tx.wikiChatDraft.findFirstOrThrow({ where: { id: candidate.id, ownerId }, select: DRAFT_SELECT });
+      if (draftStateOf(row, await draftFacts(tx, ownerId, [row], false)) === 'draft' && shares(row)) return row.id;
+    }
+    return null;
+  }
+
+  /**
+   * A rewrite card queued without a press (contract `chat.drafts.auto`): its sections marked stale and joined to the
+   * space's follow job at the press's priority, the fact marked auto, in the caller's transaction; then auto_queued_at.
+   */
+  private async queueAuto(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    card: { id: string; spaceId: string; sessionId: string; rewrites: readonly WikiChatSectionRef[] },
+  ): Promise<void> {
+    await followWikiDocsPress(tx, { ownerId, spaceId: card.spaceId, draftId: card.id, chatId: card.sessionId, sections: card.rewrites, entryIds: [], auto: true });
+    await tx.wikiChatDraft.updateMany({ where: { id: card.id, ownerId, decision: null, autoQueuedAt: null }, data: { autoQueuedAt: new Date() } });
+  }
+
+  /**
+   * What a decided card starts (contract `chat.drafts.auto`, D6): each rewrite card of its chat held waiting on it, still a
+   * draft, is queued without a press — after the card's own follow fact, so an Apply's and its join one job — unless
+   * another open card of the chat still rewrites one of its sections, which it then waits on instead. A card queued here
+   * releases the ones waiting on it in turn. Called only while the card was an open draft when it was decided.
+   */
+  private async releaseHeld(tx: Prisma.TransactionClient, ownerId: string, decidedId: string, seen = new Set<string>()): Promise<void> {
+    seen.add(decidedId);
+    for (const id of await this.lockWaiting(tx, ownerId, decidedId)) {
+      const row = await tx.wikiChatDraft.findFirstOrThrow({ where: { id, ownerId }, select: DRAFT_SELECT });
+      if (draftStateOf(row, await draftFacts(tx, ownerId, [row], false)) !== 'draft') continue;
+      const other = await this.openBlocker(tx, ownerId, row.sessionId, storedSections(row.rewrites), [row.id, ...seen], false);
+      if (other) {
+        await tx.wikiChatDraft.updateMany({ where: { id: row.id, ownerId }, data: { heldById: other } });
+        continue;
+      }
+      await this.queueAuto(tx, ownerId, { id: row.id, spaceId: row.spaceId, sessionId: row.sessionId, rewrites: storedSections(row.rewrites) });
+      await this.releaseHeld(tx, ownerId, row.id, seen);
+    }
+  }
+
+  /** The rewrite cards held waiting on a card and not yet queued or pressed, FOR UPDATE, oldest first. */
+  private async lockWaiting(tx: Prisma.TransactionClient, ownerId: string, cardId: string): Promise<string[]> {
+    const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT "id"::text AS "id" FROM "wiki_chat_draft"
+       WHERE "owner_id" = ${ownerId}::uuid AND "held_by_id" = ${cardId}::uuid AND "held" = 'draft'
+         AND "decision" IS NULL AND "auto_queued_at" IS NULL
+       ORDER BY "created_at", "id"
+       FOR UPDATE`);
+    return rows.map((row) => row.id);
   }
 
   /** The card an earlier call made under the same key, answered again; or the refusal for a key reused. */
@@ -587,6 +704,8 @@ export class WikiChatDrafts {
             ]);
           }
         }
+        // Cards first (the order above): the rewrite cards waiting on this one, held before any entry or document.
+        await this.lockWaiting(tx, ownerId, row.id);
         let record: Awaited<ReturnType<WikiService['applyChatOps']>> | null = null;
         if (row.kind === 'entry') {
           record = await this.wiki.applyChatOps(tx, {
@@ -617,6 +736,8 @@ export class WikiChatDrafts {
             entryIds: record?.entryIds ?? [],
           });
         }
+        // The rewrite cards of the chat waiting on this one are queued after it, into the same follow job (D6).
+        await this.releaseHeld(tx, ownerId, row.id);
         await tx.wikiChatDraft.updateMany({
           where: { id: row.id, ownerId, decision: null },
           data: {
@@ -654,6 +775,8 @@ export class WikiChatDrafts {
         if (row.decision === 'discarded') return { replayed: true, row };
         const state = draftStateOf(row, await draftFacts(tx, ownerId, [row]));
         if (state !== 'draft' && state !== 'changed') throw notOpen(state, 'Discard');
+        // An open draft's Discard queues the rewrite cards waiting on it (D6); a changed one leaves them plain drafts.
+        if (state === 'draft') await this.releaseHeld(tx, ownerId, row.id);
         await tx.wikiChatDraft.updateMany({ where: { id: row.id, ownerId, decision: null }, data: { decision: 'discarded', decidedAt: new Date() } });
         return { replayed: false, row };
       },
@@ -681,7 +804,8 @@ export class WikiChatDrafts {
         const row = await this.lockCard(tx, ownerId, draftId);
         if (row.undoneAt !== null) return { replayed: true, row, revert: null, sections: [] as Array<Record<string, unknown>>, planVersion: null };
         const state = draftStateOf(row, await draftFacts(tx, ownerId, [row]));
-        if (state !== 'applied') throw notOpen(state, 'Undo');
+        // A rewrite card written without a press is undone as an applied one (contract `chat.presses.undo`).
+        if (state !== 'applied' && state !== 'rewritten') throw notOpen(state, 'Undo');
         if (row.kind === 'plan') {
           // The plan's own doors, as its press went through them: the version it was drafted on stored again and confirmed,
           // under the space row's lock, and refused once the plan moved on from the one the press made.
@@ -884,7 +1008,7 @@ export class WikiChatDrafts {
       async (tx) => {
         const row = await this.lockCard(tx, ownerId, draftId);
         const state = draftStateOf(row, await draftFacts(tx, ownerId, [row]));
-        if (state !== 'applied') throw notOpen(state, 'Try again');
+        if (state !== 'applied' && state !== 'rewritten') throw notOpen(state, 'Try again');
         const rewrite = (await draftRewrites(tx, ownerId, [row])).get(row.id);
         if (rewrite?.result !== 'failed') {
           throw new ConflictException(`this card's rewrite is ${rewrite?.result ?? 'not there'}, not failed: Try again queues only a failed one, and nothing was written`);
@@ -893,7 +1017,8 @@ export class WikiChatDrafts {
           ? await tx.wikiChangesetOp.findMany({ where: { ownerId, changesetId: row.changesetId }, select: { op: true, entryId: true, resultEntryId: true } })
           : [];
         const entryIds = [...new Set(changeset.map((op) => (op.op === 'add' || op.op === 'supersede' ? op.resultEntryId : op.entryId)).filter((id): id is string => id !== null))];
-        await followWikiDocsPress(tx, { ownerId, spaceId: row.spaceId, draftId: row.id, chatId: row.sessionId, sections: storedSections(row.rewrites), entryIds });
+        // A card written without a press is queued again as it was: no turn of the chat for its sections (D11).
+        await followWikiDocsPress(tx, { ownerId, spaceId: row.spaceId, draftId: row.id, chatId: row.sessionId, sections: storedSections(row.rewrites), entryIds, auto: row.autoQueuedAt !== null });
         await tx.wikiChatDraft.updateMany({ where: { id: row.id, ownerId }, data: { seenAt: null } });
         return { row };
       },
@@ -951,7 +1076,10 @@ export class WikiChatDrafts {
     const rewrite = (await draftRewrites(this.prisma, ownerId, [row])).get(row.id);
     let wrote = false;
     if (row.seenAt === null && rewrite?.settledAt) {
-      const written = await this.prisma.wikiChatDraft.updateMany({ where: { id: row.id, ownerId, seenAt: null, decision: { in: ['applied', 'edited'] } }, data: { seenAt: new Date() } });
+      const written = await this.prisma.wikiChatDraft.updateMany({
+        where: { id: row.id, ownerId, seenAt: null, OR: [{ decision: { in: ['applied', 'edited'] } }, { autoQueuedAt: { not: null } }] },
+        data: { seenAt: new Date() },
+      });
       wrote = written.count === 1;
     }
     if (wrote) this.realtime?.publishWikiChanged(ownerId, row.spaceId);

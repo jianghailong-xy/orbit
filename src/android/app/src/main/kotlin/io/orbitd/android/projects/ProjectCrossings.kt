@@ -42,7 +42,7 @@ object ProjectCrossings {
     const val moveApproveConsequence =
         "Confirming is the move: the task joins the target project as soon as you answer, and nobody has to send the request again."
     /** The same, for a move that files the task under no project. */
-    const val moveOutApproveConsequence = "Confirming takes the task out of this project; no project's acceptance counts it any more."
+    const val moveOutApproveConsequence = "Confirming takes the task out of this project as soon as you answer; no project's acceptance counts it any more."
     const val moveDenyConsequence =
         "Refusing is final for this request, and the task stays where it is. If you change your mind, move the task yourself."
     // A filing, and a dependency.

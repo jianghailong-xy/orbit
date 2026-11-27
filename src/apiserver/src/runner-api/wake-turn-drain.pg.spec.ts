@@ -46,7 +46,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { AgentProvider, RunEventType, SessionEndReason } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -69,6 +70,7 @@ import { RunnerSessionsController } from './runner-sessions.controller';
 import { lastLoopRun, ScheduledWakeupDto } from './scheduled-wakeup';
 import { ScheduledWakeupWorker } from './scheduled-wakeup.worker';
 import '../test-support/dequeue-under-lease';
+import { wordOf } from '../test-support/session-word';
 
 const PG_URL = process.env.COORDINATOR_PG_URL;
 const skip = !PG_URL;
@@ -211,7 +213,7 @@ test('a wakeup filed onto a queued turn that its session\'s end drains is settle
         provider: 'claude',
         providerBuiltin: true,
         engine: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: false,
         startedAt: new Date(),
@@ -236,7 +238,7 @@ test('a wakeup filed onto a queued turn that its session\'s end drains is settle
 
   /** A session working on a turn its runner was handed — the long turn a wakeup comes due behind. */
   async function working(m: Machine, data: Partial<Prisma.SessionUncheckedCreateInput> = {}): Promise<{ id: string; turnId: string }> {
-    const id = await session(m, { status: RunStatus.RUNNING, ...data });
+    const id = await session(m, { turnState: 'IN_FLIGHT', ...data });
     const turn = await db.conversationTurn.create({
       data: {
         sessionId: id, seq: 2, clientTurnId: randomUUID(), kind: 'message', content: 'migrate batch 7',
@@ -330,7 +332,7 @@ test('a wakeup filed onto a queued turn that its session\'s end drains is settle
         WHERE "session_id" = $1::uuid AND "status" = 'IN_FLIGHT'`,
       [sessionId],
     );
-    await sql.query(`UPDATE "session" SET "status" = 'AWAITING_INPUT' WHERE "id" = $1::uuid`, [sessionId]);
+    await sql.query(`UPDATE "session" SET "turn_state" = NULL WHERE "id" = $1::uuid`, [sessionId]);
   }
   /** The engine replied to the turn it is running, as the runner's events record it before turn-complete. */
   async function replied(sessionId: string, turnId: string): Promise<void> {
@@ -366,7 +368,7 @@ test('a wakeup filed onto a queued turn that its session\'s end drains is settle
     await reaper.tick();
 
     const reaped = await sessionRow(id);
-    assert.equal(reaped.status, RunStatus.FAILED, 'the reaper did not finalize the run its runner died in');
+    assert.equal(wordOf(reaped), RunStatus.FAILED, 'the reaper did not finalize the run its runner died in');
     assert.ok(reaped.retryAt, 'the reap did not arm the retry this case is about');
     const drained = await turnByKey(id, wakeTurn.clientTurnId);
     assert.deepEqual([drained.status, drained.deliveredAt], ['ANSWERED', null], 'the wake turn was not drained unrun');
@@ -393,7 +395,7 @@ test('a wakeup filed onto a queued turn that its session\'s end drains is settle
     await goOnline(m);
     await retrySweepOf(id);
     const back = await sessionRow(id);
-    assert.equal(back.status, RunStatus.PENDING, 'the auto-retry did not bring the session back');
+    assert.equal(wordOf(back), RunStatus.PENDING, 'the auto-retry did not bring the session back');
     assert.deepEqual(await drainOnly(id), ['DELIVERED'], 'the held wakeup was not filed once the session was back');
     const refiled = await oneShot(copy.id);
     assert.equal(refiled.state, 'DELIVERED', 'the worker answered DELIVERED and filed nothing');
@@ -440,7 +442,7 @@ test('a wakeup filed onto a queued turn that its session\'s end drains is settle
     await reaper.tick();
 
     const reaped = await sessionRow(id);
-    assert.deepEqual([reaped.status, reaped.retryAt], [RunStatus.FAILED, null], 'the reap armed a retry, or did not fail the run');
+    assert.deepEqual([wordOf(reaped), reaped.retryAt], [RunStatus.FAILED, null], 'the reap armed a retry, or did not fail the run');
     const dropped = await oneShot(filed.id);
     assert.equal(dropped.state, 'DROPPED', 'the wakeup on the drained turn was not dropped');
     assert.equal(dropped.clientTurnId, filed.clientTurnId, 'the drop lost which turn the wakeup had been filed onto');
@@ -506,7 +508,7 @@ test('a wakeup filed onto a queued turn that its session\'s end drains is settle
         [id, SessionEndReason.ENDED],
       );
       await reaper.tick();
-      assert.equal((await sessionRow(id)).status, RunStatus.CANCELLED, 'the reaper did not finalize the unhonored end');
+      assert.equal(wordOf((await sessionRow(id))), RunStatus.CANCELLED, 'the reaper did not finalize the unhonored end');
       settled.push(['an End the runner never honored', (await oneShot(filed.id)).state]);
     }
     // The owner's End of a session working on a turn: the queued messages are retired, an end turn queued.
@@ -522,17 +524,18 @@ test('a wakeup filed onto a queued turn that its session\'s end drains is settle
     {
       const id = await session(m);
       const filed = await fileOneShot(m, id, 'queued end');
-      assert.equal((await sessionRow(id)).status, RunStatus.PENDING, 'the wakeup did not queue the session');
+      assert.equal(wordOf((await sessionRow(id))), RunStatus.PENDING, 'the wakeup did not queue the session');
       await sessions.end(m.ownerId, id);
-      assert.equal((await sessionRow(id)).status, RunStatus.CANCELLED);
+      assert.equal(wordOf((await sessionRow(id))), RunStatus.CANCELLED);
       settled.push(['the owner\'s End of a queued session', (await oneShot(filed.id)).state]);
     }
-    // The runner finishes the run: SUCCEEDED.
+    // The runner finishes the run: SUCCEEDED with no end asked, which reads CANCELLED since deploy D3 (plan §3.4 C5).
     {
       const { id } = await working(m);
       const filed = await fileOneShot(m, id, 'finished');
       await runnerApi.finalize(m.runner as never, id, { status: RunStatus.SUCCEEDED, result: 'the archive is moved' } as never);
-      assert.equal((await sessionRow(id)).status, RunStatus.SUCCEEDED, 'the runner\'s finalize did not end the run');
+      assert.ok((await sessionRow(id)).finishedAt, 'the runner\'s finalize did not end the run');
+      assert.equal(wordOf((await sessionRow(id))), RunStatus.CANCELLED, 'the runner\'s finalize did not end the run');
       settled.push(['the runner\'s finalize SUCCEEDED', (await oneShot(filed.id)).state]);
     }
 
@@ -571,7 +574,7 @@ test('a wakeup filed onto a queued turn that its session\'s end drains is settle
     await runnerDies(m, id);
     await reaper.tick();
     const reaped = await sessionRow(id);
-    assert.equal(reaped.status, RunStatus.FAILED);
+    assert.equal(wordOf(reaped), RunStatus.FAILED);
     assert.ok(reaped.retryAt, 'the reap did not arm the retry task E\'s loop B had');
     const answered10 = await turnByKey(id, filed9.clientTurnId!);
     assert.deepEqual([answered10.status, answered10.deliveredAt], ['ANSWERED', null]);
@@ -595,7 +598,7 @@ test('a wakeup filed onto a queued turn that its session\'s end drains is settle
       [id],
     );
     await retrySweepOf(id);
-    assert.deepEqual([(await sessionRow(id)).status, (await sessionRow(id)).retryAt], [RunStatus.FAILED, null], 'the auto-retry did not give up');
+    assert.deepEqual([wordOf((await sessionRow(id))), (await sessionRow(id)).retryAt], [RunStatus.FAILED, null], 'the auto-retry did not give up');
     for (let n = 39; n <= 43; n += 1) {
       const tick = await makeDue(loop.id);
       assert.equal(await worker.deliverTick(tick.id), 'MISSED', `tick ${n}, whose revive the runner was not there for`);
@@ -678,7 +681,7 @@ test('a wakeup filed onto a queued turn that its session\'s end drains is settle
     } as never);
 
     const failed = await sessionRow(id);
-    assert.deepEqual([failed.status, failed.retryAt], [RunStatus.FAILED, null], 'the failed turn did not fail its session, or armed a retry');
+    assert.deepEqual([wordOf(failed), failed.retryAt], [RunStatus.FAILED, null], 'the failed turn did not fail its session, or armed a retry');
     assert.equal((await turnByKey(id, once.clientTurnId!)).status, 'ANSWERED', 'the turn queued behind the failed one was not drained');
     assert.equal((await oneShot(once.id)).state, 'DROPPED');
     assert.deepEqual(runnerPush.rang, [{
@@ -709,7 +712,7 @@ test('a wakeup filed onto a queued turn that its session\'s end drains is settle
     await runnerApi.finalize(m.runner as never, id, { status: RunStatus.FAILED, error: 'the engine exited' } as never);
 
     const finalized = await sessionRow(id);
-    assert.deepEqual([finalized.status, finalized.retryAt], [RunStatus.FAILED, null]);
+    assert.deepEqual([wordOf(finalized), finalized.retryAt], [RunStatus.FAILED, null]);
     assert.equal((await oneShot(filed.id)).state, 'DROPPED');
     assert.deepEqual(runnerPush.rang.map((push) => [push.sessionId, push.missed, push.reason]), [
       [id, { wakeupId: filed.id }, 'SESSION_FAILED'],
@@ -739,7 +742,7 @@ test('a wakeup filed onto a queued turn that its session\'s end drains is settle
         WHERE "session_id" = $1::uuid AND "status" <> 'ANSWERED'`,
       [id],
     );
-    await sql.query(`UPDATE "session" SET "status" = 'AWAITING_INPUT' WHERE "id" = $1::uuid`, [id]);
+    await sql.query(`UPDATE "session" SET "turn_state" = NULL WHERE "id" = $1::uuid`, [id]);
 
     // The owner withdraws the next one from the queue.
     const withdrawn = await makeDue(loop.id);

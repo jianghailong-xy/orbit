@@ -656,7 +656,38 @@ export async function countPendingEvidenceJudgments(
   readAt: Date = new Date(),
 ): Promise<Map<string, number>> {
   const counts = new Map<string, number>();
-  if (coordinators.length === 0) return counts;
+  for (const card of await evidenceCardsOfCoordinators(tx, ownerId, coordinators, readAt)) {
+    counts.set(card.projectId!, (counts.get(card.projectId!) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/**
+ * One evidence card the owner has now: the revision, and the conversation it is drawn in. The rows
+ * the two counts here fold (`countPendingEvidenceJudgments`, `countEvidenceCardsOutsideProjects`),
+ * so the "Needs you" badge and the push that says a card became the owner's
+ * (`PushService.notifyDecisionCards`) are one reading of the same rows.
+ */
+export interface OwnerEvidenceCardRow {
+  evidenceId: string;
+  taskId: string;
+  title: string;
+  revision: string;
+  /** The task's project; null for a task in none. */
+  projectId: string | null;
+  /** The conversation the card is drawn in: the project's coordinator, the dispatching session, or the run. */
+  sessionId: string;
+}
+
+/** `countPendingEvidenceJudgments`'s rows: the evidence cards drawn in each project's coordinator conversation. */
+export async function evidenceCardsOfCoordinators(
+  tx: PrismaTypes.TransactionClient,
+  ownerId: string,
+  coordinators: ReadonlyArray<{ projectId: string; session: { id: string; taskId: string | null } }>,
+  readAt: Date = new Date(),
+): Promise<OwnerEvidenceCardRow[]> {
+  const cards: OwnerEvidenceCardRow[] = [];
+  if (coordinators.length === 0) return cards;
   const coordinatorOf = new Map(coordinators.map((c) => [c.projectId, c.session]));
   const unanswered = await unansweredLatestEvidence(tx, ownerId, readAt, {
     projectIds: [...coordinatorOf.keys()],
@@ -671,9 +702,16 @@ export async function countPendingEvidenceJudgments(
     const scope = { ownerId, taskId: task.id };
     if ((await decidingSessionDisqualification(tx, scope, session)) !== null) continue;
     if (heldByCoordinator) continue;
-    counts.set(projectId, (counts.get(projectId) ?? 0) + 1);
+    cards.push({
+      evidenceId: latest.id,
+      taskId: task.id,
+      title: task.title,
+      revision: latest.revision.toString(),
+      projectId,
+      sessionId: session.id,
+    });
   }
-  return counts;
+  return cards;
 }
 
 /** One revision waiting for its project's coordinator, as the delivery that hands it over needs it. */
@@ -735,7 +773,21 @@ export async function countEvidenceCardsOutsideProjects(
   sessionIds?: readonly string[],
 ): Promise<Map<string, number>> {
   const counts = new Map<string, number>();
-  if (sessionIds && sessionIds.length === 0) return counts;
+  for (const card of await evidenceCardsOutsideProjects(tx, ownerId, readAt, sessionIds)) {
+    counts.set(card.sessionId, (counts.get(card.sessionId) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/** `countEvidenceCardsOutsideProjects`'s rows: the owner cards of tasks in no project, each where it is drawn. */
+export async function evidenceCardsOutsideProjects(
+  tx: PrismaTypes.TransactionClient,
+  ownerId: string,
+  readAt: Date = new Date(),
+  sessionIds?: readonly string[],
+): Promise<OwnerEvidenceCardRow[]> {
+  const cards: OwnerEvidenceCardRow[] = [];
+  if (sessionIds && sessionIds.length === 0) return cards;
   const runs = sessionIds
     ? await tx.session.findMany({
       where: { ownerId, id: { in: [...sessionIds] }, taskId: { not: null } },
@@ -756,7 +808,14 @@ export async function countEvidenceCardsOutsideProjects(
       const decider = { id: dispatching.id, taskId: dispatching.taskId };
       if ((await decidingSessionDisqualification(tx, { ownerId, taskId: task.id }, decider)) !== null) continue;
     }
-    counts.set(ownerCard.sessionId, (counts.get(ownerCard.sessionId) ?? 0) + 1);
+    cards.push({
+      evidenceId: latest.id,
+      taskId: task.id,
+      title: task.title,
+      revision: latest.revision.toString(),
+      projectId: null,
+      sessionId: ownerCard.sessionId,
+    });
   }
-  return counts;
+  return cards;
 }

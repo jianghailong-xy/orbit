@@ -1,5 +1,7 @@
 package main
 
+import "strings"
+
 // The note a session's next message carries after its conversation was compacted or resumed
 // (docs/orbit-agent-contract.md §0 rule 10, §2.6).
 //
@@ -42,4 +44,12 @@ func withContextResetNote(text string, reset, taskSession bool) string {
 		return note
 	}
 	return note + "\n\n" + text
+}
+
+// isClaudeSlashCommand reports whether Claude Code reads text as a slash command: a leading `/name`. A path such as
+// `/root/x is missing` is not one.
+func isClaudeSlashCommand(text string) bool {
+	name, _, _ := strings.Cut(text, " ")
+	name, _, _ = strings.Cut(name, "\n")
+	return len(name) > 1 && name[0] == '/' && !strings.Contains(name[1:], "/")
 }

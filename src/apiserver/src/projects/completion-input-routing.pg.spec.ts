@@ -5,10 +5,10 @@ import test from 'node:test';
 
 import {
   CreatorType,
-  RunStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -29,6 +29,7 @@ import { CriterionUnlandedProducer } from './criterion-unlanded.producer';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
+import { wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -123,7 +124,7 @@ suite('OPEN work and AWAITING_INPUT do not gate evidence/request/decision input 
         title: 'person-opened long-running coordinator',
         prompt: 'stay open for the person',
         provider: 'codex',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: false,
       },
@@ -172,7 +173,7 @@ suite('OPEN work and AWAITING_INPUT do not gate evidence/request/decision input 
         title: 'resumable evidence source',
         prompt: 'evidence has committed; transport remains resumable',
         provider: 'codex',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: true,
       },
@@ -209,7 +210,7 @@ suite('OPEN work and AWAITING_INPUT do not gate evidence/request/decision input 
 
     assert.equal((await db.task.findUniqueOrThrow({ where: { id: siblingId } })).status, 'OPEN');
     assert.equal(
-      (await db.session.findUniqueOrThrow({ where: { id: sourceSessionId } })).status,
+      wordOf((await db.session.findUniqueOrThrow({ where: { id: sourceSessionId } }))),
       'AWAITING_INPUT',
     );
     assert.deepEqual(

@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { MAX_KNOWN_TAGS_PROMPTED } from './naming';
 import { SessionsService } from './sessions.service';
 
 const flush = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
@@ -86,28 +85,8 @@ function makeService(
       },
     },
     sessionTag: {
-      // Two shapes: the reuse candidates (custom tags only, capped by `take`) and the read-back
-      // of freshly created rows by name.
-      findMany: async ({ where, take }: { where: { name?: { in: string[] } }; take?: number }) =>
-        where.name?.in
-          ? tags.filter((t) => where.name!.in.includes(t.name)).map((t) => ({ id: t.id }))
-          : tags.slice(0, take).map((t) => ({ id: t.id, name: t.name })),
-      aggregate: async () => ({
-        _max: { position: tags.length ? Math.max(...tags.map((t) => t.position)) : null },
-      }),
-      createMany: async ({ data }: { data: Omit<TagRow, 'id'>[] }) => {
-        // Mirrors skipDuplicates on the (ownerId, name) unique.
-        const fresh = data.filter((d) => !tags.some((t) => t.name === d.name));
-        tags.push(
-          ...fresh.map((d, i) => ({
-            id: `tag-new-${tags.length + i + 1}`,
-            name: d.name,
-            color: d.color,
-            position: d.position,
-          })),
-        );
-        return { count: fresh.length };
-      },
+      // The candidates: the owner's custom tags, capped by `take`. Auto-tagging writes no tag rows.
+      findMany: async ({ take }: { take?: number }) => tags.slice(0, take).map((t) => ({ id: t.id, name: t.name })),
     },
     sessionTagLink: {
       count: async () => seed.existingLinks ?? 0,
@@ -312,7 +291,7 @@ test('auto-tagging reuses an existing tag instead of coining a near-duplicate', 
   }
 });
 
-test('auto-tagging creates the tags the owner lacks and announces the new library', async () => {
+test('auto-tagging never adds to the library: a tag the owner lacks is dropped', async () => {
   const originalKey = process.env.DEEPSEEK_API_KEY;
   process.env.DEEPSEEK_API_KEY = 'test-key';
   const fixture = makeService(true, {
@@ -323,22 +302,33 @@ test('auto-tagging creates the tags the owner lacks and announces the new librar
     await nameSession(
       fixture,
       deepSeekResponse('Fix login timeout', ['auth', 'timeout']),
-      () => fixture.tagLinks.length === 2,
+      () => fixture.tagLinks.length > 0,
     );
 
-    assert.deepEqual(fixture.tagLinks, [
-      { sessionId: 'session-1', tagId: 'tag-auth' },
-      { sessionId: 'session-1', tagId: 'tag-new-2' },
-    ]);
-    // Positions continue past the system block; colors cycle the shared palette.
-    assert.deepEqual(fixture.tags[1], {
-      id: 'tag-new-2',
-      name: 'timeout',
-      color: '#FF9500',
-      position: 8,
-    });
-    assert.deepEqual(fixture.tagEvents, ['tag_changed']);
+    assert.deepEqual(fixture.tagLinks, [{ sessionId: 'session-1', tagId: 'tag-auth' }]);
+    assert.equal(fixture.tags.length, 1);
+    assert.deepEqual(fixture.tagEvents, []);
     assert.deepEqual(fixture.realtimeEvents, ['created', 'updated']);
+  } finally {
+    restoreEnv('DEEPSEEK_API_KEY', originalKey);
+  }
+});
+
+test('an owner with no tags of their own gets a title and no tags', async () => {
+  const originalKey = process.env.DEEPSEEK_API_KEY;
+  process.env.DEEPSEEK_API_KEY = 'test-key';
+  const fixture = makeService(true);
+
+  try {
+    await nameSession(
+      fixture,
+      deepSeekResponse('Fix login timeout', ['auth', 'timeout']),
+      () => fixture.updates.length === 1,
+    );
+
+    assert.deepEqual(fixture.tagLinks, []);
+    assert.deepEqual(fixture.tags, []);
+    assert.deepEqual(fixture.tagEvents, []);
   } finally {
     restoreEnv('DEEPSEEK_API_KEY', originalKey);
   }
@@ -359,31 +349,6 @@ test('auto-tagging leaves a hand-tagged session alone but still fixes its title'
     assert.deepEqual(fixture.tagLinks, []);
     assert.deepEqual(fixture.tags, []);
     assert.equal((fixture.updates[0] as { data: { title: string } }).data.title, 'Fix login timeout');
-  } finally {
-    restoreEnv('DEEPSEEK_API_KEY', originalKey);
-  }
-});
-
-test('a library at the ceiling stops growing but still files the session under known tags', async () => {
-  const originalKey = process.env.DEEPSEEK_API_KEY;
-  process.env.DEEPSEEK_API_KEY = 'test-key';
-  const full = Array.from({ length: MAX_KNOWN_TAGS_PROMPTED }, (_, i) => ({
-    id: `tag-${i}`,
-    name: `tag-${i}`,
-    color: '#FF3B30',
-    position: 7 + i,
-  }));
-  const fixture = makeService(true, { tags: full });
-
-  try {
-    await nameSession(
-      fixture,
-      deepSeekResponse('Fix login timeout', ['tag-3', 'brand-new']),
-      () => fixture.tagLinks.length > 0,
-    );
-
-    assert.deepEqual(fixture.tagLinks, [{ sessionId: 'session-1', tagId: 'tag-3' }]);
-    assert.equal(fixture.tags.length, MAX_KNOWN_TAGS_PROMPTED);
   } finally {
     restoreEnv('DEEPSEEK_API_KEY', originalKey);
   }

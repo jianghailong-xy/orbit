@@ -9,7 +9,7 @@ import {
   Param,
   UseGuards,
 } from '@nestjs/common';
-import { Prisma, RunStatus, type Runner } from '@prisma/client';
+import { Prisma, type Runner } from '@prisma/client';
 import { HELP_ASK_READS, type HelpAskRead } from '@orbit/shared';
 import type { NextFunction, Request, Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
@@ -17,6 +17,8 @@ import { CurrentRunner } from '../runner-api/current-runner.decorator';
 import { RUNNER_CALLER_HEADER } from '../runner-api/runner-link-required';
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
 import { RUNNER_BEATS, runnerIsOnline, runnerLastBeatAt } from '../runners/runner-presence';
+import { legacySessionStatus, LEGACY_STATUS_SELECT, readLandingSettlements } from '../sessions/session-legacy-words';
+import { turnStateOf } from '../sessions/session-turn-state';
 
 /**
  * What an Ask may read of the account (docs/mocks/help-center board 02 ②: "machine status and heartbeat, session
@@ -144,18 +146,19 @@ export async function readSessions(prisma: PrismaService, ownerId: string) {
     orderBy: [{ updatedAt: 'desc' }],
     take: READ_ROWS,
     select: {
-      id: true, title: true, status: true, error: true, completedAt: true, createdAt: true, updatedAt: true,
+      id: true, title: true, ...LEGACY_STATUS_SELECT, error: true, completedAt: true, createdAt: true, updatedAt: true,
       lastTurnAt: true, engine: true, model: true,
       assignedRunner: { select: { name: true, displayName: true } },
       workspace: { select: { name: true } },
     },
   });
+  const landings = await readLandingSettlements(prisma, sessions);
   return {
     sessions: sessions.map((s) => ({
       id: s.id,
       title: s.title,
-      status: s.status,
-      paused: s.status === RunStatus.INTERRUPTED,
+      status: legacySessionStatus(s, landings.get(s.id)),
+      paused: turnStateOf(s) === 'ABANDONED',
       completed: s.completedAt !== null,
       error: s.error,
       machine: s.assignedRunner ? s.assignedRunner.displayName || s.assignedRunner.name : null,

@@ -1,0 +1,111 @@
+<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>Web 提示 · C 组（被截断的文字）</title>
+<link rel="stylesheet" href="../../../src/web/src/components/ui/foundation.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Floating.css">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#eef0f3;color:#1f2329}
+.b-part{width:1180px;padding:32px 40px 28px;font:15px/1.6 Inter,'Noto Sans SC',sans-serif}
+h1{font-size:22px;margin:0 0 4px} h2{font-size:17px;margin:0 0 12px}
+.lead{color:#646a73;font-size:13.5px;margin:0 0 20px;line-height:1.65}
+.b-note{background:#fff;border-radius:10px;padding:16px 20px;font-size:13px;line-height:1.75;margin-bottom:14px}
+.b-note h3{margin:0 0 6px;font-size:14px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+td,th{border-bottom:1px solid #eceef1;padding:7px 8px;text-align:left;vertical-align:top}
+th{color:#646a73;font-weight:600;font-size:12.5px}
+td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tag{display:inline-block;font-size:11px;font-weight:700;border-radius:4px;padding:0 6px;line-height:18px}
+.t-do{background:#e8f7ee;color:#1a7f45}.t-keep{background:#f1f2f4;color:#646a73}.t-q{background:#fff4e5;color:#b25e00}
+.rec{display:inline-block;background:#e8f7ee;color:#1a7f45;font-size:11px;font-weight:700;border-radius:4px;padding:0 6px}
+code{font-family:'JetBrains Mono',monospace;font-size:12px;background:#f1f2f4;border-radius:4px;padding:0 4px}
+/* comparison rows */
+.b-row{display:grid;grid-template-columns:200px 1fr 1fr;gap:14px;margin-bottom:14px;align-items:stretch}
+.b-lab{font-size:13px;line-height:1.55;padding-top:6px}
+.b-lab b{display:block;font-size:13.5px}
+.b-lab small{color:#646a73}
+.b-cell{position:relative;background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);height:172px;overflow:hidden;font:14px/22px Inter,'Noto Sans SC',sans-serif}
+.b-cell .cap{position:absolute;left:12px;top:8px;font-size:11.5px;color:#8f959e;font-weight:600}
+.b-colhead{display:grid;grid-template-columns:200px 1fr 1fr;gap:14px;font-size:13px;font-weight:700;margin:0 0 6px}
+/* faux UI */
+.ui{position:absolute;left:24px;top:40px;right:24px;display:flex;align-items:center;gap:10px;color:#1f2329}
+.btn{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border:1px solid #dee0e3;border-radius:8px;background:#fff;font-size:14px}
+.btn.prim{background:#3370ff;border-color:#3370ff;color:#fff}
+.btn.dis{background:#f5f6f7;border-color:#e5e6eb;color:#bbbfc4}
+.ibtn{display:inline-flex;align-items:center;justify-content:center;height:30px;min-width:30px;padding:0 6px;border-radius:6px;color:#646a73;gap:4px;font-size:13px}
+.row{display:flex;align-items:center;gap:8px;height:34px;padding:0 10px;border-radius:8px;background:#f5f6f7;width:100%;font-size:13.5px}
+.row .t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dot{width:7px;height:7px;border-radius:50%;background:#3370ff;flex:none}
+.cb{display:inline-flex;align-items:center;height:18px;padding:0 6px;border:1px solid #bcd3ff;border-radius:999px;background:#eaf1ff;color:#3370ff;font-size:10px;font-weight:600}
+.err{color:#d83931;font-size:13px}
+kbd{font:600 11px/18px Inter,sans-serif;color:#646a73;border:1px solid #dee0e3;border-bottom-width:2px;border-radius:4px;padding:0 5px;background:#fff}
+.cursor{position:absolute;width:14px;height:20px}
+/* the browser's own tip, as on macOS Chrome (owner's screenshot) */
+.native{position:absolute;max-width:330px;padding:2px 8px;font:13px/18px -apple-system,Inter,sans-serif;color:#1f2329;background:#f3f3f3;border:1px solid #c9c9c9;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.12);white-space:pre}
+.app{position:absolute;font:14px/20px Inter,'Noto Sans SC',sans-serif}
+.app.pre{white-space:pre-line}
+.lat{position:absolute;right:10px;top:8px;font-size:11px;color:#8f959e}
+.miss{position:absolute;left:24px;bottom:10px;right:24px;font-size:12px;color:#b25e00}
+.okline{position:absolute;left:24px;bottom:10px;right:24px;font-size:12px;color:#1a7f45}
+
+.b-cell{height:176px}
+.b-cell.tall{height:214px}
+.native.wrap{white-space:normal;width:300px}
+.inplace{position:absolute;padding:0 10px;height:34px;display:flex;align-items:center;background:#fff;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.14),0 0 0 1px #e5e6eb;font-size:13.5px;white-space:nowrap;z-index:2}
+.mono{font-family:'JetBrains Mono',monospace;font-size:12.5px}
+.app.wide{max-width:360px}
+.none{position:absolute;left:24px;bottom:12px;font-size:12px;color:#1a7f45}
+.bad{position:absolute;left:24px;bottom:12px;font-size:12px;color:#b25e00}
+.clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:13px;line-height:19px;width:100%}
+.opt{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+</style></head><body>
+<section class="b-part" id="part-1">
+<h1>Web 提示：C 组（被截断文字的全文）</h1>
+<p class="lead">C 组是放不下的文字（标题、路径、分支名、说明行）上的 <code>title</code>，内容就是文字本身。浏览器的气泡今天<b>不管有没有截断都弹</b>：文字完整时它只是把看得见的字再说一遍；截断时它才有用。改法：应用的 Tooltip 加一个「只在截断时出现」的模式，打开前量一下元素（和它里面被省略的子元素）是否放不下，放得下就不弹。数字来自 main（6ad6c314d3）。</p>
+<div class="b-note"><table>
+<tr><th>组</th><th>是什么</th><th class="n">处</th><th>处理</th></tr>
+<tr><td>C1</td><td>元素自己有省略号 / 两行截断（text-overflow、line-clamp）</td><td class="n">47</td><td><span class="tag t-do">改</span> 截断模式 Tooltip</td></tr>
+<tr><td>C2</td><td>省略号在子元素或父元素上，或没有自己的样式（列表名、文件名、路径行…）</td><td class="n">26</td><td><span class="tag t-do">改</span> 截断模式，量到被省略的那个子元素</td></tr>
+<tr><td>C3</td><td>其中扫描归错的：提示其实不是同一段字（「Copy」、「设置不同」…）——已含在上面两行里</td><td class="n">（≈5）</td><td><span class="tag t-do">改</span> 按 B/D 组的方式（总是出现）</td></tr>
+<tr><td>剩余</td><td>上次跳过的「提示 = 显示的字」8 处（目录路径、标签条、创建来源条、分段控件…）</td><td class="n">8</td><td><span class="tag t-do">改</span> 并入截断模式</td></tr>
+<tr><td>新增</td><td>main 上新加的任务徽章「Open task · …」</td><td class="n">1</td><td><span class="tag t-do">改</span> 同 B-a（100 ms）</td></tr>
+<tr><td colspan="2"><b>本次要改</b></td><td class="n"><b>≈82</b></td><td>约 45 个文件</td></tr>
+<tr><td>待定</td><td>Markdown 链接作者写的 title（2）、菜单项的禁用原因（Menu 内 1 处，覆盖所有菜单）</td><td class="n">3</td><td><span class="tag t-q">Q4</span></td></tr>
+</table>
+<p style="margin:10px 0 0;color:#646a73">做完后 web 上浏览器自己的 title 提示只剩 A 组跳过的 21 处里真正需要的少数（另行列出）与 Q4 的结果。可访问名称不变；截断模式不加 Tab 停顿（同 D 组：只悬停）。</p></div>
+</section>
+<section class="b-part" id="part-2">
+<h2>② 对比图（右侧用 Floating.css 的真实样式）</h2>
+<div class="b-colhead"><span></span><span>今天</span><span>改后（建议方案）</span></div>
+<div class="b-row"><div class="b-lab"><b>① 被截断的标题</b><small>列表行、侧栏、卡片标题 · 例：Session 行</small></div>
+<div class="b-cell"><span class="cap">今天 · 浏览器的 title</span><span class="lat">约 1 s 后出现</span><div class="ui"><div class="row"><span class="dot"></span><span class="t">Migrate the billing webhooks to the new event bus and backfill November</span><span style="color:#8f959e;font-size:12px">2m</span></div></div><div class="native wrap" style="left:40px;top:86px">Migrate the billing webhooks to the new event bus and backfill November</div><svg class="cursor" style="left:150px;top:50px" viewBox="0 0 14 20"><path d="M1 1v15l4-4 3 7 3-1-3-7h5z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/></svg></div>
+<div class="b-cell"><span class="cap">改后 · 只在被截断时出现</span><span class="lat">600 ms</span><div class="ui"><div class="row"><span class="dot"></span><span class="t">Migrate the billing webhooks to the new event bus and backfill November</span><span style="color:#8f959e;font-size:12px">2m</span></div></div><div class="app orbit-tooltip wide" data-side="bottom" style="left:40px;top:82px"><span class="orbit-floating-arrow" data-side="bottom" style="left:104px"></span><span class="">Migrate the billing webhooks to the new event bus and backfill November</span></div><svg class="cursor" style="left:150px;top:50px" viewBox="0 0 14 20"><path d="M1 1v15l4-4 3 7 3-1-3-7h5z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/></svg></div></div><div class="b-row"><div class="b-lab"><b>② 没被截断的标题</b><small>同一类元素，文字完整显示</small></div>
+<div class="b-cell"><span class="cap">今天 · 浏览器的 title</span><span class="lat">约 1 s 后出现</span><div class="ui"><div class="row"><span class="dot"></span><span class="t">Fix login redirect</span><span style="flex:1"></span><span style="color:#8f959e;font-size:12px">2m</span></div></div><div class="native" style="left:80px;top:86px">Fix login redirect</div><svg class="cursor" style="left:100px;top:50px" viewBox="0 0 14 20"><path d="M1 1v15l4-4 3 7 3-1-3-7h5z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/></svg><div class="bad">气泡把已经看得见的字再说一遍</div></div>
+<div class="b-cell"><span class="cap">改后 · 只在被截断时出现</span><span class="lat">600 ms</span><div class="ui"><div class="row"><span class="dot"></span><span class="t">Fix login redirect</span><span style="flex:1"></span><span style="color:#8f959e;font-size:12px">2m</span></div></div><svg class="cursor" style="left:100px;top:50px" viewBox="0 0 14 20"><path d="M1 1v15l4-4 3 7 3-1-3-7h5z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/></svg><div class="none">不出现：文字已经完整</div></div></div><div class="b-row"><div class="b-lab"><b>③ 路径 / 分支 / 命令</b><small>等宽文字 · 例：改动文件树、分支名、后台任务输出路径</small></div>
+<div class="b-cell"><span class="cap">今天 · 浏览器的 title</span><span class="lat">约 1 s 后出现</span><div class="ui"><div class="row"><span class="t mono">src/web/src/components/settings/WorkspaceSettingsPage.tsx</span><span style="color:#1a7f45;font-size:12px">+12</span></div></div><div class="native mono wrap" style="left:30px;top:86px">src/web/src/components/settings/WorkspaceSettingsPage.tsx</div><svg class="cursor" style="left:170px;top:50px" viewBox="0 0 14 20"><path d="M1 1v15l4-4 3 7 3-1-3-7h5z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/></svg></div>
+<div class="b-cell"><span class="cap">改后 · 只在被截断时出现</span><span class="lat">600 ms</span><div class="ui"><div class="row"><span class="t mono">src/web/src/components/settings/WorkspaceSettingsPage.tsx</span><span style="color:#1a7f45;font-size:12px">+12</span></div></div><div class="app orbit-tooltip wide" data-side="bottom" style="left:30px;top:82px"><span class="orbit-floating-arrow" data-side="bottom" style="left:134px"></span><span class="mono">src/web/src/components/settings/WorkspaceSettingsPage.tsx</span></div><svg class="cursor" style="left:170px;top:50px" viewBox="0 0 14 20"><path d="M1 1v15l4-4 3 7 3-1-3-7h5z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/></svg><div class="okline" style="bottom:12px">提示里保持等宽字体</div></div></div><div class="b-row"><div class="b-lab"><b>④ 两行截断的说明</b><small>项目进度卡、确认卡的说明行（line-clamp）</small></div>
+<div class="b-cell tall"><span class="cap">今天 · 浏览器的 title</span><span class="lat">约 1 s 后出现</span><div class="ui"><div class="clamp">Waiting on the owner: confirm the acceptance of “Checkout migration” — the evidence from run 3 is attached, and the coordinator recommends confirming.</div></div><div class="native wrap" style="left:24px;top:96px">Waiting on the owner: confirm the acceptance of “Checkout migration” — the evidence from run 3 is attached, and the coordinator recommends confirming.</div><svg class="cursor" style="left:200px;top:58px" viewBox="0 0 14 20"><path d="M1 1v15l4-4 3 7 3-1-3-7h5z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/></svg></div>
+<div class="b-cell tall"><span class="cap">改后 · 只在被截断时出现</span><span class="lat">600 ms</span><div class="ui"><div class="clamp">Waiting on the owner: confirm the acceptance of “Checkout migration” — the evidence from run 3 is attached, and the coordinator recommends confirming.</div></div><div class="app orbit-tooltip wide" data-side="bottom" style="left:24px;top:94px;width:360px"><span class="orbit-floating-arrow" data-side="bottom" style="left:170px"></span><span class="">Waiting on the owner: confirm the acceptance of “Checkout migration” — the evidence from run 3 is attached, and the coordinator recommends confirming.</span></div><svg class="cursor" style="left:200px;top:58px" viewBox="0 0 14 20"><path d="M1 1v15l4-4 3 7 3-1-3-7h5z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/></svg></div></div>
+</section>
+<section class="b-part" id="part-3">
+<h2>③ 待定 · 要你拍板</h2>
+<div class="b-note"><table>
+<tr><th style="width:40px"></th><th>问题</th><th>方案 A</th><th>方案 B</th><th>建议</th></tr>
+<tr><td>Q1</td><td>何时出现</td><td>只在文字真的被截断时（见 ①②）</td><td>总是出现，同今天</td><td><span class="rec">A</span> 不再重复看得见的字</td></tr>
+<tr><td>Q2</td><td>长什么样</td><td>深色气泡，在文字下方，与其他提示一致</td><td>「原地展开」：在被截断的文字上方铺一层白底，显示完整一行（见下）</td><td><span class="rec">A</span> 一套提示样式；B 遇到两行截断和很长的路径会盖住下面的行</td></tr>
+<tr><td>Q3</td><td>宽度与字体</td><td>这类提示最宽 360 px（其他仍 250），路径/分支/命令用等宽字体</td><td>与其他提示相同：250 px、普通字体</td><td><span class="rec">A</span> 路径一眼读完</td></tr>
+<tr><td>Q4</td><td>Markdown 链接的 title、菜单项的禁用原因</td><td>都改成应用提示（菜单项：Menu 支持 tooltip，禁用项也能悬停）</td><td>保留浏览器的</td><td><span class="rec">A</span> 菜单项；Markdown 链接保留（作者写的 HTML 语义）</td></tr>
+</table></div>
+<div class="opt">
+<div><div class="ftitle" style="font-size:13px;font-weight:700;margin:0 0 6px">Q2 方案 A · 深色气泡</div>
+<div class="b-cell" style="height:160px"><div class="ui"><div class="row"><span class="dot"></span><span class="t">Migrate the billing webhooks to the new event bus and backfill November</span><span style="color:#8f959e;font-size:12px">2m</span></div></div><div class="app orbit-tooltip wide" data-side="bottom" style="left:40px;top:82px"><span class="orbit-floating-arrow" data-side="bottom" style="left:104px"></span><span class="">Migrate the billing webhooks to the new event bus and backfill November</span></div><svg class="cursor" style="left:150px;top:50px" viewBox="0 0 14 20"><path d="M1 1v15l4-4 3 7 3-1-3-7h5z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/></svg></div></div>
+<div><div class="ftitle" style="font-size:13px;font-weight:700;margin:0 0 6px">Q2 方案 B · 原地展开</div>
+<div class="b-cell" style="height:160px"><div class="ui"><div class="row"><span class="dot"></span><span class="t">Migrate the billing webhooks to the new event bus and backfill November</span><span style="color:#8f959e;font-size:12px">2m</span></div></div><div class="inplace" style="left:24px;top:40px">Migrate the billing webhooks to the new event bus and backfill November</div><svg class="cursor" style="left:150px;top:50px" viewBox="0 0 14 20"><path d="M1 1v15l4-4 3 7 3-1-3-7h5z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/></svg></div></div>
+</div>
+<div class="b-note" style="margin-top:14px"><h3>落地（按代价排）</h3><table>
+<tr><th>改动</th><th>位置</th><th style="width:60px">代价</th></tr>
+<tr><td>Tooltip 加截断模式（打开前量 scrollWidth/scrollHeight，含被省略的子元素）、宽 360、等宽选项；单测</td><td><code>ui/Tooltip.tsx</code>、<code>Floating.css</code></td><td>小</td></tr>
+<tr><td>Menu：菜单项的 tooltip（Q4）</td><td><code>ui/Menu.tsx</code></td><td>小</td></tr>
+<tr><td>≈82 处换成截断模式 / 普通 Tooltip，去掉 title，改相应测试</td><td>约 45 个文件，ProjectProgressStatus 10、Transcript 8（2–3 个 SubAgent 并行）</td><td>中</td></tr>
+<tr><td>真实浏览器：截断与不截断各一、两行截断、路径、深色；全量 web 测试</td><td>—</td><td>小</td></tr>
+</table></div>
+</section>
+</body></html>

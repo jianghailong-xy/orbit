@@ -7,14 +7,21 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
-import { ProjectStatus, TaskStatus } from '@prisma/client';
+import { Prisma, ProjectStatus, TaskStatus } from '@prisma/client';
 import { uuidToBase62 } from '@orbit/shared';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { SessionsService } from '../sessions/sessions.service';
+import { isLockNotAvailable } from '../tasks/task-supersession';
 import { COORDINATOR_PAUSE_SELECT, conversationIsPaused } from './coordinator-evidence-queue';
-import { type PendingItem, readPendingAddressees } from './pending-addressees';
+import {
+  EVIDENCE_UNDECIDED_KIND,
+  EVIDENCE_UNDECIDED_TITLE,
+  type EvidenceUndecidedRoute,
+  evidenceUndecidedDedupeKey,
+} from './evidence-undecided';
+import { type PendingItem, type PendingReadWithEvidence, readPendingWithEvidence } from './pending-addressees';
 import { derivedUuid } from './project-dispatch-identity';
 import { conversationIsOver } from './project-open-item';
 
@@ -37,12 +44,36 @@ import { conversationIsOver } from './project-open-item';
  * the same pair, so a sweep cut off between the turn and its ledger row writes the turn's replay,
  * not a second message.
  *
- * No clock and no card: nothing here waits for a deadline, escalates, or counts down. It reports what
- * it finds and changes no rule about who decides what or when (§5, evidence-waits-for-coordinator).
+ * Every unanswered latest revision is read on its own as well (`readPendingWithEvidence`), not only
+ * as its task's one pending item: an open exception item about the task hides it there, and that is
+ * how M2's undecidable revision sat 33 hours with nobody told (2026-11-12, project 34xLkkpjrrFbUzGhsgy7f).
+ *
+ * ONE CLOCK, FOR EVIDENCE ONLY (project 34xLkkpjrrFbUzGhsgy7f, criterion 34qvp8SfHnGfeJ34xvuOWw).
+ * A revision nobody can decide, or that was handed to nobody, is still unanswered the project's
+ * `exceptionEscalationSeconds` after the first notice about it (this sweep's report, or the shared
+ * undecidable path's turn, `tellEvidenceUndecidable`): the account owner gets one `EVIDENCE_UNDECIDED`
+ * item on their Needs-you list (`evidence-undecided.ts`, the owner channel the escalation tick already
+ * uses, keyed the same `EV:<evidenceId>`, so the two never open two) and its push. A revision a
+ * coordinator holds and can decide is not on this clock: it keeps the evidence queue's rule (§5).
+ * Nothing else here waits for a deadline or counts down.
  */
 
 /** How often the sweep runs; the reconcile tick it rides is a minute. */
 export const ORPHAN_SWEEP_INTERVAL_MS = 5 * 60_000;
+
+/** How long opening an owner item waits for a lock a door holds before leaving it to the next pass. */
+export const EVIDENCE_ESCALATION_LOCK_TIMEOUT_MS = 2_000;
+
+/** One `EVIDENCE_UNDECIDED` item the sweep opened for the owner. */
+export interface EvidenceEscalation {
+  projectId: string;
+  itemId: string;
+  taskId: string;
+  evidenceId: string;
+  route: EvidenceUndecidedRoute;
+  /** The first notice about the revision, from which the window ran. */
+  noticeAt: Date;
+}
 
 export interface OrphanReport {
   projectId: string;
@@ -120,13 +151,30 @@ export class ProjectOrphanSweepService {
     return reports;
   }
 
-  /** One project's orphans, each reported unless it already was. Returns the reports written now. */
+  /**
+   * One project's orphans, each reported unless it already was, then its evidence that waited out the
+   * window after its notice escalated to the owner (`escalateEvidence`). Returns the reports written now.
+   */
   async sweepProject(ownerId: string, projectId: string, readAt: Date = new Date()): Promise<OrphanReport[]> {
-    const read = await readPendingAddressees(this.prisma, ownerId, projectId, readAt);
-    if (!read) return [];
+    const pending = await readPendingWithEvidence(this.prisma, ownerId, projectId, readAt);
+    if (!pending) return [];
+    const reports = await this.reportOrphans(ownerId, projectId, pending);
+    try {
+      await this.escalateEvidence(ownerId, projectId, pending);
+    } catch (error) {
+      this.logger.warn(`evidence escalation of project ${projectId} failed: ${error instanceof Error ? error.message : error}`);
+    }
+    return reports;
+  }
+
+  private async reportOrphans(ownerId: string, projectId: string, pending: PendingReadWithEvidence): Promise<OrphanReport[]> {
     const groups = new Map<string, PendingItem[]>();
-    for (const item of read.items.filter((candidate) => candidate.orphan)) {
+    for (const item of pending.read.items.filter((candidate) => candidate.orphan)) {
       groups.set(item.orphanKey, [...(groups.get(item.orphanKey) ?? []), item]);
+    }
+    // A revision hidden behind its task's exception item is reported on its own.
+    for (const { item } of pending.evidence) {
+      if (item.orphan && !groups.has(item.orphanKey)) groups.set(item.orphanKey, [item]);
     }
     if (groups.size === 0) return [];
     const reported = new Set((await this.prisma.projectOrphanNotice.findMany({
@@ -185,6 +233,141 @@ export class ProjectOrphanSweepService {
       });
     }
     return reports;
+  }
+
+  /**
+   * The clock (header): each unanswered revision that cannot be decided, or that nobody was handed,
+   * whose first notice is the project's `exceptionEscalationSeconds` old, gets the owner's
+   * `EVIDENCE_UNDECIDED` item, once per revision whatever opened it. Not on it: a revision whose
+   * addressee is the owner already (their evidence card or Restart row), and a decidable one a
+   * coordinator was handed (the evidence queue's rule). The window is read at the sweep's `readAt`.
+   */
+  async escalateEvidence(ownerId: string, projectId: string, pending: PendingReadWithEvidence): Promise<EvidenceEscalation[]> {
+    const candidates = pending.evidence.filter(({ item, undecidableReason }) => (
+      item.addressee !== null && item.addressee.kind !== 'OWNER'
+      && (undecidableReason !== null || item.notifiedAt === null)
+    ));
+    if (candidates.length === 0) return [];
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, ownerId },
+      select: { exceptionEscalationSeconds: true, coordinatorSessionId: true },
+    });
+    if (!project) return [];
+    const reported = await this.prisma.projectOrphanNotice.findMany({
+      where: {
+        projectId,
+        OR: candidates.map(({ item }) => ({ orphanKey: { startsWith: `EVIDENCE:${item.subjectId}:` } })),
+      },
+      select: { orphanKey: true, createdAt: true },
+    });
+    const opened: EvidenceEscalation[] = [];
+    for (const { item, undecidableReason } of candidates) {
+      const times = [
+        ...reported.filter((row) => row.orphanKey.startsWith(`EVIDENCE:${item.subjectId}:`)).map((row) => row.createdAt.getTime()),
+        // The shared undecidable path's turn to the run or the coordinator is a notice too.
+        ...(undecidableReason !== null && item.notifiedAt ? [item.notifiedAt.getTime()] : []),
+      ];
+      if (times.length === 0) continue;
+      const noticeAt = new Date(Math.min(...times));
+      if (pending.read.readAt.getTime() < noticeAt.getTime() + project.exceptionEscalationSeconds * 1_000) continue;
+      const route: EvidenceUndecidedRoute = undecidableReason !== null ? 'UNDECIDABLE' : 'UNDELIVERED';
+      const itemId = await this.openEvidenceItem(ownerId, projectId, item, {
+        route,
+        reason: undecidableReason,
+        noticeAt,
+        windowSeconds: project.exceptionEscalationSeconds,
+        coordinatorSessionId: project.coordinatorSessionId,
+      });
+      if (!itemId) continue;
+      this.logger.warn(`opened ${EVIDENCE_UNDECIDED_KIND} ${itemId} of project ${projectId}: `
+        + `evidence ${item.subjectId} (${route}) waited out the window after its notice`);
+      void this.push?.notifyOwnerItem(itemId).catch((error: unknown) => {
+        this.logger.warn(`push for ${EVIDENCE_UNDECIDED_KIND} ${itemId} failed: ${error instanceof Error ? error.message : error}`);
+      });
+      opened.push({ projectId, itemId, taskId: item.taskId, evidenceId: item.subjectId, route, noticeAt });
+    }
+    return opened;
+  }
+
+  /**
+   * One owner item for one revision, unless one was ever opened for it (any state) or the revision is
+   * no longer its task's unanswered latest. Under a short lock timeout: a task a door holds is the next
+   * pass's. Null when nothing was written.
+   */
+  private async openEvidenceItem(
+    ownerId: string,
+    projectId: string,
+    item: PendingItem,
+    facts: {
+      route: EvidenceUndecidedRoute;
+      reason: string | null;
+      noticeAt: Date;
+      windowSeconds: number;
+      coordinatorSessionId: string | null;
+    },
+  ): Promise<string | null> {
+    const dedupeKey = evidenceUndecidedDedupeKey(item.subjectId);
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT set_config('lock_timeout', ${`${EVIDENCE_ESCALATION_LOCK_TIMEOUT_MS}ms`}, true)`;
+        if (await tx.projectOpenItem.findFirst({ where: { projectId, dedupeKey }, select: { id: true } })) return null;
+        const evidence = await tx.taskCompletionEvidence.findFirst({
+          where: {
+            id: item.subjectId,
+            taskId: item.taskId,
+            decisions: { none: {} },
+            task: {
+              ownerId,
+              projectId,
+              completionCriterion: 'EVIDENCE_JUDGMENT',
+              status: { in: [TaskStatus.OPEN, TaskStatus.IN_PROGRESS] },
+            },
+          },
+          select: { revision: true, submittedAt: true, sourceSessionId: true, task: { select: { title: true } } },
+        });
+        if (!evidence) return null;
+        const newer = await tx.taskCompletionEvidence.findFirst({
+          where: { taskId: item.taskId, revision: { gt: evidence.revision } },
+          select: { id: true },
+        });
+        if (newer) return null;
+        const now = new Date();
+        const created = await tx.projectOpenItem.create({
+          data: {
+            projectId,
+            ownerId,
+            kind: EVIDENCE_UNDECIDED_KIND,
+            assignee: 'OWNER',
+            assigneeReason: 'ESCALATED',
+            taskId: item.taskId,
+            sessionId: evidence.sourceSessionId,
+            dedupeKey,
+            title: `${EVIDENCE_UNDECIDED_TITLE}: ${evidence.task.title}`,
+            payload: {
+              evidenceId: item.subjectId,
+              revision: evidence.revision.toString(),
+              submittedAt: evidence.submittedAt.toISOString(),
+              windowSeconds: facts.windowSeconds,
+              coordinatorSessionId: facts.coordinatorSessionId,
+              route: facts.route,
+              reason: facts.reason,
+              noticeAt: facts.noticeAt.toISOString(),
+            },
+            waitingSince: evidence.submittedAt,
+            assignedAt: now,
+            escalatedAt: now,
+          },
+          select: { id: true },
+        });
+        return created.id;
+      });
+    } catch (error) {
+      // Opened by another pass in the meantime (the partial unique key over OPEN items), or a lock a
+      // door holds: either way nothing was written now, and the next pass reads committed rows again.
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') return null;
+      if (isLockNotAvailable(error)) return null;
+      throw error;
+    }
   }
 
   /** One platform turn on the coordinator's conversation. False when it was not written. */

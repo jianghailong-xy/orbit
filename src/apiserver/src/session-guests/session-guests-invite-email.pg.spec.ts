@@ -29,7 +29,8 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 import { uuidToBase62 } from '@orbit/shared';
-import { type PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import type { AttachmentsService } from '../attachments/attachments.service';
@@ -114,7 +115,7 @@ test('session invitation email on PostgreSQL: 0618, one email per person and ses
       data: {
         id, ownerId: owner.id, creatorId: owner.id, workspaceId, assignedRunnerId: runnerId, title, prompt: title,
         provider: 'claude', providerBuiltin: true, model: 'claude-opus-4-1', permissionMode: 'acceptEdits',
-        dispatchOrigin: SessionDispatchOrigin.USER, status: RunStatus.AWAITING_INPUT, numTurns: 1, engineTurnActive: false,
+        dispatchOrigin: SessionDispatchOrigin.USER, turnState: null, numTurns: 1, engineTurnActive: false,
         runtimeSessionId: randomUUID(), startedAt: new Date(),
       },
     });

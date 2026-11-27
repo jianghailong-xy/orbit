@@ -1052,7 +1052,12 @@ while :; do :; done`)
 			completions = append(completions, req)
 			return nil
 		},
-		func(context.Context) bool { permits.Add(1); return true },
+		func(ctx context.Context) bool {
+			if !isPermitProbe(ctx) { // the poller asking whether it is there is no wait for it
+				permits.Add(1)
+			}
+			return true
+		},
 		func(error) {},
 	)
 	if status != stSucceeded || !ended {
@@ -1143,7 +1148,10 @@ printf '%s\n' '{"type":"step_finish","part":{"cost":0,"tokens":{"total":2,"input
 			}
 			return nil
 		},
-		func(context.Context) bool {
+		func(ctx context.Context) bool {
+			if isPermitProbe(ctx) { // the poller asking whether it is there is no wait for it
+				return true
+			}
 			if permits.Add(1) == 2 {
 				close(secondPermit)
 			}

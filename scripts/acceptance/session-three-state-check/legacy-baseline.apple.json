@@ -1,0 +1,184 @@
+{
+  "rows" : [
+    {
+      "glyphLabel" : "Queued",
+      "icon" : "clock",
+      "name" : "status PENDING (queued)",
+      "needsYouGroup" : false,
+      "runBadge" : "Queued",
+      "tone" : "neutral",
+      "word" : "Queued",
+      "workingGroup" : true
+    },
+    {
+      "glyphLabel" : "Running",
+      "icon" : "spinner",
+      "name" : "status RUNNING",
+      "needsYouGroup" : false,
+      "runBadge" : "Running",
+      "tone" : "brand",
+      "word" : "Running",
+      "workingGroup" : true
+    },
+    {
+      "glyphLabel" : "Waiting for your reply",
+      "icon" : "message",
+      "name" : "status AWAITING_INPUT (held idle)",
+      "needsYouGroup" : false,
+      "runBadge" : "Awaiting reply",
+      "tone" : "neutral",
+      "word" : "Waiting for your reply",
+      "workingGroup" : false
+    },
+    {
+      "glyphLabel" : "Interrupted",
+      "icon" : "minus.circle",
+      "name" : "status INTERRUPTED (held, stopped turn)",
+      "needsYouGroup" : false,
+      "runBadge" : "Interrupted",
+      "tone" : "neutral",
+      "word" : "Interrupted",
+      "workingGroup" : false
+    },
+    {
+      "glyphLabel" : "Succeeded",
+      "icon" : "checkmark.circle.fill",
+      "name" : "status SUCCEEDED (task run finished)",
+      "needsYouGroup" : false,
+      "runBadge" : "Finished",
+      "tone" : "success",
+      "word" : "Succeeded",
+      "workingGroup" : false
+    },
+    {
+      "glyphLabel" : "Failed",
+      "icon" : "xmark.circle.fill",
+      "name" : "status FAILED (released by a failed turn)",
+      "needsYouGroup" : true,
+      "runBadge" : "Failed",
+      "tone" : "error",
+      "word" : "Failed",
+      "workingGroup" : false
+    },
+    {
+      "glyphLabel" : "Ended",
+      "icon" : "checkmark.circle",
+      "name" : "status CANCELLED (released by End)",
+      "needsYouGroup" : false,
+      "runBadge" : "Ended",
+      "tone" : "neutral",
+      "word" : "Ended",
+      "workingGroup" : false
+    },
+    {
+      "glyphLabel" : "Background process running",
+      "icon" : "terminal",
+      "name" : "running a job with no turn",
+      "needsYouGroup" : false,
+      "runBadge" : "Awaiting reply",
+      "tone" : "neutral",
+      "word" : "Background process running",
+      "workingGroup" : false
+    },
+    {
+      "glyphLabel" : "Waiting for approval",
+      "icon" : "pause.circle",
+      "name" : "waiting on an approval",
+      "needsYouGroup" : true,
+      "runBadge" : "Running",
+      "tone" : "warning",
+      "word" : "Waiting for approval",
+      "workingGroup" : false
+    },
+    {
+      "glyphLabel" : "Queued",
+      "icon" : "clock",
+      "name" : "on hold (queued, account paused)",
+      "needsYouGroup" : false,
+      "runBadge" : "Queued",
+      "tone" : "neutral",
+      "word" : "Queued",
+      "workingGroup" : true
+    },
+    {
+      "glyphLabel" : "cancel not honored",
+      "icon" : "xmark.circle.fill",
+      "name" : "ended, runner never confirmed",
+      "needsYouGroup" : true,
+      "runBadge" : "Failed",
+      "tone" : "error",
+      "word" : "Failed",
+      "workingGroup" : false
+    },
+    {
+      "glyphLabel" : "Succeeded",
+      "icon" : "checkmark.circle.fill",
+      "name" : "old plain row stored SUCCEEDED",
+      "needsYouGroup" : false,
+      "runBadge" : "Finished",
+      "tone" : "success",
+      "word" : "Succeeded",
+      "workingGroup" : false
+    },
+    {
+      "glyphLabel" : "Ended",
+      "icon" : "checkmark.circle",
+      "name" : "ending after an interrupted turn",
+      "needsYouGroup" : false,
+      "runBadge" : "Ended",
+      "tone" : "neutral",
+      "word" : "Ended",
+      "workingGroup" : false
+    },
+    {
+      "glyphLabel" : "Waiting for your reply",
+      "icon" : "message",
+      "name" : "parked, engine started its own turn",
+      "needsYouGroup" : false,
+      "runBadge" : "Awaiting reply",
+      "tone" : "neutral",
+      "word" : "Waiting for your reply",
+      "workingGroup" : false
+    },
+    {
+      "glyphLabel" : "Running Agent",
+      "icon" : "spinner",
+      "name" : "parked, sub-agent running",
+      "needsYouGroup" : false,
+      "runBadge" : "Awaiting reply",
+      "tone" : "brand",
+      "word" : "Running Agent",
+      "workingGroup" : false
+    },
+    {
+      "glyphLabel" : "Waiting to resume",
+      "icon" : "eye",
+      "name" : "parked, will wake (watch or wake-up)",
+      "needsYouGroup" : false,
+      "runBadge" : "Awaiting reply",
+      "tone" : "neutral",
+      "word" : "Waiting to resume",
+      "workingGroup" : false
+    },
+    {
+      "glyphLabel" : "Ended",
+      "icon" : "checkmark.circle",
+      "name" : "unknown status, no capabilities, held",
+      "needsYouGroup" : false,
+      "runBadge" : "Ended",
+      "tone" : "neutral",
+      "word" : "Ended",
+      "workingGroup" : false
+    },
+    {
+      "glyphLabel" : "Ended",
+      "icon" : "checkmark.circle",
+      "name" : "unknown status, no capabilities, released",
+      "needsYouGroup" : false,
+      "runBadge" : "Ended",
+      "tone" : "neutral",
+      "word" : "Ended",
+      "workingGroup" : false
+    }
+  ]
+}

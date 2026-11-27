@@ -60,6 +60,7 @@ import { PushModule } from '../push/push.module';
 import { ProvidersModule } from '../providers/providers.module';
 import { RunnersModule } from '../runners/runners.module';
 import { RunnerWriteProtocolInterceptor } from './runner-write-protocol';
+import { PullRequestLandingModule } from '../github/pull-request-landing.module';
 import { IntegrationJobRelay } from './integration-job-relay';
 import { WikiRepoOps } from '../wiki-worker/wiki-repo-ops';
 import { MainCheckoutService } from '../workspaces/main-checkout.service';
@@ -106,6 +107,9 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     // RunnerGitCredentialController mints a GitHub workspace's token, and the heartbeat reconciles its clone, through
     // the one GithubWorkspaceService, whose in-memory token cache is the only place a token is kept.
     GithubModule,
+    // A landing that waits on its pull request (docs/design/protected-branch-landing.md §4.2 J-T14) and a session's
+    // Merge through one (§4.6) are handed to the one pull request door after their results commit.
+    PullRequestLandingModule,
     // RunnerSchedulesController: a session's schedule_* tools, through the services the REST doors use.
     SchedulesModule,
     ScheduleRunsModule,

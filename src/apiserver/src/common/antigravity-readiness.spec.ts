@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  ANTIGRAVITY_GOOGLE_LOGIN_LINUX_ONLY,
+  ANTIGRAVITY_GOOGLE_LOGIN_MACOS_V1,
+  ANTIGRAVITY_GOOGLE_LOGIN_UNSUPPORTED_PLATFORM,
   ANTIGRAVITY_GOOGLE_LOGIN_V1,
   antigravityGoogleLogin,
   antigravityGoogleLoginRefusal,
@@ -57,7 +58,7 @@ test('the readiness says which credential the built-in engine runs on, for the p
   );
 });
 
-test('only a Linux runner that declares the Google sign-in is asked for one', () => {
+test('only a Linux runner, or a Mac runner that declares the macOS relay, is asked for a Google sign-in', () => {
   assert.equal(antigravityGoogleLogin({ capabilities: [ANTIGRAVITY_GOOGLE_LOGIN_V1, 'os:linux'] }), 'available');
   assert.equal(antigravityGoogleLoginRefusal({ capabilities: [ANTIGRAVITY_GOOGLE_LOGIN_V1, 'os:linux'] }), null);
   // The capability first: an old runner needs updating whatever its platform.
@@ -65,17 +66,32 @@ test('only a Linux runner that declares the Google sign-in is asked for one', ()
     assert.equal(antigravityGoogleLogin({ capabilities }), 'needs_update');
     assert.match(antigravityGoogleLoginRefusal({ capabilities }) ?? '', /too old to sign Antigravity in with Google — update it/);
   }
-  // Then the platform it named: Linux only for now.
-  for (const os of ['os:darwin', 'os:windows', 'os:freebsd']) {
+  // Then the platform it named. macOS needs the macOS relay as well: a Mac runner without it is one
+  // an update fixes, not a platform that is out of reach.
+  assert.equal(antigravityGoogleLogin({ capabilities: [ANTIGRAVITY_GOOGLE_LOGIN_V1, ANTIGRAVITY_GOOGLE_LOGIN_MACOS_V1, 'os:darwin'] }), 'available');
+  assert.equal(antigravityGoogleLoginRefusal({ capabilities: [ANTIGRAVITY_GOOGLE_LOGIN_V1, ANTIGRAVITY_GOOGLE_LOGIN_MACOS_V1, 'os:darwin'] }), null);
+  for (const capabilities of [[ANTIGRAVITY_GOOGLE_LOGIN_V1, 'os:darwin'], [ANTIGRAVITY_GOOGLE_LOGIN_MACOS_V1, 'os:darwin']]) {
+    assert.equal(antigravityGoogleLogin({ capabilities }), 'needs_update', capabilities.join());
+    assert.match(antigravityGoogleLoginRefusal({ capabilities }) ?? '', /too old to sign Antigravity in with Google — update it/);
+  }
+  // The macOS relay changes nothing on Linux, nor on any other platform.
+  assert.equal(antigravityGoogleLogin({ capabilities: [ANTIGRAVITY_GOOGLE_LOGIN_V1, ANTIGRAVITY_GOOGLE_LOGIN_MACOS_V1, 'os:linux'] }), 'available');
+  for (const os of ['os:windows', 'os:freebsd']) {
+    assert.equal(antigravityGoogleLogin({ capabilities: [ANTIGRAVITY_GOOGLE_LOGIN_V1, ANTIGRAVITY_GOOGLE_LOGIN_MACOS_V1, os] }), 'unsupported_platform', os);
     assert.equal(antigravityGoogleLogin({ capabilities: [ANTIGRAVITY_GOOGLE_LOGIN_V1, os] }), 'unsupported_platform', os);
-    assert.equal(antigravityGoogleLoginRefusal({ capabilities: [ANTIGRAVITY_GOOGLE_LOGIN_V1, os] }), ANTIGRAVITY_GOOGLE_LOGIN_LINUX_ONLY);
+    assert.equal(antigravityGoogleLoginRefusal({ capabilities: [ANTIGRAVITY_GOOGLE_LOGIN_V1, os] }), ANTIGRAVITY_GOOGLE_LOGIN_UNSUPPORTED_PLATFORM);
   }
   // One that named none is let through: it refuses a platform it cannot do itself.
   assert.equal(antigravityGoogleLogin({ capabilities: [ANTIGRAVITY_GOOGLE_LOGIN_V1] }), 'available');
   // The readiness says the same.
   assert.equal(
-    antigravityState({ capabilities: [ANTIGRAVITY_GOOGLE_LOGIN_V1, 'os:darwin'], engines: null }).googleLogin,
+    antigravityState({ capabilities: [ANTIGRAVITY_GOOGLE_LOGIN_V1, 'os:windows'], engines: null }).googleLogin,
     'unsupported_platform',
+  );
+  assert.equal(antigravityState({ capabilities: [ANTIGRAVITY_GOOGLE_LOGIN_V1, 'os:darwin'], engines: null }).googleLogin, 'needs_update');
+  assert.equal(
+    antigravityState({ capabilities: [ANTIGRAVITY_GOOGLE_LOGIN_V1, ANTIGRAVITY_GOOGLE_LOGIN_MACOS_V1, 'os:darwin'], engines: null }).googleLogin,
+    'available',
   );
 });
 

@@ -1,8 +1,10 @@
-import { useState, type JSX, type ReactNode } from 'react';
+import { useContext, useEffect, useState, type JSX, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircleFilled,
   ClockCircleOutlined,
+  EyeOutlined,
+  PaperClipOutlined,
   QuestionCircleFilled,
   RightOutlined,
   UpOutlined,
@@ -20,9 +22,11 @@ import { CardActionButton, CardActions } from './CardAction';
 import { decisionReceiptTime } from './EvidenceDecisionCard';
 import { ReviewCard } from './ReviewCard';
 import { Alert } from './ui/Alert';
+import { Image } from './ui/Image';
 import { Textarea } from './ui/Textarea';
 import { RefusedAnswerFoot, useOwnerCardTranslation } from './TranslationParts';
 import { api } from '../api';
+import { AttachmentResolverContext } from '../lib/attachmentResolver';
 import { answerRefusedUntranslated } from '../lib/translation';
 import { decisionReceiptAnchor, type ReceiptPlacement } from '../lib/decisionReceipt';
 import { rehypeCodeWords } from '../lib/codeWords';
@@ -31,6 +35,7 @@ import { markdownToPlainText } from '../lib/markdownText';
 import { projectOpenItemsQuery } from '../lib/queries';
 import { ago } from '../lib/watches';
 import { streamPoll } from '../lib/listBudget';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * The question a project's coordinator put to the account owner, as a card (mock 5,
@@ -152,6 +157,122 @@ function answerOpenItem(
 }
 
 /**
+ * A picture the coordinator put in the question: `![alt](orbit-attachment:<id>)`, the same Markdown
+ * a reply embeds one with (`file_upload` answers an `orbit-attachment:` link for exactly this).
+ */
+const ATTACHMENT_IMAGE = /!\[([^\]]*)\]\(\s*<?orbit-attachment:([0-9a-zA-Z-]+)>?(?:\s+(?:"[^"]*"|'[^']*'))?\s*\)/g;
+
+export interface QuestionImage {
+  id: string;
+  alt: string;
+}
+
+/**
+ * The question's words, and the pictures it carries.
+ *
+ * The pictures are read from the question the coordinator ASKED (`asked`), not from the text the
+ * card shows: a translation may render `![Option A](orbit-attachment:…)` as `Option A:
+ * orbit-attachment:…` — which is exactly what an owner cannot act on. An attachment id is the same
+ * in every language, so the picture is drawn wherever the words came from. When the shown text
+ * still carries one of those ids (the translation flattened the Markdown), it is taken out of the
+ * prose: the picture now stands where it was, and the id says nothing to the person deciding.
+ */
+export function questionAttachments(asked: string, shown: string = asked): {
+  text: string;
+  images: QuestionImage[];
+} {
+  const images: QuestionImage[] = [];
+  for (const match of asked.matchAll(ATTACHMENT_IMAGE)) {
+    images.push({ id: match[2]!, alt: match[1]!.trim() });
+  }
+  const drawn = new Set(images.map((image) => image.id));
+  const text = shown
+    .replace(ATTACHMENT_IMAGE, '')
+    .replace(/orbit-attachment:([0-9a-zA-Z-]+)/g, (match, id: string) => (drawn.has(id) ? '' : match))
+    // A list item the picture was the whole of keeps its marker pointing at nothing.
+    .replace(/^[ \t]*(?:[-*+]|\d+[.)])[ \t]*$/gm, '')
+    .replace(/[ \t]+$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return { text, images };
+}
+
+/** One picture, fetched by its attachment id; the tile opens the viewer on tap. */
+function QuestionImageTile({ id, alt }: { id: string; alt: string }): JSX.Element {
+  const resolve = useContext(AttachmentResolverContext);
+  const [url, setUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let active = true;
+    let made: string | null = null;
+    resolve(id)
+      .then((resolved) => {
+        if (active) {
+          made = resolved;
+          setUrl(resolved);
+        } else {
+          URL.revokeObjectURL(resolved);
+        }
+      })
+      .catch(() => {
+        if (active) setFailed(true);
+      });
+    return () => {
+      active = false;
+      if (made) URL.revokeObjectURL(made);
+    };
+  }, [id, resolve]);
+  // The bytes are gone or unreadable; the chip is what the card can still say about them.
+  if (failed) {
+    return (
+      <Tooltip content={id} delay={TEXT_TOOLTIP_DELAY_MS} mono>
+        <span className="md-image-unavailable">
+          <PaperClipOutlined />
+          <code>{alt || 'Image'}</code>
+        </span>
+      </Tooltip>
+    );
+  }
+  if (!url) return <span className="md-image md-image-loading" />;
+  return (
+    <Image
+      className="md-image"
+      src={url}
+      alt={alt || 'Image'}
+      cover={
+        <span className="chat-image-mask">
+          <EyeOutlined /> Preview
+        </span>
+      }
+    />
+  );
+}
+
+/**
+ * The pictures a question carries: one drawn full width, two or more as tiles abreast, each opening
+ * the viewer. Kept under the words rather than in line with them — a question often IS the choice
+ * between these, and the options and Send answer have to stay one look away.
+ */
+function QuestionImages({ images }: { images: QuestionImage[] }): JSX.Element | null {
+  if (images.length === 0) return null;
+  return (
+    <>
+      <p className="coordinator-question-images-caption">
+        {images.length === 1
+          ? '1 image · tap to open it full size'
+          : `${images.length} images · tap any to open it full size`}
+      </p>
+      <div className={`coordinator-question-images${images.length === 1 ? ' is-single' : ''}`}>
+        {images.map((image, index) => (
+          <QuestionImageTile key={`${image.id}-${index}`} id={image.id} alt={image.alt} />
+        ))}
+      </div>
+    </>
+  );
+}
+
+
+/**
  * What the owner settled on: one of the coordinator's options by index, the Other row this card
  * adds — where the words in the box are the answer rather than a note — or, on a question that
  * recommended none of its options, nothing at all.
@@ -251,6 +372,12 @@ export function CoordinatorQuestionCard({
     );
   }
 
+  // The pictures are drawn from the question as asked, so a translation that flattened the
+  // Markdown cannot take them away; the words are the ones the card shows.
+  const { text: questionText, images: questionImages } = questionAttachments(
+    (original ?? question).question,
+    question.question,
+  );
   const free = question.options.length === 0;
   const trimmed = text.trim();
   const chosenOption = optionIndex(chosen);
@@ -268,15 +395,17 @@ export function CoordinatorQuestionCard({
   };
 
   return (
-    <ReviewCard title={COORDINATOR_QUESTION_HEADING} summary={question.question}
+    <ReviewCard title={COORDINATOR_QUESTION_HEADING} summary={questionText}
       meta={`${question.options.length} options · asked ${ago(row.waitingSince, now)}`}
       id={`question-${row.itemId}`} open={reviewOpen} onOpenChange={setReviewOpen}>
     <div className="approval-card coordinator-question">
       <div className="approval-head coordinator-question-head">
         <span className="coordinator-question-heading">{COORDINATOR_QUESTION_HEADING}</span>
-        <span className="criteria-provenance prov-brand" title={FROM_COORDINATOR_TITLE}>
-          {FROM_COORDINATOR}
-        </span>
+        <Tooltip content={FROM_COORDINATOR_TITLE} delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="criteria-provenance prov-brand">
+            {FROM_COORDINATOR}
+          </span>
+        </Tooltip>
       </div>
       <div className="approval-body is-questions coordinator-question-body">
         {/* The question as the coordinator wrote it — the same Markdown the approval cards render
@@ -288,9 +417,10 @@ export function CoordinatorQuestionCard({
             urlTransform={referenceUrlTransform}
             components={{ a: ReferenceLink }}
           >
-            {question.question}
+            {questionText}
           </Markdown>
         </div>
+        <QuestionImages images={questionImages} />
         <QuestionOptions
           name={`question-${row.itemId}`}
           options={question.options}
@@ -648,9 +778,11 @@ export function AnsweredQuestionCard({
       >
         <div className="approval-body is-questions coordinator-question-body">
           <div className="answered-question-provenance">
-            <span className="criteria-provenance prov-brand" title={FROM_COORDINATOR_TITLE}>
-              {FROM_COORDINATOR}
-            </span>
+            <Tooltip content={FROM_COORDINATOR_TITLE} delay={TEXT_TOOLTIP_DELAY_MS}>
+              <span className="criteria-provenance prov-brand">
+                {FROM_COORDINATOR}
+              </span>
+            </Tooltip>
             <span className="answered-question-asked">{`asked ${decisionReceiptTime(record.askedAt, now)}`}</span>
           </div>
           {/* The question as it was asked, in the Markdown the open card renders it in. */}

@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { ConflictException } from '@nestjs/common';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { TasksService } from './tasks.service';
 import { fakeReceiptStore } from './task-run-receipt-fake';

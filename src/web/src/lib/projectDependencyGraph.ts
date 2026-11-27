@@ -57,6 +57,7 @@ export interface ProjectRunMark {
     status: string;
     running?: boolean;
     queued?: boolean;
+    runReason?: TaskRunReason | null;
     workState?: ProjectTaskWorkState;
     verificationState?: ProjectTaskVerificationState | null;
   }>;
@@ -80,6 +81,7 @@ export interface ProjectMotifMark {
     status: string;
     running?: boolean;
     queued?: boolean;
+    runReason?: TaskRunReason | null;
     workState?: ProjectTaskWorkState;
     verificationState?: ProjectTaskVerificationState | null;
   }>;
@@ -185,8 +187,10 @@ export function markStatus(mark: ProjectGraphMark): string {
  */
 export function markLiveState(
   mark: ProjectGraphMark,
-): { status: string; running?: boolean; queued?: boolean } {
-  if (mark.kind === 'TASK') return { status: mark.status, running: mark.running, queued: mark.queued };
+): { status: string; running?: boolean; queued?: boolean; runReason?: TaskRunReason | null } {
+  if (mark.kind === 'TASK') {
+    return { status: mark.status, running: mark.running, queued: mark.queued, runReason: mark.runReason };
+  }
   return { status: markStatus(mark) };
 }
 

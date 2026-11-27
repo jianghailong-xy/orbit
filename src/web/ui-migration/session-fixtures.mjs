@@ -1,4 +1,5 @@
 import { uuidToBase62 } from '@orbit/shared';
+import { answerListing } from './session-listing-fixtures.mjs';
 
 // Synthetic display data, not parser fixtures or copied production run_event records.
 // The actual WorkspaceView and Transcript consume these REST/SSE-shaped messages.
@@ -55,6 +56,8 @@ export async function sessionApi(route) {
     return reply([{ workspaceId: WORKSPACE.id, active: 0, running: 0, jobs: 0, needsYou: 0 }]);
   }
   if (path === '/sessions') return reply([SESSION]);
+  // The same list a page at a time, as a workspace that shows folders or projects reads it.
+  if (path === '/sessions/listing') return reply(answerListing([SESSION], [], new URL(request.url()).searchParams));
   if (path === '/session-tags' || path === '/session-folders') return reply([]);
   if (path === '/providers/pools' || path === '/providers/shared-pools') return reply([]);
   if (path === '/tasks/evidence-decisions/pending') {

@@ -4,7 +4,7 @@ import type { HelpAskOutcome, HelpAskRow } from '@orbit/shared';
 import { Spinner } from '../../components/ui/Spinner';
 import { AskConversation } from '../../components/help/HelpAsk';
 import '../../components/help/HelpAsk.css';
-import { helpAskChoicesQuery, helpAskListQuery } from '../../lib/help/helpAsk';
+import { helpAskListQuery } from '../../lib/help/helpAsk';
 import { openHelpDrawer } from '../../lib/help/openHelpDrawer';
 import { routeId } from '../../lib/idCodec';
 import { useDocumentTitle } from './useDocumentTitle';
@@ -29,18 +29,17 @@ export function askedAt(iso: string, now = new Date()): string {
   });
 }
 
-/** One row's second line: when, where it was asked from, how it ended (or who it was sent to), what it cost. */
+/** One row's second line: when, where it was asked from, and how it ended (or who it was sent to). */
 export function questionLine(row: HelpAskRow, now = new Date()): string {
   const ended = row.sentTo ? `sent to ${row.sentTo}` : OUTCOME[row.outcome].toLowerCase();
-  return [askedAt(row.createdAt, now), row.origin ? `from ${row.origin}` : null, ended, `$${row.costUsd.toFixed(2)}`]
+  return [askedAt(row.createdAt, now), row.origin ? `from ${row.origin}` : null, ended]
     .filter(Boolean)
     .join(' · ');
 }
 
 /**
  * /help → Your questions (docs/mocks/help-center board 02 ④): every Ask the person started, newest first — the first
- * question as its title, the page it was asked from, how it ended and what it cost. They are sessions like any other,
- * in no workspace's list; opening one continues it here.
+ * question as its title, the page it was asked from, and how it ended. Opening one continues it here.
  */
 export function HelpQuestionsPage() {
   useDocumentTitle('Your questions');
@@ -52,7 +51,7 @@ export function HelpQuestionsPage() {
       <div className="help-questions-head">
         <div>
           <h1 className="help-title">Your questions</h1>
-          <p className="help-sub">Every Ask chat you started. They are sessions like any other.</p>
+          <p className="help-sub">Every Ask chat you started.</p>
         </div>
         <button type="button" className="help-ask-pill" onClick={() => openHelpDrawer({ tab: 'ask', askSession: null })}>
           ✦ Ask
@@ -66,11 +65,12 @@ export function HelpQuestionsPage() {
         <div className="help-questions-list">
           {rows.map((row) => (
             <button
-              key={row.sessionId}
+              key={row.id}
               type="button"
               className="help-questions-row"
-              data-help-question={row.sessionId}
-              onClick={() => navigate(`/help/questions/${row.sessionId}`)}
+              data-row-focus=""
+              data-help-question={row.id}
+              onClick={() => navigate(`/help/questions/${row.id}`)}
             >
               <span>
                 <span>{row.title}</span>
@@ -92,8 +92,7 @@ export function HelpQuestionsPage() {
 /** /help/questions/:id: one Ask, continued in place. */
 export function HelpQuestionPage() {
   const { id = '' } = useParams();
-  const sessionId = routeId(id) ?? id;
-  const choices = useQuery(helpAskChoicesQuery());
+  const askId = routeId(id) ?? id;
   const navigate = useNavigate();
   useDocumentTitle('Your questions');
   return (
@@ -102,7 +101,7 @@ export function HelpQuestionPage() {
         <Link to="/help/questions">Your questions</Link>
       </nav>
       <div className="help-questions-thread">
-        <AskConversation sessionId={sessionId} choices={choices.data} onOpenArticle={(_slug, path) => navigate(path)} />
+        <AskConversation askId={askId} onOpenArticle={(_slug, path) => navigate(path)} />
       </div>
     </div>
   );

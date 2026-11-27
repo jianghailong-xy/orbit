@@ -1,5 +1,7 @@
 // The read-only queries every run records (stack.sh psql: default_transaction_read_only=on), scoped to one project by
 // its title. Rows carry internal uuids and full SHAs, so they can be checked against `git log` in the bare origins.
+import { sessionWordSql } from '../../lib/session-word.mjs';
+
 export const P = (title) => `(select id from project where title = '${title.replace(/'/g, "''")}')`;
 
 export const projectQueries = (title) => ({
@@ -9,7 +11,7 @@ from project_codebase where project_id = ${P(title)}`, true],
   tasks: [`select t.title, t.status, t.delivered_sha, t.delivered_base_sha, (t.delivered_sha = t.delivered_base_sha) as no_commit,
   t.landing_check_exempt, t.landing_check_exempt_reason, t.landing_check_exempt_by_session_id, t.codeless, t.created_at
 from task t where t.project_id = ${P(title)} order by t.title`, true],
-  sessions: [`select t.title as task, s.status, s.end_reason, s.worktree_branch, s.base_sha, s.branch_sha, s.changed_files,
+  sessions: [`select t.title as task, ${sessionWordSql('s')} as status, s.end_reason, s.worktree_branch, s.base_sha, s.branch_sha, s.changed_files,
   s.dispatch_origin, s.run_source, s.created_at, s.finished_at
 from session s join task t on t.id = s.task_id where t.project_id = ${P(title)} order by s.created_at`, true],
   jobs: [`select j.kind, j.generation, j.state, t.title as task, j.source_ref, j.source_sha, j.target_ref, j.target_sha_before,

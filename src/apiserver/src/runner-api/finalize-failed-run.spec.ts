@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunStatus as SharedRunStatus, type RunFinalizeRequest } from '@orbit/shared';
 import { RunnerApiController } from './runner-api.controller';
 import { noSessionRequests } from '../test-support/prisma-transaction-double';
@@ -24,6 +24,8 @@ function makeController(
   quota: { planUsage?: unknown; engines?: unknown; workspace?: { env: unknown; codexAccount: string | null } } = {},
 ) {
   const updates: Array<Record<string, unknown>> = [];
+  // Each read of the runner's row: the quota retry's, and the refused sign-in's look for another account.
+  const runnerReads: number[] = [];
   const turnUpdates: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }> = [];
   const tx = {
     $queryRaw: async () => [{ id: SESSION_ID, leaseOwnerMatches: true }],
@@ -72,7 +74,12 @@ function makeController(
     approval: { updateMany: async () => ({ count: 0 }), findMany: async () => [] },
     // Only read when the terminal message is a quota refusal; unless a test says otherwise this
     // runner reports no snapshot, so the reset moment has to come from the message itself.
-    runner: { findUnique: async () => ({ planUsage: quota.planUsage ?? null, engines: quota.engines ?? null }) },
+    runner: {
+      findUnique: async () => {
+        runnerReads.push(1);
+        return { planUsage: quota.planUsage ?? null, engines: quota.engines ?? null };
+      },
+    },
     // Read for a Codex run's quota refusal: its workspace says which account the run spent.
     workspace: { findUnique: async () => quota.workspace ?? null },
     // The drain returns any item turn still queued on the conversation it is ending; this one has
@@ -96,6 +103,7 @@ function makeController(
     controller: new RunnerApiController(prisma, {} as never, realtime, {} as never, {} as never, {} as never, { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never),
     updates,
     turnUpdates,
+    runnerReads,
   };
 }
 
@@ -236,4 +244,103 @@ test('runner-loss finalize writes an IN_FLIGHT CURRENT_WORK UNCONFIRMED receipt 
       < h.turnUpdates.findIndex((write) => write.data.deliveryStatus === undefined),
     'the durable receipt must be written before the blanket ANSWERED drain',
   );
+});
+
+/**
+ * The failure's kind on the session (docs/routing-account-health-design.md §5.1, §10 Mixed versions): a runner that
+ * classifies its failure has the kind stored beside `error`, in the same write; an older runner sends no kind, and its
+ * failure is stored with nulls and decided through the legacy markers exactly as before.
+ */
+const CURSOR_PAYMENT_ERROR =
+  'Cursor said: "Add a payment method to continue." The Cursor account needs this before the session can go on.';
+
+test('a new runner: the failure kind, its scope, the provider words and the admission flag are stored with the error', async () => {
+  const h = makeController({ numTurns: 0 });
+
+  await finalize(h.controller, {
+    status: SharedRunStatus.FAILED,
+    error: CURSOR_PAYMENT_ERROR,
+    failure: { kind: 'ACCOUNT_ACTION_REQUIRED' as never, said: 'Add a payment method to continue' },
+    admission: true,
+  });
+
+  assert.equal(h.updates[0].error, CURSOR_PAYMENT_ERROR);
+  assert.equal(h.updates[0].failureKind, 'ACCOUNT_ACTION_REQUIRED');
+  assert.equal(h.updates[0].failureScope, null, 'no scope is the whole account');
+  assert.equal(h.updates[0].failureSaid, 'Add a payment method to continue');
+  assert.equal(h.updates[0].admissionFailure, true);
+  assert.equal(h.updates[0].retryAt, undefined, 'an account action is no quota wait');
+});
+
+test('an old runner: no kind is stored and a quota refusal is still read from its words', async () => {
+  const h = makeController({ numTurns: 0 });
+
+  await finalize(h.controller, { status: SharedRunStatus.FAILED, error: QUOTA_ERROR });
+
+  assert.equal(h.updates[0].failureKind, null);
+  assert.equal(h.updates[0].admissionFailure, null, 'an older runner did not say');
+  assert.ok(h.updates[0].retryAt instanceof Date, 'the legacy marker still arms the quota retry');
+});
+
+test("the runner's kind decides over the words: a sign-in sentence classified as a dropped connection is no sign-in", async () => {
+  const h = makeController({ numTurns: 0, provider: 'claude', workspaceId: 'workspace-1' });
+
+  await finalize(h.controller, {
+    status: SharedRunStatus.FAILED,
+    error: SIGNED_OUT_ERROR,
+    failure: { kind: 'TRANSPORT' as never },
+    admission: true,
+  });
+
+  assert.equal(h.updates[0].failureKind, 'TRANSPORT');
+  assert.equal(h.updates[0].retryAt, undefined);
+});
+
+test('a kind this server does not know is stored as none and read through the markers', async () => {
+  const h = makeController({ numTurns: 0 });
+
+  await finalize(h.controller, {
+    status: SharedRunStatus.FAILED,
+    error: QUOTA_ERROR,
+    failure: { kind: 'A_NEWER_KIND' as never },
+    admission: false,
+  });
+
+  assert.equal(h.updates[0].failureKind, null);
+  assert.equal(h.updates[0].admissionFailure, false);
+  assert.ok(h.updates[0].retryAt instanceof Date, 'the words still say a quota');
+});
+
+test('a run that did not fail stores no failure, whatever the runner sent', async () => {
+  const h = makeController({ numTurns: 2 });
+
+  await finalize(h.controller, {
+    status: SharedRunStatus.SUCCEEDED,
+    failure: { kind: 'CAPACITY' as never },
+    admission: true,
+  });
+
+  assert.equal(h.updates[0].failureKind, null);
+  assert.equal(h.updates[0].admissionFailure, null);
+});
+
+/**
+ * The refused sign-in path keeps what it matched before the kinds (review of revision 1, point 3): with no kind it
+ * is the runtime's "Failed to authenticate" alone (isAuthErrorText, the old `isAuthErrorText(dto.error)` here), so a
+ * Codex "Not logged in" — which only the SubAgent move ever read as a sign-in — still takes no sign-in path. A
+ * runner's CREDENTIAL_REFUSED takes it whatever the words.
+ */
+test('finalize reads a refused sign-in as it did: "Failed to authenticate" alone, unless the runner says so', async () => {
+  const signInLookups = async (error: string, failure?: { kind: string }) => {
+    const h = makeController({ numTurns: 0, provider: 'codex' });
+    await finalize(h.controller, { status: SharedRunStatus.FAILED, error, ...(failure ? { failure: failure as never } : {}) });
+    return h.runnerReads.length;
+  };
+
+  assert.equal(await signInLookups(SIGNED_OUT_ERROR), 1, "the runtime's sign-in failure looks for another account");
+  assert.equal(await signInLookups('Not logged in. Run codex login.'), 0, 'an old runner\'s "Not logged in" is no sign-in here');
+  assert.equal(await signInLookups('OAuth session expired'), 0, 'nor is an unwrapped "OAuth session expired"');
+  assert.equal(await signInLookups('Not logged in. Run codex login.', { kind: 'CREDENTIAL_REFUSED' }), 1,
+    "the runner's kind decides over the words");
+  assert.equal(await signInLookups(SIGNED_OUT_ERROR, { kind: 'TRANSPORT' }), 0, 'a dropped connection is no sign-in');
 });

@@ -28,7 +28,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { AgentProvider, PermissionMode, type RunnerEngineHealth } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -163,7 +164,7 @@ test('P4a Cursor CLI accounts on PostgreSQL', { skip, concurrency: 1, timeout: 3
         model: 'default[]',
         usesRuntimeDefaultModel: true,
         permissionMode: PermissionMode.ACCEPT_EDITS,
-        status: RunStatus.PENDING,
+        turnState: 'QUEUED',
         dispatchOrigin: SessionDispatchOrigin.USER,
         ...extra,
       },

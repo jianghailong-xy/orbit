@@ -30,12 +30,12 @@ import { test } from 'node:test';
 import { RunEventType, uuidToBase62 } from '@orbit/shared';
 import {
   CreatorType,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
   type PrismaClient,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -106,7 +106,7 @@ test('the reads whose words say "main" name the project’s main branch, and nul
       await db.session.create({
         data: {
           id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, taskId,
-          title: label, prompt: label, provider: 'claude', status: RunStatus.AWAITING_INPUT,
+          title: label, prompt: label, provider: 'claude', turnState: null,
           dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(), startsTaskWork: taskId !== null,
         },
       });

@@ -96,7 +96,7 @@ type agyApprovalPolicy struct {
 	Mode      string `json:"mode"`
 	Workspace string `json:"workspace"`
 	Uploads   string `json:"uploads,omitempty"`
-	// Drive is the Orbit Files drive's roots, empty when none is mounted: a working directory like Uploads.
+	// Drive is the drive's roots, empty when none is mounted: a working directory like Uploads.
 	Drive           []string `json:"drive,omitempty"`
 	GeminiDir       string   `json:"geminiDir"`
 	AllowedTools    []string `json:"allowedTools,omitempty"`
@@ -389,7 +389,7 @@ func shellWords(line string) []string {
 	})
 }
 
-// inDrive is whether path is in one of the Orbit Files drive's roots the policy was written with.
+// inDrive is whether path is in one of the drive's roots the policy was written with.
 func (p agyApprovalPolicy) inDrive(path string) bool { return pathWithinAny(path, p.Drive) }
 
 // pathWithinAny is whether path is within any of roots.

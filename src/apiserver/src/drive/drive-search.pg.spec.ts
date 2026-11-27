@@ -24,7 +24,7 @@ import { DriveService } from './drive.service';
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
 
-test('Orbit Files drive: search finds live entries by part of a name, in any folder, for their owner only', {
+test('Documents drive: search finds live entries by part of a name, in any folder, for their owner only', {
   skip: !URL, concurrency: 1, timeout: 300_000,
 }, async (t) => {
   const url = URL!;

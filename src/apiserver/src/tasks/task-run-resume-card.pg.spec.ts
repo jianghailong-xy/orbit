@@ -29,11 +29,11 @@ import { JwtService } from '@nestjs/jwt';
 import {
   CreatorType,
   type PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   SessionRunSource,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, RunStatus as SharedRunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -178,7 +178,7 @@ test('a resumed run\'s brief waits as the TaskStart card its echo is stored with
       data: {
         id: sessionId, ownerId, creatorId: ownerId, taskId: task.id, workspaceId, assignedRunnerId: runnerId,
         title: `执行任务：${TITLE}`, prompt: 'the brief the run was started with', provider,
-        status: RunStatus.AWAITING_INPUT, startsTaskWork: true, numTurns: 1,
+        turnState: null, startsTaskWork: true, numTurns: 1,
         startedAt: new Date(Date.now() - 60 * 60_000), runtimeSessionId: `runtime-${sessionId}`,
         dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
       },
@@ -204,7 +204,7 @@ test('a resumed run\'s brief waits as the TaskStart card its echo is stored with
    * can act on a steer (`acceptsSteer`) or not. Answers the turn it handed out.
    */
   async function take(run: Run, acceptsSteer = false): Promise<{ turnId: string; content: string }> {
-    await prisma.session.update({ where: { id: run.sessionId }, data: { status: RunStatus.RUNNING } });
+    await prisma.session.update({ where: { id: run.sessionId }, data: { turnState: 'IN_FLIGHT' } });
     const handed = await (api as unknown as {
       dequeueTurn: (sessionId: string, runnerId: string, leaseGeneration: string | null, acceptsSteer?: boolean)
         => Promise<Record<string, unknown> | null>;

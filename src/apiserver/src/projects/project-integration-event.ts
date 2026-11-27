@@ -52,6 +52,9 @@ export const INTEGRATION_JOB_EVENT_KINDS = [
   'CANCELLED',
   'ABANDONED',
   'TIMED_OUT',
+  // The landing's pull request (docs/design/protected-branch-landing.md §14, migration 1527): the landing branch
+  // pushed, the pull request opened, and merged. `data.step` says which.
+  'PULL_REQUEST',
 ] as const;
 
 /** Who caused a fact, when a person or a conversation did. */
@@ -173,7 +176,8 @@ export function minutesText(seconds: number | null | undefined): string {
 }
 
 /** What queued an attempt, which the enqueue event's own text says. */
-export type EnqueueCause = 'DONE' | 'RETRY' | 'SKIP_CHECK' | 'BACKFILL' | 'BEHIND_WORK' | 'BASELINE_HELD' | 'DECISION' | 'AUTOMATIC';
+export type EnqueueCause = 'DONE' | 'RETRY' | 'SKIP_CHECK' | 'BACKFILL' | 'BEHIND_WORK' | 'BASELINE_HELD' | 'MAIN_SYNC_HELD'
+  | 'DECISION' | 'AUTOMATIC';
 
 export function enqueuedText(input: {
   kind: IntegrationJobKind;
@@ -201,6 +205,8 @@ export function enqueuedText(input: {
       return `Queued to land on ${target} · the project started integrating`;
     case 'BASELINE_HELD':
       return `Queued to land on ${target} · waiting for the baseline to be fixed`;
+    case 'MAIN_SYNC_HELD':
+      return `Queued to land on ${target} · waiting for the project branch to absorb the upstream`;
     case 'BEHIND_WORK':
       return `Queued to land on ${target} · the task's work ended on another branch`;
     default:

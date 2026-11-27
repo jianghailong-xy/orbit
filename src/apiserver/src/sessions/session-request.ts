@@ -15,6 +15,8 @@ import { attribute, type RequestForBlock } from './session-message';
 import { readRunQuestionCard, RUN_QUESTION_PREFIX } from './run-question';
 import { SESSION_REPLY_TURN_KEY_PREFIX } from './watch-turn-key';
 import { isReleased, releaseWasFailure, type ReleaseFailureFacts } from '../common/session-release';
+import { LEGACY_STATUS_SELECT, legacySessionStatus } from './session-legacy-words';
+import { isParked, type TurnStateFacts } from './session-turn-state';
 
 /**
  * One Orbit session asking another for a reply, and the one outcome every such request comes to
@@ -1035,7 +1037,7 @@ export const RETRY_CLAIM_WINDOW_MS = 10 * 60_000;
  * outcome as well: told twice, and once wrongly.
  */
 export function awaitsAutoRetry(
-  session: ReleaseFailureFacts & {
+  session: ReleaseFailureFacts & TurnStateFacts & {
     retryAt: Date | null;
     retryClaimedAt: Date | null;
     cancelRequestedAt: Date | null;
@@ -1048,7 +1050,7 @@ export function awaitsAutoRetry(
   if (session.deletedAt || session.completedAt || session.archivedAt) return false;
   // Parked: released by a failure (common/session-release.ts), or idle.
   const parked = releaseWasFailure(session)
-    || (session.status === 'AWAITING_INPUT' && session.cancelRequestedAt == null);
+    || (isParked(session) && session.cancelRequestedAt == null);
   if (!parked) return false;
   if (session.retryAt != null) return true;
   return session.retryClaimedAt != null && now.getTime() - session.retryClaimedAt.getTime() < RETRY_CLAIM_WINDOW_MS;
@@ -1117,7 +1119,7 @@ export async function expireSessionRequest(
   const recipient = await tx.session.findUnique({
     where: { id: request.toSessionId },
     select: {
-      status: true, endReason: true, completedAt: true, archivedAt: true, deletedAt: true, lastAssistantText: true,
+      ...LEGACY_STATUS_SELECT, completedAt: true, archivedAt: true, deletedAt: true, lastAssistantText: true,
     },
   });
   const { count } = await tx.sessionRequest.updateMany({
@@ -1125,7 +1127,8 @@ export async function expireSessionRequest(
     data: {
       state: 'EXPIRED',
       excerpt: recipient?.lastAssistantText ?? null,
-      closeReason: recipient ? deriveSessionState({ ...recipient, status: recipient.status }) : 'GONE',
+      // The projected word (session-legacy-words.ts); a request's recipient is a conversation, never a landing.
+      closeReason: recipient ? deriveSessionState({ ...recipient, status: legacySessionStatus(recipient) }) : 'GONE',
       closedAt: now,
     },
   });

@@ -33,7 +33,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { ClaimedSession } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -56,6 +57,7 @@ import { ProvidersService } from './providers.service';
 import { POOL_GATEWAY_TOKEN_TTL_MS } from './shared-pool';
 import { SharedPoolsService } from './shared-pools.service';
 import '../test-support/dequeue-under-lease';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 process.env.PROVIDER_SECRET_KEY ??= 'shared-pool-claim-spec';
@@ -114,7 +116,7 @@ async function sessionOn(db: PrismaClient, owner: Person, provider: string, stat
     data: {
       title: 'shared pool claim',
       prompt: 'hello',
-      status,
+      turnState: turnStateOfWord(status),
       ownerId: owner.id,
       creatorId: owner.id,
       workspaceId: owner.workspaceId,
@@ -159,21 +161,21 @@ suite('a shared pool at the claim: the gateway and a session token, nothing of a
 
   /** The runner asking for work — which has to be `sessionId` — and the session parked again after. */
   async function claim(who: Person, sessionId: string): Promise<ClaimedSession> {
-    await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.PENDING } });
+    await db.session.update({ where: { id: sessionId }, data: { turnState: 'QUEUED' } });
     const claimed = await queue.claimSessionForRunner({ id: who.runnerId });
     assert.ok(claimed, 'the runner was offered no session');
     assert.equal(claimed.sessionId, sessionId);
-    await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+    await db.session.update({ where: { id: sessionId }, data: { turnState: null } });
     return claimed;
   }
   /** The runner asking for work and handed none: `sessionId` names a pool nothing of its owner's holds, so
    *  it is not dispatched at all — it waits, PENDING, saying why — and is parked again after. */
   async function heldBack(who: Person, sessionId: string): Promise<void> {
-    await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.PENDING } });
+    await db.session.update({ where: { id: sessionId }, data: { turnState: 'QUEUED' } });
     assert.equal(await queue.claimSessionForRunner({ id: who.runnerId }), null, 'the runner was offered a session');
     const { error } = await db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { error: true } });
     assert.equal(error, PROVIDER_UNAVAILABLE_ERROR);
-    await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+    await db.session.update({ where: { id: sessionId }, data: { turnState: null } });
   }
   /** The runner's inbox poll, until it is handed the reload a provider switch queued. */
   async function dequeueReload(who: Person, sessionId: string) {

@@ -28,6 +28,7 @@ import {
   DECISION_SEND_BACK_HINT,
   EVIDENCE_DECISION_ALREADY_DECIDED,
   EVIDENCE_DECISION_RECORDED_HEADING,
+  evidenceSubmittedLine,
   EVIDENCE_DECISION_STALE_HEADING,
   EVIDENCE_DECISION_SUPERSEDED,
   EVIDENCE_DECISION_UNREAD_HEADING,
@@ -48,6 +49,7 @@ import {
   type EvidenceDecisionStanding,
 } from './EvidenceDecisionCard';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
  * The evidence-decision card as a system card: what it draws from the pending read, what one press
@@ -299,6 +301,18 @@ describe('the card is drawn from the row the pending read published', () => {
     // The fourth is folded and COUNTED, not dropped.
     expect(html).not.toContain(escaped(GAPS[3]));
     expect(html).toContain(decisionGapsMore(1));
+  });
+
+  it('says when the version was submitted beside its mark, and nothing from a row without the time', () => {
+    const at = new Date();
+    at.setHours(19, 59, 0, 0);
+    const timed = row({ submittedAt: at.toISOString() });
+    const html = card(evidenceDecisionStanding(queue([timed]), PROJECT_ID, timed));
+    expect(html).toContain(`<span class="evidence-decision-submitted">${escaped(evidenceSubmittedLine(timed.submittedAt!))}</span>`);
+    expect(evidenceSubmittedLine(at.toISOString(), at)).toBe(`submitted ${at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`);
+
+    const untimed = row();
+    expect(card(evidenceDecisionStanding(queue([untimed]), PROJECT_ID, untimed))).not.toContain('evidence-decision-submitted');
   });
 
   it('carries the criterion’s own text, not only its key, and leads the card with it', () => {
@@ -902,21 +916,20 @@ describe('a press, end to end inside the browser', () => {
 });
 
 describe('the provenance mark', () => {
-  it('is on the card in every standing, and says no agent wrote the card or relays its press', () => {
-    const live = row();
-    for (const standing of [
-      evidenceDecisionStanding(queue([live]), PROJECT_ID, live),
-      evidenceDecisionStanding(queue([row({ evidenceRevision: '3' })]), PROJECT_ID, live),
-      evidenceDecisionStanding(queue([]), PROJECT_ID, live),
-      evidenceDecisionStanding(null, PROJECT_ID, live),
-    ]) {
-      const html = card(standing);
-      const mark = /<span class="criteria-provenance" title="([^"]*)">([^<]*)<\/span>/u.exec(html);
-      expect(mark, standing.state).not.toBeNull();
-      expect(mark![2], standing.state).toBe(PROVENANCE_LABEL);
-      expect(mark![1], standing.state).toContain('agent');
-      expect(mark![1], standing.state).toContain('decision door');
-    }
+  const live = row();
+  it.each([
+    ['live', () => evidenceDecisionStanding(queue([live]), PROJECT_ID, live)],
+    ['moved on', () => evidenceDecisionStanding(queue([row({ evidenceRevision: '3' })]), PROJECT_ID, live)],
+    ['gone', () => evidenceDecisionStanding(queue([]), PROJECT_ID, live)],
+    ['unread', () => evidenceDecisionStanding(null, PROJECT_ID, live)],
+  ])('is on the card in every standing (%s), and says no agent wrote the card or relays its press', async (_name, standing) => {
+    const node = await mount(<EvidenceDecisionCard standing={standing()} onConfirm={() => {}} onChatAbout={() => {}} />);
+    const mark = node.querySelector('span.criteria-provenance');
+    expect(mark).not.toBeNull();
+    expect(mark!.textContent).toBe(PROVENANCE_LABEL);
+    const tip = await hoverTooltip(mark!);
+    expect(tip).toContain('agent');
+    expect(tip).toContain('decision door');
   });
 });
 

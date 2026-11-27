@@ -25,6 +25,8 @@ import { ProjectBlockersCard, type ProjectBlockers } from '../components/Project
 import { CoordinatorQuestions } from '../components/CoordinatorQuestionCard';
 import { WaitingOnYouTaskBadge } from '../components/OwnerRequestCard';
 import { TaskSignInHoldNote } from '../components/TaskSignInHold';
+import { TaskAccountHoldLine } from '../components/TaskAccountHold';
+import type { TaskAccountHold } from '../lib/accountHealth';
 import { LazyBoundary } from '../components/ErrorBoundary';
 import { ProjectPromotion } from '../components/ProjectPromotionCard';
 import { ProjectReadyToRun } from '../components/ProjectReadyToRun';
@@ -88,6 +90,7 @@ import { type TaskDependencyGraphResponse } from '../lib/taskDependencyGraph';
 import { scheduledStart } from '../lib/taskSchedule';
 import { ProjectTasksGraph } from '../components/ProjectTasksGraph';
 import { ProjectTaskLink } from '../components/ProjectTaskLink';
+import { ProjectReopenRow } from '../components/ProjectReopenCard';
 import { Alert } from '../components/ui/Alert';
 import { Badge, type BadgeProps } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
@@ -123,6 +126,7 @@ import {
 import { RUN_STALLED } from '../lib/projectDependencyGraph';
 import { PROJECT_TASK_STARTS_BY_HAND } from '../lib/projectStart';
 import { useProjectIntegration } from '../lib/pollOwner';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from '../components/ui/Tooltip';
 
 // The panel a task opens in over this page — TaskDetailPanel, and the transcript and editors it
 // draws — is needed only once a task is open, so it is not on the page's own import path: the
@@ -708,10 +712,12 @@ function ProjectRowMeter({ buckets }: { buckets: ProjectPanoramaBuckets }) {
           a pointer. */}
       <div className="project-row-buckets" aria-hidden="true">
         {PANORAMA_BUCKETS.filter((bucket) => panoramaBucketValue(buckets, bucket.key) > 0).map((bucket) => (
-          <span key={bucket.key} title={bucket.label}>
-            <Glyph shape={bucket.glyph} color={bucket.color} size={8} />
-            <b>{panoramaBucketValue(buckets, bucket.key).toLocaleString('en-US')}</b>
-          </span>
+          <Tooltip key={bucket.key} content={bucket.label} delay={TEXT_TOOLTIP_DELAY_MS}>
+            <span>
+              <Glyph shape={bucket.glyph} color={bucket.color} size={8} />
+              <b>{panoramaBucketValue(buckets, bucket.key).toLocaleString('en-US')}</b>
+            </span>
+          </Tooltip>
         ))}
       </div>
     </div>
@@ -1151,6 +1157,7 @@ export function ProjectDetailPage() {
               card beside two lines of title metadata, creating a large dead rectangle under the
               title. A balanced command centre now leads with changing work state and the way to
               act on it, followed by the stable goal they are working toward. */}
+          {p.status === 'DONE' || p.status === 'CANCELLED' ? <ProjectReopenRow projectId={id!} /> : null}
           <header className="project-detail-identity" data-project-block="header">
             <h2 className="page-title orbit-typography">
               {p.title}
@@ -1829,6 +1836,8 @@ export interface ProjectTask {
   title: string;
   /** Why the auto-run sweep holds this task although it reads Ready (server-computed); null or absent otherwise. */
   hold?: TaskSignInHold | null;
+  /** Why its next automatic start stands down: no account that could run it can run now (§7.5); null or absent otherwise. */
+  accountHold?: TaskAccountHold | null;
   // Keep this tied to the server's enum. A hand-written subset once omitted FAILED, so a failed
   // task reached the status-mark lookup at runtime even though TypeScript claimed it could not.
   status: TaskStatus;
@@ -2542,13 +2551,17 @@ function ProjectTaskRow({
                       reader who needs the exact moment behind a to-the-minute local rendering. */}
                   {starts ? (
                     <Badge>
-                      <time dateTime={starts.iso} title={starts.iso}>
-                        Starts {starts.local}
-                      </time>
+                      <Tooltip content={starts.iso} delay={TEXT_TOOLTIP_DELAY_MS}>
+                        <time dateTime={starts.iso}>
+                          Starts {starts.local}
+                        </time>
+                      </Tooltip>
                     </Badge>
                   ) : null}
                 </span>
               </h4>
+              {/* No account that could run it can run now (§7.5): one quiet line under the title, never a chip in it. */}
+              {task.accountHold && !task.hold ? <TaskAccountHoldLine hold={task.accountHold} /> : null}
               <div className="orbit-list-item-meta-description">
                 <span className="project-task-row-description">
                   {excerpt(task.acceptanceCriteria, 'No acceptance criteria set')}

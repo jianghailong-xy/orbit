@@ -71,6 +71,7 @@ function Page() {
     <>
       <Link to={`/tasks/${TASK}`}>first task</Link>
       <a href={`/tasks/${OTHER}`}>second task</a>
+      <Link to="/sessions/s2">other session</Link>
       {open && (
         <button type="button" onClick={close}>
           close {open}
@@ -87,6 +88,7 @@ function app(at: string) {
     <MemoryRouter initialEntries={[at]}>
       <Routes>
         <Route path="/sessions/:id" element={<Page />} />
+        <Route path="/inbox" element={<Page />} />
         <Route path="/projects/:id" element={<Page />} />
         <Route path="/tasks/:id" element={<Where />} />
       </Routes>
@@ -104,26 +106,59 @@ const press = (text: string, init: MouseEventInit = {}) =>
 
 describe('a task link pressed on a page that is not its home', () => {
   it('opens the task over the page, and close returns to the page', () => {
-    app('/sessions/s1?folder=f1');
+    app('/inbox?folder=f1');
     press('first task');
-    expect(where()).toBe(`/sessions/s1?folder=f1&task=${TASK}`);
+    expect(where()).toBe(`/inbox?folder=f1&task=${TASK}`);
     press(`close ${TASK}`);
-    expect(where()).toBe('/sessions/s1?folder=f1');
+    expect(where()).toBe('/inbox?folder=f1');
   });
 
   it('opens a plain anchor the same way, replacing the task already open', () => {
-    app(`/sessions/s1?task=${TASK}`);
+    app(`/inbox?task=${TASK}`);
     press('second task');
-    expect(where()).toBe(`/sessions/s1?task=${OTHER}`);
+    expect(where()).toBe(`/inbox?task=${OTHER}`);
     // Opened by an address, not from the page: close puts the page's own address in its place.
     press(`close ${OTHER}`);
-    expect(where()).toBe('/sessions/s1');
+    expect(where()).toBe('/inbox');
   });
 
   it('leaves a modified press to the browser', () => {
-    app('/sessions/s1');
+    app('/inbox');
     press('second task', { metaKey: true });
+    expect(where()).toBe('/inbox');
+  });
+});
+
+describe('a task opened beside a conversation (owner 2026-11-27)', () => {
+  const open = () => [...container.querySelectorAll('button')].map((b) => b.textContent);
+
+  it('opens without the address changing, and close leaves it as it was', () => {
+    app('/sessions/s1?folder=f1');
+    press('first task');
+    expect(where()).toBe('/sessions/s1?folder=f1');
+    expect(open()).toEqual([`close ${TASK}`]);
+    press(`close ${TASK}`);
+    expect(where()).toBe('/sessions/s1?folder=f1');
+    expect(open()).toEqual([]);
+  });
+
+  it('takes over a task a pasted address opened, so closing it leaves nothing open', () => {
+    app(`/sessions/s1?task=${TASK}`);
+    expect(open()).toEqual([`close ${TASK}`]);
+    press('second task');
     expect(where()).toBe('/sessions/s1');
+    expect(open()).toEqual([`close ${OTHER}`]);
+    press(`close ${OTHER}`);
+    expect(open()).toEqual([]);
+  });
+
+  it('is forgotten when the reader leaves the conversation', () => {
+    app('/sessions/s1');
+    press('first task');
+    expect(open()).toEqual([`close ${TASK}`]);
+    press('other session');
+    expect(where()).toBe('/sessions/s2');
+    expect(open()).toEqual([]);
   });
 });
 

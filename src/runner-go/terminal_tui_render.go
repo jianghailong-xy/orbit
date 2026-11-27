@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"strings"
 )
 
@@ -428,52 +427,6 @@ func (a tuiApproval) rememberRules() []map[string]string {
 		return rules
 	}
 	return []map[string]string{{"toolName": a.ToolName}}
-}
-
-// bashRulePrefixes is each distinct sub-command's program and, when the next word reads as a
-// sub-command, that word too, as web's bashPrefix (shared/src/bashRules.ts) takes them:
-// `cd x && npm test -- login` → ["cd x", "npm test"]. A line that runs a shell (`bash -c …`) has
-// none: a rule for it would allow anything.
-func bashRulePrefixes(command string) []string {
-	seen := map[string]bool{}
-	var out []string
-	for _, seg := range splitShellSegments(command) {
-		words := strings.Fields(seg)
-		for len(words) > 0 && tuiAssignment.MatchString(words[0]) {
-			words = words[1:] // FOO=bar before the program
-		}
-		if len(words) == 0 {
-			continue
-		}
-		program := words[0]
-		switch strings.TrimPrefix(program[strings.LastIndex(program, "/")+1:], "-") {
-		case "bash", "sh", "zsh", "dash", "fish", "ksh", "env", "sudo", "eval", "exec", "xargs":
-			return nil
-		}
-		if !tuiProgramWord.MatchString(program) {
-			continue
-		}
-		prefix := program
-		if len(words) > 1 && tuiSubcommandWord.MatchString(words[1]) {
-			prefix += " " + words[1]
-		}
-		if !seen[prefix] {
-			seen[prefix] = true
-			out = append(out, prefix)
-		}
-	}
-	return out
-}
-
-var (
-	tuiAssignment     = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
-	tuiProgramWord    = regexp.MustCompile(`^[A-Za-z./_-][\w./-]*$`)
-	tuiSubcommandWord = regexp.MustCompile(`^[A-Za-z][\w-]*$`)
-)
-
-func splitShellSegments(command string) []string {
-	r := strings.NewReplacer("&&", "\n", "||", "\n", ";", "\n", "|", "\n")
-	return strings.Split(r.Replace(command), "\n")
 }
 
 // rememberLabel names what [a] remembers: "npm test", or the tool's name.

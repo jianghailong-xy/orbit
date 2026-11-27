@@ -65,6 +65,7 @@ final class TranslationCopyParityTests: XCTestCase {
             ("sendFailed", TranslationCopy.sendFailed),
             ("retry", TranslationCopy.retry),
             ("sendAsWritten", TranslationCopy.sendAsWritten),
+            ("cancel", TranslationCopy.cancel),
             ("replyPending", TranslationCopy.replyPending),
             ("replyFailed", TranslationCopy.replyFailed),
             ("sentToAgent", TranslationCopy.sentToAgent),
@@ -143,6 +144,22 @@ final class TranslationCopyParityTests: XCTestCase {
         let shared = try source(Self.shared)
         assertContains(shared, "BILINGUAL_COLLAPSE_LINES = \(BilingualEnglish.collapseLines);", in: Self.shared)
         assertContains(shared, "BILINGUAL_LINE_CHARS = \(BilingualEnglish.lineChars);", in: Self.shared)
+    }
+
+    /// A held message's failed line ends in the web's order: Retry, Send as written, then Cancel
+    /// where the message can be withdrawn.
+    func testTheHeldMessagesFailedLineIsTheWebs() throws {
+        let web = try source(Self.parts)
+        assertContains(web, "<FootAction label={COPY.sendAsWritten} "
+            + "onPress={actions && turnId ? () => actions.sendAsWritten(turnId) : undefined} /> "
+            + "{cancelTurn && turnId && actions?.canCancelTurn?.(turnId) && ( <> <Sep /> "
+            + "<FootAction label={COPY.cancel} onPress={() => cancelTurn(turnId)} /> </> )}", in: Self.parts)
+        let held = TurnTranslation(state: .failed, from: .zhHans, original: "x")
+        let presses = SessionTranslation.userFoot(held, flipped: false, cancellable: true).compactMap { part -> String? in
+            if case .action(let label, _) = part { return label }
+            return nil
+        }
+        XCTAssertEqual(presses, ["Retry", "Send as written", "Cancel"])
     }
 
     /// The owner cards (board 04-owner-cards.html) draw two lines: the whole-card flip and an answer

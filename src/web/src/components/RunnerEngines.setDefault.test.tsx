@@ -8,6 +8,7 @@ import type { RunnerClaudeAccountSwapState, RunnerEngineAccount, RunnerEngineHea
 import { EngineRows } from './RunnerEngines.test-rows';
 import { dialogDescription, dialogName, openAccountGroups, openDialog, openRunnerMenu } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
  * Set as default on a runner's Claude Code accounts: an added account's ⋯ menu offers it, a
@@ -144,7 +145,9 @@ describe('Set as default in an account’s menu', () => {
     const item = (await setDefaultItem(workRow))!;
     expect(item.getAttribute('aria-disabled')).toBe('true');
     expect(hintOf(item)).toBe(reason);
-    expect(item.getAttribute('title')).toBe(reason);
+    // The reason is the app's tip beside the menu, not the browser's title (docs/mocks/web-tooltips-c, Q4).
+    expect(item.hasAttribute('title')).toBe(false);
+    expect(await hoverTooltip(item, 200)).toBe(reason);
   });
 });
 

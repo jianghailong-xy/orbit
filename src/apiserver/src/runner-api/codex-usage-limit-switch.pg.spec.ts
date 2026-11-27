@@ -27,7 +27,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import {
   AgentProvider,
   RunEventType,
@@ -46,6 +47,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import { CODEX_ACCOUNT_MOVE_V1, RunnerApiController } from './runner-api.controller';
+import { wordSql } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -175,7 +177,7 @@ async function fixture(
       provider: 'codex',
       codexAccount: 'default',
       codexAccountPinned: pinned,
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       engineTurnActive: true,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startedAt: new Date(),
@@ -228,7 +230,7 @@ test('a Codex session its account’s usage limit stopped goes on — on another
    *  timestamp without time zone holding UTC, which `pg` would read as local time: read as epoch. */
   async function row(sessionId: string) {
     const r = await sql.query(
-      `SELECT status, codex_account, pool_switch_notice, error,
+      `SELECT ${wordSql()} AS status, codex_account, pool_switch_notice, error,
               (EXTRACT(EPOCH FROM retry_at) * 1000)::float8 AS retry_ms
          FROM "session" WHERE id = $1::uuid`,
       [sessionId],
@@ -263,7 +265,7 @@ test('a Codex session its account’s usage limit stopped goes on — on another
     // not what this file is about, so stood in for by the state they leave). The engine that claim
     // starts announces itself, and the line rides that, once.
     await sql.query(
-      `UPDATE "session" SET status = 'RUNNING', cancel_requested_at = NULL, finished_at = NULL, retry_at = NULL
+      `UPDATE "session" SET "turn_state" = 'IN_FLIGHT', cancel_requested_at = NULL, finished_at = NULL, retry_at = NULL
         WHERE id = $1::uuid`,
       [f.sessionId],
     );

@@ -333,7 +333,7 @@ describe('opening a task link’s input file', { timeout: 60_000 }, () => {
     });
     await mount(`/s/${TOKEN}`);
     requests = [];
-    await act(async () => container.querySelector<HTMLButtonElement>('button[title="Open this file"]')!.click());
+    await act(async () => container.querySelector<HTMLButtonElement>('button.share-input')!.click());
     await settle();
     click.mockRestore();
     return { pressed, requests };

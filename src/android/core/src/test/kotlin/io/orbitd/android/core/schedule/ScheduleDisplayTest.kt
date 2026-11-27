@@ -13,6 +13,7 @@ import java.time.Instant
 import java.time.OffsetDateTime
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -445,5 +446,27 @@ class ScheduleDisplayTest {
         val collapsed = items.filterIsInstance<ScheduleDisplay.TimelineItem.Missed>().single()
         assertEquals(3, collapsed.runs.size)
         assertEquals(1, items.filterIsInstance<ScheduleDisplay.TimelineItem.Run>().size)
+    }
+
+    // Rename (§8.4)
+
+    @Test fun aRenameSavesTheTrimmedTitleAndNothingWhenEmptyOrUnchanged() {
+        assertEquals("New name", ScheduleDisplay.renameTitle("  New name \n", "Old name"))
+        assertNull(ScheduleDisplay.renameTitle("", "Old name"))
+        assertNull(ScheduleDisplay.renameTitle("   ", "Old name"))
+        assertNull(ScheduleDisplay.renameTitle("Old name", "Old name"))
+        assertNull(ScheduleDisplay.renameTitle(" Old name ", "Old name"))
+    }
+
+    @Test fun aPersonsRenameSaysWhatItWasCalled() {
+        fun record(changedBy: String, before: String?, after: String) = ScheduleChangeRecord("s", "t", revision = 2, changedBy = changedBy,
+            before = before?.let { Json.parseToJsonElement(it) as JsonObject }, after = Json.parseToJsonElement(after) as JsonObject)
+        val old = """{"title":"Codex check"}"""
+        val new = """{"title":"Codex stable check"}"""
+        assertEquals("Renamed from “Codex check”", ScheduleDisplay.renamedText(record("USER", old, new)))
+        assertNull(ScheduleDisplay.renamedText(record("SESSION", old, new)))
+        assertNull(ScheduleDisplay.renamedText(record("RUN", old, new)))
+        assertNull(ScheduleDisplay.renamedText(record("USER", null, new)))
+        assertNull(ScheduleDisplay.renamedText(record("USER", old, """{"title":"Codex stable check","note":"n"}""")))
     }
 }

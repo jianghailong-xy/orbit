@@ -30,7 +30,9 @@ struct OwnerRequestContent: View {
     var onChat: ((OwnerRequest) -> Void)? = nil
 
     var body: some View {
-        if request.kind == .settingsChange, [.pending, .done, .declined].contains(request.state) {
+        if request.kind == .projectReopen, [.pending, .done, .declined].contains(request.state) {
+            ProjectReopenCardView(model: model, request: request, onChat: onChat)
+        } else if request.kind == .settingsChange, [.pending, .done, .declined].contains(request.state) {
             SettingsChangeCardView(model: model, request: request)
         } else if request.state != .pending {
             OwnerRequestResolvedLine(model: model, request: request)
@@ -66,6 +68,8 @@ struct OwnerRequestCard: View {
     @State private var draft: OwnerRequests.SecretDraft
     @State private var chosen: Int?
     @State private var text = ""
+    /// CHANGE: the Max Concurrent the stepper holds, prefilled with the requested value.
+    @State private var maxValue: Int
     @State private var declining = false
     @State private var reason = ""
     @State private var busy = false
@@ -83,9 +87,13 @@ struct OwnerRequestCard: View {
         self.onChat = onChat
         _draft = State(initialValue: OwnerRequests.SecretDraft(spec: request.secretSpec))
         _chosen = State(initialValue: request.recommendedOption)
+        _maxValue = State(initialValue: max(1, request.changeSpec?.requested ?? 1))
     }
 
     private var runner: String { request.secretSpec.map { model.runnerName($0.runnerId) } ?? "this runner" }
+    private var changeRunner: String {
+        request.changeSpec.map { model.runnerName($0.runnerId) } ?? "this runner"
+    }
     private var grant: OwnerRequestSecretGrant? { request.kind == .secret ? request.secretGrant : nil }
     private var closed: Bool { OwnerRequests.pastDeadline(request) }
 
@@ -207,8 +215,10 @@ struct OwnerRequestCard: View {
             EmptyView()
         case .wikiCreate:
             OwnerRequestWikiCreateFacts(request: request)
-        case .settingsChange:
+        case .settingsChange, .projectReopen:
             EmptyView()
+        case .change:
+            if let spec = request.changeSpec { changeSetting(spec) }
         case .browserSignIn:
             VStack(alignment: .leading, spacing: 6) {
                 if let from = BrowserSignInCopy.fromSessionLine(request) {
@@ -219,6 +229,57 @@ struct OwnerRequestCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    /// A CHANGE card's setting block: live value → stepper, what is running, and what the number would do.
+    private func changeSetting(_ spec: OwnerRequestChangeSpec) -> some View {
+        let row = model.runnerRow(spec.runnerId)
+        let live = row?.maxConcurrent ?? spec.before
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(ChangeCopy.setting(changeRunner)).font(.orbitSubtext.weight(.semibold))
+            HStack(spacing: 10) {
+                Text("\(live)").font(.orbitControl).foregroundStyle(.secondary)
+                Text("→").foregroundStyle(.secondary)
+                changeStepper
+                if let running = row?.activeSessions {
+                    Text(ChangeCopy.runningNow(running)).font(.orbitLabel).foregroundStyle(.secondary)
+                }
+            }
+            if live != spec.before {
+                Text(ChangeCopy.wasWhenAsked(spec.before)).font(.orbitLabel).foregroundStyle(.secondary)
+            }
+            if let effect = ChangeCopy.effect(value: maxValue, live: live) {
+                Text(effect).font(.orbitLabel).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    @ViewBuilder private var changeStepper: some View {
+        #if os(macOS)
+        Stepper(value: $maxValue, in: 1...999) {
+            Text("\(maxValue)").font(.orbitControl.monospacedDigit()).frame(minWidth: 28, alignment: .trailing)
+        }
+        .accessibilityLabel(ChangeCopy.numberLabel)
+        .accessibilityIdentifier("owner-request-change-stepper")
+        #else
+        // A − / + stepper with no keyboard.
+        HStack(spacing: 0) {
+            Button { maxValue = max(1, maxValue - 1) } label: {
+                Image(systemName: "minus").frame(width: 40, height: 36)
+            }
+            .disabled(maxValue <= 1)
+            .accessibilityLabel("Decrease")
+            Text("\(maxValue)").font(.orbitControl.monospacedDigit()).frame(minWidth: 36)
+                .accessibilityIdentifier("owner-request-change-value")
+            Button { maxValue = min(999, maxValue + 1) } label: {
+                Image(systemName: "plus").frame(width: 40, height: 36)
+            }
+            .accessibilityLabel("Increase")
+        }
+        .buttonStyle(.plain)
+        .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+        .accessibilityIdentifier("owner-request-change-stepper")
+        #endif
     }
 
     private var decision: some View {
@@ -494,6 +555,11 @@ struct OwnerRequestCard: View {
     }
 
     private func pressPrimary() {
+        if request.kind == .change {
+            let value = maxValue
+            run { try await model.applyChange(request, maxConcurrent: value) }
+            return
+        }
         if request.kind == .secret {
             guard let body = draft.body else { return }
             // Emptied before the request goes out: nothing typed outlives the press.
@@ -711,7 +777,9 @@ struct OwnerRequestResolvedLine: View {
     @State private var busy = false
     @State private var failure: String?
 
-    private var runner: String { request.secretSpec.map { model.runnerName($0.runnerId) } ?? "this runner" }
+    private var runner: String {
+        (request.secretSpec?.runnerId ?? request.changeSpec?.runnerId).map(model.runnerName) ?? "this runner"
+    }
 
     private var icon: (String, Color) {
         switch request.state {

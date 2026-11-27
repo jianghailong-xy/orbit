@@ -17,6 +17,10 @@ type ExecResult struct {
 	CostUsd         float64
 	Usage           *TokenUsage
 	ModelUsage      map[string]interface{}
+	// Failure and Admission are what a SubAgent child failed with, as its engine's adapter classified it, and
+	// whether it produced anything first (engine_failure.go): carried on the fallback ask. Nil when not known.
+	Failure   *RunFailure
+	Admission *bool
 }
 
 type emitFn func(eventType string, payload map[string]interface{})
@@ -246,6 +250,7 @@ func isResumeCarrierResult(r ExecResult, streamedText string, compacted bool) bo
 var connectionFailureMarkers = [][]string{
 	{"attention required", "cloudflare"}, // Cloudflare's block page in front of the API
 	{"econnreset"},                       // the socket dropped mid-request
+	{"read: connection timed out"},       // a provider's gateway timed out on its upstream (DashScope 406)
 }
 
 // isConnectionFailure reports whether a runtime's text carries a failure of the connection to the
@@ -291,6 +296,41 @@ func isAuthError(s string) bool {
 		return false
 	}
 	return strings.HasPrefix(strings.TrimSpace(s), "Failed to authenticate")
+}
+
+// claudeFailureRules is Claude Code's table (§5.3), first match wins; each row's recorded sample is in
+// claude_failure_test.go. Claude Code says all of these itself, as the turn's whole reply, so the Text is the
+// reply as it is.
+//   - a spent window opens with "You've hit your … limit" (USAGE_LIMIT_ERROR_MARKERS);
+//   - "Failed to authenticate" wraps a refused credential, and also a failure of the connection — Cloudflare's
+//     block page, a dropped socket — which says nothing of the account (isConnectionFailure): those two come
+//     first, and claudeTurnFailureOf keeps the carve-out whatever the table says.
+//
+// Not mapped: an overloaded API error (no sample of Claude Code's own words for one is recorded here; the
+// shapes in the repository are a fake model's), "Not logged in · Please run /login" (no recorded turn).
+var claudeFailureRules = []failureRule{
+	{Prefix: "You've hit your session limit", Kind: failureUsageLimit},
+	{Prefix: "You've hit your 5-hour limit", Kind: failureUsageLimit},
+	{Prefix: "You've hit your weekly limit", Kind: failureUsageLimit},
+	{Prefix: "Failed to authenticate", AndContains: "ECONNRESET", Kind: failureTransport},
+	{Prefix: "Failed to authenticate", AndContains: "Attention Required! | Cloudflare", Kind: failureTransport},
+	{Prefix: "Failed to authenticate", Kind: failureCredentialRefused},
+}
+
+// claudeTurnFailureOf is what a failed Claude turn failed with: the first of texts (its result, its last reply)
+// that claudeFailureRules classifies; unclassified when none is. A text isConnectionFailure reads as the
+// connection's is never a refused credential.
+func claudeTurnFailureOf(texts ...string) engineFailure {
+	for _, text := range texts {
+		failure := matchFailure(claudeFailureRules, text, "")
+		if failure.Kind == failureCredentialRefused && isConnectionFailure(failure.Said) {
+			failure.Kind = failureTransport
+		}
+		if failure.Kind != "" {
+			return failure
+		}
+	}
+	return engineFailure{}
 }
 
 // asAuthError puts a rejected-credentials error into the shape the clients recognise.
@@ -356,6 +396,42 @@ func assistantText(msg map[string]interface{}) string {
 		}
 	}
 	return b.String()
+}
+
+// claudeTurnOutput is what a Claude turn put out before its result, for §5.2's admission: how many replies
+// carried text, the last of them, and whether any carried anything else (a tool call, thinking).
+type claudeTurnOutput struct {
+	texts int
+	last  string
+	other bool
+}
+
+// observe counts one stream message of the turn; only assistant messages put anything out.
+func (o *claudeTurnOutput) observe(msg map[string]interface{}) {
+	if msg["type"] != "assistant" {
+		return
+	}
+	message, _ := msg["message"].(map[string]interface{})
+	content, _ := message["content"].([]interface{})
+	for _, c := range content {
+		if block, _ := c.(map[string]interface{}); block["type"] != "text" {
+			o.other = true
+		}
+	}
+	if text := strings.TrimSpace(assistantText(msg)); text != "" {
+		o.texts++
+		o.last = text
+	}
+}
+
+// produced: the turn put out something other than failureText, the failure's own words, as its one reply.
+func (o claudeTurnOutput) produced(failureText string) bool {
+	return o.other || o.texts > 1 || (o.texts == 1 && o.last != strings.TrimSpace(failureText))
+}
+
+// admission is §5.2's measurement of a Claude turn that failed with failureText.
+func (o claudeTurnOutput) admission(r ExecResult, failureText string) *bool {
+	return turnAdmission(o.produced(failureText), r.Usage, r.CostUsd)
 }
 
 func resultFrom(msg map[string]interface{}, ctx context.Context) ExecResult {

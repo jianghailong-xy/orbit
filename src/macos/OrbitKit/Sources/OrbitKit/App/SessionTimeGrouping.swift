@@ -16,20 +16,26 @@ public struct SessionTimeSection: Identifiable, Equatable, Sendable {
     }
 }
 
-/// Buckets a per-agent session list into the iOS list's recency sections. The clients diverge from
-/// web's flat list here (a deliberate, ChatGPT-style redesign): pinned sessions are lifted into a
-/// leading "Pinned" section, and the rest are grouped by the calendar day of their last activity.
+/// Buckets a per-agent session list into the list's sections, the rule web (`sessionTimeSections`)
+/// and Android (`directoryGroups`) are held to as well: contracts/session-list-order.fixtures.json.
+/// Pinned sessions are lifted into a leading "Pinned" section, and the rest are grouped by the
+/// calendar day they were listed.
 public enum SessionTimeGrouping {
-    /// Group a **console-sorted** list (pinned-first, then `listedAt` — see `SessionFilter`) into
-    /// ordered sections. When `pinnedFirst` (Open, where pinning applies), each session goes to the
-    /// first section that takes it: "Pinned" (pinnedAt set), "Needs you" (pending approvals, or
-    /// FAILED with no retry armed), "Working" (running or queued, or FAILED with a retry armed);
-    /// every other session buckets by the calendar day of `listedAt ?? createdAt` into Today /
-    /// Yesterday / 2–7 days ago / 8–30 days ago / Older. Order within each bucket is preserved
-    /// (so recency still holds), empty buckets are dropped, and a session with no/unparseable
+    /// Group a session list into ordered sections. Each session goes to the first section that
+    /// takes it: "Pinned" (pinnedAt set; only when `pinnedFirst`, Open with no tag filter), "Needs
+    /// you" (pending approvals, or FAILED with no retry armed) and "Working" (phase RUNNING or
+    /// PENDING, so a background job or SubAgent between turns counts; or FAILED with a retry armed),
+    /// both only when `attention` (Open; defaults to `pinnedFirst`); every other session buckets by
+    /// the calendar day of `listedAt ?? createdAt` into Today / Yesterday / 2–7 days ago / 8–30 days
+    /// ago / Older. Each section is ordered by `listedAt`, then `createdAt`, then id, so a pin
+    /// counts only in Pinned; with `keepOrder` (Completed's server order; defaults to `!attention`)
+    /// the given order is kept. Empty buckets are dropped, and a session with no/unparseable
     /// timestamp falls to "Older". `now` and `calendar` are injectable for deterministic tests.
-    public static func sections(_ sessions: [Session], pinnedFirst: Bool = true,
+    public static func sections(_ sessions: [Session], pinnedFirst: Bool = true, attention: Bool? = nil,
+                                keepOrder: Bool? = nil,
                                 now: Date = Date(), calendar: Calendar = .current) -> [SessionTimeSection] {
+        let attention = attention ?? pinnedFirst
+        let keepOrder = keepOrder ?? !attention
         var pinned: [Session] = []
         var needsYou: [Session] = []
         var working: [Session] = []
@@ -42,19 +48,20 @@ public enum SessionTimeGrouping {
             // Only Open honours pins; elsewhere a (possibly stale) pinnedAt just buckets
             // by time like any other session, so no "Pinned" section appears in Completed/Trash.
             if pinnedFirst, s.pinnedAt != nil { pinned.append(s); continue }
-            if pinnedFirst {
+            if attention {
                 if needsOwner(s) { needsYou.append(s); continue }
                 if isWorking(s) { working.append(s); continue }
             }
             buckets[bucketIndex(for: s, today: today, calendar: calendar)].append(s)
         }
 
+        let ordered: ([Session]) -> [Session] = { keepOrder ? $0 : SessionFilter.listedOrder($0) }
         var out: [SessionTimeSection] = []
-        if !pinned.isEmpty { out.append(SessionTimeSection(title: "Pinned", sessions: pinned)) }
-        if !needsYou.isEmpty { out.append(SessionTimeSection(title: "Needs you", sessions: needsYou)) }
-        if !working.isEmpty { out.append(SessionTimeSection(title: "Working", sessions: working)) }
+        if !pinned.isEmpty { out.append(SessionTimeSection(title: "Pinned", sessions: ordered(pinned))) }
+        if !needsYou.isEmpty { out.append(SessionTimeSection(title: "Needs you", sessions: ordered(needsYou))) }
+        if !working.isEmpty { out.append(SessionTimeSection(title: "Working", sessions: ordered(working))) }
         for (i, items) in buckets.enumerated() where !items.isEmpty {
-            out.append(SessionTimeSection(title: titles[i], sessions: items))
+            out.append(SessionTimeSection(title: titles[i], sessions: ordered(items)))
         }
         return out
     }
@@ -62,11 +69,16 @@ public enum SessionTimeGrouping {
     /// Needs the owner: something is waiting on them, or the run failed and no retry is armed.
     private static func needsOwner(_ s: Session) -> Bool {
         if (s.pendingApprovals ?? 0) > 0 { return true }
-        return s.effectiveRunState == .failed && s.retryAt == nil
+        // With the session facts, the state word's own reading (an end the runner never confirmed is Ended, not
+        // Failed); from an older server, the legacy run state.
+        let failed = s.phase != nil && s.released != nil ? s.displayRunState == .failed : s.effectiveRunState == .failed
+        return failed && s.retryAt == nil
     }
 
-    /// Running or queued, or failed with a retry armed (the server is retrying it).
+    /// Running or queued, or failed with a retry armed (the server is retrying it). With the session
+    /// facts, `phase` decides: RUNNING covers work outside a turn (a background job, a SubAgent).
     private static func isWorking(_ s: Session) -> Bool {
+        if let phase = s.phase, phase == .running || phase == .pending { return true }
         switch s.effectiveRunState {
         case .running, .queued: return true
         case .failed: return s.retryAt != nil

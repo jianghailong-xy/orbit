@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
 import { resetTranslationBreaker } from './translation';
 import { ConflictException, UnprocessableEntityException } from '@nestjs/common';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { AgentProvider, RunEventType, type NormalizedRunEvent } from '@orbit/shared';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { RealtimeService } from '../realtime/realtime.service';

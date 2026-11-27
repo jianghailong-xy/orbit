@@ -6,14 +6,14 @@ routes: [/, /runners/register, /settings/general]
 errors: []
 platforms: [web, macos, ios, android]
 common: false
-updated: 2026-11-17
+updated: 2026-11-26
 ---
 
 Orbit gives a coding agent a computer and a task, and keeps the conversation and its results in one place, on the web and on your phone.
 
 ## The four things you work with
 
-- **Machine.** A computer that runs your agents: your laptop, a Linux box or a server. It runs a small program, the runner, and the engines installed on it (Claude Code, Codex, Cursor and others). Machines are listed under **Settings → Machines**.
+- **Machine.** A computer that runs your agents: your laptop, a Linux box or a server. It runs a small program, the runner, and the engines installed on it (Claude Code, Codex, Cursor and others). Machines are listed under **Settings → Machines**. [How runners and the server work together](orbit:/help/machines-and-engines/how-runners-and-the-server-work) explains how they connect.
 - **Workspace.** A folder on one machine, usually a Git repository. Every agent conversation happens inside a workspace.
 - **Session.** One conversation with an agent in a workspace. You write a message, the agent works, and the transcript keeps every message, tool call and result.
 - **Task.** A piece of work with a definition of done. Tasks can stand alone or belong to a **project**, a goal with a graph of tasks that a coordinator works through until the result is merged.

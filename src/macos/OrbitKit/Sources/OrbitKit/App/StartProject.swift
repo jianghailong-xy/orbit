@@ -229,10 +229,14 @@ public struct ProjectStartRequest: Codable, Equatable, Sendable {
     public let repository: String?
     /// The check's warnings: what the owner should know before pressing Start.
     public let warnings: [ProjectStartFinding]
+    /// The project's default branch as a full `refs/heads/project/<title slug>-<8 chars>` ref; nil
+    /// from a server that predates it.
+    public let defaultProjectBranchName: String?
 
     public init(settings: ProjectStartSettings, why: String = "", criteriaDigest: String,
                 planDigest: String = "", repository: String? = nil,
-                warnings: [ProjectStartFinding] = []) {
+                warnings: [ProjectStartFinding] = [], defaultProjectBranchName: String? = nil) {
+        self.defaultProjectBranchName = defaultProjectBranchName
         self.settings = settings
         self.why = why
         self.criteriaDigest = criteriaDigest
@@ -249,6 +253,7 @@ public struct ProjectStartRequest: Codable, Equatable, Sendable {
         planDigest = try c.decodeIfPresent(String.self, forKey: .planDigest) ?? ""
         repository = try c.decodeIfPresent(String.self, forKey: .repository)
         warnings = (try? c.decodeIfPresent([ProjectStartFinding].self, forKey: .warnings)) ?? []
+        defaultProjectBranchName = try? c.decodeIfPresent(String.self, forKey: .defaultProjectBranchName)
     }
 }
 
@@ -763,10 +768,11 @@ public enum StartProject {
         return RunSettings.mainBranchName(chosen ?? standing?.lastMainBranch?.branch ?? suggested)
     }
 
-    /// The project branch as the first option names it: the ref the coordinator named, or the
-    /// project's own default, without `refs/heads/`.
+    /// The project branch as the first option names it: the ref the coordinator named, else the
+    /// server's default name, else (an older server) `project/<id>`, without `refs/heads/`.
     public static func branch(_ request: ProjectStartRequest, projectID: String) -> String {
-        let ref = request.settings.projectBranchName ?? "refs/heads/project/\(projectID)"
+        let ref = request.settings.projectBranchName ?? request.defaultProjectBranchName
+            ?? "refs/heads/project/\(projectID)"
         return ref.hasPrefix("refs/heads/") ? String(ref.dropFirst("refs/heads/".count)) : ref
     }
 
@@ -1285,14 +1291,17 @@ public enum RunSettings {
             && (mergeCheckCommand ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    /// A project branch as a line names it: without `refs/heads/`, and `project/<id>` down to the
-    /// first five characters of the id, which is how a reader tells two of them apart.
+    /// A project branch as a line names it: without `refs/heads/`. Only the old bare-id form,
+    /// `project/<20 or more letters and digits>`, is cut to the first five characters of the id;
+    /// a readable `project/<slug>-<8 chars>` is shown whole.
     public static func shortBranch(_ ref: String) -> String {
         let name = ref.hasPrefix("refs/heads/") ? String(ref.dropFirst("refs/heads/".count)) : ref
         let prefix = "project/"
         guard name.hasPrefix(prefix) else { return name }
         let id = Array(name.dropFirst(prefix.count).unicodeScalars)
-        guard id.count >= 6, !id.contains(where: { $0 == "\n" || $0 == "\r" }) else { return name }
+        guard id.count >= 20, !id.contains(where: { $0 == "\n" || $0 == "\r" }),
+              id.allSatisfy({ (48...57).contains($0.value) || (65...90).contains($0.value) || (97...122).contains($0.value) })
+        else { return name }
         var head = String.UnicodeScalarView()
         head.append(contentsOf: id.prefix(5))
         return "\(prefix)\(String(head))…"

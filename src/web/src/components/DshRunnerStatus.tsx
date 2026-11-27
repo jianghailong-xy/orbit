@@ -11,6 +11,7 @@ import { EngineTile } from './ProviderGallery';
 import type { Runner } from './TasksSidePanel';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * DeepSeek Harness on one machine, as a row of its card in Infrastructure's Machines (and of the
@@ -52,10 +53,12 @@ export function DshRunnerStatus({ runner }: { runner: Runner }) {
             <div className="re-meta">
               {health.version ? engineVersionNumber(health.version) : 'version not reported'}
               {note && (
-                <span className={`re-upd${note.tone === 'warn' && runner.online ? ' warn' : ''}`} title={health.update?.message}>
-                  {' '}
-                  · {note.text}
-                </span>
+                <Tooltip content={health.update?.message} delay={TEXT_TOOLTIP_DELAY_MS}>
+                  <span className={`re-upd${note.tone === 'warn' && runner.online ? ' warn' : ''}`}>
+                    {' '}
+                    · {note.text}
+                  </span>
+                </Tooltip>
               )}
             </div>
           ) : (

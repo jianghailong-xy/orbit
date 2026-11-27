@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useNavigate, type NavigateFunction } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastViewport } from '../components/ToastViewport';
 import { useToast } from './toast';
@@ -19,6 +19,12 @@ const SESSION = '0196b000-0000-7000-8000-000000000001';
 
 let container: HTMLDivElement;
 let root: Root;
+// The test's own way around the app, as a click elsewhere would take the reader.
+let go: NavigateFunction;
+function Steer() {
+  go = useNavigate();
+  return null;
+}
 
 beforeEach(async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -33,7 +39,9 @@ beforeEach(async () => {
         <Routes>
           <Route path="/" element={<p className="where">home</p>} />
           <Route path="/sessions/:id" element={<p className="where">session</p>} />
+          <Route path="/schedules" element={<p className="where">schedules</p>} />
         </Routes>
+        <Steer />
         <ToastViewport />
       </MemoryRouter>,
     );
@@ -75,8 +83,45 @@ describe('a toast says what happened to what', () => {
     expect(card.classList.contains('toast--error')).toBe(true);
     expect(card.querySelector('.toast-head')?.textContent).toBe("Couldn't save the schedule");
     expect(card.querySelector('.toast-reason')?.textContent).toBe('revision 12 is stale');
-    expect(card.querySelector('button[aria-label="Dismiss"]')).not.toBeNull();
-    expect([...card.querySelectorAll('button')].map((b) => b.textContent)).toContain('Copy error');
+    // Its × is its only button: the card itself is the way to where it happened.
+    expect([...card.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'))).toEqual(['Dismiss']);
+  });
+
+  it('takes a failure raised on another page back there from anywhere on the card', async () => {
+    await act(async () => go('/schedules'));
+    await act(async () => {
+      toast.error("Couldn't save the schedule", 'revision 12 is stale');
+    });
+    await act(async () => go('/'));
+    const [card] = toasts();
+    expect(card.querySelector('.toast-copy--link')?.getAttribute('aria-label')).toBe('Go to where this happened');
+    await act(async () => card.querySelector<HTMLElement>('.toast-reason')!.click());
+    expect(document.querySelector('.where')?.textContent).toBe('schedules');
+    expect(toasts()).toHaveLength(0);
+  });
+
+  it('leaves a failure raised on the page on screen up after a stray click, for its ×', async () => {
+    await act(async () => {
+      toast.error("Couldn't save the schedule", 'revision 12 is stale');
+    });
+    const [card] = toasts();
+    expect(card.classList.contains('toast--opens')).toBe(false);
+    await act(async () => card.click());
+    expect(toasts()).toHaveLength(1);
+    await act(async () => card.querySelector<HTMLButtonElement>('button[aria-label="Dismiss"]')!.click());
+    expect(toasts()).toHaveLength(0);
+  });
+
+  it("runs a failure's own fix from the card, with no button for it", async () => {
+    const reload = vi.fn();
+    await act(async () => {
+      showToast({ message: "Part of this page didn't load", tone: 'warning', action: { label: 'Reload', ariaLabel: 'Reload the page', onClick: reload } });
+    });
+    const [card] = toasts();
+    expect([...card.querySelectorAll('button')].map((b) => b.textContent || b.getAttribute('aria-label'))).not.toContain('Reload');
+    await act(async () => card.click());
+    expect(reload).toHaveBeenCalledOnce();
+    expect(toasts()).toHaveLength(0);
   });
 
   it('keeps a failure on screen when later toasts arrive, above them', async () => {
@@ -230,12 +275,9 @@ describe('a session result', () => {
     });
     const [card] = toasts();
     expect(card.classList.contains('toast--attention')).toBe(true);
-    // The press only follows the toast, so it belongs to the card — no "Open session" beside it. A
-    // button is left for what does more than follow it (Resolve in session) or acts on its words.
-    expect([...card.querySelectorAll('.toast-actions button')].map((one) => one.textContent)).toEqual(['Copy error']);
-    await act(async () => {
-      card.querySelector<HTMLButtonElement>('.toast-copy--link')!.click();
-    });
+    // The press only follows the toast, so it belongs to the card — no button beside it but its ×.
+    expect(card.querySelector('.toast-actions')).toBeNull();
+    await act(async () => card.click());
     expect(document.querySelector('.where')?.textContent).toBe('session');
     expect(toasts()).toHaveLength(0);
   });

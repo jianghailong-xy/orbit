@@ -27,6 +27,11 @@ const codexAccountLoginCapabilityV1 = "codex-account-login/v1"
 
 const antigravityGoogleLoginCapabilityV1 = "antigravity-google-login/v1"
 
+// antigravityGoogleLoginMacOSCapabilityV1 declares that this runner also signs Antigravity in with
+// Google on macOS, kept to a token file per account there as on Linux (antigravityTokenFileOnlyEnv).
+// A Mac runner without it refuses the sign-in, so the control plane asks for an update instead.
+const antigravityGoogleLoginMacOSCapabilityV1 = "antigravity-google-login-macos/v1"
+
 // lookLoginEngine is lookEngine, the binary the relay probes. A variable so a test can stand a
 // fake CLI in: the service PATH lookEngine searches puts ~/.local/bin first, where a dev machine's
 // real codex lives.
@@ -347,8 +352,8 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 		report(LoginResultRequest{Status: loginFailed, Message: "OpenCode sign-in is provider-specific — run `opencode auth login` on this runner and choose the provider there", Attempt: attempt})
 		return
 	}
-	if flow.engine == providerAntigravity && runtime.GOOS != "linux" {
-		report(LoginResultRequest{Status: loginFailed, Message: "Signing Antigravity in with Google works only on a Linux runner for now.", Attempt: attempt})
+	if flow.engine == providerAntigravity && runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		report(LoginResultRequest{Status: loginFailed, Message: "Signing Antigravity in with Google works only on a Linux or macOS runner for now.", Attempt: attempt})
 		return
 	}
 	// An engine whose CLI keeps a login per directory can sign in another account; every other
@@ -554,7 +559,7 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 			giveUp("could not prepare the Google sign-in: " + firstLine(err.Error()))
 			return
 		}
-		cmd.Env = envWithValue(cmd.Env, "SSH_CONNECTION", "127.0.0.1 1 127.0.0.1 2")
+		cmd.Env = envWithValue(cmd.Env, "SSH_CONNECTION", antigravitySSHConnection)
 		cmd.Env = envWithValue(cmd.Env, "TERM", "xterm-256color")
 		finishGoogle, err = preserveAntigravityGoogleLogin(antigravityGoogleDirIn(env))
 		if err != nil {

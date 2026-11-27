@@ -37,10 +37,10 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import {
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -124,7 +124,7 @@ async function fixture(db: PrismaClient, label: string): Promise<Fixture> {
       title: `协调：${label}`,
       prompt: `协调：${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
       startedAt: new Date(),
@@ -154,7 +154,7 @@ async function fixture(db: PrismaClient, label: string): Promise<Fixture> {
       title: `协调：${label}（已关掉）`,
       prompt: `协调：${label}（已关掉）`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
       startedAt: new Date(),

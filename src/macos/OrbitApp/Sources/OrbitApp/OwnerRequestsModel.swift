@@ -32,6 +32,8 @@ final class OwnerRequestsModel {
 
     /// A runner's name for "Delivered to Runner HPC", from the app's runner snapshot.
     var runnerName: (String) -> String = { _ in "this runner" }
+    /// A runner's live row (Max Concurrent, sessions running) for a CHANGE card.
+    var runnerRow: (String) -> Runner? = { _ in nil }
 
     /// Called after every read of the waiting terminals, whether or not the list moved: the app's
     /// one-time notice takes its stock on the first read and speaks on the ones after it (iOS).
@@ -148,6 +150,17 @@ final class OwnerRequestsModel {
     /// DONE. A refusal 409 SETTINGS_STALE is thrown for the card to say so.
     func applySettings(_ request: OwnerRequest) async throws {
         adopt(try await api.applyOwnerRequestSettings(request.id))
+    }
+
+    /// A CHANGE card's Apply: the server writes the runner's Max Concurrent and answers with the card, DONE.
+    func applyChange(_ request: OwnerRequest, maxConcurrent: Int) async throws {
+        adopt(try await api.applyOwnerRequestChange(request.id, OwnerRequestApplyBody(maxConcurrent: maxConcurrent)))
+    }
+
+    /// A PROJECT_REOPEN card's Reopen: the server reopens the project as the project page's press does, settles every
+    /// pending reopen request of it, and answers with this card, DONE.
+    func reopenProject(_ request: OwnerRequest) async throws {
+        adopt(try await api.reopenProjectFromOwnerRequest(request.id))
     }
 
     func decline(_ request: OwnerRequest, reason: String, sendAsWritten: Bool = false) async throws {

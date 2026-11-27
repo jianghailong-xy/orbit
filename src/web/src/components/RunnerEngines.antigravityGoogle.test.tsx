@@ -75,7 +75,7 @@ describe('Antigravity Google login across client surfaces', () => {
     expect(machineRow(fixtures.google).textContent).toBe(rendered.textContent);
   });
 
-  it.each([['macos', 'not supported on macOS runners yet'], ['old', 'Update this runner']])('gates %s runners without offering Google sign-in', (state, hint) => {
+  it.each([['macos', 'operating system. Use a Gemini API key.'], ['old', 'Update this runner']])('gates %s runners without offering Google sign-in', (state, hint) => {
     const rendered = row(state);
     expect(rendered.textContent).toContain(hint);
     expect(rendered.textContent).not.toContain('Sign in with Google');
@@ -97,7 +97,7 @@ describe('Antigravity Google login across client surfaces', () => {
     expect(rendered.querySelector('button')).toBeNull();
   });
 
-  it.each([['macos', 'not supported on macOS runners yet'], ['old', 'Update this runner']])('preserves the env-key identity and %s Google-login guidance on the runner page', (state, hint) => {
+  it.each([['macos', 'operating system. Use a Gemini API key.'], ['old', 'Update this runner']])('preserves the env-key identity and %s Google-login guidance on the runner page', (state, hint) => {
     const runner = structuredClone(fixtures['env-key']);
     runner.antigravity!.googleLogin = fixtures[state].antigravity!.googleLogin;
     for (const view of [machinePage(runner), <EngineRows />]) {
