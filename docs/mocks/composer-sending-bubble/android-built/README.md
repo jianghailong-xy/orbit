@@ -4,6 +4,7 @@ Emulator frames of the bubble in an existing session, beside the owner-confirmed
 `../04-native-parity.html` (decisions of 2026-11-27). Pixel 10 Pro display (1280×2856 @480),
 API 36, light, against the composer fixture (`src/android/scripts/composer-fixture.py`), from
 `ComposerDeviceTest#sendingBubbleStates` on app code `a987e29baf` (`identity.txt`, dirty=false).
+`not-sent-unanswered.png` was retaken on `25c4f3ce9c`, where a Not sent bubble draws at full strength (as on web).
 
 | Frame | State |
 | --- | --- |
