@@ -335,6 +335,35 @@
         "sentAt": "2026-11-20T19:24:00.000Z",
         "payload": "{\"kind\":\"schedule\",\"scheduleKind\":\"FINDING\",\"scheduleID\":\"019a0000-0000-7000-8000-000000000023\",\"sessionID\":\"019a0000-0000-7000-8000-000000000024\",\"title\":\"Ceph capacity guard\",\"body\":\"Raw used 90.4%. Above 90% for 10 min. 14 old RBD snapshots hold 1.1 TiB; one proposal is waiting for you.\",\"threadId\":\"schedule-019a0000-0000-7000-8000-000000000023\"}"
       }
+    },
+    {
+      "name": "decision-card",
+      "pushType": "alert",
+      "collapseId": "decision-card-evidence:019a0000-0000-7000-8000-000000000027",
+      "source": {
+        "aps": {
+          "alert": {
+            "title": "Archive the August receipts",
+            "body": "Does this evidence settle the task? · Revision 1"
+          },
+          "sound": "default",
+          "badge": 2,
+          "thread-id": "task-019a0000-0000-7000-8000-000000000026"
+        },
+        "kind": "decision-card",
+        "cardKind": "EVIDENCE",
+        "sessionID": "019a0000-0000-7000-8000-000000000025",
+        "taskID": "019a0000-0000-7000-8000-000000000026"
+      },
+      "data": {
+        "version": "1",
+        "type": "alert",
+        "registrationKey": "019a0000-0000-7000-8000-000000000001",
+        "eventId": "40000000-0000-4000-8000-00000000000e",
+        "notificationKey": "decision-card-evidence:019a0000-0000-7000-8000-000000000027",
+        "sentAt": "2026-11-27T02:00:00.000Z",
+        "payload": "{\"kind\":\"decision-card\",\"cardKind\":\"EVIDENCE\",\"sessionID\":\"019a0000-0000-7000-8000-000000000025\",\"taskID\":\"019a0000-0000-7000-8000-000000000026\",\"title\":\"Archive the August receipts\",\"body\":\"Does this evidence settle the task? · Revision 1\",\"threadId\":\"task-019a0000-0000-7000-8000-000000000026\",\"badge\":2}"
+      }
     }
   ]
 }
