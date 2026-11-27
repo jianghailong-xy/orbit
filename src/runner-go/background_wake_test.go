@@ -253,7 +253,9 @@ func tail(s string, n int) string {
 // passes it by, a merge or commit receipt names it), and it takes no admission slot: a session
 // parked on a forty-minute CI wait must not keep new work off the runner.
 func TestWatchJobHoldsTheCheckoutWithoutTakingAnAdmissionSlot(t *testing.T) {
-	pool := newSessionPool(1)
+	// Two slots: background jobs alone never take a runner's last one (backgroundSlotsLocked), so on one slot a job
+	// would take nothing either, and the pair below would prove nothing.
+	pool := newSessionPool(2)
 	events := &bgJobEvents{}
 	ctx, cancel := context.WithCancel(context.Background())
 	bg := newBgTailer(ctx, events.emit, pool.worktreeHoldsFor("watcher"))
@@ -282,8 +284,8 @@ func TestWatchJobHoldsTheCheckoutWithoutTakingAnAdmissionSlot(t *testing.T) {
 	if len(holders) != 1 || holders[0].kind != worktreeHeldByBackgroundJob {
 		t.Errorf("holders of the checkout = %v, want the watch job", holders)
 	}
-	if idle := pool.admissionIdleCapacity(); idle != 1 {
-		t.Fatalf("idle capacity beside a watch job = %d, want 1: a watch takes no admission slot", idle)
+	if idle := pool.admissionIdleCapacity(); idle != 2 {
+		t.Fatalf("idle capacity beside a watch job = %d, want 2: a watch takes no admission slot", idle)
 	}
 
 	// The paired positive: a job of the same session does take the slot.
@@ -293,12 +295,12 @@ func TestWatchJobHoldsTheCheckoutWithoutTakingAnAdmissionSlot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if idle := pool.admissionIdleCapacity(); idle != 0 {
-		t.Fatalf("idle capacity beside a running job = %d, want 0", idle)
+	if idle := pool.admissionIdleCapacity(); idle != 1 {
+		t.Fatalf("idle capacity beside a running job = %d, want 1", idle)
 	}
 	bg.killJob(build.JobID, bgKillTeardownGrace)
 	awaitCondition(t, 10*time.Second, "the slot never came back after the job ended", func() bool {
-		return pool.admissionIdleCapacity() == 1
+		return pool.admissionIdleCapacity() == 2
 	})
 	if !processAlive(watch.PID) {
 		t.Fatal("the watch job stopped when the job beside it was killed")
