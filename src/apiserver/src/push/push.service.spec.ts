@@ -1454,3 +1454,34 @@ test('a decision card in a muted conversation, one with needs-you off, or one in
     assert.deepEqual(sent, [], JSON.stringify(session));
   }
 });
+
+test('a coordinator’s raise takes the owner confirmation’s one push: the sweep, or a replay, does not ring it again', async () => {
+  const { service, sent } = deviceAlertHarness();
+  const claimed = new Set<string>();
+  const claims: unknown[] = [];
+  Object.assign((service as any).prisma, {
+    taskOwnerConfirmationReviewRecord: {
+      findUnique: async () => ({
+        kind: 'REVIEW', ownerId: 'owner-1', taskId: 'task-1', body: { needsYou: [{}, {}] }, task: { title: 'Rotate the keys' },
+        review: { request: { id: 'request-1', sessionId: 'run-1' } },
+      }),
+    },
+    // `owner_card_push`'s unique key, as ON CONFLICT DO NOTHING answers it.
+    ownerCardPush: {
+      createMany: async ({ data }: { data: Array<{ ownerId: string; cardKey: string }> }) => {
+        claims.push(...data);
+        const key = `${data[0].ownerId}:${data[0].cardKey}`;
+        if (claimed.has(key)) return { count: 0 };
+        claimed.add(key);
+        return { count: 1 };
+      },
+    },
+  });
+  await service.notifyConfirmationRaised('record-1');
+  assert.equal(sent.length, 1, 'the raise rings');
+  assert.equal(sent[0].payload.kind, 'confirmation-raised');
+  assert.deepEqual(claims[0], { ownerId: 'owner-1', cardKey: 'owner-confirmation:request-1', kind: 'OWNER_CONFIRMATION', sessionId: 'run-1' },
+    'claiming the key the decision-card sweep reads for this request');
+  await service.notifyConfirmationRaised('record-1');
+  assert.equal(sent.length, 1, 'a second raise of the same request finds it claimed');
+});
