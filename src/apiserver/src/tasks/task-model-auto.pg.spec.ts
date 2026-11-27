@@ -270,7 +270,7 @@ test('task create, pin and start keep every task run on a model that has Auto', 
     await h.db.session.create({
       data: {
         id: coordinator, title: 'coordinating', prompt: 'coordinate', ownerId: a.ownerId, creatorId: a.ownerId,
-        workspaceId: a.workspaceId, assignedRunnerId: a.runnerId, status: 'AWAITING_INPUT', provider: 'claude', engine: 'claude',
+        workspaceId: a.workspaceId, assignedRunnerId: a.runnerId, provider: 'claude', engine: 'claude',
       },
     });
     const projectId = randomUUID();
