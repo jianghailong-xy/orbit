@@ -565,6 +565,29 @@ final class ConsoleModel {
     /// Keeps the composer's contents put and the send button spinning until the ids land.
     private(set) var waitingForUploads = false
     private(set) var sending = false
+    /// A new session's first message while it waits for its session: drawn on the new-session page as the
+    /// same `Sending…` bubble, and `Not sent` once refused or unanswered for 20 s (web `draftPending`;
+    /// docs/mocks/composer-sending-bubble, boards 03 and 04). Nil for a `!cmd` first message and a wiki chat's.
+    private(set) var draftPending: DraftPending?
+    struct DraftPending {
+        /// Minted at the press, and sent again by Retry: the server answers a repeat with the first's session.
+        let clientRequestId: String
+        let request: CreateSessionRequest
+        /// What was in the box, for Put back, and the words the bubble shows.
+        let draft: String
+        let text: String
+        let attachments: [TurnAttachment]
+        let staged: [PendingAttachment]
+        var reason: String?
+    }
+    /// The waiting message as the transcript's own bubble, so it reads and dims as any `Sending…` one.
+    var draftPendingBubble: UserBubble? {
+        guard let p = draftPending else { return nil }
+        var bubble = UserBubble(id: "draft-pending", text: p.text, attachments: p.attachments,
+                                clientTurnId: p.clientRequestId, pending: true)
+        bubble.notSentReason = p.reason
+        return bubble
+    }
     /// One message this console sent that the server has not taken, as Retry sends it again and Put
     /// back returns it: what a restart keeps (`saved`, in `unsentStore`), and what only this launch
     /// knows — the request's other fields and the composer chips it took — which one reloaded after a
@@ -1340,14 +1363,14 @@ final class ConsoleModel {
          modelCatalog: RunnerModelCatalog? = nil, accountDefaultEffort: String? = nil,
          folderID: String? = nil,
          baseURL: URL, tokenStore: TokenStore,
-         attachments: AttachmentImageStore) {
+         attachments: AttachmentImageStore, session: URLSession = .orbitREST) {
         self.sessionID = ""
         self.unsentStore = UnsentSendMemoryStore()
         self.agentID = agent.id
         self.draftAgent = agent
         self.draftFolderID = folderID
         self.attachments = attachments
-        let api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
+        let api = APIClient(baseURL: baseURL, tokenStore: tokenStore, session: session)
         self.api = api
         // Inert for a draft (its guards see the empty sessionID); real work starts once the created
         // session's live console replaces this one.
@@ -2431,6 +2454,8 @@ final class ConsoleModel {
 
     var canSend: Bool {
         guard !sending, !waitingForUploads else { return false }
+        // One first message at a time: one that reads Not sent is retried or put back first.
+        guard draftPending == nil else { return false }
         guard !composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 || canSendAttachmentsAlone else { return false }
         if replyContext != nil { return true }   // a question reply always sends (deny+message)
@@ -4142,6 +4167,29 @@ final class ConsoleModel {
             return
         }
         let attachmentIds = pendingAttachments.compactMap(\.remoteID)
+        // A message is drawn as the bubble it will be and waits there for its session (a `!cmd` does not).
+        if !shell {
+            guard draftPending == nil, !sending else { return }
+            let skip = promptOptimizer.skipTranslation(sending: composerText)
+            let optimizedTranslation = promptOptimizer.optimizedTranslation(sending: composerText)
+            cancelOptimizePrompt()
+            promptOptimizer.dismiss()
+            let requestID = UUID().uuidString.lowercased()
+            draftPending = DraftPending(
+                clientRequestId: requestID,
+                request: draftRequest(agent, prompt: text, shell: false, attachmentIds: attachmentIds,
+                                      skipTranslation: skip, optimizedTranslation: optimizedTranslation,
+                                      clientRequestId: requestID),
+                draft: composerText, text: text,
+                attachments: pendingAttachments.compactMap { att in
+                    att.remoteID.map { TurnAttachment(id: $0, mime: att.mimeType, name: att.filename) }
+                },
+                staged: pendingAttachments)
+            composerText = ""
+            pendingAttachments = []
+            await deliverDraftPending()
+            return
+        }
         sending = true
         defer { sending = false }
         do {
@@ -4163,7 +4211,8 @@ final class ConsoleModel {
 
     private func draftRequest(_ agent: Agent, prompt: String, shell: Bool, attachmentIds: [String],
                               skipTranslation: Bool = false,
-                              optimizedTranslation: String? = nil) -> CreateSessionRequest {
+                              optimizedTranslation: String? = nil,
+                              clientRequestId: String? = nil) -> CreateSessionRequest {
         CreateSessionRequest(
             // Send the raw effort — "" (Default) included:
             // the pill is seeded from the agent's default, so an explicit Default must stick
@@ -4200,7 +4249,9 @@ final class ConsoleModel {
             // D2: the opening message is the unedited optimized text. Only ever `true` or absent.
             skipTranslation: skipTranslation ? true : nil,
             // D2: …or its reading copy, with the optimizer's agent-language prompt to release it with.
-            optimizedTranslation: optimizedTranslation)
+            optimizedTranslation: optimizedTranslation,
+            // The first message's key; a `!cmd` first turn sends none.
+            clientRequestId: clientRequestId)
     }
 
     private func draftSessionCreated(_ session: Session) {
@@ -4220,6 +4271,46 @@ final class ConsoleModel {
         if permissionModeWasEdited { rememberDefaultPermissionMode(permissionMode.rawValue) }
         managedWorkSent()
         onSessionCreated?(session)
+    }
+
+    /// POST the waiting first message — the press, or Retry — under its own `clientRequestId`, inside the
+    /// 20 s answer deadline, and settle the bubble by the answer: the session opens with it, or it reads
+    /// `Not sent`. The request is the one built at the press, so a repeat is the same request.
+    private func deliverDraftPending() async {
+        guard let pending = draftPending, !sending else { return }
+        sending = true
+        defer { sending = false }
+        draftPending?.reason = nil
+        statusMessage = nil
+        let request = pending.request
+        do {
+            let session = try await answered(within: sendAnswerTimeout) {
+                try await self.retryingTransientFailures { try await self.api.createSession(request) }
+            }
+            promptOptimizer.sent()
+            draftPending = nil
+            draftSessionCreated(session)
+        } catch {
+            if statusMessage == Self.retryingNotice { statusMessage = nil }
+            draftPending?.reason = error is SendNotAnswered ? UserBubble.notAnsweredReason : APIClient.failureReason(error)
+        }
+    }
+
+    /// A first message's `Not sent` Retry: the same request, the same `clientRequestId`.
+    func retryDraftPending() async {
+        guard draftPending?.reason != nil else { return }
+        await deliverDraftPending()
+    }
+
+    /// A first message's `Not sent` Put back: the bubble goes, and its words and files go back in the
+    /// composer, under anything typed since. Nothing is sent.
+    func putBackDraftPending() {
+        guard let pending = draftPending, pending.reason != nil, !sending else { return }
+        draftPending = nil
+        composerText = composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? pending.draft : composerText + "\n\n" + pending.draft
+        let staged = Set(pendingAttachments.compactMap(\.remoteID))
+        pendingAttachments += pending.staged.filter { $0.remoteID.map { !staged.contains($0) } ?? true }
     }
 
     /// Draft footer/slash seed (no stream): load the `/` command + skill set for the agent and,

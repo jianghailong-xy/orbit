@@ -1480,7 +1480,22 @@ struct NewSessionView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if draft.localStatusCards.isEmpty {
+            if let bubble = draft.draftPendingBubble {
+                // The first message, waiting for its session: the conversation it opens, drawn from its
+                // first bubble on, top-aligned in the engine picker's place (web `draftPending`;
+                // docs/mocks/composer-sending-bubble, board 03). `Not sent` brings Retry and Put back.
+                ScrollView {
+                    UserBubbleView(bubble: bubble)
+                        .frame(maxWidth: .infinity)
+                        .padding([.horizontal, .top], 16)
+                        .accessibilityIdentifier("draft-pending-bubble")
+                }
+                .fadesIntoComposerBand()
+                .environment(\.notSentActions, NotSentActions(
+                    retry: { [draft] _ in Task { await draft.retryDraftPending() } },
+                    putBack: { [draft] _ in draft.putBackDraftPending() },
+                    retryEnabled: !draft.sending))
+            } else if draft.localStatusCards.isEmpty {
                 VStack(spacing: 18) {
                     // Which engine runs this session is the hero — the native port of web's
                     // `NewSessionProviderHero`: the vendor's own mark, then the engine's name as the
