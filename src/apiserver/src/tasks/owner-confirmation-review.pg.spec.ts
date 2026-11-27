@@ -404,7 +404,8 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
     assert.deepEqual(view.review?.lead?.points, view.review?.review?.needsYou);
     assert.equal(view.review?.reviewer.title, 'Coordinator');
     assert.equal(await waitingOn(run.sessionId), 1);
-    assert.ok(!(await badgePush.needsYouSessions(ownerId)).includes(run.sessionId), 'N6: confirmation cards do not enter push badges');
+    // N6 as amended on 2026-11-27: a confirmation waiting on its owner is a decision card the badge counts (owner-cards.ts).
+    assert.ok((await badgePush.needsYouSessions(ownerId)).includes(run.sessionId), 'N6: the raised confirmation counts in the badge');
     assert.deepEqual(raised, [receipt.recordId]);
     await raisedPush.feishuIdle();
     assert.equal(alerts.length, 1);
@@ -468,7 +469,7 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
     await db.taskOwnerConfirmationReview.update({ where: { requestId }, data: { dueAt: new Date(Date.now() - 1000) } });
     assert.equal((await card(run.taskId)).waiting?.review?.notReviewedReason, 'TIMED_OUT');
     assert.equal(await waitingOn(run.sessionId), 1);
-    assert.ok(!(await badgePush.needsYouSessions(ownerId)).includes(run.sessionId));
+    assert.ok((await badgePush.needsYouSessions(ownerId)).includes(run.sessionId), 'N6: the timed-out confirmation counts in the badge');
     assert.deepEqual(raised, []);
     await handOut(coordinator);
     await runnerDoor.review(runner, run.taskId, coordinator, reviewInput(requestId));

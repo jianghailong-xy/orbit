@@ -75,7 +75,7 @@ object SessionDisplay {
             // An idle session a watch or wake-up will resume is just Idle: no mark (the owner, 2026-11-27).
             if (!released && f.waitingOn == "WAKE" && phaseOf(f) != SessionDisplayState.IDLE) add(SessionMark.WILL_RESUME)
             if (released && f.workFinished == true) add(SessionMark.FINISHED)
-            if (released && f.workFinished != true && !failure) add(SessionMark.ENDED)
+            if (released && f.workFinished != true && !failure && !SessionFacts.releasedByMove(f.released, f.endReason)) add(SessionMark.ENDED)
         }
     }
 

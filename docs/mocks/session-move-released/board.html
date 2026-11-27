@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>搬完之后：会话就是一条普通的空闲会话</title>
+<link rel="stylesheet" href="../session-move-web/board.css">
+<style>
+  .pair { display: flex; flex-direction: column; gap: 10px; }
+  .none { height: 56px; border: 2px dashed #c9c9d1; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+          color: #8a8a92; font-size: 13.5px; background: #f6f6f9; }
+  .x { outline: 3px dashed #f5222d; outline-offset: -3px; }
+  .lab { font-size: 12.5px; color: #6a6a72; margin: 2px 0 -4px; font-weight: 650; }
+  .tag.rec { background: #d7f2dd; color: #1d6b31; }
+  .tag.old { background: #ffe1e1; color: #a1171c; }
+  .tag.alt { background: #dcdce2; color: #3a3a40; }
+</style></head>
+<body>
+<h1>搬完之后：会话就是一条普通的空闲会话</h1>
+<p class="lede">2026-11-27 起，搬到其他 Workspace 由服务端在 <code>POST /sessions/:id/move</code> 里先<b>释放</b>会话（原 runner 收尾提交），再搬；客户端只发一次 Move，按钮和进度都不再说“结束”（已提交）。
+但释放后的会话在三个地方仍写着它“结束了”：列表行的图标、会话页头的状态词、对话底部的提示。用户只是搬了个家，看到 <i>Ended</i> 会以为会话被关掉了。下面是这三处今天的样子和建议改成的样子。</p>
+
+<div class="row">
+  <div class="col" style="width:620px">
+    <div class="cap"><span class="tag old">今天</span>搬完后，在新 Workspace 里打开它</div>
+    <div class="pair">
+      <div class="lab">列表行</div>
+      <div class="shot x" style="width:300px"><img src="shots/row-ended.png" alt=""></div>
+      <div class="lab">会话页头</div>
+      <div class="shot x" style="width:620px"><img src="shots/ended-head.png" alt=""></div>
+      <div class="lab">对话底部</div>
+      <div class="shot x" style="width:530px"><img src="shots/ended-banner.png" alt=""></div>
+    </div>
+    <ul class="notes">
+      <li class="n" data-n="1">列表行是灰色对勾圈（Ended），和“被 End 释放”的会话一样。</li>
+      <li class="n" data-n="2">页头写 <b>Ended</b> · Open。</li>
+      <li class="n" data-n="3">底部写 <i>Session ended. Send a message to resume this session.</i></li>
+    </ul>
+  </div>
+  <div class="col" style="width:620px">
+    <div class="cap"><span class="tag rec">建议 A</span>和没搬过的空闲会话完全一样</div>
+    <div class="pair">
+      <div class="lab">列表行</div>
+      <div class="shot" style="width:300px"><img src="shots/row-idle.png" alt=""></div>
+      <div class="lab">会话页头</div>
+      <div class="shot" style="width:620px"><img src="shots/held-idle-head.png" alt=""></div>
+      <div class="lab">对话底部</div>
+      <div class="none">没有提示，输入框照常可用</div>
+    </div>
+    <ul class="notes">
+      <li>列表行、页头、底部都按“空闲、在等你回复”画：<b>Waiting for your reply</b>，不出现 Ended。</li>
+      <li>下一条消息照常发出；服务端在背后恢复会话，和今天发给已释放会话一样，用户看不到区别。</li>
+      <li>只对“因搬家而释放”的会话这样画。用户自己按 End 的会话照旧显示 Ended 和底部提示。</li>
+    </ul>
+  </div>
+  <div class="col" style="width:440px">
+    <div class="cap"><span class="tag alt">B</span>只去掉底部提示</div>
+    <div class="pair">
+      <div class="lab">列表行</div>
+      <div class="shot" style="width:300px"><img src="shots/row-ended.png" alt=""></div>
+      <div class="lab">会话页头</div>
+      <div class="shot" style="width:440px"><img src="shots/ended-head.png" alt=""></div>
+      <div class="lab">对话底部</div>
+      <div class="none">没有提示</div>
+    </div>
+    <ul class="notes">
+      <li>改动最小，但列表和页头还写着 Ended，等于告诉用户会话被结束了。不推荐。</li>
+    </ul>
+  </div>
+</div>
+
+<div class="box" style="width:1760px">
+  <h2>需要定的</h2>
+  <table>
+    <tr><th style="width:40px"></th><th style="width:430px">问题</th><th>选项（第一个是建议）</th></tr>
+    <tr><td>①</td><td>搬完后，三处怎么画</td><td><b>A（建议）</b>：和没搬过的空闲会话一样（列表、页头、底部都不提 Ended）。<br><b>B</b>：只去掉底部提示，列表和页头仍写 Ended。</td></tr>
+    <tr><td>②</td><td>对话里要不要留一行“从哪搬来”</td><td><b>A（建议）不留</b>：搬家时右上角已经提示 <i>Moved to &lt;workspace&gt;</i>，对话本身不变。<br><b>B</b>：在对话里加一行灰字 <i>Moved from &lt;workspace&gt;</i>，放在搬家那一刻的位置。</td></tr>
+  </table>
+</div>
+
+<p class="foot">怎么做（不影响画面）：服务端为搬家释放写一个单独的结束原因 <code>moved</code>，其余行为与用户按 End 完全一样（runner 收尾提交、发消息时恢复）；Web、macOS / iOS、Android 读到 <code>moved</code> 时按空闲会话画。
+图里的截图取自 <code>docs/mocks/session-three-state-web/shots/after</code>（Web 控制台真实截图，假数据）：“今天”用的是一条被 End 释放的会话，“建议 A”用的是一条空闲会话，代表同一条搬过的会话。</p>
+</body></html>

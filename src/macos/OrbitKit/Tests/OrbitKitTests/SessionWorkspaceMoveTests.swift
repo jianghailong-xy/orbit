@@ -4,15 +4,15 @@ import XCTest
 
 /// Moving a session to another workspace (docs/session-folders-move-design.md §4, §5.2–5.4): what
 /// `GET /sessions/:id/move-targets` decodes to, how the Move panel's second group and its pages put
-/// the server's answer into rows and sentences, and End and Move's steps — end, wait until ended,
-/// then move — with its timeout and its readable failures.
+/// the server's answer into rows and sentences, and the readable failures of the one move request
+/// (the server lets a held session go first; the client never ends it).
 final class SessionWorkspaceMoveTests: XCTestCase {
     private func decode(_ json: String) throws -> SessionMoveTargets {
         try JSONDecoder().decode(SessionMoveTargets.self, from: Data(json.utf8))
     }
 
     /// The server's answer for an idle Codex session (mock 03 ③): the folders of its own workspace,
-    /// End and Move, the branch it leaves behind, and three workspaces — one it can go to, two it
+    /// still held, the branch it leaves behind, and three workspaces — one it can go to, two it
     /// can't, each with the server's reason.
     private func codexAnswer() throws -> SessionMoveTargets {
         try decode(#"""
@@ -175,7 +175,8 @@ final class SessionWorkspaceMoveTests: XCTestCase {
         XCTAssertEqual(SessionMoveCopy.targetFooter(bare), "It runs on box.")
     }
 
-    /// Mock 03 ②, word for word: an idle session with unmerged changes, End and Move.
+    /// Mock 03 ②: an idle session with unmerged changes. Still held, but the server lets it go first, so
+    /// nothing is said about ending it and the button is Move.
     func testTheConfirmationOfAnIdleSessionWithUnmergedChanges() throws {
         let answer = try codexAnswer()
         let wikova = answer.targets[0]
@@ -183,9 +184,9 @@ final class SessionWorkspaceMoveTests: XCTestCase {
         XCTAssertEqual(SessionMoveCopy.confirmMessage(answer, to: wikova, from: "orbit"),
                        "The conversation moves with it. Your next message continues it in wikova-develop.\n\n"
                        + "3 changed files aren’t merged into main yet. They stay on branch "
-                       + "orbit/review-import-3fa21c in orbit.\n\n"
-                       + "The session ends first.")
-        XCTAssertEqual(SessionMoveCopy.confirmAction(answer), "End and Move")
+                       + "orbit/review-import-3fa21c in orbit.")
+        XCTAssertTrue(answer.needsEnd)
+        XCTAssertEqual(SessionMoveCopy.confirmAction, "Move")
     }
 
     /// §5.3's other sentences: another runner's rebuild is said, merged changes stay on their branch,
@@ -198,7 +199,6 @@ final class SessionWorkspaceMoveTests: XCTestCase {
                        "The conversation moves with it. Your next message continues it in site.\n\n"
                        + "Earlier parts of the conversation are summarized for the agent.\n\n"
                        + "Changes made so far stay on branch orbit/fix-1 in orbit.")
-        XCTAssertEqual(SessionMoveCopy.confirmAction(merged), "Move")
 
         let one = SessionMoveTargets(branch: "orbit/fix-1", changedFiles: 4, unmergedFiles: 1,
                                      mergeTarget: "release", targets: [rebuilt])
@@ -214,129 +214,18 @@ final class SessionWorkspaceMoveTests: XCTestCase {
     }
 
     func testTheProgressAndTheToast() {
-        XCTAssertEqual(SessionMoveCopy.progress(.ending), "Ending the session…")
-        XCTAssertEqual(SessionMoveCopy.progress(.moving), "Moving…")
+        XCTAssertEqual(SessionMoveCopy.moving, "Moving…")
         XCTAssertEqual(SessionMoveCopy.movedToWorkspace("wikova-develop"), "Moved to wikova-develop")
         XCTAssertEqual(SessionMoveCopy.anotherWorkspaceGroup, "Move to Another Workspace")
     }
 
-    // MARK: End and Move
-
-    /// What End and Move's steps did, in order, against fake endpoints.
-    private final class Steps: @unchecked Sendable {
-        var log: [String] = []
-        var statuses: [Result<RunStatus, Error>]
-        var endError: Error?
-        var moveError: Error?
-
-        init(statuses: [Result<RunStatus, Error>] = [], endError: Error? = nil, moveError: Error? = nil) {
-            self.statuses = statuses
-            self.endError = endError
-            self.moveError = moveError
-        }
-
-        func run(endingFirst: Bool, timeout: TimeInterval = 5) async -> SessionWorkspaceMove.Outcome {
-            await SessionWorkspaceMove.run(
-                endingFirst: endingFirst,
-                end: {
-                    self.log.append("end")
-                    if let error = self.endError { throw error }
-                },
-                session: {
-                    let next = self.statuses.isEmpty ? .success(.awaitingInput) : self.statuses.removeFirst()
-                    self.log.append("status")
-                    return Session(id: "s", title: nil, status: try next.get(), agentId: nil,
-                                   assignedRunnerId: nil, pendingApprovals: nil, branch: nil, updatedAt: nil)
-                },
-                move: {
-                    self.log.append("move")
-                    if let error = self.moveError { throw error }
-                },
-                phase: { self.log.append("phase:\($0)") },
-                sleep: { self.log.append("sleep \($0)") },
-                timeout: timeout,
-                interval: 1)
-        }
-    }
-
-    /// An ended session moves at once: no end, no wait.
-    func testAnEndedSessionMovesAtOnce() async {
-        let steps = Steps()
-        let outcome = await steps.run(endingFirst: false)
-        XCTAssertEqual(outcome, .moved)
-        XCTAssertEqual(steps.log, ["phase:moving", "move"])
-    }
-
-    /// End and Move: end, then look until the run is over — not until the end request is answered,
-    /// since ending is when the runner commits what the session left — and only then move.
-    func testEndAndMoveWaitsUntilTheSessionHasEnded() async {
-        let steps = Steps(statuses: [.success(.awaitingInput), .success(.awaitingInput), .success(.succeeded)])
-        let outcome = await steps.run(endingFirst: true)
-        XCTAssertEqual(outcome, .moved)
-        XCTAssertEqual(steps.log, ["phase:ending", "end", "status", "sleep 1.0", "status", "sleep 1.0", "status",
-                                   "phase:moving", "move"])
-    }
-
-    /// Ended by CANCELLED or FAILED is ended as well.
-    func testAnyEndOfTheRunWillDo() async {
-        for status in [RunStatus.cancelled, .failed] {
-            let steps = Steps(statuses: [.success(status)])
-            let outcome = await steps.run(endingFirst: true)
-            XCTAssertEqual(outcome, .moved)
-            XCTAssertEqual(steps.log, ["phase:ending", "end", "status", "phase:moving", "move"])
-        }
-    }
-
-    /// The end request refused with a 409 is a session already ending or ended (the server's
-    /// `the session has ended`): the wait goes on from there.
-    func testAnEndRefusedAsAlreadyEndingStillWaitsAndMoves() async {
-        let steps = Steps(statuses: [.success(.awaitingInput), .success(.cancelled)],
-                          endError: APIError.http(status: 409, body: #"{"message":"the session has ended"}"#))
-        let outcome = await steps.run(endingFirst: true)
-        XCTAssertEqual(outcome, .moved)
-        XCTAssertEqual(steps.log.suffix(2), ["phase:moving", "move"])
-    }
-
-    /// An end that fails otherwise stops there, with why, and nothing is moved.
-    func testAnEndThatFailsMovesNothing() async {
-        let steps = Steps(endError: URLError(.notConnectedToInternet))
-        let outcome = await steps.run(endingFirst: true)
-        XCTAssertEqual(outcome, .failed("The session couldn’t be ended, so it wasn’t moved: the connection dropped."))
-        XCTAssertEqual(steps.log, ["phase:ending", "end"])
-    }
-
-    /// A session that hasn't ended by the timeout isn't moved, and the panel says so in words.
-    func testASessionStillEndingAtTheTimeoutIsNotMoved() async {
-        let steps = Steps()
-        let outcome = await steps.run(endingFirst: true, timeout: 3)
-        XCTAssertEqual(outcome, .failed(SessionMoveCopy.endTimedOut))
-        XCTAssertEqual(SessionMoveCopy.endTimedOut,
-                       "The session hasn’t finished ending, so it wasn’t moved. Try again once it has ended.")
-        XCTAssertEqual(steps.log.filter { $0.hasPrefix("sleep") }.count, 3, "it looked for three seconds")
-        XCTAssertFalse(steps.log.contains("move"))
-        XCTAssertEqual(SessionWorkspaceMove.endTimeout, 60)
-        XCTAssertEqual(SessionWorkspaceMove.pollInterval, 1)
-    }
-
-    /// A look that fails is only a missed look: the wait goes on.
-    func testAFailedLookIsOnlyAMissedOne() async {
-        let steps = Steps(statuses: [.failure(URLError(.timedOut)), .success(.succeeded)])
-        let outcome = await steps.run(endingFirst: true)
-        XCTAssertEqual(outcome, .moved)
-        XCTAssertEqual(steps.log, ["phase:ending", "end", "status", "sleep 1.0", "status", "phase:moving", "move"])
-    }
-
     /// The move's second line says only why it failed; a refusal keeps the server's sentence.
-    func testARefusedMoveSaysTheServersReason() async {
-        let refused = Steps(moveError: APIError.http(status: 409, body: #"{"message":"Stop the session first.","statusCode":409}"#))
-        let outcome = await refused.run(endingFirst: false)
-        XCTAssertEqual(outcome, .failed("Stop the session first."))
+    func testARefusedMoveSaysTheServersReason() {
         XCTAssertEqual(SessionMoveCopy.couldNotMove, "Couldn't move the session")
+        XCTAssertEqual(SessionMoveCopy.moveFailed(APIError.http(status: 409, body: #"{"message":"Stop the session first.","statusCode":409}"#)),
+                       "Stop the session first.")
         XCTAssertEqual(SessionMoveCopy.moveFailed(APIError.http(status: 403, body: #"{"message":"Permission denied."}"#)),
                        "Permission denied.")
-
-        let dropped = Steps(moveError: URLError(.networkConnectionLost))
-        let lost = await dropped.run(endingFirst: false)
-        XCTAssertEqual(lost, .failed("the connection dropped"))
+        XCTAssertEqual(SessionMoveCopy.moveFailed(URLError(.networkConnectionLost)), "the connection dropped")
     }
 }

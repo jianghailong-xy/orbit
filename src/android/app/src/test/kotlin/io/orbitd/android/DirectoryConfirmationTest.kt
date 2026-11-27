@@ -20,15 +20,16 @@ import org.robolectric.annotation.Config
 import java.util.concurrent.CopyOnWriteArrayList
 
 /** The directory's confirmations ask as every confirmation on a phone does (iOS 6969f7840, A13-15): the question, what it does,
- * and its press beside Cancel — Delete permanently, a folder's Delete in iOS's words, and a move to another workspace in one step,
- * End and Move for a session that has to be ended first (iOS SessionWorkspaceMove). */
+ * and its press beside Cancel — Delete permanently, a folder's Delete in iOS's words, and a move to another workspace in one step:
+ * Move, one request, even for a session still held, which the server lets go first. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = TestOrbitApplication::class)
 class DirectoryConfirmationTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     private val requests = CopyOnWriteArrayList<String>()
     @Volatile private var needsEnd = true
-    @Volatile private var reads = 0
+    /** The move request as it was sent: its timeouts. */
+    @Volatile private var moveRequest: ApiRequest? = null
     private val session = DirectorySession("s1", title = "Fixture session", workspaceId = "w1", status = "AWAITING_INPUT")
     private val folder = Folder("f1", "w1", "Specs")
 
@@ -47,12 +48,11 @@ class DirectoryConfirmationTest {
     private fun respond(request: ApiRequest): ApiResponse {
         val path = request.path.joinToString("/")
         requests += "${request.method} $path"
+        if (path == "sessions/s1/move") moveRequest = request
         val body = when (path) {
             "sessions/s1/move-targets" -> """{"workspaceId":"w1","folderId":null,"folders":[],"reason":null,"needsEnd":$needsEnd,
                 "branch":"orbit/s1","changedFiles":3,"unmergedFiles":2,"mergeTarget":"main",
                 "targets":[{"workspaceId":"w2","name":"Beta","conversation":"continues","runnerOnline":true,"folders":[]}]}"""
-            // The session is still ending at the first look, and has ended at the next.
-            "sessions/s1" -> """{"id":"s1","title":"Fixture session","status":"${if (reads++ == 0) "AWAITING_INPUT" else "SUCCEEDED"}"}"""
             else -> "{}"
         }
         return ApiResponse(200, body.encodeToByteArray())
@@ -70,15 +70,6 @@ class DirectoryConfirmationTest {
     }
 
     private fun inDialog(text: String) = hasText(text) and hasClickAction() and hasAnyAncestor(isDialog())
-
-    /** Waits for [condition] while moving the test clock on: the wait for the session to end is a delay in an effect. */
-    private fun until(condition: () -> Boolean) {
-        val end = System.currentTimeMillis() + 60_000
-        while (!condition()) {
-            assertTrue("still waiting after 60 s", System.currentTimeMillis() < end)
-            compose.mainClock.advanceTimeBy(250); compose.waitForIdle()
-        }
-    }
 
     @Test fun deletingPermanentlyAsksWithCancelBesideTheDestructivePress() {
         show(DirectoryDialog.Purge(session))
@@ -103,27 +94,30 @@ class DirectoryConfirmationTest {
         compose.waitUntil(60_000) { requests.contains("DELETE session-folders/f1") }
     }
 
-    @Test fun movingToAnotherWorkspaceIsOneStepEndAndMoveForAnIdleSession() {
+    @Test fun movingAnIdleSessionToAnotherWorkspaceIsOneMoveRequest() {
         show(DirectoryDialog.Move(session))
         compose.waitUntil(60_000) { compose.onAllNodes(hasText("Beta") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasText("Beta") and hasClickAction()).assertIsEnabled().performClick()
         compose.onNodeWithText("Move to Beta?").assertExists()
-        compose.onNodeWithText("The session ends first.", substring = true).assertExists()
+        compose.onAllNodesWithText("ends first", substring = true).assertCountEquals(0)
         compose.onNodeWithText("2 changed files aren’t merged into main yet. They stay on branch orbit/s1", substring = true).assertExists()
         compose.onNode(inDialog("Cancel")).assertExists()
-        compose.onNode(inDialog("End and Move")).performClick()
-        until { requests.contains("POST sessions/s1/move") }
-        val steps = requests.filter { it.startsWith("POST") || it == "GET sessions/s1" }
-        assertEquals("ended, waited until it had, then moved",
-            listOf("POST sessions/s1/end", "GET sessions/s1", "GET sessions/s1", "POST sessions/s1/move"), steps)
+        compose.onAllNodes(inDialog("End and Move")).assertCountEquals(0)
+        compose.onNode(inDialog("Move")).performClick()
+        compose.waitUntil(60_000) { requests.contains("POST sessions/s1/move") }
+        assertEquals("the server lets it go; the phone sends the move alone", listOf("POST sessions/s1/move"),
+            requests.filter { it.startsWith("POST") || it == "GET sessions/s1" })
+        // The server may wait up to 45 s for the release: longer than OkHttp's 10 s read and 30 s call.
+        assertEquals(60L, moveRequest?.readTimeoutSeconds)
+        assertEquals(75L, moveRequest?.callTimeoutSeconds)
     }
 
-    @Test fun aSessionThatNeedsNoEndMovesWithMove() {
+    @Test fun aReleasedSessionMovesWithMoveToo() {
         needsEnd = false
         show(DirectoryDialog.Move(session))
         compose.waitUntil(60_000) { compose.onAllNodes(hasText("Beta") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasText("Beta") and hasClickAction()).performClick()
-        compose.onAllNodesWithText("The session ends first.", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("ends first", substring = true).assertCountEquals(0)
         compose.onNode(inDialog("Cancel")).assertExists()
         compose.onNode(inDialog("Move")).performClick()
         compose.waitUntil(60_000) { requests.contains("POST sessions/s1/move") }

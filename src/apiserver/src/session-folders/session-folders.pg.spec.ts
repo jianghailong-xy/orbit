@@ -477,10 +477,11 @@ test('session folders: owned, unique per workspace, deleted without deleting a s
     assert.equal(inTrash.status, 409, inTrash.text);
     assert.match(inTrash.json.message, /Trash/);
     assert.equal(await folderOf(trashed), first);
-    // Another workspace takes only an ended session — sessions/session-move-workspace.pg.spec.
+    // Another workspace is asked of its runner before the session is touched — sessions/session-move-workspace.pg.spec.
+    // This runner reports no session-move/v1, so the move is refused and the idle session is not released for it.
     const elsewhere = await move(idle, { workspaceId: pub(beta), folderId: null });
     assert.equal(elsewhere.status, 409, elsewhere.text);
-    assert.equal(elsewhere.json.message, 'End the session first.');
+    assert.match(elsewhere.json.message, /^Update .* to move sessions here$/);
     assert.equal((await move(idle, { folderId: pub(first) }, other)).status, 404, 'another owner moved my session');
     assert.equal((await move(randomUUID(), { folderId: null })).status, 404);
     assert.equal(await folderOf(idle), null);

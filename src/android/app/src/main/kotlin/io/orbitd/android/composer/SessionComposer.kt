@@ -68,6 +68,7 @@ import io.orbitd.android.management.LocalPromptOptimizer
 import io.orbitd.android.core.promptoptimizer.PromptOptimizer
 import io.orbitd.android.core.promptoptimizer.PromptOptimizerCopy
 import io.orbitd.android.core.translation.Translation
+import io.orbitd.android.core.protocol.SessionFacts
 import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.management.personalPermissions
 import io.orbitd.android.reader.ComposerFold
@@ -284,7 +285,8 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                     Button(enabled = !state.busy, onClick = model::retrySend) { Text("Retry saving confirmation") }
                 }
                 selectionNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                if (target == null && terminal(detail)) {
+                // Not for a session a move let go: nothing tells its reader it ended (SessionFacts.releasedByMove).
+                if (target == null && terminal(detail) && !SessionFacts.releasedByMove(detail)) {
                     Text("Sending a message will resume this session in Open.", style = MaterialTheme.typography.bodySmall)
                     (detail["capabilities"] as? JsonObject)?.text("resumeBlockedReason")?.let { reason ->
                         Text(reason); TextButton(onClick = { app.realtime.refreshSession() }) { Text("Check Again") }

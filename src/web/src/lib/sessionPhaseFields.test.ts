@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { sessionSendDispositionOf } from './sessionCapabilities';
 import { shouldPollSessionDetail } from './sessionDetailPolling';
-import { runWorkspaceMove } from './sessionFolders';
 import {
   isSessionLive,
   isSessionQueued,
-  isSessionTerminal,
   isSessionWorking,
   sessionLastTurnOutcomeOf,
   sessionPhaseOf,
@@ -90,65 +88,6 @@ describe('send versus resume', () => {
     const s: Payload = { ...SITUATIONS['released by End'], capabilities: { canSend: false, canResume: false, resumeBlockedReason: 'MISSING_CONTEXT' } };
     expect(sessionSendDispositionOf(s, true)).toBe('CREATE');
     expect(sessionSendDispositionOf(olderServer(s), true)).toBe('CREATE');
-  });
-});
-
-describe('the wait after End', () => {
-  const noSleep = async () => {};
-  /** The move flow of SessionMoveModal and CoordinatorChange: End, then poll the detail until isSessionTerminal. */
-  const moveAfterEnd = async (snapshots: Payload[]) => {
-    const calls: string[] = [];
-    let read = 0;
-    const out = await runWorkspaceMove({
-      endingFirst: true,
-      end: async () => calls.push('end'),
-      ended: async () => {
-        const snapshot = snapshots[Math.min(read, snapshots.length - 1)];
-        read += 1;
-        return isSessionTerminal(snapshot);
-      },
-      move: async () => calls.push('move'),
-      sleep: noSleep,
-      intervalMs: 1,
-      timeoutMs: 100,
-    });
-    return { out, calls, reads: read };
-  };
-
-  const endingRunning: Payload = {
-    id: 's', status: 'RUNNING', runStatus: 'RUNNING', runState: 'RUNNING', endReason: 'ended', activity: 'TURN',
-    phase: 'RUNNING', released: false, lastTurnOutcome: null, waitingOn: null,
-  };
-
-  it('waits until the session is released, then moves', async () => {
-    const r = await moveAfterEnd([endingRunning, endingRunning, SITUATIONS['released by End']]);
-    expect(r.out).toBeNull();
-    expect(r.calls).toEqual(['end', 'move']);
-    expect(r.reads).toBe(3);
-  });
-
-  it('waits the same way from an older control plane', async () => {
-    const r = await moveAfterEnd([olderServer(endingRunning), olderServer(endingRunning), olderServer(SITUATIONS['released by End'])]);
-    expect(r.out).toBeNull();
-    expect(r.reads).toBe(3);
-  });
-
-  it('an interrupted session being ended is not moved before its runner lets go', async () => {
-    const r = await moveAfterEnd([SITUATIONS['ending after an interrupted turn'], SITUATIONS['released by End']]);
-    expect(r.reads).toBe(2);
-    expect(r.calls).toEqual(['end', 'move']);
-  });
-
-  it('an older control plane keeps its old reading: an interrupted session with an end reason reads ended', async () => {
-    const r = await moveAfterEnd([olderServer(SITUATIONS['ending after an interrupted turn'])]);
-    expect(r.reads).toBe(1);
-    expect(r.calls).toEqual(['end', 'move']);
-  });
-
-  it('a session that is never released times out instead of moving', async () => {
-    const r = await moveAfterEnd([endingRunning]);
-    expect(r.calls).toEqual(['end']);
-    expect(r.out).not.toBeNull();
   });
 });
 

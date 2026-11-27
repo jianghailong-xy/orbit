@@ -105,7 +105,7 @@ class NewWorkspaceDeviceTest : IncrementDeviceTest() {
         await("the bar says New workspace on orbit@austin") { titled() }
         awaitText(MachineSetupCopy.setupFolderOrPathHint(home))
         verify("the card has no head under the bar", !exists(hasText(MachineSetupCopy.setupNewWorkspaceTitle("orbit@austin")), unmerged = true))
-        verify("the page didn't move on to orbit", !exists(hasText("Send a task to get started."), unmerged = true))
+        verify("the page didn't move on to orbit", !exists(hasTestTag("new-session-engine"), unmerged = true))
         capture("03-card-empty")
 
         typeFolder("$home/code/api")
@@ -127,7 +127,7 @@ class NewWorkspaceDeviceTest : IncrementDeviceTest() {
         awaitText("Found · git repository · main")
         dropFocus()
         compose.onNodeWithTag("setup-create").performClick()
-        await("the new workspace's new session page", timeoutMs = 45_000) { exists(hasText("Send a task to get started."), unmerged = true) }
+        await("the new workspace's new session page", timeoutMs = 45_000) { exists(hasTestTag("new-session-engine"), unmerged = true) }
         verify("one POST workspaces with the path as found", bodies.count { it.first == "POST workspaces" } == 1 &&
             bodies.first { it.first == "POST workspaces" }.second.contains("\"workDir\":\"$home/code/api\"") &&
             !bodies.first { it.first == "POST workspaces" }.second.contains("newFolder"))

@@ -2634,10 +2634,15 @@ final class AppModel {
         show(.compose(agentID: id, folderID: nil), agent: id)
     }
 
-    /// The draft's folder, picked from its place pill (docs/mocks/new-session-place): the same
-    /// workspace's draft, filed in `folderID` or in none.
+    /// A place picked from the draft's place pill (docs/mocks/new-session-place 02, option D): this
+    /// workspace's draft refiled in `folderID` or in none, or another workspace's draft opened in one of
+    /// its folders — the hero's workspace switch, landing in the folder in the same move.
     func composeInFolder(_ folderID: String?, of agentID: String) {
-        nav.fileDraft(agentID: agentID, folderID: folderID)
+        if agentID != selectedAgentID {
+            show(.compose(agentID: agentID, folderID: folderID), agent: agentID)
+        } else {
+            nav.fileDraft(agentID: agentID, folderID: folderID)
+        }
     }
 
     /// Enter the Agents section focused on agent `id` — the one navigation transition behind the
@@ -4100,35 +4105,29 @@ final class AppModel {
 
 
     /// Move a session to another workspace, filed in one of its folders or in none — the
-    /// confirmation's Move, or its End and Move (§5.3–5.4): end the session, wait until it has
-    /// ended, then move it (`SessionWorkspaceMove.run`). `phase` follows those steps for the panel.
+    /// confirmation's Move (§5.3–5.4). One request: the server lets a held session go first and waits
+    /// for its runner to commit what it left (`POST /sessions/:id/move`), so nothing here ends it.
     ///
     /// Nil once the session is there: every loaded copy of the row names the new workspace, which
     /// takes it out of the list it was moved from at once, the toast says where it went, and the
     /// lists are read again behind it. Otherwise why not, as the sentence the panel shows — the lists
-    /// are read again all the same, since an End and Move stopped after the end has still ended the
-    /// session.
-    func moveSession(_ id: String, to target: SessionMoveTarget, folder folderID: String?,
-                     endingFirst: Bool,
-                     phase: @escaping (SessionWorkspaceMove.Phase) -> Void) async -> String? {
+    /// are read again all the same, since a move that stopped waiting may have left the session released.
+    func moveSession(_ id: String, to target: SessionMoveTarget, folder folderID: String?) async -> String? {
         guard let api else { return SessionMoveCopy.moveFailed(APIError.notConfigured) }
         let name = toastSessionTitle(id)
-        let outcome = await SessionWorkspaceMove.run(
-            endingFirst: endingFirst,
-            end: { try await api.endSession(id) },
-            session: { try await api.session(id) },
-            move: { try await api.moveSession(id, toWorkspace: target.workspaceId, folderID: folderID) },
-            phase: { phase($0) })
-        defer { Task { await reloadSessionLists() } }
-        switch outcome {
-        case .moved:
-            patchSessionWorkspace(id, to: target, folder: folderID)
-            showToast(SessionMoveCopy.movedToWorkspace(target.name), sessionID: id, sessionTitle: name,
-                      tone: .info, icon: "folder")
-            return nil
-        case .failed(let reason):
-            return reason
+        let failure: String?
+        do {
+            try await api.moveSession(id, toWorkspace: target.workspaceId, folderID: folderID)
+            failure = nil
+        } catch {
+            failure = SessionMoveCopy.moveFailed(error)
         }
+        defer { Task { await reloadSessionLists() } }
+        if let failure { return failure }
+        patchSessionWorkspace(id, to: target, folder: folderID)
+        showToast(SessionMoveCopy.movedToWorkspace(target.name), sessionID: id, sessionTitle: name,
+                  tone: .info, icon: "folder")
+        return nil
     }
 
     /// Write a move to another workspace into every loaded copy of a row, as `patchSessionFolder`

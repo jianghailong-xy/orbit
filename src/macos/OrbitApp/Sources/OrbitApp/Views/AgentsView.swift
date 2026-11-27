@@ -1548,10 +1548,6 @@ struct NewSessionView: View {
                             Text(blocker)
                                 .font(.callout).foregroundStyle(.secondary).lineLimit(2)
                                 .multilineTextAlignment(.center)
-                        } else {
-                            Text("Send a task to get started.")
-                                .font(.callout).foregroundStyle(.secondary)
-                            Text(heroSubtitle).font(.footnote).foregroundStyle(.tertiary).lineLimit(1)
                         }
                         // Nothing on this machine runs the draft (board ④): the send waits, and
                         // another provider's key is the way out here.
@@ -1684,25 +1680,31 @@ struct NewSessionView: View {
         }
     }
 
-    /// Where the session runs, under the engine (docs/mocks/new-session-place, option A; web's
-    /// `PlacePill`): one bordered pill, `[workspace] / [folder] ▾`, naming the folder only when one is
-    /// picked — a folder is a sidebar group, so none is the quiet default. Its one menu lists the
-    /// workspaces, then this workspace's folders under None.
+    /// Where the session runs, under the engine (docs/mocks/new-session-place, option A's pill, board
+    /// 02 option D's menu; web's `PlacePill`): one bordered pill, `[workspace] / [folder] ▾`, naming the
+    /// folder only when one is picked — a folder is a sidebar group, so none is the quiet default. Its
+    /// menu lists the workspaces alone, this one first; a workspace with folders opens them one level
+    /// down under None, so a folder of any workspace is one pick.
     private var placePill: some View {
-        let folders = app.sessionFolders.filter { $0.workspaceId == agent.id }
-        let folder = folders.first { $0.id == folderID }
+        let folder = app.sessionFolders.first { $0.workspaceId == agent.id && $0.id == folderID }
         let label = folder.map { "\(agent.name) / \($0.name)" } ?? agent.name
+        let workspaces = [agent] + app.orderedAgents.filter { $0.id != agent.id }
         return Menu {
-            Section("Workspace") {
-                ForEach(app.orderedAgents) { other in
-                    Button { pickWorkspace(other.id) } label: { placeRow(other.name, on: other.id == agent.id) }
-                }
-            }
-            if !folders.isEmpty {
-                Section("Folder in \(agent.name) · optional") {
-                    Button { pickFolder(nil) } label: { placeRow("None", on: folder == nil) }
-                    ForEach(folders) { each in
-                        Button { pickFolder(each.id) } label: { placeRow(each.name, on: each.id == folder?.id) }
+            ForEach(workspaces) { other in
+                let folders = app.sessionFolders.filter { $0.workspaceId == other.id }
+                let here = other.id == agent.id
+                if folders.isEmpty {
+                    Button { pick(other.id, folder: nil) } label: { placeRow(other.name, on: here) }
+                } else {
+                    Menu {
+                        Button { pick(other.id, folder: nil) } label: { placeRow("None", on: here && folder == nil) }
+                        ForEach(folders) { each in
+                            Button { pick(other.id, folder: each.id) } label: {
+                                placeRow(each.name, on: here && each.id == folder?.id)
+                            }
+                        }
+                    } label: {
+                        placeRow("\(other.name)  \(folders.count)", on: here)
                     }
                 }
             }
@@ -1735,18 +1737,11 @@ struct NewSessionView: View {
         if on { Label(name, systemImage: "checkmark") } else { Text(name) }
     }
 
-    /// Another workspace opens its own draft, which files in no folder; what was typed goes along.
-    private func pickWorkspace(_ id: String) {
-        guard id != agent.id else { return }
-        carryDraftText(to: id)
-        app.composeWithAgent(id)
-    }
-
-    /// Another folder refiles this draft: the same workspace's draft under the folder's identity.
-    private func pickFolder(_ id: String?) {
-        guard id != folderID else { return }
-        carryDraftText(to: agent.id)
-        app.composeInFolder(id, of: agent.id)
+    /// A workspace, and a folder of it or none: the draft for that place, with what was typed here.
+    private func pick(_ workspaceID: String, folder: String?) {
+        guard workspaceID != agent.id || folder != folderID else { return }
+        carryDraftText(to: workspaceID)
+        app.composeInFolder(folder, of: workspaceID)
     }
 
     /// The draft the pick opens is a new one (its identity names the workspace and the folder), so
@@ -1790,19 +1785,6 @@ struct NewSessionView: View {
     private var currentProviderChoice: ProviderChoice {
         currentEngine.provider
             ?? SessionProviderChoices.current(engine: draft.engine, provider: draft.provider, in: [], sources: sources)
-    }
-
-    /// The full model name (the composer footer only carries a truncated one). No funding label:
-    /// for a configured provider it's a constant the user already set and isn't actionable here, so
-    /// the credential earns a line only when it's broken — matching web, where it surfaces solely as
-    /// the provider's `unavailable` warning (not yet modelled on the native ProviderChoice).
-    /// No account either (web parity): the composer's quota gauge names it in its detail.
-    private var heroSubtitle: String {
-        draft.providerCapabilitiesResolved
-            ? AgentDefaults.friendlyName(draft.modelID, engine: draft.engine, provider: draft.provider,
-                                         catalog: draft.modelCatalog,
-                                         configured: draft.configuredProviders)
-            : "Runtime default"
     }
 }
 

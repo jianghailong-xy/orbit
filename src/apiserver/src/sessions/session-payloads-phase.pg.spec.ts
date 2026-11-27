@@ -48,6 +48,7 @@ const EXPECTED: Record<string, Expected> = {
   FAILED: { phase: 'IDLE', released: true, lastTurnOutcome: 'FAILED', waitingOn: null, endReason: null, workFinished: false },
   // A requested end (End).
   CANCELLED: { phase: 'IDLE', released: true, lastTurnOutcome: 'ANSWERED', waitingOn: null, endReason: 'ended', workFinished: false },
+  'released by a move': { phase: 'IDLE', released: true, lastTurnOutcome: 'ANSWERED', waitingOn: null, endReason: 'moved', workFinished: false },
   'job running': { phase: 'RUNNING', released: false, lastTurnOutcome: 'ANSWERED', waitingOn: null, endReason: null, workFinished: false },
   'waiting on an approval': { phase: 'RUNNING', released: false, lastTurnOutcome: null, waitingOn: 'PERSON', endReason: null, workFinished: false },
   'watch armed': { phase: 'IDLE', released: false, lastTurnOutcome: 'ANSWERED', waitingOn: 'WAKE', endReason: null, workFinished: false },
@@ -65,6 +66,7 @@ const BACKGROUND: Record<string, { activity: string | null; runningBgCount: numb
   SUCCEEDED: { activity: null, runningBgCount: 0 },
   FAILED: { activity: null, runningBgCount: 0 },
   CANCELLED: { activity: null, runningBgCount: 0 },
+  'released by a move': { activity: null, runningBgCount: 0 },
   'job running': { activity: 'BACKGROUND_JOB', runningBgCount: 1 },
   'waiting on an approval': { activity: 'TURN', runningBgCount: 0 },
   'watch armed': { activity: 'WAITING', runningBgCount: 0 },

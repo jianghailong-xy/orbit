@@ -599,6 +599,8 @@ confirmationUnderReview?: {
 
 **N6（推送）**：确认卡出现时不推送，`PushService.needsYouSessions` 也不数它，修订 3 不改第二点，兜底的卡片也不响。新增的推送只有两条，都由已提交的事实触发、只响一次：§9 L5，以及协调会话呈上时的 §13 A6。持有期间什么都不推。
 
+**N6 修订（2026-11-27）**：确认卡成为 owner 的之后（没有审查者，或审查结束：已审、超时、审查者结束），它是一张决策卡：`PushService.needsYouSessions` 数它，`notifyDecisionCards` 按 `owner_card_push` 台账推一次（`src/apiserver/src/push/owner-cards.ts`，迁移 1720，任务 354adqnR5U6CZFIfyR5df）。协调会话呈上时 A6 的推送占用同一个键，所以不会推两次。持有期间（审查中）仍然什么都不推，也不计入角标。
+
 ---
 
 ## 6. 审查栏与首行（H）

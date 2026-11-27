@@ -35,6 +35,17 @@ class SessionFactsRowsTest {
         assertNull(shown(s("SUCCEEDED", "task_done")))
         assertEquals("Succeeded", word(s("SUCCEEDED", "task_done")))
     }
+    /** A move let it go (board docs/mocks/session-move-released): the idle session it was — no Ended mark, its idle word — and still
+     * released, so the next message resumes it. An End the person pressed keeps its Ended mark. */
+    @Test fun aSessionAMoveLetGoReadsAsTheIdleSessionItWas() {
+        val moved = s("CANCELLED", "moved", true, "ANSWERED", workFinished = false, phase = "IDLE")
+        assertEquals("Idle", shown(moved))
+        assertEquals("Idle", word(moved))
+        assertEquals(RunState.AWAITING_INPUT, moved.displayRunState)
+        assertEquals("Idle, Ended", shown(s("CANCELLED", "ended", true, "ANSWERED", workFinished = false, phase = "IDLE")))
+        assertTrue(io.orbitd.android.core.protocol.SessionFacts.releasedByMove(true, "moved"))
+        assertFalse(io.orbitd.android.core.protocol.SessionFacts.releasedByMove(false, "moved"))
+    }
     @Test fun aQueuedSessionOnHoldReadsOnHold() {
         assertEquals("Queued", word(s("PENDING", released = false, waitingOn = "HOLD", phase = "PENDING")))
         assertEquals("Queued, On hold", shown(s("PENDING", released = false, waitingOn = "HOLD", phase = "PENDING")))
