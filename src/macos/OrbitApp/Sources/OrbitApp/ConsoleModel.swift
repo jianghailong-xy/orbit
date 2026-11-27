@@ -565,6 +565,29 @@ final class ConsoleModel {
     /// Keeps the composer's contents put and the send button spinning until the ids land.
     private(set) var waitingForUploads = false
     private(set) var sending = false
+    /// One message this console sent that the server has not taken, as Retry sends it again and Put
+    /// back returns it: what a restart keeps (`saved`, in `unsentStore`), and what only this launch
+    /// knows — the request's other fields and the composer chips it took — which one reloaded after a
+    /// restart goes without (docs/mocks/composer-sending-bubble, board 04-native-parity).
+    private struct UnsentRecord {
+        var saved: UnsentSend
+        var queueForNextTurn = false
+        var wikiContext: WikiChatContext? = nil
+        var driveContext: DriveChatContext? = nil
+        var skipTranslation = false
+        var optimizedTranslation: String? = nil
+        var fromComposer = false
+        /// The send took the composer's chips (`staged`), which Put back and a refusal's card return.
+        var takesChips = false
+        var staged: [PendingAttachment] = []
+        var onAccepted: (@MainActor () -> Void)? = nil
+    }
+    /// The messages sent from here that are `Sending…` or `Not sent`, oldest first.
+    private var unsent: [UnsentRecord] = []
+    private let unsentStore: UnsentSendStoring
+    /// How long a send waits for its answer before its request is ended and its bubble reads
+    /// `Not sent` (web `SEND_ANSWER_TIMEOUT_MS`).
+    var sendAnswerTimeout: TimeInterval = UserBubble.answerTimeout
     /// A "Start it again" on a refused run is in flight: one press, one new run.
     private(set) var startingRun = false
     /// True from the moment the user sends a message until the agent's first output for that turn
@@ -1279,8 +1302,9 @@ final class ConsoleModel {
 
     init(sessionID: String, agentID: String? = nil, baseURL: URL, tokenStore: TokenStore,
          attachments: AttachmentImageStore, restoring reducer: TranscriptReducer? = nil,
-         session: URLSession = .orbitREST) {
+         session: URLSession = .orbitREST, unsentSends: UnsentSendStoring? = nil) {
         self.sessionID = sessionID
+        self.unsentStore = unsentSends ?? UnsentSendDefaultsStore(baseURL: baseURL)
         self.agentID = agentID
         self.draftAgent = nil
         self.draftFolderID = nil
@@ -1299,6 +1323,7 @@ final class ConsoleModel {
             self.reducer = reducer
             self.state = reducer.state   // render the persisted transcript instantly, before SSE connects
         }
+        reloadUnsent()
         wireWorktree()
     }
 
@@ -1317,6 +1342,7 @@ final class ConsoleModel {
          baseURL: URL, tokenStore: TokenStore,
          attachments: AttachmentImageStore) {
         self.sessionID = ""
+        self.unsentStore = UnsentSendMemoryStore()
         self.agentID = agent.id
         self.draftAgent = agent
         self.draftFolderID = folderID
@@ -1866,6 +1892,7 @@ final class ConsoleModel {
     private func publishStateNow() {
         publishScheduled = false
         trimWindow()
+        reconcileUnsent()
         stateRevision &+= 1
         state = reducer.state
         keepQuestionTranslations()
@@ -3402,10 +3429,10 @@ final class ConsoleModel {
             return
         }
         let clientTurnId = UUID().uuidString
-        // What this send consumes. A send that fails for good hands it straight back (see the
-        // catch) rather than making the user retype a message they can no longer see; for a retry
-        // that hands the retried text to the composer, which never held it. The raw draft, so a
-        // shell send comes back with its leading `!`.
+        // What this send consumes, which its `Not sent` bubble's Put back — or a refusal's card —
+        // hands back rather than making the user retype a message they can no longer see; for a
+        // retry that hands the retried text to the composer, which never held it. The raw draft, so
+        // a shell send comes back with its leading `!`.
         let draft = overrideText ?? composerText
         // D2: unedited optimized text needs no translator — sent as written, or with the optimizer's
         // own agent-language prompt as its translation. Only the composer's own words can be.
@@ -3426,7 +3453,6 @@ final class ConsoleModel {
         let carried: [TurnAttachment] = overrideAttachments ?? pendingAttachments.compactMap { att in
             att.remoteID.map { TurnAttachment(id: $0, mime: att.mimeType, name: att.filename) }
         }
-        let attachmentIds = carried.map(\.id)
         // Carry mime/name onto the optimistic bubble so it can render image thumbnails / file chips
         // immediately (the durable `user` event later supplies the authoritative refs).
         let turnAttachments = carried
@@ -3443,6 +3469,15 @@ final class ConsoleModel {
         // tagged below once POST returns — the runner echoes turnId, not clientTurnId).
         reducer.addOptimisticUser(clientTurnId: clientTurnId, text: text, attachments: turnAttachments,
                                   queued: willQueue, shell: shell)
+        // Kept until the server takes it: Retry sends it again from this, Put back returns it, and a
+        // restart draws it again as `Not sent` (board 04-native-parity, decision 2).
+        unsent.append(UnsentRecord(
+            saved: UnsentSend(clientTurnId: clientTurnId, sessionID: sessionID, text: text, draft: draft,
+                              shell: shell, attachments: turnAttachments, afterSeq: reducer.state.maxSeq),
+            queueForNextTurn: queueForNextTurn, wikiContext: wikiContext, driveContext: driveContext,
+            skipTranslation: skipTranslation, optimizedTranslation: optimizedTranslation,
+            fromComposer: fromComposer, takesChips: takesChips, staged: staged, onAccepted: onAccepted))
+        keepUnsent()
         // Show the tail "working" indicator right away (before the scroll below), and keep it up
         // until the agent's first token — or a send failure — resolves it. `publishStateNow` clears
         // it for a queued send, where the running turn already animates the tail.
@@ -3452,28 +3487,41 @@ final class ConsoleModel {
         if fromComposer { composerText = "" }
         if takesChips { pendingAttachments = [] }
 
+        // Decide the endpoint once, before any retry: a replay has to be the same request, and the
+        // status it reads can move underneath a retry that's waiting out a gateway blip.
+        let resuming = ComposerLogic.shouldResume(status: sessionStatus, released: serverReleased,
+                                                 capabilities: sendCapabilities)
+        await deliver(clientTurnId, resuming: resuming)
+    }
+
+    /// POST one unsent message — the first attempt of a send, or a `Not sent` bubble's Retry — under
+    /// its own `clientTurnId`, and settle its bubble by the answer. One at a time: `sending` keeps
+    /// Send (and every Retry) off until this answer is in.
+    private func deliver(_ clientTurnId: String, resuming: Bool) async {
+        guard let record = unsent.first(where: { $0.saved.clientTurnId == clientTurnId }) else { return }
+        let text = record.saved.text, shell = record.saved.shell
         sending = true
         defer { sending = false }
         // Last send's answer, whichever it was: this one gets to say its own.
         runConflict = nil
         runConflictFromRetry = false
         handedOverSessionID = nil
-        // Decide the endpoint once, before any retry: a replay has to be the same request, and the
-        // status it reads can move underneath a retry that's waiting out a gateway blip.
-        let resuming = ComposerLogic.shouldResume(status: sessionStatus, released: serverReleased,
-                                                 capabilities: sendCapabilities)
         do {
             let accepted = try await postTurn(resuming: resuming, clientTurnId: clientTurnId,
-                                              text: text, shell: shell, attachmentIds: attachmentIds,
-                                              queueForNextTurn: queueForNextTurn, wikiContext: wikiContext,
-                                              driveContext: driveContext,
-                                              skipTranslation: skipTranslation,
-                                              optimizedTranslation: optimizedTranslation)
-            if fromComposer { promptOptimizer.sent() }
+                                              text: text, shell: shell,
+                                              attachmentIds: record.saved.attachments.map(\.id),
+                                              queueForNextTurn: record.queueForNextTurn,
+                                              wikiContext: record.wikiContext,
+                                              driveContext: record.driveContext,
+                                              skipTranslation: record.skipTranslation,
+                                              optimizedTranslation: record.optimizedTranslation)
+            // The server has it: nothing is left to retry, put back or reload.
+            forgetUnsent(clientTurnId)
+            if record.fromComposer { promptOptimizer.sent() }
             // An earlier send's "Couldn't send" is not true any more.
             statusMessage = ComposerLogic.statusAfterAcceptedSend(statusMessage)
             // A wiki chat's attachments went with it: its panel lets them go (`WikiChatModel.sent`).
-            onAccepted?()
+            record.onAccepted?()
             managedWorkSent()
             if resuming {
                 // The session is revived (back to PENDING/RUNNING); drop the stale terminal
@@ -3510,32 +3558,148 @@ final class ConsoleModel {
                 publishStateNow()
             }
         } catch {
-            // Nothing was queued — a POST whose response was merely lost would have been recognized
-            // by the replay's idempotent clientTurnId — so take the bubble back down rather than
-            // leave a message sitting in the transcript looking delivered…
-            reducer.removeOptimisticUser(clientTurnId: clientTurnId)
             awaitingReply = false   // no turn is coming — drop the tail "working" indicator
-            publishStateNow()
-            // …and hand the message back: the composer was cleared of what this send consumed, so
-            // this is the only copy left of it (a retry's text, which the composer never held,
-            // lands here too). Anything typed while the retries ran stays, below the returned text.
-            composerText = composerText.isEmpty ? draft : draft + "\n" + composerText
-            // The chips come back the same way — but only for a send that took them: a retry never
-            // did, and putting them back would double them.
-            if takesChips { pendingAttachments = staged + pendingAttachments }
             // The one place this end stops flattening a refusal into a sentence. A code it knows
-            // becomes a card with a way out; anything else — an older server, a code invented
-            // later, a connection that simply failed — still reads the server's own words.
+            // becomes a card with a way out, which offers the send again from the composer: the
+            // bubble steps aside and its words (and chips) go back into the box, as they did before
+            // there were Not sent bubbles. Anything else is said on the bubble below.
             if let held = error as? TaskRunStillHeld {
+                handBack(clientTurnId)
                 runConflict = held.conflict
                 runConflictFromRetry = sendingAutoRetry
             } else if let conflict = TaskRunHandoff.readConflict(error) {
+                handBack(clientTurnId)
                 runConflict = conflict
                 runConflictFromRetry = sendingAutoRetry
             } else {
-                statusMessage = ComposerLogic.sendFailureMessage(error)
+                // Refused, or no answer in time (the request was ended): the bubble stays, `Not sent`,
+                // with why and its Retry and Put back — no "Couldn't send" line (web parity:
+                // `markNotSent`). An echo that already took it means it did arrive, and it is let go.
+                let reason = error is SendNotAnswered ? UserBubble.notAnsweredReason : APIClient.failureReason(error)
+                if statusMessage == Self.retryingNotice { statusMessage = nil }
+                // A wait for a run letting go that the deadline cut short says nothing true any more.
+                runConflict = nil
+                if reducer.markNotSent(clientTurnId: clientTurnId, reason: reason),
+                   let i = unsent.firstIndex(where: { $0.saved.clientTurnId == clientTurnId }) {
+                    unsent[i].saved.reason = reason
+                    keepUnsent()
+                } else {
+                    forgetUnsent(clientTurnId)
+                }
+                publishStateNow()
             }
         }
+    }
+
+    /// A refusal that has its own card: the bubble comes down, and the message goes back into the
+    /// composer — under anything typed while it was on its way — chips included, for the card's answer
+    /// to send again from there.
+    private func handBack(_ clientTurnId: String) {
+        guard let record = unsent.first(where: { $0.saved.clientTurnId == clientTurnId }) else { return }
+        forgetUnsent(clientTurnId)
+        reducer.removeOptimisticUser(clientTurnId: clientTurnId)
+        publishStateNow()
+        let draft = record.saved.draft
+        composerText = composerText.isEmpty ? draft : draft + "\n" + composerText
+        if record.takesChips { pendingAttachments = record.staged + pendingAttachments }
+    }
+
+    /// A `Not sent` bubble's Retry: the same message, under the same `clientTurnId`, so a send that
+    /// did arrive is answered with the turn it already took instead of being taken twice (web parity:
+    /// `retryPendingSend`). One send at a time: a press while another is on its way does nothing.
+    func retryUnsent(_ bubble: UserBubble) async {
+        guard bubble.isNotSent, let clientTurnId = bubble.clientTurnId, !sending, !waitingForUploads,
+              let i = unsent.firstIndex(where: { $0.saved.clientTurnId == clientTurnId }) else { return }
+        unsent[i].saved.reason = nil
+        keepUnsent()
+        reducer.markSending(clientTurnId: clientTurnId)
+        awaitingReply = true
+        publishStateNow()
+        // The endpoint is the session's as it stands now, read as the first attempt read it.
+        if ComposerLogic.shouldResume(status: sessionStatus, released: serverReleased) {
+            _ = await refreshServerStatus()
+        }
+        let resuming = ComposerLogic.shouldResume(status: sessionStatus, released: serverReleased,
+                                                 capabilities: sendCapabilities)
+        await deliver(clientTurnId, resuming: resuming)
+    }
+
+    /// A `Not sent` bubble's Put back: the bubble goes, and its words and files go back into the
+    /// composer, under any draft as a withdrawal's do. Nothing is sent (web parity: `putBackPendingSend`).
+    func putBackUnsent(_ bubble: UserBubble) {
+        guard bubble.isNotSent, let clientTurnId = bubble.clientTurnId,
+              let record = unsent.first(where: { $0.saved.clientTurnId == clientTurnId }) else { return }
+        forgetUnsent(clientTurnId)
+        reducer.removeOptimisticUser(clientTurnId: clientTurnId)
+        publishStateNow()
+        let draft = record.saved.draft
+        composerText = composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? draft : composerText + "\n\n" + draft
+        // The chips it took, as they were; for a message that never held any (a retried one, or one
+        // reloaded after a restart), chips made from its upload ids — the bytes are on the server.
+        let chips = record.takesChips ? record.staged : record.saved.attachments.map {
+            PendingAttachment(id: UUID().uuidString, remoteID: $0.id, filename: $0.name ?? "Attachment",
+                              mimeType: $0.mime ?? "application/octet-stream", byteCount: 0, previewImageData: nil)
+        }
+        let staged = Set(pendingAttachments.compactMap(\.remoteID))
+        pendingAttachments += chips.filter { $0.remoteID.map { !staged.contains($0) } ?? true }
+    }
+
+    /// A restart: each message this session had not got through is drawn again as `Not sent`, with
+    /// Retry and Put back, and never sent by itself (decision 2). One whose echo the transcript
+    /// already holds did arrive, and is let go.
+    private func reloadUnsent() {
+        let sends = unsentStore.sends(in: sessionID)
+        guard !sends.isEmpty else { return }
+        var kept: [UnsentSend] = []
+        for var send in sends {
+            if reducer.drawnUntaken(clientTurnId: send.clientTurnId) == false || reducer.state.holdsEcho(of: send) {
+                continue
+            }
+            let reason = send.reason ?? UnsentSend.closedBeforeAnswerReason
+            send.reason = reason
+            if !reducer.markNotSent(clientTurnId: send.clientTurnId, reason: reason) {
+                reducer.addUnsentUser(clientTurnId: send.clientTurnId, text: send.text,
+                                      attachments: send.attachments, shell: send.shell, notSentReason: reason)
+            }
+            unsent.append(UnsentRecord(saved: send))
+            kept.append(send)
+        }
+        unsentStore.replace(in: sessionID, with: kept)
+        state = reducer.state
+    }
+
+    /// Each unsent message against what the transcript now draws: one the server took — its answer
+    /// tagged it, its echo replaced it, a listing adopted it — is let go; one a re-seeded window
+    /// dropped is drawn again, unless that window holds its echo.
+    private func reconcileUnsent() {
+        for record in unsent {
+            let send = record.saved
+            switch reducer.drawnUntaken(clientTurnId: send.clientTurnId) {
+            case true?:
+                continue
+            case false?:
+                forgetUnsent(send.clientTurnId)
+            case nil:
+                if reducer.state.holdsEcho(of: send) {
+                    forgetUnsent(send.clientTurnId)
+                } else {
+                    reducer.addUnsentUser(clientTurnId: send.clientTurnId, text: send.text,
+                                          attachments: send.attachments, shell: send.shell,
+                                          notSentReason: send.reason)
+                }
+            }
+        }
+    }
+
+    private func forgetUnsent(_ clientTurnId: String) {
+        guard unsent.contains(where: { $0.saved.clientTurnId == clientTurnId }) else { return }
+        unsent.removeAll { $0.saved.clientTurnId == clientTurnId }
+        keepUnsent()
+    }
+
+    private func keepUnsent() {
+        unsentStore.replace(in: sessionID, with: unsent.map(\.saved))
     }
 
     /// Answer the one question that authorises stopping a run that is doing work, and send the
@@ -3761,6 +3925,10 @@ final class ConsoleModel {
     /// A holder that did not let go within the resends. Carried as an error so the one catch below
     /// decides what is shown, rather than the wait writing to the screen from inside the post.
     private struct TaskRunStillHeld: Error { let conflict: TaskRunHandoff.Conflict }
+    /// No answer came within `sendAnswerTimeout`, and the request was ended (web `SendNotAnsweredError`).
+    private struct SendNotAnswered: Error {}
+    /// The line a same-key replay shows while it waits out a dropped connection.
+    private static let retryingNotice = "Connection problem — retrying…"
 
     /// POST the turn, replaying it through a transient failure — the gateway answering 503 while the
     /// apiserver restarts, a mobile connection dropped mid-request. Safe to replay because the
@@ -3806,6 +3974,32 @@ final class ConsoleModel {
         // rather than handing the reader a refusal about a situation that is already resolving.
         // The identical request goes back out — same `clientTurnId` — so the server either queues
         // the message once or answers from the receipt of an attempt that got through.
+        // All of it — the same-key replays of a dropped connection and a wait for a run letting go —
+        // inside the one answer deadline: past it the request is ended, and the bubble reads
+        // `Not sent` with Retry (board 04-native-parity, decisions 3 and 4; web `answerDeadline`).
+        return try await answered(within: sendAnswerTimeout) {
+            try await self.postTurnReplaying(resuming: resuming, resumeRequest: resumeRequest, turnRequest: turnRequest)
+        }
+    }
+
+    /// Run `work`, ending it when no answer has come within `seconds`: the work is cancelled (which
+    /// ends its HTTP request) and `SendNotAnswered` is thrown in its place.
+    private func answered<T: Sendable>(within seconds: TimeInterval,
+                                       _ work: @escaping @Sendable @MainActor () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await work() }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(max(0, seconds) * 1_000_000_000))
+                throw SendNotAnswered()
+            }
+            defer { group.cancelAll() }
+            guard let first = try await group.next() else { throw SendNotAnswered() }
+            return first
+        }
+    }
+
+    private func postTurnReplaying(resuming: Bool, resumeRequest: ResumeRequest,
+                                   turnRequest: SessionTurnRequest) async throws -> TurnAccepted {
         var waits = 0
         while true {
             do {
@@ -3845,11 +4039,12 @@ final class ConsoleModel {
                 if attempt > 0 { statusMessage = nil }   // the retry notice, now moot
                 return result
             } catch {
-                guard attempt < ComposerLogic.sendRetryDelaysMs.count,
+                // An ended request (its answer deadline passed) is not a dropped connection to replay.
+                guard !Task.isCancelled, attempt < ComposerLogic.sendRetryDelaysMs.count,
                       ComposerLogic.isRetriableSendFailure(error) else { throw error }
                 // Explain the wait — this is otherwise a silent spinner for several seconds.
-                // Cleared above on success; replaced by the real reason if the retries run out.
-                statusMessage = "Connection problem — retrying…"
+                // Cleared above on success; taken down by the send's own answer if the retries run out.
+                statusMessage = Self.retryingNotice
                 try? await Task.sleep(nanoseconds: ComposerLogic.sendRetryDelaysMs[attempt] * 1_000_000)
                 attempt += 1
             }

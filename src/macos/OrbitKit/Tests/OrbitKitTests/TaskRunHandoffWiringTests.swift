@@ -99,9 +99,13 @@ final class TaskRunHandoffWiringTests: XCTestCase {
                                   to: "/// Answer the one question")
         XCTAssertTrue(handler.contains("TaskRunHandoff.readConflict(error)"))
         XCTAssertTrue(handler.contains("runConflict = conflict"))
-        XCTAssertTrue(handler.contains("statusMessage = ComposerLogic.sendFailureMessage(error)"),
+        // Anything else keeps its bubble, `Not sent`, with the server's own words as the reason
+        // (docs/mocks/composer-sending-bubble, board 04-native-parity): no "Couldn't send" line.
+        XCTAssertTrue(handler.contains("APIClient.failureReason(error)"),
                       "an unknown code, an older server and a dead connection still read the "
-                          + "words they always did")
+                          + "words they always did, on the bubble")
+        XCTAssertTrue(handler.contains("reducer.markNotSent(clientTurnId: clientTurnId, reason: reason)"))
+        XCTAssertFalse(handler.contains("ComposerLogic.sendFailureMessage(error)"))
         XCTAssertTrue(model.contains("private(set) var runConflict: TaskRunHandoff.Conflict?"))
     }
 
