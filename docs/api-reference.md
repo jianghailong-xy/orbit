@@ -492,7 +492,7 @@ answers one page of the list as top-level entries, with an ETag answered `304` w
 | `POST` | `/api/schedules/:id/run` | path `id` | `SchedulesController.runNow` |
 | `GET` | `/api/schedules/:id/runs` | path `id`; query `before`, `limit` | `SchedulesController.listRuns` |
 | `POST` | `/api/schedules/:id/undo` | body `ScheduleUndoDto`; path `id` | `SchedulesController.undo` |
-| `GET` | `/api/schedules/chat` | — | `SchedulesController.pageChat` |
+| `GET` | `/api/schedules/chat` | query `timezone` | `SchedulesController.pageChat` |
 | `POST` | `/api/schedules/chat` | body `SchedulePageChatDto` | `SchedulesController.openPageChat` |
 | `GET` | `/api/schedules/drafts` | — | `SchedulesController.drafts` |
 | `POST` | `/api/schedules/drafts` | body `ScheduleDraftDto` | `SchedulesController.draft` |

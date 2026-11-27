@@ -169,11 +169,13 @@ test('the Scheduled page chat: an opening that writes nothing, a marked MANUAL s
     await sql.query(`UPDATE "schedule" SET "next_due_at" = '2026-11-30T22:00:00Z', "consecutive_failures" = 2 WHERE "id" = $1::uuid`, [docs]);
 
     const now = new Date('2026-11-28T04:00:00Z');
-    const opening = await schedulePageChatOpeningOf(prisma as never, owner.id, now);
+    const opening = await schedulePageChatOpeningOf(prisma as never, owner.id, now, 'Asia/Shanghai');
     assert.deepEqual(opening.counts, { total: 5, active: 2, paused: 2, held: 1, failing: 1 }, 'the ENDED one is not counted');
     assert.equal(opening.summary, 'You have 5 scheduled tasks: 2 active, 2 paused, 1 held, 1 failing.');
     assert.deepEqual([opening.next?.scheduleId, opening.next?.workspaceName, opening.next?.at], [bump, 'orbit-ws01', '2026-11-28T22:00:00.000Z']);
-    assert.equal(opening.nextText, 'Next: Engine version bump, tomorrow at 06:00 on orbit-ws01.');
+    assert.equal(opening.nextText, 'Next: Engine version bump, tomorrow at 06:00 on orbit-ws01.', 'read where it runs');
+    assert.equal((await schedulePageChatOpeningOf(prisma as never, owner.id, now, 'Europe/Berlin')).nextText,
+      'Next: Engine version bump, tomorrow at 06:00 Asia/Shanghai on orbit-ws01.', "another clock: the schedule's zone is named");
     assert.equal(opening.examplesLead, 'Ask about them, or tell me what to change. For example:');
     assert.deepEqual(opening.examples, [...T.examples]);
     assert.equal(opening.closing,
@@ -181,12 +183,18 @@ test('the Scheduled page chat: an opening that writes nothing, a marked MANUAL s
       + 'longer runs, more access or another workspace need your Allow.');
 
     const before = await writes(owner.id);
-    const reply = await read();
+    const reply = await api('GET', `${chat}?timezone=Asia%2FShanghai`, ownerToken);
     assert.equal(reply.status, 200, reply.text);
     assert.equal(reply.json.sessionId, null);
     assert.deepEqual(reply.json.opening.counts, opening.counts);
     assert.equal(toUuid(reply.json.opening.next.scheduleId), bump);
     assert.match(reply.json.opening.nextText, /^Next: Engine version bump, .* at 06:00 on orbit-ws01\.$/u);
+    const elsewhere = await api('GET', `${chat}?timezone=Europe%2FBerlin`, ownerToken);
+    assert.match(elsewhere.json.opening.nextText, /^Next: Engine version bump, .* at 06:00 Asia\/Shanghai on orbit-ws01\.$/u);
+    const unknown = await read();
+    assert.match(unknown.json.opening.nextText, / at 06:00 Asia\/Shanghai on /u, "no viewer zone: the schedule's is named");
+    const bad = await api('GET', `${chat}?timezone=Mars%2FOlympus`, ownerToken);
+    assert.deepEqual([bad.status, bad.json.code], [400, 'SCHEDULE_TIMEZONE_INVALID']);
     assert.deepEqual(await writes(owner.id), before, 'still nothing written: the opening is drawn, not stored');
     assert.equal((await read(strangerToken)).json.opening.counts.total, 0, "another account's schedules are not counted");
   });

@@ -816,6 +816,8 @@ export const SCHEDULE_PAGE_CHAT_COPY = {
   none: 'none',
   next: 'Next: {title}, {when} on {workspace}.',
   nextAt: '{day} at {time}',
+  /** The next run in its schedule's zone, when that zone's clock differs from the viewer's or the viewer's is unknown. */
+  nextAtZone: '{day} at {time} {zone}',
   deletedWorkspace: 'a deleted workspace',
   examplesLead: 'Ask about them, or tell me what to change. For example:',
   examples: [
@@ -892,11 +894,16 @@ export interface SchedulePageChatOpenAnswer {
   created: boolean;
 }
 
-/** The opening's words, from the counts and the next run, read at `now`. */
+/**
+ * The opening's words, from the counts and the next run, read at `now`. The next run is worded in its schedule's own
+ * zone; `viewerTimezone` is the IANA zone of the device reading it (the server keeps none for an account), and the
+ * line names the schedule's zone unless the viewer's clock reads the same there, or when the viewer's is not known.
+ */
 export function schedulePageChatOpening(input: {
   counts: SchedulePageChatCounts;
   next: SchedulePageChatNext | null;
   now: Date;
+  viewerTimezone?: string | null;
 }): SchedulePageChatOpening {
   const T = SCHEDULE_PAGE_CHAT_COPY;
   const { counts, next } = input;
@@ -920,11 +927,15 @@ export function schedulePageChatOpening(input: {
   if (next) {
     const at = new Date(next.at);
     const day = scheduleDayText(at, input.now, next.timezone);
+    const here = localParts(at, next.timezone);
+    const viewer = input.viewerTimezone ? localParts(at, input.viewerTimezone) : null;
+    const sameClock = viewer !== null && viewer.dayNumber === here.dayNumber && viewer.time === here.time;
     nextText = scheduleFill(T.next, {
       title: next.title,
-      when: scheduleFill(T.nextAt, {
+      when: scheduleFill(sameClock ? T.nextAt : T.nextAtZone, {
         day: day === C.dates.today ? C.dates.todayLower : day === C.dates.tomorrow ? C.dates.tomorrowLower : day,
-        time: localParts(at, next.timezone).time,
+        time: here.time,
+        zone: next.timezone,
       }),
       workspace: next.workspaceName ?? T.deletedWorkspace,
     });

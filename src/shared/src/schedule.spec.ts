@@ -468,6 +468,7 @@ describe('the Scheduled page chat opening (docs/scheduled-chat-design.md §4.1)'
         workspaceId: 'w', workspaceName: 'orbit-ws01',
       },
       now,
+      viewerTimezone: 'Asia/Shanghai',
     });
     expect(opening.summary).toBe('You have 4 scheduled tasks: 2 active, 2 paused, none failing.');
     expect(opening.nextText).toBe('Next: Engine version bump, tomorrow at 06:00 on orbit-ws01.');
@@ -488,7 +489,18 @@ describe('the Scheduled page chat opening (docs/scheduled-chat-design.md §4.1)'
       now,
     });
     expect(opening.summary).toBe('You have 1 scheduled task: 1 active, 1 failing.');
-    expect(opening.nextText).toBe('Next: Docs, Tuesday at 01:00 on a deleted workspace.');
+    expect(opening.nextText).toBe('Next: Docs, Tuesday at 01:00 UTC on a deleted workspace.', 'no viewer zone: the zone is named');
+  });
+
+  it("names the schedule's zone when the viewer's clock reads differently, and not when it reads the same", () => {
+    const next = {
+      scheduleId: 's', title: 'Engine version bump', at: '2026-11-28T22:00:00Z', timezone: 'Asia/Shanghai',
+      workspaceId: 'w', workspaceName: 'orbit-ws01',
+    };
+    const at = (viewerTimezone: string) =>
+      schedulePageChatOpening({ counts: counts({ total: 1, active: 1 }), next, now, viewerTimezone }).nextText;
+    expect(at('Europe/Berlin')).toBe('Next: Engine version bump, tomorrow at 06:00 Asia/Shanghai on orbit-ws01.');
+    expect(at('Asia/Singapore')).toBe('Next: Engine version bump, tomorrow at 06:00 on orbit-ws01.', 'same clock, another name');
   });
 
   it('on an empty account offers what to say, and says nothing runs until then', () => {

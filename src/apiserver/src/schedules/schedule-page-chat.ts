@@ -35,11 +35,14 @@ export class SchedulePageChats {
     private readonly sessions: SessionsService,
   ) {}
 
-  /** The account's open page chat, if any, and the opening a new one starts with. Writes nothing. */
-  async read(ownerId: string): Promise<SchedulePageChatResponse> {
+  /**
+   * The account's open page chat, if any, and the opening a new one starts with. Writes nothing. `viewerTimezone` is the
+   * reading device's IANA zone (an account keeps none): the next-run line names the schedule's zone when it differs.
+   */
+  async read(ownerId: string, viewerTimezone?: string | null): Promise<SchedulePageChatResponse> {
     const [open, opening] = await Promise.all([
       openPageChat(this.prisma, ownerId),
-      schedulePageChatOpeningOf(this.prisma, ownerId, new Date()),
+      schedulePageChatOpeningOf(this.prisma, ownerId, new Date(), viewerTimezone),
     ]);
     return { sessionId: open, opening };
   }
@@ -87,7 +90,12 @@ export async function openPageChat(tx: Tx, ownerId: string, workspaceId?: string
  * Orbit's opening (§4.1), from the account's schedules as they are at `now`: the counts of every schedule that has not
  * ended, and the soonest next run of an ACTIVE one with the workspace it runs on.
  */
-export async function schedulePageChatOpeningOf(tx: Tx, ownerId: string, now: Date): Promise<SchedulePageChatOpening> {
+export async function schedulePageChatOpeningOf(
+  tx: Tx,
+  ownerId: string,
+  now: Date,
+  viewerTimezone?: string | null,
+): Promise<SchedulePageChatOpening> {
   const schedules = await tx.schedule.findMany({
     where: { ownerId, state: { not: ScheduleState.ENDED } },
     select: {
@@ -119,5 +127,5 @@ export async function schedulePageChatOpeningOf(tx: Tx, ownerId: string, now: Da
       workspaceName: names.get(soonest.workspaceId) ?? null,
     };
   }
-  return schedulePageChatOpening({ counts, next, now });
+  return schedulePageChatOpening({ counts, next, now, viewerTimezone });
 }

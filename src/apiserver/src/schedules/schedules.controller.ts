@@ -25,6 +25,7 @@
  * Neither door is a @TerminalRoute, so `orbit` in a terminal is refused at the guard.
  */
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -57,6 +58,7 @@ import {
 } from './dto';
 import { ScheduleChangeConversations } from './schedule-change-conversation';
 import { SchedulePageChats } from './schedule-page-chat';
+import { assertTimezone } from './schedule-time';
 import { ScheduleReadsService } from './schedule-reads.service';
 import { ScheduleRunsService } from './schedule-runs.service';
 import { scheduleRunView } from './schedule-views';
@@ -154,12 +156,23 @@ export class SchedulesController {
    * The Scheduled page's chat (docs/scheduled-chat-design.md §4.1, §4.3): the account's open page chat, if any, and the
    * opening Orbit draws from its schedules for a new one. Nothing is written and no engine starts: the chat exists from
    * the person's first words (`POST`). Declared before `schedules/:id`, which would take `chat` for an id.
+   * `?timezone=` is the reading device's IANA zone: the next-run line names the schedule's zone when it differs.
    */
   @Get('schedules/chat')
   @PatScope('sessions:read', READ)
-  pageChat(@CurrentUser() user: AuthUser, @Req() req: Headers) {
+  pageChat(@CurrentUser() user: AuthUser, @Req() req: Headers, @Query('timezone') timezone?: string) {
     refusePageChatFromSession(req);
-    return this.pageChats.read(user.userId);
+    if (timezone !== undefined) {
+      try {
+        assertTimezone(timezone);
+      } catch {
+        throw new BadRequestException({
+          code: 'SCHEDULE_TIMEZONE_INVALID',
+          message: 'timezone is the IANA time zone of the device reading the chat, such as Europe/Berlin, or is left out',
+        });
+      }
+    }
+    return this.pageChats.read(user.userId, timezone);
   }
 
   /**
