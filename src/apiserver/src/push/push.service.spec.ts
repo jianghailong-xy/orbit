@@ -1403,3 +1403,54 @@ test('a condition that cannot be read, and the run a firing started, push as the
     assert.deepEqual([expected.pushType, expected.collapseId], ['alert', sent[0].collapseId]);
   }
 });
+
+// ── a decision card that became the owner's (push/owner-cards.ts, PushService.notifyDecisionCards) ──────────────────
+//
+// The shared Android fixture's `decision-card` sample is this send: fcm-transport.spec converts it to the data it holds,
+// and Android's PushAuthorityTest parses that data, so a card the owner is pushed about is not dropped on Android.
+
+/** An evidence card, as the sweep reads it: drawn in its dispatching session. */
+const EVIDENCE_CARD = {
+  key: 'evidence:019a0000-0000-7000-8000-000000000027',
+  kind: 'EVIDENCE' as const,
+  sessionId: '019a0000-0000-7000-8000-000000000025',
+  projectId: null,
+  taskId: '019a0000-0000-7000-8000-000000000026',
+  subjectId: '019a0000-0000-7000-8000-000000000027',
+  title: 'Archive the August receipts',
+  body: 'Does this evidence settle the task? · Revision 1',
+  open: true,
+};
+
+function decisionCardHarness(session: { notificationsMuted: boolean; notifyNeedsYou: string | null } | null) {
+  const { service, sent } = deviceAlertHarness();
+  (service as any).prisma.session = { findFirst: async () => session };
+  (service as any).needsYouSessions = async () => [EVIDENCE_CARD.sessionId, 'another-session'];
+  return { service, sent, send: () => (service as any).sendDecisionCard('owner-1', EVIDENCE_CARD) as Promise<void> };
+}
+
+test('a decision card rings with its badge and opens the conversation it is drawn in, as the shared Android fixture holds it', async () => {
+  const fixture = JSON.parse(readFileSync(path.resolve(__dirname, '../../../shared/src/android-push.fixture.json'), 'utf8'));
+  const { sent, send } = decisionCardHarness({ notificationsMuted: false, notifyNeedsYou: null });
+  await send();
+  assert.equal(sent.length, 1);
+  const { payload, collapseId } = sent[0];
+  assert.deepEqual(payload.aps.alert, { title: 'Archive the August receipts', body: 'Does this evidence settle the task? · Revision 1' });
+  assert.equal(payload.aps.badge, 2, 'the badge is the needs-you count, which counts this conversation');
+  assert.deepEqual([payload.kind, payload.cardKind, payload.sessionID, payload.taskID],
+    ['decision-card', 'EVIDENCE', EVIDENCE_CARD.sessionId, EVIDENCE_CARD.taskId]);
+  assert.equal(payload.projectID, undefined, 'a task in no project names none');
+  assert.equal(collapseId, 'decision-card-evidence:019a0000-0000-7000-8000-000000000027', 'collapsed per revision');
+  const sample = fixture.samples.find((candidate: { name: string }) => candidate.name === 'decision-card');
+  assert.ok(sample, 'the shared Android fixture has no decision-card sample');
+  assert.equal(JSON.stringify(payload), JSON.stringify(sample.source));
+  assert.deepEqual([sample.pushType, sample.collapseId], ['alert', collapseId]);
+});
+
+test('a decision card in a muted conversation, one with needs-you off, or one in Trash rings nothing', async () => {
+  for (const session of [{ notificationsMuted: true, notifyNeedsYou: null }, { notificationsMuted: false, notifyNeedsYou: 'off' }, null]) {
+    const { sent, send } = decisionCardHarness(session);
+    await send();
+    assert.deepEqual(sent, [], JSON.stringify(session));
+  }
+});
