@@ -118,19 +118,20 @@ final class GuestSessionDisplayTests: XCTestCase {
         payload["lifecycleState"] = "COMPLETED"
         let filed = try decode(payload, "guestRow")
         XCTAssertEqual(filed.states.first?.word, "Idle")
-        XCTAssertEqual(filed.subtitle, "payloads owner \u{00B7} Idle \u{00B7} Finished \u{00B7} Completed")
+        XCTAssertEqual(filed.subtitle, "payloads owner \u{00B7} Idle \u{00B7} Completed")
         for fact in Self.facts { payload[fact] = nil }
         XCTAssertEqual(try decode(payload, "guestRow").subtitle, "payloads owner \u{00B7} Completed")
     }
 
-    /// The two inputs the guest payloads do not send yet reach the marks when they do, as web reads them.
+    /// The two inputs the guest payloads do not send yet reach the marks and row icons when they do, as web reads them.
     func testBackgroundAndApprovalCountsReachTheMarksWhenSent() throws {
         for kind in ["guestRow", "sharedHead"] {
             var payload = try row("AWAITING_INPUT", kind)["payload"] as! [String: Any]
             payload["runningBgCount"] = 1
             payload["pendingApprovals"] = 1
             for s in try decode(payload, kind).states {
-                XCTAssertEqual(SessionDisplay.marks(s.displayFacts), [.needsYou, .background], kind)
+                XCTAssertEqual(SessionDisplay.marks(s.displayFacts), [.needsYou], kind)
+                XCTAssertEqual(SessionDisplay.rowIcons(s.displayFacts), [.background], kind)
             }
         }
     }

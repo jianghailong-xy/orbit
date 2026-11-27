@@ -1819,6 +1819,10 @@ struct AgentSessionRow: View {
     /// which keeps the glyph and the value the row always had.
     private var displayState: SessionDisplayState? { SessionDisplay.state(session.displayFacts) }
     private var marks: [SessionMark] { SessionDisplay.marks(session.displayFacts) ?? [] }
+    /// The chips after the line: Needs you alone, the rest being title-line icons (`rowIcons`).
+    private var rowMarks: [SessionMark] { SessionDisplay.rowMarks(session.displayFacts) ?? [] }
+    /// Failed, Retrying, On hold, Background and Will resume, drawn at the end of the title line rather than as chips.
+    private var rowIcons: [SessionRowIcon] { SessionDisplay.rowIcons(session.displayFacts) }
     /// The row's VoiceOver value: "Idle, Interrupted", else, from an older server, `statusWord`.
     private var statusValue: String {
         if let displayState { return SessionDisplay.spoken(displayState, marks) }
@@ -1839,16 +1843,22 @@ struct AgentSessionRow: View {
             HStack(spacing: 8) {
                 StatusGlyphView(glyph: displayState?.glyph ?? .make(for: session, watching: watching, machine: machine))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(session.title ?? "Untitled session").lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text(session.title ?? "Untitled session").lineLimit(1)
+                        if !rowIcons.isEmpty {
+                            Spacer(minLength: 4)
+                            SessionRowIconsView(icons: rowIcons)
+                        }
+                    }
                     HStack(spacing: 7) {
                         SessionCoordinatorBadge(session: session)
                         Text(line.text).font(.orbitListSubtitle)
                             .foregroundStyle(lineColor(line.tone)).lineLimit(1)
                             // A full runner, run or batch: which one, and how its slots are taken.
                             .help(QueuedCapacity.rowHint(session, machine: machine, now: Date()) ?? "")
-                        if !marks.isEmpty {
+                        if !rowMarks.isEmpty {
                             Spacer(minLength: 4)
-                            SessionMarkPills(marks: marks)
+                            SessionMarkPills(marks: rowMarks)
                         }
                     }
                 }
@@ -1882,6 +1892,7 @@ struct AgentSessionRow: View {
                     .lineLimit(1)
                     .layoutPriority(1)
                 Spacer(minLength: 8)
+                SessionRowIconsView(icons: rowIcons)
                 liveIndicator
                 if let rel = relTime {
                     Text(rel)
@@ -1915,6 +1926,7 @@ struct AgentSessionRow: View {
             HStack(spacing: 8) {
                 Text(session.title ?? "Untitled session").lineLimit(1)
                 Spacer(minLength: 8)
+                SessionRowIconsView(icons: rowIcons)
                 liveIndicator
                 if let rel = relTime {
                     Text(rel).font(.orbitMeta).foregroundStyle(.secondary)
@@ -1938,8 +1950,8 @@ struct AgentSessionRow: View {
 
     /// The marks at the right end of a phone row's second line: at most two, then "+N".
     @ViewBuilder private var phoneMarks: some View {
-        if !marks.isEmpty {
-            let row = SessionDisplay.phoneRowMarks(marks)
+        if !rowMarks.isEmpty {
+            let row = SessionDisplay.phoneRowMarks(rowMarks)
             Spacer(minLength: 4)
             SessionMarkPills(marks: row.shown, more: row.more)
         }
@@ -2026,7 +2038,9 @@ struct SessionLiveIndicator: View {
             switch state {
             case .running: SpinnerGlyph(color: .secondary)
             case .queued:  Image(systemName: "clock").font(.orbitGlyph).foregroundStyle(.secondary)
-            case .idle:    Image(systemName: "circle").font(.orbitGlyph).foregroundStyle(.secondary)
+            // Idle draws nothing (owner, 2026-11-27): a settled row is already said by its line and its
+            // VoiceOver value, and a hollow circle beside the time read as a control.
+            case .idle:    EmptyView()
             }
         } else {
             legacyCue

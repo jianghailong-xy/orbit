@@ -1660,7 +1660,8 @@ function WikiChatSession({
             shownProvider={provider}
             configuredProviders={machine.configured}
             showStop={showStop}
-            onStop={() => stop.mutate()}
+            onStop={() => !stop.isPending && stop.mutate()}
+            stopping={stop.isPending}
             canSend={(!!draft.text.trim() || draft.readyImages.length > 0) && !send.isPending && !draft.uploading && live}
             sending={send.isPending}
             onSend={onSend}

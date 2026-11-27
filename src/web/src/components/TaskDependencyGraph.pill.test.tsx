@@ -25,12 +25,12 @@ const draw = (task: object) => {
 const labelOf = (html: string) => html.match(/<button[^>]*aria-label="([^"]*)"/)?.[1];
 
 describe('the dependency graph node pill', () => {
-  it('reads a plain "Idle" for a parked run something will wake', () => {
+  it('reads a plain "Idle" for a parked run something will wake (Will resume is not a mark)', () => {
     const html = draw(waiting);
     expect(html).toMatch(/data-state="IDLE".*?>Idle<\/span>/);
     expect(html).not.toContain('data-mark=');
   });
-  it('names a waiting run by the pill\'s state and marks in the node\'s aria-label', () => {
+  it('names a waiting run by the pill\'s state in the node\'s aria-label', () => {
     expect(labelOf(draw(waiting))).toBe('Waiting task, Idle');
   });
   it('names a held queued run by its state and mark', () => {

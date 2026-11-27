@@ -118,7 +118,8 @@
     },
     "web": {
      "state": "Queued",
-     "marks": []
+     "marks": [],
+     "rowIcons": []
     }
    },
    "sessionSummary": {
@@ -191,7 +192,8 @@
     },
     "web": {
      "state": "Queued",
-     "marks": []
+     "marks": [],
+     "rowIcons": []
     }
    },
    "taskRun": {
@@ -226,7 +228,8 @@
     },
     "web": {
      "state": "Queued",
-     "marks": []
+     "marks": [],
+     "rowIcons": []
     }
    },
    "searchHit": {
@@ -265,7 +268,8 @@
     },
     "web": {
      "state": "Queued",
-     "marks": []
+     "marks": [],
+     "rowIcons": []
     }
    }
   },
@@ -387,7 +391,8 @@
     },
     "web": {
      "state": "Running",
-     "marks": []
+     "marks": [],
+     "rowIcons": []
     }
    },
    "sessionSummary": {
@@ -460,7 +465,8 @@
     },
     "web": {
      "state": "Running",
-     "marks": []
+     "marks": [],
+     "rowIcons": []
     }
    },
    "taskRun": {
@@ -495,7 +501,8 @@
     },
     "web": {
      "state": "Running",
-     "marks": []
+     "marks": [],
+     "rowIcons": []
     }
    },
    "searchHit": {
@@ -534,7 +541,8 @@
     },
     "web": {
      "state": "Running",
-     "marks": []
+     "marks": [],
+     "rowIcons": []
     }
    }
   },
@@ -656,7 +664,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": []
+     "marks": [],
+     "rowIcons": []
     }
    },
    "sessionSummary": {
@@ -729,7 +738,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": []
+     "marks": [],
+     "rowIcons": []
     }
    },
    "taskRun": {
@@ -764,7 +774,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": []
+     "marks": [],
+     "rowIcons": []
     }
    },
    "searchHit": {
@@ -803,7 +814,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": []
+     "marks": [],
+     "rowIcons": []
     }
    }
   },
@@ -925,9 +937,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Interrupted"
-     ]
+     "marks": [],
+     "rowIcons": []
     }
    },
    "sessionSummary": {
@@ -1000,9 +1011,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Interrupted"
-     ]
+     "marks": [],
+     "rowIcons": []
     }
    },
    "taskRun": {
@@ -1037,9 +1047,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Interrupted"
-     ]
+     "marks": [],
+     "rowIcons": []
     }
    },
    "searchHit": {
@@ -1078,9 +1087,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Interrupted"
-     ]
+     "marks": [],
+     "rowIcons": []
     }
    }
   },
@@ -1202,9 +1210,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Finished"
-     ]
+     "marks": [],
+     "rowIcons": []
     }
    },
    "sessionSummary": {
@@ -1277,9 +1284,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Finished"
-     ]
+     "marks": [],
+     "rowIcons": []
     }
    },
    "taskRun": {
@@ -1314,9 +1320,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Finished"
-     ]
+     "marks": [],
+     "rowIcons": []
     }
    },
    "searchHit": {
@@ -1355,9 +1360,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Finished"
-     ]
+     "marks": [],
+     "rowIcons": []
     }
    }
   },
@@ -1481,6 +1485,9 @@
      "state": "Idle",
      "marks": [
       "Failed"
+     ],
+     "rowIcons": [
+      "FAILED"
      ]
     }
    },
@@ -1556,6 +1563,9 @@
      "state": "Idle",
      "marks": [
       "Failed"
+     ],
+     "rowIcons": [
+      "FAILED"
      ]
     }
    },
@@ -1593,6 +1603,9 @@
      "state": "Idle",
      "marks": [
       "Failed"
+     ],
+     "rowIcons": [
+      "FAILED"
      ]
     }
    },
@@ -1634,6 +1647,9 @@
      "state": "Idle",
      "marks": [
       "Failed"
+     ],
+     "rowIcons": [
+      "FAILED"
      ]
     }
    }
@@ -1756,9 +1772,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Ended"
-     ]
+     "marks": [],
+     "rowIcons": []
     }
    },
    "sessionSummary": {
@@ -1831,9 +1846,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Ended"
-     ]
+     "marks": [],
+     "rowIcons": []
     }
    },
    "taskRun": {
@@ -1868,9 +1882,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Ended"
-     ]
+     "marks": [],
+     "rowIcons": []
     }
    },
    "searchHit": {
@@ -1909,9 +1922,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Ended"
-     ]
+     "marks": [],
+     "rowIcons": []
     }
    }
   },
@@ -2033,8 +2045,9 @@
     },
     "web": {
      "state": "Running",
-     "marks": [
-      "Background"
+     "marks": [],
+     "rowIcons": [
+      "BACKGROUND"
      ]
     }
    },
@@ -2108,8 +2121,9 @@
     },
     "web": {
      "state": "Running",
-     "marks": [
-      "Background"
+     "marks": [],
+     "rowIcons": [
+      "BACKGROUND"
      ]
     }
    },
@@ -2145,8 +2159,9 @@
     },
     "web": {
      "state": "Running",
-     "marks": [
-      "Background"
+     "marks": [],
+     "rowIcons": [
+      "BACKGROUND"
      ]
     }
    },
@@ -2186,8 +2201,9 @@
     },
     "web": {
      "state": "Running",
-     "marks": [
-      "Background"
+     "marks": [],
+     "rowIcons": [
+      "BACKGROUND"
      ]
     }
    }
@@ -2312,7 +2328,8 @@
      "state": "Running",
      "marks": [
       "Needs you"
-     ]
+     ],
+     "rowIcons": []
     }
    },
    "sessionSummary": {
@@ -2387,7 +2404,8 @@
      "state": "Running",
      "marks": [
       "Needs you"
-     ]
+     ],
+     "rowIcons": []
     }
    },
    "taskRun": {
@@ -2424,7 +2442,8 @@
      "state": "Running",
      "marks": [
       "Needs you"
-     ]
+     ],
+     "rowIcons": []
     }
    },
    "searchHit": {
@@ -2465,7 +2484,8 @@
      "state": "Running",
      "marks": [
       "Needs you"
-     ]
+     ],
+     "rowIcons": []
     }
    }
   },
@@ -2587,7 +2607,10 @@
     },
     "web": {
      "state": "Idle",
-     "marks": []
+     "marks": [],
+     "rowIcons": [
+      "WILL_RESUME"
+     ]
     }
    },
    "sessionSummary": {
@@ -2660,7 +2683,10 @@
     },
     "web": {
      "state": "Idle",
-     "marks": []
+     "marks": [],
+     "rowIcons": [
+      "WILL_RESUME"
+     ]
     }
    },
    "taskRun": {
@@ -2695,7 +2721,10 @@
     },
     "web": {
      "state": "Idle",
-     "marks": []
+     "marks": [],
+     "rowIcons": [
+      "WILL_RESUME"
+     ]
     }
    },
    "searchHit": {
@@ -2734,7 +2763,10 @@
     },
     "web": {
      "state": "Idle",
-     "marks": []
+     "marks": [],
+     "rowIcons": [
+      "WILL_RESUME"
+     ]
     }
    }
   },
@@ -2858,6 +2890,9 @@
      "state": "Queued",
      "marks": [
       "On hold"
+     ],
+     "rowIcons": [
+      "ON_HOLD"
      ]
     }
    },
@@ -2933,6 +2968,9 @@
      "state": "Queued",
      "marks": [
       "On hold"
+     ],
+     "rowIcons": [
+      "ON_HOLD"
      ]
     }
    },
@@ -2970,6 +3008,9 @@
      "state": "Queued",
      "marks": [
       "On hold"
+     ],
+     "rowIcons": [
+      "ON_HOLD"
      ]
     }
    },
@@ -3011,6 +3052,9 @@
      "state": "Queued",
      "marks": [
       "On hold"
+     ],
+     "rowIcons": [
+      "ON_HOLD"
      ]
     }
    }
@@ -3144,9 +3188,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Finished"
-     ]
+     "marks": [],
+     "rowIcons": []
     }
    },
    "sessionSummary": {
@@ -3224,9 +3267,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Finished"
-     ]
+     "marks": [],
+     "rowIcons": []
     }
    },
    "taskRun": {
@@ -3261,9 +3303,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Finished"
-     ]
+     "marks": [],
+     "rowIcons": []
     }
    },
    "searchHit": null
@@ -3386,9 +3427,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Ended"
-     ]
+     "marks": [],
+     "rowIcons": []
     }
    },
    "sessionSummary": {
@@ -3461,9 +3501,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Ended"
-     ]
+     "marks": [],
+     "rowIcons": []
     }
    },
    "taskRun": {
@@ -3498,9 +3537,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Ended"
-     ]
+     "marks": [],
+     "rowIcons": []
     }
    },
    "searchHit": {
@@ -3539,9 +3577,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Ended"
-     ]
+     "marks": [],
+     "rowIcons": []
     }
    }
   },
@@ -3663,9 +3700,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Ended"
-     ]
+     "marks": [],
+     "rowIcons": []
     }
    },
    "sessionSummary": {
@@ -3738,9 +3774,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Ended"
-     ]
+     "marks": [],
+     "rowIcons": []
     }
    },
    "taskRun": {
@@ -3775,9 +3810,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Ended"
-     ]
+     "marks": [],
+     "rowIcons": []
     }
    },
    "searchHit": {
@@ -3816,9 +3850,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Ended"
-     ]
+     "marks": [],
+     "rowIcons": []
     }
    }
   },
@@ -3940,9 +3973,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Interrupted"
-     ]
+     "marks": [],
+     "rowIcons": []
     }
    },
    "sessionSummary": {
@@ -4015,9 +4047,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Interrupted"
-     ]
+     "marks": [],
+     "rowIcons": []
     }
    },
    "taskRun": {
@@ -4052,9 +4083,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Interrupted"
-     ]
+     "marks": [],
+     "rowIcons": []
     }
    },
    "searchHit": {
@@ -4093,9 +4123,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Interrupted"
-     ]
+     "marks": [],
+     "rowIcons": []
     }
    }
   },
@@ -4217,7 +4246,8 @@
     },
     "web": {
      "state": "Running",
-     "marks": []
+     "marks": [],
+     "rowIcons": []
     }
    },
    "sessionSummary": {
@@ -4290,7 +4320,8 @@
     },
     "web": {
      "state": "Running",
-     "marks": []
+     "marks": [],
+     "rowIcons": []
     }
    },
    "taskRun": {
@@ -4325,7 +4356,8 @@
     },
     "web": {
      "state": "Running",
-     "marks": []
+     "marks": [],
+     "rowIcons": []
     }
    },
    "searchHit": {
@@ -4364,7 +4396,8 @@
     },
     "web": {
      "state": "Running",
-     "marks": []
+     "marks": [],
+     "rowIcons": []
     }
    }
   },
@@ -4486,7 +4519,8 @@
     },
     "web": {
      "state": "Running",
-     "marks": []
+     "marks": [],
+     "rowIcons": []
     }
    },
    "sessionSummary": {
@@ -4559,7 +4593,8 @@
     },
     "web": {
      "state": "Running",
-     "marks": []
+     "marks": [],
+     "rowIcons": []
     }
    },
    "taskRun": {
@@ -4594,7 +4629,8 @@
     },
     "web": {
      "state": "Running",
-     "marks": []
+     "marks": [],
+     "rowIcons": []
     }
    },
    "searchHit": {
@@ -4633,7 +4669,8 @@
     },
     "web": {
      "state": "Running",
-     "marks": []
+     "marks": [],
+     "rowIcons": []
     }
    }
   },
@@ -4755,8 +4792,9 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Background"
+     "marks": [],
+     "rowIcons": [
+      "BACKGROUND"
      ]
     }
    },
@@ -4830,8 +4868,9 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Background"
+     "marks": [],
+     "rowIcons": [
+      "BACKGROUND"
      ]
     }
    },
@@ -4867,8 +4906,9 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Background"
+     "marks": [],
+     "rowIcons": [
+      "BACKGROUND"
      ]
     }
    },
@@ -4908,8 +4948,9 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Background"
+     "marks": [],
+     "rowIcons": [
+      "BACKGROUND"
      ]
     }
    }
@@ -5032,7 +5073,10 @@
     },
     "web": {
      "state": "Idle",
-     "marks": []
+     "marks": [],
+     "rowIcons": [
+      "WILL_RESUME"
+     ]
     }
    },
    "sessionSummary": {
@@ -5105,7 +5149,10 @@
     },
     "web": {
      "state": "Idle",
-     "marks": []
+     "marks": [],
+     "rowIcons": [
+      "WILL_RESUME"
+     ]
     }
    },
    "taskRun": {
@@ -5140,7 +5187,10 @@
     },
     "web": {
      "state": "Idle",
-     "marks": []
+     "marks": [],
+     "rowIcons": [
+      "WILL_RESUME"
+     ]
     }
    },
    "searchHit": {
@@ -5179,7 +5229,10 @@
     },
     "web": {
      "state": "Idle",
-     "marks": []
+     "marks": [],
+     "rowIcons": [
+      "WILL_RESUME"
+     ]
     }
    }
   },
@@ -5303,6 +5356,9 @@
      "state": "Idle",
      "marks": [
       "Retrying"
+     ],
+     "rowIcons": [
+      "RETRYING"
      ]
     }
    },
@@ -5378,6 +5434,9 @@
      "state": "Idle",
      "marks": [
       "Retrying"
+     ],
+     "rowIcons": [
+      "RETRYING"
      ]
     }
    },
@@ -5415,6 +5474,9 @@
      "state": "Idle",
      "marks": [
       "Retrying"
+     ],
+     "rowIcons": [
+      "RETRYING"
      ]
     }
    },
@@ -5456,6 +5518,9 @@
      "state": "Idle",
      "marks": [
       "Retrying"
+     ],
+     "rowIcons": [
+      "RETRYING"
      ]
     }
    }
@@ -5580,6 +5645,9 @@
      "state": "Idle",
      "marks": [
       "Failed"
+     ],
+     "rowIcons": [
+      "FAILED"
      ]
     }
    },
@@ -5655,6 +5723,9 @@
      "state": "Idle",
      "marks": [
       "Failed"
+     ],
+     "rowIcons": [
+      "FAILED"
      ]
     }
    },
@@ -5692,6 +5763,9 @@
      "state": "Idle",
      "marks": [
       "Failed"
+     ],
+     "rowIcons": [
+      "FAILED"
      ]
     }
    },
@@ -5733,6 +5807,9 @@
      "state": "Idle",
      "marks": [
       "Failed"
+     ],
+     "rowIcons": [
+      "FAILED"
      ]
     }
    }
@@ -5856,8 +5933,10 @@
     "web": {
      "state": "Running",
      "marks": [
-      "Needs you",
-      "Background"
+      "Needs you"
+     ],
+     "rowIcons": [
+      "BACKGROUND"
      ]
     }
    },
@@ -5932,8 +6011,10 @@
     "web": {
      "state": "Running",
      "marks": [
-      "Needs you",
-      "Background"
+      "Needs you"
+     ],
+     "rowIcons": [
+      "BACKGROUND"
      ]
     }
    },
@@ -5970,8 +6051,10 @@
     "web": {
      "state": "Running",
      "marks": [
-      "Needs you",
-      "Background"
+      "Needs you"
+     ],
+     "rowIcons": [
+      "BACKGROUND"
      ]
     }
    },
@@ -6012,8 +6095,10 @@
     "web": {
      "state": "Running",
      "marks": [
-      "Needs you",
-      "Background"
+      "Needs you"
+     ],
+     "rowIcons": [
+      "BACKGROUND"
      ]
     }
    }
@@ -6136,9 +6221,10 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Interrupted",
-      "Background"
+     "marks": [],
+     "rowIcons": [
+      "BACKGROUND",
+      "WILL_RESUME"
      ]
     }
    },
@@ -6212,9 +6298,10 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Interrupted",
-      "Background"
+     "marks": [],
+     "rowIcons": [
+      "BACKGROUND",
+      "WILL_RESUME"
      ]
     }
    },
@@ -6250,9 +6337,10 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Interrupted",
-      "Background"
+     "marks": [],
+     "rowIcons": [
+      "BACKGROUND",
+      "WILL_RESUME"
      ]
     }
    },
@@ -6292,9 +6380,10 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Interrupted",
-      "Background"
+     "marks": [],
+     "rowIcons": [
+      "BACKGROUND",
+      "WILL_RESUME"
      ]
     }
    }
@@ -6419,7 +6508,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": []
+     "marks": [],
+     "rowIcons": []
     }
    },
    "sessionSummary": {
@@ -6492,7 +6582,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": []
+     "marks": [],
+     "rowIcons": []
     }
    }
   },
@@ -6614,8 +6705,9 @@
     },
     "web": {
      "state": "Running",
-     "marks": [
-      "Background"
+     "marks": [],
+     "rowIcons": [
+      "BACKGROUND"
      ]
     }
    },
@@ -6689,8 +6781,9 @@
     },
     "web": {
      "state": "Running",
-     "marks": [
-      "Background"
+     "marks": [],
+     "rowIcons": [
+      "BACKGROUND"
      ]
     }
    }
@@ -6813,7 +6906,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": []
+     "marks": [],
+     "rowIcons": []
     }
    },
    "sessionSummary": {
@@ -6886,7 +6980,8 @@
     },
     "web": {
      "state": "Idle",
-     "marks": []
+     "marks": [],
+     "rowIcons": []
     }
    }
   }

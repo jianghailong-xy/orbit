@@ -29,19 +29,18 @@ describe('the task panel run badge reads the session facts', () => {
     expect(sessionStatusMeta(olderServer(taskRun('on hold'))).label).toBe('Queued');
   });
 
-  it('Finished only when the work finished', () => {
+  it('a release that finished or ended draws its state alone (Finished and Ended are not drawn: the owner, 2026-11-27)', () => {
     const done = taskRun('a task run that finished', { endReason: 'task_done', workFinished: true });
-    expect(badge(done)).toEqual(['Idle', 'FINISHED']);
-    // Released and answered, but the work did not finish: Ended, not Finished.
+    expect(badge(done)).toEqual(['Idle']);
     const plain = taskRun('old plain row stored SUCCEEDED', { workFinished: false });
     expect(sessionRunStateOf(plain)).toBe('ENDED');
-    expect(badge(plain)).toEqual(['Idle', 'ENDED']);
+    expect(badge(plain)).toEqual(['Idle']);
   });
 
-  it('Failed only for a failed turn nobody asked to end; Ended otherwise', () => {
+  it('Failed only for a failed turn nobody asked to end', () => {
     expect(badge(taskRun('released by a failed turn'))).toEqual(['Idle', 'FAILED']);
-    expect(badge(taskRun('ended, runner never confirmed', { endReason: 'ended' }))).toEqual(['Idle', 'ENDED']);
-    expect(badge(taskRun('released by End', { endReason: 'ended' }))).toEqual(['Idle', 'ENDED']);
+    expect(badge(taskRun('ended, runner never confirmed', { endReason: 'ended' }))).toEqual(['Idle']);
+    expect(badge(taskRun('released by End', { endReason: 'ended' }))).toEqual(['Idle']);
   });
 });
 
