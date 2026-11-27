@@ -614,7 +614,12 @@ func TestTerminalScheduledCheckRemembersExactCommand(t *testing.T) {
 		t.Fatalf("exact command rules/label: %v / %q", rules, rememberLabel(rules))
 	}
 	delete(card.Input, "orbitScheduleCheckOnly")
-	if got := card.rememberRules(); len(got) != 1 || got[0]["ruleContent"] != "python3:*" {
+	// An ordinary card remembers prefixes, and none for an interpreter: python3:* would cover every script.
+	if got := card.rememberRules(); len(got) != 0 {
+		t.Fatalf("an interpreter is remembered: %v", got)
+	}
+	card.Input["command"] = `psql -c "select 1" db`
+	if got := card.rememberRules(); len(got) != 1 || got[0]["ruleContent"] != "psql:*" {
 		t.Fatalf("ordinary command rules changed: %v", got)
 	}
 }
