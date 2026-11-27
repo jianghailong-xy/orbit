@@ -134,10 +134,9 @@ describe('NewSessionProviderHero', () => {
     const place = (over: Partial<NewSessionPlace> = {}): NewSessionPlace => ({
       workspace: { id: 'w1', name: 'orbit-ws01' },
       workspaces: [{ id: 'w1', name: 'orbit-ws01' }, { id: 'w2', name: 'orbit-ws02' }],
-      onPickWorkspace: () => {},
       folder: { id: 'f1', name: 'Orbit Session' },
-      folders: [{ id: 'f1', name: 'Orbit Session' }, { id: 'f2', name: 'Releases' }],
-      onPickFolder: () => {},
+      folders: [{ id: 'f1', name: 'Orbit Session', workspaceId: 'w1' }, { id: 'f2', name: 'Releases', workspaceId: 'w1' }],
+      onPick: () => {},
       ...over,
     });
 

@@ -21132,51 +21132,56 @@ button.chat-jump-start:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.np-place-list {
-  width: 280px;
-  max-height: 400px;
-  overflow-y: auto;
+/* Its menu (docs/mocks/new-session-place 02, option D): the workspaces, each with its folders one level down, under a
+   search pinned over the list. */
+.orbit-menu.np-place-menu {
+  width: 300px;
+  max-height: min(440px, var(--available-height));
+}
+.orbit-menu.np-place-level {
+  width: 250px;
+  max-height: min(400px, var(--available-height));
 }
 .np-place-search {
-  width: 100%;
-  height: 32px;
-  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 8px 0;
   padding: 0 10px;
-  border: 0;
+  height: 34px;
   border-radius: 8px;
-  outline: none;
   background: var(--bg-hover);
-  color: var(--text-1);
+  color: var(--text-3);
+}
+.np-place-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: none;
   font: inherit;
-  font-size: 13px;
+  font-size: 14px;
+  color: var(--text-1);
 }
-.np-place-head {
-  padding: 6px 8px 3px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.np-place-ws {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
-.np-place-empty {
-  padding: 8px;
-  font-size: 13px;
-  color: var(--text-3);
-}
-.np-place-list .np-row > .anticon {
-  flex: none;
-  color: var(--text-3);
-}
-/* "None", the folder section's empty choice: plain text, no icon. */
-.np-row.np-place-none:not(.on) {
-  color: var(--text-2);
-}
-.np-place-list .np-row > .np-place-check {
+.np-place-count,
+.np-place-where {
   margin-left: auto;
-  color: var(--brand);
+  font-size: 13px;
+  color: var(--text-4);
+}
+.np-place-where {
+  margin-left: 8px;
+}
+/* None, a level's empty choice: plain text, no icon. */
+.orbit-menu-item.np-place-none:not([data-selected]) {
+  color: var(--text-2);
 }
 /* A phone: each name stops sooner. */
 @media (max-width: 960px) {

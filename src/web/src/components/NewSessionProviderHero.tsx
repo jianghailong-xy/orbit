@@ -1,4 +1,4 @@
-import { CheckOutlined, CodeOutlined, FolderOutlined } from '@ant-design/icons';
+import { CodeOutlined, FolderOutlined, SearchOutlined } from '@ant-design/icons';
 import { useState, type ComponentPropsWithRef, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { AgentProvider } from '@orbit/shared';
@@ -6,6 +6,7 @@ import { CLAUDE_REGION_DETAILS, CLAUDE_REGION_USE_ANOTHER_PROVIDER, anthropicUna
 import { encodeId } from '../lib/idCodec';
 import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
 import { providerNameOn, type EngineChoice } from '../lib/sessionProviderChoices';
+import { Menu, type MenuItem } from './ui/Menu';
 import { Popover } from './ui/Popover';
 import { Tooltip } from './ui/Tooltip';
 
@@ -57,19 +58,15 @@ export interface NewSessionPlace {
   workspace: { id: string; name: string };
   /** Every workspace a session can start in, in sidebar order. */
   workspaces: { id: string; name: string }[];
-  onPickWorkspace: (id: string) => void;
   /** The folder the session starts in; null is none. */
   folder: { id: string; name: string } | null;
-  /** This workspace's folders. With none, the line names the workspace alone. */
-  folders: { id: string; name: string }[];
-  onPickFolder: (id: string | null) => void;
+  /** The folders a session can be filed in, of every workspace above: each workspace's are its submenu. */
+  folders: { id: string; name: string; workspaceId: string }[];
+  /** A workspace, and a folder of it or none: one pick moves the draft to both. */
+  onPick: (workspaceId: string, folderId: string | null) => void;
 }
 
-/** Past this many rows the place menu gets a search box (docs/mocks/new-session-place ③). */
-const PLACE_SEARCH_FROM = 9;
-
-/** A component rather than a wrapped element, so the popover's trigger props reach the button through
- *  the tooltip. */
+/** A component rather than a wrapped element, so the menu's trigger props reach the button through the tooltip. */
 function PlaceButton({ place, label, ...props }: ComponentPropsWithRef<'button'> & { place: NewSessionPlace; label: string }) {
   return (
     <Tooltip content={label} truncatedOnly>
@@ -90,88 +87,97 @@ function PlaceButton({ place, label, ...props }: ComponentPropsWithRef<'button'>
 }
 
 /**
- * Under the engine (docs/mocks/new-session-place, option A): one bordered pill that says where the
- * session runs, `[workspace] / [folder] ▾`, naming the folder only when one is picked (a folder is a
- * sidebar group, so none is the quiet default rather than a "No folder" state). It opens one menu: the
- * workspaces, then this workspace's folders. A pick closes it: another workspace opens its own draft, whose
- * folders the menu lists once it is opened again.
+ * Under the engine (docs/mocks/new-session-place, option A's pill, board 02 option D's menu): one bordered pill that
+ * says where the session runs, `[workspace] / [folder] ▾`, naming the folder only when one is picked. Its menu lists
+ * the workspaces alone, this one first; a workspace with folders opens them one level down, under None, so a folder of
+ * any workspace is one pick. A search pinned over the list turns both levels into one list of matches.
  */
 function PlacePill({ place }: { place: NewSessionPlace }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const label = place.folder ? `${place.workspace.name} / ${place.folder.name}` : place.workspace.name;
-  const searchable = place.workspaces.length + place.folders.length + 1 >= PLACE_SEARCH_FROM;
-  const needle = searchable ? query.trim().toLowerCase() : '';
-  const matches = (name: string) => !needle || name.toLowerCase().includes(needle);
-  const workspaces = place.workspaces.filter((w) => matches(w.name));
-  const folders = place.folders.filter((f) => matches(f.name));
-  const row = (key: string, icon: ReactNode, name: string, on: boolean, pick: () => void) => (
-    <button
-      key={key}
-      type="button"
-      className={`np-row${on ? ' on' : ''}${icon ? '' : ' np-place-none'}`}
-      data-row-focus=""
-      onClick={() => {
-        setOpen(false);
-        setQuery('');
-        if (!on) pick();
-      }}
-    >
-      {icon}
-      <span className="np-row-name">{name}</span>
-      {on && <CheckOutlined className="np-place-check" />}
-    </button>
-  );
+  const pick = (workspaceId: string, folderId: string | null) => {
+    setOpen(false);
+    setQuery('');
+    if (workspaceId !== place.workspace.id || folderId !== (place.folder?.id ?? null)) place.onPick(workspaceId, folderId);
+  };
+  const foldersOf = (workspaceId: string) => place.folders.filter((f) => f.workspaceId === workspaceId);
+  const current = (workspaceId: string, folderId: string | null) =>
+    workspaceId === place.workspace.id && folderId === (place.folder?.id ?? null);
+  const folderRow = (f: { id: string; name: string; workspaceId: string }, where?: string): MenuItem => ({
+    key: `f-${f.id}`,
+    textValue: f.name,
+    icon: <FolderOutlined />,
+    selected: current(f.workspaceId, f.id),
+    label: where ? <>{f.name}<span className="np-place-where">{`in ${where}`}</span></> : f.name,
+    onSelect: () => pick(f.workspaceId, f.id),
+  });
+  // This workspace first, then the rest in sidebar order.
+  const workspaces = [place.workspace, ...place.workspaces.filter((w) => w.id !== place.workspace.id)];
+  const needle = query.trim().toLowerCase();
+  let items: MenuItem[];
+  if (needle) {
+    const nameOf = new Map(place.workspaces.map((w) => [w.id, w.name]));
+    const wsHits = workspaces.filter((w) => w.name.toLowerCase().includes(needle));
+    const folderHits = place.folders.filter((f) => nameOf.has(f.workspaceId) && f.name.toLowerCase().includes(needle));
+    items = wsHits.length + folderHits.length === 0
+      ? [{ key: 'none', label: 'No matches', disabled: true }]
+      : [
+          ...(wsHits.length > 0 ? [{ key: 'ws', type: 'group' as const, label: 'Workspaces', children: wsHits.map((w): MenuItem => ({
+            key: `w-${w.id}`, textValue: w.name, icon: <CodeOutlined />, selected: current(w.id, null), label: w.name, onSelect: () => pick(w.id, null),
+          })) }] : []),
+          ...(folderHits.length > 0 ? [{ key: 'fd', type: 'group' as const, label: 'Folders',
+            children: folderHits.map((f) => folderRow(f, nameOf.get(f.workspaceId))) }] : []),
+        ];
+  } else {
+    items = workspaces.map((w): MenuItem => {
+      const folders = foldersOf(w.id);
+      const here = w.id === place.workspace.id;
+      const name = <span className="np-place-ws">{w.name}{folders.length > 0 && <span className="np-place-count">{folders.length}</span>}</span>;
+      return folders.length === 0
+        ? { key: `w-${w.id}`, textValue: w.name, icon: <CodeOutlined />, selected: here, label: name, onSelect: () => pick(w.id, null) }
+        : {
+            key: `w-${w.id}`, textValue: w.name, icon: <CodeOutlined />, selected: here, label: name, popupClassName: 'np-place-level',
+            children: [
+              { key: `n-${w.id}`, textValue: 'None', className: 'np-place-none', selected: current(w.id, null), label: 'None', onSelect: () => pick(w.id, null) },
+              ...folders.map((f) => folderRow(f)),
+            ],
+          };
+    });
+  }
   return (
     <div className="np-place">
-      <Popover
-        title={null}
+      <Menu
         trigger={
           <PlaceButton
             type="button"
             className={`np-place-pill${open ? ' open' : ''}`}
-            aria-haspopup="menu"
-            aria-expanded={open}
             aria-label={`Runs in: ${label}`}
             place={place}
             label={label}
           />
         }
+        items={items}
         side="bottom"
+        align="center"
         open={open}
         onOpenChange={(next) => {
           setOpen(next);
           if (!next) setQuery('');
         }}
-        arrow={false}
-        popupClassName="np-pop"
-      >
-        <div className="np-list np-place-list">
-          {searchable && (
+        popupClassName="np-place-menu"
+        header={
+          <div className="np-place-search">
+            <SearchOutlined aria-hidden />
             <input
-              className="np-place-search"
-              type="search"
-              placeholder="Find a workspace or folder"
               aria-label="Find a workspace or folder"
+              placeholder="Find a workspace or folder"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
-          )}
-          {workspaces.length > 0 && <div className="np-place-head">Workspace</div>}
-          {workspaces.map((w) =>
-            row(w.id, <CodeOutlined />, w.name, w.id === place.workspace.id, () => place.onPickWorkspace(w.id)))}
-          {place.folders.length > 0 && (!needle || folders.length > 0) && (
-            <>
-              {workspaces.length > 0 && <div className="np-sep" />}
-              <div className="np-place-head">{`Folder in ${place.workspace.name} · optional`}</div>
-              {!needle && row('none', null, 'None', !place.folder, () => place.onPickFolder(null))}
-              {folders.map((f) =>
-                row(f.id, <FolderOutlined />, f.name, f.id === place.folder?.id, () => place.onPickFolder(f.id)))}
-            </>
-          )}
-          {workspaces.length === 0 && folders.length === 0 && <div className="np-place-empty">No matches</div>}
-        </div>
-      </Popover>
+          </div>
+        }
+      />
     </div>
   );
 }
