@@ -94,6 +94,24 @@ describe('sw.js: a push', () => {
     expect(w.self.registration.showNotification).not.toHaveBeenCalled();
   });
 
+  it('shows a decision card that became the owner’s, and its click opens the conversation the card is drawn in', async () => {
+    // What the apiserver hands a browser for an evidence card (webPushMessage over the shared fixture's `decision-card`
+    // sample, pinned in web-push-transport.spec.ts): the session as its public id.
+    const card = {
+      v: 1, type: 'alert', title: 'Archive the August receipts', body: 'Does this evidence settle the task? · Revision 1',
+      tag: 'decision-card-evidence:019a0000-0000-7000-8000-000000000027', url: '/sessions/31MyIAX6l6JJen2z5AcsP',
+    };
+    const open = tab({ visibilityState: 'hidden' });
+    const w = worker([open]);
+    await w.push(card);
+    expect(w.self.registration.showNotification).toHaveBeenCalledWith('Archive the August receipts', expect.objectContaining({
+      tag: card.tag, data: { url: '/sessions/31MyIAX6l6JJen2z5AcsP' },
+    }));
+    const notification = { close: vi.fn(), data: { url: card.url } };
+    await w.dispatch('notificationclick', { notification });
+    expect(open.navigate).toHaveBeenCalledWith('https://orbitd.io/sessions/31MyIAX6l6JJen2z5AcsP');
+  });
+
   it('ignores a message of another version', async () => {
     const w = worker();
     await w.push({ ...alert, v: 2 });
