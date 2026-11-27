@@ -117,6 +117,8 @@ import io.orbitd.android.core.cards.OwnerRequests
 import io.orbitd.android.watch.SessionWatches
 import io.orbitd.android.watch.rememberSessionTitles
 import io.orbitd.android.wiki.PageBar
+import io.orbitd.android.chat.ReaderChat
+import io.orbitd.android.core.drive.DriveChatLogic
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.obj
 import io.orbitd.android.core.cards.text
@@ -151,7 +153,9 @@ import kotlinx.serialization.json.*
 
 @Composable
 fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, api: DirectoryApi,
-    data: DirectoryData, open: (OrbitRoute) -> Unit, leave: () -> Unit = {}, swap: (OrbitRoute) -> Unit = open) {
+    data: DirectoryData, open: (OrbitRoute) -> Unit, leave: () -> Unit = {}, swap: (OrbitRoute) -> Unit = open,
+    /** Drawn inside a page's chat sheet (PageChat): no page bar of its own, the chat's cards with their turns, its composer's chips. */
+    chat: ReaderChat? = null) {
     // This page shows a conversation, and the store streams the one it shows: selecting it is the reader's own act, so a
     // landing session — which SessionDestination never sends here — is never subscribed to (§2.9 LS6). A reader leaving
     // clears the selection; a reader replacing another (a link to a second session) sets its own after the old one's.
@@ -778,7 +782,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         // replacement runs (the owner, 2026-11-15, coordinator-context-actions board 04, A; iOS `handingOverCapsule`).
         // A state the capsule reads, like `offTail`: the bar keeps the content it is first handed.
         val handingOver by rememberUpdatedState(CoordinatorHandoff.outgoing(snapshotDetail)?.locksComposer == true)
-        PageBar.Bind(route, title = null, folds = foldsChrome, center = {
+        if (chat == null) PageBar.Bind(route, title = null, folds = foldsChrome, center = {
             // One capsule changing between them (08-motion ⑤): the old words leave upward, the new come in from below.
             val saysWaiting = !handingOver && here != null && (here.side == ReaderSide.ABOVE || offTail)
             AnimatedContent(handingOver to saysWaiting, transitionSpec = {
@@ -862,6 +866,18 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     list.scrollToItem(if (index < 0) 0 else index + lead)
                 }
                 val schedulePlaced = remember(displayedRows, scheduleInserts) { ScheduleInsert.place(displayedRows.map { it.event.ts }, scheduleInserts) }
+                // A page chat's cards, each after the last row of its turn (web `useDriveChatCards`); the rest go under the conversation.
+                val chatCards = chat?.cards.orEmpty()
+                val chatPlaced = remember(displayedRows, displayedWindow.events, chatCards) {
+                    if (chatCards.isEmpty()) emptyMap() else {
+                        val lastOfTurn = HashMap<String, Long>()
+                        displayedWindow.events.forEach { e -> e.turnId?.let { t -> val k = ObjectId.canonical(t) ?: t; lastOfTurn[k] = maxOf(lastOfTurn[k] ?: e.seq, e.seq) } }
+                        val at = DriveChatLogic.place(displayedRows.map { it.event.seq }, { lastOfTurn[ObjectId.canonical(it) ?: it] },
+                            chatCards.map { it.key to it.turnId })
+                        chatCards.filter { it.key in at }.groupBy { at.getValue(it.key) }
+                    }
+                }
+                val chatRest = remember(chatPlaced, chatCards) { chatCards.filter { card -> chatPlaced.values.none { card in it } } }
                 val live = transcript.takeIf { displayedWindow.newerAfter == null }
                 // A turn running now, read at the live tail: only there is the window's newest head the turn in hand. Not a run that is
                 // merely live: a turn stopped without a `turn_end` would count up for as long as the session waits (iOS reads `.running` too).
@@ -958,6 +974,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         val asked = ownerPlaced[index]
                         val crossings = crossingPlaced[index]
                         val scheduleThings = schedulePlaced[index]
+                        val chatThings = chatPlaced[index]
                         // The turn's head row sits in its message's item, like the owner's requests, so no list index moves.
                         val head = turnHeads[row.event.seq]?.takeIf { row.event.type == "user" && row.steps.isEmpty() }
                         val held = runnerUpdatingGate?.takeIf { heldSeq != null && row.event.seq == heldSeq }
@@ -971,9 +988,10 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                                 head?.let { TurnHeadLine(it, ticking = sessionLive && row.event.seq == newestHead) }
                             }
                         }
-                        if (asked == null && crossings == null && scheduleThings == null) drawRow()
+                        if (asked == null && crossings == null && scheduleThings == null && chatThings == null) drawRow()
                         else Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             drawRow()
+                            chatThings?.forEach { key(it.key) { it.content() } }
                             scheduleThings?.forEach { drawSchedule(it) }
                             asked?.forEach { key(it.id) { Box(Modifier.conversationCard()) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink, route.id, discussCard) } } }
                             crossings?.forEach { key(it.id) { Box(Modifier.conversationCard()) { CrossingCardView(it, crossingState) { crossingStore.open(it.id) } } } }
@@ -1022,6 +1040,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     // At the live tail, under everything the conversation said and above the cards that ask the owner something.
                     if (live != null && displayedRows.isNotEmpty()) recapCard?.let { card ->
                         item(key = "recap") { RecapCardView(card, hideRecap) }
+                    }
+                    if (chatRest.isNotEmpty()) item(key = "chat-cards") {
+                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) { chatRest.forEach { key(it.key) { it.content() } } }
                     }
                     item(key = "newer") { if (displayedWindow.newerAfter != null) TextButton(enabled = !displayedLoading, onClick = model::newer) { Text("Load newer messages") } }
                     item(key = "interaction-cards") {
@@ -1153,7 +1174,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     focusRequest = composeFocus, inputFocusChanged = { composerFocused = it },
                     openTask = { open(OrbitRoute(Destination.TASK, it)) },
                     openRunner = { runner, engine -> open(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) },
-                    openTranslationSettings = { open(OrbitRoute(Destination.SETTINGS, "sessions")) }) }
+                    openTranslationSettings = { open(OrbitRoute(Destination.SETTINGS, "sessions")) },
+                    placeholder = chat?.placeholder, chips = chat?.chips) }
                 }
             }
         }

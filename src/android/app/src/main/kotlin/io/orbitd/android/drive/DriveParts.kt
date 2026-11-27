@@ -15,6 +15,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -31,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import io.orbitd.android.R
 import io.orbitd.android.core.drive.DriveEntry
 import io.orbitd.android.core.drive.DriveLogic
+import io.orbitd.android.core.drive.DriveMark
 import io.orbitd.android.core.drive.DriveWriter
 import io.orbitd.android.navigation.ObjectId
 import kotlinx.coroutines.Dispatchers
@@ -43,6 +45,8 @@ internal object DriveMetrics {
     val icon = 30.dp
     val name = 16.sp
     val line = 13.5.sp
+    /** The Upload button's distance from the page's foot; the chat's round button stands over it (owner Q1 A). */
+    val uploadBottom = 22.dp
 }
 
 /** The icon a row draws: a filled folder in the brand colour, a file's kind in the variant colour. */
@@ -120,17 +124,25 @@ internal fun DriveRow(
     end: (@Composable () -> Unit)? = null,
     /** A small line above the name, which then reads in medium weight (the preview's writer row: "Last written today 14:02"). */
     overline: String? = null,
+    /** What a Drive chat did to it, after the name on a light green row until it is opened (board drive-chat 02 frame 9). */
+    mark: DriveMark? = null,
 ) {
     Row(modifier.fillMaxWidth().heightIn(min = DriveMetrics.rowMin)
-        .then(if (selected) Modifier.background(MaterialTheme.colorScheme.secondaryContainer) else Modifier)
+        .then(if (selected) Modifier.background(MaterialTheme.colorScheme.secondaryContainer)
+            else if (mark != null) Modifier.background(markedRowColor()) else Modifier)
         .then(if (onClick != null || onLongClick != null) Modifier.combinedClickable(onClick = { onClick?.invoke() }, onLongClick = onLongClick) else Modifier)
         .padding(start = DriveMetrics.side, end = if (end != null) 8.dp else DriveMetrics.side, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         leading()
         Column(Modifier.weight(1f)) {
             if (overline != null) Text(overline, fontSize = DriveMetrics.line, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-            Text(title, fontSize = if (overline != null) 15.sp else DriveMetrics.name, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            if (mark == null) Text(title, fontSize = if (overline != null) 15.sp else DriveMetrics.name, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 fontWeight = if (overline != null) FontWeight.Medium else null, color = MaterialTheme.colorScheme.onSurface)
+            else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(title, Modifier.weight(1f, fill = false), fontSize = DriveMetrics.name, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurface)
+                MarkChip(mark)
+            }
             if (line != null && line.isNotEmpty()) Text(line, fontSize = DriveMetrics.line, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (progress != null) ThinBar(progress, Modifier.padding(top = 8.dp))
@@ -193,3 +205,17 @@ internal fun dialogColor() = if (MaterialTheme.colorScheme.background == Color.B
 @Composable
 internal fun warningColors(): Pair<Color, Color> = if (MaterialTheme.colorScheme.background == Color.Black)
     Color(0xFFFFC66D) to Color(0xFF3A2A10) else Color(0xFF985900) to Color(0xFFFFF4E0)
+
+/** The light green under a row a Drive chat changed (board `.marked`). */
+@Composable
+internal fun markedRowColor(): Color = if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) Color(0xFFEEF8F1) else Color(0xFF13261A)
+
+/** `New` in green, `Moved` and `Renamed` in blue (board `.mk-new`, `.mk-moved`). */
+@Composable
+internal fun MarkChip(mark: DriveMark) {
+    val light = MaterialTheme.colorScheme.surface.luminance() > 0.5f
+    val (back, word) = if (mark == DriveMark.NEW) (if (light) Color(0xFFD5F0DD) else Color(0xFF1E4A2C)) to (if (light) Color(0xFF1B6B36) else Color(0xFF9EDCB1))
+        else (if (light) Color(0xFFDCEBFB) else Color(0xFF1D3A5A)) to (if (light) Color(0xFF0B5394) else Color(0xFFA9CFF5))
+    Text(mark.label, Modifier.background(back, RoundedCornerShape(10.dp)).padding(horizontal = 8.dp, vertical = 2.dp).testTag("drive-mark:${mark.label}"),
+        color = word, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+}
