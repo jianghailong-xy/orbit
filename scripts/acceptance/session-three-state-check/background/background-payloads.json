@@ -1486,7 +1486,9 @@
      "marks": [
       "Failed"
      ],
-     "rowIcons": []
+     "rowIcons": [
+      "FAILED"
+     ]
     }
    },
    "sessionSummary": {
@@ -1562,7 +1564,9 @@
      "marks": [
       "Failed"
      ],
-     "rowIcons": []
+     "rowIcons": [
+      "FAILED"
+     ]
     }
    },
    "taskRun": {
@@ -1600,7 +1604,9 @@
      "marks": [
       "Failed"
      ],
-     "rowIcons": []
+     "rowIcons": [
+      "FAILED"
+     ]
     }
    },
    "searchHit": {
@@ -1642,7 +1648,9 @@
      "marks": [
       "Failed"
      ],
-     "rowIcons": []
+     "rowIcons": [
+      "FAILED"
+     ]
     }
    }
   },
@@ -2883,7 +2891,9 @@
      "marks": [
       "On hold"
      ],
-     "rowIcons": []
+     "rowIcons": [
+      "ON_HOLD"
+     ]
     }
    },
    "sessionSummary": {
@@ -2959,7 +2969,9 @@
      "marks": [
       "On hold"
      ],
-     "rowIcons": []
+     "rowIcons": [
+      "ON_HOLD"
+     ]
     }
    },
    "taskRun": {
@@ -2997,7 +3009,9 @@
      "marks": [
       "On hold"
      ],
-     "rowIcons": []
+     "rowIcons": [
+      "ON_HOLD"
+     ]
     }
    },
    "searchHit": {
@@ -3039,7 +3053,9 @@
      "marks": [
       "On hold"
      ],
-     "rowIcons": []
+     "rowIcons": [
+      "ON_HOLD"
+     ]
     }
    }
   },
@@ -5341,7 +5357,9 @@
      "marks": [
       "Retrying"
      ],
-     "rowIcons": []
+     "rowIcons": [
+      "RETRYING"
+     ]
     }
    },
    "sessionSummary": {
@@ -5417,7 +5435,9 @@
      "marks": [
       "Retrying"
      ],
-     "rowIcons": []
+     "rowIcons": [
+      "RETRYING"
+     ]
     }
    },
    "taskRun": {
@@ -5455,7 +5475,9 @@
      "marks": [
       "Retrying"
      ],
-     "rowIcons": []
+     "rowIcons": [
+      "RETRYING"
+     ]
     }
    },
    "searchHit": {
@@ -5497,7 +5519,9 @@
      "marks": [
       "Retrying"
      ],
-     "rowIcons": []
+     "rowIcons": [
+      "RETRYING"
+     ]
     }
    }
   },
@@ -5622,7 +5646,9 @@
      "marks": [
       "Failed"
      ],
-     "rowIcons": []
+     "rowIcons": [
+      "FAILED"
+     ]
     }
    },
    "sessionSummary": {
@@ -5698,7 +5724,9 @@
      "marks": [
       "Failed"
      ],
-     "rowIcons": []
+     "rowIcons": [
+      "FAILED"
+     ]
     }
    },
    "taskRun": {
@@ -5736,7 +5764,9 @@
      "marks": [
       "Failed"
      ],
-     "rowIcons": []
+     "rowIcons": [
+      "FAILED"
+     ]
     }
    },
    "searchHit": {
@@ -5778,7 +5808,9 @@
      "marks": [
       "Failed"
      ],
-     "rowIcons": []
+     "rowIcons": [
+      "FAILED"
+     ]
     }
    }
   },

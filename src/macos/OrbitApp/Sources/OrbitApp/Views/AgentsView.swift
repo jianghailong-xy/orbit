@@ -1819,7 +1819,9 @@ struct AgentSessionRow: View {
     /// which keeps the glyph and the value the row always had.
     private var displayState: SessionDisplayState? { SessionDisplay.state(session.displayFacts) }
     private var marks: [SessionMark] { SessionDisplay.marks(session.displayFacts) ?? [] }
-    /// Background and Will resume, drawn at the end of the title line rather than as marks.
+    /// The chips after the line: Needs you alone, the rest being title-line icons (`rowIcons`).
+    private var rowMarks: [SessionMark] { SessionDisplay.rowMarks(session.displayFacts) ?? [] }
+    /// Failed, Retrying, On hold, Background and Will resume, drawn at the end of the title line rather than as chips.
     private var rowIcons: [SessionRowIcon] { SessionDisplay.rowIcons(session.displayFacts) }
     /// The row's VoiceOver value: "Idle, Interrupted", else, from an older server, `statusWord`.
     private var statusValue: String {
@@ -1854,9 +1856,9 @@ struct AgentSessionRow: View {
                             .foregroundStyle(lineColor(line.tone)).lineLimit(1)
                             // A full runner, run or batch: which one, and how its slots are taken.
                             .help(QueuedCapacity.rowHint(session, machine: machine, now: Date()) ?? "")
-                        if !marks.isEmpty {
+                        if !rowMarks.isEmpty {
                             Spacer(minLength: 4)
-                            SessionMarkPills(marks: marks)
+                            SessionMarkPills(marks: rowMarks)
                         }
                     }
                 }
@@ -1948,8 +1950,8 @@ struct AgentSessionRow: View {
 
     /// The marks at the right end of a phone row's second line: at most two, then "+N".
     @ViewBuilder private var phoneMarks: some View {
-        if !marks.isEmpty {
-            let row = SessionDisplay.phoneRowMarks(marks)
+        if !rowMarks.isEmpty {
+            let row = SessionDisplay.phoneRowMarks(rowMarks)
             Spacer(minLength: 4)
             SessionMarkPills(marks: row.shown, more: row.more)
         }

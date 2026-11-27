@@ -123,7 +123,7 @@ final class SessionDisplayTests: XCTestCase {
     }
 
     func testRow11_StatusFAILEDReleasedByAFailedTurn_FactsPresent() throws {
-        try assertDrawn(row: 11, state: .idle, marks: [.failed], group: "Needs you")
+        try assertDrawn(row: 11, state: .idle, marks: [.failed], icons: [.failed], group: "Needs you")
     }
 
     func testRow12_StatusFAILEDReleasedByAFailedTurn_FactsAbsent() throws {
@@ -155,7 +155,7 @@ final class SessionDisplayTests: XCTestCase {
     }
 
     func testRow19_OnHoldQueuedAccountPaused_FactsPresent() throws {
-        try assertDrawn(row: 19, state: .queued, marks: [.onHold], group: "Working")
+        try assertDrawn(row: 19, state: .queued, marks: [.onHold], icons: [.onHold], group: "Working")
     }
 
     func testRow20_OnHoldQueuedAccountPaused_FactsAbsent() throws {
@@ -290,9 +290,21 @@ final class SessionDisplayTests: XCTestCase {
         XCTAssertEqual(SessionDisplay.rowIcons(facts(released: true, runningBgCount: 1)), [])
     }
 
+    /// A list row draws Failed, Retrying and On hold as title-line icons (Failed red), so Needs you is its only chip.
+    func testAListRowDrawsFailedRetryingAndOnHoldAsIconsAndNeedsYouAsItsOnlyChip() {
+        let failed = facts(released: true, outcome: .failed, pendingApprovals: 1)
+        XCTAssertEqual(SessionDisplay.marks(failed), [.needsYou, .failed])
+        XCTAssertEqual(SessionDisplay.rowMarks(failed), [.needsYou])
+        XCTAssertEqual(SessionDisplay.rowIcons(failed), [.failed])
+        XCTAssertEqual(SessionDisplay.rowIcons(facts(.pending, waitingOn: .hold, runningBgCount: 1)), [.onHold, .background])
+        XCTAssertNil(SessionDisplay.rowMarks(SessionDisplayFacts(phase: nil, released: nil)))
+        XCTAssertEqual(SessionRowIcon.allCases.filter { $0.tone != .neutral }, [.failed])
+        XCTAssertEqual(SessionRowIcon.failed.symbol, SessionMark.failed.symbol)
+    }
+
     func testAWakeUnderAHeldSessionIsTheWillResumeRowIconAfterBackground() {
         XCTAssertEqual(SessionDisplay.rowIcons(facts(waitingOn: .wake, activity: "BACKGROUND_JOB")), [.background, .willResume])
-        XCTAssertEqual(SessionDisplay.rowIcons(facts(released: true, outcome: .failed, waitingOn: .wake)), [])
+        XCTAssertEqual(SessionDisplay.rowIcons(facts(released: true, outcome: .failed, waitingOn: .wake)), [.retrying])
         XCTAssertEqual(SessionDisplay.rowIcons(SessionDisplayFacts(phase: nil, released: nil, runningBgCount: 1)), [])
     }
 
@@ -375,7 +387,8 @@ final class SessionDisplayTests: XCTestCase {
         XCTAssertEqual(declared, SessionMark.allCases.map { keys[$0]! })
         XCTAssertTrue(web.contains("return [state.word, ...marks.map((m) => SESSION_MARKS[m].word)].join(' · ');"))
         XCTAssertEqual(SessionDisplay.written(.idle, [.needsYou]), "Idle · Needs you")
-        for (icon, key) in [(SessionRowIcon.background, "BACKGROUND"), (.willResume, "WILL_RESUME")] {
+        for (icon, key) in [(SessionRowIcon.failed, "FAILED"), (.retrying, "RETRYING"), (.onHold, "ON_HOLD"),
+                            (.background, "BACKGROUND"), (.willResume, "WILL_RESUME")] {
             XCTAssertTrue(web.contains("  \(key): '\(icon.tip)',"), "web SESSION_ROW_ICON_TIPS.\(key)")
         }
     }

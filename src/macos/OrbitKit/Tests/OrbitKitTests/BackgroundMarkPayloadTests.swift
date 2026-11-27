@@ -43,9 +43,12 @@ final class BackgroundMarkPayloadTests: XCTestCase {
         var written: String { ([state] + marks).joined(separator: " \u{00B7} ") }
     }
 
-    /// Web's name for a row icon: BACKGROUND, WILL_RESUME.
+    /// Web's name for a row icon: FAILED, RETRYING, ON_HOLD, BACKGROUND, WILL_RESUME.
     private static func webName(_ icon: SessionRowIcon) -> String {
         switch icon {
+        case .failed:     return "FAILED"
+        case .retrying:   return "RETRYING"
+        case .onHold:     return "ON_HOLD"
         case .background: return "BACKGROUND"
         case .willResume: return "WILL_RESUME"
         }

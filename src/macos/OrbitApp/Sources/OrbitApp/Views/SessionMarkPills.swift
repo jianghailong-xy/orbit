@@ -47,8 +47,8 @@ struct SessionMarkPill: View {
     }
 }
 
-/// A list row's title-line icons (`SessionDisplay.rowIcons`): grey glyphs at the end of the first
-/// line, each with its tip as tooltip and VoiceOver label.
+/// A list row's title-line icons (`SessionDisplay.rowIcons`): glyphs at the end of the first line,
+/// red for Failed and grey otherwise, each with its tip as tooltip and VoiceOver label.
 struct SessionRowIconsView: View {
     let icons: [SessionRowIcon]
 
@@ -56,7 +56,7 @@ struct SessionRowIconsView: View {
         ForEach(icons, id: \.self) { icon in
             Image(systemName: icon.symbol)
                 .font(.orbitMeta)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(icon.tone == .error ? Color.red : Color.secondary)
                 .help(icon.tip)
                 .accessibilityLabel(icon.tip)
         }

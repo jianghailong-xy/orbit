@@ -84,14 +84,20 @@ public enum SessionMark: String, Equatable, Sendable, CaseIterable {
     }
 }
 
-/// A fact a list row draws as a grey icon at the end of its title line, not as a mark (the owner,
-/// 2026-11-27): background work still running, and a wake (a watch, a scheduled wake-up or an armed
-/// retry) that will resume it. Interrupted, Finished and Ended are not drawn at all.
+/// A fact a list row draws as an icon at the end of its title line instead of a chip (the owner,
+/// 2026-11-27; web `SessionRowIcon`): a release by a failure (Failed, or Retrying when the server will
+/// retry it) and a held queued turn (On hold), which every other surface still draws as marks; and
+/// background work still running and a wake (a watch, a scheduled wake-up or an armed retry) that
+/// will resume a held session, which no other surface draws. Interrupted, Finished and Ended are not
+/// drawn at all.
 public enum SessionRowIcon: String, Equatable, Sendable, CaseIterable {
-    case background, willResume
+    case failed, retrying, onHold, background, willResume
 
     public var symbol: String {
         switch self {
+        case .failed:     return SessionMark.failed.symbol
+        case .retrying:   return SessionMark.retrying.symbol
+        case .onHold:     return SessionMark.onHold.symbol
         case .background: return "terminal"
         case .willResume: return "eye"
         }
@@ -100,8 +106,24 @@ public enum SessionRowIcon: String, Equatable, Sendable, CaseIterable {
     /// The icon's tooltip and VoiceOver label.
     public var tip: String {
         switch self {
+        case .failed:     return SessionMark.failed.word
+        case .retrying:   return SessionMark.retrying.word
+        case .onHold:     return SessionMark.onHold.word
         case .background: return "Background work running"
         case .willResume: return "Will resume"
+        }
+    }
+
+    /// Red for Failed (a failure nobody is retrying), grey otherwise.
+    public var tone: SessionStatusGlyph.Tone { self == .failed ? .error : .neutral }
+
+    /// The mark a list row draws as this icon, if any.
+    init?(mark: SessionMark) {
+        switch mark {
+        case .failed:   self = .failed
+        case .retrying: self = .retrying
+        case .onHold:   self = .onHold
+        default:        return nil
         }
     }
 }
@@ -150,11 +172,17 @@ public enum SessionDisplay {
         return out
     }
 
-    /// The title-line icons of a held session, in drawing order (web `sessionRowIcons`). Empty from an
-    /// older server and for a released session.
+    /// The chips a list row draws after its line: the marks less those it draws as title-line icons,
+    /// so Needs you alone (web `sessionRowMarks`). Nil from an older server.
+    public static func rowMarks(_ f: SessionDisplayFacts) -> [SessionMark]? {
+        marks(f)?.filter { SessionRowIcon(mark: $0) == nil }
+    }
+
+    /// The title-line icons of a list row, in drawing order (web `sessionRowIcons`): Failed / Retrying
+    /// and On hold (the marks of those names), then Background and Will resume for a held session.
     public static func rowIcons(_ f: SessionDisplayFacts) -> [SessionRowIcon] {
-        guard hasFacts(f), f.released != true else { return [] }
-        var out: [SessionRowIcon] = []
+        var out = (marks(f) ?? []).compactMap(SessionRowIcon.init(mark:))
+        guard hasFacts(f), f.released != true else { return out }
         if f.activity == "BACKGROUND_JOB" || (f.runningBgCount ?? 0) > 0 { out.append(.background) }
         if f.waitingOn == .wake { out.append(.willResume) }
         return out
