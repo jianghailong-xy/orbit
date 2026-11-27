@@ -25,28 +25,6 @@ final class SessionPhaseBehaviorTests: XCTestCase {
         }
     }
 
-    func testEndAndMoveWaitsForReleaseAndFallsBackToTerminalStatus() async throws {
-        let cases = [
-            [#""status":"FAILED","released":false"#, #""status":"AWAITING_INPUT","released":true"#],
-            [#""status":"AWAITING_INPUT""#, #""status":"FAILED""#],
-        ]
-        for samples in cases {
-            var rows = try samples.map { try session($0) }
-            var steps: [String] = []
-            let outcome = await SessionWorkspaceMove.run(
-                endingFirst: true,
-                end: { steps.append("end") },
-                session: {
-                    steps.append("read")
-                    return rows.removeFirst()
-                },
-                move: { steps.append("move") },
-                sleep: { _ in steps.append("wait") })
-            XCTAssertEqual(outcome, .moved)
-            XCTAssertEqual(steps, ["end", "read", "wait", "read", "move"])
-        }
-    }
-
     func testFinishedAlertsUseReleaseAndOutcomeWithoutAnnouncingRequestedEnds() throws {
         let held = try session(#""status":"FAILED","released":false"#)
         let failed = try session(#""status":"AWAITING_INPUT","released":true,"lastTurnOutcome":"FAILED""#)

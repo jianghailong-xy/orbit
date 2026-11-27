@@ -74,77 +74,6 @@ public enum SessionWorkspaceMoveLogic {
     }
 }
 
-/// End and Move (§5.4): the client's own steps, since the move itself only takes an ended session.
-/// Ending is when its runner commits what it left uncommitted, so the move waits for the session to
-/// have ended rather than for the end request to be answered. Every step is handed in, so the order,
-/// the wait and its timeout are tested here without a server.
-public enum SessionWorkspaceMove {
-    /// What the panel says while the move is under way.
-    public enum Phase: Equatable, Sendable {
-        /// End and Move's first step: asking the session to end, then waiting until it has.
-        case ending
-        /// The move itself.
-        case moving
-    }
-
-    public enum Outcome: Equatable, Sendable {
-        case moved
-        /// Not moved, and why, as the sentence the panel shows.
-        case failed(String)
-    }
-
-    /// How long End and Move waits for the session to end. Its runner commits what the session left
-    /// uncommitted first, which can take a while on a large change.
-    public static let endTimeout: TimeInterval = 60
-    /// How often it looks while it waits.
-    public static let pollInterval: TimeInterval = 1
-
-    /// Move the session: end it first when `endingFirst` (End and Move), wait until its run is over,
-    /// then move it. `session` reads the current server snapshot on each look.
-    ///
-    /// An end the server refuses with a 409 is a session already ending or ended — the end request
-    /// only takes a live one — so the wait goes on from there. Anything else stops the move with why.
-    /// A status read that fails along the way is only a missed look; the wait goes on until the
-    /// timeout, and a session still not ended by then is not moved.
-    public static func run(endingFirst: Bool,
-                           end: () async throws -> Void,
-                           session: () async throws -> Session,
-                           move: () async throws -> Void,
-                           phase: (Phase) async -> Void = { _ in },
-                           sleep: (TimeInterval) async -> Void = SessionWorkspaceMove.sleep,
-                           timeout: TimeInterval = SessionWorkspaceMove.endTimeout,
-                           interval: TimeInterval = SessionWorkspaceMove.pollInterval) async -> Outcome {
-        if endingFirst {
-            await phase(.ending)
-            do {
-                try await end()
-            } catch APIError.http(let code, _) where code == 409 {
-                // Already ending or ended: wait for it below like any other.
-            } catch {
-                return .failed(SessionMoveCopy.endFailed(error))
-            }
-            var waited: TimeInterval = 0
-            while (try? await session())?.isReleased != true {
-                guard waited < timeout else { return .failed(SessionMoveCopy.endTimedOut) }
-                await sleep(interval)
-                waited += interval
-            }
-        }
-        await phase(.moving)
-        do {
-            try await move()
-        } catch {
-            return .failed(SessionMoveCopy.moveFailed(error))
-        }
-        return .moved
-    }
-
-    /// The wait between two looks at the session.
-    public static func sleep(_ seconds: TimeInterval) async {
-        try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
-    }
-}
-
 /// The words of the Move panel's second group, its workspace pages and its confirmation (§4, §5.3).
 public extension SessionMoveCopy {
     /// The second group's header.
@@ -200,8 +129,9 @@ public extension SessionMoveCopy {
 
     /// The confirmation's body, put together as §5.3 says: the conversation goes, the agent's memory
     /// of it is summarized when another runner rebuilds it, the changes stay on their branch in the
-    /// old workspace — named with how many aren't merged yet when some aren't — and an idle session
-    /// ends first.
+    /// old workspace — named with how many aren't merged yet when some aren't — and, for a project's
+    /// coordinator still held, where Orbit's updates wait once the move has let it go. The server
+    /// releasing a held session before it moves it (`POST /sessions/:id/move`) is not the person's to see.
     static func confirmMessage(_ answer: SessionMoveTargets, to target: SessionMoveTarget,
                                from workspace: String) -> String {
         var paragraphs = ["The conversation moves with it. Your next message continues it in \(target.name)."]
@@ -214,11 +144,9 @@ public extension SessionMoveCopy {
                               + "moves to \(target.name)’s list. Its tasks keep running where they are.")
         }
         if let files = filesSentence(answer, from: workspace) { paragraphs.append(files) }
-        if answer.needsEnd {
-            // An ended coordinator is not handed Orbit's updates: they wait on the project page.
-            paragraphs.append(answer.coordinates == nil ? "The session ends first."
-                              : "The session ends first. Until you message it again, Orbit’s updates for "
-                                + "the project wait on the project page.")
+        if answer.needsEnd, answer.coordinates != nil {
+            // A released coordinator is not handed Orbit's updates: they wait on the project page.
+            paragraphs.append("Until you message it again, Orbit’s updates for the project wait on the project page.")
         }
         return paragraphs.joined(separator: "\n\n")
     }
@@ -234,33 +162,18 @@ public extension SessionMoveCopy {
         return "\(files) merged into \(answer.mergeTarget ?? "main") yet. \(they) on branch \(branch) in \(workspace)."
     }
 
-    /// The confirmation's button: End and Move for a session that has to be ended first.
-    static func confirmAction(_ answer: SessionMoveTargets) -> String {
-        answer.needsEnd ? "End and Move" : "Move"
-    }
+    /// The confirmation's button.
+    static let confirmAction = "Move"
 
-    /// What the panel says while the move is under way.
-    static func progress(_ phase: SessionWorkspaceMove.Phase) -> String {
-        switch phase {
-        case .ending: return "Ending the session…"
-        case .moving: return "Moving…"
-        }
-    }
+    /// What the panel says while the move is under way: one request, which on a held session waits
+    /// for its runner to let it go first.
+    static let moving = "Moving…"
 
     /// The toast once the session is in the other workspace.
     static func movedToWorkspace(_ name: String) -> String { "Moved to \(name)" }
 
     /// The alert when it isn't, over the reason.
     static let couldNotMove = "Couldn't move the session"
-
-    /// The end request failed for a reason other than the session already ending.
-    static func endFailed(_ error: Error) -> String {
-        "The session couldn’t be ended, so it wasn’t moved: \(APIClient.failureReason(error))."
-    }
-
-    /// The session was asked to end but hadn't by the time End and Move stopped waiting.
-    static let endTimedOut = "The session hasn’t finished ending, so it wasn’t moved. "
-        + "Try again once it has ended."
 
     /// The move's reason goes below the failed-action title. A refusal (409) is the server's own
     /// sentence, shown as it is; other failures also show only their reason.

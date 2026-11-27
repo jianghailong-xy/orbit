@@ -115,7 +115,8 @@ public struct SessionMoveTargets: Codable, Equatable, Sendable {
     public let folders: [SessionMoveFolder]
     /// Why the session cannot move to another workspace at all; nil when it can.
     public let reason: String?
-    /// Idle but not ended: it has to be ended before it moves — the confirmation's End and Move.
+    /// Still held (idle, or already being let go): the move releases it first, on the server. Only a
+    /// coordinator's confirmation reads it, to say where Orbit's updates wait afterwards.
     public let needsEnd: Bool
     /// The branch its changes stay on in the old workspace's repository.
     public let branch: String?

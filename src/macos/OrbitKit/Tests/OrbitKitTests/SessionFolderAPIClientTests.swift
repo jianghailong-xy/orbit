@@ -196,12 +196,12 @@ final class SessionFolderAPIClientTests: XCTestCase {
         XCTAssertTrue(loose.sent.first?.body?["folderId"] is NSNull)
 
         // A refusal is the server's 409, with the reason the panel shows.
-        _ = answer(#"{"statusCode":409,"message":"End the session first."}"#, status: 409)
+        _ = answer(#"{"statusCode":409,"message":"Stop the session first."}"#, status: 409)
         do {
             try await client().moveSession("s1", toWorkspace: "w2", folderID: nil)
             XCTFail("a 409 is thrown")
         } catch {
-            XCTAssertEqual(SessionMoveCopy.moveFailed(error), "End the session first.")
+            XCTAssertEqual(SessionMoveCopy.moveFailed(error), "Stop the session first.")
         }
     }
 

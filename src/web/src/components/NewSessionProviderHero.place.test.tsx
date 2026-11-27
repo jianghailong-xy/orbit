@@ -7,7 +7,11 @@ import { AgentProvider } from '@orbit/shared';
 import { NewSessionProviderHero, type NewSessionPlace } from './NewSessionProviderHero';
 import { currentEngineChoice, engineChoices, type ChoiceSources } from '../lib/sessionProviderChoices';
 
-/** The place pill's one menu (docs/mocks/new-session-place ③): workspaces, then this workspace's folders. */
+/** The place pill's menu (docs/mocks/new-session-place 02, option D): the workspaces, each with its folders one level
+ *  down under None, and a search pinned over them that lists both levels' matches. */
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver;
 
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;
@@ -36,21 +40,27 @@ async function render(place: NewSessionPlace): Promise<void> {
   await settle();
 }
 
+const pill = () => container!.querySelector<HTMLButtonElement>('.np-place-pill')!;
 async function openMenu(): Promise<void> {
-  await act(async () => container!.querySelector<HTMLButtonElement>('.np-place-pill')!.click());
+  await act(async () => pill().click());
   await settle();
 }
-
-const rows = () => [...document.querySelectorAll('.np-place-list .np-row, .np-place-list .np-place-head')]
+const menus = () => [...document.querySelectorAll<HTMLElement>('[role="menu"]')];
+const rowsOf = (menu: HTMLElement) => [...menu.querySelectorAll<HTMLElement>('.orbit-menu-list [role="menuitem"], .orbit-menu-list .orbit-menu-group-label, :scope > [role="menuitem"]')]
   .map((el) => el.textContent);
+const row = (menu: HTMLElement, text: string) =>
+  [...menu.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((el) => el.textContent === text)!;
 
 const place = (over: Partial<NewSessionPlace> = {}): NewSessionPlace => ({
-  workspace: { id: 'w1', name: 'tea-cli @ SG' },
-  workspaces: [{ id: 'w1', name: 'tea-cli @ SG' }, { id: 'w2', name: 'orbit-ws01' }],
-  onPickWorkspace: vi.fn(),
+  workspace: { id: 'w2', name: 'orbit-ws01' },
+  workspaces: [{ id: 'w1', name: 'Penetration Testing' }, { id: 'w2', name: 'orbit-ws01' }, { id: 'w3', name: 'orbit-develop' }],
   folder: null,
-  folders: [{ id: 'f1', name: 'Releases' }, { id: 'f2', name: 'Orbit Session' }],
-  onPickFolder: vi.fn(),
+  folders: [
+    { id: 'f1', name: 'Orbit Drive', workspaceId: 'w2' },
+    { id: 'f2', name: 'Orbit Session', workspaceId: 'w2' },
+    { id: 'f3', name: 'Driver tests', workspaceId: 'w3' },
+  ],
+  onPick: vi.fn(),
   ...over,
 });
 
@@ -61,59 +71,61 @@ describe('NewSessionProviderHero place menu', () => {
     root = createRoot(container);
   });
 
-  afterEach(() => {
-    act(() => root?.unmount());
+  afterEach(async () => {
+    await act(async () => root?.unmount());
     container?.remove();
     container = null;
     root = null;
     document.body.innerHTML = '';
   });
 
-  it('lists the workspaces, then this workspace’s folders under None', async () => {
+  it('lists the workspaces alone, this one first, with how many folders each opens', async () => {
     await render(place());
     await openMenu();
-    expect(rows()).toEqual([
-      'Workspace', 'tea-cli @ SG', 'orbit-ws01',
-      'Folder in tea-cli @ SG · optional', 'None', 'Releases', 'Orbit Session',
-    ]);
-    expect(document.querySelector('.np-place-list .np-row.on.np-place-none')?.textContent).toBe('None');
-    expect(document.querySelector('.np-place-search')).toBeNull();
+    const [menu] = menus();
+    expect(rowsOf(menu)).toEqual(['orbit-ws012', 'Penetration Testing', 'orbit-develop1']);
+    expect(row(menu, 'orbit-ws012').getAttribute('data-selected')).not.toBeNull();
+    expect(menu.querySelector('.orbit-menu-header input[placeholder="Find a workspace or folder"]')).not.toBeNull();
+    expect(menu.textContent).not.toContain('Orbit Drive');
   });
 
-  it('lists the workspaces alone when this workspace has no folders', async () => {
-    await render(place({ folders: [] }));
-    await openMenu();
-    expect(rows()).toEqual(['Workspace', 'tea-cli @ SG', 'orbit-ws01']);
-  });
-
-  it('picks a folder or another workspace, and closes', async () => {
+  it('picks a workspace with no folders from its row', async () => {
     const p = place();
     await render(p);
     await openMenu();
-    const row = (name: string) => [...document.querySelectorAll<HTMLButtonElement>('.np-place-list .np-row')]
-      .find((el) => el.textContent === name)!;
-    await act(async () => row('Releases').click());
+    await act(async () => row(menus()[0], 'Penetration Testing').click());
     await settle();
-    expect(p.onPickFolder).toHaveBeenCalledWith('f1');
-    expect(container!.querySelector('.np-place-pill')?.getAttribute('aria-expanded')).toBe('false');
-
-    await openMenu();
-    await act(async () => row('orbit-ws01').click());
-    await settle();
-    expect(p.onPickWorkspace).toHaveBeenCalledWith('w2');
-    expect(container!.querySelector('.np-place-pill')?.getAttribute('aria-expanded')).toBe('false');
+    expect(p.onPick).toHaveBeenCalledWith('w1', null);
+    expect(menus()).toHaveLength(0);
   });
 
-  it('offers a search over both sections once the menu is long', async () => {
-    const workspaces = Array.from({ length: 6 }, (_, i) => ({ id: `w${i + 1}`, name: `ws-${i + 1}` }));
-    await render(place({ workspace: workspaces[0], workspaces }));
+  it('picks a folder of another workspace in one go, from its level', async () => {
+    const p = place();
+    await render(p);
     await openMenu();
-    const search = document.querySelector<HTMLInputElement>('.np-place-search')!;
-    expect(search).toBeTruthy();
+    await act(async () => row(menus()[0], 'orbit-develop1').click());
+    await settle();
+    const level = menus()[1];
+    expect(rowsOf(level)).toEqual(['None', 'Driver tests']);
+    await act(async () => row(level, 'Driver tests').click());
+    await settle();
+    expect(p.onPick).toHaveBeenCalledWith('w3', 'f3');
+  });
+
+  it('searches both levels into one list, a folder saying whose it is', async () => {
+    const p = place();
+    await render(p);
+    await openMenu();
+    const input = document.querySelector<HTMLInputElement>('.np-place-search input')!;
     await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(search, 'rel');
-      search.dispatchEvent(new Event('input', { bubbles: true }));
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'dri');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
     });
-    expect(rows()).toEqual(['Folder in ws-1 · optional', 'Releases']);
+    await settle();
+    const [menu] = menus();
+    expect(rowsOf(menu)).toEqual(['Folders', 'Orbit Drivein orbit-ws01', 'Driver testsin orbit-develop']);
+    await act(async () => row(menu, 'Driver testsin orbit-develop').click());
+    await settle();
+    expect(p.onPick).toHaveBeenCalledWith('w3', 'f3');
   });
 });

@@ -644,7 +644,7 @@ import {
   sessionRunStateOf,
   sessionRunStatusOf,
 } from '../lib/sessionState';
-import { sessionDisplayState, sessionDisplayText, sessionMarks } from '../lib/sessionDisplay';
+import { sessionDisplayState, sessionDisplayText, sessionMarks, sessionReleasedByMove } from '../lib/sessionDisplay';
 import { SessionMarkChips, SessionStateGlyph } from './SessionStateDisplay';
 import { deliveryFailureExplanation, offersSteerWithdraw, steerDeliveryState } from '../lib/steerDelivery';
 import { backgroundWorkIsActive, isSessionTurnActive, outlivingSessionWork } from '../lib/sessionActivity';
@@ -11180,15 +11180,26 @@ export function WorkspaceView({
         workspaces: orderWorkspaces(workspacesQ.data ?? [])
           .filter((w) => workspaceRunnerId(w) != null)
           .map((w) => ({ id: w.id, name: w.name })),
-        onPickWorkspace: (id) =>
-          navigate(`/workspaces/${encodeId(id)}/new${projectIntent ? '?intent=project' : ''}`),
         folder: openFolder && openFolder.workspaceId === pickedWorkspace.id
           ? { id: openFolder.id, name: openFolder.name }
           : null,
-        folders: projectIntent || scopeWorkspaceId !== pickedWorkspace.id
+        // Every workspace's folders, each its workspace's submenu (docs/mocks/new-session-place 02 ②).
+        folders: projectIntent
           ? []
-          : workspaceFolders.map((f) => ({ id: f.id, name: f.name })),
-        onPickFolder: (id) => setFolderParam(id, true),
+          : (foldersQ.data ?? []).map((f) => ({ id: f.id, name: f.name, workspaceId: f.workspaceId })),
+        // A folder of this workspace is the `folder` param the send already files the session by; another
+        // workspace opens its own draft (the 'new' draft's text goes along), in the folder picked there.
+        onPick: (id, folderId) => {
+          if (id === pickedWorkspace.id) {
+            setFolderParam(folderId, true);
+            return;
+          }
+          const query = new URLSearchParams();
+          if (projectIntent) query.set('intent', 'project');
+          if (folderId) query.set('folder', encodeId(folderId));
+          const search = query.toString();
+          navigate(`/workspaces/${encodeId(id)}/new${search ? `?${search}` : ''}`);
+        },
       }
     : null;
   // A wide window's draft has no header (docs/mocks/new-session-top ②c): with no session there is no title,
@@ -12819,7 +12830,9 @@ export function WorkspaceView({
               {selected &&
                 !selectedTrashed &&
                 !scheduleRunCard &&
-                isSessionTerminal(selectedSession ?? selected) && (
+                isSessionTerminal(selectedSession ?? selected) &&
+                // A move let it go; nothing tells its reader it ended (sessionReleasedByMove).
+                !sessionReleasedByMove(selectedSession ?? selected) && (
                 <div className="chat-note">
                   {sessionEndedBanner(
                     selectedSession ?? selected,
