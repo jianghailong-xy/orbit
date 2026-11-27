@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/coder/websocket v1.8.15
-	github.com/nats-io/nats.go v1.55.0
+	github.com/nats-io/nats.go v1.56.0
 	github.com/nats-io/nkeys v0.4.16
 	golang.org/x/crypto v0.58.0
 	google.golang.org/protobuf v1.36.12
