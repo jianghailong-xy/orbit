@@ -3235,7 +3235,8 @@ final class ConsoleModel {
     func send(authoritative: RunStatus? = nil, overrideText: String? = nil,
               overrideAttachments: [TurnAttachment]? = nil, takesStagedAttachments: Bool = false,
               queueForNextTurn: Bool = false,
-              wikiContext: WikiChatContext? = nil, accepted onAccepted: (@MainActor () -> Void)? = nil) async {
+              wikiContext: WikiChatContext? = nil, driveContext: DriveChatContext? = nil,
+              accepted onAccepted: (@MainActor () -> Void)? = nil) async {
         guard !sending, !waitingForUploads else { return }
         // `false` for a retry: its message was handed in, so the composer keeps what it holds.
         let fromComposer = overrideText == nil
@@ -3245,6 +3246,7 @@ final class ConsoleModel {
         // A wiki chat's composer: the page and the selection its attachment row shows go beside the words, and leave
         // the row once the server took them. A sentence handed in (a card's own) carries neither.
         let wikiContext = wikiContext ?? (fromComposer ? wikiChat?.context() : nil)
+        let driveContext = driveContext ?? (fromComposer ? wikiChat?.driveContext() : nil)
         let onAccepted = onAccepted ?? (fromComposer ? wikiChat?.accepted : nil)
         // A chip is staged the moment an image is picked, while its bytes are still going up (see
         // `attach`). Sending in that window would leave the image behind for good: only chips that
@@ -3427,6 +3429,7 @@ final class ConsoleModel {
             let accepted = try await postTurn(resuming: resuming, clientTurnId: clientTurnId,
                                               text: text, shell: shell, attachmentIds: attachmentIds,
                                               queueForNextTurn: queueForNextTurn, wikiContext: wikiContext,
+                                              driveContext: driveContext,
                                               skipTranslation: skipTranslation,
                                               optimizedTranslation: optimizedTranslation)
             if fromComposer { promptOptimizer.sent() }
@@ -3729,6 +3732,7 @@ final class ConsoleModel {
     private func postTurn(resuming: Bool, clientTurnId: String, text: String, shell: Bool,
                           attachmentIds: [String], queueForNextTurn: Bool = false,
                           wikiContext: WikiChatContext? = nil,
+                          driveContext: DriveChatContext? = nil,
                           skipTranslation: Bool = false,
                           optimizedTranslation: String? = nil) async throws -> TurnAccepted {
         // Built once, for the same reason the endpoint is chosen once: every attempt must send the
@@ -3752,11 +3756,13 @@ final class ConsoleModel {
                                           stopSessionId: confirmedStopSessionID,
                                           // A wiki chat's page and selection, which revive it too.
                                           wikiContext: wikiContext,
+                                          driveContext: driveContext,
                                           skipTranslation: skipTranslation ? true : nil,
                                           optimizedTranslation: optimizedTranslation)
         let turnRequest = ComposerLogic.makeTurn(clientTurnId: clientTurnId, text: text,
                                                  shell: shell, attachmentIds: attachmentIds,
                                                  queueForNextTurn: queueForNextTurn, wikiContext: wikiContext,
+                                                 driveContext: driveContext,
                                                  skipTranslation: skipTranslation,
                                                  optimizedTranslation: optimizedTranslation)
         // A run that is letting go frees the task within a couple of seconds, so this waits it out
@@ -7114,6 +7120,8 @@ func composerThumbnail(from data: Data, maxDimension: CGFloat = 96) -> Data? {
 /// the create its first message goes through instead of a session's.
 struct WikiChatComposing {
     let context: @MainActor () -> WikiChatContext?
+    /// A Drive chat's folder and files (board drive-chat 02), beside the words; nil on the Wiki.
+    var driveContext: @MainActor () -> DriveChatContext? = { nil }
     let accepted: @MainActor () -> Void
     /// True once the chat is made; false when it was refused, which the panel says.
     var create: (@MainActor (WikiChatLogic.FirstMessage) async -> Bool)?

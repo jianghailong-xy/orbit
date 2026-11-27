@@ -423,6 +423,9 @@ private struct CompactSections: View {
                     .drawerToggle(open: openDrawer)
                     .navigationDestination(for: NavNode.self) { node in DriveDestination(node: node) }
             }
+            // The Drive chat: the round button on every Drive page but Trash and Storage, and its two-height sheet
+            // (board drive-chat 02 ⑤-⑧).
+            .driveChatSheetHost()
 
         // SCHEDULED — the timeline and its bottom panel.
         case .scheduled:

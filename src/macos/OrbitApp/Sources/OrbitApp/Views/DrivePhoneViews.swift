@@ -65,11 +65,15 @@ struct DriveFolderPage: View {
             }
             Section {
                 ForEach(rows) { entry in
+                    // What a Drive chat made, moved in or renamed, until the row is opened (board drive-chat 02 ⑤).
+                    let mark = app.driveChat?.mark(entry.id)
                     DriveEntryRow(model: model, entry: entry, count: counts[entry.id],
-                                      folderTrail: searching ? DriveLogic.searchFolder(entry.folderPath) : nil) {
+                                      folderTrail: searching ? DriveLogic.searchFolder(entry.folderPath) : nil,
+                                      mark: mark) {
                         open(entry)
                     }
                     .driveRowActions(entry, model: model, actions: $actions)
+                    .listRowBackground(mark != nil ? Color.driveMarkedRow : nil)
                 }
             }
             if isRoot && !searching {
@@ -133,6 +137,7 @@ struct DriveFolderPage: View {
     }
 
     private func open(_ entry: DriveEntry) {
+        app.driveChat?.opened(entry.id)
         if entry.isFolder {
             app.push(.driveFolder(entryID: entry.id, name: entry.name))
         } else {
@@ -193,6 +198,8 @@ struct DriveEntryRow: View {
     var count: Int?
     /// A search result's folder, which replaces the writer line.
     var folderTrail: String?
+    /// What a Drive chat did to it, shown after its name until it is opened.
+    var mark: DriveChatLogic.Mark?
     let open: () -> Void
 
     var body: some View {
@@ -202,6 +209,7 @@ struct DriveEntryRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 4) {
                         Text(entry.name).lineLimit(1).truncationMode(.middle).foregroundStyle(.primary)
+                        if let mark { DriveMarkPill(mark: mark) }
                         if model.link(of: entry) != nil {
                             Image(systemName: "link").font(.orbitMeta).foregroundStyle(.secondary)
                                 .accessibilityLabel("Shared")

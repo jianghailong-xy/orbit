@@ -972,10 +972,29 @@ private struct TypingFold: ViewModifier {
     }
 }
 
+/// The cards a page's chat hangs under the conversation's turns (`TranscriptChatCard`), and how the page draws one:
+/// a Drive chat's change groups and overwrite questions (board drive-chat 02). Nil everywhere else.
+struct TranscriptChatCards {
+    let cards: [TranscriptChatCard]
+    let render: (String) -> AnyView
+}
+
+private struct TranscriptChatCardsKey: EnvironmentKey {
+    static let defaultValue: TranscriptChatCards? = nil
+}
+
+extension EnvironmentValues {
+    var transcriptChatCards: TranscriptChatCards? {
+        get { self[TranscriptChatCardsKey.self] }
+        set { self[TranscriptChatCardsKey.self] = newValue }
+    }
+}
+
 struct TranscriptView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openApprovalReview) private var openApprovalReview
+    @Environment(\.transcriptChatCards) private var chatCards
     @Environment(\.openPromotionReview) private var openPromotionReview
     let console: ConsoleModel
     /// The sticky "↑ Your question" header folds away while a phone's composer holds the keyboard,
@@ -1643,7 +1662,8 @@ struct TranscriptView: View {
                              recap: recapCard,
                              watchName: watchWakeName,
                              handoffReceived: app.session(id: console.sessionID)?.coordinatorHandoffReceived,
-                             createdWorkspace: console.createdWorkspaceLine)
+                             createdWorkspace: console.createdWorkspaceLine,
+                             chatCards: chatCards?.cards ?? [])
     }
 
     /// The name a folded watch turn gives its one target (`OrbitExchangeFold.orbitTurn`): the watch's
@@ -1806,6 +1826,9 @@ struct TranscriptView: View {
         case .approval(let approval):
             // No `AnchorRow`: an approval isn't a "Your question" the sticky header names.
             ApprovalCard(console: console, approval: approval).orbitCardWidth()
+        case .chatCard(let card):
+            // No `AnchorRow`: drawn by the page whose chat hangs it here.
+            if let chatCards { chatCards.render(card.id).orbitCardWidth() }
         case .recap(let card):
             // No `AnchorRow`: the recap sums the conversation up; it asks nothing.
             RecapCardView(card: card, onHide: hideRecap)
