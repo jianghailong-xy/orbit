@@ -3673,8 +3673,7 @@ button.toast--pill:focus-visible {
 /* The Task badge while its task is open beside the conversation: pressed, and a press closes it. */
 .coordinator-badge-link[aria-pressed='true'] { background: color-mix(in srgb, var(--brand) 14%, var(--bg-base)); border-color: var(--brand); }
 /* The title as the button that opens the session's settings (docs/mocks/session-settings-column ③): plain at
-   rest and while the settings are open (owner 11-25: the open state needs no look of its own), a light ground and
-   a › on hover. Keyboard focus shows as hover does, in place of the browser's ring. */
+   rest, while the settings are open (owner 11-25: the open state needs no look of its own) and on hover. */
 .workspace-name-button {
   display: inline-flex;
   align-items: center;
@@ -3691,11 +3690,9 @@ button.toast--pill:focus-visible {
   outline: none;
 }
 .workspace-name-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-/* The › takes no room at rest, so a long title runs right up to the badges after it. */
-.workspace-name-chevron { flex: none; font-size: 11px; color: var(--text-3); display: none; }
-.workspace-name-button:hover, .workspace-name-button:focus-visible { background: var(--orbit-control-hover-bg); }
-.workspace-name-button:hover .workspace-name-chevron,
-.workspace-name-button:focus-visible .workspace-name-chevron { display: inline-flex; }
+/* Hovered it reads as at rest (docs/mocks/session-title-hover, owner 11-27): nothing moves the badges after it.
+   Keyboard focus takes the app's focus ring. */
+.workspace-name-button:focus-visible { outline: var(--orbit-focus-width) solid var(--orbit-focus-color); outline-offset: 1px; }
 .workspace-sub {
   font-size: 12.5px;
   color: var(--text-3);

@@ -11732,21 +11732,20 @@ export function WorkspaceView({
               {selected && !selectedTrashed && !composing ? (
                 // A click opens the session's settings, and again closes them (docs/mocks/session-settings-column ③);
                 // it is renamed there, in the Name field.
-                <Tooltip content="Session settings" side="bottom" align="start">
-                  <button
-                    type="button"
-                    className="workspace-name workspace-name-button"
-                    aria-expanded={settingsOpen}
-                    onClick={() => {
-                      // One column at a time beside the conversation (docs/mocks/session-task-column).
-                      if (!settingsOpen && taskOverPage) closeTaskOverPage();
-                      setSettingsOpen((open) => !open);
-                    }}
-                  >
-                    <span className="workspace-name-text">{selected.title}</span>
-                    <RightOutlined className="workspace-name-chevron" aria-hidden />
-                  </button>
-                </Tooltip>
+                // It looks the same hovered as at rest: no ground, no ›, no tooltip (docs/mocks/session-title-hover).
+                <button
+                  type="button"
+                  className="workspace-name workspace-name-button"
+                  aria-label="Session settings"
+                  aria-expanded={settingsOpen}
+                  onClick={() => {
+                    // One column at a time beside the conversation (docs/mocks/session-task-column).
+                    if (!settingsOpen && taskOverPage) closeTaskOverPage();
+                    setSettingsOpen((open) => !open);
+                  }}
+                >
+                  <span className="workspace-name-text">{selected.title}</span>
+                </button>
               ) : (
                 <div className="workspace-name">
                   {composing
