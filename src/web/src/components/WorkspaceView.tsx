@@ -542,7 +542,7 @@ import { Spinner } from './ui/Spinner';
 import { Textarea } from './ui/Textarea';
 import { Tooltip } from './ui/Tooltip';
 import { PermissionModeLine } from './PermissionModeLine';
-import { ModeCapsuleValue, ModeReason } from './ModeCapsule';
+import { ModeCapsuleValue, ModeOptionLabel, ModeReason } from './ModeCapsule';
 import {
   autoMenuNote,
   modeCapsule,
@@ -13287,6 +13287,7 @@ export function SessionComposer({
             showArrow={false}
             value={shownMode}
             renderValue={() => <ModeCapsuleValue capsule={capsule} />}
+            renderOption={(option) => <ModeOptionLabel label={option.label} />}
             header={capsule.reason ? <ModeReason reason={capsule.reason} /> : undefined}
             popupClassName={capsule.reason ? 'composer-mode-popup' : undefined}
             onValueChange={(v) => {

@@ -7992,6 +7992,17 @@ button.toast--pill:focus-visible {
 .composer-mode-popup {
   min-width: 300px;
 }
+/* What a mode does here, after its name in the Mode menu: quieter than the name, as the board draws it. */
+.composer-mode-note {
+  color: var(--text-3);
+  font-weight: 400;
+}
+.orbit-select-option[data-selected] .composer-mode-note {
+  color: var(--text-2);
+}
+.orbit-select-option[data-disabled] .composer-mode-note {
+  color: inherit;
+}
 /* Pushes the model control, the gauges and Send to the right edge, leaving `+` and Mode on the
    left. */
 .composer-pill-spacer {

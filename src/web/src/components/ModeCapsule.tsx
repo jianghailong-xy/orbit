@@ -26,6 +26,18 @@ export function ModeCapsuleValue({ capsule }: { capsule: ModeCapsule }) {
   );
 }
 
+/** A row of the Mode menu: the mode's name, and after it, quieter, what it does here ("— not on Haiku 4.5, runs
+ *  as Default"), as the board draws it. */
+export function ModeOptionLabel({ label }: { label: string }) {
+  const at = label.indexOf(' — ');
+  if (at < 0) return <>{label}</>;
+  return (
+    <>
+      {label.slice(0, at)} <span className="composer-mode-note">— {label.slice(at + 3)}</span>
+    </>
+  );
+}
+
 /** Why the capsule is not the mode asked for, at the head of the Mode menu: its first sentence in amber. */
 export function ModeReason({ reason }: { reason: { lead: string; rest: string } }) {
   return (
