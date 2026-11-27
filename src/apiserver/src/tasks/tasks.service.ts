@@ -702,6 +702,15 @@ type TaskRunAutoSubject = {
   model: string | null;
 };
 
+/** Whether the task's own pins put its runs on Claude Code's own sign-in: the `claude` provider, or the
+ *  `claude` engine with no provider pin (its own sign-in, engine-provider.ts). Decided without a read. */
+function pinsClaudeSignIn(subject: Pick<TaskRunAutoSubject, 'engine' | 'provider'>): boolean {
+  const engine = subject.engine ?? null;
+  const provider = subject.provider ?? null;
+  if (provider === AgentProvider.CLAUDE) return engine === null || engine === AgentProvider.CLAUDE;
+  return provider === null && engine === AgentProvider.CLAUDE;
+}
+
 /** What a planned run needs off a task to dispatch it: its identity, and the engine/provider/model
  *  pins that override the assignee workspace's own (null on all = inherit from the workspace). */
 type TaskRunTarget = {
@@ -2973,9 +2982,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * The refusal a task gets at `door` because its run would not have Auto (owner rulings R1, R2), or
-   * null. A pin door judges only a pinned model; a start judges the run it would create. A task with no
-   * assignee has no runner to judge on, and is judged when it is started, which needs one. The runner's
-   * answer is read first, so the engine is resolved only for a model that would not have Auto there.
+   * null. A pin door judges only a pinned model; a start judges the run it would create.
+   *
+   * The answer is the assignee's runner's. A task with no assignee is judged on the static list
+   * `autoAvailable` falls back to when no runner is in view, but only when its pins say it runs on Claude
+   * Code's own sign-in: otherwise it has no engine yet either, and is judged when it is assigned (update)
+   * or started. The runner's answer is read first, so the engine is resolved only for a model that would
+   * not have Auto there.
    */
   private async taskModelAutoRefusal(
     ownerId: string,
@@ -2986,11 +2999,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     known?: TaskRunAutoRunner | null,
   ): Promise<Record<string, unknown> | null> {
     if (door === 'pin' && subject.model == null) return null;
-    if (!subject.assigneeId) return null;
-    const runner = known !== undefined ? known : await this.autoRunnerOf(ownerId, subject.assigneeId);
+    const onClaudeSignIn = pinsClaudeSignIn(subject);
+    if (!subject.assigneeId && !onClaudeSignIn) return null;
+    const runner = !subject.assigneeId ? null
+      : known !== undefined ? known : await this.autoRunnerOf(ownerId, subject.assigneeId);
     const refusal = claudeRunAutoRefusal({ model: subject.model, runner }, door, ids);
-    if (!refusal || !(await this.modelDecidesAuto(ownerId, subject))) return null;
-    return refusal;
+    if (!refusal) return null;
+    if (onClaudeSignIn || (await this.modelDecidesAuto(ownerId, subject))) return refusal;
+    return null;
   }
 
   /** A pin door's half (create, batch create, update, batch pin): a model without Auto is refused when it is pinned. */

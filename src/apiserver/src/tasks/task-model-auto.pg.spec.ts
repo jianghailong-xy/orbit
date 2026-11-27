@@ -12,6 +12,9 @@
  *      reason naming the model and models that have Auto, and no row. A model pinned alone is judged
  *      on the engine the assignee's seed gives it; the same model on Cursor CLI, whose Auto is
  *      runtime-wide, is written.
+ *  (1b) a task with no assignee: a pin on Claude Code's own sign-in is judged on the static list
+ *      `autoAvailable` falls back to; a model pinned alone, whose engine nobody knows yet, is judged when
+ *      the task is assigned.
  *  (2) batch create and its dry run: the item without Auto refuses the whole batch, naming its index.
  *  (3) update: a re-pin without Auto is refused and the stored pin stays; so is a move of a pinned task
  *      to an assignee whose runner withholds Auto from that model.
@@ -247,6 +250,24 @@ test('task create, pin and start keep every task run on a model that has Auto', 
     // Cursor CLI's Auto is runtime-wide (permissionSemantics.ts autoAvailable): the same model is not refused there.
     await h.tasks.create(a.ownerId, createDto(a, 'create-cursor', { engine: 'cursor', provider: 'cursor', model: HAIKU }) as never);
     assert.equal(await tasksTitled(h.db, 'create-cursor'), 1);
+  });
+
+  await t.test('(1b) no assignee: a Claude Code pin is judged on the static list, a model alone when it is assigned', async () => {
+    const a = await agent(h.db, 'unassigned');
+    const unassigned = await refusalOf(() => h.tasks.create(a.ownerId, {
+      ...createDto(a, 'unassigned-haiku', { provider: 'claude', model: HAIKU }), assigneeId: null,
+    } as never));
+    assert.equal(unassigned.code, CODE, JSON.stringify(unassigned));
+    assert.equal(unassigned.runner, null);
+    assert.match(unassigned.message ?? '', /^Task runs start in Auto, and claude-haiku-4-5 has no Auto, so nothing was written\. /);
+    assert.equal(await tasksTitled(h.db, 'unassigned-haiku'), 0);
+
+    const later = (await h.tasks.create(a.ownerId, {
+      ...createDto(a, 'unassigned-later', { model: HAIKU }), assigneeId: null,
+    } as never) as { id: string }).id;
+    const assigned = await refusalOf(() => h.tasks.update(a.ownerId, later, { assigneeId: a.workspaceId } as never));
+    assertNoAutoRefusal(assigned, a);
+    assert.equal((await h.db.task.findUniqueOrThrow({ where: { id: later } })).assigneeId, null, 'the refused assignment was written');
   });
 
   await t.test('(2) batch create and its dry run: the item without Auto refuses the whole batch', async () => {
