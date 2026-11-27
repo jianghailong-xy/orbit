@@ -1834,6 +1834,10 @@ public struct TranscriptReducer: Sendable, Codable {
             if let cid, b.clientTurnId == cid { return true }
             if let tid = ev.turnId, b.turnId == tid { return true }
             if b.turnId == nil, let original = translation?.original, !original.isEmpty, b.text == original { return true }
+            // Pictures or files alone have no words to match: the same uploads say it is this one.
+            if b.turnId == nil, body.isEmpty, b.text.isEmpty, !b.attachments.isEmpty {
+                return b.attachments.map { PublicID.storageKey($0.id) } == atts.map { PublicID.storageKey($0.id) }
+            }
             return b.turnId == nil && !body.isEmpty && b.text == body
         }
         // The runner just leased a queued send: drop its placeholder from `state.queued` — this
