@@ -143,7 +143,6 @@ before(async () => {
       external_sender_id text,
       external_sender_name text,
       sender_client text,
-      drive_context jsonb,
       created_at timestamptz NOT NULL DEFAULT now()
     );
   `);
