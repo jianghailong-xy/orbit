@@ -204,7 +204,7 @@ final class SessionDisplayTests: XCTestCase {
         try assertDrawn(row: 31, state: .idle, marks: [], group: "")
         let s = try JSONDecoder().decode(Session.self, from: try payload(row: 31).0)
         XCTAssertTrue(s.resumesOnItsOwn)
-        XCTAssertNotEqual(SessionLine.make(for: s, live: true).text, SessionHeader.waitingToResume)
+        XCTAssertEqual(SessionLine.make(for: s, live: true), SessionLine(text: "Idle", tone: .preview))
     }
 
     func testRow32_ParkedWillWakeWatchOrWakeUp_FactsAbsent() throws {

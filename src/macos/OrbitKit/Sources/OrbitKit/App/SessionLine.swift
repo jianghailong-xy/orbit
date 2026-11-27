@@ -143,7 +143,9 @@ public struct SessionLine: Equatable, Sendable {
         // Nothing to preview at all (a run that died before even its user turn was recorded, or an
         // older row from before the server kept the pending message). Fall back to the run's own
         // state word — the same one the console header shows — so the row still says what happened
-        // instead of collapsing.
+        // instead of collapsing. An IDLE session something will resume says Idle, not the older
+        // "Waiting to resume" (the owner, 2026-11-27; web `statusLabel`, Android `statusWord`).
+        if idle && s.resumesOnItsOwn { return SessionLine(text: SessionDisplayState.idle.word, tone: .preview) }
         return SessionLine(text: SessionHeader.statusWord(for: s), tone: .preview)
     }
 
