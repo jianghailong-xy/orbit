@@ -3588,7 +3588,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // change of it; 1761 builds a partial index CONCURRENTLY over the rows that carry one. Only `session` is touched;
       // no row is written, and no preserved relation, trigger, function of one or DONE fence changes.
       '1760_session_schedule_chat',
-      '1761_session_schedule_chat_index'],
+      '1761_session_schedule_chat_index',
+      // 1762 adds the nullable `conversation_turn.schedule_context` (catalog-only, IF NOT EXISTS). No row is written, and no
+      // preserved relation, trigger, function or DONE fence changes.
+      '1762_conversation_turn_schedule_context'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
