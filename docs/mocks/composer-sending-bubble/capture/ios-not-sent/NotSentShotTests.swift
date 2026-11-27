@@ -4,12 +4,15 @@ import XCTest
 // POST 45 s; the app ends it at 20 s) and one it refuses with 409. Takes the harness's class name, so its scheme
 // runs it unchanged.
 final class RegionShotTests: ProbeCase {
-    private func open() -> (XCUIApplication, XCUIElement)? {
+    /// `keepsUnsent: false` hides what an earlier test left Not sent (the app keeps it across a launch, and
+    /// draws it again), so each frame shows its own message alone.
+    private func open(keepsUnsent: Bool = true) -> (XCUIApplication, XCUIElement)? {
         resetStub()
         let app = XCUIApplication()
         app.launchArguments = ["-orbit.instance", "http://127.0.0.1:8765", "-ApplePersistenceIgnoreState", "YES",
                                "-probe.fresh", "-probe.session", "S1", "-AppleLanguages", "(en)",
                                "-AppleLocale", "en_GB"]
+            + (keepsUnsent ? [] : ["-composer.unsentSends.http://127.0.0.1:8765", ""])
         app.launch()
         guard appears(app, "neither test sleeps", timeout: 90) else {
             write(app.debugDescription, "missing-transcript.txt")
@@ -51,7 +54,7 @@ final class RegionShotTests: ProbeCase {
     }
 
     func testRefusedThenPutBack() {
-        guard let (app, box) = open() else { return }
+        guard let (app, box) = open(keepsUnsent: false) else { return }
         send(app, box, "Archive last year's tickets")
         XCTAssertTrue(appears(app, "Not sent", timeout: 15), "the bubble never read Not sent")
         settle(1.5)
@@ -65,7 +68,9 @@ final class RegionShotTests: ProbeCase {
         settle(1.5)
         write(app.debugDescription, "put-back-tree.txt")
         XCTAssertFalse(containing(app, "Not sent").exists, "the bubble stayed")
-        XCTAssertEqual(box.value as? String, "Archive last year's tickets", "the words did not come back")
+        // The keyboard's smart punctuation may have typed the apostrophe as ’.
+        XCTAssertEqual((box.value as? String)?.replacingOccurrences(of: "’", with: "'"),
+                       "Archive last year's tickets", "the words did not come back")
         shot("ios-built-put-back")
     }
 }
