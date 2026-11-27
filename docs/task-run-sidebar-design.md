@@ -84,6 +84,7 @@ work starts, the board is redrawn to match.
 1. Server: acceptance round record and its read (task detail lists rounds per run). Covered by a pg spec.
 2. Server and runner: Re-run the check, with idempotent queueing and a pg spec for FAILED → round → DONE/FAILED.
 3. Shared: failure-reason copy table for the pill.
-4. Web: the compact column (blocks above), docked in the task's own run conversation and open by
-   default; `⤢` opens the full page; overlay below 1280 px.
+4. Web: the compact column (blocks above), docked at 420 px beside any session page from a 1640 px
+   window and open by default in the task's own run conversation; `⤢` opens the full page; overlay
+   below 1640 px.
 5. iOS / Android: the task card at the top of a task's run conversation uses the same order, after the web version is signed off.
