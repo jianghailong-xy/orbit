@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { workspaceCloneReason } from '../common/workspace-clone-gate';
 import { diskBelowFloor } from '../common/runner-disk-gate';
-import { taskRunAnchor, taskRunAnchors } from '../workspaces/start-anchor';
+import { projectTaskRunAnchor, taskRunAnchor, taskRunAnchors } from '../workspaces/start-anchor';
 import { PushService } from '../push/push.service';
 import { ProjectOrphanSweepService } from '../projects/project-orphan-sweep.service';
 import {
@@ -339,6 +339,13 @@ import {
 import { claimTrialByKey } from '../providers/account-health.service';
 import type { ModelRoutingHold } from './model-routing';
 import {
+  TASK_MODEL_HAS_NO_AUTO,
+  autoModelForUnpinnedRun,
+  claudeRunAutoRefusal,
+  type TaskRunAutoDoor,
+  type TaskRunAutoRunner,
+} from './task-run-auto';
+import {
   REPLACEMENT_TOKEN,
   TASK_RUN_TRIGGER,
   taskRunBatchId,
@@ -365,6 +372,7 @@ import {
 } from './task-dependencies';
 import { loadVerificationEpochGates } from './verification-epoch-read';
 import { readTaskProgress } from './task-progress.service';
+import { readTaskAcceptanceRounds } from './task-acceptance-round';
 import { DagOp, effectiveOps, findCycle, resultingEdges, stateChanges } from './task-dag';
 import { manualRunnableTaskSql } from './manual-runnable-task-sql';
 import { automaticAccount, runAccount } from '../providers/plan-usage-accounts';
@@ -701,6 +709,38 @@ function dispatchCredentialOf(
   return { provider: seed.provider, login: seed.providerBuiltin && isAccountEngine(seed.provider) };
 }
 
+/** What task-run-auto.ts reads of the runner a task run would be claimed by. */
+const AUTO_RUNNER_SELECT = { name: true, displayName: true, modelCatalog: true, runtimeDefaultModels: true } as const;
+
+/** That runner as task-run-auto.ts takes it; null when the workspace is bound to none (or it was not read). */
+function autoRunnerFrom(
+  row: { name: string; displayName: string | null; modelCatalog: unknown; runtimeDefaultModels: unknown } | null | undefined,
+): TaskRunAutoRunner | null {
+  return row
+    ? { name: row.displayName || row.name, modelCatalog: row.modelCatalog, runtimeDefaultModels: row.runtimeDefaultModels }
+    : null;
+}
+
+/** A task as task-run-auto.ts judges it: as a write leaves it, or as a start finds it. `projectId`, when
+ *  given, names the project whose coordinator anchors an unpinned run (SessionsService.taskRunsWith). */
+type TaskRunAutoSubject = {
+  id?: string | null;
+  projectId?: string | null;
+  assigneeId: string | null;
+  engine: string | null;
+  provider: string | null;
+  model: string | null;
+};
+
+/** Whether the task's own pins put its runs on Claude Code's own sign-in: the `claude` provider, or the
+ *  `claude` engine with no provider pin (its own sign-in, engine-provider.ts). Decided without a read. */
+function pinsClaudeSignIn(subject: Pick<TaskRunAutoSubject, 'engine' | 'provider'>): boolean {
+  const engine = subject.engine ?? null;
+  const provider = subject.provider ?? null;
+  if (provider === AgentProvider.CLAUDE) return engine === null || engine === AgentProvider.CLAUDE;
+  return provider === null && engine === AgentProvider.CLAUDE;
+}
+
 /** What a planned run needs off a task to dispatch it: its identity, and the engine/provider/model
  *  pins that override the assignee workspace's own (null on all = inherit from the workspace). */
 type TaskRunTarget = {
@@ -714,6 +754,9 @@ type TaskRunTarget = {
    *  (docs/model-routing-design.md §8.3). The pins stay what a refusal names: nobody pinned these.
    *  A null provider is the routed engine's own sign-in on the runner. */
   routed?: { engine: string | null; provider: string | null; model: string | null; effort: string | null } | null;
+  /** The model a fresh Session that names none is created on, because its runner's default has no Auto
+   *  (task-run-auto.ts), as the plan froze it. */
+  autoModel?: string | null;
 };
 
 /**
@@ -732,17 +775,32 @@ function taskRunDispatch(
 }
 
 /**
+ * A route that left the run to the runner's default, with the line that says why the run is on another
+ * model after all (task-run-auto.ts): the decision clients show beside the run must not read "keeps the
+ * agent's model" for a run created on `autoModel`.
+ */
+function withAutoModelReason(route: TaskRunRoute | null, autoModel: string | null): TaskRunRoute | null {
+  if (!route || !autoModel) return route;
+  return {
+    ...route,
+    reasons: [...route.reasons, `Runs on ${autoModel}: task runs start in Auto, and the runner's default model has none`],
+  };
+}
+
+/**
  * The task a bound run target carries out. A routed target names what routing chose, not the task's
  * pins, so the pins are read back from the decision: its model is never one — a pinned model is not
  * routed — and its engine and provider are ones only when the task pinned them.
  */
 function boundRunTask(
-  target: Pick<TaskRunExecuteTarget, 'taskId' | 'title' | 'engine' | 'provider' | 'model' | 'effort' | 'route'>,
+  target: Pick<TaskRunExecuteTarget, 'taskId' | 'title' | 'engine' | 'provider' | 'model' | 'effort' | 'route' | 'autoModel'>,
 ): TaskRunTarget {
   const { route } = target;
+  const autoModel = target.autoModel ?? null;
   if (!route?.applied) {
     return {
       id: target.taskId, title: target.title, engine: target.engine, provider: target.provider, model: target.model,
+      autoModel,
     };
   }
   return {
@@ -757,6 +815,7 @@ function boundRunTask(
       model: target.model,
       effort: target.effort,
     },
+    autoModel,
   };
 }
 
@@ -846,7 +905,8 @@ const batchRunTaskSelect = (ownerId: string) => ({
   // The standard the prompt states for its evidence (step 3).
   ...TASK_STANDARD_SELECT,
   list: { select: { instructions: true } },
-  assignee: { select: { id: true, runnerId: true } },
+  // Its runner's catalogue too: whether the run would have Auto (task-run-auto.ts).
+  assignee: { select: { id: true, runnerId: true, runner: { select: AUTO_RUNNER_SELECT } } },
 }) satisfies Prisma.TaskSelect;
 
 type BatchRunTask = Prisma.TaskGetPayload<{ select: ReturnType<typeof batchRunTaskSelect> }>;
@@ -912,6 +972,13 @@ export type TaskRunAnswer =
          */
         | 'project-not-started'
         | 'project-paused'
+        /**
+         * The run would not have Auto (task-run-auto.ts): the task is pinned to a model without it, or
+         * its runner has no model with it. Automatic callers only; a person is refused
+         * TASK_MODEL_HAS_NO_AUTO. Released, not frozen: re-pinning the task lifts it, and the same moment
+         * arriving then must be able to start the task.
+         */
+        | 'model-has-no-auto'
         /**
          * Nothing can run it now: every account that could has been set aside by account health
          * (docs/routing-account-health-design.md §7.5). Automatic callers only; a person's start is
@@ -1978,6 +2045,24 @@ export function spendProjectBudget(budget: Map<string, number>, projectId: strin
 }
 
 /**
+ * Give back the slots `takeBudget` and `spendProjectBudget` spent on a candidate that started nothing and will
+ * start nothing on the next pass either: a task whose model has no Auto (task-run-auto.ts) stands down on every
+ * pass until it is re-pinned, and a slot it kept would go unused beside the candidates after it, pass after pass.
+ */
+export function returnBudget(
+  budget: MaterialisationBudget,
+  projectRoom: Map<string, number>,
+  candidate: { runnerId: string; listId: string | null; projectId: string | null },
+): void {
+  const runnerLeft = budget.runner.get(candidate.runnerId);
+  if (runnerLeft !== undefined) budget.runner.set(candidate.runnerId, runnerLeft + 1);
+  const listLeft = candidate.listId ? budget.list.get(candidate.listId) : undefined;
+  if (listLeft !== undefined && candidate.listId) budget.list.set(candidate.listId, listLeft + 1);
+  const projectLeft = candidate.projectId ? projectRoom.get(candidate.projectId) : undefined;
+  if (projectLeft !== undefined && candidate.projectId) projectRoom.set(candidate.projectId, projectLeft + 1);
+}
+
+/**
  * A pass's candidates in the order it offers them slots: within each list, higher `priority`
  * first, and everything else exactly where the pass read it.
  *
@@ -2915,6 +3000,121 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       },
       current,
     );
+  }
+
+  /** The runner a task assigned to this workspace runs on, as task-run-auto.ts reads it: null when it is bound to none. */
+  private async autoRunnerOf(ownerId: string, workspaceId: string): Promise<TaskRunAutoRunner | null> {
+    const workspace = await this.prisma.workspace.findFirst({
+      where: { id: workspaceId, ownerId },
+      select: { runner: { select: AUTO_RUNNER_SELECT } },
+    });
+    return autoRunnerFrom(workspace?.runner);
+  }
+
+  /**
+   * Whether the model decides Auto for a run of this task (task-run-auto.ts): it starts on Claude Code on
+   * its own sign-in, by the start resolution's own rule (SessionsService.taskRunsWith). False for a start
+   * that would be refused for a reason of its own (a credential gone), which it then gives itself; and for
+   * a task with no assignee that nothing gives an engine to (no pin, no project coordinator to follow),
+   * whose run has no engine until it is assigned.
+   */
+  private async modelDecidesAuto(ownerId: string, subject: TaskRunAutoSubject): Promise<boolean> {
+    // A pin naming another engine, or a credential other than Claude Code's own sign-in (a key, a pool,
+    // another engine's), settles it with nothing to read: only the `claude` slug is that sign-in.
+    if ((subject.engine != null && subject.engine !== AgentProvider.CLAUDE)
+      || (subject.provider != null && subject.provider !== AgentProvider.CLAUDE)) {
+      return false;
+    }
+    // With no assignee and no pin, only the project's coordinator can give the run an engine (start-anchor.ts):
+    // with none, there is nothing to resolve.
+    if (!subject.assigneeId) {
+      const anchor = subject.projectId !== undefined
+        ? (subject.projectId ? await projectTaskRunAnchor(this.prisma, subject.projectId) : null)
+        : (subject.id ? await taskRunAnchor(this.prisma, subject.id) : null);
+      if (!anchor) return false;
+    }
+    const runsWith = await this.sessions.taskRunsWith(ownerId, {
+      id: subject.id,
+      projectId: subject.projectId,
+      engine: subject.engine,
+      provider: subject.provider,
+      workspaceId: subject.assigneeId,
+    });
+    if (!subject.assigneeId && runsWith.source === 'DEFAULT') return false;
+    return runsWith.refusal == null && runsWith.engine === AgentProvider.CLAUDE && runsWith.providerBuiltin;
+  }
+
+  /**
+   * The refusal a task gets at `door` because its run would not have Auto (owner rulings R1, R2), or
+   * null. A pin door judges only a pinned model; a start judges the run it would create.
+   *
+   * The answer is the assignee's runner's. A task with no assignee is judged on the static list
+   * `autoAvailable` falls back to when no runner is in view, on the engine its pins or its project's
+   * coordinator give it; with neither it has no engine yet, and is judged when it is assigned (update) or
+   * started. The runner's answer is read first, so the engine is resolved only for a model that would not
+   * have Auto there.
+   */
+  private async taskModelAutoRefusal(
+    ownerId: string,
+    subject: TaskRunAutoSubject,
+    door: TaskRunAutoDoor,
+    ids: Record<string, string | number | null | undefined> = {},
+    /** The assignee's runner when the caller has already read it (a start reads it with the task). */
+    known?: TaskRunAutoRunner | null,
+  ): Promise<Record<string, unknown> | null> {
+    if (door === 'pin' && subject.model == null) return null;
+    const runner = !subject.assigneeId ? null
+      : known !== undefined ? known : await this.autoRunnerOf(ownerId, subject.assigneeId);
+    const refusal = claudeRunAutoRefusal({ model: subject.model, runner }, door, ids);
+    if (!refusal) return null;
+    if (pinsClaudeSignIn(subject) || (await this.modelDecidesAuto(ownerId, subject))) return refusal;
+    return null;
+  }
+
+  /** A pin door's half (create, batch create, update, batch pin): a model without Auto is refused when it is pinned. */
+  private async assertPinnedModelHasAuto(
+    ownerId: string,
+    subject: TaskRunAutoSubject,
+    ids: Record<string, string | number | null | undefined> = {},
+    prefix = '',
+  ): Promise<void> {
+    const refusal = await this.taskModelAutoRefusal(ownerId, subject, 'pin', ids);
+    if (refusal) throw new BadRequestException({ ...refusal, message: `${prefix}${String(refusal.message)}` });
+  }
+
+  /**
+   * Leave the reason an automatic start of this task was refused on its timeline: once, until the
+   * reason changes, because every sweep offers the task again and is refused again. Never in the
+   * start's way: a failure is logged.
+   */
+  private async recordNoAutoStart(taskId: string, refusal: Record<string, unknown>): Promise<void> {
+    const marker = `<!-- orbit:${TASK_MODEL_HAS_NO_AUTO} -->`;
+    const body = `${marker}\n**Automatic start refused (recorded by Orbit)**\n\n${String(refusal.message)}\n\n` +
+      `Refusal code: ${TASK_MODEL_HAS_NO_AUTO}`;
+    try {
+      const last = await this.prisma.taskComment.findFirst({
+        where: { taskId, body: { startsWith: marker } },
+        orderBy: { createdAt: 'desc' },
+        select: { body: true },
+      });
+      if (last?.body === body) return;
+      const task = await this.prisma.task.findUnique({
+        where: { id: taskId },
+        select: { ownerId: true, assigneeId: true, creatorType: true, creatorId: true },
+      });
+      if (!task) return;
+      await this.prisma.taskComment.create({
+        data: {
+          taskId,
+          authorType: task.assigneeId ? CreatorType.AGENT : task.creatorType,
+          authorId: task.assigneeId ?? task.creatorId,
+          body,
+        },
+      });
+      this.publishKnownTaskRows(task.ownerId, [taskId]);
+    } catch (e) {
+      this.logger.warn(`no-Auto refusal of task ${taskId} not recorded: ${(e as Error)?.message ?? e}`);
+    }
   }
 
   /** A task may only be filed under a list the same user owns (cf. assertOwnedWorkspace). */
@@ -4305,6 +4505,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     this.assertCriterionHasAProject(
       dto.completionCriterion, dto.verifiesTaskId, scopedProjectId, sessionId,
     );
+    // Owner rulings R1, R2: task runs start in Auto, so a model pin without Auto is refused now, judged
+    // against the project and assignee this create leaves the task with, not found out at its first run.
+    await this.assertPinnedModelHasAuto(ownerId, {
+      projectId: scopedProjectId,
+      assigneeId: dto.assigneeId ?? null,
+      engine: dto.engine ?? null,
+      provider: dto.provider ?? null,
+      model: dto.model ?? null,
+    });
     // The pairing rule, asked of this call's own items — a single create is a plan of one, and
     // nothing in it points at this row. Answered before the transaction, like every other refusal
     // on this path, so a subject filed without its check leaves no row and takes no lock (AC1).
@@ -5506,6 +5715,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         sessionId, index,
       );
     });
+    // Owner rulings R1, R2, per item over the project each was admitted into and above the dry run, so a
+    // preview is refused where the write would be: a model pin without Auto.
+    for (const [index, item] of items.entries()) {
+      if (frozen.has(index)) continue;
+      await this.assertPinnedModelHasAuto(ownerId, {
+        projectId: item.projectId ?? null,
+        assigneeId: item.assigneeId ?? null,
+        engine: item.engine ?? null,
+        provider: item.provider ?? null,
+        model: item.model ?? null,
+      }, { itemIndex: index }, `tasks[${index}]: `);
+    }
     // Unit T6, over the items this call would WRITE: a replay is frozen and is not re-charged to
     // today's allowance, since the attempt that wrote it already paid for it.
     //
@@ -9749,6 +9970,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             effort: true,
             // What the run has cost so far, for the panel's status line and its Now card.
             costUsd: true,
+            // The run's own outcome sentence ("runner offline", "acceptance command exited 1; expected 0"):
+            // the task run sidebar's status pill names its cause from it (@orbit/shared taskStatusReason).
+            error: true,
             workspace: { select: { name: true } },
           },
         },
@@ -9818,11 +10042,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // The session facts of every run, from the function every other session payload reads
     // (sessions/session-phase.ts), so a run here answers as the same session does elsewhere.
     const runIds = (task.sessions ?? []).map((session) => session.id);
-    const [runFacts, runBackground, landings] = await Promise.all([
+    const [runFacts, runBackground, landings, acceptanceRounds] = await Promise.all([
       readSessionPhaseFields(this.prisma, runIds),
       // And the Background mark's inputs, activity and runningBgCount, as the list row reads them.
       readSessionBackgroundFields(this.prisma, runIds),
       readLandingSettlements(this.prisma, task.sessions ?? []),
+      // The EXECUTABLE acceptance rounds each run ran, newest first (migration 1672, tasks/task-acceptance-round.ts).
+      readTaskAcceptanceRounds(this.prisma, ownerId, task.id, runIds),
     ]);
     return {
       ...task,
@@ -9831,6 +10057,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         ...runFacts.get(session.id),
         ...runBackground.get(session.id),
         route: routes.get(session.id) ?? null,
+        acceptanceRounds: acceptanceRounds.get(session.id) ?? [],
       })),
       creatorSession: task.creatorSession ? withoutWordFacts(withSessionState(task.creatorSession)) : null,
       comments: await this.resolveCommentAuthors(task.comments),
@@ -10450,6 +10677,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         && (boundProjectId !== null || scopeWrite.currentProjectId !== null)) {
         scopeFence = { ...scopeWrite, boundProjectId };
       }
+    }
+    // Owner rulings R1, R2: a write that pins, or that moves a pinned task to another assignee (whose
+    // runner decides), leaves the task on a model that has Auto, judged as the write leaves it. Before
+    // the transaction, like every refusal here.
+    if (dto.engine !== undefined || dto.provider !== undefined || dto.model !== undefined
+      || (dto.assigneeId !== undefined && dto.assigneeId !== before.assigneeId)) {
+      await this.assertPinnedModelHasAuto(ownerId, {
+        id,
+        projectId: dto.projectId === undefined ? before.projectId : (dto.projectId ?? null),
+        assigneeId: dto.assigneeId === undefined ? before.assigneeId : (dto.assigneeId ?? null),
+        engine: pins.engine !== undefined ? pins.engine : before.engine,
+        provider: pins.provider !== undefined ? pins.provider : before.provider,
+        model: pins.model !== undefined ? pins.model : before.model,
+      }, { taskId: id });
     }
     // Validate a newly supplied link against the task's effective project before opening the
     // update transaction. Clearing the link (`null`) is always allowed and needs no item lookup.
@@ -12242,6 +12483,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     let atCapacity = 0;
     let projectFull = 0;
     let overtaken = 0;
+    let noAuto = 0;
     let resumesAt: Date | undefined;
     // Per list as well as in total. The aggregate below answers "is the fleet moving"; a list's
     // own console needs "is MY campaign moving", and one spent provider quota holds back every
@@ -12325,7 +12567,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // A task overtaken out from under this pass is not dispatched and must not be logged as
         // though it were; the budget it spent is returned by the next sweep reading capacity afresh.
         if (res.ok) this.logger.log(`reconciled ready task ${t.id} -> auto-run`);
-        else overtaken += 1;
+        else if (res.skipped === 'model-has-no-auto') {
+          noAuto += 1;
+          returnBudget(budget, projectRoom, { runnerId: t.assignee.runnerId!, listId: t.listId, projectId: t.projectId });
+        } else overtaken += 1;
       } catch (e) {
         this.logger.warn(
           `reconcile auto-run of task ${t.id} failed: ${e instanceof Error ? e.message : e}`,
@@ -12374,6 +12619,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       this.logger.log(
         `auto-run: ${overtaken} ready task(s) were overtaken mid-sweep — the moment they were ` +
           'selected under has passed',
+      );
+    }
+    if (noAuto > 0) {
+      this.logger.log(
+        `auto-run: ${noAuto} ready task(s) not started — their model has no Auto on their runner ` +
+          `(${TASK_MODEL_HAS_NO_AUTO}, said on each task)`,
       );
     }
     for (const [listId, e] of perList) {
@@ -12460,6 +12711,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     let dispatched = 0;
     let atCapacity = 0;
     let overtaken = 0;
+    let noAuto = 0;
     // Longest-overdue first across lists, as ordered above; within a list, the one it raised
     // (orderWithinLists — the same dealing the ready sweep does, and the identity while nothing is).
     for (const t of orderWithinLists(due)) {
@@ -12489,7 +12741,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           TASK_RUN_TRIGGER.scheduled(t.id, epoch),
         );
         if (res.ok) dispatched += 1;
-        else overtaken += 1;
+        else if (res.skipped === 'model-has-no-auto') {
+          noAuto += 1;
+          returnBudget(budget, projectRoom, t);
+        } else overtaken += 1;
       } catch (e) {
         // The schedule is untouched on this path (execute consumes it only after a run is away),
         // so the next sweep tries again. Warn rather than error: a task whose runner went offline
@@ -12506,6 +12761,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       this.logger.log(
         `scheduled: ${overtaken} due task(s) were overtaken mid-sweep — the appointment they were ` +
           'selected under has been replaced',
+      );
+    }
+    if (noAuto > 0) {
+      this.logger.log(
+        `scheduled: ${noAuto} due task(s) not started — their model has no Auto on their runner ` +
+          `(${TASK_MODEL_HAS_NO_AUTO}, said on each task)`,
       );
     }
     if (atCapacity > 0) {
@@ -15818,6 +16079,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
     const created = task.routed
       ?? { engine: task.engine ?? null, provider: task.provider ?? null, model: task.model, effort: null };
+    // Owner rulings R1, R2: a run that names no model would run the runner's default, which may have no
+    // Auto. Such a run is created on the runner's first model that has Auto instead, as the plan froze it.
+    const model = created.model ?? task.autoModel ?? null;
     const session = await this.createTaskSessionOrReadWinner(
       ownerId,
       task,
@@ -15836,7 +16100,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // names what routing chose (model routing §8.3).
         ...(created.engine != null ? { engine: created.engine } : {}),
         ...(created.provider != null ? { provider: created.provider } : {}),
-        ...(created.model != null ? { model: created.model } : {}),
+        ...(model != null ? { model } : {}),
         ...(created.effort != null ? { effort: created.effort } : {}),
       },
       // Task runs belong in Active regardless of whether they were started manually,
@@ -15860,6 +16124,31 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     );
     await this.clearStaleDispatchRefusal(task.id, session.id);
     return session.id;
+  }
+
+  /**
+   * The model a fresh run that names none is created on so that it has Auto (task-run-auto.ts
+   * autoModelForUnpinnedRun): null when the runner's own default has Auto, or when the model does not
+   * decide Auto on the engine the run starts on. Decided when the run is planned and frozen with the plan
+   * (`autoModel`), so a takeover creates the run on the same model.
+   */
+  private async autoModelFor(
+    ownerId: string,
+    taskId: string,
+    workspaceId: string,
+    dispatch: { engine: string | null; provider: string | null; model: string | null },
+    runner: TaskRunAutoRunner | null,
+  ): Promise<string | null> {
+    if (dispatch.model != null) return null;
+    const model = autoModelForUnpinnedRun(runner);
+    if (!model) return null;
+    const subject = { id: taskId, assigneeId: workspaceId, engine: dispatch.engine, provider: dispatch.provider, model: null };
+    if (!(await this.modelDecidesAuto(ownerId, subject))) return null;
+    this.logger.log(
+      `task ${uuidToBase62(taskId)}: the default model of runner "${runner?.name ?? ''}" has no Auto; ` +
+        `this run is created on ${model}`,
+    );
+    return model;
   }
 
   /**
@@ -16136,7 +16425,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // 0130's guard several layers down.
         verifies: { select: { supersededByTaskId: true, terminalReason: true } },
         list: { select: { maxConcurrent: true, instructions: true } },
-        assignee: { select: { id: true, runnerId: true } },
+        // Its runner's catalogue too: whether the run would have Auto (task-run-auto.ts).
+        assignee: { select: { id: true, runnerId: true, runner: { select: AUTO_RUNNER_SELECT } } },
         // How the run's work reaches its line, which the prompt says (§10.5 O-L3).
         codeless: true,
         project: { select: TASK_DELIVERY_SELECT },
@@ -16349,6 +16639,26 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       { id: task.assignee!.id, runnerId: task.assignee!.runnerId! },
       runRequestToken,
     );
+    // Owner rulings R1, R2: a task runs only on a model that has Auto. The run this start would create,
+    // or the paused run it would move onto the task's model pin, is refused before any session exists
+    // when its model has none: a pin made before the rule, or a runner where no model has Auto. An
+    // automatic start stands down instead, released like the others here, and says why on the task once.
+    if (plannedRun.kind === 'CREATE' || (plannedRun.kind === 'RESUME' && task.model != null)) {
+      const noAuto = await this.taskModelAutoRefusal(ownerId, {
+        id: task.id,
+        assigneeId: task.assignee!.id,
+        engine: task.engine,
+        provider: task.provider,
+        model: task.model,
+      }, 'start', { taskId: id }, autoRunnerFrom(task.assignee!.runner));
+      if (noAuto) {
+        if (auto) {
+          await this.recordNoAutoStart(task.id, noAuto);
+          return this.standDownReleasing(lease, { ok: false as const, skipped: 'model-has-no-auto' as const });
+        }
+        throw new BadRequestException(noAuto);
+      }
+    }
     // A paused run answers in its own mode, so handing it this brief is giving it a turn, and a session
     // reaches it as `session_send` would (sessions/session-reach.ts). Let through narrower, who pressed is
     // frozen with the plan and said in the block §2.2 delivers after the brief. The turn stays the task's
@@ -16404,6 +16714,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           'switch this session to Auto.',
       );
     }
+    // Owner rulings R1, R2: a fresh run that names no model is not left to a runner default without Auto.
+    const autoModel = planned.kind === 'CREATE'
+      ? await this.autoModelFor(
+        ownerId, task.id, task.assignee!.id, taskRunDispatch(task, route), autoRunnerFrom(task.assignee!.runner),
+      )
+      : null;
     const frozen: TaskRunExecuteTarget = {
       v: 3,
       kind: 'RUN',
@@ -16414,7 +16730,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       workspaceId: task.assignee!.id,
       runnerId: task.assignee!.runnerId!,
       ...taskRunDispatch(task, route),
-      route,
+      ...(autoModel ? { autoModel } : {}),
+      route: withAutoModelReason(route, autoModel),
       projectId: task.projectId ?? null,
       // The list doubles as a durable batch so its cap is enforced by the claim transaction's
       // existing batch gate — no second scheduler. Only when the list actually sets a cap:
@@ -16887,6 +17204,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const itemPlan = await this.planWorkspaceRun(
       ownerId, t, workspace, TASK_RUN_TRIGGER.batch(pressToken, t.id),
     );
+    // Owner rulings R1, R2, where the single Run asks it: a run whose model would have no Auto is not started, and is
+    // skipped with the refusal's own sentence, before any session exists and before a route claims an account for it.
+    const noAuto = itemPlan.kind === 'CREATE' || (itemPlan.kind === 'RESUME' && t.model != null)
+      ? await this.taskModelAutoRefusal(ownerId, {
+        id: t.id, assigneeId: t.assignee!.id, engine: t.engine, provider: t.provider, model: t.model,
+      }, 'start', { taskId: t.id }, autoRunnerFrom(t.assignee!.runner))
+      : null;
+    if (noAuto) return { held: String(noAuto.message) };
     // Routed per item, exactly as the single Run does it: a fresh run only, and dispatched with
     // the route whenever it decided a tier. As at the single Run, an account whose trial is due is claimed for the
     // item's Session, and an item nothing can run is not started (docs/routing-account-health-design.md §6.5, §7.5):
@@ -16896,6 +17221,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       : null;
     if (planned?.hold) return { held: planned.hold.reason };
     const route = routeOfPlan(planned);
+    // As the single Run decides it: a fresh run naming no model is not left to a default without Auto.
+    const autoModel = itemPlan.kind === 'CREATE'
+      ? await this.autoModelFor(ownerId, t.id, workspace.id, taskRunDispatch(t, route), autoRunnerFrom(t.assignee!.runner))
+      : null;
     return {
       taskId: t.id,
       title: `Task: ${t.title}`,
@@ -16903,7 +17232,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       workspaceId: workspace.id,
       runnerId: workspace.runnerId,
       ...taskRunDispatch(t, route),
-      route,
+      ...(autoModel ? { autoModel } : {}),
+      route: withAutoModelReason(route, autoModel),
       runAt: t.runAt ? t.runAt.toISOString() : null,
       startWhenConditionId: t.startWhenConditionId ?? null,
       clearFailed: t.status === TaskStatus.FAILED,
@@ -17498,6 +17828,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const keeps = dto.engine !== undefined && dto.provider === undefined && pins.engine
       ? await this.pinnedProvidersRunOn(ownerId, selector, pins.engine)
       : null;
+    await this.assertBatchPinHasAuto(ownerId, selector, pins, dto.engine !== undefined || pins.engine !== undefined);
     const assignments: Prisma.Sql[] = [];
     const differs: Prisma.Sql[] = [];
     if (dto.engine !== undefined || pins.engine !== undefined) {
@@ -17581,6 +17912,50 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         FROM "public"."task"
        WHERE ${selector} AND "verifies_task_id" IS NOT NULL AND "id" <> ${runsTask}::uuid`);
     if (verifiers > 0) throw new ForbiddenException(verifierWriteFromRunRefusalBody());
+  }
+
+  /**
+   * Owner rulings R1, R2 on the batch pin door: every task the selection holds is left on a model that has
+   * Auto (task-run-auto.ts), or the whole batch is refused, like every refusal on this door. Judged once per
+   * distinct assignee, project and pins the write leaves — read in one statement, however many tasks the
+   * selection is — rather than per row. No read at all when the batch clears the model, or pins an engine
+   * whose Auto is not the model's to decide.
+   */
+  private async assertBatchPinHasAuto(
+    ownerId: string,
+    selector: Prisma.Sql,
+    pins: TaskPinWrite,
+    writesEngine: boolean,
+  ): Promise<void> {
+    if (pins.model === null) return;
+    if (writesEngine && pins.engine && pins.engine !== AgentProvider.CLAUDE) return;
+    const groups = await this.prisma.$queryRaw<Array<{
+      assigneeId: string | null; projectId: string | null; engine: string | null; provider: string | null;
+      model: string | null; tasks: number;
+    }>>(Prisma.sql`
+      SELECT "assignee_id" AS "assigneeId", "project_id" AS "projectId", "engine", "provider", "model",
+             count(*)::int AS "tasks"
+        FROM "public"."task"
+       WHERE ${selector}
+       GROUP BY 1, 2, 3, 4, 5`);
+    for (const group of groups) {
+      const model = pins.model !== undefined ? pins.model : group.model;
+      if (model == null) continue;
+      const refusal = await this.taskModelAutoRefusal(ownerId, {
+        projectId: group.projectId,
+        assigneeId: group.assigneeId,
+        engine: writesEngine ? (pins.engine ?? null) : group.engine,
+        provider: pins.provider !== undefined ? pins.provider : group.provider,
+        model,
+      }, 'pin');
+      if (refusal) {
+        throw new BadRequestException({
+          ...refusal,
+          message: `${String(refusal.message)} ${group.tasks} of the selected tasks would run on it.`,
+          tasks: group.tasks,
+        });
+      }
+    }
   }
 
   /**

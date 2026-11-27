@@ -229,6 +229,10 @@ export const HEARTBEAT_DELIVERIES = {
     how: 'EVERY_BEAT',
     reads: "the beat's own draining flag: a word about this server, which the quiet answer to a draining beat carries as the full one does",
   },
+  capacityClaims: {
+    how: 'EVERY_BEAT',
+    reads: "nothing: a word about this server (a full runner's claim scope and its returned claims), which the quiet answer carries as the full one does",
+  },
   sessionReleaseV1: {
     how: 'EVERY_BEAT',
     reads: "the apiserver's switch ORBIT_SESSION_RELEASE_V1 (run-release.ts sessionReleaseOffered): a word about this server, which the quiet answer carries as the full one does",
@@ -470,8 +474,9 @@ export interface LinkBeatRow extends RunnerLinkHintColumns {
  * managed runner's beat writes nothing here: RunnerAuthGuard admits it, with its instance, and it reconciles in full.
  *
  * Then it upserts the presence row — the process, the gateway node, the beat, LINK — leaving the change count and the
- * reconcile record as they are; a beat that comes more than RUNNER_SILENT_AFTER_MS after the one before it also keeps
- * that one as the last the runner was heard with before it lost contact (`lost_at`, migration 0450), for the reaper to
+ * reconcile record as they are; a beat that comes more than RUNNER_SILENT_AFTER_MS after the runner was last heard — its
+ * beat before, or a Welcome since (`last_heard_at`, migration 1750), the later — also keeps that instant as the
+ * last the runner was heard with before it lost contact (`lost_at`, migration 0450), for the reaper to
  * read a mass disconnection off once the runner is back. Then it reads what the answer needs: the record, how many of
  * the supervised sessions this process still holds the lease of (the leaseLostSessionIds rule: assigned to the runner,
  * open, a conversation, leased to this process), what waits for the runner (readRunnerLinkHints' three columns), the
@@ -514,9 +519,11 @@ export async function readLinkBeat(prisma: Pick<PrismaService, '$queryRaw'>, inp
              "link_state" = EXCLUDED."link_state",
              "resources" = ${resourcesAfterBeatSql(Prisma.sql`"runner_presence"."resources"`, input.resources ?? null)},
              "background_job_session_ids" = EXCLUDED."background_job_session_ids",
+             -- A Welcome counts as a beat here (migration 1750): a runner that reconnected within its beat gap lost nothing.
              "lost_at" = CASE
-               WHEN "runner_presence"."last_beat_at" < EXCLUDED."last_beat_at" - (${RUNNER_SILENT_AFTER_MS} * interval '1 millisecond')
-                 THEN "runner_presence"."last_beat_at"
+               WHEN GREATEST("runner_presence"."last_beat_at", "runner_presence"."last_heard_at")
+                      < EXCLUDED."last_beat_at" - (${RUNNER_SILENT_AFTER_MS} * interval '1 millisecond')
+                 THEN GREATEST("runner_presence"."last_beat_at", "runner_presence"."last_heard_at")
                ELSE "runner_presence"."lost_at"
              END
       RETURNING "changes"::text AS "changes",
@@ -605,6 +612,8 @@ export function quietHeartbeatAnswer(
     // As the full answer says it, to a draining beat: a runner draining for an update reads its absence as an
     // older server (runner-go drainClaimScope).
     ...(extra.draining ? { drainScopedClaims: true } : {}),
+    // As the full answer says it: a full runner names the claims it can start, and gives back one it cannot.
+    capacityClaims: true,
     // As the full answer says it: a runner that reads no such word declares SESSION_RELEASE_V1 on nothing it sends.
     ...(extra.sessionRelease ? { sessionReleaseV1: true } : {}),
     ...(extra.cursorKeyChecks && extra.cursorKeyChecks.length > 0 ? { cursorKeyChecks: extra.cursorKeyChecks } : {}),

@@ -125,7 +125,8 @@ import { useLocation, useMatch, useNavigate, useSearchParams } from 'react-route
 import { copyText } from '../lib/clipboard';
 import { REPO_CLEANUP_QUEUED, repoCleanupConfirm } from '../lib/repoCleanup';
 import { routeId, encodeId } from '../lib/idCodec';
-import { useIsMobile, useMediaQuery } from '../lib/useMediaQuery';
+import { TASK_COLUMN_QUERY, useIsMobile, useMediaQuery } from '../lib/useMediaQuery';
+import { rememberTaskRunSidebar, taskRunSidebarClosed } from '../lib/taskRunSidebar';
 import {
   dragOffset,
   isFullSwipe,
@@ -636,8 +637,16 @@ import {
   sessionRunStateOf,
   sessionRunStatusOf,
 } from '../lib/sessionState';
-import { sessionDisplayState, sessionDisplayText, sessionMarks, sessionReleasedByMove } from '../lib/sessionDisplay';
-import { SessionMarkChips, SessionStateGlyph } from './SessionStateDisplay';
+import {
+  sessionDisplayState,
+  sessionDisplayText,
+  sessionMarks,
+  sessionReleasedByMove,
+  sessionRowIcons,
+  sessionRowMarks,
+  type SessionRowIcon,
+} from '../lib/sessionDisplay';
+import { SessionMarkChips, SessionRowIcons, SessionStateGlyph } from './SessionStateDisplay';
 import { deliveryFailureExplanation, offersSteerWithdraw, steerDeliveryState } from '../lib/steerDelivery';
 import { backgroundWorkIsActive, isSessionTurnActive, outlivingSessionWork } from '../lib/sessionActivity';
 import { MainCheckoutCtx, type MainCheckoutTarget } from '../lib/mainCheckout';
@@ -669,6 +678,7 @@ import {
   markNotSent,
   newestSeq,
   SendNotAnsweredError,
+  STOP_NOT_ANSWERED,
   withPendingSend,
 } from '../lib/pendingSend';
 import { compatibleUuid } from '../lib/uuid';
@@ -733,12 +743,13 @@ import {
   runningOverLimitTag,
   type CapacityGate,
   type RunningOverLimit,
+  slotWaitGate,
 } from '../lib/queuedCapacity';
 import { type QueuedTurn, type RunEvent, useSessionStream } from '../lib/useSessionStream';
 import { SessionConversation } from './SessionConversation';
 import { useWikiChatSessionCards } from './WikiDraftCard';
 import { currentPromptSuggestion, offeredPromptSuggestion } from '../lib/promptSuggestion';
-import { useCloseTaskOverPage, useOpenTaskOverPage, useTaskOverPage } from '../lib/taskInPlace';
+import { useCloseTaskOverPage, useOpenTaskOverPage, useShowTaskOverPage, useTaskOverPage } from '../lib/taskInPlace';
 import {
   OPTIMIZE_SHORTCUT,
   optimizedSendOf,
@@ -1508,6 +1519,9 @@ export const sessionLine = (
   // produced nothing since the wait began, so that preview would echo the message back as though it
   // were being answered (see waitingNoticeFor). Blue, because this is progress — just not the
   // agent's yet.
+  // A claim a full runner keeps waiting for its slot reads as the queued wait it is, in the queued row's own words.
+  const slotWait = live ? slotWaitGate(s) : null;
+  if (slotWait) return { text: CAPACITY_HELD_LINE, tone: 'queued', hint: capacityHeldHint(slotWait, machine, Date.now()) };
   if (live && waitingNoticeFor(s)) return { text: `${startingLabel(s)}…`, tone: 'running' };
   if (live && isGenerating(s, state)) {
     if (s.lastToolUse && SUBAGENT_LAUNCH_TOOLS.has(fmtTool(s.lastToolUse)) && (s.runningSubagentCount ?? 0) > 0)
@@ -1638,7 +1652,8 @@ export const SESSION_SHARED_TIP = 'Shared · anyone with the link';
 export function SessionTitleRow({
   session: s,
   hoverTipOpen = false,
-}: { session: any; hoverTipOpen?: boolean }) {
+  icons = [],
+}: { session: any; hoverTipOpen?: boolean; icons?: readonly SessionRowIcon[] }) {
   return (
     <div className="session-title-row">
       <div className="session-title">{s.title}</div>
@@ -1650,6 +1665,7 @@ export function SessionTitleRow({
           <span className="session-merge-badge">⚠</span>
         </Tooltip>
       )}
+      <SessionRowIcons icons={icons} />
       {/* The list row's `shared` (docs/share-links-design.md §8). The tip is hover only: on a touch screen
           a tap opens the row. */}
       {s.shared === true && (
@@ -2103,7 +2119,7 @@ const SessionEntryRow = memo(function SessionEntryRow({
           />
         ) : (
           <>
-            <SessionTitleRow session={s} hoverTipOpen={hoverTipOpen} />
+            <SessionTitleRow session={s} hoverTipOpen={hoverTipOpen} icons={sessionRowIcons(actionSession)} />
             {/* One line under the title, and all of it is what the session is doing
                 or waiting on, else its recap (sessionLine). Tags are filed and
                 filtered by, not drawn on the row (the owner, 2026-10-22). */}
@@ -2136,7 +2152,7 @@ const SessionEntryRow = memo(function SessionEntryRow({
                   {line.text}
                 </div>
               </Tooltip>
-              <SessionMarkChips marks={sessionMarks(actionSession)} />
+              <SessionMarkChips marks={sessionRowMarks(actionSession)} />
             </div>
           </>
         )}
@@ -2324,6 +2340,8 @@ export function statusLabel(session: any, watching?: string | null, machine?: st
   // Where `Waiting for your confirmation` would be, while the report is with its reviewer (§5 N3).
   if (session.confirmationUnderReview) return UNDER_REVIEW;
   if (state === 'SUCCEEDED') return 'Finished';
+  const slotWait = slotWaitGate(session);
+  if (slotWait) return queuedLabel(slotWait);
   if (waitingNoticeFor(session)) return startingLabel(session);
   if (isGenerating(session, state)) return 'Running';
   if (state === 'AWAITING_INPUT') {
@@ -3029,6 +3047,9 @@ export function WorkspaceView({
   const openTaskOverPage = useOpenTaskOverPage();
   const taskOverPage = useTaskOverPage();
   const closeTaskOverPage = useCloseTaskOverPage();
+  const showTaskOverPage = useShowTaskOverPage();
+  // Wide enough for the task to sit beside the conversation as a column (TaskOverPagePanel docks it then).
+  const taskColumnRoomy = useMediaQuery(TASK_COLUMN_QUERY);
   const [searchParams, setSearchParams] = useSearchParams();
   // How this console names its machine: Orbit Cloud for the account's managed runner (machineName).
   const managedRunnerId = useManagedRunnerId() ?? managed?.status.runnerId ?? null;
@@ -4012,6 +4033,17 @@ export function WorkspaceView({
   // Whether this session's own task is open beside (or over) it: the Task badge reads pressed then.
   const selectedTaskOpen =
     !!selected?.taskId && taskOverPage != null && routeId(taskOverPage) === routeId(selected.taskId);
+  // A task's own run conversation opens its task beside it (docs/task-run-sidebar-design.md, D2 = B): while
+  // the window has room for the column, nothing else is open over the page or in the column's slot, and the
+  // task was not closed in this conversation before (lib/taskRunSidebar). Below that width it stays closed
+  // until asked for: the overlay would cover the conversation it was opened for.
+  const ownRunSessionId: string | null = selected?.taskId && !selectedTrashed ? selected.id : null;
+  const ownRunTaskId: string | null = ownRunSessionId ? selected!.taskId! : null;
+  useEffect(() => {
+    if (!ownRunSessionId || !ownRunTaskId || !taskColumnRoomy || settingsOpen || taskOverPage != null) return;
+    if (taskRunSidebarClosed(ownRunSessionId)) return;
+    showTaskOverPage(encodeId(ownRunTaskId));
+  }, [ownRunSessionId, ownRunTaskId, taskColumnRoomy, settingsOpen, taskOverPage, showTaskOverPage]);
   const selectedCompleted = selectedLifecycleState === 'COMPLETED';
   // Whether a public link opens this conversation right now: the detail's open link once it has
   // been read, the list row's flag until then. The Trash pauses a link, so a trashed one is not.
@@ -5508,10 +5540,11 @@ export function WorkspaceView({
       ? (selectedStartingSession as QueuedGate)
       : null;
   // Held by a full runner, run or batch: each waiting message says so (board queued-card-runner-full).
+  // So is a claim the full runner keeps waiting for its slot (slotWaitGate): the same wait, the same tag.
   const capacityGate: CapacityGate | null =
     selectedIsQueued && isCapacityHeld(selectedStartingSession)
       ? (selectedStartingSession as CapacityGate)
-      : null;
+      : slotWaitGate(selectedStartingSession);
   const selectedIsStarting = selected ? sessionIsStarting(selectedStartingSession) : false;
   // Starting or compacting — see waitingNoticeFor. Its `since` is the clock the notice counts from.
   const selectedWaiting = selected ? waitingNoticeFor(selectedStartingSession) : null;
@@ -7579,7 +7612,19 @@ export function WorkspaceView({
     // server or build the stopped turn left running is what the person pointing at Stop can still
     // see running — and it is the ONLY caller that asks for that: every other interrupt keeps a
     // plain interrupt's semantics (nothing killed; the engine and its conversation stay).
-    mutationFn: (id: string) => interruptSession(id, undefined, { stopBackgroundWork: true }),
+    // It waits SEND_ANSWER_TIMEOUT_MS for the server, as a send does, then ends the request and says so:
+    // a Stop nobody answered must not look like a Stop that is still on its way (lib/pendingSend).
+    mutationFn: async (id: string) => {
+      const deadline = answerDeadline();
+      try {
+        return await interruptSession(id, undefined, { stopBackgroundWork: true, signal: deadline.signal });
+      } catch (e) {
+        if (deadline.signal.aborted && isSendNotAnswered(e)) throw new Error(STOP_NOT_ANSWERED);
+        throw e;
+      } finally {
+        deadline.done();
+      }
+    },
     onSuccess: () => {
       // Interrupt drops queued follow-ups server-side. Rather than silently lose what the
       // user typed, fold their queued text back into the composer so it can be edited and
@@ -8922,7 +8967,11 @@ export function WorkspaceView({
       outlivingSessionWork(selectedSession ?? selected) !== null) &&
     !text.trim() &&
     readyImages.length === 0 &&
-    !replyTo;
+    !replyTo &&
+    // A message still on its way waits for its answer before Stop is offered: a Stop that reached the
+    // server first could drop it from the queue while its bubble read as sent. The box is empty from
+    // the press on (lib/pendingSend), so without this Stop would stand in for Send mid-send.
+    !send.isPending;
 
   // Holding Send while a turn runs offers the other way to send the message — queued for the next
   // turn instead of into this one — which ⌥Enter does from a keyboard (decided 2026-10-16,
@@ -11976,10 +12025,13 @@ export function WorkspaceView({
                     // opening it takes the column session settings had.
                     aria-pressed={selectedTaskOpen}
                     onClick={() => {
+                      // Closed or opened here, the choice is this conversation's (lib/taskRunSidebar).
                       if (selectedTaskOpen) {
+                        rememberTaskRunSidebar(selected.id, true);
                         closeTaskOverPage();
                         return;
                       }
+                      rememberTaskRunSidebar(selected.id, false);
                       setSettingsOpen(false);
                       openTaskOverPage(encodeId(selected.taskId));
                     }}
@@ -13179,7 +13231,8 @@ export function WorkspaceView({
           shownProvider={shownProvider}
           configuredProviders={configuredProviders}
           showStop={showStop}
-          onStop={() => selected && control.mutate(selected.id)}
+          onStop={() => selected && !control.isPending && control.mutate(selected.id)}
+          stopping={control.isPending}
           canSend={canSend && !handingOver}
           // A send waiting as a bubble says Sending… there; the button need not say it too.
           sending={send.isPending && !send.variables?.pendingKey}
@@ -13369,6 +13422,8 @@ export interface SessionComposerProps {
   configuredProviders: ConfiguredProvider[];
   showStop: boolean;
   onStop: () => void;
+  /** Stop was pressed and the server has not answered yet. */
+  stopping?: boolean;
   canSend: boolean;
   sending: boolean;
   onSend: (intentOverride?: SessionTurnIntent) => void;
@@ -13444,6 +13499,7 @@ export function SessionComposer({
   configuredProviders,
   showStop,
   onStop,
+  stopping = false,
   canSend,
   sending,
   onSend,
@@ -14495,6 +14551,8 @@ export function SessionComposer({
             variant="primary"
             icon={<StopSquareIcon />}
             onClick={onStop}
+            disabled={stopping}
+            loading={stopping}
             aria-label="Stop"
           />
         ) : (

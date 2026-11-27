@@ -144,11 +144,12 @@ runner ──WebSocket（TLS，protobuf）──▶ 四层负载均衡 ──▶
 - **定义与检查**：定义放在 `contracts/runner-link/v1/*.proto`。CI 跑 `buf lint` 和 `buf breaking`；字段编号只增不复用，删掉的字段标记 `reserved`。
 - **代码生成**：Go 用 `google.golang.org/protobuf`，TS 用 `@bufbuild/protobuf`。
 - **事件 payload**：用 `bytes payload_json`（D12），其余消息全部用强类型。
-- **帧大小**：单帧上限 256KB。超出时在应用层切块，控制帧可以插在块与块之间。
+- **帧大小**：单帧上限 256KB。超出时在应用层切块，控制帧可以插在块与块之间。网关写出的每条消息至多 16 KiB，大于它的帧也切块（§15.15）。
 - **写出优先级**，从高到低共三档：
   1. 控制：心跳应答、确认、取消、令牌续期、`Close`；
   2. 提示和 RPC 响应；
   3. 实时流。
+- **优先级管不到 WebSocket ping/pong。** 上面的分档只排发送方自己队列里的 `Frame`。ping 和 pong 是 WebSocket 控制帧，由 WebSocket 库直接写，不进队列；它们和数据消息抢同一把写锁，coder/websocket 只给它们 5 秒（含等锁），超时就失败或关连接。一条大消息在慢路径上写好几秒，排在它后面的 ping/pong 就超时（§15.15）。
 
 ### 5.2 五类流量
 
@@ -236,6 +237,7 @@ runner ──WebSocket（TLS，protobuf）──▶ 四层负载均衡 ──▶
   - 命令（merge、commit、登录、安装等）仍然通过 `HeartbeatAck` 至少下发一次，并配合提示立即触发心跳。各类命令现有的合同和去重方式都不变。
 - 按合同靠心跳续租的（codex reset、集成任务），照常更新它们自己的那几行记录。
 - 服务端答得慢不算断线：一条连接上同时只有一个没答的心跳（`beat_id` 标明回答的是哪一个），迟到的回答不断开连接，连接死活只看 ping，见 §15.13。
+- 事实按 runner 进程记，不按连接记：重连后的第一次心跳只带没变的事实的哈希，见 §15.17。
 
 ### 5.8 持久事件流
 
@@ -274,7 +276,7 @@ runner ──WebSocket（TLS，protobuf）──▶ 四层负载均衡 ──▶
 
 - **连接与队列。** 每条连接一读一写两个协程，写出有三档队列。对方读得慢时，实时队列满了直接丢，控制队列满了就断开连接。
 - **不持有业务状态。** 连接状态只存在内存里，断了重连可以续传。转发 RPC 时，幂等请求会在后端实例之间自动重试，所以后端发布不影响 runner 的连接。
-- **存活检测。** WebSocket ping 每 20s 一次，60s 收不到回应就断开。判断 runner 进程是否活着，以心跳为准，不以 ping 为准：ping 由独立协程应答，主循环卡死了它照样会回。
+- **存活检测。** WebSocket ping 每 20s 一次，60s 收不到回应就断开；上次 ping 以来读到过 runner 的任何帧，这一次就不 ping（§15.15）。ping 不受上面三档队列的保护：它由 WebSocket 库写，和数据消息抢同一把写锁，库只给它 5 秒（含等锁）。判断 runner 进程是否活着，以心跳为准，不以 ping 为准：ping 由独立协程应答，主循环卡死了它照样会回。
 - **逐步断开。** 发布或缩容时，分批向连接发 `Drain{reconnect_after}`，每条连接的重连延迟随机。
 - **防护：**
   - 握手限速；
@@ -767,8 +769,9 @@ runner 本地的两种暂存，回滚和降级时这样处理：
   - 迟到的回答不断开连接。心跳的调用放弃以后，这个心跳在连接上仍算没答；下一个心跳先等它的回答，不应用（和 HTTPS 上超时以后才到的回答一样），再发自己。旧网关的回答不带 `beat_id`，按顺序认：网关对一条连接的心跳逐个转发、逐个回答（排队时较新的一个替换较旧的，runner 一次只有一个，碰不到）。
   - 链路上心跳的等待由 15 秒放宽到 75 秒，长于网关转发一次心跳的上限（`LINK_RPC_TIMEOUT`，默认 60 秒，到点回一个没拿到回答的 ack）。连接活着，心跳就等得到回答，对账照常应用。心跳不重叠，服务端答得多慢，心跳就来得多慢，不会堆起来；在线状态随每次回答刷新。HTTPS 上仍是 15 秒。
   - 连接死没死只看传输：每 20 秒 ping 一次，20 秒内没有 pong、其间也没从网关读到任何帧，就关掉重连。pong 由网关自己回，后端多慢都不影响。半开连接、网关冻住、断网，40 秒内发现（以前靠心跳规则，30–60 秒）；网关被杀、连接被重置，立刻发现。接着第一次重连前的等待不到 1 秒（全抖动）；网关一直连不上时，重试照旧按退避拉长，最多 60 秒一次，所以网关恢复后至多 60 秒连回。
+  - **2026-11-27 起（§15.15）判活改成只看读到的字节**：socket 上读到任何字节都算活着，写出去的字节不算（它们只是进了内核或本机代理的缓冲）。socket 的写卡住时（有一次写在进行，或者上次检查以来有一次写超过 1 秒），runner 不发 ping，改由看门狗判：写 45 秒没有进展、其间也没读到任何字节，才关掉重连。这个 45 秒的钟只在有写在进行时走，安静的连接仍按上面的 ping 规则，40 秒内发现；忙的连接死掉，约 65 秒内发现（45 秒加上填满发送缓冲的时间）。一次写不再有 10 秒的上限，慢慢在走的写不会被掐断。
   - 唯一的例外：一个心跳在能答 ping 的连接上 3 分钟（网关上限的三倍）没答，说明这个网关没在转发这条连接的心跳，结束这条连接。
-  - 重连退避只在连接上有心跳被对账以后才清零，不再在每次 `Welcome` 时清零。连接一条接一条地断、链路始终不通时，等待的上限按 1、2、4…60 秒增长（全抖动），不会紧密循环，一批 runner 也不会一起涌向 `POST /api/runner/link-token`。
+  - 重连退避只在连接上有心跳被对账以后才清零，不再在每次 `Welcome` 时清零。连接一条接一条地断、链路始终不通时，等待的上限按 1、2、4…60 秒增长（全抖动），不会紧密循环，一批 runner 也不会一起涌向 `POST /api/runner/link-token`。2026-11-27 起（§15.15），活不到 60 秒、又是 runner 自己判死的连接（ping 没回答、写没有进展、库的期限到点），下一次重连的等待上限至少是 8 秒，退避刚被对账清零也一样：一条能对账一次心跳、随即又断的路径，不会每次都在 1 秒内重连。网关断开的（`Close`、对端 EOF 或重置）照旧马上重连。
 - **兼容和发布。**
   - proto 只加字段：`Heartbeat.beat_id = 7`、`HeartbeatAck.beat_id = 6`；`buf breaking` 对 main 通过。
   - 修复在 runner，要发 runner 版本。网关的改动（带回 `beat_id`，帧日志记 `beat=`）可有可无，随下一次重建网关带上即可。服务端不改。三者上线顺序任意。
@@ -815,3 +818,180 @@ runner 本地的两种暂存，回滚和降级时这样处理：
   - 经过：16:16:15Z 内核在 HPC 的 runner unit 里 OOM 杀了某个会话的 `tsc`。systemd 默认 `OOMPolicy=stop`，于是停了整个 runner；100 秒的关停排空到 16:17:55Z 结束了 4 个在跑的 turn，`Restart=always` 在 16:18:05Z 把 runner 拉起，启动时的自更新在没有会话的情况下装上了 0.1.252。升级闸门最后一次检查（16:12:21Z）是正确地推迟了的。新进程把 4 个 turn 全部重新领回，都 ANSWERED。
   - 修复（fe5db828a）：runner 写出的两种 unit（`service.go`、`host_setup.go`）都写入 `OOMPolicy=continue`，OOM 只结束出问题的那个进程，不再连带停掉 runner。已经装好的 unit 只在重新注册时更新；HPC 另加了一次性的 drop-in `/etc/systemd/system/orbit-runner-root.service.d/oom-policy.conf`（任务 34vNE2Z174xCdCn3UfLcc）。
   - 含义："升级不打断在跑的 turn"还依赖 runner 不被它所在 unit 里的别的事停掉。升级这条路本身只在没有 turn 在跑、或排空结束后才开始；unit 被 systemd 停掉（OOM、手动 stop）走的是关停排空，不受本节约束。
+
+### 15.15 弱网下链路不断：网关不 ping 听得到的 runner，runner 按读判活，两边写出都至多 16 KiB 一条
+
+出处：任务 354Yi7zDoV2UPV7LQvYVW（网关这一半），修复方案 v3（Fable 5.2 审过两次）的 R3、R5（网关侧）、R8；任务 354YicPMgGZ170JyihWJh（runner 这一半），R1、R2、R4、R5（runner 侧）、R6、R7，以及在线状态弱网方案 v2 的第 2 项（心跳和调用插在事件批的片之间）。两半都上才算修好。涉及 §5.1、§6.1、§15.13。下面先是网关这一半，runner 这一半在后面。
+
+- **问题。** 2026-11-27 17:21–17:44Z，ai-sg 的 runner 每 10–40 秒重连一次，持续 23 分钟。它的路径是弱网（丢包最高 30%，约 50 KB/s），网关自己的网络没问题。
+- **原因**（coder/websocket v1.8.15）：
+  - 所有写共用一把锁（`write.go:288`）；ping、pong 这类控制帧的写只有 5 秒，等锁的时间也算在里面（`write.go:276`）；一次写的 ctx 到期，库直接关掉连接（`conn.go:171`）。
+  - 丢包路径上 TCP 卡几秒是常态。runner 的发送缓冲满时，它给网关 ping 的 pong 排在自己的上传后面，5 秒一到就失败，连接断开。
+  - 网关这边，一条 256 KiB 的消息在慢路径上能占着写锁好几秒，排在后面的 ping 等锁超时；旧代码把这当成"等不到 pong"，以 `ping_timeout` 关掉连接。
+  - §5.1、§6.1 的写出优先级只排网关自己队列里的帧，管不到 ping/pong（这两节已改正）。
+- **现在**（`src/link-gateway/conn.go`、`config.go`、`metrics.go`）：
+  - **R3：听得到就不 ping。** 读循环累计读到的字节数。ping 定时器每次触发时，看上次触发以来有没有读到 runner 的任何消息；读到过，就不发 ping，只重新定时。runner 上传时网关一直听得到它，它就不用在自己的上传后面写 pong。安静的连接照常 ping，60 秒等不到 pong 仍是 `ping_timeout`。这只证明进来的方向是通的；网关听得到 runner、自己发的却丢了，这种半开连接由 runner 侧按读判活的规则发现（R1），runner 重连后新连接顶掉旧连接。
+  - **ping 写不出去，分两种。** 第一种，库的 5 秒全花在等写锁上（错误是 `failed to acquire lock`）：ping 根本没写出，连接还开着，计入 `link_ping_write_blocked_total`，到下一个间隔再试，重新定时也在 `c.mu` 下、先查 ctx。第二种，锁拿到了，写本身过了期限：库已经关了连接，计入同一个指标，断开原因记 `write_timeout`，不再记 `ping_timeout`。真正等不到 pong（`failed to wait for pong`）仍是 `ping_timeout`。三种情况按库的错误措辞区分，测试用真的库钉住这些措辞（`ping_test.go`），以后升级库、措辞变了，测试会红。
+  - 数据消息超过写超时（10 秒）也是库关的连接，断开原因同样记 `write_timeout`，以前记 `connection_lost`。
+  - **R5：写出至多 16 KiB 一条。** 网关写出的每条 WebSocket 消息至多 `sendPieceBytes` = 16 KiB，大于它的帧都用 `Chunk` 切片（以前超过 256 KiB 才切）。在慢路径上，一条消息占写锁的时间从好几秒降到一片的时间。收的一侧都不变：`SetReadLimit`、`Welcome` 的 `Limits.max_frame_bytes`（256 KiB）、重组的上限（单帧 8 MiB、每连接 4 个未完成帧、共 16 MiB）。网关的测试客户端（`client.go`）也按 16 KiB 发。字节流的 `StreamData` 每帧至多 32 KiB（`maxStreamDataBytes`），现在分两片发；runner 的读循环对任何帧都先合片（`link_client.go` 的 `readFrame`），不受影响。proto 里 `Chunk` 的注释改成：小于接收上限的帧也可以切。
+  - **四档同时切到一半。** 每档队列同时最多一个帧切到一半，四档都在中途时，runner 正好持有 4 个未完成帧，等于它的上限 `linkMaxPartialFrames`，没有余量。`Close` 帧整帧写出，消息都很短，不会成为第 5 个。
+  - **R8：连接结束时记下传了多少。** 日志 `connection closed` 带 `bytesRead`、`bytesWritten`（消息的字节数，不含 WebSocket 帧头和 ping/pong）、`largestWrite`（最大的一条消息）、`longestWrite`（最长的一次写，含等锁）。
+- **兼容和发布。**
+  - proto 只改注释。已发布的 runner 都收得下 16 KiB 的片：它们的重组器不限片数，每片追加一次；未完成帧的上限见上。
+  - 新网关配旧 runner：R3 只是网关少发 ping，runner 不依赖网关的 ping。旧网关配新 runner：没有 R3，runner 上传时旧网关的 ping 仍会被卡住，所以网关也要重建。两者上线顺序任意。
+- **测试**（`src/link-gateway/ping_test.go`、`pieces_test.go`）：
+  - runner 一直在发时不被 ping（2 秒内 0 次往返），安静下来又被 ping。
+  - 不回 pong 的 runner 只要在发就不断开，远远超过 ping 超时；安静下来以后以 `ping_timeout` 断开。
+  - 一次写卡住 8 秒：等锁的 ping 5 秒后放弃，连接不断、原因为空，下一个间隔再 ping，得到回答。
+  - ping 写进卡住的 socket，或数据消息写进去：都是 `write_timeout`。
+  - 四档同时切到一半，其中一个帧正好 8 MiB：每条消息至多 16 KiB（最大 16335 字节）；网关的重组器和 runner 的重组器（测试时把本仓库的 `src/runner-go/link_frame.go` 编进一个小程序）都还原出全部 4 个帧，同时未完成的帧最多 4 个。
+  - 把 R3 和等锁重试撤掉再跑，前三条测试都红。
+- **实测**（2026-11-27，HPC staging，项目 `orbit-link-a1cea8`，0078cac387；runner 用本仓库构建，`src/runner-go` 与当前发布 v0.1.261-beta.102 相比只差 `linkpb` 里这段注释，等于当前发布的 runner 连新网关）：
+  - lost-answer：10 次丢失的回答都在 5 秒内拿回、只执行一次（claim 最多 915 ms，inbox 最多 887 ms）；restore 后一个会话和一条消息照常回答，连接没断。
+  - durable-events：杀网关 60 秒、杀 apiserver 60 秒、数据库主备切换和切回、断网 600 秒，每一段都通过；整个会话 seq 1..1276 连续，1270 个 tick 各存一次，没有丢弃。
+  - mass-disconnect：停网关 420 秒，10 台全部失联，reaper 在 7 次清扫里都保护住，0 个会话被回收；隔离 10 台中的 2 台 420 秒，同样 0 个被回收，其余 8 台照常回答。
+  - 网关的 `connection closed` 日志带上了新字段，例如一条 mass-disconnect 的连接：`bytesRead=61831 bytesWritten=24413 largestWrite=1982 longestWrite=4.823828ms`。断网的 runner 仍由网关的 ping 发现、按 `ping_timeout` 断开：durable-events 断网约 100 秒后一条（20 秒间隔加 60 秒等 pong），mass-disconnect 的隔离段一条（日志只取了最后一个网关容器的尾部）。
+  - 本节没有测：真实弱网（`tc netem` 30% 丢包、50 KB/s）下的长时间运行（方案的 V3、V4），要等 runner 那一半上了以后两半一起测。
+
+#### runner 这一半
+
+- **ai-sg 的路径。** 它没有代理：`HTTPS_PROXY` 等都没设，runner 直接用明文 `ws://10.66.0.2:2086/runner-link`，走本机的 AmneziaWG 隧道（`awg0`，MTU 1280，底层是 UDP）到 web 网关的 nginx，再到链路网关。丢包和限速都在隧道底下。所以 runner 的 socket 就是到 nginx 的那条 TCP，发送缓冲是它自己的（`tcp_wmem` 最大 4 MiB），没有本机代理替它吃下数据。端到端测试照这个形状搭：runner 在自己的网络命名空间里，经一条 WireGuard 隧道（MTU 1280）到 nginx，`tc netem` 加在隧道底下的 veth 上。
+- **原因，runner 这边**（coder/websocket v1.8.15）：
+  - runner 自己的 ping 也是 5 秒的控制帧写。socket 的发送缓冲满时，ping 卡在 flush 里，5 秒一到库就关掉连接（`conn.go:171`）；pinger 没看出来，日志只剩读循环的 `use of closed network connection`。
+  - 数据消息的写有 10 秒上限（`linkWriteTimeout`）。30% 丢包时一段 256 KiB 的写卡十几秒很平常，到点库同样关掉连接，同样的日志。
+  - 重连以后，每个会话把没确认的事件按批重发，一批最多 1 MiB；心跳排在这些批后面等 `writeMu`，于是心跳往返 12–30 秒。
+- **现在**（`src/runner-go/link_socket.go`、`link_client.go`、`link_work.go`、`link_frame.go`、`link_events.go`、`link_events_kind.go`）：
+  - **R1：只有读到的字节证明活着。** 链路拨号用的 TCP 连接（代理的 CONNECT 和所有 TLS 层下面那一条）套一层计数：读到的字节、写出的字节、正在进行的写。写出的字节不证明对端收到（它们落进内核或本机代理的缓冲），只用来看写有没有卡住。dial 时经 context 拿到这条 socket；链路的 HTTP transport 不留空闲连接，所以 WebSocket 一定开在为它拨的那条 socket 上（切换协议的请求不带 `Connection: close`）。
+  - **写卡住时不 ping。** pinger 每 20 秒看一次：有写在进行，或者上次看过以后有一次写超过 1 秒，就跳过这次 ping，因为这时写下去的 ping 会卡在 flush 里，5 秒后库会关连接。不卡时照旧：ping 20 秒没 pong、其间 socket 上一个字节也没读到，关掉重连（40 秒）。ping 超时那一刻要是正有写在进行，也交给看门狗判。
+  - **看门狗。** 每条连接一个，每秒看一次：有写在进行，并且从这次写开始、上次写出进展、上次读到字节三者中最晚的那个算起已过 45 秒，就判死。45 秒在 30% 丢包下约等于同一个段连丢 7 次。这个钟只在写的时候走，安静的连接不受它管。
+  - **写之前先等发送缓冲有余量（测试中发现，方案里没有）。** 第一次 30% 丢包的端到端测试里，带着 R1–R7 和网关 R3 的 runner 仍然每约 45 秒断一次，原因是 `failed to handle control frame opPing: failed to write control frame opPong: failed to acquire lock`。路径卡住时 runner 的上传有十几秒到不了网关（RTO 到 15 秒），网关在一个间隔里什么都没听到，就照 R3 发 ping；这个 ping 能到 runner，但库给 pong 的 5 秒包括等写锁，而写锁正被一次卡在满缓冲里的数据写拿着，5 秒一到读循环出错，连接断开。方案假设"runner 上传时网关一直听得到它"，在双向 30% 丢包下不成立。现在每一片写之前，先在库的写锁外面等：内核发送队列（Linux 的 `SIOCOUTQ`，macOS 的 `SO_NWRITE`）加上这一片不超过发送缓冲（`SO_SNDBUF`）的一半，或者队列是空的，才交给库去写。这样库的写永远不会卡在内核里，pong 随时拿得到锁，也随时放得进缓冲；pong 到网关要排在队列后面，但网关等 pong 有 60 秒。等余量算作一次进行中的写：pinger 照样不 ping，看门狗照样计时，等待期间队列变短（对端确认了数据）算写有进展，这比"写出了字节"更能说明路径通。读不到发送队列的系统（Windows，或者不是 TCP 的连接）不等。单元测试用真的 TCP 连接：网关停止读，runner 上传直到等余量，网关再发 ping，10 秒后连接还在；把等余量去掉，同一个测试以上面那句错误失败。
+  - **R2：写没有固定期限。** 握手以后的每次写都带同一个 ctx，只有看门狗会取消它（库在 ctx 取消时关连接，`conn.go:171-178`），取代每条消息 10 秒的上限。慢慢在走的写多久都不掐断；完全不动的写 45 秒后结束连接。看门狗先记下原因再取消。`Hello` 在读循环起来之前发，仍受 `Welcome` 的 10 秒等待约束。
+  - **R4：一批最多 256 KiB。** `linkBatchMaxBytes` 由 1 MiB 降到 256 KiB，心跳每个会话至多排在一批后面。不再往下降：每个会话每个确认往返只有一批在路上，这个上限也就是长时间断线后积压排空的速度（实测见下）。裁剪过大载荷时的回退上限另用一个常量 `linkTrimmedMaxBytes`，仍是 1 MiB。
+  - **R5（runner 侧）：写出至多 16 KiB 一条。** `linkSendPieceBytes` = 16 KiB，大于它的帧都切片；收的上限 `linkMaxFrameBytes`（256 KiB）不变。
+  - **R6：说出真正的原因。** 只记期限和没有进展这两类失败（`linkConn.failure`，先记的算），一定在关连接之前记：看门狗的"写 45 秒没有进展、其间也没读到任何字节"，pinger 的"ping 在库的 5 秒内写不出去，库关了连接"和"ping 20 秒没回答"。socket 在有写卡着时被关掉、又没别的原因的，记"库在 ping 或 pong 写不出去时关了连接，socket 上的写已经多久没有进展"。网关发来的 `Close` 仍然优先。日志不再只说 `use of closed network connection`。库的两种措辞（等写锁超时不关连接，`failed to acquire lock`；写开始以后超时关连接，`failed to write frame`）由测试钉住。
+  - **R7：活不久的连接之后退避。** 退避照旧在心跳对账后清零；但一条连接活不到 60 秒，又是 runner 自己判死的（`linkConn.failure` 有记录，或者库在写卡着时关了 socket，或者读循环拿到的是本地关闭的错误），下一次重连的等待上限至少 8 秒（全抖动），不会清零后每次都在 1 秒内重连。日志在这种时候写明"within 8s at least after a connection that lasted …"。**和方案的出入**：方案写的是"活不到 60 秒就断的连接"，不分谁断的。照那样做，lost-answer 演练失败：演练让网关在丢掉回答时切断 runner 的连接，那条连接只活了 6 秒，runner 等了 7.3 秒才重连，同一个调用 7369 ms 后才拿回回答，超过 5 秒的要求（§5.6：重发同一个 request_id，马上拿回同样的工作）。所以网关断开的（`Close`、对端 EOF 或重置）不算，照旧马上重连；弱网上来回断的连接，都是 runner 自己按期限判死的，正是 R7 要管的。
+  - **心跳和调用插在事件批的片之间**（在线状态弱网方案 v2 第 2 项）。按帧类型分：只有 `EventBatch` 算大块。`EventBatch` 整批持有新的 `bulkMu`，每写一片才拿一次 `writeMu`；其他帧照旧拿着 `writeMu` 写完自己所有的片，所以连接上的第一个心跳（事实整份发，`link_heartbeat.go`）不会排在一批后面。等锁超过 1 毫秒的写者在下一次解锁时直接拿到锁（`sync.Mutex` 的饥饿模式），所以慢路径上一个心跳最多等正在写的这一片再加一片。直播和字节流的帧（`trySend`）先 `bulkMu.TryLock()` 再 `writeMu.TryLock()`，不会插进一批的中间。加锁顺序永远是先 `bulkMu` 后 `writeMu`，紧急的帧从不拿 `bulkMu`。每一片在 `writeMu` 下现编码、现取 id，所以连接上消息的 id 一条比一条大（被切片的帧自己的 id 只出现在它的片里）。同一时刻最多两个帧在切片中（一批，加一个紧急帧），在网关的上限 `maxPartialFramesPerConn` = 4 以内。
+- **兼容和发布。** 不改协议，只改了 proto 里 `Chunk` 的注释（两边都不写超过 16 KiB 的消息）。新 runner 配旧网关能用，但旧网关没有 R3，runner 上传时网关的 ping 仍会卡在 runner 的 pong 后面，30% 丢包下仍会断（实测见下）。
+- **测试**（`src/runner-go/link_slow_path_test.go`，限值在测试里缩短，`TestTheSlowPathLimitsAreAsSpecified` 钉住真实值）：
+  - 写卡住时不发 ping，写过去以后恢复；比上限短的卡顿不断连接。
+  - 写不动、也读不到任何东西，到上限判死，日志写明原因，没有 `use of closed network connection`；写不动但网关还在发东西，不判死。
+  - 一次 320 KiB 的写以 32 KiB/s 慢慢走了上限三倍多的时间（约 10 秒）、其间什么也读不到，不被掐断。这几个测试的上限是 3 秒，留出余量，让负载高的机器在竞态检测下也不会把在走的写误判成卡住。
+  - 网关不 ping、心跳的回答被扣住远超任何判活的期限，安静的连接照样不断。
+  - 写进卡住 socket 的 ping：日志写明是库的 5 秒；库的两种措辞；网关的 `Close` 仍然优先。
+  - 退避：活不到 60 秒的连接之后上限 8 秒，次数多了照旧增长到 60 秒，活够 60 秒的照旧不到 1 秒；对账清零以后，网关切断一条年轻的连接，马上重连、不加 8 秒；runner 自己判死一条年轻的连接，日志写明 8 秒。
+  - 上传填满路径时网关发 ping：pong 照样马上写出去，连接不断（真的 TCP 连接，网关停止读）；去掉等余量，同一个测试以 pong 等写锁超时失败。
+  - 每条消息至多 16 KiB（实测最大 16333 字节）。
+  - 限速连接上一个 1 MiB 的批写到一半时发心跳，心跳在两片之内写出；批在切片中时 `trySend` 全部失败，批写完就成功；批量、紧急、直播三类发送者同时跑，不死锁，消息 id 递增，同时切片中的帧最多 2 个；一个大的紧急帧切在一批的片之间，用网关自己的重组器（测试时把本仓库的 `src/link-gateway/chunk.go` 编进一个小程序）还原出所有帧，同时未完成的帧最多 2 个。这些测试也在 `-race` 下跑过。
+- **实测**（2026-11-27，HPC，`scripts/runner-link/drills/weak-link-drill.sh`，staging 项目 `orbit-link-cdc3ac`：本分支构建的 apiserver、web、nginx 和链路网关（含网关那一半），链路走 same-origin，明文 `ws://` 经 nginx 的 `/runner-link`；runner 在自己的网络命名空间里，经 WireGuard 隧道（MTU 1280）到 nginx，`tc netem` 加在隧道底下 veth 的两端，即两个方向。每次先把路径切断，让会话在断线时写出 40 条各 128 KiB 的事件，5 MiB 没确认，再换上弱网。当前发布 v0.1.261-beta.103 和本分支的 runner 轮流跑，同时只有一个）：
+  - **两种 30%。** 按字面每个包都丢 30%（"全部"）；照 ai-sg 实测的样子只丢大包（"大包"：隧道上超过 1000 字节的包丢 30%，小包不丢；ai-sg 上 1200 字节的 ping 来回丢 47%、小 ping 0%，这里分别是 50% 和 0%，RTT 128 ms 对 114 ms）。两种都加 60 ms 单向延迟、400 kbit/s。同一路径上一条普通 TCP 连续上传 90 秒："大包"约 7.4–7.9 KiB/s，最长静默 3 秒；"全部"只有 0.3–1.2 KiB/s，最长静默 37 秒，确认和 pong 也在丢，TCP 自己就会几十秒不出声，已经碰到判活的 40 秒和 45 秒。
+  - **当前发布，复现了断线**："大包"30% 10 分钟，连上 53 次、断 52 次，40 条事件一条也没存进去；"全部"30% 10 分钟，断 35 次，也是 0 条。每一次断开的日志都是 `use of closed network connection`，间隔约 10 秒，就是旧的 10 秒写期限，和 ai-sg 的日志一样。
+  - **本分支，"大包"30%：一次也没重连。** d3eb82f1d7 跑 20 分钟：40 条事件 806 秒（13.4 分钟，约 6.4 KiB/s）全部存进去，seq 1..46 连续，没有洞；没有一个心跳失败，个个对账；补发期间有 10 个心跳 10–18 秒才回答（ai-sg 当时 12–30 秒），补发完以后的 6.7 分钟里没有一个超过 10 秒。最终提交 47e2a1fc53 再跑 16 分钟：同样一次不断，832 秒存完，seq 1..46 连续，心跳没有失败；补发期间最慢 26 秒，补发完以后的 2.2 分钟里没有超过 10 秒的（两次之间只差 R7，没有重连时用不到）。
+  - **本分支，"全部"30%，16 分钟：断了 7 次**（当前发布 10 分钟断 35 次）：3 次看门狗（写 45 秒没进展、也没读到东西），3 次网关等 pong 60 秒到点，1 次 runner 的 ping 20 秒没回答。40 条事件只存进去 2 条。这条路径上 TCP 本身就会静默三四十秒，按方案保留的判活期限（40 秒、45 秒、网关 60 秒）就该判死；不再放宽，因为放宽就是让真断的路径更晚才被发现。
+  - **等余量之前**：同样"全部"30%，只带 R1–R7 的 runner 每约 45 秒断一次，原因都是 pong 等写锁超时，就是上面说的那个问题。
+  - **其他丢包率**（"大包"）：10%，10 分钟不断，事件 292 秒存完，没有慢心跳；47%，10 分钟断 1 次（看门狗：写 46 秒没进展、也没读到任何东西），存进去 5 条，心跳最慢 73 秒、失败 2 次。47% 不要求不断，只记原因。
+  - **路径死掉**（丢包 100%，本分支）：安静的连接 24 秒发现；忙的连接（引擎每 0.2 秒写 64 KiB）39 秒；只有 runner→网关通、只有网关→runner 通，各 35 秒，都是 runner 按 ping 规则先发现，网关那边随后以 `superseded`（runner 连回来时）或 `connection_lost` 结束旧连接。
+  - **补发速度**（快路径，32 MiB 积压，大半在 spool 里）：不加延迟 0.82 MiB/s；加 120 ms RTT 0.20 MiB/s。当前发布（一批 1 MiB）在 120 ms RTT 上 0.75 MiB/s。每个会话一个确认往返只有一批在路上，所以 256 KiB 的上限在 120 ms 的路径上让积压排空慢了约 3.7 倍，32 MiB 要将近 3 分钟；每批一个来回约 1.25 秒，比 RTT 长得多，原因没有再查。要更快，可以让一个会话同时有不止一批在路上，而不是把批调回 1 MiB。
+  - **生产的网关镜像**（`orbit-link-gateway:e1a7f6ba520c…`，没有 R3，按 20 秒间隔照样 ping）：新 runner 在通畅的路径上照常连上、会话照常跑。"大包"30% 10 分钟，一次也没断，存进去 29 条，seq 连续。方案预计"旧网关上新 runner 在 30% 丢包下仍会断"，在 ai-sg 那样的路径上没有出现：等余量以后，谁发的 ping，pong 都能马上写出去，旧网关的 ping 也就等得到。"全部"30% 10 分钟断 5 次（3 次看门狗、1 次 runner 的 ping、1 次网关 `ping_timeout`），和新网关上一样，是路径本身几十秒不通。所以网关的 R3 仍然要上（它省掉忙连接上的 ping），但不再是新 runner 不断线的前提。
+  - **现有演练**（47e2a1fc53，各自的 staging 项目）：lost-answer 10 次丢失的回答都在 0.1–1.0 秒内拿回、只执行一次，restore 后连接不断；durable-events 杀网关、杀 apiserver、数据库主备切换和切回、断网 600 秒，每一段都通过，整个会话 seq 1..1276 连续，1270 个 tick 各存一次，没有丢弃。mass-disconnect 停网关 420 秒，10 台全部失联，reaper 6 次清扫都保护住；隔离 10 台中的 2 台 420 秒，同样 6 次保护住，两段都是 0 个会话被回收、10 个会话都在。
+
+### 15.16 弱网下照样算在场（服务端这一半）：链路的 Welcome 也算听到，最多比最后一次心跳多算 5 分钟
+
+出处：任务 354Z7B8GLXysSIByangIN，方案 runner-presence-weak-network-plan.md v2 第 1 项（Fable 5.2 审过）；2026-11-27 账号所有者把范围收窄成只算 Welcome。网关那一半见 §15.15，runner 那一半（心跳优先，插到 EventBatch 的片之间）是另一个任务。涉及 §5.7、§6.5、§11.5、§15.6。
+
+- **问题。** 在场只靠心跳写：HTTPS 心跳的 `recordRunnerBeat`（`runners/runner-presence.ts`），链路心跳的 `readLinkBeat`（`runner-api/link-heartbeat.ts`）。2026-11-27 17:21–17:44Z ai-sg 在弱网上（丢包最高 30%），链路每 10–40 秒断一次、重连一次，每条新连接都送到了 Hello，心跳却排在事件重发后面，或者随连接一起死掉，所以它明明在一次次重连，90 秒后还是被判 OFFLINE。
+- **现在：只有 Welcome 算听到**（`runner_presence.last_heard_at`，迁移 1750）。
+  - 网关为每条新连接、在发 Welcome 之前调 welcome 路由（`POST /runner/link/welcome`），`recordRunnerLinkOpened` 在它原有的那条语句里把 `last_heard_at` 写成 now()：只写 `link_state = 'LINK'`、`process_id` 等于链路令牌的 lease owner 的行，用 PostgreSQL 的时钟。续期和网关重发的 welcome 也写。新进程刷新不了旧进程的在场，接管仍归心跳。从不建行：主备切换清空了 UNLOGGED 表以后，下一次心跳重建行之前什么也听不到。一条连接一次，不用节流。
+  - **事件写入和 RPC 不算。** 原方案把它们也算作听到，账号所有者否掉了：工作循环卡住、引擎却还在出事件的 runner，在一条稳定的连接上事件照样流，算它们就会把它的离线推迟到最后一次心跳后 5 分钟 + 90 秒，回收也跟着推迟。这种情况必须保持现在的判法：最后一次心跳（或 Welcome）后 90 秒判 OFFLINE，5 分钟回收。只算 Welcome 已经够这次事故用：ai-sg 每 10–40 秒就重连一次，每次都有 Welcome。稳定连接上心跳被饿死的问题，由 runner 任务的心跳优先来修，不在服务端补。
+- **在场 = GREATEST(last_beat_at, LEAST(last_heard_at, last_beat_at + 5 分钟), runner.last_heartbeat_at)。**
+  - 读法：`runnerPresentAt`、`runnerPresenceSql`，`runnerIsOnline` 和 `runnerOfflineSql` 都按它判。`runnerLastBeatAt`、`runnerLastBeatSql` 仍然只看心跳，`runnerBeatIsOnline` 是只看心跳的在线规则。SQL 里的 LEAST 要先判 `last_heard_at` 不为空：PostgreSQL 的 LEAST 跳过 NULL，从没 Welcome 过的行会被当成在场到心跳后 5 分钟。上限是写进 SQL 的字面量，不是绑定参数，拼进它的语句的参数顺序不变。
+  - **上限 5 分钟**（`RUNNER_HEARD_CAP_MS`）。它高于 runner 自己的规则：心跳连续 3 分钟没有回答就断开连接（`link_heartbeat.go`）。所以一直重连、却一次心跳也没到的 runner，在最后一次心跳后至多 5 分钟 + 90 秒判 OFFLINE，走正常的离线流程（§11.5 "主循环卡住"）。心跳的回答里带的命令和取消，不会对一台显示在场的 runner 扣住超过约 5 分钟。
+  - 给客户端看的 `lastHeartbeatAt` 也是在场的时刻：网页、iOS、Android 都按它自己算 90 秒离线，所以不改客户端，它们也不会把刚重连过的 runner 画成离线。
+- **读的地方，一处一处定的。**
+  - 改成按在场判：`runnerIsOnline`、`runnerOfflineSql`（显示和派活的 SQL 都经过它们），reaper 的 `massDisconnectOf` 和 `runnerLooksOffline`，`cellLosses`，`owner-secrets` 的授权列表，`wiki-repo-ops` 的 runner 在线判断（它从来不看 runner 的 status，现在也不看），四处绕开 `RUNNER_BEATS` 手写的查询（`runners.service.ts` 的 runner 列表、`attention-fix.ts`、`subagent-remote.ts`、`orbit status` 的 `/runner/me`），会话列表和打开列表版本、帮助问答、主检出、Cursor key 检查、删除审批、`/runner/runners` 给客户端的时刻，`orbit_runners` 和 `orbit_runner_oldest_heartbeat_age_seconds` 两个指标。
+  - 仍只看心跳：托管 runner 的管理器（上一个镜像的静默、休眠用的遥测新鲜度：`managed-runner-manager.ts`、`managed-runner.service.ts`、`managed-runner-status.ts`），这些数据是心跳带来的；Codex 额度重置的受理（`runnerBeatIsOnline`），因为重置命令只在心跳的回答里发；落地任务的租约续期本来就不读心跳时刻，不用改。
+- **`lost_at`：两处写都按在场算。**
+  - 链路心跳：上一次心跳和 `last_heard_at` 里较晚的那个，比这次心跳早 45 秒以上，才把它记成 `lost_at`。在两次心跳之间重连过的 runner，按重连那一刻算，没有失联那么久。
+  - `recordRunnerLinkOpened`（welcome）：改成两个 CASE。`lost_at` 记 GREATEST(last_beat_at, last_heard_at)，续期的判断也用它；只要是同一个进程的 LINK 行，`last_heard_at` 就写 now()，续期和重发的 welcome 也写（以前这两种 WHERE 直接不写）。语句先读旧值、再写新值，所以记下的是这条连接之前最后一次听到的时刻。代价：网关没拿到回答、重发 welcome 时，第二次读到的是第一次写的 `last_heard_at`，`lost_at` 会往后挪到第一次 welcome 的时刻（几秒）；那也是一个听到 runner 的时刻，`cellLosses` 按 45 秒的宽度认大面积断线，挪这几秒不影响。
+- **指标 `orbit_runner_reconcile_stale`：只计数。** 在场（`online`、`draining`）、在链路上、最后一次完整对账（`reconciled_at`）早于 5 分钟 + 45 秒的 runner 数。为什么不是正好 5 分钟：链路心跳每台 runner 按自己的相位每 5 分钟至少完整对账一次，做对账的是周期翻过之后的第一次心跳，所以健康的 runner 每个周期都有最多一个心跳间隔超过 5 分钟；线划在 5 分钟，1 万台时任何时刻都会算进几百台健康的。NULL 表示欠着一次对账，不算；HTTPS 的 runner 每次心跳都完整对账、从不写这一列，也不算。客户端和 reaper 都不改：有了 5 分钟的上限，一台不再对账（也就不再心跳）的 runner 自己会判离线。
+- **兼容和发布。** 只改 apiserver 和一个迁移（UNLOGGED 表加一列可空的 TIMESTAMP(3)，只改目录）。读的是已发布的网关本来就会为每条连接调的 welcome，所以每个 runner 和网关版本都受益，与 §15.15 的网关、runner 的改动上线顺序任意。
+- **测试**（pg 规格 `runner-presence-heard.pg.spec.ts`，单元规格 `runner-presence.spec.ts`、`fleet-metrics.spec.ts`）：Welcome 只改匹配进程的 LINK 行，续期和重发也写，从不建行；单会话事件、合并事件、RPC、心跳都不改 `last_heard_at`；一条稳定连接上事件照流、没有心跳的 runner，在最后一次心跳或 Welcome 后 90 秒判离线，5 分钟回收，和以前一样；一直重连、没有心跳到达的 runner 到心跳后 5 分钟仍在线，5 分钟 + 90 秒后离线；每个改过的读者对同一行和 `runnerOfflineSql` 一致，托管 runner 的读者仍只看心跳；两处 `lost_at` 都按在场算；45 秒内 Welcome 过的 runner 不算进 `cellLosses` 的静默；对账过期的指标不算 NULL。把规格放回"调用也算听到"的上一版代码上跑，稳定连接、`cellLosses` 和回收三个用例都红。
+
+### 15.17 重连不重发事实：网关按 runner 进程记住事实，别的节点没有就问持有的节点；WebSocket 压缩打开（不保留上下文）
+
+出处：任务 354tlKkUG5D8RoEjXFzl6（2026-11-27）。涉及 §5.7、§6.1、§6.3、§15.15、§15.16。
+
+- **问题。** 心跳里的事实（§5.7：modelCatalog、skills、commands、engines 等）只在网关没有时才发全量，否则只发哈希。原来"网关有没有"按连接记：runner 那边是 `linkWorkConn.facts`，网关那边是连接的 `factCache`，所以每条新连接的第一次心跳都把全部事实重发一遍。2026-11-27 用 `orbit-link-lfx42`、`orbit-link-wk24` 的帧日志回放 11,086 个心跳：平常一次约 2 KB（14 个会话时中位数 2,083 B），连接上的第一次 9.5–15.9 KB，离 16 KiB 的分片线（§15.15 R5）只差一点。ai-sg 那次弱网（§15.16）每 10–40 秒重连一次，每次都重发全量。
+- **网关：事实按进程记**（`src/link-gateway/facts.go`）。键是 runner + 链路令牌的 leaseOwner（即 Hello 的 process_id，小写），这个进程在本节点上的所有连接共用一份（换连接时新旧两条可能同时在发心跳，所以加锁），最后一条连接断开后再留 15 分钟（`factKeepAfterClose`），每分钟清一次过期的。单份的上限照旧（64 种、4 MiB），内容照旧 intern，各 runner 相同的部分只存一份。指标 `link_fact_processes`。
+- **Welcome 新增 `process_facts = 11`。** 新网关（能转发的）一律写 true。runner 读到 true，就用进程级的记录（`linkWork.facts`）代替这条连接自己的：它在之前任何一条连接上整份发过、而且网关没有要回去的事实，新连接的第一次心跳只发哈希。旧网关不写这个字段（读作 false），runner 就照旧按连接记，第一次心跳发全量。proto 只加字段，原有字段的意思不变。
+- **别的节点：问持有的节点。** 本节点没有某个哈希（进程之前连的是别的节点，或者本节点刚重启），先在 NATS 上问：`lfx.<runnerId>` 上发一个只带 process_id 和哈希的 `Heartbeat`，回答收在自己的收件箱 `_LFX.>`。哪个节点有这个进程、这个哈希的事实，就回一个带全量的 `Heartbeat`；一个都没有就不回。问的一方先核对内容的 SHA-256 等于所问的哈希再用、再存，然后转发；最多等 250 ms（`factPeerWait`）。用的还是 `Heartbeat`/`Fact` 两个消息，不新增 proto 消息。nats.conf 给网关的用户加了 `lfx.*` 的发布和订阅、`_LFX.>` 的订阅；apiserver 的用户两样都没有，网关仍然读不到 `_INBOX.>`。
+- **谁都没有：照旧 want_facts。** 节点重启、所有节点都重启过、NATS 断了、别的节点还是旧版本，问不到就把这些种类写进 `want_facts`，这一拍不转发（缺了的成员有意义，§5.7），runner 马上用全量再发一次。代价是一拍只带哈希的心跳加一拍全量，外加问的那至多 250 ms。apiserver 重启不影响：事实在网关的内存里。网关没有为此存库，也没有让 apiserver 存：最常见的重连是同一个节点（目前每个部署只有一个网关节点），同节点和换节点都不用 runner 重发；网关重启时全量重发一次，和以前一样。
+- **runner 一侧的细节**（`src/runner-go/link_heartbeat.go`）。
+  - 进程级的记录有锁，两条连接可以共用。
+  - 一拍心跳在回答到来之前连接就断了，那一拍整份发出的事实可能根本没到网关，就从记录里删掉，下一条连接上照旧整份发，不用多问一次。
+  - 网关要回去的种类（`want_facts`）照旧从记录里删掉。
+- **兼容，四种组合都测过。**
+  - 新 runner ⇄ 新网关：同节点重连只发哈希；换节点问到持有的节点；节点重启走 want_facts。
+  - 旧 runner ⇄ 新网关：旧 runner 每条新连接都发全量，照常转发，网关照样记下，给这个进程之后的连接用。
+  - 新 runner ⇄ 旧网关：Welcome 里没有 `process_facts`，runner 照旧按连接记，第一次心跳发全量。
+  - 新网关 ⇄ 旧 nats.conf：订阅和发布被拒，网关记日志，问不到，退回 want_facts。
+- **实测大小**（`TestLinkReconnectSendsUnchangedPartsByDigest`：14 种事实，各自的长度取 wk24 帧日志 2026-11-24 第 82 拍，14 个会话；测的是网关读到的 WebSocket 消息）：
+  - 进程的第一次心跳 16,291 B，平常一拍 1,741 B。
+  - 重连后的第一次心跳：从 16,291 B 降到 1,741 B，和平常一拍一样大。
+  - 连到什么都没有的节点：先发 1,741 B 只带哈希的一拍，被要回去以后发 16,290 B 的全量。
+- **测试。**
+  - 网关（`facts_test.go`）：
+    - 同节点重连，填上的是上一条连接发的内容；同一 runner 的另一个进程拿不到；旧 runner 整份发照常转发。
+    - 两个节点共用一个 NATS，B 节点从 A 节点问到、核对后转发，之后自己记着。
+    - 节点重启、谁都没有时回 `want_facts`，这一拍不转发。
+    - 别的节点回的内容和哈希对不上就不用。
+    - 进程最后一条连接断开 15 分钟后才清掉。
+  - runner（`link_facts_test.go`）：
+    - 同节点重连只发哈希，换到什么都没有的节点时被要回去、马上补全量。
+    - 旧网关上每条新连接都发全量。
+    - 没回答就断了的一拍，它整份发的事实在下一条连接上照旧整份发。
+  - nats.conf 的权限：`scripts/runner-link/nats-auth-check.sh` 在真的 nats-server 上验证网关节点之间能问能答，apiserver 不能。
+- **WebSocket 压缩：打开 permessage-deflate，不保留上下文（no context takeover），门槛 512 字节。**
+  - **为什么原来关着。** git 历史里没有专门的决定：两端从第一版（c53f00a631 网关 v0、d6813a40f7 runner 链路客户端）就写着 `CompressionDisabled`，`docs/dependency-security.md` 的"Reach"把"压缩关着"列为暴露面的一条，库（coder/websocket）的文档也说"没有针对自己的用法测过之前不要打开"。所以先测。
+  - **怎么测**（`src/link-gateway/cmd/loadgen/compression_test.go`，`LINK_MEASURE_COMPRESSION=1` 才跑；两端用的同一个库，经回环 TCP，五次取中位数）：
+    - 流量：loadgen 自己的帧（synth.go、live.go）——第一次心跳（全量）、平常的心跳（只带哈希、14 个会话）、持久事件批、实时批。
+    - 真实文本：loadgen 的文本只取几百个词，比引擎的输出好压。所以再加一组用这台机器上 Claude Code 的真实记录（3 万条内容）拼成的事件批和实时批。只报大小和时间，不报内容。
+  - **实测**（2026-11-27，orbit-ws01，负载 7）。比例是线上字节/原始字节；CPU 是两端合计每条比不压缩多出的微秒数：
+
+    | 流量 | 原始 B/条 | 不保留上下文，门槛 512 | 门槛 128 | 保留上下文 |
+    | --- | --- | --- | --- | --- |
+    | 第一次心跳 | 7,208 | 0.344，+46 µs | 0.344，+50 µs | 0.109，+26 µs |
+    | 平常的心跳 | 1,416 | 1.010，+4.5 µs | 1.010，+3.9 µs | 0.067，+9.4 µs |
+    | 事件批（loadgen 文本） | 2,893 | 0.475，+42 µs | 0.475，+38 µs | 0.336，+31 µs |
+    | 事件批（真实输出） | 6,567 | 0.512，+70 µs | 0.511，+71 µs | 0.364，+57 µs |
+    | 实时批（loadgen 文本） | 444 | 0.745，+9 µs | 0.663，+16 µs | 0.311，+12 µs |
+    | 实时批（真实输出） | 436 | 0.829，+9 µs | 0.754，+17 µs | 0.387，+11 µs |
+
+  - **各端单独的开销**（不保留上下文，库的做法：每条从池里取 BestSpeed 写端、读端各重置一次）：
+    - 真实输出的事件批：runner 压缩 38 µs，网关解压 24 µs。
+    - 第一次心跳：压缩 21 µs，解压 17 µs。
+    - 实时批：压缩 8.5 µs，解压 3.6 µs。
+    - 平常的心跳几乎为零（BestSpeed 把它整块原样存）。
+  - **内存**（成对的空闲连接，每端各写读一条之后；100 对和 400 对之差）：
+    - 不压缩每对 28.8 KB，不保留上下文 47.9 KB：每端多约 10 KB，是读过压缩消息以后留下的 bufio 读缓冲。
+    - 保留上下文每对 1,165 KB：每条连接一个常驻 1.2 MB 的 flate 写端，外加 32 KB 的窗口。
+  - **为什么这样定。**
+    - 收益：runner 上传的大头是事件批，降到一半左右，弱网下补发积压的时间也就减半（§15.15 实测 5 MiB 积压 806 秒）。
+    - CPU 代价：一个单元（§9：每秒约 2,000 条事件，真实输出约每秒 3 MB 原始字节）网关解压约 0.012 核，加上实时批也不到 0.02 核。实测单节点带 1.5 万条连接用 0.79 核，所以多出约 2.5%。
+    - 内存代价：每条连接约多 10 KB，1.5 万条约多 150 MB；实测 2,298 MiB，约多 6%。
+    - 保留上下文：比例好得多，可是每条连接要常驻 1.2 MB 的写端，1.5 万条连接就是 17 GB，不可行。
+    - 不对称的方案（只让 runner 保留上下文、网关不压缩它写出的消息）每条连接也要常驻 32 KB 窗口；它额外省下的主要是平常的心跳，而那每 30 秒才 1.4 KB。库的接口也不直接支持这种协商。所以不做。
+    - 窗口：库只支持 15 位（32 KB），没有可调的。
+    - 门槛 512：低于它的只有大部分实时批和网关的确认帧。降到 128，实时批只多省 8 个百分点，CPU 却翻倍。
+  - **两端的配置。**
+    - 网关：`websocket.Accept` 用 `CompressionNoContextTakeover`，门槛 512（`gateway.go` 的 `linkCompressionThreshold`）。
+    - runner：`websocket.Dial` 一样，`link_client.go` 的 `linkCompressionThreshold`。
+    - runner 发出的是带 `client_no_context_takeover`、`server_no_context_takeover` 的提议。对方提议保留上下文时，网关也只按不保留上下文回答。
+  - **新旧混用。** 是否压缩按握手协商：
+    - 旧 runner 不提议，新网关回答不压缩。
+    - 新 runner 提议，旧网关不接受，连接照常不压缩。
+    - 所以四种组合都能连上、都能工作。
+    - 网关经 nginx 的默认安装（§15.10）：nginx 原样转发 `Sec-WebSocket-Extensions`。
+  - **暴露面。** 解压只发生在已经通过令牌检查的连接上。256 KiB 的读上限管的是解压以后的大小（库把读上限套在解压器外面），所以压缩包不会在网关里膨胀到上限以外。`docs/dependency-security.md` 两处"压缩关着"已改。
+  - **测试。**
+    - 网关（`compression_test.go`）：不提议的 runner 拿到不压缩的连接，7,201 字节的部分在线上 7,400 字节；提议的拿到 `server_no_context_takeover`，同一部分 280 字节；保留上下文的提议也按不保留回答；三种都照常转发、对账。
+    - runner（`link_facts_test.go`）：对不接受压缩的网关，4,911 字节的部分线上 5,153 字节；对接受的网关 410 字节；两种都照常转发。

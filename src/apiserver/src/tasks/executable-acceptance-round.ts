@@ -3,9 +3,10 @@
  *
  * WHY THIS FILE EXISTS
  * ====================
- * An acceptance round is not a row. Nothing in the schema records that a declared command ran,
- * what it exited with, or when — `runner-api.controller.ts` says so in as many words above the
- * comparison ("the exit code exists for the length of this block"). What survives the request is
+ * The comparison keeps nothing — `runner-api.controller.ts` says so in as many words above it
+ * ("the exit code exists for the length of this block"). Since migration 1672 the round has a
+ * record of its own, `task_acceptance_round` (`task-acceptance-round.ts`), written beside that
+ * block rather than by it, for a reader. The traces the comparison's door itself leaves are
  * incidental to two other rows:
  *
  *   * the reserved shell turn's `client_turn_id`, which marks the turn as a server-queued

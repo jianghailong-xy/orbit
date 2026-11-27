@@ -26,6 +26,11 @@ const (
 	// cap were the idle ones kept. An apiserver serves its calls with 10 database connections, so more calls at once
 	// than this only wait inside it instead.
 	defaultBackendMaxConns = 256
+	// sendPieceBytes is the largest WebSocket message the gateway writes: a frame over it goes in pieces (Chunk), though
+	// a receiver takes messages of up to maxFrameBytes. On a slow path one 256 KiB message holds the library's single
+	// write lock for seconds, and every ping, pong and control frame waits behind it; a 16 KiB piece holds it briefly
+	// (§15.15).
+	sendPieceBytes = 16 << 10
 )
 
 // config is everything the gateway is told at start, from the environment (README.md, "Configuration").

@@ -244,7 +244,7 @@ export interface AgentExecConfig {
 
 /**
  * What changed the mode a session's engine is actually running in (`session_permission_mode_change.cause`,
- * migration 1735):
+ * migration 1755):
  *  - CLAIM: a claim handed the runner this mode (for an engine that reports none, that is the mode it runs in);
  *  - OWNER_PICK: the owner's config change reached the engine (`client` names the app when the request said);
  *  - ENGINE_REPORT: the engine said it runs in another mode than the one recorded (Claude Code's init frame);
@@ -274,7 +274,7 @@ export const PERMISSION_MODE_CORRECTION_FAILED_EVENT_SUBTYPE = 'permission_mode_
 
 /**
  * Why a claim handed the runner another mode than the one the session asked for (`session_permission_mode_change.reason`,
- * migration 1740). These are the claim's only substitutions, and neither predicts what the engine can do:
+ * migration 1770). These are the claim's only substitutions, and neither predicts what the engine can do:
  *  - ROOT_RUNNER: Bypass on a runner that runs as root, where Claude Code exits before it says anything; Auto instead;
  *  - SCHEDULED_RUN: a scheduled run on Claude Code, which runs in Auto whatever its level.
  */
@@ -298,7 +298,7 @@ export interface SessionPermissionModeChange {
 
 /**
  * The session detail's and list row's word on its mode. `permissionMode` is the owner's intent and is never
- * rewritten by normalization; `actualPermissionMode` is what the engine runs in (null until a claim since 1735,
+ * rewritten by normalization; `actualPermissionMode` is what the engine runs in (null until a claim since 1755,
  * and absent from an older server). Clients that read neither keep working: both are additions.
  */
 export interface SessionPermissionModeFacts {
@@ -1782,6 +1782,11 @@ export interface RunnerHeartbeatResponse {
    *  which a runner draining for an update sends for the sessions whose engine is running a turn on it.
    *  Absent from an older server, to which such a runner sends no claim while it drains. */
   drainScopedClaims?: boolean;
+  /** This server takes a full runner's claim scope (`GET /runner/sessions/claim?fullScope=`: an ordinary claim only for
+   *  the sessions named, a Run now claim for any) and a claim given back because the runner is full (return-slot
+   *  `reason: runner_full`). Said on every answer. Absent from an older server: a runner then asks as before, and a
+   *  claim it cannot start waits on it for its slot. */
+  capacityClaims?: boolean;
   /** This server's operator says every replica serves SESSION_RELEASE_V1 (the switch ORBIT_SESSION_RELEASE_V1): a runner
    *  may declare it on its turn-complete and release reports. Absent from an older server and while the switch is
    *  off; a runner that does not read it on its latest answer declares nothing. */
@@ -4090,12 +4095,29 @@ export interface ReleaseTurnLeasesRequest {
 export interface ReturnSlotRequest {
   /** Stable for one runner process: the process that holds the session. */
   leaseOwner?: string;
+  /** `runner_full`: not a drain. Every slot of the runner is taken — by turns and by sessions its background jobs hold —
+   *  so it gives back a claim it cannot start (runner-go sessionPool.waitActive). The session goes back to the queue,
+   *  where it reads queued behind a full runner, and the runner is not recorded draining. A session whose engine never
+   *  started has no inbox lease owner yet, so the fence for this reason is the runner, and an owner that is this
+   *  process or none. Sent only to a server whose heartbeat answer says `capacityClaims`. */
+  reason?: 'runner_full';
+}
+
+/** A claimed session a full runner keeps waiting for its slot (enginePhase `waiting_for_slot`), counted as the runner
+ *  admits it: what holds the runner's slots other than this session, the part of that sessions running background jobs
+ *  hold, and the runner's limit. Carried on the session list row beside that phase only (SessionsService list). */
+export interface SessionSlotWait {
+  active: number;
+  heldByJobs: number;
+  limit: number;
 }
 
 /** The session's status after a slot return: RUNNING when a turn in flight kept the slot, which the runner keeps too. */
 export interface ReturnSlotResponse {
   ok: true;
   status: string;
+  /** Whether the slot was given back by this call. Absent from an older server. */
+  returned?: boolean;
 }
 
 /** Runner → control plane: make one freshly reserved engine generation the sole inbox consumer.
@@ -4227,6 +4249,29 @@ export interface OrchestrationCredentialResponse {
  * cancel-grace sweep releases the held session as a failure.
  */
 export const SESSION_RELEASE_V1 = 'session-release/v1';
+
+/**
+ * One EXECUTABLE acceptance round: what the runner's turn-complete reported for a server-queued acceptance shell turn
+ * (migration 1672). GET /tasks/:id lists them on each of its runs, as `sessions[].acceptanceRounds`, newest first; a
+ * run that ran none has an empty list. A record for a reader: the task's status is still decided by the exit-code
+ * comparison alone.
+ */
+export interface TaskAcceptanceRound {
+  id: string;
+  /** The acceptance shell turn of the run's conversation that this round was. */
+  turnId: string;
+  /** What the command exited with; null when the runner reported no code. -1 is the runner's "no comparable code"
+   *  (a start failure, a timeout kill, a signal). */
+  exitCode: number | null;
+  /** The code the declaration asked for when the round was queued. */
+  expectedExitCode: number;
+  /** The commit the run's branch stood at when the round finished; null when the runner reported none. */
+  branchSha: string | null;
+  /** ISO time the server recorded the round's completion. */
+  finishedAt: string;
+  /** The last 16 KB of the command's combined output, with secrets redacted; empty when it printed nothing. */
+  outputTail: string;
+}
 
 /**
  * Runner → control plane: a single interactive turn finished (the per-turn `result`),

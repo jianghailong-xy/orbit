@@ -79,13 +79,15 @@ final class TaskDetailWiringTests: XCTestCase {
         let body = try section(web, from: "<div className=\"tdp-body\">", to: "<div className=\"tdp-compose\">")
         // 2026-11-12, docs/mocks/task-detail-agent-first: the web panel leads with the run — Now and
         // the evidence, then the contract, the plan, the envelope folded to one line, one timeline.
-        // The phone has not followed yet.
+        // The phone has not followed yet. Now, the brief (inside Done means) and Runs with are drawn from
+        // the pieces the task run sidebar's compact arrangement shares (docs/task-run-sidebar-design.md).
         let order = try positions([
-            "showVerifierCard &&", ">Now<", "{latestEvidence && (", ">Done means<", ">Brief for the agent<",
-            ">In the plan<", ">Runs with<", "<TaskInputs ", "<TaskAttributionNotice ", "<TaskFollowedBy ", ">Activity<",
+            "showVerifierCard &&", "{nowSection}", "{latestEvidence && (", ">Done means<", "{doneMeansDetail}",
+            ">In the plan<", "{runsWithSection}", "<TaskInputs ", "<TaskAttributionNotice ", "<TaskFollowedBy ", ">Activity<",
         ], in: body)
         XCTAssertEqual(order, order.sorted(), "the web panel's blocks moved — decide whether the phone follows")
-        let head = try section(web, from: "<div className=\"tdp-head-actions\">", to: "<Menu")
+        // The ⋯ menu is built once (`moreMenu`) and placed in both the panel's head and the sidebar's.
+        let head = try section(web, from: "<div className=\"tdp-head-actions\">", to: "{moreMenu}")
         XCTAssertFalse(head.contains("Mark done"), "the browser offers no Mark done beside its presses either")
     }
 

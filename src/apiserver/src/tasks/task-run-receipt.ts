@@ -112,6 +112,10 @@ export interface TaskRunExecuteTarget {
   engine: string | null;
   provider: string | null;
   model: string | null;
+  /** The model a run that names none is created on, because its runner's default has no Auto
+   *  (task-run-auto.ts). Optional: absent or null leaves the runtime default, as a target bound before
+   *  the rule does. Never a pin, so a stale plan is not judged by it (staleCreatePlan). */
+  autoModel?: string | null;
   /** The effort the Session is created with; null names none, leaving the workspace's or account's. */
   effort: string | null;
   /** The routing decision, on a CREATE plan only. */
@@ -153,6 +157,8 @@ export type TaskRunBatchItemPlan = TaskRunPlan & {
   engine: string | null;
   provider: string | null;
   model: string | null;
+  /** As on the single run: the model a run that names none is created on when its default has no Auto. */
+  autoModel?: string | null;
   /** As on the single run: the effort the Session is created with, and the route on a CREATE. */
   effort: string | null;
   route: TaskRunRoute | null;

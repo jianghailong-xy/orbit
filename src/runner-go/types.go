@@ -550,6 +550,10 @@ type HeartbeatResponse struct {
 	// (drainClaimScope). False/absent on older control planes, which would ignore the scope, so the
 	// runner claims nothing while it drains, as before.
 	DrainScopedClaims bool `json:"drainScopedClaims,omitempty"`
+	// CapacityClaims: the control plane takes a full runner's claim scope (GET /runner/sessions/claim?fullScope=) and
+	// takes back a claim the runner cannot start (return-slot reason runner_full). Said on every answer; absent from older
+	// control planes, which hand out claims as before, and a claim the runner cannot start then waits for its slot.
+	CapacityClaims bool `json:"capacityClaims,omitempty"`
 	// SessionReleaseV1: this server's operator says every replica serves the session-release protocol (the apiserver's
 	// switch ORBIT_SESSION_RELEASE_V1), so this runner may report a failed turn and the release separately
 	// (session_release.go). Absent from an older control plane and while the switch is off: declared on nothing.

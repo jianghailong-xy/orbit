@@ -86,6 +86,15 @@ class TaskApi(private val api: AuthSession, private val handle: SessionHandle, w
         write(listOf("tasks", id, "owner-confirmation"), body = OwnerConfirmations.panelRequest(), revision = revision)
     }
 
+    /** The task card's Accept on a run waiting with no reviewer: answers that run's request (docs/task-run-sidebar-design.md). */
+    suspend fun confirmWaiting(id: String, requestId: String, revision: String) =
+        write(listOf("tasks", id, "owner-confirmation"), body = buildJsonObject { put("decision", "CONFIRM"); put("requestId", requestId) },
+            revision = revision)
+
+    /** Re-run the check on a FAILED EXECUTABLE task: its acceptance command once more in its latest run, no agent turn. No body:
+     * the server names the press, so a double press queues one round. */
+    suspend fun rerunCheck(id: String, revision: String) = write(listOf("tasks", id, "rerun-check"), revision = revision)
+
     suspend fun follow(id: String, predicate: JsonObject, ttlSeconds: Int, idempotencyKey: String): JsonObject? =
         write(listOf("watches"), body = buildJsonObject {
             put("predicateVersion", 1); put("predicate", predicate)

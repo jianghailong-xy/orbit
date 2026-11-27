@@ -34,6 +34,11 @@ vi.mock('../api', async (importOriginal) => {
   };
 });
 // jsdom has no IndexedDB, and a cached transcript would seed the window instead of the stub.
+// A short wait for the server's answer, so the Stop timeout case runs in real time.
+vi.mock('../lib/pendingSend', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/pendingSend')>();
+  return { ...actual, answerDeadline: () => actual.answerDeadline(60) };
+});
 vi.mock('../lib/transcriptStore', () => ({
   loadTranscript: async () => null,
   saveTranscript: async () => {},
@@ -273,5 +278,85 @@ describe('Stop in the composer', { timeout: 60_000 }, () => {
       }));
       expect(posted).toContainEqual({ url: `/api/sessions/${SESSION_PUBLIC}/interrupt`, method: 'POST' });
     });
+  });
+
+  // A fetch the server never answers: rejects only when its request is ended, with the reason it was ended for.
+  const unanswered = (match: string) => {
+    const base = fetchMock.getMockImplementation()!;
+    let hits = 0;
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (!String(url).includes(match)) return base(url);
+      hits += 1;
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+      });
+    });
+    return () => hits;
+  };
+
+  it('is disabled while its request is out, so a second press sends nothing', async () => {
+    session = { ...parkedAndIdle(), engineTurnActive: true };
+    const hits = unanswered('/interrupt');
+    await mountSession();
+    await waitForUi(() => expect(stop()).not.toBeNull());
+
+    await click(stop()!);
+    await waitForUi(() => expect((stop() as HTMLButtonElement).disabled).toBe(true));
+    await click(stop()!);
+    expect(hits()).toBe(1);
+  });
+
+  it('gives up after the answer limit and says so, and Stop can be pressed again', async () => {
+    const { ToastViewport } = await import('./ToastViewport');
+    const { clearToasts } = await import('../lib/toastStore');
+    const { STOP_NOT_ANSWERED } = await import('../lib/pendingSend');
+    session = { ...parkedAndIdle(), engineTurnActive: true };
+    unanswered('/interrupt');
+    await mountSession();
+    const toasts = document.createElement('div');
+    document.body.appendChild(toasts);
+    const toastRoot = createRoot(toasts);
+    await act(async () => toastRoot.render(<MemoryRouter><ToastViewport /></MemoryRouter>));
+    try {
+      await waitForUi(() => expect(stop()).not.toBeNull());
+      await click(stop()!);
+      await waitForUi(() => expect(document.body.textContent).toContain("Couldn't stop the session"));
+      expect(document.body.textContent).toContain(STOP_NOT_ANSWERED);
+      await waitForUi(() => expect((stop() as HTMLButtonElement).disabled).toBe(false));
+    } finally {
+      await act(async () => clearToasts());
+      await act(async () => toastRoot.unmount());
+      toasts.remove();
+    }
+  });
+
+  it('is not offered while a message is still on its way: Send stays, disabled, until it settles', async () => {
+    session = { ...parkedAndIdle(), engineTurnActive: true };
+    const base = fetchMock.getMockImplementation()!;
+    let answer: (value: unknown) => void = () => {};
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (!String(url).includes('/turns/current-work-routing')) return base(url);
+      return new Promise((resolve) => {
+        answer = resolve;
+        void init;
+      });
+    });
+    await mountSession();
+    await waitForUi(() => expect(stop()).not.toBeNull());
+    const box = mounted().querySelector<HTMLTextAreaElement>('.composer-field textarea')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(box, 'also check the logs');
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    });
+    await waitForUi(() => expect(mounted().textContent).toContain('Sending…'));
+    expect(stop(), 'no Stop while the message is on its way').toBeNull();
+    expect(mounted().querySelector<HTMLButtonElement>('button.composer-send')?.disabled).toBe(true);
+
+    const body = { turnId: 'turn-steer', seq: 9, kind: 'steer', placement: 'steer' };
+    await act(async () => answer({ ok: true, status: 200, statusText: 'OK', text: async () => JSON.stringify(body), json: async () => body }));
+    await waitForUi(() => expect(stop()).not.toBeNull());
   });
 });

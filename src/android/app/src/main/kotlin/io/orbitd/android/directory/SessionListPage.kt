@@ -126,15 +126,18 @@ internal fun SessionRow(session: DirectorySession, machine: String?, onOpen: () 
     val line = remember(session, deleted, watching, recaps, machine, cloneProgress) {
         SessionLine.make(session, live = !deleted, watching = watching, recaps = recaps, machine = machine, cloneProgress = cloneProgress)
     }
-    // With the session facts, the row's value is the state and its marks ("Idle, Finished"); from an older server, today's word.
+    // With the session facts, the row's value is the state and its marks ("Idle, Needs you"); from an older server, today's word.
     val word = remember(session, watching) { SessionDisplay.text(session.displayFacts, ", ") ?: SessionHeader.statusWord(session, watching) }
-    val marks = remember(session) { SessionDisplay.marks(session.displayFacts) }
+    // The chips after the line: Needs you alone, the rest being title-line icons.
+    val marks = remember(session) { SessionDisplay.rowMarks(session.displayFacts) }
+    val rowIcons = remember(session) { SessionDisplay.rowIcons(session.displayFacts) }
     Column(Modifier.fillMaxWidth()
         .combinedClickable(role = Role.Button, onLongClickLabel = "Options for ${session.name}", onLongClick = onOptions, onClick = onOpen)
         .semantics { stateDescription = word }
         .padding(horizontal = 16.dp, vertical = 11.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(session.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
+            SessionRowIcons(rowIcons)
             SessionLiveMark(session, watching)
             SessionListTime.format(session)?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = muted, maxLines = 1, softWrap = false) }
         }
@@ -154,12 +157,13 @@ internal fun SessionRow(session: DirectorySession, machine: String?, onOpen: () 
 
 /** iOS `SessionLiveIndicator`: what must never go silent on a row. A working session's spinner, the eye of one a watch will resume, the
  * clock of a report under review or a session queued for a slot, the terminal of a background process — breathing for a job in flight,
- * still for one merely left up — an amber dot when it waits on you and a red one when it failed. The settled states draw nothing: the
+ * still for one merely left up — an amber dot when it waits on you and a red one when it failed. The settled states, Idle among them, draw nothing: the
  * line and the row's value say them. */
 @Composable
 internal fun SessionLiveMark(session: DirectorySession, watching: WatchSessionSummary?) {
-    // With the session facts, always one of the three state icons, from `phase` alone (the board); the facts are the marks on the line.
-    SessionDisplay.state(session.displayFacts)?.let { return SessionStateGlyph(it) }
+    // With the session facts, the state icon from `phase` alone (the board); the facts are the marks on the line. Idle draws nothing
+    // (owner, 2026-11-27, as on iOS): a settled row is said by its line and its TalkBack value, and the circle read as a control.
+    SessionDisplay.state(session.displayFacts)?.let { if (it != SessionDisplayState.IDLE) SessionStateGlyph(it); return }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val parked = session.effectiveRunState == RunState.AWAITING_INPUT
     when {

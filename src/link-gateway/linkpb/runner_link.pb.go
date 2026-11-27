@@ -900,12 +900,14 @@ func (*Frame_BackgroundJobTailRequest) isFrame_Body() {}
 
 func (*Frame_BackgroundJobTailResponse) isFrame_Body() {}
 
-// A piece of a frame too large for one WebSocket message (§5.1: a message carries at most
-// Limits.max_frame_bytes). The sender encodes the whole Frame, cuts the bytes into pieces and sends
-// each piece in a Frame of its own, in order, at the priority of the frame being cut up; other frames
-// may be written between the pieces. The receiver joins the pieces of one frame_id in index order
-// and decodes the result as the original Frame. Pieces left incomplete when the connection closes
-// are discarded.
+// A piece of a frame sent in several WebSocket messages. A message carries at most
+// Limits.max_frame_bytes (§5.1), and a frame that does not fit must be cut up; a sender may cut up a
+// smaller one too, and neither side sends more than 16 KiB in one message, so that a ping, a pong or
+// a control frame never waits long behind one on a slow path (§15.15). The sender encodes the whole
+// Frame, cuts the bytes into pieces and sends each piece in a Frame of its own, in order, at the
+// priority of the frame being cut up; other frames may be written between the pieces. The receiver
+// joins the pieces of one frame_id in index order, whatever their sizes, and decodes the result as
+// the original Frame. Pieces left incomplete when the connection closes are discarded.
 type Chunk struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The id of the frame these pieces make up (that Frame's id).
@@ -1334,7 +1336,14 @@ type Welcome struct {
 	// server's ORBIT_MANAGED_RUNNER_BROWSER_ENABLED and ORBIT_MANAGED_RUNNERS_ENABLED switches are both on and Hello
 	// carried a ManagedInstance the manager authorized. False for every self-managed runner, and from a gateway or
 	// apiserver older than the field.
-	Browser       bool `protobuf:"varint,10,opt,name=browser,proto3" json:"browser,omitempty"`
+	Browser bool `protobuf:"varint,10,opt,name=browser,proto3" json:"browser,omitempty"`
+	// Whether the gateway keeps the heartbeat Facts it was sent whole for the connecting process (the
+	// runner and Hello.process_id), not for this connection alone (§15.17). The process's first
+	// Heartbeat on this connection may then send by digest alone every Fact it sent whole on an earlier
+	// connection, to this gateway node or another; a digest the gateway no longer holds is named in
+	// HeartbeatAck.want_facts, as always. False from a gateway older than the field: it holds a
+	// connection's Facts for that connection alone, so the first Heartbeat on each sends them all whole.
+	ProcessFacts  bool `protobuf:"varint,11,opt,name=process_facts,json=processFacts,proto3" json:"process_facts,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1435,6 +1444,13 @@ func (x *Welcome) GetConnectionId() string {
 func (x *Welcome) GetBrowser() bool {
 	if x != nil {
 		return x.Browser
+	}
+	return false
+}
+
+func (x *Welcome) GetProcessFacts() bool {
+	if x != nil {
+		return x.ProcessFacts
 	}
 	return false
 }
@@ -4320,7 +4336,7 @@ const file_v1_runner_link_proto_rawDesc = "" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x19\n" +
 	"\blast_seq\x18\x02 \x01(\x04R\alastSeq\x12\x17\n" +
-	"\aturn_id\x18\x03 \x01(\tR\x06turnId\"\xf5\x03\n" +
+	"\aturn_id\x18\x03 \x01(\tR\x06turnId\"\x9a\x04\n" +
 	"\aWelcome\x12)\n" +
 	"\x10protocol_version\x18\x01 \x01(\rR\x0fprotocolVersion\x12-\n" +
 	"\x04mode\x18\x02 \x01(\x0e2\x19.orbit.runnerlink.v1.ModeR\x04mode\x122\n" +
@@ -4332,7 +4348,8 @@ const file_v1_runner_link_proto_rawDesc = "" +
 	"\arelease\x18\b \x01(\v2$.orbit.runnerlink.v1.AssignedReleaseR\arelease\x12#\n" +
 	"\rconnection_id\x18\t \x01(\tR\fconnectionId\x12\x18\n" +
 	"\abrowser\x18\n" +
-	" \x01(\bR\abrowser\"0\n" +
+	" \x01(\bR\abrowser\x12#\n" +
+	"\rprocess_facts\x18\v \x01(\bR\fprocessFacts\"0\n" +
 	"\x06Limits\x12&\n" +
 	"\x0fmax_frame_bytes\x18\x01 \x01(\rR\rmaxFrameBytes\"m\n" +
 	"\fSessionState\x12\x1d\n" +

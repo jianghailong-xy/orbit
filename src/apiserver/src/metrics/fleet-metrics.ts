@@ -1,7 +1,8 @@
 import { Logger } from '@nestjs/common';
 import { Prisma, type PrismaClient } from '@prisma/client';
 
-import { RUNNER_OFFLINE_AFTER_MS, runnerLastBeatSql } from '../runners/runner-presence';
+import { LINK_RECONCILE_EVERY_MS } from '../runner-api/link-heartbeat';
+import { RUNNER_OFFLINE_AFTER_MS, RUNNER_SILENT_AFTER_MS, runnerPresenceSql } from '../runners/runner-presence';
 import { sessionHeldSql } from '../common/session-release';
 import { sessionTurnStateSql } from '../sessions/session-turn-state';
 import { sessionCarriesTaskSql } from '../sessions/task-work-carrier';
@@ -14,10 +15,17 @@ import { sessionCarriesTaskSql } from '../sessions/task-work-carrier';
  *   `online` and `draining` were heard from within RUNNER_OFFLINE_AFTER_MS and are reachable, `draining` taking no new
  *   work; `silent` did not sign off and has not been heard from for that long, or ever; `offline` signed off.
  * - `orbit_runner_oldest_heartbeat_age_seconds`: how long ago the least recently heard of the reachable runners
- *   (`online` and `draining`) last beat, 0 with none. Runners beat every 30 s, so it sits near 30 when beats arrive and
- *   climbs to 90 as they stop; one past that has gone `silent` and is counted there. Over the reachable ones only,
- *   because the server never moves a runner that went away without signing off: one closed laptop would hold any wider
- *   maximum at weeks.
+ *   (`online` and `draining`) was last present — a beat, or a link Welcome (runnerPresenceSql) — 0 with none.
+ *   Runners beat every 30 s, so it sits near 30 when beats arrive and climbs to 90 as they stop; one past that has gone
+ *   `silent` and is counted there. Over the reachable ones only, because the server never moves a runner that went away
+ *   without signing off: one closed laptop would hold any wider maximum at weeks.
+ * - `orbit_runner_reconcile_stale`: the reachable runners on the link whose last full reconcile
+ *   (`runner_presence.reconciled_at`) is older than RECONCILE_STALE_AFTER_MS: the five-minute period a link beat
+ *   reconciles in full at least once in (LINK_RECONCILE_EVERY_MS), and a missed beat past it, since the beat that does is
+ *   the first after the runner's period turns over — a line at five minutes flat would count every healthy runner for
+ *   up to a beat in each period. A null `reconciled_at` is a reconcile owed, not a stale one, and is not counted; nor is
+ *   a runner on HTTPS, which reconciles in full on every beat and never writes one. Counted only: a runner that stops reconciling stops beating its full beats too,
+ *   and presence's five-minute cap on being heard takes it offline by itself (docs/runner-link-design.md §15.16).
  * - `orbit_sessions{state}`: sessions not in the Trash with a turn `queued` (PENDING) or `running` (RUNNING).
  * - `orbit_tasks{state}`: tasks a work session is carrying (sessions/task-work-carrier.ts), as the task list draws them:
  *   `queued` while that session's turn waits for a runner, `running` otherwise, which includes a session parked to wait
@@ -35,6 +43,9 @@ import { sessionCarriesTaskSql } from '../sessions/task-work-carrier';
 
 export const FLEET_GAUGES_TTL_MS = 30_000;
 
+/** How old a reachable link runner's last full reconcile is before orbit_runner_reconcile_stale counts it. */
+export const RECONCILE_STALE_AFTER_MS = LINK_RECONCILE_EVERY_MS + RUNNER_SILENT_AFTER_MS;
+
 export const RUNNER_STATES = ['online', 'draining', 'silent', 'offline'] as const;
 export const WORK_STATES = ['queued', 'running'] as const;
 
@@ -44,6 +55,7 @@ export type WorkState = (typeof WORK_STATES)[number];
 export interface FleetGauges {
   runners: Record<RunnerState, number>;
   oldestHeartbeatAgeSeconds: number;
+  reconcileStale: number;
   sessions: Record<WorkState, number>;
   tasks: Record<WorkState, number>;
 }
@@ -56,6 +68,7 @@ interface Row {
   runners_silent: number;
   runners_offline: number;
   oldest_beat_age_seconds: number | null;
+  runners_reconcile_stale: number;
   sessions_queued: number;
   sessions_running: number;
   tasks_queued: number;
@@ -72,9 +85,10 @@ export async function readFleetGauges(db: GaugeReader): Promise<FleetGauges> {
                WHEN r."status" = 'DRAINING' THEN 'draining'
                ELSE 'online'
              END AS "state",
-             beat."at"
+             beat."at",
+             (SELECT p."reconciled_at" FROM "runner_presence" p WHERE p."runner_id" = r."id" AND p."link_state" = 'LINK') AS "reconciledAt"
         FROM "runner" r
-        CROSS JOIN LATERAL (SELECT ${runnerLastBeatSql('r')} AS "at") beat
+        CROSS JOIN LATERAL (SELECT ${runnerPresenceSql('r')} AS "at") beat
     )
     SELECT
       (SELECT count(*) FROM runner_state WHERE "state" = 'online')::int AS runners_online,
@@ -83,6 +97,9 @@ export async function readFleetGauges(db: GaugeReader): Promise<FleetGauges> {
       (SELECT count(*) FROM runner_state WHERE "state" = 'offline')::int AS runners_offline,
       (SELECT EXTRACT(EPOCH FROM now() - min("at"))::float8 FROM runner_state
         WHERE "state" IN ('online', 'draining')) AS oldest_beat_age_seconds,
+      (SELECT count(*) FROM runner_state
+        WHERE "state" IN ('online', 'draining')
+          AND "reconciledAt" < now() - (${RECONCILE_STALE_AFTER_MS} * interval '1 millisecond'))::int AS runners_reconcile_stale,
       -- Queued and running are the turn states QUEUED and IN_FLIGHT (sessions/session-turn-state.ts), of held rows.
       (SELECT count(*) FROM "session" s
         WHERE s."deleted_at" IS NULL AND ${sessionHeldSql('s')}
@@ -105,6 +122,7 @@ export async function readFleetGauges(db: GaugeReader): Promise<FleetGauges> {
     },
     // A clock a second apart from another apiserver's can make a fresh beat read as a little in the future.
     oldestHeartbeatAgeSeconds: Math.max(0, Number(row?.oldest_beat_age_seconds ?? 0)),
+    reconcileStale: Number(row?.runners_reconcile_stale ?? 0),
     sessions: { queued: Number(row?.sessions_queued ?? 0), running: Number(row?.sessions_running ?? 0) },
     tasks: { queued: Number(row?.tasks_queued ?? 0), running: Number(row?.tasks_running ?? 0) },
   };
@@ -173,6 +191,12 @@ export async function renderFleetMetrics(db?: GaugeReader, now: () => number = D
     'orbit_runner_oldest_heartbeat_age_seconds',
     'Seconds since the least recently heard of the online and draining runners last beat; 0 with none.',
     [['', gauges.oldestHeartbeatAgeSeconds]],
+  );
+  gauge(
+    lines,
+    'orbit_runner_reconcile_stale',
+    'Online and draining link runners whose last full reconcile is more than 5 minutes and a missed beat old; a reconcile still owed is not counted.',
+    [['', gauges.reconcileStale]],
   );
   gauge(
     lines,

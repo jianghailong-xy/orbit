@@ -51,7 +51,7 @@ class GuestDisplayDrawTest {
         File("../../../scripts/acceptance/session-three-state-check/guest/guest-payloads.json").readText()).jsonArray.map { it.jsonObject }
     private val facts = setOf("phase", "released", "lastTurnOutcome", "waitingOn", "endReason", "workFinished")
     private val stateTags = listOf("QUEUED", "RUNNING", "IDLE").map { "session-state-icon:$it" }
-    private val markTags = listOf("NEEDS_YOU", "FAILED", "RETRYING", "ON_HOLD", "INTERRUPTED", "BACKGROUND", "WILL_RESUME", "FINISHED", "ENDED")
+    private val markTags = listOf("NEEDS_YOU", "FAILED", "RETRYING", "ON_HOLD")
 
     private fun row(p: JsonObject): GuestSessionSummary = GuestWire.list(buildJsonObject { put("sessions", buildJsonArray { add(p) }) }
         .toString().encodeToByteArray()).single()
@@ -89,12 +89,13 @@ class GuestDisplayDrawTest {
         }
     }
 
-    @Test fun aFiledSessionsHeadSaysCompletedAfterItsMarks() {
+    @Test fun aFiledSessionsHeadSaysCompletedAfterItsState() {
         val head = JsonObject(cases.single { it["name"]!!.jsonPrimitive.content == "SUCCEEDED" }["sharedHead"]!!.jsonObject +
             ("lifecycleState" to JsonPrimitive("COMPLETED")))
         compose.setContent { OrbitTheme { GuestHead(GuestWire.state(head)) } }
         compose.onNodeWithText("Idle", useUnmergedTree = true).assertIsDisplayed()
-        compose.onNodeWithTag("session-mark:FINISHED", useUnmergedTree = true).assertIsDisplayed()
+        // Finished is not drawn (the owner, 2026-11-27).
+        assertEquals(false, present("session-mark:FINISHED"))
         compose.onNodeWithTag("guest-completed", useUnmergedTree = true).assertIsDisplayed()
         compose.onNodeWithText("Completed", useUnmergedTree = true).assertIsDisplayed()
     }

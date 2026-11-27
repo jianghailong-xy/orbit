@@ -11,7 +11,7 @@ import {
 } from '@orbit/shared';
 
 /**
- * The mode a session's engine is actually running in (session.actual_permission_mode, migration 1735), kept apart
+ * The mode a session's engine is actually running in (session.actual_permission_mode, migration 1755), kept apart
  * from `session.permission_mode`, the owner's intent, which only an explicit pick writes.
  *
  * Where it is read from:
@@ -25,7 +25,7 @@ import {
  *
  * Every change is one row of session_permission_mode_change naming its cause; recording the mode already recorded
  * writes nothing. A claim that hands another mode than the session asked for says so on its row: the mode asked for
- * and why (migration 1740, queue/claim-permission-mode.ts).
+ * and why (migration 1770, queue/claim-permission-mode.ts).
  */
 
 const KNOWN_MODES = new Set<string>(Object.values(PermissionMode));

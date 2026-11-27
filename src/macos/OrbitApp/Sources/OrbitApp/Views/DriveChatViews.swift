@@ -473,7 +473,7 @@ struct DriveMarkPill: View {
     var body: some View {
         let tint: Color = mark == .new ? .green : .blue
         Text(mark.rawValue)
-            .font(.system(size: 11, weight: .semibold))
+            .font(.orbitRowNote.weight(.semibold))
             .foregroundStyle(tint)
             .padding(.horizontal, 7)
             .padding(.vertical, 1)

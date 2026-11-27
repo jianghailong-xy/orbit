@@ -3559,6 +3559,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // triggers with turn_state or finished_at added to their column lists. Only `session` is touched; no row is
       // written, and no preserved relation, trigger, function or DONE fence changes.
       '1671_session_status_from_facts',
+      // 1672 creates task_acceptance_round (one EXECUTABLE acceptance round's record), cascading with task and with its
+      // conversation_turn; no preserved relation, row, trigger, function or DONE fence changes.
+      '1672_task_acceptance_round',
       // 1680 adds a nullable session.drive_chat_prompt_digest and conversation_turn.drive_context (catalog-only) and
       // widens session_opened_by_check by 'DRIVE_CHAT' NOT VALID; 1681 validates it and builds a partial index
       // CONCURRENTLY. No row is written, and no preserved relation's trigger, function or DONE fence changes.
@@ -3581,22 +3584,25 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // (owner_id, client_request_id) over the rows that carry one. Only `session` is touched; no trigger, function of
       // one, preserved relation or DONE fence changes.
       '1730_session_client_request_id',
-      // 1735 adds two nullable columns on session, actual_permission_mode and actual_permission_mode_at, and a new
+      // 1750 adds the nullable `runner_presence.last_heard_at` (catalog only, no row rewritten) to the UNLOGGED presence
+      // table. No `task`, `session`, ledger table or preserved trigger/function is touched, and no DONE fence changes.
+      '1750_runner_presence_last_heard_at',
+      // 1755 adds two nullable columns on session, actual_permission_mode and actual_permission_mode_at, and a new
       // append-only table session_permission_mode_change (cascades with its session); no row is written, and no preserved
       // relation, trigger, function or DONE fence changes. Written as 1317, renumbered to 1437 to sit after main's
-      // migrations, and to 1735 after main took 1438-1730 (1730 the highest on main then), below the project's 1740,
+      // migrations, and to 1735 after main took 1438-1730 (1730 the highest on main then), and to 1755 after main took 1750 (the
+      // highest on main then), below the project's 1757 onward,
       // which alters this table.
-      '1735_session_actual_permission_mode',
-      // 1736 adds a partial index on activity. No preserved relation or row is changed.
+      '1755_session_actual_permission_mode',
+      // 1756 adds a partial index on activity. No preserved relation or row is changed.
       // Written as 1461 on its task branch, it was renumbered to 1470 after main took 1462, to 1495 after main took
-      // 1491, to 1540 after other branches took 1495, and to 1736 after main took 1547-1730 (1730 the highest on main
-      // then).
-      '1736_default_permission_mode_audit',
-      // 1740 adds the nullable session_permission_mode_change.requested_mode and .reason and one check on that table;
+      // 1491, to 1540 after other branches took 1495, to 1736 after main took 1547-1730 (1730 the highest on main then), and to 1756 after main took 1750.
+      '1756_default_permission_mode_audit',
+      // 1770 adds the nullable session_permission_mode_change.requested_mode and .reason and one check on that table;
       // it is none of the preserved relations, no row is written, and no trigger, function or DONE fence changes.
-      // Numbered above main's 1730, the highest on any branch when it was written; it stays after 1735, which creates
-      // the table it alters.
-      '1740_permission_mode_change_claim_substitution'],
+      // Written as 1740, it was renumbered to 1770 after main took 1750 and this project's 1735 and 1736 moved to 1755
+      // and 1756 (1762 the highest on any branch then); it stays after 1755, which creates the table it alters.
+      '1770_permission_mode_change_claim_substitution'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.

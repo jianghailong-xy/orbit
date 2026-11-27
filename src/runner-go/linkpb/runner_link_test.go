@@ -53,6 +53,7 @@ func samples(t *testing.T) []proto.Message {
 		Release:             release,
 		ConnectionId:        "conn-1",
 		Browser:             true,
+		ProcessFacts:        true,
 	}
 	tokenRefresh := &linkpb.TokenRefresh{Token: "eyJhbGciOiJFZERTQSJ9.e30.c2ln", ExpiresAtUnixMs: 1792900000000}
 	redirect := &linkpb.Redirect{Url: "wss://link-cell-2.example/runner", Token: "eyJhbGciOiJFZERTQSJ9.e30.Y2VsbDI"}

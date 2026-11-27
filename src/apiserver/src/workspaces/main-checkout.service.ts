@@ -44,7 +44,7 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { isHeldPastClaim } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
-import { RUNNER_BEATS, runnerIsOnline, runnerLastBeatAt } from '../runners/runner-presence';
+import { RUNNER_BEATS, runnerIsOnline, runnerPresentAt } from '../runners/runner-presence';
 import { TURN_STATE_SELECT } from '../sessions/session-turn-state';
 
 /**
@@ -280,7 +280,7 @@ export class MainCheckoutService implements OnModuleInit, OnModuleDestroy {
     this.realtime?.notifyRunnerWake(runner.id);
     // Said at once when the runner has gone quiet: nothing has run, and it runs when the runner is back.
     if (!runnerIsOnline(runner) && initiatedFrom) {
-      const beat = runnerLastBeatAt(runner);
+      const beat = runnerPresentAt(runner);
       const minutes = beat ? Math.max(1, Math.round((Date.now() - beat.getTime()) / 60_000)) : 0;
       const waiting: MainCheckoutActionResult = {
         ...this.controlPlaneResult(request.kind, request.requestId, health.root, 'RUNNER_OFFLINE', health.branch),

@@ -878,8 +878,12 @@ export class MergeReceiptService {
     const sourceSha = normalizeSha(args.sourceSha, 'sourceSha');
     if (!sourceSha) throw new BadRequestException('an integration receipt needs the source SHA');
     const result: MergeReceiptResult = args.state === 'LANDED' ? 'MERGED' : 'ALREADY_MERGED';
-    // ALREADY_MERGED names no `targetShaAfter`: nothing moved, and a SHA here would claim it did.
-    const targetShaAfter = result === 'MERGED' ? normalizeSha(args.landedSha, 'landedSha') : null;
+    // ALREADY_MERGED names no `targetShaAfter` when nothing moved, and a SHA there would claim it did.
+    // An ALREADY_LANDED with a `landedSha` did move it: the target held the source only through the main
+    // sync the job had just made, and the runner pushed that sync (integration contract §2.4 J-S3).
+    const targetShaAfter = result === 'MERGED' || args.state === 'ALREADY_LANDED'
+      ? normalizeSha(args.landedSha, 'landedSha')
+      : null;
     if (result === 'MERGED' && !targetShaAfter) {
       throw new BadRequestException('a landed integration must name where the target ended up');
     }

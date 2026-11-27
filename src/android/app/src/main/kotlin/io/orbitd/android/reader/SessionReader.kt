@@ -60,6 +60,10 @@ import io.orbitd.android.realtime.PagePoll
 import io.orbitd.android.realtime.restoredFields
 import io.orbitd.android.R
 import io.orbitd.android.composer.CoordinatorHandoff
+import io.orbitd.android.composer.echoed
+import io.orbitd.android.composer.isCreate
+import io.orbitd.android.composer.shownBy
+import io.orbitd.android.composer.words
 import io.orbitd.android.composer.CoordinatorHandoffApi
 import io.orbitd.android.composer.CreatedWorkspaceLine
 import io.orbitd.android.composer.HandedOverBanner
@@ -76,7 +80,10 @@ import io.orbitd.android.composer.ProviderChoices
 import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.composer.SessionComposer
 import io.orbitd.android.composer.ManagedRunnerAsleepLine
+import io.orbitd.android.composer.PermissionModeLineView
 import io.orbitd.android.composer.SessionPendingTray
+import io.orbitd.android.composer.modeLines
+import io.orbitd.android.core.cards.PermissionModeDisplay
 import io.orbitd.android.cards.AnsweredQuestions
 import io.orbitd.android.cards.conversationCard
 import io.orbitd.android.cards.CardFocus
@@ -420,6 +427,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         scheduled.loadSessionNow(route.id!!, scheduleRunId)
     }
     val scheduleInserts = remember(scheduledState.sessions, scheduledState.runs, route.id) { ScheduleInsert.of(scheduledState, route.id!!) }
+    // Each change of the mode the engine runs in, with who or what made it (board permission-mode-actual B1), where it happened: the
+    // session's detail carries them, and the runner's catalogue says whether its model has Auto.
+    val permissionModeLines = remember(snapshotDetail, composerState.catalog) { modeLines(snapshotDetail, composerState.catalog) }
     val drawSchedule: @Composable (ScheduleInsert) -> Unit = { insert ->
         key(insert.key) { Box(Modifier.conversationCard()) {
             ScheduleConversationInsert(insert, scheduled, route.id!!) { id ->
@@ -468,6 +478,12 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         cancellableHeldTurn(state.session?.snapshot?.queuedTurns.orEmpty(), state.window.events)
     }
     val liveTail = transcript != null && state.window.newerAfter == null
+    // The outbox's message and the one the server took last, while nothing of the server's draws them yet: an echo replaces either,
+    // never stands beside it (docs/mocks/composer-sending-bubble).
+    val pendingShown = composerState.draft.pending?.takeIf { pending ->
+        !isCreate(pending.endpoint) && !echoed(pending.words, pending.afterSeq, state.window.events)
+    }
+    val sentShown = composerState.sent?.takeIf { !it.shownBy(state.session?.snapshot?.queuedTurns.orEmpty(), state.window.events) }
     val queuedShown = if (liveTail) queued.size else 0
     // Opened onto a waiting card: once placed, at the rail — the item before the queue and the tail — whose card then brings its
     // own top into view. Once per open; a jump the open itself asked for (a record) wins.
@@ -853,6 +869,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 // Inside the row it follows, so no list index moves: the reader's jumps count rows.
                 val ownerPlaced = remember(displayedRows, ownerRequests) { OwnerRequests.place(displayedRows.map { it.event.ts }, ownerRequests) }
                 val crossingPlaced = remember(displayedRows, crossingBatches) { CrossingCards.place(displayedRows.map { it.event.ts }, crossingBatches) }
+                val modePlaced = remember(displayedRows, permissionModeLines) { PermissionModeDisplay.place(displayedRows.map { it.event.ts }, permissionModeLines) }
                 // An owner request's link opened this conversation onto its card (OwnerRequestLinks): once the reader has placed itself, the
                 // row the card follows is scrolled to, and the card brings itself into view when drawn (OwnerRequestInConversation).
                 val ownerFocus = CardFocus.pending(route.id!!)?.takeIf { it.startsWith(CardFocus.OWNER_REQUEST) }
@@ -913,7 +930,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     if (!displayedWindow.seeded) item(key = "loading") { LoadingMessage("Loading messages…") }
                     item(key = "older") {
                         if (displayedWindow.hasOlder) TextButton(enabled = !displayedLoading, onClick = { follow = false; model.older() }) { Text(if (displayedLoading) "Loading messages…" else "Load earlier messages") }
-                        else if (ownerPlaced[-1] != null || crossingPlaced[-1] != null || schedulePlaced[-1] != null) Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        else if (ownerPlaced[-1] != null || crossingPlaced[-1] != null || schedulePlaced[-1] != null || modePlaced[-1] != null) Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            modePlaced[-1]?.forEach { key(it.key) { PermissionModeLineView(it) } }
                             schedulePlaced[-1]?.forEach { drawSchedule(it) }
                             ownerPlaced[-1]?.forEach { key(it.id) { Box(Modifier.conversationCard()) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink, route.id, discussCard) } } }
                             crossingPlaced[-1]?.forEach { key(it.id) { Box(Modifier.conversationCard()) { CrossingCardView(it, crossingState) { crossingStore.open(it.id) } } } }
@@ -974,6 +992,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         val asked = ownerPlaced[index]
                         val crossings = crossingPlaced[index]
                         val scheduleThings = schedulePlaced[index]
+                        val modeChanges = modePlaced[index]
                         val chatThings = chatPlaced[index]
                         // The turn's head row sits in its message's item, like the owner's requests, so no list index moves.
                         val head = turnHeads[row.event.seq]?.takeIf { row.event.type == "user" && row.steps.isEmpty() }
@@ -988,9 +1007,10 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                                 head?.let { TurnHeadLine(it, ticking = sessionLive && row.event.seq == newestHead) }
                             }
                         }
-                        if (asked == null && crossings == null && scheduleThings == null && chatThings == null) drawRow()
+                        if (asked == null && crossings == null && scheduleThings == null && modeChanges == null && chatThings == null) drawRow()
                         else Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             drawRow()
+                            modeChanges?.forEach { key(it.key) { PermissionModeLineView(it) } }
                             chatThings?.forEach { key(it.key) { it.content() } }
                             scheduleThings?.forEach { drawSchedule(it) }
                             asked?.forEach { key(it.id) { Box(Modifier.conversationCard()) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink, route.id, discussCard) } } }
@@ -1036,6 +1056,15 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                                 over?.let { RunningOverLimitFoot(it, Modifier.align(Alignment.End)) }
                             }
                         }
+                        // The reader's own message the server has not drawn yet (docs/mocks/composer-sending-bubble): taken, as the
+                        // ordinary bubble until the queue or its echo does; on its way, or not sent, as the outbox's bubble.
+                        sentShown?.let { sent -> item(key = "sent:${sent.turnId}") { SentBubble(sent.words, sent.attachments, openLink) } }
+                        pendingShown?.let { pending -> item(key = "pending-send:${pending.clientTurnId}") {
+                            val ready = composerState.loaded && !composerState.sending && !composerState.busy
+                            PendingSendBubble(pending.words, pending.attachments, composerState.sending, composerState.notSentReason,
+                                retry = if (ready && !state.denied) composer::retrySend else null,
+                                putBack = if (ready) composer::putBackUnsent else null, open = openLink)
+                        } }
                     }
                     // At the live tail, under everything the conversation said and above the cards that ask the owner something.
                     if (live != null && displayedRows.isNotEmpty()) recapCard?.let { card ->

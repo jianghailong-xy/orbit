@@ -70,7 +70,7 @@ before(async () => {
   // `finished_at` is the release column (migrations 1261, 1401): the lock reads it to refuse a released session,
   // NULL on every case here, as on every session still held.
   // `sender_client` is the app a turn came from (migration 0595): the claim returns it, and a reload it hands out
-  // records the mode it carries as the session's actual mode (migration 1735: `actual_permission_mode{,_at}` and one
+  // records the mode it carries as the session's actual mode (migration 1755: `actual_permission_mode{,_at}` and one
   // `session_permission_mode_change` row, sessions/actual-permission-mode.ts), so those are mirrored too.
   // `drive_context` is the folder and selection a Drive chat message carried (migration 1680): the claim returns it
   // with the turn it hands out, NULL on every case here, as on every turn outside a Drive chat.
@@ -138,11 +138,11 @@ before(async () => {
       coordinator_context_key text,
       sender_session_id uuid,
       wiki_context jsonb,
+      drive_context jsonb,
       external_sender_source text,
       external_sender_id text,
       external_sender_name text,
       sender_client text,
-      drive_context jsonb,
       created_at timestamptz NOT NULL DEFAULT now()
     );
   `);

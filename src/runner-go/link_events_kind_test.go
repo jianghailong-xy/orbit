@@ -197,7 +197,7 @@ func TestLinkEventsTrimOnlyWhatNoFrameCarries(t *testing.T) {
 	if line := strings.Join(logs.all(), "\n"); !strings.Contains(line, "event seq 2 (tool_result) of session session-trim is") {
 		t.Errorf("the trim was not logged with its session, seq and size: %s", line)
 	}
-	if size := s.oneEventFrameSize(trimmed); size > linkBatchMaxBytes {
+	if size := s.oneEventFrameSize(trimmed); size > linkTrimmedMaxBytes {
 		t.Errorf("the trimmed event still needs a %d-byte frame", size)
 	}
 }

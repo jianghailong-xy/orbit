@@ -30,8 +30,9 @@ import { RunnerReleaseFeed } from './runner-release-feed';
  * route the gateway calls). It reads, but for one write a link call makes: the gateway is opening a connection, so the
  * runner's last beat is kept as the last it was heard with before it connected again (recordRunnerLinkOpened), which is
  * how the reaper knows of a mass disconnection its runners are back from — unless the connection is a renewal: opened
- * with a token minted moments ago by a process still heard. That write is the same however often the gateway asks
- * again, and one that fails is logged and costs the answer nothing.
+ * with a token minted moments ago by a process still heard. The same write records the process as heard now
+ * (`last_heard_at`): a Welcome is the one call presence counts besides the heartbeat (docs/runner-link-design.md
+ * §15.16). One that fails is logged and costs the answer nothing.
  *
  * `browser` is whether the runner is offered the managed runner browser (docs/runner-browser-design.md §2): true only
  * with the browser switch on and the runner a managed one whose instance the runner guard authorized against the

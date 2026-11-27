@@ -180,6 +180,7 @@ import {
 import {
   ANCHOR_ROLE,
   anchoredSeed,
+  projectTaskRunAnchor,
   sessionAnchor,
   taskRunAnchor,
   type AnchorSeed,
@@ -486,8 +487,8 @@ import {
 import {
   RUNNER_BEATS,
   runnerIsOnline,
-  runnerLastBeatSql,
-  withRunnerLastBeat,
+  runnerPresenceSql,
+  withRunnerPresence,
 } from '../runners/runner-presence';
 import { PULL_REQUEST_VIEW_SELECT, pullRequestViewOf } from '../projects/pull-request-landing';
 
@@ -3300,19 +3301,30 @@ export class SessionsService {
    * What a task's next fresh run starts on (start-anchor.ts TaskRunsWith), by the resolution its
    * dispatch makes (TasksService.execute → create() with the task's pins and taskRunAnchor): the task
    * payload's `runsWith` and `orbit status` read this. Routing aside, a run created now gets this pair.
+   * `projectId`, when given, is the project the task is filed under as a write leaves it (null: none), and
+   * names the anchor instead of the task's stored project; a task not written yet has only that.
    */
   async taskRunsWith(
     ownerId: string,
-    task: { id?: string | null; engine?: string | null; provider?: string | null; workspaceId?: string | null },
+    task: {
+      id?: string | null;
+      projectId?: string | null;
+      engine?: string | null;
+      provider?: string | null;
+      workspaceId?: string | null;
+    },
   ): Promise<TaskRunsWith> {
     const taskId = task.id;
+    const projectId = task.projectId;
     const pinned = !!(task.engine || task.provider);
     let seed: ReadSeed | null | undefined;
     const target = {
       engine: task.engine,
       provider: task.provider,
       workspaceId: task.workspaceId,
-      anchor: taskId ? () => taskRunAnchor(this.prisma, taskId) : undefined,
+      anchor: projectId !== undefined
+        ? (projectId ? () => projectTaskRunAnchor(this.prisma, projectId) : undefined)
+        : taskId ? () => taskRunAnchor(this.prisma, taskId) : undefined,
     };
     const source = (): Pick<TaskRunsWith, 'source' | 'anchorSessionId'> => pinned
       ? { source: 'TASK_PIN', anchorSessionId: null }
@@ -5354,6 +5366,9 @@ export class SessionsService {
       queuedPassPending: boolean | null;
       runnerLabel: string | null;
       overLimitActive: number | bigint | null;
+      slotWaitActive: number | bigint | null;
+      slotWaitHeld: number | bigint | null;
+      slotWaitLimit: number | null;
       overLimitLimit: number | null;
       queuedRunnerSelfUpdate: Prisma.JsonValue;
       queuedRunnerTurns: Array<{ id: string; title: string | null }> | null;
@@ -5512,8 +5527,8 @@ export class SessionsService {
         s.assigned_runner_id AS "runnerId",
         r.name  AS "runnerName",
         r.status AS "runnerStatus",
-        -- Its last beat, from either record of it (runners/runner-presence.ts).
-        ${runnerLastBeatSql('r')} AS "runnerLastHeartbeatAt",
+        -- When it was last present: a beat from either record of it, or heard over the link (runners/runner-presence.ts).
+        ${runnerPresenceSql('r')} AS "runnerLastHeartbeatAt",
         s.task_id AS "taskId",
         t.title   AS "taskTitle",
         cp.id     AS "projectId",
@@ -5598,6 +5613,17 @@ export class SessionsService {
             + ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`)}
         END AS "overLimitActive",
         CASE WHEN ${sessionTurnStateSql('s')} = 'IN_FLIGHT' AND s.over_capacity_turn_id IS NOT NULL THEN r.max_concurrent END AS "overLimitLimit",
+        -- A claimed turn the runner has no slot for yet (enginePhase waiting_for_slot): what holds the runner's slots
+        -- other than this session, the count the runner admits it against, and the part of it background jobs hold,
+        -- for "Runner full (4/4), 3 held by background jobs". Only such a row pays.
+        CASE WHEN s.engine_phase = 'waiting_for_slot' THEN
+          ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`, Prisma.sql`s.id`)}
+            + ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`, Prisma.sql`s.id`)}
+        END AS "slotWaitActive",
+        CASE WHEN s.engine_phase = 'waiting_for_slot' THEN
+          ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`, Prisma.sql`s.id`)}
+        END AS "slotWaitHeld",
+        CASE WHEN s.engine_phase = 'waiting_for_slot' THEN r.max_concurrent END AS "slotWaitLimit",
         -- What the runner_updating explanation names (docs/runner-update-drain-design.md §3): the
         -- release it is updating to, the owner's turns it waits for, and the clock "Waiting 38 min"
         -- counts from. Read only for a row that gate holds; every other row pays nothing for it.
@@ -5671,7 +5697,7 @@ export class SessionsService {
         providerBuiltin: r.providerBuiltin,
         model: r.model,
         permissionMode: r.permissionMode,
-        // What the engine runs in, beside the intent (actual-permission-mode.ts); null until a claim since 1735.
+        // What the engine runs in, beside the intent (actual-permission-mode.ts); null until a claim since 1755.
         actualPermissionMode: r.actualPermissionMode,
         actualPermissionModeAt: r.actualPermissionModeAt,
         codexSandboxUnavailable: r.codexSandboxUnavailable,
@@ -5746,6 +5772,10 @@ export class SessionsService {
         queuedRunnerUpdate: queuedRunnerUpdateOf(r),
         // Run now (docs/mocks/queued-run-now) beside a slot gate, and how far over the runner may go.
         ...queuedRunNowOf(r),
+        // Beside enginePhase waiting_for_slot only: what holds the runner's slots, the part background jobs hold, the limit.
+        slotWait: r.slotWaitActive == null || r.slotWaitHeld == null || r.slotWaitLimit == null
+          ? null
+          : { active: Number(r.slotWaitActive), heldByJobs: Number(r.slotWaitHeld), limit: r.slotWaitLimit },
         // A turn its owner started over the runner's limit, while it runs: "over limit · 17/16".
         runningOverLimit: r.overLimitActive == null || r.overLimitLimit == null
           ? null
@@ -6098,7 +6128,7 @@ export class SessionsService {
       ? await readLandingView(this.prisma, ownerId, session.id)
       : undefined;
     // As clients have always read it: `lastHeartbeatAt` is its last beat, from either record of it.
-    const assignedRunner = session.assignedRunner && servedRunner(withRunnerLastBeat(session.assignedRunner));
+    const assignedRunner = session.assignedRunner && servedRunner(withRunnerPresence(session.assignedRunner));
     // The engine it runs on: its recorded one, else what the old rules derive, null when nobody can
     // tell (docs/provider-engine-contract.md §6.1).
     const engine = await sessionEngine(this.prisma, session);
