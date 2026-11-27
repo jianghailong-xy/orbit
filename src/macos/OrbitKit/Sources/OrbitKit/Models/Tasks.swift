@@ -361,6 +361,11 @@ public struct SessionRef: Codable, Equatable, Sendable, Identifiable {
     /// older server.
     public let runningBgCount: Int?
     public let sessionKind: String?
+    /// The run's own outcome sentence ("runner offline", "acceptance command exited 1; expected 0"), which the
+    /// task card's status pill names its cause from (`TaskStatusReason`); absent from an older server.
+    public let error: String?
+    /// The EXECUTABLE acceptance rounds this run ran, newest first (migration 1672); absent from an older server.
+    public let acceptanceRounds: [TaskAcceptanceRound]?
 
     /// Resolve the task detail's run state from the session facts when sent, as web's task panel does
     /// (the run state function), else the modern run state, retaining
@@ -375,6 +380,22 @@ public struct SessionRef: Codable, Equatable, Sendable, Identifiable {
         return SessionRunState.resolveOptional(runState, legacy: sessionState,
                                         status: status, endReason: endReason)
     }
+}
+
+/// One EXECUTABLE acceptance round of a run (`@orbit/shared` `TaskAcceptanceRound`): what the runner's
+/// turn-complete reported for a server-queued acceptance shell turn.
+public struct TaskAcceptanceRound: Codable, Equatable, Sendable, Identifiable {
+    public let id: String
+    /// The acceptance shell turn of the run's conversation that this round was.
+    public let turnId: String
+    /// What the command exited with; nil when the runner reported no code.
+    public let exitCode: Int?
+    public let expectedExitCode: Int
+    /// The commit the run's branch stood at when the round finished.
+    public let branchSha: String?
+    public let finishedAt: String
+    /// The last 16 KB of the command's output, redacted; empty when it printed nothing.
+    public let outputTail: String?
 }
 
 public struct AgentNameRef: Codable, Equatable, Sendable {

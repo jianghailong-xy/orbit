@@ -334,6 +334,7 @@ import {
   TASK_ACCEPTANCE_CLIENT_TURN_PREFIX,
   executableAcceptanceFailureReason,
 } from '../tasks/executable-acceptance-round';
+import { recordTaskAcceptanceRound } from '../tasks/task-acceptance-round';
 import {
   postExecutableAcceptanceUnavailableComment,
   postRunFailureComment,
@@ -8189,7 +8190,8 @@ export class RunnerApiController {
       // one comparison between the code this callback reports and the code the declaration asks
       // for. Every input is already in hand under the rank-50 task lock taken above, so this
       // reads nothing further and writes nothing but `task.status` — no attempt row, no result
-      // ledger, no evidence. The exit code exists for the length of this block.
+      // ledger, no evidence. The exit code exists for the length of this block; the round's own record
+      // (migration 1672) is written past its end, beside `recordTaskFailure`.
       //
       // The guards around it are the identity checks, not evidence: the turn must be the reserved
       // shell turn this session queued, the declaration must not have been edited since it was
@@ -8284,6 +8286,23 @@ export class RunnerApiController {
       // database exactly once. Still this transaction, so the FAILED and the project's record of
       // it commit together or not at all (contract §4.3 A).
       if (acceptanceFailure) await recordTaskFailure(tx, acceptanceFailure);
+      // The round's own record (migration 1672): the code it exited with or none, the code it was queued to expect,
+      // the branch SHA this completion reports, and the clipped, redacted tail of what it printed. Every reserved
+      // shell turn this ACK settles gets one, compared or not. Written here, past the end of the comparison, for the
+      // reason `recordTaskFailure` is: that block stays one status write and no other database touch. The task row
+      // is the one locked above, so the record cannot name a task that is gone.
+      if (taskAcceptanceTurn && lockedAcceptanceTask != null) {
+        await recordTaskAcceptanceRound(tx, {
+          ownerId: current.ownerId,
+          taskId: lockedAcceptanceTask.id,
+          sessionId,
+          turnId: dto.turnId,
+          expectedExitCode: queuedAcceptanceExpectedExitCode!,
+          shellExitCode: dto.shellExitCode,
+          shellOutput: dto.shellOutput,
+          branchSha: dto.branchSha,
+        });
+      }
       // How the turn ended, for the turn row and the session's copy of it (docs/session-three-state-design.md
       // §4.2), and the words it ended with: see turn-outcome.ts. A steer and a withdraw settled above. Decided
       // after the acceptance comparison, whose failure is this turn's (design §12.1 W1a, W1b).

@@ -864,6 +864,7 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   },
   'POST /tasks/:id/dependency-graph/nodes': { request: (of) => ({ params: { id: of.taskId }, body: { taskIds: [of.taskId] } }) },
   'POST /tasks/:id/execute': { request: (of) => ({ params: { id: of.taskId }, body: {} }) },
+  'POST /tasks/:id/rerun-check': { request: (of) => ({ params: { id: of.taskId } }) },
   'GET /tasks/:id/progress': { request: (of) => ({ params: { id: of.taskId } }) },
   'POST /tasks/:id/progress': { request: (of) => ({ params: { id: of.taskId }, body: { phase: 'census' } }) },
   'GET /tasks/:id/share': { request: (of) => ({ params: { id: of.taskId } }) },

@@ -111,13 +111,24 @@ describe('the composer drive picker', () => {
     });
   };
   const option = (text: string) => [...document.body.querySelectorAll('[role=option]')].find((e) => e.textContent?.includes(text));
+  /** The row once the picker has drawn it: a folder's listing can land after a fixed wait on a loaded host. */
+  const shown = async (text: string) => {
+    let row: Element | undefined;
+    await act(async () => {
+      await vi.waitFor(() => {
+        row = option(text);
+        expect(row).toBeTruthy();
+      });
+    });
+    return row;
+  };
 
   it('hands back the picked file with its path, browsing from the root', async () => {
     serve();
     const onPick = vi.fn();
     await mount(<DriveFilePicker onClose={() => {}} onPick={onPick} />);
-    await click(option('Orbit UI migration'));
-    await click(option('sign-in-copy.md'));
+    await click(await shown('Orbit UI migration'));
+    await click(await shown('sign-in-copy.md'));
     await click([...document.body.querySelectorAll('button')].find((b) => b.textContent === 'Add 1'));
     expect(onPick).toHaveBeenCalledWith([{ id: 'e1', name: 'sign-in-copy.md', path: '/home/orbit/Drive/Orbit UI migration/sign-in-copy.md' }]);
   });
@@ -126,7 +137,7 @@ describe('the composer drive picker', () => {
     serve();
     const onPick = vi.fn();
     await mount(<DriveFilePicker projectFolder={{ id: 'p1', title: 'Orbit UI migration' }} onClose={() => {}} onPick={onPick} />);
-    await click(option('sign-in-copy.md'));
+    await click(await shown('sign-in-copy.md'));
     await click([...document.body.querySelectorAll('button')].find((b) => b.textContent === 'Add 1'));
     expect(onPick.mock.calls[0]![0][0].path).toBe('/home/orbit/Drive/Orbit UI migration/sign-in-copy.md');
   });
@@ -162,7 +173,7 @@ describe('the composer drive picker', () => {
     });
     expect(searches[0]).toContain('q=budg');
     expect(option('budget.xlsx')?.textContent).toContain('Drive/Finance/2026');
-    await click(option('budget.xlsx'));
+    await click(await shown('budget.xlsx'));
     await click([...document.body.querySelectorAll('button')].find((b) => b.textContent === 'Add 1'));
     expect(onPick).toHaveBeenCalledWith([{ id: 'e7', name: 'budget.xlsx', path: '/home/orbit/Drive/Finance/2026/budget.xlsx' }]);
   });

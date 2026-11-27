@@ -17086,6 +17086,186 @@ button.chat-jump-start:hover {
 .tdp-acceptance-head .tdp-link-button {
   margin-left: auto;
 }
+/* The task run sidebar (docs/task-run-sidebar-design.md): the same panel docked beside its conversation in a
+   compact arrangement — head, the state block, Branch, Done means, Runs, then Runs with and Activity on a line. */
+.task-detail-panel.is-compact .tdp-section {
+  padding: 12px 16px;
+}
+.tdp-compact-head {
+  padding: 10px 8px 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  flex: none;
+}
+.tdp-compact-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.tdp-compact-kicker {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.tdp-compact-title {
+  margin-right: 8px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.tdp-state {
+  margin: 12px 16px 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  font-size: 13px;
+}
+.tdp-state.is-running {
+  padding: 0;
+  border: 0;
+}
+.tdp-state.is-running > .tdp-section {
+  padding: 0;
+  border-bottom: 0;
+}
+.tdp-state.is-needs-you {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+.tdp-state.is-done {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+}
+.tdp-state.is-failed {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+}
+.tdp-state-title {
+  font-weight: 600;
+  color: var(--text-1);
+  margin-bottom: 6px;
+}
+.tdp-state-claim {
+  color: var(--text-2);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.tdp-state-note {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  color: var(--text-3);
+}
+.tdp-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.tdp-checklist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-1);
+}
+.tdp-checklist > li {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+.tdp-checklist > li > span:last-child,
+.tdp-checklist > li > code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.tdp-checklist > li.is-pending {
+  color: var(--text-3);
+}
+.tdp-check-mark {
+  flex: none;
+  width: 12px;
+  color: var(--text-3);
+}
+.tdp-checklist > li.is-passed > .tdp-check-mark {
+  color: var(--success-solid);
+}
+.tdp-checklist > li.is-failed > .tdp-check-mark {
+  color: var(--error-solid);
+}
+.tdp-round-output {
+  margin: 6px 0 0;
+  max-height: 200px;
+  overflow: auto;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--bg-base);
+  font-size: 11px;
+  white-space: pre-wrap;
+}
+.tdp-kv {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 4px 10px;
+  margin: 0;
+  font-size: 13px;
+}
+.tdp-kv > dt {
+  color: var(--text-3);
+}
+.tdp-kv > dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--text-1);
+}
+.tdp-kv-mono {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tdp-kv-commit {
+  overflow-wrap: anywhere;
+}
+.tdp-line-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 13px;
+}
+.tdp-line-button {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tdp-line-button > .anticon {
+  color: var(--text-3);
+  transition: transform 0.15s;
+}
+.tdp-line-button > .anticon.is-open {
+  transform: rotate(90deg);
+}
+.tdp-compact-run {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 13px;
+  color: var(--text-1);
+}
 .tdp-now {
   border: 1px solid var(--brand-border);
   background: var(--brand-tint);

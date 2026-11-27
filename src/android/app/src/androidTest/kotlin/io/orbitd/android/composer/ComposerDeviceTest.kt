@@ -884,6 +884,25 @@ class ComposerDeviceTest {
         capture("a07c-continue-sent")
     }
 
+    /** The task card over a task's own run (docs/task-run-sidebar-design.md): ⋯ → Open Task in the conversation draws the web
+     * column's blocks in its order, in each of its four states (src/android/scripts/task_card_states.py, the iOS probe's data too). */
+    @Test fun taskRunCardFollowsTheWebColumn() = journey("task-run-card") {
+        for ((state, words) in listOf("failed" to "Why it failed", "running" to "Now", "needs-you" to "Review the evidence", "done" to "Delivered")) {
+            login("""{"taskCard":"$state"}""")
+            awaitCreatedSession()
+            appClick("Session actions")
+            awaitText("Open Task")
+            appClick("Open Task")
+            compose.waitUntil(15000) { compose.onAllNodesWithTag("task-run-card").fetchSemanticsNodes().isNotEmpty() }
+            awaitText(words)
+            compose.waitUntil(15000) { compose.onAllNodesWithTag("task-card-done-means").fetchSemanticsNodes().isNotEmpty() }
+            capture("task-card-$state")
+            compose.onNodeWithTag("task-detail").performScrollToNode(hasTestTag("task-card-activity"))
+            compose.waitForIdle()
+            capture("task-card-$state-end")
+        }
+    }
+
     /** A07-4 (and A13-3's composer part): an Antigravity session's failure is its repair card — the CLI's install, said while it
      * runs — and a missing credential offers Google sign-in, a Gemini key, and the switch to one. */
     @Test fun a07cAntigravityRepairCard() = journey("a07c-antigravity") {
