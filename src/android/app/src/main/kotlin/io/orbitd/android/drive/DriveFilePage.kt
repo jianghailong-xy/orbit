@@ -146,7 +146,8 @@ internal fun DriveFilePage(store: DriveStore, route: OrbitRoute, open: (OrbitRou
             if (moving) MoveDialog(store, shown, actions) { moving = false }
             if (sharing) ShareDialog(store, shown) { sharing = false }
         }
-        DriveSnackbar(snackbar, Modifier.align(Alignment.BottomCenter).padding(12.dp))
+        // Over the chat's round button in the corner.
+        DriveSnackbar(snackbar, Modifier.align(Alignment.BottomCenter).padding(start = 12.dp, end = 12.dp, bottom = 84.dp))
     }
 }
 

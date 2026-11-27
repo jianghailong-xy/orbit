@@ -199,7 +199,8 @@ internal fun DriveFolderPage(store: DriveStore, route: OrbitRoute, open: (OrbitR
             expanded = !list.isScrollInProgress, containerColor = MaterialTheme.colorScheme.secondaryContainer,
             contentColor = MaterialTheme.colorScheme.onSecondaryContainer, shape = RoundedCornerShape(16.dp),
             modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = DriveMetrics.uploadBottom).testTag("drive-upload"))
-        DriveSnackbar(snackbar, Modifier.align(Alignment.BottomCenter).padding(start = 12.dp, end = 12.dp, bottom = 90.dp))
+        // Over Upload and the chat's round button stacked on it, so neither covers the snackbar's Undo.
+        DriveSnackbar(snackbar, Modifier.align(Alignment.BottomCenter).padding(start = 12.dp, end = 12.dp, bottom = 166.dp))
     }
 
     sheetFor?.let { entry ->
