@@ -99,6 +99,8 @@ final class QueuedTurnCardsTests: XCTestCase {
         "translation",
         // The session's opening prompt, which the held tag's Cancel leaves alone (`HeldCancelTests`).
         "opening",
+        // Why a send from here is `Not sent` (`NotSentBubbleTests`): this end's, never the queue's.
+        "notSentReason",
     ]
 
     /// What the agent reads on such a turn: words written for it, which no card is read out of.
