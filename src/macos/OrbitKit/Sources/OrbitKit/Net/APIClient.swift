@@ -439,7 +439,7 @@ public final class APIClient: @unchecked Sendable {
     }
 
     public func sendTurn(sessionID: String, _ req: SessionTurnRequest) async throws -> TurnAccepted {
-        try await post("sessions/\(sessionID)/turns", body: req)
+        try await postCancellable("sessions/\(sessionID)/turns", body: req)
     }
 
     /// The user turns no transcript event draws yet, oldest first, each with its `placement`: the
@@ -2428,7 +2428,7 @@ public final class APIClient: @unchecked Sendable {
     }
 
     public func resume(sessionID: String, _ req: ResumeRequest) async throws -> TurnAccepted {
-        try await post("sessions/\(sessionID)/resume", body: req)
+        try await postCancellable("sessions/\(sessionID)/resume", body: req)
     }
 
     public func updateConfig(sessionID: String, _ req: ConfigUpdateRequest) async throws {
@@ -2914,6 +2914,15 @@ public final class APIClient: @unchecked Sendable {
 
     private func post<T: Decodable, B: Encodable>(_ path: String, body: B) async throws -> T {
         let data = try await send(makeRequest(path, method: "POST", body: body))
+        return try decoder.decode(T.self, from: data)
+    }
+
+    /// A message's send: a composer that waited out its answer (`UserBubble.answerTimeout`) ends the
+    /// request rather than leaving it open, so a cancelled caller takes the HTTP work with it (web
+    /// parity: `answerDeadline` aborts the fetch). The server is idempotent on the request's
+    /// `clientTurnId`, so a request that did arrive before it was ended is answered again by Retry.
+    private func postCancellable<T: Decodable, B: Encodable>(_ path: String, body: B) async throws -> T {
+        let data = try await send(makeRequest(path, method: "POST", body: body), cancellationAware: true)
         return try decoder.decode(T.self, from: data)
     }
 
