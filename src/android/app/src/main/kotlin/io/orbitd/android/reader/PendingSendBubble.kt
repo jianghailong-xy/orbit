@@ -27,7 +27,7 @@ import io.orbitd.android.composer.StagedAttachment
 /**
  * The reader's message before the server has taken it (board docs/mocks/composer-sending-bubble/04-native-parity.html; web
  * `UserBubble`'s pending states): a local row beside the server's, since this transcript holds only theirs. Dimmed, with
- * `Sending…` under it while the request is out; then `⚠ Not sent · Retry · Put back in the composer`, and [reason] printed as one red
+ * `Sending…` under it while the request is out; then at full strength (web), with `⚠ Not sent · Retry · Put back in the composer`, and [reason] printed as one red
  * line under that foot — a touch screen has no hover for web's tooltip (owner decision 5). Its files are chips on it (decision 7).
  * [retry] and [putBack] are null while nothing may be pressed (the box not read yet).
  */
@@ -35,7 +35,7 @@ import io.orbitd.android.composer.StagedAttachment
 internal fun PendingSendBubble(words: String, attachments: List<StagedAttachment>, sending: Boolean, reason: String?,
     retry: (() -> Unit)?, putBack: (() -> Unit)?, open: (String) -> Unit) {
     UserTurnColumn(Modifier.testTag(if (sending) "pending-send:sending" else "pending-send:not-sent")) {
-        Box(Modifier.alpha(DIMMED)) {
+        Box(Modifier.alpha(if (sending) DIMMED else 1f)) {
             androidx.compose.foundation.layout.Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 SentAttachments(attachments, open)
                 if (words.isNotBlank()) UserWordsBubble(words, null, open)
@@ -88,5 +88,5 @@ private fun FootButton(label: String, tag: String, press: (() -> Unit)?) =
         color = if (press != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
         style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
 
-/** The board's dimmed bubble (web `.chat-user-wrap.is-pending`). */
+/** The board's dimmed `Sending…` bubble (web `.chat-sending`). */
 private const val DIMMED = 0.55f
