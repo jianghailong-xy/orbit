@@ -65,7 +65,7 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import { RunnerApiController } from './runner-api.controller';
 import '../test-support/dequeue-under-lease';
-import { WORD_SELECT, wordOf } from '../test-support/session-word';
+import { WORD_SELECT, wordOf, wordSql } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -424,7 +424,7 @@ test('a turn nothing answered goes back in the queue instead of being marked ANS
     // any host that is not UTC (this one is CEST). In the database both sides share one clock.
     async function sessionRow() {
       const r = await sql.query(
-        `SELECT status, error, "retry_at", EXTRACT(EPOCH FROM ("retry_at" - now())) AS wait_seconds
+        `SELECT ${wordSql()} AS status, error, "retry_at", EXTRACT(EPOCH FROM ("retry_at" - now())) AS wait_seconds
            FROM "session" WHERE id = $1::uuid`,
         [f.sessionId],
       );

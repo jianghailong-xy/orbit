@@ -48,6 +48,7 @@ import { encryptSecret } from '../providers/provider-crypto';
 import '../test-support/daemon-routes-over-http';
 import { FakeGithub, type FakeGithubUser, type FakeRepo } from '../test-support/fake-github';
 import { serveFakeGithub } from '../test-support/fake-github-over-http';
+import { wordSql } from '../test-support/session-word';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -257,7 +258,7 @@ test('GitHub P1 on PostgreSQL: create from GitHub, the clone reconcile, the disp
       repoId: String(APP_REPO), installationId: String(OWNER_INSTALLATION), cloneRef: 'main', cloneState: 'PENDING', cloneError: null,
       autoCreateWorkDir: false, started: false, finished: false,
     });
-    assert.equal((await rows(`SELECT "status" FROM "session" WHERE "id" = $1::uuid`, [appSession]))[0].status, 'PENDING');
+    assert.equal((await rows(`SELECT ${wordSql()} AS status FROM "session" WHERE "id" = $1::uuid`, [appSession]))[0].status, 'PENDING');
     // A clone's point is landing back to the repository (P2): the workspace isolates its sessions, and this one has its branch.
     assert.equal((await rows(`SELECT "enable_worktree" FROM "workspace" WHERE "id" = $1::uuid`, [appWorkspace]))[0].enable_worktree, true);
     assert.ok((await rows(`SELECT "branch" FROM "session" WHERE "id" = $1::uuid`, [appSession]))[0].branch, 'the first session runs on its own branch');

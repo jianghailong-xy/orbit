@@ -66,6 +66,7 @@ import { WATCH_PREDICATE_VERSION } from './watch-predicate';
 import { vectorSessionStatus } from './watch-vector.fixture';
 import { redactReason, redactSnapshot } from './watch-redaction';
 import { WatchesService } from './watches.service';
+import { wordSql } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -277,7 +278,7 @@ async function insertSession(row: {
                            "completed_at","deleted_at","assigned_runner_id", "finished_at")
      VALUES ($1,'watched session','p',$2,$2,now(),(CASE ($3)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END),$4,
              CASE WHEN $5::boolean THEN now() END, CASE WHEN $6::boolean THEN now() END, $7,
-             CASE WHEN $3::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END)`,
+             CASE WHEN $3::text IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END)`,
     [id, row.owner ?? ownerId, row.status, row.endReason ?? null, row.completedAt ?? false, row.deletedAt ?? false, row.runnerId ?? null],
   );
   return id;
@@ -1541,7 +1542,7 @@ test('the job leaf is checked where a watch is created: its version, its window,
 });
 
 async function sessionStatus(sessionId: string): Promise<string> {
-  const { rows: [row] } = await sql.query<{ status: string }>(`SELECT "status"::text AS "status" FROM "session" WHERE "id" = $1`, [sessionId]);
+  const { rows: [row] } = await sql.query<{ status: string }>(`SELECT ${wordSql()} AS "status" FROM "session" WHERE "id" = $1`, [sessionId]);
   return row.status;
 }
 
@@ -1599,7 +1600,7 @@ async function quiescentSession(row: QuiescentSessionRow = {}): Promise<string> 
                            "completed_at","running_bg_jobs","running_subagents","engine_turn_active","retry_at", "finished_at")
      VALUES ($1,'a child session','p',$2,$2,now(),(CASE ($3)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END),$4,CASE WHEN $5::boolean THEN now() END,$6::text[],$7::text[],$8,
              CASE WHEN $9::int IS NOT NULL THEN now() + make_interval(secs => $9::int) END,
-             CASE WHEN $3::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END)`,
+             CASE WHEN $3::text IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END)`,
     [
       id, ownerId, row.status ?? 'AWAITING_INPUT', row.endReason ?? null, row.completed ?? false,
       row.jobs ?? [], row.subagents ?? [], row.engineTurn ?? false, row.retryInSeconds ?? null,

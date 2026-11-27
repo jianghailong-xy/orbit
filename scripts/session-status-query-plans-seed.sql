@@ -1,3 +1,6 @@
+-- D2-era: this reads or writes session.status, which deploy D4 (migration 1711) dropped. It runs on a database of
+-- deploy D1 or D2 only, and is kept for the record of those deploys.
+--
 -- A production-shaped data set for scripts/session-status-query-plans.sql (docs/session-status-retirement-plan.md
 -- §4.5): one busy runner with 44,000 released sessions and 73 held ones (the shape measured in the earlier plan's
 -- step 4.3), nineteen quieter runners, tasks, task lists, batches, spawn trees, turns and runner presence.
