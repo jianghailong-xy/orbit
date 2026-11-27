@@ -156,6 +156,8 @@ export function managedRunnerStatus(input: ManagedRunnerStatusInput): ManagedRun
       usable: false,
       reason: accountReason ?? switchReason ?? (eligible ? null : managedRunnerNotEligibleReason()),
       retryAfter: null,
+      nextAttemptAt: null,
+      attempt: 0,
       initialProvider: null,
       firstSessionProvider: null,
       actions: { ...actions, canEnsure: operable && eligible },
@@ -180,6 +182,9 @@ export function managedRunnerStatus(input: ManagedRunnerStatusInput): ManagedRun
     usable: mapping.managementState === 'READY' && fresh && runner?.status !== 'OFFLINE' && !disabled,
     reason: !enabled ? switchReason : (accountReason ?? reason ?? switchReason),
     retryAfter: mapping.nextAttemptAt && mapping.nextAttemptAt > now ? mapping.nextAttemptAt.toISOString() : null,
+    // Nothing is tried for a disabled account, nor with the switch off or no environment to try it in.
+    nextAttemptAt: operable ? (mapping.nextAttemptAt?.toISOString() ?? null) : null,
+    attempt: mapping.attempt,
     initialProvider: mapping.initialProvider,
     firstSessionProvider: managedFirstSessionProvider(
       mapping.initialProvider,

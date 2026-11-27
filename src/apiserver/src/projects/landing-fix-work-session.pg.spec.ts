@@ -5,11 +5,11 @@ import { test } from 'node:test';
 import {
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunStatus as SharedRunStatus, type IntegrationJobCommand } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -32,6 +32,7 @@ import { canonicalRepoUrl } from './project-integration-line';
 import { queueLandingRetry } from './project-integration-job';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectPromotionService } from './project-promotion.service';
+import { withWord, WORD_SELECT } from '../test-support/session-word';
 
 /**
  * A landing failure goes first to the task's own work session (`docs/project-integration-line-contract.md`
@@ -173,7 +174,7 @@ async function world(stack: Stack, label: string, line: Line): Promise<World> {
     data: {
       id: coordinatorSessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
       title: `coordinator: ${label}`, prompt: `coordinator: ${label}`, provider: 'claude',
-      status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
+      turnState: null, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
       titleManagedByProject: true, numTurns: 1, startedAt: new Date(), runtimeSessionId: `runtime-${coordinatorSessionId}`,
     },
   });
@@ -214,7 +215,7 @@ async function parkedTask(stack: Stack, w: World, label: string): Promise<Finish
     data: {
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId, workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId, title: `work ${label}`, prompt: 'work', provider: 'claude',
-      status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      turnState: null, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       isolationStatus: 'worktree', branch: `orbit/${label}`, branchSha: sha('a'), baseSha: sha('b'), numTurns: 1,
       startedAt: minutesAgo(30), createdAt: minutesAgo(30), runtimeSessionId: randomUUID(),
       changedFiles: [{ path: 'src/a.ts', status: 'M', additions: 1, deletions: 0 }] as Prisma.InputJsonValue,
@@ -240,9 +241,9 @@ async function finalize(stack: Stack, w: World, t: Finished, label: string): Pro
 }
 
 async function endingOf(stack: Stack, sessionId: string) {
-  return stack.db.session.findUniqueOrThrow({
-    where: { id: sessionId }, select: { status: true, finishedAt: true, endReason: true, cancelRequestedAt: true },
-  });
+  return withWord(await stack.db.session.findUniqueOrThrow({
+    where: { id: sessionId }, select: { ...WORD_SELECT, finishedAt: true, endReason: true, cancelRequestedAt: true },
+  }), 'finishedAt', 'endReason');
 }
 
 /**
@@ -368,7 +369,7 @@ async function landing(stack: Stack, label: string, body: object,
 
 // ─── W-T1: the results that are handed off ────────────────────────────────────────────────────────
 
-for (const phase of ['REBASE', 'MERGE', 'MAIN_SYNC'] as const) {
+for (const phase of ['REBASE', 'MERGE'] as const) {
   test(`W-T1: a task landing's CONFLICT in ${phase} opens its item in the work session's hands`, { skip }, async () => {
     const stack = await connect();
     try {
@@ -380,6 +381,28 @@ for (const phase of ['REBASE', 'MERGE', 'MAIN_SYNC'] as const) {
     }
   });
 }
+
+// Revision 45 (docs/design/project-line-upstream-sync.md §4.2): a MAIN_SYNC conflict is the line's, not the work's.
+// It opens the task-less line-sync item for the coordinator, and the finished task's session is not revived for it.
+test('W-T1, revision 45: a task landing\'s CONFLICT in MAIN_SYNC is not handed to the work session', { skip }, async () => {
+  const stack = await connect();
+  try {
+    const w = await world(stack, 'conflict-main-sync', 'PROJECT_BRANCH');
+    const t = await finishedTask(stack, w, 'conflict-main-sync');
+    const command = await claim(stack, w, 'LAND_TASK');
+    await report(stack, w, command, conflict('MAIN_SYNC'));
+    const items = await stack.db.projectOpenItem.findMany({ where: { projectId: w.projectId, state: 'OPEN' } });
+    assert.equal(items.length, 1);
+    assert.equal(items[0]!.taskId, null, 'the line-sync item names no task');
+    assert.ok(items[0]!.dedupeKey.startsWith('IMS:'));
+    assert.equal(items[0]!.workSessionId, null, 'not offered to the work session');
+    assert.equal(items[0]!.assignee, 'COORDINATOR');
+    const session = await stack.db.session.findUniqueOrThrow({ where: { id: t.sessionId }, select: { finishedAt: true } });
+    assert.notEqual(session.finishedAt, null, 'the finished work session was not revived');
+  } finally {
+    await stack.db.$disconnect();
+  }
+});
 
 test('W-T1: a task landing\'s CHECK_FAILED of its own making is handed off, and W9 refuses resolve and retry',
   { skip }, async () => {
@@ -583,18 +606,18 @@ const negated: Array<[string, (stack: Stack, w: World, t: Finished) => Promise<v
     // Revived, running, and asked to end by a person: `cancel_requested_at` beside `end_reason = 'ended'`.
     await stack.db.session.update({
       where: { id: t.sessionId },
-      data: { status: RunStatus.RUNNING, finishedAt: null, endReason: 'ended', cancelRequestedAt: new Date() },
+      data: { turnState: 'IN_FLIGHT', finishedAt: null, endReason: 'ended', cancelRequestedAt: new Date() },
     });
   }],
   ['2: a person ended the work session', async (stack, _w, t) => {
-    await stack.db.session.update({ where: { id: t.sessionId }, data: { endReason: 'ended', status: RunStatus.CANCELLED } });
+    await stack.db.session.update({ where: { id: t.sessionId }, data: { endReason: 'ended', turnState: null } });
   }],
   ['3: the task\'s newest work session is another one', async (stack, w, t) => {
     await stack.db.session.create({
       data: {
         id: randomUUID(), ownerId: w.ownerId, creatorId: w.ownerId, taskId: t.taskId, workspaceId: w.workspaceId,
         assignedRunnerId: w.runnerId, title: 'a later run', prompt: 'work', provider: 'claude',
-        status: RunStatus.SUCCEEDED, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+        turnState: null, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
         isolationStatus: 'worktree', branch: 'orbit/a-later-run', branchSha: sha('f'), baseSha: sha('b'), numTurns: 1,
         startedAt: new Date(), createdAt: new Date(), runtimeSessionId: randomUUID(), finishedAt: new Date(),
         endReason: 'task_done',
@@ -635,7 +658,7 @@ test('W-T6: W4 condition 4 — after two generations asked for by the work sessi
       // Its DONE's end, as `claimParkedSessionEnd` and the finalize leave it: `cancel_requested_at` too.
       await stack.db.session.update({
         where: { id: t.sessionId },
-        data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), endReason: 'task_done', cancelRequestedAt: new Date() },
+        data: { turnState: null, finishedAt: new Date(), endReason: 'task_done', cancelRequestedAt: new Date() },
       });
       const queued = await stack.db.$transaction((tx) => queueLandingRetry(tx, {
         ownerId: w.ownerId, projectId: w.projectId, taskId: t.taskId,

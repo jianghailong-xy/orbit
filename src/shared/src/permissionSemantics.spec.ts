@@ -217,8 +217,8 @@ describe('Codex Auto with its sandbox unavailable on Orbit Cloud', () => {
       approvalSupport: 'partial',
       honored: false,
       sandbox: 'off',
-      note: "Codex's sandbox is unavailable on Orbit Cloud: commands run unconfined inside your Cloud runner.",
-      shortNote: 'sandbox off on Orbit Cloud, commands run unconfined',
+      note: "Codex's own sandbox cannot start on Orbit Cloud, so it is off: your Cloud runner's container isolates its commands instead.",
+      shortNote: "Codex sandbox off, the Cloud runner's container isolates commands",
     });
     expect(JSON.stringify(s)).not.toMatch(/workspace-write/);
   });

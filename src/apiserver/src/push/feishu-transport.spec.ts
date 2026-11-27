@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import type { ConfigService } from '@nestjs/config';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { renderFeishuCard, type FeishuAlert, type FeishuCard } from '../feishu/cards/feishu-cards';
 import type { FeishuSendResult } from '../feishu/feishu-outbound';
 import {
@@ -76,6 +76,10 @@ test('an approval reaches Feishu with no device: one card for the stretch, its a
     ownerRequest: { findMany: async () => [] },
     projectHandoffApproval: { findMany: async () => [] },
     projectOpenItem: { findMany: async () => [] },
+    // The decision cards (push/owner-cards.ts) the same count reads: no project, task or confirmation, so none.
+    project: { findMany: async () => [] },
+    task: { findMany: async () => [] },
+    taskOwnerConfirmationRequest: { findMany: async () => [] },
     $queryRaw: async () => [],
     approval: {
       findMany: async () => [

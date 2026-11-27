@@ -1,4 +1,5 @@
 import { evidence, type Tenant, type TenantRequest } from './tenant-isolation-cases';
+import { underEveryDrivePrefix, underEveryRunnerDrivePrefix } from '../drive/drive-routes';
 
 /**
  * The tenant isolation census, second half (docs/google-sign-in-design.md §5.6, §11 T2). The first
@@ -157,7 +158,7 @@ export interface RunnerObjects {
   /** An import job of the space (server execution P5, contract `import.server`), ended, to be read back. */
   wikiImportJobId: string;
   /**
-   * The drive door (docs/orbit-files-drive-technical-design.md §4.2): a staging of this machine's on the account's drive
+   * The drive door (docs/drive-technical-design.md §4.2): a staging of this machine's on the account's drive
    * file holding chunk 0 (`driveChunkSha256`, content of this account's alone); another staging with nothing in it, which
    * a commit names; a commit's id; and two files of the drive folder, one to move and one to delete.
    */
@@ -167,6 +168,8 @@ export interface RunnerObjects {
   driveCommitId: string;
   driveMoveFileId: string;
   driveDeleteFileId: string;
+  /** An agent's directory sync this machine opened and is still reporting into (docs/drive-directory-sync-design.md S4). */
+  driveSyncId: string;
   /** Shared: a session link's root with a file in it; a task link's root with a run and a file; a project link's. */
   sharedSessionId: string;
   sharedSessionAttachmentId: string;
@@ -208,6 +211,10 @@ const SESSION = ['session'] as const;
 
 /** The header the runner door names its calling session in. */
 const calling = (sessionId: string) => ({ 'x-orbit-session-id': sessionId });
+
+/** Entries keyed `METHOD /runner/drive/…`, each held under /runner/drive and its /runner/documents alias (drive/drive-routes.ts). */
+const underEveryDoorPrefix = <T>(entries: Record<string, T>): Record<string, T> =>
+  Object.fromEntries(Object.entries(entries).flatMap(([key, value]) => underEveryRunnerDrivePrefix(key).map((route) => [route, value])));
 /** Another account's session in the calling session's place on a request of the caller's own. */
 const fromTheirSession = (
   as: readonly RunnerCredential[],
@@ -349,6 +356,11 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
       params: { id: of.runner.machineSessionId },
       body: { leaseOwner: of.runner.leaseOwner, leaseGeneration: of.runner.leaseGeneration },
     }),
+  },
+  // A slot return names the process that holds the session (docs/runner-update-drain-design.md §7.3).
+  'POST /runner/sessions/:id/return-slot': {
+    as: RUNNER,
+    request: (of) => ({ params: { id: of.runner.machineSessionId }, body: { leaseOwner: of.runner.leaseOwner } }),
   },
   'POST /runner/sessions/:id/orchestration-credential': { as: RUNNER, request: (of) => ({ params: { id: of.runner.callingSessionId } }) },
   'GET /runner/sessions/:id/inbox': {
@@ -631,6 +643,16 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
       body: { line: 'MAIN', automatic: false, maxConcurrentTasks: 1, why: 'the census' },
     }),
   },
+  // Any session may ask (design D1): the caller's own session asks about A's project, which the door reads under the
+  // runner's owner and answers 404 before anything is filed.
+  'POST /runner/projects/:id/reopen-requests': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: { id: of.projectId },
+      headers: calling(mine.runner.coordinatorSessionId),
+      body: { why: 'the census', plannedWork: 'the census' },
+    }),
+  },
   'POST /runner/projects/:id/done-requests': {
     as: RUNNER,
     request: (of, mine) => ({ params: { id: of.projectId }, headers: calling(mine.runner.coordinatorSessionId), body: { judgment: 'Done.', gaps: [] } }),
@@ -772,14 +794,19 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
     nested: ['jobId'],
   },
   'GET /runner/wiki/entries/:id': { as: RUNNER, request: (of, mine) => ({ params: { id: of.wikiEntryId }, headers: calling(mine.runner.wikiSessionId) }) },
-  // ── the runner drive door (docs/orbit-files-drive-technical-design.md §4.2, §4.4) ───────────────
+  // ── the runner drive door (docs/drive-technical-design.md §4.2, §4.4) ───────────────
   // A chunk only by a sha256 the caller's own versions or stagings name; a staging only of the caller's runner; a commit
   // id only within the caller's account.
-  'GET /runner/drive/chunks/:sha256': { as: RUNNER, request: (of) => ({ params: { sha256: of.runner.driveChunkSha256 } }) },
-  'PUT /runner/drive/stagings/:id/chunks/:idx': { as: RUNNER, request: (of) => ({ params: { id: of.runner.driveStagingId, idx: '1' } }) },
-  'GET /runner/drive/stagings/:id/chunks/:idx': { as: RUNNER, request: (of) => ({ params: { id: of.runner.driveStagingId, idx: '0' } }) },
-  'POST /runner/drive/stagings/:id/keepalive': { as: RUNNER, request: (of) => ({ params: { id: of.runner.driveStagingId }, body: { dirty: false } }) },
-  'GET /runner/drive/commits/:commitId': { as: RUNNER, request: (of) => ({ params: { commitId: of.runner.driveCommitId } }) },
+  // Under /runner/drive and its /runner/documents alias.
+  ...underEveryDoorPrefix<RunnerCase>({
+    'GET /runner/drive/chunks/:sha256': { as: RUNNER, request: (of) => ({ params: { sha256: of.runner.driveChunkSha256 } }) },
+    'PUT /runner/drive/stagings/:id/chunks/:idx': { as: RUNNER, request: (of) => ({ params: { id: of.runner.driveStagingId, idx: '1' } }) },
+    'GET /runner/drive/stagings/:id/chunks/:idx': { as: RUNNER, request: (of) => ({ params: { id: of.runner.driveStagingId, idx: '0' } }) },
+    'POST /runner/drive/stagings/:id/keepalive': { as: RUNNER, request: (of) => ({ params: { id: of.runner.driveStagingId }, body: { dirty: false } }) },
+    'GET /runner/drive/commits/:commitId': { as: RUNNER, request: (of) => ({ params: { commitId: of.runner.driveCommitId } }) },
+    // A sync is reported into only by the runner that opened it, in the caller's account.
+    'PATCH /runner/drive/syncs/:id': { as: RUNNER, request: (of) => ({ params: { id: of.runner.driveSyncId }, body: { status: 'UPLOADING', filesDone: 1 } }) },
+  }),
 };
 
 /** Runner-gate routes the census cannot stand up, each with why and the reading that proves it. */
@@ -1532,6 +1559,8 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     }),
     (of) => of.wikiChatId,
   ),
+  // A wiki chat's read (contract `chat.read`): read as another account's chat, refused as a session this runner does not host.
+  'GET /runner/wiki/read header x-orbit-session-id': fromTheirSession(RUNNER, () => ({ params: {} }), (of) => of.wikiChatId),
   // Another account's card is no card of this chat to replace: answered WIKI_SCHEMA at replaces, as one that names nothing.
   'POST /runner/wiki/drafts body replaces': {
     as: RUNNER,
@@ -1548,38 +1577,50 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     }),
   },
   // ── the runner drive door: an entry, a version or a staging of another account's is one that is not there ──
-  'GET /runner/drive/stat query id': { as: RUNNER, request: (of) => ({ params: {}, query: { id: of.driveFileId } }) },
-  'GET /runner/drive/list query id': { as: RUNNER, request: (of) => ({ params: {}, query: { id: of.driveFolderId } }) },
-  'GET /runner/drive/manifest query id': { as: RUNNER, request: (of) => ({ params: {}, query: { id: of.driveFileId } }) },
-  'POST /runner/drive/stagings body entryId': { as: RUNNER, request: (of) => ({ params: {}, body: { entryId: of.driveFileId } }) },
-  'POST /runner/drive/commit body entryId': {
-    as: RUNNER,
-    request: (of) => ({ params: {}, body: { commitId: 'census-commit-entry', entryId: of.driveFileId, mode: 'OVERWRITE', chunks: [] } }),
-  },
-  // An append built on another account's version, onto the caller's own file: a base that is not there.
-  'POST /runner/drive/commit body baseVersionId': {
-    as: RUNNER,
-    request: (of, mine) => ({
-      params: {},
-      body: { commitId: 'census-commit-base', entryId: mine.driveFileId, mode: 'APPEND', baseVersionId: of.driveVersionId, chunks: [] },
-    }),
-  },
-  'POST /runner/drive/commit body stagingId': {
-    as: RUNNER,
-    request: (of, mine) => ({
-      params: {},
-      body: { commitId: 'census-commit-staging', entryId: mine.driveFileId, mode: 'OVERWRITE', chunks: [], stagingId: of.runner.driveCommitStagingId },
-    }),
-  },
-  'POST /runner/drive/rename body id': {
-    as: RUNNER,
-    request: (of) => ({ params: {}, body: { id: of.runner.driveMoveFileId, to: '/census moved by the runner.txt' } }),
-  },
+  ...underEveryDoorPrefix<RunnerFieldCase>({
+    'GET /runner/drive/stat query id': { as: RUNNER, request: (of) => ({ params: {}, query: { id: of.driveFileId } }) },
+    'GET /runner/drive/list query id': { as: RUNNER, request: (of) => ({ params: {}, query: { id: of.driveFolderId } }) },
+    'GET /runner/drive/manifest query id': { as: RUNNER, request: (of) => ({ params: {}, query: { id: of.driveFileId } }) },
+    'POST /runner/drive/stagings body entryId': { as: RUNNER, request: (of) => ({ params: {}, body: { entryId: of.driveFileId } }) },
+    'POST /runner/drive/commit body entryId': {
+      as: RUNNER,
+      request: (of) => ({ params: {}, body: { commitId: 'census-commit-entry', entryId: of.driveFileId, mode: 'OVERWRITE', chunks: [] } }),
+    },
+    // An append built on another account's version, onto the caller's own file: a base that is not there.
+    'POST /runner/drive/commit body baseVersionId': {
+      as: RUNNER,
+      request: (of, mine) => ({
+        params: {},
+        body: { commitId: 'census-commit-base', entryId: mine.driveFileId, mode: 'APPEND', baseVersionId: of.driveVersionId, chunks: [] },
+      }),
+    },
+    'POST /runner/drive/commit body stagingId': {
+      as: RUNNER,
+      request: (of, mine) => ({
+        params: {},
+        body: { commitId: 'census-commit-staging', entryId: mine.driveFileId, mode: 'OVERWRITE', chunks: [], stagingId: of.runner.driveCommitStagingId },
+      }),
+    },
+    // A batch names a staging only of the caller's runner, refused before any file of it is written.
+    'POST /runner/drive/batch body stagingId': {
+      as: RUNNER,
+      request: (of) => ({
+        params: {},
+        body: { stagingId: of.runner.driveCommitStagingId, items: [{ path: '/census batch.txt', commitId: 'census-batch-staging', chunks: [] }] },
+      }),
+    },
+    'POST /runner/drive/rename body id': {
+      as: RUNNER,
+      request: (of) => ({ params: {}, body: { id: of.runner.driveMoveFileId, to: '/census moved by the runner.txt' } }),
+    },
+    'POST /runner/drive/utimens body id': {
+      as: RUNNER,
+      request: (of) => ({ params: {}, body: { id: of.driveFileId, mtime: '2020-01-02T03:04:05.000Z' } }),
+    },
+  }),
+  // A's own request deletes its file, so this is held under /runner/drive alone; its /runner/documents alias is read by
+  // hand (RUNNER_ISOLATION_FIELDS_BY_HAND).
   'POST /runner/drive/delete body id': { as: RUNNER, request: (of) => ({ params: {}, body: { id: of.runner.driveDeleteFileId } }) },
-  'POST /runner/drive/utimens body id': {
-    as: RUNNER,
-    request: (of) => ({ params: {}, body: { id: of.driveFileId, mtime: '2020-01-02T03:04:05.000Z' } }),
-  },
   ...Object.fromEntries(Object.entries(wikiRequests()).map(([route, own]) => [
     `${route} header x-orbit-session-id`,
     fromTheirSession(RUNNER, own, (of) => of.runner.wikiSessionId),
@@ -1602,6 +1643,19 @@ const planUsageReadings = Object.fromEntries(
 
 /** Ids a runner-gate request carries that name nothing of an account's to reach, with why and where. */
 export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> = {
+  // ── Push as me's credential door (docs/design/protected-branch-landing.md §5.2) ───────────────────────────
+  'POST /runner/git-credential body jobId':
+    "read only by (id, the runner's owner) and only when its source session's workspace is the named one, which is first "
+    + "read by (id, the calling runner, its owner, not deleted) (github/push-as-me.service.ts:67, :113); another account's "
+    + "job answers 403 PUSH_AS_ME_REFUSED, as an id that names nothing does, and nothing is written. pull-request-landing.pg.spec.ts "
+    + 'case 11 sends it for another runner, lease and generation',
+  'POST /runner/git-credential body sessionId':
+    "read only by (id, the runner's owner) and only when it is a session of the named workspace on the calling runner "
+    + "(github/push-as-me.service.ts:67, :136); another account's session answers 403 PUSH_AS_ME_REFUSED, as an id that names "
+    + 'nothing does, and nothing is written. pull-request-landing.pg.spec.ts case 13 sends it with another operation',
+  'POST /runner/git-credential body mergeOperationId':
+    "compared with the merge operation of a session already found as the runner owner's own (github/push-as-me.service.ts:136); "
+    + "it names nothing of its own, and one that is not that session's current operation answers 403 PUSH_AS_ME_REFUSED",
   'GET /runner/landings/:id header x-orbit-session-id':
     "the calling session is taken only as a work session of the runner's owner on this runner (sessions/sessions.service.ts:3454), "
     + 'so another account\'s session there finds nothing and the read answers 404 LANDING_NOT_THIS_SESSIONS_TASK, writing nothing; '
@@ -1670,6 +1724,8 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     'counted among the runner owner\'s own projects before anything is written; one that is not answers 404 (owner-requests/owner-requests.service.ts:132); owner-requests.pg.spec.ts (f) sends another account\'s',
   'POST /runner/owner-requests header x-orbit-session-id':
     'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-owner-requests.controller.ts:100); owner-requests.pg.spec.ts (f) sends another account\'s',
+  'POST /runner/projects/:id/reopen-requests header x-orbit-session-id':
+    'must be a session of the runner\'s owner that this runner hosts, else 403 before the project is read or anything is written (owner-requests/owner-requests.service.ts:719); the project is then read under that owner only, 404 for another account\'s (owner-requests/owner-requests.service.ts:586), and the card is filed under that owner',
   'POST /runner/settings-proposals header x-orbit-session-id':
     'must be a session of the runner\'s owner that this runner hosts, else 403 before anything is read or written (runner-api/runner-owner-requests.controller.ts:100); the proposal acts on that owner\'s own preferences only, and settings-proposals.pg.spec.ts (t) sends another account\'s session',
   'GET /runner/settings header x-orbit-session-id':
@@ -1867,40 +1923,63 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     'the coordinator\'s own key for one question, a dedupe key within the project the path names '
     + '(project-open-item.service.ts:686)',
   // ── the runner drive door: the writer's own keys ─────────────────────────────────────────────
-  'POST /runner/drive/create body handleId':
-    "the writer's own key for the handle that fills the new file, stored on its first version and compared only with a "
-    + "later commit's handleId on that same entry of the caller's account (drive/drive.service.ts:703); nothing is looked up by it",
-  'POST /runner/drive/commit body handleId':
-    "compared only with the handle_id of the current version of the entry the commit names, an entry already found by "
-    + "(id, the runner's owner) under FOR UPDATE (drive/drive.service.ts:703); nothing is looked up by it",
-  'POST /runner/drive/commit body commitId':
-    "the writer's own retry key, looked up and stored only by (the runner's owner, commitId) (drive/drive.service.ts:690), "
-    + "so another account's commit id names nothing of anybody's here",
-  // ── the runner drive door: who a write is recorded as coming from ─────────────────────────────
-  'POST /runner/drive/create body writer.sessionId':
-    "a drive write's attribution (docs/orbit-files-drive-technical-design.md §3.6): kept only when it is a session of the "
-    + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
-    + "stored as null otherwise (drive/drive.service.ts:1226); no session is read beyond that, written or authorized by it",
-  'POST /runner/drive/mkdir body writer.sessionId':
-    "a drive write's attribution (docs/orbit-files-drive-technical-design.md §3.6): kept only when it is a session of the "
-    + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
-    + "stored as null otherwise (drive/drive.service.ts:1226); no session is read beyond that, written or authorized by it",
-  'POST /runner/drive/commit body writer.sessionId':
-    "a drive write's attribution (docs/orbit-files-drive-technical-design.md §3.6): kept only when it is a session of the "
-    + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
-    + "stored as null otherwise (drive/drive.service.ts:1226); no session is read beyond that, written or authorized by it",
-  'POST /runner/drive/rename body writer.sessionId':
-    "a drive write's attribution (docs/orbit-files-drive-technical-design.md §3.6): kept only when it is a session of the "
-    + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
-    + "stored as null otherwise (drive/drive.service.ts:1226); no session is read beyond that, written or authorized by it",
-  'POST /runner/drive/delete body writer.sessionId':
-    "a drive write's attribution (docs/orbit-files-drive-technical-design.md §3.6): kept only when it is a session of the "
-    + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
-    + "stored as null otherwise (drive/drive.service.ts:1226); no session is read beyond that, written or authorized by it",
-  'POST /runner/drive/utimens body writer.sessionId':
-    "a drive write's attribution (docs/orbit-files-drive-technical-design.md §3.6): kept only when it is a session of the "
-    + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
-    + "stored as null otherwise (drive/drive.service.ts:1226); no session is read beyond that, written or authorized by it",
+  ...underEveryDoorPrefix({
+    'POST /runner/drive/create body handleId':
+      "the writer's own key for the handle that fills the new file, stored on its first version and compared only with a "
+      + "later commit's handleId on that same entry of the caller's account (drive/drive.service.ts:703); nothing is looked up by it",
+    'POST /runner/drive/commit body handleId':
+      "compared only with the handle_id of the current version of the entry the commit names, an entry already found by "
+      + "(id, the runner's owner) under FOR UPDATE (drive/drive.service.ts:703); nothing is looked up by it",
+    'POST /runner/drive/commit body commitId':
+      "the writer's own retry key, looked up and stored only by (the runner's owner, commitId) (drive/drive.service.ts:690), "
+      + "so another account's commit id names nothing of anybody's here",
+    'POST /runner/drive/batch body items[].commitId':
+      "each file's retry key, passed to the same commit as the commit route's commitId and looked up and stored only by "
+      + "(the runner's owner, commitId) (drive/drive.service.ts:690), so another account's commit id names nothing of anybody's here",
+    'POST /runner/drive/batch body writer.sessionId':
+      "a drive write's attribution (docs/drive-technical-design.md §3.6), passed to the same mkdir, create, commit and "
+      + "setMtime as the routes above: kept only when it is a session of the runner's owner assigned to the calling runner, "
+      + "read by (id, owner, runner) in the write's own transaction, and stored as null otherwise (drive/drive.service.ts:1226)",
+    // ── the runner drive door: who a write is recorded as coming from ─────────────────────────────
+    'POST /runner/drive/create body writer.sessionId':
+      "a drive write's attribution (docs/drive-technical-design.md §3.6): kept only when it is a session of the "
+      + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
+      + "stored as null otherwise (drive/drive.service.ts:1226); no session is read beyond that, written or authorized by it",
+    'POST /runner/drive/mkdir body writer.sessionId':
+      "a drive write's attribution (docs/drive-technical-design.md §3.6): kept only when it is a session of the "
+      + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
+      + "stored as null otherwise (drive/drive.service.ts:1226); no session is read beyond that, written or authorized by it",
+    'POST /runner/drive/commit body writer.sessionId':
+      "a drive write's attribution (docs/drive-technical-design.md §3.6): kept only when it is a session of the "
+      + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
+      + "stored as null otherwise (drive/drive.service.ts:1226); no session is read beyond that, written or authorized by it",
+    'POST /runner/drive/rename body writer.sessionId':
+      "a drive write's attribution (docs/drive-technical-design.md §3.6): kept only when it is a session of the "
+      + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
+      + "stored as null otherwise (drive/drive.service.ts:1226); no session is read beyond that, written or authorized by it",
+    'POST /runner/drive/delete body writer.sessionId':
+      "a drive write's attribution (docs/drive-technical-design.md §3.6): kept only when it is a session of the "
+      + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
+      + "stored as null otherwise (drive/drive.service.ts:1226); no session is read beyond that, written or authorized by it",
+    'POST /runner/drive/utimens body writer.sessionId':
+      "a drive write's attribution (docs/drive-technical-design.md §3.6): kept only when it is a session of the "
+      + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
+      + "stored as null otherwise (drive/drive.service.ts:1226); no session is read beyond that, written or authorized by it",
+  }),
+  // ── an agent's directory sync, reported for the owner's upload tray (docs/drive-directory-sync-design.md S4) ──
+  ...underEveryDoorPrefix({
+    'POST /runner/drive/syncs body sessionId':
+      "the session a sync is shown under: kept only when it is a session of the runner's owner, read by (id, owner), and "
+      + "stored as null otherwise (drive/drive-syncs.service.ts:95); only its title is shown back, to that owner",
+    'PATCH /runner/drive/syncs/:id body destEntryId':
+      "the destination folder's id, stored on the caller's own sync row and never looked up (drive/drive-syncs.service.ts:132); "
+      + "it is shown only to the runner's owner, whose own read of another account's entry by that id is not found",
+  }),
+  'POST /runner/documents/delete body id':
+    'the same handler as POST /runner/drive/delete, whose case above holds it across accounts: RunnerDriveController '
+    + 'is one class mounted under both prefixes (drive/runner-drive.controller.ts:103, '
+    + '@Controller(RUNNER_DRIVE_ROUTE_PREFIXES)), so the alias reaches the same lookup by (id, the runner\'s owner); the '
+    + "case's own request deletes A's file, which a second run under /runner/documents would find already gone",
   // The skip door's `approvalId` is sent by the census itself (RUNNER_ISOLATION_FIELD_CASES above): a real case is
   // the stronger registration, and the census refuses a key registered both ways.
 };
@@ -1911,12 +1990,14 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
  * any other — and the reading, with file:line, of what it reads.
  */
 export const RUNNER_OPAQUE_BODIES: Readonly<Record<string, { reads: readonly string[]; reading: string }>> = {
-  'PUT /runner/drive/stagings/:id/chunks/:idx request': {
-    reads: [],
-    reading: 'the raw bytes of one drive chunk, streamed into a temporary file and hashed; read only after the staging the '
-      + 'path names is found by (id, the runner\'s owner, this runner) (drive/runner-drive.controller.ts:208), and never '
-      + 'parsed for anything',
-  },
+  ...underEveryDoorPrefix({
+    'PUT /runner/drive/stagings/:id/chunks/:idx request': {
+      reads: [],
+      reading: 'the raw bytes of one drive chunk, streamed into a temporary file and hashed; read only after the staging the '
+        + 'path names is found by (id, the runner\'s owner, this runner) (drive/runner-drive.controller.ts:213), and never '
+        + 'parsed for anything',
+    },
+  }),
   'POST /runner/link-token request': {
     reads: [],
     reading: 'the whole request, for how it arrived: X-Orbit-Request-Host, X-Orbit-Request-Proto, X-Forwarded-For and '
@@ -2113,12 +2194,13 @@ export const SHARED_BY_HAND: Readonly<Record<string, string>> = {
  * answered alike whoever made the one that does.
  */
 export const PUBLIC_ROUTES: Readonly<Record<string, string>> = {
-  'GET /drive/dl/:token':
+  // The same handler under /drive and its /documents alias (drive/drive-routes.ts).
+  ...Object.fromEntries(underEveryDrivePrefix('GET /drive/dl/:token').map((route) => [route,
     'a download URL the owner\'s Files page minted (POST /drive/entries/:id/download-link, behind the owner\'s login): the '
     + 'token is the credential, signed with a key of its own and expiring in five minutes, and it names its owner, file '
     + 'and version itself; the version is read WHERE id, owner and file are the token\'s, and a forged, expired or stale '
     + 'one is the one 404 — drive-download-links.ts:78, :84; nothing in the request but the token names an object — '
-    + 'drive.controller.ts:279',
+    + 'drive.controller.ts:279'])),
   'GET /health':
     'a constant `{status:"ok"}` that touches no table — health/health.controller.ts:27',
   'ALL /gw/codex':
@@ -2164,6 +2246,12 @@ export const PUBLIC_ROUTES: Readonly<Record<string, string>> = {
   'GET /auth/google/callback':
     'Google\'s return: the state is found by its hash and must match the browser cookie the start set — '
     + 'google-login.service.ts:390',
+  'POST /integrations/github/webhook':
+    'GitHub\'s webhook deliveries (docs/design/protected-branch-landing.md §4.7): no session and no token; the credential '
+    + 'is the HMAC-SHA256 of the raw bytes under the deployment\'s saved secret, compared in constant time before '
+    + 'anything is read. It names no Orbit id: a delivery about a repository or installation no workspace was cloned '
+    + 'through is dropped, and the one row it writes is the delivery\'s own, keyed by GitHub\'s delivery id. The pull '
+    + 'requests it is about are read again from GitHub, never changed from the payload — github-webhook.ts:107, :125',
   'GET /integrations/github/callback':
     'GitHub\'s return: the flow is taken by its state\'s hash with one DELETE … RETURNING and must match the browser '
     + 'cookie /integrations/github/start set; it writes only the connection of the account that started that flow. '

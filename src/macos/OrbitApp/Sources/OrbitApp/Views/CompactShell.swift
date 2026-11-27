@@ -415,6 +415,18 @@ private struct CompactSections: View {
             // and the line a rewrite floats (docs/wiki-chat-design.md §9).
             .wikiChatHost()
 
+        // DOCUMENTS — the drive's top level → a folder, a file's page, its earlier versions, Trash or Storage
+        // (docs/mocks/drive, 01-ios). The path is the section's stack, like every section here.
+        case .drive:
+            NavigationStack(path: $model.nav.path) {
+                DriveFolderPage(folderID: nil, name: DriveLogic.title)
+                    .drawerToggle(open: openDrawer)
+                    .navigationDestination(for: NavNode.self) { node in DriveDestination(node: node) }
+            }
+            // The Drive chat: the round button on every Drive page but Trash and Storage, and its two-height sheet
+            // (board drive-chat 02 ⑤-⑧).
+            .driveChatSheetHost()
+
         // SCHEDULED — the timeline and its bottom panel.
         case .scheduled:
             NavigationStack {
@@ -770,7 +782,9 @@ struct NavigationDrawer: View {
                     wiki: model.wiki?.shown == true,
                     // Scheduled (board 01 ①): account-wide, here and nowhere in a workspace's list; away while
                     // the server predates scheduled tasks.
-                    scheduled: model.scheduled.map { !$0.unsupported } ?? false)) { row in
+                    scheduled: model.scheduled.map { !$0.unsupported } ?? false,
+                    // Documents under the Wiki, no count (documents board 01-ios ①), only while the server has it on.
+                    drive: model.drive?.shown == true)) { row in
                     switch row {
                     case .projects:       projectsRow
                     case .wiki:           wikiRow
@@ -803,6 +817,8 @@ struct NavigationDrawer: View {
             .task { await model.wiki?.loadSpaces() }
             // Scheduled's number — the schedules failing or held — read with the drawer like the others.
             .task { await model.scheduled?.load() }
+            // Whether the Drive row is drawn is the capabilities read's answer (`DriveLogic.shown`).
+            .task { await model.drive?.loadCapabilities() }
             // Shared with me, the rail's last group: read with the drawer, then every minute.
             .task { await model.followSharedWithMe() }
             // The action bar *floats over* the rail (ChatGPT-style) rather than being docked below a

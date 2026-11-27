@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -199,7 +200,7 @@ async function fixture(stack: Stack, label: string): Promise<Fixture> {
       title: `Coordinate: ${label}`,
       prompt: `Coordinate: ${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
     },
@@ -271,7 +272,7 @@ async function attempt(
       title: label,
       prompt: label,
       provider: 'claude',
-      status: RunStatus.SUCCEEDED, 
+      turnState: null, 
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       branch: `orbit/${label}`,
@@ -349,7 +350,7 @@ async function coordinatorReads(stack: Stack, f: Fixture): Promise<void> {
   });
   await stack.db.session.update({
     where: { id: f.coordinatorSessionId },
-    data: { status: RunStatus.AWAITING_INPUT },
+    data: { turnState: null },
   });
 }
 

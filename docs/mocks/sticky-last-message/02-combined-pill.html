@@ -1,0 +1,103 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+:root{--text-1:#1f2329;--text-2:#4e5969;--text-3:#86909c;--border:#e5e6eb;--border-subtle:#eef0f3;--bg-sunken:#f6f7f9;--bg-raised:#fff;--brand:#3370ff;--brand-tint:#e8f0ff}
+*{box-sizing:border-box}
+body{margin:0;background:#eceef2;font-family:-apple-system,Inter,'Noto Sans SC',sans-serif;color:var(--text-1)}
+.board{width:2360px;padding:40px;background:#eceef2}
+h1{font-size:30px;margin:0 0 6px}
+.sub{color:var(--text-2);font-size:16px;margin-bottom:28px;line-height:1.6}
+.row{display:flex;gap:28px;align-items:flex-start}
+.col{width:740px}
+.tag{font-size:19px;font-weight:700;margin:0 0 4px}
+.tagnote{font-size:14px;color:var(--text-2);margin:0 0 12px;line-height:1.55;min-height:66px}
+.rec{display:inline-block;background:#00b42a;color:#fff;font-size:12px;border-radius:4px;padding:1px 6px;margin-left:6px;vertical-align:2px}
+.pane{background:#fff;border-radius:10px;border:1px solid #dcdfe6;overflow:hidden;height:560px;display:flex;flex-direction:column;position:relative}
+.hdr{padding:16px 22px 12px;border-bottom:1px solid var(--border-subtle)}
+.hdr .t{font-size:19px;font-weight:700}.hdr .m{font-size:13px;color:var(--text-3);margin-top:6px}
+.chip{display:inline-block;background:#f2f3f5;border-radius:10px;padding:1px 8px;margin-left:6px;color:var(--text-2)}
+.bar{display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid var(--border-subtle);background:var(--bg-sunken);font-size:13px;color:var(--text-1)}
+.bar .l{font-size:12px;color:var(--text-3);flex:none}.bar .x{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar.loading{color:var(--text-3)}
+.scroll{flex:1;position:relative;padding:18px 22px;overflow:hidden}
+.pills{position:absolute;top:10px;left:0;right:0;text-align:center;z-index:3;display:flex;justify-content:center;gap:8px}
+.pill{display:inline-flex;gap:6px;align-items:center;padding:4px 12px;border-radius:999px;border:1px solid var(--border);background:#fff;color:var(--text-2);font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+.pill.new{border-color:var(--brand);color:var(--brand)}
+.card{border:1px solid #c9d8ff;background:#f3f7ff;border-radius:8px;padding:12px 14px;margin:30px 0 14px}
+.card .h{color:var(--brand);font-weight:600;font-size:15px;display:flex;justify-content:space-between}.card .h span{color:var(--text-3);font-weight:400;font-size:12px}
+.card .b{font-size:13px;color:var(--text-2);margin-top:6px}
+.asst{font-size:13.5px;line-height:1.6;color:var(--text-1);margin:10px 0}
+.line{height:9px;background:#eef0f3;border-radius:4px;margin:9px 0}
+.user{margin-left:auto;width:fit-content;max-width:80%;background:var(--brand-tint);border-radius:10px;padding:8px 12px;font-size:13.5px;margin:12px 0}
+.mark{outline:3px solid #f53f3f;outline-offset:2px;border-radius:6px}
+.badge{position:absolute;background:#f53f3f;color:#fff;border-radius:50%;width:24px;height:24px;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;z-index:9}
+.foot{font-size:13.5px;color:var(--text-2);line-height:1.6;margin-top:12px}
+.foot b{color:var(--text-1)}
+table{border-collapse:collapse;width:100%;font-size:14px;background:#fff;margin-top:30px}
+td,th{border:1px solid #dcdfe6;padding:8px 10px;text-align:left;vertical-align:top;line-height:1.5}th{background:#f6f7f9}
+.notes{display:flex;gap:28px;margin-top:28px}.notes>div{flex:1;background:#fff;border-radius:10px;padding:16px 20px;font-size:14px;line-height:1.65}
+.notes h3{margin:0 0 8px;font-size:16px}
+.todo{background:#fff7e8!important;border:1px solid #ffcf8b}
+code{font-family:'JetBrains Mono',monospace;font-size:12.5px;background:#f2f3f5;padding:0 4px;border-radius:3px}
+</style><style>
+.cap{display:inline-flex;align-items:stretch;border-radius:999px;border:1px solid var(--border);background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.12);font-size:13px;max-width:86%;overflow:hidden}
+.cap .p{display:flex;align-items:center;gap:6px;padding:5px 12px 5px 14px;color:var(--brand);min-width:0}
+.cap .p .who{flex:none;font-size:12px;color:var(--text-3)}
+.cap .p .x{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-1);font-weight:500}
+.cap .s{flex:none;display:flex;align-items:center;gap:4px;padding:5px 11px 5px 10px;color:var(--brand);border-left:1px solid var(--border);font-size:12.5px}
+.cap .p.load .x{color:var(--text-3);font-weight:400}
+.phone{width:393px}
+.phone .pane{height:520px}
+.state{font-size:13px;color:var(--text-2);margin:10px 0 0;line-height:1.6}
+</style></head><body><div class="board">
+<h1>合并药丸：上一条消息为主，回到开头为辅</h1>
+<div class="sub">加载逻辑同上一轮：离开底部、向上滚动才开始逐页往前加载；找到你最后一条亲手发的消息后，才显示它。<br>
+这里不再用顶部的置顶栏显示它，而是放进原来「Jump to the beginning」的位置：一个药丸分两段，左边是你的消息（主操作，点了跳到它），右边只有双箭头图标（次操作，点了回到会话开头；悬停提示和读屏文字是 “Jump to the beginning”）。置顶栏保持 11-14 的规则不变。</div>
+<div class="row">
+ <div class="col"><div class="tag">① 找到之前（逐页加载中）</div>
+ <div class="tagnote">刚向上滚动，正在往前翻页。左段先占位，右边的双箭头已经能用。</div><div class="pane"><div class="hdr"><div class="t">协调器行滑动交互设计</div><div class="m">Waiting for your reply · Open · 11/22, 02:53 <span class="chip">● 功能扩展</span></div></div>
+<div class="scroll"><div class="pills"><span class="cap"><span class="p load">↑ <span class="x">Finding your last message…</span></span><span class="s" title="Jump to the beginning"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 11.5l6-6 6 6M6 18.5l6-6 6 6"/></svg></span></span></div>
+<div class="card"><div class="h">Evidence to review <span>2:40 AM</span></div><div class="b">Task “iOS/macOS: Pause/Resume on the project row” submitted revision 1.</div></div>
+<div class="asst">Reading revision 1 of the evidence…</div><div class="line" style="width:92%"></div><div class="line" style="width:78%"></div><div class="line" style="width:85%"></div>
+<div class="card" style="margin-top:18px"><div class="h">Task finished <span>2:47 AM</span></div><div class="b">Web: Pause/Resume on the project row — landed on main.</div></div>
+<div class="line" style="width:88%"></div><div class="line" style="width:64%"></div></div></div>
+ <div class="state">左段占位文字是灰色、不可点；每页到了视图都不动。翻满 30 页仍没找到 → 收回成 ③ 的单段药丸（单独出现时仍带文字 “Jump to the beginning”，只有图标会看不懂）。</div></div>
+ <div class="col"><div class="tag">② 找到了 <span class="rec">主状态</span></div>
+ <div class="tagnote">左段显示你的消息（单行，超长省略），蓝色箭头 + 深色文字，是视觉主体；右边只有双箭头图标。</div><div class="pane"><div class="hdr"><div class="t">协调器行滑动交互设计</div><div class="m">Waiting for your reply · Open · 11/22, 02:53 <span class="chip">● 功能扩展</span></div></div>
+<div class="scroll"><div class="pills"><span class="cap mark"><span class="p">↑ <span class="who">You:</span><span class="x">Pause 和 Resume 先做服务器和 Web，iOS 等设计图确认后再派</span></span><span class="s" title="Jump to the beginning"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 11.5l6-6 6 6M6 18.5l6-6 6 6"/></svg></span></span></div>
+<div class="card"><div class="h">Evidence to review <span>2:40 AM</span></div><div class="b">Task “iOS/macOS: Pause/Resume on the project row” submitted revision 1.</div></div>
+<div class="asst">Reading revision 1 of the evidence…</div><div class="line" style="width:92%"></div><div class="line" style="width:78%"></div><div class="line" style="width:85%"></div>
+<div class="card" style="margin-top:18px"><div class="h">Task finished <span>2:47 AM</span></div><div class="b">Web: Pause/Resume on the project row — landed on main.</div></div>
+<div class="line" style="width:88%"></div><div class="line" style="width:64%"></div></div></div>
+ <div class="state">点左段 → 滚到你那条消息，它上方照常按需加载。<br>点双箭头 → 和现在的「Jump to the beginning」一样，一路翻到开头。<br>栏里的文字是示例。</div></div>
+ <div class="col"><div class="tag">③ 不需要左段时</div>
+ <div class="tagnote">在底部：整个药丸不显示（同现状）。<br>你从没发过消息（任务会话），或顶部置顶栏已经在显示同一条消息：只剩原来的单段药丸。</div><div class="pane"><div class="hdr"><div class="t">协调器行滑动交互设计</div><div class="m">Waiting for your reply · Open · 11/22, 02:53 <span class="chip">● 功能扩展</span></div></div><div class="bar"><span class="l">↑ Your question</span><span class="x">Pause 和 Resume 先做服务器和 Web，iOS 等设计图确认后再派</span></div>
+<div class="scroll"><div class="pills"><span class="pill">↑ Jump to the beginning</span></div>
+<div class="card"><div class="h">Evidence to review <span>2:40 AM</span></div><div class="b">Task “iOS/macOS: Pause/Resume on the project row” submitted revision 1.</div></div>
+<div class="asst">Reading revision 1 of the evidence…</div><div class="line" style="width:92%"></div><div class="line" style="width:78%"></div><div class="line" style="width:85%"></div>
+<div class="card" style="margin-top:18px"><div class="h">Task finished <span>2:47 AM</span></div><div class="b">Web: Pause/Resume on the project row — landed on main.</div></div>
+<div class="line" style="width:88%"></div><div class="line" style="width:64%"></div></div></div>
+ <div class="state">这一帧：置顶栏已在显示这条消息，药丸不重复它。</div></div>
+</div>
+<div class="row" style="margin-top:34px">
+ <div class="col phone"><div class="tag">④ 手机宽度（393）</div>
+ <div class="tagnote">只有图标后，消息能多占宽度（约 85%）。</div><div class="pane"><div class="hdr"><div class="t">协调器行滑动交互设计</div><div class="m">Waiting for your reply · Open</div></div>
+<div class="scroll"><div class="pills"><span class="cap mark" style="max-width:94%"><span class="p">↑ <span class="x">Pause 和 Resume 先做服务器和 Web，iOS 等设计图确认后再派</span></span><span class="s" title="Jump to the beginning"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 11.5l6-6 6 6M6 18.5l6-6 6 6"/></svg></span></span></div>
+<div class="card"><div class="h">Evidence to review <span>2:40 AM</span></div><div class="b">Task “iOS/macOS: Pause/Resume on the project row” submitted revision 1.</div></div>
+<div class="asst">Reading revision 1 of the evidence…</div><div class="line" style="width:92%"></div><div class="line" style="width:78%"></div><div class="line" style="width:85%"></div>
+<div class="card" style="margin-top:18px"><div class="h">Task finished <span>2:47 AM</span></div><div class="b">Web: Pause/Resume on the project row — landed on main.</div></div>
+<div class="line" style="width:88%"></div><div class="line" style="width:64%"></div></div></div></div>
+ <div style="flex:1">
+ <table style="margin-top:0">
+ <tr><th style="width:34%">情况</th><th>药丸显示</th></tr>
+ <tr><td>在底部</td><td>不显示（同现状）</td></tr>
+ <tr><td>已离开底部，正在往前找</td><td>[ ↑ Finding your last message… │ ⇈ ]</td></tr>
+ <tr><td>找到了，且置顶栏没在显示它</td><td>[ ↑ You: &lt;你的消息&gt; │ ⇈ ]</td></tr>
+ <tr><td>置顶栏已在显示同一条消息</td><td>[ ↑ Jump to the beginning ]（同现状）</td></tr>
+ <tr><td>从没发过 / 30 页内没找到</td><td>[ ↑ Jump to the beginning ]（同现状）</td></tr>
+ <tr><td>正在执行「回到开头」</td><td>Loading earlier messages…（同现状）</td></tr>
+ </table>
+ <div class="notes" style="margin-top:20px">
+ <div><h3>会改的文件</h3><code>WorkspaceView.tsx</code>：<code>.chat-older-top</code> 的药丸改成两段；measure() 里加「离开底部后往前找你最后一条消息」。<code>index.css</code>：新增两段药丸样式。置顶栏逻辑不动。<br>测试：stickyWake 测试加「消息在更早一页 → 药丸左段显示它、点击滚到它」「在底部不加载」。</div>
+ <div class="todo"><h3>待你定</h3>1. 左段前缀用「You:」还是不要前缀（④ 是不要前缀的样子）？<br>2. 双箭头用蓝色（同左段箭头，如图）还是灰色（更像次操作）？<br>3. 找的过程中左段显示占位 ①，还是完全不显示、找到才出现？<br>4. 先只改 Web，还是 iOS / Android 一起？</div>
+ </div></div>
+</div>
+</div></body></html>

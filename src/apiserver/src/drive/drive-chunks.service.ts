@@ -6,7 +6,7 @@ import { FilesService } from '../files/files.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
- * The most one drive chunk holds (docs/orbit-files-drive-technical-design.md §2.2): small enough to be one temporary file,
+ * The most one drive chunk holds (docs/drive-technical-design.md §2.2): small enough to be one temporary file,
  * one file_blob and one signed S3 PUT, and to read whole when serving part of it.
  */
 export const DRIVE_CHUNK_MAX = 8 * 1024 * 1024;

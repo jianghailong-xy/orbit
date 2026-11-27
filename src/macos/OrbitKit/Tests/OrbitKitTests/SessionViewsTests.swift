@@ -110,6 +110,20 @@ final class SessionViewsTests: XCTestCase {
         XCTAssertEqual(SessionListTime.format(for: approval, now: now), "just now")
     }
 
+    /// A settled row says when it was listed, so its time agrees with where it sits (owner
+    /// 2026-11-26): output that moves only `lastTurnAt` (a background job's) does not change it.
+    func testASettledRowDatesItsListingNotItsLastActivity() throws {
+        let now = try XCTUnwrap(RelativeTime.parse("2026-08-26T12:00:00Z"))
+        let woken = Session(id: "woken", title: "Woken", status: .awaitingInput,
+                            agentId: nil, assignedRunnerId: nil, pendingApprovals: nil,
+                            branch: nil, updatedAt: nil,
+                            lastTurnAt: "2026-08-26T11:55:00Z",
+                            listedAt: "2026-08-19T12:00:00Z")
+
+        XCTAssertEqual(SessionListTime.format(for: woken, now: now), RelativeTime.format("2026-08-19T12:00:00Z", now: now))
+        XCTAssertNotEqual(SessionListTime.format(for: woken, now: now), "5m ago")
+    }
+
     /// The list nests the agent — filtering must read `agent.id`, not the (absent) flat `agentId`.
     func testForAgentFiltersByNestedAgent() throws {
         let json = """

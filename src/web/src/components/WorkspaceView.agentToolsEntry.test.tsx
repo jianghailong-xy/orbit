@@ -27,6 +27,7 @@ const RUNNER_ID = '0195c0de-0000-7000-8000-0000000000d1';
 const WORKSPACE_PUBLIC = encodeId('0195c0de-0000-7000-8000-0000000000d2');
 const REPORTED = encodeId('0195c0de-0000-7000-8000-0000000000d3');
 const SILENT = encodeId('0195c0de-0000-7000-8000-0000000000d4');
+const FAILED = encodeId('0195c0de-0000-7000-8000-0000000000d5');
 
 const RUNNER = {
   id: RUNNER_ID,
@@ -52,7 +53,7 @@ const row = (id: string, title: string) => ({
   createdAt: '2026-11-14T09:00:00Z',
   lastTurnAt: '2026-11-14T09:05:00Z',
 });
-const ROWS = [row(REPORTED, 'Rotate the staging key'), row(SILENT, 'An older runner')];
+const ROWS = [row(REPORTED, 'Rotate the staging key'), row(SILENT, 'An older runner'), row(FAILED, 'A server that would not start')];
 const REPORT = {
   v: 1,
   at: '2026-11-14T09:04:00Z',
@@ -69,6 +70,7 @@ const REPORT = {
 const DETAIL: Record<string, Record<string, unknown>> = {
   [REPORTED]: { ...ROWS[0], agentTools: REPORT },
   [SILENT]: { ...ROWS[1], agentTools: null },
+  [FAILED]: { ...ROWS[2], agentTools: { ...REPORT, mcp: { status: 'failed', tools: 0 } } },
 };
 
 class FakeEventSource {
@@ -111,7 +113,7 @@ async function mount(sessionId: string): Promise<void> {
     );
   });
   await act(async () => {
-    await vi.waitFor(() => expect(mounted().querySelectorAll('.session-row')).toHaveLength(2), { timeout: 20_000, interval: 20 });
+    await vi.waitFor(() => expect(mounted().querySelectorAll('.session-row')).toHaveLength(ROWS.length), { timeout: 20_000, interval: 20 });
   });
   await settle();
 }
@@ -125,7 +127,7 @@ async function click(element: Element | null | undefined, what: string): Promise
 }
 
 async function openHeaderMenu(): Promise<HTMLElement> {
-  await click(mounted().querySelector('.workspace-header button[title="More actions"]'), 'the header ⋯ button');
+  await click(mounted().querySelector('.workspace-header button[aria-label="More actions"]'), 'the header ⋯ button');
   await act(async () => {
     await vi.waitFor(() => expect(document.querySelector('[role="menu"]:not([data-closed])')).not.toBeNull(), {
       timeout: 10_000,
@@ -156,7 +158,7 @@ beforeEach(() => {
     if (path === '/workspaces') {
       return reply([{ id: WORKSPACE_PUBLIC, name: 'orbit', runnerId: RUNNER_ID, createdAt: '2026-01-01T00:00:00Z', lastProvider: 'claude' }]);
     }
-    for (const id of [REPORTED, SILENT]) {
+    for (const id of [REPORTED, SILENT, FAILED]) {
       if (path.startsWith(`/sessions/${id}`)) {
         if (path.includes('/events/page')) return reply({ events: [], hasMore: false });
         if (path.includes('/diff')) return reply({ files: [] });
@@ -211,12 +213,15 @@ describe('the session menu’s door to Agent tools', { timeout: 60_000 }, () => 
     await mount(REPORTED);
     const menu = await openHeaderMenu();
     const items = rows(menu);
-    expect(items[0]).toMatch(/^Find in session/);
-    expect(items[1]).toBe('Agent toolsConnected');
-    const door = [...menu.querySelectorAll<HTMLElement>('[role="menuitem"]')][1];
+    const find = items.findIndex((row) => row.startsWith('Find in session'));
+    expect(find).toBeGreaterThan(-1);
+    expect(items[find + 1]).toBe('Agent toolsConnected');
+    const door = [...menu.querySelectorAll<HTMLElement>(':scope > [role="menuitem"]')][find + 1];
     const word = door.querySelector('.agent-tools-menu-status');
     expect(word?.textContent).toBe('Connected');
     expect(word?.className).toContain('is-ok');
+    // Connected is said on the row alone, never by the title.
+    expect(document.querySelector('.workspace-header .session-agent-tools-pill')).toBeNull();
 
     await click(door, 'the Agent tools row');
     const drawer = await vi.waitFor(() => {
@@ -232,10 +237,25 @@ describe('the session menu’s door to Agent tools', { timeout: 60_000 }, () => 
     expect(drawer.querySelectorAll('input, textarea, [role="switch"]')).toHaveLength(0);
   });
 
+  // docs/mocks/session-header-menu ③-c: a failed connection is said by the title, and opens the same drawer.
+  it('puts a pill by the title when the connection failed, which opens the drawer', async () => {
+    await mount(FAILED);
+    const pill = await vi.waitFor(() => {
+      const found = document.querySelector<HTMLElement>('.workspace-header .session-agent-tools-pill');
+      expect(found).not.toBeNull();
+      return found!;
+    }, { timeout: 10_000, interval: 20 });
+    expect(pill.textContent?.trim()).toBe('Agent tools not connected');
+    await click(pill, 'the Agent tools pill');
+    await vi.waitFor(() =>
+      expect([...document.querySelectorAll('[role="dialog"]')].some((d) => d.querySelector('.agent-tools'))).toBe(true),
+    );
+  });
+
   it('says Not reported for a session whose runner sent no report', async () => {
     await mount(SILENT);
     const menu = await openHeaderMenu();
-    expect(rows(menu)[1]).toBe('Agent toolsNot reported');
+    expect(rows(menu)).toContain('Agent toolsNot reported');
     expect(menu.querySelector('.agent-tools-menu-status')?.className).toContain('is-quiet');
   });
 });

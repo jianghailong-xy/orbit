@@ -243,6 +243,8 @@ struct ComposerView: View {
     @State private var showPhotoPicker = false
     @State private var showFileImporter = false
     @State private var pickedPhotos: [PhotosPickerItem] = []
+    /// The + menu's Drive: Add from Drive (docs/mocks/drive, 01-ios ⑭).
+    @State private var showDrivePicker = false
     #endif
 
     // The models of the current engine and provider, in catalog order (Opus → Haiku). The model control's
@@ -1406,15 +1408,21 @@ struct ComposerView: View {
                 #else
                 pickFiles(images: true)
                 #endif
-            } label: { Label("Upload Image", systemImage: "photo") }
+            } label: { Label("Image", systemImage: "photo") }
             Button {
                 #if os(iOS)
                 showFileImporter = true
                 #else
                 pickFiles(images: false)
                 #endif
-            } label: { Label("Upload File", systemImage: "square.and.arrow.up") }
+            } label: { Label("File", systemImage: "paperclip") }
             #if os(iOS)
+            // A drive file by its path (D21): offered while the server has Drive on, as the web's `drive` item.
+            if app.drive?.shown == true {
+                Button { showDrivePicker = true } label: {
+                    Label("Drive", systemImage: "folder")
+                }
+            }
             // Paste an image from the clipboard (macOS does this via the ⌘V monitor above). Only
             // shown when the clipboard actually holds an image — `hasImages` is a non-consuming
             // check, so it doesn't trigger the paste-access banner until the user taps to paste.
@@ -1454,6 +1462,16 @@ struct ComposerView: View {
         .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.item],
                       allowsMultipleSelection: true) { result in
             if case .success(let urls) = result { Task { await attachFiles(urls) } }
+        }
+        // The picked files go into the draft as their paths on the agent's mount; nothing is uploaded again.
+        .sheet(isPresented: $showDrivePicker) {
+            DrivePickerSheet(project: app.session(id: console.sessionID)?.projectMembership
+                                    .map { (id: $0.projectId, title: $0.projectTitle) }) { paths in
+                let text = console.composerText
+                let lead = text.isEmpty || text.hasSuffix(" ") || text.hasSuffix("\n") ? "" : " "
+                console.composerText = text + lead + paths.joined(separator: " ") + " "
+            }
+            .environment(app)
         }
         #endif
     }

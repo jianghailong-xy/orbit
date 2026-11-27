@@ -23,6 +23,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -109,7 +110,8 @@ func pruneAntigravityTokenCopies() {
 // (antigravityEnv): no variable that names another sign-in or endpoint (antigravityCredentialEnvKey),
 // and a D-Bus address that reaches nothing, so agy keeps to the token file in the session's directory
 // instead of a desktop keyring, whose sign-in is filed under one key for every agy on the machine
-// (contract §16.2). The agent's commands inherit both (§3.2).
+// (contract §16.2) — and on macOS the variable that keeps it off the Keychain (antigravityTokenFileOnlyEnv).
+// The agent's commands inherit them (§3.2).
 func antigravityGoogleEnv(env []string, geminiDir string) []string {
 	kept := make([]string, 0, len(env))
 	for _, entry := range env {
@@ -118,9 +120,30 @@ func antigravityGoogleEnv(env []string, geminiDir string) []string {
 			kept = append(kept, entry)
 		}
 	}
-	return replaceEnv(kept, map[string]string{
+	return replaceEnv(kept, antigravityTokenFileOnlyEnv(map[string]string{
 		"DBUS_SESSION_BUS_ADDRESS": "unix:path=" + filepath.Join(geminiDir, "absent-dbus"),
-	})
+	}))
+}
+
+// antigravitySSHConnection is the SSH_CONNECTION a Google-mode agy is given where it must not reach a
+// keychain: any non-empty value makes agy store its sign-in in the token file of its Gemini directory
+// ("Using file-based token storage because SSH session detected"), and skip opening a browser.
+const antigravitySSHConnection = "127.0.0.1 1 127.0.0.1 2"
+
+// antigravityKeychainPlatform is whether agy here would otherwise keep a Google sign-in in a keychain
+// the runner's own user can reach. On macOS agy (go-keyring, through /usr/bin/security) reads the
+// login Keychain item gemini/antigravity first, and only falls back to the token file when there is
+// none (contract §16.12): one sign-in made by hand on the Mac would be every session's account. A
+// variable only so a test on Linux can stand in for a Mac.
+var antigravityKeychainPlatform = runtime.GOOS == "darwin"
+
+// antigravityTokenFileOnlyEnv adds to vars, where agy would reach a keychain, what keeps a Google-mode
+// agy to the token file in its own Gemini directory. On Linux the unreachable D-Bus does that alone.
+func antigravityTokenFileOnlyEnv(vars map[string]string) map[string]string {
+	if antigravityKeychainPlatform {
+		vars["SSH_CONNECTION"] = antigravitySSHConnection
+	}
+	return vars
 }
 
 // antigravityGoogleLogFile is the log of a Google-mode agy of the session: agy's own log is the only

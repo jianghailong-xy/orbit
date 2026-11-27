@@ -31,18 +31,78 @@ func fakeDriveMount(t *testing.T, mounted bool) {
 	}
 	fstype := "ext4"
 	if mounted {
-		fstype = "fuse.orbit-files"
+		fstype = "fuse.orbit-drive"
 	}
-	writeTestFile(t, mountinfoPath, fmt.Sprintf("10 9 0:33 / %s rw - %s orbit-files rw\n", driveMountPath, fstype))
+	writeTestFile(t, mountinfoPath, fmt.Sprintf("10 9 0:33 / %s rw - %s orbit-drive rw\n", driveMountPath, fstype))
+}
+
+// A Pod of an older CSI driver has its drive at /run/orbit-documents (documents.orbit.dev) or /run/orbit-files
+// (files.orbit.dev), mounted by a daemon whose FUSE type is still fuse.orbit-documents or fuse.orbit-files: the runner
+// takes whichever root it has, and any of the three types as the drive.
+func TestDriveRootOfEveryDriver(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "run", "orbit-drive")
+	documents, files := filepath.Join(dir, "run", "orbit-documents"), filepath.Join(dir, "run", "orbit-files")
+	pick := func() string { return pickDriveRoot(root, documents, files) }
+	if got := pick(); got != root {
+		t.Fatalf("with no directory: %s", got)
+	}
+	if err := os.MkdirAll(files, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := pick(); got != files {
+		t.Fatalf("in a Pod of files.orbit.dev: %s", got)
+	}
+	if err := os.MkdirAll(documents, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(files); err != nil {
+		t.Fatal(err)
+	}
+	if got := pick(); got != documents {
+		t.Fatalf("in a Pod of documents.orbit.dev: %s", got)
+	}
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := pick(); got != root {
+		t.Fatalf("with both: %s", got)
+	}
+	if err := os.Remove(documents); err != nil {
+		t.Fatal(err)
+	}
+	if got := pick(); got != root {
+		t.Fatalf("in a Pod of drive.orbit.dev: %s", got)
+	}
+	if driveRootPath != "/run/orbit-drive" || strings.Join(driveLegacyRootPaths, " ") != "/run/orbit-documents /run/orbit-files" {
+		t.Fatalf("the runner looks for %s, then %v", driveRootPath, driveLegacyRootPaths)
+	}
+
+	for fstype, want := range map[string]bool{"fuse.orbit-drive": true, "fuse.orbit-documents": true, "fuse.orbit-files": true, "fuse.sshfs": false} {
+		fakeDriveMount(t, false)
+		writeTestFile(t, mountinfoPath, fmt.Sprintf("10 9 0:33 / %s rw - %s x rw\n", driveMountPath, fstype))
+		if got := driveMounted(); got != want {
+			t.Errorf("%s at the drive's path: mounted = %t", fstype, got)
+		}
+	}
+}
+
+// ~/Documents and ~/Files are ordinary local paths now, not the drive.
+func TestDriveHomeAliasesNoLongerResolve(t *testing.T) {
+	for _, p := range []string{"~/Documents/Proj/r.md", "/home/orbit/Documents/Proj/r.md", "~/Files/Proj/r.md", "/home/orbit/Files/Proj/r.md"} {
+		if _, ok := driveMountRelative(p); ok {
+			t.Errorf("%q still resolves to the drive", p)
+		}
+	}
 }
 
 func TestDrivePathNormalization(t *testing.T) {
-	for _, p := range []string{"/Proj/r.md", "Proj/r.md", "~/Files/Proj/r.md", "/home/orbit/Files/Proj/r.md", "/run/orbit-files/drive/Proj/r.md"} {
+	for _, p := range []string{"/Proj/r.md", "Proj/r.md", "~/Drive/Proj/r.md", "/home/orbit/Drive/Proj/r.md", "/run/orbit-drive/drive/Proj/r.md", "/run/orbit-documents/drive/Proj/r.md", "/run/orbit-files/drive/Proj/r.md"} {
 		if got, err := normalizeDrivePath(p); err != nil || got != "/Proj/r.md" {
 			t.Errorf("normalize %q = %q, %v", p, got, err)
 		}
 	}
-	for _, p := range []string{"../Proj/r.md", "~/Files/../Proj/r.md", "/Proj/../r.md"} {
+	for _, p := range []string{"../Proj/r.md", "~/Drive/../Proj/r.md", "/Proj/../r.md"} {
 		if _, err := normalizeDrivePath(p); err == nil {
 			t.Errorf("accepted traversal %q", p)
 		}
@@ -162,7 +222,7 @@ func TestDrivePutChunksAndRecoversCommit(t *testing.T) {
 		}
 	})
 	s := &mcpServer{sessionID: fileTestSession, t: newCallerTransport(srv.URL, "runner-secret", runnerCallerMCP)}
-	reply := fileToolText(t, s, "drive_put", map[string]interface{}{"localPath": local, "path": "~/Files/Proj/r.md"}, false)
+	reply := fileToolText(t, s, "drive_put", map[string]interface{}{"localPath": local, "path": "~/Drive/Proj/r.md"}, false)
 	var answer struct {
 		ID, Path, Link, VersionID string
 		SizeBytes                 int
@@ -227,7 +287,7 @@ func TestDriveGetVerifiesEachChunk(t *testing.T) {
 		}
 	})
 	s := &mcpServer{sessionID: fileTestSession, t: newCallerTransport(srv.URL, "runner-secret", runnerCallerMCP)}
-	args := map[string]interface{}{"path": "/run/orbit-files/drive/Proj/r.md"}
+	args := map[string]interface{}{"path": "/run/orbit-drive/drive/Proj/r.md"}
 	expected := filepath.Join(uploadsDir(fileTestSession), "drive", "e1", "r.md")
 	corrupt = true
 	if reply := fileToolText(t, s, "drive_get", args, true); !strings.Contains(reply, "sha256") {
@@ -308,22 +368,26 @@ func TestDriveCLIListsMovesDeletesAndOverwrites(t *testing.T) {
 	checkout := t.TempDir()
 	chdirForTest(t, checkout)
 	writeTestFile(t, filepath.Join(checkout, "empty"), "")
-	for _, call := range []struct {
-		args []string
-		want string
-	}{
-		{[]string{"ls", "--cursor", "next+1", "--json"}, `"nextCursor":"next+2"`},
-		{[]string{"mv", "~/Files/Proj/r.md", "--json", "Archive/r.md"}, `"path":"/Archive/r.md"`},
-		{[]string{"put", "empty", "/r.md", "--json"}, `"newVersion":true`},
-		{[]string{"rm", "/r.md", "--json"}, `"deleted":true`},
-	} {
-		if call.args[0] == "rm" {
-			t.Setenv("ORBIT_SESSION_ID", "")
-		}
-		var out, stderr bytes.Buffer
-		if err := runOrbitCLI(append([]string{"drive"}, call.args...), strings.NewReader(""), &out, &stderr); err != nil ||
-			!strings.Contains(out.String(), call.want) {
-			t.Fatalf("drive %v = %s %s, %v", call.args, out.String(), stderr.String(), err)
+	// `orbit drive`, and `orbit documents`, its name while Drive was called Drive, which still works.
+	for _, command := range []string{"drive", "documents"} {
+		t.Setenv("ORBIT_SESSION_ID", fileTestSession)
+		for _, call := range []struct {
+			args []string
+			want string
+		}{
+			{[]string{"ls", "--cursor", "next+1", "--json"}, `"nextCursor":"next+2"`},
+			{[]string{"mv", "~/Drive/Proj/r.md", "--json", "Archive/r.md"}, `"path":"/Archive/r.md"`},
+			{[]string{"put", "empty", "/r.md", "--json"}, `"newVersion":true`},
+			{[]string{"rm", "/r.md", "--json"}, `"deleted":true`},
+		} {
+			if call.args[0] == "rm" {
+				t.Setenv("ORBIT_SESSION_ID", "")
+			}
+			var out, stderr bytes.Buffer
+			if err := runOrbitCLI(append([]string{command}, call.args...), strings.NewReader(""), &out, &stderr); err != nil ||
+				!strings.Contains(out.String(), call.want) {
+				t.Fatalf("%s %v = %s %s, %v", command, call.args, out.String(), stderr.String(), err)
+			}
 		}
 	}
 }
@@ -378,5 +442,77 @@ func TestFileUploadOfADriveFileIsSecretScanned(t *testing.T) {
 	}
 	if len(api.calls) != 0 {
 		t.Errorf("a drive file holding a secret was sent: %v", api.calls)
+	}
+}
+
+// tools/list names the Drive tools drive_* and never their names while Drive was called Documents, documents_*; a call
+// by either name is served, as the tool it is now, through the whole tools/call path, and an ORBIT_MCP_TOOLS list that
+// names an old name serves the tool too.
+func TestDriveToolsAreListedAndTheirDocumentsNamesStillServed(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	checkout := t.TempDir()
+	chdirForTest(t, checkout)
+	writeTestFile(t, filepath.Join(checkout, "r.md"), "x")
+	var routes []string
+	srv := newDriveTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		routes = append(routes, r.Method+" "+r.URL.Path)
+		switch r.Method + " " + r.URL.Path {
+		case "GET /api/runner/drive/stat":
+			w.WriteHeader(404)
+			fmt.Fprint(w, `{"code":"DRIVE_ENTRY_NOT_FOUND"}`)
+		case "POST /api/runner/drive/create":
+			fmt.Fprint(w, `{"id":"e1","kind":"FILE","path":"/r.md","currentVersionId":"v0"}`)
+		case "POST /api/runner/drive/stagings":
+			fmt.Fprint(w, `{"id":"s1"}`)
+		case "PUT /api/runner/drive/stagings/s1/chunks/0":
+			w.WriteHeader(200)
+		case "POST /api/runner/drive/commit":
+			fmt.Fprint(w, `{"entryId":"e1","versionId":"v0","newVersion":false,"sizeBytes":1}`)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	})
+
+	listed := map[string]bool{}
+	resp, _ := (&mcpServer{allowPermissionPrompt: true}).handle(&rpcRequest{ID: json.RawMessage("1"), Method: "tools/list"})
+	for _, tool := range resp.Result.(map[string]interface{})["tools"].([]map[string]interface{}) {
+		listed[tool["name"].(string)] = true
+	}
+	for old, current := range driveToolAliases {
+		if !listed[current] || listed[old] {
+			t.Errorf("tools/list: %s listed %v, %s listed %v", current, listed[current], old, listed[old])
+		}
+	}
+
+	t.Setenv(envMCPTools, "documents_put")
+	for _, call := range []struct {
+		name string
+		s    *mcpServer
+	}{
+		{"drive_put", &mcpServer{sessionID: fileTestSession, t: newCallerTransport(srv.URL, "runner-secret", runnerCallerMCP)}},
+		{"documents_put", &mcpServer{sessionID: fileTestSession, t: newCallerTransport(srv.URL, "runner-secret", runnerCallerMCP)}},
+		{"documents_put", &mcpServer{sessionID: fileTestSession, t: newCallerTransport(srv.URL, "runner-secret", runnerCallerMCP), onlyTools: mcpToolsFromEnv()}},
+	} {
+		s := call.s
+		routes = nil
+		params, _ := json.Marshal(map[string]interface{}{"name": call.name, "arguments": map[string]interface{}{"localPath": "r.md", "path": "/r.md"}})
+		resp, _ := s.handle(&rpcRequest{JSONRPC: "2.0", ID: json.RawMessage("2"), Method: "tools/call", Params: params})
+		result, _ := resp.Result.(map[string]interface{})
+		content, _ := result["content"].([]map[string]interface{})
+		if result == nil || result["isError"] == true || len(content) != 1 {
+			t.Fatalf("%s answered %#v", call.name, resp)
+		}
+		var answer struct {
+			Operation string
+			Entity    struct{ ID, Link string }
+		}
+		if err := json.Unmarshal([]byte(content[0]["text"].(string)), &answer); err != nil || answer.Operation != "drive_put" ||
+			answer.Entity.ID != "e1" || answer.Entity.Link != "orbit-drive:e1" {
+			t.Errorf("%s answer = %v, %v", call.name, content[0]["text"], err)
+		}
+		if len(routes) != 5 {
+			t.Errorf("%s sent %v", call.name, routes)
+		}
 	}
 }

@@ -16,6 +16,7 @@ import { api, getSession, type SessionDetail } from '../api';
 import { landingClockTime } from './ProjectPanoramaHeader';
 import { ProjectLandingsWindow } from './ProjectLandingsWindow';
 import landingCheckFixture from '../lib/landingCheckTimeline.fixture.json';
+import { hoverTooltip } from '../test/tooltipHover';
 
 vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api')>();
@@ -454,7 +455,7 @@ describe('a landing in the window', () => {
     expect(line.querySelector('.sr-only')?.textContent).toBe('Orbit runs these landings — nothing to type here.');
     const door = foot.querySelector<HTMLButtonElement>('button.landing-page-foot-open')!;
     expect(door.textContent).toBe('Open coordinator');
-    expect(door.getAttribute('title')).toBe('Decisions: the coordinator');
+    expect(await hoverTooltip(door)).toBe('Decisions: the coordinator');
     expect(door.querySelector('.anticon-user')).not.toBeNull();
     expect(foot.querySelector('input, textarea, [contenteditable]')).toBeNull();
     await click(door, 'Open coordinator');

@@ -221,6 +221,14 @@ class GuestSessionsTest {
         assertEquals("Runs on Ana’s machine", state(GuestRunState.AWAITING_INPUT).hint("Ana"))
     }
 
+    @Test fun aRetryWaitingOnItsWakeIsFollowedAtTheWaitingPace() {
+        // PENDING on a wake is an armed retry, hours out on a spent quota; a queued turn is followed closely.
+        val retry = GuestState(runStatus = "AWAITING_INPUT", lifecycleState = "OPEN", phase = "PENDING", released = false, waitingOn = "WAKE")
+        assertEquals(30_000L, GuestFollow.delay(retry, moved = false))
+        assertEquals(4_000L, GuestFollow.delay(retry, moved = true))
+        assertEquals(4_000L, GuestFollow.delay(retry.copy(runStatus = "PENDING", waitingOn = null), moved = false))
+    }
+
     @Test fun endedRestartsOnTheOwnersMachineAndIsNoLongerFollowed() {
         for (s in listOf(state(GuestRunState.ENDED), state(GuestRunState.SUCCEEDED), state(GuestRunState.FAILED),
             state(GuestRunState.RUNNING, lifecycle = "COMPLETED"))) {

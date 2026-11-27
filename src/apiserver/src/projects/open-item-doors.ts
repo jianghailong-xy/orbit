@@ -34,6 +34,9 @@ export const OPEN_ITEM_DOOR_SOURCE_JOBS = [
   'LAND_PROMOTION',
   /** §10.6 O-J4: the project's observations failing, `IE:observe:<projectId>`. */
   'OBSERVE_LANDING',
+  /** docs/design/project-line-upstream-sync.md §4.1: the project branch could not absorb the upstream,
+   *  `IMS:<serial_key>`. About the line, so it names no task. */
+  'LINE_SYNC',
   'TASK_FAILURE',
   'DIRECT',
 ] as const;
@@ -266,6 +269,25 @@ const createSyncTask = (holder: OpenItemDoorAssignee): OpenItemDoor => door(
   'MCP',
   'REPAIR',
   ['SUCCESSOR_FILED'],
+  {
+    mcp: 'task_create',
+    route: '/runner/tasks',
+    resolving: true,
+  },
+);
+
+/**
+ * File the sync task that resolves a line-sync item (docs/design/project-line-upstream-sync.md §4.4): `task_create`
+ * with `fixesOpenItemId`. Filing it closes nothing; its landing is the only one the hold lets through, and that
+ * landing closes the item LANDED (L-T3) — the resolution this door leads to.
+ */
+const createLineSyncTask = (holder: OpenItemDoorAssignee): OpenItemDoor => door(
+  holder,
+  'task-create-line-sync',
+  'task_create',
+  'MCP',
+  'REPAIR',
+  ['LANDED'],
   {
     mcp: 'task_create',
     route: '/runner/tasks',
@@ -557,6 +579,11 @@ export function sourceJobForOpenItem(input: OpenItemDoorInput): OpenItemDoorSour
   // §10.6 O-J4's item: the project's observations failing. It names no task and no promotion, so it
   // is read by its job's kind before the fallbacks below would file it as either.
   if (jobKind === 'OBSERVE_LANDING') return 'OBSERVE_LANDING';
+  // The line-sync item: a task landing's MAIN_SYNC conflict, filed about the project branch with no task
+  // (docs/design/project-line-upstream-sync.md §4.1). A legacy MAIN_SYNC item names its task and keeps its cell.
+  if (input.kind === 'INTEGRATION_CONFLICT' && !input.taskId && !input.promotionId && phase === 'MAIN_SYNC') {
+    return 'LINE_SYNC';
+  }
   if (input.kind === 'TASK_FAILED') return 'TASK_FAILURE';
   if (input.kind === 'COORDINATOR_QUESTION' || input.kind === 'FUSE_PAUSED'
       || input.kind === 'START_REQUEST' || input.kind === 'DONE_REQUEST') return 'DIRECT';
@@ -697,6 +724,19 @@ export function doorsForCell(cell: Pick<OpenItemDoorCell,
     return doors;
   }
 
+  if (sourceJob === 'LINE_SYNC') {
+    // docs/design/project-line-upstream-sync.md §4.1: the line could not absorb the upstream. No task is acted on —
+    // no reopen, comment, cancel or rerun — because no task's work caused it. The coordinator files one sync task
+    // (non-resolving: its landing closes the item, L-T3), or closes the item by hand when the upstream will fix it
+    // (L-T4); the owner can send it back to the coordinator.
+    if (assignee === 'COORDINATOR') doors.push(openCoordinator(assignee), askOwner(assignee));
+    else doors.push(askAgain(assignee));
+    doors.push(createLineSyncTask(assignee), createFixTask(assignee), handClose(assignee));
+    if (assignee === 'COORDINATOR') doors.push(handOver(assignee));
+    doors.push(openLanding(assignee));
+    return doors;
+  }
+
   // The coordinator and owner use the same integration_retry decision.  A conflict is different:
   // replaying the same source cannot repair it, so the table names the concrete branch-changing
   // operation that does.
@@ -757,7 +797,7 @@ function buildTable(): OpenItemDoorCell[] {
   const integrationKinds = OPEN_ITEM_DOOR_TODO_TYPES.filter(isIntegration);
   for (const todoType of integrationKinds) {
     for (const sourceJob of OPEN_ITEM_DOOR_SOURCE_JOBS.filter((job) =>
-      job !== 'TASK_FAILURE' && job !== 'DIRECT' && job !== 'OBSERVE_LANDING')) {
+      job !== 'TASK_FAILURE' && job !== 'DIRECT' && job !== 'OBSERVE_LANDING' && job !== 'LINE_SYNC')) {
       for (const failureClass of OPEN_ITEM_DOOR_FAILURE_CLASSES) {
         for (const assignee of OPEN_ITEM_DOOR_ASSIGNEES) {
           cells.push({ todoType, sourceJob, failureClass, assignee,
@@ -810,6 +850,12 @@ function buildTable(): OpenItemDoorCell[] {
   cells.push({ todoType: 'EVIDENCE_UNDECIDED', sourceJob: 'DIRECT', failureClass: 'ERROR',
     assignee: 'OWNER',
     doors: doorsForCell({ todoType: 'EVIDENCE_UNDECIDED', sourceJob: 'DIRECT', failureClass: 'ERROR', assignee: 'OWNER' }) });
+  // The line-sync item is a conflict, the coordinator's like every integration item, the owner's when there is none,
+  // it is handed over or the clock hands it on.
+  for (const assignee of OPEN_ITEM_DOOR_ASSIGNEES) {
+    cells.push({ todoType: 'INTEGRATION_CONFLICT', sourceJob: 'LINE_SYNC', failureClass: 'CONFLICT', assignee,
+      doors: doorsForCell({ todoType: 'INTEGRATION_CONFLICT', sourceJob: 'LINE_SYNC', failureClass: 'CONFLICT', assignee }) });
+  }
   // §10.6 O-J4: an observation fails one way — an ERROR — and its item is the coordinator's like every
   // integration item, the owner's when there is none or it is handed over.
   for (const assignee of OPEN_ITEM_DOOR_ASSIGNEES) {
@@ -982,6 +1028,15 @@ export function openItemActionsFromDoors(input: OpenItemDoorInput): OpenItemActi
       (action !== 'ASK_COORDINATOR_AGAIN' || (assignee === 'OWNER' && input.askable))
       && doors.some((candidate) => candidate.action === action && candidate.holder === assignee)),
     input, doors, assignee);
+  }
+  if (sourceJobForOpenItem(input) === 'LINE_SYNC') {
+    // The line-sync item names no task, so none of a task's presses: the coordinator's conversation, the owner's
+    // ask-again, and the landing the conflict was found in.
+    const actions: OpenItemAction[] = assignee === 'COORDINATOR' ? ['OPEN_COORDINATOR'] : ['ASK_COORDINATOR_AGAIN'];
+    return appendOpenLanding(actions.filter((action) =>
+      (action !== 'ASK_COORDINATOR_AGAIN' || input.askable)
+      && directDoors.some((candidate) => candidate.implemented && candidate.holder === assignee && candidate.action === action)),
+    input, directDoors, assignee);
   }
   if (!input.taskId) return [];
   const doors = directDoors.length > 0

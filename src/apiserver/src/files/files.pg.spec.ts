@@ -1,13 +1,13 @@
 /**
- * Orbit Files' storage layer (docs/orbit-files-design.md §2.1, §2.10; migration 0462; files/), held against the
+ * Drive' storage layer (docs/drive-design.md §2.1, §2.10; migration 0462; files/), held against the
  * production apiserver — `build/main.js`, the whole AppModule, multer and every guard and pipe in front of the routes —
  * over a real PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty, once with each store:
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/files/files.pg.spec.ts
  *
- *   local  the files directory, a directory of this run's (ORBIT_FILES_DIR);
+ *   local  the files directory, a directory of this run's (ORBIT_DRIVE_DIR);
  *   s3     a real S3-compatible server — VersityGW, the image pinned in test-support/s3-test-server.ts — started on Docker the way
- *          scripts/run-pg-spec.sh starts its PostgreSQL, with a bucket of the run's (ORBIT_FILES_BACKEND=s3). It checks
+ *          scripts/run-pg-spec.sh starts its PostgreSQL, with a bucket of the run's (ORBIT_DRIVE_BACKEND=s3). It checks
  *          every request's signature and every PUT's payload hash, as AWS S3 does.
  *
  * The same cases with each store:
@@ -16,13 +16,13 @@
  *       keeps no bytes in Postgres;
  *   (2) every read door — GET /attachments/:id, GET /runner/sessions/:id/attachments/:attId, and GET
  *       /shared/:token/attachments/:id on a session link and on a task link — answers those bytes, byte for byte;
- *   (3) a row from before Orbit Files, its bytes in `data`, is answered from there through the same doors;
+ *   (3) a row from before Drive, its bytes in `data`, is answered from there through the same doors;
  *   (4) an upload goes through a temporary file on disk, never a buffer: halfway through the request its bytes are
  *       already in a file under <files dir>/tmp, and once it is answered that file is gone into the store;
  *   (5) a single file is still capped at 25 MiB: exactly that much is kept, one byte more is refused 413, and a
  *       refused upload — too large, or another runner's session — leaves nothing behind, on disk or in the database;
  *   (6) a dispatch copies a task's inputs as rows naming the same bytes (tasks.service.ts#copyTaskAttachments): no
- *       bytes copied and no file_blob row added; an input from before Orbit Files has its bytes kept the first time
+ *       bytes copied and no file_blob row added; an input from before Drive has its bytes kept the first time
  *       it is copied, and is copied the same way from then on;
  *   (7) a client that hangs up in the middle of an upload leaves nothing behind;
  *   (8) nor does an upload refused before its handler is entered — a malformed id, which PublicIdPipe turns down after
@@ -61,7 +61,7 @@ import { S3FileStore } from './s3-file-store';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
-const PROVIDER_SECRET_KEY = `orbit-files-${RUN}`;
+const PROVIDER_SECRET_KEY = `orbit-documents-${RUN}`;
 
 const sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 const b62 = (id: string) => uuidToBase62(id);
@@ -126,7 +126,7 @@ async function get(server: Apiserver, route: string, bearer?: string): Promise<A
 
 /** A multipart/form-data body with the one `file` field the upload doors read. */
 function multipart(bytes: Buffer, fileName: string, type: string) {
-  const boundary = `orbit-files-${randomUUID()}`;
+  const boundary = `orbit-documents-${randomUUID()}`;
   const head = Buffer.from(
     `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: ${type}\r\n\r\n`,
   );
@@ -185,7 +185,7 @@ function storeCases(leg: Leg) {
       await db.$disconnect().catch(() => undefined);
       await sql.end().catch(() => undefined);
     });
-    const jwtSecret = `orbit-files-${randomUUID()}`;
+    const jwtSecret = `orbit-documents-${randomUUID()}`;
     const jwt = new JwtService({ secret: jwtSecret });
     server = await startApiserver(url, jwtSecret, {
       PROVIDER_SECRET_KEY,
@@ -206,7 +206,7 @@ function storeCases(leg: Leg) {
 
     // An owner with a runner, a session on it, a task and a link to each; and a second runner, not the session's.
     const ownerId = randomUUID();
-    const email = `files-${leg.storage}-${RUN}@orbit-files.invalid`;
+    const email = `files-${leg.storage}-${RUN}@orbit-documents.invalid`;
     await db.user.create({ data: { id: ownerId, email, name: `files ${leg.storage}`, passwordHash: 'x' } });
     const bearer = await jwt.signAsync({ sub: ownerId, email });
     const runner = async (name: string) => {
@@ -225,7 +225,7 @@ function storeCases(leg: Leg) {
     await db.session.create({
       data: {
         id: sessionId, title: 'files', prompt: 'files', ownerId, creatorId: ownerId, workspaceId,
-        assignedRunnerId: machine.id, status: 'AWAITING_INPUT', startedAt: new Date(), runtimeSessionId: `runtime-${sessionId}`,
+        assignedRunnerId: machine.id, turnState: null, startedAt: new Date(), runtimeSessionId: `runtime-${sessionId}`,
       },
     });
     const taskId = randomUUID();
@@ -291,7 +291,7 @@ function storeCases(leg: Leg) {
     const oldSha = sha256(old);
     const legacy: Record<'session' | 'task', string> = { session: '', task: '' };
 
-    await t.test(`${leg.storage}: a row from before Orbit Files is answered from its own bytes, through the same doors`, async () => {
+    await t.test(`${leg.storage}: a row from before Documents is answered from its own bytes, through the same doors`, async () => {
       legacy.session = (await db.attachment.create({
         data: { ownerId, sessionId, mimeType: 'image/png', sizeBytes: old.length, fileName: 'old.png', data: old },
       })).id;
@@ -402,7 +402,7 @@ function storeCases(leg: Leg) {
         'one copy per input, in order, each a row that names the bytes and carries none',
       );
       assert.deepEqual(await blob(sha), shaBlob, 'copying a stored input writes nothing about its bytes');
-      // The input from before Orbit Files: its bytes kept once, the first time it was copied, and named on the row.
+      // The input from before Drive: its bytes kept once, the first time it was copied, and named on the row.
       assert.deepEqual(
         await db.attachment.findUniqueOrThrow({ where: { id: legacy.task }, select: { sha256: true } }),
         { sha256: oldSha },
@@ -498,7 +498,7 @@ function storeCases(leg: Leg) {
       await db.session.create({
         data: {
           id: run, title: 'a run', prompt: 'a run', ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: machine.id, taskId: citingTask,
-          startsTaskWork: true, status: 'AWAITING_INPUT', startedAt: new Date(), runtimeSessionId: `runtime-${run}`,
+          startsTaskWork: true, turnState: null, startedAt: new Date(), runtimeSessionId: `runtime-${run}`,
         },
       });
       const head = Buffer.alloc(24);
@@ -535,7 +535,7 @@ function storeCases(leg: Leg) {
   };
 }
 
-test('Orbit Files storage, on the local files directory and on an S3-compatible server', {
+test('Documents storage, on the local files directory and on an S3-compatible server', {
   skip: !URL, concurrency: 1, timeout: 900_000,
 }, async (t) => {
   const url = URL!;
@@ -549,8 +549,8 @@ test('Orbit Files storage, on the local files directory and on an S3-compatible 
   }
   process.env.PROVIDER_SECRET_KEY = PROVIDER_SECRET_KEY;
 
-  const localDir = mkdtempSync(path.join(tmpdir(), 'orbit-files-local-'));
-  const s3Dir = mkdtempSync(path.join(tmpdir(), 'orbit-files-s3-'));
+  const localDir = mkdtempSync(path.join(tmpdir(), 'orbit-documents-local-'));
+  const s3Dir = mkdtempSync(path.join(tmpdir(), 'orbit-documents-s3-'));
   t.after(() => {
     rmSync(localDir, { recursive: true, force: true });
     rmSync(s3Dir, { recursive: true, force: true });
@@ -560,7 +560,7 @@ test('Orbit Files storage, on the local files directory and on an S3-compatible 
     storage: 'local',
     dir: localDir,
     config: { dir: localDir, storage: 'local' },
-    env: { ORBIT_FILES_BACKEND: 'local', ORBIT_FILES_DIR: localDir },
+    env: { ORBIT_DRIVE_BACKEND: 'local', ORBIT_DRIVE_DIR: localDir },
   }));
 
   const s3 = await startS3((fn) => t.after(fn));
@@ -569,13 +569,13 @@ test('Orbit Files storage, on the local files directory and on an S3-compatible 
     dir: s3Dir,
     config: { dir: s3Dir, storage: 's3', s3 },
     env: {
-      ORBIT_FILES_BACKEND: 's3',
-      ORBIT_FILES_DIR: s3Dir,
-      ORBIT_FILES_S3_ENDPOINT: s3.endpoint,
-      ORBIT_FILES_S3_BUCKET: s3.bucket,
-      ORBIT_FILES_S3_ACCESS_KEY_ID: s3.accessKeyId,
-      ORBIT_FILES_S3_SECRET_ACCESS_KEY: s3.secretAccessKey,
-      ORBIT_FILES_S3_REGION: s3.region,
+      ORBIT_DRIVE_BACKEND: 's3',
+      ORBIT_DRIVE_DIR: s3Dir,
+      ORBIT_DRIVE_S3_ENDPOINT: s3.endpoint,
+      ORBIT_DRIVE_S3_BUCKET: s3.bucket,
+      ORBIT_DRIVE_S3_ACCESS_KEY_ID: s3.accessKeyId,
+      ORBIT_DRIVE_S3_SECRET_ACCESS_KEY: s3.secretAccessKey,
+      ORBIT_DRIVE_S3_REGION: s3.region,
     },
   }));
 });

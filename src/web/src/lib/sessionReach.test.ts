@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { conditionQuery } from './conditions';
-import { helpAskListQuery } from './help/helpAsk';
 import { sessionRequestQuery } from './queries';
 import { awaitDraftFrom, scheduleDetailQuery, scheduleDraftsQuery, scheduleRequestQuery } from './schedules';
 import { sessionReaches, taskDocumentReach, taskGraphReach, type SessionReachDeclaration, type SessionSubject } from './sessionReach';
@@ -26,14 +25,6 @@ describe('the reads whose sessions are in what they hold', () => {
     expect(reaches(meta, data, subject('S1'))).toBe(true);
     expect(reaches(meta, data, subject('S2'))).toBe(true);
     expect(reaches(meta, data, subject('S3'))).toBe(false);
-  });
-
-  it('Your questions: its questions\' sessions, and a new session', () => {
-    const meta = helpAskListQuery().meta!.sessionReach;
-    const data = { questions: [{ sessionId: 'H1' }] };
-    expect(reaches(meta, data, subject('H1'))).toBe(true);
-    expect(reaches(meta, data, subject('S3'))).toBe(false);
-    expect(reaches(meta, data, subject('H2', { created: true, createdOnly: true }))).toBe(true);
   });
 
   it('a schedule\'s inspector: its runs, its cards\' askers, and an unlisted run of its workspace', () => {

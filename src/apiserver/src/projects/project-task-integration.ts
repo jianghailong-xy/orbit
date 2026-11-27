@@ -4,6 +4,7 @@ import type {
   IntegrationJobPhase,
   IntegrationJobState,
   LandTaskBlockingReasonCode,
+  LandingPullRequestView,
   LandTaskIntegrationView,
   ProjectLandTask,
   TaskIntegrationView,
@@ -13,6 +14,10 @@ import { runnerOfflineSql } from '../runners/runner-presence';
 import { branchNameSql, hasWorkToLandSql, lineStartedSql, taskLandingSql } from './project-criterion-landing';
 import { INTEGRATION_JOB_CLAIM } from './project-integration-job';
 import { baselineHoldSql } from './baseline-hold';
+import { lineSyncHoldSql } from './line-sync-hold';
+import { IN_FLIGHT_JOB_STATES, IN_FLIGHT_JOB_STATES_SQL } from './in-flight-job-states';
+import { pullRequestBlockingCode, pullRequestViewOf, pullRequestWaitSummary } from './pull-request-landing';
+import { isInFlightJobState } from './in-flight-job-states';
 
 /**
  * Where each task on a page sits between "done" and "on main"
@@ -73,6 +78,16 @@ export type QueueBlockingCode =
 interface TaskIntegrationRow {
   taskId: string;
   taskStatus: string;
+  /** The pull request the newest attempt waits on or landed through (docs/design/protected-branch-landing.md §8). */
+  prNumber?: number | null;
+  prUrl?: string | null;
+  prState?: string | null;
+  prCondition?: string | null;
+  prChecks?: unknown;
+  prMergeMethod?: string | null;
+  prMergedSha?: string | null;
+  prRefusal?: unknown;
+  prWorkspaceId?: string | null;
   landing: string;
   isCode: boolean;
   lineStarted: boolean;
@@ -255,7 +270,20 @@ function reasonSummary(code: LandTaskBlockingReasonCode, row: TaskIntegrationRow
     }
     case 'ERROR':
       return `Landing failed${row.jobPhase ? ` at ${row.jobPhase}` : ''}${row.jobErrorCode ? `: ${row.jobErrorCode}` : ''}`;
+    case 'WAITING_FOR_CHECKS':
+    case 'WAITING_FOR_REVIEW':
+      return pullRequestWaitSummary(code, pullRequestOfRow(row), row.mainBranch);
   }
+}
+
+/** The task row's pull request block (§8), or null for an attempt that pushed directly. */
+function pullRequestOfRow(row: TaskIntegrationRow): LandingPullRequestView | null {
+  if (!row.prState) return null;
+  return pullRequestViewOf({
+    number: row.prNumber ?? null, url: row.prUrl ?? null, state: row.prState, condition: row.prCondition ?? null,
+    checks: row.prChecks, mergeMethod: row.prMergeMethod ?? null, mergedSha: row.prMergedSha ?? null,
+    refusal: row.prRefusal ?? null, workspaceId: row.prWorkspaceId ?? null,
+  });
 }
 
 /** The newest attempt, as its own row says it; null for a task that has no LAND_TASK. */
@@ -264,9 +292,11 @@ function landTaskOf(row: TaskIntegrationRow, now: Date): LandTaskIntegrationView
     return null;
   }
   const stopped = row.jobState === 'CONFLICT' || row.jobState === 'CHECK_FAILED' || row.jobState === 'ERROR';
+  const pullRequest = pullRequestOfRow(row);
   const code: LandTaskBlockingReasonCode | null = row.jobState === 'QUEUED'
     ? row.queueBlockCode ?? 'WAITING_DISPATCH'
-    : stopped ? row.jobState as LandTaskBlockingReasonCode : null;
+    : row.jobState === 'PULL_REQUEST' ? pullRequestBlockingCode(pullRequest?.condition ?? null)
+      : stopped ? row.jobState as LandTaskBlockingReasonCode : null;
   let blockingReason: IntegrationJobBlockingReason | null = null;
   if (code) {
     blockingReason = { code, summary: reasonSummary(code, row) };
@@ -295,6 +325,7 @@ function landTaskOf(row: TaskIntegrationRow, now: Date): LandTaskIntegrationView
     targetRef: row.jobTargetRef,
     waitMs: Math.max(0, waitEnd.getTime() - row.jobCreatedAt.getTime()),
     blockingReason,
+    pullRequest,
   };
 }
 
@@ -321,6 +352,10 @@ function stateForJob(state: string): TaskIntegrationView['state'] | null {
   switch (state) {
     case 'QUEUED': return 'QUEUED';
     case 'RUNNING': return 'RUNNING';
+    // Waiting for GitHub on its pull request (docs/design/protected-branch-landing.md §4.2): still the
+    // platform's to finish and nobody's to act on, so the row reads as a running landing; `landTask`
+    // carries the state, the reason and the pull request.
+    case 'PULL_REQUEST': return 'RUNNING';
     case 'READY': return 'AWAITING_OWNER';
     default: return null;
   }
@@ -353,7 +388,7 @@ export function taskIntegrationOf(row: TaskIntegrationRow, now: Date): TaskInteg
   // link is the evidence that the new queued/running job is answering that failure; an unrelated
   // job must not hide an outstanding exception.
   const retryInFlight = row.itemHandlingJobId !== null && row.itemHandlingJobId === row.jobId
-    && (row.jobState === 'QUEUED' || row.jobState === 'RUNNING');
+    && row.jobState !== null && isInFlightJobState(row.jobState);
   // Revision 42 (§12.7): a failure in the task's own work session's hands is being fixed there — "Landing · fixing",
   // which opens that session — and asks nobody else to act. Once its fix is queued to land again, the job says so.
   if (itemState && !retryInFlight && row.itemWorkSessionId) {
@@ -433,6 +468,7 @@ export async function readTaskIntegrationViews(
       SELECT DISTINCT ON (j."task_id")
              j."task_id", j."id", j."kind", j."state", j."phase", j."generation", j."target_ref",
              j."serial_key", j."session_id", j."landing_id", j."error_code", j."cancel_requested_at",
+             j."pull_request_id",
              cardinality(j."conflicts") AS "conflict_count", j."checks",
              j."created_at", j."started_at", j."claimed_at", j."heartbeat_at", j."finished_at"
         FROM "project_integration_job" j
@@ -481,6 +517,11 @@ export async function readTaskIntegrationViews(
            -- session_id is the source work session and is a history reference (0424), so nothing
            -- about a deleted source can remove this address.
            landing."session_id" AS "jobLandingSessionId",
+           -- docs/design/protected-branch-landing.md §8: the pull request this attempt waits on or landed through.
+           pr."number" AS "prNumber", pr."url" AS "prUrl", pr."state" AS "prState", pr."condition" AS "prCondition",
+           pr."checks" AS "prChecks", pr."merge_method" AS "prMergeMethod", pr."merged_sha" AS "prMergedSha",
+           pr."refusal" AS "prRefusal",
+           pr."workspace_id"::text AS "prWorkspaceId",
            failed_check."check" AS "jobFailedCheck",
            -- The claim's own conditions (integration-job-relay.ts claimOne), in the table's order,
            -- for the one state they decide: why a QUEUED attempt has not been claimed yet. Since
@@ -533,6 +574,7 @@ export async function readTaskIntegrationViews(
       FROM scoped
       LEFT JOIN newest_job ON newest_job."task_id" = scoped."taskId"
       LEFT JOIN "project_landing" landing ON landing."id" = newest_job."landing_id"
+      LEFT JOIN "github_pull_request" pr ON pr."id" = newest_job."pull_request_id"
       LEFT JOIN open_item ON open_item."task_id" = scoped."taskId"
       LEFT JOIN landed_at ON landed_at."task_id" = scoped."taskId"
       LEFT JOIN LATERAL (
@@ -566,6 +608,7 @@ export async function readTaskIntegrationViews(
       -- M2: an OPEN item about another task's failed absorb of upstream into the same target holds
       -- every later landing on it; the conflicted task's own later generations are exempt (§3.1 M3),
       -- and so are the landings of a task filed to fix that item (fixes_open_item_id), as in claimOne.
+      -- The line-sync item (docs/design/project-line-upstream-sync.md §4.3) has no same-task exemption: lineSyncHoldSql.
       -- Read through the item rather than the failed job, so closing it is what lets the queue move.
       -- H1 does NOT exempt an item a new generation is handling: claimOne reads this same condition
       -- and holds those landings too, so the reader says what the claim does with the row
@@ -573,20 +616,15 @@ export async function readTaskIntegrationViews(
       -- queue that would take it on the next heartbeat and will not.
       LEFT JOIN LATERAL (
         SELECT f."id" AS "jobId", i."id" AS "openItemId", i."owner_id" AS "ownerId",
-               ft."title" AS "taskTitle",
-               CASE WHEN handling."id" IS NOT NULL AND handling."state" IN ('QUEUED', 'RUNNING')
+               -- The line-sync item is about the line, not the task that happened to land next.
+               CASE WHEN i."task_id" IS NOT NULL THEN ft."title" END AS "taskTitle",
+               CASE WHEN handling."id" IS NOT NULL AND handling."state" IN ${IN_FLIGHT_JOB_STATES_SQL}
                     THEN handling."generation" END AS "handlingGeneration"
           FROM "project_open_item" i
           JOIN "project_integration_job" f ON f."id" = i."integration_job_id"
           LEFT JOIN "task" ft ON ft."id" = f."task_id"
           LEFT JOIN "project_integration_job" handling ON handling."id" = i."handling_job_id"
-         WHERE newest_job."state" = 'QUEUED'
-           AND f."serial_key" = newest_job."serial_key" AND f."phase" = 'MAIN_SYNC'
-           AND i."kind" = 'INTEGRATION_CONFLICT' AND i."state" = 'OPEN'
-           AND f."task_id" IS DISTINCT FROM newest_job."task_id"
-           AND NOT EXISTS (
-             SELECT 1 FROM "task" fix
-              WHERE fix."id" = newest_job."task_id" AND fix."fixes_open_item_id" = i."id")
+         WHERE newest_job."state" = 'QUEUED' AND ${lineSyncHoldSql('newest_job')}
          ORDER BY i."created_at", i."id" LIMIT 1
       ) sync_block ON true
       LEFT JOIN LATERAL (
@@ -612,7 +650,7 @@ export async function readTaskIntegrationViews(
   return new Map(rows.map((row) => [row.taskId, taskIntegrationOf(row, now)]));
 }
 
-const ACTIVE = new Set(['RUNNING', 'QUEUED']);
+const ACTIVE = new Set<string>(IN_FLIGHT_JOB_STATES);
 const STOPPED = new Set(['CONFLICT', 'CHECK_FAILED', 'ERROR']);
 
 /** Running, then the queue, then the stops, then the last landing (§2.7a). */
@@ -659,7 +697,7 @@ export async function readProjectLandTaskViews(
     SELECT n."task_id" AS "taskId", t."title" AS "taskTitle", n."owner_id" AS "ownerId"
       FROM newest n
       JOIN "task" t ON t."id" = n."task_id" AND t."owner_id" = n."owner_id"
-     WHERE n."state" IN ('QUEUED', 'RUNNING')
+     WHERE n."state" IN ${IN_FLIGHT_JOB_STATES_SQL}
         OR (n."state" IN ('CONFLICT', 'CHECK_FAILED', 'ERROR') AND t."status" = 'DONE')
         OR n."id" IN (SELECT "id" FROM last_landed)`);
   if (candidates.length === 0) return [];

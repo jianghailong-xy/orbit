@@ -135,7 +135,8 @@ func TestSubagentMovesToTheNextCandidateAfterAUsageLimit(t *testing.T) {
 	}
 }
 
-// A third limit in a row, after two moves, ends the call failed without a third ask.
+// A third limit in a row, after two moves, ends the call failed with the server's refusal: the runner asks a third
+// time, since the server holds the bound (a refused trial is not counted against it) and closes that attempt.
 func TestSubagentFailsAfterTwoMoves(t *testing.T) {
 	rig := &subagentFallbackRig{
 		children: []ExecResult{
@@ -146,16 +147,22 @@ func TestSubagentFailsAfterTwoMoves(t *testing.T) {
 		answers: []func(http.ResponseWriter){
 			moveTo(2, providerCodex, "gpt-5.5", "Moved to gpt-5.5 after claude-opus-5-5's account hit its limit"),
 			moveTo(3, providerClaude, "claude-sonnet-5-5", "Moved to claude-sonnet-5-5 after gpt-5.5's account hit its limit"),
+			func(w http.ResponseWriter) {
+				w.WriteHeader(http.StatusConflict)
+				b, _ := json.Marshal(map[string]interface{}{"code": "SUBAGENT_FALLBACK_SPENT", "statusCode": 409,
+					"message": "The SubAgent hit a usage limit, capacity or a failed login on 3 candidates in a row; it was moved 2 times, the most one delegate call is."})
+				_, _ = w.Write(b)
+			},
 		},
 	}
 	report := rig.run(t)
 	t.Logf("child runs: %q", rig.ran)
 	t.Logf("result: %s", report.Result)
-	if len(rig.ran) != 3 || len(rig.fallbacks) != 2 {
-		t.Fatalf("ran %d children and asked %d times, want 3 and 2", len(rig.ran), len(rig.fallbacks))
+	if len(rig.ran) != 3 || len(rig.fallbacks) != 3 {
+		t.Fatalf("ran %d children and asked %d times, want 3 and 3", len(rig.ran), len(rig.fallbacks))
 	}
 	if report.Status != subagentStatusFailed || rig.patch["status"] != subagentStatusFailed ||
-		!strings.Contains(report.Result, "was moved 2 times") {
+		!strings.Contains(report.Result, "SUBAGENT_FALLBACK_SPENT") || !strings.Contains(report.Result, "was moved 2 times") {
 		t.Fatalf("report = %+v", report)
 	}
 }

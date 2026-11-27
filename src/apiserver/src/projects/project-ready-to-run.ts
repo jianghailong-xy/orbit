@@ -6,6 +6,7 @@ import {
   sessionCarriesTaskSql,
   sessionRunReasonSql,
 } from '../sessions/task-work-carrier';
+import { sessionTurnStateSql } from '../sessions/session-turn-state';
 import { manualRunnableTaskSql } from '../tasks/manual-runnable-task-sql';
 import { dependenciesSatisfiedSql, everyPrerequisiteTailDoneSql } from '../tasks/task-dependencies';
 import { BLOCKING_MAX_UNFINISHED_TASKS } from './project-panorama-blocking';
@@ -217,10 +218,10 @@ export async function readProjectReadyToRun(
                t.id,
                t.title,
                t.status::text AS status,
-               -- PENDING is still exactly QUEUED; a turn running and a session parked with
+               -- A turn waiting for its claim is exactly QUEUED; a turn running and a session parked with
                -- something that will wake it are both work in progress.
-               CASE s.status
-                 WHEN 'PENDING'::run_status THEN 'QUEUED'
+               CASE ${sessionTurnStateSql('s')}
+                 WHEN 'QUEUED' THEN 'QUEUED'
                  ELSE 'RUNNING'
                END::text AS "runState",
                coalesce(s.started_at, s.created_at) AS "activeSince",
@@ -233,7 +234,7 @@ export async function readProjectReadyToRun(
            AND s.owner_id = ${ownerId}::uuid
            AND ${Prisma.raw(sessionCarriesTaskSql('s'))}
          ORDER BY t.id,
-                  CASE s.status WHEN 'RUNNING'::run_status THEN 0 ELSE 1 END,
+                  CASE ${sessionTurnStateSql('s')} WHEN 'IN_FLIGHT' THEN 0 ELSE 1 END,
                   s.created_at DESC,
                   s.id DESC
       ),

@@ -71,7 +71,8 @@ import { test } from 'node:test';
 
 import { Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -229,7 +230,7 @@ test('a criteria edit through the runner door is attributed to the session that 
       title: 'the conversation that edits the ruler',
       prompt: 'state what would settle this project',
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: false,
     },

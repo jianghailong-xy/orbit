@@ -87,7 +87,7 @@ const envKey = (accounts: RunnerEngineAccount[]): RunnerEngineHealth =>
     },
   });
 
-const LOGIN_CAPABILITIES = ['antigravity-google-login/v1', 'antigravity-account-login/v1', 'antigravity-account-remove/v1'];
+const LOGIN_CAPABILITIES = ['antigravity-google-login/v1', 'antigravity-account-login/v1', 'antigravity-account-remove/v1', 'antigravity-default-sign-out/v1'];
 
 const runner = (engine: RunnerEngineHealth = antigravity(), over: Partial<Runner> = {}): Runner => ({
   id: RUNNER_ID,
@@ -276,7 +276,8 @@ describe('two Google accounts on one runner', () => {
     expect(buttons(defaultRow)).toEqual(['More actions']);
     const items = async (row: HTMLElement) =>
       all(await openRunnerMenu(row), '[role="menuitem"]').map((item) => item.textContent?.trim());
-    expect(await items(defaultRow)).toEqual(['Rename', 'Re-sign in', 'Pause account…', 'Remove account']);
+    // Sign out… is Default's alone: an added account's login goes with the account.
+    expect(await items(defaultRow)).toEqual(['Rename', 'Re-sign in', 'Pause account…', 'Sign out…', 'Remove account']);
     expect(await items(workRow)).toEqual(['Rename', 'Re-sign in', 'Pause account…', 'Remove account']);
 
     await clickRunnerMenuItem(workRow, 'Remove account');
@@ -322,7 +323,7 @@ describe('one Google account', () => {
     [
       'a macOS runner',
       { antigravity: { supported: true, installed: true, version: '1.3.0', envKeyAvailable: true, authSource: 'google', googleLogin: 'unsupported_platform' } },
-      'Google sign-in is not supported on macOS runners yet. Use a Gemini API key.',
+      "Google sign-in is not supported on this runner's operating system. Use a Gemini API key.",
     ],
     [
       'an older runner',

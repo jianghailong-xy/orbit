@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient, type Query, type QueryFilters } from '@tanstack/react-query';
-import { CONTROL_HINT_DRIVE_CHANGED, CONTROL_HINT_LIST_SCOPES, type WatchView } from '@orbit/shared';
+import { CONTROL_HINT_DRIVE_CHANGED, CONTROL_HINT_DRIVE_SYNCS, CONTROL_HINT_LIST_SCOPES, type WatchView } from '@orbit/shared';
 import { getToken } from '../api';
 import { streamReport } from './listBudget';
 import { cloneEventOf, hearClone, sameWorkspace } from './workspaceClone';
@@ -14,6 +14,8 @@ import {
   type TaskReachDeclaration,
 } from './sessionReach';
 import type { ProjectPlacement } from './queries';
+import { listingRows } from './sessionListingData';
+import { refreshDriveSyncs } from './driveSyncs';
 
 // Coalesce a burst of control events (a turn end fires status + approval back-to-back) into a
 // single refetch per list. A second, as the list budget asks (docs/list-freshness-design.md R1): a
@@ -77,7 +79,8 @@ export function useRefreshSessionLists(): () => void {
   }, [qc, viaStream]);
 }
 
-/** An Open list query (`sessionsQuery`, view Open or the server's default, which is Open). */
+/** An Open list query (`sessionsQuery`, view Open or the server's default, which is Open), or an Open listing
+ *  (`sessionListingQuery`, keyed in the same places). */
 const isOpenList = (queryKey: readonly unknown[]): boolean =>
   queryKey[0] === 'sessions' && queryKey.length === 6 && (queryKey[3] === 'open' || queryKey[3] === null);
 
@@ -358,7 +361,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     // What a session counts in when the stream has not described it yet: what this tab last read of it.
     const readFacts = (sessionId: string): TallyFacts | undefined => {
       for (const [key, cached] of qc.getQueriesData<unknown>({ predicate: ({ queryKey }) => queryKey[0] === 'sessions' || (queryKey[0] === 'session' && queryKey.length === 2) })) {
-        const rows = (Array.isArray(cached) ? cached : key[0] === 'session' && cached ? [cached] : []) as TallyRow[];
+        const rows = (Array.isArray(cached) ? cached : key[0] === 'session' && cached ? [cached] : listingRows(cached)) as TallyRow[];
         const row = rows.find((candidate) => candidate?.id === sessionId);
         if (row) return tallyFactsOf(row, '');
       }
@@ -805,7 +808,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       if (heard) return heard;
       // Never heard of here: what this tab has read of it, in a list or its detail.
       for (const [key, cached] of qc.getQueriesData<unknown>({ predicate: ({ queryKey }) => queryKey[0] === 'sessions' || queryKey[0] === 'project-sessions' || (queryKey[0] === 'session' && queryKey.length === 2) })) {
-        const rows = (Array.isArray(cached) ? cached : key[0] === 'session' && cached ? [cached] : []) as {
+        const rows = (Array.isArray(cached) ? cached : key[0] === 'session' && cached ? [cached] : listingRows(cached)) as {
           id?: unknown; taskId?: unknown; projectId?: unknown; projectMembership?: { projectId?: unknown } | null;
         }[];
         const row = rows.find((candidate) => candidate?.id === sessionId);
@@ -950,7 +953,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       // `list_changed` opts into Open-list hints (§4.8), and `list_scopes` adds their workspace scopes.
       // The other opt-ins enable notifications for owner requests, schedule cards and committed drive writes.
       es = new EventSource(
-        `/api/events?access_token=${encodeURIComponent(getToken() ?? '')}&hints=list_changed,owner_requests,schedule_cards,${CONTROL_HINT_LIST_SCOPES},${CONTROL_HINT_DRIVE_CHANGED}`,
+        `/api/events?access_token=${encodeURIComponent(getToken() ?? '')}&hints=list_changed,owner_requests,schedule_cards,${CONTROL_HINT_LIST_SCOPES},${CONTROL_HINT_DRIVE_CHANGED},${CONTROL_HINT_DRIVE_SYNCS}`,
       );
       es.onopen = () => {
         lastMsgAt = Date.now();
@@ -960,6 +963,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         // it surface too. A tab that is hidden reads it when it is back in view (`pump`).
         if (missedEvents) {
           missedEvents = false;
+          if (!hidden()) void refreshDriveSyncs();
           reconcile();
         }
       };
@@ -998,6 +1002,8 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         // events (tag/provider/task-list) legitimately carry none.
         if (!ev?.type || ev.type === 'ping') return;
         if (ev.type === 'sessions.list_changed') hinted = true;
+        // An agent's directory sync moved (`hints=drive_syncs`): the Drive tray reads its list again.
+        if (ev.type === 'drive.sync' && !hidden()) void refreshDriveSyncs();
         const projectId = ev.data?.projectMembership?.projectId;
         const id = ev.data?.id;
         if (ev.type === 'session.updated' || ev.type === 'session.created' || ev.type === 'session.ended') {
@@ -1025,9 +1031,11 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
             // Lifecycle-ended frames carry no membership. A member entering Completed may
             // only be known in an earlier workspace Open list or its own session detail.
             if (ev.type === 'session.ended') {
-              const known = qc.getQueriesData<readonly { id: string; projectMembership?: { projectId?: string } | null }[]>(
-                { queryKey: ['sessions'] },
-              ).flatMap(([, rows]) => rows?.filter((row) => row.id === sessionId) ?? []);
+              const known = qc.getQueriesData<unknown>({ queryKey: ['sessions'] })
+                .flatMap(([, cached]) => (Array.isArray(cached) ? cached : listingRows(cached)) as {
+                  id: string; projectMembership?: { projectId?: string } | null;
+                }[])
+                .filter((row) => row?.id === sessionId);
               const detail = qc.getQueryData<{ projectMembership?: { projectId?: string } | null }>(['session', sessionId]);
               for (const row of [...known, detail]) {
                 if (row?.projectMembership?.projectId) scheduleProjectSessions(row.projectMembership.projectId);

@@ -35,8 +35,9 @@ export type MergeReceiptResult = (typeof MERGE_RECEIPT_RESULTS)[number];
  */
 export const MATCHED_BY_CONTENT = 'MATCHED_BY_CONTENT';
 
-/** WHO recorded it. Provenance, never an input to a decision. */
-export const MERGE_RECEIPT_RECORDERS = ['RUNNER', 'AGENT', 'USER'] as const;
+/** WHO recorded it. Provenance, never an input to a decision. `SERVER`: the server, from GitHub's answer about a
+ *  pull request it merged (docs/design/protected-branch-landing.md §4.2 J-T15, §4.6; migration 1527). */
+export const MERGE_RECEIPT_RECORDERS = ['RUNNER', 'AGENT', 'USER', 'SERVER'] as const;
 
 export type MergeReceiptRecorder = (typeof MERGE_RECEIPT_RECORDERS)[number];
 

@@ -47,7 +47,7 @@ class AntigravityAccountsTest {
             assertFalse(state, RunnerPage.antigravityCanSignIn(fixture(state)))
             assertNotNull(state, RunnerPage.signInHint(fixture(state), "antigravity"))
         }
-        assertEquals("Google sign-in is not supported on macOS runners yet. Use a Gemini API key.", RunnerPage.antigravityLoginHint("unsupported_platform"))
+        assertEquals("Google sign-in is not supported on this runner's operating system. Use a Gemini API key.", RunnerPage.antigravityLoginHint("unsupported_platform"))
         assertNull(RunnerPage.engineStatus(agy(fixture("unknown"))))
         assertEquals("env key", RunnerPage.engineStatus(agy(fixture("env-key")))?.first)
         // A macOS runner and an old one say so on the row instead of Signed out.
@@ -76,7 +76,7 @@ class AntigravityAccountsTest {
         val health = RunnerPage.engines(runner).first()
         assertEquals("env key", RunnerPage.engineStatus(health, runner)?.first)
         assertFalse(RunnerPage.antigravityCanSignIn(runner))
-        assertEquals("Google sign-in is not supported on macOS runners yet. Use a Gemini API key.", RunnerPage.signInHint(runner, "antigravity"))
+        assertEquals("Google sign-in is not supported on this runner's operating system. Use a Gemini API key.", RunnerPage.signInHint(runner, "antigravity"))
         assertTrue(RunnerPage.engineWindows(runner, "antigravity").isEmpty())
     }
 
@@ -270,7 +270,7 @@ class AntigravityAccountsTest {
         val mac = runner(one, googleLogin = "unsupported_platform")
         assertFalse(RunnerPage.canAddAccount(mac, "antigravity"))
         assertFalse(RunnerPage.canSignIn(mac, "antigravity"))
-        assertEquals("Google sign-in is not supported on macOS runners yet. Use a Gemini API key.", RunnerPage.signInHint(mac, "antigravity"))
+        assertEquals("Google sign-in is not supported on this runner's operating system. Use a Gemini API key.", RunnerPage.signInHint(mac, "antigravity"))
         assertEquals("Update this runner to sign in with Google.", RunnerPage.signInHint(runner(one, googleLogin = "needs_update"), "antigravity"))
         // Every other engine is as it was.
         assertTrue(RunnerPage.canAddAccount(mac, "claude"))

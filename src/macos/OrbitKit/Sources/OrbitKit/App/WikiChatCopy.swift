@@ -56,6 +56,12 @@ public enum WikiChatCopy {
     public static let cardWeb = "Based on web content"
     public static let cardWebNote = "Read before you apply."
     public static let cardApplied = "Applied · Confirmed by you"
+    /// A rewrite card written from main without a press (design §7.2, option A): never `Confirmed by you`.
+    public static let cardRewritten = "Rewritten from main"
+    /// The line under a rewrite card held for a press (`wikiChatHeldLine`).
+    public static let cardHeldWeb = "Apply to write: this chat read web content"
+    public static let cardHeldBudget = "Apply to write: today's automatic rewrites are used up"
+    public static let cardHeldDraft = "Written once you apply or discard the draft that rewrites the same section"
     /// An applied card whose challenge still waits in Review (`wikiChatAppliedInReview`): not confirmed yet.
     public static let cardAppliedInReview = "Applied · In Review"
     public static let cardAppliedInReviewNote = "Keep, amend or retire the entry in Review."
@@ -156,6 +162,7 @@ public enum WikiChatCopy {
     // MARK: the attachment lines (contract `chat.copy.notes`)
 
     public static let noteChat = "Wiki chat"
+    public static let noteContents = "Wiki contents"
     public static let notePageDoc = "Wiki page · {where}"
     public static let notePageEntry = "Wiki entry · {title}"
     public static let notePagePlan = "Wiki plan · {doc}"
@@ -169,6 +176,8 @@ public enum WikiChatCopy {
     public static let noteEdited = "{n} edited"
     public static let noteDiscarded = "{n} discarded"
     public static let noteUndone = "{n} undone"
+    public static let noteRewritten = "{n} rewritten"
+    public static let noteSettled = "{n} finished"
     public static let noteOutdated = "Outdated"
 
     // MARK: Activity's banner for W's chat part (contract `chat.copy.waitingBanner`)
@@ -292,7 +301,8 @@ public enum WikiChatCopy {
             "card.sources": cardSources, "card.yourMessage": cardYourMessage, "card.footnote": cardFootnote,
             "card.wouldRewrite": cardWouldRewrite, "card.sectionUpdated": sectionUpdated, "card.replaced": cardReplaced,
             "card.replacedNote": cardReplacedNote, "card.changed": cardChanged, "card.web": cardWeb,
-            "card.webNote": cardWebNote, "card.applied": cardApplied, "card.appliedInReview": cardAppliedInReview,
+            "card.webNote": cardWebNote, "card.applied": cardApplied, "card.rewritten": cardRewritten,
+            "card.heldWeb": cardHeldWeb, "card.heldBudget": cardHeldBudget, "card.heldDraft": cardHeldDraft, "card.appliedInReview": cardAppliedInReview,
             "card.appliedInReviewNote": cardAppliedInReviewNote, "card.discarded": cardDiscarded,
             "card.notApplied": cardNotApplied, "card.undone": cardUndone, "card.redoMessage": cardRedoMessage,
             "card.planDocument": cardPlanDocument, "card.planNewDoc": cardPlanNewDoc, "card.planNewCategory": cardPlanNewCategory,
@@ -304,11 +314,12 @@ public enum WikiChatCopy {
             "result.waiting": resultWaiting, "result.failed": resultFailed, "result.updatedLead": resultUpdatedLead,
             "result.sentenceOne": resultSentenceOne, "result.sentenceMany": resultSentenceMany,
             "result.same": resultSame, "result.gone": resultGone,
-            "notes.chat": noteChat, "notes.pageDoc": notePageDoc, "notes.pageEntry": notePageEntry,
+            "notes.chat": noteChat, "notes.contents": noteContents, "notes.pageDoc": notePageDoc, "notes.pageEntry": notePageEntry,
             "notes.pagePlan": notePagePlan, "notes.selection": noteSelection, "notes.sentenceOne": noteSentenceOne,
             "notes.sentenceMany": noteSentenceMany, "notes.sourceOne": noteSourceOne, "notes.sourceMany": noteSourceMany,
             "notes.drafts": noteDrafts, "notes.applied": noteApplied, "notes.edited": noteEdited,
-            "notes.discarded": noteDiscarded, "notes.undone": noteUndone, "notes.outdated": noteOutdated,
+            "notes.discarded": noteDiscarded, "notes.undone": noteUndone,
+            "notes.rewritten": noteRewritten, "notes.settled": noteSettled, "notes.outdated": noteOutdated,
             "waitingBanner.one": waitingBannerOne, "waitingBanner.many": waitingBannerMany,
             "changes.rewritten": changesRewritten, "changes.restored": changesRestored, "changes.changedOne": changedOne,
             "changes.changedMany": changedMany, "changes.same": changedSame, "changes.leftOne": leftOne,

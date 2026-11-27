@@ -31,7 +31,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, type ClaimedSession, type PlanUsageSnapshot, type TurnCompleteRequest } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -52,6 +53,7 @@ import { PoolNotices } from './pool-notice';
 import { encryptSecret } from './provider-crypto';
 import { ProvidersService } from './providers.service';
 import '../test-support/dequeue-under-lease';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 process.env.PROVIDER_SECRET_KEY ??= 'pool-login-claim-spec';
@@ -163,18 +165,18 @@ suite("a login pool's sessions: which ChatGPT account each runs on, and when the
     (await sessions.create(who.id, { prompt: 'hello', title: pool.label, workspaceId: who.workspaceId, provider: pool.slug })).id;
   /** The runner asking for work — which has to be `sessionId` — leaving it RUNNING or parked, as a turn would. */
   async function claim(who: Person, sessionId: string, park = true): Promise<ClaimedSession> {
-    await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.PENDING, cancelRequestedAt: null, finishedAt: null} });
+    await db.session.update({ where: { id: sessionId }, data: { turnState: 'QUEUED', cancelRequestedAt: null, finishedAt: null} });
     const claimed = await queue.claimSessionForRunner({ id: who.runnerId });
     assert.ok(claimed, 'the runner was offered no session');
     assert.equal(claimed.sessionId, sessionId);
     assert.equal(claimed.agent.env?.OPENAI_BASE_URL, GATEWAY, 'a login pool session goes to the gateway, whatever its account');
-    if (park) await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+    if (park) await db.session.update({ where: { id: sessionId }, data: { turnState: null } });
     return claimed;
   }
   const sessionRow = (sessionId: string) =>
     db.session.findUniqueOrThrow({
       where: { id: sessionId },
-      select: { ownerId: true, provider: true, poolCodexAccountId: true, poolSwitchNotice: true, retryAt: true, status: true },
+      select: { ownerId: true, provider: true, poolCodexAccountId: true, poolSwitchNotice: true, retryAt: true, ...WORD_SELECT },
     });
   /** The account the session is on, and the transcript line it is owed. */
   const standing = async (sessionId: string) => {
@@ -286,7 +288,7 @@ suite("a login pool's sessions: which ChatGPT account each runs on, and when the
     assert.deepEqual(await queue.accountPoolResumesAt(owner.id, pool.slug, now), bBack);
     // The turn the limit ends arms its retry there.
     const failed = await failTurn(owner, session);
-    assert.equal(failed.status, RunStatus.FAILED);
+    assert.equal(wordOf(failed), RunStatus.FAILED);
     assert.ok(failed.retryAt, 'no retry was armed for a turn every account had spent');
     assert.ok(
       failed.retryAt.getTime() >= bBack.getTime() && failed.retryAt.getTime() < bBack.getTime() + 60_000,
@@ -320,7 +322,7 @@ suite("a login pool's sessions: which ChatGPT account each runs on, and when the
 
     const before = Date.now();
     const failed = await failTurn(owner, session);
-    assert.equal(failed.status, RunStatus.FAILED);
+    assert.equal(wordOf(failed), RunStatus.FAILED);
     assert.ok(failed.retryAt, 'no retry was armed');
     assert.ok(
       failed.retryAt.getTime() >= before && failed.retryAt.getTime() < Date.now() + 60_000,
@@ -415,7 +417,7 @@ suite("a login pool's sessions: which ChatGPT account each runs on, and when the
     // B, with A spent — and that is where it starts, not a move.
     const live = (await db.session.create({
       data: {
-        title: 'switched onto the pool', prompt: 'hello', status: RunStatus.AWAITING_INPUT,
+        title: 'switched onto the pool', prompt: 'hello', turnState: null,
         ownerId: owner.id, creatorId: owner.id, workspaceId: owner.workspaceId, assignedRunnerId: owner.runnerId,
         provider: 'codex', providerBuiltin: true, model: 'gpt-5.5', permissionMode: 'default', usesRuntimeDefaultModel: true,
         numTurns: 1, runtimeSessionId: randomUUID(), startedAt: new Date(),

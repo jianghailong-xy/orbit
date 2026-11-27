@@ -41,7 +41,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, RunStatus as SharedRunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -61,10 +62,12 @@ import {
   APPROVAL_ABANDONED_STATUS,
   APPROVAL_ORPHANED_MESSAGE,
   countLiveApprovals,
+  countLiveApprovalsBySession,
   reapApprovalsOfEndedTurns,
 } from './abandoned-approvals';
 import { SessionsService } from './sessions.service';
 import { pastCreateAllowance } from '../test-support/past-create-allowance';
+import { WORD_SELECT } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -164,7 +167,7 @@ async function fixture(db: PrismaClient, label: string): Promise<Fixture> {
       title: `${label} 的会话`,
       prompt: `${label} 的会话`,
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       engineTurnActive: true,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startedAt: new Date(),
@@ -756,10 +759,13 @@ test('a job card is collected when its job ends, not when the turn does', {
     assert.ok(row, 'the conversation is in this owner’s Open list');
     const session = await db.session.findUniqueOrThrow({
       where: { id: f.sessionId },
-      select: { id: true, taskId: true, status: true, engineTurnActive: true, runningBgShells: true, runningSubagents: true },
+      select: { id: true, taskId: true, ...WORD_SELECT, finishedAt: true, turnState: true, engineTurnActive: true, runningBgShells: true, runningSubagents: true },
     });
     const shown = await stack.sessions.listApprovals(f.ownerId, f.sessionId, 'PENDING');
-    return { list: row.pendingApprovals, live: await countLiveApprovals(db as never, session), shown: shown.length };
+    const live = await countLiveApprovals(db as never, session);
+    // The batch a search page counts with says the same (countLiveApprovalsBySession).
+    assert.equal((await countLiveApprovalsBySession(db as never, [session])).get(session.id), live, 'the batched count agrees');
+    return { list: row.pendingApprovals, live, shown: shown.length };
   }
 
   const card = await stack.api.createApproval({ id: f.runnerId }, f.sessionId, {

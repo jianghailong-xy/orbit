@@ -100,6 +100,12 @@ describe('nginx: the script a page waits for', () => {
   });
 });
 
+describe('nginx: the service worker', () => {
+  it('is revalidated on every check, so a deploy\'s worker replaces the old one, and says nothing of a file it does not have', () => {
+    expect(locationDirectives('= /sw.js')).toEqual(['add_header Cache-Control "no-cache"']);
+  });
+});
+
 describe('nginx: the icons the shell links', () => {
   it.each(['/favicon.ico', '/favicon.svg', '/favicon-32.png', '/apple-touch-icon.png'])(
     '%s is kept for a day, so a tab does not revalidate it, with no header of the shell\'s',

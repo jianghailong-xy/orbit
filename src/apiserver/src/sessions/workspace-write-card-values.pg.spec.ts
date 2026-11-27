@@ -8,7 +8,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -106,7 +107,7 @@ test('a reaper that collects a card takes its values with it', { skip: !URL, con
     await db.session.create({
       data: {
         id, ownerId, creatorId: ownerId, title: 'asker', prompt: 'p', provider: 'claude', providerBuiltin: true,
-        status: RunStatus.AWAITING_INPUT, runtimeSessionId: randomUUID(), dispatchOrigin: SessionDispatchOrigin.USER,
+        turnState: null, runtimeSessionId: randomUUID(), dispatchOrigin: SessionDispatchOrigin.USER,
       },
     });
     return id;

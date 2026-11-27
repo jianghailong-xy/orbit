@@ -5,9 +5,10 @@ import { classifyTransactionFault, loggedRetry, withTransactionRetry } from '../
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { DRIVE_CHUNK_MAX } from './drive-chunks.service';
+import { driveChatTurnOf, followDriveChatChange, recordDriveChatChange } from './drive-chat-change-record';
 
 /**
- * The drive's name layer (docs/orbit-files-drive-technical-design.md §1, §3, §5.4): folders and files over the chunk
+ * The drive's name layer (docs/drive-technical-design.md §1, §3, §5.4): folders and files over the chunk
  * store, versions, Trash and the change feed. Every rule here holds whichever door a write came through: the owner's
  * routes (drive.controller.ts), and the runner drive door and the mount daemon, which belong to their own tasks.
  *
@@ -23,6 +24,8 @@ import { DRIVE_CHUNK_MAX } from './drive-chunks.service';
  *     one cut off by a bound answers 503 DRIVE_LIMIT_HIT, not a bare 500.
  *   - Every change writes one drive_change row and moves the entry's `seq`; the feed re-reads 60 s back so a row whose
  *     transaction committed late is never skipped (§5.4). Each committed change is announced as `drive.changed`.
+ *   - A Drive chat's change is recorded, in the same transaction, into its turn's change group, which one Undo reverses;
+ *     a Drive chat never replaces a file by a rename (drive-chat-change-record.ts, drive-chat-changes.ts).
  *
  * The owner is always the caller's, from its credential; another account's entry, version or group is not found.
  */
@@ -66,6 +69,8 @@ export const DRIVE_VERSION_CURRENT = 'DRIVE_VERSION_CURRENT';
 export const DRIVE_TRASH_GROUP_NOT_FOUND = 'DRIVE_TRASH_GROUP_NOT_FOUND';
 export const DRIVE_CURSOR_INVALID = 'DRIVE_CURSOR_INVALID';
 export const DRIVE_LIMIT_HIT = 'DRIVE_LIMIT_HIT';
+/** A write that names the state it expects (`ifSeq`) found the entry changed since. */
+export const DRIVE_CHANGED_SINCE = 'DRIVE_CHANGED_SINCE';
 
 type Tx = Prisma.TransactionClient;
 export type DriveEntryRow = EntryRow;
@@ -79,6 +84,8 @@ export interface DriveWriter {
   kind: 'OWNER' | 'AGENT';
   sessionId?: string | null;
   runnerId?: string | null;
+  /** The owner's Apply of a Drive chat's held changes: what it makes is recorded into this change group. */
+  changeGroupId?: string | null;
 }
 export const OWNER_WRITER: DriveWriter = { kind: 'OWNER' };
 
@@ -142,6 +149,7 @@ function refusal(status: HttpStatus, code: string, message: string, extra: Recor
 const notFound = () => refusal(HttpStatus.NOT_FOUND, DRIVE_ENTRY_NOT_FOUND, 'No such file or folder.');
 const parentGone = () => refusal(HttpStatus.NOT_FOUND, DRIVE_PARENT_GONE, 'The folder is gone or in Trash.');
 const nameTaken = (name: string) => refusal(HttpStatus.CONFLICT, DRIVE_NAME_TAKEN, `"${name}" is already taken in that folder.`);
+const changedSince = () => refusal(HttpStatus.CONFLICT, DRIVE_CHANGED_SINCE, 'The file or folder changed since.');
 
 /**
  * A drive transaction cut off by a bound of §1.4 (a statement past 10 s, the transaction past 20 s), or turned away by the
@@ -681,6 +689,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
         data: { mtime, updatedAt: now, ...lastWriterFields(checked, now) },
       });
       const seq = await recordChanges(tx, ownerId, [{ entryId: id, parentId: updated.parentId, op: 'UPSERT' }]);
+      await followDriveChatChange(tx, ownerId, checked, id, { seq });
       return { entry: { ...updated, seq: BigInt(seq) }, seq };
     }, loggedRetry(this.logger, 'drive.setMtime', { transaction: TRANSACTION }));
     this.announce(ownerId, outcome.seq);
@@ -711,6 +720,10 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
             },
           });
           const changed = await recordChanges(tx, ownerId, [{ entryId: created.id, parentId: parent.id, op: 'UPSERT' }]);
+          await recordDriveChatChange(tx, ownerId, writer, {
+            kind: 'NEW_FOLDER', entryId: created.id, entryKind: 'FOLDER', beforeParentId: null, beforeName: null,
+            afterParentId: parent.id, afterName: free, afterSeq: changed,
+          });
           return { entry: { ...created, seq: BigInt(changed) }, seq: changed };
         }, loggedRetry(this.logger, 'drive.createFolder', { transaction: TRANSACTION }));
         this.announce(ownerId, seq);
@@ -785,6 +798,10 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
             data: { id: versionId, ownerId, entryId, createdAt: now, handleId: input.handleId ?? null, ...versionWriterFields(writer) },
           });
           const changed = await recordChanges(tx, ownerId, [{ entryId, parentId: parent.id, op: 'UPSERT' }]);
+          await recordDriveChatChange(tx, ownerId, writer, {
+            kind: 'NEW_FILE', entryId, entryKind: 'FILE', beforeParentId: null, beforeName: null,
+            afterParentId: parent.id, afterName: free, afterSeq: changed, versionId,
+          });
           return { entry: { ...created, seq: BigInt(changed) }, seq: changed };
         }, loggedRetry(this.logger, 'drive.createFile', { transaction: TRANSACTION }));
         this.announce(ownerId, seq);
@@ -811,6 +828,24 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
    *
    * A commit lands on its entry wherever it is now, in Trash included (§3.1).
    */
+  /**
+   * Which of these chunks the account already holds (docs/drive-directory-sync-design.md, "Sending what is not there
+   * yet"): the content a commit would accept without the bytes being sent again, by the very rule a commit checks
+   * (assertChunksHeld): bytes still kept, of the same size, named by a staging or a version of this account's. Another
+   * account's content is never counted, so the answer says nothing about what anyone else keeps.
+   */
+  async heldChunks(ownerId: string, chunks: Array<{ sha256: string; size: number }>): Promise<string[]> {
+    const wanted = [...new Set(chunks.map((c) => c.sha256).filter((sha) => /^[0-9a-f]{64}$/.test(sha)))];
+    if (!wanted.length) return [];
+    const held = await this.prisma.$queryRaw<Array<{ sha256: string; size_bytes: number | bigint }>>`
+      SELECT b."sha256", b."size_bytes" FROM "file_blob" b
+       WHERE b."sha256" = ANY(${wanted}::text[]) AND b."bytes_deleted_at" IS NULL
+         AND (EXISTS (SELECT 1 FROM "drive_staging_chunk" s WHERE s."sha256" = b."sha256" AND s."owner_id" = ${ownerId}::uuid)
+           OR EXISTS (SELECT 1 FROM "drive_version_chunk" v WHERE v."sha256" = b."sha256" AND v."owner_id" = ${ownerId}::uuid))`;
+    const sizes = new Map(held.map((h) => [h.sha256, Number(h.size_bytes)]));
+    return [...new Set(chunks.filter((c) => sizes.get(c.sha256) === c.size).map((c) => c.sha256))];
+  }
+
   async commit(
     ownerId: string,
     input: DriveCommitInput,
@@ -970,6 +1005,15 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
       data: { sizeBytes: size, mtime: now, updatedAt: now, ...lastWriterFields(writer, now) },
     });
     const seq = await recordChanges(tx, ownerId, [{ entryId: entry.id, parentId: entry.parentId, op: 'UPSERT' }]);
+    // A Drive chat's content: its new file's change follows it, else it is an edit, which Undo reverses to the version
+    // it replaced (none when it grew the current one in place).
+    if (!entry.trashedAt) {
+      await followDriveChatChange(tx, ownerId, writer, entry.id, { seq, versionId: result.versionId }, {
+        kind: 'EDIT', entryId: entry.id, entryKind: 'FILE', beforeParentId: entry.parentId, beforeName: entry.name,
+        afterParentId: entry.parentId, afterName: entry.name, afterSeq: seq, versionId: result.versionId,
+        replacedVersionId: result.replacedVersionId,
+      });
+    }
     if (input.stagingId) {
       await tx.driveStagingChunk.deleteMany({ where: { stagingId: input.stagingId, ownerId } });
       await tx.driveStaging.updateMany({ where: { id: input.stagingId, ownerId }, data: { touchedAt: now, dirty: false } });
@@ -991,7 +1035,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
   async rename(
     ownerId: string,
     id: string,
-    input: { name?: string; parentId?: string; writer?: DriveWriter; replace?: boolean },
+    input: { name?: string; parentId?: string; writer?: DriveWriter; replace?: boolean; ifSeq?: bigint },
   ): Promise<DriveEntryView> {
     const newName = input.name === undefined ? undefined : assertDriveName(input.name);
     let lockFirst = false;
@@ -1014,6 +1058,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
            WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid AND "trashed_at" IS NULL FOR UPDATE`;
         if (!rows.length) throw notFound();
         const entry = await tx.driveEntry.findUniqueOrThrow({ where: { id } });
+        if (input.ifSeq !== undefined && entry.seq !== input.ifSeq) throw changedSince();
         if (moving && entry.kind === 'FOLDER' && (await isWithin(tx, ownerId, dest.id, entry.id))) {
           throw refusal(HttpStatus.CONFLICT, DRIVE_MOVE_INTO_ITSELF, 'A folder cannot be moved into itself.');
         }
@@ -1024,6 +1069,8 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
         const target = await tx.driveEntry.findFirst({ where: { ownerId, parentId: dest.id, name, trashedAt: null, NOT: { id } } });
         if (target) {
           if (!input.replace || target.kind !== 'FILE' || entry.kind !== 'FILE') throw nameTaken(name);
+          // A Drive chat never replaces a file (owner decision Q2 A): its runner door asks the owner instead.
+          if (await driveChatTurnOf(tx, ownerId, writer)) throw nameTaken(name);
           if (!locked) return { again: true as const };
           return this.renameOnto(tx, ownerId, entry, target, writer, now);
         }
@@ -1035,6 +1082,10 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
           ? [{ entryId: id, parentId: entry.parentId, op: 'REMOVE' }, { entryId: id, parentId: dest.id, op: 'UPSERT' }]
           : [{ entryId: id, parentId: dest.id, op: 'UPSERT' }];
         const seq = await recordChanges(tx, ownerId, changes);
+        await recordDriveChatChange(tx, ownerId, writer, {
+          kind: moving ? 'MOVE' : 'RENAME', entryId: id, entryKind: entry.kind, beforeParentId: entry.parentId,
+          beforeName: entry.name, afterParentId: dest.id, afterName: name, afterSeq: seq,
+        });
         return { entry: { ...updated, seq: BigInt(seq) }, seq };
       }, loggedRetry(this.logger, 'drive.rename', { transaction: TRANSACTION }));
       if ('again' in outcome) {
@@ -1097,7 +1148,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
   async moveToTrash(
     ownerId: string,
     id: string,
-    options: { writer?: DriveWriter; burstKey?: string | null; burstWindowMs?: number } = {},
+    options: { writer?: DriveWriter; burstKey?: string | null; burstWindowMs?: number; ifSeq?: bigint } = {},
   ) {
     const first = await withTransactionRetry(this.prisma, async (tx) => {
       await bound(tx);
@@ -1115,6 +1166,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
       await tx.$queryRaw`SELECT "id" FROM "drive_entry" WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
       const entry = await tx.driveEntry.findUniqueOrThrow({ where: { id } });
       if (entry.trashedAt) throw notFound();
+      if (options.ifSeq !== undefined && entry.seq !== options.ifSeq) throw changedSince();
       const writer = await checkedWriter(tx, ownerId, options.writer ?? OWNER_WRITER);
       const now = new Date();
       const groupId = await deleteGroupFor(tx, ownerId, entry, writer, now, options.burstKey ?? null, options.burstWindowMs);
@@ -1139,11 +1191,54 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
         data: { lastAddedAt: now, ...countsOf(marked), ...(under.open.length ? { marking: true } : {}) },
       });
       const seq = await recordChanges(tx, ownerId, marked.map((m) => ({ entryId: m.id, parentId: m.parent_id, op: 'REMOVE' as const })));
+      const after = await tx.driveEntry.findUniqueOrThrow({ where: { id }, select: { seq: true } });
+      await recordDriveChatChange(tx, ownerId, writer, {
+        kind: 'TRASH', entryId: id, entryKind: entry.kind, beforeParentId: entry.parentId, beforeName: entry.name,
+        afterParentId: entry.parentId, afterName: entry.name, afterSeq: after.seq, trashGroupId: groupId,
+      });
       return { groupId, seq, open: under.open as string[] | null };
     }, loggedRetry(this.logger, 'drive.moveToTrash', { transaction: TRANSACTION })).catch(limitHit);
     this.announce(ownerId, first.seq);
     if (first.open === null || first.open.length) await this.finishTrash(ownerId, first.groupId, first.open);
     return { trashGroupId: first.groupId };
+  }
+
+  /**
+   * A folder a Drive chat made, removed outright by the owner's Undo (drive-chat-changes.ts): only while it is live, has
+   * not changed since `ifSeq`, holds no live entry and no upload is going into it. One that holds items in Trash is
+   * moved to Trash instead, in a DELETE group of its own (TRASHED), so those items keep a folder to come back to. Under
+   * the account's lock, as a folder trash is (§1.4). Anything else answers what it found, changing nothing.
+   */
+  async removeEmptyFolder(ownerId: string, id: string, ifSeq: bigint): Promise<'REMOVED' | 'TRASHED' | 'CHANGED' | 'NOT_EMPTY'> {
+    const outcome = await withTransactionRetry(this.prisma, async (tx) => {
+      await bound(tx);
+      await lockAccount(tx, ownerId);
+      // FOR UPDATE: a create or a restore into the folder holds it FOR SHARE, so it waits for this, or this for it.
+      const rows = await tx.$queryRaw<Array<{ kind: string; parent_id: string | null; trashed_at: Date | null; seq: bigint }>>`
+        SELECT "kind", "parent_id", "trashed_at", "seq" FROM "drive_entry"
+         WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
+      const folder = rows[0];
+      if (!folder || folder.kind !== 'FOLDER' || folder.trashed_at || folder.parent_id === null || folder.seq !== ifSeq) {
+        return { result: 'CHANGED' as const, seq: null };
+      }
+      const live = await tx.driveEntry.findFirst({ where: { ownerId, parentId: id, trashedAt: null }, select: { id: true } })
+        ?? await tx.driveStaging.findFirst({ where: { ownerId, parentId: id, committedAt: null }, select: { id: true } });
+      if (live) return { result: 'NOT_EMPTY' as const, seq: null };
+      if (await tx.driveEntry.findFirst({ where: { ownerId, parentId: id }, select: { id: true } })) {
+        const entry = await tx.driveEntry.findUniqueOrThrow({ where: { id } });
+        const now = new Date();
+        const groupId = await deleteGroupFor(tx, ownerId, entry, OWNER_WRITER, now, null);
+        await tx.driveEntry.update({ where: { id }, data: { trashedAt: now, trashGroupId: groupId, trashTop: true, updatedAt: now } });
+        await tx.driveTrashGroup.update({ where: { id: groupId }, data: { itemCount: 1, lastAddedAt: now } });
+        const seq = await recordChanges(tx, ownerId, [{ entryId: id, parentId: folder.parent_id, op: 'REMOVE' }]);
+        return { result: 'TRASHED' as const, seq };
+      }
+      await tx.driveEntry.delete({ where: { id } });
+      const seq = await recordChanges(tx, ownerId, [{ entryId: id, parentId: folder.parent_id, op: 'REMOVE' }]);
+      return { result: 'REMOVED' as const, seq };
+    }, loggedRetry(this.logger, 'drive.removeEmptyFolder', { transaction: TRANSACTION }));
+    this.announce(ownerId, outcome.seq);
+    return outcome.result;
   }
 
   /**
@@ -1325,12 +1420,23 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
    * Restore a replaced version (board choice c): as the current version (the current one goes to Trash in a VERSION group;
    * the file must be live), or as a copy beside the file named by the suffix rule, the chosen version staying in Trash.
    */
-  async restoreVersion(ownerId: string, versionId: string, as: 'CURRENT' | 'COPY', writer: DriveWriter = OWNER_WRITER) {
+  async restoreVersion(
+    ownerId: string,
+    versionId: string,
+    as: 'CURRENT' | 'COPY',
+    writer: DriveWriter = OWNER_WRITER,
+    options: { ifSeq?: bigint } = {},
+  ) {
     const outcome = await withTransactionRetry(this.prisma, async (tx) => {
       await bound(tx);
       const version = await tx.driveVersion.findFirst({ where: { id: versionId, ownerId } });
       if (!version) throw refusal(HttpStatus.NOT_FOUND, DRIVE_VERSION_NOT_FOUND, 'No such version.');
       if (!version.replacedAt) throw refusal(HttpStatus.CONFLICT, DRIVE_VERSION_CURRENT, 'That is already the current version.');
+      if (options.ifSeq !== undefined) {
+        const held = await tx.$queryRaw<Array<{ seq: bigint }>>`
+          SELECT "seq" FROM "drive_entry" WHERE "id" = ${version.entryId}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
+        if (held[0]?.seq !== options.ifSeq) throw changedSince();
+      }
       const checked = await checkedWriter(tx, ownerId, writer);
       const now = new Date();
       if (as === 'CURRENT') return restoreAsCurrent(tx, ownerId, version, checked, now);
@@ -1496,7 +1602,9 @@ async function pathOf(db: Tx | PrismaService, ownerId: string, entryId: string):
 
 /** The writer as recorded (§3.6): an agent's session only when it is the owner's and runs on the runner the write came through. */
 async function checkedWriter(tx: Tx, ownerId: string, writer: DriveWriter): Promise<DriveWriter> {
-  if (writer.kind === 'OWNER') return { kind: 'OWNER', sessionId: null, runnerId: null };
+  if (writer.kind === 'OWNER') {
+    return { kind: 'OWNER', sessionId: null, runnerId: null, ...(writer.changeGroupId ? { changeGroupId: writer.changeGroupId } : {}) };
+  }
   const runnerId = writer.runnerId ?? null;
   if (!writer.sessionId || !runnerId) return { kind: 'AGENT', sessionId: null, runnerId };
   const session = await tx.session.findFirst({ where: { id: writer.sessionId, ownerId, assignedRunnerId: runnerId }, select: { id: true } });

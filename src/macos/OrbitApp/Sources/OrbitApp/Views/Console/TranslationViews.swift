@@ -4,7 +4,7 @@ import OrbitKit
 // Settings › Translation in a conversation (board docs/mocks/session-translation/01-board.png,
 // frames 4–6 and 8): the line under a translated message with its per-message Show original, the
 // "Translating…" and "Translates when the reply is done" chips, and the failure rows with Retry /
-// Send as written. What each line says is `SessionTranslation.userFoot` / `replyFoot` in OrbitKit, where it
+// Send as written / Cancel. What each line says is `SessionTranslation.userFoot` / `replyFoot` in OrbitKit, where it
 // is tested; these only draw it and call the console's doors.
 
 /// What the open conversation can do about a translation, provided by `ConsoleView`. `on` is the
@@ -18,6 +18,8 @@ struct TranslationActions {
     var agentLanguage: TranslationLanguage = .agentDefault
     var retryTurn: (String) -> Void
     var sendAsWritten: (String) -> Void
+    /// Withdraw a held message that failed to translate; its words and files go back to the composer.
+    var cancelTurn: (UserBubble) -> Void
     var retryReply: (Int) -> Void
 }
 
@@ -59,7 +61,7 @@ struct TranslationFootView: View {
         }
     }
 
-    /// The words wrapped, then "Retry · Send as written" on a line of their own.
+    /// The words wrapped, then "Retry · Send as written · Cancel" on a line of their own.
     private var wrapped: some View {
         let words = parts.filter { if case .action = $0 { return false } else { return true } }
         let presses = parts.filter { if case .action = $0 { return true } else { return false } }

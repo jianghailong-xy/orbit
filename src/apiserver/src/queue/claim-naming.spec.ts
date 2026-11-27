@@ -3,7 +3,6 @@ import { test } from 'node:test';
 import { AgentProvider, PermissionMode, type ClaimedSession } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
 import { encryptSecret } from '../providers/provider-crypto';
-import { ENGINE_NAMING_INSTRUCTIONS } from '../sessions/naming';
 import { QueueService } from './queue.service';
 
 process.env.PROVIDER_SECRET_KEY = 'test-master-key';
@@ -107,22 +106,17 @@ async function withoutDeepSeek<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-test("with no DeepSeek key, a session on an engine's own sign-in is named by that engine", async () => {
+test("a claim never asks the engine to name the session: without DeepSeek's key, the session's provider is not spent on a title", async () => {
   await withoutDeepSeek(async () => {
     for (const provider of [AgentProvider.CLAUDE, AgentProvider.CODEX]) {
-      const claimed = await claim({ provider });
-      assert.deepEqual(claimed.naming, {
-        description: 'Fix the flaky login timeout on Safari\nIt fails about once in ten runs.',
-        instructions: ENGINE_NAMING_INSTRUCTIONS,
-      }, provider);
+      assert.equal('naming' in (await claim({ provider })), false, provider);
     }
-    // Bounded like every naming request.
-    assert.equal((await claim({ prompt: 'x'.repeat(2_000), title: 'x'.repeat(80) })).naming?.description.length, 600);
+    const subscription = { runtime: 'claude', baseUrl: 'https://api.anthropic.com', secret: 'sk-ant-oat01-x' };
+    assert.equal('naming' in (await claim({ provider: 'my-max', providerBuiltin: false, row: subscription })), false);
   });
 });
 
-test('a session something else names, or that already has a real title, is not named again', async () => {
-  // The server names it itself on its DeepSeek key.
+test('with a DeepSeek key the server names the session itself, and the claim asks for no name either', async () => {
   const original = process.env.DEEPSEEK_API_KEY;
   process.env.DEEPSEEK_API_KEY = 'test-key';
   try {
@@ -131,25 +125,4 @@ test('a session something else names, or that already has a real title, is not n
     if (original === undefined) delete process.env.DEEPSEEK_API_KEY;
     else process.env.DEEPSEEK_API_KEY = original;
   }
-  await withoutDeepSeek(async () => {
-    // A title of its own: a person's, a task's, a project's, or an earlier naming's.
-    assert.equal((await claim({ title: 'Safari login timeout' })).naming, undefined);
-    assert.equal((await claim({ taskId: '44444444-4444-4444-8444-444444444444' })).naming, undefined);
-    assert.equal((await claim({ titleManagedByProject: true })).naming, undefined);
-    // An engine with no way to answer from inside its own process.
-    assert.equal((await claim({ provider: AgentProvider.KIMI })).naming, undefined);
-    assert.equal((await claim({ provider: AgentProvider.ANTIGRAVITY })).naming, undefined);
-    // A key the server may spend: it named the session at creation.
-    const deepseek = { runtime: 'claude', baseUrl: 'https://api.deepseek.com/anthropic', secret: 'sk-ds' };
-    assert.equal((await claim({ provider: 'deepseek', providerBuiltin: false, row: deepseek })).naming, undefined);
-  });
-});
-
-test('a configured Claude subscription is named by the Claude Code that runs on it', async () => {
-  await withoutDeepSeek(async () => {
-    const subscription = { runtime: 'claude', baseUrl: 'https://api.anthropic.com', secret: 'sk-ant-oat01-x' };
-    const claimed = await claim({ provider: 'my-max', providerBuiltin: false, row: subscription });
-    assert.equal(claimed.provider, AgentProvider.CLAUDE);
-    assert.equal(claimed.naming?.instructions, ENGINE_NAMING_INSTRUCTIONS);
-  });
 });

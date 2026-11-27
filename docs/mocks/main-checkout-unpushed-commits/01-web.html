@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Main checkout bar: commits not pushed</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; background: #e9e9ee; }
+.board { width: 1760px; padding: 44px 48px 56px; background: #f4f4f7; color: #16161a;
+  font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; -webkit-font-smoothing: antialiased; }
+h1 { font-size: 28px; line-height: 1.3; letter-spacing: -.01em; margin: 0 0 10px; }
+.lede { color: #4a4a54; font-size: 15.5px; max-width: 1500px; margin: 0 0 26px; }
+code { font: 12.5px "JetBrains Mono", monospace; background: #e3e3ea; border-radius: 4px; padding: 1px 5px; }
+.section { display: flex; align-items: baseline; gap: 14px; margin: 34px 0 16px; padding-top: 18px; border-top: 1px solid #dcdce3; }
+.section.first { border-top: 0; padding-top: 0; margin-top: 0; }
+.sec { flex: none; font-size: 15px; font-weight: 700; border-radius: 999px; padding: 3px 14px; }
+.sec.now { background: #ffe0dc; color: #8f1d13; }
+.sec.after { background: #d9e6ff; color: #14428f; }
+.sec.ask { background: #fff0c2; color: #6b4a00; }
+.sec-sub { color: #5a5a64; font-size: 14.5px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; align-items: start; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; align-items: start; }
+.tile { min-width: 0; margin: 0; background: #fff; border-radius: 16px; padding: 18px 20px 16px; box-shadow: 0 0 0 1px rgba(0,0,0,.05), 0 2px 8px rgba(0,0,0,.04); }
+.tile + .tile.stack { margin-top: 26px; }
+.tile-title { font-size: 16px; font-weight: 650; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+.num { display: inline-flex; width: 22px; height: 22px; border-radius: 50%; background: #e5372b; color: #fff;
+  font-size: 12.5px; font-weight: 700; align-items: center; justify-content: center; flex: none; }
+.notes { list-style: none; margin: 12px 0 0; padding: 0; font-size: 14px; line-height: 1.6; color: #34343c; }
+.notes li { display: flex; gap: 10px; margin: 6px 0; }
+.notes li .num { margin-top: 1px; width: 20px; height: 20px; font-size: 11.5px; }
+.cmp { width: 100%; border-collapse: collapse; font-size: 14px; }
+.cmp th, .cmp td { text-align: left; vertical-align: top; padding: 9px 10px; border-top: 1px solid #ececf1; line-height: 1.55; }
+.cmp th { border-top: 0; color: #6a6a74; font-size: 13px; font-weight: 600; }
+.cmp td:first-child { width: 210px; font-weight: 600; }
+
+/* ---- product surface (tokens from src/web/src/index.css, light theme) ---- */
+.ui { --bg-base:#fff; --bg-subtle:#fafbfc; --bg-sunken:#f7f8fa; --bg-hover:#f5f6f7; --border:#dee0e3; --border-subtle:#eceef1;
+  --text-1:#1f2329; --text-2:#646a73; --text-3:#8f959e; --text-4:#a8acb3; --green:#2a9d4b; --red:#d1453b; --accent:#3370ff;
+  --warn:#b76e00; --warn-bg:#fff7e6; --warn-border:#ffe1a8;
+  font: 13px/1.45 Inter, "Noto Sans SC", sans-serif; color: var(--text-1);
+  background: #fff; border: 1px solid #e3e4e8; border-radius: 12px; padding: 14px; position: relative; }
+.ui .mono { font-family: "JetBrains Mono", monospace; }
+.wt-bar { border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-subtle); overflow: hidden; margin-bottom: 8px; }
+.wt-row { overflow: hidden; display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 2px 10px; font-size: 12px; }
+.wt-branch { display: inline-flex; align-items: center; gap: 5px; padding: 2px 7px; border: 1px solid var(--border); border-radius: 6px;
+  background: #fff; font: 11.5px "JetBrains Mono", monospace; color: var(--text-1); white-space: nowrap; flex: none; }
+.wt-branch .p { color: var(--text-3); }
+.dim { color: var(--text-3); white-space: nowrap; }
+.fr { display:inline-flex; width:22px; height:22px; border-radius:6px; background:#16161a; color:#fff; font-size:12.5px; font-weight:700; align-items:center; justify-content:center; flex:none; }
+.add { color: var(--green); font-family: "JetBrains Mono", monospace; font-size: 11.5px; }
+.del { color: var(--red); font-family: "JetBrains Mono", monospace; font-size: 11.5px; }
+.sp { flex: 1; }
+.merged { color: var(--green); font-weight: 600; white-space: nowrap; }
+.count { font-weight: 600; white-space: nowrap; }
+.subj { color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.caret { color: var(--text-3); font-size: 10px; }
+.btn { border: 1px solid var(--border); background: #fff; border-radius: 6px; padding: 2px 9px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+.btn.pri { background: var(--accent); border-color: var(--accent); color: #fff; }
+.panel { border-top: 1px solid var(--border-subtle); padding: 4px 0; background: #fff; }
+.frow { display: flex; gap: 8px; padding: 3px 12px; font: 11.5px "JetBrains Mono", monospace; color: var(--text-2); }
+.frow .sp { flex: 1; }
+.crow { display: grid; grid-template-columns: 14px 1fr auto auto auto; gap: 10px; align-items: center; padding: 6px 12px; font-size: 12.5px; }
+.crow:hover, .crow.hover { background: var(--bg-hover); }
+.crow .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); justify-self: center; }
+.crow .dot.pend { background: #fff; border: 1.5px dashed var(--warn); }
+.crow .dot.auto { background: #fff; border: 1.5px solid var(--text-4); }
+.crow .t { min-width: 0; }
+.crow .s { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crow .m { font-size: 11.5px; color: var(--text-3); display: flex; gap: 6px; align-items: center; }
+.crow .sha { font: 11px "JetBrains Mono", monospace; color: var(--text-3); }
+.turn { font-size: 11px; color: var(--accent); background: #eef3ff; border-radius: 4px; padding: 0 5px; }
+.tagx { font-size: 11px; border-radius: 4px; padding: 0 5px; }
+.tagx.auto { background: #eff0f2; color: var(--text-2); }
+.tagx.pend { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-border); }
+.pfoot { display: flex; align-items: center; gap: 8px; padding: 6px 12px 4px; border-top: 1px solid var(--border-subtle); font-size: 12px; color: var(--text-2); }
+.link { color: var(--accent); }
+.composer { border: 1px solid var(--border); border-radius: 14px; padding: 10px 14px; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.05); }
+.composer .ph { color: var(--text-4); font-size: 13.5px; min-height: 22px; }
+.composer .txt { font-size: 13.5px; min-height: 22px; }
+.composer .foot { display: flex; align-items: center; gap: 12px; margin-top: 10px; font-size: 12px; color: var(--text-2); }
+.send { width: 24px; height: 24px; border-radius: 50%; background: #c9ccd3; color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; }
+.send.on { background: var(--accent); }
+.mk { position: absolute; }
+.mk .num { box-shadow: 0 0 0 2.5px #fff, 0 2px 6px rgba(0,0,0,.3); }
+
+/* drawer */
+.drawer { display: grid; grid-template-columns: 250px 1fr; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: #fff; }
+.d-left { border-right: 1px solid var(--border-subtle); background: var(--bg-subtle); padding: 8px 0; }
+.d-tabs { display: flex; gap: 4px; padding: 2px 10px 8px; font-size: 12px; }
+.d-tab { padding: 2px 9px; border-radius: 6px; color: var(--text-2); }
+.d-tab.on { background: #fff; border: 1px solid var(--border); color: var(--text-1); font-weight: 600; }
+.d-c { padding: 6px 12px; font-size: 12.5px; border-left: 2px solid transparent; }
+.d-c.on { background: #fff; border-left-color: var(--accent); }
+.d-c .s { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.d-c .m { font-size: 11px; color: var(--text-3); }
+.d-main { padding: 14px 16px; min-width: 0; }
+.d-h { font-size: 15px; font-weight: 650; margin: 0 0 4px; }
+.d-meta { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--text-3); margin-bottom: 10px; flex-wrap: wrap; }
+.d-body { font-size: 13px; color: var(--text-2); margin: 0 0 12px; }
+.d-acts { display: flex; gap: 6px; margin-bottom: 12px; }
+.d-files { border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; }
+.d-f { display: flex; gap: 8px; padding: 5px 10px; font: 11.5px "JetBrains Mono", monospace; border-top: 1px solid var(--border-subtle); }
+.d-f:first-child { border-top: 0; }
+.d-f.open { background: var(--bg-sunken); }
+.diff { font: 11.5px/1.6 "JetBrains Mono", monospace; border-top: 1px solid var(--border-subtle); }
+.diff div { padding: 0 10px; white-space: pre; overflow: hidden; }
+.diff .h { color: var(--text-3); background: #f3f6fb; }
+.diff .a { background: #e9f7ee; }
+.diff .r { background: #fdecea; }
+
+/* transcript */
+.turnbox { font-size: 13.5px; color: var(--text-1); padding: 4px 4px 10px; }
+.turnbox p { margin: 0 0 8px; }
+.cchip { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; font-size: 12.5px; background: var(--bg-subtle); margin: 2px 0; max-width: 100%; }
+.cchip .g { color: var(--text-3); }
+/* ---- this board ---- */
+.mck-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: #c2710c; }
+.mck-dot.clean { background: #b8bcc4; }
+.mck-label { color: var(--text-2); white-space: nowrap; }
+.mck-branch { padding: 0 6px; border: 1px solid var(--border); border-radius: 4px; background: #fff; font: 11.5px "JetBrains Mono", monospace; }
+.mck-status { color: var(--text-3); white-space: nowrap; }
+.mck-status.live { color: var(--text-2); }
+.pbtn { flex: none; padding: 2px 10px; border: 1px solid #bcd3ff; border-radius: 6px; background: #eaf1ff; color: #3370ff; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.wt-row.hov { background: var(--bg-hover); cursor: pointer; }
+.cursor { position: absolute; font-size: 18px; line-height: 1; }
+.crow { grid-template-columns: 14px 1fr auto auto; }
+.ring { position: absolute; border: 2px dashed #e5372b; border-radius: 8px; pointer-events: none; }
+.dead { position: relative; }
+.dead { text-decoration: underline wavy #e5372b; text-underline-offset: 3px; }
+.morel { padding: 4px 12px 6px 36px; font-size: 12px; color: var(--text-3); }
+.morel code { font-size: 11px; }
+.note-box { border: 1px dashed #c9ccd3; border-radius: 8px; padding: 8px 12px; font-size: 12.5px; color: var(--text-2); background: #fafbfc; }
+.d-rail-h { white-space: nowrap; flex-wrap: wrap; padding: 2px 12px 8px; font-size: 12px; font-weight: 600; color: var(--text-1); display: flex; gap: 6px; }
+.d-rail-h .dim { font-weight: 400; }
+.transcript-stub { height: 46px; border-radius: 8px; background: repeating-linear-gradient(180deg, #f2f3f5 0 10px, transparent 10px 18px); opacity: .7; margin: 0 0 12px; }
+</style>
+</head>
+<body>
+<div class="board">
+  <h1>Main checkout bar: see the commits that aren't pushed</h1>
+  <p class="lede">The Main checkout bar says <b>Clean · 4 commits not pushed</b> and offers Push, but nothing says what those 4 commits are, and clicking the text does nothing. This proposal makes the row open into the same commit list as the session's worktree bar (board <code>session-commits-first</code>, live since 11-19). A commit then opens in the same drawer with its message, files and diff. Hand-drawn with the product's tokens; nothing is built.</p>
+
+  <div class="section first"><span class="sec now">Today</span><span class="sec-sub">A count and a Push button; the wavy text does nothing when clicked. The runner only reports <code>ahead: 4</code>, so there is nothing to show.</span></div>
+  <div class="grid2">
+    <figure class="tile">
+      <div class="tile-title">Clean, 4 commits ahead of origin/develop</div>
+      <div class="ui">
+        <div class="transcript-stub"></div>
+        <div class="wt-bar"><div class="wt-row">
+          <span class="mck-label">Main checkout</span><span class="mck-branch">develop</span>
+          <span class="mck-status dead">Clean · 4 commits not pushed</span>
+          <span class="sp"></span><span class="pbtn">Push to origin/develop</span>
+        </div></div>
+        <div class="composer" style="margin-top:22px"><div class="ph">Reply…</div><div class="foot"><span>＋</span><span>Auto</span><span class="sp"></span><span><b>Claude Opus 5.5</b> High</span><span>12%</span><span class="send">↑</span></div></div>
+      </div>
+    </figure>
+    <figure class="tile">
+      <div class="tile-title">What the person has to do instead</div>
+      <ul class="notes" style="margin-top:0">
+        <li><span class="num">!</span><span>Push blind, or open a terminal on the runner's machine and run <code>git log origin/develop..develop</code>. On a phone there is no terminal.</span></li>
+        <li><span class="num">!</span><span>On iOS, macOS and Android, tapping the bar opens the Review sheet, which then says "No uncommitted files." It's a dead end too (board 02).</span></li>
+        <li><span class="num">!</span><span>The worktree bar right below already lists its commits and opens each one. The Main checkout bar is the only Git bar that doesn't.</span></li>
+      </ul>
+    </figure>
+  </div>
+
+  <div class="section"><span class="sec after">Proposal</span><span class="sec-sub">The same bar, opening the way the worktree bar does. Every state below is the bar above the composer.</span></div>
+  <div class="grid2">
+    <div>
+      <figure class="tile">
+        <div class="tile-title"><span class="fr">A</span>Collapsed, hovered</div>
+        <div class="ui">
+          <div class="wt-bar" style="position:relative"><div class="wt-row hov">
+            <span class="mck-label">Main checkout</span><span class="mck-branch">develop</span>
+            <span class="mck-status live">Clean · 4 commits not pushed</span>
+            <span class="sp"></span><span class="pbtn">Push to origin/develop</span><span class="caret">▸</span>
+          </div></div>
+        </div>
+        <ul class="notes">
+          <li><span class="num">1</span><span>The whole row toggles, as <code>.wt-row-toggle</code> does on the worktree bar: hover tint, a ▸ caret at the end, <code>aria-expanded</code>. Push keeps its place and doesn't toggle the row.</span></li>
+          <li><span class="num">2</span><span>The status text reads one step darker once it leads somewhere. No new colour, no underline.</span></li>
+        </ul>
+      </figure>
+
+      <figure class="tile stack">
+        <div class="tile-title"><span class="fr">B</span>Expanded</div>
+        <div class="ui">
+          <div class="wt-bar"><div class="wt-row">
+            <span class="mck-label">Main checkout</span><span class="mck-branch">develop</span>
+            <span class="mck-status live">Clean · 4 commits not pushed</span>
+            <span class="sp"></span><span class="pbtn">Push to origin/develop</span><span class="caret">▾</span>
+          </div>
+          <div class="panel">
+            <div class="crow hover">
+              <span class="dot"></span>
+              <span class="t"><div class="s">fix(web): Settings and Admin nav take the sidebar's width</div><div class="m"><span class="sha">0f2a60f</span><span>· 18 min ago · 2 files</span></div></span>
+              <span class="add">+24</span><span class="del">−9</span>
+            </div>
+            <div class="crow">
+              <span class="dot"></span>
+              <span class="t"><div class="s">fix(web): centre the account menu's end values</div><div class="m"><span class="sha">503a4f0</span><span>· 41 min ago · 1 file</span></div></span>
+              <span class="add">+6</span><span class="del">−4</span>
+            </div>
+            <div class="crow">
+              <span class="dot"></span>
+              <span class="t"><div class="s">feat(web): session header Share is an open tray</div><div class="m"><span class="sha">c03a5c0</span><span>· 1 h ago · 5 files</span></div></span>
+              <span class="add">+142</span><span class="del">−37</span>
+            </div>
+            <div class="crow">
+              <span class="dot"></span>
+              <span class="t"><div class="s">docs(mocks): session header Share as an open tray</div><div class="m"><span class="sha">35574d8</span><span>· 1 h ago · 3 files</span></div></span>
+              <span class="add">+210</span><span class="del">−0</span>
+            </div>
+            <div class="pfoot"><span>On <span class="mono">develop</span>, not on <span class="mono">origin/develop</span></span><span class="sp"></span><span class="dim">Checked 12s ago</span></div>
+          </div></div>
+          <div class="composer"><div class="ph">Reply…</div><div class="foot"><span>＋</span><span>Auto</span><span class="sp"></span><span><b>Claude Opus 5.5</b> High</span><span>12%</span><span class="send">↑</span></div></div>
+        </div>
+        <ul class="notes">
+          <li><span class="num">3</span><span>Rows are the worktree bar's <code>CommitRow</code>: subject, short sha, age, file count and line counts, newest first. Click a row to open it (C).</span></li>
+          <li><span class="num">4</span><span>The list is <code>upstream..HEAD</code>, the same range <i>ahead</i> counts. It's read when the row opens, not on the heartbeat. The footer says where it was measured and how fresh that is.</span></li>
+          <li><span class="num">5</span><span>No per-commit actions (Revert, Push this one). The row's one action stays Push.</span></li>
+        </ul>
+      </figure>
+    </div>
+
+    <div>
+      <figure class="tile">
+        <div class="tile-title"><span class="fr">C</span>A commit opened (the session's right-side drawer)</div>
+        <div class="ui">
+          <div class="drawer">
+            <div class="d-left">
+              <div class="d-rail-h">Not pushed · 4</div>
+              <div class="d-c on"><div class="s">fix(web): Settings and Admin nav…</div><div class="m">0f2a60f · 18 min ago</div></div>
+              <div class="d-c"><div class="s">fix(web): centre the account menu…</div><div class="m">503a4f0 · 41 min ago</div></div>
+              <div class="d-c"><div class="s">feat(web): session header Share is…</div><div class="m">c03a5c0 · 1 h ago</div></div>
+              <div class="d-c"><div class="s">docs(mocks): session header Share…</div><div class="m">35574d8 · 1 h ago</div></div>
+            </div>
+            <div class="d-main">
+              <div class="d-h">fix(web): Settings and Admin nav take the sidebar's width, so the page panel doesn't jump</div>
+              <div class="d-meta"><span class="sha mono">0f2a60f</span><span>· 18 min ago</span><span class="add">+24</span><span class="del">−9</span><span>· 2 files</span></div>
+              <p class="d-body">Opening Settings swapped the sidebar for a narrower nav, so the page panel moved 24 px left and back. Both navs now take the sidebar's stored width.</p>
+              <div class="d-acts"><span class="btn">Copy sha</span></div>
+              <div class="d-files">
+                <div class="d-f open"><span>▾ src/web/src/index.css</span><span class="sp"></span><span class="add">+18</span><span class="del">−6</span></div>
+                <div class="diff">
+                  <div class="h">@@ -30412,9 +30412,12 @@ .settings-nav</div>
+                  <div> .settings-nav {</div>
+                  <div class="r">-  width: 220px;</div>
+                  <div class="a">+  width: var(--sidebar-width);</div>
+                  <div class="a">+  min-width: var(--sidebar-min);</div>
+                  <div>   flex: none;</div>
+                </div>
+                <div class="d-f"><span>▸ src/web/src/pages/SettingsLayout.tsx</span><span class="sp"></span><span class="add">+6</span><span class="del">−3</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <ul class="notes">
+          <li><span class="num">6</span><span>The worktree's commit view, reused: message first, then files and their diffs. The rail holds only the commits that aren't pushed. There's no "All changes" tab, because Review already shows the uncommitted files.</span></li>
+          <li><span class="num">7</span><span>Files and diffs come from the runner on demand, one commit at a time, like Review's patches today.</span></li>
+        </ul>
+      </figure>
+
+      <figure class="tile stack">
+        <div class="tile-title"><span class="fr">D</span>Uncommitted files and commits together</div>
+        <div class="ui">
+          <div class="wt-bar"><div class="wt-row">
+            <span class="mck-dot"></span><span class="mck-label">Main checkout</span><span class="mck-branch">develop</span>
+            <span class="mck-status live">3 uncommitted files · 4 commits not pushed</span>
+            <span class="sp"></span><span class="pbtn">Review</span><span class="pbtn">Push to origin/develop</span><span class="caret">▾</span>
+          </div>
+          <div class="panel">
+            <div class="crow">
+              <span class="dot pend"></span>
+              <span class="t"><div class="s">Uncommitted changes</div><div class="m"><span>3 files · not committed yet · opens Review</span></div></span>
+              <span class="add">+41</span><span class="del">−2</span>
+            </div>
+            <div class="crow">
+              <span class="dot"></span>
+              <span class="t"><div class="s">fix(web): Settings and Admin nav take the sidebar's width</div><div class="m"><span class="sha">0f2a60f</span><span>· 18 min ago · 2 files</span></div></span>
+              <span class="add">+24</span><span class="del">−9</span>
+            </div>
+            <div class="morel">… 3 more commits</div>
+          </div></div>
+        </div>
+        <ul class="notes">
+          <li><span class="num">8</span><span>The worktree bar's pending row leads the list and opens today's Review drawer. Review and Push stay on the row as today.</span></li>
+        </ul>
+      </figure>
+
+      <figure class="tile stack">
+        <div class="tile-title"><span class="fr">E</span>Edge rows</div>
+        <div class="ui">
+          <div class="wt-bar"><div class="panel" style="border-top:0">
+            <div class="morel">and 17 more not listed · <code>git log origin/develop..develop</code></div>
+          </div></div>
+          <div class="note-box" style="margin-top:10px">Runner too old to list commits: the bar is today's, with no caret and no hover.</div>
+        </div>
+        <ul class="notes">
+          <li><span class="num">9</span><span>The runner lists at most 20. Past that, the last line gives the count and the command to see the rest.</span></li>
+        </ul>
+      </figure>
+    </div>
+  </div>
+
+  <div class="section"><span class="sec after">Rules</span><span class="sec-sub">What each state shows.</span></div>
+  <figure class="tile">
+    <table class="cmp">
+      <tr><th>State</th><th>Collapsed bar</th><th>Expanded list</th><th>Row's buttons</th></tr>
+      <tr><td>Clean, commits ahead</td><td>Clean · N commits not pushed ▸</td><td>commits newest first</td><td>Push to &lt;upstream&gt;</td></tr>
+      <tr><td>Uncommitted, nothing ahead</td><td>N uncommitted files (today)</td><td>not expandable; the row opens Review, as macOS does today</td><td>Review</td></tr>
+      <tr><td>Uncommitted + ahead</td><td>N uncommitted files · M commits not pushed ▸</td><td>pending row (opens Review), then commits</td><td>Review, Push</td></tr>
+      <tr><td>More than 20 ahead</td><td>as above</td><td>20 rows + "and K more not listed"</td><td>as above</td></tr>
+      <tr><td>Runner without the field</td><td>today's bar, no caret</td><td>—</td><td>as today</td></tr>
+      <tr><td>Behind as well (diverged)</td><td>as above</td><td>only the commits ahead; Push's rejection says the rest (board 03)</td><td>as today</td></tr>
+    </table>
+  </figure>
+
+  <div class="section"><span class="sec ask">For you to decide</span><span class="sec-sub">Each changes what gets built.</span></div>
+  <figure class="tile">
+    <table class="cmp">
+      <tr><th>Decision</th><th>Recommended</th><th>Otherwise</th></tr>
+      <tr><td>A. On phones, the tap opens</td><td>A sheet listing the commits, like the worktree bar's on iOS and Android (board 02). The list doesn't push the transcript up.</td><td>The list folds open under the bar on phones too, max 4 rows, scrolling. That takes 4 rows off a phone's transcript.</td></tr>
+      <tr><td>B. How many commits</td><td>20 and "K more". The list rides on every snapshot read (each Review open, each refresh), so keep it short.</td><td>100, the worktree bar's cap: one rule for both bars, at a little more git work per read.</td></tr>
+    </table>
+  </figure>
+
+  <div class="section"><span class="sec after">Would touch</span><span class="sec-sub">For sizing only.</span></div>
+  <figure class="tile">
+    <table class="cmp">
+      <tr><td>Runner</td><td><code>maincheckout.go</code> scan: <code>branchCommitsBetween(root, @{upstream}, HEAD)</code> (from <code>branch_commits.go</code>), capped, with <code>commitsTruncated</code>. A snapshot read can name a commit and get its file patches.</td></tr>
+      <tr><td>Contract</td><td><code>MainCheckoutSnapshot.commits?: BranchCommit[]</code> in <code>mainCheckoutGit.ts</code>, <code>main_checkout_types.go</code>, the shared fixture, and §2 of <code>main-checkout-git-contract.md</code>. Snapshot only, never the heartbeat.</td></tr>
+      <tr><td>Server</td><td><code>validSnapshotAnswer</code> bounds the list; <code>GET …/main-checkout</code> forwards <code>commit</code>.</td></tr>
+      <tr><td>Web</td><td><code>MainCheckout.tsx</code> (toggle + <code>CommitList</code>), <code>MainCheckoutDrawer.tsx</code> (commit view via <code>WorktreeDiffDrawer</code>).</td></tr>
+      <tr><td>Apple, Android</td><td>Board 02.</td></tr>
+    </table>
+  </figure>
+</div>
+</body>
+</html>

@@ -22,7 +22,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus, type ModelProvider } from '@prisma/client';
+import { PrismaClient, RunnerStatus, type ModelProvider } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { ClaimedSession } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -141,7 +142,7 @@ async function liveSession(db: PrismaClient, ownerId: string, on: Machine, provi
     data: {
       title: 'live',
       prompt: 'hello',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       ownerId,
       creatorId: ownerId,
       workspaceId: on.workspaceId,
@@ -335,7 +336,7 @@ suite('an account pool through the doors that take a provider, on real PostgreSQ
     });
 
     // The claim after it stays on that member, and so does a restarted runner.
-    await db.session.update({ where: { id: live }, data: { status: RunStatus.PENDING } });
+    await db.session.update({ where: { id: live }, data: { turnState: 'QUEUED' } });
     assert.equal(token((await claim(box.runnerId, live)).agent.env), personal.key);
     const reclaimed = (await runnerApi.reclaim({ id: box.runnerId, ownerId: me.id })).sessions;
     assert.equal(token(reclaimed.find((s) => s.sessionId === live)?.agent.env), personal.key);

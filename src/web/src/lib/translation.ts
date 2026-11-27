@@ -14,6 +14,7 @@ import {
   type TranslationLanguage,
   type TurnTranslation,
   TRANSLATION_UNAVAILABLE_TAG,
+  type ProjectTextTranslation,
 } from '@orbit/shared';
 import { useEffect, useState } from 'react';
 import type { Me } from './queries';
@@ -31,6 +32,7 @@ export const TRANSLATION_COPY = {
   sendFailed: "Couldn't translate, so it wasn't sent",
   retry: 'Retry',
   sendAsWritten: 'Send as written',
+  cancel: 'Cancel',
   replyPending: 'Translates when the reply is done',
   replyFailed: "Couldn't translate this reply",
   // "Show both languages" (docs/mocks/session-translation/02-bilingual.png).
@@ -69,6 +71,12 @@ export function ownerLanguageTranslation<T extends { lang: TranslationLanguage; 
 ): T | undefined {
   if (!translation || translation.failed || me?.preferences?.translationEnabled !== true) return undefined;
   return translation.lang === translationLanguageOf(me) ? translation : undefined;
+}
+
+/** A criterion's text from the project's `translation` (ProjectTextTranslation, already picked for the
+ *  reader), matched by id; the original when it holds none for that criterion. */
+export function criterionTextIn(translation: ProjectTextTranslation | undefined, id: string, original: string): string {
+  return translation?.criteria?.find((criterion) => criterion.id === id)?.text || original;
 }
 
 /** An owner card's answer door refused the owner's words 422 TRANSLATION_FAILED: nothing was recorded,

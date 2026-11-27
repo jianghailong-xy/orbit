@@ -13,6 +13,7 @@ import type { ConfirmationUnderReview } from './owner-confirmation-review';
 import type { SessionOwnerItem, SessionOwnerRequest, SessionTaskMoveGroup, SessionWaitingKind } from './project-progress';
 import type { ExternalMessageFrom, OrbitMessageFrom, SessionMessageFrom } from './session-message';
 import type { SessionPhase, SessionTurnOutcome, SessionWaitingOn } from './session-phase';
+import type { SessionActivity } from './task-run-reason';
 import type { SessionRequestPeer } from './session-request';
 import type { SessionSourceRefusalDetail, SourceRefusalCode, SourceState } from './source';
 
@@ -98,12 +99,18 @@ export enum ControlEventType {
    *  above), sent to every user. `data` is a `ControlResourceChanged` whose id is `translation` and nothing
    *  else: a nudge to read `GET /users/me` again. Shipped clients treat it as an unknown type. */
   TRANSLATION_STATUS_CHANGED = 'translation.status_changed',
-  /** The owner's drive changed: a write added rows to its change feed (docs/orbit-files-drive-technical-design.md §5.4).
+  /** The owner's drive changed: a write added rows to its change feed (docs/drive-technical-design.md §5.4).
    *  USER-SCOPED (see above). `data` is a `ControlDriveChanged`: the feed's seq and nothing else, a nudge to read
    *  `GET /drive/changes`. Sent ONLY to a stream that declared it with `GET /api/events?hints=drive_changed`
    *  (`CONTROL_HINT_DRIVE_CHANGED`): an agent writing through the mount commits often, and a shipped client re-reads
    *  everything on a type it does not know. */
   DRIVE_CHANGED = 'drive.changed',
+  /** An agent's directory sync into the owner's Drive started, reported progress or ended
+   *  (docs/drive-directory-sync-design.md S4). USER-SCOPED (see above). `data` is a `ControlDriveSync`: the sync's
+   *  id and nothing else, a nudge to read `GET /drive/syncs`. Sent ONLY to a stream that declared it with
+   *  `GET /api/events?hints=drive_syncs` (`CONTROL_HINT_DRIVE_SYNCS`): a running sync reports every two seconds, and a
+   *  shipped client re-reads everything on a type it does not know. */
+  DRIVE_SYNC = 'drive.sync',
   /** The owner's Open list may read differently than it did. USER-SCOPED (see above). `data` is a
    *  `ControlListChanged`. Sent ONLY to a stream that declared it with
    *  `GET /api/events?hints=list_changed` (`CONTROL_HINT_LIST_CHANGED`): shipped clients treat a type
@@ -170,6 +177,14 @@ export const CONTROL_HINT_DRIVE_CHANGED = 'drive_changed';
 /** `data` for `drive.changed`: the change feed's seq when the write committed, as a decimal string. */
 export interface ControlDriveChanged {
   seq: string;
+}
+
+/** The `hints=` value a `GET /api/events` connection declares to receive `drive.sync`. */
+export const CONTROL_HINT_DRIVE_SYNCS = 'drive_syncs';
+
+/** `data` for `drive.sync`: the sync that moved. */
+export interface ControlDriveSync {
+  syncId: string;
 }
 
 /** The `hints=` value a `GET /api/events` connection declares to receive `owner_requests.changed`. */
@@ -246,6 +261,10 @@ export interface ControlSessionSummary {
   waitingOn?: SessionWaitingOn | null;
   endReason?: string | null;
   workFinished?: boolean;
+  /** The Background mark's inputs (SessionBackgroundFields), as the list row carries them. Absent from an older
+   *  control plane. */
+  activity?: SessionActivity | null;
+  runningBgCount?: number;
   /** Server-derived actions; optional for rolling-version compatibility. */
   capabilities?: SessionCapabilities;
   /** The engine the session runs on for good — the CLI on the runner (`claude`, `codex`, `kimi`,
@@ -339,7 +358,7 @@ export interface ControlSessionSummary {
   /** The sessions waiting on a reply from this one, oldest first. Same `[]` convention. */
   owesReplyTo?: SessionRequestPeer[];
   lastTurnAt: string | null;
-  /** Where the row sits in the session list (session.listed_at, migration 1434): moved only when the session changes
+  /** Where the row sits in the session list (session.listed_at, migration 1490): moved only when the session changes
    *  for its owner — created, a person's message, a turn ending on them, ended or completed — never by streamed
    *  activity, which moves lastTurnAt. Clients sort by this. Absent from an older control plane. */
   listedAt?: string;
@@ -429,6 +448,10 @@ export interface ControlSessionEnded {
   lastTurnOutcome?: SessionTurnOutcome | null;
   waitingOn?: SessionWaitingOn | null;
   workFinished?: boolean;
+  /** The Background mark's inputs (SessionBackgroundFields), the row as it stands now. Absent from an older
+   *  control plane. */
+  activity?: SessionActivity | null;
+  runningBgCount?: number;
 }
 
 /** `data` for `session.error`. `recoverable=true` marks a mid-turn (non-fatal) error — e.g. a

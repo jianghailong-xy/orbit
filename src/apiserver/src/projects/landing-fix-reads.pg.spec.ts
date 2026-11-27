@@ -5,11 +5,11 @@ import { test } from 'node:test';
 import {
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, RunStatus as SharedRunStatus, type IntegrationJobCommand } from '@orbit/shared';
 import { JwtService } from '@nestjs/jwt';
 import { Client } from 'pg';
@@ -55,6 +55,7 @@ import { SessionAttemptService } from './session-attempt.service';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
 import '../test-support/dequeue-under-lease';
+import { turnStateFilter } from '../sessions/session-turn-state';
 
 /**
  * Where a landing failure handed to its task's own work session stands (`docs/project-integration-line-contract.md`
@@ -228,7 +229,7 @@ async function world(stack: Stack, label: string, line: Line = 'PROJECT_BRANCH')
     data: {
       id: coordinatorSessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
       title: `coordinator: ${label}`, prompt: `coordinator: ${label}`, provider: 'claude',
-      status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
+      turnState: null, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
       titleManagedByProject: true, numTurns: 1, startedAt: new Date(), runtimeSessionId: `runtime-${coordinatorSessionId}`,
     },
   });
@@ -283,7 +284,7 @@ async function finishedTask(stack: Stack, w: World, label: string): Promise<Fini
     data: {
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId, workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId, title: `work ${label}`, prompt: 'work', provider: 'claude',
-      status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      turnState: null, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       isolationStatus: 'worktree', branch, branchSha: DELIVERED, baseSha: sha('b'), numTurns: 1,
       startedAt: minutesAgo(30), createdAt: minutesAgo(30), runtimeSessionId: randomUUID(),
       changedFiles: [{ path: 'src/a.ts', status: 'M', additions: 1, deletions: 0 }] as Prisma.InputJsonValue,
@@ -391,8 +392,8 @@ async function runFixTurn(
   await stack.db.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
     await tx.session.updateMany({
-      where: { id: t.sessionId, status: { in: [RunStatus.PENDING, RunStatus.AWAITING_INPUT] } },
-      data: { status: RunStatus.RUNNING, inboxLeaseOwner: leaseOwner, inboxLeaseGeneration: generation },
+      where: { id: t.sessionId, ...turnStateFilter(['QUEUED', null]) },
+      data: { turnState: 'IN_FLIGHT', inboxLeaseOwner: leaseOwner, inboxLeaseGeneration: generation },
     });
     await tx.inboxLeaseGeneration.updateMany({
       where: { sessionId: t.sessionId, retiredAt: null }, data: { retiredAt: new Date() },

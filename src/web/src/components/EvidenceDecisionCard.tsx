@@ -25,6 +25,7 @@ import {
   type RecordedDecisionRow,
   type SentToCoordinatorRow,
 } from './DecisionRail';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * The card that asks whether a task's submitted evidence settles it — composed by Orbit from the
@@ -616,9 +617,16 @@ export function EvidenceDecisionCard({
         <span className="evidence-decision-heading">
           {recorded ? EVIDENCE_DECISION_RECORDED_HEADING : evidenceDecisionHeading(standing)}
         </span>
-        <span className="criteria-provenance" title={EVIDENCE_PROVENANCE_TITLE}>
-          {PROVENANCE_LABEL}
-        </span>
+        {/* When the version on the card was submitted, beside the mark (board
+            evidence-waits-for-coordinator: `FROM ORBIT · submitted 7:59 PM`). */}
+        {decidable?.submittedAt ? (
+          <span className="evidence-decision-submitted">{evidenceSubmittedLine(decidable.submittedAt)}</span>
+        ) : null}
+        <Tooltip content={EVIDENCE_PROVENANCE_TITLE} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="criteria-provenance">
+            {PROVENANCE_LABEL}
+          </span>
+        </Tooltip>
       </div>
       <div className="approval-body is-questions decision-ask-body">
         <section className="decision-ask-q">
@@ -931,10 +939,12 @@ export function sentToCoordinatorLine(deliveredAt: string, now?: Date): string {
 function SentToCoordinatorLine({ sent }: { sent: SentToCoordinatorRow }): JSX.Element {
   return (
     <div className="evidence-sent" data-sent-row={decisionRowKey(sent)}>
-      <span className="evidence-sent-line" title={sent.title}>
-        <ArrowRightOutlined aria-hidden="true" />
-        {sentToCoordinatorLine(sent.deliveredAt)}
-      </span>
+      <Tooltip content={sent.title} delay={TEXT_TOOLTIP_DELAY_MS}>
+        <span className="evidence-sent-line">
+          <ArrowRightOutlined aria-hidden="true" />
+          {sentToCoordinatorLine(sent.deliveredAt)}
+        </span>
+      </Tooltip>
     </div>
   );
 }
@@ -960,6 +970,11 @@ export function decisionReceiptTime(decidedAt: string, now: Date = new Date()): 
   const time = at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   if (at.toDateString() === now.toDateString()) return time;
   return `${at.toLocaleDateString([], { month: 'numeric', day: 'numeric' })} ${time}`;
+}
+
+/** When the card's version was submitted, as the card's head says it. */
+export function evidenceSubmittedLine(submittedAt: string, now?: Date): string {
+  return `submitted ${decisionReceiptTime(submittedAt, now)}`;
 }
 
 /** The receipt's line: which answer, to which version, and when. */
@@ -1007,9 +1022,11 @@ export function EvidenceDecisionReceipt({ decided }: { decided: RecordedDecision
             ? EVIDENCE_DECISION_AGENT_RECORDED_HEADING
             : EVIDENCE_DECISION_RECORDED_HEADING}
         </span>
-        <span className="criteria-provenance" title={EVIDENCE_PROVENANCE_TITLE}>
-          {PROVENANCE_LABEL}
-        </span>
+        <Tooltip content={EVIDENCE_PROVENANCE_TITLE} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="criteria-provenance">
+            {PROVENANCE_LABEL}
+          </span>
+        </Tooltip>
       </div>
       <div className="approval-body is-questions decision-ask-body">
         <section className="decision-ask-q">

@@ -56,6 +56,7 @@ class RealtimeStoreTest {
         var heldDetail: CompletableDeferred<Unit>? = null
         fun response(json: String) = ApiResponse(200, json.encodeToByteArray())
         fun row(seq: Long) = """{"seq":$seq,"type":"assistant","payload":{"text":"row $seq"}}"""
+        fun event(seq: Long) = Wire.decode(row(seq).encodeToByteArray(), RunEvent.serializer())
         fun seq(row: String) = Wire.decode(row.encodeToByteArray(), RunEvent.serializer()).seq
         /** The queries of the `after=` page reads in `reads[from until until]`, to compare with [page]. */
         fun pages(from: Int = 0, until: Int = reads.size) =
@@ -523,7 +524,7 @@ class RealtimeStoreTest {
             val rig = Rig(this)
             val (_, store) = rig.start()
             val ended = rig.streams.session()
-            rig.rows = rig.rows + (2L..300L).map { rig.row(it) }
+            rig.rows = rig.rows + (2L..150L).map { rig.row(it) }
             rig.rows.subList(1, 10).forEach { ended.emit(it) }
             runCurrent()
             assertEquals(10, store.state.value.session!!.transcript.maxSeq)
@@ -533,71 +534,90 @@ class RealtimeStoreTest {
             runCurrent(); advanceTimeBy(1_001); runCurrent()
             val stream = rig.streams.session()
             assertNotSame(ended, stream)
-            assertEquals(listOf(rig.page(1), rig.page(201)), rig.pages(start, stream.readsBefore))
-            assertEquals("300", stream.request.api.query.toMap()["sinceSeq"])
-            assertEquals((1L..300L).toList(), store.state.value.session!!.transcript.events.map { it.seq })
+            assertEquals(listOf(rig.page(1)), rig.pages(start, stream.readsBefore))
+            assertEquals("150", stream.request.api.query.toMap()["sinceSeq"])
+            assertEquals((1L..150L).toList(), store.state.value.session!!.transcript.events.map { it.seq })
             store.close(); runCurrent()
         }
     }
 
-    /** Five 200-event pages are the server's own SSE_GAP_CAP. A restored gap of exactly that many closes in place
-     * before the stream connects; one event more is not paged further but re-seeded from the tail, as the server's
-     * resync would have ordered. */
-    @Test fun aRestoredGapPastFivePagesReseedsFromTheTail() = runTest {
-        for (gap in listOf(1_000L, 1_001L)) {
-            val rig = Rig(this)
-            val (_, store) = rig.start()
-            advanceTimeBy(101); runCurrent()
-            store.close(); runCurrent()
-            rig.rows = rig.rows + (2L..gap + 1).map { rig.row(it) }
-            val auth = rig.client()
-            auth.restore()
-            val restored = RealtimeStore(auth, backgroundScope)
-            val start = rig.reads.size
-            val connects = rig.streams.all.size
-            restored.setNetwork(true); restored.setForeground(true); runCurrent()
-            val catchUp = listOf(1L, 201L, 401L, 601L, 801L).map { rig.page(it) }
-            if (gap == 1_000L) {
-                val stream = rig.streams.session()
-                assertEquals(catchUp, rig.pages(start, stream.readsBefore))
-                assertEquals("1001", stream.request.api.query.toMap()["sinceSeq"])
-                assertEquals((1L..1_001L).toList(), restored.state.value.session!!.transcript.events.map { it.seq })
-            } else {
-                assertEquals(catchUp, rig.pages(start))
-                assertTrue("no session stream before the re-seed", rig.streams.all.drop(connects).none { it.request.api.path.size > 1 })
-                assertTrue(restored.state.value.session!!.transcript.events.isEmpty())
-                advanceTimeBy(1_001); runCurrent()
-                val stream = rig.streams.session()
-                assertEquals(catchUp, rig.pages(start, stream.readsBefore))
-                assertTrue(rig.reads.subList(start, stream.readsBefore).any { it.api.query.toMap()["tail"] == "200" })
-                assertEquals("1002", stream.request.api.query.toMap()["sinceSeq"])
-                assertEquals((803L..1_002L).toList(), restored.state.value.session!!.transcript.events.map { it.seq })
+    /** Restores a saved transcript of event 1, then adds rows up to [last] on the server; returns the restored store. */
+    private suspend fun TestScope.reopen(rig: Rig, last: Long): RealtimeStore {
+        rig.rows = rig.rows + (2L..last).map { rig.row(it) }
+        val auth = rig.client()
+        auth.restore()
+        return RealtimeStore(auth, backgroundScope)
+    }
+
+    /** Every distinct set of events the window held while [block] ran, in order: what a reader's list would have drawn. */
+    private fun TestScope.drawn(store: RealtimeStore, into: MutableList<List<Long>>) {
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            store.state.collect { s ->
+                val seqs = s.session?.transcript?.events?.map { it.seq } ?: return@collect
+                if (seqs.isNotEmpty() && into.lastOrNull() != seqs) into += seqs
             }
-            restored.close(); runCurrent()
         }
     }
 
-    /** A catch-up page that fails is not retried before the stream: the stream attempt right after it is the retry,
-     * from the frontier the earlier pages advanced. onOpen reads one seam page and does not follow its cursor; the
-     * replay carries the rest. */
-    @Test fun aFailedCatchUpPageLeavesTheRetryToTheStreamFromTheAdvancedFrontier() = runTest {
+    /** A gap that fits one page is read with one page request and lands in one publish before the stream opens. */
+    @Test fun aReopenWhoseGapFitsOnePageIsCaughtUpWithOnePageAndOnePublish() = runTest {
         val rig = Rig(this)
         val (_, store) = rig.start()
         advanceTimeBy(101); runCurrent()
         store.close(); runCurrent()
-        rig.rows = rig.rows + (2L..600L).map { rig.row(it) }
-        rig.pageFailures[201] = 503
-        val auth = rig.client()
-        auth.restore()
-        val restored = RealtimeStore(auth, backgroundScope)
+        val restored = reopen(rig, 150)
+        val start = rig.reads.size
+        val seen = mutableListOf<List<Long>>()
+        drawn(restored, seen)
+        restored.setNetwork(true); restored.setForeground(true); runCurrent()
+        val stream = rig.streams.session()
+        assertEquals(listOf(rig.page(1)), rig.pages(start, stream.readsBefore))
+        assertEquals("150", stream.request.api.query.toMap()["sinceSeq"])
+        assertEquals(listOf(listOf(1L), (1L..150L).toList()), seen)
+        assertEquals((1L..150L).toList(), restored.state.value.session!!.transcript.events.map { it.seq })
+    }
+
+    /** A gap wider than one page is not paged through: one tail request re-seeds the window at once, with no empty window
+     * between and no backoff, so a following reader's window ends at the latest event after one change of content. */
+    @Test fun aReopenWhoseGapIsWiderThanOnePageReseedsFromTheTailAtOnce() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        advanceTimeBy(101); runCurrent()
+        store.close(); runCurrent()
+        val restored = reopen(rig, 1_001)
+        val start = rig.reads.size
+        val seen = mutableListOf<List<Long>>()
+        drawn(restored, seen)
+        restored.setNetwork(true); restored.setForeground(true); runCurrent()
+        val stream = rig.streams.session()
+        assertEquals(listOf(rig.page(1)), rig.pages(start, stream.readsBefore))
+        assertEquals(1, rig.reads.subList(start, stream.readsBefore).count { it.api.query.toMap()["tail"] == "200" })
+        assertEquals("1001", stream.request.api.query.toMap()["sinceSeq"])
+        assertEquals(listOf(listOf(1L), (802L..1_001L).toList()), seen)
+        val transcript = restored.state.value.session!!.transcript
+        // The reader's window, following, goes straight to the latest event; in history it keeps what it had.
+        val window = ReadingWindow().seed(EventPage(listOf(rig.event(1)), false))
+        assertEquals(1_001L, window.live(transcript, true).events.last().seq)
+        assertEquals(listOf(1L), window.live(transcript, false).events.map { it.seq })
+    }
+
+    /** A catch-up read that fails is not retried before the stream: the stream attempt right after it is the retry,
+     * from the current frontier. onOpen reads one seam page and does not follow its cursor; the replay carries the rest. */
+    @Test fun aFailedCatchUpReadLeavesTheRetryToTheStreamFromTheCurrentFrontier() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        advanceTimeBy(101); runCurrent()
+        store.close(); runCurrent()
+        rig.pageFailures[1] = 503
+        val restored = reopen(rig, 600)
         val start = rig.reads.size
         restored.setNetwork(true); restored.setForeground(true); runCurrent()
         val stream = rig.streams.session()
-        assertEquals(listOf(rig.page(1), rig.page(201)), rig.pages(start, stream.readsBefore))
-        assertEquals("201", stream.request.api.query.toMap()["sinceSeq"])
-        assertEquals(listOf(rig.page(201)), rig.pages(stream.readsBefore))
+        assertEquals(listOf(rig.page(1)), rig.pages(start, stream.readsBefore))
+        assertEquals("1", stream.request.api.query.toMap()["sinceSeq"])
+        assertEquals(listOf(rig.page(1)), rig.pages(stream.readsBefore))
         assertEquals(ConnectionState.CONNECTED, restored.state.value.session!!.connection)
-        assertEquals(401, restored.state.value.session!!.transcript.resumeSeq)
+        assertEquals(201, restored.state.value.session!!.transcript.resumeSeq)
     }
 
     @Test fun resyncDropsWindowAndSeedsTailBeforeUsingNewCursor() = runTest {

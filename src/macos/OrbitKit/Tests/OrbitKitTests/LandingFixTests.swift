@@ -101,6 +101,8 @@ final class LandingFixTests: XCTestCase {
     func testBranchesAndPathsShortenAsTheBoardDoes() {
         XCTAssertEqual(LandingFix.shortBranch(target), "project/34ZZn...CsCFp")
         XCTAssertEqual(LandingFix.shortBranch("main"), "main")
+        XCTAssertEqual(LandingFix.shortBranch("project/foo-352xNyEH"), "project/foo-352xNyEH")
+        XCTAssertEqual(LandingFix.shortBranch("project/352xNyEH"), "project/352xNyEH")
         XCTAssertEqual(LandingFix.shortPath("a/b.kt"), "a/b.kt")
         XCTAssertEqual(LandingFix.shortPath("app/src/x/y/notify/Router.kt"), "app/…/notify/Router.kt")
     }

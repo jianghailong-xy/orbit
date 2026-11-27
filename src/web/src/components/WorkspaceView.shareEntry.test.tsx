@@ -5,15 +5,17 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
  * Where a session says it is public, and the three ways out of its ⋯ menu
  * (docs/share-links-design.md §3, §8; mock 06-manage-and-entry ⑤ ⑥), on the real WorkspaceView:
  *
  *   - the list row of a session a link opens carries a globe beside its time, and no other row does;
- *   - the open conversation's header says "Shared · Live";
- *   - the ⋯ menu offers Copy link (the signed-in address), Share… (with "Live link" while one is
- *     open) and Download HTML (read as the owner — no public link needed);
+ *   - the open conversation's header has a Share button beside ⋯, which says "Shared · Live" while a
+ *     link is open (docs/mocks/session-header-compact);
+ *   - the ⋯ menu offers Copy link (the signed-in address) and Download HTML (read as the owner — no
+ *     public link needed);
  *   - moving a shared session to Trash first says its link pauses, and comes back on restore.
  */
 
@@ -155,7 +157,7 @@ const listRow = (title: string): HTMLElement => {
 
 /** Opens the conversation header's ⋯ menu and hands back the popup the menu mounted. */
 async function openHeaderMenu(): Promise<HTMLElement> {
-  await click(mounted().querySelector('.workspace-header button[title="More actions"]'), 'the header ⋯ button');
+  await click(mounted().querySelector('.workspace-header button[aria-label="More actions"]'), 'the header ⋯ button');
   await act(async () => {
     await vi.waitFor(() => expect(document.querySelector('[role="menu"]:not([data-closed])')).not.toBeNull(), {
       timeout: 10_000,
@@ -165,7 +167,7 @@ async function openHeaderMenu(): Promise<HTMLElement> {
   return document.querySelector<HTMLElement>('[role="menu"]:not([data-closed])')!;
 }
 
-/** The menu's rows below the tags, top to bottom; a divider is a row of its own. */
+/** The menu's rows, top to bottom; a divider is a row of its own. */
 const drawn = (menu: HTMLElement): string[] =>
   [...menu.querySelectorAll(':scope > [role="menuitem"], :scope > [role="separator"]')].map((el) =>
     el.getAttribute('role') === 'separator' ? '─' : (el.textContent ?? '').trim(),
@@ -265,58 +267,69 @@ describe('a shared session in the session list and its conversation', { timeout:
 
     const globe = listRow(SHARED.title).querySelector<HTMLElement>('.session-title-row .session-shared');
     expect(globe, 'the shared row has no globe').not.toBeNull();
-    expect(globe!.getAttribute('title')).toBe('Shared · anyone with the link');
-    expect(globe!.getAttribute('title')).toBe(SESSION_SHARED_TIP);
+    expect(SESSION_SHARED_TIP).toBe('Shared · anyone with the link');
     expect(globe!.querySelector('.anticon-global')).not.toBeNull();
     // Beside the time: the globe is the element right before it.
     expect(globe!.nextElementSibling?.classList.contains('session-time')).toBe(true);
     expect(listRow(PLAIN.title).querySelector('.session-shared')).toBeNull();
+    expect(await hoverTooltip(globe!)).toBe(SESSION_SHARED_TIP);
   });
 
-  it('says "Shared · Live" in the header of a shared conversation, and nothing in one nobody shared', async () => {
+  it('says "Shared · Live" on the header\'s Share button of a shared conversation, and plain Share… in one nobody shared', async () => {
     await mount(SHARED_PUBLIC);
     await act(async () => {
-      await vi.waitFor(() => expect(mounted().querySelector('.workspace-header .session-shared-pill')).not.toBeNull());
+      await vi.waitFor(() => expect(mounted().querySelector('.workspace-header-share.is-live')).not.toBeNull());
     });
-    expect(mounted().querySelector('.workspace-header .session-shared-pill')?.textContent?.trim()).toBe('Shared · Live');
+    expect(mounted().querySelector('.workspace-header-share')?.getAttribute('aria-label')).toBe('Shared · Live');
+    expect(mounted().querySelector('.workspace-header .session-shared-pill')).toBeNull();
 
     await act(async () => root!.unmount());
     root = null;
     container?.remove();
     await mount(PLAIN_PUBLIC);
-    expect(mounted().querySelector('.workspace-header .session-shared-pill')).toBeNull();
+    expect(mounted().querySelector('.workspace-header-share')?.getAttribute('aria-label')).toBe('Share…');
+    // The header's two icons use the app's Tooltip, not the browser's own tip.
+    expect(mounted().querySelector('.workspace-header-share')?.hasAttribute('title')).toBe(false);
+    expect(mounted().querySelector('.workspace-header-more')?.hasAttribute('title')).toBe(false);
+    expect(mounted().querySelector('.workspace-header-share.is-live')).toBeNull();
   });
 
-  it('offers Copy link, Share… · Live link and Download HTML, in that order, above Delete', async () => {
+  it('offers Follow… with the organize group, then Copy link and Download HTML, in that order', async () => {
     await mount(SHARED_PUBLIC);
     await act(async () => {
-      await vi.waitFor(() => expect(mounted().querySelector('.workspace-header .session-shared-pill')).not.toBeNull());
+      await vi.waitFor(() => expect(mounted().querySelector('.workspace-header-share.is-live')).not.toBeNull());
     });
     const menu = await openHeaderMenu();
 
     const rows = drawn(menu);
-    expect(rows.slice(rows.indexOf('Complete'))).toEqual([
+    // docs/mocks/session-header-menu: organize, share, inspect, then Delete on its own.
+    expect(rows.map((row) => (row.startsWith('Tags') ? 'Tags' : row.startsWith('Find in session') ? 'Find in session' : row.startsWith('Agent tools') ? 'Agent tools' : row))).toEqual([
       'Complete',
       'Rename…',
       'Move…',
-      'Settings…',
+      'Tags',
+      'Follow…',
       '─',
       'Copy link',
-      'Share…Live link',
       'Download HTML',
+      '─',
+      'Find in session',
+      'Agent tools',
+      'Session settings…',
       '─',
       'Delete',
     ]);
-    expect(item(menu, 'Share…').querySelector('.scope-menu-value')?.textContent).toBe('Live link');
   });
 
-  it('a session nobody shared offers plain Share…', async () => {
+  // A wide header has no Follow chip; ⋯ → Follow… opens the same watch editor (docs/mocks/session-header-compact).
+  it('Follow… opens the watch editor on this session, and the header has no Follow chip', async () => {
     await mount(PLAIN_PUBLIC);
+    expect(mounted().querySelector('.workspace-header .watch-chip.is-action')).toBeNull();
     const menu = await openHeaderMenu();
-    expect(drawn(menu)).toContain('Share…');
-    expect(item(menu, 'Share…').querySelector('.scope-menu-value')).toBeNull();
-    expect(drawn(menu)).toContain('Copy link');
-    expect(drawn(menu)).toContain('Download HTML');
+    await click(item(menu, 'Follow…'), 'Follow…');
+    await act(async () => {
+      await vi.waitFor(() => expect(document.querySelector('.watch-editor-dialog')).not.toBeNull());
+    });
   });
 
   it('Copy link copies the signed-in address, not the public one', async () => {
@@ -340,10 +353,9 @@ describe('a shared session in the session list and its conversation', { timeout:
     });
   });
 
-  it('Share… opens the unified dialog on this session', async () => {
+  it('the header\'s Share button opens the unified dialog on this session', async () => {
     await mount(PLAIN_PUBLIC);
-    const menu = await openHeaderMenu();
-    await click(item(menu, 'Share…'), 'Share…');
+    await click(mounted().querySelector('.workspace-header-share'), 'the header Share button');
     await act(async () => {
       await vi.waitFor(() => expect(document.querySelector('[role="dialog"].share-dialog')).not.toBeNull());
     });
@@ -360,7 +372,7 @@ describe('a shared session in the session list and its conversation', { timeout:
   it('moving a shared session to Trash first says its link pauses and comes back on restore', async () => {
     await mount(SHARED_PUBLIC);
     await act(async () => {
-      await vi.waitFor(() => expect(mounted().querySelector('.workspace-header .session-shared-pill')).not.toBeNull());
+      await vi.waitFor(() => expect(mounted().querySelector('.workspace-header-share.is-live')).not.toBeNull());
     });
     const menu = await openHeaderMenu();
     await click(item(menu, 'Delete'), 'Delete');

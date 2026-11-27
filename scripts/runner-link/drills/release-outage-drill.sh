@@ -32,6 +32,7 @@
 set -euo pipefail
 # shellcheck source=../staging-lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../staging-lib.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../../lib/session-word.sh"
 
 helper="$here/drills/drill-api.mjs"
 out="$state/client/release-outage"
@@ -156,7 +157,7 @@ wait_answered() {
   done
 }
 turn_of() { psql_value "SELECT id FROM conversation_turn WHERE session_id = '$1' AND content LIKE '%$2%'"; }
-session_status() { psql_value "SELECT status FROM session WHERE id = '$1'"; }
+session_status() { psql_value "SELECT $(session_word_sql s) FROM session s WHERE s.id = '$1'"; }
 
 # --- The control plane going down and coming back. --------------------------------------------------------------------
 # kill_container NAME: the container killed, as a crash or a lost host ends it. A kill is a stop to Docker, so its

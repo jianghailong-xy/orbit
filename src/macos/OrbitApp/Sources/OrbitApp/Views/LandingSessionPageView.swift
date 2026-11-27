@@ -149,6 +149,11 @@ struct LandingStatusCardView: View {
                         timedOutDoors(landing)
                     }
                 }
+                if let pullRequest = landing.pullRequest {
+                    LandingPullRequestBlock(
+                        pullRequest: pullRequest,
+                        main: landing.currentAttempt.map { TaskLandingLogic.branch($0.targetRef) } ?? facts.mainBranch)
+                }
                 if fixing {
                     LandingFixingDoors(landing: landing, now: now, act: act)
                 } else {

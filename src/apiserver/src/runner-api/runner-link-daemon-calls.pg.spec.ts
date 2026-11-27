@@ -25,7 +25,8 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import { type PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { toUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -121,7 +122,7 @@ test('the daemon\'s Cursor key checks and job alerts: on the link, and refused o
     data: {
       id: othersSession, ownerId: owner.id, creatorId: owner.id, workspaceId: other.workspaceId, assignedRunnerId: other.id,
       title: 'the other machine\'s session', prompt: 'the work', provider: 'claude', engine: 'claude',
-      status: RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
+      turnState: 'IN_FLIGHT', dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
     },
   });
 

@@ -27,6 +27,9 @@ set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 API="$REPO/src/apiserver"
 UNIT=0255_codex_rate_limit_reset_operation
+# Later migrations that alter 0255's table. They cannot apply without it, so the database without 0255 goes
+# without them too, and rolling 0255 back and forward again re-applies them after it.
+DEPENDENTS=(1669_codex_reset_operation_account_slot)
 SPEC=src/apiserver/src/runners/codex-rate-limit-reset.pg.spec.ts
 # The reporter a `node --test` child is pinned to, and the parser that decides whether its summary can
 # be believed; shared with run-pg-spec.sh.
@@ -110,7 +113,9 @@ migration_round_trip() {
   local dir name
   for dir in "$API"/prisma/migrations/[0-9][0-9][0-9][0-9]_*/; do
     name="$(basename "$dir")"
-    [ "$name" != "$UNIT" ] && cp -R "$dir" "$WORK/frontier/$name"
+    [ "$name" = "$UNIT" ] && continue
+    [[ " ${DEPENDENTS[*]} " == *" $name "* ]] && continue
+    cp -R "$dir" "$WORK/frontier/$name"
   done
   echo "==> prisma migrate deploy: pccreset_before with every migration but $UNIT, pccreset_after with all of them"
   ( cd "$API" && DATABASE_URL="$(url pccreset_before)" \
@@ -159,8 +164,11 @@ SQL
   [ "$(sql pccreset_after -c 'SELECT count(*) FROM "runner"' </dev/null)" = 1 ] ||
     red "the rollback lost the runner row it ran over"
 
-  sql pccreset_after -c "DELETE FROM \"_prisma_migrations\" WHERE \"migration_name\" = '$UNIT'" </dev/null >/dev/null ||
-    { red "could not delete $UNIT's ledger row"; return; }
+  local unit
+  for unit in "$UNIT" "${DEPENDENTS[@]}"; do
+    sql pccreset_after -c "DELETE FROM \"_prisma_migrations\" WHERE \"migration_name\" = '$unit'" </dev/null >/dev/null ||
+      { red "could not delete $unit's ledger row"; return; }
+  done
   ( cd "$API" && DATABASE_URL="$(url pccreset_after)" "$PRISMA" migrate deploy >"$WORK/deploy-again.log" 2>&1 ) ||
     { cat "$WORK/deploy-again.log"; red "prisma migrate deploy did not roll $UNIT forward again"; return; }
   same_schema "$WORK/after.sql" pccreset_after "rolled forward again, the schema is not the $UNIT one" || return

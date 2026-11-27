@@ -193,6 +193,14 @@ type integrationResult struct {
 	UnknownPushes []IntegrationUnknownPushCheck
 	// Observations is an OBSERVED job's answer, one per task its command named (§10.6 O-S2).
 	Observations []IntegrationObservation
+	// LandingRefSha and PushRefusal are a PULL_REQUEST answer's (docs/design/protected-branch-landing.md §4.2
+	// J-T14): the commit the landing branch holds after the push, and GitHub's words for the refused target push.
+	LandingRefSha string
+	PushRefusal   string
+	// PushedAs and BypassedRules are a LANDED Push as me answer's (§5.2): "OWNER", and the rules GitHub said the
+	// owner's push bypassed.
+	PushedAs      string
+	BypassedRules []string
 	// Interrupted is a job this runner stopped because the runner itself is stopping
 	// (runIntegrationJobUntil): it pushed nothing, so it is handed back rather than answered, and
 	// Phase says where it was. Never part of a report.
@@ -712,22 +720,52 @@ func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, sc
 		result.ErrorDetail = map[string]any{"detail": refusal}
 		return result
 	}
+	// docs/design/protected-branch-landing.md §9 item 2: the subject's pull request is open, so this attempt pushes
+	// only its landing branch. The target refused this subject before, and the pull request is how it lands now.
+	viaPullRequest := landsThroughPullRequest(cmd.LandVia, cmd.LandingRef, local)
+	if viaPullRequest && cmd.PullRequestOpen {
+		return toLandingBranch(result, cmd, scratch, remote, tested, treeSha, targetSha, "")
+	}
+	// docs/design/protected-branch-landing.md §5.2: Push as me pushes the target with the owner's token, asked for
+	// here, past the push boundary, and held for this push alone. Not to be had, the landing branch is pushed instead.
+	owner, refusal := ownerCredentialForJob(cmd, scratch, remote, viaPullRequest, progress)
+	if refusal != "" {
+		return toLandingBranch(result, cmd, scratch, remote, tested, treeSha, targetSha, refusal)
+	}
 	mergeLock.Lock()
 	unlockCheckout := lockMainCheckout(repoRoot)
-	pushErr := integrationPush(repoRoot, scratch, remote, cmd.TargetRef, tested, targetSha, local)
+	ownerSaid, pushErr := pushIntegrationTarget(owner, repoRoot, scratch, remote, cmd.TargetRef, tested, targetSha, local)
 	if pushErr == nil {
 		advanceLocalRef(repoRoot, cmd.TargetRef, tested)
 	}
 	unlockCheckout()
 	mergeLock.Unlock()
+	if pushErr != nil && owner != nil {
+		// §5.2 "No second credential": refused by the branch's rules, or the token not accepted, the target is not
+		// pushed again with any other credential; the landing branch is.
+		if refusal, ok := ownerPushRefusal(ownerSaid, pushErr); ok {
+			return toLandingBranch(result, cmd, scratch, remote, tested, treeSha, targetSha, refusal)
+		}
+	}
 	if pushErr != nil {
+		stderr := gitStderr(pushErr)
+		// §9 item 1: GitHub refused the push because of the branch's rules. The target did not move, so this is
+		// never TARGET_MOVED: a landing that goes through a pull request pushes its landing branch instead, and one
+		// with no pull request to fall back to says the branch is protected. A control plane that named no landVia
+		// knows neither answer and is told PUSH_REJECTED, as it always was.
+		if cmd.LandVia != "" && isProtectedRefusal(stderr) {
+			if viaPullRequest {
+				return toLandingBranch(result, cmd, scratch, remote, tested, treeSha, targetSha, githubRefusalWords(stderr))
+			}
+			return protectedPushResult(result, stderr)
+		}
 		result.State, result.Phase = "ERROR", "PUSH"
-		if isNonFastForward(gitStderr(pushErr)) {
+		if isNonFastForward(stderr) {
 			result.ErrorCode = "TARGET_MOVED"
 		} else {
 			result.ErrorCode = "PUSH_REJECTED"
 		}
-		result.ErrorDetail = map[string]any{"detail": clip(gitStderr(pushErr), 2000)}
+		result.ErrorDetail = map[string]any{"detail": clip(stderr, 2000)}
 		return result
 	}
 
@@ -758,6 +796,9 @@ func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, sc
 		if n, convErr := strconv.Atoi(strings.TrimSpace(ahead)); convErr == nil {
 			result.AheadOfUpstream = &n
 		}
+	}
+	if owner != nil {
+		result.PushedAs, result.BypassedRules = pushedAsOwner, bypassedRulesOf(ownerSaid)
 	}
 	result.State, result.Phase = "LANDED", "VERIFY"
 	return result
@@ -1061,18 +1102,41 @@ func promoteOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, scra
 		result.ErrorDetail = map[string]any{"detail": refusal}
 		return result
 	}
+	// docs/design/protected-branch-landing.md §9 item 2, as in J-S6: the candidate's pull request is open, so this
+	// attempt pushes only its landing branch.
+	viaPullRequest := landsThroughPullRequest(cmd.LandVia, cmd.LandingRef, local)
+	if viaPullRequest && cmd.PullRequestOpen {
+		return toLandingBranch(result, cmd, scratch, remote, tested, treeSha, upstreamSha, "")
+	}
+	// Push as me, as in J-S6 (§5.2).
+	owner, refusal := ownerCredentialForJob(cmd, scratch, remote, viaPullRequest, progress)
+	if refusal != "" {
+		return toLandingBranch(result, cmd, scratch, remote, tested, treeSha, upstreamSha, refusal)
+	}
 	mergeLock.Lock()
 	unlockCheckout := lockMainCheckout(repoRoot)
 	// The same push for both kinds, and it is a fast-forward either way: a merge commit and a rebased
 	// commit both carry the upstream tip as an ancestor. What differs is the commit being pushed, not
 	// the way it travels — and no force, so an upstream that moved underneath is refused (J-S6).
-	pushErr := integrationPush(repoRoot, scratch, remote, cmd.UpstreamRef, tested, upstreamSha, local)
+	ownerSaid, pushErr := pushIntegrationTarget(owner, repoRoot, scratch, remote, cmd.UpstreamRef, tested, upstreamSha, local)
 	if pushErr == nil {
 		advanceLocalRef(repoRoot, cmd.UpstreamRef, tested)
 	}
 	unlockCheckout()
 	mergeLock.Unlock()
+	if pushErr != nil && owner != nil {
+		if refusal, ok := ownerPushRefusal(ownerSaid, pushErr); ok {
+			return toLandingBranch(result, cmd, scratch, remote, tested, treeSha, upstreamSha, refusal)
+		}
+	}
 	if pushErr != nil {
+		// §9 item 1, as in J-S6: refused by the branch's rules, never TARGET_MOVED.
+		if stderr := gitStderr(pushErr); cmd.LandVia != "" && isProtectedRefusal(stderr) {
+			if viaPullRequest {
+				return toLandingBranch(result, cmd, scratch, remote, tested, treeSha, upstreamSha, githubRefusalWords(stderr))
+			}
+			return protectedPushResult(result, stderr)
+		}
 		result.State, result.Phase = "ERROR", "PUSH"
 		if isNonFastForward(gitStderr(pushErr)) {
 			result.ErrorCode = "TARGET_MOVED"
@@ -1119,6 +1183,9 @@ func promoteOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, scra
 	}
 	result.LandedSha = landed
 	result.LandedTreeSha = landedTree
+	if owner != nil {
+		result.PushedAs, result.BypassedRules = pushedAsOwner, bypassedRulesOf(ownerSaid)
+	}
 	result.State, result.Phase = "LANDED", "VERIFY"
 	return result
 }
@@ -1182,6 +1249,43 @@ var integrationPush = func(repoRoot, scratch, remote, targetRef, tested, expecte
 	}
 	_, err := networkGit(scratch, networkGitTimeout, "push", remote, tested+":"+targetRef)
 	return err
+}
+
+// pushIntegrationTarget is J-S6 / M-S4's target push: integrationPush as always, or with owner set (Push as me) the
+// owner's push, which answers git's stderr on success too (pushAsOwner).
+func pushIntegrationTarget(owner *orbitGitCredential, repoRoot, scratch, remote, targetRef, tested, expectedBefore string, local bool) (string, error) {
+	if owner == nil {
+		return "", integrationPush(repoRoot, scratch, remote, targetRef, tested, expectedBefore, local)
+	}
+	return pushAsOwner(scratch, remote, owner, tested+":"+targetRef)
+}
+
+// ownerCredentialForJob is the owner's credential for a Push as me job's target push (§5.2), asked for once per claim,
+// right after its first synchronous PUSH report was accepted, and held on the claim's progress for its later rounds.
+// Nil with no refusal for every other landing, which pushes as it always did; nil with a refusal, in Orbit's words,
+// when the token is not to be had — or when the claim is not one that reports its push first (no progress), so there
+// is no push boundary to ask at. The target is then not pushed at all, and the landing branch is.
+func ownerCredentialForJob(cmd IntegrationJobCommand, scratch, remote string, viaPullRequest bool, progress *integrationProgress) (*orbitGitCredential, string) {
+	if !pushesAsOwner(cmd.LandVia, viaPullRequest, cmd.PullRequestOpen) {
+		return nil, ""
+	}
+	if progress == nil {
+		return nil, pushAsMeWithoutPushReport
+	}
+	// Not under progress.mu, which the progress ticker takes: the ask may take orbitGitCredentialTimeout, and these
+	// fields are only ever touched here, on the job's own goroutine, one round after another.
+	if !progress.ownerAsked {
+		progress.ownerAsked = true
+		credential, err := askOwnerGitCredential(scratch, remote, RunnerGitCredentialRequest{
+			JobID: cmd.JobID, ClaimGeneration: cmd.ClaimGeneration, LeaseOwner: cmd.LeaseOwner,
+		})
+		if err != nil {
+			logln("integration job", cmd.JobID, "could not have the owner's GitHub token for its push; pushing its landing branch:", err)
+			progress.ownerRefusal = pushAsMeUnavailablePrefix + err.Error()
+		}
+		progress.owner = credential
+	}
+	return progress.owner, progress.ownerRefusal
 }
 
 // advanceLocalRef moves this checkout's own copy of the target forward, the way rebaseFastForward
@@ -1788,6 +1892,13 @@ type integrationProgress struct {
 	stepAt    time.Time
 	afterPush bool
 	noted     bool
+	// Push as me (§5.2): the owner's token, or Orbit's reason it is not to be had, from this claim's one request
+	// for it. The server answers once per claim generation, and a LAND_TASK's refetch rounds push again under the
+	// same claim, so the answer is held here — for this job's push attempts, and dropped with it. Only the job's own
+	// goroutine reads or writes these (ownerCredentialForJob), so they are not under mu.
+	ownerAsked   bool
+	owner        *orbitGitCredential
+	ownerRefusal string
 
 	done chan struct{}
 	wg   sync.WaitGroup
@@ -2438,6 +2549,10 @@ func runIntegrationJobAndReport(stop, handBack context.Context, t *Transport, jo
 		ErrorDetail:          result.ErrorDetail,
 		UpstreamMovedCommits: result.UpstreamMovedCommits,
 		UnknownPushes:        result.UnknownPushes,
+		LandingRefSha:        result.LandingRefSha,
+		PushRefusal:          result.PushRefusal,
+		PushedAs:             result.PushedAs,
+		BypassedRules:        result.BypassedRules,
 	}
 	if result.State == "OBSERVED" {
 		observations := append([]IntegrationObservation{}, result.Observations...)

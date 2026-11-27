@@ -28,7 +28,9 @@ export const SETTING_TIER_KEYS = {
   ],
   // `optimizeFor` landed after the design's table was written (2026-11-19, account-wide Optimize For). Like
   // `modelRouting` it decides how new work is routed, and it gives agents no more reach, so it is tier 2.
-  2: ['defaultModel', 'defaultModels', 'defaultEffort', 'modelRouting', 'optimizeFor'],
+  // `relaxBlockedPins` (docs/routing-account-health-design.md §7.5) decides where pinned work runs while its account
+  // cannot: routing, like `modelRouting`, and inside the owner's SubAgent provider limits, so no more reach: tier 2.
+  2: ['defaultModel', 'defaultModels', 'defaultEffort', 'modelRouting', 'optimizeFor', 'relaxBlockedPins'],
   // `cardFreeTaskCreates` landed after the table too (Settings › General, "Tasks a session files without asking"). It
   // decides how many tasks a session files without asking the owner, so it is agent reach: tier 3.
   3: ['enableOrchestration', 'defaultPermissionMode', 'subagentBlockedProviders', 'cardFreeTaskCreates'],
@@ -72,6 +74,8 @@ export const SETTING_DEFAULTS: Readonly<Record<TieredSettingKey, unknown>> = {
   // On unless explicitly false, as the apiserver reads it (common/model-routing-switch.ts).
   modelRouting: true,
   optimizeFor: 'balance',
+  // Off unless explicitly true, as the apiserver reads it (tasks/task-route-decision.ts).
+  relaxBlockedPins: false,
   enableOrchestration: true,
   // The apiserver's DEFAULT_PERMISSION_MODE (common/permission-mode.ts).
   defaultPermissionMode: 'auto',
@@ -153,6 +157,7 @@ export const SETTING_ROWS: Readonly<Record<TieredSettingKey, SettingRow>> = {
   defaultEffort: { title: 'Default effort', path: null, anchor: null },
   modelRouting: row(PERSONAL_SETTINGS.modelRouting),
   optimizeFor: row(PERSONAL_SETTINGS.optimizeFor),
+  relaxBlockedPins: row(PERSONAL_SETTINGS.relaxBlockedPins),
   enableOrchestration: row(PERSONAL_SETTINGS.enableOrchestration),
   defaultPermissionMode: row(PERSONAL_SETTINGS.defaultPermissionMode),
   subagentBlockedProviders: { title: 'SubAgent providers', path: null, anchor: null },

@@ -7,6 +7,7 @@ import { CoordinatorConvergenceService } from './coordinator-convergence.service
 import { WakeFact, attemptEndedUnsettledFact } from './coordinator-wake';
 import type { WakeAuthorization, WakeAuthorizer } from './coordinator-wake.service';
 import { sessionReleasedSql } from '../common/session-release';
+import { legacySessionStatusSql } from '../sessions/session-legacy-words';
 
 /** The project disappeared between the committed task read and the wake's authorization. */
 export const EXCEPTION_WAKE_PROJECT_GONE = 'PROJECT_GONE';
@@ -99,10 +100,11 @@ export class TaskExceptionInputProducer {
     const rows = await this.prisma.$queryRaw<EndedAttemptRow[]>(Prisma.sql`
       SELECT t."id" AS "taskId", t."status"::text AS "taskStatus",
              t."project_id" AS "projectId",
-             a."id" AS "sessionId", a."status"::text AS "sessionStatus"
+             a."id" AS "sessionId", a."word" AS "sessionStatus"
         FROM "task" t
         JOIN LATERAL (
-          SELECT s."id", s."status"
+          -- The word derived from the facts (plan §3.1, §3.4), not the stored one.
+          SELECT s."id", ${legacySessionStatusSql('s')} AS "word"
             FROM "session" s
            WHERE s."task_id" = t."id"
              AND s."starts_task_work" = true

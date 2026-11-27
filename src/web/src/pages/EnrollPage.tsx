@@ -17,6 +17,7 @@ import { Spinner } from '../components/ui/Spinner';
 import { copyText } from '../lib/clipboard';
 import { encodeId } from '../lib/idCodec';
 import { machineDraftPath } from '../lib/machineSetup';
+import { unregisterWebPushOnSignOut } from '../lib/webPush';
 import { ENROLL_NEXT_BODY, ENROLL_NEXT_TITLE, ENROLL_OPEN_MACHINE, START_A_SESSION } from '../lib/machineSetupCopy';
 import { meQuery } from '../lib/queries';
 import { ago } from '../lib/runnerEngines';
@@ -191,6 +192,7 @@ export function EnrollPage() {
 
   // Another account: signed out, and back here once signed in — the code lasts its ten minutes.
   const switchAccount = async () => {
+    await unregisterWebPushOnSignOut();
     await logoutSession();
     clearToken();
     location.href = `/login?next=${encodeURIComponent('/enroll' + location.search)}`;

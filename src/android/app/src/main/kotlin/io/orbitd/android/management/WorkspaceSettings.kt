@@ -60,7 +60,8 @@ internal object WorkspaceEffort {
  * mean "unchanged", as on iOS and the web.
  */
 @Composable
-fun WorkspaceSettings(api: ManagementApi, workspaceId: String?, revision: Long, done: () -> Unit, deleted: () -> Unit, changed: () -> Unit) {
+fun WorkspaceSettings(api: ManagementApi, workspaceId: String?, revision: Long, done: () -> Unit, deleted: () -> Unit, changed: () -> Unit,
+                      open: (io.orbitd.android.navigation.OrbitRoute) -> Unit = {}) {
     val id = workspaceId ?: return
     // The record as this opening of the form found it (iOS prefill): the fields start from it and Done compares with it,
     // so a change made elsewhere meanwhile is neither shown as an edit here nor written back over.
@@ -143,6 +144,7 @@ fun WorkspaceSettings(api: ManagementApi, workspaceId: String?, revision: Long, 
                 Text("Enabled", Modifier.weight(1f)); Switch(checked = enabled, onCheckedChange = null)
             }
         }
+        WorkspaceLandingSetting(api, id, saved, open, changed) { failure = personalFailure(it) }
         FormSection("Instructions") {
             OutlinedTextField(instructions, { instructions = it }, Modifier.fillMaxWidth().heightIn(min = 90.dp).padding(vertical = 6.dp))
             Text("Added to every run's runtime instructions (optional).", style = MaterialTheme.typography.labelMedium, color = Ink.muted)

@@ -1,0 +1,47 @@
+<!doctype html>
+<!-- A new session's first message, on the built page (capture/capture.mjs, scenes new*): this branch's src/web on vite,
+     Chromium, 1280-wide desktop, 2x, fed by src/web/ui-migration's fixtures; POST /sessions held or refused per scene.
+     "Today" is the build of 1a4b20265a, before the Sending… bubble. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sending… bubble: a new session's first message</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<style>
+  body { margin: 0; background: #eef0f3; }
+  .b-part { font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; color: var(--text-1); background: #fff;
+            padding: 26px 32px 28px; width: 1880px; box-sizing: border-box; margin: 0 0 2px; }
+  .b-part h1 { font-size: 21px; margin: 0 0 4px; }
+  .b-sub { color: var(--text-2); font-size: 13.5px; margin: 0 0 20px; max-width: 1500px; }
+  .b-four { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; align-items: start; }
+  .b-h { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px; font-size: 14px; font-weight: 600; }
+  .b-n { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px;
+         background: #16833a; color: #fff; font: 700 12.5px/1 Inter, sans-serif; }
+  .b-n.bad { background: var(--error-solid); } .b-n.grey { background: var(--text-3); }
+  .b-four img { display: block; width: 100%; border-radius: 10px; box-shadow: 0 0 0 1px rgba(15,23,42,.09), 0 1px 3px rgba(15,23,42,.06); }
+  .b-cap { font-size: 12.5px; line-height: 1.7; color: var(--text-2); margin: 10px 2px 0; }
+  .b-cap b { color: var(--text-1); } .b-cap code { font-size: 11.5px; background: #f0f2f5; padding: 0 4px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<section class="b-part">
+  <h1>A new session's first message waits as a Sending… bubble too</h1>
+  <p class="b-sub">The same bubble as in a conversation that exists, on the new-session page: in the engine picker's place,
+    at the top, where the conversation it opens will start. Its Retry is safe because the request carries its own key
+    (<code>clientRequestId</code>, migration 1730): a create whose answer was lost and is sent again answers with the session it
+    already made.</p>
+  <div class="b-four">
+    <div><div class="b-h"><span class="b-n grey">0</span>Before Enter</div><img src="real/new-before.png">
+      <p class="b-cap">The new-session page: the engine picker, and the first message typed.</p></div>
+    <div><div class="b-h"><span class="b-n bad">1</span>Today, 1.5 s after Enter</div><img src="real/new-today.png">
+      <p class="b-cap">The build before the change: the words stay in the box behind a spinner until the session exists.</p></div>
+    <div><div class="b-h"><span class="b-n">2</span>Sending…</div><img src="real/new-sending.png">
+      <p class="b-cap">The words leave the box at once. The bubble is dimmed, with <code>Sending…</code> in its foot, and Send is a
+        plain disabled arrow. When the session is made, its page opens with this message as its first.</p></div>
+    <div><div class="b-h"><span class="b-n">3</span>Not sent (here refused, 503)</div><img src="real/new-refused.png">
+      <p class="b-cap"><code>⚠ Not sent · Retry · Put back in the composer</code>, with the reason in the tooltip. Retry sends the same
+        key. Send stays off until this one is retried or put back, so a second first message can't replace it.</p></div>
+  </div>
+</section>
+</body>
+</html>

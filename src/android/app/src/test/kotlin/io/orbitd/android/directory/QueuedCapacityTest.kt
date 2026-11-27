@@ -1,5 +1,6 @@
 package io.orbitd.android.directory
 
+import io.orbitd.android.core.protocol.Wire
 import java.io.File
 import java.time.Instant
 import org.junit.Assert.assertEquals
@@ -64,6 +65,48 @@ class QueuedCapacityTest {
         assertEquals(gate("runner_at_capacity"), row.queuedGate)
     }
 
+    /** A `GET /sessions` row as the server sends it (sessions.service.ts, queued-gate.ts `queuedRunNowOf`): HPC full at 16 of 16. */
+    private fun row(extra: String) = Wire.json.decodeFromString(DirectorySession.serializer(),
+        """{"id":"34aaaaaaaaaaaaaaaaaaa","title":"Android","status":"PENDING","runState":"QUEUED","queuedReason":"runner_at_capacity",""" +
+            """"queuedActive":16,"queuedLimit":16,"queuedHeldByJobs":0,"lastTurnAt":"2026-11-14T17:14:54.436Z",$extra}""")
+    private val offered = """"runNowAvailable":true,"runNowRefusal":null,"queuedBurstLimit":2,"runningOverLimit":null"""
+    private val atCap = "HPC is already 2 over its limit, the most it can take. Wait, or stop another session."
+
+    @Test fun runNowSaysWhatPressingDoes() {
+        val gate = row(offered).queuedGate
+        assertTrue(gate.runNowAvailable)
+        assertNull(gate.runNowRefusal)
+        assertEquals("Starts it as the 17th session on HPC. This turn only; the limit stays 16.", QueuedCapacity.runNowNote(gate, "HPC"))
+        assertEquals(listOf("21st", "22nd", "23rd", "11th", "12th", "13th", "111th"), listOf(20, 21, 22, 10, 11, 12, 110).map { active ->
+            QueuedCapacity.runNowNote(gate.copy(queuedActive = active), "HPC")!!.substringAfter("as the ").substringBefore(" session")
+        })
+        // A full run or batch counts from the runner's own slots, not the gate's.
+        val tree = gate.copy(queuedReason = "tree_at_capacity", queuedActive = 13, queuedLimit = 13)
+        assertEquals("Starts it as the 6th session on this runner. This turn only; the limit stays 16.", QueuedCapacity.runNowNote(tree, " ", 5, 16))
+        assertEquals("Starts this turn now. The limit stays the same.", QueuedCapacity.runNowNote(tree, "HPC"))
+    }
+
+    @Test fun aRefusalIsTheServersSentenceAndNothingElseDrawsNoButton() {
+        val refused = row(""""runNowAvailable":false,"runNowRefusal":"$atCap","queuedBurstLimit":2""").queuedGate
+        assertFalse(refused.runNowAvailable)
+        assertEquals(atCap, QueuedCapacity.runNowNote(refused, "HPC"))
+        // An older server sends neither; a gate no slot holds sends false and null.
+        assertNull(QueuedCapacity.runNowNote(row(""""runSource":null""").queuedGate, "HPC"))
+        val offline = Wire.json.decodeFromString(DirectorySession.serializer(),
+            """{"id":"s","queuedReason":"runner_offline","runNowAvailable":false,"runNowRefusal":null,"queuedBurstLimit":null}""")
+        assertNull(QueuedCapacity.runNowNote(offline.queuedGate, "HPC"))
+        assertNull(QueuedCapacity.runNowNote(row(offered).queuedGate.copy(queuedReason = "runner_updating"), "HPC"))
+    }
+
+    @Test fun theOverLimitTagCountsAndNamesTheRunner() {
+        val over = RunningOverLimit.of(row(""""runningOverLimit":{"active":17,"limit":16,"runnerName":"HPC"}""").runningOverLimit)!!
+        assertEquals("over limit · 17/16", QueuedCapacity.overLimitTag(over))
+        assertEquals("Started over HPC's limit by you", QueuedCapacity.overLimitHint(over))
+        assertEquals("Started over the runner's limit by you", QueuedCapacity.overLimitHint(over.copy(runnerName = null)))
+        assertNull(RunningOverLimit.of(row(offered).runningOverLimit))
+        assertNull(RunningOverLimit.of(row(""""runSource":null""").runningOverLimit))
+    }
+
     /** Every word is web `queuedCapacity.ts`'s, and every sentence one its spec expects. A missing counterpart is a failure. */
     @Test fun theWordsAreTheWebs() {
         val root = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }.first { File(it, "src/web/src/lib/queuedCapacity.ts").isFile }
@@ -72,9 +115,20 @@ class QueuedCapacityTest {
         mapOf("RUNNER_FULL_TITLE" to QueuedCapacity.RUNNER_FULL_TITLE, "RUNNER_FULL_TAG" to QueuedCapacity.RUNNER_FULL_TAG,
             "RUN_FULL_TITLE" to QueuedCapacity.RUN_FULL_TITLE, "RUN_FULL_TAG" to QueuedCapacity.RUN_FULL_TAG,
             "BATCH_FULL_TITLE" to QueuedCapacity.BATCH_FULL_TITLE, "BATCH_FULL_TAG" to QueuedCapacity.BATCH_FULL_TAG,
-            "CAPACITY_HELD_LINE" to QueuedCapacity.CAPACITY_HELD_LINE,
+            "CAPACITY_HELD_LINE" to QueuedCapacity.CAPACITY_HELD_LINE, "RUN_NOW" to QueuedCapacity.RUN_NOW,
+            "EXTRA_SESSIONS_ON_DEMAND" to QueuedCapacity.EXTRA_SESSIONS_ON_DEMAND,
         ).forEach { (name, words) -> assertTrue("$name", copy.contains("export const $name = '$words';")) }
         QueuedCapacity.REASONS.forEach { assertTrue(it, copy.contains("reason === '$it'")) }
         sentences().forEach { assertTrue("queuedCapacity.test.ts no longer expects $it", spec.contains("'$it'")) }
+        // Run now's other words, which queuedCapacity.ts builds from parts: each template as the web writes it.
+        listOf("export const RUN_NOW_FAILED = \"${QueuedCapacity.RUN_NOW_FAILED}\";",
+            "return 'Starts this turn now. The limit stays the same.';",
+            "return `Starts it as the \${next}\${suffix} session \${where}. This turn only; the limit stays \${limit}.`;",
+            "`on \${machine.trim()}` : 'on this runner'",
+            "return `over limit · \${active}/\${limit}`;",
+            "`Started over \${runner}'s limit by you` : \"Started over the runner's limit by you\"",
+        ).forEach { assertTrue("queuedCapacity.ts no longer says $it", copy.contains(it)) }
+        val settings = File(root, "src/web/src/components/settings/MachineSettingsPage.tsx").readText()
+        assertTrue(settings.contains("const MAX_EXTRA_SESSIONS = ${QueuedCapacity.MAX_EXTRA_SESSIONS};"))
     }
 }

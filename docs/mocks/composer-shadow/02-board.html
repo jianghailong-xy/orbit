@@ -1,0 +1,79 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Composer edge in the whole window</title>
+<style>
+body{margin:0;background:#e9ebee;font:14px/1.5 -apple-system,BlinkMacSystemFont,'PingFang SC',sans-serif;color:#1f2329}
+.board{width:1840px;padding:36px;box-sizing:border-box}
+h1{font-size:26px;margin:0 0 4px}.sub{color:#646a73;margin:0 0 22px}
+h2{font-size:18px;margin:30px 0 12px}
+.cols{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.colh{font-weight:600;font-size:17px;margin-bottom:6px}.colh small{display:block;font-weight:400;color:#646a73;font-size:12.5px;font-family:'JetBrains Mono',monospace}
+.f{background:#fff;border-radius:10px;padding:6px;box-shadow:0 0 0 1px #dee0e3}.f img{width:100%;display:block;border-radius:6px}
+.pick{box-shadow:0 0 0 3px #3370ff}
+.tag{display:inline-block;margin-left:6px;padding:0 8px;border-radius:10px;background:#3370ff;color:#fff;font-size:12px;vertical-align:2px}
+.rowh{font-weight:600;color:#646a73;font-size:13px;margin:12px 0 4px}
+.cap{font-size:12.5px;color:#646a73;margin-top:6px}
+.card{background:#fff;border-radius:12px;padding:18px 22px;box-shadow:0 0 0 1px #dee0e3}
+table{border-collapse:collapse;width:100%;font-size:13px}td,th{border-bottom:1px solid #eceef1;padding:7px 10px;text-align:left;vertical-align:top}th{color:#646a73;font-weight:600}
+td.bad{color:#d83931;font-weight:600}
+code{font-family:'JetBrains Mono',monospace;font-size:12px;background:#f2f3f5;padding:1px 5px;border-radius:4px}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:4px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.1)}
+.two{display:grid;grid-template-columns:1.4fr 1fr;gap:18px;margin-top:22px}
+.ask{background:#fff7e8;box-shadow:0 0 0 1px #ffd591}
+</style></head><body><div class="board">
+<h1>Composer 与其它面板的协调 · 整体效果</h1>
+<p class="sub">真实会话页（本分支 build；右栏窗口 kit 的 coordinator，加上 Tasks / Agents 条），1440×820，2x。三列只换 <code>.composer-box</code> 的描边颜色和 box-shadow，其它一律不动。</p>
+
+<div class="card"><b>问题不在阴影本身，而在同一画面里有三套"边缘语言"：</b>
+<table style="margin-top:8px">
+<tr><th>元素</th><th>圆角</th><th>描边（实测）</th><th>阴影</th><th>结果</th></tr>
+<tr><td>面板（会话列表+对话、右栏、任务详情）</td><td>12px</td><td><span class="sw" style="background:#eceef1"></span><code>--border-subtle</code> #eceef1 · 236</td><td><code>--panel-shadow</code> 0 1px 2px α.04</td><td>几乎平贴在画布上</td></tr>
+<tr><td>Tasks / Agents 条</td><td>8px</td><td><span class="sw" style="background:#eceef1"></span><code>--border-subtle</code> · 236</td><td>无</td><td>平</td></tr>
+<tr><td>Composer（今天）</td><td>24px</td><td class="bad"><span class="sw" style="background:#dee0e3"></span><code>--border</code> #dee0e3 · 222</td><td class="bad">0 2px 10px α.05 + 0 10px 30px α.04</td><td class="bad">全页唯一"浮起"的东西；描边比所有面板深一档；阴影 30px 模糊在 16px 处被面板底边切断</td></tr>
+</table>
+<p class="cap">2026-11-26 的 "panels on a canvas"（2cd162c3c4）定了"一个圆角、一个间距、一个高度"。composer 是那之前的样式，没跟上。</p></div>
+
+<h2>A · 整窗（浅色，未聚焦）</h2>
+<div class="cols">
+  <div><div class="colh">① 今天<small>--border · 0 2px 10px α.05, 0 10px 30px α.04</small></div><div class="f"><img src="frames/window/today-full.png"></div></div>
+  <div><div class="colh">② 只去阴影<small>--border · box-shadow: none</small></div><div class="f"><img src="frames/window/flat-full.png"></div></div>
+  <div><div class="colh">③ 跟面板同一套边缘<span class="tag">推荐</span><small>--border-subtle · var(--panel-shadow)</small></div><div class="f pick"><img src="frames/window/panel-full.png"></div></div>
+</div>
+
+<h2>B · 下半部放大（Tasks / Agents 条、composer、面板底边、右栏底边）</h2>
+<div class="rowh">浅色 · 未聚焦</div>
+<div class="cols">
+  <div class="f"><img src="frames/window/today-band.png"></div>
+  <div class="f"><img src="frames/window/flat-band.png"></div>
+  <div class="f pick"><img src="frames/window/panel-band.png"></div>
+</div>
+<div class="cols"><div class="cap">composer 下方灰带 242→252，到面板底边被切成一条线；描边比上面两条、比面板都深。</div>
+<div class="cap">灰带没了；但描边仍比 Tasks / Agents 条和面板深一档，仍是"另一套"。</div>
+<div class="cap">描边与上面两条、与面板同色（236），阴影 2px 内消失（251→255），和右栏底边同一种落地感。</div></div>
+<div class="rowh">浅色 · 聚焦（描边加深到 169，三种一样）</div>
+<div class="cols">
+  <div class="f"><img src="frames/window/today-focus-band.png"></div>
+  <div class="f"><img src="frames/window/flat-focus-band.png"></div>
+  <div class="f pick"><img src="frames/window/panel-focus-band.png"></div>
+</div>
+<div class="cols"><div class="cap">聚焦时阴影更大更深（0 3px 14px α.08 + 0 12px 34px α.05），灰带更明显。</div>
+<div class="cap">聚焦只靠描边变深。</div>
+<div class="cap">未聚焦很安静，聚焦时描边从 236 跳到 169，"正在输入"反而更清楚。</div></div>
+<div class="rowh">深色 · 未聚焦</div>
+<div class="cols">
+  <div class="f"><img src="frames/window/today-dark-band.png"></div>
+  <div class="f"><img src="frames/window/flat-dark-band.png"></div>
+  <div class="f pick"><img src="frames/window/panel-dark-band.png"></div>
+</div>
+<div class="cols"><div class="cap">深色下阴影本来就看不出（30 vs 32）。</div><div class="cap">同左。</div><div class="cap">描边换成 --border-subtle（#343437），和深色面板边缘一致。</div></div>
+
+<div class="two">
+  <div class="card"><h3 style="margin:0 0 8px">③ 的改动范围</h3>
+  只动 <code>src/web/src/index.css</code> 的 <code>.composer-box</code>：<br>
+  · <code>border</code> 颜色 <code>--border</code> → <code>--border-subtle</code><br>
+  · <code>box-shadow</code> → <code>var(--panel-shadow)</code>（窄屏 &lt;961px 没有这个变量 → 无阴影，与窄屏面板一致）<br>
+  · 聚焦 / 弹出菜单时：保留"描边加深到 28% text-1"，阴影不再变大<br>
+  不动：24px 圆角、shell 模式红框、内边距、按钮。</div>
+  <div class="card ask"><h3 style="margin:0 0 8px">待你定</h3>
+  ③ 跟面板同一套边缘（推荐）还是 ② 只去阴影、保留较深的描边？<br>
+  <span class="cap">另：composer 24px 圆角 vs 面板 12px、条 8px 也是三档。这次不动；如果你觉得也属于"不协调"，我再出一张圆角对比。</span></div>
+</div>
+</div></body></html>

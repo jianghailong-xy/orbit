@@ -32,6 +32,7 @@ import type { PrismaService } from '../prisma/prisma.service';
 import { TaskCompletionEvidenceService } from './task-completion-evidence.service';
 import { TaskProgressService } from './task-progress.service';
 import { TasksService } from './tasks.service';
+import { wordSql } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -167,8 +168,8 @@ test('unit L4: the account owner confirms a move, and the task moves', { skip, c
       [worker, 'a run in A']]) {
       await admin.query(
         `INSERT INTO "session" ("id","owner_id","workspace_id","title","prompt","creator_id",
-           "provider","status","dispatch_origin","updated_at")
-         VALUES ($1,$2,$3,$4,'fixture',$2,'claude','RUNNING'::"run_status",
+           "provider","turn_state","dispatch_origin","updated_at")
+         VALUES ($1,$2,$3,$4,'fixture',$2,'claude','IN_FLIGHT',
            'USER'::"session_dispatch_origin",now())`,
         [id, ownerId, workspaceId, `${label}: ${name}`],
       );
@@ -610,7 +611,7 @@ test('unit L4: the account owner confirms a move, and the task moves', { skip, c
       description: null,
     });
     const { rows: [run] } = await admin.query(
-      'SELECT "status"::text AS "status", "task_id" FROM "session" WHERE "id" = $1::uuid', [w.worker]);
+      `SELECT ${wordSql()} AS "status", "task_id" FROM "session" WHERE "id" = $1::uuid`, [w.worker]);
     assert.deepEqual(run, { status: 'RUNNING', task_id: w.work }, 'the run is untouched and still holds its task');
 
     // Its own task, in the scope that moved with it — not refused as a takeover.
@@ -822,7 +823,7 @@ test('unit L4: the account owner confirms a move, and the task moves', { skip, c
     await confirm(w, question.id);
     assert.equal((await taskRow(w.work)).project_id, null);
     const { rows: [run] } = await admin.query(
-      'SELECT "status"::text AS "status", "task_id" FROM "session" WHERE "id" = $1::uuid', [w.worker]);
+      `SELECT ${wordSql()} AS "status", "task_id" FROM "session" WHERE "id" = $1::uuid`, [w.worker]);
     assert.deepEqual(run, { status: 'RUNNING', task_id: w.work });
   });
 });

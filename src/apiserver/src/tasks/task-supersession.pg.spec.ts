@@ -19,7 +19,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
-import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import { TaskStatus, uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -30,6 +31,7 @@ import {
 import { TasksService } from './tasks.service';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { establishProjectContractForPgTest } from '../projects/project-contract-test-helper';
+import { wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -492,12 +494,13 @@ suite('task supersession, on real PostgreSQL', async (t) => {
     const tasks = tasksService(db);
     const old = await tasks.create(ownerId, { title: 'old', projectId: w.projectId });
     const fresh = await tasks.create(ownerId, { title: 'fresh', projectId: w.projectId });
-    // The historical run: it FAILED, and that is the fact the audit is about.
+    // The historical run: it FAILED, and that is the fact the audit is about. Since deploy D3 the word is the facts':
+    // released on a failed turn, with no end asked (docs/session-status-retirement-plan.md §3.1 P1).
     const sessionId = randomUUID();
     await db.session.create({
       data: {
         id: sessionId, ownerId, creatorId: ownerId, workspaceId, taskId: old.id,
-        title: 'the attempt', prompt: 'p', status: RunStatus.FAILED, finishedAt: new Date(), endReason: 'error',
+        title: 'the attempt', prompt: 'p', turnState: null, finishedAt: new Date(), lastTurnOutcome: 'FAILED',
       },
     });
 
@@ -505,8 +508,9 @@ suite('task supersession, on real PostgreSQL', async (t) => {
     await tasks.update(ownerId, old.id, { supersededByTaskId: fresh.id });
 
     const session = await db.session.findUniqueOrThrow({ where: { id: sessionId } });
-    assert.equal(session.status, RunStatus.FAILED, 'the run is still recorded as having failed');
-    assert.equal(session.endReason, 'error');
+    assert.equal(wordOf(session), RunStatus.FAILED, 'the run is still recorded as having failed');
+    assert.equal(session.lastTurnOutcome, 'FAILED');
+    assert.equal(session.endReason, null);
     assert.equal(session.taskId, old.id, 'and it is still attached to the attempt it ran');
   });
 });

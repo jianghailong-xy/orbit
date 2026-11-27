@@ -15,7 +15,7 @@ import { machineName, newWorkspaceOf, type PickedFolder } from '../../lib/machin
 import { startHistoryImport, useClaudeHistory } from '../../lib/claudeHistoryImport';
 import { managedRowOf, useManagedRunner, useManagedRunnerId } from '../../lib/managedRunner';
 import type { SessionReach } from '../../lib/sessionReach';
-import { type MainCheckoutRepoHealth, type RunnerRepoHealth } from '@orbit/shared';
+import { type MainCheckoutRepoHealth, type RunnerRepoHealth, type WorkspaceLandingMode, type WorkspaceLandingView } from '@orbit/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
@@ -59,15 +59,23 @@ import { PasswordInput } from '../ui/PasswordInput';
 import { Spinner } from '../ui/Spinner';
 import { Switch } from '../ui/Switch';
 import { Textarea } from '../ui/Textarea';
+import { Tooltip } from '../ui/Tooltip';
 import { SubagentSettings } from '../SubagentSettings';
 import {
   WorktreeIsolationDialog,
   worktreeIsolationDialogFor,
   type WorktreeIsolationDialogKind,
 } from '../WorktreeIsolationDialog';
+import { WorkspaceLandingSetting } from './WorkspaceLandingSetting';
 import { SettingsCard, SettingsHeader, SettingsRow, SettingsSection } from './SettingsBlocks';
 import { AgentToolsDrawer } from '../AgentToolsDrawer';
 import './Settings.css';
+
+/** `owner/repo` of a GitHub URL, for words that name the repository. */
+function repoSlug(url: string | null | undefined): string | null {
+  const match = /github\.com[/:]([^/]+\/[^/.]+?)(?:\.git)?\/?$/.exec(url ?? '');
+  return match ? match[1] : null;
+}
 
 export interface SettingsWorkspace {
   id: string;
@@ -113,6 +121,10 @@ export interface SettingsWorkspace {
   lastActiveAt?: string | null;
   /** Its conversations, read on GET /workspaces/:id only. */
   sessionCount?: number;
+  /** What the owner chose; written by PATCH, read back as `landing.mode`. */
+  landingMode?: WorkspaceLandingMode;
+  /** The landing setting, on GET /workspaces/:id only (docs/design/protected-branch-landing.md §8). */
+  landing?: WorkspaceLandingView;
   createdAt?: string;
 }
 
@@ -123,6 +135,7 @@ type WorkspacePatch = Partial<
     | 'name'
     | 'workDir'
     | 'repoUrl'
+    | 'landingMode'
     | 'enableWorktree'
     | 'subagentsEnabled'
     | 'subagentsMaxRunning'
@@ -384,6 +397,7 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
         action={
           <Menu
             align="end"
+            tooltip="Actions"
             items={[
               {
                 key: 'console',
@@ -398,7 +412,7 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
                 onSelect: () => duplicateMut.mutate(workspace),
               },
             ]}
-            trigger={<Button icon={<MoreOutlined />} title="Actions" aria-label="Actions" />}
+            trigger={<Button icon={<MoreOutlined />} aria-label="Actions" />}
           />
         }
       />
@@ -469,6 +483,15 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
           />
         </SettingsCard>
       </SettingsSection>
+
+      {detail.data?.landing ? (
+        <WorkspaceLandingSetting
+          landing={detail.data.landing}
+          repo={repoSlug(workspace.repoUrl)}
+          saving={patch.isPending}
+          onChoose={(landingMode) => save({ landingMode })}
+        />
+      ) : null}
 
       <SettingsSection title="Sessions" className="workspace-section-sessions">
         <SettingsCard>
@@ -844,13 +867,14 @@ function EnvDrawer({
               onChange={(e) => setRows(rows.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)))}
               placeholder="value"
             />
-            <Button
-              variant="text"
-              title="Remove"
-              aria-label="Remove"
-              icon={<DeleteOutlined />}
-              onClick={() => setRows(rows.filter((_, j) => j !== i))}
-            />
+            <Tooltip content="Remove" align="end">
+              <Button
+                variant="text"
+                aria-label="Remove"
+                icon={<DeleteOutlined />}
+                onClick={() => setRows(rows.filter((_, j) => j !== i))}
+              />
+            </Tooltip>
           </div>
         ))}
         <Button
@@ -1016,14 +1040,15 @@ function WorkspacePermissionRules({ workspaceId }: { workspaceId: string }) {
               <code className="rd-rule-token">
                 {rule.ruleContent ? `${rule.toolName}(${rule.ruleContent})` : rule.toolName}
               </code>
-              <Button
-                variant="text"
-                title="Ask about this again"
-                aria-label="Ask about this again"
-                icon={<DeleteOutlined />}
-                loading={revokeMut.isPending && revokeMut.variables === rule.id}
-                onClick={() => revokeMut.mutate(rule.id)}
-              />
+              <Tooltip content="Ask about this again" align="end">
+                <Button
+                  variant="text"
+                  aria-label="Ask about this again"
+                  icon={<DeleteOutlined />}
+                  loading={revokeMut.isPending && revokeMut.variables === rule.id}
+                  onClick={() => revokeMut.mutate(rule.id)}
+                />
+              </Tooltip>
             </div>
           ))}
           {/* The two mechanisms differ in WHEN they take effect: Claude is handed the rules when it

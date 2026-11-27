@@ -10,6 +10,17 @@ import { WIKI_NO_DOCUMENTS } from '../lib/wikiDocs';
 import { WIKI_FROM_WORKSPACE_KEY, WIKI_LAST_SPACE_KEY, wikiWaiting } from '../lib/wikiSpace';
 import { WikiPage } from './WikiPage';
 
+// The app Tooltip draws its words only while open: this file reads them off the trigger, as `data-tip`.
+vi.mock('../components/ui/Tooltip', async () => {
+  const { cloneElement } = await import('react');
+  return {
+    CONTROL_TOOLTIP_DELAY_MS: 100,
+    TEXT_TOOLTIP_DELAY_MS: 600,
+    Tooltip: ({ children, content }: { children: import('react').ReactElement; content?: import('react').ReactNode }) =>
+      cloneElement(children, (content ? { 'data-tip': content } : {}) as object),
+  };
+});
+
 // The browser's storage, which the space `/wiki` opens reads: the workspace this tab came from and the
 // space last looked at. Empty unless a test fills it.
 const browser = vi.hoisted(() => {
@@ -352,7 +363,7 @@ describe('the Wiki home', () => {
   it('draws the head from the spaces list and grey bars for the rest while the first read is out (mock 31 ⑦)', () => {
     const html = paint('home', '/wiki/orbit', { spaces: [{ ...SPACE, pendingOps: 3 }] });
     expect(html).toContain('<span class="v">orbit</span>');
-    expect(html).toContain('title="3 waiting on you"');
+    expect(html).toContain('data-tip="3 waiting on you"');
     expect(html).toContain('<div class="wk-home-state"><span class="wk-sk" aria-hidden="true"></span></div>');
     expect(html).toContain('class="wk-pl-cat wk-home-sk" aria-busy="true"');
     expect(html).not.toContain('class="wk-home-more"');
@@ -510,7 +521,7 @@ describe('the Wiki head', () => {
     expect(at('aria-label="Settings"')).toBeGreaterThan(at('wk-activity-btn'));
     expect(html).not.toContain('New entry');
     expect(wikiWaiting(THREE_SPACES)).toBe(7);
-    expect(html).toContain('class="tp-rail-badge needs-you" title="7 waiting on you" aria-label="7 waiting on you">7</span>');
+    expect(html).toMatch(/class="tp-rail-badge needs-you" aria-label="7 waiting on you"[^>]*>7<\/span>/);
   });
 
   it('heads the directory column and the head row with the space’s name alone: no Wiki title, no search line in the column (board wiki-rail-name B)', () => {

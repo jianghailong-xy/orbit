@@ -2,7 +2,9 @@ import { useState, type JSX } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { ProjectIntegrationView } from '@orbit/shared';
 import { api } from '../api';
+import { encodeId } from '../lib/idCodec';
 import { projectIntegrationQuery } from '../lib/queries';
+import { LandingPullRequest } from './LandingPullRequest';
 import { LandingLink, LandingNoPage } from './LandingLink';
 import {
   LANDING_ALL_JOBS,
@@ -92,6 +94,10 @@ export function ProjectLandingCard({
   return (
     <div className={`session-project-landing${shape}`}>
       {press}
+      {card.pullRequest && !several ? (
+        <LandingPullRequest pullRequest={card.pullRequest} main={card.target ?? 'main'}
+          sessionHref={lead?.landingSessionId ? `/sessions/${encodeURIComponent(encodeId(lead.landingSessionId))}` : undefined} />
+      ) : null}
       {/* Several jobs: a row each, its link beside it and outside the press — a link may not be
           inside a button, and the row that lands no task is the merge card's to open. */}
       {several ? (

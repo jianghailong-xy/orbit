@@ -1,0 +1,410 @@
+<!-- DESIGN MOCK (2026-11-24). Documents in the Android app: the iPhone board (01-ios) in Material 3, with the app's own colours
+     (src/android/app/src/main/kotlin/io/orbitd/android/ui/OrbitTheme.kt) and drawer (MainActivity DrawerPanel).
+     File names, sessions, sizes and dates are demo data.
+     Render: node docs/mocks/drive/render.mjs $PWD/docs/mocks/drive/04-android.html $PWD/docs/mocks/drive/04-android.png -->
+<!doctype html><html lang="en"><meta charset="utf-8">
+<title>Documents - Android</title>
+<link rel="stylesheet" href="board.css">
+<style>
+  /* Material 3 phone, 400 dp, the app's light scheme */
+  .ad { --p:#0066BE; --on:#1C1C1E; --v:#555861; --sv:#F0F1F4; --sc:#E4EFFC; --onsc:#123451; --ol:#c9cbd1; --bg:#FDFDFE; --err:#B3261E;
+        width:400px; background:var(--bg); color:var(--on); border-radius:26px; position:relative; overflow:hidden; padding-bottom:20px;
+        box-shadow:0 1px 0 #d5d5da, 0 6px 24px rgba(0,0,0,.08); font:15px/1.45 Roboto,Inter,sans-serif; }
+  .ad.dark { --p:#8AC6FF; --on:#F1F1F4; --v:#BFC2CA; --sv:#292B2F; --sc:#203F5C; --onsc:#D4E8FC; --ol:#3a3c41; --bg:#000; --err:#FFB4AB; }
+  .ad .sbar { height:30px; display:flex; justify-content:space-between; align-items:center; padding:0 22px; font-size:13px; font-weight:500; }
+  .ad .top { display:flex; align-items:center; gap:4px; height:60px; padding:0 6px; }
+  .ad .top .ib { width:44px; height:44px; display:flex; align-items:center; justify-content:center; color:var(--on); }
+  .ad .top .t { flex:1; font-size:21px; font-weight:400; padding-left:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ad .crumb2 { font-size:13px; color:var(--v); padding:0 20px 8px; }
+  .ad .li { display:flex; align-items:center; gap:16px; padding:10px 20px; min-height:56px; position:relative; }
+  .ad .li .l { flex:1; min-width:0; }
+  .ad .li .h { font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ad .li .s { font-size:13.5px; color:var(--v); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ad .li .s a, .ad a.lk { color:var(--p); text-decoration:none; }
+  .ad .li .tr { color:var(--v); font-size:13.5px; white-space:nowrap; }
+  .ad .div { height:1px; background:var(--ol); margin:6px 0; opacity:.6; }
+  .ad .sh { font-size:14px; font-weight:500; color:var(--p); padding:14px 20px 4px; }
+  .ad .fab { position:absolute; right:16px; bottom:22px; height:56px; border-radius:16px; background:var(--sc); color:var(--onsc);
+             display:flex; align-items:center; gap:10px; padding:0 20px; font-weight:500; font-size:15px; box-shadow:0 3px 8px rgba(0,0,0,.18); z-index:2; }
+  .ad .snack { position:absolute; left:12px; right:12px; bottom:94px; background:#313033; color:#F4EFF4; border-radius:6px; padding:14px 16px;
+               display:flex; justify-content:space-between; font-size:14.5px; box-shadow:0 4px 12px rgba(0,0,0,.25); z-index:3; }
+  .ad .snack b { color:#8AC6FF; font-weight:500; }
+  .ad .scrim { position:absolute; inset:0; background:rgba(0,0,0,.32); z-index:4; }
+  .ad .bs { position:absolute; left:0; right:0; bottom:0; background:#F4F5F8; border-radius:28px 28px 0 0; z-index:5; padding:10px 0 20px; }
+  .ad.dark .bs { background:#1d1e21; }
+  .ad .bs .hd { width:32px; height:4px; border-radius:2px; background:#8e9099; margin:6px auto 14px; }
+  .ad .bs .bt { font-size:16px; font-weight:500; padding:0 24px 8px; }
+  .ad .mi2 { display:flex; align-items:center; gap:18px; padding:13px 24px; font-size:16px; }
+  .ad .mi2.red { color:var(--err); }
+  .ad .dlg { position:absolute; left:24px; right:24px; z-index:5; background:#EEF0F5; border-radius:28px; padding:24px; }
+  .ad .dlg h4 { margin:0 0 12px; font-size:22px; font-weight:400; line-height:1.3; }
+  .ad .dlg .tx { font-size:14.5px; color:var(--v); line-height:1.5; }
+  .ad .dlg .acts { display:flex; justify-content:flex-end; gap:8px; margin-top:20px; }
+  .ad .tb { color:var(--p); font-weight:500; font-size:14.5px; padding:10px 12px; border-radius:20px; }
+  .ad .fb { background:var(--p); color:#fff; font-weight:500; font-size:14.5px; padding:10px 22px; border-radius:20px; display:inline-block; text-align:center; }
+  .ad.dark .fb { color:#00335F; }
+  .ad .ob { border:1px solid #757881; color:var(--p); font-weight:500; font-size:14.5px; padding:9px 22px; border-radius:20px; display:inline-block; text-align:center; }
+  .ad .chip2 { display:inline-flex; align-items:center; gap:4px; border-radius:8px; padding:3px 8px; font-size:12.5px; font-weight:500; background:var(--sc); color:var(--onsc); white-space:nowrap; }
+  .ad .bar2 { height:4px; border-radius:2px; background:#dfe3ec; overflow:hidden; margin-top:8px; } .ad .bar2 i { display:block; height:100%; background:var(--p); border-radius:2px; }
+  .ad .card2 { background:var(--sv); border-radius:16px; margin:0 16px 12px; }
+  .ad .search2 { margin:4px 16px 8px; height:52px; border-radius:26px; background:var(--sv); display:flex; align-items:center; gap:14px; padding:0 18px; color:var(--v); font-size:16px; }
+  .ad .drawer { position:absolute; left:0; top:0; bottom:0; width:320px; background:#F4F5F8; border-radius:0 18px 18px 0; z-index:5; padding:30px 12px 16px; }
+  .ad .dr { display:flex; align-items:center; gap:14px; height:52px; padding:0 16px; border-radius:26px; font-size:15px; font-weight:500; color:#44474e; }
+  .ad .dr.on { background:var(--sc); color:var(--onsc); }
+  .ad .dr .k { margin-left:auto; font-size:13px; color:#985900; }
+  .ad .dsec { font-size:13.5px; font-weight:500; color:var(--v); padding:16px 16px 6px; }
+  .ad .shade { background:#E9EBF0; padding:14px 12px; }
+  .ad .nt { background:#fff; border-radius:22px; padding:14px 16px; margin-bottom:8px; font-size:14px; }
+  .ad .nt .app { display:flex; gap:8px; align-items:center; font-size:12px; color:var(--v); margin-bottom:6px; }
+  .ad .nt .ac { display:flex; gap:22px; margin-top:10px; color:var(--p); font-weight:500; font-size:14px; }
+  .ad .warn2 { background:#FFF4E0; border-radius:12px; padding:12px 14px; color:#5c3a00; font-size:13.5px; line-height:1.5; margin-top:14px; }
+  .ad svg.ic { color:inherit; }
+  .ad.dark svg.ic[data-k="line"] { color:var(--on); }
+</style>
+<body><div class="board">
+<h1>Documents · Android</h1>
+<p class="lede">The iPhone's screens (<code>01-ios.png</code>, the reference) in Material 3, with the Android app's own colours and drawer. The
+layout follows iOS; what changes is Android's own: a navigation drawer row, an extended <b>Upload</b> button, bottom sheets and dialogs, the system
+pickers, a snackbar to undo, and a notification while the owner's uploads run in the background. Everything not drawn here (Markdown preview,
+earlier versions, reply links) is the iPhone frame with these same parts. All names, sessions, sizes and dates are demo data.</p>
+
+<div class="grid">
+
+<!-- 1 drawer -->
+<div>
+  <div class="fh"><span class="n">1</span>Navigation drawer <span class="dec">Documents under Wiki</span><span class="dec">No count</span></div>
+  <div class="ad" style="height:700px">
+    <div class="sbar"><span>9:41</span><span>▾ ▮</span></div>
+    <div class="scrim" style="background:rgba(0,0,0,.4)"></div>
+    <div class="drawer">
+      <div class="search2" style="margin:0 4px 14px;height:48px;background:#e6e8ee"><i data-ic="search"></i>Search</div>
+      <div class="dr"><i data-ic="projects"></i>Projects<span class="k" style="color:var(--v)">4</span></div>
+      <div class="dr"><i data-ic="tasks"></i>Tasks</div>
+      <div class="dr"><i data-ic="cal"></i>Scheduled</div>
+      <div class="dr"><i data-ic="book"></i>Wiki<span class="k">2</span></div>
+      <div class="dr on" data-mk="1"><i data-ic="drive"></i>Documents</div>
+      <div class="dsec">Workspaces</div>
+      <div class="dr"><i data-ic="ws"></i>apiserver</div>
+      <div class="dr"><i data-ic="ws"></i>web</div>
+      <div class="dr"><i data-ic="ws"></i>Orbit baseline</div>
+      <div style="position:absolute;left:12px;right:12px;bottom:16px;display:flex;gap:10px">
+        <span class="fb" style="flex:1">New session</span><span class="ob" style="width:52px;padding:9px 0"><i data-ic="gear" style="margin:0 auto"></i></span></div>
+    </div>
+  </div>
+  <p class="note"><b>1</b> A <span class="mono">Destination.DOCUMENTS</span> row right after Wiki in the drawer's first group, with a folder icon and
+  no count. It is left out while <span class="mono">GET /auth/capabilities</span> says <span class="mono">documents.enabled: false</span>; a missing
+  field or a failed read counts as on, as on web.</p>
+</div>
+
+<!-- 2 root -->
+<div>
+  <div class="fh"><span class="n">2</span>Documents <span class="dec">Ordinary drive</span><span class="dec">Upload button</span></div>
+  <div class="ad" style="height:700px">
+    <div class="sbar"><span>9:41</span><span>▾ ▮</span></div>
+    <div class="top"><span class="ib"><i data-ic="menu"></i></span><span class="t">Documents</span><span class="ib"><i data-ic="newfolder"></i></span><span class="ib"><i data-ic="more" style="transform:rotate(90deg)"></i></span></div>
+    <div class="search2"><i data-ic="search"></i>Search Documents</div>
+    <div class="li"><i data-ic="folder" class="lg"></i><div class="l"><div class="h">Orbit UI migration</div><div class="s">14 items · today 14:02</div></div></div>
+    <div class="li"><i data-ic="folder" class="lg"></i><div class="l"><div class="h">Drive service</div><div class="s">3 items · today 10:31</div></div></div>
+    <div class="li"><i data-ic="folder" class="lg"></i><div class="l"><div class="h">Datasets</div><div class="s">2 items · Nov 17</div></div></div>
+    <div class="li"><i data-ic="folder" class="lg"></i><div class="l"><div class="h">Receipts 2026</div><div class="s">41 items · Nov 3</div></div></div>
+    <div class="li"><i data-ic="md" class="lg"></i><div class="l"><div class="h">reading-list.md</div><div class="s">You · Nov 12 · 4 KB</div></div><i data-ic="more" style="transform:rotate(90deg);color:var(--v)"></i></div>
+    <div class="div"></div>
+    <div class="li" data-mk="1"><i data-ic="trash" style="color:var(--v);margin:0 6px"></i><div class="l"><div class="h">Trash</div></div><span class="tr">23 items</span></div>
+    <div class="li"><i data-ic="chart" style="color:var(--v);margin:0 6px"></i><div class="l"><div class="h">Storage</div></div><span class="tr">18.4 GB</span></div>
+    <div class="fab" data-mk="2"><i data-ic="up"></i>Upload</div>
+  </div>
+  <p class="note">Full-width Material list rows instead of iOS's inset groups; otherwise the iPhone's frame 2. <b>1</b> Trash and Storage are the last
+  rows of the top level, as on the phone. <b>2</b> An extended <b>Upload</b> button replaces iOS's <b>+</b>; it shrinks to an icon while the list
+  scrolls. New folder sits in the top bar.</p>
+</div>
+
+<!-- 3 folder + snackbar -->
+<div>
+  <div class="fh"><span class="n">3</span>A folder <span class="dec">Rule 6 who last wrote it</span><span class="dec">D6 delete, Undo</span></div>
+  <div class="ad" style="height:700px">
+    <div class="sbar"><span>9:41</span><span>▾ ▮</span></div>
+    <div class="top"><span class="ib">←</span><span class="t">Orbit UI migration</span><span class="ib"><i data-ic="newfolder"></i></span><span class="ib"><i data-ic="more" style="transform:rotate(90deg)"></i></span></div>
+    <div class="crumb2">Documents › Orbit UI migration</div>
+    <div class="li"><i data-ic="folder" class="lg"></i><div class="l"><div class="h">screens</div><div class="s">9 items · today 14:02</div></div></div>
+    <div class="li" data-mk="1"><span class="thumb" style="width:30px;height:30px"></span><div class="l"><div class="h">sign-in-v3.png</div><div class="s">Agent in <a>Redesign the sign-in page</a> · 14:02</div></div><span class="tr">1.2 MB</span></div>
+    <div class="li" data-mk="2"><i data-ic="md" class="lg"></i><div class="l"><div class="h">migration-notes.md</div><div class="s">An agent on Orbit Cloud · 11:40</div></div><span class="tr">18 KB</span></div>
+    <div class="li"><i data-ic="csv" class="lg"></i><div class="l"><div class="h">route-inventory.csv</div><div class="s">Agent in <a>Inventory web routes</a> · yesterday</div></div><span class="tr">96 KB</span></div>
+    <div class="li"><i data-ic="md" class="lg"></i><div class="l"><div class="h">brief.md</div><div class="s">You · Nov 16</div></div><span class="tr">3 KB</span></div>
+    <div class="li"><span class="thumb g" style="width:30px;height:30px"></span><div class="l"><div class="h">palette.png</div><div class="s">An agent on Orbit Cloud · Nov 15</div></div><span class="tr">340 KB</span></div>
+    <div class="snack" data-mk="3"><span>Moved figma-export.zip to Trash</span><b>Undo</b></div>
+    <div class="fab"><i data-ic="up"></i>Upload</div>
+  </div>
+  <p class="note"><b>1</b> "Agent in &lt;session&gt;" links the session that wrote the file. <b>2</b> Plain "An agent on Orbit Cloud", no link, where
+  Orbit could not tell. <b>3</b> Move to Trash asks nothing (D6); a snackbar offers <b>Undo</b>, as the web's toast does.</p>
+</div>
+
+<!-- 4 row actions -->
+<div>
+  <div class="fh"><span class="n">4</span>Actions on a file <span class="dec">Rename · Move · Download · Share link</span></div>
+  <div class="ad" style="height:700px">
+    <div class="sbar"><span>9:41</span><span>▾ ▮</span></div>
+    <div class="top"><span class="ib">←</span><span class="t">Orbit UI migration</span></div>
+    <div class="li"><i data-ic="folder" class="lg"></i><div class="l"><div class="h">screens</div><div class="s">9 items · today 14:02</div></div></div>
+    <div class="li"><span class="thumb" style="width:30px;height:30px"></span><div class="l"><div class="h">sign-in-v3.png</div><div class="s">Agent in Redesign the sign-in page</div></div></div>
+    <div class="scrim"></div>
+    <div class="bs">
+      <div class="hd"></div>
+      <div class="li" style="padding-top:0"><i data-ic="md" class="lg"></i><div class="l"><div class="h" style="font-weight:500">migration-notes.md</div><div class="s">An agent on Orbit Cloud · 18 KB</div></div></div>
+      <div class="div" style="margin:4px 0 6px"></div>
+      <div class="mi2"><i data-ic="pencil"></i>Rename</div>
+      <div class="mi2"><i data-ic="move"></i>Move to…</div>
+      <div class="mi2" data-mk="1"><i data-ic="down"></i>Download</div>
+      <div class="mi2"><i data-ic="share"></i>Send a copy…</div>
+      <div class="mi2"><i data-ic="link"></i>Share link…</div>
+      <div class="mi2 red"><i data-ic="trash"></i>Move to Trash</div>
+    </div>
+  </div>
+  <p class="note">A row's <b>⋮</b> or a long press opens a modal bottom sheet. Long press with a second tap starts selection, for moving several at
+  once. <b>1</b> Download saves to the phone's Downloads with the system's download notification; <b>Send a copy…</b> is Android's share sheet
+  (the file itself, not a link). <b>Share link…</b> is frame 10.</p>
+</div>
+
+<!-- 5 upload sheet -->
+<div>
+  <div class="fh"><span class="n">5</span>Upload <span class="dec">D3 files or folders</span><span class="dec">System pickers</span></div>
+  <div class="ad" style="height:700px">
+    <div class="sbar"><span>9:41</span><span>▾ ▮</span></div>
+    <div class="top"><span class="ib">←</span><span class="t">Datasets</span></div>
+    <div class="li"><i data-ic="csv" class="lg"></i><div class="l"><div class="h">labels.csv</div><div class="s">You · Nov 17</div></div><span class="tr">84 MB</span></div>
+    <div class="li"><i data-ic="zip" class="lg"></i><div class="l"><div class="h">eval-runs-2026-10.zip</div><div class="s">An agent on Orbit Cloud · Oct 31</div></div><span class="tr">9.6 GB</span></div>
+    <div class="scrim"></div>
+    <div class="bs">
+      <div class="hd"></div>
+      <div class="bt">Upload to Datasets</div>
+      <div class="mi2" data-mk="1"><i data-ic="file"></i>Files</div>
+      <div class="mi2"><i data-ic="img"></i>Photos and videos</div>
+      <div class="mi2" data-mk="2"><i data-ic="drive"></i>A folder</div>
+      <div class="div" style="margin:4px 0"></div>
+      <div class="mi2"><i data-ic="newfolder"></i>New folder</div>
+    </div>
+  </div>
+  <p class="note"><b>1</b> Files opens the system document picker (several at once), Photos and videos the system photo picker; no storage permission
+  is asked. <b>2</b> A folder uses the system folder picker and keeps the folder's tree. Orbit in the system share sheet uploads what another app
+  shares, asking which folder first. A taken name gets a suffix ("labels 2.csv"), never an overwrite.</p>
+</div>
+
+<!-- 6 notification -->
+<div>
+  <div class="fh"><span class="n">6</span>Uploads in the background <span class="dec">D12 resumable</span><span class="dec">Notification</span></div>
+  <div class="ad" style="height:700px;background:#E9EBF0">
+    <div class="sbar"><span>9:41</span><span>▾ ▮</span></div>
+    <div class="shade">
+      <div style="font-size:13px;color:#555861;padding:0 6px 10px">Silent</div>
+      <div class="nt" data-mk="1">
+        <div class="app"><i data-ic="logo" class="sm"></i>Orbit · Documents</div>
+        <div style="font-weight:500">Uploading 2 of 3 to Datasets</div>
+        <div style="color:#555861;font-size:13.5px">6.1 of 14.3 GB · about 18 min left</div>
+        <div class="bar2"><i style="width:43%"></i></div>
+        <div class="ac"><span>Pause</span><span>Show</span></div>
+      </div>
+      <div class="nt" data-mk="2">
+        <div class="app"><i data-ic="logo" class="sm"></i>Orbit · Documents</div>
+        <div style="font-weight:500">demo-recording.mov is paused</div>
+        <div style="color:#555861;font-size:13.5px">No connection. 1.2 of 2.4 GB is kept; it goes on from there when you're back online.</div>
+      </div>
+      <div class="nt" style="opacity:.55">
+        <div class="app"><i data-ic="down" class="sm"></i>Downloads</div>
+        <div>migration-notes.md · Download complete</div>
+      </div>
+    </div>
+  </div>
+  <p class="note">The owner's uploads run as background work, so they go on with the app closed. <b>1</b> One ongoing notification for all of
+  them, with Pause and Show (opens frame 7). It goes once they are done. <b>2</b> A dropped connection pauses with the parts already sent kept, and
+  resumes by itself. An agent's sync never posts a notification: it is the agent's work, seen in the app (frame 7).</p>
+</div>
+
+<!-- 7 uploads sheet with sync -->
+<div>
+  <div class="fh"><span class="n">7</span>Uploads, with an agent's sync <span class="dec">S4 one row per sync</span><span class="dec">Session link</span></div>
+  <div class="ad" style="height:700px">
+    <div class="sbar"><span>9:41</span><span>▾ ▮</span></div>
+    <div class="top"><span class="ib">←</span><span class="t">out</span></div>
+    <div class="card2" style="display:flex;gap:12px;align-items:center;padding:12px 16px;background:var(--sc);color:var(--onsc)" data-mk="1"><i data-ic="up"></i><div style="flex:1"><b style="font-weight:500">Uploading 2 of 3</b> · 410 MB of 1.7 GB</div><span style="font-weight:500;color:var(--p)">Show</span></div>
+    <div class="scrim"></div>
+    <div class="bs">
+      <div class="hd"></div>
+      <div style="display:flex;align-items:center;padding:0 12px 6px 24px"><div class="bt" style="padding:0;flex:1">Uploads</div><span class="tb">Clear finished</span></div>
+      <div class="li" style="display:block"><div style="display:flex;gap:14px;align-items:center"><i data-ic="video" class="lg"></i><div class="l"><div class="h">holiday.mov → Videos</div><div class="s">310 of 800 MB · 12 MB/s · under a minute left</div></div><i data-ic="pause" style="color:var(--v)"></i></div><div class="bar2" style="margin-left:46px"><i style="width:39%"></i></div></div>
+      <div class="li" style="display:block" data-mk="2"><div style="display:flex;gap:14px;align-items:center"><i data-ic="folder" class="lg"></i><div class="l"><div class="h">out/ → Reports/out</div><div class="s" style="white-space:normal">12 of 42 files · 90 of 900 MB · about 2 min left</div></div><span class="chip2"><i data-ic="cloud" class="sm"></i>Agent sync</span></div><div class="bar2" style="margin-left:46px"><i style="width:10%"></i></div><div class="s" style="margin:6px 0 0 46px;font-size:13.5px;color:var(--v)">charts/q3-margin.png · <a class="lk">Weekly report</a></div></div>
+      <div class="li" data-mk="3"><i data-ic="folder" class="lg"></i><div class="l"><div class="h">data/ → Datasets</div><div class="s">Synced 30 files · <span style="color:var(--err)">1 failed</span> · <a>Details</a></div></div><i data-ic="warn"></i></div>
+    </div>
+  </div>
+  <p class="note"><b>1</b> While anything goes up, a card at the top of the folder counts uploads and syncs together. <b>2</b> An agent's sync is one
+  row with <b>Agent sync</b>, the same words and states as iPhone frames 16–17, and no Pause. <b>3</b> <b>Details</b> opens a full-screen dialog
+  with the failed paths (iPhone frame 18): no Retry, <b>Open Datasets</b>.</p>
+</div>
+
+<!-- 8 picture preview -->
+<div>
+  <div class="fh"><span class="n">8</span>Picture preview <span class="dec">Preview: pictures</span><span class="dec">Who wrote it, with session</span></div>
+  <div class="ad" style="height:700px">
+    <div class="sbar"><span>9:41</span><span>▾ ▮</span></div>
+    <div class="top"><span class="ib">←</span><span class="t">sign-in-v3.png</span><span class="ib"><i data-ic="share"></i></span><span class="ib"><i data-ic="more" style="transform:rotate(90deg)"></i></span></div>
+    <div style="background:#0f0f12;padding:26px 40px"><div class="pic" style="height:250px"></div></div>
+    <div class="li"><div class="l"><div class="h" style="font-weight:500">sign-in-v3.png</div><div class="s">PNG · 1.2 MB · 1179 × 2556 · Orbit UI migration</div></div></div>
+    <div class="card2">
+      <div class="li" data-mk="1"><div class="av agent">C</div><div class="l"><div class="s">Last written today 14:02</div><div class="h" style="font-weight:500;font-size:15px">Agent in Redesign the sign-in page</div></div><span style="color:var(--v)">›</span></div>
+      <div class="li"><i data-ic="restore" style="color:var(--v)"></i><div class="l"><div class="h" style="font-size:15px">Earlier versions</div></div><span class="tr">2 in Trash ›</span></div>
+    </div>
+    <div style="display:flex;gap:10px;margin:4px 16px 0"><span class="ob" style="flex:1">Download</span><span class="fb" style="flex:1">Share link…</span></div>
+  </div>
+  <p class="note">Pinch to zoom, swipe to the next picture in the folder. <b>1</b> The writer opens its session. Markdown renders as the Wiki does
+  (iPhone frame 5), read-only; other files show their icon with <b>Download</b> and <b>Open with…</b>, which hands the file to another app.</p>
+</div>
+
+<!-- 9 move -->
+<div>
+  <div class="fh"><span class="n">9</span>Move to a folder <span class="dec">Move · New folder</span></div>
+  <div class="ad" style="height:700px">
+    <div class="sbar"><span>9:41</span><span>▾ ▮</span></div>
+    <div class="top"><span class="ib">✕</span><span class="t" style="font-size:19px">Move "migration-notes.md"</span></div>
+    <div class="crumb2">Documents › <b style="color:var(--on);font-weight:500">Drive service</b></div>
+    <div class="li"><span class="ib" style="color:var(--v)">←</span><div class="l"><div class="h" style="color:var(--v)">Documents</div></div></div>
+    <div class="li"><i data-ic="folder" class="lg"></i><div class="l"><div class="h">board</div></div><span style="color:var(--v)">›</span></div>
+    <div class="li"><i data-ic="folder" class="lg"></i><div class="l"><div class="h">feasibility</div></div><span style="color:var(--v)">›</span></div>
+    <div class="li" style="background:var(--sc)" data-mk="1"><i data-ic="folder" class="lg"></i><div class="l"><div class="h">Notes</div><div class="s">New folder</div></div><i data-ic="check" style="color:var(--p)"></i></div>
+    <div class="li" style="color:var(--p)"><i data-ic="newfolder" style="margin:0 6px"></i><div class="l"><div class="h" style="color:var(--p)">New folder</div></div></div>
+    <div style="position:absolute;left:16px;right:16px;bottom:22px"><span class="fb" style="display:block">Move to Notes</span></div>
+  </div>
+  <p class="note">A full-screen dialog walks the folder tree; only folders are listed. <b>1</b> A folder made with <b>New folder</b> is selected
+  straight away. A name already taken where the file lands gets a suffix. The system back gesture goes up one folder, then closes.</p>
+</div>
+
+<!-- 10 share link with warning -->
+<div>
+  <div class="fh"><span class="n">10</span>Share link, secret found <span class="dec">D18 warn, do not block</span></div>
+  <div class="ad" style="height:700px">
+    <div class="sbar"><span>9:41</span><span>▾ ▮</span></div>
+    <div class="top"><span class="ib">←</span><span class="t">Drive service</span></div>
+    <div class="li"><i data-ic="md" class="lg"></i><div class="l"><div class="h">deploy-checklist.md</div><div class="s">Agent in Deploy the drive service</div></div></div>
+    <div class="scrim"></div>
+    <div class="dlg" style="top:120px">
+      <div style="text-align:center;margin-bottom:10px"><i data-ic="warn" style="width:26px;height:26px;margin:0 auto"></i></div>
+      <h4 style="text-align:center">Share a link to "deploy-checklist.md"?</h4>
+      <div class="tx">Anyone with the link can view and download this one file without signing in.</div>
+      <div class="warn2" data-mk="1"><b>This file looks like it holds secrets</b>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:2px 10px;margin:6px 0;font-size:13px"><span>AWS access key</span><span class="mono">line 14 · AKIA…7QX2</span><span>Private key block</span><span class="mono">line 31</span><span>Database URL with a password</span><span class="mono">line 52</span></div>
+        Anyone with the link could read them. You can still share it.</div>
+      <div class="acts"><span class="tb">Cancel</span><span class="tb" style="color:#985900" data-mk="2">Share anyway</span></div>
+    </div>
+  </div>
+  <p class="note">A Material dialog. <b>1</b> The scan names what it found, masked (D18). <b>2</b> <b>Share anyway</b> is a text button in the warning
+  colour, not the filled one; it makes the link and the dialog turns into the link with Copy and Stop sharing. With nothing found the link is made
+  straight away (iPhone frame 9).</p>
+</div>
+
+<!-- 11 trash -->
+<div>
+  <div class="fh"><span class="n">11</span>Trash <span class="dec">D6 · D11</span><span class="dec">Rule 3 grouped by folder and time</span></div>
+  <div class="ad" style="height:700px">
+    <div class="sbar"><span>9:41</span><span>▾ ▮</span></div>
+    <div class="top"><span class="ib">←</span><span class="t">Trash</span><span class="tb" style="color:var(--err)">Empty</span></div>
+    <div class="crumb2">23 items · 2.6 GB · kept until you empty it</div>
+    <div class="sh" style="display:flex;justify-content:space-between;align-items:center" data-mk="1"><span>Orbit UI migration · today 14:20</span><span class="tb" style="padding:4px 8px">Restore all</span></div>
+    <div class="li"><i data-ic="folder" class="lg"></i><div class="l"><div class="h">old-screens</div><div class="s">Folder · 18 items · 46 MB · by an agent on Orbit Cloud</div></div></div>
+    <div class="sh" style="display:flex;justify-content:space-between;align-items:center" data-mk="2"><span>Orbit UI migration · today 09:12</span><span class="tb" style="padding:4px 8px">Restore all</span></div>
+    <div class="li"><span class="thumb" style="width:30px;height:30px"></span><div class="l"><div class="h">sign-in-v3.png</div><div class="s">Earlier version · replaced 09:12 by Agent in Redesign…</div></div><span class="tr">1.1 MB</span></div>
+    <div class="li"><span class="thumb" style="width:30px;height:30px"></span><div class="l"><div class="h">sign-in-v3.png</div><div class="s">Earlier version · replaced Nov 19 by you</div></div><span class="tr">1.1 MB</span></div>
+    <div class="sh" style="display:flex;justify-content:space-between;align-items:center"><span>Datasets · Nov 17</span><span class="tb" style="padding:4px 8px">Restore all</span></div>
+    <div class="li"><i data-ic="zip" class="lg"></i><div class="l"><div class="h">eval-runs-draft.zip</div><div class="s">Deleted by you</div></div><span class="tr">2.5 GB</span></div>
+  </div>
+  <p class="note"><b>1</b> Grouped by the folder an item was deleted from and when; one <span class="mono">rm -rf</span> is one group, restored whole.
+  <b>2</b> Earlier versions of overwritten files (D17). A row's ⋮ has Restore, Restore as a copy and Delete for good; only Delete for good and
+  <b>Empty</b> ask first. Agents cannot see Trash (D11).</p>
+</div>
+
+<!-- 12 storage -->
+<div>
+  <div class="fh"><span class="n">12</span>Storage <span class="dec">D13 replaces Settings → Storage</span><span class="dec">D19 counted once</span></div>
+  <div class="ad" style="height:700px">
+    <div class="sbar"><span>9:41</span><span>▾ ▮</span></div>
+    <div class="top"><span class="ib">←</span><span class="t">Storage</span></div>
+    <div class="card2" style="padding:16px" data-mk="1">
+      <div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:30px">18.4 GB</span><span style="color:var(--v)">in this account</span></div>
+      <div class="stack" style="margin-top:10px;height:10px"><i style="width:59%;background:#0066BE"></i><i style="width:7%;background:#8AC6FF"></i><i style="width:34%;background:#b4b4ba"></i></div>
+      <div class="legend"><span style="--c:#0066BE">Documents 10.9 GB</span><span style="--c:#8AC6FF">Trash 1.3 GB</span><span style="--c:#b4b4ba">Other 6.2 GB</span></div>
+    </div>
+    <div class="sh">Other storage</div>
+    <div class="li" style="min-height:44px;padding:6px 20px"><div class="l"><div class="h" style="font-size:15px">Conversation pictures</div></div><span class="tr">2.1 GB</span></div>
+    <div class="li" style="min-height:44px;padding:6px 20px"><div class="l"><div class="h" style="font-size:15px">Attachments</div></div><span class="tr">1.4 GB</span></div>
+    <div class="li" style="min-height:44px;padding:6px 20px"><div class="l"><div class="h" style="font-size:15px">Evidence files</div></div><span class="tr">0.9 GB</span></div>
+    <div class="li" style="min-height:44px;padding:6px 20px" data-mk="2"><div class="l"><div class="h" style="font-size:15px">Files agents uploaded</div></div><span class="tr">1.8 GB</span></div>
+    <div class="sh">Largest projects</div>
+    <div class="li" style="min-height:44px;padding:6px 20px"><div class="l"><div class="h" style="font-size:15px">Orbit UI migration</div></div><span class="tr">1.9 GB ›</span></div>
+    <div class="li" style="min-height:44px;padding:6px 20px"><div class="l"><div class="h" style="font-size:15px">Drive service</div></div><span class="tr">640 MB ›</span></div>
+    <div class="sh">Added each week</div>
+    <div class="li" style="min-height:44px;padding:6px 20px"><div class="l"><div class="h" style="font-size:15px">Week of Nov 16</div></div><span class="tr">1.2 GB ›</span></div>
+  </div>
+  <p class="note"><b>1</b> The account total and the drive's share; Trash counts until emptied. <b>2</b> The rest, with the web's per-project,
+  per-task and per-week lists. Android has no Settings → Storage today, so this is new here (D13).</p>
+</div>
+
+<!-- 13 dark -->
+<div>
+  <div class="fh"><span class="n">13</span>A folder, dark theme <span class="dec">App's dark scheme</span></div>
+  <div class="ad dark" style="height:700px">
+    <div class="sbar"><span>9:41</span><span>▾ ▮</span></div>
+    <div class="top"><span class="ib">←</span><span class="t">Orbit UI migration</span><span class="ib"><i data-ic="newfolder"></i></span><span class="ib"><i data-ic="more" style="transform:rotate(90deg)"></i></span></div>
+    <div class="crumb2">Documents › Orbit UI migration</div>
+    <div class="li"><i data-ic="folder" class="lg"></i><div class="l"><div class="h">screens</div><div class="s">9 items · today 14:02</div></div></div>
+    <div class="li"><span class="thumb" style="width:30px;height:30px"></span><div class="l"><div class="h">sign-in-v3.png</div><div class="s">Agent in <a>Redesign the sign-in page</a> · 14:02</div></div><span class="tr">1.2 MB</span></div>
+    <div class="li"><i data-ic="md" class="lg"></i><div class="l"><div class="h">migration-notes.md</div><div class="s">An agent on Orbit Cloud · 11:40</div></div><span class="tr">18 KB</span></div>
+    <div class="li"><i data-ic="csv" class="lg"></i><div class="l"><div class="h">route-inventory.csv</div><div class="s">Agent in <a>Inventory web routes</a> · yesterday</div></div><span class="tr">96 KB</span></div>
+    <div class="li"><i data-ic="md" class="lg"></i><div class="l"><div class="h">brief.md</div><div class="s">You · Nov 16</div></div><span class="tr">3 KB</span></div>
+    <div class="li"><i data-ic="video" class="lg"></i><div class="l"><div class="h">walkthrough.mov</div><div class="s">Uploading · 63%</div><div class="bar2" style="background:#3a3c41"><i style="width:63%"></i></div></div><span class="tr">3.1 GB</span></div>
+    <div class="fab"><i data-ic="up"></i>Upload</div>
+  </div>
+  <p class="note">The app's dark scheme (black surface, <span class="mono">#8AC6FF</span> primary). A file still uploading sits in its folder with
+  its bar, as on the Mac (frame 1), so the owner sees where it will land.</p>
+</div>
+
+<!-- 14 composer picker -->
+<div>
+  <div class="fh"><span class="n">14</span>Composer: pick a Documents file <span class="dec">D21 file picker</span></div>
+  <div class="ad" style="height:700px">
+    <div class="sbar"><span>9:41</span><span>▾ ▮</span></div>
+    <div class="top"><span class="ib">←</span><span class="t">Redesign the sign-in page</span></div>
+    <div style="padding:6px 20px;color:var(--v)">Done. The new sign-in screens are drafted; tell me which notes to follow for the copy.</div>
+    <div class="scrim"></div>
+    <div class="bs" style="top:150px">
+      <div class="hd"></div>
+      <div style="display:flex;align-items:center;padding:0 12px 6px 24px"><div class="bt" style="padding:0;flex:1">Add from Documents</div><span class="tb">Add 1</span></div>
+      <div class="search2" style="height:44px">Search Documents</div>
+      <div class="crumb2">Documents › <b style="color:var(--on);font-weight:500">Orbit UI migration</b></div>
+      <div class="li"><i data-ic="folder" class="lg"></i><div class="l"><div class="h">screens</div></div><span style="color:var(--v)">›</span></div>
+      <div class="li" style="background:var(--sc)" data-mk="1"><i data-ic="md" class="lg"></i><div class="l"><div class="h">migration-notes.md</div><div class="s">An agent on Orbit Cloud · 11:40</div></div><i data-ic="check" style="color:var(--p)"></i></div>
+      <div class="li"><i data-ic="md" class="lg"></i><div class="l"><div class="h">brief.md</div><div class="s">You · Nov 16</div></div></div>
+      <div class="li"><i data-ic="csv" class="lg"></i><div class="l"><div class="h">route-inventory.csv</div><div class="s">Agent in Inventory web routes</div></div></div>
+    </div>
+  </div>
+  <p class="note">The composer's <b>+</b> menu gains <b>From Documents</b> beside Photos and Files, opening on the session's project folder (D22).
+  <b>1</b> The picked file goes in the message as a chip; what is sent is its <span class="mono">/home/orbit/Documents/…</span> path, not a new
+  upload (D21). A reply linking <span class="mono">~/Documents</span> renders as iPhone frame 15.</p>
+</div>
+
+<!-- 15 sync details -->
+<div>
+  <div class="fh"><span class="n">15</span>Details of a sync with failures <span class="dec">Failed paths with their errors</span></div>
+  <div class="ad" style="height:700px">
+    <div class="sbar"><span>9:41</span><span>▾ ▮</span></div>
+    <div class="top"><span class="ib">✕</span><span class="t">data/ → Datasets</span></div>
+    <div style="padding:4px 20px 8px;font-size:15px;line-height:1.5">Synced 30 files from <a class="lk">Clean survey data</a> at 14:12. 1 file
+      didn't upload. The other files are in Datasets. Ask the agent to run the sync again; it only sends what's still missing.</div>
+    <div class="sh">Didn't upload</div>
+    <div class="li" style="display:block" data-mk="1"><div class="mono" style="font-size:13px">survey-2026/raw/export.zip</div><div class="s" style="color:var(--err);white-space:normal">Changed while uploading. It was being written to.</div></div>
+    <div style="position:absolute;left:16px;right:16px;bottom:22px;display:flex;gap:10px"><span class="ob" style="flex:1">Open Datasets</span><span class="fb" style="flex:1">Done</span></div>
+  </div>
+  <p class="note">A full-screen dialog from <b>Details</b>. <b>1</b> Up to 100 failed paths with their reasons in plain words, then "and N more".
+  No Retry: only the agent runs a sync again (S1). Never the runner's local path.</p>
+</div>
+
+</div>
+</div>
+<script src="icons.js"></script>
+<script src="marks.js"></script>
+</body></html>

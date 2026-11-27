@@ -105,4 +105,27 @@ class DirectoryGroupingTest {
         assertEquals(2, before.map { it.id }.distinct().size)
         assertEquals(before.map { it.id }, groups("Renamed").map { it.id })
     }
+
+    private fun failed(id: String, vararg facts: Pair<String, Any?>): DirectorySession {
+        val f = facts.toMap()
+        return DirectorySession(id, createdAt = "2026-10-03T17:00:00Z", status = "FAILED", phase = f["phase"] as String?,
+            released = f["released"] as Boolean?, lastTurnOutcome = f["outcome"] as String?, endReason = f["endReason"] as String?,
+            retryAt = f["retryAt"] as String?)
+    }
+    private fun needsYou(s: DirectorySession) =
+        directoryGroups(listOf(s), SessionView.OPEN, Grouping.RECENCY, now, ZoneId.of("UTC")).first().title == "Needs you"
+
+    @Test fun anEndTheRunnerNeverConfirmedIsNotUnderNeedsYou() =
+        assertFalse(needsYou(failed("a", "phase" to "IDLE", "released" to true, "outcome" to "FAILED", "endReason" to "user_ended")))
+
+    @Test fun aRealFailureIsUnderNeedsYou() =
+        assertTrue(needsYou(failed("a", "phase" to "IDLE", "released" to true, "outcome" to "FAILED")))
+
+    @Test fun aFailureBeingRetriedIsNotUnderNeedsYou() =
+        assertFalse(needsYou(failed("a", "phase" to "IDLE", "released" to true, "outcome" to "FAILED", "retryAt" to "2026-10-04T01:00:00Z")))
+
+    @Test fun factsAbsentGroupsAsBefore() {
+        assertTrue(needsYou(failed("a", "endReason" to "user_ended")))
+        assertFalse(needsYou(failed("a", "retryAt" to "2026-10-04T01:00:00Z")))
+    }
 }

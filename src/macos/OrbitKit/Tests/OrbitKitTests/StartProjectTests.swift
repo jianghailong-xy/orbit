@@ -327,6 +327,47 @@ final class StartProjectTests: XCTestCase {
         XCTAssertTrue(main["requestId"] is NSNull)
     }
 
+    func testOnlyTheOldBareIdBranchIsShortened() {
+        XCTAssertEqual(RunSettings.shortBranch("project/readable-project-branch-names-352xNyEH"),
+                       "project/readable-project-branch-names-352xNyEH")
+        XCTAssertEqual(RunSettings.shortBranch("refs/heads/project/readable-project-branch-names-352xNyEH"),
+                       "project/readable-project-branch-names-352xNyEH")
+        XCTAssertEqual(RunSettings.shortBranch("project/352xNyEH"), "project/352xNyEH")
+        XCTAssertEqual(RunSettings.shortBranch("project/bg-jobs"), "project/bg-jobs")
+        XCTAssertEqual(RunSettings.shortBranch("project/34WvwUS8YMXfOfWbMqVuu"), "project/34Wvw…")
+        XCTAssertEqual(RunSettings.shortBranch("refs/heads/project/34WvwUS8YMXfOfWbMqVuu"), "project/34Wvw…")
+        XCTAssertEqual(RunSettings.shortBranch("project/34WvwUS8YMXfOfWbMqVuu\nx"),
+                       "project/34WvwUS8YMXfOfWbMqVuu\nx", "a newline is never cut")
+    }
+
+    func testTheStartCardBranchIsWhatTheServerSends() throws {
+        func settings(_ name: String?) -> ProjectStartSettings {
+            ProjectStartSettings(line: .projectBranch, projectBranchName: name, automatic: true,
+                                 maxConcurrentTasks: 1)
+        }
+        let readable = "refs/heads/project/foo-352xNyEH"
+        XCTAssertEqual(StartProject.branch(ProjectStartRequest(
+            settings: settings(nil), criteriaDigest: "c", defaultProjectBranchName: readable),
+            projectID: Self.project), "project/foo-352xNyEH")
+        XCTAssertEqual(StartProject.branch(ProjectStartRequest(
+            settings: settings(nil), criteriaDigest: "c"), projectID: Self.project),
+            "project/\(Self.project)")
+        XCTAssertEqual(StartProject.branch(ProjectStartRequest(
+            settings: settings("refs/heads/project/named"), criteriaDigest: "c",
+            defaultProjectBranchName: readable), projectID: Self.project), "project/named")
+
+        let with = try JSONDecoder().decode(ProjectStartRequest.self, from: Data(#"""
+            {"settings":{"line":"PROJECT_BRANCH","automatic":true,"maxConcurrentTasks":1},
+             "criteriaDigest":"c","defaultProjectBranchName":"refs/heads/project/foo-352xNyEH"}
+            """#.utf8))
+        XCTAssertEqual(with.defaultProjectBranchName, readable)
+        let without = try JSONDecoder().decode(ProjectStartRequest.self, from: Data(#"""
+            {"settings":{"line":"PROJECT_BRANCH","automatic":true,"maxConcurrentTasks":1},
+             "criteriaDigest":"c"}
+            """#.utf8))
+        XCTAssertNil(without.defaultProjectBranchName)
+    }
+
     func testTheDraftIsCompleteOnlyInsideTheDoorsLimits() {
         var draft = StartSettingsDraft(request().settings)
         XCTAssertTrue(draft.complete)

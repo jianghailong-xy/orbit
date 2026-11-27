@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { encryptSecret } from '../providers/provider-crypto';
+import { failureClauseOf, matchesFailureFilter } from '../test-support/failure-kind-filter-double';
 import { QUOTA_BLIND_RETRY_BACKOFF_MS, TasksService } from './tasks.service';
 
 process.env.PROVIDER_SECRET_KEY ??= 'quota-gate-subscription-key-spec';
@@ -19,6 +20,8 @@ const SUBSCRIPTION = 'claude-subscription';
 const API_KEY = 'claude-api';
 /** A subscription token on a key whose protocol is not Anthropic's: it runs on no engine at all. */
 const WRONG_PROTOCOL = 'openai-oat';
+/** What every failed run here ended with: Claude Code's 5-hour window (events.ts USAGE_LIMIT_ERROR_MARKERS). */
+const USAGE_LIMIT_ERROR = "You've hit your session limit · resets 6:20pm (Europe/Berlin)";
 
 type Assignee = { provider: string; login: boolean; runnerId: string; workspaceId: string };
 type Gate = {
@@ -64,10 +67,10 @@ function world(failedAt: Record<string, Date> = {}) {
     session: {
       // The failure budget's count (a run with no error text or none of the markers) finds nothing: every
       // run here was killed by a usage limit. The blind brake's read finds each one asked about.
-      groupBy: async ({ where }: { where: { taskId: { in: string[] }; OR: unknown[] } }) =>
-        where.OR.some((clause) => (clause as { error?: unknown }).error === null)
-          ? []
-          : where.taskId.in.filter((id) => failedAt[id]).map((id) => ({ taskId: id, _max: { createdAt: failedAt[id] } })),
+      groupBy: async ({ where }: { where: { taskId: { in: string[] }; AND?: unknown[] } }) =>
+        matchesFailureFilter(failureClauseOf(where), { error: USAGE_LIMIT_ERROR, failureKind: null })
+          ? where.taskId.in.filter((id) => failedAt[id]).map((id) => ({ taskId: id, _max: { createdAt: failedAt[id] } }))
+          : [],
     },
   };
   const service = new TasksService(prisma as never, {} as never, {} as never) as unknown as Gate;

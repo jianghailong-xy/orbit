@@ -15,7 +15,9 @@ class DshApprovalCardTest {
         val command = """python3 -c "print(open('watched.txt').read())" """.trimEnd()
         val input = buildJsonObject { put("command", command); put("orbitScheduleCheckOnly", true) }
         assertEquals(listOf(PermissionRule("Bash", command)), ApprovalRules.remember("Bash", input))
-        assertEquals(listOf(PermissionRule("Bash", "python3:*")), ApprovalRules.remember("Bash", buildJsonObject { put("command", command) }))
+        // An ordinary card remembers prefixes, and none for an interpreter: python3:* would cover every script.
+        assertEquals(listOf(PermissionRule("Bash", "psql:*")), ApprovalRules.remember("Bash", buildJsonObject { put("command", "psql -c \"select 1\" db") }))
+        assertEquals(emptyList<PermissionRule>(), ApprovalRules.remember("Bash", buildJsonObject { put("command", command) }))
     }
 
     private val raw = fixture().obj("snapshot")!!

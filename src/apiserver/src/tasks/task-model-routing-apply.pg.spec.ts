@@ -5,7 +5,8 @@ import test from 'node:test';
 import { BadRequestException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { CreatorType, PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { CreatorType, PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -216,7 +217,7 @@ const turnsOf = (db: PrismaClient, sessionId: string) => db.conversationTurn.fin
 /** A run that was claimed, did a turn, and is now parked with nothing to wake it. */
 async function pause(db: PrismaClient, sessionId: string) {
   await db.session.update({
-    where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT, numTurns: 1 },
+    where: { id: sessionId }, data: { turnState: null, numTurns: 1 },
   });
 }
 
@@ -275,7 +276,7 @@ test('smart selection on: a fresh run is created on the routed model and effort,
 
       // The Agent's old switch, written on or off, is no longer read: the next fresh run is routed and applied.
       await services.db.session.update({
-        where: { id: sessionId }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
+        where: { id: sessionId }, data: { turnState: null, finishedAt: new Date() },
       });
       await services.workspaces.update(target.ownerId, target.agentId, { modelRouting: false });
       const next = await runNow(services, target, taskId, randomUUID());
@@ -285,7 +286,7 @@ test('smart selection on: a fresh run is created on the routed model and effort,
 
       // Only the account's switch turns it off: the next fresh run is the baseline, and nothing is recorded.
       await services.db.session.update({
-        where: { id: next }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
+        where: { id: next }, data: { turnState: null, finishedAt: new Date() },
       });
       await services.db.user.update({
         where: { id: target.ownerId }, data: { preferences: { modelRouting: false, optimizeFor: 'cost' } },
@@ -498,7 +499,7 @@ test('a takeover creates the run on the route that was bound, not on one decided
       const press = randomUUID();
       // Decided at S by a holder that died between binding and creating; the task now says M.
       const route = {
-        policyVersion: 2, applied: true, level: 'S', provider: 'claude', model: SONNET, effort: 'low',
+        policyVersion: 4, applied: true, level: 'S', provider: 'claude', model: SONNET, effort: 'low',
         baseline: { provider: 'claude', providerSource: 'task-pin', model: null, effort: AGENT_EFFORT },
         features: { modelHint: 'S', modelRouting: true }, reasons: ['decided by the holder that died'],
       };
@@ -531,7 +532,7 @@ test('a routed run refused by a run already holding the task names no pin the ta
       const press = randomUUID();
       await boundReceipt(services.db, target.ownerId, TASK_RUN_ACTION.execute, press, `task:${taskId}`,
         routedTarget(target, taskId, press, {
-          policyVersion: 2, applied: true, level: 'M', provider: 'claude', model: SONNET, effort: 'medium',
+          policyVersion: 4, applied: true, level: 'M', provider: 'claude', model: SONNET, effort: 'medium',
           baseline: { provider: 'claude', providerSource: 'task-pin', model: null, effort: AGENT_EFFORT },
           features: { modelHint: 'M', modelRouting: true }, reasons: ['decided by the holder that died'],
         }));
@@ -554,7 +555,7 @@ test('the switch is the owner\'s: the user API turns it on and off, the agent to
     const services = connect();
     try {
       // The user API validates with a whitelist (main.ts): a boolean is kept, anything else is refused.
-      for (const Dto of [CreateWorkspaceDto, UpdateWorkspaceDto]) {
+      for (const Dto of [CreateWorkspaceDto, UpdateWorkspaceDto] as Array<typeof UpdateWorkspaceDto>) {
         const ok = plainToInstance(Dto, { name: 'agent', modelRouting: true });
         assert.deepEqual(await validate(ok, { whitelist: true }), []);
         assert.equal(ok.modelRouting, true, `${Dto.name} keeps it`);
@@ -648,7 +649,7 @@ test('Optimize For is frozen with CREATE; changed modes affect only later fresh 
         await setOptimizeFor(services.db, target.ownerId, 'intelligence');
         assert.equal(await runNow(services, target, taskId, press), run);
         assert.equal((await receipt(services.db, target.ownerId, TASK_RUN_ACTION.execute, press)).target.route.features.optimizeFor, mode);
-        await services.db.session.update({ where: { id: run }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() } });
+        await services.db.session.update({ where: { id: run }, data: { turnState: null, finishedAt: new Date() } });
       }
     } finally {
       await services.db.$disconnect();

@@ -62,6 +62,7 @@ import {
   wikiWaitingIn,
   writeWikiLastSpace,
 } from '../lib/wikiSpace';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from '../components/ui/Tooltip';
 
 /**
  * The Wiki's routes, and the chrome they share.
@@ -433,16 +434,18 @@ function WikiActivityRow({ space, waiting, on }: { space: SpaceRow; waiting: num
   const dots = parts.filter((part) => part.mark === 'dot' && (part.tone === 'error' || part.tone === 'warn'));
   const tone = dots.some((part) => part.tone === 'error') ? 'error' : dots.length > 0 ? 'warn' : null;
   return (
-    <Link className={`wk-toc-item${on ? ' active' : ''}`} to={wikiActivityPath(space.slug)} aria-current={on ? 'page' : undefined}>
+    <Link className={`wk-toc-item${on ? ' active' : ''}`} data-row-focus="" to={wikiActivityPath(space.slug)} aria-current={on ? 'page' : undefined}>
       <span className="tp-ico">
         <HistoryOutlined />
       </span>
       <span className="lb">{WIKI_ACTIVITY}</span>
-      {tone && <span className={`wk-toc-alarm wk-toc-alarm--${tone}`} role="img" aria-label={wikiStatusText(dots)} title={wikiStatusText(dots)} />}
+      {tone && <Tooltip content={wikiStatusText(dots)} align="end" delay={TEXT_TOOLTIP_DELAY_MS}><span className={`wk-toc-alarm wk-toc-alarm--${tone}`} role="img" aria-label={wikiStatusText(dots)} /></Tooltip>}
       {waiting > 0 && (
-        <span className="tp-count needs-you" title={wikiWaitingOnYou(waiting)}>
-          {waiting}
-        </span>
+        <Tooltip content={wikiWaitingOnYou(waiting)} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="tp-count needs-you">
+            {waiting}
+          </span>
+        </Tooltip>
       )}
     </Link>
   );
@@ -481,9 +484,11 @@ function WikiHeadSpace({ space, spaces }: { space: SpaceRow; spaces: readonly Sp
               <span className="s">{line}</span>
             </span>
             {waiting > 0 && (
-              <span className="tp-count needs-you" title={wikiWaitingOnYou(waiting)}>
-                {waiting}
-              </span>
+              <Tooltip content={wikiWaitingOnYou(waiting)} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+                <span className="tp-count needs-you">
+                  {waiting}
+                </span>
+              </Tooltip>
             )}
           </span>
         ),
@@ -498,9 +503,10 @@ function WikiHeadSpace({ space, spaces }: { space: SpaceRow; spaces: readonly Sp
     <>
       <Menu
         popupClassName="wk-space-menu"
+        tooltip={WIKI_SPACE_PICKER_HINT}
         items={items}
         trigger={
-          <button type="button" className="wk-select" title={WIKI_SPACE_PICKER_HINT} aria-label={`${name}: ${WIKI_SPACE_PICKER_HINT}`}>
+          <button type="button" className="wk-select" aria-label={`${name}: ${WIKI_SPACE_PICKER_HINT}`}>
             <span className="v">{name}</span>
             <DownOutlined className="ic caret" />
           </button>

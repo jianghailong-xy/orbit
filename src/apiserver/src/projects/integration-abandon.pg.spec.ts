@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { Prisma, PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { IntegrationCheckResult, IntegrationJobCommand, IntegrationJobResultRequest } from '@orbit/shared';
@@ -143,7 +144,7 @@ async function world(
   const coordinatorSessionId = (await db.session.create({
     data: {
       ownerId, creatorId: ownerId, workspaceId, title: `${label} coordinator`,
-      prompt: `${label} coordinator`, status: RunStatus.RUNNING, branch: null,
+      prompt: `${label} coordinator`, turnState: 'IN_FLIGHT', branch: null,
     },
     select: { id: true },
   })).id;
@@ -180,7 +181,7 @@ async function doneTask(stack: Stack, w: World, label: string): Promise<{ taskId
     data: {
       ownerId: w.ownerId, creatorId: w.ownerId, taskId: created.id, workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId, title, prompt: title, branch, isolationStatus: 'worktree',
-      baseSha: 'b'.repeat(40), status: RunStatus.SUCCEEDED, startsTaskWork: true,
+      baseSha: 'b'.repeat(40), turnState: null, startsTaskWork: true,
       finishedAt: new Date(Date.now() - 60_000), worktreeBranch: branch, worktreeDirty: false,
       changedFiles: [{ path: 'src/the-work.ts' }] as never,
     },

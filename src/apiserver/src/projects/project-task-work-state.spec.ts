@@ -59,7 +59,8 @@ test('AWAITING_VERIFICATION cannot land on a work row that has never run', () =>
 function readyBranch(sql: string): string {
   const end = sql.indexOf("THEN 'READY'");
   assert.notEqual(end, -1, 'the READY lane must still exist');
-  return sql.slice(sql.lastIndexOf('WHEN ', end), end);
+  // From the WHEN after the arm before it: the arm's own predicates may hold a CASE WHEN (the turn state's).
+  return sql.slice(sql.indexOf('WHEN ', sql.lastIndexOf("THEN '", end - 1)), end);
 }
 
 test('the READY lane can be narrowed by a caller that already owns the candidate set', () => {

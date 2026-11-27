@@ -42,6 +42,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
 import { Fatal, RunnerMachine, callApi, eventually, freePort, migrate, startApiserver, startPostgres } from '../codex-reset-e2e/harness.mjs';
+import { sessionWordSql } from '../lib/session-word.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '../..');
@@ -101,7 +102,7 @@ async function main() {
     for (const [label, query] of [
       ['grants', `SELECT id, request_id, runner_id, session_id, task_id, name, exposure, state, end_reason, value_enc IS NOT NULL AS has_value, expires_at FROM owner_request_secret`],
       ['requests', `SELECT id, kind, state, asked_by_session_id, secret_spec FROM owner_request`],
-      ['sessions', `SELECT id, status::text, assigned_runner_id, task_id, completed_at, archived_at, deleted_at FROM session`],
+      ['sessions', `SELECT id, ${sessionWordSql('session')} AS status, assigned_runner_id, task_id, completed_at, archived_at, deleted_at FROM session`],
       ['tasks', `SELECT id, status::text FROM task`],
       ['runners', `SELECT id, name, status::text, last_heartbeat_at, 'owner-secret/v1' = ANY(capabilities) AS secrets FROM runner`],
       ['presence', `SELECT * FROM runner_presence`],
@@ -218,7 +219,7 @@ async function main() {
     return { id, uuid };
   };
   const idle = (uuid) => eventually('the session to finish its turn', async () => {
-    const { rows: [s] } = await sql.query(`SELECT to_jsonb(session) AS row, status::text AS status FROM session WHERE id = $1`, [uuid]);
+    const { rows: [s] } = await sql.query(`SELECT to_jsonb(session) AS row, ${sessionWordSql('session')} AS status FROM session WHERE id = $1`, [uuid]);
     if (s && ['FAILED', 'INTERRUPTED', 'CANCELLED'].includes(s.status)) {
       const { rows: events } = await sql.query(`SELECT type, payload::text AS p FROM run_event WHERE session_id = $1 ORDER BY seq DESC LIMIT 8`, [uuid]);
       throw new Fatal(`the session ended ${s.status}: ${JSON.stringify({ endReason: s.row.end_reason, error: s.row.error })}\n${events.map((e) => `${e.type} ${e.p.slice(0, 600)}`).join('\n')}`);

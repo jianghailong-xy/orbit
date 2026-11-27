@@ -21,6 +21,7 @@ import {
   wikiRunRow,
   wikiRunTier,
 } from '../lib/wikiRuns';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * Activity's Runs card (design §2.2, mock 35 ④⑤; contract `jobs.read`, P9): the server's runs of the space, newest
@@ -130,9 +131,11 @@ function WikiCallLog({ id, job, now }: { id: string; job: WikiJobView; now: numb
               return (
                 <Fragment key={call.id}>
                   <tr>
-                    <td className="c" title={`${call.step} · ${call.unit}`}>
-                      {one.call}
-                    </td>
+                    <Tooltip content={`${call.step} · ${call.unit}`} align="start" delay={TEXT_TOOLTIP_DELAY_MS}>
+                      <td className="c">
+                        {one.call}
+                      </td>
+                    </Tooltip>
                     <td className="st">
                       <span className={one.tone}>{one.state}</span>
                       {/* The space between is where a narrow log breaks the state from its retries. */}

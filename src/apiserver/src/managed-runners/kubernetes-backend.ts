@@ -121,17 +121,31 @@ function credentialOf(secret: Secret): KubeCredential {
 }
 
 /**
+ * The kubelet's eviction for local storage: the Pod's emptyDir (/tmp) or its containers' writable layers over their
+ * limit ("Usage of EmptyDir volume \"tmp\" exceeds the limit \"1Gi\".", "Pod ephemeral local storage usage exceeds the
+ * total limit of containers 1Gi."), or the node low on it ("The node was low on resource: ephemeral-storage."). An
+ * eviction for memory or anything else is not one.
+ */
+const STORAGE_EVICTION = /ephemeral|EmptyDir/i;
+
+/**
  * How a terminal Pod ended, by the kubelet's container states: the runner's exit code, and whether a
  * container ended killed (137) with the runtime's OOMKilled reason — which, like Docker's flag, is
- * also given for a container in which only a child process was killed.
+ * also given for a container in which only a child process was killed. A Pod the kubelet evicted for
+ * local storage (`reason` Evicted) also says `storageFull`, with or without a container state.
  */
 function exitOf(pod: Pod): ManagedInstance['exit'] {
   if (!podTerminated(pod)) return null;
+  const storageFull = pod.status?.reason === 'Evicted' && STORAGE_EVICTION.test(pod.status?.message ?? '');
   const ended = (statuses: PodContainerStatus[] | undefined) => (statuses ?? []).flatMap((c) => (c.state?.terminated ? [c.state.terminated] : []));
   const runner = ended(pod.status?.containerStatuses);
   const all = [...ended(pod.status?.initContainerStatuses), ...runner];
-  if (all.length === 0) return null;
-  return { code: (runner[0] ?? all[0]).exitCode ?? null, outOfMemory: all.some((t) => t.reason === 'OOMKilled' && t.exitCode === 137) };
+  if (all.length === 0) return storageFull ? { code: null, outOfMemory: false, storageFull } : null;
+  return {
+    code: (runner[0] ?? all[0]).exitCode ?? null,
+    outOfMemory: all.some((t) => t.reason === 'OOMKilled' && t.exitCode === 137),
+    ...(storageFull ? { storageFull } : {}),
+  };
 }
 
 /**

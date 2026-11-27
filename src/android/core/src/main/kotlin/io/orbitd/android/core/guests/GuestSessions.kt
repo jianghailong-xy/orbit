@@ -9,6 +9,7 @@ import io.orbitd.android.core.protocol.SessionFacts
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.RunEvent
 import io.orbitd.android.core.realtime.SseFrame
+import io.orbitd.android.directory.SessionDisplay
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -43,7 +44,9 @@ data class GuestSessionSummary(
     /** How the session stands, read from the row's own fields the way the guest view reads its head. */
     val state: GuestState get() = GuestState(runStatus = status, sessionState = sessionState, lifecycleState = lifecycleState,
         phase = SessionFacts.phase(facts), released = SessionFacts.released(facts), lastTurnOutcome = SessionFacts.lastTurnOutcome(facts),
-        waitingOn = SessionFacts.waitingOn(facts), endReason = SessionFacts.endReason(facts), workFinished = SessionFacts.workFinished(facts))
+        waitingOn = SessionFacts.waitingOn(facts), endReason = SessionFacts.endReason(facts), workFinished = SessionFacts.workFinished(facts),
+        activity = SessionDisplay.facts(facts).activity, pendingApprovals = SessionDisplay.facts(facts).pendingApprovals,
+        runningBgCount = SessionDisplay.facts(facts).runningBgCount)
 }
 
 /** The head fields the guest door answers beside its events, and whether the agent waits on its owner. */
@@ -60,6 +63,10 @@ data class GuestState(
     val waitingOn: String? = null,
     val endReason: String? = null,
     val workFinished: Boolean? = null,
+    // What a mark reads beside the facts, where the payload sends it.
+    val activity: String? = null,
+    val pendingApprovals: Int = 0,
+    val runningBgCount: Int = 0,
 )
 
 /** The guest view's root (`GET /guest-sessions/:id`): who shared it, how it stands, and the newest page of its transcript. */
@@ -95,6 +102,8 @@ object GuestWire {
         waitingOnOwner = obj.bool("waitingOnOwner") ?: false,
         phase = SessionFacts.phase(obj), released = SessionFacts.released(obj), lastTurnOutcome = SessionFacts.lastTurnOutcome(obj),
         waitingOn = SessionFacts.waitingOn(obj), endReason = SessionFacts.endReason(obj), workFinished = SessionFacts.workFinished(obj),
+        activity = SessionDisplay.facts(obj).activity, pendingApprovals = SessionDisplay.facts(obj).pendingApprovals,
+        runningBgCount = SessionDisplay.facts(obj).runningBgCount,
     )
 
     fun list(bytes: ByteArray): List<GuestSessionSummary> = (root(bytes)["sessions"] as? JsonArray).orEmpty()

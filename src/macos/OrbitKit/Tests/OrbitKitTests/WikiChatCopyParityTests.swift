@@ -111,7 +111,7 @@ final class WikiChatCopyParityTests: XCTestCase {
     private static let notSentences: Set<String> = ["WIKI_CHAT_PARAM", "WIKI_CHAT_NEW_PARAM", "WIKI_CHAT_FOCUS_NEEDS_YOU"]
 
     /// The web lib's `WIKI_*` exports that are no string at all: a typed table or an object of numbers.
-    private static let notStrings: Set<String> = ["WIKI_CHAT_WIDTH", "WIKI_CHAT_NO_ATTACHMENTS", "WIKI_CHAT_ACTION_PRESS"]
+    private static let notStrings: Set<String> = ["WIKI_CHAT_WIDTH", "WIKI_CHAT_NO_ATTACHMENTS", "WIKI_CHAT_ACTION_PRESS", "WIKI_CHAT_STORE"]
 
     // MARK: the contract's copy
 
@@ -228,9 +228,11 @@ final class WikiChatCopyParityTests: XCTestCase {
              "chip(remove: WikiChatCopy.remove(page.label), cross: { chat.crossPage() })", "the page's cross"),
             ("aria-label={wikiChatRemove(quote.first)} onClick={() => dispatch({ type: 'crossQuote' })}",
              "chip(remove: WikiChatCopy.remove(quote.first), cross: { chat.crossQuote() })", "the selection's cross"),
-            ("composerPlaceholder={WIKI_CHAT_PLACEHOLDER}", "creates == nil ? chat.placeholder : WikiChatCopy.placeholder",
+            // Both panels take a new chat's placeholder from where the chat is docked (the web's `ChatOrigin`, Swift's
+            // `ChatOrigin.Copy`): the Wiki's is WikiChatCopy.placeholder, Drive's DriveChatCopy.placeholder.
+            ("composerPlaceholder={origin.copy.placeholder}", "creates == nil ? chat.placeholder : chat.copy.placeholder",
              "a new chat's placeholder"),
-            ("composerPlaceholder={draftOpen ? WIKI_CHAT_PLACEHOLDER_DRAFT : WIKI_CHAT_PLACEHOLDER}",
+            ("composerPlaceholder={draftOpen ? (origin.copy.placeholderDraft ?? origin.copy.placeholder) : origin.copy.placeholder}",
              "? WikiChatCopy.placeholderDraft : WikiChatCopy.placeholder", "a running chat's placeholder"),
             ("<span className=\"k\">{WIKI_CHAT_RUNS_IN}</span>", "Text(WikiChatCopy.runsIn)", "Runs in"),
             ("shown={wikiChatWorkspaceName(runsIn.workspace)}", "Text(WikiChatLogic.workspaceName(workspace))",

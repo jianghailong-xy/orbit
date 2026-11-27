@@ -5,10 +5,10 @@ import { test } from 'node:test';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -30,6 +30,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
 import { SessionAttemptService } from './session-attempt.service';
+import { wordOf } from '../test-support/session-word';
 
 /**
  * Unit T5 against a real PostgreSQL, because the claims it makes are the DATABASE's.
@@ -128,7 +129,7 @@ async function fixture(options: { coordinatorEnabled?: boolean } = {}): Promise<
       taskId,
       title: 'the attempt',
       prompt: 'do the task',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startedAt: new Date(),
     },
@@ -381,7 +382,7 @@ test('a spent steer allowance does not stop a worker that is finishing', { skip:
     assert.equal(after.attempt.outcome, null);
     assert.equal(after.attempt.closedAt, null);
     const session = await f.db.session.findUniqueOrThrow({ where: { id: f.sessionId } });
-    assert.equal(session.status, RunStatus.RUNNING);
+    assert.equal(wordOf(session), RunStatus.RUNNING);
     assert.equal(session.cancelRequestedAt, null);
   } finally {
     await f.db.$disconnect();

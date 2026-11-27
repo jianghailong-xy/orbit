@@ -115,6 +115,7 @@ export interface RequestProjectDoneBody {
  * - `DONE_OWNER_ITEMS_OPEN` — open items waiting on the owner.
  * - `DONE_INTEGRATION_IN_FLIGHT` — a landing or a merge into main (LAND_TASK, CHECK_PROMOTION,
  *   LAND_PROMOTION) queued or running.
+ * - `DONE_LANDING_DEFERRED` — DONE tasks whose landings wait for their work sessions to finish.
  * - `DONE_CRITERION_UNLANDED` (warn) — a criterion not LANDED, one finding each, with its reason.
  */
 export type ProjectDoneCheckCode =
@@ -123,6 +124,7 @@ export type ProjectDoneCheckCode =
   | 'DONE_TASKS_IN_FLIGHT'
   | 'DONE_OWNER_ITEMS_OPEN'
   | 'DONE_INTEGRATION_IN_FLIGHT'
+  | 'DONE_LANDING_DEFERRED'
   | 'DONE_CRITERION_UNLANDED';
 
 export interface ProjectDoneFinding {
@@ -250,6 +252,8 @@ export interface DoneState {
   ownerItems: Array<{ itemId: string; kind: OpenItemKind; title: string }>;
   /** The landings and merges into main queued or running, oldest first. */
   jobs: Array<{ integrationJobId: string; kind: string; state: string; taskId: string | null }>;
+  /** DONE tasks whose landing waits for their work sessions to finish, oldest first. */
+  deferredLandings?: ProjectDoneFinding['tasks'];
   criteriaDigest: string;
   stateDigest: string;
   /** Always false since revision 42 (§12.15 P-M3): the non-code mark (migration 0535) is no longer

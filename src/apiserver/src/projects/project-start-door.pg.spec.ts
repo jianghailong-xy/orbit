@@ -51,11 +51,11 @@ import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import {
   CreatorType,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { PrismaClient } from '@prisma/client';
 import {
   type ProjectStartedCard,
@@ -83,6 +83,7 @@ import { ProjectHandoffService } from './project-handoff.service';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { projectAwaitingStart, projectStartedTurnId } from './project-started';
 import { ProjectsController } from './projects.controller';
+import { startOnFirstIntegration } from './project-integration-line';
 import { ProjectsService } from './projects.service';
 import { SessionAttemptService } from './session-attempt.service';
 import { TaskCheckpointService } from './task-checkpoint.service';
@@ -329,7 +330,7 @@ test('the owner starts a project in one write, once', {
         title: `协调：${label}`,
         prompt: `协调：${label}`,
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
         runtimeSessionId: randomUUID(),
@@ -511,7 +512,8 @@ test('the owner starts a project in one write, once', {
       mergeCheckCommand: 'npm test',
     });
     assert.equal(sent.status, 201, JSON.stringify(sent.json));
-    const branch = `refs/heads/project/${uuidToBase62(started.id)}`;
+    // No branch named: the default, from the title's ASCII words and 8 characters of the id.
+    const branch = `refs/heads/project/five-at-once-${uuidToBase62(started.id).slice(0, 8)}`;
     const settings = {
       line: 'PROJECT_BRANCH',
       projectBranchName: branch,
@@ -570,7 +572,7 @@ test('the owner starts a project in one write, once', {
       by: 'CONFIRMATION', confirmationId: confirmation.id, criteriaCount: 2, at: new Date(),
     }));
     assert.ok(told[0].content.includes(
-      `It runs with: tasks land on the project branch project/${uuidToBase62(started.id)} first · `
+      `It runs with: tasks land on the project branch project/five-at-once-${uuidToBase62(started.id).slice(0, 8)} first · `
         + 'Automatic on · at most 5 tasks at a time · merge check `npm test`.',
     ), told[0].content);
     assert.ok(!told[0].content.includes('Different from what the start asked for'),
@@ -660,6 +662,57 @@ test('the owner starts a project in one write, once', {
     }]);
   });
 
+  // A line decided on a project branch before the readable names, and not started yet: the
+  // binding stores the old `project/<public id>` name, which is the branch's for good.
+  const named = await coordinated('kept-branch');
+  const keptRef = `refs/heads/project/${uuidToBase62(named.id)}`;
+  await prisma.projectCodebase.create({
+    data: {
+      ownerId,
+      projectId: named.id,
+      canonicalRepoUrl: 'https://example.invalid/orbit/start-door',
+      upstreamRef: 'refs/heads/main',
+      integrationRef: keptRef,
+      refAuthority: 'REMOTE',
+      integrationRefSource: 'EXPLICIT',
+    },
+  });
+
+  await t.test('(5b) a project branch already stored keeps its name: the start and the first integration leave it', async () => {
+    const sent = await press(named.id, {
+      criteriaDigest: await seal(named.id),
+      line: 'PROJECT_BRANCH',
+      automatic: false,
+      maxConcurrentTasks: 2,
+      mergeCheckCommand: null,
+    });
+    assert.equal(sent.status, 201, JSON.stringify(sent.json));
+    assert.equal((sent.json.settings as Record<string, unknown>).projectBranchName, keptRef,
+      'the start answers with the branch the binding has, not a new default');
+    assert.notEqual(keptRef, `refs/heads/project/kept-branch-${uuidToBase62(named.id).slice(0, 8)}`,
+      'CONTROL: the new default would be a different name');
+    const started = await world(named.id, named.sessionId);
+    assert.deepEqual(started.bindings.map((row) => [row.integration_ref, row.integration_ref_source]),
+      [[keptRef, 'EXPLICIT']]);
+
+    // The first integration starts the line on the branch it has.
+    const first = await prisma.$transaction((tx) => startOnFirstIntegration(tx, {
+      ownerId, projectId: named.id, taskId: named.heldId,
+    }));
+    assert.deepEqual(first, {
+      started: true, line: 'PROJECT_BRANCH', integrationRef: keptRef, upstreamRef: 'refs/heads/main',
+      source: 'EXPLICIT', startedNow: true,
+    });
+    const after = await world(named.id, named.sessionId);
+    assert.equal(after.bindings[0].integration_ref, keptRef);
+    assert.ok(after.bindings[0].integration_started_at, 'the line started, on the stored branch');
+
+    // And the reads say the same: the line's ref, and the default a client shows for it.
+    const view = await projects.integration(ownerId, named.id);
+    assert.equal(view.ref, keptRef.slice('refs/heads/'.length));
+    assert.equal(view.defaultProjectBranch, keptRef.slice('refs/heads/'.length));
+  });
+
   await t.test('(6) the coordinator’s turn and card carry the settings, and mark what differs from the request', async () => {
     const told = await startedTurns(locked.sessionId);
     assert.equal(told.length, 1, 'the start put exactly one message on its conversation');
@@ -721,7 +774,7 @@ test('the owner starts a project in one write, once', {
 
     // Its tasks depend on one another, so the default rule — run now, over them as they stand —
     // puts it on a project branch. Recorded, so the first integration does not decide it again.
-    const branch = `refs/heads/project/${uuidToBase62(byRule.id)}`;
+    const branch = `refs/heads/project/old-door-dependent-${uuidToBase62(byRule.id).slice(0, 8)}`;
     const settings = {
       line: 'PROJECT_BRANCH',
       projectBranchName: branch,
@@ -741,8 +794,8 @@ test('the owner starts a project in one write, once', {
       [{ settings, differsFromRequest: [] }]);
     const told = await startedTurns(byRule.sessionId);
     assert.equal(told.length, 1, 'and its coordinator was told, once');
-    assert.ok(told[0].content.includes(`It runs with: tasks land on the project branch project/${
-      uuidToBase62(byRule.id)} first · Automatic on · at most 7 tasks at a time · no merge check.`),
+    assert.ok(told[0].content.includes(`It runs with: tasks land on the project branch ${
+      branch.slice('refs/heads/'.length)} first · Automatic on · at most 7 tasks at a time · no merge check.`),
     told[0].content);
     assert.deepEqual((await queuedCard(byRule.sessionId))?.settings, settings);
 
@@ -836,7 +889,7 @@ test('the owner starts a project in one write, once', {
           title: 'a session that ran',
           prompt: 'run it',
           provider: 'claude',
-          status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
+          turnState: null, finishedAt: new Date(), 
           dispatchOrigin: SessionDispatchOrigin.USER,
           startsTaskWork,
           createdAt,

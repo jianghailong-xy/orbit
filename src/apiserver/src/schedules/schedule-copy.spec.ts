@@ -342,5 +342,7 @@ test('a check-only approval names the complete command, while other approvals ke
   const command = `python3 -c "print(open('watched.txt').read())"`;
   assert.equal(approvalPattern('Bash', { command }, true), command);
   assert.equal(approvalPattern('Bash', { command, orbitScheduleCheckOnly: true }), command);
-  assert.equal(approvalPattern('Bash', { command }), 'python3:*');
+  assert.equal(approvalPattern('Bash', { command: 'cd db && psql -c "select 1"' }), 'cd:*, psql:*');
+  // An interpreter is never remembered: python3:* would cover every script.
+  assert.equal(approvalPattern('Bash', { command }), '');
 });

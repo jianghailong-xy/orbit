@@ -429,22 +429,27 @@ class RealtimeStore(
             witnessed(before, page, "page")
             save()
         }
-        // Close the gap over REST pages before the stream opens. The gateway gzips JSON but never
+        // Close the gap over one REST page before the stream opens. The gateway gzips JSON but never
         // text/event-stream, and a replay is all-or-nothing: a drop mid-replay re-sends the whole gap.
-        // Each landed page moves the frontier. A failed page is not retried here; the stream attempt
-        // right after it is the retry, from the advanced frontier. Past the server's own budget the
-        // window is re-seeded from the tail, as the server's resync would have ordered.
-        suspend fun catchUp() {
-            var after = state.value.session!!.transcript.resumeSeq
-            repeat(CATCH_UP_PAGES) {
-                val page = try { rest.page(handle, id, after) } catch (cancelled: CancellationException) { throw cancelled }
-                    catch (_: Exception) { return }
-                land(page)
-                val next = page.after ?: return
-                if (next <= after) throw Resync()
-                after = next
-            }
-            throw Resync()
+        // A gap that fits the page lands in one publish and moves the frontier. A wider one is not paged
+        // through (each page would move a following reader's window forward once more): the caller re-seeds
+        // from the tail at once, so the window changes once. A failed read is not retried here; the stream
+        // attempt right after it is the retry, from the current frontier. Returns false when the gap is wider.
+        suspend fun catchUp(): Boolean {
+            val after = state.value.session!!.transcript.resumeSeq
+            val page = try { rest.page(handle, id, after) } catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) { return true }
+            if (page.after != null) return false
+            land(page)
+            return true
+        }
+        suspend fun seedTail() {
+            val tail = rest.page(handle, id)
+            check()
+            val before = state.value.session?.transcript
+            updateSession(handle, focus) { if (it.accessDenied) it else it.copy(transcript = it.transcript.tail(tail), seededFromCache = false) }
+            witnessed(before, tail, "tail")
+            save()
         }
         val policy = ReconnectPolicy()
         var reseed = false
@@ -455,17 +460,12 @@ class RealtimeStore(
             var failed = false
             try {
                 if (reseed || state.value.session?.transcript?.seeded != true) {
-                    val tail = rest.page(handle, id)
-                    check()
-                    val before = state.value.session?.transcript
-                    updateSession(handle, focus) { if (it.accessDenied) it else it.copy(transcript = it.transcript.tail(tail), seededFromCache = false) }
-                    witnessed(before, tail, "tail")
-                    save()
+                    seedTail()
                     reseed = false
                 } else {
                     // Live frames never move the frontier, so a window seeded before this attempt (restored
                     // from the cache, or carried over a drop or a clean close) is behind by all they carried.
-                    catchUp()
+                    if (!catchUp()) seedTail()
                 }
                 val cursor = state.value.session!!.transcript.resumeSeq
                 auth.stream(handle, ApiRequest(listOf("sessions", id, "events"),
@@ -523,8 +523,6 @@ class RealtimeStore(
         const val OPEN_FALLBACK_MS = 60_000L
         /** The open conversation's snapshot and cards, read again with no event that concerns them. */
         const val SESSION_FALLBACK_MS = 60_000L
-        /** Five 200-event pages: the server's SSE_GAP_CAP, past which it answers a cursor with resync. */
-        private const val CATCH_UP_PAGES = 5
         private val SNAPSHOT_EVENTS = setOf("approval_request", "approval_resolved", "queued_turns_changed",
             "background_task", "user", "user_delivery", "turn_end", "status", "result", "interrupt")
         /** The runner's word on the mode the engine runs in — the Agent Tools report Claude Code's init frame rides in, a correction the

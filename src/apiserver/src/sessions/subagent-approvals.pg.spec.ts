@@ -26,7 +26,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { NotFoundException } from '@nestjs/common';
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, type Runner } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin, type Runner } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, RunStatus as SharedRunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -47,6 +48,7 @@ import {
   APPROVAL_ABANDONED_STATUS,
   APPROVAL_ABANDONED_SUBAGENT_MESSAGE,
   countLiveApprovals,
+  countLiveApprovalsBySession,
 } from './abandoned-approvals';
 import { PushService } from '../push/push.service';
 import { SessionsService } from './sessions.service';
@@ -112,7 +114,7 @@ test('SubAgent permissions and approvals', { skip, concurrency: 1, timeout: 300_
       data: {
         id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
         title: 'port the retry', prompt: 'port the retry', provider: 'claude', engine: 'claude',
-        model: 'claude-opus-5-5', effort: 'high', permissionMode, status: RunStatus.RUNNING, engineTurnActive: true,
+        model: 'claude-opus-5-5', effort: 'high', permissionMode, turnState: 'IN_FLIGHT', engineTurnActive: true,
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false, startedAt: new Date(),
         runtimeSessionId: randomUUID(),
       },
@@ -238,7 +240,7 @@ test('SubAgent permissions and approvals', { skip, concurrency: 1, timeout: 300_
     const strangerSession = randomUUID();
     await db.session.create({ data: {
       id: strangerSession, ownerId: strangerId, creatorId: strangerId, workspaceId: strangerWs, assignedRunnerId: strangerRunner,
-      title: 'theirs', prompt: 'theirs', provider: 'claude', status: RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER,
+      title: 'theirs', prompt: 'theirs', provider: 'claude', turnState: 'IN_FLIGHT', dispatchOrigin: SessionDispatchOrigin.USER,
     } });
     const theirRun = await db.subagentRun.create({ data: {
       ownerId: strangerId, sessionId: strangerSession, toolUseId: 'toolu_theirs', type: 'general', definitionSource: 'builtin', decision: {},
@@ -287,7 +289,7 @@ test('SubAgent permissions and approvals', { skip, concurrency: 1, timeout: 300_
     await db.conversationTurn.update({ where: { id: f.turnId }, data: { status: 'ANSWERED' } });
     await db.session.update({
       where: { id: f.sessionId },
-      data: { status: RunStatus.AWAITING_INPUT, engineTurnActive: false, runningSubagents: [delegateId] },
+      data: { turnState: null, engineTurnActive: false, runningSubagents: [delegateId] },
     });
     const card = await api.createApproval({ id: runnerId, ownerId } as never, f.sessionId, {
       toolName: 'Bash', input: { command: 'go test ./quota/...' }, toolUseId: `${runId}:toolu_bash`, subagentRunId: runId,
@@ -296,6 +298,9 @@ test('SubAgent permissions and approvals', { skip, concurrency: 1, timeout: 300_
     async function signals() {
       const row = (await sessions.list(ownerId, {})).find((s: { id: string }) => s.id === f.sessionId) as { pendingApprovals: number } | undefined;
       const session = await db.session.findUniqueOrThrow({ where: { id: f.sessionId } });
+      // The batch a search page counts with says what the one-session count says (countLiveApprovalsBySession).
+      assert.equal((await countLiveApprovalsBySession(db as never, [session])).get(session.id),
+        await countLiveApprovals(db as never, session), 'the batched count agrees');
       const workspace = (await sessions.workspaceSessionCounts(ownerId)).find((w: { workspaceId: string }) => w.workspaceId === session.workspaceId) as { needsYou: number } | undefined;
       return {
         pendingApprovals: row?.pendingApprovals,

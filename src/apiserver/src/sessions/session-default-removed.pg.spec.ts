@@ -33,7 +33,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import {
   AgentProvider,
   RunEventType,
@@ -59,6 +60,8 @@ import { AutoRetryService } from './auto-retry.service';
 import { RUNNER_OFFLINE_AFTER_MS } from '../runners/runner-presence';
 import { SessionsService } from './sessions.service';
 import '../test-support/dequeue-under-lease';
+import { turnStateOfWord } from './session-turn-state';
+import { WORD_SELECT, withWord, wordSql } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -201,7 +204,7 @@ test('no session runs on a Default its owner removed from Orbit', {
         provider,
         providerBuiltin: true,
         ...(provider === 'codex' ? { codexAccount: 'default' } : { claudeAccount: 'default' }),
-        status,
+        turnState: turnStateOfWord(status),
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
         runtimeSessionId: randomUUID(),
@@ -215,7 +218,7 @@ test('no session runs on a Default its owner removed from Orbit', {
   async function row(id: string) {
     const r = await sql.query(
       `SELECT codex_account, codex_account_pinned, claude_account, claude_account_pinned, pool_switch_notice,
-              status::text AS status, error, (EXTRACT(EPOCH FROM retry_at) * 1000)::float8 AS retry_ms
+              ${wordSql()} AS status, error, (EXTRACT(EPOCH FROM retry_at) * 1000)::float8 AS retry_ms
          FROM "session" WHERE id = $1::uuid`,
       [id],
     );
@@ -395,8 +398,8 @@ test('no session runs on a Default its owner removed from Orbit', {
     const at = new Date(Math.max(after.retry_ms!, Date.now()) + 1_000);
     await db.runner.update({ where: { id: m.runnerId }, data: { lastHeartbeatAt: new Date(at.getTime() - RUNNER_OFFLINE_AFTER_MS / 2) } });
     await new AutoRetryService(prisma, sessions, quiet).sweep(at);
-    const revived = await db.session.findUniqueOrThrow({ where: { id }, select: { status: true, retryAttempts: true } });
-    assert.deepEqual(revived, { status: RunStatus.PENDING, retryAttempts: 1 }, 'held back by the quota of a Default nobody uses');
+    const revived = await db.session.findUniqueOrThrow({ where: { id }, select: { ...WORD_SELECT, retryAttempts: true } });
+    assert.deepEqual(withWord(revived), { status: RunStatus.PENDING, retryAttempts: 1 }, 'held back by the quota of a Default nobody uses');
     const claimed = await claims.claimSessionForRunner({ id: m.runnerId });
     assert.equal(claimed?.agent.env?.CLAUDE_CONFIG_DIR, home('claude', WORK));
   });

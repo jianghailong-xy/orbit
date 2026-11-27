@@ -280,7 +280,7 @@ public enum ProjectCrossings {
         "Confirming is the move: the task joins the target project as soon as you answer, and nobody has to send the request again."
     /// `moveApproveConsequence` for a move to no project, which no target project receives.
     public static let moveOutApproveConsequence =
-        "Confirming takes the task out of this project; no project's acceptance counts it any more."
+        "Confirming takes the task out of this project as soon as you answer; no project's acceptance counts it any more."
     public static let moveDenyConsequence =
         "Refusing is final for this request, and the task stays where it is. If you change your mind, move the task yourself."
 

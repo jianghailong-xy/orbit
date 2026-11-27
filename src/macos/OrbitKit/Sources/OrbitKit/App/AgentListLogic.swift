@@ -131,10 +131,17 @@ public enum AgentListLogic {
     /// `scheduled` (the server serves scheduled tasks) adds Scheduled right under Tasks, as the drawer does
     /// (`DrawerWorkLogic.rows(scheduled:)`, board docs/mocks/scheduled-tasks/web/01-board.png ①), its count the
     /// schedules failing or held (`scheduledNeedsYou`). Account-wide: it is never a row of a workspace's list.
+    ///
+    /// Documents (`documents`, the server's switch) goes right under the Wiki, or where the Wiki would be, with no
+    /// count (docs/mocks/drive, 03-mac ①).
     public static func sidebarSections(_ sections: [AppSection], wiki: Bool,
                                        projectsWaiting: Int, wikiWaiting: Int,
-                                       scheduled: Bool = false, scheduledNeedsYou: Int = 0) -> [SidebarSectionRow] {
-        sections.filter { $0 != .wiki || wiki }.flatMap { section -> [SidebarSectionRow] in
+                                       scheduled: Bool = false, scheduledNeedsYou: Int = 0,
+                                       drive: Bool = false) -> [SidebarSectionRow] {
+        let shown = sections.contains(.wiki) && drive && !sections.contains(.drive)
+            ? sections.flatMap { $0 == .wiki ? [$0, .drive] : [$0] }
+            : sections
+        return shown.filter { ($0 != .wiki || wiki) && ($0 != .drive || drive) }.flatMap { section -> [SidebarSectionRow] in
             let waiting: Int
             switch section {
             case .projects: waiting = projectsWaiting

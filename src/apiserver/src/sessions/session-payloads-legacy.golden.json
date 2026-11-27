@@ -30,6 +30,10 @@
       "legacy": "{\"status\":\"PENDING\",\"runStatus\":\"PENDING\",\"runState\":\"QUEUED\",\"sessionState\":\"QUEUED\",\"filingState\":\"OPEN\"}"
     },
     {
+      "key": "PENDING / taskRun",
+      "legacy": "{\"status\":\"PENDING\",\"runStatus\":\"PENDING\",\"runState\":\"QUEUED\",\"sessionState\":\"QUEUED\",\"filingState\":\"OPEN\"}"
+    },
+    {
       "key": "RUNNING / listRow",
       "legacy": "{\"status\":\"RUNNING\",\"runStatus\":\"RUNNING\",\"runState\":\"RUNNING\",\"sessionState\":\"RUNNING\",\"filingState\":\"OPEN\"}"
     },
@@ -55,6 +59,10 @@
     },
     {
       "key": "RUNNING / sharedHead",
+      "legacy": "{\"status\":\"RUNNING\",\"runStatus\":\"RUNNING\",\"runState\":\"RUNNING\",\"sessionState\":\"RUNNING\",\"filingState\":\"OPEN\"}"
+    },
+    {
+      "key": "RUNNING / taskRun",
       "legacy": "{\"status\":\"RUNNING\",\"runStatus\":\"RUNNING\",\"runState\":\"RUNNING\",\"sessionState\":\"RUNNING\",\"filingState\":\"OPEN\"}"
     },
     {
@@ -86,6 +94,10 @@
       "legacy": "{\"status\":\"AWAITING_INPUT\",\"runStatus\":\"AWAITING_INPUT\",\"runState\":\"AWAITING_INPUT\",\"sessionState\":\"AWAITING_INPUT\",\"filingState\":\"OPEN\"}"
     },
     {
+      "key": "AWAITING_INPUT / taskRun",
+      "legacy": "{\"status\":\"AWAITING_INPUT\",\"runStatus\":\"AWAITING_INPUT\",\"runState\":\"AWAITING_INPUT\",\"sessionState\":\"AWAITING_INPUT\",\"filingState\":\"OPEN\"}"
+    },
+    {
       "key": "INTERRUPTED / listRow",
       "legacy": "{\"status\":\"INTERRUPTED\",\"runStatus\":\"INTERRUPTED\",\"runState\":\"INTERRUPTED\",\"sessionState\":\"INTERRUPTED\",\"filingState\":\"OPEN\"}"
     },
@@ -111,6 +123,10 @@
     },
     {
       "key": "INTERRUPTED / sharedHead",
+      "legacy": "{\"status\":\"INTERRUPTED\",\"runStatus\":\"INTERRUPTED\",\"runState\":\"INTERRUPTED\",\"sessionState\":\"INTERRUPTED\",\"filingState\":\"OPEN\"}"
+    },
+    {
+      "key": "INTERRUPTED / taskRun",
       "legacy": "{\"status\":\"INTERRUPTED\",\"runStatus\":\"INTERRUPTED\",\"runState\":\"INTERRUPTED\",\"sessionState\":\"INTERRUPTED\",\"filingState\":\"OPEN\"}"
     },
     {
@@ -142,6 +158,10 @@
       "legacy": "{\"status\":\"SUCCEEDED\",\"runStatus\":\"SUCCEEDED\",\"runState\":\"SUCCEEDED\",\"sessionState\":\"COMPLETED\",\"filingState\":\"OPEN\"}"
     },
     {
+      "key": "SUCCEEDED / taskRun",
+      "legacy": "{\"status\":\"SUCCEEDED\",\"runStatus\":\"SUCCEEDED\",\"runState\":\"SUCCEEDED\",\"sessionState\":\"COMPLETED\",\"filingState\":\"OPEN\"}"
+    },
+    {
       "key": "FAILED / listRow",
       "legacy": "{\"status\":\"FAILED\",\"runStatus\":\"FAILED\",\"runState\":\"FAILED\",\"sessionState\":\"FAILED\",\"filingState\":\"OPEN\"}"
     },
@@ -167,6 +187,10 @@
     },
     {
       "key": "FAILED / sharedHead",
+      "legacy": "{\"status\":\"FAILED\",\"runStatus\":\"FAILED\",\"runState\":\"FAILED\",\"sessionState\":\"FAILED\",\"filingState\":\"OPEN\"}"
+    },
+    {
+      "key": "FAILED / taskRun",
       "legacy": "{\"status\":\"FAILED\",\"runStatus\":\"FAILED\",\"runState\":\"FAILED\",\"sessionState\":\"FAILED\",\"filingState\":\"OPEN\"}"
     },
     {
@@ -198,6 +222,10 @@
       "legacy": "{\"status\":\"CANCELLED\",\"runStatus\":\"CANCELLED\",\"runState\":\"ENDED\",\"sessionState\":\"DORMANT\",\"filingState\":\"OPEN\"}"
     },
     {
+      "key": "CANCELLED / taskRun",
+      "legacy": "{\"status\":\"CANCELLED\",\"runStatus\":\"CANCELLED\",\"runState\":\"ENDED\",\"sessionState\":\"DORMANT\",\"filingState\":\"OPEN\"}"
+    },
+    {
       "key": "job running / listRow",
       "legacy": "{\"status\":\"AWAITING_INPUT\",\"runStatus\":\"AWAITING_INPUT\",\"runState\":\"AWAITING_INPUT\",\"sessionState\":\"AWAITING_INPUT\",\"filingState\":\"OPEN\"}"
     },
@@ -223,6 +251,10 @@
     },
     {
       "key": "job running / sharedHead",
+      "legacy": "{\"status\":\"AWAITING_INPUT\",\"runStatus\":\"AWAITING_INPUT\",\"runState\":\"AWAITING_INPUT\",\"sessionState\":\"AWAITING_INPUT\",\"filingState\":\"OPEN\"}"
+    },
+    {
+      "key": "job running / taskRun",
       "legacy": "{\"status\":\"AWAITING_INPUT\",\"runStatus\":\"AWAITING_INPUT\",\"runState\":\"AWAITING_INPUT\",\"sessionState\":\"AWAITING_INPUT\",\"filingState\":\"OPEN\"}"
     },
     {
@@ -254,6 +286,10 @@
       "legacy": "{\"status\":\"RUNNING\",\"runStatus\":\"RUNNING\",\"runState\":\"RUNNING\",\"sessionState\":\"RUNNING\",\"filingState\":\"OPEN\"}"
     },
     {
+      "key": "waiting on an approval / taskRun",
+      "legacy": "{\"status\":\"RUNNING\",\"runStatus\":\"RUNNING\",\"runState\":\"RUNNING\",\"sessionState\":\"RUNNING\",\"filingState\":\"OPEN\"}"
+    },
+    {
       "key": "watch armed / listRow",
       "legacy": "{\"status\":\"AWAITING_INPUT\",\"runStatus\":\"AWAITING_INPUT\",\"runState\":\"AWAITING_INPUT\",\"sessionState\":\"AWAITING_INPUT\",\"filingState\":\"OPEN\"}"
     },
@@ -279,6 +315,10 @@
     },
     {
       "key": "watch armed / sharedHead",
+      "legacy": "{\"status\":\"AWAITING_INPUT\",\"runStatus\":\"AWAITING_INPUT\",\"runState\":\"AWAITING_INPUT\",\"sessionState\":\"AWAITING_INPUT\",\"filingState\":\"OPEN\"}"
+    },
+    {
+      "key": "watch armed / taskRun",
       "legacy": "{\"status\":\"AWAITING_INPUT\",\"runStatus\":\"AWAITING_INPUT\",\"runState\":\"AWAITING_INPUT\",\"sessionState\":\"AWAITING_INPUT\",\"filingState\":\"OPEN\"}"
     },
     {
@@ -310,6 +350,10 @@
       "legacy": "{\"status\":\"PENDING\",\"runStatus\":\"PENDING\",\"runState\":\"QUEUED\",\"sessionState\":\"QUEUED\",\"filingState\":\"OPEN\"}"
     },
     {
+      "key": "paused account / taskRun",
+      "legacy": "{\"status\":\"PENDING\",\"runStatus\":\"PENDING\",\"runState\":\"QUEUED\",\"sessionState\":\"QUEUED\",\"filingState\":\"OPEN\"}"
+    },
+    {
       "key": "settled landing / listRow",
       "legacy": "{\"status\":\"SUCCEEDED\",\"runStatus\":\"SUCCEEDED\",\"runState\":\"SUCCEEDED\",\"sessionState\":\"COMPLETED\",\"filingState\":\"OPEN\"}"
     },
@@ -335,6 +379,10 @@
     },
     {
       "key": "settled landing / sharedHead",
+      "legacy": "{\"status\":\"SUCCEEDED\",\"runStatus\":\"SUCCEEDED\",\"runState\":\"SUCCEEDED\",\"sessionState\":\"COMPLETED\",\"filingState\":\"OPEN\"}"
+    },
+    {
+      "key": "settled landing / taskRun",
       "legacy": "{\"status\":\"SUCCEEDED\",\"runStatus\":\"SUCCEEDED\",\"runState\":\"SUCCEEDED\",\"sessionState\":\"COMPLETED\",\"filingState\":\"OPEN\"}"
     }
   ]

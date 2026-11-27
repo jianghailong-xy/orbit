@@ -2,6 +2,7 @@ import type { ProjectCrossingRow } from './attribution';
 import {
   MOVE_TASK_APPROVE_CONSEQUENCE,
   MOVE_TASK_CRITERION_GONE,
+  MOVE_TASK_OUT_APPROVE_CONSEQUENCE,
   MOVE_TASK_REQUESTED_CRITERION_LABEL,
   MOVE_TASK_WITHDRAWN_CRITERION_LABEL,
 } from '../components/ProjectCrossingsCard';
@@ -102,15 +103,16 @@ export function moveBatchAnswer(
 }
 
 export const UNNAMED_PROJECT = 'unnamed project';
-export const CROSSING_PROVENANCE = 'From Orbit — not the requesting agent.';
+/** Who wrote the card, not where the tasks come from: the From/To lines under it say that. */
+export const CROSSING_PROVENANCE = 'Written by Orbit — not the requesting agent.';
 export const CROSSING_TO_THIS_PROJECT = 'this project';
 export const CROSSING_APPROVE_LABEL = 'Approve';
 export const CROSSING_REFUSE_LABEL = 'Refuse';
 export const CROSSING_NO_PROJECT = 'No project';
-export const MOVE_OUT_APPROVE_CONSEQUENCE =
-  'Confirming takes the task out of this project as soon as you answer, and nobody has to send the request again.';
+/** The project page's confirm prompt says the same of one task. */
+export const MOVE_OUT_APPROVE_CONSEQUENCE = MOVE_TASK_OUT_APPROVE_CONSEQUENCE;
 export const MOVE_OUT_MANY_APPROVE_CONSEQUENCE =
-  'Confirming takes the tasks out of this project as soon as you answer, and nobody has to send the request again.';
+  "Confirming takes the tasks out of this project as soon as you answer; no project's acceptance counts them any more.";
 export const CROSSING_LINK_LIVE = 'View details & act';
 export const CROSSING_LINK_ANSWERED = 'View details';
 export const CROSSING_RECORDED = 'Decision recorded';
@@ -217,6 +219,35 @@ export function crossingTitle(kind: string, count: number, target?: string | nul
   return one ? 'Move this task here?' : 'Move these tasks here?';
 }
 
+/** An answered card's heading: what happened, no longer a question. A mixed answer says only that. */
+export function answeredTitle(
+  kind: string,
+  count: number,
+  verdict: CrossingVerdict,
+  target?: string | null,
+  out = false,
+): string {
+  const one = count === 1;
+  const noun = kind === 'DEPEND_ON_TASK' ? (one ? 'Dependency' : 'Dependencies') : one ? 'Task' : 'Tasks';
+  if (verdict === 'MIXED') return one ? 'Request answered' : 'Requests answered';
+  if (verdict === 'REFUSED') {
+    if (out) return `${noun} kept in the project`;
+    if (kind === 'FILE_TASK') return one ? 'Filing refused' : 'Filings refused';
+    if (kind === 'DEPEND_ON_TASK') return `${noun} refused`;
+    return one ? 'Move refused' : 'Moves refused';
+  }
+  if (out) return `${noun} taken out of the project`;
+  if (kind === 'FILE_TASK') return `${noun} filed here`;
+  if (kind === 'DEPEND_ON_TASK') return `${noun} allowed`;
+  if (target) return `${noun} moved to ${target}`;
+  return `${noun} moved here`;
+}
+
+/** The label over the quoted reasons: they are the agent's words, under a card Orbit wrote. */
+export function reasonsHead(count: number): string {
+  return count === 1 ? 'Reason given by the requesting agent' : 'Reasons given by the requesting agent';
+}
+
 export function crossingBadge(kind: string): string {
   if (kind === 'FILE_TASK') return 'file';
   if (kind === 'DEPEND_ON_TASK') return 'depend';
@@ -261,7 +292,14 @@ export function criterionName(criterion: NamedCriterion): string | null {
 
 export function crossingSummary(batch: CrossingBatch): string {
   const count = batch.rows.length;
-  if (batch.out) return `${count} ${crossingNoun(batch.kind, count)} to take out of ${batch.sourceTitle}`;
+  if (batch.out) {
+    const noun = crossingNoun(batch.kind, count);
+    if (isLive(batch)) return `${count} ${noun} to take out of ${batch.sourceTitle}`;
+    const verdict = batchVerdict(batch);
+    if (verdict === 'APPROVED') return `${count} ${noun} taken out of ${batch.sourceTitle}`;
+    if (verdict === 'REFUSED') return `${count} ${noun} kept in ${batch.sourceTitle}`;
+    return `${count} ${noun} from ${batch.sourceTitle}`;
+  }
   const head = `${count} ${crossingNoun(batch.kind, count)} from ${batch.sourceTitle}`;
   const distinct = new Map<string, NamedCriterion>();
   for (const row of batch.rows) {

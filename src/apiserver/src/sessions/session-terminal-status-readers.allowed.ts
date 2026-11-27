@@ -56,8 +56,9 @@
  * forceFinalize, the runner's finalize and its failed turn, the import, the end of a queued session, the landing
  * container and the refused source), with the one vocabulary they share
  * (RELEASED_SESSION_STATUSES, which the finalize also checks the runner's word against, and gracefulEndStatus).
- * (b) PROJECTOR: the derive functions that produce the legacy wire fields `runState`, `sessionState` and
- * `filingState` from the stored facts, which withSessionState (sessions/session-state.ts) puts on every payload beside
+ * (b) PROJECTOR: the projector of the status word from a session's facts (session-legacy-words.ts) and the derive
+ * functions that produce the legacy wire fields `runState`, `sessionState` and
+ * `filingState` from it and the stored facts, which withSessionState (sessions/session-state.ts) puts on every payload beside
  * `status` and `runStatus`; session-state-legacy-fields.spec.ts pins their output for every stored combination.
  * (c) OLD_PROTOCOL: the runner's turn-complete status word, translated into the turn outcome and read by the turn
  * writer; it goes when plan phase 6 (task 3509dk246EQ9g9yZRriiQ, step 6.1) lets the runner report the outcome and the
@@ -66,35 +67,36 @@
  * (PENDING, RUNNING), held-idle sets (AWAITING_INPUT, INTERRUPTED), the held set and slot counts. They name no released
  * value, and are counted because the project's criterion JGPQFXIZvP1MO137FGfPP counts every hand-written live or
  * terminal status set, not because they decide from a terminal value. INTERRUPTED is counted wherever it stands for the
- * same reason: session_release_fact_chk (migrations 1401, 1402) makes it a held status, never a released one.
+ * same reason: it is a held status, never a released one.
  *
  * The spec holds the split to the source: a file that names a released value (SUCCEEDED, FAILED or CANCELLED, or for
  * the derived states ENDED, COMPLETED, DORMANT or DELETED, through an enum or in a session set) is in one of sections
  * (a) to (d), and every file in those sections names one; a file only in section (e) names none.
  */
 
-/** (a) The writers that record a release, and the vocabulary they write. */
+/** (a) The writers that record a release, and the vocabulary they write. Since deploy D3 (task T14) no writer writes
+ *  the word: the refused source and the end of a queued session left this section with it; the rest still decide in
+ *  the same statement from the word the runner or the reaper reports, and answer it. */
 export const RELEASE_WRITERS: Readonly<Record<string, number>> = {
-  // RELEASED_SESSION_STATUSES: the statuses a release writes, which session_release_fact_chk ties to `finished_at`
+  // RELEASED_SESSION_STATUSES: the words of a released row (`finished_at` set)
   // and the runner's finalize accepts (its TERMINAL); isReleasedStatus builds spec rows from it.
   'src/apiserver/src/common/session-release.ts': 4,
   // landingContainerStatus: the status both container writers write, and the LANDING detail shows before its row exists.
   'src/apiserver/src/projects/landing-session.ts': 2,
-  // The refused source: FAILED with setup_failed.
-  'src/apiserver/src/projects/session-source.ts': 1,
   // forceFinalize and the status each sweep hands it.
   'src/apiserver/src/realtime/reaper.service.ts': 4,
   // turnComplete's failed turn (the status it writes and publishes), the finalize (its status, the side effects it
   // decides in the same transaction, producedNothingBeforeFailing) and the failed import.
   'src/apiserver/src/runner-api/runner-api.controller.ts': 14,
-  // The end of a session still queued: CANCELLED, and the status the end answers with.
-  'src/apiserver/src/sessions/sessions.service.ts': 2,
   // gracefulEndStatus: the status the finalize and the reaper write for a graceful end.
   'src/shared/src/enums.ts': 2,
 };
 
 /** (b) The one projector of the legacy wire fields. */
 export const PROJECTOR: Readonly<Record<string, number>> = {
+  // legacySessionStatus, which derives the status word from a session's facts, and statusWordFilter beside it
+  // (docs/session-status-retirement-plan.md §3.1, §6).
+  'src/apiserver/src/sessions/session-legacy-words.ts': 8,
   // deriveSessionRunState, deriveSessionState (deriveSessionLifecycleState and deriveSessionFilingState name none).
   'src/shared/src/enums.ts': 23,
 };
@@ -121,6 +123,9 @@ export const CLIENT_WIRE: Readonly<Record<string, number>> = {
 
 /** (e) Hand-written sets that name no released value: activity, held-idle and held sets, and slot counts. */
 export const NO_RELEASED_VALUE: Readonly<Record<string, number>> = {
+  // Not a set: the repeated out-of-memory stop writes INTERRUPTED on the turns it parks (main 1baac761e8). It goes
+  // when that writer moves to `turn_state` (docs/session-status-retirement-plan.md, writer #1).
+  'src/apiserver/src/managed-runners/managed-runner-manager.ts': 1,
   // HELD_SESSION_STATUSES, for the filters whose status list is an index's access path.
   'src/apiserver/src/common/session-release.ts': 2,
   // UNSETTLED (a turn queued or running), and statusAfterTurnEnqueued's idle statuses (AWAITING_INPUT, INTERRUPTED).
@@ -129,12 +134,6 @@ export const NO_RELEASED_VALUE: Readonly<Record<string, number>> = {
   'src/apiserver/src/common/session-tree-sql.ts': 1,
   // `paused`: held and stopped mid-turn (INTERRUPTED).
   'src/apiserver/src/help/help-ask-reads.ts': 1,
-  // Idle coordinators: AWAITING_INPUT or INTERRUPTED.
-  'src/apiserver/src/projects/coordinator-evidence-queue.service.ts': 2,
-  // A coordinator is busy unless AWAITING_INPUT or INTERRUPTED.
-  'src/apiserver/src/projects/pending-addressees.ts': 1,
-  // Tasks with a session queued or running.
-  'src/apiserver/src/projects/project-done-request.ts': 1,
   // Sessions per account: queued or running, and held-idle within a window.
   'src/apiserver/src/providers/active-sessions.ts': 3,
   // The claimed-and-held set (RUNNING, AWAITING_INPUT, INTERRUPTED) as an index condition.
@@ -145,12 +144,11 @@ export const NO_RELEASED_VALUE: Readonly<Record<string, number>> = {
   'src/apiserver/src/sessions/sessions.service.ts': 1,
   // Activity and the parked status in the carrier SQL.
   'src/apiserver/src/sessions/task-work-carrier.ts': 2,
+  // The one map between a turn state and its held word (plan §1.3), which the projector reads too: moved here from
+  // session-legacy-words.ts by task T11.
+  'src/apiserver/src/sessions/session-turn-state.ts': 1,
   // The derived run states still live on the public task page: QUEUED, RUNNING.
   'src/apiserver/src/share-links/public-task.ts': 1,
-  // The idle sweep's creator sessions: AWAITING_INPUT or INTERRUPTED.
-  'src/apiserver/src/tasks/evidence-review.service.ts': 1,
-  // Tasks with a session queued or running, and the held-idle sessions in raw SQL.
-  'src/apiserver/src/tasks/tasks.service.ts': 2,
 };
 
 export const ALLOW_LIST_SECTIONS = {

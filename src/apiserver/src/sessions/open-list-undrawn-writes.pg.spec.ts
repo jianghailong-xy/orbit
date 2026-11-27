@@ -20,7 +20,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { MessageEvent } from '@nestjs/common';
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { ControlEventType, RunEventType, RunStatus as SharedRunStatus, type ControlEvent } from '@orbit/shared';
 import { Client } from 'pg';
 import { EventsController } from '../events/events.controller';
@@ -103,7 +104,7 @@ async function fixture(t: T, opts: { held?: boolean } = {}): Promise<Fixture> {
     data: {
       id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title: 'olu',
       prompt: 'olu', provider: 'claude', model: 'claude-opus-5-5', providerBuiltin: true,
-      status: RunStatus.RUNNING, startedAt: new Date(), lastTurnAt: new Date(),
+      turnState: 'IN_FLIGHT', startedAt: new Date(), lastTurnAt: new Date(),
       dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });

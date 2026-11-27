@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { Logger } from '@nestjs/common';
 
-import { Prisma, RunStatus, TaskStatus } from '@prisma/client';
+import { Prisma, TaskStatus } from '@prisma/client';
 import type {
   AcceptedGap,
   DoneState,
@@ -16,6 +16,7 @@ import type {
 
 import type { PrismaService } from '../prisma/prisma.service';
 import type { SessionsService } from '../sessions/sessions.service';
+import { TURN_STATE_SELECT, turnStateFilter, turnStateOf } from '../sessions/session-turn-state';
 import { storeDerivedProjectStatus, type StoreDerivedProjectStatusOptions } from './project-done-derived';
 import { tellCoordinatorDoneRequestSuperseded } from './project-started';
 
@@ -33,6 +34,7 @@ import {
 } from './project-acceptance';
 import {
   criterionLanding,
+  landingDeferredSql,
   readLandingBranches,
   readLandingJobsByTask,
   taskHasNothingToLand,
@@ -58,7 +60,7 @@ import { START_REQUEST_KIND } from './project-start-request';
  * `task-plan-preflight`'s shape, as the start request is (`project-start-request.ts`): `REFUSE`
  * findings stop the request (409 `DONE_REQUEST_NOT_READY`, every finding at once) — a criterion its
  * work has not met, work still running, queued or IN_PROGRESS, an open item waiting on the owner, a
- * landing or a merge into main queued or running — and `WARN` findings are filed with it: every
+ * deferred or queued landing, or integration work running — and `WARN` findings are filed with it: every
  * criterion not LANDED, with why (`criterion-landing-reason.ts`). `doneReadiness` is pure, and the
  * facts it reads are `readDoneState`'s.
  *
@@ -161,6 +163,13 @@ export async function readDoneState(
   const landing = new Map(
     criterionLanding(served, branches).map((row) => [row.definitionId, row.landing]),
   );
+  // Read deferrals before jobs so a finish that queues a job between the reads cannot hide both.
+  const deferredLandings = await tx.$queryRaw<NonNullable<DoneState['deferredLandings']>>(Prisma.sql`
+    SELECT t."id" AS "taskId", t."title" FROM "task" t
+     WHERE t."project_id" = ${projectId}::uuid
+       AND t."owner_id" = ${ownerId}::uuid
+       AND ${Prisma.raw(landingDeferredSql('t'))}
+     ORDER BY t."created_at", t."id"`);
   const jobs = (await tx.projectIntegrationJob.findMany({
     where: {
       projectId,
@@ -216,20 +225,20 @@ export async function readDoneState(
   const runs = await tx.session.findMany({
     where: {
       ownerId,
-      status: { in: [RunStatus.PENDING, RunStatus.RUNNING] },
+      ...turnStateFilter(['QUEUED', 'IN_FLIGHT']),
       // "Nothing is still running" counts engine runs; the landing container is the platform's
       // own and is never one (§2.9 LS6).
       sessionKind: 'CONVERSATION',
       task: { projectId },
       ...(askingSessionId ? { id: { not: askingSessionId } } : {}),
     },
-    select: { taskId: true, status: true },
+    select: { taskId: true, ...TURN_STATE_SELECT },
   });
   const running = new Set(
-    runs.filter((run) => run.status === RunStatus.RUNNING).map((run) => run.taskId),
+    runs.filter((run) => turnStateOf(run) === 'IN_FLIGHT').map((run) => run.taskId),
   );
   const queued = new Set(
-    runs.filter((run) => run.status === RunStatus.PENDING).map((run) => run.taskId),
+    runs.filter((run) => turnStateOf(run) === 'QUEUED').map((run) => run.taskId),
   );
   const tasks = rows.map((task): DoneStateTask => ({
     ...task,
@@ -255,8 +264,9 @@ export async function readDoneState(
     tasks,
     ownerItems,
     jobs,
+    ...(deferredLandings.length > 0 ? { deferredLandings } : {}),
     criteriaDigest: standardSetVersion(stated).digest,
-    stateDigest: doneStateDigest(criteria, tasks, jobs),
+    stateDigest: doneStateDigest(criteria, tasks, jobs, deferredLandings),
     // Kept for the clients that read it; the mark no longer changes what the check finds.
     nonCode: false,
   };
@@ -273,6 +283,7 @@ export function doneStateDigest(
   criteria: readonly DoneStateCriterion[],
   tasks: readonly DoneStateTask[],
   jobs: DoneState['jobs'],
+  deferredLandings: NonNullable<DoneState['deferredLandings']> = [],
 ): string {
   const state = {
     version: 2,
@@ -285,6 +296,9 @@ export function doneStateDigest(
         + `${criterion.landing}:${criterion.reason ?? ''}`)
       .sort(),
     jobs: jobs.map((job) => `${job.integrationJobId}:${job.state}`).sort(),
+    ...(deferredLandings.length > 0
+      ? { deferredLandings: deferredLandings.map((task) => task.taskId).sort() }
+      : {}),
   };
   return createHash('sha256').update(JSON.stringify(state)).digest('hex');
 }
@@ -406,6 +420,12 @@ export function doneReadiness(
         + 'settled yet',
       'Wait for them to finish — Orbit reads the landing again when they do — then ask again.',
       { jobs: state.jobs });
+  }
+  if (state.deferredLandings?.length) {
+    finding('REFUSE', 'DONE_LANDING_DEFERRED',
+      `${count(state.deferredLandings.length, 'landing is', 'landings are')} waiting for work sessions to finish`,
+      'Wait for the work sessions to finish and any resulting landings to settle, then ask again.',
+      { tasks: state.deferredLandings });
   }
 
   const named = new Set(gaps.map((gap) => gap.criterionKey));

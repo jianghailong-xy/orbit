@@ -1,5 +1,5 @@
 /**
- * The mount daemon's finish line (docs/orbit-files-drive-technical-design.md §5.9): every shell operation of the list,
+ * The mount daemon's finish line (docs/drive-technical-design.md §5.9): every shell operation of the list,
  * run as uid 10001 through a real FUSE mount made the way the privileged parent makes it (src/drive-mount), against
  * the production apiserver (`node build/main.js`) over a real PostgreSQL that `scripts/run-pg-spec.sh` migrates:
  *
@@ -13,13 +13,17 @@
  *     runner of the same account (an account has one Cloud runner, so B is self-registered and its daemon presents the
  *     runner credential, which the door also takes). Each daemon reaches the apiserver through a fault proxy that can
  *     refuse connections, hold them unanswered, or drop a commit's answer after the door applied it.
- *   - `$F` is `~/Files`, a symlink to `<root>/drive` as on a runner, so the rows give `$F/` where §5.9 does. The mounts
+ *   - `$F` is `~/Drive`, a symlink to `<root>/drive` as on a runner, so the rows give `$F/` where §5.9 does. The mounts
  *     sit outside /tmp, where vim's default backupskip would change row 20.
  *   - "Trash" is the owner's Trash as the owner routes list it (a personal access token holding `files`).
  *   - DRIVE_MOUNT_E2E_SCALE=full runs the sizes §5.9 names (5 GiB, 5 × 900 MiB with a 1 GiB spool, a 3 GiB zip member,
  *     100,000-file folders, 3 × 400 MiB unsent) and holds the timing budgets; by default smaller sizes run the same
  *     paths and the times are reported. DRIVE_MOUNT_E2E_ROWS=1,2,3 runs only those rows (setup always runs).
  *   - DRIVE_MOUNT_E2E_REPORT names a file for the row-by-row table.
+ *
+ * Row "chat" holds a Drive chat's writes through the mount to the chat's rules (one group a turn that one Undo
+ * reverses, no overwrite, the 200-item hold), attributed by /proc and, outside the Pod (pid 0, as on Docker), counted
+ * as the chat's while it is the runner's only live session.
  *
  * Not here: row 55 (the wiring task), 59 (the engine's Plan mode, §7), 60 (the door task),
  * 61 (the runner's entrypoint, runner-go). Not destructive: every row belongs to the account this run creates.
@@ -35,11 +39,12 @@ import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { test } from 'node:test';
 
-import { toUuid } from '@orbit/shared';
+import { toUuid, uuidToBase62 } from '@orbit/shared';
 import type { PrismaClient } from '@prisma/client';
 import { Client } from 'pg';
 
 import { PatService } from '../auth/pat.service';
+import { hashPassword } from '../common/crypto.util';
 import { call, startApiserver, type Apiserver } from '../auth/pat-test-apiserver';
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -51,7 +56,7 @@ const RUN = randomUUID().slice(0, 8);
 const REPO = path.resolve(__dirname, '..', '..', '..', '..');
 const FULL = process.env.DRIVE_MOUNT_E2E_SCALE === 'full';
 const ONLY = (process.env.DRIVE_MOUNT_E2E_ROWS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-const E2E_ROOT = process.env.DRIVE_MOUNT_E2E_ROOT ?? '/var/lib/orbit-files-e2e';
+const E2E_ROOT = process.env.DRIVE_MOUNT_E2E_ROOT ?? '/var/lib/orbit-drive-e2e';
 const AGENT_UID = 10001;
 const MiB = 1 << 20;
 
@@ -131,7 +136,7 @@ class FaultProxy {
       return;
     }
     if (this.mode === 'blackhole') return; // never answered
-    const isCommit = req.method === 'POST' && (req.url ?? '').startsWith('/api/runner/drive/commit');
+    const isCommit = req.method === 'POST' && /^\/api\/runner\/(documents|drive)\/commit/.test(req.url ?? '');
     if (isCommit) this.commits += 1;
     const up = http.request(
       { host: '127.0.0.1', port: this.target, method: req.method, path: req.url, headers: req.headers },
@@ -198,10 +203,10 @@ interface Runner {
   name: 'a' | 'b';
   id: string;
   dir: string;
-  root: string; // /run/orbit-files
-  drive: string; // /run/orbit-files/drive
+  root: string; // /run/orbit-drive
+  drive: string; // /run/orbit-drive/drive
   home: string; // /home/orbit
-  F: string; // ~/Files
+  F: string; // ~/Drive
   spool: string;
   tokenFile: string;
   proxy: FaultProxy;
@@ -229,10 +234,10 @@ function mountpoints(): Array<{ point: string; type: string }> {
 }
 
 function mounted(point: string): boolean {
-  return mountpoints().some((m) => m.point === point && m.type === 'fuse.orbit-files');
+  return mountpoints().some((m) => m.point === point && m.type === 'fuse.orbit-drive');
 }
 
-test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9)', {
+test('Drive: the mount daemon passes the shell-operation list (§5.9)', {
   skip: !URL ? 'no COORDINATOR_PG_URL' : usable || false,
   concurrency: 1,
   timeout: 4 * 60 * 60 * 1000,
@@ -261,7 +266,7 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
   // ── the daemon ──
   let bin = process.env.DRIVE_MOUNT_BIN ?? '';
   if (!bin) {
-    bin = path.join(runDir, 'orbit-files-mount');
+    bin = path.join(runDir, 'orbit-drive-mount');
     const built = spawnSync('go', ['build', '-o', bin, '.'], {
       cwd: path.join(REPO, 'src', 'drive-mount'), env: { ...process.env, CGO_ENABLED: '0' }, encoding: 'utf8',
     });
@@ -294,10 +299,10 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
     await db.session.create({ data: { id, ownerId: owner, creatorId: owner, title, prompt: title, assignedRunnerId: ra.id } });
   }
   const pat = (await new PatService(db as unknown as PrismaService).issue(owner, {
-    name: 'files', scopes: ['files'], expiresInDays: 1, createdVia: 'WEB', workspaceIds: [],
+    name: 'drive', scopes: ['drive'], expiresInDays: 1, createdVia: 'WEB', workspaceIds: [],
   })).token;
 
-  const server: Apiserver = await startApiserver(url, `drive-mount-${RUN}`, { ORBIT_FILES_DIR: filesDir });
+  const server: Apiserver = await startApiserver(url, `drive-mount-${RUN}`, { ORBIT_DRIVE_DIR: filesDir });
   t.after(() => server.stop());
 
   // ── owner routes ──
@@ -404,7 +409,7 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
     const home = path.join(dir, 'home', 'orbit');
     mkdirSync(home, { recursive: true });
     chownSync(home, AGENT_UID, AGENT_UID);
-    const root = path.join(dir, 'run', 'orbit-files');
+    const root = path.join(dir, 'run', 'orbit-drive');
     const proxy = new FaultProxy(server.port);
     await proxy.start();
     t.after(() => proxy.stop());
@@ -430,10 +435,10 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
       }
     }
     const r: Runner = {
-      name, id, dir, root, drive: path.join(root, 'drive'), home, F: path.join(home, 'Files'), spool: path.join(dir, 'spool'),
+      name, id, dir, root, drive: path.join(root, 'drive'), home, F: path.join(home, 'Drive'), spool: path.join(dir, 'spool'),
       tokenFile, proxy, podUid: pod, cgroup, args: extra, log: '',
     };
-    // ~/Files is a symlink to the drive, as the runner's entrypoint makes it (§6.1).
+    // ~/Drive is a symlink to the drive, as the runner's entrypoint makes it (§6.1).
     spawnSync('ln', ['-sfn', r.drive, r.F]);
     lchownSync(r.F, AGENT_UID, AGENT_UID);
     return r;
@@ -718,7 +723,7 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
     assert.match(s.out, /cp-a rc=1/);
     assert.match(s.out, /copied/);
     assert.match(s.err, /preserving permissions for .*script\.sh.*Operation not permitted/);
-    assert.match(errorsLog(a), /EPERM chmod \/home\/orbit\/Files\/script\.sh to 0755: the drive keeps no modes/);
+    assert.match(errorsLog(a), /EPERM chmod \/home\/orbit\/Drive\/script\.sh to 0755: the drive keeps no modes/);
     d.push('contents copied; cp printed "preserving permissions … Operation not permitted", exit 1 both; errors.log has the chmod line');
   });
 
@@ -933,7 +938,7 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
     // regular file neither as a user nor with -p. The executable bit the drive cannot keep goes without tar seeing a
     // refusal, so §5.9's "Cannot change mode … exits 2" cannot happen; errors.log names each such file instead.
     assert.match(s.out, /rc=0\nsame\n644\nrc-p=0\nsame-p/);
-    assert.match(errorsLog(a), /INFO create \/home\/orbit\/Files\/x23\/run\.sh with mode 0755: the drive keeps no modes: the file is 0644 and cannot be executed/);
+    assert.match(errorsLog(a), /INFO create \/home\/orbit\/Drive\/x23\/run\.sh with mode 0755: the drive keeps no modes: the file is 0644 and cannot be executed/);
     d.push('every file\'s content matches; tar -x and tar -xp both exit 0 and run.sh shows 0644: GNU tar takes the mode it created a file with as set and chmods no regular file, so it meets no refusal (§5.9\'s "Cannot change mode … exit 2" does not happen with GNU tar 1.35); errors.log says run.sh was created executable and is kept 0644');
   });
 
@@ -1228,7 +1233,7 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
     assert.match(s.err, /No locks available/);
     assert.match(s.out, /flock rc=(1|71)\b/);
     assert.match(s.out, /sqlite rc=[1-9]/);
-    assert.match(errorsLog(a), /ENOLCK fcntl lock \/home\/orbit\/Files\/x40\.db: the drive has no file locks/);
+    assert.match(errorsLog(a), /ENOLCK fcntl lock \/home\/orbit\/Drive\/x40\.db: the drive has no file locks/);
     d.push(`flock: "No locks available", exit ${/flock rc=(\d+)/.exec(s.out)![1]} (util-linux exits EX_OSERR for ENOLCK); sqlite (the sqlite3 CLI is not on this host, so Python's sqlite3, the same library): "${(/sqlite3\.\w+: ([^\n]+)/.exec(s.err) ?? ['', 'fails'])[1]}", exit ≠ 0; errors.log says the drive has no file locks`);
   });
 
@@ -1361,6 +1366,99 @@ print('listxattr', os.listxattr('$F/x46'))"`);
     d.push(`a ${(bytes.length / MiB).toFixed(1)} MiB upload (2 chunks) read whole by a second session on runner A ${seen} ms after it completed, and on runner B`);
   });
 
+  // ═══ A Drive chat through the mount ═══════════════════════════════════════════════════════════
+
+  await row('chat', 'a Drive chat\'s mkdir, mv, rm through the mount: one group, one Undo, no overwrite, the 200 hold', async (d) => {
+    const chat = randomUUID();
+    await db.session.create({
+      data: { id: chat, ownerId: owner, creatorId: owner, title: 'Sort the scans', prompt: 'sort', assignedRunnerId: a.id, openedBy: 'DRIVE_CHAT' },
+    });
+    let seq = 0;
+    const nextTurn = async () => {
+      await db.$executeRaw`UPDATE "conversation_turn" SET status = 'ANSWERED' WHERE session_id = ${chat}::uuid AND status = 'IN_FLIGHT'`;
+      await db.$executeRaw`UPDATE "session" SET turn_state = 'IN_FLIGHT' WHERE id = ${chat}::uuid`;
+      const id = randomUUID();
+      seq += 1;
+      await db.$executeRaw`INSERT INTO "conversation_turn"(id, session_id, seq, client_turn_id, kind, content, status)
+        VALUES (${id}::uuid, ${chat}::uuid, ${seq}, ${randomUUID()}, 'message', 'sort my files', 'IN_FLIGHT')`;
+      return id;
+    };
+    const base = `/drive/chats/${uuidToBase62(chat)}`;
+    // Undo and the questions are the owner's own, signed in: an access token cannot press them.
+    const password = `pw-${RUN}`;
+    await db.user.update({ where: { id: owner }, data: { passwordHash: hashPassword(password) } });
+    const login = await call(server, 'POST', '/api/auth/login', undefined, { email: `drive-mount-${RUN}@drive-mount.invalid`, password });
+    assert.equal(login.status, 201, login.text);
+    const signedIn = login.json.accessToken as string;
+    const owners = (method: string, route: string) => call(server, method, `/api${route}`, signedIn);
+    const groupsOf = async (turn: string) => {
+      const reply = await owners('GET', `${base}/groups`);
+      assert.equal(reply.status, 200, reply.text);
+      return (reply.json.groups as Array<{ id: string; turnId: string; status: string; held: boolean; total: number; items: Array<{ kind: string }>; heldItems: Array<{ kind: string; toPath: string | null; state: string }> }>)
+        .filter((g) => toUuid(g.turnId) === turn);
+    };
+    try {
+      ok(await sh(a, 'mkdir -p $F/rc/Scans $F/rc/Home && for n in a b c keep e; do echo "scan $n" > $F/rc/Scans/$n.txt; done && echo "the one there" > $F/rc/Home/keep.txt',
+        { session: sessionOnA }), 'setup');
+
+      // Attributed by /proc: a mkdir, a move, a rename and an unlink are one group of the turn; one Undo reverses it.
+      const first = await nextTurn();
+      ok(await sh(a, 'mkdir $F/rc/Sorted && mv $F/rc/Scans/a.txt $F/rc/Sorted/ && mv $F/rc/Scans/b.txt "$F/rc/Scans/b renamed.txt" && rm $F/rc/Scans/c.txt',
+        { session: chat }), 'the chat sorts');
+      const [group] = await groupsOf(first);
+      assert.deepEqual(group.items.map((i) => i.kind), ['NEW_FOLDER', 'MOVE', 'RENAME', 'TRASH']);
+      const undone = await owners('POST', `${base}/groups/${group.id}/undo`);
+      assert.equal(undone.status, 200, undone.text);
+      assert.deepEqual([undone.json.status, undone.json.skipped], ['UNDONE', 0]);
+      // The owner's Undo reaches the mount by the change feed, as the owner's own changes do (row 47).
+      const listing = () => sh(a, 'ls $F/rc/Scans/; test ! -e $F/rc/Sorted && echo no-sorted');
+      await waitFor('the mount shows the Undo', async () => (await listing()).out === 'a.txt\nb.txt\nc.txt\ne.txt\nkeep.txt\nno-sorted\n', 40_000, 500);
+      d.push(`mkdir, mv, mv (rename), rm from the chat's process: one group (${group.items.map((i) => i.kind).join(', ')}); one Undo put all four back (ls shows a b c again, no Sorted)`);
+
+      // A rename onto a live file fails EEXIST at once, errors.log says why, and the owner's question is filed.
+      const second = await nextTurn();
+      const mark = errorsLog(a).length;
+      const mv = await sh(a, 'mv $F/rc/Scans/keep.txt $F/rc/Home/keep.txt; echo "rc=$?"; cat $F/rc/Home/keep.txt $F/rc/Scans/keep.txt', { session: chat });
+      assert.match(mv.err, /File exists/, mv.err);
+      assert.match(mv.out, /^rc=1\nthe one there\nscan keep\n$/, mv.out);
+      const logged = errorsLog(a).slice(mark);
+      assert.match(logged, /EEXIST rename \S*rc\/Scans\/keep\.txt: Not moved: \/rc\/Home\/keep\.txt is already there, and a Drive chat never replaces a file\./, logged);
+      const questions = await owners('GET', `${base}/questions`);
+      assert.equal(questions.status, 200, questions.text);
+      const asked = (questions.json.questions as Array<{ status: string; moving: { path: string }; existing: { path: string }; turnId: string }>)
+        .filter((x) => toUuid(x.turnId) === second);
+      assert.deepEqual(asked.map((x) => [x.status, x.moving.path, x.existing.path]), [['OPEN', '/rc/Scans/keep.txt', '/rc/Home/keep.txt']]);
+      assert.deepEqual(await groupsOf(second), []);
+      d.push(`mv onto a live file: "${mv.err.trim().replace(/\/\S+/g, '…')}", rc 1, both files as they were; errors.log: "${/Not moved:[^\n]{0,80}/.exec(logged)![0]}…"; one OPEN Keep both / Replace question`);
+
+      // Past 200 changes the 201st waits for Apply: mkdir fails EDQUOT and makes nothing.
+      const third = await nextTurn();
+      const many = await sh(a, 'mkdir $F/rc/Many && for i in $(seq 1 199); do mkdir $F/rc/Many/f$i || exit 9; done; mkdir $F/rc/Many/f200; echo "rc=$?"; test ! -e $F/rc/Many/f200 && echo not-made',
+        { session: chat });
+      assert.match(many.err, /Disk quota exceeded/, many.err);
+      assert.equal(many.out, 'rc=1\nnot-made\n');
+      const [done, pending] = await groupsOf(third);
+      assert.deepEqual([done.status, done.total], ['DONE', 200]);
+      assert.deepEqual([pending.status, pending.held, pending.total], ['PENDING', true, 1]);
+      assert.deepEqual(pending.heldItems.map((h) => [h.kind, h.toPath, h.state]), [['NEW_FOLDER', '/rc/Many/f200', 'PENDING']]);
+      assert.match(errorsLog(a), /EDQUOT mkdir \S*rc\/Many\/f200: Held for the owner, not done/);
+      d.push(`200 mkdirs made as one group; the 201st: "${many.err.trim().replace(/\/\S+/g, '…')}", not made, held PENDING (1 item)`);
+
+      // Outside the Pod the parent names no session (pid 0 on Docker): with the chat the runner's only live session,
+      // the write is the chat's all the same.
+      const fourth = await nextTurn();
+      ok(await sh(a, 'mkdir $F/rc/Inferred && mv $F/rc/Scans/e.txt $F/rc/Inferred/', { session: chat, outsidePod: true }), 'unattributed');
+      const [inferred] = await groupsOf(fourth);
+      assert.deepEqual(inferred.items.map((i) => i.kind), ['NEW_FOLDER', 'MOVE']);
+      const unmv = await sh(a, 'mv $F/rc/Scans/keep.txt $F/rc/Home/keep.txt; echo "rc=$?"', { session: chat, outsidePod: true });
+      assert.match(unmv.err, /File exists/);
+      d.push('outside the Pod (no session from /proc): mkdir and mv grouped as the chat\'s, mv onto a live file EEXIST, while it is the runner\'s only live session');
+    } finally {
+      await db.$executeRaw`UPDATE "conversation_turn" SET status = 'ANSWERED' WHERE session_id = ${chat}::uuid AND status = 'IN_FLIGHT'`;
+      await db.$executeRaw`UPDATE "session" SET turn_state = NULL WHERE id = ${chat}::uuid`;
+    }
+  });
+
   await row('48', 'server unreachable: cached and uncached cat, ls, echo >, echo >>', async (d) => {
     ok(await sh(a, 'mkdir -p $F/off48 && echo cached > $F/off48/cached.txt && echo "x" > $F/off48/app.txt && cat $F/off48/cached.txt && ls $F/off48/'), 'warm the cache');
     await ownerUpload('/off48', 'uncached.txt', Buffer.from('never read on A\n'));
@@ -1418,7 +1516,7 @@ except OSError as e:
     const saved = spawnSync('ls', [unsent], { encoding: 'utf8' }).stdout.trim().split('\n').filter((f) => f.endsWith('w49.txt'));
     assert.equal(saved.length, 1, 'unsent/ holds its bytes');
     assert.equal(readFileSync(path.join(unsent, saved[0]), 'utf8'), 'kept bytes\n');
-    assert.match(errorsLog(a), new RegExp(`EIO close /home/orbit/Files/w49\\.txt: .*kept in /run/orbit-files/unsent/${saved[0].replace(/[.]/g, '\\.')}`));
+    assert.match(errorsLog(a), new RegExp(`EIO close /home/orbit/Drive/w49\\.txt: .*kept in /run/orbit-drive/unsent/${saved[0].replace(/[.]/g, '\\.')}`));
     a.proxy.set('pass');
     await waitFor('back online', () => status(a).connected === true, 30_000);
     ok(await sh(a, 'echo after > $F/after49.txt && cat $F/after49.txt'), 'reads and writes work without a remount');
@@ -1548,12 +1646,12 @@ f = open('$F/long52.log', 'w'); f.write('one line\\n'); f.flush(); time.sleep(70
     d.push(`a call blocked ${(blocked / 1000).toFixed(1)} s until the watchdog aborted the connection: the call in flight got "${/Software caused connection abort|Transport endpoint is not connected/.exec(s.out)![0]}" (the kernel's errno for requests in flight on an abort; later calls get "Transport endpoint is not connected"); recovered as in 53`);
   });
 
-  // Row 56 (docs/orbit-files-drive-technical-design.md §5.9, §7.2): for each engine's own sandbox, a process started
-  // under it writes and reads ~/Files, the daemon is SIGKILLed, the parent remounts, and the SAME process writes and reads
+  // Row 56 (docs/drive-technical-design.md §5.9, §7.2): for each engine's own sandbox, a process started
+  // under it writes and reads ~/Drive, the daemon is SIGKILLed, the parent remounts, and the SAME process writes and reads
   // again. Cursor's is bwrap with the parent bound (cursor_sandbox.go wrap); Codex's is `codex sandbox`, whose writable
   // roots are the ones codexSandboxPolicy names. Claude Code, OpenCode, Antigravity, Kimi and DSH run no OS sandbox of
   // their own on Linux (their grants are launch arguments and permission rules), so their process is a plain one.
-  await row('56', 'each engine\'s sandbox keeps ~/Files across a remount', async (d) => {
+  await row('56', 'each engine\'s sandbox keeps ~/Drive across a remount', async (d) => {
     const probe = (name: string) => `n=${name}
       echo "before-$n" > "$F/e56-$n.txt" && echo "before write ok" && cat "$F/e56-$n.txt" && echo "before read ok" || echo "before FAILED"
       sleep 3

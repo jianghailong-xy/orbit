@@ -1,0 +1,67 @@
+/* PROJECT_REOPEN (docs/project-reopen-request-design.md §6; board docs/mocks/project-reopen-request). The card is
+   `.approval-card` and borrows SettingsChange.css; these are its own lines. */
+.project-reopen-since {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--text-2);
+}
+.project-reopen-label {
+  margin: 10px 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.project-reopen-planned {
+  margin: 0 0 6px;
+  color: var(--text-1);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.project-reopen-asked {
+  margin-top: 4px;
+}
+
+.project-reopen-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--brand-border);
+  border-radius: 10px;
+  background: var(--brand-tint);
+}
+.project-reopen-row-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.project-reopen-row-title {
+  color: var(--text-1);
+}
+.project-reopen-row-asked {
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.project-reopen-review {
+  flex: none;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font: inherit;
+  cursor: pointer;
+}
+.project-reopen-review:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+.project-reopen-since a {
+  color: var(--text-2);
+}

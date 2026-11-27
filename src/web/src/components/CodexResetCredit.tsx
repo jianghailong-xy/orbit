@@ -7,8 +7,20 @@ import {
   SafetyCertificateOutlined,
 } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import {
+  memo,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react';
+import {
+  CODEX_DEFAULT_ACCOUNT_SLOT,
   codexRateLimitResetOf,
   type CodexRateLimitResetOperationView,
   type CodexRateLimitResetRefusalCode,
@@ -30,7 +42,7 @@ import {
   codexResetStatusCopy,
   decodeCodexResetOperation,
   decodeCodexResetOperations,
-  readCodexResetIntent,
+  findCodexResetIntent,
   writeCodexResetIntent,
   type CodexResetCard,
   type CodexResetIntent,
@@ -43,12 +55,15 @@ import { useToast } from '../lib/toast';
 import { compatibleUuid } from '../lib/uuid';
 import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
-/** Where a reset is confirmed from: the runner whose default Codex account it spends, and the
- *  workspace whose composer asked, which the create route checks for an account override. */
+/** Where a reset is confirmed from: the runner, the Codex account on it whose credit it spends
+ *  (Default when none is named), and the workspace whose composer asked, which the create route checks
+ *  for an account override. */
 export interface CodexResetContext {
   runner: CodexResetRunner;
   workspaceId?: string;
+  accountSlot?: string;
 }
 
 type CreatePhase =
@@ -89,7 +104,8 @@ export interface CodexResetCreditState {
   useButtonRef: RefObject<HTMLButtonElement | null>;
 }
 
-const operationsKey = (runnerId: string | undefined) => ['codex-rate-limit-reset', runnerId, 'operations'] as const;
+const operationsKey = (runnerId: string | undefined, accountFingerprint: string | undefined) =>
+  ['codex-rate-limit-reset', runnerId, 'operations', accountFingerprint] as const;
 const operationKey = (runnerId: string | undefined, operationId: string | undefined) =>
   ['codex-rate-limit-reset', runnerId, 'operation', operationId] as const;
 
@@ -102,7 +118,7 @@ function announce(toast: ReturnType<typeof useToast>, copy: CodexResetStatusCopy
 }
 
 /**
- * One runner's reset credit, for the Plan usage popover: the card, the confirmation and the
+ * One Codex account's reset credit, for the Plan usage popover: the card, the confirmation and the
  * operation it becomes. The API calls are the operation API alone (§6.1); what this browser keeps is
  * its own confirmation — the clientRequestId minted when the user confirmed — so a second press, a
  * create that timed out and a reload all come back to the same operation instead of starting another.
@@ -118,6 +134,7 @@ export function useCodexResetCredit(
   const runner = context?.runner;
   const runnerId = runner?.id;
   const workspaceId = context?.workspaceId;
+  const accountSlot = context?.accountSlot ?? CODEX_DEFAULT_ACCOUNT_SLOT;
 
   const [now, setNow] = useState(() => new Date());
   const [intent, setIntent] = useState<CodexResetIntent | null>(null);
@@ -135,25 +152,29 @@ export function useCodexResetCredit(
   const dismissed = useRef(new Set<string>());
   const confirmed = useRef(false);
 
-  const remember = useCallback(
-    (next: CodexResetIntent | null) => {
-      if (!runnerId) return;
-      if (next) writeCodexResetIntent(next);
-      else clearCodexResetIntent(runnerId);
-      setIntent(next);
-    },
-    [runnerId],
-  );
+  const remember = useCallback((next: CodexResetIntent) => {
+    writeCodexResetIntent(next);
+    setIntent(next);
+  }, []);
+  const forget = useCallback((done: CodexResetIntent) => {
+    clearCodexResetIntent(done.runnerId, done.accountFingerprint);
+    setIntent(null);
+  }, []);
 
-  const offered = runner ? codexResetCard(runner, now, false) !== null : false;
+  const block = runner ? codexRateLimitResetOf(runner.planUsage, accountSlot) : undefined;
+  const offered = runner ? codexResetCard(runner, now, false, null, accountSlot) !== null : false;
+  // The account this card follows: the one its remembered confirmation spends, else the slot's own.
+  const fingerprint = intent?.accountFingerprint ?? block?.accountFingerprint;
   const operations = useQuery({
-    queryKey: operationsKey(runnerId),
+    queryKey: operationsKey(runnerId, fingerprint),
     queryFn: async () => {
-      const decoded = decodeCodexResetOperations(await api(`/runners/${runnerId}/codex-rate-limit-reset`));
+      const decoded = decodeCodexResetOperations(
+        await api(`/runners/${runnerId}/codex-rate-limit-reset?accountFingerprint=${encodeURIComponent(fingerprint ?? '')}`),
+      );
       if (!decoded) throw new Error('unreadable reset operations');
       return decoded;
     },
-    enabled: !!runnerId && (offered || intent !== null),
+    enabled: !!runnerId && !!fingerprint && (offered || intent !== null),
     refetchInterval: (query) => (query.state.data?.active ? CODEX_RESET_CLIENT_TIMING.pollMs : false),
     staleTime: 10_000,
   });
@@ -191,6 +212,7 @@ export function useCodexResetCredit(
         body: {
           clientRequestId: target.clientRequestId,
           accountFingerprint: target.accountFingerprint,
+          accountSlot: target.accountSlot ?? CODEX_DEFAULT_ACCOUNT_SLOT,
           ...(target.workspaceId ? { workspaceId: target.workspaceId } : {}),
         },
         signal: abort.signal,
@@ -210,12 +232,13 @@ export function useCodexResetCredit(
           v: 1,
           runnerId,
           accountFingerprint: target.accountFingerprint,
+          accountSlot: target.accountSlot,
           confirmedAt: target.confirmedAt,
           operationId: failure.operationId,
         });
         setCreate({ phase: 'idle' });
       } else if (failure.kind !== 'unanswered') {
-        remember(null);
+        forget(target);
         setCreate({ phase: 'idle' });
         if (failure.kind === 'refused') {
           setNotice({ kind: 'refused', code: failure.code });
@@ -248,12 +271,12 @@ export function useCodexResetCredit(
     setCreate({ phase: 'idle' });
     setNotice(null);
     announced.current = null;
-    if (!runnerId) return;
-    const stored = readCodexResetIntent(runnerId);
+    if (!runner) return;
+    const stored = findCodexResetIntent(runner, accountSlot);
     if (stored) {
       const step = codexResetResume(stored, new Date());
       if (step === 'forget') {
-        clearCodexResetIntent(runnerId);
+        clearCodexResetIntent(stored.runnerId, stored.accountFingerprint);
       } else {
         setIntent(stored);
         if (stored.settledAt) announced.current = stored.operationId ?? null;
@@ -261,7 +284,9 @@ export function useCodexResetCredit(
       }
     }
     return () => clearTimeout(retryTimer.current);
-  }, [runnerId]);
+    // Once per runner and account slot, from the runner as it is then: a later heartbeat changes nothing here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runnerId, accountSlot]);
 
   // An account override is the workspace's, so moving to another workspace asks again.
   useEffect(() => setHiddenBy(null), [workspaceId]);
@@ -271,8 +296,9 @@ export function useCodexResetCredit(
     if (!intent || intent.operationId || !operations.data) return;
     if (codexResetResume(intent, new Date()) !== 'look-up') return;
     const found = codexResetLookUp(intent, operations.data);
-    remember(found ? { ...intent, operationId: found.id } : null);
-  }, [intent, operations.data, remember]);
+    if (found) remember({ ...intent, operationId: found.id });
+    else forget(intent);
+  }, [intent, operations.data, remember, forget]);
 
   // An operation in flight that this page did not start — another tab, another device — is followed
   // rather than raced: the create route would refuse a second one anyway.
@@ -285,12 +311,11 @@ export function useCodexResetCredit(
   // The runner no longer has that operation (deleted, or not this runner's): stop following it.
   useEffect(() => {
     if (!(followed.error instanceof ApiError) || followed.error.status !== 404) return;
-    if (intent?.operationId === operationId) remember(null);
+    if (intent && intent.operationId === operationId) forget(intent);
     setAttachedId(null);
-  }, [followed.error, intent, operationId, remember]);
+  }, [followed.error, intent, operationId, forget]);
 
   const runnerOnline = runner?.online === true;
-  const block = runner ? codexRateLimitResetOf(runner.planUsage) : undefined;
   const accountChanged = !!operation && !!block && block.accountFingerprint !== operation.accountFingerprint;
 
   // A settled operation refreshes what it changed, and a result nobody has seen yet is announced once.
@@ -298,7 +323,7 @@ export function useCodexResetCredit(
   useEffect(() => {
     if (!runnerId || !settled) return;
     void qc.invalidateQueries({ queryKey: runnersQuery().queryKey });
-    void qc.invalidateQueries({ queryKey: operationsKey(runnerId) });
+    void qc.invalidateQueries({ queryKey: operationsKey(runnerId, settled.accountFingerprint) });
     if (intent?.operationId !== settled.id || intent.settledAt) return;
     remember({ ...intent, settledAt: new Date().toISOString() });
     if (announced.current === settled.id) return;
@@ -317,7 +342,7 @@ export function useCodexResetCredit(
   }, [shown, visible]);
 
   const active = !!operation && codexResetOperationActive(operation);
-  const card = runner ? codexResetCard(runner, now, !!listedActive || active, operations.data) : null;
+  const card = runner ? codexResetCard(runner, now, !!listedActive || active, operations.data, accountSlot) : null;
   const busy = create.phase === 'sending' || create.phase === 'retrying' || active;
 
   const openConfirm = () => {
@@ -342,6 +367,7 @@ export function useCodexResetCredit(
       runnerId,
       clientRequestId: compatibleUuid(),
       accountFingerprint: card.accountFingerprint,
+      accountSlot,
       confirmedAt: new Date().toISOString(),
       ...(workspaceId ? { workspaceId } : {}),
     };
@@ -372,7 +398,7 @@ export function useCodexResetCredit(
 
   const dismiss = () => {
     if (operation) dismissed.current.add(operation.id);
-    remember(null);
+    if (intent) forget(intent);
     setAttachedId(null);
     setNotice(null);
     setCreate({ phase: 'idle' });
@@ -470,14 +496,21 @@ export function codexResetStatusOf(state: CodexResetCreditState): CodexResetStat
   return null;
 }
 
+/** Whether the card has anything to show: no section where the count is zero, where there is neither a
+ *  block to draw nor a status to report, or where a refusal said the entry does not belong. */
+export function codexResetCardShown(state: CodexResetCreditState): boolean {
+  if (state.card?.details.availableCount === 0) return false;
+  const status = codexResetStatusOf(state);
+  return !!status || (!!state.card && !state.hiddenBy);
+}
+
 /** The reset credit section under the usage windows: count, expiry, freshness, and the one action. */
 export function CodexResetCreditCard({ state }: { state: CodexResetCreditState }) {
   const headingId = useId();
   const reasonId = useId();
   const { card, operation, create, notice, hiddenBy } = state;
-  if (card?.details.availableCount === 0) return null;
+  if (!codexResetCardShown(state)) return null;
   const status = codexResetStatusOf(state);
-  if ((!card && !status) || (hiddenBy && !status)) return null;
   const expiry = card ? codexResetExpiry(card.block, fmtDay) : null;
   const freshness = card ? codexResetFreshness(card.block, state.now) : null;
   const settled = !!operation && !codexResetOperationActive(operation);
@@ -495,17 +528,20 @@ export function CodexResetCreditCard({ state }: { state: CodexResetCreditState }
             </div>
             <div className="cu-rc-count">{codexResetCountLabel(card.details)}</div>
             {expiry && (
-              <div className="cu-rc-meta" title={expiry.at ? fmtFull(expiry.at) : undefined}>
-                {expiry.label}
-              </div>
+              <Tooltip content={expiry.at ? fmtFull(expiry.at) : undefined} delay={TEXT_TOOLTIP_DELAY_MS}>
+                <div className="cu-rc-meta">
+                  {expiry.label}
+                </div>
+              </Tooltip>
             )}
             {freshness && (
-              <div
-                className={`cu-rc-meta${freshness.stale ? ' cu-rc-stale' : ''}`}
-                title={fmtFull(card.block.fetchedAt)}
-              >
-                {freshness.label}
-              </div>
+              <Tooltip content={fmtFull(card.block.fetchedAt)} delay={TEXT_TOOLTIP_DELAY_MS}>
+                <div
+                  className={`cu-rc-meta${freshness.stale ? ' cu-rc-stale' : ''}`}
+                >
+                  {freshness.label}
+                </div>
+              </Tooltip>
             )}
           </div>
         </div>
@@ -567,8 +603,17 @@ export function CodexResetCreditCard({ state }: { state: CodexResetCreditState }
   );
 }
 
-/** The second confirmation: what the press spends, before anything is sent. */
-export function CodexResetConfirm({ state, usagePercent }: { state: CodexResetCreditState; usagePercent: number }) {
+/** The second confirmation: what the press spends, before anything is sent. `accountLabel` names whose
+ *  credit it is, where the runner has more than one account to tell apart. */
+export function CodexResetConfirm({
+  state,
+  usagePercent,
+  accountLabel,
+}: {
+  state: CodexResetCreditState;
+  usagePercent?: number;
+  accountLabel?: string;
+}) {
   const cancelRef = useRef<HTMLButtonElement>(null);
   const card = state.card;
   const expiry = card ? codexResetExpiry(card.block, fmtDay) : null;
@@ -598,10 +643,22 @@ export function CodexResetConfirm({ state, usagePercent }: { state: CodexResetCr
       <p className="cu-rc-confirm-text">
         This consumes 1 earned credit and resets eligible Codex usage windows. This action can’t be undone.
       </p>
-      <div className="cu-rc-confirm-usage">
-        <span>Current usage</span>
-        <span className="cu-rc-confirm-value">{usagePercent}% → reset</span>
-      </div>
+      {(accountLabel || usagePercent !== undefined) && (
+        <div className="cu-rc-confirm-usage">
+          {accountLabel && (
+            <div className="cu-rc-confirm-row">
+              <span>Account</span>
+              <span className="cu-rc-confirm-value">{accountLabel}</span>
+            </div>
+          )}
+          {usagePercent !== undefined && (
+            <div className="cu-rc-confirm-row">
+              <span>Current usage</span>
+              <span className="cu-rc-confirm-value">{usagePercent}% → reset</span>
+            </div>
+          )}
+        </div>
+      )}
       <p className="cu-rc-confirm-note">
         {card ? `${codexResetCountLabel(card.details)}${expiry ? ` · ${expiry.label}` : ''}. ` : ''}
         Your conversations and their context aren’t affected.
@@ -609,3 +666,31 @@ export function CodexResetConfirm({ state, usagePercent }: { state: CodexResetCr
     </Dialog>
   );
 }
+
+/**
+ * One account's reset, kept running while the popover is closed: it polls, announces results and holds
+ * its confirmation. The popover draws the card from the state this hands up. Memoized, so that the
+ * parent storing that state does not render it again.
+ */
+export const CodexResetAccount = memo(function CodexResetAccount({
+  runner,
+  workspaceId,
+  accountSlot,
+  accountLabel,
+  usagePercent,
+  visible,
+  fallbackFocus,
+  onState,
+}: CodexResetContext & {
+  accountSlot: string;
+  accountLabel?: string;
+  usagePercent?: number;
+  visible: boolean;
+  fallbackFocus: () => HTMLElement | null;
+  onState: (accountSlot: string, state: CodexResetCreditState | null) => void;
+}) {
+  const state = useCodexResetCredit({ runner, workspaceId, accountSlot }, visible, fallbackFocus);
+  useLayoutEffect(() => onState(accountSlot, state));
+  useLayoutEffect(() => () => onState(accountSlot, null), [accountSlot, onState]);
+  return <CodexResetConfirm state={state} usagePercent={usagePercent} accountLabel={accountLabel} />;
+});

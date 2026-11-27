@@ -1,225 +1,265 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, ServiceUnavailableException, BadRequestException } from '@nestjs/common';
 import { CreatorType, Prisma } from '@prisma/client';
 import {
-  HELP_ASK_ENGINES,
-  HELP_ASK_V1,
-  helpAskEngineLabel,
   ORBIT_RELEASE_REPOSITORY_DEFAULT,
-  PermissionMode,
   uuidToBase62,
   type HelpAskAdminResult,
-  type HelpAskChoices,
+  type HelpAskConversation,
   type HelpAskList,
-  type HelpAskMachine,
+  type HelpAskMessage,
   type HelpAskRow,
+  type HelpAskStatus,
   type HelpAskStuck,
-  type RunnerEngineHealth,
 } from '@orbit/shared';
-import type { AuthCredential } from '../common/current-user.decorator';
-import { runnerOs } from '../common/runner-platform';
 import { PrismaService } from '../prisma/prisma.service';
-import { RUNNER_BEATS, runnerIsOnline, runnerLastBeatAt } from '../runners/runner-presence';
-import type { CreateSessionDto } from '../sessions/dto';
 import type { CreateTaskDto } from '../tasks/dto';
 import { TasksService } from '../tasks/tasks.service';
-import { helpAskMarkerOf, helpAskOutcome, helpAskTitle, readHelpAskPage } from './help-ask-marker';
-import { SessionsService } from '../sessions/sessions.service';
+import {
+  askDeepSeek,
+  HELP_ASK_ANSWER_TIMEOUT_MS,
+  HelpAskAnswerFailed,
+  helpAskCanAnswer,
+  helpAskContextPrompt,
+  helpAskLibraryPrompt,
+} from './help-ask-answer';
+import { readMachines, readQuota, readSessions, readTasks } from './help-ask-reads';
+import { helpAskTitle, readHelpAskPage } from './help-ask-marker';
+import { HelpLibrary } from './help-library';
 
 /**
- * The help center's Ask (docs/mocks/help-center board 02 §1–§4; decisions on board 03): a question answered by an
- * ordinary session on one of the person's own machines. Like the wiki chat (docs/wiki-chat-design.md §0), it is not a
- * new runtime: it is made by SessionsService.create, and its title, price, transcript, turns, Trash and phone are a
- * session's. What only an Ask has:
+ * The help center's Ask (docs/mocks/help-center board 02 §1–§4): a conversation answered by the server on its own
+ * DeepSeek key, kept in `help_ask_conversation` (migration 1668). The person only sends questions; nothing runs on
+ * their machines and nothing is changed.
  *
- *   - `session.help_ask` (migration 0850), set in the row's own INSERT and never after: the page it was asked from;
- *   - no workspace: it runs on the machine picked here, in a scratch folder the runner fills with the article
- *     library (runner-go help_ask.go), and it is in no session list (SessionsService.list leaves it out);
- *   - read-only: the runner starts Claude Code with Read, Grep and Glob and the four help reads alone, and the runner
- *     doors refuse an Ask's tools everything else (help-ask-reads.ts);
- *   - no server-side model call (board 03, decision 1): it is titled by its first question, not named by a model.
+ * A question is written with the Ask `working`, and answered off the request: the server reads the account (the four
+ * reads of help-ask-reads.ts), asks DeepSeek with every article the person may read and the conversation so far, and
+ * appends the answer — or the reason there is none — setting the Ask `answered` or `failed`. The clients read the Ask
+ * again until it is not working. An answer the process did not live to write reads as failed once
+ * HELP_ASK_STALE_MS has passed, and the person can ask again.
  *
- * The machine and engine are remembered per person (`user.preferences.helpAsk`), and offered first next time.
+ * Asks made before 1668 are sessions (`session.help_ask`); they are not listed here.
  */
 
 /** How many questions Your questions lists. */
 export const HELP_ASK_LIST_LIMIT = 100;
+/** The longest question, and the most messages an Ask holds (twenty questions and their answers). */
+export const HELP_ASK_QUESTION_CHARS = 4_000;
+export const HELP_ASK_MAX_MESSAGES = 40;
+/** A working Ask not written to for this long lost its answer: the process that was waiting on it ended. */
+export const HELP_ASK_STALE_MS = HELP_ASK_ANSWER_TIMEOUT_MS + 30_000;
 
-const RUNNER_SELECT = {
+const STALE_ERROR = 'The answer did not arrive. Ask again.';
+
+const CONVERSATION_SELECT = {
   id: true,
-  name: true,
-  displayName: true,
+  title: true,
+  page: true,
+  messages: true,
   status: true,
-  ...RUNNER_BEATS,
-  engines: true,
-  capabilities: true,
-} satisfies Prisma.RunnerSelect;
+  createdAt: true,
+  updatedAt: true,
+  sentToAdminAt: true,
+  adminTaskId: true,
+  admin: { select: { name: true } },
+} satisfies Prisma.HelpAskConversationSelect;
 
-type ChoiceRunner = Prisma.RunnerGetPayload<{ select: typeof RUNNER_SELECT }>;
+type ConversationRow = Prisma.HelpAskConversationGetPayload<{ select: typeof CONVERSATION_SELECT }>;
 
-function machineOf(runner: ChoiceRunner, now: number): HelpAskMachine {
-  const engines = (Array.isArray(runner.engines) ? (runner.engines as unknown as RunnerEngineHealth[]) : [])
-    .filter((health) => health && health.installed && health.auth === 'yes')
-    .map((health) => ({
-      engine: health.engine,
-      label: helpAskEngineLabel(health.engine),
-      askable: (HELP_ASK_ENGINES as readonly string[]).includes(health.engine),
-      model: null,
-    }));
-  return {
-    id: runner.id,
-    name: runner.displayName || runner.name,
-    online: runnerIsOnline(runner, now),
-    supported: (runner.capabilities ?? []).includes(HELP_ASK_V1),
-    engines,
-  };
+function messagesOf(value: Prisma.JsonValue): HelpAskMessage[] {
+  return Array.isArray(value) ? (value as unknown as HelpAskMessage[]) : [];
 }
 
-function rememberedOf(preferences: Prisma.JsonValue | null | undefined): HelpAskChoices['remembered'] {
-  const helpAsk = preferences && typeof preferences === 'object' && !Array.isArray(preferences)
-    ? (preferences as { helpAsk?: unknown }).helpAsk
-    : undefined;
-  if (!helpAsk || typeof helpAsk !== 'object') return null;
-  const { runnerId, engine } = helpAsk as Record<string, unknown>;
-  return typeof runnerId === 'string' && typeof engine === 'string' ? { runnerId, engine } : null;
+/** Where an Ask stands, with a working one the process stopped waiting on read as failed. */
+function statusOf(row: Pick<ConversationRow, 'status' | 'updatedAt'>, now: number): HelpAskStatus {
+  if (row.status === 'working' && now - row.updatedAt.getTime() > HELP_ASK_STALE_MS) return 'failed';
+  return row.status as HelpAskStatus;
+}
+
+function readQuestion(body: unknown): string {
+  const content = body !== null && typeof body === 'object' && !Array.isArray(body) ? (body as { content?: unknown }).content : undefined;
+  if (typeof content !== 'string' || content.trim() === '') {
+    throw new BadRequestException('content is the question, and it has to say something');
+  }
+  if (content.length > HELP_ASK_QUESTION_CHARS) {
+    throw new BadRequestException(`content must be at most ${HELP_ASK_QUESTION_CHARS} characters`);
+  }
+  return content.trim();
+}
+
+function noKey(): ServiceUnavailableException {
+  return new ServiceUnavailableException({
+    code: 'HELP_ASK_NO_KEY',
+    message: 'Ask is not available: this Orbit server has no DeepSeek key. An admin sets DEEPSEEK_API_KEY on the server.',
+  });
 }
 
 @Injectable()
 export class HelpAsk {
+  private readonly logger = new Logger(HelpAsk.name);
+  /** Answers being waited on, for a spec or a shutdown to wait for. */
+  private readonly pending = new Set<Promise<void>>();
+
   constructor(
     private readonly prisma: PrismaService,
-    private readonly sessions: SessionsService,
     private readonly tasks: TasksService,
+    private readonly library: HelpLibrary,
   ) {}
 
-  /** GET /api/help/ask/choices: every machine of the person's, online ones first, and the pick remembered. */
-  async choices(ownerId: string): Promise<HelpAskChoices> {
-    const [runners, user] = await Promise.all([
-      this.prisma.runner.findMany({ where: { ownerId }, select: RUNNER_SELECT, orderBy: [{ position: 'asc' }, { name: 'asc' }] }),
-      this.prisma.user.findUnique({ where: { id: ownerId }, select: { preferences: true } }),
-    ]);
-    const now = Date.now();
-    const machines = runners.map((runner) => machineOf(runner, now));
-    machines.sort((a, b) => Number(b.online) - Number(a.online));
-    return { machines, remembered: rememberedOf(user?.preferences) };
+  /** POST /api/help/ask: `{ content, page? }`. Writes the Ask working, starts its answer, and returns its id. */
+  async create(ownerId: string, body: unknown): Promise<{ id: string }> {
+    const content = readQuestion(body);
+    const page = readHelpAskPage((body as { page?: unknown }).page);
+    if (!helpAskCanAnswer()) throw noKey();
+    const message: HelpAskMessage = { role: 'user', text: content, at: new Date().toISOString() };
+    const row = await this.prisma.helpAskConversation.create({
+      data: {
+        ownerId,
+        title: helpAskTitle(content),
+        page: page ? (page as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
+        messages: [message] as unknown as Prisma.InputJsonValue,
+        status: 'working',
+      },
+      select: { id: true },
+    });
+    this.answerLater(row.id, ownerId);
+    return { id: row.id };
   }
 
   /**
-   * POST /api/help/ask: `{ content, runnerId, engine, model?, page? }`. The machine has to be the person's, online,
-   * and on a runner that starts an Ask read-only (HELP_ASK_V1); the engine one an Ask runs on, signed in there.
-   * Each refusal says what to do, and nothing is made or remembered.
+   * POST /api/help/ask/:id/messages: a follow-up. Appended in one statement that also sets the Ask working, and only
+   * while it is not already waiting on an answer (or the wait went stale) and has room.
    */
-  async create(ownerId: string, body: unknown, credential?: AuthCredential): Promise<{ sessionId: string }> {
-    const input = (body !== null && typeof body === 'object' && !Array.isArray(body) ? body : {}) as Record<string, unknown>;
-    if (typeof input.content !== 'string' || input.content.trim() === '') {
-      throw new BadRequestException('content is the question, and it has to say something');
+  async followUp(ownerId: string, id: string, body: unknown): Promise<HelpAskConversation> {
+    const content = readQuestion(body);
+    if (!helpAskCanAnswer()) throw noKey();
+    const message: HelpAskMessage = { role: 'user', text: content, at: new Date().toISOString() };
+    const stale = new Date(Date.now() - HELP_ASK_STALE_MS);
+    const written = await this.prisma.$executeRaw`
+      UPDATE "help_ask_conversation"
+         SET "messages" = "messages" || jsonb_build_array(${JSON.stringify(message)}::jsonb),
+             "status" = 'working',
+             "updated_at" = CURRENT_TIMESTAMP
+       WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+         AND ("status" <> 'working' OR "updated_at" < ${stale})
+         AND jsonb_array_length("messages") < ${HELP_ASK_MAX_MESSAGES - 1}`;
+    if (written === 0) {
+      const row = await this.own(ownerId, id);
+      if (messagesOf(row.messages).length >= HELP_ASK_MAX_MESSAGES - 1) {
+        throw new ConflictException({ code: 'HELP_ASK_FULL', message: 'This Ask is as long as one can be. Start a new question.' });
+      }
+      throw new ConflictException({ code: 'HELP_ASK_WORKING', message: 'The last question is still being answered.' });
     }
-    if (typeof input.runnerId !== 'string' || input.runnerId === '') {
-      throw new BadRequestException('runnerId names the machine the question runs on');
-    }
-    if (typeof input.engine !== 'string' || !(HELP_ASK_ENGINES as readonly string[]).includes(input.engine)) {
-      throw new BadRequestException(`engine must be one an Ask runs on read-only: ${HELP_ASK_ENGINES.join(', ')}`);
-    }
-    if (input.model !== undefined && input.model !== null && typeof input.model !== 'string') {
-      throw new BadRequestException('model must be a string');
-    }
-    const page = readHelpAskPage(input.page);
-    const runner = await this.prisma.runner.findFirst({ where: { id: input.runnerId, ownerId }, select: RUNNER_SELECT });
-    if (!runner) throw new NotFoundException('no such machine');
-    const machine = machineOf(runner, Date.now());
-    if (!machine.online) {
-      throw new ConflictException({
-        code: 'HELP_ASK_MACHINE_OFFLINE',
-        message: `${machine.name} is offline, so it cannot answer now. Pick a machine that is online.`,
-      });
-    }
-    if (!machine.supported) {
-      throw new ConflictException({
-        code: 'HELP_ASK_RUNNER_UPGRADE',
-        message: `${machine.name} runs an Orbit runner too old to answer questions read-only. Update it, or pick another machine.`,
-      });
-    }
-    const content = input.content;
-    const dto: CreateSessionDto = {
-      prompt: content,
-      title: helpAskTitle(content),
-      assignedRunnerId: runner.id,
-      engine: input.engine,
-      // What the session reads as; the runner starts an Ask in its own read-only set whatever this says (help_ask.go).
-      permissionMode: PermissionMode.DONT_ASK,
-      ...(typeof input.model === 'string' && input.model !== '' ? { model: input.model } : {}),
-    } as CreateSessionDto;
-    const session = await this.sessions.create(ownerId, dto, {
-      credential,
-      noWorktree: true,
-      helpAsk: { page },
-    });
-    // Remembered once the Ask is made: one statement that merges the key over the preferences as they stand.
-    await this.prisma.$executeRaw`
-      UPDATE "user"
-         SET "preferences" = COALESCE("preferences", '{}'::jsonb)
-               || jsonb_build_object('helpAsk', jsonb_build_object('runnerId', ${runner.id}::text, 'engine', ${input.engine}::text))
-       WHERE "id" = ${ownerId}::uuid`;
-    return { sessionId: session.id };
+    this.answerLater(id, ownerId);
+    return this.get(ownerId, id);
   }
 
-  /** GET /api/help/ask/sessions (board 02 ④): the person's Asks not in Trash, newest first. */
+  /** GET /api/help/ask/:id: one of the caller's Asks. */
+  async get(ownerId: string, id: string): Promise<HelpAskConversation> {
+    const row = await this.own(ownerId, id);
+    const status = statusOf(row, Date.now());
+    const messages = messagesOf(row.messages);
+    // The wait went stale with the question last: say so where the answer would be.
+    if (status === 'failed' && row.status === 'working') {
+      messages.push({ role: 'assistant', text: '', at: row.updatedAt.toISOString(), error: STALE_ERROR });
+    }
+    return {
+      id: row.id,
+      title: row.title,
+      page: readPageOrNull(row.page),
+      status,
+      messages,
+      createdAt: row.createdAt.toISOString(),
+    };
+  }
+
+  /** GET /api/help/ask/conversations (board 02 ④): the person's Asks, newest first. */
   async list(ownerId: string): Promise<HelpAskList> {
-    const rows = await this.prisma.session.findMany({
-      where: { ownerId, helpAsk: { not: Prisma.DbNull }, deletedAt: null },
+    const rows = await this.prisma.helpAskConversation.findMany({
+      where: { ownerId },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: HELP_ASK_LIST_LIMIT,
-      select: {
-        id: true,
-        title: true,
-        status: true,
-        // With the status, what "released by a failure" reads (common/session-release.ts).
-        finishedAt: true,
-        endReason: true,
-        lastTurnOutcome: true,
-        engineTurnActive: true,
-        costUsd: true,
-        createdAt: true,
-        helpAsk: true,
-        engine: true,
-        model: true,
-        assignedRunner: { select: { name: true, displayName: true } },
-        helpAskAdminRequest: { select: { admin: { select: { name: true } } } },
-      },
+      select: CONVERSATION_SELECT,
     });
+    const now = Date.now();
     return {
-      questions: rows.map((row): HelpAskRow => ({
-        sessionId: row.id,
-        title: row.title,
-        origin: helpAskMarkerOf(row.helpAsk)?.page?.label ?? null,
-        // Sent to an admin, it is with them — unless a follow-up is being answered right now.
-        outcome: row.helpAskAdminRequest && helpAskOutcome(row) !== 'working' ? 'with-admin' : helpAskOutcome(row),
-        sentTo: row.helpAskAdminRequest?.admin.name ?? null,
-        costUsd: row.costUsd,
-        createdAt: row.createdAt.toISOString(),
-        runner: row.assignedRunner ? row.assignedRunner.displayName || row.assignedRunner.name : null,
-        engine: row.engine,
-        model: row.model,
-      })),
+      questions: rows.map((row): HelpAskRow => {
+        const status = statusOf(row, now);
+        return {
+          id: row.id,
+          title: row.title,
+          origin: readPageOrNull(row.page)?.label ?? null,
+          // Sent to an admin, it is with them — unless a follow-up is being answered right now.
+          outcome: row.sentToAdminAt && status !== 'working' ? 'with-admin' : status,
+          sentTo: row.sentToAdminAt ? row.admin?.name ?? null : null,
+          createdAt: row.createdAt.toISOString(),
+        };
+      }),
     };
+  }
+
+  /** Waits for every answer started so far. */
+  async settled(): Promise<void> {
+    while (this.pending.size > 0) await Promise.allSettled([...this.pending]);
+  }
+
+  private answerLater(id: string, ownerId: string): void {
+    const run = this.answer(id, ownerId).catch((error: unknown) => {
+      this.logger.error(`Ask ${id}: the answer could not be written: ${(error as Error).message}`);
+    });
+    this.pending.add(run);
+    void run.finally(() => this.pending.delete(run));
+  }
+
+  /** Answer the Ask's last question, and append the answer or why there is none. */
+  private async answer(id: string, ownerId: string): Promise<void> {
+    const [row, user] = await Promise.all([
+      this.prisma.helpAskConversation.findFirst({ where: { id, ownerId }, select: { page: true, messages: true } }),
+      this.prisma.user.findUnique({ where: { id: ownerId }, select: { role: true } }),
+    ]);
+    if (!row) return;
+    let reply: HelpAskMessage;
+    try {
+      const admin = user?.role === 'ADMIN';
+      const articles = this.library
+        .index(admin)
+        .articles.map((meta) => this.library.article(meta.slug, admin))
+        .filter((a): a is NonNullable<typeof a> => a !== null);
+      const [machines, sessions, tasks, quota] = await Promise.all([
+        readMachines(this.prisma, ownerId),
+        readSessions(this.prisma, ownerId),
+        readTasks(this.prisma, ownerId),
+        readQuota(this.prisma, ownerId),
+      ]);
+      const text = await askDeepSeek({
+        library: helpAskLibraryPrompt(articles),
+        context: helpAskContextPrompt({
+          account: { machines: machines.machines, sessions: sessions.sessions, tasks: tasks.tasks, quota: quota.machines },
+          page: readPageOrNull(row.page),
+          now: new Date(),
+        }),
+        messages: messagesOf(row.messages),
+      });
+      reply = { role: 'assistant', text, at: new Date().toISOString() };
+    } catch (error) {
+      if (!(error instanceof HelpAskAnswerFailed)) this.logger.error(`Ask ${id}: ${(error as Error).message}`);
+      const words = error instanceof HelpAskAnswerFailed ? error.message : 'Orbit could not answer this one. Ask again.';
+      reply = { role: 'assistant', text: '', at: new Date().toISOString(), error: words };
+    }
+    await this.prisma.$executeRaw`
+      UPDATE "help_ask_conversation"
+         SET "messages" = "messages" || jsonb_build_array(${JSON.stringify(reply)}::jsonb),
+             "status" = ${reply.error ? 'failed' : 'answered'},
+             "updated_at" = CURRENT_TIMESTAMP
+       WHERE "id" = ${id}::uuid AND "status" = 'working'`;
   }
 
   // ── Still stuck (board 02 ② right frame, side note 5) ─────────────────────────────────────────────────────────
 
-  /** One of the caller's Asks, not in Trash, or the 404 of an Ask that is not there. */
-  private async ownAsk(ownerId: string, sessionId: string) {
-    const session = await this.prisma.session.findFirst({
-      where: { id: sessionId, ownerId, helpAsk: { not: Prisma.DbNull }, deletedAt: null },
-      select: {
-        id: true,
-        title: true,
-        engine: true,
-        model: true,
-        assignedRunner: { select: { name: true, displayName: true, version: true, capabilities: true, ...RUNNER_BEATS } },
-        helpAskAdminRequest: { select: { createdAt: true, taskId: true, admin: { select: { name: true } } } },
-      },
-    });
-    if (!session) throw new NotFoundException('no such question');
-    return session;
+  /** One of the caller's Asks, or the 404 of an Ask that is not there. */
+  private async own(ownerId: string, id: string): Promise<ConversationRow> {
+    const row = await this.prisma.helpAskConversation.findFirst({ where: { id, ownerId }, select: CONVERSATION_SELECT });
+    if (!row) throw new NotFoundException('no such question');
+    return row;
   }
 
   /**
@@ -237,45 +277,29 @@ export class HelpAsk {
   }
 
   /** GET /api/help/ask/:id/stuck: who Ask your admin sends to, whether it was sent, and what a report carries. */
-  async stuck(ownerId: string, sessionId: string): Promise<HelpAskStuck> {
-    const [session, admin, workspaces] = await Promise.all([
-      this.ownAsk(ownerId, sessionId),
+  async stuck(ownerId: string, id: string): Promise<HelpAskStuck> {
+    const [row, admin, workspaces] = await Promise.all([
+      this.own(ownerId, id),
       this.adminFor(ownerId),
       this.prisma.workspace.findMany({ where: { ownerId }, select: { name: true, workDir: true, repoUrl: true } }),
     ]);
-    const runner = session.assignedRunner;
-    const sent = session.helpAskAdminRequest;
     return {
       admin: admin ? { name: admin.name } : null,
-      sentToAdmin: sent ? { adminName: sent.admin.name, at: sent.createdAt.toISOString() } : null,
-      report: {
-        repository: releaseRepository(),
-        machine: runner
-          ? {
-              name: runner.displayName || runner.name,
-              runnerVersion: runner.version,
-              os: runnerOs(runner.capabilities),
-              lastHeartbeatAt: runnerLastBeatAt(runner)?.toISOString() ?? null,
-            }
-          : null,
-        privateNames: privateNamesOf(workspaces),
-      },
+      sentToAdmin: row.sentToAdminAt ? { adminName: row.admin?.name ?? 'your admin', at: row.sentToAdminAt.toISOString() } : null,
+      report: { repository: releaseRepository(), privateNames: privateNamesOf(workspaces) },
     };
   }
 
   /**
-   * POST /api/help/ask/:id/admin `{ exchanges: [{ question, answer }] }`: Still stuck → Ask your admin. An ordinary
-   * task in the admin's own task list — theirs, in no workspace, held until they start it — carrying the question, the
-   * answer and a link to the Ask; made through TasksService.create, so it is announced to the admin as every new task
-   * is. Once per Ask: asked again, it answers with the task already sent. Refused to an administrator, and when the
-   * instance has no other.
+   * POST /api/help/ask/:id/admin: Still stuck → Ask your admin. An ordinary task in the admin's own task list — theirs,
+   * in no workspace, held until they start it — carrying the conversation and a link to the Ask; made through
+   * TasksService.create, so it is announced to the admin as every new task is. Once per Ask: asked again, it answers
+   * with the task already sent. Refused to an administrator, and when the instance has no other.
    */
-  async askAdmin(ownerId: string, sessionId: string, body: unknown): Promise<HelpAskAdminResult> {
-    const exchanges = readExchanges(body);
-    const session = await this.ownAsk(ownerId, sessionId);
-    const already = session.helpAskAdminRequest;
-    if (already) {
-      return { taskId: already.taskId ?? '', adminName: already.admin.name, at: already.createdAt.toISOString() };
+  async askAdmin(ownerId: string, id: string): Promise<HelpAskAdminResult> {
+    const row = await this.own(ownerId, id);
+    if (row.sentToAdminAt) {
+      return { taskId: row.adminTaskId ?? '', adminName: row.admin?.name ?? 'your admin', at: row.sentToAdminAt.toISOString() };
     }
     const admin = await this.adminFor(ownerId);
     if (!admin) {
@@ -285,71 +309,61 @@ export class HelpAsk {
       });
     }
     const asker = await this.prisma.user.findUniqueOrThrow({ where: { id: ownerId }, select: { name: true, email: true } });
-    const runner = session.assignedRunner;
     const dto = {
-      title: helpAskTitle(`Help: ${session.title}`),
+      title: helpAskTitle(`Help: ${row.title}`),
       description: adminTaskDescription({
         asker,
-        link: `${publicOrigin()}/help/questions/${uuidToBase62(session.id)}`,
-        machine: runner ? runner.displayName || runner.name : null,
-        engine: session.engine ? helpAskEngineLabel(session.engine) : null,
-        exchanges,
+        link: `${publicOrigin()}/help/questions/${uuidToBase62(row.id)}`,
+        exchanges: exchangesOf(messagesOf(row.messages)),
       }),
       completionCriterion: 'OWNER_CONFIRMED',
       acceptanceCriteria: `${asker.name} has an answer, or knows what to do next.`,
       autoRunWhenReady: false,
-      idempotencyKey: `help-ask-admin:${session.id}`,
+      idempotencyKey: `help-ask-admin:${row.id}`,
     } as CreateTaskDto;
     const task = (await this.tasks.create(admin.id, dto, { type: CreatorType.USER, id: ownerId })) as { id: string };
-    // Keyed by the Ask: a second press that raced this one finds the row and writes nothing.
-    await this.prisma.helpAskAdminRequest.createMany({
-      data: [{ sessionId: session.id, ownerId, adminId: admin.id, taskId: task.id }],
-      skipDuplicates: true,
+    // Once: a second press that raced this one finds the Ask already sent and writes nothing.
+    await this.prisma.helpAskConversation.updateMany({
+      where: { id: row.id, ownerId, sentToAdminAt: null },
+      data: { adminId: admin.id, adminTaskId: task.id, sentToAdminAt: new Date() },
     });
-    const row = await this.prisma.helpAskAdminRequest.findUniqueOrThrow({
-      where: { sessionId: session.id },
-      select: { taskId: true, createdAt: true, admin: { select: { name: true } } },
-    });
-    return { taskId: row.taskId ?? '', adminName: row.admin.name, at: row.createdAt.toISOString() };
+    const sent = await this.own(ownerId, id);
+    return { taskId: sent.adminTaskId ?? '', adminName: sent.admin?.name ?? admin.name, at: (sent.sentToAdminAt ?? new Date()).toISOString() };
+  }
+}
+
+function readPageOrNull(value: Prisma.JsonValue | null): ReturnType<typeof readHelpAskPage> {
+  try {
+    return readHelpAskPage(value);
+  } catch {
+    return null;
   }
 }
 
 /** How many exchanges, and how many characters of each, an admin's task carries. */
 const ADMIN_EXCHANGES = 20;
-const ADMIN_QUESTION_CHARS = 4_000;
 const ADMIN_ANSWER_CHARS = 8_000;
 
-function readExchanges(body: unknown): { question: string; answer: string }[] {
-  const list = body && typeof body === 'object' && !Array.isArray(body) ? (body as { exchanges?: unknown }).exchanges : undefined;
-  if (!Array.isArray(list) || list.length === 0 || list.length > ADMIN_EXCHANGES) {
-    throw new BadRequestException(`exchanges must be the conversation: 1 to ${ADMIN_EXCHANGES} { question, answer }`);
+/** The conversation as question-and-answer pairs, the newest ADMIN_EXCHANGES of them. */
+export function exchangesOf(messages: readonly HelpAskMessage[]): { question: string; answer: string }[] {
+  const out: { question: string; answer: string }[] = [];
+  for (const m of messages) {
+    if (m.role === 'user') out.push({ question: m.text, answer: '' });
+    else if (out.length > 0 && !m.error) out[out.length - 1].answer = m.text.slice(0, ADMIN_ANSWER_CHARS);
   }
-  return list.map((item, i) => {
-    const { question, answer } = (item && typeof item === 'object' ? item : {}) as Record<string, unknown>;
-    if (typeof question !== 'string' || question.trim() === '' || question.length > ADMIN_QUESTION_CHARS) {
-      throw new BadRequestException(`exchanges[${i}].question must say something, in at most ${ADMIN_QUESTION_CHARS} characters`);
-    }
-    if (typeof answer !== 'string' || answer.length > ADMIN_ANSWER_CHARS) {
-      throw new BadRequestException(`exchanges[${i}].answer must be text of at most ${ADMIN_ANSWER_CHARS} characters`);
-    }
-    return { question: question.trim(), answer: answer.trim() };
-  });
+  return out.slice(-ADMIN_EXCHANGES);
 }
 
 /** The admin's task, in their words: who is stuck, where the Ask is, and the conversation. */
 export function adminTaskDescription(input: {
   asker: { name: string; email: string };
   link: string;
-  machine: string | null;
-  engine: string | null;
   exchanges: { question: string; answer: string }[];
 }): string {
-  const ranOn = [input.machine, input.engine].filter(Boolean).join(' · ');
   const lines = [
     `${input.asker.name} (${input.asker.email}) asked Orbit's help, is still stuck, and sent you the conversation.`,
     '',
     `Ask: ${input.link} (it opens in ${input.asker.name}'s account)`,
-    ...(ranOn ? [`Answered on: ${ranOn}`] : []),
   ];
   input.exchanges.forEach((ex, i) => {
     const n = input.exchanges.length > 1 ? ` ${i + 1}` : '';

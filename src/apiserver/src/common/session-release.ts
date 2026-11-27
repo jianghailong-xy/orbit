@@ -1,5 +1,7 @@
-import { Prisma, RunStatus } from '@prisma/client';
-import { deriveSessionLifecycleState, SessionLifecycleState } from '@orbit/shared';
+import { Prisma } from '@prisma/client';
+import { deriveSessionLifecycleState, RunStatus, SessionLifecycleState } from '@orbit/shared';
+
+import { TURN_STATE_SELECT, turnStateOf, type TurnStateFacts } from '../sessions/session-turn-state';
 
 /**
  * "Released" and "held", the release fact of docs/session-three-state-design.md §4.2 (decision D1, plan
@@ -11,10 +13,10 @@ import { deriveSessionLifecycleState, SessionLifecycleState } from '@orbit/share
  * Both are spelled here twice. On the column: `isReleased` / `isHeld`, the Prisma filters `releasedFilter` /
  * `heldFilter`, which the TypeScript readers read (plan step 4.2), and the raw SQL fragments `sessionReleasedSql` /
  * `sessionHeldSql` (plan step 4.3). As status sets, the same members every hand-copied live/terminal set held, for
- * the readers phase 4 has not moved yet, and the Prisma filters whose status list is an index's access path (the only
- * index that reads `finished_at` is the execution claim's, over `task_id`, migration 1426).
- * session_release_fact_chk (migrations 1401, 1402) makes the two the same rows: a status is terminal exactly when
- * `finished_at` is set.
+ * the readers that have not moved onto the facts yet (docs/session-status-retirement-plan.md, tasks T10 to T12).
+ * The two are the same rows: a projected word is terminal exactly when `finished_at` is set (the database held the
+ * stored word to that until deploy D4 dropped it, migration 1711). The partial indexes on `finished_at IS NULL` (migrations 1628, 1633) are the held rows' access
+ * paths, so no reader states the held statuses beside the column for the planner any more.
  */
 
 /** Held: a runner holds the session, or a message waits for one to claim it. */
@@ -42,11 +44,6 @@ export function isHeldStatus(status: RunStatus | string): boolean {
   return (HELD_SESSION_STATUSES as readonly string[]).includes(status);
 }
 
-/** Prisma filter on `session.status`: held. */
-export function heldStatusFilter(): Prisma.EnumRunStatusFilter<'Session'> {
-  return { in: [...HELD_SESSION_STATUSES] };
-}
-
 /** The release column, as a row read with it carries it. */
 export interface SessionReleaseColumn {
   finishedAt: Date | string | null;
@@ -62,9 +59,12 @@ export function isHeld(session: SessionReleaseColumn): boolean {
   return session.finishedAt == null;
 }
 
-/** Whether a runner holds this session past its claim: held, and not waiting in the queue to be claimed. */
-export function isHeldPastClaim(session: SessionReleaseColumn & { status: RunStatus | string }): boolean {
-  return isHeld(session) && session.status !== RunStatus.PENDING;
+/**
+ * Whether a runner holds this session past its claim: held, and not waiting in the queue to be claimed (plan §2.1: L,
+ * its turn state is not QUEUED).
+ */
+export function isHeldPastClaim(session: TurnStateFacts): boolean {
+  return isHeld(session) && turnStateOf(session) !== 'QUEUED';
 }
 
 /** Prisma filter on a session: released, `finished_at IS NOT NULL`. */
@@ -90,20 +90,6 @@ export function sessionHeldSql(sessionAlias: string): Prisma.Sql {
   return Prisma.sql`${Prisma.raw(sessionAlias)}."finished_at" IS NULL`;
 }
 
-/** The held statuses as an SQL list, for the fragment below and nothing else. */
-const HELD_STATUS_LIST_SQL = Prisma.raw(`('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')`);
-
-/**
- * Raw SQL: `sessionHeldSql`, for a query whose access path is an index on `status`, alone (`session_status_idx`, the
- * dispatch pause's reads, plan step 4.5) or after another column (`session_assigned_runner_id_status_idx`): the release
- * column decides, and the held statuses are stated beside it, which session_release_fact_chk makes the same rows. The
- * status list decides nothing; it is there because the planner can read it as an index condition and cannot read
- * `finished_at` as one outside the claim index. Without it a runner's query reads every session the runner ever had
- * (measured in plan step 4.3: 44,000 index entries for 73 rows).
- */
-export function sessionHeldIndexedSql(sessionAlias: string): Prisma.Sql {
-  return Prisma.sql`(${sessionHeldSql(sessionAlias)} AND ${Prisma.raw(sessionAlias)}."status" IN ${HELD_STATUS_LIST_SQL})`;
-}
 
 /**
  * The two questions a reader asks of a release (docs/session-three-state-design.md §12.2 and §12.3, decision D9,
@@ -139,16 +125,16 @@ const WORK_FINISHED_END_REASON = 'task_done';
 const LANDING_KIND = 'LANDING';
 
 /**
- * What "released by a failure" reads of a session row, and the status word beside it. The question reads no status:
- * the status bridge that read FAILED beside the turn outcome, for the rows a deploy-1 server released during deploy 2's
- * hand-over, went with removal step R7 (design §12.6, deploy 3), after migration 1441 wrote the turn outcome of every
- * such row. `status` stays in the row (and in RELEASE_FAILURE_SELECT) for the readers that select these columns and
- * read the status word themselves: the held statuses they compare against, the word they publish.
+ * What "released by a failure" reads of a session row, and the turn state's columns beside it. The question reads no
+ * status: the status bridge that read FAILED beside the turn outcome, for the rows a deploy-1 server released during
+ * deploy 2's hand-over, went with removal step R7 (design §12.6, deploy 3), after migration 1441 wrote the turn outcome
+ * of every such row. The turn state's columns (TURN_STATE_SELECT, sessions/session-turn-state.ts) stay in the row, and
+ * in RELEASE_FAILURE_SELECT, for the readers that select these columns and ask more of the row: sessionHasEnded's
+ * abandoned turn, a held turn state, the word they publish.
  */
-export interface ReleaseFailureFacts extends SessionReleaseColumn {
+export interface ReleaseFailureFacts extends SessionReleaseColumn, TurnStateFacts {
   endReason: string | null;
   lastTurnOutcome: string | null;
-  status: RunStatus | string;
 }
 
 /** What "the work finished" reads of a session row. */
@@ -162,10 +148,10 @@ export type SessionReleaseFacts = ReleaseFailureFacts & ReleaseWorkFacts;
 
 /** The columns ReleaseFailureFacts reads, for a Prisma `select`. */
 export const RELEASE_FAILURE_SELECT = {
+  ...TURN_STATE_SELECT,
   finishedAt: true,
   endReason: true,
   lastTurnOutcome: true,
-  status: true,
 } as const;
 
 /** The columns ReleaseWorkFacts reads, for a Prisma `select`. */
@@ -244,18 +230,18 @@ export function reportsSuccessWithNoEnd(current: { cancelRequestedAt: Date | nul
 
 /** What a machine wake or a credential gate reads of a session to decide whether it has ended. */
 /**
- * Whether the session's run is over: released, or parked interrupted with an end recorded (INTERRUPTED is a held
- * status, the turn was abandoned; with an end reason, the session itself was ended). The SESSION_RUN_TERMINAL watch
- * leaf asks exactly this, and sessionHasEnded asks it after the filing facts. Under session_release_fact_chk it
- * answers, for every stored row, what "the derived run state is SUCCEEDED, FAILED or ENDED" answered.
+ * Whether the session's run is over: released, or held with its turn abandoned and an end recorded (ABANDONED, what
+ * INTERRUPTED said: the runner was stopped under the turn; with an end reason, the session itself was ended; plan
+ * §2.1: E). The SESSION_RUN_TERMINAL watch leaf asks exactly this, and sessionHasEnded asks it after the filing facts.
+ * It answers, for every row, what "the derived run state is SUCCEEDED, FAILED or
+ * ENDED" answered. A row read with TURN_STATE_SELECT; one not yet backfilled reads its stored word there.
  */
-export function runIsOver(session: SessionReleaseColumn & { status: RunStatus | string; endReason: string | null }): boolean {
+export function runIsOver(session: TurnStateFacts & { endReason: string | null }): boolean {
   if (isReleased(session)) return true;
-  return session.status === 'INTERRUPTED' && Boolean(session.endReason);
+  return turnStateOf(session) === 'ABANDONED' && Boolean(session.endReason);
 }
 
-export interface SessionEndedRow extends SessionReleaseColumn {
-  status: RunStatus | string;
+export interface SessionEndedRow extends TurnStateFacts {
   endReason: string | null;
   completedAt: Date | null;
   archivedAt: Date | null;

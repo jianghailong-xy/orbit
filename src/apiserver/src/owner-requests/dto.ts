@@ -16,6 +16,7 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
+import type { ApplyOwnerRequestChangeBody, OwnerRequestChangeFiling } from '@orbit/shared';
 import { IsPublicId } from '../common/public-id';
 import {
   MAX_OWNER_REQUEST_IF_UNANSWERED,
@@ -69,6 +70,11 @@ export class FileOwnerRequestDto {
   @ValidateNested({ each: true }) @Type(() => OwnerRequestStepDto)
   steps?: OwnerRequestStepDto[];
   @IsOptional() @ValidateNested() @Type(() => OwnerRequestSecretSpecDto) secretSpec?: OwnerRequestSecretSpecDto;
+  /**
+   * CHANGE: `{ runnerId, maxConcurrent }`. Kept whole rather than validated as a nested DTO, which the global whitelist
+   * would strip a setting v1 does not allow from in silence: `normalizeOwnerRequest` refuses that setting by name.
+   */
+  @IsOptional() @IsObject() change?: OwnerRequestChangeFiling;
   @IsOptional() @IsString() @MaxLength(MAX_OWNER_REQUEST_VERIFY_HINT) verifyHint?: string;
   @IsOptional() @IsISO8601() expiresAt?: string;
   @IsOptional() @IsString() @MinLength(1) @MaxLength(200) clientRequestId?: string;
@@ -81,6 +87,14 @@ export class CompleteOwnerRequestDto {
   @IsOptional() @IsString() @MaxLength(4_000) text?: string;
   /** Deliver the owner's words untranslated: the "Send as written" of an answer refused 422 TRANSLATION_FAILED. */
   @IsOptional() @IsBoolean() sendAsWritten?: boolean;
+}
+
+/**
+ * The owner's Apply on a CHANGE card (`POST /owner-requests/:id/apply`): the value written, the requested one or one the
+ * owner typed (design §8, decision 1). The same floor as `UpdateRunnerDto.maxConcurrent`, which PATCH /runners/:id holds.
+ */
+export class ApplyOwnerRequestChangeDto implements ApplyOwnerRequestChangeBody {
+  @IsInt() @Min(1) maxConcurrent!: number;
 }
 
 /** The owner declining a request: the reason is required, because the asking session acts on it. */
@@ -139,6 +153,15 @@ export class SecretGrantRemovedDto {
  * values are checked against the tier table and `UpdatePreferencesDto` by `validateSettingsChanges`, not here, so a
  * key that is not a setting is refused by name rather than stripped.
  */
+/**
+ * `POST /runner/projects/:id/reopen-requests` (`@orbit/shared` ProjectReopenFiling). Each is trimmed, non-empty and at
+ * most MAX_PROJECT_REOPEN_TEXT characters, which the service checks after trimming (owner-requests/project-reopen.ts).
+ */
+export class RequestProjectReopenDto {
+  @IsString() why!: string;
+  @IsString() plannedWork!: string;
+}
+
 export class ProposeSettingsDto {
   @IsObject() changes!: Record<string, unknown>;
   @IsString() @MinLength(1) @MaxLength(MAX_OWNER_REQUEST_WHY) why!: string;

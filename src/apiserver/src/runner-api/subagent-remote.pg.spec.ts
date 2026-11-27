@@ -35,7 +35,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { type PrismaClient, type Runner, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, type Runner, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import {
   CLAUDE_REGION_V1,
   RunEventType,
@@ -168,7 +169,7 @@ test('Cross-workspace SubAgents: choice of workspace, refusals, hand-over, relay
       data: {
         id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runner.id,
         title: 'ship the iOS build', prompt: 'ship the iOS build', provider: 'claude', engine: 'claude',
-        model: 'claude-opus-5-5', effort: 'high', status: RunStatus.AWAITING_INPUT, numTurns: 1,
+        model: 'claude-opus-5-5', effort: 'high', turnState: null, numTurns: 1,
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false, costUsd: 0,
       },
     });

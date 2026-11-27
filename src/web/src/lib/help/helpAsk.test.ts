@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { HelpAskChoices } from '@orbit/shared';
-import { askExchanges, defaultAskPick, parseAnswer, questionFor, suggestedQuestions, toolLine } from './helpAsk';
+import { askExchanges, parseAnswer, questionFor, suggestedQuestions } from './helpAsk';
 
 describe('parseAnswer', () => {
   it('reads a source list written without a heading when it closes the answer', () => {
@@ -41,47 +40,25 @@ describe('parseAnswer', () => {
   });
 });
 
-describe('toolLine', () => {
-  it('counts the articles read, not the index, and names the state checked', () => {
-    expect(toolLine([
-      { name: 'Read', about: 'help-ask/INDEX.md' },
-      { name: 'Read', about: 'get-started/connect-a-model.md' },
-      { name: 'help_machines', about: 'machines' },
-      { name: 'help_quota', about: 'quota' },
-    ])).toBe('Read 1 article · Checked machines, quota');
-    expect(toolLine([{ name: 'Grep', about: 'offline' }])).toBe('Searched the articles');
-  });
-});
-
 describe('askExchanges', () => {
-  it('splits the conversation at each question and keeps the last answer of each', () => {
+  it('pairs each question with its answer, or with why there is none', () => {
+    const at = '2026-11-26T00:00:00.000Z';
     const exchanges = askExchanges([
-      { seq: 4, type: 'assistant', payload: { text: 'Second answer' } },
-      { seq: 1, type: 'user', payload: { text: 'First?' } },
-      { seq: 2, type: 'assistant', payload: { text: 'Let me look.' } },
-      { seq: 2.5, type: 'tool_use', payload: { name: 'mcp__orbit__help_tasks', input: {} } },
-      { seq: 2.7, type: 'assistant', payload: { text: 'First answer' } },
-      { seq: 3, type: 'user', payload: { text: 'Second?' } },
+      { role: 'user', text: 'First?', at },
+      { role: 'assistant', text: 'First answer', at },
+      { role: 'user', text: 'Second?', at },
+      { role: 'assistant', text: '', at, error: 'DeepSeek answered 503. Ask again in a moment.' },
+      { role: 'user', text: 'Third?', at },
     ]);
-    expect(exchanges.map((e) => [e.question, e.answer, e.tools.map((t) => t.name)])).toEqual([
-      ['First?', 'First answer', ['help_tasks']],
-      ['Second?', 'Second answer', []],
+    expect(exchanges).toEqual([
+      { question: 'First?', index: 0, answer: 'First answer', error: null },
+      { question: 'Second?', index: 2, answer: '', error: 'DeepSeek answered 503. Ask again in a moment.' },
+      { question: 'Third?', index: 4, answer: '', error: null },
     ]);
   });
 });
 
-describe('the picker and the suggestions', () => {
-  const machine = (id: string, over: Partial<HelpAskChoices['machines'][number]> = {}) => ({
-    id, name: id, online: true, supported: true, engines: [{ engine: 'claude', label: 'Claude Code', askable: true, model: null }], ...over,
-  });
-
-  it('starts on the remembered pick while it can answer, else the first machine that can', () => {
-    const choices: HelpAskChoices = { machines: [machine('a'), machine('b')], remembered: { runnerId: 'b', engine: 'claude' } };
-    expect(defaultAskPick(choices)).toEqual({ runnerId: 'b', engine: 'claude' });
-    expect(defaultAskPick({ ...choices, machines: [machine('a'), machine('b', { online: false })] })).toEqual({ runnerId: 'a', engine: 'claude' });
-    expect(defaultAskPick({ machines: [machine('a', { supported: false })], remembered: null })).toBeNull();
-  });
-
+describe('the suggestions', () => {
   it('asks about an error on the page first, then the page, then what anyone asks', () => {
     expect(questionFor({ title: 'Add a second machine' })).toBe('How do I add a second machine?');
     expect(questionFor({ title: 'A machine shows Offline' })).toBeNull();

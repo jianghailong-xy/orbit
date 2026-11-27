@@ -80,6 +80,7 @@ import {
   type ManagedRunnerRuntime,
 } from './managed-runner-runtime';
 import '../test-support/daemon-routes-over-http';
+import { wordOf } from '../test-support/session-word';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -395,7 +396,7 @@ test('a new account queues its first session while its managed runner waits for 
       assert.equal(claimed.provider, 'claude');
       assert.equal(claimed.agent.env.ANTHROPIC_BASE_URL, 'https://api.deepseek.com/anthropic');
     }
-    assert.equal((await db.session.findUniqueOrThrow({ where: { id: toUuid(first.json.id) } })).status, 'RUNNING');
+    assert.equal(wordOf((await db.session.findUniqueOrThrow({ where: { id: toUuid(first.json.id) } }))), 'RUNNING');
     // Once reported, both routes use create-workdir/v2's home rule, including while asleep.
     await db.runner.update({ where: { id: ready.runnerId }, data: {
       reposRoot: '/home/orbit/orbit-repos', capabilities: ['create-workdir/v1', 'create-workdir/v2'], capabilitiesReportedAt: new Date(),
@@ -431,6 +432,8 @@ test('a new account queues its first session while its managed runner waits for 
 
   await t.test('Docker: the first session is queued while the runner waits for capacity, and runs once it is READY', async () => {
     const profile = testDockerRunnerProfile({ clusterKey: `first-docker-${randomUUID().slice(0, 8)}`, lifecycle: LIFECYCLE, capacity: { maxActiveUsers: 1 } });
+    // This case claims two queued turns before either finishes. Leave room for both under the memory ceiling.
+    profile.runner.resources.memory = '3Gi';
     const channel = new FakeDockerChannel(profile.docker.instanceId, profile.runner.image);
     const server = await boot('docker', profile, { docker: () => channel });
     try {

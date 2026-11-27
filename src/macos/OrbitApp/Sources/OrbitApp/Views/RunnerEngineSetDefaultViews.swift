@@ -25,6 +25,7 @@ enum RunnerEngineSetDefaultViews {
     /// The confirmation's title, body and Make default / Cancel — what `.orbitConfirmation` asks.
     struct Confirm: View {
         let question: RunnerPageFormat.RemovalQuestion
+        var confirm = RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT_CONFIRM
 
         var body: some View {
             VStack(spacing: 14) {
@@ -40,7 +41,7 @@ enum RunnerEngineSetDefaultViews {
                         .frame(maxWidth: .infinity)
                         .foregroundStyle(Color.accentColor)
                     Divider().frame(height: 36)
-                    Text(RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT_CONFIRM)
+                    Text(confirm)
                         .fontWeight(.semibold)
                         .frame(maxWidth: .infinity)
                         .foregroundStyle(Color.accentColor)

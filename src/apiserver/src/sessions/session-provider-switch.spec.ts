@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { isReleasedStatus } from '../common/session-release';
 
 process.env.PROVIDER_SECRET_KEY = 'test-master-key';
 
 import { encryptSecret } from '../providers/provider-crypto';
 import { SessionsService } from './sessions.service';
+import { writtenWord } from '../test-support/session-word';
 
 const id = '11111111-1111-4111-8111-111111111111';
 const ownerId = '22222222-2222-4222-8222-222222222222';
@@ -337,7 +338,7 @@ test('a PENDING session takes the new provider without a reload — its claim re
       provider: 'anthropic',
       providerBuiltin: false,
       model: 'claude-opus-5',
-      status: RunStatus.PENDING,
+      turnState: 'QUEUED', status: RunStatus.PENDING,
     },
     [providerRow({ slug: 'anthropic' }), providerRow({ slug: 'anthropic-2' })],
   );
@@ -434,7 +435,7 @@ test('an ended session can be revived on another provider of the same runtime', 
   await service.resume(ownerId, id, { ...revive, provider: 'anthropic-2' });
 
   const data = updates[0].data;
-  assert.equal(data.status, RunStatus.PENDING);
+  assert.equal(writtenWord(data), RunStatus.PENDING);
   assert.equal(data.provider, 'anthropic-2');
   assert.equal(data.providerBuiltin, false);
   // Both share the runtime's model space, so the revived session keeps what it was running.

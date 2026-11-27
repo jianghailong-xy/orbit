@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException } from '@nestjs/common';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { isReleasedStatus } from '../common/session-release';
 import { AgentProvider, PermissionMode, SESSION_SOURCE_PIN_V1 } from '@orbit/shared';
 import { encryptSecret } from '../providers/provider-crypto';
@@ -229,7 +229,7 @@ test('Rollback messages: a queued Cursor CLI session waits with the install noti
   for (const [snapshot, message] of [[NEW_WITHOUT_CLI, CURSOR_NOT_INSTALLED_ERROR], [OLD, CURSOR_RUNNER_UPGRADE_ERROR]] as const) {
     const marks: Array<{ ids: string[]; error: string }> = [];
     const waiting = {
-      id: 'cursor-queued', provider: 'cursor', providerBuiltin: true, engine: 'cursor', ownerId, status: 'PENDING',
+      id: 'cursor-queued', provider: 'cursor', providerBuiltin: true, engine: 'cursor', ownerId, turnState: 'QUEUED', status: 'PENDING',
       model: 'default[]', usesRuntimeDefaultModel: true, runtimeSessionId: 'runtime-cursor', workspace: null,
       assignedRunner: null, cancelRequestedAt: null, error: null, permissionMode: 'acceptEdits', inboxLeaseOwner: null,
       sourceState: 'UNBOUND', allowedTools: [], disallowedTools: [],

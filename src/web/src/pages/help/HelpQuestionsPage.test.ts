@@ -6,24 +6,20 @@ import { questionLine } from './HelpQuestionsPage';
 describe('questionLine', () => {
   const NOW = new Date('2026-11-16T12:00:00');
   const row = (over: Partial<HelpAskRow>): HelpAskRow => ({
-    sessionId: 's1',
+    id: 'a1',
     title: 'Can two people confirm the same task?',
     origin: 'a task',
     outcome: 'answered',
-    costUsd: 0.01,
     createdAt: '2026-11-12T09:00:00',
-    runner: 'mia-macbook',
-    engine: 'claude',
-    model: null,
     sentTo: null,
     ...over,
   });
 
   it('an answered Ask says answered', () => {
-    expect(questionLine(row({}), NOW)).toBe('Nov 12 · from a task · answered · $0.01');
+    expect(questionLine(row({}), NOW)).toBe('Nov 12 · from a task · answered');
   });
 
   it('an Ask sent to an admin says who it went to', () => {
-    expect(questionLine(row({ outcome: 'with-admin', sentTo: 'Alex Li' }), NOW)).toBe('Nov 12 · from a task · sent to Alex Li · $0.01');
+    expect(questionLine(row({ outcome: 'with-admin', sentTo: 'Alex Li' }), NOW)).toBe('Nov 12 · from a task · sent to Alex Li');
   });
 });

@@ -1,4 +1,5 @@
 import { seedPromotionRequest } from '../test-support/promotion-request';
+import { asLegacyMainSyncItem } from '../test-support/legacy-main-sync';
 import { receiveOpenItem } from '../test-support/open-item-delivery';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -9,11 +10,11 @@ import {
   CreatorType,
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import {
@@ -63,6 +64,8 @@ import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
 import '../test-support/dequeue-under-lease';
 import { landingFixWorkSession, settleDeliveredIdentityAfterFinish } from './project-integration-job';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 /**
  * Exception items (docs/project-integration-line-contract.md §4): a task FAILED from any door opens
@@ -260,7 +263,7 @@ async function world(stack: Stack, label: string, coordinator: CoordinatorShape,
         title: `coordinator: ${label}`,
         prompt: `coordinator: ${label}`,
         provider: 'claude',
-        status: coordinator === 'RUNNING' ? RunStatus.RUNNING : RunStatus.AWAITING_INPUT,
+        turnState: turnStateOfWord(coordinator === 'RUNNING' ? RunStatus.RUNNING : RunStatus.AWAITING_INPUT),
         dispatchOrigin: SessionDispatchOrigin.USER,
         titleManagedByProject: true,
         numTurns: 1,
@@ -371,7 +374,7 @@ async function attempt(
       title,
       prompt: title,
       provider: 'claude',
-      status: options.session ?? RunStatus.RUNNING,
+      turnState: turnStateOfWord(options.session ?? RunStatus.RUNNING),
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
@@ -701,7 +704,7 @@ async function queuedLanding(
     const finished = await tx.session.update({
       where: { id: a.sessionId },
       data: {
-        status: RunStatus.SUCCEEDED, finishedAt: new Date(),
+        turnState: null, finishedAt: new Date(),
         worktreeBranch: `orbit/${label}`,
         worktreeDirty: false,
       },
@@ -854,7 +857,7 @@ async function independentSession(
       title: `${label}-review`,
       prompt: 'judge the evidence',
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: false,
     },
@@ -911,7 +914,7 @@ test('a FAILED written by the runner\'s failed turn opens one item owned by the 
         [{ itemId: item.id, sessionId: w.coordinatorSessionId, purpose: 'ITEM', returnedAt: null }],
       );
       assert.equal(
-        (await stack.db.session.findUniqueOrThrow({ where: { id: w.coordinatorSessionId! } })).status,
+        wordOf((await stack.db.session.findUniqueOrThrow({ where: { id: w.coordinatorSessionId! } }))),
         RunStatus.PENDING,
         'a parked coordinator is woken for it',
       );
@@ -1239,11 +1242,11 @@ test('the owner’s own run-again press picks a FAILED task up, and answers its 
       const started = press as { sessionId: string };
       const run = await stack.db.session.findUniqueOrThrow({
         where: { id: started.sessionId },
-        select: { taskId: true, startsTaskWork: true, status: true },
+        select: { taskId: true, startsTaskWork: true, ...WORD_SELECT },
       });
       assert.equal(run.taskId, a.taskId);
       assert.equal(run.startsTaskWork, true, 'the press starts run work, not a conversation');
-      assert.ok(['PENDING', 'RUNNING'].includes(run.status), `the run is live: ${run.status}`);
+      assert.ok(['PENDING', 'RUNNING'].includes(wordOf(run)), `the run is live: ${wordOf(run)}`);
       assert.notEqual(started.sessionId, a.sessionId, 'a fresh run, not the attempt that failed');
 
       // And the failure item is answered by that fact (§4.2's fourth fact, `resolveByFact`): a run
@@ -1475,7 +1478,7 @@ test('a claim with nowhere to run it opens an item the coordinator is told about
       const finished = await tx.session.update({
         where: { id: a.sessionId },
         data: {
-          status: RunStatus.SUCCEEDED, finishedAt: new Date(),
+          turnState: null, finishedAt: new Date(),
           worktreeBranch: 'orbit/unworkable',
           worktreeDirty: false,
         },
@@ -1515,7 +1518,7 @@ test('an integration failure with no coordinator to hand it to is the owner\'s',
     const { task, job } = await claimedLanding(stack, w, 'conflict-unowned');
     await reportFailure(stack, w, job, {
       state: 'CONFLICT',
-      phase: 'MAIN_SYNC',
+      phase: 'REBASE',
       sourceSha: 'a'.repeat(40),
       targetShaBefore: 'c'.repeat(40),
       conflicts: ['docs/project-integration-line-contract.md'],
@@ -1547,8 +1550,8 @@ async function claimed(stack: Stack, sessionId: string): Promise<void> {
   await stack.db.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT set_config('orbit.runner_supports_opencode', '1', true), set_config('orbit.runner_supports_antigravity', '1', true), set_config('orbit.runner_supports_dsh', '1', true), set_config('orbit.runner_supports_cursor', '1', true), set_config('orbit.claim_reads_session_engine', '1', true)`;
     await tx.session.updateMany({
-      where: { id: sessionId, status: RunStatus.PENDING },
-      data: { status: RunStatus.RUNNING },
+      where: { id: sessionId, turnState: 'QUEUED' },
+      data: { turnState: 'IN_FLIGHT' },
     });
   });
 }
@@ -1613,9 +1616,9 @@ async function rework(stack: Stack, w: World, a: Attempt, label: string): Promis
 async function drainRequestedEnd(stack: Stack, w: World, sessionId: string, leaseOwner?: string): Promise<boolean> {
   const row = await stack.db.session.findUniqueOrThrow({
     where: { id: sessionId },
-    select: { cancelRequestedAt: true, status: true },
+    select: { cancelRequestedAt: true, ...WORD_SELECT },
   });
-  if (!row.cancelRequestedAt || row.status !== RunStatus.AWAITING_INPUT) return false;
+  if (!row.cancelRequestedAt || wordOf(row) !== RunStatus.AWAITING_INPUT) return false;
   await stack.api.finalize({ id: w.runnerId }, sessionId, {
     status: SharedRunStatus.SUCCEEDED,
     subtype: 'success',
@@ -1704,6 +1707,10 @@ test('a MAIN_SYNC conflict holds the line\'s other landings, but not the next la
         targetShaBefore: 'c'.repeat(40),
         conflicts: ['src/apiserver/src/tasks/task-judgment-data-preserved.spec.ts'],
       });
+      // Revision 45 opens the task-less line-sync item for this (line-sync-hold.pg.spec.ts); this case pins the
+      // LEGACY task-level item, still in force for items opened before it (docs/design/project-line-upstream-sync.md
+      // §4.6 item 7).
+      await asLegacyMainSyncItem(stack.db, { projectId: w.projectId, taskId: task.taskId });
       const item = await onlyItemFor(stack.db, w, task.taskId, 'the absorb conflicted');
       assert.equal(item.state, 'OPEN');
 
@@ -1797,6 +1804,8 @@ test('a task filed to fix the MAIN_SYNC conflict lands past it, and nothing else
         targetShaBefore: 'c'.repeat(40),
         conflicts: ['src/apiserver/src/runner-api/integration-job-relay.ts'],
       });
+      // Narrowed to the LEGACY task-level item, as above (revision 45).
+      await asLegacyMainSyncItem(stack.db, { projectId: w.projectId, taskId: conflicted.taskId });
       const item = await onlyItemFor(stack.db, w, conflicted.taskId, 'the absorb conflicted');
       assert.equal(item.state, 'OPEN');
       assert.equal(item.assignee, 'COORDINATOR');
@@ -1841,6 +1850,7 @@ test('a task filed to fix the MAIN_SYNC conflict lands past it, and nothing else
         targetShaBefore: 'c'.repeat(40),
         conflicts: ['src/apiserver/src/runner-api/integration-job-relay.ts'],
       });
+      await asLegacyMainSyncItem(stack.db, { projectId: w.projectId, taskId: fix.taskId });
       const fixItem = await onlyItemFor(stack.db, w, fix.taskId, 'the fix met the same conflict');
       assert.equal(fixItem.kind, 'INTEGRATION_CONFLICT');
       assert.equal(fixItem.state, 'OPEN');
@@ -1867,14 +1877,18 @@ test('a task filed to fix the MAIN_SYNC conflict lands past it, and nothing else
       const after = await itemNow(stack, w, item.id);
       assert.equal(after.state, 'OPEN');
       assert.ok(after.assignedAt.getTime() > before.assignedAt.getTime(), 'the item was handed back');
-      assert.deepEqual(await heartbeat('lease-still-held'), [],
-        'the line stays held until the coordinator answers the item');
-
-      // The coordinator closes it, and the line moves on its own: both held landings are claimed in
-      // turn, the oldest first.
-      await stack.openItems.resolveOpenItem(w.ownerId, w.projectId, item.id,
-        { note: 'the fix carried the conflicted task\'s work' },
-        { kind: 'SESSION', sessionId: w.coordinatorSessionId! });
+      // Revision 45's bridge for legacy items (docs/design/project-line-upstream-sync.md §4.6 item 7): the fix's
+      // landing gave the line main, so the conflicted task's own landing is queued again in that transaction — no
+      // reopen — and, exempt from its own item, it is the only landing the next beat hands out.
+      const bridged = await heartbeat('lease-bridged');
+      assert.deepEqual(
+        await Promise.all(bridged.map((row) => taskOf(row.jobId))),
+        [conflicted.taskId],
+        `the conflicted task's landing is queued again by the bridge, and only it is claimed — ${await jobsOf(stack.db, w.projectId)}`,
+      );
+      // Its landing answers the item (J-T5), and the line moves on its own: the oldest held landing is next.
+      assert.equal((await reportLanding(stack, w, bridged[0]!)).accepted, true);
+      assert.equal((await itemNow(stack, w, item.id)).resolution, 'LANDED');
       const next = await heartbeat('lease-after');
       assert.deepEqual(
         await Promise.all(next.map((row) => taskOf(row.jobId))),
@@ -2006,7 +2020,7 @@ test('an integration item survives a task write that is not one of its terminal 
       const { task, job } = await claimedLanding(stack, w, 'kept-open');
       await reportFailure(stack, w, job, {
         state: 'CONFLICT',
-        phase: 'MAIN_SYNC',
+        phase: 'REBASE',
         sourceSha: 'a'.repeat(40),
         targetShaBefore: 'c'.repeat(40),
         conflicts: ['README.md'],
@@ -2196,8 +2210,8 @@ async function retryCoordinator(stack: Stack, w: World): Promise<void> {
   await stack.db.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
     await tx.session.updateMany({
-      where: { id: coordinator, status: RunStatus.PENDING },
-      data: { status: RunStatus.RUNNING, inboxLeaseOwner: null },
+      where: { id: coordinator, turnState: 'QUEUED' },
+      data: { turnState: 'IN_FLIGHT', inboxLeaseOwner: null },
     });
   });
   const delivered = await dequeue(stack, coordinator, w.runnerId);
@@ -2221,7 +2235,7 @@ test('an item whose coordinator has ended, or that has none, goes to the owner',
     assert.equal(ended.escalateAt, null, 'an item already with the owner has nobody to escalate to');
     assert.deepEqual(await itemTurns(stack.db, completed.coordinatorSessionId!), [], 'a completed conversation is not reopened');
     const session = await stack.db.session.findUniqueOrThrow({ where: { id: completed.coordinatorSessionId! } });
-    assert.equal(session.status, RunStatus.AWAITING_INPUT, 'and not woken');
+    assert.equal(wordOf(session), RunStatus.AWAITING_INPUT, 'and not woken');
 
     const orphan = await world(stack, 'no-coordinator', 'NONE');
     const b = await attempt(stack, orphan, 'no-coordinator', { taskStatus: TaskStatus.IN_PROGRESS });
@@ -2278,7 +2292,7 @@ test('items opened while the coordinator is down stay the coordinator\'s, and re
       assert.deepEqual(await itemTurns(stack.db, coordinator), [], 'a FAILED conversation is not written to');
       assert.deepEqual(await deliveries(stack.db, w.projectId), [], 'and nothing says it was');
       const down = await stack.db.session.findUniqueOrThrow({ where: { id: coordinator } });
-      assert.equal(down.status, RunStatus.FAILED, 'nor revived to be told');
+      assert.equal(wordOf(down), RunStatus.FAILED, 'nor revived to be told');
 
       await retryCoordinator(stack, w);
 
@@ -2399,7 +2413,7 @@ test('delivering an item spends nothing of the coordinator\'s fuse budget', { sk
     // every PENDING -> RUNNING write (`common/session-scheduling.ts`).
     await stack.db.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
-      await tx.session.update({ where: { id: coordinator }, data: { status: RunStatus.RUNNING } });
+      await tx.session.update({ where: { id: coordinator }, data: { turnState: 'IN_FLIGHT' } });
     });
     const handed = await dequeue(stack, coordinator, w.runnerId);
     assert.equal(handed?.turnId, queued.id);
@@ -2892,7 +2906,7 @@ test('hands it back with the window restarted, and queues it on the coordinator 
       assert.equal(sent[0]!.clientTurnId, fresh[0]!.clientTurnId);
       assert.equal(sent[0]!.returnedAt, null);
       assert.equal(
-        (await stack.db.session.findUniqueOrThrow({ where: { id: w.coordinatorSessionId! } })).status,
+        wordOf((await stack.db.session.findUniqueOrThrow({ where: { id: w.coordinatorSessionId! } }))),
         RunStatus.PENDING,
         'a parked coordinator is woken for it',
       );

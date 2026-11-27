@@ -121,7 +121,9 @@ final class WikiChatWiringTests: XCTestCase {
                             "func openByDefault(spaceID: String, settingsOnTop: Bool) {",
                             "WikiChatLogic.opensByDefault(sheet: asSheet, settingsOnTop: settingsOnTop, hiddenByOwner: hiddenByOwner(spaceID))",
                             "if openedByDefault && !fits { presented = false }",
-                            "chat = WikiChatLogic.toOpen(read.chats)"], "✕ and the button")
+                            "chat = toOpen(read.chats)"], "✕ and the button")
+        // The button and the default opening pick the chat by origin: Drive leaves a completed chat be.
+        XCTAssertTrue(model.contains("origin == .drive ? DriveChatLogic.toOpen(chats) : WikiChatLogic.toOpen(chats)"))
     }
 
     /// The column's title opens the space's chats over the whole panel (Q3 A): a search, Open and Completed (Q4 A),
@@ -129,7 +131,7 @@ final class WikiChatWiringTests: XCTestCase {
     func testTheTitleOpensTheHistoryOverThePanel() throws {
         let views = code(try source("Views/WikiChatViews.swift"))
         let panel = try slice(views, from: "struct WikiChatPanel: View {", to: "struct WikiChatHistoryList: View {")
-        assertOrder(panel, ["if chat.history != nil {", "WikiChatHistoryList(chat: chat, space: space)",
+        assertOrder(panel, ["if chat.history != nil {", "WikiChatHistoryList(chat: chat)",
                             "if compact { historyMenu } else { historyTitle }", "chat.toggleHistory()"], "the title and the list")
         let list = try slice(views, from: "struct WikiChatHistoryList: View {", to: "private struct WikiChatNewBody: View {")
         assertOrder(list, ["WikiChatLogic.historyGroups(read.rows)", "TextField(WikiChatCopy.search, text: $words)",
@@ -193,7 +195,7 @@ final class WikiChatWiringTests: XCTestCase {
         }
         // The panel's chat streams while it shows: the console focus falls back to it.
         let model = code(try source("AppModel.swift"))
-        XCTAssertTrue(model.contains("let id = focusedConsoleSessionID ?? (selectedSection == .wiki ? wikiChat?.focusedSessionID : nil)"))
+        XCTAssertTrue(model.contains("let id = focusedConsoleSessionID ?? (selectedSection == .wiki ? wikiChat?.focusedSessionID\n            : selectedSection == .drive ? driveChat?.focusedSessionID : nil)"))
         XCTAssertTrue(model.contains("wikiChat = WikiChatModel(baseURL: url, tokenStore: tokenStore)"))
         let arm = try slice(model, from: "case .wiki:\n", to: "case .folders:")
         XCTAssertTrue(arm.contains("wikiChat?.nudge()"), "a card made, replaced or pressed is read again")
@@ -210,10 +212,10 @@ final class WikiChatWiringTests: XCTestCase {
         let views = code(try source("Views/WikiChatViews.swift"))
         let composer = try slice(views, from: "struct WikiChatComposer: View {", to: "private struct WikiChatNewComposer: View {")
         assertOrder(composer, ["ComposerBand {", "ComposerView(console: console,",
-                               "emptyPlaceholder: creates == nil ? chat.placeholder : WikiChatCopy.placeholder,",
+                               "emptyPlaceholder: creates == nil ? chat.placeholder : chat.copy.placeholder,",
                                "? nil : AnyView(WikiChatChips(chat: chat)))",
                                ".onAppear { console.wikiChat = composing }", ".onDisappear { console.wikiChat = nil }",
-                               "WikiChatComposing(context: { chat.context }, accepted: { chat.sent() })",
+                               "WikiChatComposing(context: { chat.context }, driveContext: { chat.driveContext },\n                                          accepted: { chat.sent() })",
                                "await chat.create(spaceID: creates.spaceID, workspaceID: creates.workspaceID, first)"],
                     "the panel's composer")
         for own in ["TextField(", "stop.fill", "wiki-chat-send"] {
@@ -239,8 +241,9 @@ final class WikiChatWiringTests: XCTestCase {
         // Every send from the composer — Send, Return, held to queue, Stop and send — carries the page and the selection.
         let console = code(try source("ConsoleModel.swift"))
         let send = try slice(console, from: "func send(authoritative: RunStatus? = nil,", to: "} catch {")
-        assertOrder(send, ["wikiContext: WikiChatContext? = nil, accepted onAccepted: (@MainActor () -> Void)? = nil) async {",
+        assertOrder(send, ["wikiContext: WikiChatContext? = nil, driveContext: DriveChatContext? = nil,\n              accepted onAccepted: (@MainActor () -> Void)? = nil) async {",
                            "let wikiContext = wikiContext ?? (fromComposer ? wikiChat?.context() : nil)",
+                           "let driveContext = driveContext ?? (fromComposer ? wikiChat?.driveContext() : nil)",
                            "let onAccepted = onAccepted ?? (fromComposer ? wikiChat?.accepted : nil)",
                            "if isDraft { await createDraftSession(); return }",
                            "queueForNextTurn: queueForNextTurn, wikiContext: wikiContext,",
@@ -260,11 +263,11 @@ final class WikiChatWiringTests: XCTestCase {
                              from: "func create(spaceID: String, workspaceID: String, _ first: WikiChatLogic.FirstMessage) async -> Bool {",
                              to: "func press(_ card: WikiChatDraftView")
         assertOrder(chat, ["WikiChatLogic.createRequest(", "first, workspaceId: workspaceID, context: context,",
-                           "try await api.createWikiChat(spaceID: spaceID, request)", "sent()", "chat = made.sessionId"],
+                           "made = try await api.createWikiChat(spaceID: spaceID, request).sessionId", "sent()", "chat = made"],
                     "the create")
         let post = try slice(console, from: "private func postTurn(", to: "private func retryingTransientFailures<T>(")
         XCTAssertTrue(post.contains("stopSessionId: confirmedStopSessionID,\n"))
-        XCTAssertTrue(post.contains("wikiContext: wikiContext,\n                                          skipTranslation: skipTranslation ? true : nil,\n                                          optimizedTranslation: optimizedTranslation)\n        let turnRequest = ComposerLogic.makeTurn("))
+        XCTAssertTrue(post.contains("wikiContext: wikiContext,\n                                          driveContext: driveContext,\n                                          skipTranslation: skipTranslation ? true : nil,\n                                          optimizedTranslation: optimizedTranslation)\n        let turnRequest = ComposerLogic.makeTurn("))
         XCTAssertTrue(post.contains("queueForNextTurn: queueForNextTurn, wikiContext: wikiContext,"))
     }
 
@@ -274,7 +277,7 @@ final class WikiChatWiringTests: XCTestCase {
         let views = code(try source("Views/WikiChatViews.swift"))
         let new = try slice(views, from: "private struct WikiChatNewBody: View {", to: "private func choose(")
         assertOrder(new, ["case .chosen(let workspace, _, let choices)?:\n                runsInLine(workspace, choices: choices)",
-                          "WikiChatNewComposer(chat: chat, spaceID: space.id, workspaceID: workspace.id)",
+                          "WikiChatNewComposer(chat: chat, spaceID: scope, workspaceID: workspace.id)",
                           ".id(workspace.id)", "Text(WikiChatCopy.runsIn)", "WikiChatLogic.workspaceName(workspace)"],
                     "a new chat's Runs in")
         let line = try slice(new, from: "private func runsInLine(", to: "private func choose(")

@@ -32,7 +32,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import {
   AgentProvider,
   RunEventType,
@@ -55,6 +56,8 @@ import { QueueService as RealQueueService } from '../queue/queue.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { KIMI_ACCOUNT_MOVE_V1, RunnerApiController } from './runner-api.controller';
 import '../test-support/dequeue-under-lease';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordSql } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -206,7 +209,7 @@ async function fixture(
       providerBuiltin: true,
       kimiAccount: 'default',
       kimiAccountPinned: pinned,
-      status,
+      turnState: turnStateOfWord(status),
       engineTurnActive: status === RunStatus.RUNNING,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startedAt: new Date(),
@@ -270,7 +273,7 @@ test('a Kimi session that has said something moves to another Kimi account only 
    *  timestamp without time zone holding UTC, which `pg` would read as local time: read as epoch. */
   async function row(sessionId: string) {
     const r = await sql.query(
-      `SELECT status, kimi_account, kimi_account_pinned, pool_switch_notice, error,
+      `SELECT ${wordSql()} AS status, kimi_account, kimi_account_pinned, pool_switch_notice, error,
               (EXTRACT(EPOCH FROM retry_at) * 1000)::float8 AS retry_ms
          FROM "session" WHERE id = $1::uuid`,
       [sessionId],
@@ -362,13 +365,13 @@ test('a Kimi session that has said something moves to another Kimi account only 
     // The re-send revives the session (auto-retry, resume — stood in for by the state they leave), and
     // its claim hands the runner Work's home, which the runner carries the conversation into.
     await sql.query(
-      `UPDATE "session" SET status = 'PENDING', cancel_requested_at = NULL, finished_at = NULL, retry_at = NULL
+      `UPDATE "session" SET "turn_state" = 'QUEUED', cancel_requested_at = NULL, finished_at = NULL, retry_at = NULL
         WHERE id = $1::uuid`,
       [f.sessionId],
     );
     assert.equal((await claimedEnv(f.runnerId)).KIMI_CODE_HOME, WORK_HOME);
     // The engine that claim starts announces itself, and the line rides that, once.
-    await sql.query(`UPDATE "session" SET status = 'RUNNING' WHERE id = $1::uuid`, [f.sessionId]);
+    await sql.query(`UPDATE "session" SET "turn_state" = 'IN_FLIGHT' WHERE id = $1::uuid`, [f.sessionId]);
     await api.events({ id: f.runnerId }, f.sessionId, {
       events: [{
         seq: 1,

@@ -1,15 +1,15 @@
 /**
- * Moving old attachments out of Postgres in two steps (attachment-migration.ts; docs/orbit-files-design.md §2.1), held
+ * Moving old attachments out of Postgres in two steps (attachment-migration.ts; docs/drive-design.md §2.1), held
  * against the production apiserver — `build/main.js`, the whole AppModule, which runs the copy after a start — and the
  * real command that clears, as separate processes, over a real PostgreSQL that `scripts/run-pg-spec.sh` migrates from
  * empty, once with each store:
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/files/attachment-migration.pg.spec.ts
  *
- *   local  the files directory, a directory of this run's (ORBIT_FILES_DIR);
+ *   local  the files directory, a directory of this run's (ORBIT_DRIVE_DIR);
  *   s3     a real S3-compatible server (test-support/s3-test-server.ts) with a bucket of the run's.
  *
- * What is held, with each store, on a batch of rows written as an apiserver before Orbit Files wrote them:
+ * What is held, with each store, on a batch of rows written as an apiserver before Drive wrote them:
  *   (1) what every read door answers before anything moves is the baseline: GET /attachments/:id,
  *       GET /runner/sessions/:id/attachments/:attId, GET /shared/:token/attachments/:id on a session link and a task link;
  *   (2) a start does not wait for the copy: with the copy stalled on a row, the server answers, and it answers every door
@@ -17,7 +17,7 @@
  *   (3) killed partway (SIGKILL, with the bytes of one row stored and the row not yet naming them), the next start carries
  *       on from the rows and redoes none of them, with reads and uploads going on while it does, and logs its counts;
  *   (4) the copy alone leaves `data` as it was and writes `sha256`, one file_blob row per content, the store holding
- *       the same bytes, so a client of the schema before Orbit Files (a generated Prisma client) still reads every row;
+ *       the same bytes, so a client of the schema before Drive (a generated Prisma client) still reads every row;
  *   (5) a start after the copy writes nothing;
  *   (6) the clear, killed partway and run again under reads and uploads, reads each row's bytes back from the store first,
  *       and leaves and reports a row whose bytes the store lacks, a row whose bytes under that name are others, a row whose
@@ -140,7 +140,7 @@ async function readAll(stream: Readable | null): Promise<Buffer | null> {
   return Buffer.concat(chunks);
 }
 
-// ── The client of the last schema before Orbit Files ───────────────────────────────────────────
+// ── The client of the last schema before Drive ───────────────────────────────────────────
 /**
  * `model Attachment` as it stood before migration 0462 (schema.prisma at 1ab75589f^), less its relations: `data` is
  * required, and `sha256` and the columns beside it do not exist.
@@ -178,7 +178,7 @@ type PreOrbitFilesClient = {
 
 /** A client generated from that schema, under build/ so that it finds @prisma/client: the older apiserver's reads, for real. */
 function preOrbitFilesClient(url: string): PreOrbitFilesClient {
-  const dir = path.join(__dirname, 'pre-orbit-files-client');
+  const dir = path.join(__dirname, 'pre-file-store-client');
   mkdirSync(dir, { recursive: true });
   const schema = path.join(dir, 'schema.prisma');
   writeFileSync(schema, PRE_ORBIT_FILES_SCHEMA(dir));
@@ -289,7 +289,7 @@ function storeCases(leg: Leg) {
 
     // The owner, a runner, a session on it, a task and a link to each.
     const ownerId = randomUUID();
-    const email = `migration-${leg.storage}-${RUN}@orbit-files.invalid`;
+    const email = `migration-${leg.storage}-${RUN}@orbit-documents.invalid`;
     await db.user.create({ data: { id: ownerId, email, name: `migration ${leg.storage}`, passwordHash: 'x' } });
     const bearer = await jwt.signAsync({ sub: ownerId, email });
     const runnerId = randomUUID();
@@ -303,7 +303,7 @@ function storeCases(leg: Leg) {
     await db.session.create({
       data: {
         id: sessionId, title: 'migration', prompt: 'migration', ownerId, creatorId: ownerId, workspaceId,
-        assignedRunnerId: runnerId, status: 'AWAITING_INPUT', startedAt: new Date(), runtimeSessionId: `runtime-${sessionId}`,
+        assignedRunnerId: runnerId, turnState: null, startedAt: new Date(), runtimeSessionId: `runtime-${sessionId}`,
       },
     });
     const taskId = randomUUID();
@@ -546,7 +546,7 @@ function storeCases(leg: Leg) {
       );
     });
 
-    await step(`${leg.storage}: the copy alone leaves data as it was, so a client from before Orbit Files reads every row`, async () => {
+    await step(`${leg.storage}: the copy alone leaves data as it was, so a client from before Documents reads every row`, async () => {
       const seen = await sql.query(
         `SELECT id::text, sha256, encode(pg_catalog.sha256(data), 'hex') AS in_data, octet_length(data) AS length FROM attachment WHERE id = ANY($1::uuid[]) ORDER BY id`,
         [everyId],
@@ -1011,7 +1011,7 @@ test('moving old attachments out of Postgres, on the local files directory and o
     storage: 'local',
     dir: localDir,
     config: { dir: localDir, storage: 'local' },
-    env: { ORBIT_FILES_BACKEND: 'local', ORBIT_FILES_DIR: localDir },
+    env: { ORBIT_DRIVE_BACKEND: 'local', ORBIT_DRIVE_DIR: localDir },
     put: async (sha, bytes) => {
       mkdirSync(path.dirname(local.pathOf(sha)), { recursive: true });
       writeFileSync(local.pathOf(sha), bytes);
@@ -1026,13 +1026,13 @@ test('moving old attachments out of Postgres, on the local files directory and o
     dir: s3Dir,
     config: { dir: s3Dir, storage: 's3', s3 },
     env: {
-      ORBIT_FILES_BACKEND: 's3',
-      ORBIT_FILES_DIR: s3Dir,
-      ORBIT_FILES_S3_ENDPOINT: s3.endpoint,
-      ORBIT_FILES_S3_BUCKET: s3.bucket,
-      ORBIT_FILES_S3_ACCESS_KEY_ID: s3.accessKeyId,
-      ORBIT_FILES_S3_SECRET_ACCESS_KEY: s3.secretAccessKey,
-      ORBIT_FILES_S3_REGION: s3.region,
+      ORBIT_DRIVE_BACKEND: 's3',
+      ORBIT_DRIVE_DIR: s3Dir,
+      ORBIT_DRIVE_S3_ENDPOINT: s3.endpoint,
+      ORBIT_DRIVE_S3_BUCKET: s3.bucket,
+      ORBIT_DRIVE_S3_ACCESS_KEY_ID: s3.accessKeyId,
+      ORBIT_DRIVE_S3_SECRET_ACCESS_KEY: s3.secretAccessKey,
+      ORBIT_DRIVE_S3_REGION: s3.region,
     },
     put: (sha, bytes) => s3Object(s3, 'PUT', bucket.keyOf(sha), bytes),
     drop: (sha) => s3Object(s3, 'DELETE', bucket.keyOf(sha)),

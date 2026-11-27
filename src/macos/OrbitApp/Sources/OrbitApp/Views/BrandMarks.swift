@@ -99,7 +99,7 @@ enum AgentBrand {
         case "kimi", "moonshot":           return .kimi
         case "glm", "zai", "z.ai":         return .glm
         case "minimax":                    return .minimax
-        case "qwen", "dashscope":          return .qwen
+        case "qwen", "qwen-coding-plan", "dashscope": return .qwen
         case "antigravity":                return .antigravity
         // Cursor CLI, the engine, and a Cursor key (`cursor-api`) wear Cursor's cube (the owner's D3).
         case "cursor", "cursor-api":       return .cursor

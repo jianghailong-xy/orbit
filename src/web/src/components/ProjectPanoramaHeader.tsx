@@ -9,6 +9,7 @@ import {
   type ProjectIntegrationJob,
   type ProjectIntegrationView,
   type ProjectManualReady,
+  type LandingPullRequestView,
 } from '@orbit/shared';
 import { api } from '../api';
 import { streamPoll } from '../lib/listBudget';
@@ -22,6 +23,7 @@ import { Button } from './ui/Button';
 import { Spinner } from './ui/Spinner';
 import './ui/Typography.css';
 import { useProjectIntegration } from '../lib/pollOwner';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * Where a project's work stands, and — when none of it is moving — why (the header card of the
@@ -558,7 +560,8 @@ function unreadable(now: number, observation: { updatedAt?: number; failed?: boo
  *  project's main branch by name, which a sync names. */
 /** The job facts §7.2 V6 reads, as both `inFlight` and every `inFlightJobs` entry carry them. */
 interface LandingJobFacts {
-  state: 'RUNNING' | 'QUEUED';
+  /** `PULL_REQUEST`: no runner holds it, so no liveness is drawn (docs/design/protected-branch-landing.md §4.2). */
+  state: 'RUNNING' | 'QUEUED' | 'PULL_REQUEST';
   phase?: IntegrationJobPhase | null;
   startedAt: string;
   heartbeatAt?: string | null;
@@ -684,7 +687,9 @@ function liveLine(
     state: unavailable ? 'Update unavailable'
       : silent ? LANDING_NO_REPORT
         : running && localLockWait(job) !== null ? LANDING_LIVENESS_WORDS.WAITING
-          : running ? (job.phase ? jobPhases(main)[job.phase] ?? 'running' : 'running') : 'queued',
+          : running ? (job.phase ? jobPhases(main)[job.phase] ?? 'running' : 'running')
+            // Held on its pull request, not queued: GitHub is what it waits for (design §4.2).
+            : job.state === 'PULL_REQUEST' ? 'waiting for GitHub' : 'queued',
     // An instant this clock cannot read is no elapsed time rather than `NaN` on the page: the row
     // stays up and counts from zero, which is the one thing it can still say truthfully.
     clock: liveness?.clock ?? landingClock(Number.isFinite(startedAt) ? elapsedAt - startedAt : 0),
@@ -871,6 +876,8 @@ export interface LandingCard {
    *  "Nothing to do" (board v4 04 draws no body under that head). Read off `inFlight`, so a server
    *  that does not list its jobs says it too. */
   mergeJob: boolean;
+  /** The pull request the landing waits on or ended in (design §8); absent from a server that predates it. */
+  pullRequest?: LandingPullRequestView | null;
 }
 
 /** The card's own three: the branch the work lands on, the sentence that takes the reader off the
@@ -944,6 +951,7 @@ export function landingCard(
       : lead?.skipCheck === 'STOPPING' ? LANDING_WORDS.SKIP_CHECK_STOPPING
         : lead?.skipCheck === 'SKIPPED' ? LANDING_WORDS.SKIP_CHECK_SKIPPED : null,
     mergeJob: !several && MERGE_JOB_KINDS.has(view.inFlight?.kind ?? ''),
+    ...(!several && view.inFlight?.pullRequest ? { pullRequest: view.inFlight.pullRequest } : {}),
   };
 }
 
@@ -1211,16 +1219,16 @@ export function BucketMeter({
         <span style={{ flex: 1, background: 'var(--fill-muted)', borderRadius: 4 }} />
       ) : (
         drawn.map((segment, index) => (
-          <span
-            key={segment.key}
-            title={`${segment.label} ${segment.value}`}
-            style={{
-              flex: segment.value,
-              minWidth: 3,
-              background: segment.color,
-              borderRadius: segmentRadius(index, drawn.length),
-            }}
-          />
+          <Tooltip key={segment.key} content={`${segment.label} ${segment.value}`} delay={TEXT_TOOLTIP_DELAY_MS}>
+            <span
+              style={{
+                flex: segment.value,
+                minWidth: 3,
+                background: segment.color,
+                borderRadius: segmentRadius(index, drawn.length),
+              }}
+            />
+          </Tooltip>
         ))
       )}
     </div>

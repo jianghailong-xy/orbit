@@ -53,7 +53,7 @@ runner over the existing link, and a viewer in the client.
 
 ## 3. Inside the runner
 
-- **Image.** Add `chromium`, `xvfb`, `x11vnc` and fonts (`fonts-noto-cjk`, `fonts-noto-color-emoji`) from the same
+- **Image.** Add `chromium`, `xvfb`, `x11vnc` and fonts (`fonts-noto-cjk`, `fonts-noto-color-emoji`, and `fonts-noto-core` for the other scripts: Indic, Thai, Arabic, Hebrew…) from the same
   dated Debian snapshot, and `@playwright/mcp` pinned like the other npm tools. Each gets a version check in the
   `tool-versions.json` step. About +350 MB. No websockify: the server side speaks WebSocket, the container only raw
   RFB on a local socket.

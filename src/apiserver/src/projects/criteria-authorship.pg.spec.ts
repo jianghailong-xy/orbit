@@ -61,7 +61,8 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { PrismaClient } from '@prisma/client';
 import { Client } from 'pg';
 
@@ -175,7 +176,7 @@ test('every version of a project’s criteria records the conversation that wrot
         title,
         prompt: 'act on this project',
         provider: 'claude',
-        status: RunStatus.RUNNING,
+        turnState: 'IN_FLIGHT',
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: false,
       },

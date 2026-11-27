@@ -12,6 +12,7 @@ import { MachineSettingsPage } from './MachineSettingsPage';
 import { SettingsWorkspacePage } from './WorkspaceSettingsPage';
 import { ToastViewport } from '../ToastViewport';
 import { clearToasts } from '../../lib/toastStore';
+import { hoverTooltip } from '../../test/tooltipHover';
 
 /**
  * A machine's Settings page as board-3 lays it out (docs/mocks/settings-redesign): one column — the
@@ -339,7 +340,7 @@ describe('a runner’s page, laid out as web.png', () => {
     const region = { verdict: 'allowed' as const, country: 'JP', regionCode: null, name: 'Japan', viaProxy: false, checkedAt };
     await mount(machine('real wikova', { region }));
     expect(text($('.machine-metaline'))).toBe('📍 Japan · vmi3129740 · v0.1.197 · Last Check-in just now');
-    expect($('[data-testid="machine-location"]').title).toBe('Checked 3m ago · Claude’s connection: Japan (no proxy)');
+    expect(await hoverTooltip($('[data-testid="machine-location"]'))).toBe('Checked 3m ago · Claude’s connection: Japan (no proxy)');
   });
 
   it('says the country is the proxy’s when the check went through one', async () => {

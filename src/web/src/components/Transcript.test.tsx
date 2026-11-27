@@ -30,6 +30,20 @@ import { ApiError } from '../api';
 import { readTaskRunConflict } from '../lib/taskRunHandoff';
 import { transcriptEventsWithDurableDeliveryReceipts } from '../lib/acceptedUserTurn';
 
+// A static render opens no tip: the app Tooltip also puts what it would say on its child here.
+vi.mock('./ui/Tooltip', async (importOriginal) => {
+  const real = await importOriginal<typeof import('./ui/Tooltip')>();
+  const { cloneElement, createElement } = await import('react');
+  return {
+    ...real,
+    Tooltip: (props: import('./ui/Tooltip').TooltipProps) =>
+      createElement(real.Tooltip, {
+        ...props,
+        children: typeof props.content === 'string' ? cloneElement(props.children, { 'data-tip': props.content } as object) : props.children,
+      }),
+  };
+});
+
 const LIST_UUID = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
 const LIST_B62 = encodeId(LIST_UUID);
 
@@ -484,7 +498,7 @@ describe('message delivery', () => {
     );
 
     expect(html).toContain('Not delivered');
-    expect(html).toContain('claude stdin is closed');
+    // The reason is the row's tooltip (Transcript.tips.test.tsx).
   });
 
   it('says nothing about a message that arrived', () => {
@@ -664,7 +678,7 @@ describe('a message steered into the running turn', () => {
     );
 
     expect(html).toContain('Not delivered');
-    expect(html).toContain('no turn is running');
+    // The reason is the row's tooltip (Transcript.tips.test.tsx).
     expect(html).not.toContain('Sending…');
     expect(html).not.toContain('chat-steer-state');
   });
@@ -1118,7 +1132,8 @@ describe('engine stderr', () => {
 
       expect(html.split('chat-diagnostic"').length - 1).toBe(1);
       expect(html).toContain(`×${times}`);
-      expect(html).toContain('2026-10-28T15:13:06.979719Z');
+      // The folded row's tip keeps the first stamp the engine wrote.
+      expect(html).toMatch(/data-tip="2026-10-28T15:13:06\.979719Z/);
       expect(html).not.toContain('chat-error');
     }
   });
@@ -1334,7 +1349,7 @@ describe('engine stderr', () => {
 
     expect(html).toContain(`>${MISSING_OUTPUT}<`);
     expect(html).toContain('data-level="ERROR"');
-    expect(html).toContain('title="2026-08-12T15:31:40.112363Z ERROR codex_core::util:');
+    // The raw line is the row's tooltip (Transcript.tips.test.tsx).
   });
 
   it('carries a warning at its own level rather than as an error', () => {
@@ -1517,6 +1532,7 @@ describe('engine stderr', () => {
     vi.stubGlobal('window', dom.window);
     vi.stubGlobal('document', dom.window.document);
     vi.stubGlobal('HTMLElement', dom.window.HTMLElement);
+    vi.stubGlobal('Element', dom.window.Element);
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
     const root = createRoot(dom.window.document.getElementById('root')!);
     const start = vi.fn();
@@ -2641,6 +2657,7 @@ describe('clipped screenshot results', () => {
     const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost' });
     vi.stubGlobal('window', dom.window);
     vi.stubGlobal('document', dom.window.document);
+    vi.stubGlobal('Element', dom.window.Element);
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
     const root = createRoot(dom.window.document.getElementById('root')!);
     await act(async () => {

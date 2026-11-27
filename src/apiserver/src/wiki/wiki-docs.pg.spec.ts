@@ -249,8 +249,8 @@ async function session(h: Harness, ownerId: string, workspaceId: string, runnerI
   const id = randomUUID();
   await h.sql.query(
     `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","workspace_id","assigned_runner_id",
-                            "task_id","status","dispatch_origin","updated_at")
-     VALUES ($1,$2,'p',$3,$3,$4,$5,$6,'RUNNING'::run_status,'USER',now())`,
+                            "task_id","turn_state","dispatch_origin","updated_at")
+     VALUES ($1,$2,'p',$3,$3,$4,$5,$6,'IN_FLIGHT','USER',now())`,
     [id, title, ownerId, workspaceId, runnerId, taskId],
   );
   return id;

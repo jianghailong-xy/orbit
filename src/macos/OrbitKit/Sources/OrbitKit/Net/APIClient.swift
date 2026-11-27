@@ -1085,10 +1085,21 @@ public final class APIClient: @unchecked Sendable {
         try await postEmpty("owner-requests/\(id)/create-wiki")
     }
 
+    /// A CHANGE card's Apply: writes the runner's Max Concurrent and settles the card DONE.
+    public func applyOwnerRequestChange(_ id: String, _ body: OwnerRequestApplyBody) async throws -> OwnerRequest {
+        try await post("owner-requests/\(id)/apply", body: body)
+    }
+
     /// A SETTINGS_CHANGE card's Save changes (design §5.2): writes the proposed values and settles the card DONE. A value
     /// that moved since is refused 409 SETTINGS_STALE and nothing is written.
     public func applyOwnerRequestSettings(_ id: String) async throws -> OwnerRequest {
         try await postEmpty("owner-requests/\(id)/apply-settings")
+    }
+
+    /// A PROJECT_REOPEN card's Reopen (docs/project-reopen-request-design.md §4.2): reopens the project as the project
+    /// page's press does and settles every pending reopen request of it DONE. Answers with the card.
+    public func reopenProjectFromOwnerRequest(_ id: String) async throws -> OwnerRequest {
+        try await postEmpty("owner-requests/\(id)/reopen-project")
     }
 
     /// Undo of a settings change (design §5.3): the owner's own preferences PATCH with each key's `from`.
@@ -1858,6 +1869,40 @@ public final class APIClient: @unchecked Sendable {
     public func createWikiChat(spaceID: String, _ req: WikiChatCreateRequest) async throws -> WikiChatCreateAnswer {
         try await post("wiki/spaces/\(spaceID)/chats", body: req)
     }
+    // MARK: Drive chat (src/shared/src/driveChat.ts; apiserver drive/drive-chat.controller.ts, drive-chat-changes.controller.ts)
+
+    /// `GET /drive/chats`: the owner's Drive chats, a page at a time (`q`, `offset`), the button's counts over all of them
+    /// and the workspace a new one runs in.
+    public func driveChats(q: String = "", offset: Int = 0) async throws -> DriveChatList {
+        var query: [URLQueryItem] = []
+        let words = q.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !words.isEmpty { query.append(URLQueryItem(name: "q", value: words)) }
+        if offset > 0 { query.append(URLQueryItem(name: "offset", value: String(offset))) }
+        return try await get("drive/chats", query: query)
+    }
+    /// `POST /drive/chats`: a chat made with the owner's first words, its first turn filed under the client's UUID.
+    public func createDriveChat(_ req: DriveChatCreateRequest) async throws -> DriveChatCreateAnswer {
+        try await post("drive/chats", body: req)
+    }
+    /// `GET /drive/chats/:id/groups`: what each of the chat's turns changed, oldest first.
+    public func driveChatGroups(sessionID: String) async throws -> [DriveChatChangeGroup] {
+        let read: DriveChatGroups = try await get("drive/chats/\(sessionID)/groups")
+        return read.groups
+    }
+    /// `POST /drive/chats/:id/groups/:groupId/undo` or `/apply`.
+    public func pressDriveChatGroup(sessionID: String, groupID: String, apply: Bool) async throws -> DriveChatChangeGroup {
+        try await postEmpty("drive/chats/\(sessionID)/groups/\(groupID)/\(apply ? "apply" : "undo")")
+    }
+    /// `GET /drive/chats/:id/questions`: the overwrites the chat asked the owner about.
+    public func driveChatQuestions(sessionID: String) async throws -> [DriveChatQuestion] {
+        let read: DriveChatQuestions = try await get("drive/chats/\(sessionID)/questions")
+        return read.questions
+    }
+    /// `POST /drive/chats/:id/questions/:questionId { choice }`: Keep both or Replace.
+    public func answerDriveChatQuestion(sessionID: String, questionID: String,
+                                        _ choice: DriveChatQuestion.Choice) async throws -> DriveChatQuestion {
+        try await post("drive/chats/\(sessionID)/questions/\(questionID)", body: DriveChatAnswerRequest(choice: choice))
+    }
     /// `GET /wiki/chats/:id/drafts`: every card of a chat (its session id), oldest first.
     public func wikiChatDrafts(sessionID: String) async throws -> WikiChatDrafts {
         try await get("wiki/chats/\(sessionID)/drafts")
@@ -2244,6 +2289,16 @@ public final class APIClient: @unchecked Sendable {
         try await delete("runners/\(id)/accounts/\(engine.rawValue)/\(account)")
     }
 
+    /// Sign the machine's own Default login out (docs/default-sign-out-design.md): the runner deletes the
+    /// credential and nothing else. Answered `pending`, and the runner's word comes back in the list's
+    /// `accountRemove`; a runner refuses while sessions run on Default unless `force` — the person
+    /// confirmed after that refusal named them.
+    public func signOutRunnerDefault(_ id: String, engine: LoginEngine,
+                                     force: Bool = false) async throws -> RunnerAccountRemoveState {
+        try await post("runners/\(id)/accounts/\(engine.rawValue)/default/sign-out",
+                       body: SignOutDefaultRequest(force: force))
+    }
+
     /// Make an added Claude Code account the Default: the runner swaps its login with ~/.claude after
     /// any turn in progress on either account ends (docs/claude-default-swap-contract.md).
     public func setDefaultRunnerAccount(_ id: String, engine: LoginEngine,
@@ -2270,6 +2325,22 @@ public final class APIClient: @unchecked Sendable {
     public func fixRunnerAttention(_ id: String, kind: RunnerAttentionFixKind,
                                    body: RunnerAttentionFixRequest) async throws -> RunnerAttentionFixResult {
         try await post("runners/\(id)/attention/\(kind.rawValue)/fix", body: body)
+    }
+
+    /// Blocked accounts (`GET /account-health`): cool-downs and suspect accounts are not in it.
+    public func accountHealth() async throws -> [AccountHealthBlock] {
+        let answer: AccountHealthAnswer = try await get("account-health")
+        return answer.blocks ?? []
+    }
+
+    /// Check again: the owner says the account is fixed. A 404 means it was already cleared, which is
+    /// the state wanted, so it is not a failure.
+    public func checkAccountAgain(_ id: String) async throws {
+        do {
+            try await postRaw("account-health/\(id)/check", body: Optional<Empty>.none)
+        } catch APIError.http(let status, _) where status == 404 {
+            return
+        }
     }
 
     public func pauseRunnerAccount(_ id: String, engine: LoginEngine, account: String,
@@ -2530,6 +2601,11 @@ public final class APIClient: @unchecked Sendable {
         try await post("schedules/\(id)/undo", body: ScheduleUndoBody(revision: revision))
     }
 
+    /// Rename (§8.4): the title alone, applied at once. It answers as Undo does.
+    public func renameSchedule(_ id: String, title: String) async throws -> ScheduleUpdateAnswer {
+        try await post("schedules/\(id)/rename", body: ScheduleRenameBody(title: title))
+    }
+
     public func deleteSchedule(_ id: String) async throws -> ScheduleControlAnswer {
         try await delete("schedules/\(id)")
     }
@@ -2632,6 +2708,187 @@ public final class APIClient: @unchecked Sendable {
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return false }
         return object["code"] as? String == taskRunRequestInProgress
+    }
+
+    // MARK: Drive (docs/drive-technical-design.md §4.1, apiserver drive/drive.controller.ts)
+
+    /// Every page of a folder (the root when `parentID` is nil): a folder is read whole, a thousand names a page.
+    public func driveFolder(_ parentID: String?) async throws -> DriveListing {
+        var cursor: String?
+        var listing: DriveListing?
+        repeat {
+            var query = [URLQueryItem(name: "limit", value: "1000")]
+            if let parentID { query.append(URLQueryItem(name: "parentId", value: parentID)) }
+            if let cursor { query.append(URLQueryItem(name: "cursor", value: cursor)) }
+            let page: DriveListing = try await get("drive/entries", query: query)
+            listing = listing.map { DriveListing(folder: page.folder, entries: $0.entries + page.entries,
+                                                     nextCursor: page.nextCursor) } ?? page
+            cursor = page.nextCursor
+        } while cursor != nil
+        return listing!
+    }
+
+    /// Live entries anywhere in the drive whose name contains `q`, each with its folder (the first page, by name).
+    public func driveSearch(_ q: String) async throws -> DriveSearchResult {
+        try await getCancellable("drive/search", query: [URLQueryItem(name: "q", value: q),
+                                                             URLQueryItem(name: "limit", value: "100")])
+    }
+
+    /// One entry, with its `path`.
+    public func driveEntry(_ id: String) async throws -> DriveEntry { try await get("drive/entries/\(id)") }
+
+    public func driveVersions(_ fileID: String) async throws -> DriveVersions {
+        try await get("drive/entries/\(fileID)/versions")
+    }
+
+    /// A new folder; a name already taken gets a suffix.
+    public func driveCreateFolder(parentID: String?, name: String) async throws -> DriveEntry {
+        try await post("drive/folders", body: DriveFolderBody(parentId: parentID, name: name))
+    }
+
+    /// Rename; a taken name is refused, never overwritten.
+    public func driveRename(_ id: String, to name: String) async throws -> DriveEntry {
+        try await patch("drive/entries/\(id)", body: DriveEntryPatch(name: name, parentId: nil))
+    }
+
+    public func driveMove(_ id: String, to parentID: String) async throws -> DriveEntry {
+        try await patch("drive/entries/\(id)", body: DriveEntryPatch(name: nil, parentId: parentID))
+    }
+
+    /// Move to Trash; answers the group, which Undo restores.
+    public func driveMoveToTrash(_ id: String) async throws -> DriveTrashed {
+        try await delete("drive/entries/\(id)")
+    }
+
+    /// Every group in Trash, newest first.
+    public func driveTrash() async throws -> [DriveTrashGroup] {
+        var cursor: String?
+        var groups: [DriveTrashGroup] = []
+        repeat {
+            var query = [URLQueryItem(name: "limit", value: "200")]
+            if let cursor { query.append(URLQueryItem(name: "cursor", value: cursor)) }
+            let page: DriveTrashPage = try await get("drive/trash", query: query)
+            groups += page.groups
+            cursor = page.nextCursor
+        } while cursor != nil
+        return groups
+    }
+
+    @discardableResult
+    public func driveRestoreGroup(_ groupID: String) async throws -> DriveRestored {
+        try await postEmpty("drive/trash/groups/\(groupID)/restore")
+    }
+
+    /// One item of a group back, and what hangs under it, leaving the rest in Trash (rule 3).
+    @discardableResult
+    public func driveRestoreItem(groupID: String, entryID: String) async throws -> DriveRestored {
+        try await postEmpty("drive/trash/groups/\(groupID)/items/\(entryID)/restore")
+    }
+
+    /// Delete a group for good.
+    public func driveDeleteGroup(_ groupID: String) async throws {
+        try await deleteRaw("drive/trash/groups/\(groupID)")
+    }
+
+    public func driveEmptyTrash() async throws { try await deleteRaw("drive/trash") }
+
+    /// A replaced version back as the file's current one, or as a copy beside it.
+    public func driveRestoreVersion(_ versionID: String, asCopy: Bool) async throws -> DriveEntry {
+        try await post("drive/versions/\(versionID)/restore", body: ["as": asCopy ? "COPY" : "CURRENT"])
+    }
+
+    /// The secret scan before sharing (§9): warns, never blocks.
+    public func driveShareCheck(_ fileID: String) async throws -> DriveShareCheck {
+        try await postEmpty("drive/entries/\(fileID)/share-check")
+    }
+
+    /// Share the file's current version, or move its link there. Only the owner's login reaches it.
+    public func driveShare(_ fileID: String) async throws -> DriveShareAnswer {
+        try await post("share-links", body: ["kind": "DRIVE_FILE", "driveEntryId": fileID])
+    }
+
+    /// The drive files' links that have not ended, asked for by name.
+    public func driveShareLinks() async throws -> [DriveShareLink] {
+        let list: DriveShareLinkList = try await get("share-links", query: [URLQueryItem(name: "kind", value: "DRIVE_FILE")])
+        return list.links.filter { $0.kind == "DRIVE_FILE" && $0.state != "ENDED" }
+    }
+
+    public func driveStopSharing(_ linkID: String) async throws { try await deleteRaw("share-links/\(linkID)") }
+
+    /// The drive's share of the account and the rest (Storage).
+    public func driveUsage() async throws -> DriveUsage { try await get("drive/usage") }
+
+    /// What the account keeps besides, by project, task and week (Storage's other lists).
+    public func storageUsage() async throws -> StorageUsage { try await get("attachments/usage") }
+
+    /// Agents' directory syncs: running ones and those ended in the last day.
+    public func driveSyncs() async throws -> [DriveSync] {
+        let list: DriveSyncList = try await get("drive/syncs")
+        return list.syncs
+    }
+
+    /// One agent's sync, whatever its age: the conversation's card for the call that started it.
+    public func driveSync(_ id: String) async throws -> DriveSync {
+        try await get("drive/syncs/\(id)")
+    }
+
+    /// The first `maxBytes` of a file (or one version) for a preview, or all of it when nil. Never a download.
+    public func driveContent(_ id: String, version: Bool = false, maxBytes: Int? = nil) async throws -> Data {
+        var req = try makeRequest("drive/\(version ? "versions" : "entries")/\(id)/content", method: "GET",
+                                  body: Optional<Empty>.none)
+        if let maxBytes { req.setValue("bytes=0-\(maxBytes - 1)", forHTTPHeaderField: "Range") }
+        return try await send(req)
+    }
+
+    /// A short-lived URL that downloads the current version (or `versionID`) with no login header, so a download
+    /// streams to disk however large the file is (D12).
+    public func driveDownloadURL(_ fileID: String, versionID: String? = nil) async throws -> URL {
+        let link: DriveDownloadLink = try await post("drive/entries/\(fileID)/download-link",
+                                                         body: DriveDownloadBody(versionId: versionID))
+        let base = baseURL.absoluteString.hasSuffix("/") ? String(baseURL.absoluteString.dropLast()) : baseURL.absoluteString
+        guard let url = URL(string: base + (link.path.hasPrefix("/") ? link.path : "/" + link.path)) else {
+            throw URLError(.badURL)
+        }
+        return url
+    }
+
+    // Resumable uploads: open, send chunks of at most `chunkSize`, complete.
+
+    public func driveOpenUpload(parentID: String?, name: String, size: Int, relativePath: String?,
+                                    dropRootID: String?) async throws -> DriveUploadOpened {
+        try await post("drive/uploads", body: DriveUploadBody(parentId: parentID, name: name, size: size,
+                                                                       relativePath: relativePath, dropRootId: dropRootID))
+    }
+
+    public func driveUploadStatus(_ uploadID: String) async throws -> DriveUploadStatus {
+        try await get("drive/uploads/\(uploadID)")
+    }
+
+    /// One chunk as the raw body, with its sha256; sent again, it replaces.
+    public func drivePutChunk(uploadID: String, index: Int, bytes: Data, sha256: String) async throws {
+        var req = try makeRequest("drive/uploads/\(uploadID)/chunks/\(index)", method: "PUT", body: Optional<Empty>.none)
+        req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        req.setValue(sha256, forHTTPHeaderField: "X-Orbit-Chunk-Sha256")
+        req.httpBody = bytes
+        _ = try await send(req, cancellationAware: true)
+    }
+
+    /// Create the file; sent again after it applied, it answers the same file.
+    public func driveCompleteUpload(_ uploadID: String) async throws -> DriveEntry {
+        try await postEmpty("drive/uploads/\(uploadID)/complete")
+    }
+
+    public func driveAbandonUpload(_ uploadID: String) async throws { try await deleteRaw("drive/uploads/\(uploadID)") }
+
+    private struct DriveFolderBody: Encodable { let parentId: String?; let name: String }
+    private struct DriveEntryPatch: Encodable { let name: String?; let parentId: String? }
+    private struct DriveDownloadBody: Encodable { let versionId: String? }
+    private struct DriveUploadBody: Encodable {
+        let parentId: String?
+        let name: String
+        let size: Int
+        let relativePath: String?
+        let dropRootId: String?
     }
 
     private struct Empty: Codable {}

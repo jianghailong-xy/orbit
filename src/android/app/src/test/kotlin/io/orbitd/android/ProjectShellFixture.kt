@@ -151,6 +151,8 @@ internal object ProjectShell {
     @Volatile var quietAttention: String? = null
     /** Whether Launch's coordinator has a turn under way (`engineTurnActive`), which the Open list draws as its spinner. */
     @Volatile var coordinatorWorking = false
+    /** The owner requests `GET owner-requests` lists, as a JSON array; none by default. A POST to a request's reopen-project answers it DONE. */
+    @Volatile var ownerRequests = "[]"
 
     // A15 F-22: How it runs' authorization set, fenced on its revision as `PATCH projects/:id` fences it. Off by default, which
     // leaves the set out of Launch's document as before.
@@ -192,6 +194,7 @@ internal object ProjectShell {
         landingLog = """{"jobId":"j-1","entries":[],"nextCursor":null}"""; taskTitle = "Wire the page"
         landingStatus = 200; landingLogStatus = 200
         coordinatorStatus = "{\"state\":\"NEVER_OPENED\"}"; doorStatus = 200; doorMessage = "The job is no longer running."
+        ownerRequests = "[]"
         landingServed = 0; holdLanding = null; holdLandingReads.clear(); landingAfterDoor = null; movedJobs.clear()
         taskRunning = false; holdTask = null
         // An earlier test's held request is dropped, never answered: answered now, it would write into this test's server state.
@@ -222,7 +225,7 @@ internal object ProjectShell {
     private fun row(id: String, title: String, workspace: String, run: String, extra: String, lifecycle: String = "OPEN", lastTurnAt: String = ago(5),
         approvals: Int = 0) =
         """{"id":"$id","title":"$title","status":"$run","runState":"$run","lifecycleState":"$lifecycle","agent":{"id":"$workspace","name":"${if (workspace == ALPHA) "Alpha" else "Beta"}"},
-            "agentId":"$workspace","createdAt":"${ago(600)}","lastTurnAt":"$lastTurnAt","pendingApprovals":$approvals,"tags":[],
+            "agentId":"$workspace","createdAt":"${ago(600)}","lastTurnAt":"$lastTurnAt","listedAt":"$lastTurnAt","pendingApprovals":$approvals,"tags":[],
             "capabilities":{"canComplete":${lifecycle == "OPEN"},"canRestore":${lifecycle != "OPEN"}}$extra}"""
     private fun session(id: String) = if (id in completedMembers) openSession(id).replaceFirst("\"lifecycleState\":\"OPEN\"", "\"lifecycleState\":\"COMPLETED\"")
         .replace("\"canComplete\":true", "\"canComplete\":false").replace("\"canRestore\":false", "\"canRestore\":true") else openSession(id)
@@ -427,6 +430,12 @@ internal object ProjectShell {
                 }
             }
             method == "POST" && path.startsWith("projects/$LAUNCH/promotions/") -> press(path.substringAfterLast('/'))
+            path == "owner-requests" && method == "GET" -> ok("""{"requests":$ownerRequests}""")
+            method == "POST" && path.startsWith("owner-requests/") && path.endsWith("/reopen-project") -> {
+                val answered = ownerRequests.removeSurrounding("[", "]").replaceFirst(""""state":"PENDING"""", """"state":"DONE","resolvedAt":"2026-11-24T14:02:00.000Z"""")
+                ownerRequests = "[$answered]"; done = false
+                ok(answered)
+            }
             path.startsWith("projects/") -> ok("{}")
             path.startsWith("wiki/") -> ApiResponse(404, """{"code":"WIKI_DISABLED","message":"The wiki is off."}""".encodeToByteArray())
             method == "GET" -> ok("[]")

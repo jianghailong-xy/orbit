@@ -26,10 +26,12 @@ import {
   type PromotionBlockedReason,
   type PromotionSourceKind,
   type PromotionState,
+  type LandingPullRequestView,
 } from '@orbit/shared';
 
 import type { PrismaService } from '../prisma/prisma.service';
 import { baselineHoldSql } from './baseline-hold';
+import { lineSyncHoldSql } from './line-sync-hold';
 import {
   landingCheckValueOf,
   recordSettingChange,
@@ -65,6 +67,8 @@ import {
   type RunnerWait,
   readProjectLandTaskViews,
 } from './project-task-integration';
+import { IN_FLIGHT_JOB_STATES, IN_FLIGHT_JOB_STATES_SQL } from './in-flight-job-states';
+import { pullRequestBlockingCode, pullRequestViewOf, pullRequestWaitSummary } from './pull-request-landing';
 
 // SR36 and §1.1's repository condition live beside their SQL spellings, in the landing module; they
 // are served from here too, where the line's readers have always found them.
@@ -134,9 +138,50 @@ export function defaultIntegrationLine(
     : 'MAIN';
 }
 
-/** A project's own branch, named after its public id — the spelling every client shows (A-Q1). */
-export function projectBranchRef(projectId: string): string {
-  return `refs/heads/project/${uuidToBase62(projectId)}`;
+/** Latin letters that Unicode does not split into a base letter and a mark, as they are spelled in ASCII. */
+const LATIN_WITHOUT_DECOMPOSITION: Readonly<Record<string, string>> = {
+  ß: 'ss', æ: 'ae', œ: 'oe', ø: 'o', đ: 'd', ł: 'l', þ: 'th', ı: 'i',
+};
+
+/** How long a branch's title part may be, in characters: it is cut back to a word boundary. */
+const PROJECT_BRANCH_SLUG_MAX = 40;
+
+/**
+ * A project title as a branch name part: lowercase ASCII letters and digits, every other run of
+ * characters one `-`, capped at {@link PROJECT_BRANCH_SLUG_MAX} on a word boundary. An accented
+ * letter keeps its base letter (`Café` is `cafe`). Empty for a title with no ASCII letter or digit
+ * in it, such as a Chinese one.
+ */
+export function projectBranchSlug(title: string): string {
+  const slug = title.normalize('NFKD').replace(/\p{M}+/gu, '').toLowerCase()
+    .replace(/[ßæœøđłþı]/gu, (letter) => LATIN_WITHOUT_DECOMPOSITION[letter] ?? letter)
+    .replace(/[^a-z0-9]+/gu, '-').replace(/^-+|-+$/gu, '');
+  if (slug.length <= PROJECT_BRANCH_SLUG_MAX) return slug;
+  const cut = slug.slice(0, PROJECT_BRANCH_SLUG_MAX + 1);
+  const boundary = cut.lastIndexOf('-');
+  // One word longer than the cap is cut inside it, since there is no boundary to cut at.
+  return (boundary > 0 ? cut.slice(0, boundary) : cut.slice(0, PROJECT_BRANCH_SLUG_MAX)).replace(/-+$/u, '');
+}
+
+/**
+ * A project's own branch by default: `refs/heads/project/<title slug>-<first 8 characters of its
+ * public id>`, or `refs/heads/project/<8 characters>` when the title gives no slug. The name is
+ * chosen once, when the line is decided or starts, and stored as the binding's `integrationRef`;
+ * every later reader reads that, so renaming the project never renames its branch.
+ */
+export function projectBranchRef(projectId: string, title: string): string {
+  const id = uuidToBase62(projectId).slice(0, 8);
+  const slug = projectBranchSlug(title);
+  return `refs/heads/project/${slug ? `${slug}-${id}` : id}`;
+}
+
+/** {@link projectBranchRef} for a project read by id, its title from its own row. */
+async function defaultProjectBranchRef(
+  db: Pick<Prisma.TransactionClient, 'project'>,
+  projectId: string,
+): Promise<string> {
+  const { title } = await db.project.findUniqueOrThrow({ where: { id: projectId }, select: { title: true } });
+  return projectBranchRef(projectId, title);
 }
 
 /**
@@ -228,7 +273,7 @@ export async function readProjectListBindings(
       projectId: true,
       // An observation is not an integration attempt (§10.6, A-Q23): it is not counted here.
       _count: { select: { integrationJobs: {
-        where: { state: { in: ['QUEUED', 'RUNNING'] }, kind: { not: 'OBSERVE_LANDING' } },
+        where: { state: { in: [...IN_FLIGHT_JOB_STATES] }, kind: { not: 'OBSERVE_LANDING' } },
       } } },
     },
   });
@@ -254,16 +299,18 @@ export async function readProjectListBindings(
   return bindings;
 }
 
-/** How long this project's exception items wait on its coordinator before they are the owner's. */
-async function escalationWindow(
+/** {@link projectIntegrationView} for a project read by id: how long its exception items wait on
+ *  its coordinator before they are the owner's, and its title for the default branch name. */
+async function settingsViewOf(
   db: Pick<Prisma.TransactionClient, 'project'>,
   projectId: string,
-): Promise<number> {
-  const row = await db.project.findUniqueOrThrow({
+  row: ProjectCodebaseLine | null,
+): Promise<ProjectIntegrationSettingsView> {
+  const project = await db.project.findUniqueOrThrow({
     where: { id: projectId },
-    select: { exceptionEscalationSeconds: true },
+    select: { exceptionEscalationSeconds: true, title: true },
   });
-  return row.exceptionEscalationSeconds;
+  return projectIntegrationView(row, project.exceptionEscalationSeconds, { id: projectId, title: project.title });
 }
 
 /** The line a binding states, when somebody decided it: the owner, or the default rule at the start. */
@@ -287,15 +334,31 @@ export type ProjectIntegrationSettingsView = SharedProjectIntegrationSettings<Da
  *  answers (§1.6), and the five facts the project page's line row is drawn from. */
 export type ProjectIntegrationView = SharedProjectIntegrationView<Date>;
 
+/**
+ * The branch a project branch line of this project is on, as a full ref: the one its binding
+ * stores, once its line is decided on one, and otherwise the name {@link projectBranchRef} gives it
+ * now. What a client shows for a project branch nobody named, so it never builds one itself.
+ */
+export function defaultProjectBranchOf(
+  row: ProjectCodebaseLine | null,
+  project: { id: string; title: string },
+): string {
+  return row && decidedLine(row) === 'PROJECT_BRANCH'
+    ? row.integrationRef
+    : projectBranchRef(project.id, project.title);
+}
+
 export function projectIntegrationView(
   row: ProjectCodebaseLine | null,
   escalationSeconds: number,
+  project: { id: string; title: string },
 ): ProjectIntegrationSettingsView {
   const line = row ? decidedLine(row) : null;
   return {
     line,
     lineAbsentReason: line ? null : 'NOT_DECIDED',
     ref: row && line ? branchName(row.integrationRef) : null,
+    defaultProjectBranch: branchName(defaultProjectBranchOf(row, project)),
     upstreamRef: row ? branchName(row.upstreamRef) : null,
     upstreamChosenAt: row?.upstreamRefChosenAt ?? null,
     source: row && line ? (row.integrationRefSource as IntegrationRefSource) : null,
@@ -575,6 +638,16 @@ interface InFlightJobRow extends IntegrationCheckSource {
   ownerId: string;
   id: string;
   state: string;
+  /** The pull request a PULL_REQUEST job waits on (docs/design/protected-branch-landing.md §8). */
+  prNumber?: number | null;
+  prUrl?: string | null;
+  prState?: string | null;
+  prCondition?: string | null;
+  prChecks?: unknown;
+  prMergeMethod?: string | null;
+  prMergedSha?: string | null;
+  prRefusal?: unknown;
+  prWorkspaceId?: string | null;
   kind: IntegrationJobKind;
   phase: IntegrationJobPhase | null;
   generation: number;
@@ -770,6 +843,14 @@ function queueFacts(row: InFlightJobRow, blocker: Partial<QueueBlockingFacts> = 
 /** One row as both the view's `inFlight` and its `inFlightJobs` entry state it. */
 function inFlightJobOf(row: InFlightJobRow, typicalMs: Map<string, number>): ProjectIntegrationJob<Date> {
   const running = row.state === 'RUNNING';
+  // §4.2: a job waiting on its pull request holds no runner and has no lease: never timed out, never silent.
+  const pullRequest = row.state === 'PULL_REQUEST' && row.prState
+    ? pullRequestViewOf({
+      number: row.prNumber ?? null, url: row.prUrl ?? null, state: row.prState, condition: row.prCondition ?? null,
+      checks: row.prChecks, mergeMethod: row.prMergeMethod ?? null, mergedSha: row.prMergedSha ?? null,
+      refusal: row.prRefusal ?? null, workspaceId: row.prWorkspaceId ?? null,
+    })
+    : null;
   const limitSeconds = integrationJobLimitSeconds(row);
   const timedOut = limitSeconds !== null && !row.behindAnotherOnRunner
     && (row.silentSeconds ?? 0) > limitSeconds;
@@ -779,7 +860,8 @@ function inFlightJobOf(row: InFlightJobRow, typicalMs: Map<string, number>): Pro
   return {
     jobId: row.id,
     kind: row.kind,
-    state: running ? 'RUNNING' : 'QUEUED',
+    state: running ? 'RUNNING' : row.state === 'PULL_REQUEST' ? 'PULL_REQUEST' : 'QUEUED',
+    ...(row.state === 'PULL_REQUEST' ? { pullRequest } : {}),
     landingSessionId: row.landingSessionId ?? null,
     phase: row.phase,
     taskId: row.taskId,
@@ -801,7 +883,7 @@ function inFlightJobOf(row: InFlightJobRow, typicalMs: Map<string, number>): Pro
     outputMovedAt: running ? row.outputMovedAt : null,
     typicalMs: (check?.name === 'MERGE_CHECK' || check?.name === 'LANDING_CHECK') ? typicalMs.get(row.projectId) ?? null : null,
     liveness: livenessOf(row, timedOut),
-    blockingReason: blockingReasonOf(row),
+    blockingReason: row.state === 'PULL_REQUEST' ? pullRequestBlockingReason(pullRequest, row.upstreamRef) : blockingReasonOf(row),
     retryable: timedOut && row.kind === 'LAND_TASK',
     skippable: row.taskId !== null && inFlightSkipRefusal({
       kind: row.kind,
@@ -820,6 +902,13 @@ function inFlightJobOf(row: InFlightJobRow, typicalMs: Map<string, number>): Pro
   };
 }
 
+/** Why a job waiting on its pull request waits (§8): the required checks or a review, in one sentence. */
+function pullRequestBlockingReason(pullRequest: LandingPullRequestView | null, upstreamRef: string | null): IntegrationJobBlockingReason {
+  const code = pullRequestBlockingCode(pullRequest?.condition ?? null);
+  const mainBranch = upstreamRef ? upstreamRef.replace(/^refs\/heads\//, '') : null;
+  return { code, summary: pullRequestWaitSummary(code, pullRequest, mainBranch) };
+}
+
 /** The oldest job of a project, as the project's line states it — the same fields the view's
  *  `inFlight` carries, so a list row and the page cannot describe one job differently. */
 function inFlightOf(job: ProjectIntegrationJob<Date>): ProjectIntegrationInFlight<Date> {
@@ -829,6 +918,7 @@ function inFlightOf(job: ProjectIntegrationJob<Date>): ProjectIntegrationInFligh
     kind: job.kind,
     phase: job.phase,
     state: job.state,
+    ...(job.state === 'PULL_REQUEST' ? { pullRequest: job.pullRequest ?? null } : {}),
     startedAt: job.startedAt,
     heartbeatAt: job.heartbeatAt,
     waitMs: claimedWaitMs(job),
@@ -1013,12 +1103,18 @@ async function readInFlightJobsForProjects(
            running_block."jobId" AS "serialBlockJobId", running_block."ownerId" AS "serialBlockOwnerId",
            running_block."kind" AS "serialBlockKind", running_block."taskTitle" AS "serialBlockTaskTitle",
            landing."session_id" AS "landingSessionId",
+           -- docs/design/protected-branch-landing.md §8: the pull request a PULL_REQUEST job waits on.
+           pr."number" AS "prNumber", pr."url" AS "prUrl", pr."state" AS "prState", pr."condition" AS "prCondition",
+           pr."checks" AS "prChecks", pr."merge_method" AS "prMergeMethod", pr."merged_sha" AS "prMergedSha",
+           pr."refusal" AS "prRefusal",
+           pr."workspace_id"::text AS "prWorkspaceId",
            lock_holder."jobId" AS "lockHolderJobId", lock_holder."ownerId" AS "lockHolderOwnerId",
            lock_holder."kind" AS "lockHolderKind", lock_holder."taskTitle" AS "lockHolderTaskTitle",
            lock_holder."projectTitle" AS "lockHolderProjectTitle"
       FROM "project_integration_job" j
       JOIN "project_codebase" cb ON cb."id" = j."codebase_id"
       LEFT JOIN "project_landing" landing ON landing."id" = j."landing_id"
+      LEFT JOIN "github_pull_request" pr ON pr."id" = j."pull_request_id"
       LEFT JOIN "task" t ON t."id" = j."task_id"
       LEFT JOIN "session" s ON s."id" = j."session_id"
       LEFT JOIN "task" st ON st."id" = s."task_id"
@@ -1049,22 +1145,18 @@ async function readInFlightJobsForProjects(
       -- holds every later landing on it; the conflicted job's own later generations are exempt (M3),
       -- and so are the landings of a task filed to fix that item (fixes_open_item_id), as in the
       -- claim. The claim reads the item, not a handling generation (T17), so this does too.
+      -- The line-sync item (docs/design/project-line-upstream-sync.md §4.3) has no same-task exemption: lineSyncHoldSql.
       LEFT JOIN LATERAL (
         SELECT f."id" AS "jobId", i."id" AS "openItemId", i."owner_id" AS "ownerId",
-               ft."title" AS "taskTitle",
-               CASE WHEN handling."id" IS NOT NULL AND handling."state" IN ('QUEUED', 'RUNNING')
+               -- The line-sync item is about the line, not the task that happened to land next.
+               CASE WHEN i."task_id" IS NOT NULL THEN ft."title" END AS "taskTitle",
+               CASE WHEN handling."id" IS NOT NULL AND handling."state" IN ${IN_FLIGHT_JOB_STATES_SQL}
                     THEN handling."generation" END AS "handlingGeneration"
           FROM "project_open_item" i
           JOIN "project_integration_job" f ON f."id" = i."integration_job_id"
           LEFT JOIN "task" ft ON ft."id" = f."task_id"
           LEFT JOIN "project_integration_job" handling ON handling."id" = i."handling_job_id"
-         WHERE j."state" = 'QUEUED'
-           AND f."serial_key" = j."serial_key" AND f."phase" = 'MAIN_SYNC'
-           AND i."kind" = 'INTEGRATION_CONFLICT' AND i."state" = 'OPEN'
-           AND f."task_id" IS DISTINCT FROM j."task_id"
-           AND NOT EXISTS (
-             SELECT 1 FROM "task" fix
-              WHERE fix."id" = j."task_id" AND fix."fixes_open_item_id" = i."id")
+         WHERE j."state" = 'QUEUED' AND ${lineSyncHoldSql('j')}
          ORDER BY i."created_at", i."id" LIMIT 1
       ) sync_block ON true
       LEFT JOIN LATERAL (
@@ -1108,7 +1200,7 @@ async function readInFlightJobsForProjects(
          ORDER BY (o."step" IS NOT DISTINCT FROM 'WAITING_LOCAL_LOCK'), o."claimed_at", o."id" LIMIT 1
       ) lock_holder ON true
      WHERE j."project_id" IN (${ids})
-       AND j."state" IN ('RUNNING', 'QUEUED')
+       AND j."state" IN ${IN_FLIGHT_JOB_STATES_SQL}
        ${observations === 'EXCLUDE' ? Prisma.sql`AND j."kind" <> 'OBSERVE_LANDING'` : Prisma.empty}
        ${jobId ? Prisma.sql`AND j."id" = ${jobId}::uuid` : Prisma.empty}
      ORDER BY j."project_id" ASC,
@@ -1207,7 +1299,7 @@ export async function readProjectPromotionIntegrationViews(
         FROM "project_integration_job" j
        WHERE j."project_id" = ${projectId}::uuid
          AND j."promotion_id" IS NOT NULL
-         AND j."state" IN ('QUEUED', 'RUNNING')
+         AND j."state" IN ${IN_FLIGHT_JOB_STATES_SQL}
     ),
     last_merged AS (
       SELECT p."id"
@@ -1320,7 +1412,7 @@ export async function readProjectIntegrationRead(
 ): Promise<ProjectIntegrationRead<Date>> {
   const [settings, queue, landTasks, promotionViews, log, timeline] = await Promise.all([
     readProjectCodebase(prisma, project.id).then((row) =>
-      projectIntegrationView(row, project.exceptionEscalationSeconds)),
+      projectIntegrationView(row, project.exceptionEscalationSeconds, project)),
     readInFlightJobs(prisma, project.id),
     readProjectLandTaskViews(prisma, project.id),
     readProjectPromotionIntegrationViews(prisma, project.id),
@@ -1546,6 +1638,31 @@ export async function stopInFlightJob(
       return { outcome: 'CANCELLED', errorCode: null };
     }
     // It was claimed between the read and the write: fall through and ask that claim to stop.
+  } else if (job.state === 'PULL_REQUEST') {
+    // docs/design/protected-branch-landing.md §4.2 J-T18: a landing waiting on its pull request holds no runner, so
+    // the stop ends it on the spot. Nothing reached the target. The pull request stays open for the subject's next
+    // attempt, which pushes the same landing branch; the door merges no pull request nobody waits on.
+    const ended = await tx.projectIntegrationJob.updateMany({
+      where: { id: input.jobId, state: 'PULL_REQUEST' },
+      data: { state: 'CANCELLED', cancelRequestedAt: input.now, finishedAt: input.now },
+    });
+    if (ended.count === 1) {
+      await appendIntegrationJobEvent(tx, {
+        jobId: input.jobId,
+        key: 'cancelled',
+        kind: 'CANCELLED',
+        claim: job.claim ?? 0,
+        round: job.round ?? null,
+        phase: job.phase,
+        actor: input.actor ?? { type: 'PLATFORM' },
+        reason: input.reason ?? null,
+        data: { cause: input.cause ?? 'STOP', state: 'CANCELLED', pullRequestOpen: true },
+        text: 'Stopped · cancelled while its pull request waited; the pull request stays open',
+        at: input.now,
+      });
+      return { outcome: 'CANCELLED', errorCode: null };
+    }
+    return { outcome: 'NONE', errorCode: null };
   } else if (job.timedOut) {
     const errorCode = await endTimedOutLanding(tx, job, input.cause ?? 'STOP');
     if (errorCode !== null) {
@@ -1941,10 +2058,7 @@ export async function configureProjectIntegration(
     || settings.mergeCheckTimeoutSeconds !== undefined
     || settings.deliveryMode !== undefined;
   if (!bindingNamed) {
-    return projectIntegrationView(
-      await readProjectCodebase(tx, projectId),
-      await escalationWindow(tx, projectId),
-    );
+    return settingsViewOf(tx, projectId, await readProjectCodebase(tx, projectId));
   }
 
   let row = await lockCodebase(tx, projectId);
@@ -1970,7 +2084,8 @@ export async function configureProjectIntegration(
   const upstreamRef = settings.upstreamRef ?? row.upstreamRef;
   const integrationRef = (chosen ?? decided) === 'PROJECT_BRANCH'
     ? settings.projectBranchName
-      ?? (decided === 'PROJECT_BRANCH' ? row.integrationRef : projectBranchRef(projectId))
+      // A line already on a project branch keeps the name it has: never renamed.
+      ?? (decided === 'PROJECT_BRANCH' ? row.integrationRef : await defaultProjectBranchRef(tx, projectId))
     // MAIN, or not decided yet: the line stands on the upstream until the default rule moves it.
     : upstreamRef;
   if ((chosen ?? decided) === 'PROJECT_BRANCH' && integrationRef === upstreamRef) {
@@ -2046,7 +2161,7 @@ export async function configureProjectIntegration(
       });
     }
   }
-  return projectIntegrationView(written, await escalationWindow(tx, projectId));
+  return settingsViewOf(tx, projectId, written);
 }
 
 /**
@@ -2380,7 +2495,7 @@ export async function startOnFirstIntegration(
     let integrationRef = row.integrationRef;
     if (row.integrationRefSource !== 'EXPLICIT') {
       integrationRef = await projectDefaultLine(tx, first.projectId) === 'PROJECT_BRANCH'
-        ? projectBranchRef(first.projectId)
+        ? await defaultProjectBranchRef(tx, first.projectId)
         : row.upstreamRef;
     }
     row = await tx.projectCodebase.update({

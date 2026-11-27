@@ -5,8 +5,9 @@
  * releases during deploy 2's hand-over. Each carries the columns the release questions of common/session-release.ts
  * read and what changes for it.
  */
-import type { RunStatus } from '@prisma/client';
+import type { RunStatus } from '@orbit/shared';
 
+import { turnStateOfWord } from '../sessions/session-turn-state';
 import type { SessionReleaseFacts } from './session-release';
 
 /** Why a shape's answer to "released by a failure" is not the cause reading's (design §12.2, §12.3). */
@@ -26,7 +27,8 @@ export interface ReleaseShape {
   what: string;
   /** Who leaves it: a writer (file and function) or a migration. */
   writer: string;
-  status: RunStatus;
+  /** The word its writer stored before deploy D3; since D3 the stored word follows the facts (migration 1671). */
+  status: `${RunStatus}`;
   released: boolean;
   endReason: string | null;
   lastTurnOutcome: 'ANSWERED' | 'FAILED' | 'INTERRUPTED' | 'CANCELLED' | null;
@@ -222,7 +224,7 @@ export const RELEASE_SHAPES: readonly ReleaseShape[] = [
 /** A shape's release facts at `at`, as the questions read them. */
 export function releaseFactsOfShape(shape: ReleaseShape, at: Date = new Date()): SessionReleaseFacts {
   return {
-    status: shape.status,
+    turnState: shape.released ? null : turnStateOfWord(shape.status),
     finishedAt: shape.released ? at : null,
     endReason: shape.endReason,
     lastTurnOutcome: shape.lastTurnOutcome,

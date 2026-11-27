@@ -41,7 +41,8 @@ import { test, type TestContext } from 'node:test';
 
 import { JwtService } from '@nestjs/jwt';
 import { uuidToBase62 } from '@orbit/shared';
-import { CreatorType, type PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, TaskCompletionCriterion } from '@prisma/client';
+import { CreatorType, type PrismaClient, RunnerStatus, SessionDispatchOrigin, TaskCompletionCriterion } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-test-apiserver';
@@ -119,7 +120,7 @@ test('viewer streams end with a gone frame within 1 s when access ends, and at t
       data: {
         id: sessionId, ownerId, creatorId: ownerId, workspaceId, taskId, title: `${name} ${RUN}`, prompt: name,
         provider: 'claude', providerBuiltin: true, model: 'm', permissionMode: 'acceptEdits',
-        dispatchOrigin: SessionDispatchOrigin.USER, status: RunStatus.AWAITING_INPUT, numTurns: 1, engineTurnActive: false,
+        dispatchOrigin: SessionDispatchOrigin.USER, turnState: null, numTurns: 1, engineTurnActive: false,
         startedAt: new Date(),
       },
     });

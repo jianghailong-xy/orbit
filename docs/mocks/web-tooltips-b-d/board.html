@@ -1,0 +1,104 @@
+<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>Web 提示 · B 与 D 的范围与对比</title>
+<link rel="stylesheet" href="../../../src/web/src/components/ui/foundation.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Floating.css">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#eef0f3;color:#1f2329}
+.b-part{width:1180px;padding:32px 40px 28px;font:15px/1.6 Inter,'Noto Sans SC',sans-serif}
+h1{font-size:22px;margin:0 0 4px} h2{font-size:17px;margin:0 0 12px}
+.lead{color:#646a73;font-size:13.5px;margin:0 0 20px;line-height:1.65}
+.b-note{background:#fff;border-radius:10px;padding:16px 20px;font-size:13px;line-height:1.75;margin-bottom:14px}
+.b-note h3{margin:0 0 6px;font-size:14px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+td,th{border-bottom:1px solid #eceef1;padding:7px 8px;text-align:left;vertical-align:top}
+th{color:#646a73;font-weight:600;font-size:12.5px}
+td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tag{display:inline-block;font-size:11px;font-weight:700;border-radius:4px;padding:0 6px;line-height:18px}
+.t-do{background:#e8f7ee;color:#1a7f45}.t-keep{background:#f1f2f4;color:#646a73}.t-q{background:#fff4e5;color:#b25e00}
+.rec{display:inline-block;background:#e8f7ee;color:#1a7f45;font-size:11px;font-weight:700;border-radius:4px;padding:0 6px}
+code{font-family:'JetBrains Mono',monospace;font-size:12px;background:#f1f2f4;border-radius:4px;padding:0 4px}
+/* comparison rows */
+.b-row{display:grid;grid-template-columns:200px 1fr 1fr;gap:14px;margin-bottom:14px;align-items:stretch}
+.b-lab{font-size:13px;line-height:1.55;padding-top:6px}
+.b-lab b{display:block;font-size:13.5px}
+.b-lab small{color:#646a73}
+.b-cell{position:relative;background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);height:172px;overflow:hidden;font:14px/22px Inter,'Noto Sans SC',sans-serif}
+.b-cell .cap{position:absolute;left:12px;top:8px;font-size:11.5px;color:#8f959e;font-weight:600}
+.b-colhead{display:grid;grid-template-columns:200px 1fr 1fr;gap:14px;font-size:13px;font-weight:700;margin:0 0 6px}
+/* faux UI */
+.ui{position:absolute;left:24px;top:40px;right:24px;display:flex;align-items:center;gap:10px;color:#1f2329}
+.btn{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border:1px solid #dee0e3;border-radius:8px;background:#fff;font-size:14px}
+.btn.prim{background:#3370ff;border-color:#3370ff;color:#fff}
+.btn.dis{background:#f5f6f7;border-color:#e5e6eb;color:#bbbfc4}
+.ibtn{display:inline-flex;align-items:center;justify-content:center;height:30px;min-width:30px;padding:0 6px;border-radius:6px;color:#646a73;gap:4px;font-size:13px}
+.row{display:flex;align-items:center;gap:8px;height:34px;padding:0 10px;border-radius:8px;background:#f5f6f7;width:100%;font-size:13.5px}
+.row .t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dot{width:7px;height:7px;border-radius:50%;background:#3370ff;flex:none}
+.cb{display:inline-flex;align-items:center;height:18px;padding:0 6px;border:1px solid #bcd3ff;border-radius:999px;background:#eaf1ff;color:#3370ff;font-size:10px;font-weight:600}
+.err{color:#d83931;font-size:13px}
+kbd{font:600 11px/18px Inter,sans-serif;color:#646a73;border:1px solid #dee0e3;border-bottom-width:2px;border-radius:4px;padding:0 5px;background:#fff}
+.cursor{position:absolute;width:14px;height:20px}
+/* the browser's own tip, as on macOS Chrome (owner's screenshot) */
+.native{position:absolute;max-width:330px;padding:2px 8px;font:13px/18px -apple-system,Inter,sans-serif;color:#1f2329;background:#f3f3f3;border:1px solid #c9c9c9;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.12);white-space:pre}
+.app{position:absolute;font:14px/20px Inter,'Noto Sans SC',sans-serif}
+.app.pre{white-space:pre-line}
+.lat{position:absolute;right:10px;top:8px;font-size:11px;color:#8f959e}
+.miss{position:absolute;left:24px;bottom:10px;right:24px;font-size:12px;color:#b25e00}
+.okline{position:absolute;left:24px;bottom:10px;right:24px;font-size:12px;color:#1a7f45}
+</style></head><body>
+<section class="b-part" id="part-1">
+<h1>Web 提示：B 与 D 的范围</h1>
+<p class="lead">接上次的审查（A 组 40 处已上线）。B = 有文字的按钮/链接上的补充提示；D = 普通文字、标签、徽章上的解释。今天它们都是浏览器的 <code>title</code>：灰色系统气泡、约 1 秒后出现、键盘和触屏都看不到。改后统一用应用自己的 Tooltip（深色圆角、带箭头）。数字来自对 main（503a4f0c86）的扫描，逐处核对后再动手。</p>
+<div class="b-note"><table>
+<tr><th>组</th><th>是什么</th><th class="n">处</th><th class="n">文件</th><th>处理</th></tr>
+<tr><td>B-a</td><td>有文字的按钮/链接 + 补充说明（「Open project · …」「Use this suggestion」、顶栏 ▦ 项目按钮…）</td><td class="n">33</td><td class="n">21</td><td><span class="tag t-do">改</span> 包 Tooltip，100 ms，与 A 组一致</td></tr>
+<tr><td>B-c</td><td>可能被禁用的按钮，提示说明为何禁用（邮件 Test、卡片动作）</td><td class="n">2</td><td class="n">2</td><td><span class="tag t-do">改</span> 外包一层 span 让禁用时也能悬停</td></tr>
+<tr><td>B-b</td><td>提示只是重复按钮自己的文字（目录路径、标签条、Markdown 链接作者写的 title）</td><td class="n">4</td><td class="n">3</td><td><span class="tag t-keep">保留</span> 同 C 组：被截断文字的全文，浏览器提示是惯例</td></tr>
+<tr><td>D-a</td><td>列表行里的状态标记（运行点、后台任务数、等你的数）</td><td class="n">17</td><td class="n">4</td><td><span class="tag t-do">改</span> 延迟待定（Q1）</td></tr>
+<tr><td>D-b</td><td>标签 / 徽章 / 计数的解释（Coordinator、Shared、来源、增删的运行…）</td><td class="n">93</td><td class="n">47</td><td><span class="tag t-do">改</span> 延迟待定（Q1）</td></tr>
+<tr><td>D-c</td><td>精确时间、日期、错误详情（含 2 处多行）</td><td class="n">15</td><td class="n">11</td><td><span class="tag t-do">改</span> Tooltip 支持换行</td></tr>
+<tr><td>D-d</td><td>快捷键提示（侧栏 <kbd>⌘1</kbd> …）</td><td class="n">4</td><td class="n">1</td><td><span class="tag t-do">改</span></td></tr>
+<tr><td colspan="2"><b>本次要改</b></td><td class="n"><b>164</b></td><td class="n"><b>69</b></td><td></td></tr>
+<tr><td>C</td><td>被截断标签的全文（不在本次范围）</td><td class="n">73</td><td class="n">38</td><td><span class="tag t-keep">保留</span> 浏览器提示</td></tr>
+</table>
+<p style="margin:10px 0 0;color:#646a73">不动：iOS / macOS / Android（它们没有 title 这回事）、组件的 <code>title</code> 属性（对话框标题、设置行标题等，不是提示）、A 组已改的 40 处。可访问名称不变：提示文字不替代 aria-label。</p></div>
+</section>
+<section class="b-part" id="part-2">
+<h2>② 对比图 · 每类一例（右侧用的是 Floating.css 的真实样式）</h2>
+<div class="b-colhead"><span></span><span>今天</span><span>改后</span></div>
+<div class="b-row"><div class="b-lab"><b>B-a 有文字的按钮 + 补充说明</b><small>33 处 · 21 文件 · 例：任务清单的「Steered from」</small></div>
+<div class="b-cell"><span class="cap">今天 · 浏览器的 title</span><span class="lat">约 1 s 后出现</span><div class="ui"><span class="btn">Steered from this session</span><span class="btn">Edit</span></div><div class="native" style="left:120px;top:96px">Open the conversation this list is steered from</div><svg class="cursor" style="left:112px;top:66px" viewBox="0 0 14 20"><path d="M1 1v15l4-4 3 7 3-1-3-7h5z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/></svg></div>
+<div class="b-cell"><span class="cap">改后 · 应用的 Tooltip</span><span class="lat">100 ms</span><div class="ui"><span class="btn">Steered from this session</span><span class="btn">Edit</span></div><div class="app orbit-tooltip" data-side="bottom" style="left:24px;top:86px;width:250px"><span class="orbit-floating-arrow" data-side="bottom" style="left:90px"></span>Open the conversation this list is steered from</div><svg class="cursor" style="left:112px;top:66px" viewBox="0 0 14 20"><path d="M1 1v15l4-4 3 7 3-1-3-7h5z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/></svg></div></div><div class="b-row"><div class="b-lab"><b>B-a 顶栏的项目按钮</b><small>顶栏 ▦ 3（与 ⋯、分享同一行）</small></div>
+<div class="b-cell"><span class="cap">今天 · 浏览器的 title</span><span class="lat">约 1 s 后出现</span><div class="ui"><span style="flex:1;font-weight:700;font-size:16px">Checkout flow migration</span><span class="ibtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="2.5" y="2.5" width="7.5" height="7.5" rx="1.8"/><rect x="14" y="2.5" width="7.5" height="7.5" rx="1.8"/><rect x="2.5" y="14" width="7.5" height="7.5" rx="1.8"/><rect x="14" y="14" width="7.5" height="7.5" rx="1.8"/></svg> 3</span><span class="ibtn">•••</span></div><div class="native" style="left:290px;top:96px">Project sessions</div><svg class="cursor" style="left:318px;top:66px" viewBox="0 0 14 20"><path d="M1 1v15l4-4 3 7 3-1-3-7h5z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/></svg></div>
+<div class="b-cell"><span class="cap">改后 · 应用的 Tooltip</span><span class="lat">100 ms</span><div class="ui"><span style="flex:1;font-weight:700;font-size:16px">Checkout flow migration</span><span class="ibtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="2.5" y="2.5" width="7.5" height="7.5" rx="1.8"/><rect x="14" y="2.5" width="7.5" height="7.5" rx="1.8"/><rect x="2.5" y="14" width="7.5" height="7.5" rx="1.8"/><rect x="14" y="14" width="7.5" height="7.5" rx="1.8"/></svg> 3</span><span class="ibtn">•••</span></div><div class="app orbit-tooltip" data-side="bottom" style="left:262px;top:86px"><span class="orbit-floating-arrow" data-side="bottom" style="left:36px"></span>Project sessions</div><svg class="cursor" style="left:318px;top:66px" viewBox="0 0 14 20"><path d="M1 1v15l4-4 3 7 3-1-3-7h5z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/></svg></div></div><div class="b-row"><div class="b-lab"><b>B-c 可能被禁用的按钮</b><small>2 处 · 例：邮件设置的 Test（有未保存修改时禁用）</small></div>
+<div class="b-cell"><span class="cap">今天 · 浏览器的 title</span><span class="lat">约 1 s 后出现</span><div class="ui"><span class="btn dis">Send test email</span><span class="btn prim">Save</span></div><div class="native" style="left:80px;top:96px">Save your changes first</div><svg class="cursor" style="left:70px;top:66px" viewBox="0 0 14 20"><path d="M1 1v15l4-4 3 7 3-1-3-7h5z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/></svg></div>
+<div class="b-cell"><span class="cap">改后 · 应用的 Tooltip</span><span class="lat">100 ms</span><div class="ui"><span class="btn dis">Send test email</span><span class="btn prim">Save</span></div><div class="app orbit-tooltip" data-side="bottom" style="left:24px;top:86px"><span class="orbit-floating-arrow" data-side="bottom" style="left:50px"></span>Save your changes first</div><svg class="cursor" style="left:70px;top:66px" viewBox="0 0 14 20"><path d="M1 1v15l4-4 3 7 3-1-3-7h5z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/></svg><div class="okline">需在按钮外包一层 span：应用的 Tooltip 在禁用按钮上收不到悬停</div></div></div><div class="b-row"><div class="b-lab"><b>D-a 列表行里的状态标记</b><small>17 处 · 4 文件 · Session / 工作区列表的运行点、后台任务、等你的数</small></div>
+<div class="b-cell"><span class="cap">今天 · 浏览器的 title</span><span class="lat">约 1 s 后出现</span><div class="ui"><div class="row"><span class="dot"></span><span class="t">Migrate the billing webhooks</span><span style="color:#8f959e;font-size:12px">⚙ 2</span><span style="color:#8f959e;font-size:12px">2m</span></div></div><div class="native" style="left:250px;top:86px">2 background jobs running</div><svg class="cursor" style="left:322px;top:50px" viewBox="0 0 14 20"><path d="M1 1v15l4-4 3 7 3-1-3-7h5z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/></svg></div>
+<div class="b-cell"><span class="cap">改后 · 应用的 Tooltip</span><span class="lat">待定：100 ms / 600 ms</span><div class="ui"><div class="row"><span class="dot"></span><span class="t">Migrate the billing webhooks</span><span style="color:#8f959e;font-size:12px">⚙ 2</span><span style="color:#8f959e;font-size:12px">2m</span></div></div><div class="app orbit-tooltip" data-side="bottom" style="left:206px;top:82px"><span class="orbit-floating-arrow" data-side="bottom" style="left:112px"></span>2 background jobs running</div><svg class="cursor" style="left:322px;top:50px" viewBox="0 0 14 20"><path d="M1 1v15l4-4 3 7 3-1-3-7h5z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/></svg><div class="miss">鼠标扫过列表时会频繁弹出：建议这一类用 600 ms（见 ③ Q1）</div></div></div><div class="b-row"><div class="b-lab"><b>D-b 标签 / 徽章 / 计数的解释</b><small>93 处 · 47 文件 · 例：列表行的 Coordinator 标记</small></div>
+<div class="b-cell"><span class="cap">今天 · 浏览器的 title</span><span class="lat">约 1 s 后出现</span><div class="ui"><div class="row"><span class="t">Checkout flow migration + data backfill</span><span class="cb">Coordinator</span><span style="color:#8f959e;font-size:12px">5m</span></div></div><div class="native" style="left:196px;top:86px">This session coordinates a project</div><svg class="cursor" style="left:306px;top:50px" viewBox="0 0 14 20"><path d="M1 1v15l4-4 3 7 3-1-3-7h5z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/></svg></div>
+<div class="b-cell"><span class="cap">改后 · 应用的 Tooltip</span><span class="lat">待定：100 ms / 600 ms</span><div class="ui"><div class="row"><span class="t">Checkout flow migration + data backfill</span><span class="cb">Coordinator</span><span style="color:#8f959e;font-size:12px">5m</span></div></div><div class="app orbit-tooltip" data-side="bottom" style="left:150px;top:82px"><span class="orbit-floating-arrow" data-side="bottom" style="left:152px"></span>This session coordinates a project</div><svg class="cursor" style="left:306px;top:50px" viewBox="0 0 14 20"><path d="M1 1v15l4-4 3 7 3-1-3-7h5z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/></svg></div></div><div class="b-row"><div class="b-lab"><b>D-c 精确时间 / 日期 / 错误详情</b><small>15 处 · 11 文件 · 例：用户页的欢迎邮件失败（两行）</small></div>
+<div class="b-cell"><span class="cap">今天 · 浏览器的 title</span><span class="lat">约 1 s 后出现</span><div class="ui"><span>ada@example.com</span><span class="err">Welcome email failed</span></div><div class="native" style="left:150px;top:92px">SMTP 550: mailbox unavailable
+Last attempt Nov 26, 14:02</div><svg class="cursor" style="left:170px;top:62px" viewBox="0 0 14 20"><path d="M1 1v15l4-4 3 7 3-1-3-7h5z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/></svg></div>
+<div class="b-cell"><span class="cap">改后 · 应用的 Tooltip</span><span class="lat">待定：100 ms / 600 ms</span><div class="ui"><span>ada@example.com</span><span class="err">Welcome email failed</span></div><div class="app orbit-tooltip pre" data-side="bottom" style="left:96px;top:84px;width:250px"><span class="orbit-floating-arrow" data-side="bottom" style="left:70px"></span>SMTP 550: mailbox unavailable
+Last attempt Nov 26, 14:02</div><svg class="cursor" style="left:170px;top:62px" viewBox="0 0 14 20"><path d="M1 1v15l4-4 3 7 3-1-3-7h5z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/></svg><div class="okline">两处多行提示：Tooltip 需支持换行（white-space: pre-line）</div></div></div><div class="b-row"><div class="b-lab"><b>D-d 快捷键提示</b><small>4 处 · 侧栏</small></div>
+<div class="b-cell"><span class="cap">今天 · 浏览器的 title</span><span class="lat">约 1 s 后出现</span><div class="ui"><div class="row"><span class="t">orbit-develop</span><kbd>⌘2</kbd></div></div><div class="native" style="left:250px;top:86px">Open workspace with ⌘2</div><svg class="cursor" style="left:360px;top:50px" viewBox="0 0 14 20"><path d="M1 1v15l4-4 3 7 3-1-3-7h5z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/></svg></div>
+<div class="b-cell"><span class="cap">改后 · 应用的 Tooltip</span><span class="lat">待定：100 ms / 600 ms</span><div class="ui"><div class="row"><span class="t">orbit-develop</span><kbd>⌘2</kbd></div></div><div class="app orbit-tooltip" data-side="bottom" style="left:236px;top:82px"><span class="orbit-floating-arrow" data-side="bottom" style="left:120px"></span>Open workspace with ⌘2</div><svg class="cursor" style="left:360px;top:50px" viewBox="0 0 14 20"><path d="M1 1v15l4-4 3 7 3-1-3-7h5z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/></svg></div></div>
+</section>
+<section class="b-part" id="part-3">
+<h2>③ 待定 · 要你拍板</h2>
+<div class="b-note"><table>
+<tr><th style="width:44px"></th><th>问题</th><th>方案 A</th><th>方案 B</th><th>建议</th></tr>
+<tr><td>Q1</td><td>D 组（文字上的提示）多快出现</td><td>与按钮一样 100 ms</td><td>600 ms：鼠标路过文字时不弹，停住才弹；按钮（A、B）仍 100 ms</td><td><span class="rec">B</span> 列表里扫一遍不会满屏气泡</td></tr>
+<tr><td>Q2</td><td>D 组键盘能否看到</td><td>只悬停，与今天相同，不新增 Tab 停顿</td><td>给这些文字加 tabIndex，键盘可聚焦看提示（约 +129 个 Tab 停顿）</td><td><span class="rec">A</span> 重要的错误详情另行在页面上显示，不靠提示</td></tr>
+<tr><td>Q3</td><td>禁用按钮的说明（2 处）</td><td>外包 span，禁用时也弹应用提示</td><td>保留浏览器提示</td><td><span class="rec">A</span></td></tr>
+<tr><td>Q4</td><td>多行提示（2 处）</td><td>Tooltip 加 white-space: pre-line，保留换行</td><td>改成一行</td><td><span class="rec">A</span></td></tr>
+</table></div>
+<div class="b-note"><h3>落地（按代价排）</h3><table>
+<tr><th>改动</th><th>位置</th><th>代价</th></tr>
+<tr><td>Tooltip 加 <code>delay</code> 选项（Q1）与换行（Q4）；单测</td><td><code>ui/Tooltip.tsx</code>、<code>Floating.css</code></td><td>小</td></tr>
+<tr><td>B-a 33 处、B-c 2 处：包 Tooltip，去掉 title，改相应测试</td><td>21 + 2 个文件</td><td>中</td></tr>
+<tr><td>D 组 129 处：包 Tooltip（Q1 的延迟），去掉 title，改相应测试</td><td>54 个文件，WorkspaceView 16、TasksSidePanel 12</td><td>中偏大（分 2–3 个 SubAgent 并行）</td></tr>
+<tr><td>真实浏览器抽查：列表行、禁用按钮、多行、深色；全量 web 测试</td><td>—</td><td>小</td></tr>
+</table></div>
+</section>
+</body></html>

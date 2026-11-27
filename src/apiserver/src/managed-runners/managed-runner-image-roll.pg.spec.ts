@@ -85,8 +85,8 @@ test('a managed runner on a previous image rolls onto the new one when idle', {
     const id = randomUUID();
     await sql.query(
       `INSERT INTO "session" ("id", "owner_id", "creator_id", "workspace_id", "assigned_runner_id", "title", "prompt", "provider",
-                              "status", "num_turns", "runtime_session_id", "started_at", "updated_at")
-       VALUES ($1, $2, $2, $3, $4, 'managed work', 'work', 'claude', $5::"run_status", 1, $6, now(), now())`,
+                              "turn_state", "num_turns", "runtime_session_id", "started_at", "updated_at")
+       VALUES ($1, $2, $2, $3, $4, 'managed work', 'work', 'claude', (CASE ($5)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END), 1, $6, now(), now())`,
       [id, m.ownerId, workspace.id, m.runnerId, status, randomUUID()],
     );
     return id;

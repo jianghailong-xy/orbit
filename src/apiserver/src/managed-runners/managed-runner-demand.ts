@@ -34,8 +34,9 @@ export type ManagedDemandSource = 'session' | 'turn' | 'resume' | 'auto-retry' |
 export interface ManagedRunnerDemandAnswer {
   /** The switch is on and the runner is a managed runner: the demand was recorded on its mapping. */
   managed: boolean;
-  /** …and it comes back by itself: it is up, starting, waiting for capacity, draining or asleep.
-   *  False for a mapping that needs an owner or an operator first (FAILED, FENCING, deletion). */
+  /** …and it comes back by itself: it is up, starting, waiting for capacity, draining or asleep, or FAILED with
+   *  its slow retry scheduled (at `retryAfter`, taken while work waits). False for a mapping that needs an owner or
+   *  an operator first (FAILED with no next try, FENCING, deletion). */
   comingBack: boolean;
   state?: ManagedRunnerManagementState;
   /** What it is waiting for, as the status read says it. */
@@ -58,11 +59,17 @@ const COMING_BACK: ReadonlySet<ManagedRunnerManagementState> = new Set([
   'REQUESTED', 'WAITING_CAPACITY', 'PROVISIONING', 'STARTING', 'READY', 'DRAINING', 'SLEEPING',
 ]);
 
+/** FAILED, retryable, with its next automatic try recorded (managed-runner-manager.ts `fail`): it comes back by itself. */
+function slowRetryScheduled(mapping: ManagedRunner): boolean {
+  return mapping.managementState === 'FAILED' && mapping.nextAttemptAt !== null
+    && (mapping.lastError as { retryable?: unknown } | null)?.retryable === true;
+}
+
 export function demandAnswer(mapping: ManagedRunner): ManagedRunnerDemandAnswer {
   const reason = mapping.lastError as ManagedRunnerReason | null;
   return {
     managed: true,
-    comingBack: COMING_BACK.has(mapping.managementState),
+    comingBack: COMING_BACK.has(mapping.managementState) || slowRetryScheduled(mapping),
     state: mapping.managementState,
     reason: reason && typeof reason === 'object' ? { code: reason.code, message: reason.message, retryable: reason.retryable === true } : null,
     retryAfter: mapping.nextAttemptAt,

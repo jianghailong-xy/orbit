@@ -9,13 +9,14 @@ import {
   OnModuleInit,
   Optional,
 } from '@nestjs/common';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import {
   type CoordinatorHandoffFailureCode,
   type CoordinatorHandoffRequest,
   type CoordinatorHandoffSuccessor,
   type CoordinatorHandoffView,
   RunEventType,
+  RunStatus,
 } from '@orbit/shared';
 
 import { isReleased, RELEASE_FAILURE_SELECT, releaseWasFailure } from '../common/session-release';

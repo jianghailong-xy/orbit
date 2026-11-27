@@ -60,6 +60,7 @@ import type { CreateWatchDto } from './dto';
 import { WatchDeliveryResult, WatchDeliveryService } from './watch-delivery.service';
 import { WatchEvaluatorService } from './watch-evaluator.service';
 import { WatchesService } from './watches.service';
+import { wordSql } from '../test-support/session-word';
 import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -219,9 +220,9 @@ async function insertTask(owner: string, status: string): Promise<string> {
 async function insertSession(owner: string, status: string, runnerId: string): Promise<string> {
   const id = randomUUID();
   await sql.query(
-    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","status","assigned_runner_id",
+    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","turn_state","assigned_runner_id",
                            "provider","provider_builtin","num_turns","started_at","runtime_session_id")
-     VALUES ($1,'watch qa forge','the opening prompt',$2,$2,now(),$3,$4,'claude',TRUE,1,now(),$5)`,
+     VALUES ($1,'watch qa forge','the opening prompt',$2,$2,now(),(CASE ($3)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END),$4,'claude',TRUE,1,now(),$5)`,
     [id, owner, status, runnerId, `runtime-${id}`],
   );
   return id;
@@ -329,7 +330,7 @@ async function ranWake(kind: Kind, owner: string, by: Worker): Promise<{ wake: W
   assert.equal((await turnById(queued.id))?.status, 'ANSWERED', `${kind}: the wake ran`);
   assert.equal((await deliveryOf(delivery.id)).state, 'DELIVERED');
   // The observer goes on to run something else, as its runner would report it.
-  await sql.query(`UPDATE "session" SET "status" = 'RUNNING' WHERE "id" = $1`, [observer]);
+  await sql.query(`UPDATE "session" SET "turn_state" = 'IN_FLIGHT' WHERE "id" = $1`, [observer]);
   const running = await insertRunningTurn(observer);
   return { wake: { kind, observer, watchId: watch.id, deliveryId: delivery.id, key, wakeId: queued.id }, doors, running };
 }
@@ -388,7 +389,7 @@ async function turnById(id: string): Promise<TurnRow | undefined> {
 }
 
 async function sessionStatus(id: string): Promise<string> {
-  const { rows } = await sql.query<{ status: string }>(`SELECT "status" FROM "session" WHERE "id" = $1`, [id]);
+  const { rows } = await sql.query<{ status: string }>(`SELECT ${wordSql()} AS status FROM "session" WHERE "id" = $1`, [id]);
   return rows[0].status;
 }
 
@@ -454,7 +455,7 @@ qa('FG-1', 'a turn the owner queued earlier under a wake\'s key must not swallow
   {
     const { settled, wakeQueued } = await squatted('REVOKED, squat already answered', 'REVOKED', async (observer, turnId) => {
       await sql.query(`UPDATE "conversation_turn" SET "status" = 'ANSWERED', "delivered_at" = now(), "answered_at" = now() WHERE "id" = $1`, [turnId]);
-      await sql.query(`UPDATE "session" SET "status" = 'AWAITING_INPUT' WHERE "id" = $1`, [observer]);
+      await sql.query(`UPDATE "session" SET "turn_state" = NULL WHERE "id" = $1`, [observer]);
     });
     if (settled.state === 'DELIVERED' && !wakeQueued) failures.push('REVOKED after an answered squat: DELIVERED, and the observer was never woken');
   }

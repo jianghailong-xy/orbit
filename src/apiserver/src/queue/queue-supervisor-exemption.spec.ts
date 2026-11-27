@@ -40,19 +40,21 @@ test('the tree cap does not count a session waiting on its own child', async () 
   assert.match(treeCount, /tree\."root_session_id" = s\."root_session_id"/);
   assert.match(treeCount, /NOT EXISTS/);
   assert.match(treeCount, /child\."parent_session_id" = tree\.id/);
-  assert.match(treeCount, /child\."status" IN \('PENDING', 'RUNNING'\)/);
+  // Queued or in flight (PENDING or RUNNING), read through sessions/session-turn-state.ts.
+  assert.match(treeCount, /\(CASE WHEN child\."finished_at" IS NULL THEN child\."turn_state" END\) IN \('QUEUED', 'IN_FLIGHT'\)/);
 });
 
 // The exemption is scoped to the tree cap. The runner cap is the safety net that makes
 // letting a tree exceed its own cap safe, so it must keep counting every active turn.
-test('the runner cap still counts every RUNNING session', async () => {
+test('the runner cap still counts every session in flight (RUNNING)', async () => {
   const text = await claimSql();
   // Ends at the cap comparison, so the prose below it cannot satisfy the match either way.
   const runnerCount = text.slice(
     text.indexOf('FROM "session" active'),
     text.indexOf('-- Batch-run cap'),
   );
-  assert.match(runnerCount, /active\."status" = 'RUNNING'/);
+  assert.match(runnerCount, /\(CASE WHEN active\."finished_at" IS NULL THEN active\."turn_state" END\) = 'IN_FLIGHT'/);
+  assert.doesNotMatch(runnerCount, /phase/);
   assert.doesNotMatch(runnerCount, /NOT EXISTS/);
 });
 

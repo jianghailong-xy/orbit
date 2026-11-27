@@ -27,6 +27,8 @@ internal class OwnerRequestFixture {
     @Volatile var refuseUntranslated = false
     /** SETTINGS_CHANGE: Save changes is refused 409 SETTINGS_STALE, and `GET /users/me` as the account answers (with its `changedBy`). */
     @Volatile var staleApply = false
+    /** CHANGE: the apply door's reply, verbatim, when a test holds one from a real server. */
+    @Volatile var applyReply: String? = null
     @Volatile var me: JsonObject = buildJsonObject { put("id", "u"); put("email", "u@example.test"); put("name", "U") }
 
     private val server = MockWebServer().apply {
@@ -68,6 +70,9 @@ internal class OwnerRequestFixture {
                             "done" -> ended("DONE") { put("answer", body) }
                             "apply-settings" -> if (staleApply) return json(409, """{"code":"SETTINGS_STALE","message":"SETTINGS_STALE"}""")
                                 else ended("DONE") {}
+                            "reopen-project" -> ended("DONE") {}
+                            "apply" -> applyReply?.let { reply -> return json(200, reply).also { held[id] = Json.parseToJsonElement(reply).jsonObject } }
+                                ?: ended("DONE") { putJsonObject("answer") { put("applied", body["maxConcurrent"]!!); put("actualBefore", 4) } }
                             "decline" -> ended("DECLINED") { put("resolutionNote", body["reason"]!!) }
                             "secret" -> refuseSecret?.let { return json(400, buildJsonObject { put("message", it) }.toString()) }
                                 ?: JsonObject(row + buildJsonObject { putJsonObject("secretGrant") {
@@ -158,6 +163,22 @@ internal class OwnerRequestFixture {
                 addJsonObject { put("key", "translationLanguage"); put("from", "en"); put("to", "zh-Hans"); put("tier", 1) }
                 addJsonObject { put("key", "defaultPermissionMode"); put("from", "default"); put("to", "plan"); put("tier", 2) }
             } }
+        }
+
+        const val REOPEN_ID = "01a0d6a9-d763-70e1-b4cf-8793e971b506"
+        const val REOPEN_PROJECT = "01a0d6a9-d763-70e1-b4cf-8793e971b507"
+
+        /** An agent asking to reopen a settled project, with a second session that joined the ask. */
+        fun projectReopen() = request(REOPEN_ID, "PROJECT_REOPEN", "Reopen project “Share to Orbit”?", "The share sheet needs a dark-mode fix that changes its acceptance criteria.", 3) {
+            put("projectId", REOPEN_PROJECT); put("askedBySessionTitle", "Fix share sheet colours")
+            putJsonObject("payload") {
+                put("projectId", REOPEN_PROJECT); put("statusAtAsk", "DONE"); put("settledAt", "2026-11-18T09:00:00.000Z")
+                put("plannedWork", "Restyle the share sheet for dark mode and add a screenshot check.")
+                putJsonArray("askers") {
+                    addJsonObject { put("sessionId", SESSION); put("title", "Fix share sheet colours") }
+                    addJsonObject { put("sessionId", "01a0d6a9-d763-70e1-b4cf-8793e971b5cc"); put("title", "Audit dark mode") }
+                }
+            }
         }
 
         fun confirm() = request(CONFIRM_ID, "CONFIRM", "Confirm the DNS change", "The new records point the app at the new load balancer.", 45) {}

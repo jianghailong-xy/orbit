@@ -28,7 +28,8 @@ import { randomUUID } from 'node:crypto';
 import { beforeEach, test } from 'node:test';
 import { resetTranslationBreaker } from './translation';
 
-import { CreatorType, RunStatus, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { CreatorType, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -364,7 +365,7 @@ async function account(db: Db): Promise<Account> {
     await db.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title, prompt: title, provider: 'claude',
-        status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER, numTurns: 1, startedAt: new Date(),
+        turnState: null, dispatchOrigin: SessionDispatchOrigin.USER, numTurns: 1, startedAt: new Date(),
         runtimeSessionId: randomUUID(),
       },
     });

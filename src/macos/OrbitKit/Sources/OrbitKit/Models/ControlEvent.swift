@@ -56,6 +56,12 @@ public enum ControlEventType: String, Codable, Sendable {
     /// docs/ux/translation-failure-policy.html frame 6). USER-scoped: a nudge to re-read `GET /users/me`
     /// for `translationUnavailableUntil`. Not sent when the skip simply runs out: the client times that.
     case translationStatusChanged = "translation.status_changed"
+    /// One write to the owner's Drive committed (docs/drive-technical-design.md §5.4). USER-scoped: a
+    /// nudge to re-read what the Drive page shows.
+    case driveChanged = "drive.changed"
+    /// An agent's directory sync into Drive started, moved or ended (docs/drive-directory-sync-design.md):
+    /// a nudge to re-read `GET /drive/syncs` for the uploads popover.
+    case driveSync = "drive.sync"
     case notification = "notification"
     case unknown
 
@@ -122,6 +128,11 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
     @LenientSessionField public private(set) var workFinished: Bool?
     @LenientSessionField public private(set) var lastTurnOutcome: SessionTurnOutcome?
     @LenientSessionField public private(set) var waitingOn: SessionWaitingOn?
+    /// The Background mark's inputs, beside the facts. `activity` is doubly optional for `retryAt`'s reason:
+    /// `nil` is a server that never sends the key (keep the row's), `.some(nil)` is this server saying the
+    /// session is doing nothing beyond its status. `runningBgCount` is never null: nil keeps the row's.
+    public let activity: String??
+    public let runningBgCount: Int?
     /// Server-normalized state, omitted by older control planes.
     public let sessionState: SessionState?
     /// Orthogonal execution state and lifecycle location, omitted by older control planes.
@@ -222,6 +233,10 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
         workFinished = try? values.decodeIfPresent(Bool.self, forKey: .workFinished)
         lastTurnOutcome = try? values.decodeIfPresent(SessionTurnOutcome.self, forKey: .lastTurnOutcome)
         waitingOn = try? values.decodeIfPresent(SessionWaitingOn.self, forKey: .waitingOn)
+        activity = values.contains(.activity)
+            ? .some(try? values.decodeIfPresent(String.self, forKey: .activity))
+            : nil
+        runningBgCount = try? values.decodeIfPresent(Int.self, forKey: .runningBgCount)
         sessionState = try values.decodeIfPresent(SessionState.self, forKey: .sessionState)
         // An older summary omits the key. A null on a current summary clears a previous end.
         if (try? values.decodeNil(forKey: .endReason)) == true {

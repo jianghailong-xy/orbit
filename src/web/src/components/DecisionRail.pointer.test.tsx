@@ -18,6 +18,7 @@ import {
   type PendingDecisionRow,
 } from './DecisionRail';
 import { SessionEvidenceDecisionCard, evidenceDecisionCardRows } from './EvidenceDecisionCard';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
  * The line, end to end: the strip and the evidence cards in one document, as the page composes them.
@@ -200,6 +201,12 @@ const strip = (scope: HTMLElement): HTMLElement =>
 const line = (scope: HTMLElement): HTMLButtonElement =>
   scope.querySelector<HTMLButtonElement>('.decision-strip-line')!;
 
+/** The line's tip, read as a pointer arriving on it afresh. */
+async function tip(element: Element): Promise<string | null> {
+  await act(async () => element.dispatchEvent(new MouseEvent('mouseleave')));
+  return hoverTooltip(element);
+}
+
 /** The question the line names, in its own words. */
 const named = (scope: HTMLElement): string | null =>
   line(scope).querySelector('.decision-strip-title')?.textContent ?? null;
@@ -250,14 +257,14 @@ describe('the line takes the reader to the evidence card that answers it', () =>
     expect(line(scope).textContent).toContain('40m');
     expect(line(scope).textContent).toContain(wayPosition(1, 2));
     expect(line(scope).getAttribute('aria-label')).toBe(`${needsDecisionCount(2)}: ${a.title}`);
-    expect(line(scope).getAttribute('title')).toBe(GO_TO_CARD_HINT);
+    expect(await tip(line(scope))).toBe(GO_TO_CARD_HINT);
 
     await click(line(scope));
     expect(scrolled).toEqual([anchorFor(scope, a)]);
     expect(named(scope)).toBe(a.title);
     expect(line(scope).textContent).toContain(wayPosition(1, 2));
     // From here a press goes on, and the line says so.
-    expect(line(scope).getAttribute('title')).toBe(GO_TO_NEXT_CARD_HINT);
+    expect(await tip(line(scope))).toBe(GO_TO_NEXT_CARD_HINT);
 
     await click(line(scope));
     expect(scrolled).toEqual([anchorFor(scope, a), anchorFor(scope, b)]);
@@ -315,14 +322,14 @@ describe('the line takes the reader to the evidence card that answers it', () =>
     const only = row();
     const scope = await page({ rows: [only] });
 
-    expect(line(scope).getAttribute('title')).toBe(GO_TO_CARD_HINT);
+    expect(await tip(line(scope))).toBe(GO_TO_CARD_HINT);
     expect(line(scope).textContent).toContain('20m');
     // Pressing it wrote nothing: a navigation does not settle a question, so the line says what it
     // said — and with one card there is no position to claim and no "next" to promise.
     await click(line(scope));
     expect(line(scope).getAttribute('aria-label')).toBe(`${needsDecisionCount(1)}: ${only.title}`);
     expect(line(scope).textContent).not.toMatch(/\d of \d/u);
-    expect(line(scope).getAttribute('title')).toBe(GO_TO_CARD_HINT);
+    expect(await tip(line(scope))).toBe(GO_TO_CARD_HINT);
   });
 });
 

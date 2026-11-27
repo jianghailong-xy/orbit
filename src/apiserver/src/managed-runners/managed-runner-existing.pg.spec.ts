@@ -59,6 +59,8 @@ import {
 import { assertTripwireQuiet, bootScrubbedApiserver } from '../test-support/managed-runner-apiserver';
 import { managedPodName, managedPvcName } from './managed-runner-resources';
 import '../test-support/daemon-routes-over-http';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordSql } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -110,6 +112,11 @@ test('managed runners switched off with existing state: nothing is stopped, dele
       ...mapping,
     } as Record<string, unknown>;
     if (columns.pod_uid) columns.pod_name = managedPodName(runnerId);
+    // The word as its facts (deploy D3): the turn state of a held word; the release beside a released one is set above.
+    if ('status' in columns) {
+      columns.turn_state = turnStateOfWord(String(columns.status));
+      delete columns.status;
+    }
     const names = Object.keys(columns);
     await sql.query(
       `INSERT INTO managed_runner (${names.map((n) => `"${n}"`).join(', ')}) VALUES (${names.map((_, i) => `$${i + 1}`).join(', ')})`,
@@ -183,17 +190,22 @@ test('managed runners switched off with existing state: nothing is stopped, dele
       } : {}),
       ...extra,
     };
+    // The word as its facts (deploy D3): the turn state of a held word; the release beside a released one is set above.
+    if ('status' in columns) {
+      columns.turn_state = turnStateOfWord(String(columns.status));
+      delete columns.status;
+    }
     const names = Object.keys(columns);
     await sql.query(
       // started_at and updated_at by the database's clock: they are timestamps without a zone.
       `INSERT INTO "session" (${names.map((n) => `"${n}"`).join(', ')}, "started_at", "updated_at")
-       VALUES (${names.map((n, i) => (n === 'status' ? `$${i + 1}::"run_status"` : `$${i + 1}`)).join(', ')}, now(), now())`,
+       VALUES (${names.map((_, i) => `$${i + 1}`).join(', ')}, now(), now())`,
       names.map((n) => columns[n]),
     );
     return id;
   }
   const statusOf = async (sessionId: string) =>
-    (await sql.query(`SELECT status::text AS status, retry_at AS "retryAt", retry_attempts AS "retryAttempts" FROM "session" WHERE id = $1`, [sessionId])).rows[0];
+    (await sql.query(`SELECT ${wordSql()} AS status, retry_at AS "retryAt", retry_attempts AS "retryAttempts" FROM "session" WHERE id = $1`, [sessionId])).rows[0];
 
   async function disabledBoot(label: string, extra: NodeJS.ProcessEnv) {
     // Work addressed to the sleeping managed runner, one of each kind, written before the boot so the
@@ -230,7 +242,7 @@ test('managed runners switched off with existing state: nothing is stopped, dele
       const owner = await login(ready.ownerId);
 
       const capabilities = await call(server, 'GET', '/api/auth/capabilities', owner);
-      assert.deepEqual(capabilities.json, { managedRunners: { enabled: false, contractVersion: 1 } });
+      assert.deepEqual(capabilities.json, { managedRunners: { enabled: false, contractVersion: 1 }, documents: { enabled: false } });
       const status = await call(server, 'GET', '/api/managed-runner', owner);
       assert.equal(status.status, 200, status.text);
       assert.equal(status.json.enabled, false);
@@ -342,7 +354,7 @@ test('managed runners switched off with existing state: nothing is stopped, dele
       assert.equal(claimed.status, 200, claimed.text);
       assert.equal(toUuid(claimed.json.sessionId), queuedForDraining, 'its queued turn is still handed out');
       // Its turn ran: settled, so the next boot finds nothing of this one's left running.
-      await sql.query(`UPDATE "session" SET status = 'SUCCEEDED', finished_at = now() WHERE id = $1`, [queuedForDraining]);
+      await sql.query(`UPDATE "session" SET "turn_state" = NULL, finished_at = now() WHERE id = $1`, [queuedForDraining]);
     } finally {
       await server.stop();
     }

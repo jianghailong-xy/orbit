@@ -125,7 +125,7 @@ struct EngineSwitchSheet: View {
         let greyed = engine.unavailable != nil && engine.fixEngine == nil
         let reasonBelow = Self.reasonBelowName(engine)
         Button {
-            // Dismiss first, then switch — same ordering as AgentSwitchSheet, so the sheet
+            // Dismiss first, then switch, so the sheet
             // never tears down through a view the switch has already rebuilt.
             dismiss()
             // A row this machine can't run isn't a pick — it's a request for the sign-in
@@ -297,7 +297,7 @@ struct WorkspaceTitle: View {
     }
 }
 
-/// Clickable title used by the iOS task list and the macOS new-session workspace picker.
+/// Clickable title used by the iOS task list.
 ///
 /// `.fixedSize()` is load-bearing, not tidiness. iOS 26 hands a *custom* item in the leading slot a
 /// proposal far narrower than the item's own content: measured on an iPhone 17 Pro Max simulator
@@ -344,73 +344,3 @@ struct WorkspaceTitleSwitcher: View {
     }
 }
 
-/// Agent picker opened from the macOS new-session hero. Lists agents in drawer order and reports
-/// the selection to the caller, which switches the composing agent.
-struct AgentSwitchSheet: View {
-    let agents: [Agent]
-    let currentID: String
-    let configuredProviders: [ConfiguredProvider]
-    let onSelect: (String) -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            List {
-                ForEach(agents) { agent in
-                    AgentSwitchRow(agent: agent, currentID: currentID,
-                                   configuredProviders: configuredProviders, onSelect: onSelect)
-                }
-            }
-            .navigationTitle("Switch agent")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
-                }
-            }
-            #endif
-        }
-        #if os(iOS)
-        .presentationDetents([.medium, .large])
-        #endif
-    }
-}
-
-/// One agent in the switch sheet: its name, what a session in it starts on, and a checkmark when it
-/// is the one composing now.
-private struct AgentSwitchRow: View {
-    let agent: Agent
-    let currentID: String
-    let configuredProviders: [ConfiguredProvider]
-    let onSelect: (String) -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        Button {
-            // Dismiss first, then switch: the switch rebuilds the presenting NewSessionView
-            // (its `.id(agent.id)` changes), so tearing the sheet down ourselves first avoids
-            // dismissing through a view that's already gone.
-            dismiss()
-            if agent.id != currentID { onSelect(agent.id) }
-        } label: {
-            HStack(spacing: 12) {
-                ProviderMark(provider: agent.defaultProvider, size: 38)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(agent.name).foregroundStyle(.primary).lineLimit(1)
-                    Text(SessionProviderChoices.engineVia(
-                        engine: agent.defaultEngine(configured: configuredProviders),
-                        provider: agent.defaultProvider, configured: configuredProviders))
-                        .font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
-                }
-                Spacer(minLength: 8)
-                if agent.id == currentID {
-                    Image(systemName: "checkmark")
-                        .font(.body.weight(.semibold)).foregroundStyle(Color.accentColor)
-                }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-}

@@ -9,6 +9,7 @@ import { openDialog } from '../RunnerEngines.test-helpers';
 import { encodeId } from '../../lib/idCodec';
 import type { ProviderRow } from '../../lib/providerAdmin';
 import { SettingsKeysPage, SettingsProvidersHome } from './SettingsProviderPages';
+import { hoverTooltip } from '../../test/tooltipHover';
 
 /**
  * The API keys page in Settings' Providers group (owner's choice A, docs/mocks/settings-providers-compact
@@ -351,7 +352,7 @@ describe('the API keys page in Settings', () => {
     expect(text(keyRow('DeepSeek').querySelector('.vk-model'))).toBe('· Starts on DeepSeek V4 Flash');
     expect(text(keyRow('DeepSeek').querySelector('.vk-used'))).toBe('last used 3d ago');
     // What the relative time stands for is its tooltip.
-    expect(keyRow('DeepSeek').querySelector('.vk-used')?.getAttribute('title')).toBe(
+    expect(await hoverTooltip(keyRow('DeepSeek').querySelector('.vk-used')!)).toBe(
       new Date(THREE_DAYS_AGO).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }),
     );
     // A key that is on says nothing of it.
@@ -372,7 +373,7 @@ describe('the API keys page in Settings', () => {
     const row = keyRow('Claude Max');
     expect(text(row.querySelector('.vk-name'))).toBe('Claude Max Disabled');
     expect(text(row.querySelector('.vk-used.never'))).toBe('never used');
-    expect(row.querySelector('.vk-used[title]')).toBeNull();
+    expect(await hoverTooltip(row.querySelector('.vk-used.never')!)).toBeNull();
     // One button on the row, its ⋯ (Edit and Delete in it), named after the key; the row itself opens it.
     expect([...row.querySelectorAll('.vk-act button')].map((b) => b.getAttribute('aria-label'))).toEqual([
       'More for Claude Max',

@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunStatus as SharedRunStatus } from '@orbit/shared';
 import { buildCoordinatorDeliveryContextKey } from '../projects/coordinator-opening';
 import { currentWorkTerminalizationDouble, noSessionRequests } from '../test-support/prisma-transaction-double';
 import { RunnerApiController } from './runner-api.controller';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordOfWrite } from '../test-support/session-word';
 
 const PROJECT_ID = '33333333-3333-4333-8333-333333333333';
 const LEASE_GENERATION = '44444444-4444-4444-8444-444444444444';
@@ -78,16 +80,20 @@ function makeController(
     session: {
       findUniqueOrThrow: async () => ({
         status: session.status,
+        turnState: turnStateOfWord(session.status),
+        finishedAt: null,
         taskId: session.taskId,
         inboxLeaseGeneration: LEASE_GENERATION,
         coordinatorContextEpoch,
         coordinatorForProject: coordinatorContextKey ? { id: PROJECT_ID, coordinatorEnabled } : null,
       }),
-      findUnique: async () => ({ status: session.status }),
-      updateMany: async ({ data }: { data: { status: RunStatus } }) => {
-        statusWrites.push(data.status);
+      findUnique: async () => ({ status: session.status, turnState: turnStateOfWord(session.status), finishedAt: null }),
+      updateMany: async ({ data }: { data: Record<string, unknown> }) => {
+        // The writer writes the facts; the word they leave is the projector's (deploy D3).
+        const word = wordOfWrite(data) as RunStatus;
+        statusWrites.push(word);
         sessionWrites.push(data);
-        session.status = data.status;
+        session.status = word;
         return { count: 1 };
       },
       count: async () => 0,
@@ -306,4 +312,41 @@ test('a failed task turn retires its inbox generation in the terminal transactio
   assert.equal(h.inboxWakes(), 0);
   assert.deepEqual(h.sessionUpdates, [h.sessionId]);
   assert.deepEqual(h.taskChanges, ['33333333-3333-4333-8333-333333333333']);
+});
+
+/**
+ * The failure's kind on the session, written with the error by the same terminal write (routing-account-health-design
+ * §5.1, §10 Mixed versions): a runner that classifies sends `failure` and `admission`; an older one sends neither.
+ */
+test('a failed turn from a new runner stores its failure kind beside the error', async () => {
+  const h = makeController(0);
+
+  await h.controller.turnComplete({ id: h.runnerId }, h.sessionId, {
+    turnId: 'turn-1',
+    status: SharedRunStatus.FAILED,
+    error: 'Cursor said: "Add a payment method to continue." The Cursor account needs this before the session can go on.',
+    failure: { kind: 'ACCOUNT_ACTION_REQUIRED' as never, said: 'Add a payment method to continue' },
+    admission: true,
+  });
+
+  assert.deepEqual(h.statusWrites, [RunStatus.FAILED]);
+  assert.equal(h.sessionWrites[0].failureKind, 'ACCOUNT_ACTION_REQUIRED');
+  assert.equal(h.sessionWrites[0].failureSaid, 'Add a payment method to continue');
+  assert.equal(h.sessionWrites[0].failureScope, null);
+  assert.equal(h.sessionWrites[0].admissionFailure, true);
+});
+
+test('a failed turn from an old runner stores no kind and fails as it did', async () => {
+  const h = makeController(0);
+
+  const result = await h.controller.turnComplete({ id: h.runnerId }, h.sessionId, {
+    turnId: 'turn-1',
+    status: SharedRunStatus.FAILED,
+    result: 'provider failed',
+  });
+
+  assert.deepEqual(result, { ok: true, status: RunStatus.FAILED });
+  assert.equal(h.sessionWrites[0].error, 'provider failed');
+  assert.equal(h.sessionWrites[0].failureKind, null);
+  assert.equal(h.sessionWrites[0].admissionFailure, null);
 });

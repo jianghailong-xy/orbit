@@ -10,6 +10,8 @@ import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { CODEX_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
 import { ConflictException } from '@nestjs/common';
 import '../test-support/dequeue-under-lease';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordOf } from '../test-support/session-word';
 
 const url = process.env.COORDINATOR_PG_URL;
 const work = '1fda3f43';
@@ -50,7 +52,7 @@ test('personal account pause persists and gates claims and inbox without interru
     const session = async (status: 'PENDING' | 'RUNNING' = 'PENDING', pinned = false) => db.session.create({ data: {
       ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
       title: 'Pause test', prompt: 'hello', provider: 'codex', providerBuiltin: true,
-      codexAccount: 'default', codexAccountPinned: pinned, status, usesRuntimeDefaultModel: true,
+      codexAccount: 'default', codexAccountPinned: pinned, turnState: turnStateOfWord(status), usesRuntimeDefaultModel: true,
     } });
     return { ownerId, runnerId, workspaceId, session };
   }
@@ -83,7 +85,7 @@ test('personal account pause persists and gates claims and inbox without interru
     assert.equal(reload?.kind, 'reload', 'warm engines must reload before receiving the queued message');
     assert.equal(reload?.env?.CODEX_HOME, '/home/test/codex-work');
     assert.equal((await db.conversationTurn.findUniqueOrThrow({ where: { id: message.id } })).status, 'PENDING');
-    assert.equal((await db.session.findUniqueOrThrow({ where: { id: pinned.id } })).status, 'PENDING');
+    assert.equal(wordOf((await db.session.findUniqueOrThrow({ where: { id: pinned.id } }))), 'PENDING');
     await runners.pauseAccount(f.ownerId, f.runnerId, 'codex', 'default', null);
     assert.equal((await queue.claimSessionForRunner({ id: f.runnerId }))?.sessionId, pinned.id);
     await runners.pauseAccount(f.ownerId, f.runnerId, 'codex', 'default', 1);
@@ -99,7 +101,7 @@ test('personal account pause persists and gates claims and inbox without interru
     await runners.pauseAccount(f.ownerId, f.runnerId, 'codex', 'default', 120);
     await assert.rejects(dequeue(s.id, f.runnerId), ConflictException);
     assert.equal((await db.conversationTurn.findUniqueOrThrow({ where: { id: turn.id } })).status, 'PENDING');
-    assert.equal((await db.session.findUniqueOrThrow({ where: { id: s.id } })).status, 'PENDING');
+    assert.equal(wordOf((await db.session.findUniqueOrThrow({ where: { id: s.id } }))), 'PENDING');
     const parked = await db.session.findUniqueOrThrow({ where: { id: s.id } });
     assert.equal(parked.inboxLeaseOwner, null, 'heartbeat must detach the old process and release its permit');
     const fences = await db.$queryRaw<Array<{ retired_at: Date | null }>>`
@@ -119,7 +121,7 @@ test('personal account pause persists and gates claims and inbox without interru
     // Inbox may re-deliver the same id; the resident engine deduplicates it. The pause
     // must not detach a turn merely because it has run beyond the five-minute deadline.
     await dequeue(active.id, f.runnerId, activeGeneration);
-    assert.equal((await db.session.findUniqueOrThrow({ where: { id: active.id } })).status, 'RUNNING');
+    assert.equal(wordOf((await db.session.findUniqueOrThrow({ where: { id: active.id } }))), 'RUNNING');
     assert.equal((await db.conversationTurn.findUniqueOrThrow({ where: { id: turn.id } })).status, 'IN_FLIGHT');
     assert.equal((await db.conversationTurn.findUniqueOrThrow({ where: { id: turn.id } })).deliveredAt?.getTime(), startedAt.getTime());
     await db.conversationTurn.create({ data: { sessionId: active.id, seq: 3, kind: 'diff', clientTurnId: randomUUID() } });
@@ -135,7 +137,7 @@ test('personal account pause persists and gates claims and inbox without interru
     } });
     await runners.pauseAccount(f.ownerId, f.runnerId, 'codex', 'default', 120);
     await assert.rejects(dequeue(s.id, f.runnerId, generation), ConflictException);
-    assert.equal((await db.session.findUniqueOrThrow({ where: { id: s.id } })).status, 'PENDING');
+    assert.equal(wordOf((await db.session.findUniqueOrThrow({ where: { id: s.id } }))), 'PENDING');
     assert.equal((await db.conversationTurn.findUniqueOrThrow({ where: { id: turn.id } })).status, 'PENDING');
     await runners.pauseAccount(f.ownerId, f.runnerId, 'codex', 'default', null);
     assert.equal((await queue.claimSessionForRunner({ id: f.runnerId }))?.sessionId, s.id);

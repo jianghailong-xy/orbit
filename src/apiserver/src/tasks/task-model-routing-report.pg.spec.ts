@@ -15,6 +15,8 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import { SubagentRoutingReportService } from './subagent-routing-report.service';
 import { TaskModelRoutingReportController } from './task-model-routing-report.controller';
 import { TaskModelRoutingReportService, type ModelRoutingReportGroup } from './task-model-routing-report.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import type { SessionFixture } from '../test-support/session-word';
 
 const PG_URL = process.env.COORDINATOR_PG_URL;
 const OPUS = 'claude-opus-5-5';
@@ -59,13 +61,13 @@ test('model-routing report aggregates actual runs, first-run task cohorts and on
       assigneeId: agent.id, ...data,
     } });
   }
-  async function run(subject: Task, seconds: number, duration: number | null, data: Partial<Prisma.SessionUncheckedCreateInput> = {}) {
-    const status = data.status ?? 'SUCCEEDED';
+  async function run(subject: Task, seconds: number, duration: number | null, data: SessionFixture = {}) {
+    const { status = 'SUCCEEDED', ...dataFacts } = data;
     const terminal = ['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(status);
     return db.session.create({ data: {
       ownerId: subject.ownerId, creatorId: subject.ownerId, title: 'report run', prompt: 'report', taskId: subject.id,
       workspaceId: subject.ownerId === owner ? agent.id : otherAgent.id, startsTaskWork: true,
-      provider: 'claude', model: OPUS, effort: 'low', status, createdAt: at(seconds), ...data,
+      provider: 'claude', model: OPUS, effort: 'low', turnState: turnStateOfWord(status), createdAt: at(seconds), ...dataFacts,
       finishedAt: terminal ? data.finishedAt ?? at(seconds + (duration ?? 0)) : null,
       // A failure release carries FAILED on its turn (removal step R2), which is what reads it as one since R7.
       ...(status === 'FAILED' && data.lastTurnOutcome === undefined ? { lastTurnOutcome: 'FAILED' } : {}),
@@ -181,7 +183,7 @@ test('model-routing report aggregates actual runs, first-run task cohorts and on
   } });
   const pending = await task({ status: 'IN_PROGRESS' });
   const pendingRun = await run(pending, 1100, null, { status: 'PENDING', provider: 'codex', model: null });
-  await route(pending, pendingRun.id, 1100, { policyVersion: 3, level: 'M' });
+  await route(pending, pendingRun.id, 1100, { policyVersion: 4, level: 'M' });
 
   // Same policy/tier, a different actual model; the route's suggestion is not the grouping key.
   const sonnet = await task();
@@ -267,8 +269,8 @@ test('model-routing report aggregates actual runs, first-run task cohorts and on
     });
   });
   await t.test('unfinished runs with no usage, completion or finish time return defined counts and NULL ratios', async () => {
-    assert.deepEqual(group(await get(), 'shadow', 3, 'M', 'codex', null), {
-      policyVersion: 3, level: 'M', provider: 'codex', model: null, sampleCount: 1,
+    assert.deepEqual(group(await get(), 'shadow', 4, 'M', 'codex', null), {
+      policyVersion: 4, level: 'M', provider: 'codex', model: null, sampleCount: 1,
       taskCount: 1, completedTaskCount: 0, firstPassTaskCount: 0, firstPassRate: 0,
       averageFailureCount: 0, tokensPerCompletedTask: null, costUsdPerCompletedTask: null, usageUnknownCompletedTaskCount: 0, durationP50Ms: null,
     });

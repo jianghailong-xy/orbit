@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { RunStatus } from '@prisma/client';
 import {
   createRunnerOrchestrationJwt,
   ORCHESTRATION_CREDENTIAL_INVALID_CODE,
@@ -189,14 +188,7 @@ test('reissue signs only after the runner still owns an eligible live session', 
       assignedRunnerId: 'runner-1',
       deletedAt: null,
       cancelRequestedAt: null,
-      status: {
-        in: [
-          RunStatus.PENDING,
-          RunStatus.RUNNING,
-          RunStatus.AWAITING_INPUT,
-          RunStatus.INTERRUPTED,
-        ],
-      },
+      finishedAt: null,
       workspace: { deletedAt: null },
     },
   ]);
@@ -243,14 +235,7 @@ test('assert verifies the credential before applying the open-session database p
       assignedRunnerId: 'runner-1',
       deletedAt: null,
       cancelRequestedAt: null,
-      status: {
-        in: [
-          RunStatus.PENDING,
-          RunStatus.RUNNING,
-          RunStatus.AWAITING_INPUT,
-          RunStatus.INTERRUPTED,
-        ],
-      },
+      finishedAt: null,
       workspace: { deletedAt: null },
     },
   ]);

@@ -29,7 +29,7 @@ const gone = () =>
   );
 
 /**
- * A file's download as the browser's own download (docs/orbit-files-drive-technical-design.md §4.1, D12): the content
+ * A file's download as the browser's own download (docs/drive-technical-design.md §4.1, D12): the content
  * route takes a bearer header, which a navigation cannot send, so the Files page first asks for a short-lived URL bound
  * to the owner, the file and one version, and navigates to it. The browser then streams the bytes to disk with its
  * download manager, whatever their size, and a Range resumes it.

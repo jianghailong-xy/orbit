@@ -6,7 +6,7 @@ import CoreTransferable
 import UniformTypeIdentifiers
 #endif
 
-// What a version of evidence cites, on its card (docs/orbit-files-design.md §2.6): the file area under
+// What a version of evidence cites, on its card (docs/drive-design.md §2.6): the file area under
 // the standard, the Evidence files page it opens, and the viewer a thumbnail opens. Web's
 // `EvidenceFiles.tsx`. Every word and every reading of a row is `EvidenceFiles`, in OrbitKit.
 //

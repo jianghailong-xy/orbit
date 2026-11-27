@@ -21,6 +21,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.R
+import io.orbitd.android.core.drive.DriveChatCopy
 import io.orbitd.android.text.MarkdownText
 import io.orbitd.android.text.TranscriptImage
 import io.orbitd.android.translation.BilingualEnglish
@@ -133,3 +134,11 @@ internal fun UserTurnMetaLine(lead: @Composable () -> Unit, foot: (@Composable (
 @Composable
 internal fun UserTurnMetaText(text: String) =
     Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+
+/** `⊕ Orbit attached: Folder · Scans` under the owner's message: what Orbit told the agent beside their words (a page chat's note). */
+@Composable
+internal fun OrbitAttachedLine(label: String) = Row(Modifier.testTag("orbit-attached"), horizontalArrangement = Arrangement.spacedBy(5.dp),
+    verticalAlignment = Alignment.CenterVertically) {
+    Icon(painterResource(R.drawable.ic_add_circle), null, Modifier.size(15.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text("${DriveChatCopy.ORBIT_ATTACHED}: $label", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}

@@ -10,10 +10,12 @@ import { Prisma } from '@prisma/client';
 import { RunEventType } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { LEGACY_STATUS_SELECT } from '../sessions/session-legacy-words';
 import { withSessionState } from '../sessions/session-state';
 import { assertEngineSession } from '../sessions/engine-session';
 import { WikiDocs } from '../wiki/wiki-docs';
 import { currentWikiRollout, wikiDisabledError, wikiOnFor } from '../wiki/wiki-rollout';
+import { documentsDisabledError, documentsEnabled } from '../drive/drive-switch';
 import type { PutShareLinkDto } from './dto';
 import {
   effectiveProjectInclude,
@@ -100,7 +102,8 @@ const LINK_SELECT = {
   updatedAt: true,
   session: {
     select: {
-      id: true, title: true, status: true, endReason: true, completedAt: true, archivedAt: true, deletedAt: true,
+      ...LEGACY_STATUS_SELECT,
+      id: true, title: true, completedAt: true, archivedAt: true, deletedAt: true,
     },
   },
   task: { select: { id: true, title: true, status: true } },
@@ -297,7 +300,7 @@ export class ShareLinksService {
 
   /**
    * Share one drive file, pinned to `versionId` (the version the owner's share check just read): open its link, or move the
-   * link it has to that version (docs/orbit-files-drive-technical-design.md §9). Only the owner's routes call this. The same
+   * link it has to that version (docs/drive-technical-design.md §9). Only the owner's routes call this. The same
    * version twice changes nothing. A file in Trash cannot be shared.
    */
   async putDriveFile(ownerId: string, entryId: string, versionId: string, expiresAtRaw?: string | null): Promise<ShareLinkView> {
@@ -479,6 +482,8 @@ export class ShareLinksService {
    *  public door's `content` route; nothing the file has since been given reaches here. */
   async driveFilePage(link: OpenLink): Promise<{ name: string; sizeBytes: number; versionId: string }> {
     const entryId = this.rootOf(link, 'DRIVE_FILE');
+    // A link made while Drive was on reads, while it is off, as one naming nothing (drive-switch.ts).
+    if (!documentsEnabled()) throw linkNotFound();
     const version = link.driveVersionId
       ? await this.prisma.driveVersion.findFirst({
           where: { id: link.driveVersionId, ownerId: link.ownerId, entryId },
@@ -591,6 +596,7 @@ export class ShareLinksService {
       return { inTrash: false };
     }
     if (kind === 'DRIVE_FILE') {
+      if (!documentsEnabled()) throw documentsDisabledError();
       const entry = await this.prisma.driveEntry.findFirst({ where: { id, ownerId, kind: 'FILE' }, select: { trashedAt: true } });
       if (!entry) throw new NotFoundException('file not found');
       return { inTrash: entry.trashedAt != null };
@@ -707,7 +713,7 @@ export class ShareLinksService {
       return {
         id: session.id,
         title: session.title,
-        status: session.status,
+        status: session.runStatus,
         lifecycleState: session.lifecycleState,
         completedAt: session.completedAt,
       };

@@ -1,4 +1,5 @@
 import { readTaskIntegrationViews } from './project-task-integration';
+import { asLegacyMainSyncItem } from '../test-support/legacy-main-sync';
 import { openItemMessage } from './project-open-item';
 import { seedPromotionRequest } from '../test-support/promotion-request';
 import assert from 'node:assert/strict';
@@ -12,11 +13,11 @@ import { test } from 'node:test';
 import {
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { receiveOpenItem } from '../test-support/open-item-delivery';
@@ -27,6 +28,7 @@ import {
   RunEventType,
   RunStatus as SharedRunStatus,
   TaskStatus as DeclaredTaskStatus,
+  uuidToBase62,
 } from '@orbit/shared';
 import { HttpException } from '@nestjs/common';
 
@@ -220,7 +222,7 @@ async function world(stack: Stack, label: string, automatic = true): Promise<Wor
       title: `coordinator: ${label}`,
       prompt: `coordinator: ${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
       numTurns: 1,
@@ -323,7 +325,7 @@ async function doneTask(
       title,
       prompt: title,
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
@@ -377,8 +379,8 @@ async function doneTask(
     const finished = await tx.session.update({
       where: { id: sessionId },
       data: worktree
-        ? { status: RunStatus.SUCCEEDED, finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false }
-        : { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
+        ? { turnState: null, finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false }
+        : { turnState: null, finishedAt: new Date() },
       select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
     });
     await settleDeliveredIdentityAfterFinish(tx, finished);
@@ -886,7 +888,7 @@ test('the rerun lands the branch the task\'s work ended on, not the one the fail
           title: 'the second run',
           prompt: 'the second run',
           provider: 'claude',
-          status: RunStatus.SUCCEEDED, 
+          turnState: null, 
           dispatchOrigin: SessionDispatchOrigin.USER,
           startsTaskWork: true,
           startedAt: new Date(),
@@ -958,24 +960,24 @@ test('CHECK_TIMED_OUT and ERROR are rerun, a CONFLICT is not',
     }
   });
 
-test('a MAIN_SYNC conflict is refused as well, and the refusal sends the absorb to the project line',
+test('a MAIN_SYNC conflict is the line\'s since revision 45: the landing is already queued again behind the line-sync item, and the refusal names it',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
     try {
-      // §3.1 M3, read off the phase the job row recorded: the line conflicted absorbing the upstream,
-      // so the same source run again conflicts in the same place, and the task's own work is not
-      // what to change. What resolves it is a source branch that carries the absorb.
+      // docs/design/project-line-upstream-sync.md §4.2: the line conflicted absorbing the upstream, so the task's
+      // landing is held (MAIN_SYNC_HELD), not failed, and nothing about the task is rerun or reopened.
       const w = await world(stack, 'retry-main-sync');
       const clash = await failedLanding(stack, w, 'retry-main-sync', { ...CONFLICTED, phase: 'MAIN_SYNC' });
+      const lineSync = await stack.db.projectOpenItem.findFirstOrThrow({
+        where: { projectId: w.projectId, dedupeKey: { startsWith: 'IMS:' }, state: 'OPEN' },
+      });
       const refused = await denied(() => retry(stack, w, clash.task.taskId, 'the ledger conflict is resolved'));
       assert.equal(refused.status, 409);
-      assert.equal(refused.code, 'INTEGRATION_RETRY_NOT_APPLICABLE');
-      assert.match(refused.message, /stopped at MAIN_SYNC/);
-      assert.match(refused.message, /Absorb the upstream on the project line first/);
-      assert.match(refused.message, /lands by J-S4 MERGE/);
-      assert.equal((await landings(stack.db, clash.task.taskId)).length, 1, 'nothing queued for a conflict');
-      const [stillOpen] = await itemsOf(stack.db, clash.task.taskId);
-      assert.equal(stillOpen?.state, 'OPEN', 'and its item is left for the decision it needs');
+      assert.equal(refused.code, 'INTEGRATION_RETRY_IN_FLIGHT');
+      assert.ok(refused.message.includes(uuidToBase62(lineSync.id)), refused.message);
+      assert.deepEqual((await landings(stack.db, clash.task.taskId)).map((job) => job.state), ['CONFLICT', 'QUEUED'],
+        'the held generation, and nothing more');
+      assert.equal((await itemsOf(stack.db, clash.task.taskId)).length, 0, 'no item is filed as the task\'s failure');
     } finally {
       await stack.db.$disconnect();
     }
@@ -1044,6 +1046,9 @@ async function mainSyncConflictOverGit(stack: Stack, label: string) {
     ...CONFLICTED, phase: 'MAIN_SYNC', sourceSha: conflictedTip, targetShaBefore: lineTip, upstreamSha: mainTip,
   });
   assert.equal(answer.accepted, true);
+  // The moved-branch rerun is a door of the LEGACY task-level item only (revision 45; docs/design/
+  // project-line-upstream-sync.md §4.6 item 7), so the fixture narrows the conflict to one.
+  await asLegacyMainSyncItem(stack.db, { projectId: w.projectId, taskId: task.taskId });
   /** Whether the branch, as pushed, contains this commit — what J-S2 asks on the runner. */
   const contains = (tip: string): boolean => {
     try {
@@ -1167,12 +1172,18 @@ test('a MAIN_SYNC conflict whose branch moved but lacks main or the project tip 
         assert.equal(next?.jobId, retried.jobId);
         const again = await report(stack, fixture.w, next!, { ...CONFLICTED, phase: 'MAIN_SYNC' });
         assert.equal(again.accepted, true);
+        // Since revision 45 that conflict is the line's: it opens the line-sync item, which supersedes the legacy item
+        // the rerun was handling (H3), and the task's landing is held behind it rather than failed again.
         const items = await itemsOf(stack.db, fixture.task.taskId);
-        const open = items.filter((item) => item.state === 'OPEN');
-        assert.equal(open.length, 1, 'one conflict item, back for the decision it needs');
-        assert.equal(open[0]?.kind, 'INTEGRATION_CONFLICT');
-        assert.equal(open[0]?.integrationJobId, retried.jobId);
-        assert.equal(items.find((item) => item.id === first!.id)?.state, 'SUPERSEDED');
+        assert.equal(items.filter((item) => item.state === 'OPEN').length, 0);
+        const lineSync = await stack.db.projectOpenItem.findFirstOrThrow({
+          where: { projectId: fixture.w.projectId, dedupeKey: { startsWith: 'IMS:' }, state: 'OPEN' },
+        });
+        assert.equal(lineSync.kind, 'INTEGRATION_CONFLICT');
+        assert.equal(lineSync.integrationJobId, retried.jobId);
+        const superseded = items.find((item) => item.id === first!.id);
+        assert.equal(superseded?.state, 'SUPERSEDED');
+        assert.equal(superseded?.supersededByItemId, lineSync.id);
       }
     } finally {
       lacksMain.cleanup();
@@ -1252,7 +1263,7 @@ test('a taken unanswered exception survives an owner-card wait beyond the window
       const { task } = await failedLanding(stack, w, 'retry-owner-card-wait');
       const [item] = await itemsOf(stack.db, task.taskId);
       await stack.openItems.deliverForItems([item!.id]);
-      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.RUNNING } });
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { turnState: 'IN_FLIGHT' } });
       const handed = await dequeue(stack, w.coordinatorSessionId, w.runnerId);
       assert.ok(handed);
       const turn = await stack.db.conversationTurn.findUniqueOrThrow({ where: { id: handed.turnId } });
@@ -1291,7 +1302,7 @@ test('escalated: a failure that went to the owner on the clock is theirs, and th
       const [item] = await itemsOf(stack.db, task.taskId);
       await receiveOpenItem(stack.db, item!.id);
       // A taken item only escalates after its coordinator can no longer carry it.
-      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, finishedAt: new Date()} });
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { turnState: null, finishedAt: new Date()} });
       await stack.db.$executeRaw(
         Prisma.sql`UPDATE "project_open_item" SET "escalate_at" = now() - interval '1 minute'
                     WHERE "id" = ${item!.id}::uuid`,
@@ -2247,6 +2258,83 @@ for (const ending of ['fix landed', 'retry', 'resolve'] as const) {
           assert.equal((await landings(stack.db, expected.taskId!)).length, 2,
             'J5: a task-owned red still queues no next generation');
         }
+      } finally {
+        await stack.db.$disconnect();
+      }
+    });
+}
+
+/**
+ * 2026-11-26, project 354EYHJTnEWkqJ4CeyjlH, task 354FnwOeMe3wToFoLct6h: the task filed to fix an OPEN baseline
+ * item is exempt from its hold, so K5 queues it no held generation. When its own landing came back baseline-red
+ * under a new (U, T0) — main had moved — it opened its own ICB item, and `integration_retry` of it answered 500
+ * (P2025: the baseline branch looked for a QUEUED generation nobody had queued). The retry queues exactly one next
+ * generation itself and closes that item RETRIED; the original baseline item stays OPEN and holds the others.
+ */
+for (const door of ['coordinator', 'owner'] as const) {
+  test(`K5: the ${door}'s retry of a baseline fix whose own landing is baseline-red queues its next generation`,
+    { skip, timeout: 180_000 }, async () => {
+      const stack = await connect();
+      try {
+        const w = await world(stack, `baseline-fix-retry-${door}`);
+        const held = await failedLanding(stack, w, 'held', BASELINE_RED);
+        const original = (await itemsOf(stack.db, held.task.taskId))[0]!;
+        const fix = await doneTask(stack, w, 'baseline-fix');
+        await stack.db.task.update({ where: { id: fix.taskId }, data: { fixesOpenItemId: original.id } });
+        const [claimed] = await claim(stack, w, 'fix-exempt');
+        const failedFix = (await landings(stack.db, fix.taskId))[0]!;
+        assert.equal(claimed?.jobId, failedFix.id, 'the fix is exempt from the hold it was filed against');
+        const movedUpstream = '7'.repeat(40);
+        assert.equal((await report(stack, w, claimed!, { ...BASELINE_RED, upstreamSha: movedUpstream })).accepted, true);
+
+        // The state production was in: generation 1 CHECK_FAILED, nothing queued, the fix's own baseline item OPEN.
+        assert.deepEqual((await landings(stack.db, fix.taskId)).map((job) => [job.generation, job.state]),
+          [[1, 'CHECK_FAILED']], 'K5 queues a baseline fix no held generation');
+        const [own] = await itemsOf(stack.db, fix.taskId);
+        assert.equal(own?.state, 'OPEN');
+        assert.equal(own?.integrationJobId, failedFix.id);
+        assert.equal(own?.payload.failureClass, 'BASELINE_RED');
+        assert.notEqual(own?.id, original.id, 'a new (U, T0) opens its own baseline item');
+        if (door === 'owner') {
+          await stack.db.projectOpenItem.update({ where: { id: own!.id }, data: { assignee: 'OWNER', escalateAt: null } });
+        }
+
+        const reason = 'the merge check now runs go test with -timeout 30m; the red was its 10-minute default';
+        const rerun = door === 'owner'
+          ? await ownerRetry(stack, w, fix.taskId, reason)
+          : await retry(stack, w, fix.taskId, reason);
+        const after = await landings(stack.db, fix.taskId);
+        assert.equal(after.length, 2, 'exactly one next generation');
+        const next = after[1]!;
+        assert.equal(rerun.jobId, next.id);
+        assert.equal(rerun.generation, 2);
+        assert.equal(rerun.failureClass, 'BASELINE_RED');
+        assert.equal(rerun.retryOfJobId, failedFix.id);
+        assert.equal(next.state, 'QUEUED');
+        assert.equal(next.retryOfJobId, failedFix.id);
+        assert.equal(next.retryFailureClass, 'BASELINE_RED');
+        assert.equal(next.retryReason, reason);
+        assert.equal(next.retryRequestedBySessionId, door === 'owner' ? null : w.coordinatorSessionId);
+        assert.equal(next.retryRequestedByUserId, door === 'owner' ? w.ownerId : null);
+        const closed = (await itemsOf(stack.db, fix.taskId)).find((item) => item.id === own!.id)!;
+        assert.equal(closed.state, 'RESOLVED');
+        assert.equal(closed.resolution, 'RETRIED');
+        assert.equal(closed.resolvedBy, door === 'owner' ? 'USER' : 'COORDINATOR');
+        assert.equal(closed.resolutionNote, reason);
+        assert.equal((await itemsOf(stack.db, held.task.taskId))[0]?.state, 'OPEN', 'the original baseline item still holds');
+
+        const again = await denied(() => (door === 'owner'
+          ? ownerRetry(stack, w, fix.taskId, reason)
+          : retry(stack, w, fix.taskId, reason)));
+        assert.equal(again.status, 409, 'a second press queues nothing beside it');
+        assert.equal(again.code, 'INTEGRATION_RETRY_IN_FLIGHT');
+        assert.equal((await landings(stack.db, fix.taskId)).length, 2);
+
+        const [resumed] = await claim(stack, w, 'fix-rerun');
+        assert.equal(resumed?.jobId, next.id, 'the rerun is claimed; the held landing still waits');
+        await report(stack, w, resumed!, LANDED);
+        const landed = await stack.db.projectOpenItem.findUniqueOrThrow({ where: { id: original.id } });
+        assert.equal(landed.resolution, 'LANDED', 'the fix landing closes the item it was filed against');
       } finally {
         await stack.db.$disconnect();
       }

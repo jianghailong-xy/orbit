@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Coordinator question card — border conformance and redesign</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/TextControls.css">
+<style>
+  body {
+    margin: 0;
+    padding: 40px 52px 56px;
+    width: 1440px;
+    background: #eef0f3;
+    font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB',
+      'Microsoft YaHei', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  }
+  h1 { margin: 0 0 6px; font-size: 25px; letter-spacing: -0.01em; }
+  .sub { margin: 0 0 22px; max-width: 1120px; color: var(--text-2); font-size: 14px; line-height: 1.55; }
+
+  .superseded { margin: 0 0 22px; padding: 10px 14px; max-width: 1120px; border: 1px solid var(--border);
+    border-radius: 8px; background: #fff; color: var(--text-2); font-size: 13px; line-height: 1.55; }
+  .superseded b { color: var(--text-1); }
+  .superseded .token { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+    padding: 1px 5px; border-radius: 4px; background: var(--fill-muted); color: var(--text-1); }
+
+  .facts { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 30px; }
+  .fact { display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 8px;
+    background: #fff; border: 1px solid var(--border-subtle); font-size: 12.5px; }
+  .fact .k { color: var(--text-3); }
+  .fact .v { font-weight: 600; }
+  .sw { width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(0,0,0,.12); flex: none; }
+
+  .panel { background: #fff; border: 1px solid var(--border-subtle); border-radius: 14px;
+    padding: 20px 24px 24px; margin: 0 0 22px; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+  .panel-head { display: flex; align-items: baseline; gap: 10px; margin: 0 0 4px; }
+  .panel-body { display: grid; grid-template-columns: 744px minmax(0, 1fr); gap: 30px; align-items: start; }
+  .num { flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--text-1); color: #fff;
+    font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;
+    transform: translateY(1px); }
+  .num.rec { background: var(--success-solid); }
+  .panel h2 { margin: 0; font-size: 18px; font-weight: 650; }
+  .panel .cap { margin: 0 0 16px 34px; color: var(--text-2); font-size: 13.5px; line-height: 1.5; }
+
+  .stage { width: 744px; background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 12px;
+    padding: 12px; }
+  .stage .approval-card { margin: 0; max-width: 720px; }
+
+  .notes { margin: 0; padding: 0; list-style: none; font-size: 13.5px; line-height: 1.62; color: var(--text-1); }
+  .notes li { margin: 0 0 12px; padding-left: 20px; position: relative; }
+  .notes li::before { content: ''; position: absolute; left: 2px; top: 8px; width: 6px; height: 6px;
+    border-radius: 50%; background: var(--text-4); }
+  .notes li.bad::before { background: var(--error-solid); }
+  .notes li.good::before { background: var(--success-solid); }
+  .notes b { font-weight: 650; }
+  .token { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+    padding: 1px 5px; border-radius: 4px; background: var(--fill-muted); color: var(--text-1); white-space: nowrap; }
+  .verdict { margin: 14px 0 0; padding: 10px 12px; border-radius: 8px; font-size: 13px; line-height: 1.55; }
+  .verdict.no { background: var(--error-bg); border: 1px solid var(--error-border); color: var(--text-1); }
+  .verdict.yes { background: var(--success-bg); border: 1px solid var(--success-border); color: var(--text-1); }
+  .verdict b { font-weight: 650; }
+
+  /* ── Redesign A: the card is amber all the way through ───────────────────────────────── */
+  .is-amber .approval-card.coordinator-question {
+    border: 1.5px solid var(--warning-solid);
+    background: var(--warning-bg);
+  }
+  .is-amber .approval-card.coordinator-question .approval-head {
+    background: var(--warning-bg);
+    border-bottom-color: var(--warning-border);
+  }
+  .is-amber .approval-card.coordinator-question .approval-actions {
+    border-top-color: var(--warning-border);
+  }
+  /* ── Redesign B: the same card, every line on the system hairline ────────────────────── */
+  .is-hairline .approval-card.coordinator-question {
+    border-width: 1px;
+    border-color: var(--warning-border);
+  }
+
+  table.spec { width: 100%; border-collapse: collapse; font-size: 13px; margin: 4px 0 0; }
+  table.spec th, table.spec td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border-subtle);
+    vertical-align: top; }
+  table.spec th { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); font-weight: 650; }
+  table.spec td.role { font-weight: 600; width: 200px; }
+  table.spec td.tok { width: 210px; }
+  table.spec td.use { color: var(--text-2); }
+
+  .code { margin: 0; padding: 14px 16px; border-radius: 10px; background: #1f2329; color: #e6e8eb;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.65;
+    overflow: hidden; }
+  .code .c { color: #8f959e; }
+  .code .k { color: #7aa2ff; }
+  .code .p { color: #ffd591; }
+  .cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+  .label { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--text-3);
+    font-weight: 650; margin: 0 0 8px; }
+  .foot { margin-top: 26px; color: var(--text-3); font-size: 12.5px; line-height: 1.6; }
+  .foot b { color: var(--text-2); }
+</style>
+</head>
+<body>
+
+<h1>Coordinator question card — does the edge conform?</h1>
+<p class="sub">
+  Web console. The card is drawn with the real component classes and the real <span class="token">index.css</span>
+  light-theme tokens; only this board's frame, captions and measurements are drawn. Sample question is the
+  GPT-account reset-quota one this card was last seen asking.
+</p>
+
+<p class="superseded"><b>Superseded 2026-11-26.</b> The owner picked the brand-blue scheme
+  (<span class="token">02-schemes.html</span>, Scheme 1). The amber card below is not what shipped; the facts and the card
+  were measured before the change, and this board stays as the conformance check that led there.</p>
+
+<div class="facts">
+  <span class="fact"><span class="sw" style="background:#fa8c16"></span><span class="k">edge</span><span class="v">1.5px solid #fa8c16</span><span class="k">--warning-solid</span></span>
+  <span class="fact"><span class="sw" style="background:#eaf1ff"></span><span class="k">surface</span><span class="v">#eaf1ff</span><span class="k">--brand-tint</span></span>
+  <span class="fact"><span class="sw" style="background:#bcd3ff"></span><span class="k">head / action rule</span><span class="v">#bcd3ff</span><span class="k">--brand-border</span></span>
+  <span class="fact"><span class="sw" style="background:#3370ff"></span><span class="k">mark / primary</span><span class="v">#3370ff</span><span class="k">--brand</span></span>
+  <span class="fact"><span class="k">edge at 2×</span><span class="v">3 device px</span></span>
+</div>
+
+<!-- ① ─────────────────────────────────────────────────────────────────────────────── -->
+<section class="panel">
+  <div class="panel-head"><span class="num">1</span><h2>Today — one amber edge around a blue card</h2></div>
+  <p class="cap">The shipped rule: <span class="token">.approval-card.coordinator-question { border: 1.5px solid var(--warning-solid) }</span> — nothing else on the card changed.</p>
+  <div class="panel-body">
+    <div class="stage" id="stage-today"></div>
+    <div>
+      <ul class="notes">
+        <li>The line itself is right: 1.5px, solid, full-strength orange — the 2026-11-13 pick (<b>Q2</b>) and the same stroke native's <span class="token">emphasized</span> draws.</li>
+        <li class="bad">Everything it wraps is still <span class="token">--brand</span>: tinted head, head rule, FROM COORDINATOR mark, action rule and the Send answer button.</li>
+        <li class="bad"><b>Native draws the whole card orange</b> — <span class="token">ApprovalReviewLayout(tone: open ? .orange : .blue, emphasized: open)</span> with an orange icon chip. Web is the only client that shipped the outline alone.</li>
+        <li class="bad">Orbit's toned cards put <b>surface, rule, mark and edge in one tone</b>. The owner open-item card does it with <span class="token">--warning-bg</span> + <span class="token">--warning-border</span>; this card puts a stray amber outline on a blue object.</li>
+        <li class="bad">It is the <b>only 1.5px card edge</b> in <span class="token">index.css</span>. Every other 1.5px border there is a status dot or a spinner.</li>
+      </ul>
+      <p class="verdict no"><b>The line conforms; the card it draws does not.</b> Width and hue match the approved pick, but it is the only amber thing on a blue card — so it reads as a warning frame dropped over somebody else's card, the exact confusion the Q2 board flagged.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ② ─────────────────────────────────────────────────────────────────────────────── -->
+<section class="panel">
+  <div class="panel-head"><span class="num">A</span><h2>Redesign A — the whole card is amber <span style="color:var(--text-3);font-size:13px;font-weight:650">Not taken</span></h2></div>
+  <p class="cap">Keep the owner's heavier edge; give it a card that agrees with it. This is the same chrome the owner's open-item card already wears.</p>
+  <div class="panel-body">
+    <div class="stage is-amber" id="stage-amber"></div>
+    <div>
+      <ul class="notes">
+        <li class="good"><b>Edge:</b> <span class="token">1.5px solid --warning-solid</span> — unchanged, the 2026-11-13 pick.</li>
+        <li class="good"><b>Surface:</b> <span class="token">--warning-bg</span>; head rule and action rule <span class="token">--warning-border</span>; FROM COORDINATOR drops <span class="token">.prov-brand</span> for its default amber mark.</li>
+        <li class="good"><b>Action stays blue:</b> <span class="token">--brand</span> is the one pressable colour — the open-item card pairs an amber surface with blue presses the same way.</li>
+        <li class="good">Now web agrees with native and the Q2 board: <b>one orange card</b>, and two cards waiting on the same person agree too.</li>
+      </ul>
+      <p class="verdict yes"><b>Conforms:</b> every toned surface, rule and mark comes from the warning family, and the heavier edge is the one documented exception.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ③ ─────────────────────────────────────────────────────────────────────────────── -->
+<section class="panel">
+  <div class="panel-head"><span class="num">B</span><h2>Redesign B — amber, every line on the hairline</h2></div>
+  <p class="cap">Same amber card, but the edge returns to the system's 1px border role.</p>
+  <div class="panel-body">
+    <div class="stage is-amber is-hairline" id="stage-hairline"></div>
+    <div>
+      <ul class="notes">
+        <li class="good"><b>Edge:</b> <span class="token">1px solid --warning-border</span> — the border role the status family defines, and the hairline every other card uses.</li>
+        <li class="good">Nothing leaves the token roles (<span class="token">fg / solid dot / tint bg / border</span>), and there is no 1.5px exception left to explain.</li>
+        <li>The amber surface and the amber mark still carry the “waiting on you” reading; the edge is just quieter.</li>
+        <li class="bad">Trade-off: in a long open-items list the card stands out less than A, which is the only reason A keeps the heavier edge.</li>
+      </ul>
+      <p class="verdict yes"><b>Conforms strictly:</b> pick this if the 1.5px width is itself the objection.</p>
+    </div>
+  </div>
+</section>
+
+<!-- spec + diff ───────────────────────────────────────────────────────────────────── -->
+<section class="panel">
+  <div class="panel-head"><span class="num">4</span><h2>What the tokens are for</h2></div>
+  <p class="cap">From the status family declared at the top of <span class="token">index.css</span>: <span class="token">/* status: fg / solid dot / tint bg / border */</span>.</p>
+  <div class="cols2">
+    <div>
+      <table class="spec">
+        <thead><tr><th>Role</th><th>Token</th><th>Light</th><th>Used for</th></tr></thead>
+        <tbody>
+          <tr><td class="role">Border</td><td class="tok"><span class="token">--warning-border</span></td><td>#ffd591</td><td class="use">card edges and rules in the warning tone</td></tr>
+          <tr><td class="role">Tint surface</td><td class="tok"><span class="token">--warning-bg</span></td><td>#fff4e6</td><td class="use">a card that is waiting on the owner</td></tr>
+          <tr><td class="role">Foreground</td><td class="tok"><span class="token">--warning</span></td><td>#c2710c</td><td class="use">warning text and marks</td></tr>
+          <tr><td class="role">Solid dot</td><td class="tok"><span class="token">--warning-solid</span></td><td>#fa8c16</td><td class="use">status dots; the approved heavier edge</td></tr>
+          <tr><td class="role">Action</td><td class="tok"><span class="token">--brand</span></td><td>#3370ff</td><td class="use">the one pressable action on any card</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <p class="label">Redesign A, in code</p>
+      <pre class="code"><span class="c">/* was: border only, on the blue card */</span>
+.approval-card.<span class="p">coordinator-question</span> {
+  border: 1.5px solid var(--warning-solid);
+  <span class="k">background: var(--warning-bg);</span>
+}
+.<span class="p">coordinator-question</span> .approval-head {
+  <span class="k">background: var(--warning-bg);</span>
+  <span class="k">border-bottom-color: var(--warning-border);</span>
+}
+.<span class="p">coordinator-question</span> .approval-actions {
+  <span class="k">border-top-color: var(--warning-border);</span>
+}
+<span class="c">/* FROM COORDINATOR: drop .prov-brand → default amber mark */</span></pre>
+    </div>
+  </div>
+</section>
+
+<p class="foot">
+  <b>Source of the pick:</b> <span class="token">docs/mocks/decision-receipt-fold/02-question-border.html</span>, Q2
+  (“orange frame + orange icon”, owner, 2026-11-13), shipped in <span class="token">136e3bbd41</span>.
+  Q2 drew the <b>whole</b> card in orange; native shipped it that way, web shipped the frame only.<br>
+  <b>No product code is changed by this board.</b> Pick A or B and the card gets the amber chrome; the question,
+  options, mark wording and action stay exactly as they are.
+</p>
+
+<template id="card-tpl">
+  <div class="approval-card coordinator-question">
+    <div class="approval-head coordinator-question-head">
+      <span class="coordinator-question-heading">The coordinator has a question</span>
+      <span class="MARK_CLASS">FROM COORDINATOR</span>
+    </div>
+    <div class="approval-body is-questions coordinator-question-body">
+      <div class="coordinator-question-text md">
+        For each GPT account’s reset-quota card, which layout should the Plan usage popover use? This is the
+        mockup approval the project’s web standard needs from you.
+      </div>
+      <label class="coordinator-question-option is-chosen">
+        <input type="radio" name="Q" checked>
+        <span class="coordinator-question-option-text">Option A — one stacked block per account, the current session’s account first
+          <span class="coordinator-question-recommended">Recommended</span></span>
+      </label>
+      <label class="coordinator-question-option">
+        <input type="radio" name="Q">
+        <span class="coordinator-question-option-text">Option B — compact cards for the other accounts, each with its own button</span>
+      </label>
+      <label class="coordinator-question-option">
+        <input type="radio" name="Q">
+        <span class="coordinator-question-option-text">Not yet — change the mock</span>
+      </label>
+      <label class="coordinator-question-option">
+        <input type="radio" name="Q">
+        <span class="coordinator-question-option-text">Other — say it in my own words</span>
+      </label>
+      <textarea class="orbit-text-control orbit-textarea coordinator-question-free" rows="2"
+        placeholder="Add a note (optional)"></textarea>
+      <p class="coordinator-question-meta">Blocks 1 task · If you don’t answer: the Web task stays blocked and no UI code is written. At 13:09 UTC Orbit will ask you directly.</p>
+    </div>
+    <div class="card-actions approval-actions coordinator-question-actions">
+      <button type="button" class="card-action card-action--primary">Send answer</button>
+      <span class="coordinator-question-asked">asked 44s ago</span>
+    </div>
+  </div>
+</template>
+
+<script>
+  const tpl = document.getElementById('card-tpl');
+  const mount = (id, markClass) => {
+    const node = tpl.content.firstElementChild.cloneNode(true);
+    node.querySelector('.MARK_CLASS').className = markClass;
+    document.getElementById(id).appendChild(node);
+  };
+  mount('stage-today', 'criteria-provenance prov-brand');
+  mount('stage-amber', 'criteria-provenance');
+  mount('stage-hairline', 'criteria-provenance');
+</script>
+</body>
+</html>

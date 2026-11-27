@@ -212,3 +212,85 @@ test('an opaque vendor message is qualified with the status it came back on', as
     restore();
   }
 });
+
+/** Answer each endpoint by its host, recording the URLs asked in order. */
+function stubByHost(statusOf: (host: string) => number) {
+  const urls: string[] = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (url: string) => {
+    urls.push(url);
+    const status = statusOf(new URL(url).host);
+    return { ok: status >= 200 && status < 300, status, text: async () => '' };
+  }) as never;
+  return { urls, restore: () => (globalThis.fetch = original) };
+}
+
+test('a MiniMax key the international platform refuses is tried on the China one, and named as China\'s', async () => {
+  const { urls, restore } = stubByHost((host) => (host === 'api.minimaxi.com' ? 200 : 401));
+  try {
+    const r = await svc().testConnection({
+      baseUrl: 'https://api.minimax.io/anthropic',
+      apiKey: 'sk-cn',
+      model: 'MiniMax-M2.7',
+      runtime: 'claude',
+    });
+    assert.equal(r.ok, false);
+    assert.equal(r.status, 401);
+    assert.deepEqual(urls, ['https://api.minimax.io/anthropic/v1/messages', 'https://api.minimaxi.com/anthropic/v1/messages']);
+    assert.deepEqual(r.region, { id: 'cn', label: 'China', baseUrl: 'https://api.minimaxi.com/anthropic' });
+    assert.equal(r.message, 'This key is from the China platform (minimaxi.com), not the international platform');
+  } finally {
+    restore();
+  }
+});
+
+test('a key both of a vendor\'s platforms refuse is invalid, and says both were tried', async () => {
+  const { urls, restore } = stubByHost(() => 401);
+  try {
+    const r = await svc().testConnection({
+      baseUrl: 'https://open.bigmodel.cn/api/anthropic/',
+      apiKey: 'bad',
+      model: 'glm-5.2',
+      runtime: 'claude',
+    });
+    assert.equal(r.ok, false);
+    assert.equal(r.region, undefined);
+    assert.equal(urls[1], 'https://api.z.ai/api/anthropic/v1/messages');
+    assert.equal(r.message, 'Invalid API key — refused on both bigmodel.cn and z.ai');
+  } finally {
+    restore();
+  }
+});
+
+test('a refused key on a vendor with one platform is just invalid, with no second request', async () => {
+  const { urls, restore } = stubByHost(() => 401);
+  try {
+    const r = await svc().testConnection({
+      baseUrl: 'https://api.deepseek.com/anthropic',
+      apiKey: 'bad',
+      model: 'deepseek-flash',
+      runtime: 'claude',
+    });
+    assert.equal(r.message, 'Invalid API key');
+    assert.equal(urls.length, 1);
+  } finally {
+    restore();
+  }
+});
+
+test('a Qwen key from Singapore, tried on Beijing, is named as the international platform\'s', async () => {
+  const { urls, restore } = stubByHost((host) => (host === 'dashscope-intl.aliyuncs.com' ? 200 : 401));
+  try {
+    const r = await svc().testConnection({
+      baseUrl: 'https://dashscope.aliyuncs.com/apps/anthropic',
+      apiKey: 'sk-intl',
+      model: 'qwen3.7-max',
+      runtime: 'claude',
+    });
+    assert.equal(urls[1], 'https://dashscope-intl.aliyuncs.com/apps/anthropic/v1/messages');
+    assert.equal(r.region?.id, 'global');
+    assert.equal(r.message, 'This key is from the international platform (alibabacloud.com), not the China platform');
+  } finally {
+    restore();
+  }
+});

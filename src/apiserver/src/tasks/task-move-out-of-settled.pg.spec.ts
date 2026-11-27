@@ -39,7 +39,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { HttpException } from '@nestjs/common';
-import { CreatorType, RunStatus, type PrismaClient } from '@prisma/client';
+import { CreatorType, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import type { CompletionInputRouter } from '../projects/completion-input-router.service';
 import {
@@ -55,6 +56,7 @@ import { ProjectsService } from '../projects/projects.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { TasksService } from './tasks.service';
+import { wordSql } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -138,8 +140,8 @@ test('a task none of a settled project\'s criteria count leaves it by a confirme
     const id = randomUUID();
     await admin.query(
       `INSERT INTO "session" ("id","owner_id","workspace_id","title","prompt","creator_id",
-         "provider","status","dispatch_origin","updated_at")
-       VALUES ($1,$2,$3,$4,'fixture',$2,'claude',$5::"run_status",'USER'::"session_dispatch_origin",now())`,
+         "provider","turn_state","dispatch_origin","updated_at")
+       VALUES ($1,$2,$3,$4,'fixture',$2,'claude',(CASE ($5)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END),'USER'::"session_dispatch_origin",now())`,
       [id, ownerId, workspaceId, title, status],
     );
     return id;
@@ -209,7 +211,7 @@ test('a task none of a settled project\'s criteria count leaves it by a confirme
     await prisma.session.create({
       data: {
         id: ran, ownerId, creatorId: ownerId, taskId, title: `ran ${title}`, prompt: 'do the work',
-        status: RunStatus.SUCCEEDED, finishedAt: new Date(), branch: `orbit/${nibble}`, isolationStatus: 'worktree',
+        turnState: null, finishedAt: new Date(), branch: `orbit/${nibble}`, isolationStatus: 'worktree',
       },
     });
     await receipts.record(ownerId, ran, {
@@ -353,7 +355,7 @@ test('a task none of a settled project\'s criteria count leaves it by a confirme
 
     // The run went with its task.
     const { rows: [after] } = await admin.query(
-      'SELECT "status"::text AS "status", "task_id" FROM "session" WHERE "id" = $1::uuid', [run]);
+      `SELECT ${wordSql()} AS "status", "task_id" FROM "session" WHERE "id" = $1::uuid`, [run]);
     assert.deepEqual(after, { status: 'RUNNING', task_id: running });
     const { rows: moved } = await admin.query(
       `SELECT "payload" FROM "activity" WHERE "actor_id" = $1::uuid AND "type" = 'task.moved'

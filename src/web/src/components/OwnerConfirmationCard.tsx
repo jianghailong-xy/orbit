@@ -43,6 +43,7 @@ import {
   type ReviewChoices,
 } from './OwnerConfirmationReview';
 import { streamPoll } from '../lib/listBudget';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * The card that asks the account owner whether an OWNER_CONFIRMED task is done.
@@ -579,7 +580,9 @@ function OwnerConfirmationIfYouConfirm({
               ) : null}
             </div>
             {row.detail !== null ? (
-              <div className="owner-confirmation-if-detail" title={row.detail}>{row.detail}</div>
+              <Tooltip content={row.detail} truncatedOnly>
+                <div className="owner-confirmation-if-detail">{row.detail}</div>
+              </Tooltip>
             ) : null}
           </div>
         </div>
@@ -689,9 +692,11 @@ export function OwnerConfirmationCard({
     >
       <div className="approval-head decision-ask-head">
         <span className="evidence-decision-heading">{OWNER_CONFIRMATION_HEADING}</span>
-        <span className="criteria-provenance" title={OWNER_CONFIRMATION_AUTHORSHIP_TITLE}>
-          {PROVENANCE_LABEL}
-        </span>
+        <Tooltip content={OWNER_CONFIRMATION_AUTHORSHIP_TITLE} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="criteria-provenance">
+            {PROVENANCE_LABEL}
+          </span>
+        </Tooltip>
       </div>
       <div className="approval-body is-questions decision-ask-body">
         <section className="decision-ask-q">
@@ -884,9 +889,11 @@ export function OwnerDecisionReceipt({
         <span className="evidence-decision-heading">
           {confirmed ? OWNER_CONFIRMED_HEADING : OWNER_SENT_BACK_HEADING}
         </span>
-        <span className="criteria-provenance" title={OWNER_CONFIRMATION_AUTHORSHIP_TITLE}>
-          {PROVENANCE_LABEL}
-        </span>
+        <Tooltip content={OWNER_CONFIRMATION_AUTHORSHIP_TITLE} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="criteria-provenance">
+            {PROVENANCE_LABEL}
+          </span>
+        </Tooltip>
       </div>
       <div className="approval-body is-questions decision-ask-body">
         <section className="decision-ask-q">
@@ -941,9 +948,11 @@ export function ReviewerReturnRecord({
     >
       <div className="approval-head decision-ask-head">
         <span className="evidence-decision-heading">{OWNER_CONFIRMATION_HEADING}</span>
-        <span className="criteria-provenance" title={OWNER_CONFIRMATION_AUTHORSHIP_TITLE}>
-          {PROVENANCE_LABEL}
-        </span>
+        <Tooltip content={OWNER_CONFIRMATION_AUTHORSHIP_TITLE} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="criteria-provenance">
+            {PROVENANCE_LABEL}
+          </span>
+        </Tooltip>
       </div>
       <div className="approval-body is-questions decision-ask-body">
         <section className="decision-ask-q">

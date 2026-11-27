@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType } from '@orbit/shared';
 import { ListEventsService } from '../task-lists/list-events.service';
 import { appendBackgroundJobsContext } from './background-jobs-context';
