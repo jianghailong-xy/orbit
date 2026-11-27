@@ -3658,7 +3658,10 @@ final class ConsoleModel {
             }
             let reason = send.reason ?? UnsentSend.closedBeforeAnswerReason
             send.reason = reason
-            if !reducer.markNotSent(clientTurnId: send.clientTurnId, reason: reason) {
+            // Drawn at the end of a window that holds the tail. An empty one (a cold open with no
+            // snapshot) is seeded later, and the history it brings would land after the message:
+            // `reconcileUnsent` draws it once that page is in.
+            if !reducer.markNotSent(clientTurnId: send.clientTurnId, reason: reason), reducer.state.maxSeq > 0 {
                 reducer.addUnsentUser(clientTurnId: send.clientTurnId, text: send.text,
                                       attachments: send.attachments, shell: send.shell, notSentReason: reason)
             }
@@ -3681,6 +3684,9 @@ final class ConsoleModel {
             case false?:
                 forgetUnsent(send.clientTurnId)
             case nil:
+                // A window with no tail yet (cold open, or re-seeding after a resync) is drawn into
+                // once the tail page is in, so the message ends it rather than heading it.
+                guard reducer.state.maxSeq > 0 else { continue }
                 if reducer.state.holdsEcho(of: send) {
                     forgetUnsent(send.clientTurnId)
                 } else {

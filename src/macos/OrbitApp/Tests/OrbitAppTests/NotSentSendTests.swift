@@ -104,7 +104,7 @@ final class NotSentSendTests: XCTestCase {
     private static let ended = #"{"statusCode":409,"message":"the session has ended"}"#
 
     private func console(store: UnsentSendStoring = UnsentSendMemoryStore(),
-                         restoring extra: [RunEvent] = []) throws -> ConsoleModel {
+                         restoring extra: [RunEvent] = [], cold: Bool = false) throws -> ConsoleModel {
         var reducer = TranscriptReducer()
         let page = try JSONDecoder().decode(EventPage.self, from: Data(#"""
         {"events":[{"seq":1,"type":"user","turnId":"t1","payload":{"text":"first"}},
@@ -119,7 +119,7 @@ final class NotSentSendTests: XCTestCase {
         let tokens = InMemoryTokenStore()
         return ConsoleModel(sessionID: "S1", baseURL: baseURL, tokenStore: tokens,
                             attachments: AttachmentImageStore(baseURL: baseURL, tokenStore: tokens),
-                            restoring: reducer, session: URLSession(configuration: configuration),
+                            restoring: cold ? nil : reducer, session: URLSession(configuration: configuration),
                             unsentSends: store)
     }
 
@@ -297,6 +297,17 @@ final class NotSentSendTests: XCTestCase {
         ScriptedTurnURLProtocol.then([.answer(200, Self.accepted)])
         await console.retryUnsent(try XCTUnwrap(reloaded.first))
         XCTAssertEqual(ScriptedTurnURLProtocol.attempts, ["c-kept"])
+    }
+
+    func testOnAColdOpenTheReloadedMessageWaitsForTheTailRatherThanHeadingIt() async throws {
+        ScriptedTurnURLProtocol.script([])
+        let store = UnsentSendMemoryStore([
+            UnsentSend(clientTurnId: "c-kept", sessionID: "S1", text: "Ship the quarterly report",
+                       draft: "Ship the quarterly report", reason: "the session has ended", afterSeq: 3),
+        ])
+        let console = try console(store: store, cold: true)
+        XCTAssertTrue(users(console).isEmpty, "not drawn above the history the tail page will bring")
+        XCTAssertEqual(store.sends(in: "S1").map(\.clientTurnId), ["c-kept"], "still kept, to draw once it is in")
     }
 
     func testAReloadedMessageWhoseEchoTheTranscriptHoldsIsLetGo() async throws {
