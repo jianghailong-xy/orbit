@@ -439,7 +439,12 @@ function WikiChatHistory({
   // The space's chats on the Wiki, else the origin's own (Drive's, Scheduled's): each read only where it is the history.
   const wikiPages = useInfiniteQuery({ ...wikiChatHistoryQuery(origin.space?.id ?? '', q.trim()), enabled: !!origin.space });
   const drivePages = useInfiniteQuery({ ...driveChatHistoryQuery(q.trim()), enabled: !origin.space && !origin.history });
-  const ownPages = useInfiniteQuery({ ...(origin.history ?? noHistory)(q.trim()), enabled: !origin.space && !!origin.history });
+  // An origin's own history is read from its sessions (Scheduled: the session list's From Scheduled rows).
+  const ownPages = useInfiniteQuery({
+    ...(origin.history ?? noHistory)(q.trim()),
+    meta: { entities: ['session'] },
+    enabled: !origin.space && !!origin.history,
+  });
   const pages = origin.space ? wikiPages : origin.history ? ownPages : drivePages;
   const qc = useQueryClient();
   const toast = useToast();
