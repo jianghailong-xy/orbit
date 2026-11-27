@@ -262,18 +262,25 @@ class ComposerModelTest {
         assertEquals(listOf("host"),catalog.slashItems("claude","agent").map { it.text("name") })
         assertTrue(catalog.slashItems("codex","agent").isEmpty())
         assertEquals(listOf("kimi"),catalog.slashItems("kimi",null).map { it.text("name") })
-        assertFalse("auto" in catalog.permissions("claude","claude","claude-opus-5"))
+        // A model the runner says has no Auto keeps it as a pick, which starts in Default there (board permission-mode-actual C1).
+        assertTrue("auto" in catalog.permissions("claude","claude","claude-opus-5"))
+        assertTrue(catalog.autoMissing("claude","claude","claude-opus-5"))
         assertFalse("bypassPermissions" in catalog.permissions("claude","claude","claude-opus-5"))
     }
 
     // A runner whose catalogue has not answered for a model falls back to the known list, which has to name the current models:
-    // without them, moving a session onto one dropped its Auto to Default (shared AUTO_CAPABLE_CLAUDE_MODELS).
+    // without them, a session on one read as having no Auto (shared AUTO_CAPABLE_CLAUDE_MODELS).
     @Test fun currentClaudeModelsKeepAutoWhereTheCatalogIsSilent() {
         val silent = ComposerCatalog(Wire.json.parseToJsonElement("""{"modelCatalog":{}}""").jsonObject, emptyList())
         for (model in listOf("claude-opus-5-5", "claude-fable-5-2", "claude-sonnet-5-5", "claude-haiku-5-5")) {
-            assertTrue(model, "auto" in silent.permissions("claude", "claude", model))
+            assertFalse(model, silent.autoMissing("claude", "claude", model))
         }
-        assertFalse("auto" in silent.permissions("claude", "claude", "claude-haiku-4-5"))
+        assertTrue(silent.autoMissing("claude", "claude", "claude-haiku-4-5"))
+        // Still a pick there: it starts in Default, and the pick holds for a model that has Auto (C1). No client clamps it away.
+        assertTrue("auto" in silent.permissions("claude", "claude", "claude-haiku-4-5"))
+        // Nothing is said of a model nobody named, nor of another engine's.
+        assertFalse(silent.autoMissing("claude", "claude", ""))
+        assertFalse(silent.autoMissing("codex", "codex", "gpt-6"))
     }
 
     @Test fun shellUsesSameSwiftPostContractIncludingCarriedAttachments() = runTest {
