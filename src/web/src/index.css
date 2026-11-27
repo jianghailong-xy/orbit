@@ -14752,6 +14752,15 @@ button.chat-jump-start:hover {
   font-weight: 600;
   letter-spacing: 0.04em;
 }
+.evidence-decision-submitted {
+  flex: none;
+  margin-left: auto;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.evidence-decision-submitted + .criteria-provenance {
+  margin-left: 8px;
+}
 .criteria-decision .approval-body {
   background: var(--bg-raised);
   padding: 10px 14px 4px;
