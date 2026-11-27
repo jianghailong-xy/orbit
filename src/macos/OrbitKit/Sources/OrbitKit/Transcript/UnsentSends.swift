@@ -19,9 +19,13 @@ public struct UnsentSend: Codable, Equatable, Sendable {
     public var reason: String?
     /// The transcript's newest seq when it was sent: its echo is a `user` event after it.
     public var afterSeq: Int
+    /// Sent by "stop and send this instead": Retry goes back through the interrupt, which stops the
+    /// turn and queues the message in one request. Nil for an ordinary send.
+    public var stopsTurn: Bool?
 
     public init(clientTurnId: String, sessionID: String, text: String, draft: String, shell: Bool = false,
-                attachments: [TurnAttachment] = [], reason: String? = nil, afterSeq: Int = 0) {
+                attachments: [TurnAttachment] = [], reason: String? = nil, afterSeq: Int = 0,
+                stopsTurn: Bool? = nil) {
         self.clientTurnId = clientTurnId
         self.sessionID = sessionID
         self.text = text
@@ -30,6 +34,7 @@ public struct UnsentSend: Codable, Equatable, Sendable {
         self.attachments = attachments
         self.reason = reason
         self.afterSeq = afterSeq
+        self.stopsTurn = stopsTurn
     }
 
     /// Why a message still on its way when the app closed reads `Not sent` when it opens again.

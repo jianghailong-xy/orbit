@@ -3507,7 +3507,21 @@ final class ConsoleModel {
         runConflictFromRetry = false
         handedOverSessionID = nil
         do {
-            let accepted = try await postTurn(resuming: resuming, clientTurnId: clientTurnId,
+            let accepted: TurnAccepted
+            // A "stop and send this instead" goes through the interrupt, first time and Retry alike.
+            // One whose session has ended since has nothing to stop, and resumes as any send does.
+            if record.saved.stopsTurn == true, !resuming {
+                accepted = try await postInterrupt(clientTurnId: clientTurnId, text: text,
+                                                   attachmentIds: record.saved.attachments.map(\.id))
+                // The interrupt door names no turn only for a repeat of a request it had already
+                // taken, whose message a later Stop has dropped since: the words go back.
+                if accepted.turnId == nil {
+                    awaitingReply = false
+                    handBack(clientTurnId)
+                    return
+                }
+            } else {
+                accepted = try await postTurn(resuming: resuming, clientTurnId: clientTurnId,
                                               text: text, shell: shell,
                                               attachmentIds: record.saved.attachments.map(\.id),
                                               queueForNextTurn: record.queueForNextTurn,
@@ -3515,6 +3529,7 @@ final class ConsoleModel {
                                               driveContext: record.driveContext,
                                               skipTranslation: record.skipTranslation,
                                               optimizedTranslation: record.optimizedTranslation)
+            }
             // The server has it: nothing is left to retry, put back or reload.
             forgetUnsent(clientTurnId)
             if record.fromComposer { promptOptimizer.sent() }
@@ -3559,6 +3574,8 @@ final class ConsoleModel {
             }
         } catch {
             awaitingReply = false   // no turn is coming — drop the tail "working" indicator
+            // No follow-up was filed that a later Stop would have to leave alone.
+            if interruptFollowUpClientTurnId == clientTurnId { interruptFollowUpClientTurnId = nil }
             // The one place this end stops flattening a refusal into a sentence. A code it knows
             // becomes a card with a way out, which offers the send again from the composer: the
             // bubble steps aside and its words (and chips) go back into the box, as they did before
@@ -3985,6 +4002,21 @@ final class ConsoleModel {
         // `Not sent` with Retry (board 04-native-parity, decisions 3 and 4; web `answerDeadline`).
         return try await answered(within: sendAnswerTimeout) {
             try await self.postTurnReplaying(resuming: resuming, resumeRequest: resumeRequest, turnRequest: turnRequest)
+        }
+    }
+
+    /// POST the interrupt that carries its follow-up, under the same answer deadline and same-key
+    /// replays as `postTurn`: the server files both halves once per `clientTurnId`.
+    private func postInterrupt(clientTurnId: String, text: String,
+                               attachmentIds: [String]) async throws -> TurnAccepted {
+        let request = SessionInterruptRequest(clientTurnId: clientTurnId, content: text,
+                                              attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds)
+        // Claimed again by a Retry, for the same reason as the first time (`interruptAndSend`).
+        interruptFollowUpClientTurnId = clientTurnId
+        return try await answered(within: sendAnswerTimeout) {
+            try await self.retryingTransientFailures { () async throws -> TurnAccepted in
+                try await self.api.interruptAndSend(sessionID: self.sessionID, request)
+            }
         }
     }
 
@@ -4424,13 +4456,19 @@ final class ConsoleModel {
         let clientTurnId = UUID().uuidString
         let draft = composerText
         let staged = pendingAttachments
-        let ready = pendingAttachments.compactMap { att in att.remoteID.map { (att, $0) } }
-        let attachmentIds = ready.map(\.1)
-        let turnAttachments = ready.map { TurnAttachment(id: $0.1, mime: $0.0.mimeType, name: $0.0.filename) }
+        let turnAttachments = pendingAttachments.compactMap { att in
+            att.remoteID.map { TurnAttachment(id: $0, mime: att.mimeType, name: att.filename) }
+        }
         // Always queued: the follow-up waits for the interrupted turn's result, whether or not the
         // engine honours the stop.
         reducer.addOptimisticUser(clientTurnId: clientTurnId, text: text,
                                   attachments: turnAttachments, queued: true)
+        // Kept until the server takes it, as `send` keeps one (`Not sent`, Retry, Put back).
+        unsent.append(UnsentRecord(
+            saved: UnsentSend(clientTurnId: clientTurnId, sessionID: sessionID, text: text, draft: draft,
+                              attachments: turnAttachments, afterSeq: reducer.state.maxSeq, stopsTurn: true),
+            takesChips: true, staged: staged))
+        keepUnsent()
         // Claimed BEFORE the request goes out, because the `interrupt` event can beat its response
         // back here: the salvage below must already know this one message was not dropped.
         interruptFollowUpClientTurnId = clientTurnId
@@ -4439,30 +4477,9 @@ final class ConsoleModel {
         localSendTick &+= 1
         composerText = ""
         pendingAttachments = []
-        sending = true
-        defer { sending = false }
-        do {
-            let accepted = try await api.interruptAndSend(
-                sessionID: sessionID,
-                SessionInterruptRequest(clientTurnId: clientTurnId, content: text,
-                                        attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds))
-            statusMessage = ComposerLogic.statusAfterAcceptedSend(statusMessage)
-            if let tid = accepted.turnId {
-                reducer.setOptimisticTurnId(clientTurnId: clientTurnId, turnId: tid,
-                                            translation: accepted.turnTranslation)
-            }
-            publishStateNow()
-        } catch {
-            // Nothing was queued and nothing was stopped: take the bubble back down and hand the
-            // draft back, exactly as a failed send does.
-            reducer.removeOptimisticUser(clientTurnId: clientTurnId)
-            interruptFollowUpClientTurnId = nil
-            awaitingReply = false
-            publishStateNow()
-            composerText = composerText.isEmpty ? draft : draft + "\n" + composerText
-            pendingAttachments = staged + pendingAttachments
-            statusMessage = ComposerLogic.sendFailureMessage(error)
-        }
+        // One request, so a refusal or no answer means nothing was queued: its bubble reads
+        // `Not sent`, as any send's does.
+        await deliver(clientTurnId, resuming: false)
     }
 
     /// Withdraw a message still waiting behind the in-flight turn (the queued bubble's Cancel button,
@@ -4716,8 +4733,11 @@ final class ConsoleModel {
         // as the queued bubble that is really there, once as a draft they never retyped.
         let followUp = interruptFollowUpClientTurnId
         interruptFollowUpClientTurnId = nil
+        // Nor is one still `Sending…` or `Not sent`: it keeps its own bubble (`reconcileUnsent`
+        // draws it again), with Retry and Put back.
+        let kept = Set(unsent.map(\.saved.clientTurnId))
         let restored = reducer.state.queued
-            .filter { $0.clientTurnId == nil || $0.clientTurnId != followUp }
+            .filter { $0.clientTurnId == nil || ($0.clientTurnId != followUp && !kept.contains($0.clientTurnId!)) }
             // A turn nobody typed — a wake, a delivery — was never the user's to get back.
             .compactMap(ComposerLogic.restorableText(of:))
             .joined(separator: "\n\n")

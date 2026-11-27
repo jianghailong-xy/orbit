@@ -255,12 +255,16 @@ final class RetrySendWiringTests: XCTestCase {
         let clear = "statusMessage = ComposerLogic.statusAfterAcceptedSend(statusMessage)"
         let accepted = try section(try sendBody(), from: "try await postTurn(", to: "} catch {")
         XCTAssertTrue(accepted.contains(clear), "send(): between the accepted POST and its catch")
+        // "Stop and send this instead" is delivered by the same path, so the line above is its too.
         let interrupt = try section(try source(Self.consolePath),
                                     from: "func interruptAndSend() async {",
                                     to: "func cancelQueued")
-        XCTAssertTrue(try section(interrupt, from: "try await api.interruptAndSend(", to: "} catch {")
-                          .contains(clear),
-                      "interruptAndSend(): between the accepted POST and its catch")
+        XCTAssertTrue(interrupt.contains("await deliver(clientTurnId, resuming: false)"),
+                      "interruptAndSend(): its follow-up goes out through deliver()")
+        XCTAssertFalse(interrupt.contains("sendFailureMessage"),
+                       "interruptAndSend(): a failed follow-up is Not sent on its bubble, never a Couldn't send line")
+        let deliver = try section(try sendBody(), from: "accepted = try await postInterrupt(", to: "} catch {")
+        XCTAssertTrue(deliver.contains(clear), "deliver(): the interrupt's accepted POST reaches the same line")
     }
 
     // MARK: the sentence neither end says any more
