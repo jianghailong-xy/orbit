@@ -68,13 +68,12 @@
   /* 9: a row's ⋯ shows on the selected row and under the pointer only. */
   .v-after .files-row .files-row-more { visibility: hidden; }
   .v-after .files-row.selected .files-row-more, .v-after .files-row.b-hover .files-row-more { visibility: visible; }
-  /* 5 · 11 · 12: the details pane has a title bar like the project column: × first, the name in at most two lines. */
-  .v-after .files-pane-bar { display: flex; align-items: flex-start; gap: 8px; margin: -4px 0 0 -6px; }
+  /* 5 · 11 · 12: the details pane has a title bar like every drawer and dialog: the name in at most two lines, × at the far end. */
+  .v-after .files-pane-bar { display: flex; align-items: flex-start; gap: 8px; margin: -4px -6px 0 0; }
   .v-after .files-pane-close { flex: none; width: 28px; height: 28px; border: 0; border-radius: 6px; background: none; color: var(--text-3);
                                display: inline-flex; align-items: center; justify-content: center; }
   .v-after .files-pane-name { word-break: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
                               overflow: hidden; line-height: 1.45; padding-top: 2px; }
-  .v-after .files-pane-kind { margin-left: 30px; }
   .v-after .files-pane-more { height: var(--orbit-control-height); width: var(--orbit-control-height); border-radius: 10px; }
   /* 1 · 2: with the details open, the tray docks in the pane's empty foot, inside its border; it ends on a whole row. */
   .v-after .files-tray { right: calc(var(--panel-gap) + 13px); bottom: calc(var(--panel-gap) + 13px); width: calc(336px - 26px); box-shadow: none; }
@@ -123,22 +122,27 @@
     <p><span class="b-num g">8</span><b>放大镜 + 「Search Drive」</b>。</p>
     <p><span class="b-num g">9</span><b>⋯ 只在选中行和悬停行出现</b>（图中第 4 行画的是悬停）。</p>
     <p><span class="b-num g">10</span><b>选中行圆角 8px</b>，和树、会话列表一致。</p>
-    <p><span class="b-num g">11</span><b>详情面板标题栏首位 ×</b>，同项目会话栏。</p>
+    <p><span class="b-num g">11</span><b>详情面板标题栏末尾放 ×</b>，同 Help、Wiki 条目抽屉、任务详情和所有对话框（右上角）。会话页项目栏把 × 放在最前，是它错了，见 ③。</p>
     <p><span class="b-num g">12</span><b>⋯ 改成控件同高的方形按钮</b>，三颗按钮一条线。</p>
     <p><span class="b-num g">13</span><b>时间沿用会话列表的格式</b>：一天内「2h ago」，更早「11/26, 09:50」。</p>
   </div>
 </section>
 
 <section class="b-part" id="part-3">
-  <h2>③ 参照：会话页里被借用的三样东西</h2>
+  <h2>③ 参照：从会话页借用的三样东西（以及不该照抄的一处）</h2>
   <div class="b-ref">
     <div class="b-card"><h3>主操作 = 浅蓝底按钮</h3>
       <div class="session-new" style="width:300px;margin:8px 0"><svg class="b-ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>New session</div>
       <p style="margin:4px 0 0">会话页没有实心蓝按钮。Drive 的 Upload 用同一组 token：<code>--brand-tint</code> 底、<code>--brand-border</code> 边、<code>--brand</code> 字。</p></div>
-    <div class="b-card"><h3>右栏 = × + 标题 + 灰色副标题</h3>
-      <div style="display:flex;gap:8px;align-items:flex-start;margin:8px 0"><span style="color:var(--text-3);font-size:18px;line-height:22px">×</span>
-        <div><div style="font-weight:600;font-size:15px">Sample project</div><div style="color:var(--text-3);font-size:12px">Project · 30 sessions</div></div></div>
-      <p style="margin:4px 0 0">详情面板照这个排：× 在最前，名字粗体，下一行灰字写类型与大小。</p></div>
+    <div class="b-card"><h3>右栏 = 标题 + 灰色副标题，× 在末尾</h3>
+      <div style="display:flex;gap:8px;align-items:flex-start;margin:8px 0;padding:6px 8px;border-radius:8px;background:#fdecea">
+        <span style="color:var(--text-3);font-size:18px;line-height:22px">×</span>
+        <div style="flex:1"><div style="font-weight:600;font-size:15px">Sample project</div><div style="color:var(--text-3);font-size:12px">Project · 30 sessions</div></div>
+        <span style="color:var(--text-3)">▦</span><span class="b-tag today" style="align-self:center">今天 · 错</span></div>
+      <div style="display:flex;gap:8px;align-items:flex-start;margin:8px 0;padding:6px 8px;border-radius:8px;background:#e9f6ee">
+        <div style="flex:1"><div style="font-weight:600;font-size:15px">Sample project</div><div style="color:var(--text-3);font-size:12px">Project · 30 sessions</div></div>
+        <span style="color:var(--text-3)">▦</span><span style="color:var(--text-3);font-size:18px;line-height:22px">×</span><span class="b-tag after" style="align-self:center">规矩</span></div>
+      <p style="margin:4px 0 0">会话页项目栏是全站唯一把 × 放在最前的面板；Help 抽屉、Wiki 条目抽屉、任务详情、对话框都在右上角。详情面板照规矩排，项目栏也一起改：× 移到「打开项目」▦ 之后。</p></div>
     <div class="b-card"><h3>行 = 圆角选中、灰色副信息、同一种时间</h3>
       <div class="session-row active" style="min-height:52px;border-radius:8px;margin:8px 0"><div style="min-width:0"><div style="font-weight:500">Sample session title</div>
         <div style="color:var(--text-3);font-size:13px">Last reply, in grey</div></div><span style="margin-left:auto;color:var(--text-3);font-size:12px">11/26, 09:50</span></div>
@@ -167,6 +171,7 @@
     <tr><td>纯 CSS</td><td>6 灰色作者 · 9 ⋯ 悬停出现 · 10 圆角选中 · 12 ⋯ 同高 · 5 标题断行/两行 · 2 托盘按行收 + 渐隐 · 1 开着详情时托盘落进详情面板底部</td><td><code>pages/DrivePage.css</code></td></tr>
     <tr><td>小改 TSX</td><td>8 搜索放大镜 + 「Search Drive」· 6 Upload 浅蓝、Share link… 普通 · 11 详情 × · 5 Path 只写文件夹 · 13 时间用会话列表的格式</td><td><code>pages/DrivePage.tsx</code>、<code>lib/drive.ts</code></td></tr>
     <tr><td>小改 TSX</td><td>3 托盘标题如实 · 4 同一对文件夹只留最近一次并带时间</td><td><code>components/drive/DriveUploadTray.tsx</code></td></tr>
+    <tr><td>小改 TSX</td><td>11 会话页项目栏：× 从标题前移到末尾（「打开项目」之后），桌面右栏与手机 sheet 同一个 head</td><td><code>components/WorkspaceView.tsx</code>（<code>projectPageHead</code>）</td></tr>
     <tr><td>看 ④</td><td>7 Trash / Storage 进树底部（A）或改图标按钮（B）</td><td><code>pages/DrivePage.tsx</code></td></tr>
     <tr><td>不在这轮</td><td>上一轮 P3：长名中间省略、视频图标、「Drive」出现三次、⚠/✓ 粗细、树行高</td><td>—</td></tr>
   </table>
@@ -242,7 +247,7 @@ function frame(after) {
   const pane = `
     <aside class="files-pane">
       ${after
-        ? `<div class="files-pane-bar"><button class="files-pane-close"${mk(11)}>${ic('close')}</button><h2 class="files-pane-name"${mk(5)}>${sel.name}</h2></div>
+        ? `<div class="files-pane-bar"><h2 class="files-pane-name"${mk(5)}>${sel.name}</h2><button class="files-pane-close"${mk(11)}>${ic('close')}</button></div>
            <div class="files-pane-kind">MKV · ${sel.size}</div>`
         : `<h2 class="files-pane-name"${mk(5)}>${sel.name}</h2><div class="files-pane-kind"${mk(11)}>${sel.size}</div>`}
       <dl class="files-pane-facts">
@@ -333,10 +338,10 @@ window.drawMarks = () => {
       if (n === '10') continue;
       if (n === '11' && !after) continue;
       // Offsets keep each mark off its own text: header controls get it above, row-end controls to their right.
-      const at = { '6': [-10, -18], '7': [-10, -18], '8': [-10, -18], '9': [22, -2], '12': [10, -18], '11': [-6, -20], '13': [-24, -2] }[n] || [-24, -2];
+      const at = { '6': [-10, -18], '7': [-10, -18], '8': [-10, -18], '9': [22, -2], '12': [10, -18], '11': [10, -16], '13': [-24, -2] }[n] || [-24, -2];
       const w = el.getBoundingClientRect().width;
       if (n === '13') at[0] = w + 4;          // right of "Modified", clear of "Size"
-      if (n === '5' && after) at[0] = w - 6;  // the title's far end, clear of the ×
+      
       put(el, n, ...at);
     }
     if (!after) { const p = host.querySelector('.files-pane').getBoundingClientRect(); const m = document.createElement('span');
