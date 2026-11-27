@@ -366,7 +366,6 @@ import {
   type SessionSwitch,
 } from '../providers/engine-provider';
 import { ownsModel, withPreset } from '../providers/preset-overlay';
-import { sessionHeldKey } from '../providers/held-key';
 import {
   newTerminalResumeHandoffOwner,
   pendingWorktreeOperationMayBeExecuting,
@@ -2675,9 +2674,6 @@ export class SessionsService {
         select: {
           id: true,
           ownerId: true,
-          provider: true,
-          providerBuiltin: true,
-          model: true,
           title: true,
           runtimeSessionId: true,
         },
@@ -2713,23 +2709,21 @@ export class SessionsService {
 
   /**
    * Background naming for a session that started with a prompt-derived title: a cleaner display
-   * title, plus a couple of semantic tags to file it under. Asked of DeepSeek on the server's key
-   * when one is configured; otherwise of the session's own provider, when the server holds its key
-   * (sessionHeldKey). A session on an engine's own sign-in has no key here, and is named by its runner
-   * through that engine instead (the claim's `naming`). The shared bounded queue prevents a create
+   * title, plus a couple of semantic tags to file it under. Asked only of DeepSeek on the server's
+   * key: without DEEPSEEK_API_KEY nothing is asked, and the session keeps the title cut from its
+   * prompt; the session's own provider is never spent on naming. The shared bounded queue prevents a create
    * burst from fanning out calls. Swap the title only while it is still the exact fallback we wrote,
    * so a user rename (or any concurrent change) is never clobbered. Re-publishes the session so live
    * clients pick up both. Fire-and-forget: never awaited, swallows all errors.
    */
   private async beautifySessionLater(
-    session: { id: string; ownerId: string; provider: string; providerBuiltin: boolean; model: string | null },
+    session: { id: string; ownerId: string },
     prompt: string,
     fallbackTitle: string,
   ): Promise<void> {
     const { id: sessionId, ownerId } = session;
     try {
-      const key = process.env.DEEPSEEK_API_KEY?.trim() ? undefined : await sessionHeldKey(this.prisma, session);
-      if (key === null) return;
+      if (!process.env.DEEPSEEK_API_KEY?.trim()) return;
       // The owner's own vocabulary, offered to the model as reuse candidates. System tags are
       // colors ("Red"), not semantics, so they are never candidates and are never auto-applied.
       const known = await this.prisma.sessionTag.findMany({
@@ -2741,7 +2735,6 @@ export class SessionsService {
       const { title, tags } = await enqueueBeautifySession({
         prompt,
         knownTags: known.map((t) => t.name),
-        key,
       });
       let changed = false;
       if (title && title !== fallbackTitle) {

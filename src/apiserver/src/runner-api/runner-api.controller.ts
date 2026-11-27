@@ -7342,7 +7342,8 @@ export class RunnerApiController {
 
   /**
    * The title the engine running a session gave it, when its claim asked for one
-   * (ClaimedSession.naming, engineNamingJob). It lands only while the session still carries the title
+   * (ClaimedSession.naming). The server no longer asks: a session is titled only on its DeepSeek key.
+   * It lands only while the session still carries the title
    * that claim did, so a rename made in the meantime stands; a miss is not an error.
    */
   @UseGuards(RunnerAuthGuard)
