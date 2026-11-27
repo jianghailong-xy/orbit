@@ -59,9 +59,8 @@ final class ScheduledChatShotTests: ProbeCase {
     // MARK: iPhone (board 4 ① ② ③)
 
     func testPhoneSheetNameOpensTheScheduleAndChatGoesBack() throws {
-        #if os(iOS)
+        // `phone` is false on a Mac, so the Mac skips these too.
         guard phone else { throw XCTSkip("iPhone only") }
-        #endif
         let tag = "\(platform)-sheet"
         let app = open("chat", tag)
         let button = chatButton(app)
@@ -108,9 +107,8 @@ final class ScheduledChatShotTests: ProbeCase {
     }
 
     func testPhoneNewChatShowsOrbitsOpening() throws {
-        #if os(iOS)
+        // `phone` is false on a Mac, so the Mac skips these too.
         guard phone else { throw XCTSkip("iPhone only") }
-        #endif
         let tag = "\(platform)-new"
         let app = open("new", tag)
         press(chatButton(app))
@@ -123,9 +121,7 @@ final class ScheduledChatShotTests: ProbeCase {
     // MARK: iPad and Mac (board 4, right-hand notes)
 
     func testColumnOpensBesideAndIsRememberedOnTheDevice() throws {
-        #if os(iOS)
-        guard !phone else { throw XCTSkip("iPad only") }
-        #endif
+        guard !phone else { throw XCTSkip("iPad and Mac only") }
         let tag = "\(platform)-column"
         var app = open("chat", tag)
         XCTAssertFalse(chatShows(app, timeout: 4), "\(tag): never open the first time")
