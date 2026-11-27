@@ -77,18 +77,18 @@ ARG TARGETARCH
 # minutes at 81.7 MB of the Kimi binary until it was killed by hand.
 ARG FETCH="curl -fsSL --connect-timeout 30 --speed-limit 4096 --speed-time 60 --retry 5 --retry-delay 10 --retry-all-errors"
 RUN case "$TARGETARCH" in \
-      amd64) target=linux-x64 sum=a8855467385e823209e1f45014f3fa9ade81260b648bcba33fbe461963dae9e2 ;; \
-      arm64) target=linux-arm64 sum=ee6d96407dd17c4123ae3bf1d2d021be26dce7c358cd81771b6cad2d740dc323 ;; \
+      amd64) target=linux-x64 sum=88a9a7788fa4a6d6959b253de118446ec55ce9f106093a318a61bd369d242ad4 ;; \
+      arm64) target=linux-arm64 sum=7a467c3d7c765eda2d3277f7d156ca801fe35c0d44ea07b1f7d0e6f576145f16 ;; \
       *) exit 1 ;; esac \
- && $FETCH -o /tmp/kimi "https://code.kimi.com/kimi-code/binaries/2.8.0/kimi-code-$target" \
+ && $FETCH -o /tmp/kimi "https://code.kimi.com/kimi-code/binaries/2.8.1/kimi-code-$target" \
  && echo "$sum  /tmp/kimi" | sha256sum -c - \
  && install -D -m 0755 /tmp/kimi /opt/kimi-code/bin/kimi \
  && rm /tmp/kimi
 RUN case "$TARGETARCH" in \
-      amd64) path=linux-x64/cli_linux_x64.tar.gz sum=71a967aa16e0ab5d87196bcd6772130bdab55b2fd768cd24d21b1da401ff9f60280b976cad3dc14a2d646233b0eaf8caf87c490eed73044d54550cbb3d8d67d2 ;; \
-      arm64) path=linux-arm/cli_linux_arm64.tar.gz sum=e4f086d0730b325cfd438ea90396ee78eb23a3110ef7f792824c8817b8d0432462b7b5f91b3d933fc1932a6f4ba73de505e2e96f44448c9fb2427292ead716f7 ;; \
+      amd64) path=linux-x64/cli_linux_x64.tar.gz sum=ef379ec869719112f696e8c7cfddf776618712e58fc38e53df80801d6528abb4677782c7c8778f9c09c9123fa44c2c32675d228c06f2a8f7a8f4214e75f5bb26 ;; \
+      arm64) path=linux-arm/cli_linux_arm64.tar.gz sum=6c59cbce5a7632083dd4ef594296e52ce0abdc12f8b4ecb55523e093748cf178f8f8383d7e51e9ed7859ea6e46c83a43a7b46364b0e033dd13afb24d6bfbe4c8 ;; \
       *) exit 1 ;; esac \
- && $FETCH -o /tmp/agy.tar.gz "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.17-4823843970351104/$path" \
+ && $FETCH -o /tmp/agy.tar.gz "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.18-6386224290725888/$path" \
  && echo "$sum  /tmp/agy.tar.gz" | sha512sum -c - \
  && mkdir /tmp/agy && tar -xzf /tmp/agy.tar.gz -C /tmp/agy --no-same-owner \
  && install -D -m 0755 /tmp/agy/antigravity /opt/agy/bin/agy \
@@ -251,7 +251,7 @@ if platform.machine() == 'x86_64':
     actual['cursor'] = version(str(store / 'cursor/versions/2026.10.14-941492e/cursor-agent'), '--version')
     actual['dsh'] = version(str(store / 'engines/dsh/0.2.0-rc.2/node_modules/.bin/dsh'), '--version')
 expected_versions = {'go': 'go1.27.1', 'node': 'v26.10.0', 'codex': 'codex-cli 0.172.0',
-                     'claude': '2.1.332 (Claude Code)', 'opencode': '1.19.6', 'kimi': '2.8.0', 'agy': '1.5.17'}
+                     'claude': '2.1.332 (Claude Code)', 'opencode': '1.19.6', 'kimi': '2.8.1', 'agy': '1.5.18'}
 expected_versions.update(chromium='Chromium 154.0.8037.57 built on Debian GNU/Linux 13 (trixie)',
                          xvfb='2:21.1.16-1.3+deb13u4', x11vnc='x11vnc: 0.9.17 lastmod: 2025-04-11',
                          xclip='0.13-4', xdotool='1:3.20160805.1-5.1',
