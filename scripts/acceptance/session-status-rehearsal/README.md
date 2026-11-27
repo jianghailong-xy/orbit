@@ -17,6 +17,12 @@ production, and no production row is read.
 | `recheck.mjs` | An earlier pass's sessions, read from another replica (S12) |
 | `compare.mjs` | Pass against pass, scenario by scenario, and a recheck's payloads |
 
+**D3 to D4 (task T17).** On a database D4 migrated (no `session.status`): `census.cjs` reports the projector's words
+and checks `phase` only; `seed-shapes.cjs` writes the facts; `writer-loop.cjs` takes `WRITER_CODE=d3`; `walk.mjs` takes
+`--code d3|d4` and reads words through the projector. Give `rehearse.sh census` a `KIT_IMAGE` built from D3 or D4 code.
+`rehearse.sh` has no step that builds or hands over D3 or D4 images, and the D1/D2 scripts it calls (the plans seed and
+plans, the backfill, the SQL census, the phase down script) are D2-era: they need the column.
+
 Run, in order (each step writes its records into `$OUT`, default `/mnt/tmp/t16/out`, and a line into `timeline.log`):
 
     D1_REF=1b4e3290a0 WEB_IMAGE=<an existing web image> scripts/acceptance/session-status-rehearsal/build-images.sh /mnt/tmp/t16

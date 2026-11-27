@@ -56,6 +56,7 @@ import { ProjectsService } from '../projects/projects.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { TasksService } from './tasks.service';
+import { wordSql } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -354,7 +355,7 @@ test('a task none of a settled project\'s criteria count leaves it by a confirme
 
     // The run went with its task.
     const { rows: [after] } = await admin.query(
-      'SELECT "status"::text AS "status", "task_id" FROM "session" WHERE "id" = $1::uuid', [run]);
+      `SELECT ${wordSql()} AS "status", "task_id" FROM "session" WHERE "id" = $1::uuid`, [run]);
     assert.deepEqual(after, { status: 'RUNNING', task_id: running });
     const { rows: moved } = await admin.query(
       `SELECT "payload" FROM "activity" WHERE "actor_id" = $1::uuid AND "type" = 'task.moved'

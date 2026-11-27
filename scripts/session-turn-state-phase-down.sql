@@ -1,3 +1,6 @@
+-- D2-era: this reads or writes session.status, which deploy D4 (migration 1711) dropped. It runs on a database of
+-- deploy D1 or D2 only, and is kept for the record of those deploys.
+--
 -- Undo migrations 1611 and 1612 (deploy D1 of docs/session-status-retirement-plan.md §4.1): drop session.turn_state,
 -- session.phase, their CHECKs, the two triggers and the four functions. Only while nothing reads or writes the two
 -- columns, that is before deploy D2: D1 code does not declare them.

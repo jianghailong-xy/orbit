@@ -347,8 +347,8 @@ export function leafHolds(test: WatchLeafTest, fact: WatchTargetFact, now: numbe
         && !sessionFactWakeArmed(fact);
     case 'SESSION_RUN_TERMINAL':
       // The run is over: released (`finished_at`), or interrupted with an end recorded. Never which terminal value
-      // the session holds: the stored meaning (the derived run state is SUCCEEDED, FAILED or ENDED) is the same
-      // rows under session_release_fact_chk (plan step 4.8; common/session-release.ts runIsOver).
+      // the session holds: the meaning (the derived run state is SUCCEEDED, FAILED or ENDED) is the same rows
+      // (plan step 4.8; common/session-release.ts runIsOver).
       return fact.kind === 'SESSION' && runIsOver(fact);
     case 'SESSION_LIFECYCLE_TERMINAL':
       return fact.kind === 'SESSION' && TERMINAL_LIFECYCLE_STATES.includes(deriveSessionLifecycleState(fact));

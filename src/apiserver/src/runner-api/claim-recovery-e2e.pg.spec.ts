@@ -79,6 +79,7 @@ import { TasksService } from '../tasks/tasks.service';
 import { RunnerApiController } from './runner-api.controller';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
+import { wordSql } from '../test-support/session-word';
 import '../test-support/daemon-routes-over-http';
 
 declare global {
@@ -467,7 +468,7 @@ test('a lost claim is recovered without the session ever going silent', {
   }
   const sessionRow = async (sessionId: string): Promise<SessionRow> => {
     const { rows } = await sql.query<SessionRow>(
-      'SELECT status, num_turns, last_assistant_text, retry_at FROM "session" WHERE id = $1::uuid', [sessionId]);
+      `SELECT ${wordSql()} AS status, num_turns, last_assistant_text, retry_at FROM "session" WHERE id = $1::uuid`, [sessionId]);
     return rows[0];
   };
 

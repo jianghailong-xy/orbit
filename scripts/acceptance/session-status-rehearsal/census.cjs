@@ -6,13 +6,18 @@
 // plan's §3.4 kinds (C1-C8), named by its facts below; any other one, or any held row whose word changes, or any
 // phase or turn-state disagreement, makes it exit 1: the plan says that stops deploy D2.
 //
-// Run inside the D2 apiserver image:
+// On a database deploy D4 left (no session.status, migration 1711) there is no stored word to compare: the census says
+// so (`storedWord: false`), reports every row under the projector's word alone, counts the stored `phase` against
+// deriveSessionPhase, and exits 1 on a missing or disagreeing phase only. The word and turn-state counts are null.
+//
+// Run inside an apiserver image (D2 on; its projector), or against a build of src/apiserver (API_DIST):
 //   docker run --rm --network <net> -e DATABASE_URL=... -v <this dir>:/kit:ro <project>-apiserver:d2 node /kit/census.cjs [label]
+//   API_DIST=$PWD/src/apiserver/dist DATABASE_URL=... node scripts/acceptance/session-status-rehearsal/census.cjs [label]
 // Prints one JSON document (and a Markdown table under "markdown").
 'use strict';
 const path = require('node:path');
 
-const API = '/app/src/apiserver/dist';
+const API = process.env.API_DIST ?? '/app/src/apiserver/dist';
 const { prismaClientFor } = require(path.join(API, 'prisma/prisma-client.js'));
 const { legacySessionStatus } = require(path.join(API, 'sessions/session-legacy-words.js'));
 const { deriveSessionPhase } = require(path.join(API, 'sessions/session-phase.js'));
@@ -39,8 +44,13 @@ function kindOf(row, stored, projected) {
 
 async function main() {
   const t0 = Date.now();
+  // Deploy D4 dropped the stored word: without the column there is nothing to compare the projector's word with.
+  const [{ present: storedWord }] = await db.$queryRawUnsafe(`
+    SELECT EXISTS (SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = current_schema() AND table_name = 'session' AND column_name = 'status') AS present`);
   const rows = await db.$queryRawUnsafe(`
-    SELECT s."id"::text AS id, s."status"::text AS status, s."turn_state", s."phase", s."finished_at", s."end_reason",
+    SELECT s."id"::text AS id, ${storedWord ? 's."status"::text' : 'NULL::text'} AS status, s."turn_state", s."phase",
+           s."finished_at", s."end_reason", s."retry_at",
            s."last_turn_outcome", s."started_at", s."import_source_cwd", s."kind", s."completed_at", s."archived_at",
            s."deleted_at", s."engine_turn_active", s."running_subagents", s."running_bg_jobs",
            l."settled_at" AS landing_settled_at, l."settled_as" AS landing_settled_as
@@ -60,21 +70,23 @@ async function main() {
       ? { settledAt: r.landing_settled_at, settledAs: r.landing_settled_as } : null;
     const projected = legacySessionStatus(facts, landing);
     const filing = { endReason: r.end_reason, completedAt: r.completed_at, archivedAt: r.archived_at, deletedAt: r.deleted_at };
-    const runStored = deriveSessionRunState({ status: r.status, ...filing });
     const runProjected = deriveSessionRunState({ status: projected, ...filing });
-    const stateStored = deriveSessionState({ status: r.status, ...filing });
     const stateProjected = deriveSessionState({ status: projected, ...filing });
+    const runStored = storedWord ? deriveSessionRunState({ status: r.status, ...filing }) : runProjected;
+    const stateStored = storedWord ? deriveSessionState({ status: r.status, ...filing }) : stateProjected;
     const phase = deriveSessionPhase({
       status: r.status, finishedAt: r.finished_at, turnState: r.turn_state, engineTurnActive: r.engine_turn_active,
-      runningSubagents: r.running_subagents, runningBgJobs: r.running_bg_jobs,
+      runningSubagents: r.running_subagents, runningBgJobs: r.running_bg_jobs, retryAt: r.retry_at,
     });
-    const wordTurnState = r.finished_at == null ? WORD_TURN_STATE[r.status] ?? null : null;
     if (r.phase == null) totals.phaseNull++;
     else if (r.phase !== phase) totals.phaseDisagrees++;
-    if ((r.turn_state ?? null) !== wordTurnState) totals.turnStateDisagrees++;
-    if (runStored !== runProjected) totals.runStateChanged++;
-    if (stateStored !== stateProjected) totals.sessionStateChanged++;
-    const changed = projected !== r.status || runStored !== runProjected || stateStored !== stateProjected;
+    if (storedWord) {
+      const wordTurnState = r.finished_at == null ? WORD_TURN_STATE[r.status] ?? null : null;
+      if ((r.turn_state ?? null) !== wordTurnState) totals.turnStateDisagrees++;
+      if (runStored !== runProjected) totals.runStateChanged++;
+      if (stateStored !== stateProjected) totals.sessionStateChanged++;
+    }
+    const changed = storedWord && (projected !== r.status || runStored !== runProjected || stateStored !== stateProjected);
     let kind = null;
     if (changed) {
       totals.wordChanged++;
@@ -86,7 +98,8 @@ async function main() {
       } else byKind[kind] = (byKind[kind] ?? 0) + 1;
     }
     const filed = r.deleted_at ? 'trash' : r.completed_at ?? r.archived_at ? 'completed' : 'open';
-    const key = [r.status, projected, runStored, runProjected, stateStored, stateProjected, r.end_reason ?? '', r.last_turn_outcome ?? '',
+    const key = [storedWord ? r.status : '', projected, storedWord ? runStored : '', runProjected,
+      storedWord ? stateStored : '', stateProjected, r.end_reason ?? '', r.last_turn_outcome ?? '',
       r.kind, r.import_source_cwd != null ? 'import' : '', filed, changed ? (kind ?? 'UNLISTED') : ''].join('\t');
     lines.set(key, (lines.get(key) ?? 0) + 1);
   }
@@ -94,11 +107,16 @@ async function main() {
     const [status, projected, runStored, runProjected, stateStored, stateProjected, endReason, outcome, kind, imported, filed, change] = k.split('\t');
     return { status, projected, runStored, runProjected, stateStored, stateProjected, endReason, outcome, kind, imported, filed, change, rows };
   }).sort((a, b) => (a.change === '' ? 1 : 0) - (b.change === '' ? 1 : 0) || b.rows - a.rows);
-  const md = ['| stored → sent | runState | sessionState | end reason | outcome | kind | import | filed | §3.4 kind | rows |',
+  const side = (stored, sent) => (!storedWord || stored === sent ? sent : `${stored} → ${sent}`);
+  const md = [`| ${storedWord ? 'stored → sent' : 'sent'} | runState | sessionState | end reason | outcome | kind | import | filed | §3.4 kind | rows |`,
     '|---|---|---|---|---|---|---|---|---|---|',
-    ...table.map((t) => `| ${t.status}${t.projected !== t.status ? ` → ${t.projected}` : ''} | ${t.runStored}${t.runProjected !== t.runStored ? ` → ${t.runProjected}` : ''} | ${t.stateStored}${t.stateProjected !== t.stateStored ? ` → ${t.stateProjected}` : ''} | ${t.endReason} | ${t.outcome} | ${t.kind} | ${t.imported} | ${t.filed} | ${t.change} | ${t.rows} |`)].join('\n');
-  const ok = totals.unlisted === 0 && totals.heldChanged === 0 && totals.phaseDisagrees === 0 && totals.turnStateDisagrees === 0;
-  console.log(JSON.stringify({ label, at: new Date().toISOString(), readMs: Date.now() - t0, ok, totals, byKind, unlistedSamples: samples, lines: table, markdown: md }, null, 1));
+    ...table.map((t) => `| ${side(t.status, t.projected)} | ${side(t.runStored, t.runProjected)} | ${side(t.stateStored, t.stateProjected)} | ${t.endReason} | ${t.outcome} | ${t.kind} | ${t.imported} | ${t.filed} | ${t.change} | ${t.rows} |`)].join('\n');
+  if (!storedWord) {
+    for (const k of ['wordChanged', 'unlisted', 'heldChanged', 'turnStateDisagrees', 'runStateChanged', 'sessionStateChanged']) totals[k] = null;
+  }
+  const ok = !totals.unlisted && !totals.heldChanged && totals.phaseDisagrees === 0 && !totals.turnStateDisagrees
+    && (storedWord || totals.phaseNull === 0);
+  console.log(JSON.stringify({ label, at: new Date().toISOString(), readMs: Date.now() - t0, storedWord, ok, totals, byKind, unlistedSamples: samples, lines: table, markdown: md }, null, 1));
   return ok;
 }
 

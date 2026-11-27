@@ -71,7 +71,7 @@ test('a dormant retry arm is not managed-runner work', { skip: !URL, concurrency
     const names = Object.keys(columns);
     await sql.query(
       `INSERT INTO "session" (${names.map((n) => `"${n}"`).join(', ')}, "started_at", "updated_at")
-       VALUES (${names.map((n, i) => (n === 'status' ? `$${i + 1}::"run_status"` : `$${i + 1}`)).join(', ')}, now(), now())`,
+       VALUES (${names.map((_, i) => `$${i + 1}`).join(', ')}, now(), now())`,
       names.map((n) => columns[n]),
     );
     // Due by the database's clock: these columns are timestamps without a zone.

@@ -8,6 +8,7 @@ import {
   SESSION_CODEX_STEER_V1,
   SESSION_CURRENT_WORK_ROUTING_V1,
 } from '@orbit/shared';
+import { wordSql } from '../test-support/session-word';
 import '../test-support/dequeue-under-lease';
 
 /**
@@ -252,7 +253,7 @@ pgTest('steer dequeue commit with a lost response re-enters the queue at target 
   // And it is genuinely claimable — an executable turn the session is now RUNNING for, rather
   // than a PENDING row parked behind an idle session nothing will come back for.
   const session = await admin.query<{ status: string }>(
-    'SELECT status FROM "session" WHERE id = $1::uuid',
+    `SELECT ${wordSql()} AS status FROM "session" WHERE id = $1::uuid`,
     [SESSION_ID],
   );
   assert.equal(session.rows[0].status, 'RUNNING');

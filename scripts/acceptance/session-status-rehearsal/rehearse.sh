@@ -20,6 +20,9 @@
 #   rehearse.sh down        remove the stack and every container this script started
 #
 # Records go to $OUT (default /mnt/tmp/t16/out): one file per step, and timeline.log.
+# KIT_IMAGE names the apiserver image the census and the shape seed run in (default $LM_PROJECT-apiserver:d2); for a
+# D4 database give it an image built from D3 or D4 code. The steps up, rewind, seed, d1, gate, backfill, plans, d2,
+# post-gate and cutover are the D1 and D2 rehearsal's.
 set -euo pipefail
 HERE=$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO=$(cd "$HERE/../../.." && pwd)
@@ -38,7 +41,8 @@ mkdir -p "$OUT"
 stamp() { date -u +%FT%T.%3NZ; }
 log() { echo "$(stamp) $*" | tee -a "$OUT/timeline.log"; }
 psqlc() { docker exec -i "$PG" psql -U orbit -d orbit -X -v ON_ERROR_STOP=1 "$@"; }
-kit() { docker run --rm --network "$NET" -e DATABASE_URL="$DB_URL" -v "$HERE:/kit:ro" -v "$REPO/scripts:/scripts:ro" "$P-apiserver:d2" "$@"; }
+kit() { docker run --rm --network "$NET" -e DATABASE_URL="$DB_URL" -v "$HERE:/kit:ro" -v "$REPO/scripts:/scripts:ro" "${KIT_IMAGE:-$P-apiserver:d2}" "$@"; }
+has_status() { [ "$(psqlc -At -c "SELECT count(*) FROM information_schema.columns WHERE table_name = 'session' AND column_name = 'status'")" = 1 ]; }
 healthy() { docker exec "$1" node -e "fetch('http://127.0.0.1:3000/api').then(()=>process.exit(0)).catch(()=>process.exit(1))" 2>/dev/null; }
 wait_healthy() {
   local c=$1 t0; t0=$(date +%s)
@@ -108,7 +112,9 @@ census)
   rc=$?
   set -e
   log "census $label: exit $rc $(node -e 'const j=require(process.argv[1]); console.log(JSON.stringify(j.totals), JSON.stringify(j.byKind))' "$OUT/census-$label.json")"
-  psqlc -At -f - < "$REPO/scripts/session-turn-state-census.sql" > "$OUT/census-sql-$label.txt" 2>&1 || true
+  # The SQL census reads the stored word, so it has nothing to say once deploy D4 has dropped the column.
+  if has_status; then psqlc -At -f - < "$REPO/scripts/session-turn-state-census.sql" > "$OUT/census-sql-$label.txt" 2>&1 || true
+  else log "census $label: no session.status column; session-turn-state-census.sql (D2-era) not run"; fi
   ;;
 gate)
   log "gate: 1622 of $POST_GATE_REF (refuses a row whose facts are not the word's)"

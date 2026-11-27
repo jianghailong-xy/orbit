@@ -1,5 +1,7 @@
 // The rehearsal's writer loop (plan §7.2: "a writer loop updating sessions the way event ingestion does, to see the
-// lock tries work"). It writes as code before deploy D2 does, the word only, never turn_state or phase:
+// lock tries work"). By default (WRITER_CODE=d1) it writes as code before deploy D2 does, the word only, never
+// turn_state or phase; WRITER_CODE=d3 writes as D3 and D4 code does, turn_state and never the word, which is the loop
+// for the D3 to D4 hand-over (a D4 database has no word column):
 //   ingest   every 100 ms, one held session of the seeded runners gets its running background jobs, background shells
 //            and engine flag moved, as event ingestion moves them (each write fires session_zz_phase once D1 is in);
 //   cycle    every 500 ms, one of ten held seeded sessions moves AWAITING_INPUT -> PENDING -> RUNNING -> AWAITING_INPUT,
@@ -9,11 +11,18 @@
 // No lock_timeout: a writer queues behind a migration's lock as a server's does, and how long it queued is the point.
 // Every statement is timed; one that takes over 100 ms is logged with its time, and a summary line is printed every
 // 10 s. Stops on SIGTERM and prints a last summary.
-//   docker run -d --network <net> -e DATABASE_URL=... -v <this dir>:/kit:ro <project>-apiserver:d2 node /kit/writer-loop.cjs
+//   docker run -d --network <net> -e DATABASE_URL=... [-e WRITER_CODE=d3] -v <this dir>:/kit:ro <project>-apiserver:d2 node /kit/writer-loop.cjs
 'use strict';
 const path = require('node:path');
 
-const { prismaClientFor } = require(path.join('/app/src/apiserver/dist', 'prisma/prisma-client.js'));
+const { prismaClientFor } = require(path.join(process.env.API_DIST ?? '/app/src/apiserver/dist', 'prisma/prisma-client.js'));
+const CODE = process.env.WRITER_CODE ?? 'd1';
+if (!['d1', 'd3'].includes(CODE)) throw new Error(`WRITER_CODE is d1 or d3, not ${CODE}`);
+const TURN_STATE = { AWAITING_INPUT: null, PENDING: 'QUEUED', RUNNING: 'IN_FLIGHT' };
+/** Move one held session to the state `to` names, as this code's enqueue, claim and turn-complete write it. */
+const move = (op, id, to) => (CODE === 'd1'
+  ? timed(op, `UPDATE "session" SET "status" = $2::run_status, "updated_at" = now() WHERE "id" = $1::uuid AND "finished_at" IS NULL`, id, to)
+  : timed(op, `UPDATE "session" SET "turn_state" = $2, "updated_at" = now() WHERE "id" = $1::uuid AND "finished_at" IS NULL`, id, TURN_STATE[to]));
 const db = prismaClientFor(process.env.DATABASE_URL);
 const SLOW_MS = 100;
 
@@ -55,7 +64,8 @@ async function main() {
   // The held sessions of the seeded runners 2-20 (session-status-query-plans-seed.sql names them 'runner <n>').
   const parked = await db.$queryRawUnsafe(`
     SELECT s."id"::text AS id FROM "session" s JOIN "runner" r ON r."id" = s."assigned_runner_id"
-     WHERE r."name" ~ '^runner ([2-9]|1[0-9]|20)$' AND s."finished_at" IS NULL AND s."status" = 'AWAITING_INPUT'
+     WHERE r."name" ~ '^runner ([2-9]|1[0-9]|20)$' AND s."finished_at" IS NULL
+       AND ${CODE === 'd1' ? `s."status" = 'AWAITING_INPUT'` : 's."turn_state" IS NULL'}
      ORDER BY s."id"`);
   if (parked.length < 20) throw new Error(`only ${parked.length} parked seeded sessions`);
   const cyclers = parked.slice(0, 10).map((r) => r.id);
@@ -76,7 +86,7 @@ async function main() {
     if (tick % 5 === 0) {
       const c = cyclers[(tick / 5) % cyclers.length];
       const to = NEXT[word.get(c)];
-      await timed(`cycle:${to}`, `UPDATE "session" SET "status" = $2::run_status, "updated_at" = now() WHERE "id" = $1::uuid AND "finished_at" IS NULL`, c, to);
+      await move(`cycle:${to}`, c, to);
       word.set(c, to);
     }
     if (tick % 150 === 1) {
@@ -87,7 +97,7 @@ async function main() {
     await sleep(100);
   }
   // Leave the cycled sessions parked, as they started.
-  for (const c of cyclers) await timed('park', `UPDATE "session" SET "status" = 'AWAITING_INPUT', "updated_at" = now() WHERE "id" = $1::uuid AND "finished_at" IS NULL`, c);
+  for (const c of cyclers) await move('park', c, 'AWAITING_INPUT');
   summary(true);
 }
 
