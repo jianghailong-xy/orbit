@@ -208,6 +208,7 @@ answers one page of the list as top-level entries, with an ETag answered `304` w
 | `GET` | `/api/documents/search` | query `cursor`, `limit`, `q` | `DriveController.search` |
 | `GET` | `/api/documents/syncs` | — | `DriveController.listSyncs` |
 | `GET` | `/api/documents/syncs/:id` | path `id` | `DriveController.getSync` |
+| `POST` | `/api/documents/syncs/:id/handled` | path `id` | `DriveController.markSyncHandled` |
 | `DELETE` | `/api/documents/trash` | — | `DriveController.emptyTrash` |
 | `GET` | `/api/documents/trash` | query `cursor`, `limit` | `DriveController.trash` |
 | `DELETE` | `/api/documents/trash/groups/:id` | path `id` | `DriveController.deleteGroup` |
@@ -245,6 +246,7 @@ answers one page of the list as top-level entries, with an ETag answered `304` w
 | `GET` | `/api/drive/search` | query `cursor`, `limit`, `q` | `DriveController.search` |
 | `GET` | `/api/drive/syncs` | — | `DriveController.listSyncs` |
 | `GET` | `/api/drive/syncs/:id` | path `id` | `DriveController.getSync` |
+| `POST` | `/api/drive/syncs/:id/handled` | path `id` | `DriveController.markSyncHandled` |
 | `DELETE` | `/api/drive/trash` | — | `DriveController.emptyTrash` |
 | `GET` | `/api/drive/trash` | query `cursor`, `limit` | `DriveController.trash` |
 | `DELETE` | `/api/drive/trash/groups/:id` | path `id` | `DriveController.deleteGroup` |

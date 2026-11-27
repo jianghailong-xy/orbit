@@ -570,6 +570,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
     'GET /drive/usage',
     'GET /drive/syncs',
     'GET /drive/syncs/:id',
+    'POST /drive/syncs/:id/handled',
     'POST /drive/uploads',
     'GET /drive/uploads/:id',
     'PUT /drive/uploads/:id/chunks/:idx',

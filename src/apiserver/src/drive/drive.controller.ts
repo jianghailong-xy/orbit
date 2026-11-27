@@ -42,7 +42,7 @@ export class DriveController {
     private readonly syncs: DriveSyncsService,
   ) {}
 
-  /** Agents' directory syncs for the upload tray: running ones and those ended in the last day (S4). */
+  /** Agents' directory syncs for the upload tray: running ones, those ended in the last day and unhandled failures (S4). */
   @DRIVE_PAT()
   @Get('syncs')
   listSyncs(@CurrentUser() user: AuthUser): Promise<{ syncs: DriveSyncView[] }> {
@@ -54,6 +54,14 @@ export class DriveController {
   @Get('syncs/:id')
   getSync(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string): Promise<DriveSyncView> {
     return this.syncs.get(user.userId, id);
+  }
+
+  /** The owner has dealt with a sync's failures (the Drive page's Clear): it stops being kept past the day. */
+  @DRIVE_PAT()
+  @Post('syncs/:id/handled')
+  @HttpCode(HttpStatus.OK)
+  markSyncHandled(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string): Promise<DriveSyncView> {
+    return this.syncs.markHandled(user.userId, id);
   }
 
   // What Files → Storage shows: the drive's share and the rest, each content once (§2.5).

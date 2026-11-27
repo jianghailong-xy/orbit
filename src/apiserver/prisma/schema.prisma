@@ -11449,6 +11449,12 @@ model DriveSync {
   startedAt    DateTime  @default(now()) @map("started_at") @db.Timestamptz(3)
   updatedAt    DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
   endedAt      DateTime? @map("ended_at") @db.Timestamptz(3)
+  /// When a failed sync stopped needing the owner (migration 1790): cleared by them, or a later clean sync of the same
+  /// source and destination. A sync that ended with failures and has none is kept and listed whatever its age.
+  handledAt      DateTime? @map("handled_at") @db.Timestamptz(3)
+  /// The session the failures were handed to, and when: history read by id, not a key.
+  fixSessionId   String?   @map("fix_session_id") @db.Uuid
+  fixRequestedAt DateTime? @map("fix_requested_at") @db.Timestamptz(3)
 
   @@index([ownerId, startedAt(sort: Desc)], map: "drive_sync_owner_started_idx")
   @@index([runnerId], map: "drive_sync_runner_id_idx")

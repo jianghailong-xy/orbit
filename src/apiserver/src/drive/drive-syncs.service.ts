@@ -12,7 +12,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 
 /** A running sync whose runner sent nothing for this long reads as STOPPED. */
 export const DRIVE_SYNC_STALE_MS = 2 * 60_000;
-/** How long an ended sync is listed. */
+/** How long an ended sync is listed, unless it needs handling (NEEDS_HANDLING). */
 export const DRIVE_SYNC_KEEP_MS = 24 * 60 * 60_000;
 /** The most failed paths a row keeps; `failedCount` counts them all. */
 export const DRIVE_SYNC_FAILED_MAX = 100;
@@ -22,6 +22,17 @@ const DRIVE_SYNC_LIST_MAX = 50;
 export type DriveSyncStatus = 'CHECKING' | 'UPLOADING' | 'DONE' | 'FAILED' | 'STOPPED';
 export const DRIVE_SYNC_STATUSES: readonly DriveSyncStatus[] = ['CHECKING', 'UPLOADING', 'DONE', 'FAILED', 'STOPPED'];
 const RUNNING: readonly string[] = ['CHECKING', 'UPLOADING'];
+
+/**
+ * A sync that ended with failures nobody has dealt with yet: the Drive page keeps it under "Needs you", so it is neither
+ * pruned nor dropped from the list, whatever its age, until the owner clears it or a later clean sync of the same source
+ * and destination does.
+ */
+const NEEDS_HANDLING = {
+  endedAt: { not: null },
+  handledAt: null,
+  OR: [{ failedCount: { gt: 0 } }, { status: 'FAILED' }],
+} satisfies Prisma.DriveSyncWhereInput;
 
 export interface DriveSyncFailure {
   path: string;
@@ -50,6 +61,11 @@ export interface DriveSyncView {
   startedAt: string;
   updatedAt: string;
   endedAt: string | null;
+  /** When the failures stopped needing the owner; null while they do (or there were none). */
+  handledAt: string | null;
+  /** The session the failures were handed to, and when. */
+  fixSessionId: string | null;
+  fixRequestedAt: string | null;
 }
 
 export interface DriveSyncOpen {
@@ -85,10 +101,13 @@ export class DriveSyncsService {
     @Optional() private readonly realtime?: RealtimeService,
   ) {}
 
-  /** A runner starts a sync. The owner's syncs that ended more than a day ago go first, so the table stays small. */
+  /**
+   * A runner starts a sync. The owner's syncs that ended more than a day ago go first, so the table stays small; one
+   * that still needs handling stays.
+   */
   async open(runner: { id: string; ownerId: string }, input: DriveSyncOpen, now = new Date()): Promise<{ id: string }> {
     await this.prisma.driveSync.deleteMany({
-      where: { ownerId: runner.ownerId, endedAt: { lt: new Date(now.getTime() - DRIVE_SYNC_KEEP_MS) } },
+      where: { ownerId: runner.ownerId, endedAt: { lt: new Date(now.getTime() - DRIVE_SYNC_KEEP_MS) }, NOT: NEEDS_HANDLING },
     });
     // The session is shown to the owner by title, so only one of the owner's own is kept.
     const session = input.sessionId
@@ -148,8 +167,36 @@ export class DriveSyncsService {
       if (!row) throw refusal(HttpStatus.NOT_FOUND, 'DOCUMENTS_SYNC_NOT_FOUND', 'No such sync on this runner.');
       throw refusal(HttpStatus.CONFLICT, 'DOCUMENTS_SYNC_ENDED', 'This sync has already ended.');
     }
+    if (ending) await this.handleEarlierFailures(runner.ownerId, id, now);
     this.realtime?.publishDriveSync(runner.ownerId, id);
     return { ok: true };
+  }
+
+  /** A sync that ended DONE with nothing failed settles the earlier failures of the same source into the same place. */
+  private async handleEarlierFailures(ownerId: string, id: string, now: Date): Promise<void> {
+    const row = await this.prisma.driveSync.findFirst({
+      where: { id, ownerId },
+      select: { status: true, failedCount: true, sourceName: true, destPath: true, startedAt: true },
+    });
+    if (!row || row.status !== 'DONE' || row.failedCount > 0) return;
+    const earlier = await this.prisma.driveSync.findMany({
+      where: { ownerId, sourceName: row.sourceName, destPath: row.destPath, startedAt: { lte: row.startedAt }, id: { not: id }, ...NEEDS_HANDLING },
+      select: { id: true },
+    });
+    if (earlier.length === 0) return;
+    await this.prisma.driveSync.updateMany({ where: { id: { in: earlier.map((sync) => sync.id) }, handledAt: null }, data: { handledAt: now } });
+    for (const sync of earlier) this.realtime?.publishDriveSync(ownerId, sync.id);
+  }
+
+  /**
+   * The owner has dealt with a sync's failures (the Drive page's Clear): it ages out like any other from now on. Saying
+   * it again keeps the first time. Another account's sync is not found.
+   */
+  async markHandled(ownerId: string, id: string, now = new Date()): Promise<DriveSyncView> {
+    const { count } = await this.prisma.driveSync.updateMany({ where: { id, ownerId, handledAt: null }, data: { handledAt: now } });
+    const view = await this.get(ownerId, id, now);
+    if (count > 0) this.realtime?.publishDriveSync(ownerId, id);
+    return view;
   }
 
   /**
@@ -165,13 +212,21 @@ export class DriveSyncsService {
     return viewOf(row, new Map(session ? [[session.id, session.title]] : []), now);
   }
 
-  /** What the tray shows: running syncs and those that ended in the last day, newest first. */
+  /**
+   * What the tray shows: running syncs, those that ended in the last day, and those that still need handling whatever
+   * their age, newest first. The last are read on their own, so fifty newer syncs never push one out of the list.
+   */
   async list(ownerId: string, now = new Date()): Promise<{ syncs: DriveSyncView[] }> {
-    const rows = await this.prisma.driveSync.findMany({
-      where: { ownerId, OR: [{ endedAt: null }, { endedAt: { gte: new Date(now.getTime() - DRIVE_SYNC_KEEP_MS) } }] },
-      orderBy: { startedAt: 'desc' },
-      take: DRIVE_SYNC_LIST_MAX,
-    });
+    const [recent, unhandled] = await Promise.all([
+      this.prisma.driveSync.findMany({
+        where: { ownerId, OR: [{ endedAt: null }, { endedAt: { gte: new Date(now.getTime() - DRIVE_SYNC_KEEP_MS) } }] },
+        orderBy: { startedAt: 'desc' },
+        take: DRIVE_SYNC_LIST_MAX,
+      }),
+      this.prisma.driveSync.findMany({ where: { ownerId, ...NEEDS_HANDLING }, orderBy: { startedAt: 'desc' }, take: DRIVE_SYNC_LIST_MAX }),
+    ]);
+    const rows = [...new Map([...recent, ...unhandled].map((row) => [row.id, row])).values()]
+      .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
     const sessionIds = [...new Set(rows.map((row) => row.sessionId).filter((id): id is string => id !== null))];
     const sessions = sessionIds.length
       ? await this.prisma.session.findMany({ where: { id: { in: sessionIds }, ownerId }, select: { id: true, title: true } })
@@ -206,5 +261,8 @@ export function viewOf(row: DriveSync, titles: Map<string, string>, now: Date): 
     startedAt: row.startedAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     endedAt: (row.endedAt ?? (stale ? row.updatedAt : null))?.toISOString() ?? null,
+    handledAt: row.handledAt?.toISOString() ?? null,
+    fixSessionId: row.fixSessionId,
+    fixRequestedAt: row.fixRequestedAt?.toISOString() ?? null,
   };
 }
