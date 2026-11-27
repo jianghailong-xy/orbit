@@ -100,8 +100,10 @@ const READ = { workspaceConfinable: false } as const;
  * The page chat's doors are the person's: a session (one acting through `X-Orbit-Session`) reads and changes schedules
  * with its own tools, and neither opens a conversation in the person's name nor reads the person's chat.
  */
-function refusePageChatFromSession(req: Headers): void {
-  if (actingSession(req.headers) !== null) {
+async function refusePageChatFromSession(req: Headers, user: AuthUser, pageChats: SchedulePageChats): Promise<void> {
+  const acting = actingSession(req.headers);
+  if (acting !== null) {
+    await pageChats.refuseRunSession(user.userId, acting);
     throw new ForbiddenException({
       code: 'SCHEDULE_CHAT_FROM_SESSION',
       message: "A session manages schedules with the schedule tools; the Scheduled page's chat is the person's door.",
@@ -160,8 +162,8 @@ export class SchedulesController {
    */
   @Get('schedules/chat')
   @PatScope('sessions:read', READ)
-  pageChat(@CurrentUser() user: AuthUser, @Req() req: Headers, @Query('timezone') timezone?: string) {
-    refusePageChatFromSession(req);
+  async pageChat(@CurrentUser() user: AuthUser, @Req() req: Headers, @Query('timezone') timezone?: string) {
+    await refusePageChatFromSession(req, user, this.pageChats);
     if (timezone !== undefined) {
       try {
         assertTimezone(timezone);
@@ -183,12 +185,12 @@ export class SchedulesController {
   @Post('schedules/chat')
   @PatScope('sessions:write', { workspaceConfinable: { body: { workspaceId: 'workspace' }, requires: ['workspaceId'] } })
   @HttpCode(HttpStatus.OK)
-  openPageChat(
+  async openPageChat(
     @CurrentUser() user: AuthUser,
     @Body(PublicIdPipe.forFields('workspaceId')) dto: SchedulePageChatDto,
     @Req() req: Headers,
   ) {
-    refusePageChatFromSession(req);
+    await refusePageChatFromSession(req, user, this.pageChats);
     return this.pageChats.open(user, dto.workspaceId, dto.text);
   }
 

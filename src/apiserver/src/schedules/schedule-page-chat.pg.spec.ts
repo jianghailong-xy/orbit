@@ -272,6 +272,36 @@ test('the Scheduled page chat: an opening that writes nothing, a marked MANUAL s
     assert.ok(ordinary, 'an ordinary session of the workspace carries no origin');
   });
 
+  await t.test('7. a run session cannot open or act as a page chat: both doors refuse SCHEDULE_RUN_SESSION_SCOPE, nothing made', async () => {
+    const schedules = new SchedulesService(prisma as unknown as PrismaService);
+    const made = await schedules.create({ kind: 'OWNER', ownerId: owner.id }, {
+      workspaceId: wsA, intent: 'check it', title: 'Run scope', prompt: 'Check it.',
+      rule: { kind: 'DAILY', time: '06:00' }, timezone: 'UTC', accessLevel: 'CHECK_ONLY',
+    });
+    if (made.outcome !== 'CREATED') throw new Error('not created');
+    const run = await prisma.scheduleRun.create({
+      data: { scheduleId: made.schedule.id, scheduleRevision: 1, plannedAt: new Date(), trigger: 'MANUAL', state: 'RUNNING', startedAt: new Date() },
+    });
+    const sessionId = randomUUID();
+    await prisma.session.create({
+      data: {
+        id: sessionId, ownerId: owner.id, creatorId: owner.id, workspaceId: wsA, title: 'run', prompt: 'p', provider: 'claude',
+        engine: 'claude', providerBuiltin: true, dispatchOrigin: 'USER', permissionMode: 'PLAN', runSource: 'SCHEDULE', scheduleRunId: run.id,
+      },
+    });
+    await prisma.scheduleRun.update({ where: { id: run.id }, data: { sessionId } });
+    const before = await writes(owner.id);
+    const acting = { 'x-orbit-session-id': pub(sessionId) };
+    for (const [what, reply] of [
+      ['GET', await read(ownerToken, acting)],
+      ['POST', await open({ workspaceId: pub(wsA), text: 'pause it' }, ownerToken, acting)],
+    ] as const) {
+      assert.equal(reply.status, 403, `${what}: ${reply.text}`);
+      assert.equal(reply.json.code, 'SCHEDULE_RUN_SESSION_SCOPE', what);
+    }
+    assert.deepEqual(await writes(owner.id), before, 'no session and no turn');
+  });
+
   await t.test('6. owner channel only, the owner\'s workspaces only, words required: each refused, nothing made', async () => {
     const before = await writes(owner.id);
     const strangerBefore = await writes(stranger.id);

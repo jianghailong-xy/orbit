@@ -4,6 +4,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma, ScheduleState } from '@prisma/client';
 import {
   schedulePageChatOpening,
+  toUuid,
   type SchedulePageChatCounts,
   type SchedulePageChatNext,
   type SchedulePageChatOpenAnswer,
@@ -14,6 +15,7 @@ import {
 import type { AuthUser } from '../common/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from '../sessions/sessions.service';
+import { assertRunSessionScope, runSessionScheduleId } from './schedules.service';
 import { workspaceNames } from './schedule-views';
 
 type Tx = Prisma.TransactionClient;
@@ -34,6 +36,17 @@ export class SchedulePageChats {
     private readonly prisma: PrismaService,
     private readonly sessions: SessionsService,
   ) {}
+
+  /** A run session (`scheduleRun` set) cannot open or act as a page chat: SCHEDULE_RUN_SESSION_SCOPE. */
+  async refuseRunSession(ownerId: string, acting: string): Promise<void> {
+    let sessionId: string;
+    try {
+      sessionId = toUuid(acting);
+    } catch {
+      return;
+    }
+    assertRunSessionScope(await runSessionScheduleId(this.prisma, { kind: 'SESSION', ownerId, sessionId }), null, 'CONTROL');
+  }
 
   /**
    * The account's open page chat, if any, and the opening a new one starts with. Writes nothing. `viewerTimezone` is the
