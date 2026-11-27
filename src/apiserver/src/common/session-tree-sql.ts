@@ -72,10 +72,11 @@ export function treeCeiling(runnerIdSql: Prisma.Sql): Prisma.Sql {
 }
 
 /** Active turns already held on a runner. A slot is an active turn, not a warm process. */
-export function runnerActiveTurns(runnerIdSql: Prisma.Sql): Prisma.Sql {
+export function runnerActiveTurns(runnerIdSql: Prisma.Sql, exceptSessionSql?: Prisma.Sql): Prisma.Sql {
   return Prisma.sql`(
     SELECT count(*) FROM "session" active
     WHERE active."assigned_runner_id" = ${runnerIdSql}
+      ${exceptSessionSql ? Prisma.sql`AND active.id <> ${exceptSessionSql}` : Prisma.empty}
       -- Held, beside the turn state, so a runner's held rows are the access path (session_runner_held_idx).
       AND ${sessionHeldSql('active')}
       AND ${inFlight('active')}
@@ -83,27 +84,23 @@ export function runnerActiveTurns(runnerIdSql: Prisma.Sql): Prisma.Sql {
 }
 
 /**
- * The slots of a runner that sessions running no turn hold through a background job: open (held),
- * not IN_FLIGHT, and named by the runner's last beat (runner_presence.background_job_session_ids,
- * migration 0780; runners/runner-background-holders.ts), one slot each up to every slot but one.
- * The runner itself admits against turns plus these, and keeps its last slot for a turn
- * (src/runner-go/session_pool.go backgroundSlotsLocked): jobs alone never fill it, so a count of
- * every holder would read a machine that takes the next turn as full. A count of turns alone reads
- * a full machine as having room. The queued explanation reads it, and so does Run now's overflow
- * claim, which may go past the limit only up to max + burst of what the runner admits against; the
- * ordinary claim gate counts turns, and the runner holds back its claims by itself. The machine
- * page's "N of M running" counts every holder (runningSessionCounts), not these slots. Ask it only
- * of a runner known to be online: a stale presence row still names the holders of its last beat.
+ * Sessions on a runner that run no turn but hold one of its slots through a background job: open
+ * (held), not IN_FLIGHT, and named by the runner's last beat (runner_presence.background_job_session_ids,
+ * migration 0780; runners/runner-background-holders.ts). The runner itself admits against turns
+ * plus these (src/runner-go/session_pool.go), so a count of turns alone reads a full machine as
+ * having room. The queued explanation reads it, and so do both claims: the ordinary claim takes a
+ * session only while turns plus these leave a slot — counted by turns alone, a full runner was handed
+ * a claim it could not start, which read RUNNING ("Getting the session ready") on a runner that was
+ * full — and Run now's overflow claim may go past the limit only up to max + burst of what the runner
+ * admits against. Ask it only of a runner known to be online: a stale presence row still names the
+ * holders of its last beat.
  *
  * exceptSessionSql leaves one session's own jobs out, as the runner leaves out those of the session it
  * is admitting (canAdmitTurnLocked): a queued session's own build does not keep its next message waiting.
  */
 export function runnerBackgroundHeldSessions(runnerIdSql: Prisma.Sql, exceptSessionSql?: Prisma.Sql): Prisma.Sql {
   return Prisma.sql`(
-    SELECT LEAST(
-      count(*),
-      GREATEST((SELECT hr."max_concurrent" FROM "runner" hr WHERE hr.id = ${runnerIdSql}) - 1, 0)
-    ) FROM "session" held
+    SELECT count(*) FROM "session" held
     WHERE held."assigned_runner_id" = ${runnerIdSql}
       ${exceptSessionSql ? Prisma.sql`AND held.id <> ${exceptSessionSql}` : Prisma.empty}
       AND ${sessionHeldSql('held')}

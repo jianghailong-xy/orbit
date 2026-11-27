@@ -85,7 +85,7 @@ export function engineStreamedIn(events: EventLike[]): boolean {
 
 /** The phases a runtime may name: see Session.enginePhase for why it is not an enum. `compacting` is the
  *  engine's; `waiting_for_slot` the runner's own, for a claimed turn its admission has not given a slot yet
- *  (src/runner-go/session_pool.go waitActive), which no engine has been asked to start. */
+ *  and that it could not give back (src/runner-go/session_pool.go waitActive): no engine has been asked to start it. */
 const NAMED_PHASES: ReadonlySet<string> = new Set<string>(['compacting', 'waiting_for_slot']);
 
 /**

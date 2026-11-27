@@ -313,8 +313,8 @@ test('claim, slots and dispatch read the turn state, and select what the stored 
       'the turn in flight holds the one slot');
     await db.runner.update({ where: { id: gated.runnerId }, data: { maxConcurrent: 2 } });
     // Two parked sessions the runner's beat names as held by background jobs, beside the queued session's own: the
-    // runner admits a turn against turns plus other sessions' holders, those up to every slot but one, so on 2 slots the
-    // turn and one holder fill it and the claim waits queued rather than RUNNING on a runner that cannot start it.
+    // runner admits a turn against turns plus other sessions' holders, so the claim leaves the session queued while
+    // they fill the runner, rather than hand it to a runner that cannot start it.
     const holders: string[] = [];
     for (const title of ['a build in bg_run', 'a remote submit in bg_run']) {
       const held = await db.session.create({
@@ -328,13 +328,20 @@ test('claim, slots and dispatch read the turn state, and select what the stored 
     }
     await db.runnerPresence.update({ where: { runnerId: gated.runnerId }, data: { backgroundJobSessionIds: [gated.id, ...holders] } });
     assert.equal(await queue.claimSessionForRunner({ id: gated.runnerId, supportedProviders: ['claude'] } as never), null,
-      'the turn and the background-job holders, capped at one slot, fill the two');
+      'the turn and the two background-job holders fill the two slots');
     await db.runner.update({ where: { id: gated.runnerId }, data: { maxConcurrent: 3 } });
     assert.equal(await queue.claimSessionForRunner({ id: gated.runnerId, supportedProviders: ['claude'] } as never), null,
       'on three slots the turn and the two holders fill it');
     await db.runnerPresence.update({ where: { runnerId: gated.runnerId }, data: { backgroundJobSessionIds: [gated.id, holders[0]] } });
-    assert.equal((await queue.claimSessionForRunner({ id: gated.runnerId, supportedProviders: ['claude'] } as never))?.sessionId, gated.id,
-      'one holder ended: a slot is free, the queued session\'s own job holds none against it, and the phase-RUNNING parked session holds none');
+    // A full runner's scope (fullScope): an ordinary claim takes only the sessions it names, and none for an empty one.
+    assert.equal(await queue.claimSessionForRunner({ id: gated.runnerId, supportedProviders: ['claude'], fullScope: [] } as never), null,
+      'an empty full scope took an ordinary claim');
+    assert.equal(await queue.claimSessionForRunner(
+      { id: gated.runnerId, supportedProviders: ['claude'], fullScope: [holders[0]] } as never), null,
+    'a full scope that does not name the session took it');
+    assert.equal((await queue.claimSessionForRunner(
+      { id: gated.runnerId, supportedProviders: ['claude'], fullScope: [gated.id] } as never))?.sessionId, gated.id,
+    'one holder ended: a slot is free, the queued session\'s own job holds none against it, and the phase-RUNNING parked session holds none');
 
     const claimed: string[] = [gated.title];
     for (const row of rows) {

@@ -1711,6 +1711,10 @@ export interface RunnerHeartbeatResponse {
    *  which a runner draining for an update sends for the sessions whose engine is running a turn on it.
    *  Absent from an older server, to which such a runner sends no claim while it drains. */
   drainScopedClaims?: boolean;
+  /** This server takes a full runner's claim scope (`GET /runner/sessions/claim?fullScope=`: an ordinary claim only for
+   *  the sessions named, a Run now claim for any) and a claim given back because the runner is full (return-slot
+   *  `reason: runner_full`). Absent from an older server, which a runner asks as before. */
+  capacityClaims?: boolean;
   /** This server's operator says every replica serves SESSION_RELEASE_V1 (the switch ORBIT_SESSION_RELEASE_V1): a runner
    *  may declare it on its turn-complete and release reports. Absent from an older server and while the switch is
    *  off; a runner that does not read it on its latest answer declares nothing. */
@@ -4019,12 +4023,20 @@ export interface ReleaseTurnLeasesRequest {
 export interface ReturnSlotRequest {
   /** Stable for one runner process: the process that holds the session. */
   leaseOwner?: string;
+  /** `runner_full`: not a drain. Every slot of the runner is taken — by turns and by sessions its background jobs hold —
+   *  so it gives back a claim it cannot start (runner-go sessionPool.waitActive). The session goes back to the queue,
+   *  where it reads queued behind a full runner, and the runner is not recorded draining. A session whose engine never
+   *  started has no inbox lease owner yet, so the fence for this reason is the runner, and an owner that is this
+   *  process or none. Sent only to a server whose heartbeat answer says `capacityClaims`. */
+  reason?: 'runner_full';
 }
 
 /** The session's status after a slot return: RUNNING when a turn in flight kept the slot, which the runner keeps too. */
 export interface ReturnSlotResponse {
   ok: true;
   status: string;
+  /** Whether the slot was given back by this call. Absent from an older server. */
+  returned?: boolean;
 }
 
 /** Runner → control plane: make one freshly reserved engine generation the sole inbox consumer.

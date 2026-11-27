@@ -166,6 +166,14 @@ export interface ClaimingRunner {
    * claim takes any session as it always has; an empty list takes none.
    */
   onlySessionIds?: readonly string[];
+  /**
+   * A full runner's claim scope (runner-go sessionPool.claimScope): every slot of the runner is taken, by turns and by
+   * sessions its background jobs hold, so an ordinary claim may take only the sessions named — those held by a
+   * background job of their own, whose message the slot their job holds admits — and a Run now claim may take any.
+   * Empty takes no ordinary claim. Absent, the claim is the runner's ordinary one. Sent only to a server whose heartbeat
+   * answer says `capacityClaims`.
+   */
+  fullScope?: readonly string[];
 }
 
 /**
@@ -548,6 +556,11 @@ export class QueueService {
             -- and this claim makes it RUNNING again. No other session is claimed while it drains.
             AND (${runner.onlySessionIds ? [...runner.onlySessionIds] : null}::uuid[] IS NULL
               OR s.id = ANY(${runner.onlySessionIds ? [...runner.onlySessionIds] : null}::uuid[]))
+            -- A full runner names the only sessions an ordinary claim may take (ClaimingRunner.fullScope): it would
+            -- have to hand any other back. Run now's overflow claim is not held to it.
+            AND (${overflow}::boolean
+              OR ${runner.fullScope ? [...runner.fullScope] : null}::uuid[] IS NULL
+              OR s.id = ANY(${runner.fullScope ? [...runner.fullScope] : null}::uuid[]))
             AND s."cancel_requested_at" IS NULL
             AND s."assigned_runner_id" = ${runnerId}
             -- Settings › Translation (sessions/turn-translation.ts): a new or revived session whose only

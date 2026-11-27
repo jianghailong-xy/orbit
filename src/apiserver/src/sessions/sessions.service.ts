@@ -5336,6 +5336,7 @@ export class SessionsService {
       queuedPassPending: boolean | null;
       runnerLabel: string | null;
       overLimitActive: number | bigint | null;
+      slotWaitActive: number | bigint | null;
       slotWaitHeld: number | bigint | null;
       slotWaitLimit: number | null;
       overLimitLimit: number | null;
@@ -5580,8 +5581,13 @@ export class SessionsService {
             + ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`)}
         END AS "overLimitActive",
         CASE WHEN ${sessionTurnStateSql('s')} = 'IN_FLIGHT' AND s.over_capacity_turn_id IS NOT NULL THEN r.max_concurrent END AS "overLimitLimit",
-        -- A claimed turn the runner has no slot for yet (enginePhase waiting_for_slot): the slots other sessions'
-        -- background jobs hold of its limit, for "All 4 slots are in use, 3 by background jobs". Only such a row pays.
+        -- A claimed turn the runner has no slot for yet (enginePhase waiting_for_slot): what holds the runner's slots
+        -- other than this session, the count the runner admits it against, and the part of it background jobs hold,
+        -- for "Runner full (4/4), 3 held by background jobs". Only such a row pays.
+        CASE WHEN s.engine_phase = 'waiting_for_slot' THEN
+          ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`, Prisma.sql`s.id`)}
+            + ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`, Prisma.sql`s.id`)}
+        END AS "slotWaitActive",
         CASE WHEN s.engine_phase = 'waiting_for_slot' THEN
           ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`, Prisma.sql`s.id`)}
         END AS "slotWaitHeld",
@@ -5731,10 +5737,10 @@ export class SessionsService {
         queuedRunnerUpdate: queuedRunnerUpdateOf(r),
         // Run now (docs/mocks/queued-run-now) beside a slot gate, and how far over the runner may go.
         ...queuedRunNowOf(r),
-        // Beside enginePhase waiting_for_slot only: the limit, and the slots background jobs hold of it.
-        slotWait: r.slotWaitHeld == null || r.slotWaitLimit == null
+        // Beside enginePhase waiting_for_slot only: what holds the runner's slots, the part background jobs hold, the limit.
+        slotWait: r.slotWaitActive == null || r.slotWaitHeld == null || r.slotWaitLimit == null
           ? null
-          : { heldByJobs: Number(r.slotWaitHeld), limit: r.slotWaitLimit },
+          : { active: Number(r.slotWaitActive), heldByJobs: Number(r.slotWaitHeld), limit: r.slotWaitLimit },
         // A turn its owner started over the runner's limit, while it runs: "over limit · 17/16".
         runningOverLimit: r.overLimitActive == null || r.overLimitLimit == null
           ? null

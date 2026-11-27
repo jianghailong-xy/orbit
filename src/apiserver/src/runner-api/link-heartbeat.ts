@@ -229,6 +229,10 @@ export const HEARTBEAT_DELIVERIES = {
     how: 'EVERY_BEAT',
     reads: "the beat's own draining flag: a word about this server, which the quiet answer to a draining beat carries as the full one does",
   },
+  capacityClaims: {
+    how: 'EVERY_BEAT',
+    reads: 'nothing: a word about this server (a full runner\'s claim scope and its returned claims), which the quiet answer carries as the full one does',
+  },
   sessionReleaseV1: {
     how: 'EVERY_BEAT',
     reads: "the apiserver's switch ORBIT_SESSION_RELEASE_V1 (run-release.ts sessionReleaseOffered): a word about this server, which the quiet answer carries as the full one does",
@@ -605,6 +609,8 @@ export function quietHeartbeatAnswer(
     // As the full answer says it, to a draining beat: a runner draining for an update reads its absence as an
     // older server (runner-go drainClaimScope).
     ...(extra.draining ? { drainScopedClaims: true } : {}),
+    // As the full answer says it: a full runner names the claims it can start, and gives back one it cannot.
+    capacityClaims: true,
     // As the full answer says it: a runner that reads no such word declares SESSION_RELEASE_V1 on nothing it sends.
     ...(extra.sessionRelease ? { sessionReleaseV1: true } : {}),
     ...(extra.cursorKeyChecks && extra.cursorKeyChecks.length > 0 ? { cursorKeyChecks: extra.cursorKeyChecks } : {}),

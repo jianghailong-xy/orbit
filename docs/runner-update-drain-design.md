@@ -181,6 +181,15 @@ flight (then it answers `RUNNING` and the runner keeps its permit). With a follo
 goes back to the queue as above (`PENDING`, `runner_updating`); with nothing queued, it goes idle. The
 slot return records the runner as draining too. The runner parks the permit on any answer but `RUNNING`.
 
+The same route takes back a claim a runner that is not draining cannot start because every slot is taken, by turns
+and by sessions its runner-hosted background jobs hold (`reason: "runner_full"` in the body; runner-go
+`sessionPool.waitActive`). Such a claim never activated an engine, so its fence is the runner, with an inbox lease
+owner that is this process or none yet, and the runner is not recorded as draining: the session goes back to the queue,
+where it reads `runner_at_capacity`, and the runner claims it again once a slot is free. A full runner asks only for
+claims it can start (`GET /runner/sessions/claim?fullScope=`: an ordinary claim for the job holders' own messages, a
+Run now claim for any session), so this return covers the claim taken just before a background job filled the last
+slot. Both are offered by a server whose heartbeat answer says `capacityClaims`.
+
 ### 7.4 Stop on such a session
 
 Stop on a session queued behind the update:

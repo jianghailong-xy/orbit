@@ -3123,6 +3123,9 @@ export class RunnerApiController {
       // To a draining beat: this server takes a claim scoped to named sessions (GET sessions/claim?drainScope=),
       // which is what a runner draining for an update claims with. A runner that sees no such word sends none.
       ...(dto?.draining === true ? { drainScopedClaims: true } : {}),
+      // This server takes a full runner's claim scope and its returned claims (GET sessions/claim?fullScope=,
+      // return-slot reason runner_full). A word about this server, said on every answer.
+      capacityClaims: true,
       // While the operator's switch says every replica serves it (run-release.ts sessionReleaseOffered): a runner may
       // report a failed turn and its release as two reports. Absent, a runner declares nothing.
       ...(sessionReleaseOffered() ? { sessionReleaseV1: true } : {}),
@@ -4533,9 +4536,15 @@ export class RunnerApiController {
      * heartbeat answer says `drainScopedClaims`. Ids that are not UUIDs are dropped; none left claims none.
      */
     @Query('drainScope') drainScope?: string,
+    /**
+     * A full runner's claim scope (ClaimingRunner.fullScope), comma-separated, empty for none: the sessions an
+     * ordinary claim may take. It sends one only to a server whose heartbeat answer says `capacityClaims`.
+     */
+    @Query('fullScope') fullScopeParam?: string,
   ): Promise<ClaimedSession | null> {
     const onlySessionIds = drainScope === undefined ? undefined : parseDrainScope(drainScope);
     if (onlySessionIds?.length === 0) return null;
+    const fullScope = fullScopeParam === undefined ? undefined : parseDrainScope(fullScopeParam);
     // The claim outlives the request otherwise: a runner that stopped — a self-update re-exec, a
     // restart, its own claim timeout — leaves it going here, and the session it claims is answered
     // to nobody (see claimSessionForRunner). The response closing before anything was written to
@@ -4582,6 +4591,7 @@ export class RunnerApiController {
         ...(managedInstance ? { managedInstance } : {}),
         ...(link?.requestId ? { claimRequestId: link.requestId } : {}),
         ...(onlySessionIds ? { onlySessionIds } : {}),
+        ...(fullScope ? { fullScope } : {}),
       },
       hungUp,
     );
@@ -5757,9 +5767,13 @@ export class RunnerApiController {
   ): Promise<ReturnSlotResponse> {
     await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
     const leaseOwner = parseLeaseGeneration(dto?.leaseOwner, 'leaseOwner');
+    // A full runner gives back a claim it cannot start (ReturnSlotRequest.reason): not a drain.
+    const full = dto?.reason === 'runner_full';
     // Retried whole: whether anything runs is re-read under the session lock on every attempt.
     const outcome = await withTransactionRetry(this.prisma, async (tx) => {
-      await this.lockSessionLeaseOwner(tx, sessionId, runner.id, leaseOwner);
+      // A claim a full runner never started has no inbox lease owner yet: its engine never activated one.
+      if (full) await this.lockSessionLeaseOwnerOrNone(tx, sessionId, runner.id, leaseOwner);
+      else await this.lockSessionLeaseOwner(tx, sessionId, runner.id, leaseOwner);
       const row = await tx.session.findUniqueOrThrow({
         where: { id: sessionId }, select: { ...LEGACY_STATUS_SELECT, cancelRequestedAt: true },
       });
@@ -5774,12 +5788,20 @@ export class RunnerApiController {
       // Back in the queue behind the update, or parked.
       const turnState = await executable('PENDING') > 0 ? 'QUEUED' as const : null;
       const status = turnState === 'QUEUED' ? RunStatus.PENDING : RunStatus.AWAITING_INPUT;
-      await tx.session.update({ where: { id: sessionId }, data: { turnState, engineTurnActive: false } });
+      await tx.session.update({
+        where: { id: sessionId },
+        // A full runner's return also ends a waiting_for_slot phase it may have named under the claim.
+        data: { turnState, engineTurnActive: false, ...(full ? { enginePhase: null, enginePhaseSince: null } : {}) },
+      });
       return { status, returned: true };
     }, loggedRetry(this.logger, 'runnerApi.returnSlot'));
-    await this.recordRunnerDraining(runner.id);
-    if (outcome.returned) this.realtime.publishSessionUpdated(sessionId);
-    return { ok: true, status: outcome.status };
+    if (!full) await this.recordRunnerDraining(runner.id);
+    if (outcome.returned) {
+      this.realtime.publishSessionUpdated(sessionId);
+      // Back in the queue: the runner claims it again once a slot is free, which this hint lets it ask for.
+      if (full) this.queue.notifySessionQueued(runner.id);
+    }
+    return { ok: true, status: outcome.status, returned: outcome.returned };
   }
 
   /** What a draining turn completion and a slot return say of their runner, written where its heartbeat writes it. */
@@ -11941,6 +11963,32 @@ export class RunnerApiController {
     const locked = await tx.$queryRaw<Array<{ id: string; leaseOwnerMatches: boolean }>>`
       SELECT id,
              ("inbox_lease_owner" IS NOT DISTINCT FROM ${leaseOwner}::uuid) AS "leaseOwnerMatches"
+      FROM "session"
+      WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runnerId}::uuid
+      FOR UPDATE
+    `;
+    if (locked.length === 0) {
+      throw new ForbiddenException('session does not belong to this runner');
+    }
+    if (!locked[0].leaseOwnerMatches) {
+      throw new ConflictException('runner process no longer owns this session');
+    }
+  }
+
+  /**
+   * lockSessionLeaseOwner for a session whose engine may never have started under this claim: assigned to this runner,
+   * and its inbox lease owner this process or none yet. A claim takes no lease; only an engine activating its
+   * generation does (activate-leases), so a claim a full runner never started has none.
+   */
+  private async lockSessionLeaseOwnerOrNone(
+    tx: Prisma.TransactionClient,
+    sessionId: string,
+    runnerId: string,
+    leaseOwner: string | null,
+  ): Promise<void> {
+    const locked = await tx.$queryRaw<Array<{ id: string; leaseOwnerMatches: boolean }>>`
+      SELECT id,
+             ("inbox_lease_owner" IS NULL OR "inbox_lease_owner" IS NOT DISTINCT FROM ${leaseOwner}::uuid) AS "leaseOwnerMatches"
       FROM "session"
       WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runnerId}::uuid
       FOR UPDATE

@@ -185,7 +185,7 @@ test('queuedReason runner_at_capacity: a runner full of turns and background-job
     assert.equal(got.queuedHeldByJobs, null);
   });
 
-  await t.test('(7) jobs alone never fill the last slot: it is a turn\'s, as on the runner', async () => {
+  await t.test('(7) background jobs alone fill the runner; a holder\'s own message is not held by its own job', async () => {
     const r = await runner(alice.id, 'jobs-only', { maxConcurrent: 3 });
     const jobs = [
       await session(alice.id, r, 'a build', RunStatus.AWAITING_INPUT),
@@ -193,17 +193,15 @@ test('queuedReason runner_at_capacity: a runner full of turns and background-job
       await session(alice.id, r, 'a remote submit', RunStatus.AWAITING_INPUT),
     ];
     const queued = await session(alice.id, r, 'the next message', RunStatus.PENDING);
-    await holders(r.id, jobs);
+    const own = await session(alice.id, r, 'a message to a session with its own job', RunStatus.PENDING);
+    await holders(r.id, [...jobs.slice(0, 2), own]);
+    // Two holders and the third's own message: for that one, its own job holds nothing against it.
+    const ownRow = await row(aliceToken, own);
+    assert.equal(ownRow.queuedReason, null, 'a session was held by its own background job');
+    await db.runnerPresence.update({ where: { runnerId: r.id }, data: { backgroundJobSessionIds: [...jobs, own] } });
     const got = await row(aliceToken, queued);
-    assert.equal(got.queuedReason, null, 'three job holders on three slots leave one for a turn');
-    assert.equal(got.queuedHeldByJobs, null);
-
-    // With a turn in that slot the runner is full, and the jobs are counted for the slots they take: two.
-    await session(alice.id, r, 'the turn in the last slot', RunStatus.RUNNING);
-    const full = await row(aliceToken, queued);
-    assert.equal(full.queuedReason, 'runner_at_capacity');
-    assert.equal(full.queuedActive, 3);
-    assert.equal(full.queuedLimit, 3);
-    assert.equal(full.queuedHeldByJobs, 2);
+    assert.equal(got.queuedReason, 'runner_at_capacity', 'four job holders on three slots: the runner is full');
+    assert.equal(got.queuedLimit, 3);
+    assert.equal(got.queuedHeldByJobs, 4);
   });
 });
