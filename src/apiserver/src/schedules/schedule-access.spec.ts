@@ -235,8 +235,10 @@ test('both claim paths hand the runner the run\'s allow and deny lists, by the s
     ['runner-api/runner-api.controller.ts', 's', 'runner.capabilities'],
   ] as const) {
     const source = readFileSync(join(root, file), 'utf8');
+    // The mode is claimPermissionMode's, which applies scheduleRunPermissionMode to the level handed here
+    // (queue/claim-permission-mode.spec.ts holds it to the rule).
     assert.ok(
-      source.includes(`scheduleRunPermissionMode(permissionMode, runAccessLevel(${session}.scheduleRun), provider),`),
+      source.includes(`claimPermissionMode(provider, permissionMode, runAccessLevel(${session}.scheduleRun), `),
       `${file}: the mode by the run's level`,
     );
     const level = `runAccessLevel(${session}.scheduleRun),`;

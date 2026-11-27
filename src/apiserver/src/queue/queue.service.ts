@@ -1222,12 +1222,7 @@ export class QueueService {
     // Auto, and Bypass reaching a root runner (a session that would exit during startup) runs as Auto. A Claude model
     // whose catalogue row lists no Auto is handed Auto all the same: its engine says what it settles on, and the runner
     // corrects it when it settles lower (claim-permission-mode.ts). Each substitution is logged and recorded.
-    const claimedMode = claimPermissionMode(
-      provider,
-      permissionMode,
-      runAccessLevel(session.scheduleRun),
-      session.assignedRunner?.runsAsRoot,
-    );
+    const claimedMode = claimPermissionMode(provider, permissionMode, runAccessLevel(session.scheduleRun), session.assignedRunner?.runsAsRoot);
     const handedPermissionMode = claimedMode.mode;
     if (claimedMode.substitution) {
       this.logger.log(claimPermissionModeLogLine({
