@@ -277,6 +277,42 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
     val recipient = TaskDetailLogic.runRecipient(task)
     val toRun = recipient != null && composeToRun
     val (followers, endedWatches) = TaskDetailLogic.followers(id, data.watches.orEmpty())
+    // The task's ⋯: under the title row of the page, and in the task card's head.
+    val taskMenu: @Composable () -> Unit = {
+        Box {
+            TextButton(onClick = { menu = true }, modifier = Modifier.testTag("task-menu").semantics { contentDescription = "Task actions" }) { Text("⋯", style = MaterialTheme.typography.titleLarge) }
+            DropdownMenu(menu, { menu = false }) {
+                // The presses a stopped task's header no longer draws, and the two that used to be blocks of their own (board 05).
+                if (TaskReopen.isOffered(task)) DropdownMenuItem(text = { Text(TaskReopenCopy.actionLabel) }, enabled = enabled,
+                    modifier = Modifier.testTag("task-reopen"), onClick = { menu = false; confirm = DetailConfirm.Reopen })
+                if ((status == "DONE" || status == "CANCELLED") && !gate) DropdownMenuItem(text = { Text(TaskDetailCopy.runAgain) },
+                    enabled = enabled && canStart, modifier = Modifier.testTag("task-run-again"), onClick = { menu = false; runTask() })
+                DropdownMenuItem(text = { Text(TaskDetailCopy.followTask) }, enabled = enabled, modifier = Modifier.testTag("task-follow"),
+                    onClick = { menu = false; sheet = "follow" })
+                if (!TaskDetailLogic.hasDependencies(task)) DropdownMenuItem(text = { Text(TaskDetailCopy.addPrerequisite) }, enabled = enabled,
+                    modifier = Modifier.testTag("task-add-prerequisite"), onClick = { menu = false; sheet = "dependency" })
+                HorizontalDivider()
+                DropdownMenuItem(text = { Text(SharePanelCopy.copyLink) }, onClick = { menu = false; clipboard.setText(AnnotatedString(webUrl)); data.notice = SharePanelCopy.linkCopied })
+                DropdownMenuItem(text = { Column { Text(SharePanelCopy.share); SharePanel.menuStatus(data.share)?.let { Text(it, style = MaterialTheme.typography.bodySmall) } } },
+                    enabled = enabled, onClick = { menu = false; sheet = "share" })
+                DropdownMenuItem(text = { Text(SharePanelCopy.copyAsMarkdown) }, onClick = {
+                    menu = false
+                    clipboard.setText(AnnotatedString(TaskMarkdown.task(task, webUrl) { iso -> TaskTime.local(iso) ?: "—" }))
+                    data.notice = SharePanelCopy.markdownCopied
+                })
+                // Setting the status by hand starts nothing and confirms nothing, so it is held here rather than beside the
+                // presses under the title.
+                if (status != "DONE") {
+                    HorizontalDivider()
+                    DropdownMenuItem(text = { Text(TaskDetailCopy.markDone) }, enabled = enabled, modifier = Modifier.testTag("task-mark-done"),
+                        onClick = { menu = false; patch(buildJsonObject { put("status", "DONE") }) })
+                }
+                HorizontalDivider()
+                DropdownMenuItem(text = { Text(TaskDetailCopy.deleteTask, color = MaterialTheme.colorScheme.error) }, enabled = enabled,
+                    onClick = { menu = false; confirm = DetailConfirm.Delete })
+            }
+        }
+    }
     val here = if (cardFullPage) null else TaskRunCardLogic.hereRun(task, from)
 
     if (here != null) {
@@ -308,7 +344,7 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
                 openConfirmationCard = ::openCard,
                 readSession = { session -> runCatching { api.read(listOf("sessions", session)) as? JsonObject }.getOrNull() },
             ),
-            open = open, link = link,
+            open = open, link = link, menu = taskMenu,
             banners = {
                 if (!connected) OfflineNote()
                 data.loadError?.let { TaskErrorBanner(it, retry = { scope.launch { load() } }) { data.loadError = null } }
@@ -340,39 +376,7 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
                                 Modifier.weight(1f).clickable(role = Role.Button) { project.text("id")?.let { open(OrbitRoute(Destination.PROJECT, it)) } }.testTag("task-project"),
                                 color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         } else Spacer(Modifier.weight(1f))
-                        Box {
-                            TextButton(onClick = { menu = true }, modifier = Modifier.testTag("task-menu").semantics { contentDescription = "Task actions" }) { Text("⋯", style = MaterialTheme.typography.titleLarge) }
-                            DropdownMenu(menu, { menu = false }) {
-                                // The presses a stopped task's header no longer draws, and the two that used to be blocks of their own (board 05).
-                                if (TaskReopen.isOffered(task)) DropdownMenuItem(text = { Text(TaskReopenCopy.actionLabel) }, enabled = enabled,
-                                    modifier = Modifier.testTag("task-reopen"), onClick = { menu = false; confirm = DetailConfirm.Reopen })
-                                if ((status == "DONE" || status == "CANCELLED") && !gate) DropdownMenuItem(text = { Text(TaskDetailCopy.runAgain) },
-                                    enabled = enabled && canStart, modifier = Modifier.testTag("task-run-again"), onClick = { menu = false; runTask() })
-                                DropdownMenuItem(text = { Text(TaskDetailCopy.followTask) }, enabled = enabled, modifier = Modifier.testTag("task-follow"),
-                                    onClick = { menu = false; sheet = "follow" })
-                                if (!TaskDetailLogic.hasDependencies(task)) DropdownMenuItem(text = { Text(TaskDetailCopy.addPrerequisite) }, enabled = enabled,
-                                    modifier = Modifier.testTag("task-add-prerequisite"), onClick = { menu = false; sheet = "dependency" })
-                                HorizontalDivider()
-                                DropdownMenuItem(text = { Text(SharePanelCopy.copyLink) }, onClick = { menu = false; clipboard.setText(AnnotatedString(webUrl)); data.notice = SharePanelCopy.linkCopied })
-                                DropdownMenuItem(text = { Column { Text(SharePanelCopy.share); SharePanel.menuStatus(data.share)?.let { Text(it, style = MaterialTheme.typography.bodySmall) } } },
-                                    enabled = enabled, onClick = { menu = false; sheet = "share" })
-                                DropdownMenuItem(text = { Text(SharePanelCopy.copyAsMarkdown) }, onClick = {
-                                    menu = false
-                                    clipboard.setText(AnnotatedString(TaskMarkdown.task(task, webUrl) { iso -> TaskTime.local(iso) ?: "—" }))
-                                    data.notice = SharePanelCopy.markdownCopied
-                                })
-                                // Setting the status by hand starts nothing and confirms nothing, so it is held here rather than beside the
-                                // presses under the title.
-                                if (status != "DONE") {
-                                    HorizontalDivider()
-                                    DropdownMenuItem(text = { Text(TaskDetailCopy.markDone) }, enabled = enabled, modifier = Modifier.testTag("task-mark-done"),
-                                        onClick = { menu = false; patch(buildJsonObject { put("status", "DONE") }) })
-                                }
-                                HorizontalDivider()
-                                DropdownMenuItem(text = { Text(TaskDetailCopy.deleteTask, color = MaterialTheme.colorScheme.error) }, enabled = enabled,
-                                    onClick = { menu = false; confirm = DetailConfirm.Delete })
-                            }
-                        }
+                        taskMenu()
                     }
                     task.obj("project")?.takeIf { it.text("status") == "CANCELLED" }?.let {
                         Text(TaskDetailCopy.projectCancelledNote, style = MaterialTheme.typography.bodySmall, color = muted)

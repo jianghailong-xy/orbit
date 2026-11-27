@@ -3537,6 +3537,7 @@ extension TaskDetailContent {
                             ForEach(commits.prefix(3)) { commit in
                                 (Text(commit.sha.prefix(7)).font(.orbitMono) + Text(" \(commit.subject)"))
                                     .lineLimit(2)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                             if commits.count > 3 {
                                 Text(TaskRunCardCopy.more(commits.count - 3)).foregroundStyle(.secondary)

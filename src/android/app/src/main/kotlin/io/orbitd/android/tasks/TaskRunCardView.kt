@@ -17,9 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -28,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import io.orbitd.android.R
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.ObjectId
@@ -60,7 +60,7 @@ internal class TaskRunCardActions(
 @Composable
 internal fun TaskRunCardList(
     task: JsonObject, here: JsonObject, data: TaskDetailData, owner: OwnerPanelAction?, enabled: Boolean, canStart: Boolean,
-    runsWithLine: String, actions: TaskRunCardActions, open: (OrbitRoute) -> Unit, link: (String) -> Unit,
+    runsWithLine: String, actions: TaskRunCardActions, open: (OrbitRoute) -> Unit, link: (String) -> Unit, menu: @Composable () -> Unit,
     banners: @Composable () -> Unit, now: @Composable (JsonObject) -> Unit, activityRow: @Composable (TaskActivityItem) -> Unit,
 ) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -86,9 +86,10 @@ internal fun TaskRunCardList(
                     Column(Modifier.testTag("task-run-card"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(TaskRunCardCopy.KICKER, Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = muted)
-                            TextButton(onClick = actions.fullPage, modifier = Modifier.semantics { contentDescription = "Open the full task page" }) {
-                                Text("⤢", style = MaterialTheme.typography.titleMedium)
+                            IconButton(onClick = actions.fullPage) {
+                                Icon(painterResource(R.drawable.ic_open_in_full), "Open the full task page", tint = MaterialTheme.colorScheme.primary)
                             }
+                            menu()
                         }
                         Text(task.text("title") ?: "Untitled task", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
                             maxLines = 2, overflow = TextOverflow.Ellipsis)
