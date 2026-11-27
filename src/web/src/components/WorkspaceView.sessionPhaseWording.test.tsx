@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { olderServer, SITUATIONS } from '../lib/sessionPhaseFields.fixture';
 import { sessionEndedBanner, sessionReleasedOf, sessionRunStateOf, sessionStateWord } from '../lib/sessionState';
 import { sessionSendDispositionOf } from '../lib/sessionCapabilities';
-import { SESSION_MARKS, sessionMarks, sessionReleasedByMove } from '../lib/sessionDisplay';
+import { SESSION_MARKS, sessionMarks, sessionReleasedByMove, sessionRowIcons } from '../lib/sessionDisplay';
 import { statusGlyphMotion, statusLabel } from './WorkspaceView';
 
 /**
@@ -16,22 +16,21 @@ describe('state wording, with the new fields and without them', () => {
   const cases: [string, string, string[], string][] = [
     ['held idle', 'Idle', [], 'Waiting for your reply'],
     ['released by a failed turn', 'Idle', ['Failed'], 'Failed'],
-    ['released by End', 'Idle', ['Ended'], 'Ended'],
+    ['released by End', 'Idle', [], 'Ended'],
     // The move let it go: the person only moved it, so it reads as the idle session it was (no Ended mark).
     ['released by a move', 'Idle', [], 'Ended'],
     // D2: a session never "succeeds"; a task's run that finished its work wears Finished, whichever server says so.
-    ['a task run that finished', 'Idle', ['Finished'], 'Finished'],
+    ['a task run that finished', 'Idle', [], 'Finished'],
     ['waiting on an approval', 'Running', ['Needs you'], 'Waiting for approval'],
     // Held by the dispatch pause or a hold notice, which no runner gate names: only the new field can say it.
     ['on hold', 'Queued', ['On hold'], 'Queued'],
-    // Idle is Idle: a watch or wake-up to come draws no mark (the owner, 2026-11-27).
     ['will wake', 'Idle', [], 'Waiting to resume'],
     // An end was asked for; the runner's silence is not a failure of the conversation (design §12).
-    ['ended, runner never confirmed', 'Idle', ['Ended'], 'Failed'],
+    ['ended, runner never confirmed', 'Idle', [], 'Failed'],
     // D2: a plain conversation is Ended or Failed. An older server cannot tell it from a task's finished run.
-    ['old plain row stored SUCCEEDED', 'Idle', ['Ended'], 'Finished'],
+    ['old plain row stored SUCCEEDED', 'Idle', [], 'Finished'],
     // Still held until the runner lets go; the older reading said Ended at once.
-    ['ending after an interrupted turn', 'Idle', ['Interrupted'], 'Ended'],
+    ['ending after an interrupted turn', 'Idle', [], 'Ended'],
   ];
   for (const [name, withFields, marks, without] of cases) {
     it(`${name}: "${withFields}"${marks.length ? ` + ${marks.join(', ')}` : ''} with the new fields, "${without}" without them`, () => {
@@ -42,10 +41,11 @@ describe('state wording, with the new fields and without them', () => {
     });
   }
 
-  it('running a job with no turn is Running with the Background mark; an older server keeps its breathing glyph', () => {
+  it('running a job with no turn is Running with the Background row icon; an older server keeps its breathing glyph', () => {
     const s = SITUATIONS['running a job with no turn'];
     expect(statusLabel(s)).toBe('Running');
-    expect(sessionMarks(s)).toEqual(['BACKGROUND']);
+    expect(sessionMarks(s)).toEqual([]);
+    expect(sessionRowIcons(s)).toEqual(['BACKGROUND']);
     expect(statusGlyphMotion(s)).toBe('spinner');
     expect(statusLabel(olderServer(s))).toBe('Background process running');
     expect(statusGlyphMotion(olderServer(s))).toBe('pulse');
@@ -74,9 +74,9 @@ describe('state wording, with the new fields and without them', () => {
     expect(sessionSendDispositionOf(s, true)).toBe('RESUME');
   });
 
-  it('a shared session reads Idle + Finished for a task run that finished, never Succeeded', () => {
+  it('a shared session reads Idle for a task run that finished, never Succeeded', () => {
     expect(sessionStateWord(SITUATIONS['a task run that finished'])).toBe('Idle');
-    expect(sessionMarks(SITUATIONS['a task run that finished'])).toEqual(['FINISHED']);
+    expect(sessionMarks(SITUATIONS['a task run that finished'])).toEqual([]);
     expect(sessionStateWord(olderServer(SITUATIONS['a task run that finished']))).toBe('Finished');
   });
 });

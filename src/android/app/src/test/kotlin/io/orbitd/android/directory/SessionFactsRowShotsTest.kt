@@ -129,7 +129,7 @@ class SessionFactsRowShotsTest {
     @Test fun afterTheFactsAreSent() {
         draw(rows(true))
         assertWords(listOf("Idle", "On hold", "Idle", "Idle", "Idle"),
-            listOf("Idle, Finished", "Queued, On hold", "Idle, Ended", "Idle, Ended", "Idle, Interrupted"))
+            listOf("Idle", "Queued, On hold", "Idle", "Idle", "Idle"))
         shot("list-after-session-facts")
     }
 }

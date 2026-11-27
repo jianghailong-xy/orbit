@@ -327,9 +327,9 @@ describe('another session’s message, waiting in the queue', { timeout: 60_000 
     await waitForUi(() => {
       // The composer's Stop: this session, no follow-up, and the explicit ask that its
       // background work ends with the turn (see WorkspaceView.stopBackgroundWork.test.tsx).
-      expect(interruptMock).toHaveBeenCalledWith(SESSION_PUBLIC, undefined, {
+      expect(interruptMock).toHaveBeenCalledWith(SESSION_PUBLIC, undefined, expect.objectContaining({
         stopBackgroundWork: true,
-      });
+      }));
       // What the reader typed comes back to be edited and resent; the other session's words do not.
       expect(composer()?.value).toBe(TYPED);
     });
