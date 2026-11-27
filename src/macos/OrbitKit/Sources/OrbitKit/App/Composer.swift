@@ -391,6 +391,7 @@ public enum ComposerLogic {
                                 attachmentIds: [String], queueForNextTurn: Bool = false,
                                 wikiContext: WikiChatContext? = nil,
                                 driveContext: DriveChatContext? = nil,
+                                context: SchedulePageChatContext? = nil,
                                 skipTranslation: Bool = false,
                                 optimizedTranslation: String? = nil) -> SessionTurnRequest {
         SessionTurnRequest(clientTurnId: clientTurnId,
@@ -400,6 +401,7 @@ public enum ComposerLogic {
                            intent: queueForNextTurn ? "NEXT_TURN" : nil,
                            wikiContext: wikiContext,
                            driveContext: driveContext,
+                           context: context,
                            // Only ever `true` or absent: a body without it is what every send was.
                            skipTranslation: skipTranslation ? true : nil,
                            optimizedTranslation: optimizedTranslation)

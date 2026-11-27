@@ -2675,6 +2675,17 @@ public final class APIClient: @unchecked Sendable {
         try await post("schedules/\(id)/change", body: ScheduleChangeBody(text: text))
     }
 
+    /// The Scheduled page's chat (docs/scheduled-chat-design.md §3, §4.1): the account's open one, and Orbit's opening
+    /// for a new one, its next run worded for this device's zone. Writes nothing.
+    public func scheduledChat(timezone: String) async throws -> SchedulePageChatResponse {
+        try await get("schedules/chat", query: [URLQueryItem(name: "timezone", value: timezone)])
+    }
+
+    /// The person's first words open the page chat in `workspaceID` (or are said in its open one).
+    public func openScheduledChat(workspaceID: String, text: String) async throws -> SchedulePageChatOpenAnswer {
+        try await post("schedules/chat", body: SchedulePageChatOpenRequest(workspaceId: workspaceID, text: text))
+    }
+
     // MARK: - request plumbing
 
     /// How far a NAMED run request is resent when no answer comes back, and how long it waits.

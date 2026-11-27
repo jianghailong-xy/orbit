@@ -702,6 +702,9 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// The scheduled task's run this session is (docs/scheduled-tasks-design.md §6.3), from the session's own
     /// read; nil for every other session. What puts the run's header over its conversation.
     public var scheduleRunId: String? = nil
+    /// The chat door that opened this session (`chatOrigin`: `WIKI_CHAT`, `DRIVE_CHAT`, `SCHEDULE_CHAT`), nil for every
+    /// other session and from an older server. A Scheduled page chat's row is tagged From Scheduled.
+    public var chatOrigin: String? = nil
     /// The Project this Session coordinates, projected from the Project-owned pointer. Both are
     /// nil for ordinary Sessions and when talking to an older server.
     public let projectId: String?
@@ -965,6 +968,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         source = try values.decodeIfPresent(String.self, forKey: .source)
         runSource = try values.decodeIfPresent(String.self, forKey: .runSource)
         scheduleRunId = try? values.decodeIfPresent(String.self, forKey: .scheduleRunId)
+        chatOrigin = try? values.decodeIfPresent(String.self, forKey: .chatOrigin)
         projectId = try values.decodeIfPresent(String.self, forKey: .projectId)
         projectTitle = try values.decodeIfPresent(String.self, forKey: .projectTitle)
         projectMembership = try values.decodeIfPresent(SessionProjectMembership.self, forKey: .projectMembership)
@@ -1407,6 +1411,9 @@ public struct SessionTurnRequest: Codable, Sendable {
     /// A Drive chat's folder and selection, beside the owner's words (`driveContext`, src/shared/src/driveChat.ts).
     /// Nil leaves the field out: any other session refuses one.
     public let driveContext: DriveChatContext?
+    /// A Scheduled page chat's view (`context`, docs/scheduled-chat-design.md §4.2): the list's workspace filter and the
+    /// schedule whose chip is on. Nil leaves the field out; any other session ignores one.
+    public let context: SchedulePageChatContext?
     /// Prompt optimizer (D2): the text is the optimizer's prompt, sent exactly as inserted, so
     /// Translation neither holds nor translates it. Nil leaves the key out (`PromptOptimizerState.skipTranslation`).
     public let skipTranslation: Bool?
@@ -1416,7 +1423,9 @@ public struct SessionTurnRequest: Codable, Sendable {
     public let optimizedTranslation: String?
     public init(clientTurnId: String, content: String, kind: String = "message", attachmentIds: [String]? = nil,
                 intent: String? = nil, wikiContext: WikiChatContext? = nil, driveContext: DriveChatContext? = nil,
+                context: SchedulePageChatContext? = nil,
                 skipTranslation: Bool? = nil, optimizedTranslation: String? = nil) {
+        self.context = context
         self.clientTurnId = clientTurnId
         self.content = content
         self.kind = kind
@@ -2324,6 +2333,8 @@ public struct ResumeRequest: Codable, Sendable {
     public let wikiContext: WikiChatContext?
     /// A Drive chat's folder and selection, which revive it too. Nil leaves the field out.
     public let driveContext: DriveChatContext?
+    /// A Scheduled page chat's view, which revives it too. Nil leaves the field out.
+    public let context: SchedulePageChatContext?
     /// Prompt optimizer (D2): a revive whose words are the optimizer's prompt, sent as inserted. Nil omits it.
     public let skipTranslation: Bool?
     /// Prompt optimizer (D2): a revive whose words are the reading copy Use inserted; this is its
@@ -2334,9 +2345,10 @@ public struct ResumeRequest: Codable, Sendable {
                 fastMode: Bool? = nil,
                 attachmentIds: [String]? = nil, provider: String? = nil, account: String? = nil,
                 stopSessionId: String? = nil, wikiContext: WikiChatContext? = nil,
-                driveContext: DriveChatContext? = nil,
+                driveContext: DriveChatContext? = nil, context: SchedulePageChatContext? = nil,
                 skipTranslation: Bool? = nil, optimizedTranslation: String? = nil) {
         self.driveContext = driveContext
+        self.context = context
         self.skipTranslation = skipTranslation
         self.optimizedTranslation = optimizedTranslation
         self.clientTurnId = clientTurnId
