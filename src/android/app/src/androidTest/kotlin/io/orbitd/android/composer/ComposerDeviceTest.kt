@@ -515,8 +515,10 @@ class ComposerDeviceTest {
         compose.waitUntil(10000) { model.state.value.draft.attachments.singleOrNull()?.remoteId != null }
         compose.onNodeWithTag("composer-input").performTextInput("拒绝后恢复同一草稿")
         control("""{"rejectTurnOnce":true}"""); clickSendWhenEnabled()
-        compose.waitUntil(10000) { !model.state.value.busy && model.state.value.error != null }
-        assertNull(model.state.value.draft.pending)
+        // Refused: the bubble reads Not sent, the words come back only with Put back (docs/mocks/composer-sending-bubble).
+        compose.waitUntil(10000) { !model.state.value.busy && model.state.value.notSentReason != null }
+        compose.onNodeWithTag("pending-send:put-back").performClick()
+        compose.waitUntil(10000) { model.state.value.draft.pending == null }
         compose.onNodeWithTag("composer-input").assertTextContains("拒绝后恢复同一草稿")
         assertEquals("retry.txt",model.state.value.draft.attachments.single().name)
         assertEquals(0,stats()["uniqueTurns"]!!.jsonPrimitive.int)
@@ -529,6 +531,43 @@ class ComposerDeviceTest {
         capture("resume-accepted")
     }
 
+    // The Sending… / Not sent bubble, each state photographed for docs/mocks/composer-sending-bubble (04-native-parity.html).
+    @Test fun sendingBubbleStates() = journey("sending-bubble") {
+        login()
+        control("""{"postDelay":6}"""); ready()
+        compose.onNodeWithTag("composer-input").performTextInput("Ship the quarterly report")
+        clickSendWhenEnabled()
+        compose.waitUntil(10000) { model.state.value.draft.pending != null && model.state.value.sending }
+        compose.waitUntil(10000) { compose.onAllNodesWithTag("pending-send:sending").fetchSemanticsNodes().isNotEmpty() }
+        SystemClock.sleep(1500); compose.waitForIdle(); capture("bubble-sending")
+        compose.waitUntil(20000) { !model.state.value.busy && model.state.value.draft.pending == null }
+        control("""{"postDelay":0}"""); SystemClock.sleep(2500); compose.waitForIdle(); capture("bubble-sent")
+        assertEquals(1, compose.onAllNodesWithText("Ship the quarterly report").fetchSemanticsNodes().size)
+        // Held past 20 s: the device ends the request and the bubble reads Not sent with why. The fixture takes it at 25 s, and its echo
+        // then replaces the bubble.
+        control("""{"postDelay":25}"""); ready()
+        compose.onNodeWithTag("composer-input").performTextInput("Second message that never gets an answer")
+        clickSendWhenEnabled()
+        compose.waitUntil(24000) { model.state.value.notSentReason == PendingSendCopy.NOT_ANSWERED }
+        compose.waitUntil(3000) { compose.onAllNodesWithTag("pending-send:not-sent").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitForIdle(); capture("bubble-not-sent-unanswered")
+        compose.waitUntil(30000) { model.state.value.draft.pending == null }
+        compose.waitUntil(10000) { compose.onAllNodesWithTag("pending-send:not-sent").fetchSemanticsNodes().isEmpty() }
+        control("""{"postDelay":0}"""); SystemClock.sleep(1500); compose.waitForIdle(); capture("bubble-echo-replaced")
+        assertEquals(1, compose.onAllNodesWithText("Second message that never gets an answer").fetchSemanticsNodes().size)
+        // Refused (409, the session has ended): Not sent, the server's reason one red line under the foot.
+        ready()
+        compose.onNodeWithTag("composer-input").performTextInput("Ship the quarterly report again")
+        control("""{"rejectTurnOnce":true}"""); clickSendWhenEnabled()
+        compose.waitUntil(10000) { model.state.value.notSentReason == "the session has ended" }
+        compose.waitUntil(3000) { compose.onAllNodesWithText("the session has ended").fetchSemanticsNodes().isNotEmpty() }
+        SystemClock.sleep(800); compose.waitForIdle(); capture("bubble-refused")
+        compose.onNodeWithTag("pending-send:put-back").performClick()
+        compose.waitUntil(10000) { model.state.value.draft.pending == null }
+        compose.onNodeWithTag("composer-input").assertTextContains("Ship the quarterly report again")
+        SystemClock.sleep(800); compose.waitForIdle(); capture("bubble-put-back")
+    }
+
     @Test fun explicit413RestoresEditableMessageAndAttachment() = journey("oversize-rejection") {
         login()
         compose.runOnIdle { model.importAttachment(StagedAttachment("oversize-file","retained.txt","text/plain"),
@@ -538,8 +577,9 @@ class ComposerDeviceTest {
         // HTTP response injection exercises the UI. The unit regression uses the actual 10 MiB + 1 text.
         compose.onNodeWithTag("composer-input").performTextInput("正文过大，拒绝后可以缩短")
         control("""{"rejectTurnOnce":true,"rejectTurnStatus":413}"""); clickSendWhenEnabled()
-        compose.waitUntil(10000) { !model.state.value.busy && model.state.value.error != null }
-        assertNull(model.state.value.draft.pending)
+        compose.waitUntil(10000) { !model.state.value.busy && model.state.value.notSentReason != null }
+        compose.onNodeWithTag("pending-send:put-back").performClick()
+        compose.waitUntil(10000) { model.state.value.draft.pending == null }
         compose.onNodeWithTag("composer-input").assertTextContains("正文过大，拒绝后可以缩短")
         assertEquals(attachment,model.state.value.draft.attachments.single())
         assertEquals(0,stats()["uniqueTurns"]!!.jsonPrimitive.int)
