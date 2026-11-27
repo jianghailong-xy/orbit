@@ -491,7 +491,7 @@ class RealtimeStore(
                         witness.durable(id, event.seq, state.value.session?.transcript === before, "sse")
                     // A translation folded into an event the window holds is part of what the device keeps of it.
                     if (event.durable || event.type == "translation") save()
-                    if (event.type in SNAPSHOT_EVENTS) refreshSession()
+                    if (event.type in SNAPSHOT_EVENTS || event.reportsMode()) refreshSession()
                 })
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Resync) {
@@ -527,5 +527,9 @@ class RealtimeStore(
         private const val CATCH_UP_PAGES = 5
         private val SNAPSHOT_EVENTS = setOf("approval_request", "approval_resolved", "queued_turns_changed",
             "background_task", "user", "user_delivery", "turn_end", "status", "result", "interrupt")
+        /** The runner's word on the mode the engine runs in — the Agent Tools report Claude Code's init frame rides in, a correction the
+         * runner made itself — which the server has recorded by the time it is heard: the detail's actual mode moved. */
+        private val MODE_REPORTS = setOf("agent_tools", "permission_mode_corrected")
+        private fun RunEvent.reportsMode() = type == "system" && fields.text("subtype") in MODE_REPORTS
     }
 }

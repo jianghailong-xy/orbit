@@ -863,6 +863,25 @@ class RealtimeStoreTest {
         }
     }
 
+    /** The runner's word on the mode the engine runs in — the Agent Tools report Claude Code's init frame rides in, a correction the
+     * runner made — moved the detail's actual mode: the conversation's snapshot is read again then, not a minute later. Any other
+     * engine notice reads nothing. */
+    @Test fun aReportOfTheModeRunningReadsTheSnapshotAgain() = runTest {
+        val rig = Rig(this)
+        rig.start()
+        val start = rig.reads.size
+        rig.streams.session().emit("""{"seq":2,"type":"system","payload":{"subtype":"resumed"}}""")
+        runCurrent(); advanceTimeBy(5_000); runCurrent()
+        assertEquals("a notice that says nothing of the mode", 0, rig.snapshots(start))
+        for ((seq, payload) in listOf(3 to """{"subtype":"permission_mode_corrected","mode":"auto"}""",
+                4 to """{"subtype":"agent_tools","agentTools":{"engine":"claude","permissionMode":"default"}}""")) {
+            val before = rig.reads.size
+            rig.streams.session().emit("""{"seq":$seq,"type":"system","payload":$payload}""")
+            runCurrent(); advanceTimeBy(5_000); runCurrent()
+            assertEquals(payload, 1, rig.snapshots(before))
+        }
+    }
+
     @Test fun emptySessionIdNudgesRefetchAndDirectoryErrorRetainsRows() = runTest {
         val rig = Rig(this)
         val (_, store) = rig.start()
