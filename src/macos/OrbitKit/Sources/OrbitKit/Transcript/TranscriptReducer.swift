@@ -888,6 +888,7 @@ public struct TranscriptReducer: Sendable, Codable {
         // Translation), so its bubble wears the "Translating…" chip from the moment it is known.
         if let i = state.queued.firstIndex(where: { $0.clientTurnId == clientTurnId && $0.pending }) {
             state.queued[i].turnId = turnId
+            state.queued[i].notSentReason = nil
             if steer { state.queued[i].steer = true }
             if let translation { state.queued[i].translation = translation }
             if placement == "accepted" {
@@ -904,6 +905,7 @@ public struct TranscriptReducer: Sendable, Codable {
             return false
         }), case .user(var b) = state.items[i] else { return }
         b.turnId = turnId
+        b.notSentReason = nil
         if steer { b.steer = true }
         if let translation { b.translation = translation }
         if placement == "queued", b.translation?.held != true {
@@ -919,9 +921,9 @@ public struct TranscriptReducer: Sendable, Codable {
         state.items[i] = .user(b)
     }
 
-    /// Drop an optimistic bubble whose send ultimately failed, so a message that never reached the
-    /// server doesn't sit in the transcript looking delivered (the composer hands its text back
-    /// instead — see `ConsoleModel.send`). Matched by `clientTurnId`, and only while unconfirmed:
+    /// Drop an optimistic bubble whose words went back into the composer: a `Not sent` one's Put back,
+    /// a refusal that has its own card, a send the run that holds the task took (see
+    /// `ConsoleModel.send`). Matched by `clientTurnId`, and only while unconfirmed:
     /// a bubble the durable `user` event already reconciled belongs to a turn that DID land — the
     /// response to it was merely lost — and must stay. `undelivered` counts as unconfirmed (the run
     /// ended under a send still retrying its POST), or the composer would hand the text back AND
@@ -938,6 +940,73 @@ public struct TranscriptReducer: Sendable, Codable {
         // for a still-streaming turn would land in the wrong bubble (same hazard as `prependPage`).
         if let o = openAssistant, o > i { openAssistant = o - 1 }
         if let o = openThinking, o > i { openThinking = o - 1 }
+    }
+
+    /// The send got no answer in time, or a refusal: its bubble stays, `Not sent`, and says why
+    /// (web parity: `markNotSent`). Found by `clientTurnId` while the server has not taken it — no
+    /// turn id, no echo. A run that settled terminal under it had marked it undelivered; it is the
+    /// send's own failure that is true of it now. False when no such bubble is drawn: an echo already
+    /// took it (the message did arrive), or it was put back.
+    @discardableResult
+    public mutating func markNotSent(clientTurnId: String, reason: String) -> Bool {
+        func untaken(_ b: UserBubble) -> Bool { b.clientTurnId == clientTurnId && b.turnId == nil && (b.pending || b.undelivered) }
+        func mark(_ b: inout UserBubble) {
+            b.pending = true
+            b.undelivered = false
+            b.notSentReason = reason
+        }
+        if let i = state.queued.firstIndex(where: untaken) {
+            mark(&state.queued[i])
+            return true
+        }
+        guard let i = state.items.firstIndex(where: {
+            if case .user(let b) = $0 { return untaken(b) }
+            return false
+        }), case .user(var b) = state.items[i] else { return false }
+        mark(&b)
+        state.items[i] = .user(b)
+        return true
+    }
+
+    /// Retry: a `Not sent` bubble is `Sending…` again, the same row, until this attempt's answer.
+    public mutating func markSending(clientTurnId: String) {
+        if let i = state.queued.firstIndex(where: { $0.clientTurnId == clientTurnId && $0.isNotSent }) {
+            state.queued[i].notSentReason = nil
+            return
+        }
+        guard let i = state.items.firstIndex(where: {
+            if case .user(let b) = $0 { return b.clientTurnId == clientTurnId && b.isNotSent }
+            return false
+        }), case .user(var b) = state.items[i] else { return }
+        b.notSentReason = nil
+        state.items[i] = .user(b)
+    }
+
+    /// Draw again a message this end sent that the server has not taken, where nothing draws it: kept
+    /// across an app restart (`UnsentSend`), or dropped with a window the stream re-seeded. At the
+    /// transcript's end, `Not sent` with `reason` — or `Sending…` with none, for one still on its way.
+    /// A no-op where a bubble for it is already drawn.
+    public mutating func addUnsentUser(clientTurnId: String, text: String, attachments: [TurnAttachment] = [],
+                                       shell: Bool = false, notSentReason: String?) {
+        guard drawnUntaken(clientTurnId: clientTurnId) == nil else { return }
+        var bubble = UserBubble(id: nextID(), text: text, attachments: attachments,
+                                clientTurnId: clientTurnId, turnId: nil, pending: true, shell: shell)
+        bubble.notSentReason = notSentReason
+        flushStreaming()
+        state.items.append(.user(bubble))
+    }
+
+    /// Whether the message sent from here under `clientTurnId` is drawn, and if so whether the server
+    /// still has not taken it: true while it is `Sending…` or `Not sent` — or marked undelivered by a
+    /// run that ended under its POST, which no answer has tagged — false once a turn id or an echo
+    /// says the server has it, nil when nothing draws it.
+    public func drawnUntaken(clientTurnId: String) -> Bool? {
+        let drawn = state.items.compactMap { item -> UserBubble? in
+            if case .user(let b) = item { return b }
+            return nil
+        } + state.queued + state.accepted + state.unreadSteers
+        guard let bubble = drawn.first(where: { $0.clientTurnId == clientTurnId }) else { return nil }
+        return bubble.turnId == nil && (bubble.pending || bubble.undelivered)
     }
 
     /// Withdraw a still-queued message locally (the queued bubble's Cancel button). The server-side
@@ -1653,13 +1722,14 @@ public struct TranscriptReducer: Sendable, Codable {
         state.status = status
         guard status.isTerminal else { return }
         clearLiveToolOutputsAtBoundary()
+        // A `Not sent` bubble never reached the queue that drain empties: it keeps its Retry and Put back.
         for i in state.items.indices {
-            guard case .user(var b) = state.items[i], b.pending else { continue }
+            guard case .user(var b) = state.items[i], b.pending, !b.isNotSent else { continue }
             b.pending = false
             b.undelivered = true
             state.items[i] = .user(b)
         }
-        for i in state.queued.indices where state.queued[i].pending {
+        for i in state.queued.indices where state.queued[i].pending && !state.queued[i].isNotSent {
             state.queued[i].pending = false
             state.queued[i].undelivered = true
         }
@@ -1834,6 +1904,10 @@ public struct TranscriptReducer: Sendable, Codable {
             if let cid, b.clientTurnId == cid { return true }
             if let tid = ev.turnId, b.turnId == tid { return true }
             if b.turnId == nil, let original = translation?.original, !original.isEmpty, b.text == original { return true }
+            // Pictures or files alone have no words to match: the same uploads say it is this one.
+            if b.turnId == nil, body.isEmpty, b.text.isEmpty, !b.attachments.isEmpty {
+                return b.attachments.map { PublicID.storageKey($0.id) } == atts.map { PublicID.storageKey($0.id) }
+            }
             return b.turnId == nil && !body.isEmpty && b.text == body
         }
         // The runner just leased a queued send: drop its placeholder from `state.queued` — this
@@ -1887,6 +1961,8 @@ public struct TranscriptReducer: Sendable, Codable {
         }) {
             if case .user(var b) = state.items[i] {       // reconcile optimistic bubble
                 b.pending = false
+                // A `Not sent` bubble whose message did arrive: the echo is that message, in its place.
+                b.notSentReason = nil
                 if let tid = ev.turnId { b.turnId = tid }    // adopt the id if we matched by text
                 if !body.isEmpty { b.text = body }
                 b.note = recorded?.note

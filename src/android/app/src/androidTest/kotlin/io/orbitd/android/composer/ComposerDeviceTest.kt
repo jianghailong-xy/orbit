@@ -411,6 +411,35 @@ class ComposerDeviceTest {
         compose.waitUntil(10000) { app.realtime.state.value.session?.fresh==true && model.state.value.loaded }
         if (setup == null) awaitText("No messages yet")
     }
+    /** A new session's first message waits as the bubble in the engine picker's place (docs/mocks/composer-sending-bubble/03-new-session.html):
+     * Sending… while the create is out; past 20 s Not sent, and Retry resends the same clientRequestId — one session, never two. */
+    @Test fun newSessionFirstMessageSendingBubbleStates() = journey("new-session-bubble") {
+        login()
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.startNewSession()
+        compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("new-session-engine") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        control("""{"createDelay":6}""")
+        compose.onNodeWithTag("composer-input").performTextInput("Build me a thing")
+        clickSendWhenEnabled()
+        compose.waitUntil(10000) { compose.onAllNodesWithTag("pending-send:sending").fetchSemanticsNodes().isNotEmpty() }
+        SystemClock.sleep(1500); compose.waitForIdle(); capture("new-session-sending")
+        awaitCreatedSession()
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.startNewSession()
+        compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("new-session-engine") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        control("""{"createDelay":25}""")
+        compose.onNodeWithTag("composer-input").performTextInput("Second first message")
+        clickSendWhenEnabled()
+        compose.waitUntil(24000) { compose.onAllNodesWithTag("pending-send:not-sent").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitForIdle(); capture("new-session-not-sent")
+        control("""{"createDelay":0}""")
+        compose.onNodeWithTag("pending-send:retry").performClick()
+        awaitCreatedSession()
+        val ids = stats()["creations"]!!.jsonArray.map { it.jsonObject["clientRequestId"]!!.jsonPrimitive.content }
+        assertEquals("one create per message, the Retry added none", 2, ids.toSet().size)
+        assertEquals(2, ids.size)
+    }
+
     @Test fun newSessionUsesWorkspaceDraftAndNavigatesAfterCreation() = journey("new-session") {
         login()
         compose.onNodeWithContentDescription("Back").performClick()
@@ -515,8 +544,10 @@ class ComposerDeviceTest {
         compose.waitUntil(10000) { model.state.value.draft.attachments.singleOrNull()?.remoteId != null }
         compose.onNodeWithTag("composer-input").performTextInput("拒绝后恢复同一草稿")
         control("""{"rejectTurnOnce":true}"""); clickSendWhenEnabled()
-        compose.waitUntil(10000) { !model.state.value.busy && model.state.value.error != null }
-        assertNull(model.state.value.draft.pending)
+        // Refused: the bubble reads Not sent, the words come back only with Put back (docs/mocks/composer-sending-bubble).
+        compose.waitUntil(10000) { !model.state.value.busy && model.state.value.notSentReason != null }
+        compose.onNodeWithTag("pending-send:put-back").performClick()
+        compose.waitUntil(10000) { model.state.value.draft.pending == null }
         compose.onNodeWithTag("composer-input").assertTextContains("拒绝后恢复同一草稿")
         assertEquals("retry.txt",model.state.value.draft.attachments.single().name)
         assertEquals(0,stats()["uniqueTurns"]!!.jsonPrimitive.int)
@@ -529,6 +560,43 @@ class ComposerDeviceTest {
         capture("resume-accepted")
     }
 
+    // The Sending… / Not sent bubble, each state photographed for docs/mocks/composer-sending-bubble (04-native-parity.html).
+    @Test fun sendingBubbleStates() = journey("sending-bubble") {
+        login()
+        control("""{"postDelay":6}"""); ready()
+        compose.onNodeWithTag("composer-input").performTextInput("Ship the quarterly report")
+        clickSendWhenEnabled()
+        compose.waitUntil(10000) { model.state.value.draft.pending != null && model.state.value.sending }
+        compose.waitUntil(10000) { compose.onAllNodesWithTag("pending-send:sending").fetchSemanticsNodes().isNotEmpty() }
+        SystemClock.sleep(1500); compose.waitForIdle(); capture("bubble-sending")
+        compose.waitUntil(20000) { !model.state.value.busy && model.state.value.draft.pending == null }
+        control("""{"postDelay":0}"""); SystemClock.sleep(2500); compose.waitForIdle(); capture("bubble-sent")
+        assertEquals(1, compose.onAllNodesWithText("Ship the quarterly report").fetchSemanticsNodes().size)
+        // Held past 20 s: the device ends the request and the bubble reads Not sent with why. The fixture takes it at 25 s, and its echo
+        // then replaces the bubble.
+        control("""{"postDelay":25}"""); ready()
+        compose.onNodeWithTag("composer-input").performTextInput("Second message that never gets an answer")
+        clickSendWhenEnabled()
+        compose.waitUntil(24000) { model.state.value.notSentReason == PendingSendCopy.NOT_ANSWERED }
+        compose.waitUntil(3000) { compose.onAllNodesWithTag("pending-send:not-sent").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitForIdle(); capture("bubble-not-sent-unanswered")
+        compose.waitUntil(30000) { model.state.value.draft.pending == null }
+        compose.waitUntil(10000) { compose.onAllNodesWithTag("pending-send:not-sent").fetchSemanticsNodes().isEmpty() }
+        control("""{"postDelay":0}"""); SystemClock.sleep(1500); compose.waitForIdle(); capture("bubble-echo-replaced")
+        assertEquals(1, compose.onAllNodesWithText("Second message that never gets an answer").fetchSemanticsNodes().size)
+        // Refused (409, the session has ended): Not sent, the server's reason one red line under the foot.
+        ready()
+        compose.onNodeWithTag("composer-input").performTextInput("Ship the quarterly report again")
+        control("""{"rejectTurnOnce":true}"""); clickSendWhenEnabled()
+        compose.waitUntil(10000) { model.state.value.notSentReason == "the session has ended" }
+        compose.waitUntil(3000) { compose.onAllNodesWithText("the session has ended").fetchSemanticsNodes().isNotEmpty() }
+        SystemClock.sleep(800); compose.waitForIdle(); capture("bubble-refused")
+        compose.onNodeWithTag("pending-send:put-back").performClick()
+        compose.waitUntil(10000) { model.state.value.draft.pending == null }
+        compose.onNodeWithTag("composer-input").assertTextContains("Ship the quarterly report again")
+        SystemClock.sleep(800); compose.waitForIdle(); capture("bubble-put-back")
+    }
+
     @Test fun explicit413RestoresEditableMessageAndAttachment() = journey("oversize-rejection") {
         login()
         compose.runOnIdle { model.importAttachment(StagedAttachment("oversize-file","retained.txt","text/plain"),
@@ -538,8 +606,9 @@ class ComposerDeviceTest {
         // HTTP response injection exercises the UI. The unit regression uses the actual 10 MiB + 1 text.
         compose.onNodeWithTag("composer-input").performTextInput("正文过大，拒绝后可以缩短")
         control("""{"rejectTurnOnce":true,"rejectTurnStatus":413}"""); clickSendWhenEnabled()
-        compose.waitUntil(10000) { !model.state.value.busy && model.state.value.error != null }
-        assertNull(model.state.value.draft.pending)
+        compose.waitUntil(10000) { !model.state.value.busy && model.state.value.notSentReason != null }
+        compose.onNodeWithTag("pending-send:put-back").performClick()
+        compose.waitUntil(10000) { model.state.value.draft.pending == null }
         compose.onNodeWithTag("composer-input").assertTextContains("正文过大，拒绝后可以缩短")
         assertEquals(attachment,model.state.value.draft.attachments.single())
         assertEquals(0,stats()["uniqueTurns"]!!.jsonPrimitive.int)
@@ -842,6 +911,25 @@ class ComposerDeviceTest {
         assertEquals("Continue where you left off.", turns.values.single().jsonObject["request"]!!.jsonObject["content"]!!.jsonPrimitive.content)
         assertEquals("the lost attempt and its replay, one key", 2, stats()["attempts"]!!.jsonObject.values.single().jsonPrimitive.int)
         capture("a07c-continue-sent")
+    }
+
+    /** The task card over a task's own run (docs/task-run-sidebar-design.md): ⋯ → Open Task in the conversation draws the web
+     * column's blocks in its order, in each of its four states (src/android/scripts/task_card_states.py, the iOS probe's data too). */
+    @Test fun taskRunCardFollowsTheWebColumn() = journey("task-run-card") {
+        for ((state, words) in listOf("failed" to "Why it failed", "running" to "Now", "needs-you" to "Review the evidence", "done" to "Delivered")) {
+            login("""{"taskCard":"$state"}""")
+            awaitCreatedSession()
+            appClick("Session actions")
+            awaitText("Open Task")
+            appClick("Open Task")
+            compose.waitUntil(15000) { compose.onAllNodesWithTag("task-run-card").fetchSemanticsNodes().isNotEmpty() }
+            awaitText(words)
+            compose.waitUntil(15000) { compose.onAllNodesWithTag("task-card-done-means").fetchSemanticsNodes().isNotEmpty() }
+            capture("task-card-$state")
+            compose.onNodeWithTag("task-detail").performScrollToNode(hasTestTag("task-card-activity"))
+            compose.waitForIdle()
+            capture("task-card-$state-end")
+        }
     }
 
     /** A07-4 (and A13-3's composer part): an Antigravity session's failure is its repair card — the CLI's install, said while it

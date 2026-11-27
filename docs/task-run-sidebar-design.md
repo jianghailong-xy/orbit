@@ -14,18 +14,23 @@ ended FAILED, what is left on its branch, and what to do next.
 
 ## Decisions
 
-- **D1 = A.** The panel docks only in the task's **own run conversation**, meaning a session that is
-  one of the task's runs. Opened from a link anywhere else, the task stays the overlay that
-  `task-link-in-place` settled.
-- **D2 = B.** In a task's own run conversation the sidebar is **open by default**. It can be closed,
-  and the choice is remembered per session.
+- **D1 = A, overridden.** D1 docked the panel only in the task's own run conversation. The owner's
+  later `session-task-column` ruling (2026-11-26, `docs/mocks/session-task-column`, option A) wins, and
+  the owner confirmed it for this column on 2026-11-26 (question 354PPFKSkI4Hmg66904vp): opened over
+  **any session page**, the task docks beside the conversation as a column. Opened from any other page,
+  it stays the overlay that `task-link-in-place` settled. The ruling also replaces this design's first
+  numbers, a 380 px column from a 1280 px window, with main's 420 px from 1640 px (below).
+- **D2 = B.** In a task's own run conversation (a session that is one of the task's runs) the sidebar
+  is **open by default**. It can be closed, and the choice is remembered per session. In any other
+  conversation it opens only when asked for.
 - **D3 = A.** A FAILED task whose criterion is EXECUTABLE gets **Re-run the check**: the acceptance
   command runs again in the same conversation, on the branch as it is now, and no agent turn starts.
 
 ## The column
 
-Width 380 px, docked to the right of the conversation, which narrows instead of being covered. Below
-1280 px window width it falls back to today's overlay. Its blocks, top to bottom:
+Width 420 px, docked to the right of the conversation, which narrows instead of being covered, from a
+window 1640 px wide (`TASK_COLUMN_QUERY`, the width at which the conversation keeps 560 px). Below
+1640 px it falls back to today's overlay. Its blocks, top to bottom:
 
 1. **Head.** The title clamped to 2 lines, a status pill that carries its reason (`Failed · check exited 1`),
    then elapsed time and cost. On the right: `⤢` (full task page), `⋮`, `✕`.
@@ -79,6 +84,7 @@ work starts, the board is redrawn to match.
 1. Server: acceptance round record and its read (task detail lists rounds per run). Covered by a pg spec.
 2. Server and runner: Re-run the check, with idempotent queueing and a pg spec for FAILED → round → DONE/FAILED.
 3. Shared: failure-reason copy table for the pill.
-4. Web: the compact column (blocks above), docked in the task's own run conversation and open by
-   default; `⤢` opens the full page; overlay below 1280 px.
+4. Web: the compact column (blocks above), docked at 420 px beside any session page from a 1640 px
+   window and open by default in the task's own run conversation; `⤢` opens the full page; overlay
+   below 1640 px.
 5. iOS / Android: the task card at the top of a task's run conversation uses the same order, after the web version is signed off.

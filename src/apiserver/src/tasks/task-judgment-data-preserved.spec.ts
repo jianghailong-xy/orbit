@@ -3559,6 +3559,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // triggers with turn_state or finished_at added to their column lists. Only `session` is touched; no row is
       // written, and no preserved relation, trigger, function or DONE fence changes.
       '1671_session_status_from_facts',
+      // 1672 creates task_acceptance_round (one EXECUTABLE acceptance round's record), cascading with task and with its
+      // conversation_turn; no preserved relation, row, trigger, function or DONE fence changes.
+      '1672_task_acceptance_round',
       // 1680 adds a nullable session.drive_chat_prompt_digest and conversation_turn.drive_context (catalog-only) and
       // widens session_opened_by_check by 'DRIVE_CHAT' NOT VALID; 1681 validates it and builds a partial index
       // CONCURRENTLY. No row is written, and no preserved relation's trigger, function or DONE fence changes.
