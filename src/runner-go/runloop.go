@@ -2788,8 +2788,27 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// rather than at the first tick, so that the control plane sees it online, with its engines,
 		// before its first claim. The ticker keeps its cadence from the start.
 		if currentManagedInstance() != nil {
-			managedStartupBeat(loopCtx, engineHealth.probed(), managedStartupProbeWait, managedStartupBeatRetry, heartbeatInterval,
-				func() bool { beat(); return beatTaken })
+			probed := engineHealth.probed()
+			waitStarted := time.Now()
+			var timing startupBeatTiming
+			timing.taken = managedStartupBeat(loopCtx, probed, managedStartupProbeWait, managedStartupBeatRetry, heartbeatInterval,
+				func() bool {
+					if timing.attempts == 0 {
+						timing.waited = time.Since(waitStarted)
+						select {
+						case <-probed:
+							timing.probed = true
+						default:
+						}
+					}
+					timing.attempts++
+					sent := time.Now()
+					beat()
+					timing.lastRoundTrip = time.Since(sent)
+					return beatTaken
+				})
+			timing.sinceStart = time.Since(runnerProcessStarted)
+			logln(startupBeatLine(timing))
 		}
 		close(startupBeatDone)
 		beatUntilStopped(hbStop, ticker.C, hbNow, beat)
