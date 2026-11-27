@@ -912,6 +912,91 @@ func TestIntegrationAlreadyLandedPushesNothing(t *testing.T) {
 	}
 }
 
+// TestIntegrationAlreadyLandedPushesTheMainSyncItRestsOn is the 2026-11-27 incident (project INV-A):
+// the batch queue had merged the task's branch into main, the project line was behind main, and the
+// LAND_TASK found the source only in the main sync J-S2 had just made. It answered ALREADY_LANDED and
+// dropped that sync, so the line never took the task's work and the dependent's start was refused
+// DEPENDENCY_BASE_NOT_LANDED on a receipt that said the work was there. The answer stays ALREADY_LANDED,
+// and the line now holds what it says: the sync is pushed, forward only — the upstream tip itself when
+// the line has no commits of its own, the merge J-S2 made when it does — and the result names it.
+func TestIntegrationAlreadyLandedPushesTheMainSyncItRestsOn(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		// Builds project/line from main.
+		line func(r *integrationRepo)
+		// Whether the line ends at the upstream tip itself: a line with nothing of its own takes a
+		// fast-forward rather than a merge commit main does not have.
+		fastForward bool
+	}{
+		{name: "a line that mirrors the upstream", line: func(r *integrationRepo) {
+			r.checkoutNew("project/line", "main")
+			r.push("project/line")
+		}, fastForward: true},
+		{name: "a line with commits of its own", line: func(r *integrationRepo) {
+			r.checkoutNew("project/line", "main")
+			r.write("line.txt", "on the line\n")
+			r.commit("project branch")
+			r.push("project/line")
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newIntegrationRepo(t)
+			tc.line(r)
+			before := r.rev("project/line")
+			// The task forked from the line, and the batch queue merged its branch into main.
+			r.checkoutNew("task/v13", "main")
+			r.write("v13.txt", "from v13\n")
+			source := r.commit("task v13")
+			r.push("task/v13")
+			r.checkout("main")
+			mustRun(t, r.work, "git", "merge", "--quiet", "--no-ff", "-m", "batch merge of task/v13", "task/v13")
+			r.write("other.txt", "main moved on\n")
+			r.commit("main moved")
+			r.push("main")
+			upstream := r.rev("main")
+
+			command := r.command("task/v13", "project/line")
+			command.SessionBaseSha = before
+			var phases []string
+			result := runIntegrationJob(command, func(phase string, _ *IntegrationUpstreamMoved) {
+				phases = append(phases, phase)
+			})
+			if result.State != "ALREADY_LANDED" {
+				t.Fatalf("state = %s / %s (%s), want ALREADY_LANDED", result.State, result.Phase, result.ErrorCode)
+			}
+			after := r.originRev("refs/heads/project/line")
+			if after == before {
+				t.Fatalf("the line stayed at %s: the main sync the answer rests on was not pushed", before)
+			}
+			if result.LandedSha != after {
+				t.Fatalf("landedSha = %q, the line is at %s", result.LandedSha, after)
+			}
+			tree, _ := git(r.origin, "rev-parse", after+"^{tree}")
+			if result.LandedTreeSha != tree {
+				t.Errorf("landedTreeSha = %q, want %s", result.LandedTreeSha, tree)
+			}
+			for what, sha := range map[string]string{"the line it was": before, "the source": source, "the upstream": upstream} {
+				if !isAncestor(r.origin, sha, after) {
+					t.Errorf("the line at %s does not contain %s (%s)", after, what, sha)
+				}
+			}
+			if tc.fastForward && after != upstream {
+				t.Errorf("the line is at %s, want a fast-forward to the upstream tip %s", after, upstream)
+			}
+			if !tc.fastForward && after != result.MainSyncSha {
+				t.Errorf("the line is at %s, want the main sync %s", after, result.MainSyncSha)
+			}
+			if want := []string{"FETCH", "MAIN_SYNC", "PUSH", "VERIFY"}; !slices.Equal(phases, want) {
+				t.Errorf("phases = %v, want %v", phases, want)
+			}
+			if len(result.Checks) != 0 {
+				t.Errorf("checks ran on a landing that adds no task work: %+v", result.Checks)
+			}
+		})
+	}
+}
+
 // TestIntegrationNothingToLandForAnEmptyBranch: a branch whose tip is the commit its session
 // started at carries nothing of the task's own — and J-S3's "already contained" is trivially true
 // of it, because a fork point is in the target it forked from. That answer is NOTHING_TO_LAND
