@@ -3,8 +3,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import remarkGfm from 'remark-gfm';
 import {
-  DatabaseOutlined,
-  DeleteOutlined,
   DownloadOutlined,
   DownOutlined,
   EllipsisOutlined,
@@ -27,6 +25,7 @@ import { DriveWriterName } from '../components/drive/DriveWriterName';
 import { DriveMoveDialog } from '../components/drive/DriveMoveDialog';
 import { DriveShareDialog } from '../components/drive/DriveShareDialog';
 import { DriveUploadTray } from '../components/drive/DriveUploadTray';
+import { DriveSettingsMenu } from '../components/drive/DriveSettingsMenu';
 import { DriveTrash } from '../components/drive/DriveTrash';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -774,15 +773,10 @@ function DriveBrowser() {
             <Button icon={<FolderAddOutlined />} onClick={() => void newFolder(folder?.id ?? null)}>
               New folder
             </Button>
-            <Button variant="primary" icon={<UploadOutlined />} onClick={() => picker.current?.click()}>
+            <Button icon={<UploadOutlined />} onClick={() => picker.current?.click()}>
               Upload
             </Button>
-            <Button icon={<DeleteOutlined />} onClick={() => navigate('/drive/trash')}>
-              Trash
-            </Button>
-            <Button icon={<DatabaseOutlined />} onClick={() => navigate('/drive/storage')}>
-              Storage
-            </Button>
+            <DriveSettingsMenu />
             <input
               ref={picker}
               type="file"
