@@ -87,12 +87,12 @@ answers one page of the list as top-level entries, with an ETag answered `304` w
 | Caller | Routes |
 | --- | --- |
 | `public` | 41 |
-| `user` | 588 |
+| `user` | 589 |
 | `admin` | 31 |
 | `runner` | 259 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **923** |
+| **Total** | **924** |
 
 ## Public routes
 
@@ -546,6 +546,7 @@ answers one page of the list as top-level entries, with an ETag answered `304` w
 | `POST` | `/api/sessions/:id/merge-repair` | body `Object`; path `id` | `SessionsController.mergeRepair` |
 | `POST` | `/api/sessions/:id/move` | body `MoveSessionDto`; path `id` | `SessionsController.move` |
 | `GET` | `/api/sessions/:id/move-targets` | path `id` | `SessionsController.moveTargets` |
+| `GET` | `/api/sessions/:id/permission-mode-changes` | path `id`; query `before`, `limit` | `SessionsController.permissionModeChangePage` |
 | `DELETE` | `/api/sessions/:id/pin` | path `id` | `SessionsController.unpin` |
 | `POST` | `/api/sessions/:id/pin` | path `id` | `SessionsController.pin` |
 | `DELETE` | `/api/sessions/:id/purge` | path `id` | `SessionsController.purge` |

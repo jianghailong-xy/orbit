@@ -3597,7 +3597,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1756 adds a partial index on activity. No preserved relation or row is changed.
       // Written as 1461 on its task branch, it was renumbered to 1470 after main took 1462, to 1495 after main took
       // 1491, to 1540 after other branches took 1495, to 1736 after main took 1547-1730 (1730 the highest on main then), and to 1756 after main took 1750.
-      '1756_default_permission_mode_audit'],
+      '1756_default_permission_mode_audit',
+      // 1780 adds session_permission_mode_change.seq (a sequence, numbering the rows already there by created_at) and an
+      // index on (session_id, seq); it is none of the preserved relations, and no trigger, function or DONE fence changes.
+      // It stays after 1755, which creates the table it alters.
+      '1780_permission_mode_change_seq'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
