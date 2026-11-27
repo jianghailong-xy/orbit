@@ -53,7 +53,7 @@ class PendingTrayCopyParityTest {
             assertTrue("iOS says \"$words\"", ios.contains("\"$words\""))
         }
         // What only the web says: the way back to the composer — under a bubble and under a receipt — and a discard it refused.
-        assertEquals("under the bubble and under the receipt", 2, Regex(">\\s*${SteerDelivery.PUT_BACK}\\s*<").findAll(web).count())
+        assertEquals("under the bubble, under the receipt and under a Not sent bubble", 3,Regex(">\\s*${SteerDelivery.PUT_BACK}\\s*<").findAll(web).count())
         assertTrue(web.contains("\"${SteerDelivery.COULDNT_DISCARD}\""))
         // Why a steer did not land, each code to its words (web `deliveryFailureExplanation`), and the server's reason for any other.
         val explanation = web.substringAfter("export function deliveryFailureExplanation(").substringBefore("\n}\n")
