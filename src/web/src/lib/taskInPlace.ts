@@ -120,6 +120,27 @@ export function useOpenTaskOverPage() {
   );
 }
 
+/**
+ * Show a task over this page in place of the address it has, adding no history entry: what a page
+ * opens by itself (a task's own run conversation opens its task beside it, lib/taskRunSidebar), so
+ * Back still leaves the page and ✕ takes the parameter off again. On a conversation's own page it is held
+ * beside it, as a pressed Task › is, and the address is left alone.
+ */
+export function useShowTaskOverPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  return useCallback(
+    (taskId: string) => {
+      if (isSessionPage(location.pathname)) {
+        hold({ pathname: location.pathname, taskId: routeId(taskId) ?? taskId });
+        return;
+      }
+      navigate(withTask(location, taskId), { replace: true, state: location.state });
+    },
+    [location, navigate],
+  );
+}
+
 /** Close the task open over this page: back to the entry under it, or — opened by an address — the
  *  page's own address in its place. */
 export function useCloseTaskOverPage() {

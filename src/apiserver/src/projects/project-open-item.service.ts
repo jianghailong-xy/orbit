@@ -685,8 +685,13 @@ const RESUME_REFUSED_TURN_FAILED: ReadonlySet<string> = new Set([
   'NO_RUNNER', 'RUNNER_OFFLINE', 'NOT_STARTED', 'MISSING_CONTEXT', 'NOT_TERMINAL',
 ]);
 
+/** How many times `offerLandingFix` offers a turn refused with a 409 that is no answer about the session (a row
+ *  being written a moment), and how long it waits before the next, times the attempt, before handing it back. */
+const LANDING_FIX_DELIVERY_ATTEMPTS = 3;
+const LANDING_FIX_RETRY_MS = 200;
+
 /** Which hand-back a refused landing-fix delivery is (W7, R3), or null for a refusal that is no answer about the
- *  session — a lock held a moment, a key with other words — which the backstop delivers again. */
+ *  session — a lock held a moment, a key with other words — which `offerLandingFix` retries, then hands back. */
 function landingFixRefusalReturn(error: unknown): LandingFixReturnReason | null {
   if (error instanceof LandingFixSessionEnded || error instanceof SessionNotSendable || error instanceof NotFoundException) {
     return 'SESSION_ENDED';
@@ -953,7 +958,7 @@ export class ProjectOpenItemService {
    * Once: the turn row under its key is the receipt, so a delivery that finds it writes nothing — a
    * session the turn revived, that ended again when its turn did, is not revived a second time.
    */
-  async offerLandingFix(itemId: string): Promise<void> {
+  async offerLandingFix(itemId: string, attempt = 1): Promise<void> {
     const item = await this.prisma.projectOpenItem.findUnique({
       where: { id: itemId },
       select: {
@@ -1030,12 +1035,18 @@ export class ProjectOpenItemService {
         await this.returnLandingFix(item.id, now ? reason : 'SESSION_ENDED');
         return;
       }
-      if (error instanceof ConflictException) {
-        // A row being written right now, or a key already holding other words: the backstop delivers again.
-        this.logger.warn(`landing fix ${clientTurnId} was not delivered to ${sessionId}: ${error.message}`);
-        return;
+      // A row being written right now (409): offered again from the top, a moment later.
+      if (error instanceof ConflictException && attempt < LANDING_FIX_DELIVERY_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, LANDING_FIX_RETRY_MS * attempt));
+        return this.offerLandingFix(itemId, attempt + 1);
       }
-      throw error;
+      // Anything else — a conflict that outlasted its retries, a turn the session door refuses outright (a message over
+      // its size limit), an error — is not delivered, and nothing would offer it again: the session has finished, and
+      // the coordinator's turn ends never reach an item in the session's hands. So it is handed back now (TURN_FAILED),
+      // with its escalation time, rather than held with no turn and every door refusing OPEN_ITEM_WITH_WORK_SESSION.
+      this.logger.warn(`landing fix ${clientTurnId} was not delivered to ${sessionId}, handed back: `
+        + `${error instanceof Error ? error.message : String(error)}`);
+      await this.returnLandingFix(item.id, 'TURN_FAILED');
     }
   }
 
