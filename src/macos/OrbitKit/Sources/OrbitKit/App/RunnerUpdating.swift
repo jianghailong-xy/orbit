@@ -175,7 +175,7 @@ public enum RunnerUpdating {
     /// nor one whose delivery settled. Its own queued line says `Queued · runner updating`
     /// (docs/mocks/queued-card-runner-updating ②⑤; web `queuedTurnWaitsItsTurn`).
     public static func holdsQueued(_ bubble: UserBubble) -> Bool {
-        !bubble.steer && !bubble.undelivered && !SteerDelivery.settles(bubble.delivery)
+        !bubble.isSending && !bubble.steer && !bubble.undelivered && !SteerDelivery.settles(bubble.delivery)
     }
 
     /// Whether a waiting turn is one the update holds — a card on the queued tail, or the reader's own
@@ -196,7 +196,7 @@ public enum RunnerUpdating {
     public static func footBubbleID(_ items: [TranscriptItem], accepted: [UserBubble] = []) -> String? {
         if let last = accepted.last { return last.id }
         for item in items.reversed() {
-            if case .user(let bubble) = item { return bubble.id }
+            if case .user(let bubble) = item, !bubble.isSending { return bubble.id }
         }
         return nil
     }

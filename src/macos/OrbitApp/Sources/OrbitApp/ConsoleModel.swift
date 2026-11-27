@@ -2437,6 +2437,8 @@ final class ConsoleModel {
         guard !regionHeld else { return false }
         guard sending || awaitingReply || state.status == .running else { return false }
         guard state.pendingApprovals.isEmpty else { return false }
+        // Nothing works under a message the server has not taken yet.
+        guard !state.tailIsSending else { return false }
         guard let last = state.items.last else { return true }   // empty transcript → a reply is owed
         switch last {
         case .assistant(let b): return b.isFinalized
