@@ -1549,11 +1549,12 @@ private struct TaskDetailContent: View {
                         Text(assignee.name ?? "Unassigned").lineLimit(1)
                     }
                 }
-                if let ranOn = (task.sessions ?? []).first(where: { $0.model != nil })?.model {
-                    Text("· \(runModelName(ranOn, task))").foregroundStyle(.secondary).lineLimit(1)
-                }
-                if let cost = TaskDetailLogic.totalCost(task) {
-                    Text("· \(cost)").foregroundStyle(.secondary).lineLimit(1)
+                // Model and cost are one item with the dot between them, as on the web, so neither
+                // stands alone behind a leading "·" (docs/mocks/task-panel-header).
+                let ranOn = (task.sessions ?? []).first(where: { $0.model != nil })?.model
+                let modelAndCost = [ranOn.map { runModelName($0, task) }, TaskDetailLogic.totalCost(task)].compactMap { $0 }
+                if !modelAndCost.isEmpty {
+                    Text(modelAndCost.joined(separator: " · ")).foregroundStyle(.secondary).lineLimit(1)
                 }
             }
             .font(.orbitSubtext)
@@ -1606,7 +1607,9 @@ private struct TaskDetailContent: View {
         HStack(spacing: 4) {
             Image(systemName: chip.isGate ? "checkmark.shield" : "checkmark.seal")
                 .foregroundStyle(chip.isGate ? Color.orange : Color.green)
+            // One line, as on the web: a narrow width cuts the method short rather than wrapping the chip.
             Text(chip.text).foregroundStyle(chip.isGate ? Color.orange : Color.secondary)
+                .lineLimit(1).truncationMode(.tail)
         }
         .font(.orbitLabel)
         .padding(.horizontal, 8)
