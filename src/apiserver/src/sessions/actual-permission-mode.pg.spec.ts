@@ -16,7 +16,11 @@
  *   (4) The mode ceiling rules judge the starting session by the mode it runs in: stored Auto running Default may not
  *       start an Auto session or reach a wider one; stored Default running Auto may; with no actual mode recorded the
  *       stored mode decides.
- *   (5) A claim or reclaim of a Claude session whose engine the runner names as still running (its claim's
+ *   (5) A session with more changes than the detail carries: the detail has the newest SESSION_PERMISSION_MODE_CHANGES_LIMIT
+ *       and says older ones exist; the pages before it (GET /sessions/:id/permission-mode-changes?before=<seq>) have
+ *       the rest, so every change is read once, in the order it was recorded, with its cause and client, even where
+ *       several share one millisecond.
+ *   (6) A claim or reclaim of a Claude session whose engine the runner names as still running (its claim's
  *       `residentEngines`) hands the turn to that engine, which is not spawned again: the actual mode stays what the
  *       engine reported and no CLAIM change is recorded over it. A claim that spawns a new engine records CLAIM as
  *       before, and so does a claim handed to a running Codex, which reports no mode of its own.
@@ -39,6 +43,8 @@ import {
   RunEventType,
   RunStatus as SharedRunStatus,
   type RunnerEngineHealth,
+  SESSION_PERMISSION_MODE_CHANGES_LIMIT,
+  type SessionPermissionModeChange,
 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -51,6 +57,7 @@ import type { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { sessionLease } from '../test-support/dequeue-under-lease';
 import { TasksService } from '../tasks/tasks.service';
+import { recordActualPermissionMode } from './actual-permission-mode';
 import { SessionsService } from './sessions.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -186,7 +193,7 @@ test('the stored mode, the mode running, and the ceiling on PostgreSQL', { skip,
   async function changes(id: string) {
     return db.sessionPermissionModeChange.findMany({
       where: { sessionId: id },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { seq: 'asc' },
       select: { fromMode: true, toMode: true, cause: true, client: true },
     });
   }
@@ -447,7 +454,83 @@ test('the stored mode, the mode running, and the ceiling on PostgreSQL', { skip,
     await sessions.assertMayStartInMode(w.ownerId, unrecordedAuto, { engine: AgentProvider.CLAUDE, workspaceId: w.workspaceId }, NEXT);
   });
 
-  await t.test('(5) a claim or reclaim handed to the engine still running keeps the mode it reported', async () => {
+  await t.test('(5) more changes than the detail carries are read page by page, each once and in order', async () => {
+    const w = await world('paging');
+    const { id } = await claimed(w, { permissionMode: PermissionMode.AUTO });
+    type Said = Pick<SessionPermissionModeChange, 'fromMode' | 'toMode' | 'cause' | 'client'>;
+    const expected: Said[] = [{ fromMode: null, toMode: PermissionMode.AUTO, cause: 'CLAIM', client: null }];
+    // Twenty rounds of three changes, each round in one transaction and then stamped with one millisecond, as a batch
+    // recorded inside a millisecond is: Auto → Plan by the owner on the web, back to Auto by the runner, Plan again by
+    // the owner on Android. The same transition twice at the same moment, told apart only by the order it was recorded in.
+    const ties: string[][] = [];
+    for (let round = 0; round < 20; round += 1) {
+      await db.$transaction(async (tx) => {
+        assert.ok(await recordActualPermissionMode(tx, id, PermissionMode.PLAN, 'OWNER_PICK', 'web'));
+        assert.ok(await recordActualPermissionMode(tx, id, PermissionMode.AUTO, 'RUNNER_CORRECTION'));
+        assert.ok(await recordActualPermissionMode(tx, id, PermissionMode.PLAN, 'OWNER_PICK', 'android'));
+      });
+      const recorded = await db.sessionPermissionModeChange.findMany({
+        where: { sessionId: id }, orderBy: { seq: 'desc' }, take: 3, select: { id: true },
+      });
+      ties.push(recorded.map((r) => r.id));
+      // And the engine's report of Auto, on its own.
+      assert.ok(await recordActualPermissionMode(db, id, PermissionMode.AUTO, 'ENGINE_REPORT'));
+      expected.push(
+        { fromMode: PermissionMode.AUTO, toMode: PermissionMode.PLAN, cause: 'OWNER_PICK', client: 'web' },
+        { fromMode: PermissionMode.PLAN, toMode: PermissionMode.AUTO, cause: 'RUNNER_CORRECTION', client: null },
+        { fromMode: PermissionMode.AUTO, toMode: PermissionMode.PLAN, cause: 'OWNER_PICK', client: 'android' },
+        { fromMode: PermissionMode.PLAN, toMode: PermissionMode.AUTO, cause: 'ENGINE_REPORT', client: null },
+      );
+    }
+    for (const group of ties) {
+      await sql.query(
+        `UPDATE session_permission_mode_change SET created_at = (SELECT min(created_at) FROM session_permission_mode_change WHERE id = ANY($1::uuid[])) WHERE id = ANY($1::uuid[])`,
+        [group],
+      );
+    }
+    assert.equal(expected.length, 81);
+    assert.deepEqual(await changes(id), expected, 'the rows, in the order they were recorded');
+
+    const detail = (await sessions.get(w.ownerId, id)) as unknown as {
+      permissionModeChanges: SessionPermissionModeChange[];
+      permissionModeChangesHasMore: boolean;
+    };
+    assert.equal(detail.permissionModeChanges.length, SESSION_PERMISSION_MODE_CHANGES_LIMIT, 'the detail carries the newest 50');
+    assert.equal(detail.permissionModeChangesHasMore, true, 'and says older ones are recorded');
+    const said = (c: SessionPermissionModeChange): Said => ({ fromMode: c.fromMode, toMode: c.toMode, cause: c.cause, client: c.client });
+    assert.deepEqual(detail.permissionModeChanges.map(said), expected.slice(-SESSION_PERMISSION_MODE_CHANGES_LIMIT));
+
+    // Paged back from the detail's oldest, seven at a time, as a client scrolling up reads them.
+    let all = detail.permissionModeChanges;
+    for (let hasMore: boolean = detail.permissionModeChangesHasMore, pages = 0; hasMore; pages += 1) {
+      assert.ok(pages < 10, 'the pages end');
+      const page = await sessions.getPermissionModeChangePage(w.ownerId, id, { before: all[0].seq, limit: 7 });
+      assert.ok(page.changes.length > 0 && page.changes.length <= 7);
+      all = [...page.changes, ...all];
+      hasMore = page.hasMore;
+    }
+    assert.deepEqual(all.map(said), expected, 'every change once, oldest first, with its cause and client');
+    const seqs = all.map((c) => c.seq!);
+    assert.deepEqual(seqs, [...seqs].sort((a, b) => a - b), 'in the order of their seq');
+    assert.equal(new Set(seqs).size, all.length, 'no seq twice');
+    // Every round's three changes share one instant, and still read in the order they happened: each starts from the
+    // mode the one before it left.
+    for (let round = 0; round < 20; round += 1) {
+      const [a, b, c] = all.slice(1 + 4 * round, 4 + 4 * round);
+      assert.ok(a.at === b.at && b.at === c.at, `round ${round}'s three changes share their moment`);
+    }
+    all.forEach((c, i) => assert.equal(c.fromMode, i === 0 ? null : all[i - 1].toMode, `change ${i} follows the one before it`));
+
+    // Without `before`, the newest; a limit above the cap is held to it; another owner's session is not found.
+    const newest = await sessions.getPermissionModeChangePage(w.ownerId, id, { limit: 500 });
+    assert.deepEqual(newest, { changes: detail.permissionModeChanges, hasMore: true });
+    const oldest = await sessions.getPermissionModeChangePage(w.ownerId, id, { before: all[1].seq });
+    assert.deepEqual(oldest, { changes: [all[0]], hasMore: false });
+    const other = await world('paging-other');
+    await assert.rejects(sessions.getPermissionModeChangePage(other.ownerId, id, {}), /session not found/);
+  });
+
+  await t.test('(6) a claim or reclaim handed to the engine still running keeps the mode it reported', async () => {
     const w = await world('resident');
     // The runner's doors as Nest calls them, naming the engines that runner runs now (runner-go
     // residentEngineSessionIDs): GET sessions/claim?residentEngines= and GET sessions/reclaim?residentEngines=.

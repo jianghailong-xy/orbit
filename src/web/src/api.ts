@@ -14,6 +14,7 @@ import type {
   SessionGuestPerson,
   SessionGuestSuggestion,
   SessionPermissionModeChange,
+  SessionPermissionModeChangePage,
   TranslationActionResponse,
   TurnTranslation,
   SubagentRoutingReport,
@@ -473,6 +474,18 @@ export const getSessionEventPageAfter = (
   const qs = new URLSearchParams({ after: String(after), maxPayload: String(MAX_EVENT_PAYLOAD) });
   if (opts.limit != null) qs.set('limit', String(opts.limit));
   return api<TranscriptWindowPage>(`/sessions/${id}/events/page?${qs.toString()}`, { signal: opts.signal });
+};
+
+/** The session's permission-mode changes recorded just before the one numbered `before` (its `seq`), oldest first:
+ *  the page older than the newest ones its detail carries, read as the transcript pages back. */
+export const getSessionPermissionModeChanges = (
+  id: string,
+  opts: { before?: number; limit?: number; signal?: AbortSignal } = {},
+): Promise<SessionPermissionModeChangePage> => {
+  const qs = new URLSearchParams();
+  if (opts.before != null) qs.set('before', String(opts.before));
+  if (opts.limit != null) qs.set('limit', String(opts.limit));
+  return api<SessionPermissionModeChangePage>(`/sessions/${id}/permission-mode-changes?${qs.toString()}`, { signal: opts.signal });
 };
 
 /** The untrimmed payload of one event, fetched when the user expands a card that arrived
@@ -2143,6 +2156,8 @@ export interface SessionDetail {
   actualPermissionModeAt?: string | null;
   /** How the mode running came to be: the newest changes, oldest first, each with what made it. */
   permissionModeChanges?: SessionPermissionModeChange[];
+  /** Whether older changes than those are recorded (getSessionPermissionModeChanges); absent from an older server. */
+  permissionModeChangesHasMore?: boolean;
   /** The session's Agent Tools report (lib/agentTools): what its engine was given from Orbit and took, in the
    *  engine's own words. Null until the runner sends one; optional, because an older server does not send it. */
   agentTools?: AgentToolsReport | null;

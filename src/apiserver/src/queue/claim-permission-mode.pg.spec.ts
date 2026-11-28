@@ -166,7 +166,8 @@ test('the mode a claim hands the runner, and every substitution it still makes',
   async function changes(id: string) {
     return db.sessionPermissionModeChange.findMany({
       where: { sessionId: id },
-      orderBy: { createdAt: 'asc' },
+      // The order they were recorded in (migration 1810): two can share a millisecond.
+      orderBy: { seq: 'asc' },
       select: { fromMode: true, toMode: true, cause: true, requestedMode: true, reason: true },
     });
   }
@@ -258,8 +259,11 @@ test('the mode a claim hands the runner, and every substitution it still makes',
       permissionModeChanges: Array<Record<string, unknown>>;
     };
     assert.equal(detail.permissionMode, PermissionMode.BYPASS, 'the intent is still the Bypass the owner picked');
+    // Each change also carries the order it was recorded in (`seq`, migration 1810), rising.
+    const seqs = detail.permissionModeChanges.map((change) => change.seq as number);
+    assert.deepEqual(seqs, [...seqs].sort((a, b) => a - b));
     assert.deepEqual(
-      detail.permissionModeChanges.map(({ at: _at, ...change }) => change),
+      detail.permissionModeChanges.map(({ at: _at, seq: _seq, ...change }) => change),
       [
         { fromMode: null, toMode: PermissionMode.AUTO, cause: 'CLAIM', client: null, requestedMode: PermissionMode.BYPASS, reason: 'ROOT_RUNNER' },
         { fromMode: PermissionMode.AUTO, toMode: PermissionMode.DEFAULT, cause: 'ENGINE_REPORT', client: null },

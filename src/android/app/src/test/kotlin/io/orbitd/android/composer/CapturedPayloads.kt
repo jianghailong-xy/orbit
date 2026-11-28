@@ -24,7 +24,13 @@ internal object CapturedPayloads {
     private val ROUTING = Regex("^(id|publicId|.*Id|.*PublicId|.*Ids|.*PublicIds|agent|workspace|assignedRunner|runner|owner|creator)$")
 
     /** A captured session detail as [ComposerShell.session]'s fields. */
-    fun session(name: String): Map<String, JsonElement> = json("session-$name").jsonObject.filterKeys { !ROUTING.matches(it) }
+    fun session(name: String): Map<String, JsonElement> = fields("session-$name")
+
+    /** The captured payload [file] (its path under the directory, without `.json`) as [ComposerShell.session]'s fields. */
+    fun fields(file: String): Map<String, JsonElement> = json(file).jsonObject.filterKeys { !ROUTING.matches(it) }
+
+    /** The captured payload [file] as the server sent it, byte for byte. */
+    fun text(file: String): String = File(dir, "$file.json").readText()
 
     /** A captured session detail whole, as the server sent it. */
     fun detail(name: String): JsonObject = json("session-$name").jsonObject
