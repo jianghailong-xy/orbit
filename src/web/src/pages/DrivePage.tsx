@@ -25,6 +25,7 @@ import { DriveWriterName } from '../components/drive/DriveWriterName';
 import { DriveMoveDialog } from '../components/drive/DriveMoveDialog';
 import { DriveShareDialog } from '../components/drive/DriveShareDialog';
 import { DriveAgentsButton } from '../components/drive/DriveAgentsButton';
+import { DrivePendingActions, pendingStatus } from '../components/drive/DrivePendingActions';
 import { DriveSettingsMenu } from '../components/drive/DriveSettingsMenu';
 import { DriveTrash } from '../components/drive/DriveTrash';
 import { Button } from '../components/ui/Button';
@@ -972,11 +973,7 @@ function DriveBrowser() {
                         </span>
                       </td>
                       <td className="files-col-writer">
-                        {u.status === 'uploading' || u.status === 'queued'
-                          ? `Uploading · ${u.size ? Math.floor((u.sentBytes / u.size) * 100) : 0}%`
-                          : u.status === 'failed'
-                            ? "Couldn't upload"
-                            : `Paused · ${u.size ? Math.floor((u.sentBytes / u.size) * 100) : 0}%`}
+                        {pendingStatus(u)} <DrivePendingActions upload={u} />
                       </td>
                       <td className="files-col-size">{formatSize(u.size)}</td>
                       <td className="files-col-when">—</td>

@@ -32072,3 +32072,8 @@ td > .routing-report-tier + .model-routing-flag {
 .files-agents-count { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; margin-left: 6px;
                       padding: 0 4px; box-sizing: border-box; border-radius: 8px; background: var(--warning-solid); color: #fff;
                       font-size: 11px; font-weight: 700; line-height: 1; }
+
+/* The controls of a pending upload row: small text buttons at the list's scale. */
+.files-pending-actions { display: inline-flex; gap: 8px; margin-left: 6px; }
+.files-pending-actions button { padding: 0; border: 0; background: none; font: inherit; color: var(--brand); cursor: pointer; }
+.files-pending-actions button:hover { text-decoration: underline; }

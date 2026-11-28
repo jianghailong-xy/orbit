@@ -500,11 +500,17 @@ describe('the Agents button count (board ⑤)', () => {
     id: 's1', status: 'FAILED', sourceName: 'books-stage/', destPath: '/Books', destEntryId: null, session: null,
     filesSeen: 4, filesTotal: 4, filesDone: 0, filesSame: 0, filesDeleted: 0, bytesTotal: 100, bytesSent: 0, currentPath: null,
     failed: [{ path: 'a.pdf', error: 'permission denied' }], failedCount: 1, error: null,
-    startedAt: AT, updatedAt: AT, endedAt: AT, ...over,
+    startedAt: AT, updatedAt: AT, endedAt: AT, handledAt: null, fixSessionId: null, fixRequestedAt: null, ...over,
   });
 
-  it('counts every failed sync in the list, and rings while a sync runs', async () => {
-    syncList = [sync({ id: 's1' }), sync({ id: 's2' }), sync({ id: 's3', status: 'DONE', failed: [], failedCount: 0 })];
+  it('counts a sync that failed or finished with failed files and is not handled, and none that were handled or ran clean', async () => {
+    syncList = [
+      sync({ id: 's1' }),
+      sync({ id: 's2', status: 'DONE' }),
+      sync({ id: 's3', handledAt: AT }),
+      sync({ id: 's5', status: 'DONE', handledAt: AT }),
+      sync({ id: 's6', status: 'DONE', failed: [], failedCount: 0 }),
+    ];
     await open('/drive');
     expect(text(fab()?.querySelector('.files-agents-count'))).toBe('2');
     expect(fab()?.querySelector('.files-agents-ring')).toBeNull();

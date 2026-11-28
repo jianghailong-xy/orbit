@@ -69,8 +69,8 @@ export function DriveChatHost({
   const changes = useDriveChanges();
   const syncs = useDriveSyncs();
   const { uploads } = useDriveUploads();
-  // Every failed sync in the list: the server has no "handled" mark on a sync yet.
-  const failedSyncs = syncs.filter((sync) => sync.status === 'FAILED').length;
+  // A sync needs the owner when it failed, or finished with failed files, and nobody has handled it.
+  const failedSyncs = syncs.filter((sync) => (sync.status === 'FAILED' || sync.failedCount > 0) && sync.handledAt === null).length;
   const fab = driveChatFab(list.data ? { ...list.data.fab, needsYou: list.data.fab.needsYou + changes.needsYou, updated: 0 } : null);
   const host = useChatHost({
     scope: me.data?.id ?? null,

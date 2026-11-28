@@ -456,6 +456,69 @@ describe('upload', () => {
     await until(() => expect(row('labels.csv')).toBeTruthy());
   });
 
+  it('goes on from a reload when the same file is chosen again on the row: only the chunks the server lacks are sent', async () => {
+    uploadStatus['upload-7'] = { chunks: [{ idx: 0, sha256: sha('hell'), sizeBytes: 4 }] };
+    localStorage.setItem(
+      'orbit:drive-uploads',
+      JSON.stringify([
+        { key: 'k1', name: 'eval.zip', size: 11, lastModified: 5, parentId: 'f-data', parentName: 'Datasets', relativePath: null, dropKey: null, uploadId: 'upload-7' },
+      ]),
+    );
+    resetDriveUploadsForTest();
+    await visit('/drive?folder=f-data');
+    await until(() => expect(document.querySelector('tr.pending')?.textContent).toContain('Stopped'));
+    expect(document.querySelector('.files-tray')).toBeNull();
+    const pending = document.querySelector<HTMLElement>('tr.pending')!;
+    expect(button('Choose file again', pending)).toBeTruthy();
+    expect(button('Cancel', pending)).toBeTruthy();
+    const again = pending.querySelector<HTMLInputElement>('input[aria-label="Pick eval.zip again"]')!;
+    await pick(again, [new File(['hello world'], 'eval.zip', { lastModified: 5 })]);
+    await until(() => expect(calls.some((c) => c.path === '/drive/uploads/upload-7/complete')).toBe(true));
+    // Nothing opened anew; chunk 0 was there already.
+    expect(calls.filter((c) => c.path === '/drive/uploads' && c.method === 'POST')).toEqual([]);
+    expect(chunks.map((c) => c.path)).toEqual(['/api/drive/uploads/upload-7/chunks/1', '/api/drive/uploads/upload-7/chunks/2']);
+  });
+
+  it('pauses on a lost connection, saying so on its row, and goes on from there on Resume', async () => {
+    let fail = true;
+    const served = vi.mocked(authedFetch).getMockImplementation()!;
+    vi.mocked(authedFetch).mockImplementation((async (input: string, init: RequestInit) => {
+      if (fail && input.includes('/chunks/1')) throw new TypeError('Failed to fetch');
+      return served(input, init);
+    }) as never);
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setTimeout'] });
+    try {
+      await visit('/drive?folder=f-ui');
+      await until(() => expect(row('sign-in-v3.png')).toBeTruthy());
+      await pick(document.querySelector<HTMLInputElement>('input[aria-label="Files to upload"]')!, [new File(['hello world'], 'big.bin')]);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      await until(() => expect(document.querySelector('tr.pending')?.textContent).toContain('Connection lost'));
+      expect(document.querySelector('.files-tray')).toBeNull();
+      fail = false;
+      await click(button('Resume', document.querySelector('tr.pending')!));
+      await until(() => expect(calls.some((c) => c.path === '/drive/uploads/upload-1/complete')).toBe(true));
+      expect(chunks.map((c) => c.body)).toEqual(['hell', 'o wo', 'rld']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('cancels a paused upload from its row', async () => {
+    localStorage.setItem(
+      'orbit:drive-uploads',
+      JSON.stringify([
+        { key: 'k2', name: 'old.zip', size: 11, lastModified: 5, parentId: 'f-ui', parentName: 'UI', relativePath: null, dropKey: null, uploadId: null },
+      ]),
+    );
+    resetDriveUploadsForTest();
+    await visit('/drive?folder=f-ui');
+    await until(() => expect(document.querySelector('tr.pending')).toBeTruthy());
+    await click(button('Cancel', document.querySelector('tr.pending')!));
+    expect(document.querySelector('tr.pending')).toBeNull();
+  });
+
   it('drops a folder as one drop: its files keep their paths and share the top folder the first one made', async () => {
     await visit('/drive?folder=f-ui');
     await until(() => expect(row('sign-in-v3.png')).toBeTruthy());
