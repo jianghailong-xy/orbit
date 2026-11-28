@@ -761,6 +761,7 @@ import { SessionConversation } from './SessionConversation';
 import { useWikiChatSessionCards } from './WikiDraftCard';
 import { currentPromptSuggestion, offeredPromptSuggestion } from '../lib/promptSuggestion';
 import { useCloseTaskOverPage, useOpenTaskOverPage, useShowTaskOverPage, useTaskOverPage } from '../lib/taskInPlace';
+import { setTaskColumnProject } from '../lib/taskColumnProject';
 import {
   OPTIMIZE_SHORTCUT,
   optimizedSendOf,
@@ -4042,6 +4043,9 @@ export function WorkspaceView({
   // Session settings as a column (docs/mocks/session-settings-column): on a wide screen, in the project column's
   // slot, which it takes while it is open (one column at a time); on a phone a sheet instead.
   const settingsColumnShown = settingsOpen && !isMobile && !!selected && !selectedTrashed;
+  // A task docked beside the conversation (TaskOverPagePanel) holds the same slot: the right side is one
+  // column (docs/mocks/right-panel-stack), and the task's head leads back to the project column under it.
+  const taskColumnShown = taskOverPage != null && taskColumnRoomy && !isMobile && !!selectedId && !settingsColumnShown;
   // Whether this session's own task is open beside (or over) it: the Task badge reads pressed then.
   const selectedTaskOpen =
     !!selected?.taskId && taskOverPage != null && routeId(taskOverPage) === routeId(selected.taskId);
@@ -4752,7 +4756,7 @@ export function WorkspaceView({
   // read here only while that page is shut: open, the page reads them itself (the same cache entries),
   // and these stop.
   const titleBarPageShown = !!titleBarProjectId && (isMobile ? sheetProjectId === titleBarProjectId
-    : titleBarProjectId === columnProjectId && projectColumnOpen && !settingsColumnShown);
+    : titleBarProjectId === columnProjectId && projectColumnOpen && !settingsColumnShown && !taskColumnShown);
   const titleBarReadsLine = !!titleBarProjectId && !selectedTrashed && !titleBarPageShown;
   const titleBarIntegrationQ = useProjectIntegration(titleBarProjectId ?? '', titleBarReadsLine);
   const titleBarPromotionQ = useQuery({
@@ -4766,6 +4770,13 @@ export function WorkspaceView({
     titleBarIntegrationQ.data,
     titleBarPromotionQ.data,
   );
+  // A member conversation's way back to its project's coordinator (docs/mocks/right-panel-stack ⑥): the head of
+  // every session of a project but the coordinator itself, and the project's landings, which are no conversation.
+  const selectedRole = selectedSession?.projectMembership?.role ?? null;
+  const headerCoordinator = titleBarProjectId && selectedRole && selectedRole !== 'COORDINATOR' && selectedRole !== 'LANDING'
+    ? (titleBarOwnRead ? [...(titleBarOpenQ.data ?? []), ...(titleBarCompletedQ.data ?? [])] : allProjectMembers)
+      .find((s) => s.projectMembership?.role === 'COORDINATOR') ?? null
+    : null;
   // Esc folds the column too, unless focus is in a field, a dialog or a menu, which own the key.
   // With the settings column over it, Esc is the settings column's: it closes that, and the project column
   // underneath comes back.
@@ -4780,13 +4791,25 @@ export function WorkspaceView({
         setSettingsOpen(false);
         return;
       }
+      // The docked task's own Esc closes it, and the project column under it comes back.
+      if (taskColumnShown) return;
       setProjectColumnFolded(true);
       setProjectColumnOnDemand(false);
       localStorage.setItem(PROJECT_COLUMN_FOLDED_KEY, '1');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [projectColumnOpen, settingsColumnShown]);
+  }, [projectColumnOpen, settingsColumnShown, taskColumnShown]);
+  // Tell the docked task which project column it stands in for, so its head can lead back to it.
+  const foldProjectColumnRef = useRef(foldProjectColumn);
+  foldProjectColumnRef.current = foldProjectColumn;
+  const foldUnderTask = useCallback(() => foldProjectColumnRef.current(true), []);
+  const taskOverProjectTitle = taskColumnShown && projectColumnOpen && columnProjectId ? pageProjectTitle : null;
+  useEffect(() => {
+    if (taskOverProjectTitle == null) return;
+    setTaskColumnProject({ title: taskOverProjectTitle, fold: foldUnderTask });
+    return () => setTaskColumnProject(null);
+  }, [taskOverProjectTitle, foldUnderTask]);
   // Whether the address named the column's project together with, or after, the conversation now open
   // (a project row, a member's mark, a link), rather than the selection having moved on under a column
   // already open. Read by the effect below, so it is written first.
@@ -10042,6 +10065,12 @@ export function WorkspaceView({
       setSettingsOpen(false);
       if (titleBarProjectId === columnProjectId && projectColumnOpen) return;
     }
+    // So does a docked task: closed here, it stays closed in this conversation (lib/taskRunSidebar).
+    if (taskColumnShown) {
+      if (ownRunSessionId) rememberTaskRunSidebar(ownRunSessionId, true);
+      closeTaskOverPage();
+      if (titleBarProjectId === columnProjectId && projectColumnOpen) return;
+    }
     if (titleBarProjectId === columnProjectId) {
       foldProjectColumn(projectColumnOpen);
       return;
@@ -12016,6 +12045,21 @@ export function WorkspaceView({
               {isMobile && capsuleMounted && (
                 <div className="workspace-title-jump" hidden={!topPillShown}>{topPill(decisionStrip('line'))}</div>
               )}
+              {/* docs/mocks/right-panel-stack ⑥: a member of a project leads back to its coordinator in one press,
+                  however it was reached; the column beside the conversation is left as it is. */}
+              {!isMobile && !composing && headerCoordinator && (
+                <button
+                  type="button"
+                  className="workspace-coordinator-back"
+                  aria-label={`Back to the coordinator · ${selectedSession?.projectMembership?.projectTitle ?? headerCoordinator.title}`}
+                  onClick={() => navigate(sessionPath(headerCoordinator.id))}
+                >
+                  <LeftOutlined aria-hidden />
+                  <span className="workspace-coordinator-back-text">
+                    {selectedSession?.projectMembership?.projectTitle ?? headerCoordinator.title}
+                  </span>
+                </button>
+              )}
               {selected && !selectedTrashed && !composing ? (
                 // A click opens the session's settings, and again closes them (docs/mocks/session-settings-column ③);
                 // it is renamed there, in the Name field.
@@ -13320,7 +13364,7 @@ export function WorkspaceView({
           <SessionSettingsDrawer {...settingsProps} variant="column" width={settingsColWidth} overlay={settingsColumnCrowds} />
         </>
       )}
-      {projectColumnOpen && columnProjectId && !settingsColumnShown && (
+      {projectColumnOpen && columnProjectId && !settingsColumnShown && !taskColumnShown && (
         <>
           {!projectColumnOnDemand && (
             <div

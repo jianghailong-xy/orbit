@@ -27,7 +27,8 @@ vi.mock('../lib/transcriptStore', () => ({
 const apiModule = await import('../api');
 const { WorkspaceView } = await import('./WorkspaceView');
 const { encodeId } = await import('../lib/idCodec');
-const { MOBILE_QUERY } = await import('../lib/useMediaQuery');
+const { MOBILE_QUERY, TASK_COLUMN_QUERY } = await import('../lib/useMediaQuery');
+const { useTaskColumnProject } = await import('../lib/taskColumnProject');
 
 const uuid = (n: number) => `0195c0de-0000-7000-8000-${String(n).padStart(12, '0')}`;
 const pid = (n: number) => encodeId(uuid(n));
@@ -159,6 +160,10 @@ const shown = (): string => {
 };
 let routerNavigate: NavigateFunction;
 let mobile = false;
+/** A window wide enough for a task to dock beside the conversation (TASK_COLUMN_QUERY). */
+let taskRoom = false;
+/** The project column a docked task says it stands in for (lib/taskColumnProject). */
+let underTask: { title: string } | null = null;
 let projectReadError = false;
 let withControlPlane = false;
 /** What the project's two promotion doors serve: the candidate on offer, and the merges made. */
@@ -178,6 +183,7 @@ let integrationView: Record<string, unknown> | null = null;
 let ownerRequests: Array<Record<string, unknown>> = [];
 
 function LocationProbe() {
+  underTask = useTaskColumnProject();
   const l = useLocation();
   routerNavigate = useNavigate();
   address = `${l.pathname}${l.search}`;
@@ -278,6 +284,7 @@ beforeEach(() => {
   address = '';
   setConversationProjectPage(null);
   mobile = false;
+  taskRoom = false;
   projectReadError = false;
   withControlPlane = false;
   currentPromotion = null;
@@ -388,7 +395,7 @@ beforeEach(() => {
     return reply([]);
   }) as unknown as typeof apiModule.api);
   vi.stubGlobal('matchMedia', (query: string) => ({
-    matches: mobile ? query === MOBILE_QUERY : query === '(hover: hover)', media: query, onchange: null,
+    matches: mobile ? query === MOBILE_QUERY : query === '(hover: hover)' || (taskRoom && query === TASK_COLUMN_QUERY), media: query, onchange: null,
     addListener: () => {}, removeListener: () => {}, addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false,
   }));
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
@@ -1086,6 +1093,76 @@ describe('the title bar’s Project sessions button', { timeout: 60_000 }, () =>
 // Owner decisions of 2026-11-11 (docs/mocks/project-sessions-column, board 5): at phone width a project row
 // opens the coordinator's conversation itself, and the title bar's button brings the project's sessions up
 // in a bottom sheet over it.
+describe('one column on the right: a docked task over the project column, and the way back to the coordinator (docs/mocks/right-panel-stack)', { timeout: 60_000 }, () => {
+  const column = (): HTMLElement | null => mounted().querySelector<HTMLElement>('aside.session-project-column');
+  const coordinatorBack = (): HTMLButtonElement | null => mounted().querySelector<HTMLButtonElement>('.workspace-header .workspace-coordinator-back');
+  const headerTitle = (): string | null | undefined => mounted().querySelector('.workspace-header .workspace-name')?.textContent;
+  const TASK_ID = encodeId(pid(899));
+
+  it('leads a member back to its coordinator from the head of its conversation, with the column kept', async () => {
+    await mount();
+    await click(projectRow(), 'the project row');
+    await until(() => expect(column()).not.toBeNull());
+    // The coordinator is the top of the project: no way back drawn.
+    expect(coordinatorBack()).toBeNull();
+    await act(async () => routerNavigate(`/sessions/${TASK.id}`));
+    await until(() => expect(headerTitle()).toBe(TASK.title));
+    await until(() => expect(coordinatorBack()?.textContent).toBe('Project Alpha'));
+    expect(coordinatorBack()!.getAttribute('aria-label')).toBe('Back to the coordinator · Project Alpha');
+    // Before the title, at the start of the head.
+    expect(coordinatorBack()!.compareDocumentPosition(mounted().querySelector('.workspace-header .workspace-name')!)
+      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await click(coordinatorBack(), 'the way back to the coordinator');
+    await until(() => expect(shown()).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
+    expect(column()).not.toBeNull();
+    // A session in no project has none.
+    await act(async () => routerNavigate(`/sessions/${LOOSE.id}`));
+    await until(() => expect(headerTitle()).toBe(LOOSE.title));
+    expect(coordinatorBack()).toBeNull();
+  });
+
+  it('draws no way back on a phone, where the sheet is the project’s', async () => {
+    mobile = true;
+    await mount(() => expect(headerTitle()).toBe(TASK.title), `/sessions/${TASK.id}`);
+    await settle();
+    expect(coordinatorBack()).toBeNull();
+  });
+
+  it('gives a task docked beside the conversation the project column’s slot, and names the column under it', async () => {
+    taskRoom = true;
+    await mount();
+    await click(projectRow(), 'the project row');
+    await until(() => expect(column()).not.toBeNull());
+    expect(underTask).toBeNull();
+    await act(async () => routerNavigate(`/sessions/${COORDINATOR.id}?task=${TASK_ID}`));
+    await until(() => expect(column()).toBeNull());
+    expect(underTask?.title).toBe('Project Alpha');
+    // The title bar's button is not pressed: the project's page is not what shows.
+    expect(projectSessionsButton()?.getAttribute('aria-pressed')).toBe('false');
+    // Esc is the task's (its panel goes back one level); the column under it is not folded.
+    await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    await settle();
+    expect(localStorage.getItem('orbit.projectColumnFolded')).not.toBe('1');
+    // The title bar's button hands the slot back: the task closes and the project column returns.
+    await click(projectSessionsButton(), 'the Project sessions button');
+    await until(() => expect(column()).not.toBeNull());
+    expect(address).toBe(`/sessions/${COORDINATOR.id}`);
+    expect(underTask).toBeNull();
+  });
+
+  it('names no column under a docked task while the project column is folded', async () => {
+    taskRoom = true;
+    await mount();
+    await click(projectRow(), 'the project row');
+    await until(() => expect(column()).not.toBeNull());
+    await click(projectSessionsButton(), 'the Project sessions button');
+    await until(() => expect(column()).toBeNull());
+    await act(async () => routerNavigate(`/sessions/${COORDINATOR.id}?task=${TASK_ID}`));
+    await settle();
+    expect(underTask).toBeNull();
+  });
+});
+
 describe('the phone’s project sessions sheet', { timeout: 60_000 }, () => {
   const sheet = (): HTMLElement | null => document.querySelector<HTMLElement>('.project-sessions-sheet');
   const sheetTitles = (): string[] => [...(sheet()?.querySelectorAll('.session-row .session-title') ?? [])].map((el) => el.textContent ?? '');

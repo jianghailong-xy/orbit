@@ -23,6 +23,7 @@ const { TaskDetailPanel, compactTaskState, doneMeansChecklist } = await import('
 const { TaskOverPagePanel } = await import('./TaskOverPagePanel');
 const { encodeId } = await import('../lib/idCodec');
 const { TASK_COLUMN_QUERY } = await import('../lib/useMediaQuery');
+const { setTaskColumnProject } = await import('../lib/taskColumnProject');
 
 const TASK = encodeId('0195c0de-0000-7000-8000-0000000000a1');
 const RUN = encodeId('0195c0de-0000-7000-8000-0000000000a2');
@@ -330,6 +331,55 @@ describe('docked beside a conversation from 1640 px, the overlay below that and 
     await open(`/sessions/${OTHER_SESSION}`);
     await act(async () => panel().querySelector<HTMLButtonElement>('button[aria-label="Close"]')!.click());
     expect(store.get('orbit.taskRunSidebarClosed')).toBeUndefined();
+  });
+
+  describe('over a project column, one column at a time (docs/mocks/right-panel-stack)', () => {
+    const fold = vi.fn();
+    beforeEach(() => {
+      fold.mockClear();
+      setTaskColumnProject({ title: 'Permission mode: Auto is guaranteed', fold });
+    });
+    afterEach(() => setTaskColumnProject(null));
+    const back = () => panel().querySelector<HTMLButtonElement>('.tdp-compact-back');
+
+    it('its head leads back to the project, which closes the task and leaves the project column open', async () => {
+      windowWidth(DOCK_WIDTH);
+      await open(`/sessions/${OTHER_SESSION}`);
+      expect(back()!.textContent).toBe('Permission mode: Auto is guaranteed');
+      expect(back()!.getAttribute('aria-label')).toBe('Back to Permission mode: Auto is guaranteed');
+      await act(async () => back()!.click());
+      expect(new URLSearchParams(search).get('task')).toBeNull();
+      expect(fold).not.toHaveBeenCalled();
+    });
+
+    it('✕ closes the task and folds the project column: the right side empties', async () => {
+      windowWidth(DOCK_WIDTH);
+      await open(`/sessions/${OTHER_SESSION}`);
+      await act(async () => panel().querySelector<HTMLButtonElement>('button[aria-label="Close"]')!.click());
+      expect(new URLSearchParams(search).get('task')).toBeNull();
+      expect(fold).toHaveBeenCalledTimes(1);
+    });
+
+    it('Esc goes back one level, to the project column', async () => {
+      windowWidth(DOCK_WIDTH);
+      await open(`/sessions/${OTHER_SESSION}`);
+      await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));
+      expect(new URLSearchParams(search).get('task')).toBeNull();
+      expect(fold).not.toHaveBeenCalled();
+    });
+
+    it('going back in its own run remembers the close, so the task does not reopen over the project', async () => {
+      windowWidth(DOCK_WIDTH);
+      await open(`/sessions/${RUN}`);
+      await act(async () => back()!.click());
+      expect(JSON.parse(store.get('orbit.taskRunSidebarClosed') ?? '[]')).toEqual([RUN]);
+    });
+
+    it('lying over a page, it is the task alone: no way back drawn', async () => {
+      windowWidth(DOCK_WIDTH - 1);
+      await open(`/sessions/${OTHER_SESSION}`);
+      expect(back()).toBeNull();
+    });
   });
 
   it('the stylesheet docks it at the column width the query makes room for', () => {

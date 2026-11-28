@@ -3616,6 +3616,29 @@ button.toast--pill:focus-visible {
 .coordinator-badge-link:focus-visible { outline: var(--orbit-focus-width) solid var(--orbit-focus-color); outline-offset: 1px; }
 /* The Task badge while its task is open beside the conversation: pressed, and a press closes it. */
 .coordinator-badge-link[aria-pressed='true'] { background: color-mix(in srgb, var(--brand) 14%, var(--bg-base)); border-color: var(--brand); }
+/* A project member's way back to its coordinator, before the title (docs/mocks/right-panel-stack ⑥): the
+   project's name as a link, cut short so the session's own title keeps the room. */
+.workspace-coordinator-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 220px;
+  margin: 0 8px 0 0;
+  padding: 1px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--link);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.workspace-coordinator-back .anticon { flex: none; font-size: 10px; }
+.workspace-coordinator-back-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-coordinator-back:hover { background: var(--bg-hover); }
+.workspace-coordinator-back:focus-visible { outline: var(--orbit-focus-width) solid var(--orbit-focus-color); outline-offset: 1px; }
 /* The title as the button that opens the session's settings (docs/mocks/session-settings-column ③): plain at
    rest, while the settings are open (owner 11-25: the open state needs no look of its own) and on hover. */
 .workspace-name-button {
@@ -17213,6 +17236,26 @@ button.chat-jump-start:hover {
   font-size: 12px;
   color: var(--text-3);
 }
+/* Docked over a project column, the kicker is the way back to it (docs/mocks/right-panel-stack). */
+.tdp-compact-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 2px 4px;
+  margin-left: -4px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--link);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tdp-compact-back .anticon { flex: none; font-size: 10px; }
+.tdp-compact-back-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tdp-compact-back:hover { text-decoration: underline; }
+.tdp-compact-back:focus-visible { outline: var(--orbit-focus-width) solid var(--orbit-focus-color); outline-offset: 1px; }
 .tdp-compact-title {
   margin-right: 8px;
   display: -webkit-box;
