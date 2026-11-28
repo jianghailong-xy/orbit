@@ -1,0 +1,182 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Task link card in a reply: four treatments</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #eceef1; font: 15px/1.5 -apple-system, BlinkMacSystemFont, Inter, "PingFang SC", "Noto Sans SC", sans-serif; color: #1f2329; }
+  .b-part { padding: 32px 36px 36px; width: 1960px; }
+  .b-h1 { font-size: 26px; font-weight: 700; margin: 0 0 6px; }
+  .b-lede { color: #555; margin: 0 0 24px; max-width: 1500px; }
+  .b-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .b-col h2 { font-size: 17px; margin: 0 0 4px; display: flex; gap: 8px; align-items: center; }
+  .b-tag { font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 10px; background: #dfe3e8; color: #444; }
+  .b-tag.rec { background: #d6f0dd; color: #1d7a3a; }
+  .b-sub { color: #666; font-size: 13.5px; margin: 0 0 10px; }
+  .b-notes { font-size: 13.5px; color: #333; margin: 10px 0 0; padding-left: 18px; }
+  .b-notes li { margin: 0 0 3px; } .pro { color: #1d7a3a; } .con { color: #b3261e; }
+
+  /* The conversation column, at the width the screenshot's reply had (~900 px). */
+  .chat { --bg: #fff; --raised: #fff; --subtle: #fafbfc; --border: #dee0e3; --hair: #eceef1; --t1: #1f2329; --t2: #646a73; --t3: #8f959e;
+          --brand: #3370ff; --brand-tint: #eaf1ff; --ok: #1a7f37; --ok-bg: #e8f6ec; --ok-border: #b6e7c4; --err: #cf3b35; --err-bg: #fdecea;
+          --warn: #c2710c; --warn-bg: #fdf3e2; --fill: rgba(0,0,0,.05);
+          background: var(--bg); color: var(--t1); border-radius: 14px; padding: 22px 26px; width: 920px; }
+  .chat.dark { --bg: #1e1e20; --raised: #2b2b2e; --subtle: #252528; --border: #424246; --hair: #38383c; --t1: #c9ced5; --t2: #a7adb6; --t3: #8a9099;
+               --brand: #5b8cff; --brand-tint: rgba(91,140,255,.16); --ok: #4ac26b; --ok-bg: rgba(46,161,33,.18); --ok-border: rgba(46,161,33,.35);
+               --err: #f0837b; --err-bg: rgba(240,131,123,.15); --warn: #e0a23b; --warn-bg: rgba(224,162,59,.15); --fill: rgba(255,255,255,.06); }
+  .zh { font-size: 15px; margin: 0; }
+  .en { font-size: 14px; color: var(--t3); margin: 2px 0 10px; }
+  svg { display: block; }
+
+  /* ── Today ── */
+  .t-ul { margin: 0; padding-left: 22px; }
+  .t-card { margin: 6px 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--raised); }
+  .t-head { display: flex; align-items: center; gap: 8px; }
+  .t-kind { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--t2); }
+  .t-tile { width: 20px; height: 20px; border-radius: 5px; background: var(--brand-tint); color: var(--brand); display: flex; align-items: center; justify-content: center; }
+  .t-pill { margin-left: auto; padding: 1px 7px; border: 1px solid var(--ok-border); border-radius: 999px; background: var(--ok-bg); color: var(--ok); font-size: 11px; font-weight: 600; }
+  .t-title { margin-top: 4px; font-size: 15px; font-weight: 600; line-height: 1.35; color: var(--brand); }
+  .t-line { display: flex; gap: 6px; align-items: baseline; margin-top: 3px; font-size: 13px; color: var(--t2); }
+
+  /* ── shared bits of the new rows ── */
+  .glyph { flex: none; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; }
+  .g-done { color: var(--ok); } .g-run { color: var(--brand); } .g-fail { color: var(--err); } .g-wait { color: var(--warn); } .g-idle { color: var(--t3); }
+  .title { min-width: 0; flex: 1; font-size: 14.5px; font-weight: 500; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .word { flex: none; font-size: 12.5px; font-weight: 500; }
+  .meta { font-size: 12.5px; color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .meta b { font-weight: 500; color: var(--t2); }
+  .chev { flex: none; color: var(--t3); font-size: 15px; margin-left: 2px; }
+
+  /* ── A · compact card ── */
+  .a-card { display: block; margin: 6px 0; padding: 8px 12px 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--raised); }
+  .a-card:hover { background: var(--subtle); }
+  .a-row { display: flex; align-items: center; gap: 8px; }
+  .a-card .meta { padding-left: 26px; margin-top: 1px; }
+  .a-orig { opacity: .62; }
+
+  /* ── B · one list ── */
+  .b-list { margin: 8px 0 4px; border: 1px solid var(--border); border-radius: 12px; background: var(--raised); overflow: hidden; }
+  .b-lhead { display: flex; align-items: center; gap: 8px; padding: 7px 14px; background: var(--subtle); border-bottom: 1px solid var(--hair); font-size: 12.5px; color: var(--t2); }
+  .b-lhead .count { margin-left: auto; color: var(--t3); }
+  .b-row { display: flex; align-items: center; gap: 10px; padding: 9px 14px 9px 12px; }
+  .b-row + .b-row { border-top: 1px solid var(--hair); }
+  .b-row:hover { background: var(--subtle); }
+  .b-body { min-width: 0; flex: 1; }
+  .b-body .title { display: block; }
+  .b-right { flex: none; text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+  .b-right .meta { font-size: 12px; }
+
+  /* ── C · plain lines ── */
+  .c-list { margin: 4px 0; padding: 0; list-style: none; }
+  .c-list li { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+  .c-list .title { flex: 0 1 auto; color: var(--brand); font-weight: 500; }
+  .c-list .meta { flex: 0 1 auto; }
+  .c-orig { padding-left: 26px !important; padding-top: 0 !important; }
+  .c-orig .title { color: var(--t3); font-weight: 400; font-size: 13.5px; }
+
+  .b-states { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 30px; }
+  .b-states h3 { margin: 0 0 8px; font-size: 15px; }
+</style></head>
+<body>
+<section class="b-part" id="part-1">
+  <p class="b-h1">Task link card in a reply: four treatments</p>
+  <p class="b-lede">The reply from the screenshot, drawn the same way in each panel. It is in "Show both languages", so each item's English original sits under it. Today a reference on a line of its own becomes a four-line card: a "Task" header row, a loud blue bold title, a project line that is the same on every card, and a facts line. The bullet floats outside the box. Four tasks fill a screen and nothing in the cards stands out. All four are Done, as in the screenshot. The panel at the bottom shows the other states.</p>
+  <div class="b-grid" id="grid"></div>
+
+  <div class="b-states">
+    <div><h3>B, every state (light)</h3><div class="chat" id="states-light"></div></div>
+    <div><h3>B, every state (dark), and one reference in prose (A)</h3><div class="chat dark" id="states-dark"></div></div>
+  </div>
+</section>
+
+<script>
+const ICON = {
+  done: '<svg width="16" height="16" viewBox="0 0 16 16"><rect x="1.5" y="1.5" width="13" height="13" rx="3.5" fill="currentColor" opacity=".14"/><rect x="1.5" y="1.5" width="13" height="13" rx="3.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.8 8.2l2.2 2.2 4.3-4.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  run: '<svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-opacity=".22" stroke-width="2"/><path d="M8 2a6 6 0 0 1 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+  fail: '<svg width="16" height="16" viewBox="0 0 16 16"><rect x="1.5" y="1.5" width="13" height="13" rx="3.5" fill="currentColor" opacity=".14"/><rect x="1.5" y="1.5" width="13" height="13" rx="3.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  wait: '<svg width="16" height="16" viewBox="0 0 16 16"><rect x="1.5" y="1.5" width="13" height="13" rx="3.5" fill="currentColor" opacity=".14"/><rect x="1.5" y="1.5" width="13" height="13" rx="3.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 4.6v4.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="8" cy="11.2" r="1" fill="currentColor"/></svg>',
+  open: '<svg width="16" height="16" viewBox="0 0 16 16"><rect x="1.5" y="1.5" width="13" height="13" rx="3.5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>',
+  queued: '<svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 4.8V8l2.2 1.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
+  task: '<svg width="13" height="13" viewBox="0 0 16 16"><rect x="1.5" y="1.5" width="13" height="13" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M4.8 8.2l2.2 2.2 4.3-4.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  project: '<svg width="13" height="13" viewBox="0 0 16 16"><rect x="1.5" y="2" width="13" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5 5v6M8 5v3M11 5v4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
+};
+const PROJECT = 'Permission mode: Auto is guaranteed, and the mode shown is the mode running';
+const TASKS = [
+  { t: 'Server: config changes and SubAgents keep an Auto intent in Auto; the engine reports and the runner corrects', turns: 191, ago: '4h ago' },
+  { t: "Clients: show a refused Auto correction (permission_mode_correction_failed) and the claim's substitution reason", turns: 355, ago: '4h ago' },
+  { t: 'Server: a reclaim of a live engine does not overwrite the mode it reported', turns: 146, ago: '4h ago' },
+  { t: "Runner: judge Claude's settled mode from its status frames, not only the init frame", turns: 71, ago: '6h ago' },
+];
+const STATE = {
+  done:   { g: 'g-done', i: ICON.done,   w: 'Done' },
+  run:    { g: 'g-run',  i: ICON.run,    w: 'Running' },
+  fail:   { g: 'g-fail', i: ICON.fail,   w: 'Failed' },
+  wait:   { g: 'g-wait', i: ICON.wait,   w: 'Needs you' },
+  open:   { g: 'g-idle', i: ICON.open,   w: 'Open' },
+  queued: { g: 'g-idle', i: ICON.queued, w: 'Queued' },
+};
+const facts = (x) => x.facts ?? `orbit-ws01 · 1 run · last Finished, ${x.turns} turns · ${x.ago}`;
+const head = '<p class="zh">我对仍在运行的四个任务设置了新的监视。如果其中任何一个失败，它会唤醒我，最长持续两天：</p><p class="en">I set a new watch on the four tasks still running. It wakes me if any of them fails, for up to two days:</p>';
+
+function today() {
+  const card = (x) => `<div class="t-card"><div class="t-head"><span class="t-kind"><span class="t-tile">${ICON.task}</span>Task</span><span class="t-pill">Done</span></div>
+    <div class="t-title">${x.t}</div>
+    <div class="t-line"><span style="color:var(--t3)">${ICON.project}</span><span>${PROJECT}</span></div>
+    <div class="t-line">${facts(x)}</div></div>`;
+  return head + '<ul class="t-ul">' + TASKS.map((x) => `<li>${card(x)}</li><div style="margin-left:0">${card(x)}</div>`).join('') + '</ul>';
+}
+
+function aCard(x, s = 'done', orig = false, withProject = true) {
+  const st = STATE[s];
+  return `<div class="a-card${orig ? ' a-orig' : ''}"><div class="a-row"><span class="glyph ${st.g}">${st.i}</span><span class="title">${x.t}</span><span class="word ${st.g}">${x.word ?? st.w}</span><span class="chev">›</span></div>
+    <div class="meta">${withProject ? `<b>${PROJECT}</b> · ` : ''}${facts(x)}</div></div>`;
+}
+function optA() {
+  return head + TASKS.map((x) => aCard(x) + aCard(x, 'done', true)).join('');
+}
+
+function bRow(x, s = 'done') {
+  const st = STATE[s];
+  return `<div class="b-row"><span class="glyph ${st.g}">${st.i}</span>
+    <div class="b-body"><span class="title">${x.t}</span><div class="meta">${x.facts ?? `orbit-ws01 · 1 run · last Finished, ${x.turns} turns`}</div></div>
+    <div class="b-right"><span class="word ${st.g}">${x.word ?? st.w}</span><span class="meta">${x.ago}</span></div></div>`;
+}
+function bList(rows, project = PROJECT, label = 'tasks') {
+  return `<div class="b-list"><div class="b-lhead"><span style="color:var(--t3)">${ICON.project}</span><span>${project}</span><span class="count">${rows.length} ${label}</span></div>${rows.map((r) => bRow(r, r.s)).join('')}</div>`;
+}
+function optB() {
+  return head + bList(TASKS);
+}
+
+function optC() {
+  return head + '<ul class="c-list">' + TASKS.map((x) => {
+    const st = STATE.done;
+    return `<li><span class="glyph ${st.g}">${st.i}</span><span class="title">${x.t}</span><span class="meta">Done · ${x.ago}</span></li>
+      <li class="c-orig"><span class="title">${x.t}</span></li>`;
+  }).join('') + '</ul>';
+}
+
+const PANELS = [
+  { h: 'Today', tag: '', sub: 'What the screenshot shows: 8 cards, 4 lines each, about 1,000 px tall for four tasks.', body: today(),
+    notes: ['<span class="con">The "Task" row is a whole line spent on the type name.</span>', '<span class="con">Every title is bold, blue and 15 px, so nothing stands out and the list shouts.</span>', '<span class="con">The project line is the same on all four cards.</span>', '<span class="con">The bullet floats beside the box. The green pill is the only colour, and every card has one.</span>'] },
+  { h: 'A · Compact card', tag: '', sub: 'Two lines. The state glyph replaces the "Task" row, and the title is dark, one line, ellipsized. The state word sits on the right. The bullet is dropped. The original card is dimmed under each card.', body: optA(),
+    notes: ['<span class="pro">About half the height of today. The card still reads as an object you can open.</span>', '<span class="pro">Works the same for a single reference in prose, which is the most common case.</span>', '<span class="con">The project still repeats on every card, and the bilingual view still shows each task twice.</span>'] },
+  { h: 'B · One list for adjacent cards', tag: 'rec', sub: 'Adjacent references form one bordered list, like the tasks page: a header with the shared project, then one row per task with the state glyph, title, facts, state word and time. A lone reference is drawn as card A.', body: optB(),
+    notes: ['<span class="pro">Four tasks fit in about 260 px. The project is said once.</span>', '<span class="pro">The left column of glyphs shows at a glance which ones are not Done.</span>', '<span class="con">The rows are drawn once, from the translation, like code and tables already are. The bilingual view does not repeat them, so that needs a small pairing change.</span>', '<span class="con">The project is shown in the header only if every row shares it; otherwise each row shows its own.</span>'] },
+  { h: 'C · Plain lines, no box', tag: '', sub: 'Each reference is one line in the text: state glyph, blue title link, and "Done · 4h ago". The original is a grey line under it.', body: optC(),
+    notes: ['<span class="pro">The lightest option. It reads as part of the reply, not as UI inside it.</span>', '<span class="con">Runs, turns and the machine are gone; you open the task to see them.</span>', '<span class="con">Close to a plain link, so the reason to have a card mostly disappears.</span>'] },
+];
+document.getElementById('grid').innerHTML = PANELS.map((p) => `<div class="b-col"><h2>${p.h}${p.tag ? ' <span class="b-tag rec">Recommended</span>' : ''}</h2><p class="b-sub">${p.sub}</p>
+  <div class="chat">${p.body}</div><ul class="b-notes">${p.notes.map((n) => `<li>${n}</li>`).join('')}</ul></div>`).join('');
+
+const MIXED = [
+  { t: 'Runner: judge Claude\'s settled mode from its status frames, not only the init frame', s: 'run', facts: 'orbit-ws01 · run 2 · 38 turns so far', ago: 'now' },
+  { t: 'Server: a reclaim of a live engine does not overwrite the mode it reported', s: 'wait', facts: 'orbit-ws01 · 1 run · asks you to confirm', ago: '12m ago' },
+  { t: "Clients: show a refused Auto correction (permission_mode_correction_failed) and the claim's substitution reason", s: 'fail', facts: 'orbit-ws01 · 1 run · last Failed: merge check red', ago: '1h ago' },
+  { t: 'Server: config changes and SubAgents keep an Auto intent in Auto; the engine reports and the runner corrects', s: 'done', facts: 'orbit-ws01 · 1 run · last Finished, 191 turns', ago: '4h ago' },
+  { t: 'Docs: help article for Auto permission mode', s: 'queued', facts: 'Unassigned · never run', ago: '2d ago' },
+  { t: 'Android: show the mode the engine reported', s: 'open', facts: 'Unassigned · never run', ago: '2d ago' },
+];
+document.getElementById('states-light').innerHTML = bList(MIXED);
+document.getElementById('states-dark').innerHTML = bList(MIXED.slice(0, 4)) +
+  '<p class="zh" style="margin-top:14px">修复在这里：</p>' + aCard({ ...MIXED[0] }, 'run', false, true);
+</script>
+</body></html>
