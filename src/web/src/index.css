@@ -4192,6 +4192,12 @@ button.toast--pill:focus-visible {
   border-top: 1px solid var(--border-subtle);
   font-size: 12px;
 }
+/* Twenty rows scroll in the panel; where it was measured and what is not listed stay in view under them. */
+.mck-commits-foot {
+  position: sticky;
+  bottom: 0;
+  background: var(--bg-raised);
+}
 .wt-commits-all {
   border: none;
   background: none;
@@ -4237,6 +4243,17 @@ button.toast--pill:focus-visible {
   margin: 0 -8px 8px;
   padding-bottom: 6px;
   border-bottom: 1px solid var(--border-subtle);
+}
+/* A rail row is the subject and one meta line: in the narrow rail the meta is cut, never wrapped to a third line. */
+.wt-rail-commits .wt-commit-meta {
+  flex-wrap: nowrap;
+  min-width: 0;
+  white-space: nowrap;
+}
+.wt-rail-commits .wt-commit-meta > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .wt-commit-head {
   flex: none;

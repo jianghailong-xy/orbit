@@ -1,0 +1,775 @@
+{
+  "plain": {
+    "snapshot": {
+      "root": "/tmp/TestWriteMainCheckoutWebFixtures431700019/001",
+      "branch": "develop",
+      "head": "f9c9bd676fe5c21df65f8f593f4bf4b22cfc2ed7",
+      "state": "dirty",
+      "upstream": "origin/develop",
+      "ahead": 21,
+      "behind": 0,
+      "files": [
+        {
+          "path": "notes.md",
+          "status": "A",
+          "contentHash": "fa49b077972391ad58037050f2a75f74e3671e92",
+          "untracked": true,
+          "additions": 1,
+          "deletions": 0
+        },
+        {
+          "path": "src/web/src/index.css",
+          "status": "M",
+          "contentHash": "2b14cb5b6471c8b527d696145e409ca8669f2718",
+          "additions": 1,
+          "deletions": 2
+        },
+        {
+          "path": "src/web/src/pages/SettingsLayout.tsx",
+          "status": "M",
+          "contentHash": "2b14cb5b6471c8b527d696145e409ca8669f2718",
+          "additions": 1,
+          "deletions": 1
+        }
+      ],
+      "fileCount": 3,
+      "truncated": false,
+      "fingerprint": "mc1:f9c9bd676fe5c21df65f8f593f4bf4b22cfc2ed7:69d43222ca3b785893724e706435d45687af5a087402a759701063394d77641d",
+      "checkedAt": "2026-11-28T13:31:36.916Z",
+      "commits": [
+        {
+          "sha": "f9c9bd676fe5c21df65f8f593f4bf4b22cfc2ed7",
+          "subject": "fix(web): Settings and Admin nav take the sidebar's width, so the page panel doesn't jump",
+          "body": "Opening Settings swapped the sidebar for a narrower nav, so the page panel moved 24 px left and back. Both navs now use the sidebar's stored width.",
+          "committedAt": "2026-11-28T13:13:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "3bffda569ec09bb6edbc7883c65d9fff96159492",
+          "subject": "fix(web): change 20 of 21",
+          "committedAt": "2026-11-28T13:06:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "9c6adc623712e1dd7122db42014e5655bfce91c9",
+          "subject": "fix(web): change 19 of 21",
+          "committedAt": "2026-11-28T12:59:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "53319a1639b89091b9ddd0e6612e1339e9f39247",
+          "subject": "fix(web): change 18 of 21",
+          "committedAt": "2026-11-28T12:52:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "7aa054dda325c4cb5fd3657ce605537180823ddf",
+          "subject": "fix(web): change 17 of 21",
+          "committedAt": "2026-11-28T12:45:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "4a2f2d13ae06a3d40919ce10e1a406bcfc2d1445",
+          "subject": "fix(web): change 16 of 21",
+          "committedAt": "2026-11-28T12:38:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "afa648a0f3bb062d5dba0e295851bfefaaf9f3fc",
+          "subject": "fix(web): change 15 of 21",
+          "committedAt": "2026-11-28T12:31:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "8573dda2c54d5c55f6c541f335016c1aec9ca637",
+          "subject": "fix(web): change 14 of 21",
+          "committedAt": "2026-11-28T12:24:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "d48cb522c41ffb2b67e07fe187b6575af6ae8598",
+          "subject": "fix(web): change 13 of 21",
+          "committedAt": "2026-11-28T12:17:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "05bb1d8f609bbd29b996deb509e1e779f00e3402",
+          "subject": "fix(web): change 12 of 21",
+          "committedAt": "2026-11-28T12:10:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "9b392237b43e53bc8ec361f1e157d8418f5af0fa",
+          "subject": "fix(web): change 11 of 21",
+          "committedAt": "2026-11-28T12:03:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "53f8ca4174b8429a250b6280612814453c76c5d9",
+          "subject": "fix(web): change 10 of 21",
+          "committedAt": "2026-11-28T11:56:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "ac96f7641b1edf8e9f6f1ec5cd0cbf1ad4d49822",
+          "subject": "fix(web): change 9 of 21",
+          "committedAt": "2026-11-28T11:49:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "aebb511ce54e9b7bd555378dca236aaf7fd018b4",
+          "subject": "fix(web): change 8 of 21",
+          "committedAt": "2026-11-28T11:42:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "23c0880c23f92b002cf761bb72186a6f7cbb7590",
+          "subject": "fix(web): change 7 of 21",
+          "committedAt": "2026-11-28T11:35:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "64ccfe99d16ebde28e5a8d1cfe3abb0b7c5a09a9",
+          "subject": "fix(web): change 6 of 21",
+          "committedAt": "2026-11-28T11:28:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "b2a368508e6262566b568b00349f086625ea0c93",
+          "subject": "fix(web): change 5 of 21",
+          "committedAt": "2026-11-28T11:21:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "1d987e575ee567825b276aa72415ac07b7fc069c",
+          "subject": "fix(web): change 4 of 21",
+          "committedAt": "2026-11-28T11:14:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "6225e39142c7a16c14894ba7d1f8ebf9d792b0d0",
+          "subject": "fix(web): change 3 of 21",
+          "committedAt": "2026-11-28T11:07:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "acac2acaf3ffdf2c42ce195c6528dd31ea83943b",
+          "subject": "fix(web): change 2 of 21",
+          "committedAt": "2026-11-28T11:00:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        }
+      ],
+      "commitsTruncated": true
+    }
+  },
+  "commit": {
+    "snapshot": {
+      "root": "/tmp/TestWriteMainCheckoutWebFixtures431700019/001",
+      "branch": "develop",
+      "head": "f9c9bd676fe5c21df65f8f593f4bf4b22cfc2ed7",
+      "state": "dirty",
+      "upstream": "origin/develop",
+      "ahead": 21,
+      "behind": 0,
+      "files": [
+        {
+          "path": "notes.md",
+          "status": "A",
+          "contentHash": "fa49b077972391ad58037050f2a75f74e3671e92",
+          "untracked": true,
+          "additions": 1,
+          "deletions": 0
+        },
+        {
+          "path": "src/web/src/index.css",
+          "status": "M",
+          "contentHash": "2b14cb5b6471c8b527d696145e409ca8669f2718",
+          "additions": 1,
+          "deletions": 2
+        },
+        {
+          "path": "src/web/src/pages/SettingsLayout.tsx",
+          "status": "M",
+          "contentHash": "2b14cb5b6471c8b527d696145e409ca8669f2718",
+          "additions": 1,
+          "deletions": 1
+        }
+      ],
+      "fileCount": 3,
+      "truncated": false,
+      "fingerprint": "mc1:f9c9bd676fe5c21df65f8f593f4bf4b22cfc2ed7:69d43222ca3b785893724e706435d45687af5a087402a759701063394d77641d",
+      "checkedAt": "2026-11-28T13:31:36.946Z",
+      "commits": [
+        {
+          "sha": "f9c9bd676fe5c21df65f8f593f4bf4b22cfc2ed7",
+          "subject": "fix(web): Settings and Admin nav take the sidebar's width, so the page panel doesn't jump",
+          "body": "Opening Settings swapped the sidebar for a narrower nav, so the page panel moved 24 px left and back. Both navs now use the sidebar's stored width.",
+          "committedAt": "2026-11-28T13:13:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "3bffda569ec09bb6edbc7883c65d9fff96159492",
+          "subject": "fix(web): change 20 of 21",
+          "committedAt": "2026-11-28T13:06:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "9c6adc623712e1dd7122db42014e5655bfce91c9",
+          "subject": "fix(web): change 19 of 21",
+          "committedAt": "2026-11-28T12:59:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "53319a1639b89091b9ddd0e6612e1339e9f39247",
+          "subject": "fix(web): change 18 of 21",
+          "committedAt": "2026-11-28T12:52:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "7aa054dda325c4cb5fd3657ce605537180823ddf",
+          "subject": "fix(web): change 17 of 21",
+          "committedAt": "2026-11-28T12:45:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "4a2f2d13ae06a3d40919ce10e1a406bcfc2d1445",
+          "subject": "fix(web): change 16 of 21",
+          "committedAt": "2026-11-28T12:38:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "afa648a0f3bb062d5dba0e295851bfefaaf9f3fc",
+          "subject": "fix(web): change 15 of 21",
+          "committedAt": "2026-11-28T12:31:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "8573dda2c54d5c55f6c541f335016c1aec9ca637",
+          "subject": "fix(web): change 14 of 21",
+          "committedAt": "2026-11-28T12:24:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "d48cb522c41ffb2b67e07fe187b6575af6ae8598",
+          "subject": "fix(web): change 13 of 21",
+          "committedAt": "2026-11-28T12:17:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "05bb1d8f609bbd29b996deb509e1e779f00e3402",
+          "subject": "fix(web): change 12 of 21",
+          "committedAt": "2026-11-28T12:10:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "9b392237b43e53bc8ec361f1e157d8418f5af0fa",
+          "subject": "fix(web): change 11 of 21",
+          "committedAt": "2026-11-28T12:03:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "53f8ca4174b8429a250b6280612814453c76c5d9",
+          "subject": "fix(web): change 10 of 21",
+          "committedAt": "2026-11-28T11:56:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "ac96f7641b1edf8e9f6f1ec5cd0cbf1ad4d49822",
+          "subject": "fix(web): change 9 of 21",
+          "committedAt": "2026-11-28T11:49:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "aebb511ce54e9b7bd555378dca236aaf7fd018b4",
+          "subject": "fix(web): change 8 of 21",
+          "committedAt": "2026-11-28T11:42:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "23c0880c23f92b002cf761bb72186a6f7cbb7590",
+          "subject": "fix(web): change 7 of 21",
+          "committedAt": "2026-11-28T11:35:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "64ccfe99d16ebde28e5a8d1cfe3abb0b7c5a09a9",
+          "subject": "fix(web): change 6 of 21",
+          "committedAt": "2026-11-28T11:28:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "b2a368508e6262566b568b00349f086625ea0c93",
+          "subject": "fix(web): change 5 of 21",
+          "committedAt": "2026-11-28T11:21:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "1d987e575ee567825b276aa72415ac07b7fc069c",
+          "subject": "fix(web): change 4 of 21",
+          "committedAt": "2026-11-28T11:14:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "6225e39142c7a16c14894ba7d1f8ebf9d792b0d0",
+          "subject": "fix(web): change 3 of 21",
+          "committedAt": "2026-11-28T11:07:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        },
+        {
+          "sha": "acac2acaf3ffdf2c42ce195c6528dd31ea83943b",
+          "subject": "fix(web): change 2 of 21",
+          "committedAt": "2026-11-28T11:00:36Z",
+          "files": [
+            {
+              "path": "src/web/src/index.css",
+              "additions": 1,
+              "deletions": 2
+            },
+            {
+              "path": "src/web/src/pages/SettingsLayout.tsx",
+              "additions": 1,
+              "deletions": 1
+            }
+          ]
+        }
+      ],
+      "commitsTruncated": true
+    },
+    "diffs": [
+      {
+        "path": "src/web/src/index.css",
+        "binary": false,
+        "patch": "diff --git a/src/web/src/index.css b/src/web/src/index.css\nindex 4915bcc..bc444d7 100644\n--- a/src/web/src/index.css\n+++ b/src/web/src/index.css\n@@ -1,3 +1,2 @@\n a { color: red; }\n-a { color: red; }\n-/* v20 */\n+/* v21 */\n"
+      }
+    ]
+  }
+}

@@ -816,7 +816,7 @@ function validRunnerResult(body: unknown, row: RequestRow): MainCheckoutActionRe
 }
 
 /** A runner's snapshot answer, kept to its shape and bounds. */
-function validSnapshotAnswer(body: unknown): MainCheckoutSnapshotAnswer {
+export function validSnapshotAnswer(body: unknown): MainCheckoutSnapshotAnswer {
   if (!body || typeof body !== 'object') throw new BadRequestException('answer must be an object');
   const b = body as Record<string, unknown>;
   if (typeof b.error === 'string' && b.error) return { error: b.error.slice(0, 500) };

@@ -427,7 +427,7 @@ export function MainCheckoutBar({ shared }: { shared?: boolean }) {
             del: pendingDel,
           }}
           foot={
-            <>
+            <div className="mck-commits-foot">
               {more > 0 && (
                 <div className="wt-commits-foot">
                   <span className="wt-dim">and {more} more not listed</span>
@@ -442,7 +442,7 @@ export function MainCheckoutBar({ shared }: { shared?: boolean }) {
                 <span className="wt-spacer" />
                 <span className="wt-dim">{checkedAgo(snapshot?.checkedAt)}</span>
               </div>
-            </>
+            </div>
           }
         />
       )}
