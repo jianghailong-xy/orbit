@@ -101,6 +101,8 @@ export class ProjectLineBlockedService {
         body: `“${line.itemTitle}” has held the landings of ${others} for `
           + `${spanInWords(now.getTime() - line.heldSince.getTime())}, and the run that must act on it went idle. `
           + `The coordinator was told ${spanInWords(now.getTime() - first.createdAt.getTime())} ago.`,
+        taskId: line.itemTaskId ?? first.subjectId,
+        sessionId: null,
       });
     }
     return told;

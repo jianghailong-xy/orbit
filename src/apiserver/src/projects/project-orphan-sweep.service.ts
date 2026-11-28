@@ -230,6 +230,8 @@ export class ProjectOrphanSweepService {
         noticeId,
         title: `${project.title}: nobody has this`,
         body: `${root.detail} ${describe(root)}`,
+        taskId: root.taskId,
+        sessionId: root.kind === 'TASK_RUN' ? root.subjectId : null,
       });
     }
     return reports;

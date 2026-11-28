@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyReferencePick,
+  chipDeletionRange,
   materializeReferences,
   referenceToken,
   segmentComposer,
@@ -63,26 +64,36 @@ describe('segmentComposer', () => {
     expect(segs.find((s) => s.type === 'ref')?.text).toBe('#W 009/250 → WARC');
   });
 
-  it('marks @mentions, including after an opening bracket', () => {
-    const segs = segmentComposer('（@wikova 看一下）', {});
-
-    expect(segs).toEqual([
-      { type: 'text', text: '（' },
-      { type: 'mention', text: '@wikova' },
-      { type: 'text', text: ' 看一下）' },
+  it('leaves an @ someone typed as prose until a session is picked', () => {
+    // `@` names a session you picked from the menu, not any word after an `@` (an email, a handle).
+    expect(segmentComposer('ask @wikova or mail a@b.co', {})).toEqual([
+      { type: 'text', text: 'ask @wikova or mail a@b.co' },
     ]);
   });
 
-  it('does not treat an @ inside a reference title as a mention', () => {
-    // The title has to contain a *matchable* mention for this to test the guard rather than the
-    // mention pattern: `@ deepseek` has a space after the `@` and never matches at all, so a
-    // fixture using it passes with the guard deleted.
-    const withAt: ReferenceMap = { 'wikids @deepseek': { kind: 'list', id: LIST_ID } };
+  it('marks a picked session with @ and a picked project with #, never one for the other', () => {
+    const both: ReferenceMap = {
+      'Deploy main': { kind: 'session', id: 'S1' },
+      'Runner link': { kind: 'project', id: 'P1' },
+    };
 
-    const segs = segmentComposer('看 #wikids @deepseek 的失败', withAt);
+    const segs = segmentComposer('@Deploy main and #Runner link, not #Deploy main', both);
 
-    expect(segs.filter((s) => s.type === 'mention')).toEqual([]);
-    expect(segs.find((s) => s.type === 'ref')?.text).toBe('#wikids @deepseek');
+    expect(segs.filter((s) => s.type === 'ref')).toEqual([
+      { type: 'ref', text: '@Deploy main', kind: 'session' },
+      { type: 'ref', text: '#Runner link', kind: 'project' },
+    ]);
+  });
+
+  it('keeps an @ inside a reference title part of that title', () => {
+    const withAt: ReferenceMap = {
+      'wikids @deepseek': { kind: 'list', id: LIST_ID },
+      deepseek: { kind: 'session', id: 'S1' },
+    };
+
+    const segs = segmentComposer('see #wikids @deepseek failures', withAt);
+
+    expect(segs.filter((s) => s.type === 'ref').map((s) => s.text)).toEqual(['#wikids @deepseek']);
   });
 
   it('finds nothing to mark when nothing has been picked', () => {
@@ -157,5 +168,57 @@ describe('referenceToken', () => {
 
   it('does not reach across a line break', () => {
     expect(referenceToken('#FineWeb\n第二行')).toBeNull();
+  });
+});
+
+describe('@ sessions and # projects', () => {
+  it('sends a picked session and project as the links the server expands', () => {
+    const picked: ReferenceMap = {
+      'Deploy main': { kind: 'session', id: 'S1' },
+      'Runner link [v2]': { kind: 'project', id: 'P1' },
+    };
+
+    expect(materializeReferences('@Deploy main is stuck; see #Runner link [v2]', picked)).toBe(
+      '[Deploy main](orbit-session:S1) is stuck; see [Runner link \\[v2\\]](orbit-project:P1)',
+    );
+  });
+
+  it('reads the @ query at the caret and replaces only it on a pick', () => {
+    const typed = 'compare #Runner link with @depl';
+
+    expect(referenceToken(typed, '@')).toBe('depl');
+    expect(referenceToken(typed)).toBeNull();
+
+    const next = applyReferencePick(typed, 'Deploy main', { kind: 'session', id: 'S1' }, {});
+
+    expect(next.text).toBe('compare #Runner link with @Deploy main ');
+    expect(next.refs).toEqual({ 'Deploy main': { kind: 'session', id: 'S1' } });
+  });
+
+  it('inserts a title holding a $ as written', () => {
+    const next = applyReferencePick('@co', 'Cost $5 cap', { kind: 'session', id: 'S1' }, {});
+
+    expect(next.text).toBe('@Cost $5 cap ');
+  });
+});
+
+describe('chipDeletionRange', () => {
+  const picked: ReferenceMap = { 'Deploy main': { kind: 'session', id: 'S1' } };
+  const typed = 'see @Deploy main why';
+
+  it('takes the whole chip and its space with one Backspace at its end or after the space', () => {
+    expect(chipDeletionRange(typed, picked, 16, 'Backspace')).toEqual({ start: 4, end: 17 });
+    expect(chipDeletionRange(typed, picked, 17, 'Backspace')).toEqual({ start: 4, end: 17 });
+  });
+
+  it('takes it with Delete at its start', () => {
+    expect(chipDeletionRange(typed, picked, 4, 'Delete')).toEqual({ start: 4, end: 17 });
+  });
+
+  it('leaves other carets to delete one character', () => {
+    expect(chipDeletionRange(typed, picked, 10, 'Backspace')).toBeNull();
+    expect(chipDeletionRange(typed, picked, 20, 'Backspace')).toBeNull();
+    expect(chipDeletionRange(typed, picked, 16, 'Delete')).toBeNull();
+    expect(chipDeletionRange('see @Deploy mai why', picked, 15, 'Backspace')).toBeNull();
   });
 });

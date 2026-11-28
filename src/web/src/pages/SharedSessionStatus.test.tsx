@@ -11,7 +11,7 @@ import { SharedSessionStatus } from './SharedSessionPage';
 type Case = {
   name: string;
   kind: string;
-  web: { state: string; icon: 'clock' | 'spinner' | 'circle' };
+  web: { state: string; icon: 'clock' | 'spinner' | 'message' };
   payload: Record<string, unknown>;
 };
 const cases: Case[] = JSON.parse(
@@ -20,8 +20,8 @@ const cases: Case[] = JSON.parse(
     'utf8',
   ),
 );
-const GLYPH = { clock: 'anticon-clock-circle', spinner: 'anticon-loading', circle: '<circle ' };
-const PHASE = { clock: 'PENDING', spinner: 'RUNNING', circle: 'IDLE' };
+const GLYPH = { clock: 'anticon-clock-circle', spinner: 'anticon-loading', message: 'anticon-message' };
+const PHASE = { clock: 'PENDING', spinner: 'RUNNING', message: 'IDLE' };
 /** The pill's own markup: everything before the word. */
 const draw = (payload: Record<string, unknown>) =>
   renderToStaticMarkup(<SharedSessionStatus head={payload} canReply={false} />);
@@ -29,7 +29,7 @@ const draw = (payload: Record<string, unknown>) =>
 describe('the shared and guest page header pill', () => {
   it('covers both payload kinds and all three icons', () => {
     expect(new Set(cases.map((c) => c.kind))).toEqual(new Set(['guestRow', 'sharedHead']));
-    expect(new Set(cases.map((c) => c.web.icon))).toEqual(new Set(['clock', 'spinner', 'circle']));
+    expect(new Set(cases.map((c) => c.web.icon))).toEqual(new Set(['clock', 'spinner', 'message']));
   });
 
   for (const c of cases) {

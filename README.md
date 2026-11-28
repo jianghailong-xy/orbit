@@ -7,165 +7,131 @@
 </p>
 
 <p align="center">
-  <a href="https://jianghailong-xy.github.io/orbit/?utm_source=github&utm_medium=readme&utm_campaign=launch&utm_content=top-en">Public website</a> ·
-  <a href="https://jianghailong-xy.github.io/orbit/zh/?utm_source=github&utm_medium=readme&utm_campaign=launch&utm_content=top-zh">中文官网</a> ·
-  <a href="#quick-start">Quick Start</a> ·
-  <a href="docs/90-second-demo.md">90-second demo</a> ·
-  <a href="docs/launch-copy.md">Launch kit</a> ·
-  <a href="examples/demo-repo/">Demo repo</a> ·
-  <a href="docs/self-hosting.md">Operations</a> ·
-  <a href="CHANGELOG.md">Changelog</a> ·
-  <a href="SUPPORT.md">Support</a>
-</p>
-
-The [public Orbit entrance](https://jianghailong-xy.github.io/orbit/?utm_source=github&utm_medium=readme&utm_campaign=launch&utm_content=intro-en)
-is a concise, mobile-friendly path through the product story, 90-second demo, Quick Start, architecture and
-security boundaries, FAQ, community links, and roadmap. The [简体中文入口](https://jianghailong-xy.github.io/orbit/zh/?utm_source=github&utm_medium=readme&utm_campaign=launch&utm_content=intro-zh)
-contains the equivalent path; both pages offer an explicit 中文 / English switch. They point back here for the
-complete operator docs and preserve the Sparkle update feed at [`appcast.xml`](https://jianghailong-xy.github.io/orbit/appcast.xml).
-
-<p align="center">
   <a href="https://github.com/jianghailong-xy/orbit/releases"><img alt="GitHub release" src="https://img.shields.io/github/v/release/jianghailong-xy/orbit?include_prereleases&sort=semver"></a>
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-3370ff"></a>
   <a href="https://github.com/jianghailong-xy/orbit/actions/workflows/client.yml"><img alt="Native client CI" src="https://github.com/jianghailong-xy/orbit/actions/workflows/client.yml/badge.svg"></a>
 </p>
 
-Orbit is for small engineering and infrastructure teams already running coding agents against private code
-or internal systems. It keeps work visible and resumable across sessions, machines, and context windows while
-leaving execution on machines you choose. Individual power users coordinating several agent sessions across
-machines are a good secondary audience.
+<p align="center">
+  <a href="#quick-start">Quick Start</a> ·
+  <a href="docs/90-second-demo.md">90-second demo</a> ·
+  <a href="docs/README.md">Docs</a> ·
+  <a href="docs/self-hosting.md">Self-hosting</a> ·
+  <a href="SECURITY.md">Security</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
 
-**Start here:** follow [Quick Start](#quick-start), then use **Add a runner** in the web UI. The first command
-installs the runner and opens the browser approval flow; once the runner is online, create a workspace for a
-checkout and launch your first task.
+Orbit is for small engineering and infrastructure teams already running coding agents against private code or
+internal systems; individual power users coordinating several agent sessions across machines are a good secondary
+audience. It keeps work visible and resumable across sessions, machines, and context windows, while execution
+stays on machines you choose.
 
-Orbit is self-hosted. You operate the server, register runners, install and authenticate an agent runtime, and
-choose the access controls, TLS, backups, and host hardening that fit your environment. It is not a managed SaaS,
-a no-setup autonomous coding service, or a security sandbox.
+> [!NOTE]
+> Orbit is self-hosted: you operate the server, register runners, install and authenticate an agent runtime, and
+> choose the access controls, TLS, backups, and host hardening. It is not a managed SaaS, a no-setup autonomous
+> coding service, or a security sandbox.
 
 ## Three launch scenarios
 
-These are the three ways Orbit earns its place. They are deliberately ordered to match the
-[launch messaging brief](docs/messaging-brief.md) and the [90-second demo](docs/90-second-demo.md).
+The names and order follow the [launch messaging brief](docs/messaging-brief.md).
 
-### 1. Work that outlives a chat
+**1. Work that outlives a chat.** Turn a multi-day migration, refactor, or test rescue into a durable task graph.
+Dependencies, comments, and session history survive context limits, restarts, and a closed browser, so the next
+session continues without reconstructing the plan.
 
-Turn a multi-day migration, refactor, or test rescue into a durable task graph. Dependencies, comments, and
-session history survive context limits, restarts, and a closed browser, so the next session can continue without
-reconstructing the plan.
+**2. Parallel agents without checkout collisions.** Split a backlog across runners with a separate git worktree
+per session. Agents work concurrently; you review the diffs and choose what to merge. A worktree prevents file
+collisions, but it is not a security boundary.
 
-**Show:** task list → dependency → resumable session → result and comment history.
-
-### 2. Parallel agents without checkout collisions
-
-Split a backlog across runners and enable a separate git worktree per session. Agents can work concurrently;
-you review the diffs and choose what to merge. A worktree prevents file collisions, but it is not a security
-boundary.
-
-**Show:** two tasks dispatched → isolated worktrees → diff review → human merge decision.
-
-### 3. Access to private infrastructure
-
-Run a runner on a machine that already has the required repository, internal CLI, VPN, or cluster access.
-Runners poll outward, and a risky command can appear as an approval card before it proceeds.
-
-**Show:** runner inside the private network → command approval → transcript and outcome. The runner account still
-has the OS access you grant it.
-
-## See the product
+**3. Access to private infrastructure.** Put a runner on a machine that already has the repository, internal CLI,
+VPN, or cluster access. Runners poll outward, and a risky command can appear as an approval card before it
+proceeds. The runner account still has the OS access you grant it.
 
 [![Orbit project and merge-review UI preview](docs/mocks/project-progress/04-merge-to-main.png)](docs/90-second-demo.md)
 
-*UI preview from the repository's design evidence; it is an annotated product image, not a hosted-service
-guarantee. The timed narration and exact claims are in the [90-second demo storyboard](docs/90-second-demo.md).*
+*An annotated UI preview from the repository's design evidence, not a hosted-service guarantee. The narrated
+walkthrough is the [90-second demo](docs/90-second-demo.md).*
 
 ## Quick Start
 
-This path gets a small trusted team from a fresh Linux host to an online runner. The server is normally run with
-Docker Compose; the runner can be a Linux or macOS machine with a supported coding-agent CLI. Keep the server and
-runner on a private network until you have put HTTPS and host controls in place.
+From a fresh Linux host to an online runner and a first task. Keep the server and runner on a private network
+until HTTPS and host controls are in place — see the [hardening guide](docs/self-hosting.md) and
+[security policy](SECURITY.md).
 
-### 1. Start the self-hosted control plane
+### 1. Start the control plane
 
-Requirements: Docker Engine with the Compose plugin, Git, OpenSSL, and a machine that can build the images. Node
-and Go are not required for the Compose install.
+Requires Docker Engine with the Compose plugin, Git, and OpenSSL (no Node or Go).
 
 ```bash
 git clone https://github.com/jianghailong-xy/orbit.git
 cd orbit
-# Optional but recommended: pin a reviewed release tag (the package version with a v prefix):
+# Recommended: pin a reviewed release tag (the package version with a v prefix)
 # git checkout vX.Y.Z
 scripts/install-server.sh
 docker compose ps
 ```
 
-The install script writes `.env` with independently generated secrets (never commit it), sets up the
-[runner link](docs/self-hosting.md#runner-link), builds the images and starts the stack.
-[Managed runners](docs/self-hosting.md#managed-runners) (Orbit Cloud) are off unless you add `--managed-runners`: with
-them on, every account gets a runner of its own, a container on this host's Docker, when it signs in. Read who gets one
-and how far a container isolates it before you open sign-up. The link needs no port or certificate of its own: runners reach it through
-the same port as the web, encrypted where that is.
-To install by hand instead, write `.env` as [self-hosting](docs/self-hosting.md#1-configure-the-deployment)
-describes and run `docker compose up -d --build`.
+Open <http://localhost:2086>. The first visitor is redirected to `/setup` and becomes the administrator.
 
-The build stamps the downloadable runner with the commit from the checkout. If you build from a source archive,
-which carries no Git metadata, name that revision explicitly (the install script reads it too):
-`ORBIT_SOURCE_SHA=<40-character commit> docker compose up -d --build`. Do not put it in `.env`, where it would
-become stale after an upgrade.
+<details>
+<summary>What the install script does, and options</summary>
 
-The gateway listens on <http://localhost:2086> by default. The first visitor is redirected to `/setup` and
-becomes the initial administrator. For a network deployment, give the external HTTPS origin before the web image
-is built (`scripts/install-server.sh --public-origin https://orbit.example.com`, or `PUBLIC_ORIGIN` in `.env`) and
-follow the [self-hosting hardening guide](docs/self-hosting.md) and [security policy](SECURITY.md).
+- Writes `.env` with independently generated secrets (never commit it), sets up the
+  [runner link](docs/self-hosting.md#runner-link), builds the images, and starts the stack. The link needs no port
+  or certificate of its own: runners reach it through the same port as the web, encrypted where that is.
+- **Public origin:** for a network deployment, give the external HTTPS origin before the web image is built:
+  `scripts/install-server.sh --public-origin https://orbit.example.com` (or `PUBLIC_ORIGIN` in `.env`).
+- **Managed runners** ([Orbit Cloud](docs/self-hosting.md#managed-runners)) are off unless you pass
+  `--managed-runners`. With them on, every account gets its own runner, a container on this host's Docker, when it
+  signs in. Read who gets one and how far a container isolates it before you open sign-up.
+- **Source archives:** the build stamps the downloadable runner with the checkout's commit. Without Git metadata,
+  name it explicitly: `ORBIT_SOURCE_SHA=<40-character commit> docker compose up -d --build`. Do not put it in
+  `.env`, where it would go stale after an upgrade.
+- **By hand:** write `.env` as [self-hosting](docs/self-hosting.md#1-configure-the-deployment) describes, then
+  run `docker compose up -d --build`.
+
+</details>
 
 ### 2. Add a runner
 
-With managed runners on, every account is already given one at sign-in, and it takes sessions once a runtime is
-signed in on it. Register a machine of your own as well when the work needs that machine's repositories, network or
-credentials.
-
-In the web UI, open **Infrastructure → Add → Register a machine**, choose Linux or macOS, and copy the command shown for your
-deployment. The current installer is one command because it downloads the static runner and then runs
-`orbit register`:
+In the web UI, open **Infrastructure → Add → Register a machine**, choose Linux or macOS, and run the command it
+shows **on the machine that has the repository, internal tools, VPN, and agent credentials**:
 
 ```bash
 curl -fsSL http://localhost:2086/install.sh | bash
 ```
 
-The command must run on the machine that has the repository, internal tools, VPN, and agent credentials. It opens
-a browser approval URL (or prints one to copy); approve the machine in Orbit. The UI polls the runner list and
-shows **Runner online** after the first heartbeat. If you are provisioning non-interactively, create a one-time
-enrollment token with `POST /api/runners/enrollment-tokens` while signed in (the web UI has no button for it, and a
-personal access token is refused) and pass it to `orbit register --token`; never put a long-lived runner token in
-source control.
-
-Useful checks on the runner are:
+It downloads the static runner, runs `orbit register`, and opens (or prints) a browser approval URL. Approve the
+machine; the UI shows **Runner online** after the first heartbeat. Then check the runner:
 
 ```bash
 orbit status
-orbit doctor
+orbit doctor   # is Claude Code, Codex, Kimi Code, or OpenCode installed and signed in?
 ```
 
-`orbit doctor` reports whether Claude Code, Codex, Kimi Code, or OpenCode is installed and signed in. Orbit does
-not move those engine credentials to the control plane. Install and authenticate at least one supported runtime
-on the runner before starting a task.
+Install and authenticate at least one supported runtime on the runner; Orbit does not move engine credentials to
+the control plane. With managed runners on, each account already has a runner, which takes sessions once a runtime
+is signed in on it — register your own machine when the work needs its repositories, network, or credentials.
 
-### 3. Create a workspace and run a first task
+<details>
+<summary>Non-interactive registration</summary>
 
-After the runner is online, choose **Create a workspace**, select the runner, and point the workspace at a Git
-checkout. Start with the [Demo repo fixture](examples/demo-repo/) if you do not want to use a private project.
-Create a task such as “run the tests and explain the result”, assign it to the workspace, and start it. The task
-graph, transcript, approvals, and result remain in Orbit even if you close the browser.
+While signed in, create a one-time enrollment token with `POST /api/runners/enrollment-tokens` (the web UI has no
+button for it, and a personal access token is refused) and pass it to `orbit register --token`. Never put a
+long-lived runner token in source control.
 
-For a copyable operator checklist, troubleshooting, upgrades, backups, and TLS, see [Self-hosting](docs/self-hosting.md).
-For a local development install, see [Development](docs/development.md).
+</details>
 
-### What we measured on a clean host
+### 3. Run a first task
 
-The repository includes a dated, sanitized run record rather than an invented “five-minute install” claim:
-[clean-host install and runner smoke test](docs/evidence/clean-install-2026-09-29.md). It records the exact commit,
-tool versions, elapsed time, commands, online-heartbeat check, and the point where provider availability blocked
-the first real task.
+Choose **Create a workspace**, select the runner, and point it at a Git checkout — or copy the tiny
+[demo repo](examples/demo-repo/) into a standalone repository if you'd rather not use a private project. Create a
+task such as “run the tests and explain the result”, assign it to the workspace, and start it. The task graph,
+transcript, approvals, and result stay in Orbit even if you close the browser.
+
+Next: upgrades, backups, TLS, and troubleshooting are in [Self-hosting](docs/self-hosting.md). The
+[clean-host install record](docs/evidence/clean-install-2026-09-29.md) shows a dated, sanitized run of this path —
+exact commit, tool versions, elapsed time, and where provider availability blocked the first real task.
 
 ## What Orbit provides
 
@@ -189,112 +155,99 @@ Web / macOS / iOS ── REST + SSE ──▶ Control plane + PostgreSQL ◀─�
                                                                               optional git worktree
 ```
 
-- **Control plane:** NestJS, Prisma, and PostgreSQL own users, workspaces, sessions, projects, tasks,
-  approvals, runners, attachments, and usage.
+- **Control plane:** NestJS, Prisma, and PostgreSQL own users, workspaces, sessions, projects, tasks, approvals,
+  runners, attachments, and usage.
 - **Runner:** a small static Go CLI registers a machine, claims work, drives the selected local runtime, and
   reports heartbeats, transcripts, approvals, and outcomes.
-- **Clients and gateway:** Vite/React web plus shared SwiftUI clients; nginx exposes the web and `/api` through
-  one origin in the Compose deployment.
+- **Clients and gateway:** Vite/React web plus shared SwiftUI clients; nginx serves the web and `/api` from one
+  origin in the Compose deployment.
 
-Runners make outbound connections; the control plane does not need inbound access to a runner. That is a network
-topology, not a sandbox: agent processes inherit the runner OS account's permissions, and a worktree is file
-collision isolation rather than a security boundary. Use least-privilege accounts, unique secrets, HTTPS before
-network exposure, off-host backups, and a tested restore procedure. Read [Architecture](docs/architecture.md),
-[Security](SECURITY.md), [Self-hosting hardening](docs/self-hosting.md), and [HUMAN_ONLY authority](docs/human-only-authority.md)
-before attaching sensitive infrastructure.
-
-## Demo repo
-
-The [Demo repo fixture](examples/demo-repo/) is intentionally tiny: a Git checkout with a test command and a
-starter task prompt. It is committed here so the onboarding path is reviewable and reproducible; copy that
-directory into a standalone Git repository (or use this checkout as the workspace directory) before assigning it
-to a runner. It does not require production credentials and is not a substitute for testing your own network and
-permission policy.
-
-## Read, share, and collaborate
-
-The [long-running-work article](docs/article-durable-agent-work.md) explains how task graphs, handoff comments,
-and resumable sessions keep a migration legible across context windows. The [private multi-runtime article](docs/article-private-multi-runtime-control-plane.md)
-covers runner placement, approvals, worktrees, and runtime choice. For a first announcement, use the
-[launch copy pack](docs/launch-copy.md); for a fact-checked partner story, start with the
-[design-partner case-study template](docs/design-partner-case-study-template.md).
+Runners connect outward; the control plane needs no inbound access to a runner. That is a network topology, not a
+sandbox: agent processes inherit the runner OS account's permissions. Use least-privilege accounts, unique
+secrets, HTTPS before network exposure, off-host backups, and a tested restore. Read
+[Architecture](docs/architecture.md), [Security](SECURITY.md), [Self-hosting hardening](docs/self-hosting.md), and
+[HUMAN_ONLY authority](docs/human-only-authority.md) before attaching sensitive infrastructure.
 
 ## FAQ
 
-### Is Orbit hosted for me?
+<details>
+<summary><strong>Is Orbit hosted for me?</strong></summary>
 
-No. You run the control plane and PostgreSQL, and you decide where it is reachable. The included Compose gateway
-is HTTP-only and intended as a starting point; put TLS and access controls in front of it before exposing it to a
-network.
+No. You run the control plane and PostgreSQL and decide where they are reachable. The included Compose gateway is
+HTTP-only and a starting point; put TLS and access controls in front of it before exposing it to a network.
 
-### Do my model or engine credentials leave the runner?
+</details>
 
-The supported coding-agent CLIs use the runner's local configuration and credentials. The control plane stores
+<details>
+<summary><strong>Do my model or engine credentials leave the runner?</strong></summary>
+
+The supported coding-agent CLIs use the runner's local configuration and credentials. The control plane stores the
 metadata and transcripts needed for coordination; provider behavior and billing remain the provider's
 responsibility. A self-hosted Codex pool is a separate control-plane feature documented in
 [Self-hosting](docs/self-hosting.md).
 
-### Is a worktree a security sandbox?
+</details>
+
+<details>
+<summary><strong>Is a worktree a security sandbox?</strong></summary>
 
 No. It reduces checkout collisions between concurrent sessions. Processes still run as the runner OS account and
-can access whatever that account can access. Use a separate least-privilege host/account when the trust boundary
+can reach whatever that account can. Use a separate least-privilege host or account when the trust boundary
 requires it.
 
-### What happens if the runner or browser goes away?
+</details>
 
-The task graph and session history live in the control plane. A runner that loses heartbeats is treated as offline;
-other eligible runners can continue queued work. Exact resume behavior, model features, and usage data vary by
-engine and provider, so verify the behavior you need before relying on it.
+<details>
+<summary><strong>What happens if the runner or browser goes away?</strong></summary>
 
-### Which agent runtimes are supported?
+The task graph and session history live in the control plane. A runner that stops sending heartbeats is treated as
+offline, and other eligible runners can continue queued work. Resume behavior, model features, and usage data vary
+by engine and provider, so verify the behavior you need before relying on it.
 
-The control plane and runner know about Claude Code, Codex, Kimi Code, and OpenCode. The runtime must be installed
-and authenticated on the runner; `orbit doctor` is the first diagnostic. Feature parity is not promised across
-engines.
+</details>
 
-### Can I run the server without Docker?
+<details>
+<summary><strong>Which agent runtimes are supported?</strong></summary>
 
-For contributors, yes: see [Development](docs/development.md) for Node/PostgreSQL and web/API commands. The
-documented operator path is Docker Compose because it keeps the gateway, API, PostgreSQL, and backup sidecar
-together.
+Claude Code, Codex, Kimi Code, and OpenCode. The runtime must be installed and authenticated on the runner;
+`orbit doctor` is the first diagnostic. Feature parity across engines is not promised.
 
-### Which version should I run?
+</details>
 
-Orbit is a pre-1.0 open-source project under active development. Pin deployments to a tagged release and review
-upgrade notes before changing versions. The latest published release receives best-effort security fixes; `main`
-is a development branch and older releases are not supported.
+<details>
+<summary><strong>Can I run the server without Docker?</strong></summary>
 
-The root `package.json` version is the version of record. A release tag is that version with a `v` prefix,
-and the GitHub Release, macOS DMG, TestFlight build, Android APK, runner binaries and update feeds all
-derive from it. The rules, support window, release notes and checklist are in
-[Release process](docs/release-process.md); run `node scripts/release-identity.mjs check-tag <tag>` to check
-one release's identity. The [curated changelog](CHANGELOG.md) summarizes notable changes across releases,
-and each tag's operator-facing notes are on the [Releases page](https://github.com/jianghailong-xy/orbit/releases). Every release also publishes `SHA256SUMS`, a CycloneDX SBOM, an in-toto/SLSA
-provenance statement and a GitHub artifact attestation; [Verifiable release supply chain](docs/supply-chain.md)
-gives the commands that verify them and the signing identities behind them. Tags published before this rule
-do not share the package version; treat them as history, not as a pattern.
+For development, yes — see [Develop locally](#develop-locally). The documented operator path is Docker Compose
+because it keeps the gateway, API, PostgreSQL, and backup sidecar together.
 
-## Roadmap (direction, not dates)
+</details>
 
-The roadmap is intentionally a set of adoption gates rather than a promise of delivery dates.
+## Project status and releases
 
-- **Now:** make the clean-install smoke test repeatable, keep the README/demo/security claims in sync, keep
-  one version scheme across server, web, runner, and native artifacts, and keep the public roadmap and
-  changelog current.
-- **Next:** v1.0 readiness review, the OpenSSF best-practices baseline, broader maintainer coverage, and
-  compatibility and migration guarantees only after the evidence gates are met.
-- **Later:** recurring schedules and inbound task sources (ticket/chat ingestion), which are designed for but not
-  built; versioned docs for a stable line. Any name, repository-organization, domain, or release-account change
-  is a project-owner decision and is not scheduled here.
+Orbit is a **pre-1.0 open-source project under active development**. Pin deployments to a tagged release and
+review upgrade notes before changing versions. The latest published release receives best-effort security fixes;
+`main` is a development branch and older releases are not supported.
 
-See the [public roadmap](ROADMAP.md), the [curated changelog](CHANGELOG.md), the [full maturity
-roadmap](docs/project-maturity.md), and the [canonical launch brief](docs/messaging-brief.md) for the evidence
-required before calling a release production-ready.
+Core functionality is in place: distributed runners, interactive sessions, project coordination, task graphs,
+approvals, worktree isolation, multi-runtime support, web and native clients, runner recovery, backups, and usage
+reporting. Recurring schedules and inbound task sources (ticket/chat ingestion) are designed for but not yet built.
+
+- **One version:** the root `package.json` version is the version of record, and a release tag is that version
+  with a `v` prefix. The GitHub Release, macOS DMG, TestFlight build, Android APK, runner binaries, and update feeds
+  all derive from it ([Release process](docs/release-process.md); check a tag with
+  `node scripts/release-identity.mjs check-tag <tag>`). Tags published before this rule do not share the package
+  version; treat them as history, not as a pattern.
+- **Verifiable artifacts:** every release publishes `SHA256SUMS`, a CycloneDX SBOM, an in-toto/SLSA provenance
+  statement, and a GitHub artifact attestation — see [Verifiable release supply chain](docs/supply-chain.md).
+- **What changed:** the [curated changelog](CHANGELOG.md) and each tag's notes on the
+  [Releases page](https://github.com/jianghailong-xy/orbit/releases).
+- **Where it's going:** the [public roadmap](ROADMAP.md) (adoption gates, not dates) and the
+  [maturity roadmap](docs/project-maturity.md) list the evidence required before calling a release
+  production-ready.
 
 ## Develop locally
 
-Contributors need Node.js 26+, Docker or PostgreSQL 16, and Go 1.27+ when changing the runner. The shortest API
-and web loop is:
+Contributors need Node.js 26+, Docker or PostgreSQL 16, and Go 1.27+ when changing the runner:
 
 ```bash
 npm install
@@ -305,45 +258,28 @@ npm run prisma:migrate -w @orbit/apiserver
 npm run dev:apiserver
 ```
 
-In another terminal, run `npm run dev:web`. The API is on <http://localhost:3000> and Vite is on
-<http://localhost:5173>; the [development guide](docs/development.md) covers tests, repository layout, and native
-clients.
+In another terminal, run `npm run dev:web`. The API is on <http://localhost:3000> and Vite on
+<http://localhost:5173>. The [development guide](docs/development.md) covers tests, repository layout, and the
+native clients.
 
-## Support and contribution
+## Community and support
 
-- Installation and usage questions: start with the [documentation index](docs/README.md), then use the
-  [support guide](SUPPORT.md).
-- Reproducible bugs and feature proposals: use the [GitHub issue forms](https://github.com/jianghailong-xy/orbit/issues).
-- Security vulnerabilities: follow [SECURITY.md](SECURITY.md); do not publish details in a public issue.
-- Contributions: read [CONTRIBUTING.md](CONTRIBUTING.md) and [GOVERNANCE.md](GOVERNANCE.md).
+- **Questions:** start with the [documentation index](docs/README.md) and the [support guide](SUPPORT.md), then
+  [GitHub Discussions](https://github.com/jianghailong-xy/orbit/discussions). Give feedback on a release you
+  upgraded to in the [release feedback discussion](https://github.com/jianghailong-xy/orbit/discussions/159).
+- **Bugs and proposals:** use the [GitHub issue forms](https://github.com/jianghailong-xy/orbit/issues).
+- **Security vulnerabilities:** follow [SECURITY.md](SECURITY.md); never in a public issue.
+- **Contributing:** read [CONTRIBUTING.md](CONTRIBUTING.md), the [Code of Conduct](CODE_OF_CONDUCT.md), and
+  [GOVERNANCE.md](GOVERNANCE.md), then pick a
+  [good first issue](https://github.com/jianghailong-xy/orbit/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
+  The [community guide](COMMUNITY.md) has more.
+- **Further reading:** [durable agent work](docs/article-durable-agent-work.md) and
+  [a private multi-runtime control plane](docs/article-private-multi-runtime-control-plane.md).
 
-## Project status
-
-Orbit is a **pre-1.0 open-source project under active development**. Pin deployments to a tagged release and
-review upgrade notes before changing versions. The latest published release receives best-effort security
-fixes; `main` is a development branch and older releases are not supported.
-
-Core functionality is in place: distributed runners, interactive sessions, project coordination, task graphs,
-approvals, worktree isolation, multi-runtime support, web and native clients, runner recovery, backups, and
-usage reporting. Before relying on Orbit for critical production work, review the [security policy](SECURITY.md),
-[self-hosting hardening guide](docs/self-hosting.md), backup runbook, and release notes. Recurring schedules
-and inbound task sources are not yet built.
-
-## Community
-
-- Start with the [community guide](COMMUNITY.md), [public roadmap](ROADMAP.md), or [documentation index](docs/README.md).
-- Read the [curated changelog](CHANGELOG.md), and give feedback on a release you upgraded to in the fixed
-  [release feedback discussion](https://github.com/jianghailong-xy/orbit/discussions/159).
-- Ask questions, share a deployment, or discuss direction in [GitHub Discussions](https://github.com/jianghailong-xy/orbit/discussions).
-- Report a reproducible bug or scoped proposal with [GitHub Issues](https://github.com/jianghailong-xy/orbit/issues); the repository's Issue Forms explain what to include.
-- Pick a small, independently scoped task from the [good first issue list](https://github.com/jianghailong-xy/orbit/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
-- Read [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md) before participating.
-- Project decisions and maintainer responsibilities are described in [GOVERNANCE.md](GOVERNANCE.md); security issues must follow [SECURITY.md](SECURITY.md), not a public issue.
-
-Support is community-maintained and best effort; it is not an emergency channel, SLA, or enterprise support
-contract. Sanitize logs and never post tokens, cookies, API keys, private hostnames, repository contents, or
-runner configuration.
+Support is community-maintained and best effort — not an emergency channel, SLA, or enterprise support contract.
+Sanitize logs and never post tokens, cookies, API keys, private hostnames, repository contents, or runner
+configuration.
 
 ## License
 
-Orbit is available under the [MIT License](LICENSE).
+[MIT](LICENSE).

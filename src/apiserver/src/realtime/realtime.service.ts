@@ -2,7 +2,7 @@ import { questionsWithCoordinator } from '../sessions/run-question';
 import { KEEP_BACKGROUND_WORK_END_CONTENT } from '../sessions/running-work';
 import { readMergeRecovery, type MergeRecoveryAction, type SessionPhaseFields } from '@orbit/shared';
 import { readOneSessionPhaseFields } from '../sessions/session-phase';
-import { readOneSessionBackgroundFields } from '../sessions/task-work-carrier';
+import { readCreatedTasksActive, readOneSessionBackgroundFields } from '../sessions/task-work-carrier';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { EventEmitter } from 'events';
 import { randomUUID } from 'crypto';
@@ -1964,6 +1964,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       ...(await readOneSessionPhaseFields(this.prisma, sessionId, pendingApprovals)),
       // The Background mark's inputs, activity and runningBgCount, as the list row reads them.
       ...(await readOneSessionBackgroundFields(this.prisma, sessionId)),
+      // The tasks it created that are running or queued now, as the list row reads them.
+      createdTasksActive: (await readCreatedTasksActive(this.prisma, s.ownerId, [sessionId])).get(sessionId) ?? null,
       confirmationUnderReview: underReview
         ? {
           ...underReview,

@@ -6,6 +6,7 @@ import { Observable } from 'rxjs';
 import type { PrismaService } from '../prisma/prisma.service';
 import { readOpenListVersionParts } from '../sessions/open-list-version';
 import { sessionTurnStateSql } from '../sessions/session-turn-state';
+import { sessionCarriesTaskSql } from '../sessions/task-work-carrier';
 
 /** How often the account counters are summed, and so the soonest a hint follows a write. */
 export const LIST_CHANGED_COUNTER_EVERY_MS = 1_000;
@@ -32,11 +33,14 @@ interface Watched {
   always: Set<string>;
   /** The account's `session` counter total when `always` was read; undefined until it is. */
   alwaysAt?: string;
+  /** The task-run pairs (rule 5) of the previous tick, so a run that stopped carrying its task in this one still
+   *  names its creator's workspace. */
+  carried?: Array<[string, string]>;
 }
 
 /** One row of a tick's statement: a counter key, an open request's two workspaces, an always-rebuilt workspace, or a re-read of those. */
 interface TickRow {
-  kind: 'k' | 'p' | 'a' | 'r';
+  kind: 'k' | 'p' | 't' | 'a' | 'r';
   owner_id: string;
   a: string | null;
   b: string | null;
@@ -83,7 +87,11 @@ const listed = (alias: string): Prisma.Sql => {
  *   other sessions on its runner, which a `since=` read rebuilds on every read. Those are read again
  *   whenever the account's `session` keys moved. A row rooted in a LANDING session, which that read
  *   rebuilds too, is not one of them: the landing's own writes move no counter (open_list_bump_session
- *   counts CONVERSATION rows only) and its progress writes account-wide sources, which name no workspace.
+ *   counts CONVERSATION rows only) and its progress writes account-wide sources, which name no workspace;
+ * - when a session running a task moved, for the workspace of the session that created the task (rule 5):
+ *   that row counts its created tasks that are running and queued (`readCreatedTasksActive`). The pairs are
+ *   the runs that carry a task now and those that did at the previous tick, so the write that ends a run's
+ *   carry, after which this tick no longer reads its pair, still names the creator's workspace.
  * Every other stream is told exactly what it was before: `{ version }`, whenever the token moved.
  *
  * What a stream was told is kept per stream, not per account. A new stream is told the current
@@ -170,10 +178,12 @@ export class OpenListHints {
     const ids = [...this.owners.keys()];
     if (ids.length === 0) return;
     try {
-      const read = new Map<string, { keys: Map<string, bigint>; pairs: Array<[string, string]>; always?: Set<string>; alwaysAt?: string }>();
+      const read = new Map<string, {
+        keys: Map<string, bigint>; pairs: Array<[string, string]>; carried: Array<[string, string]>; always?: Set<string>; alwaysAt?: string;
+      }>();
       const of = (ownerId: string) => {
         let found = read.get(ownerId);
-        if (!found) read.set(ownerId, found = { keys: new Map(), pairs: [] });
+        if (!found) read.set(ownerId, found = { keys: new Map(), pairs: [], carried: [] });
         return found;
       };
       const always: Array<[string, string]> = [];
@@ -181,6 +191,7 @@ export class OpenListHints {
         const owner = of(row.owner_id);
         if (row.kind === 'k') owner.keys.set(row.a!, BigInt(row.b!));
         else if (row.kind === 'p') owner.pairs.push([row.a!, row.b!]);
+        else if (row.kind === 't') owner.carried.push([row.a!, row.b!]);
         else if (row.kind === 'r') {
           owner.always = new Set();
           owner.alwaysAt = row.a!;
@@ -193,7 +204,7 @@ export class OpenListHints {
       await Promise.all(ids.map(async (ownerId) => {
         const watched = this.owners.get(ownerId);
         if (!watched) return;
-        const { keys, pairs, always: rebuilt, alwaysAt } = of(ownerId);
+        const { keys, pairs, carried, always: rebuilt, alwaysAt } = of(ownerId);
         // Read just now, whatever becomes of the rest of this account's tick.
         if (rebuilt) {
           watched.always = rebuilt;
@@ -209,8 +220,11 @@ export class OpenListHints {
         const sum = [...keys.values()].reduce((total, epoch) => total + epoch, 0n).toString();
         // Opaque to clients, which compare it with the previous hint's only.
         const version = createHash('sha256').update(`${sum}|${clockPart}`).digest('base64url').slice(0, 27);
-        const scopes = movedScopes(watched.keys, keys, watched.clockPart !== clockPart, pairs, watched.always);
+        const scopes = movedScopes(
+          watched.keys, keys, watched.clockPart !== clockPart, [...pairs, ...carried, ...(watched.carried ?? [])], watched.always,
+        );
         watched.keys = keys;
+        watched.carried = carried;
         watched.clockPart = clockPart;
         for (const stream of watched.streams) {
           const first = stream.told === undefined;
@@ -238,7 +252,8 @@ export class OpenListHints {
  * partial OPEN indexes; and, for an account whose `session` keys moved since they were last read (`held`: the
  * `session` total each account's were read at; an account not in it was never read), the workspaces holding an
  * Open queued row (rule 4), through session_owner_held_task_idx, marked by an `r` row with the `session`
- * total they were read at. No branch scans an account's sessions.
+ * total they were read at; and the workspaces of each session carrying a task and of the session that created
+ * the task (rule 5), over the carriers alone. No branch scans an account's sessions.
  */
 export function openListTickStatement(ids: readonly string[], held: ReadonlyArray<readonly [string, string]>): Prisma.Sql {
   return Prisma.sql`
@@ -271,6 +286,13 @@ export function openListTickStatement(ids: readonly string[], held: ReadonlyArra
         JOIN session t ON t.id = r.to_session_id
        WHERE r.state = 'OPEN' AND r.owner_id = ANY(${[...ids]}::uuid[])
          AND f.workspace_id IS NOT NULL AND t.workspace_id IS NOT NULL
+      UNION ALL
+      SELECT DISTINCT 't', c.owner_id::text, c.workspace_id::text, cr.workspace_id::text
+        FROM session c
+        JOIN task k ON k.id = c.task_id
+        JOIN session cr ON cr.id = k.creator_session_id
+       WHERE c.owner_id = ANY(${[...ids]}::uuid[]) AND c.task_id IS NOT NULL AND ${Prisma.raw(sessionCarriesTaskSql('c'))}
+         AND c.workspace_id IS NOT NULL AND cr.workspace_id IS NOT NULL
       UNION ALL
       SELECT DISTINCT 'a', x.owner_id::text, x.workspace_id::text, NULL::text
         FROM session x

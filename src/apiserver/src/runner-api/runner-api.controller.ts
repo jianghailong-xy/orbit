@@ -1094,6 +1094,8 @@ interface HandedTurn {
   /** Who outside Orbit sent it (migration 0502): what the runner's delivery says to the agent. */
   externalSenderSource: string | null;
   externalSenderName: string | null;
+  /** A person sent it (migration 1490): with no external sender, the owner's own words, whose references expand fully. */
+  byPerson: boolean;
   /** A wiki chat's page and selection, as ids (migration 0476): what `appendWikiChatNotes` reads. */
   wikiContext: unknown;
   /** The app a config turn's change came from (migration 0595): what the actual-mode change it causes names. */
@@ -6231,6 +6233,7 @@ export class RunnerApiController {
                    "sender_session_id" AS "senderSessionId",
                    "external_sender_source" AS "externalSenderSource",
                    "external_sender_name" AS "externalSenderName",
+                   "by_person" AS "byPerson",
                    "wiki_context" AS "wikiContext",
                    "sender_client" AS "senderClient",
                    "drive_context" AS "driveContext"
@@ -6499,6 +6502,7 @@ export class RunnerApiController {
                   "sender_session_id" AS "senderSessionId",
                   "external_sender_source" AS "externalSenderSource",
                   "external_sender_name" AS "externalSenderName",
+                  "by_person" AS "byPerson",
                   "wiki_context" AS "wikiContext",
                   "sender_client" AS "senderClient",
                   "drive_context" AS "driveContext"
@@ -6543,6 +6547,8 @@ export class RunnerApiController {
             // drive is mounted where the session runs.
             openedBy: true,
             assignedRunnerId: true,
+            // Whether this conversation's opening prompt is the owner's words (a task run's is Orbit's).
+            taskId: true,
             // A schedule's change conversation names its schedule on every message (appendScheduleChangeNote).
             changeScheduleId: true,
           },
@@ -6629,8 +6635,24 @@ export class RunnerApiController {
           // Scoped to the session's owner, not the runner: a reference resolves only against
           // what the person sending it may already see, so a stray id from elsewhere expands to
           // nothing rather than leaking another tenant's list into a prompt.
+          //
+          // The owner's own words also name sessions and projects — as a chip, a pasted URL or a bare
+          // id (docs/composer-references-design.md §3.1). `by_person` marks them, except the opening
+          // prompt of a conversation the owner opened, which its writer does not mark. A guest's or
+          // Feishu sender's turn is a person's too, but not the owner's: theirs expand as before.
           if (sessionContext) {
-            content = (await this.references.expand(sessionContext.ownerId, content)) ?? content;
+            const ownersOpening =
+              (t.clientTurnId ?? '').startsWith('initial') &&
+              sessionContext.openedBy === 'PERSON' &&
+              sessionContext.taskId == null &&
+              t.senderSessionId == null;
+            const byOwner = (t.byPerson === true || ownersOpening) && t.externalSenderSource == null;
+            content =
+              (await this.references.expand(sessionContext.ownerId, content, {
+                byOwner,
+                sessionId,
+                runnerId: sessionContext.assignedRunnerId,
+              })) ?? content;
           }
           // A wiki chat's message (wiki contract `chat.notes`): its first carries the chat's standing
           // rules, and any carries the page and the selection it was sent with, read now from the ids

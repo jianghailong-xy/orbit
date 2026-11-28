@@ -43,7 +43,8 @@ import {
  *   * TASK_RUN — a run of the task whose conversation has not ended. It is its own addressee, told
  *     when it was started — unless it has reported no progress, taken no turn, and has no background
  *     job running and no wake-up waiting for the project's window (`exceptionEscalationSeconds`),
- *     in which case nobody is moving it.
+ *     in which case nobody is moving it. A run is reported quiet once: a run that takes a turn and goes
+ *     quiet again keeps its key, so the owner is not told again about the same session.
  *   * DEPENDENCIES — an OPEN task with a prerequisite that is not DONE: the prerequisite's own
  *     addressee, followed down the chain. A prerequisite with nothing of its own pending is the
  *     platform's when it will be started by itself (auto-run, not held), and nobody's otherwise.
@@ -500,7 +501,7 @@ export async function readPendingWithEvidence(
       kind: 'TASK_RUN',
       subjectId: run.id,
       since: quietSince,
-      orphanKey: `TASK_RUN:${run.id}:QUIET:${quietSince.getTime()}`,
+      orphanKey: `TASK_RUN:${run.id}:QUIET`,
       detail: `${detail} It has reported no progress, taken no turn, and has no background job running and no wake-up `
         + `waiting since ${quietSince.toISOString()}.`,
       addressee: null,

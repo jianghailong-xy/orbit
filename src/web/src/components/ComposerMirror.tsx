@@ -21,11 +21,17 @@ export function ComposerMirror({
   text,
   refs,
   scrollTop,
+  anchorAt = null,
 }: {
   text: string;
   refs: ReferenceMap;
   /** The textarea's scroll offset, so the two layers stay in step once it overflows. */
   scrollTop: number;
+  /**
+   * A character offset to mark with a zero-size `.composer-mirror-anchor`: where the `@` or `#` being
+   * typed sits, so its popup can be placed under it. Zero-size, so it moves no glyph.
+   */
+  anchorAt?: number | null;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -34,13 +40,22 @@ export function ComposerMirror({
 
   return (
     <div ref={ref} className="composer-mirror" aria-hidden="true">
-      {segmentComposer(text, refs).map((seg, i) => {
-        if (seg.type === 'text') return <span key={i}>{seg.text}</span>;
+      {withOffsets(segmentComposer(text, refs)).map(({ seg, start }, i) => {
+        if (seg.type === 'text') {
+          if (anchorAt != null && anchorAt >= start && anchorAt <= start + seg.text.length) {
+            const cut = anchorAt - start;
+            return (
+              <span key={i}>
+                {seg.text.slice(0, cut)}
+                <span className="composer-mirror-anchor" />
+                {seg.text.slice(cut)}
+              </span>
+            );
+          }
+          return <span key={i}>{seg.text}</span>;
+        }
         return (
-          <span
-            key={i}
-            className={`composer-chip composer-chip--${seg.type === 'ref' ? seg.kind : 'mention'}`}
-          >
+          <span key={i} className={`composer-chip composer-chip--${seg.kind}`}>
             {seg.text}
           </span>
         );
@@ -50,4 +65,14 @@ export function ComposerMirror({
       {'\n'}
     </div>
   );
+}
+
+/** Each segment with the offset it starts at in the draft. */
+function withOffsets<T extends { text: string }>(segs: T[]): Array<{ seg: T; start: number }> {
+  let at = 0;
+  return segs.map((seg) => {
+    const start = at;
+    at += seg.text.length;
+    return { seg, start };
+  });
 }

@@ -788,3 +788,35 @@ describe('a session row\'s time', () => {
     expect(sessionRowTime({ status: 'RUNNING', listedAt: ago(2 * 3_600_000) })).toBe('');
   });
 });
+
+/** The tasks a row's session created that are running or queued now (docs/mocks/session-row-running-tasks). */
+describe('the running-tasks count on a session row', () => {
+  it('draws the count beside the title with a tip that says what runs and what waits, and nothing when none does', async () => {
+    const { renderToStaticMarkup } = await import('react-dom/server');
+    const { SessionTitleRow } = await import('./WorkspaceView');
+    const row = (s: Record<string, unknown>) =>
+      renderToStaticMarkup(<SessionTitleRow session={{ title: 'Card reappears after Complete', lastTurnAt: new Date().toISOString(), ...s }} />);
+    const shown = row({ createdTasksActive: { running: 2, queued: 1 }, activity: 'BACKGROUND_JOB' });
+    expect(shown).toContain('aria-label="2 tasks running · 1 queued"');
+    expect(shown).toContain('<span class="session-created-tasks-count" aria-hidden="true">3</span>');
+    // After the title, before the time.
+    expect(shown.indexOf('session-title')).toBeLessThan(shown.indexOf('session-created-tasks'));
+    expect(shown.indexOf('session-created-tasks')).toBeLessThan(shown.indexOf('session-time'));
+    expect(row({ createdTasksActive: null })).not.toContain('session-created-tasks');
+    expect(row({ createdTasksActive: { running: 0, queued: 0 } })).not.toContain('session-created-tasks');
+    // An older control plane sends no key.
+    expect(row({})).not.toContain('session-created-tasks');
+  });
+
+  it('words the tip by what there is', async () => {
+    const { sessionCreatedTasksCount, sessionCreatedTasksTip } = await import('../lib/sessionDisplay');
+    expect(sessionCreatedTasksTip({ running: 1, queued: 0 })).toBe('1 task running');
+    expect(sessionCreatedTasksTip({ running: 3, queued: 0 })).toBe('3 tasks running');
+    expect(sessionCreatedTasksTip({ running: 0, queued: 1 })).toBe('1 task queued');
+    expect(sessionCreatedTasksTip({ running: 0, queued: 2 })).toBe('2 tasks queued');
+    expect(sessionCreatedTasksTip({ running: 1, queued: 2 })).toBe('1 task running · 2 queued');
+    expect(sessionCreatedTasksCount({ running: 1, queued: 2 })).toBe(3);
+    expect(sessionCreatedTasksCount({ running: 0, queued: 0 })).toBeNull();
+    expect(sessionCreatedTasksCount(undefined)).toBeNull();
+  });
+});

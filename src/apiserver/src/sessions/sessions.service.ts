@@ -48,7 +48,7 @@ import {
   SESSION_EXECUTING_EXCEPT_BG_JOB_WHERE,
   SESSION_RUNNING_BG_JOB_WHERE,
 } from '../common/session-working';
-import { readOneSessionBackgroundFields, readSessionBackgroundFields, sessionActivitySql } from './task-work-carrier';
+import { readCreatedTasksActive, readOneSessionBackgroundFields, readSessionBackgroundFields, sessionActivitySql } from './task-work-carrier';
 import {
   LEGACY_STATUS_SELECT, legacySessionStatus, legacySessionStatusSql, readLandingSettlements, statusWordFilter, withoutWordFacts,
 } from './session-legacy-words';
@@ -467,6 +467,7 @@ import {
   assertEngineSession as assertEngineSessionRow,
 } from './engine-session';
 import { returnWaitingSessionsToOpen } from './return-to-open';
+import { expirePendingAskedBy } from '../owner-requests/owner-request-endings';
 import { readLandingView } from '../projects/landing-view';
 import {
   deriveSessionCapabilities,
@@ -4819,8 +4820,9 @@ export class SessionsService {
    * of the row moves, a raw one included), the values it reads from its task, its context task and
    * its root, the turn in flight, the SubAgent title and how many of its jobs are fresh; and, from
    * a few reads over the account, the project each of its membership candidates names (title and
-   * status), its workspace's name, model and effort, and whether it waits on a watch, is shared or
-   * has a guest. A row whose token names something those reads did not return — or that is queued,
+   * status), its workspace's name, model and effort, whether it waits on a watch, is shared or
+   * has a guest, and how many of the tasks it created are running and queued (other sessions' rows
+   * carry those, so its own version cannot see them move). A row whose token names something those reads did not return — or that is queued,
    * or whose root is a landing — is built on every read (`always`).
    */
   private async openListProbe(
@@ -4932,6 +4934,8 @@ export class SessionsService {
     const watching = new Set(account.watching ?? []);
     const shared = new Set(account.shared ?? []);
     const guests = new Set(account.guests ?? []);
+    // The tasks each row created that are carried now: other sessions' rows, which the row's own version cannot see.
+    const createdTasks = await readCreatedTasksActive(this.prisma, ownerId, null);
     const nowMs = Date.now();
     return { questions: shortHash(account.questions ?? null), rows: rows.map((row) => {
       let unknown = false;
@@ -4953,6 +4957,7 @@ export class SessionsService {
         row.rootId, project(row.rootTaskProjectId), project(row.rootContextProjectId),
         project(row.rootId ? coordinatorOf.get(row.rootId) : null), project(row.rootId ? wakeOf.get(row.rootId) : null),
         watching.has(row.id), shared.has(row.id), guests.has(row.id),
+        createdTasks.get(row.id) ?? null,
       ]);
       return {
         id: row.id,
@@ -5798,10 +5803,12 @@ export class SessionsService {
       rows.map((r) => r.id),
       new Map(rows.map((r) => [r.id, overlays.get(r.id)!.pendingApprovals])),
     );
+    // The tasks each row's session created that are running or queued now: the count beside its title.
+    const createdTasks = await readCreatedTasksActive(this.prisma, ownerId, rows.map((r) => r.id));
     // The release column was read for the capabilities and the status words; the row does not carry it, nor the two
     // other columns read for the words alone (`lastTurnOutcome` comes with the phase fields).
     return sessions.map(({ finishedAt: _released, lastTurnOutcome: _outcome, importSourceCwd: _import, ...s }) =>
-      ({ ...s, ...overlays.get(s.id)!, ...phases.get(s.id) }));
+      ({ ...s, ...overlays.get(s.id)!, ...phases.get(s.id), createdTasksActive: createdTasks.get(s.id) ?? null }));
   }
 
   /**
@@ -12591,7 +12598,7 @@ export class SessionsService {
    * `end` control turn + signal the runner to cancel) so a live claude isn't orphaned.
    * The status settles to CANCELLED async while the row already sits in Completed.
    */
-  async complete(ownerId: string, id: string, opts: { handingOver?: boolean } = {}) {
+  async complete(ownerId: string, id: string, opts: { handingOver?: boolean; withdrawPendingQuestions?: boolean } = {}) {
     // A coordinator handing over (ProjectsService.coordinator's replace with a handoff) ends the same way, but its
     // `end` turn says to leave the session's SubAgent runs and bg_run jobs running: their wake goes to the successor
     // (docs/coordinator-handoff-v2-design.md §1). Every other Complete stops them.
@@ -12614,8 +12621,21 @@ export class SessionsService {
       ended.endReason,
       ended.lifecycleState,
     );
+    // The owner confirmed that the questions this session still asks go unanswered: they end here, so the sweep below
+    // has nothing to bring the session back to Open for. Without it, a waiting question brings it straight back.
+    if (opts.withdrawPendingQuestions) await this.expirePendingQuestions(ownerId, id);
     await this.returnIfStillWaiting(ownerId, [id]);
     return { ok: true };
+  }
+
+  /** Every PENDING owner request this session asked ends EXPIRED (`expirePendingAskedBy`), told as an expiry is. */
+  private async expirePendingQuestions(ownerId: string, id: string): Promise<void> {
+    const ended = await withTransactionRetry(
+      this.prisma,
+      (tx) => expirePendingAskedBy(tx, ownerId, [id], new Date()),
+      loggedRetry(this.logger, 'sessions.expirePendingQuestions'),
+    );
+    if (ended.length > 0) this.realtime.publishOwnerSignalChanged(ownerId, [id]);
   }
 
   /**

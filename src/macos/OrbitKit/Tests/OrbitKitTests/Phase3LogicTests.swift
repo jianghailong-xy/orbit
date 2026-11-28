@@ -197,7 +197,16 @@ final class Phase3LogicTests: XCTestCase {
             XCTAssertNil(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
                                               userInfo: ["kind": kind]), "\(kind) names its runner")
         }
-        // A project nobody has opens the project; without its id there is nothing to open.
+        // A project nobody has opens the quiet run's session, else its task; an older push naming
+        // neither opens the project; without any id there is nothing to open.
+        XCTAssertEqual(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
+                                            userInfo: ["kind": "project-orphan", "projectID": "p1",
+                                                       "taskID": "019a0000-0000-7000-8000-000000000027", "sessionID": "s1"]),
+                       .open(.session("s1")))
+        XCTAssertEqual(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
+                                            userInfo: ["kind": "project-orphan", "projectID": "p1",
+                                                       "taskID": "019a0000-0000-7000-8000-000000000027"]),
+                       .open(.task(PublicID.toPublic("019a0000-0000-7000-8000-000000000027"))))
         XCTAssertEqual(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
                                             userInfo: ["kind": "project-orphan", "projectID": "p1"]),
                        .openProject(projectID: "p1"))

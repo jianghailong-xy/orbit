@@ -1213,9 +1213,14 @@ export const dismissMergeFailure = (sessionId: string) =>
 // Lifecycle actions for sessions. Complete moves a session into Completed; delete
 // moves it to Trash. Both keep all data; restore brings either back to Open. Purge is
 // the only hard delete: it permanently removes a trashed session and all its data.
-export const completeSession = async (sessionId: string) => {
+/** `withdrawPendingQuestions`: the owner confirmed that the questions the session still asks them end unanswered, so it
+ *  stays in Completed; without it, a waiting question brings the session straight back to Open. */
+export const completeSession = async (sessionId: string, opts: { withdrawPendingQuestions?: boolean } = {}) => {
   try {
-    return await api(`/sessions/${sessionId}/complete`, { method: 'POST' });
+    return await api(`/sessions/${sessionId}/complete`, {
+      method: 'POST',
+      ...(opts.withdrawPendingQuestions ? { body: { withdrawPendingQuestions: true } } : {}),
+    });
   } catch (error) {
     // A new browser bundle may briefly overlap an older API replica. Fall back only when
     // the canonical route is absent; authorization/conflict/server errors must not replay.

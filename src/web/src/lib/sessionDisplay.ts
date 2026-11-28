@@ -13,7 +13,7 @@ import type { SessionStateSource } from './sessionState';
  * into the seven run states to pick an icon or a word; sessionDisplayGuard.test.ts holds every surface to that.
  */
 
-export type SessionStateIcon = 'clock' | 'spinner' | 'circle';
+export type SessionStateIcon = 'clock' | 'spinner' | 'message';
 
 export interface SessionDisplayState {
   phase: SessionPhase;
@@ -24,7 +24,7 @@ export interface SessionDisplayState {
 const STATES: Record<SessionPhase, { word: string; icon: SessionStateIcon }> = {
   PENDING: { word: 'Queued', icon: 'clock' },
   RUNNING: { word: 'Running', icon: 'spinner' },
-  IDLE: { word: 'Idle', icon: 'circle' },
+  IDLE: { word: 'Idle', icon: 'message' },
 };
 
 // Read here rather than through sessionState's readers, which import this module: the same rule (a value this client
@@ -107,6 +107,30 @@ export const SESSION_ROW_ICON_TIPS: Record<SessionRowIcon, string> = {
   BACKGROUND: 'Background work running',
   WILL_RESUME: 'Will resume',
 };
+
+/** The tasks a session created that are running or queued now, as its list row carries them (`createdTasksActive`). */
+export interface SessionCreatedTasksActive {
+  running: number;
+  queued: number;
+}
+
+/**
+ * The count a list row draws beside its title for the tasks its session created that are being worked on now
+ * (docs/mocks/session-row-running-tasks, the owner's choices 2026-11-28): running and queued together, null when none
+ * or from an older control plane. Drawn whatever the session itself is doing, Completed rows included: the session
+ * may be done while its tasks still run. Failed tasks and tasks waiting on you are not counted.
+ */
+export function sessionCreatedTasksCount(active: SessionCreatedTasksActive | null | undefined): number | null {
+  const count = (active?.running ?? 0) + (active?.queued ?? 0);
+  return count > 0 ? count : null;
+}
+
+/** The count's tip: `2 tasks running · 1 queued`, `1 task queued`, leaving out what is none. */
+export function sessionCreatedTasksTip(active: SessionCreatedTasksActive): string {
+  const running = active.running > 0 ? `${active.running} ${active.running === 1 ? 'task' : 'tasks'} running` : '';
+  if (!active.queued) return running;
+  return running ? `${running} · ${active.queued} queued` : `${active.queued} ${active.queued === 1 ? 'task' : 'tasks'} queued`;
+}
 
 /** The marks a list row draws as icons rather than chips. */
 const ROW_ICON_MARKS: ReadonlySet<SessionMark> = new Set<SessionMark>(['FAILED', 'RETRYING', 'ON_HOLD']);

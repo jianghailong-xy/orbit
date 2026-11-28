@@ -237,6 +237,8 @@ public enum Notifications {
     /// `userInfo` key naming the project an owner-item alert is about (apiserver
     /// `PushService.notifyOwnerItem`).
     public static let keyProject = "projectID"
+    /// The task a `project-orphan` alert is about.
+    public static let keyTask = "taskID"
     /// `userInfo` key naming the runner a machine alert is about (apiserver `PushService.notifyRunnerDrainWaiting`).
     public static let keyRunner = "runnerID"
     /// The terminal sign-in a `terminal-login` alert is about (apiserver `PushService.notifyTerminalLogin`).
@@ -302,7 +304,12 @@ public enum Notifications {
            let entry = ShareHandoffLink.entryID(in: link) {
             return .openShare(entryID: entry)
         }
-        // Project done and a project nobody has (`project-orphan`) both open the project.
+        // A pending item nobody has (`project-orphan`) opens the quiet run's session, else the task it is
+        // about; a push from an older server naming neither opens the project, as project done does.
+        if userInfo[keyKind] == "project-orphan" {
+            if let sid = userInfo[keySession] { return .open(.session(sid)) }
+            if let task = userInfo[keyTask] { return .open(.task(PublicID.toPublic(task))) }
+        }
         if userInfo[keyKind] == "project-done" || userInfo[keyKind] == "project-orphan",
            let project = userInfo[keyProject] {
             return .openProject(projectID: project)

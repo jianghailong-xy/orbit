@@ -71,5 +71,14 @@ export interface SessionBackgroundFields {
   runningBgCount: number;
 }
 
+/** The tasks a session created that are being worked on now, as its list row carries them
+ *  (`createdTasksActive`; docs/mocks/session-row-running-tasks): `running` and `queued` count the tasks some work
+ *  session carries (apiserver `sessions/task-work-carrier.ts` `readCreatedTasksActive`), a task once. The row
+ *  carries null when both are none; an older control plane omits the key. */
+export interface SessionCreatedTasksActive {
+  running: number;
+  queued: number;
+}
+
 /** Their names, in the order the contract lists them. */
 export const SESSION_BACKGROUND_FIELD_NAMES = ['activity', 'runningBgCount'] as const;

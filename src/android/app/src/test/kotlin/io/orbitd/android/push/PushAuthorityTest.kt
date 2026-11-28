@@ -533,9 +533,10 @@ class PushAuthorityTest {
     }
 
     /** The orphan sweep's push to an owner whose project has no coordinator to tell (docs/evidence-always-has-an-addressee-design.md
-     * §4): it parses exactly as the server sends it (the shared fixture's sample), opens its project as project-done does, and stands
+     * §4): it parses exactly as the server sends it (the shared fixture's sample), opens the quiet run's session (else its task, else its
+     * project), and stands
      * while the project is open. Without its project it is no notification. */
-    @Test fun anOrphanReportOpensItsProjectAndStandsWhileTheProjectIsOpen() = runBlocking {
+    @Test fun anOrphanReportOpensItsSessionAndStandsWhileTheProjectIsOpen() = runBlocking {
         val sample = pushFixture()["samples"]!!.jsonArray.map { it.jsonObject }
             .single { it["name"]!!.jsonPrimitive.content == "project-orphan" }
         val data = sample["data"]!!.jsonObject.mapValues { it.value.jsonPrimitive.content }
@@ -545,9 +546,15 @@ class PushAuthorityTest {
         assertEquals("project-orphan", push.payload.kind)
         assertTrue(ObjectId.same(push.payload.projectId, project))
         assertFalse(push.payload.isReminder)
-        assertEquals("orbit://project/$project", push.link)
+        // It opens the quiet run's session, else its task; a push from an older server naming neither opens the project.
+        val session = sample["source"]!!.jsonObject["sessionID"]!!.jsonPrimitive.content
+        val task = sample["source"]!!.jsonObject["taskID"]!!.jsonPrimitive.content
+        assertEquals("orbit-session:${ObjectId.canonical(session)}", push.link)
+        assertEquals("orbit-task:${ObjectId.canonical(task)}", push.copy(payload = push.payload.copy(sessionId = null)).link)
+        val older = push.copy(payload = push.payload.copy(sessionId = null, taskId = null))
+        assertEquals("orbit://project/$project", older.link)
         assertEquals(OrbitRoute(Destination.PROJECT_SESSIONS, project, origin = Origin.EXTERNAL),
-            push.link?.let { OrbitLinks.parse(it, origin = Origin.EXTERNAL) })
+            older.link?.let { OrbitLinks.parse(it, origin = Origin.EXTERNAL) })
         assertNull("it names its project", PushMessage.parse(data + ("payload" to
             """{"title":"Session translation: nobody has this","body":"Nobody can move it now.","kind":"project-orphan"}""")))
         authorityFixture { authority, server, _ ->

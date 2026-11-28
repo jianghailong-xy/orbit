@@ -55,8 +55,12 @@ data class PushPayload(
 
     /** The existing ACTION_VIEW/OrbitLinks entry retains authentication and the caller's stack. */
     val link: String? get() = when {
-        // A project done, and a pending item of a project nobody has (the orphan sweep, owner with no coordinator): its project.
-        kind == "project-done" || kind == "project-orphan" -> projectId?.let { "orbit://project/$it" }
+        // A pending item of a project nobody has (the orphan sweep, owner with no coordinator): the quiet run's session, else the
+        // task the item is about, else (an older server naming neither) its project, which does not show the item.
+        kind == "project-orphan" -> sessionId?.let { "orbit-session:$it" } ?: taskId?.let { "orbit-task:$it" }
+            ?: projectId?.let { "orbit://project/$it" }
+        // A project done: its project.
+        kind == "project-done" -> projectId?.let { "orbit://project/$it" }
         // A terminal asking to be approved: Machines & models' Needs you section, its card lit (OrbitLinks).
         kind == TERMINAL_LOGIN -> terminalLoginId?.let { "orbit://terminal-login/$it" }
         kind == "watch-matched" -> watchId?.let { "orbit://watch/$it" }

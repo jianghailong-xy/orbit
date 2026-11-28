@@ -326,7 +326,7 @@ final class SessionDisplayTests: XCTestCase {
     func testStateIconsAreAClockTheSpinnerAndAnEmptyCircleAndOnlyRunningIsColoured() {
         XCTAssertEqual(SessionDisplayState.queued.glyph, SessionStatusGlyph(shape: .symbol("clock"), tone: .neutral, label: "Queued"))
         XCTAssertEqual(SessionDisplayState.running.glyph, SessionStatusGlyph(shape: .spinner, tone: .brand, label: "Running"))
-        XCTAssertEqual(SessionDisplayState.idle.glyph, SessionStatusGlyph(shape: .symbol("circle"), tone: .neutral, label: "Idle"))
+        XCTAssertEqual(SessionDisplayState.idle.glyph, SessionStatusGlyph(shape: .symbol("message"), tone: .neutral, label: "Idle"))
         XCTAssertEqual(SessionMark.allCases.filter { $0.tone != .neutral }, [.needsYou, .failed])
         XCTAssertEqual(SessionMark.needsYou.tone, .warning)
         XCTAssertEqual(SessionMark.failed.tone, .error)
