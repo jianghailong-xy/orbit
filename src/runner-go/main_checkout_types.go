@@ -19,6 +19,9 @@ const mainCheckoutFileLimit = 200
 // mainCheckoutPatchMaxBytes caps one file's patch in the on-demand diff read.
 const mainCheckoutPatchMaxBytes = 256 * 1024
 
+// mainCheckoutCommitsMax is the most commits a snapshot lists; past it CommitsTruncated is set.
+const mainCheckoutCommitsMax = 20
+
 // Action kinds.
 const (
 	mainCheckoutMove    = "move"
@@ -91,18 +94,22 @@ type MainCheckoutFile struct {
 // MainCheckoutSnapshot is what the runner sees in a main checkout. Files are sorted by path bytes
 // and capped at mainCheckoutFileLimit; Fingerprint covers every changed file.
 type MainCheckoutSnapshot struct {
-	Root        string             `json:"root"`
-	Branch      string             `json:"branch,omitempty"`
-	Head        string             `json:"head,omitempty"`
-	State       string             `json:"state"`
-	Upstream    string             `json:"upstream,omitempty"`
-	Ahead       *int               `json:"ahead,omitempty"`
-	Behind      *int               `json:"behind,omitempty"`
-	Files       []MainCheckoutFile `json:"files"`
-	FileCount   int                `json:"fileCount"`
-	Truncated   bool               `json:"truncated"`
-	Fingerprint string             `json:"fingerprint"`
-	CheckedAt   string             `json:"checkedAt"`
+	Root     string `json:"root"`
+	Branch   string `json:"branch,omitempty"`
+	Head     string `json:"head,omitempty"`
+	State    string `json:"state"`
+	Upstream string `json:"upstream,omitempty"`
+	Ahead    *int   `json:"ahead,omitempty"`
+	Behind   *int   `json:"behind,omitempty"`
+	// Commits are upstream..HEAD, newest first, at most mainCheckoutCommitsMax; nil without an upstream or on a
+	// detached HEAD. On this on-demand read only, never in MainCheckoutHeartbeatFields.
+	Commits          []BranchCommit     `json:"commits,omitempty"`
+	CommitsTruncated bool               `json:"commitsTruncated,omitempty"`
+	Files            []MainCheckoutFile `json:"files"`
+	FileCount        int                `json:"fileCount"`
+	Truncated        bool               `json:"truncated"`
+	Fingerprint      string             `json:"fingerprint"`
+	CheckedAt        string             `json:"checkedAt"`
 }
 
 // MainCheckoutFileDiff is one file's patch, read on demand and never sent on the heartbeat.
@@ -196,13 +203,15 @@ type MainCheckoutChangedNotice struct {
 }
 
 // MainCheckoutRunnerRequest is one entry of the heartbeat's mainCheckoutRequests (contract §10.1):
-// a snapshot read (Op "snapshot": Root, DiffPaths, RequestedAt, ExpiresAt) or an action (Op
-// "action": Command). Each is handed out once; ID is what the answer is posted under.
+// a snapshot read (Op "snapshot": Root, DiffPaths, Commit, RequestedAt, ExpiresAt) or an action (Op
+// "action": Command). With Commit set (a full sha in upstream..HEAD), DiffPaths are answered from
+// that commit against its first parent. Each is handed out once; ID is what the answer is posted under.
 type MainCheckoutRunnerRequest struct {
 	ID          string                     `json:"id"`
 	Op          string                     `json:"op"`
 	Root        string                     `json:"root,omitempty"`
 	DiffPaths   []string                   `json:"diffPaths,omitempty"`
+	Commit      string                     `json:"commit,omitempty"`
 	RequestedAt string                     `json:"requestedAt,omitempty"`
 	ExpiresAt   string                     `json:"expiresAt,omitempty"`
 	Command     *MainCheckoutActionCommand `json:"command,omitempty"`

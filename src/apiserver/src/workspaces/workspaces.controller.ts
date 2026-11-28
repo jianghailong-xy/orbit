@@ -98,8 +98,9 @@ export class WorkspacesController {
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
     @Query('diff') diff?: string | string[],
+    @Query('commit') commit?: string | string[],
   ) {
-    return this.mainCheckout.read(user.userId, id, diff === undefined ? [] : Array.isArray(diff) ? diff : [diff]);
+    return this.mainCheckout.read(user.userId, id, diff === undefined ? [] : Array.isArray(diff) ? diff : [diff], commit);
   }
 
   /** Move, commit, push or rescue the main checkout (§5). Queued for the runner; the outcome is a line in

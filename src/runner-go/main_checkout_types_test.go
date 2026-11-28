@@ -71,11 +71,11 @@ func fixtureFingerprint(head string, files []MainCheckoutFile) string {
 func TestMainCheckoutContractNames(t *testing.T) {
 	fx := readMainCheckoutFixture(t)
 	var capability string
-	var limit int
+	var limit, commitsMax int
 	var kinds, codes []string
 	var notices map[string]string
 	for key, dst := range map[string]interface{}{
-		"capability": &capability, "fileLimit": &limit, "actionKinds": &kinds, "refusalCodes": &codes, "noticeKinds": &notices,
+		"capability": &capability, "fileLimit": &limit, "commitsMax": &commitsMax, "actionKinds": &kinds, "refusalCodes": &codes, "noticeKinds": &notices,
 	} {
 		if err := json.Unmarshal(fx[key], dst); err != nil {
 			t.Fatalf("%s: %v", key, err)
@@ -86,6 +86,9 @@ func TestMainCheckoutContractNames(t *testing.T) {
 	}
 	if limit != mainCheckoutFileLimit {
 		t.Errorf("file limit %d, fixture %d", mainCheckoutFileLimit, limit)
+	}
+	if commitsMax != mainCheckoutCommitsMax {
+		t.Errorf("commits max %d, fixture %d", mainCheckoutCommitsMax, commitsMax)
 	}
 	if want := []string{mainCheckoutMove, mainCheckoutCommit, mainCheckoutPush, mainCheckoutRescue, mainCheckoutDiscard}; !reflect.DeepEqual(kinds, want) {
 		t.Errorf("kinds %v, fixture %v", want, kinds)
@@ -114,6 +117,15 @@ func TestMainCheckoutFixtureParsesIntoGoTypes(t *testing.T) {
 	trunc := roundTrip[MainCheckoutSnapshot](t, "truncatedSnapshot", fx["truncatedSnapshot"])
 	if !trunc.Truncated || trunc.FileCount != mainCheckoutFileLimit {
 		t.Errorf("truncated snapshot: %+v", trunc)
+	}
+
+	unpushed := roundTrip[MainCheckoutSnapshot](t, "unpushedSnapshot", fx["unpushedSnapshot"])
+	if len(unpushed.Commits) != 2 || !unpushed.CommitsTruncated || unpushed.Commits[0].Sha != unpushed.Head {
+		t.Errorf("unpushed snapshot: %+v", unpushed)
+	}
+	read := roundTrip[MainCheckoutRunnerRequest](t, "snapshotRequest", fx["snapshotRequest"])
+	if read.Op != "snapshot" || read.Commit != unpushed.Head || len(read.DiffPaths) != 1 {
+		t.Errorf("snapshot request: %+v", read)
 	}
 
 	var vectors []json.RawMessage

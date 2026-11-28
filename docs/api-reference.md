@@ -163,7 +163,7 @@ answers one page of the list as top-level entries, with an ETag answered `304` w
 | `DELETE` | `/api/agents/:id` | path `id` | `WorkspacesController.remove` |
 | `GET` | `/api/agents/:id` | path `id` | `WorkspacesController.get` |
 | `PATCH` | `/api/agents/:id` | body `UpdateWorkspaceDto`; path `id` | `WorkspacesController.update` |
-| `GET` | `/api/agents/:id/main-checkout` | path `id`; query `diff` | `WorkspacesController.mainCheckoutRead` |
+| `GET` | `/api/agents/:id/main-checkout` | path `id`; query `commit`, `diff` | `WorkspacesController.mainCheckoutRead` |
 | `POST` | `/api/agents/:id/main-checkout/actions` | body `Object`; path `id` | `WorkspacesController.mainCheckoutAct` |
 | `POST` | `/api/agents/:id/main-checkout/actions/:requestId/cancel` | path `id`, `requestId` | `WorkspacesController.mainCheckoutCancel` |
 | `GET` | `/api/agents/:id/permission-rules` | path `id` | `WorkspacesController.permissionRules` |
@@ -731,7 +731,7 @@ answers one page of the list as top-level entries, with an ETag answered `304` w
 | `GET` | `/api/workspaces/:id` | path `id` | `WorkspacesController.get` |
 | `PATCH` | `/api/workspaces/:id` | body `UpdateWorkspaceDto`; path `id` | `WorkspacesController.update` |
 | `POST` | `/api/workspaces/:id/clone/retry` | path `id` | `GithubWorkspaceController.retry` |
-| `GET` | `/api/workspaces/:id/main-checkout` | path `id`; query `diff` | `WorkspacesController.mainCheckoutRead` |
+| `GET` | `/api/workspaces/:id/main-checkout` | path `id`; query `commit`, `diff` | `WorkspacesController.mainCheckoutRead` |
 | `POST` | `/api/workspaces/:id/main-checkout/actions` | body `Object`; path `id` | `WorkspacesController.mainCheckoutAct` |
 | `POST` | `/api/workspaces/:id/main-checkout/actions/:requestId/cancel` | path `id`, `requestId` | `WorkspacesController.mainCheckoutCancel` |
 | `GET` | `/api/workspaces/:id/permission-rules` | path `id` | `WorkspacesController.permissionRules` |
