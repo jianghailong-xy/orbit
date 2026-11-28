@@ -214,7 +214,7 @@ jobs:
   # asks for it: it costs a 90-minute Mac runner and an ordinary dispatch should not.
   #
   # The pictures land in `source-refused-shots` (artifact) and, because artifacts cannot be
-  # downloaded without a token, in `probe/source-refused-mac-shots-results` — the branch a clone
+  # downloaded without a token, in `probe/permission-mode-refused-shots-results` — the branch a clone
   # can read, which is what `docs/evidence/source-refused-native/README.md` names.
   source-refused-shots:
     name: Source-refused probe (Mac window + iPhone)
@@ -236,7 +236,7 @@ jobs:
       - name: Stage the harness at the repository root
         run: |
           mkdir -p .sr-probe
-          cp -R docs/evidence/source-refused-native/probe-harness/. .sr-probe/
+          cp -R docs/evidence/permission-mode-refused-native/probe-harness/. .sr-probe/
       - name: Build, drive and capture
         id: capture
         continue-on-error: true
@@ -289,7 +289,7 @@ jobs:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: out
-      - name: Push to probe/source-refused-mac-shots-results
+      - name: Push to probe/permission-mode-refused-shots-results
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -307,7 +307,7 @@ jobs:
           git add -A
           git commit -q -m "source-refused probe results for ${{ github.sha }} (run ${{ github.run_id }})"
           git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
-            results:refs/heads/probe/source-refused-mac-shots-results
+            results:refs/heads/probe/permission-mode-refused-shots-results
 
   # The beta.242 sidebar crash (EXC_BREAKPOINT from -[NSLayoutConstraint setActive:] under SwiftUI's
   # OutlineListCoordinator -> NSOutlineView reloadItem:, inside withSelectionUpdateGuard) exists only
