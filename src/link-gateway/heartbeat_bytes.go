@@ -18,11 +18,14 @@ import (
 const (
 	heartbeatWireSampleEvery = 16
 	// A frame past this is not sampled: the estimate is for the ordinary beat, and the cost per sample is bounded.
-	heartbeatWireSampleMaxBytes = 256 << 10
+	heartbeatWireSampleMaxBytes = 1 << 20
 )
 
-// countHeartbeatBytes adds one heartbeat frame's inflated size, `data` being the message as it was read.
-func (m *gatewayMetrics) countHeartbeatBytes(hb *linkpb.Heartbeat, data []byte) {
+// countHeartbeatBytes adds one heartbeat's size, from onHeartbeat: the one place a beat passes whether it arrived as one
+// message or, past sendPieceBytes, as Chunks joined (a joined frame has no single raw message, so sizes are the
+// encoded Frame's). The wire estimate encodes the frame again and deflates it as the link would send it: cut into
+// pieces of at most sendPieceBytes, each deflated when it is linkCompressionThreshold or more, and summed.
+func (m *gatewayMetrics) countHeartbeatBytes(hb *linkpb.Heartbeat) {
 	var whole, digest int
 	for _, f := range hb.GetFacts() {
 		if len(f.GetJson()) > 0 {
@@ -31,13 +34,30 @@ func (m *gatewayMetrics) countHeartbeatBytes(hb *linkpb.Heartbeat, data []byte) 
 			digest += proto.Size(f)
 		}
 	}
-	m.heartbeatBytes.add(float64(len(data)-whole-digest), "typed")
+	frame := &linkpb.Frame{Body: &linkpb.Frame_Heartbeat{Heartbeat: hb}}
+	total := proto.Size(frame)
+	m.heartbeatBytes.add(float64(total-whole-digest), "typed")
 	m.heartbeatBytes.add(float64(whole), "fact_whole")
 	m.heartbeatBytes.add(float64(digest), "fact_digest")
-	if len(data) <= heartbeatWireSampleMaxBytes && m.heartbeatSeen.Add(1)%heartbeatWireSampleEvery == 0 {
-		m.heartbeatWireInflated.add(float64(len(data)))
-		m.heartbeatWire.add(float64(deflatedSize(data)))
+	if total > heartbeatWireSampleMaxBytes || m.heartbeatSeen.Add(1)%heartbeatWireSampleEvery != 0 {
+		return
 	}
+	data, err := proto.Marshal(frame)
+	if err != nil {
+		return
+	}
+	wire := 0
+	for len(data) > 0 {
+		n := min(len(data), sendPieceBytes)
+		if n >= linkCompressionThreshold {
+			wire += deflatedSize(data[:n])
+		} else {
+			wire += n
+		}
+		data = data[n:]
+	}
+	m.heartbeatWireInflated.add(float64(total))
+	m.heartbeatWire.add(float64(wire))
 }
 
 type sizeWriter struct{ n int }

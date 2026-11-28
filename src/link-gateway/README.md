@@ -591,8 +591,8 @@ Every metric is served at `/metrics` on `LINK_METRICS_ADDR`, in Prometheus text 
 | `link_frames_received_total`, `link_frames_sent_total` | counter | `type`: the frame body |
 | `link_frame_decode_errors_total` | counter | — |
 | `link_heartbeats_total` | counter | — |
-| `link_heartbeat_bytes_total` | counter | `part`: typed (typed fields and framing), fact_whole, fact_digest. Inflated bytes: the WebSocket library returns a message inflated |
-| `link_heartbeat_wire_bytes_total`, `link_heartbeat_wire_sampled_inflated_bytes_total` | counter | — (one heartbeat in 16, up to 256 KB, deflated with BestSpeed and no context takeover as the link is: the first is an estimate of its wire bytes, the second the inflated bytes of the same frames; their ratio is the compression) |
+| `link_heartbeat_bytes_total` | counter | `part`: typed (typed fields and framing), fact_whole, fact_digest. Inflated bytes of the encoded frame (its id aside), counted once per beat whether it arrived whole or in Chunks |
+| `link_heartbeat_wire_bytes_total`, `link_heartbeat_wire_sampled_inflated_bytes_total` | counter | — (one heartbeat in 16, up to 1 MiB, deflated piece by piece (16 KiB, those of 512 bytes or more) with BestSpeed and no context takeover as the link is, then summed: the first is an estimate of its wire bytes, the second the inflated bytes of the same frames; their ratio is the compression) |
 | `link_draining`, `link_drains_sent_total` | gauge, counter | — |
 | `link_revocations`, `link_revocation_fetches_total`, `link_revocation_last_success_timestamp_seconds` | gauge, counter, gauge | `result`: ok, error, unauthorized, not_configured |
 | `link_tls_certificate_not_after_timestamp_seconds`, `link_tls_reloads_total`, `link_tls_handshake_errors_total` | gauge, counter, counter | `result`: ok, error |

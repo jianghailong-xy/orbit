@@ -293,9 +293,6 @@ func (c *conn) readFrame() (*linkpb.Frame, error) {
 		c.log.Warn("frame does not decode", "type", typ.String(), "bytes", len(data), "raw", base64.StdEncoding.EncodeToString(raw))
 		return nil, errUndecodable
 	}
-	if hb := f.GetHeartbeat(); hb != nil {
-		c.g.metrics.countHeartbeatBytes(hb, data)
-	}
 	return &f, nil
 }
 
@@ -370,6 +367,7 @@ func (c *conn) dispatch(f *linkpb.Frame) bool {
 // (§5.7, heartbeat.go). A gateway without backends, as some tests build it, answers it at once with nothing to apply.
 func (c *conn) onHeartbeat(hb *linkpb.Heartbeat) {
 	c.g.metrics.heartbeats.inc()
+	c.g.metrics.countHeartbeatBytes(hb)
 	if c.link != nil {
 		c.link.onHeartbeat(hb)
 		return

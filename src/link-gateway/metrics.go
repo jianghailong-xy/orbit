@@ -300,7 +300,7 @@ func newGatewayMetrics(version string, deny *denyList) *gatewayMetrics {
 		frameDecodeErrors:     newCounter("link_frame_decode_errors_total", "WebSocket messages from runners that did not decode as a Frame."),
 		heartbeats:            newCounter("link_heartbeats_total", "Heartbeat frames received."),
 		heartbeatBytes:        newCounter("link_heartbeat_bytes_total", "Inflated bytes of heartbeat frames received, by part: typed (typed fields and framing), fact_whole (facts sent whole), fact_digest (facts sent by digest).", "part"),
-		heartbeatWire:         newCounter("link_heartbeat_wire_bytes_total", "Estimated bytes on the wire of the sampled heartbeat frames: each deflated with BestSpeed and no context takeover."),
+		heartbeatWire:         newCounter("link_heartbeat_wire_bytes_total", "Estimated bytes on the wire of the sampled heartbeats: each cut into 16 KiB pieces, the pieces of 512 bytes or more deflated with BestSpeed and no context takeover, and summed."),
 		heartbeatWireInflated: newCounter("link_heartbeat_wire_sampled_inflated_bytes_total", "Inflated bytes of those same sampled frames; link_heartbeat_wire_bytes_total over this is the compression ratio."),
 		draining:              newGauge("link_draining", "1 while the gateway drains its connections before it exits."),
 		drainsSent:            newCounter("link_drains_sent_total", "Drain frames sent."),
