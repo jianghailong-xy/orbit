@@ -13,7 +13,7 @@ import type { SessionStateSource } from './sessionState';
  * into the seven run states to pick an icon or a word; sessionDisplayGuard.test.ts holds every surface to that.
  */
 
-export type SessionStateIcon = 'clock' | 'spinner' | 'circle';
+export type SessionStateIcon = 'clock' | 'spinner' | 'message';
 
 export interface SessionDisplayState {
   phase: SessionPhase;
@@ -24,7 +24,7 @@ export interface SessionDisplayState {
 const STATES: Record<SessionPhase, { word: string; icon: SessionStateIcon }> = {
   PENDING: { word: 'Queued', icon: 'clock' },
   RUNNING: { word: 'Running', icon: 'spinner' },
-  IDLE: { word: 'Idle', icon: 'circle' },
+  IDLE: { word: 'Idle', icon: 'message' },
 };
 
 // Read here rather than through sessionState's readers, which import this module: the same rule (a value this client

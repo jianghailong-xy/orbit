@@ -37,7 +37,7 @@ facts are drawn by today's code, unchanged, and each picture says so in its "Old
 |---|---|---|---|
 | `PENDING` | Queued | clock | grey |
 | `RUNNING` | Running | spinner (turning) | blue on web and Mac; muted on iPhone and Android, as today |
-| `IDLE` | Idle | empty circle | grey |
+| `IDLE` | Idle | speech bubble (*amended 2026-11-28 by the owner: the empty circle read as an unticked checkbox; see [session-idle-icon](../session-idle-icon/board.png)*) | grey |
 
 **Marks: one per fact,** drawn after the state word in this order. A mark never replaces the state icon.
 
@@ -62,13 +62,13 @@ rows without facts in the fixture are that case.
 
 ## The four questions
 
-**1. What is an ended session's icon?** The Idle icon, the empty grey circle: released is not an activity, and a
+**1. What is an ended session's icon?** The Idle icon, the grey speech bubble: released is not an activity, and a
 released session is always `phase` IDLE. Beside it, the grey **Ended** mark (or green **Finished** when the work
 finished, or red **Failed** when the release was a failure). Today it is a grey check, which reads as success.
 
 **2. How does a failure stay noticeable in the list without being a state?** By the red **Failed** mark, the only red
 thing left on a session row, and by its place: a failure nobody is retrying sits in the **Needs you** group at the top
-of the list, as today. The state icon of a failed session is the grey Idle circle; the red has moved from the icon to
+of the list, as today. The state icon of a failed session is the grey Idle speech bubble; the red has moved from the icon to
 the mark. A failure the server is retrying wears the grey **Retrying** mark and stays in **Working**, as today.
 
 **3. Do the Needs you and Working groups keep their membership?** Yes, on every fixture row and every client. The

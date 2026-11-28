@@ -33,7 +33,7 @@ internal val DirectorySession.displayFacts: SessionDisplay.Facts get() = Session
 internal val SearchHit.displayFacts: SessionDisplay.Facts get() = SessionDisplay.Facts(phase, released, lastTurnOutcome, waitingOn,
     endReason, workFinished, activity, runningBgCount = runningBgCount ?: 0)
 
-/** The state icon, in the quiet tone of the slot it sits in: a clock for Queued, the row's spinner for Running, an empty circle for Idle. */
+/** The state icon, in the quiet tone of the slot it sits in: a clock for Queued, the row's spinner for Running, a speech bubble for Idle. */
 @Composable
 internal fun SessionStateGlyph(state: SessionDisplayState, modifier: Modifier = Modifier) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -41,7 +41,7 @@ internal fun SessionStateGlyph(state: SessionDisplayState, modifier: Modifier = 
     when (state.icon) {
         SessionDisplayState.Icon.SPINNER -> RowSpinner(tagged)
         SessionDisplayState.Icon.CLOCK -> Icon(painterResource(R.drawable.ic_clock), null, tagged.size(14.dp), tint = muted)
-        SessionDisplayState.Icon.CIRCLE -> Icon(painterResource(R.drawable.ic_state_idle), null, tagged.size(14.dp), tint = muted)
+        SessionDisplayState.Icon.MESSAGE -> Icon(painterResource(R.drawable.ic_state_idle), null, tagged.size(14.dp), tint = muted)
     }
 }
 

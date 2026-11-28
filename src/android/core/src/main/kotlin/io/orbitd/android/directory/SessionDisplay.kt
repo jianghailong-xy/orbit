@@ -19,9 +19,9 @@ import kotlinx.serialization.json.intOrNull
  * drew before (pinned by LegacyBaselineTest).
  */
 enum class SessionDisplayState(val word: String, val icon: Icon) {
-    QUEUED("Queued", Icon.CLOCK), RUNNING("Running", Icon.SPINNER), IDLE("Idle", Icon.CIRCLE);
+    QUEUED("Queued", Icon.CLOCK), RUNNING("Running", Icon.SPINNER), IDLE("Idle", Icon.MESSAGE);
 
-    enum class Icon { CLOCK, SPINNER, CIRCLE }
+    enum class Icon { CLOCK, SPINNER, MESSAGE }
 }
 
 /** One mark per fact. [tone] is the only colour a mark may carry: amber = the person has to act, red = a failure nobody is retrying,
