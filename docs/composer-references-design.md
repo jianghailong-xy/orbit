@@ -6,6 +6,41 @@ point at is **a session**, almost always by pasting its link, and almost always 
 look into it. Tasks are created, run and commented on by agents; people do not reference them.
 Nothing here is built yet. §8 lists the open decisions, each with a recommended default.
 
+**Revision 3 (2026-11-28, owner's call): `@` = a session, `#` = a project.** This supersedes §3.2's
+session-first `#` menu and §6. Board: `docs/mocks/session-at-references/` (01–06).
+
+- **`@` lists your most recent sessions, by latest activity.** It covers every workspace and runner,
+  task runs, coordinators and landings, but leaves out the current session. Status is a dot and a
+  short label, and it never reorders the list. Typing searches via `/sessions/search`. Picking or
+  pasting inserts `@<title>`, sent as `[@title](orbit-session:<id>)`. `@workspace` leaves the
+  session composer; task-comment mentions are unchanged.
+- **`#` names a piece of work: a project.** Sessions are one-off (413 references over 308
+  sessions, 1.3 each); projects recur (317 over 77, 4.1 each, 302 of them hand-copied bare ids), and
+  a recurring set is where a picker beats pasting.
+  - A blank `#` shows this conversation's own project, then projects by latest activity.
+  - Typing searches projects, then tasks (a few rows, labelled "Task").
+  - Pasting a project or task URL or id gives the same chip.
+- **Not in `#`, with the reason for each:**
+  - task lists: 8 references; they are agents' dispatch plumbing, and old `orbit-list:` links
+    still expand;
+  - Drive files: about 6; a file is an attachment, so it goes back to the ＋ attach control and is
+    sent as a path;
+  - wiki entries: 6; agents search the wiki themselves;
+  - sessions: they belong to `@`.
+- **`<referenced-project>`** carries:
+  - state and a "Shown as" line;
+  - criteria met out of total, with the unmet ones named;
+  - task counts and recent failures;
+  - open blockers and items waiting on the owner;
+  - the coordinator session and its state;
+  - landing state.
+
+  `<referenced-task>` gains its latest run's session id.
+- **A message with both kinds gets one grey line:** `⊕ Orbit attached: 1 session, 1 project`.
+- **Kill criterion for the `#` menu:** after a month, if under about 15% of project references
+  arrive as a chip from the menu, remove the menu and keep server recognition. The threshold is a
+  guess. A Fable run wrote this `#` definition.
+
 ## 1. What production shows
 
 Read-only queries against production on 2026-11-28, over all `conversation_turn` rows since
