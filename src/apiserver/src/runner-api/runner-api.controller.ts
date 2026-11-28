@@ -531,6 +531,7 @@ import {
   type LinkBeatDigests,
   type LinkBeatRow,
 } from './link-heartbeat';
+import { countLinkHeartbeatFull, countLinkHeartbeatQuiet, countLinkHeartbeatReport } from './link-heartbeat-metrics';
 import { RunnerReleaseFeed } from './runner-release-feed';
 import { ReferenceExpansionService } from '../tasks/reference-expansion';
 import { ListEventsService } from '../task-lists/list-events.service';
@@ -2226,11 +2227,13 @@ export class RunnerApiController {
       // A managed runner is admitted with its instance, as RunnerAuthGuard admits it, and reconciles in full.
       const admitted = await readAdmittedLinkRunner(this.prisma, { runnerId, credential: admission.credential });
       const instance = await authorizeManagedRunnerInstance(this.prisma, admitted.id, headers.all);
+      countLinkHeartbeatFull('MANAGED');
       return this.reconcileHeartbeat(admitted, dto, headers.capabilities, headers.providerHeader, headers.osHeader, instance, link);
     }
     if (row.landingNamed) assertEngineSessionRow({ sessionKind: 'LANDING' });
     await this.recordExecuting(runnerId, leaseOwner, dto);
     let verdict = linkBeatVerdict(runnerId, row, digests, supervised.length);
+    let unwritable = false;
     if (verdict.answer === 'REPORT') {
       // A beat whose checkout report changed is written here, not by the full reconcile: read what it overwrites, so
       // the owner's clients are told which workspaces' checkouts moved, as reconcileHeartbeat tells them.
@@ -2262,8 +2265,12 @@ export class RunnerApiController {
         if (!(error instanceof LinkReportUnwritable)) throw error;
         // What one statement cannot write, the full reconcile writes, and refuses, as an HTTPS beat does.
         verdict = { answer: 'FULL', reason: 'INPUTS' };
+        unwritable = true;
       }
     }
+    if (verdict.answer === 'FULL') countLinkHeartbeatFull(unwritable ? 'REPORT_UNWRITABLE' : verdict.reason);
+    else if (verdict.answer === 'REPORT') countLinkHeartbeatReport(verdict.reports);
+    else countLinkHeartbeatQuiet();
     if (verdict.answer !== 'FULL') {
       // Whichever apiserver process holds them (cursor-key-check-relay.ts): the gateway forwards a beat to any.
       const cursorKeyChecks = await cursorKeyCheckRelay.takeAnywhere(runnerId);
