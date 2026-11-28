@@ -8,7 +8,8 @@
  *       deletes; a Drive chat's renames; a sync's files (and not its writes again); and the owner's own rename and delete
  *       are four groups, each naming its session, with the right ops, counts, folder paths and bytes. Writes of no
  *       session are nobody's. A chat's change group is answered as its Undo, which the chat's undo route accepts; a
- *       deletion as its Trash group, which POST /drive/trash/groups/:id/restore accepts;
+ *       deletion as its Trash group, which POST /drive/trash/groups/:id/restore accepts; a chat's change group held for
+ *       Apply as `held` lines with no Undo;
  *   (2) owner isolation: another account's session work is never in the owner's answer, and the owner's never in theirs;
  *       the other account cannot restore the owner's group;
  *   (3) paging: whole days a page, newest first, until a page holds 20 groups; `before=<nextBefore>` answers the days
@@ -273,6 +274,23 @@ test('Drive activity: the owner\'s drive work grouped by session and day', {
   const after = await activity(ownerToken);
   assert.ok(!after.groups.some((g) => uuidOf(g.sessionId) === chat), 'an undone change group is no longer the chat\'s work');
   assert.ok(!groupOf(after, plain).lines.some((l) => l.op === 'DELETED'), 'a restored deletion is no longer in Trash to restore');
+
+  // A held change group (past a turn's 200th change): what it holds for Apply is the chat's, marked held, with no Undo.
+  const heldGroup = randomUUID();
+  const turn = (await sql.query(`SELECT id FROM "conversation_turn" WHERE session_id = $1`, [chat])).rows[0].id as string;
+  await sql.query(`INSERT INTO "drive_chat_change_group"(id, owner_id, session_id, turn_id, status, held) VALUES ($1, $2, $3, $4, 'PENDING', true)`,
+    [heldGroup, owner.id, chat, turn]);
+  for (const name of ['d', 'e']) {
+    await sql.query(
+      `INSERT INTO "drive_chat_held_change"(id, group_id, owner_id, kind, op, name, from_path, to_path)
+       VALUES ($1, $2, $3, 'RENAME', '{}'::jsonb, $4, $5, $6)`,
+      [randomUUID(), heldGroup, owner.id, `${name}.jpg`, `/Books/${name}.jpg`, `/Books/0412-${name}.jpg`],
+    );
+  }
+  const withHeld = groupOf(await activity(ownerToken), chat);
+  assert.equal(withHeld.isDriveChat, true);
+  assert.deepEqual(withHeld.lines.map((l) => [l.op, l.count, l.folderPath, l.held ?? false, l.undo ?? null]),
+    [['RENAMED', 2, '/Books', true, null]], 'the held renames, waiting for Apply');
 
   // ── (3) paging ─────────────────────────────────────────────────────────────────────────────
   // 21 sessions moved something on 2026-01-10 (UTC), one on 2026-01-08: whole days a page, until a page holds 20 groups.
