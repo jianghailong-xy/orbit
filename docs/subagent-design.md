@@ -445,7 +445,9 @@ P1 不路由，所以可以先把最难的部分（同 cwd 子进程、事件内
     （领取时父会话的模式，旧服务端不带时是子 Agent 自己的模式），Plan 门按它判断。所以在 Plan 模式下领取的运行仍然不能上传。
   - 远程运行的 worktree 在 `~/.orbit/remote-subagents/<run>/tree`，在 Orbit 自己的目录里；`file_upload` 把这次运行自己的
     worktree 当作它的 checkout 放行（别的运行的不放行），父会话的 uploads 目录照旧可用。
-  - `file_fetch` 和其他 Orbit 写操作没有放开：服务端仍只认托管父会话的 runner。
+  - `file_fetch` 也带 `?subagentRunId=<run>`（2026-11-28）：描述和字节两个请求都按上面的规则放行，所以父 Agent 可以先
+    `file_upload` 一个文件（比如补丁），把 id 写进 prompt，远程子 Agent 再 `file_fetch` 取回，下载时校验 sha256。
+    其他 Orbit 写操作没有放开：服务端仍只认托管父会话的 runner。
 - 看不到父会话未提交的改动：工具描述里写明「remote SubAgents run on that workspace's own HEAD and return text only」，
   父 Agent 需要它看到新代码时，自己先提交并推送（或者在 prompt 里写清楚）。
 - **续跑**：worktree 随结束删掉，对话留下。目标 runner 把结束的运行记成 `ended`（`remote-subagents/<runId>/run.json`：
