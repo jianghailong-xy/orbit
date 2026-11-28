@@ -1,4 +1,4 @@
-import { ClockCircleOutlined, LoadingOutlined } from '@ant-design/icons';
+import { ClockCircleOutlined, LoadingOutlined, MessageOutlined } from '@ant-design/icons';
 import type { ReactNode } from 'react';
 import {
   SESSION_MARKS,
@@ -53,8 +53,8 @@ export function SessionStateGlyph({ state, size = 16 }: { state: SessionDisplayS
     );
   return (
     <Tooltip content={label} delay={TEXT_TOOLTIP_DELAY_MS}>
-      <span aria-label={label} className="session-state-glyph" data-state={state.phase} style={{ color: 'var(--text-3)' }}>
-        {svg(<path d="M2.7 3.7h10.6a.7.7 0 0 1 .7.7v6a.7.7 0 0 1-.7.7H6.7l-3 2.3V11.1h-1a.7.7 0 0 1-.7-.7v-6a.7.7 0 0 1 .7-.7z" />, size)}
+      <span aria-label={label} className="session-state-glyph" data-state={state.phase}>
+        <MessageOutlined style={{ color: 'var(--text-3)', fontSize: size }} />
       </span>
     </Tooltip>
   );

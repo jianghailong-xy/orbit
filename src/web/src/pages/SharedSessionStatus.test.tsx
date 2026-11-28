@@ -20,7 +20,7 @@ const cases: Case[] = JSON.parse(
     'utf8',
   ),
 );
-const GLYPH = { clock: 'anticon-clock-circle', spinner: 'anticon-loading', message: '<path d="M2.7 3.7h10.6' };
+const GLYPH = { clock: 'anticon-clock-circle', spinner: 'anticon-loading', message: 'anticon-message' };
 const PHASE = { clock: 'PENDING', spinner: 'RUNNING', message: 'IDLE' };
 /** The pill's own markup: everything before the word. */
 const draw = (payload: Record<string, unknown>) =>

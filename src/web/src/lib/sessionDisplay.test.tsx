@@ -147,7 +147,7 @@ describe('the board on web: facts present', () => {
       // Session list row: the state icon from phase alone, and the marks after its line.
       const glyph = renderToStaticMarkup(<StatusIcon session={p} />);
       expect(glyph).toContain(`data-state="${p.phase}"`);
-      expect(antGlyph(glyph)).toBe(want.icon === 'clock' ? 'clock-circle' : want.icon === 'spinner' ? 'loading' : 'none');
+      expect(antGlyph(glyph)).toBe(want.icon === 'clock' ? 'clock-circle' : want.icon === 'spinner' ? 'loading' : 'message');
       expect(statusGlyphMotion(p)).toBe(want.icon === 'spinner' ? 'spinner' : null);
       // Session header, search palette, local status: the state word.
       expect(statusLabel(p)).toBe(want.state);
