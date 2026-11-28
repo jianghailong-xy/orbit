@@ -104,9 +104,12 @@ describe('session listing fixture (contracts/session-listing.fixtures.json)', ()
           // sessionLine: a row somebody waits on reads in the approval tone, which is what lights a project row.
           line: (s) => ({ text: '', tone: (s.pendingApprovals ?? 0) > 0 ? 'approval' : 'preview' }),
         });
+        // The server keeps `running` and `jobs` apart; the web draws both as running (a row with a job in flight spins).
+        const merged = <E extends { running?: boolean; jobs?: boolean }>({ jobs, ...rest }: E) =>
+          'running' in rest ? { ...rest, running: !!rest.running || !!jobs } : rest;
         expect(listing.folders.map((f) => ({
-          folderId: f.folder.id, rowCount: f.sessionCount, needsYou: f.needsYou, running: f.running, jobs: f.jobs,
-        }))).toEqual(read.expected.folders ?? []);
+          folderId: f.folder.id, rowCount: f.sessionCount, needsYou: f.needsYou, running: f.running,
+        }))).toEqual((read.expected.folders ?? []).map(merged));
         // The order the column draws: in Open its sections flattened, in Completed the listing's own.
         const drawn = read.view === 'open'
           ? sessionTimeSections(listing.entries, { pinnedFirst: true, attention: true }).flatMap((section) => section.sessions)
@@ -120,9 +123,8 @@ describe('session listing fixture (contracts/session-listing.fixtures.json)', ()
               placedAt: entry.listedAt,
               spokeAt: entry.lastTurnAt,
               running: entry.running,
-              jobs: entry.jobs,
             }
-          : { kind: 'session', id: entry.id })).toEqual(read.expected.entries);
+          : { kind: 'session', id: entry.id })).toEqual(read.expected.entries.map(merged));
       });
     }
   }

@@ -108,7 +108,7 @@ function listingPages(c: Case, read: Read, size: number): SessionListingPage[] {
 const shape = (entries: readonly SessionProjectEntry<Row>[]) =>
   entries.map((entry) => entry.kind === 'project'
     ? { kind: 'project', id: entry.projectId, coordinator: entry.coordinator?.id ?? null, listedAt: entry.listedAt,
-        lastTurnAt: entry.lastTurnAt, pinned: !!entry.pinnedAt, needsYou: entry.needsYou, running: entry.running, jobs: entry.jobs,
+        lastTurnAt: entry.lastTurnAt, pinned: !!entry.pinnedAt, needsYou: entry.needsYou, running: entry.running,
         indicator: entry.indicator }
     : { kind: 'session', id: entry.id, mark: entry.projectMark?.projectId ?? null });
 
@@ -130,7 +130,7 @@ describe('the list drawn from GET /sessions/listing (contracts/session-listing.f
           const paged = sessionListingView(listingPages(c, read, size), folders, [], opts);
 
           const folderRows = (rows: typeof whole.folders) =>
-            rows.map((f) => ({ id: f.folder.id, count: f.sessionCount, needsYou: f.needsYou, running: f.running, jobs: f.jobs }));
+            rows.map((f) => ({ id: f.folder.id, count: f.sessionCount, needsYou: f.needsYou, running: f.running }));
           expect(folderRows(paged.folders)).toEqual(folderRows(whole.folders));
           // In Open the column draws the sections below, each sorted as compareListed sorts it, so the flat order is
           // the drawn one only in Completed; in Open it is the same entries, and the sections are compared next.
@@ -178,11 +178,12 @@ describe('sessionListingView', () => {
       next: null,
     }];
     const rows = sessionListingView(pages, folders, [], opts).folders;
-    expect(rows.map((r) => [r.folder.id, r.sessionCount, r.needsYou, r.running, r.jobs])).toEqual([
-      ['f3', 0, 0, false, false], ['f1', 4, 1, true, false], ['f2', 2, 0, false, true],
+    expect(rows.map((r) => [r.folder.id, r.sessionCount, r.needsYou, r.running])).toEqual([
+      // A job in flight runs its folder, as it spins its row.
+      ['f3', 0, 0, false], ['f1', 4, 1, true], ['f2', 2, 0, true],
     ]);
     const offline = sessionListingView(pages, folders, [], { ...opts, runnerOffline: true }).folders;
-    expect(offline.some((r) => r.running || r.jobs)).toBe(false);
+    expect(offline.some((r) => r.running)).toBe(false);
     const completed = sessionListingView(pages, folders, [], { ...opts, view: 'completed' }).folders;
     expect(completed.map((r) => r.folder.id)).toEqual(['f1', 'f2']);
   });
@@ -226,9 +227,10 @@ describe('sessionListingView', () => {
     const busy = (flags: { running?: boolean; jobs?: boolean }, runnerOffline = false) =>
       sessionListingView([{ entries: [{ ...pages[0].entries[0], ...flags } as SessionListingEntry], next: null }], [], [],
         { ...opts, runnerOffline }).entries[0];
-    expect(busy({ running: true, jobs: true })).toMatchObject({ running: true, jobs: true, indicator: 'running' });
-    expect(busy({ jobs: true })).toMatchObject({ running: false, jobs: true, indicator: 'jobs' });
-    expect(busy({ running: true, jobs: true }, true)).toMatchObject({ running: false, jobs: false, indicator: null });
+    // A member with a job in flight spins its row (`phase` RUNNING), so the project row spins for it too.
+    expect(busy({ running: true, jobs: true })).toMatchObject({ running: true, indicator: 'running' });
+    expect(busy({ jobs: true })).toMatchObject({ running: true, indicator: 'running' });
+    expect(busy({ running: true, jobs: true }, true)).toMatchObject({ running: false, indicator: null });
     // A project with no coordinator, no sidebar row and no member the list holds still has a name.
     const bare = sessionListingView([{ entries: [{ ...pages[0].entries[0], coordinator: null } as SessionListingEntry], next: null }], [], [], opts);
     expect(bare.entries[0]).toMatchObject({ kind: 'project', title: 'Project', line: { text: 'No coordinator' } });

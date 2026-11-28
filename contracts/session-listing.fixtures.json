@@ -84,8 +84,8 @@
           "expected": {
             "folders": [],
             "entries": [
-              { "kind": "session", "id": "m2a" },
               { "kind": "project", "id": "P3", "coordinator": null, "memberCount": 2, "placedAt": "2026-11-20T11:00:00.000Z", "spokeAt": "2026-11-20T11:30:00.000Z", "running": false, "jobs": true },
+              { "kind": "session", "id": "m2a" },
               { "kind": "session", "id": "s2a" },
               { "kind": "session", "id": "m2b" },
               { "kind": "project", "id": "P4", "coordinator": "c4", "memberCount": 1, "placedAt": "2026-11-20T08:00:00.000Z", "spokeAt": "2026-11-19T00:00:00.000Z", "running": false, "jobs": false }

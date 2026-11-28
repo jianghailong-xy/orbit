@@ -380,19 +380,19 @@ describe('project second line and target', () => {
 });
 
 describe('project status indicator', () => {
-  it('prioritizes a waiting member, then running work, then background jobs', () => {
+  it('prioritizes a waiting member, then running work, a background job in flight included', () => {
     const background = member('background', { motion: 'pulse' });
     const running = member('running', { motion: 'spinner' });
     const waiting = member('waiting', { line: { text: 'Waiting for your confirmation', tone: 'approval' } });
     expect(listing([coordinator(), background, running, waiting]).projects[0].indicator).toBe('needs-you');
     expect(listing([coordinator(), background, running]).projects[0].indicator).toBe('running');
-    expect(listing([coordinator(), background]).projects[0].indicator).toBe('jobs');
+    expect(listing([coordinator(), background]).projects[0].indicator).toBe('running');
     expect(listing([coordinator()]).projects[0].indicator).toBeNull();
   });
 
   it('does not infer local motion from sidebar running counts, and suppresses motion offline', () => {
     expect(listing([coordinator()]).projects[0]).toMatchObject({ runningCount: 2, indicator: null });
-    expect(listing([coordinator(), member('running', { motion: 'spinner' }), member('background', { motion: 'pulse' })], { runnerOffline: true }).projects[0]).toMatchObject({ running: false, jobs: false, indicator: null });
+    expect(listing([coordinator(), member('running', { motion: 'spinner' }), member('background', { motion: 'pulse' })], { runnerOffline: true }).projects[0]).toMatchObject({ running: false, indicator: null });
   });
 
   it('shows Ready to start without adding a folder needs-you count', () => {

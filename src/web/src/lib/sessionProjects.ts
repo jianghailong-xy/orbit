@@ -48,8 +48,7 @@ export interface SessionProjectRow<T> extends GroupableSession {
   folderId: string | null;
   needsYou: boolean;
   running: boolean;
-  jobs: boolean;
-  indicator: 'needs-you' | 'running' | 'jobs' | null;
+  indicator: 'needs-you' | 'running' | null;
   line: SessionProjectLine;
   target: { kind: 'session' | 'project'; id: string };
   taskCounts?: ProjectSidebarTaskCounts;
@@ -897,8 +896,8 @@ export function sessionProjectRow<T extends SessionProjectSession>(
     : null;
   const motions = opts.runnerOffline ? [] : members.map(opts.motion);
   const needsYou = members.some((session) => lines.get(session.id)?.tone === 'approval');
-  const running = motions.includes('spinner') || (!opts.runnerOffline && !!placed?.running);
-  const jobs = motions.includes('pulse') || (!opts.runnerOffline && !!placed?.jobs);
+  // A member with a background job in flight runs here too (the server's `jobs`, an older server's breathing row).
+  const running = motions.some((motion) => motion !== null) || (!opts.runnerOffline && !!(placed?.running || placed?.jobs));
   const listedAt = placed?.placedAt ?? latest?.listedAt ?? latest?.createdAt ?? null;
   return {
     id: projectId,
@@ -919,8 +918,7 @@ export function sessionProjectRow<T extends SessionProjectSession>(
     createdAt: coordinator?.createdAt ?? latest?.createdAt ?? listedAt,
     needsYou,
     running,
-    jobs,
-    indicator: needsYou ? 'needs-you' : running ? 'running' : jobs ? 'jobs' : null,
+    indicator: needsYou ? 'needs-you' : running ? 'running' : null,
     line,
     target,
     taskCounts: summary?.taskCounts,
