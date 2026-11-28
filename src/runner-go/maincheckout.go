@@ -124,10 +124,6 @@ func scanMainCheckout(ctx context.Context, dir string) (*mainCheckoutScan, error
 						b, errB := strconv.Atoi(f[1])
 						if errA == nil && errB == nil {
 							snap.Ahead, snap.Behind = &a, &b
-							if a > 0 {
-								snap.Commits = mainCheckoutUnpushedCommits(ctx, root, head)
-								snap.CommitsTruncated = snap.Commits != nil && a > mainCheckoutCommitsMax
-							}
 						}
 					}
 				}
@@ -142,17 +138,25 @@ func scanMainCheckout(ctx context.Context, dir string) (*mainCheckoutScan, error
 	return &mainCheckoutScan{Snapshot: snap, All: all}, nil
 }
 
-// mainCheckoutUnpushedCommits is upstream..head as a session's commit list reads it (branchCommitsBetween), newest
-// first and at most mainCheckoutCommitsMax; nil when git cannot say. A rename is listed as a delete and an add, so
-// that every listed path is one a commit read can be asked for.
-func mainCheckoutUnpushedCommits(ctx context.Context, root, head string) []BranchCommit {
-	upstream, err := mcGit(ctx, root, nil, "rev-parse", "--verify", "--quiet", "@{upstream}^{commit}")
-	if err != nil {
-		return nil
+// listMainCheckoutUnpushedCommits fills snap's Commits and CommitsTruncated: upstream..HEAD as a session's commit list
+// reads it (branchCommitsBetween), newest first and at most mainCheckoutCommitsMax, left nil when nothing is ahead or
+// git cannot say. A rename is listed as a delete and an add, so that every listed path is one a commit read can be
+// asked for. Only the on-demand read calls it: the scan behind the heartbeat, the turn-end watch and the actions runs
+// every minute or more and would throw the list away.
+func listMainCheckoutUnpushedCommits(ctx context.Context, snap *MainCheckoutSnapshot) {
+	if snap.Ahead == nil || *snap.Ahead == 0 {
+		return
 	}
-	out, err := mcGit(ctx, root, nil, branchCommitsLogArgs(strings.TrimSpace(string(upstream)), head,
+	ctx, cancel := context.WithTimeout(ctx, mainCheckoutScanTimeout)
+	defer cancel()
+	upstream, err := mcGit(ctx, snap.Root, nil, "rev-parse", "--verify", "--quiet", "@{upstream}^{commit}")
+	if err != nil {
+		return
+	}
+	out, err := mcGit(ctx, snap.Root, nil, branchCommitsLogArgs(strings.TrimSpace(string(upstream)), snap.Head,
 		mainCheckoutCommitsMax, "--no-renames")...)
-	return readBranchCommits(root, string(out), err)
+	snap.Commits = readBranchCommits(snap.Root, string(out), err)
+	snap.CommitsTruncated = snap.Commits != nil && *snap.Ahead > mainCheckoutCommitsMax
 }
 
 // mainCheckoutReviewLimit bounds how many served fingerprints the runner remembers the files of.

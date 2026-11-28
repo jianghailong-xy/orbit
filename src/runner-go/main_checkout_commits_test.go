@@ -3,6 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -27,6 +30,16 @@ func readCommit(repo, sha string, paths ...string) MainCheckoutSnapshotAnswer {
 		mainCheckoutDeps{owns: ownsOnly(repo)})
 }
 
+// readSnapshot is the snapshot an on-demand read answers, the only one that lists commits.
+func readSnapshot(t *testing.T, repo string) MainCheckoutSnapshot {
+	t.Helper()
+	a := readCommit(repo, "")
+	if a.Error != "" || a.Snapshot == nil {
+		t.Fatalf("read %s: %+v", repo, a)
+	}
+	return *a.Snapshot
+}
+
 func checkedOut(t *testing.T, repo string) string {
 	t.Helper()
 	return mustGit(t, repo, "rev-parse", "HEAD")
@@ -34,7 +47,7 @@ func checkedOut(t *testing.T, repo string) string {
 
 func TestMainCheckoutCommitsListedNewestFirst(t *testing.T) {
 	repo := trackingRepo(t)
-	if snap := mustScan(t, repo).Snapshot; snap.Commits != nil || snap.CommitsTruncated {
+	if snap := readSnapshot(t, repo); snap.Commits != nil || snap.CommitsTruncated {
 		t.Fatalf("nothing ahead, commits = %+v", snap.Commits)
 	}
 	commitFile(t, repo, "a.txt", "1\n2\n", "first")
@@ -44,7 +57,7 @@ func TestMainCheckoutCommitsListedNewestFirst(t *testing.T) {
 	mustGit(t, repo, "add", "-A")
 	mustGit(t, repo, "commit", "-q", "-m", "third", "-m", "Why it was done.")
 
-	snap := mustScan(t, repo).Snapshot
+	snap := readSnapshot(t, repo)
 	if len(snap.Commits) != 3 || snap.CommitsTruncated {
 		t.Fatalf("commits = %+v, truncated %v", snap.Commits, snap.CommitsTruncated)
 	}
@@ -68,18 +81,77 @@ func TestMainCheckoutCommitsListedNewestFirst(t *testing.T) {
 	}
 }
 
+// The heartbeat and the turn-end watch scan every checkout again and again and send no commit list, so they must not
+// read one. A git on PATH records what each of them runs.
+func TestMainCheckoutCommitsListedOnlyByTheRead(t *testing.T) {
+	repo := trackingRepo(t)
+	for i := 1; i <= 3; i++ {
+		commitFile(t, repo, "a.txt", fmt.Sprintf("%d\n", i), fmt.Sprintf("c%d", i))
+	}
+	real, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := t.TempDir()
+	ran := filepath.Join(bin, "ran")
+	script := fmt.Sprintf("#!/bin/sh\necho \"$@\" >> '%s'\nexec '%s' \"$@\"\n", ran, real)
+	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	logs := func() int {
+		t.Helper()
+		raw, err := os.ReadFile(ran)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Remove(ran); err != nil {
+			t.Fatal(err)
+		}
+		return strings.Count(string(raw), " log --first-parent ")
+	}
+
+	if scan := mustScan(t, repo); scan.Snapshot.Ahead == nil || *scan.Snapshot.Ahead != 3 ||
+		scan.Snapshot.Commits != nil || scan.Snapshot.CommitsTruncated {
+		t.Errorf("scan = %+v", scan.Snapshot)
+	}
+	if n := logs(); n != 0 {
+		t.Errorf("a scan ran %d commit logs", n)
+	}
+	if hb := mainCheckoutHeartbeat(repo); hb == nil || hb.Ahead == nil || *hb.Ahead != 3 {
+		t.Errorf("heartbeat = %+v", hb)
+	}
+	if n := logs(); n != 0 {
+		t.Errorf("the heartbeat ran %d commit logs", n)
+	}
+	watch := watchMainCheckout(&Worktree{RepoDir: repo})
+	mcWrite(t, repo, "new.txt", "x\n")
+	if watch.changed() == nil {
+		t.Error("the turn-end watch saw no change")
+	}
+	if n := logs(); n != 0 {
+		t.Errorf("the turn-end watch ran %d commit logs", n)
+	}
+	if snap := readSnapshot(t, repo); len(snap.Commits) != 3 {
+		t.Errorf("read listed %+v", snap.Commits)
+	}
+	if n := logs(); n != 1 {
+		t.Errorf("the read ran %d commit logs, want 1", n)
+	}
+}
+
 func TestMainCheckoutCommitsCappedAt20(t *testing.T) {
 	repo := trackingRepo(t)
 	for i := 1; i <= mainCheckoutCommitsMax; i++ {
 		mustGit(t, repo, "commit", "-q", "--allow-empty", "-m", fmt.Sprintf("c%d", i))
 	}
-	if snap := mustScan(t, repo).Snapshot; len(snap.Commits) != 20 || snap.CommitsTruncated {
+	if snap := readSnapshot(t, repo); len(snap.Commits) != 20 || snap.CommitsTruncated {
 		t.Fatalf("20 ahead: %d listed, truncated %v", len(snap.Commits), snap.CommitsTruncated)
 	}
 	for i := 21; i <= 25; i++ {
 		mustGit(t, repo, "commit", "-q", "--allow-empty", "-m", fmt.Sprintf("c%d", i))
 	}
-	snap := mustScan(t, repo).Snapshot
+	snap := readSnapshot(t, repo)
 	if snap.Ahead == nil || *snap.Ahead != 25 || len(snap.Commits) != 20 || !snap.CommitsTruncated {
 		t.Fatalf("25 ahead: ahead %v, %d listed, truncated %v", snap.Ahead, len(snap.Commits), snap.CommitsTruncated)
 	}
@@ -95,7 +167,7 @@ func TestMainCheckoutCommitsCappedAt20(t *testing.T) {
 func TestMainCheckoutCommitsAbsentWithoutUpstream(t *testing.T) {
 	absent := func(what, repo string) {
 		t.Helper()
-		snap := mustScan(t, repo).Snapshot
+		snap := readSnapshot(t, repo)
 		raw, err := json.Marshal(snap)
 		if err != nil {
 			t.Fatal(err)

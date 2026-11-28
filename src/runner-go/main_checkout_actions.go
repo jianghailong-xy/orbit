@@ -173,6 +173,7 @@ func readMainCheckoutForRelay(req MainCheckoutRunnerRequest, deps mainCheckoutDe
 	if req.Commit != "" && !mainCheckoutUnpushed(ctx, scan.Snapshot, req.Commit) {
 		return MainCheckoutSnapshotAnswer{Error: "that commit isn't one this checkout hasn't pushed"}
 	}
+	listMainCheckoutUnpushedCommits(ctx, &scan.Snapshot)
 	answer := MainCheckoutSnapshotAnswer{Snapshot: &scan.Snapshot}
 	for _, p := range req.DiffPaths {
 		var d MainCheckoutFileDiff
