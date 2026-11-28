@@ -10,8 +10,13 @@ import {
 } from 'react';
 import {
   BookOutlined,
+  BorderOutlined,
   CheckSquareOutlined,
+  ClockCircleOutlined,
+  CloseSquareOutlined,
   FolderOutlined,
+  LoadingOutlined,
+  MinusSquareOutlined,
   MessageOutlined,
   ProjectOutlined,
   UnorderedListOutlined,
@@ -38,6 +43,7 @@ import {
   pathLabel,
   targetHref,
   ORBIT_LINK_CARD_TAG,
+  ORBIT_LINK_GROUP_TAG,
   ORBIT_LINK_KINDS,
   writtenId,
   type OrbitLinkKind,
@@ -46,7 +52,7 @@ import {
 import { wikiAnchorLabel, wikiAnchorMark, wikiKindWord, WIKI_NO_LONGER_PUSHED } from '../lib/wiki';
 import { sessionRunStateOf, type SessionRunState, type SessionStateSource } from '../lib/sessionState';
 import { WikiAnchorMark, WikiTrustBadge } from './WikiMarks';
-import { TaskStatusPill } from './TaskStatusPill';
+import { taskStatusLabel } from './TaskStatusPill';
 import { sessionDisplayState, sessionMarks } from '../lib/sessionDisplay';
 import { SessionMarkChips } from './SessionStateDisplay';
 import { relTime } from './Transcript';
@@ -239,6 +245,46 @@ function lastActivity(at: Array<string | null | undefined>): string | null {
   return null;
 }
 
+/** `4 tasks` — the count in a task list's header. */
+export function orbitLinkTaskCount(count: number): string {
+  return count === 1 ? '1 task' : `${orbitLinkNumber(count)} tasks`;
+}
+
+/** A task's state as a row draws it: the task list's own word, a tone, and the glyph that carries it. */
+function taskState(task: LinkPreviewTask): { word: string; tone: 'live' | 'done' | 'failed' | 'idle'; glyph: ReactNode } {
+  const word = taskStatusLabel(task.status, task.running, task.queued);
+  if (task.running) return { word, tone: 'live', glyph: <LoadingOutlined /> };
+  if (task.queued) return { word, tone: 'idle', glyph: <ClockCircleOutlined /> };
+  if (task.status === 'DONE') return { word, tone: 'done', glyph: <CheckSquareOutlined /> };
+  if (task.status === 'FAILED') return { word, tone: 'failed', glyph: <CloseSquareOutlined /> };
+  if (task.status === 'CANCELLED') return { word, tone: 'idle', glyph: <MinusSquareOutlined /> };
+  if (task.status === 'IN_PROGRESS') return { word, tone: 'live', glyph: <BorderOutlined /> };
+  return { word, tone: 'idle', glyph: <BorderOutlined /> };
+}
+
+/** `orbit · 2 runs · last Finished, 93 turns`: who has the task and how its runs went. */
+function taskFacts(task: LinkPreviewTask, stateWord: (row: SessionStateSource) => string): string {
+  const parts = [task.assignee?.name ?? ORBIT_LINK_UNASSIGNED, orbitLinkRuns(task.runs)];
+  // The newest run's own word, from the same vocabulary the conversation header uses.
+  if (task.lastRun) parts.push(orbitLinkLastRun(stateWord(task.lastRun), task.lastRun.numTurns));
+  return parts.join(ORBIT_LINK_SEPARATOR);
+}
+
+/** When anything last happened to a task, relative. */
+function taskTime(task: LinkPreviewTask): string | null {
+  const at = lastActivity([task.lastRun?.endedAt, task.updatedAt]);
+  return at ? relTime(at) : null;
+}
+
+/** The title as a one-line link, its full text on hover when the line cuts it off. */
+function RowTitle({ title, href }: { title: string; href: string | null }) {
+  return (
+    <Tooltip content={title} truncatedOnly>
+      <span className="olc-title">{href !== null ? <Link to={href}>{title}</Link> : <span>{title}</span>}</span>
+    </Tooltip>
+  );
+}
+
 /**
  * One card. Pure: everything it draws comes from its props, so the four contents and the two states
  * with nothing to show are each one render in `OrbitLinkCard.test.tsx`.
@@ -300,20 +346,22 @@ export function OrbitLinkCard({
     title = ORBIT_LINK_NOT_AVAILABLE;
     lines.push({ text: ORBIT_LINK_UNAVAILABLE_REASON });
   } else if (state === 'ready' && kind === 'task') {
+    // Two lines (docs/mocks/task-link-card/board.png, A): the state's glyph stands where the type's
+    // name was, the title is one line, and the project leads the facts under it.
     const task = answer as LinkPreviewTask;
-    headRight = <TaskStatusPill status={task.status} running={task.running} queued={task.queued} />;
-    title = cardTitle(task.title, link);
-    if (task.project && task.project.title !== '') {
-      lines.push({ text: task.project.title, glyph: <ProjectOutlined /> });
-    }
-    const parts = [task.assignee?.name ?? ORBIT_LINK_UNASSIGNED, orbitLinkRuns(task.runs)];
-    if (task.lastRun) {
-      // The newest run's own word, from the same vocabulary the conversation header uses.
-      parts.push(orbitLinkLastRun(stateWord(task.lastRun), task.lastRun.numTurns));
-    }
-    const at = lastActivity([task.lastRun?.endedAt, task.updatedAt]);
-    if (at) parts.push(relTime(at));
-    lines.push({ text: parts.join(ORBIT_LINK_SEPARATOR) });
+    const shown = taskState(task);
+    const time = taskTime(task);
+    const facts = [task.project?.title || null, taskFacts(task, stateWord), time].filter(Boolean);
+    return (
+      <div className="orbit-link-card is-ready is-compact" data-kind={kind} data-state={state}>
+        <div className="olc-row">
+          <span className={`olc-glyph is-${shown.tone}`} aria-hidden="true">{shown.glyph}</span>
+          <RowTitle title={cardTitle(task.title, link)} href={href} />
+          <span className={`olc-word is-${shown.tone}`}>{shown.word}</span>
+        </div>
+        <div className="olc-meta">{facts.join(ORBIT_LINK_SEPARATOR)}</div>
+      </div>
+    );
   } else if (state === 'ready' && kind === 'session') {
     const session = answer as LinkPreviewSession;
     // With the facts: the state from `phase` alone in the pill, blue while it runs, and the marks after it
@@ -636,6 +684,109 @@ export function OrbitLinkCardNode(props: {
 }
 
 /**
+ * Two or more task cards in a row, as one list (docs/mocks/task-link-card/board.png, B): a header with
+ * the project when every row shares it and the count, then one row per task — its state's glyph, the
+ * title, the facts under it, the state's word and the time on the right. Pure, like the card.
+ */
+export function OrbitLinkGroup({
+  links,
+  previewFor,
+  stateWord,
+}: {
+  links: OrbitLinkRef[];
+  previewFor: (link: OrbitLinkRef) => LinkPreview | undefined;
+  stateWord: (row: SessionStateSource) => string;
+}) {
+  const tasks = links.map((link) => {
+    const preview = previewFor(link);
+    const task = preview?.state === 'ok' && preview.kind === 'task' ? preview.task : undefined;
+    return { link, task, loading: preview === undefined };
+  });
+  // The project is said once when it is the same on every row; otherwise each row says its own.
+  const projects = new Set(tasks.map(({ task }) => task?.project?.title ?? ''));
+  const shared = projects.size === 1 && tasks.every(({ task }) => task) ? [...projects][0] : '';
+  return (
+    <div className="olc-group" data-kind="task">
+      <div className="olc-group-head">
+        {shared !== '' && (
+          <>
+            <span className="olc-line-glyph" aria-hidden="true">
+              <ProjectOutlined />
+            </span>
+            <span className="olc-group-project">{shared}</span>
+          </>
+        )}
+        <span className="olc-group-count">{orbitLinkTaskCount(links.length)}</span>
+      </div>
+      {tasks.map(({ link, task, loading }) => {
+        const href = targetHref(link.target, undefined);
+        if (!task) {
+          return (
+            <div key={linkKey(link.target)} className={`olc-group-row is-${loading ? 'loading' : 'unavailable'}`}>
+              <span className="olc-glyph is-idle" aria-hidden="true">
+                <CheckSquareOutlined />
+              </span>
+              <div className="olc-group-body">
+                {loading ? (
+                  <div className="olc-skeleton" aria-hidden="true">
+                    <span />
+                  </div>
+                ) : (
+                  <>
+                    <RowTitle title={ORBIT_LINK_NOT_AVAILABLE} href={href} />
+                    <div className="olc-meta">{ORBIT_LINK_UNAVAILABLE_REASON}</div>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        }
+        const shown = taskState(task);
+        const time = taskTime(task);
+        const project = shared === '' ? task.project?.title || null : null;
+        return (
+          <div key={linkKey(link.target)} className="olc-group-row is-ready">
+            <span className={`olc-glyph is-${shown.tone}`} aria-hidden="true">
+              {shown.glyph}
+            </span>
+            <div className="olc-group-body">
+              <RowTitle title={cardTitle(task.title, link)} href={href} />
+              <div className="olc-meta">{[project, taskFacts(task, stateWord)].filter(Boolean).join(ORBIT_LINK_SEPARATOR)}</div>
+            </div>
+            <div className="olc-group-side">
+              <span className={`olc-word is-${shown.tone}`}>{shown.word}</span>
+              {time && <span className="olc-meta">{time}</span>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** The list as react-markdown draws it: the tag `orbitLinkGroupRemarkPlugin` gave it, its rows the
+ *  card nodes' own props, read back the way a card reads its own. */
+export function OrbitLinkGroupNode({ cards: raw }: { cards?: unknown }) {
+  const cards = useContext(OrbitLinkCardsCtx);
+  const links = useMemo(() => {
+    let rows: unknown;
+    try {
+      rows = typeof raw === 'string' ? JSON.parse(raw) : [];
+    } catch {
+      rows = [];
+    }
+    return (Array.isArray(rows) ? rows : [])
+      .map((row) => linkFromProps((row ?? {}) as Record<string, unknown>))
+      .filter((link): link is OrbitLinkRef => link !== null);
+  }, [raw]);
+  useEffect(() => {
+    for (const link of links) cards?.register(link);
+  }, [cards, links]);
+  if (!cards || links.length === 0) return null;
+  return <OrbitLinkGroup links={links} previewFor={cards.previewFor} stateWord={cards.stateWord} />;
+}
+
+/**
  * The mapping react-markdown needs to draw a card: the tag `orbitLinkRemarkPlugin` gives a card
  * node, and the component above. Spread into `MD`'s overrides rather than written as a key in their
  * literal — `orbit-link-card` is not a JSX intrinsic element, so it has no key of its own in
@@ -643,4 +794,5 @@ export function OrbitLinkCardNode(props: {
  */
 export const orbitLinkCardComponents = {
   [ORBIT_LINK_CARD_TAG]: OrbitLinkCardNode,
+  [ORBIT_LINK_GROUP_TAG]: OrbitLinkGroupNode,
 } as unknown as Components;

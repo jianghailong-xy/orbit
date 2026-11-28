@@ -434,6 +434,39 @@ describe('Show both languages', () => {
     expect(container.querySelector('.chat-translate-foot.is-reply')!.textContent).toBe('Translated·Hide original');
   });
 
+  it('task references in a row are one task list, drawn once; one alone is its card with no bullet beside it', async () => {
+    const { OrbitLinkCardsCtx } = await import('./OrbitLinkCard');
+    const cards = { host: 'orbit.test', register: () => {}, previewFor: () => undefined, stateWord: () => '' };
+    const list = ['34OEE9MQXMEm0h0Ptm1GG', '34TqaiSUMbQfgTGgyTuNK'].map((id) => `- [Fix the runner](orbit-task:${id})`).join('\n');
+    const lone = '- [Ship it](orbit-task:34TcwNgAIo6tGUiIKjqnQ)';
+    const event: RunEvent = {
+      seq: 2,
+      type: 'assistant',
+      payload: {
+        text: `I set a watch on these tasks:\n\n${list}\n\nAnd one more:\n\n${lone}`,
+        translation: { lang: 'zh-Hans', text: `我对这些任务设置了监视：\n\n${list}\n\n还有一个：\n\n${lone}` },
+      },
+      ts: TS,
+    };
+    await both(
+      <OrbitLinkCardsCtx.Provider value={cards}>
+        <Transcript events={[user(1, done), event]} />
+      </OrbitLinkCardsCtx.Provider>,
+    );
+    const groups = [...container.querySelectorAll('.chat-interleaved .olc-group')];
+    expect(groups).toHaveLength(1);
+    expect(groups[0].querySelectorAll('.olc-group-row')).toHaveLength(2);
+    expect(groups[0].closest('.chat-interleaved-pair')!.querySelector('.chat-bilingual-original')).toBeNull();
+    // The lone one: a card, its original under it, and no list item around it.
+    const alone = [...container.querySelectorAll('.chat-interleaved-pair.is-item')];
+    expect(alone).toHaveLength(1);
+    expect(alone[0].querySelector('li')).toBeNull();
+    expect(alone[0].querySelector('.chat-bilingual-original')).not.toBeNull();
+    // The sentences around them keep their originals.
+    expect(text()).toContain('I set a watch on these tasks:');
+    expect(text()).toContain('And one more:');
+  });
+
   it('code blocks and tables are drawn once, from the translation, between the pairs', async () => {
     await both(<Transcript events={[user(1, done), fixtureReply(2, CODE)]} />);
     expect(container.querySelectorAll('.chat-interleaved pre')).toHaveLength(2);

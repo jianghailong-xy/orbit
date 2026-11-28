@@ -10295,6 +10295,137 @@ button.chat-jump-start:hover {
 .orbit-link-card .olc-title a:hover {
   text-decoration: underline;
 }
+/* A task, in two lines (docs/mocks/task-link-card/board.png, A) or as a row of a task list (B): the
+   state's glyph and word in its tone, the title one line in the text colour, the facts under it. */
+.orbit-link-card.is-compact {
+  padding: 8px 12px 8px 10px;
+}
+.olc-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.olc-glyph {
+  flex: none;
+  display: inline-flex;
+  justify-content: center;
+  width: 18px;
+  font-size: 15px;
+}
+.olc-glyph.is-live,
+.olc-word.is-live {
+  color: var(--brand);
+}
+.olc-glyph.is-done,
+.olc-word.is-done {
+  color: var(--success);
+}
+.olc-glyph.is-failed,
+.olc-word.is-failed {
+  color: var(--error);
+}
+.olc-glyph.is-idle,
+.olc-word.is-idle {
+  color: var(--text-3);
+}
+.olc-row .olc-title,
+.olc-group-row .olc-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14.5px;
+  font-weight: 500;
+}
+.orbit-link-card .olc-row .olc-title a,
+.olc-group-row .olc-title a {
+  color: var(--text-1);
+  text-decoration: none;
+}
+.olc-group-row .olc-title a:hover {
+  text-decoration: underline;
+}
+.olc-word {
+  flex: none;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.olc-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.is-compact .olc-meta {
+  margin-top: 1px;
+  padding-left: 26px;
+}
+.olc-group {
+  margin: 8px 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+  overflow: hidden;
+}
+.chat-user .olc-group {
+  border-radius: 8px;
+  border-color: color-mix(in srgb, var(--brand) 20%, transparent);
+}
+.olc-group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-subtle);
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.olc-group-project {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.olc-group-count {
+  flex: none;
+  margin-left: auto;
+  color: var(--text-3);
+}
+.olc-group-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px 9px 12px;
+}
+.olc-group-row + .olc-group-row {
+  border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+.olc-group-row:hover {
+  background: var(--bg-subtle);
+}
+.olc-group-body {
+  flex: 1;
+  min-width: 0;
+}
+.olc-group-body .olc-title {
+  display: block;
+}
+.olc-group-side {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+.olc-group-side .olc-meta {
+  font-size: 12px;
+}
 .olc-line {
   display: flex;
   align-items: baseline;
@@ -10389,6 +10520,9 @@ button.chat-jump-start:hover {
 }
 .olc-skeleton span:last-child {
   width: 55%;
+}
+.olc-group-row .olc-skeleton {
+  margin-top: 0;
 }
 /* Nothing to show: a grey tile and a title that says so rather than a card that looks half-drawn. */
 .orbit-link-card.is-unavailable .olc-tile {

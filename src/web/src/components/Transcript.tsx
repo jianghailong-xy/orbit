@@ -202,7 +202,14 @@ export const ArtifactResolverContext =
 // signed out: the page's resolver answers for every AppLink and SameOriginLink in the tree.
 export { PublicLinkResolverCtx, type PublicLinkResolver } from '../lib/publicLinks';
 import Markdown from './Markdown';
-import { canonicalId, orbitLinkRemarkPlugin, type OrbitLinkRef } from '../lib/orbitLink';
+import {
+  canonicalId,
+  loneReference,
+  orbitLinkGroupRemarkPlugin,
+  orbitLinkRemarkPlugin,
+  targetForReference,
+  type OrbitLinkRef,
+} from '../lib/orbitLink';
 import { OrbitLinkCardsCtx, orbitLinkCardComponents } from './OrbitLinkCard';
 import { remarkHardBreaks } from '../lib/remarkHardBreaks';
 import { dshRepair, type DshRepair } from '../lib/dshRuntime';
@@ -4623,7 +4630,7 @@ export const MD = memo(function MD({
   // The plugin and its options, as unified's own tuple: an entry here is an *attacher*, and a card
   // plugin handed over already called would be installed as one and asked to read a tree it was
   // never given.
-  if (cards && !exporting) plugins.push([orbitLinkRemarkPlugin, { host: cards.host }]);
+  if (cards && !exporting) plugins.push([orbitLinkRemarkPlugin, { host: cards.host }], orbitLinkGroupRemarkPlugin);
   if (tail) plugins.push(remarkTail);
   return (
     <div className="md">
@@ -4754,8 +4761,33 @@ function TranslatedReply({ node }: { node: TextNode }) {
 // the translation with the original's matching block right under it, smaller and grey, and no divider
 // inside a pair. An item's original sits under its own words, indented with them; a heading's under the
 // heading, in a lighter weight. Code, tables and images are drawn once, from the translation.
-function InterleavedReply({ pairs, seq }: { pairs: BilingualPair[]; seq?: number }) {
+//
+// A block that is nothing but a reference to a task is drawn as its card, as anywhere MD draws a block
+// on its own: an item that is only a card wears no bullet beside it, and two or more such blocks in a
+// row are one task list (docs/mocks/task-link-card/board.png, B), drawn once from the translation like
+// code and tables — the rows say the tasks as they are now, in no language of their own.
+function InterleavedReply({ pairs: blocks, seq }: { pairs: BilingualPair[]; seq?: number }) {
   const agentLanguage = useContext(TranslationCtx)?.agentLanguage ?? DEFAULT_AGENT_LANGUAGE;
+  const cards = useContext(OrbitLinkCardsCtx);
+  const exporting = useContext(ExportCtx) != null;
+  const isTaskCard = (pair: BilingualPair) => {
+    if (!cards || exporting || (pair.kind !== 'item' && pair.kind !== 'paragraph')) return false;
+    const ref = loneReference(pair.text);
+    return ref !== null && targetForReference(ref)?.kind === 'task';
+  };
+  const pairs: Array<BilingualPair & { taskCard?: boolean }> = [];
+  for (let i = 0; i < blocks.length; ) {
+    let end = i;
+    while (end < blocks.length && isTaskCard(blocks[end])) end++;
+    if (end - i >= 2) {
+      const run = blocks.slice(i, end);
+      pairs.push({ kind: 'other', depth: run[0].depth, text: run.map((pair) => pair.text.trim()).join('\n\n') });
+      i = end;
+    } else {
+      pairs.push(end > i ? { ...blocks[i], taskCard: true } : blocks[i]);
+      i++;
+    }
+  }
   const original = (pair: BilingualPair) =>
     pair.original ? (
       <div className={pair.kind === 'heading' ? 'chat-bilingual-original is-heading' : 'chat-bilingual-original'} lang={agentLanguage}>
@@ -4767,7 +4799,14 @@ function InterleavedReply({ pairs, seq }: { pairs: BilingualPair[]; seq?: number
       {pairs.map((pair, i) => {
         const indent = pair.depth > 0 ? { paddingLeft: `${pair.depth * 22}px` } : undefined;
         let body: ReactNode;
-        if (pair.kind === 'item') {
+        if (pair.kind === 'item' && pair.taskCard) {
+          body = (
+            <>
+              <MD>{pair.text}</MD>
+              {original(pair)}
+            </>
+          );
+        } else if (pair.kind === 'item') {
           const ordered = /^\d/.test(pair.marker ?? '');
           const item = (
             <li>

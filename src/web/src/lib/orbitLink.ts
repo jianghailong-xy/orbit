@@ -384,6 +384,12 @@ const LONE_REFERENCE = new RegExp(
   String.raw`^\[([^\]]*)\]\((orbit-(?:${ORBIT_LINK_KINDS.join('|')}):[^)\s]+)\)$`,
 );
 
+/** The address of a block that is nothing but `[名字](orbit-task:<id>)` — what a paragraph of its own
+ *  draws as a card — or null when the block is anything else. */
+export function loneReference(text: string): string | null {
+  return LONE_REFERENCE.exec(text.trim())?.[2] ?? null;
+}
+
 /**
  * A paragraph's links, as parts to draw in order — or null when nothing in it becomes a card.
  *
@@ -397,10 +403,10 @@ const LONE_REFERENCE = new RegExp(
  *     wall of cards.
  */
 export function placeParagraph(text: string, host: string): OrbitLinkPart[] | null {
-  const lone = LONE_REFERENCE.exec(text.trim());
-  if (lone) {
-    const target = targetForReference(lone[2]);
-    if (target) return [{ kind: 'card', ref: { target, source: { kind: 'ref', ref: lone[2] } } }];
+  const ref = loneReference(text);
+  if (ref) {
+    const target = targetForReference(ref);
+    if (target) return [{ kind: 'card', ref: { target, source: { kind: 'ref', ref } } }];
   }
 
   const matches = scanPageURLs(text, host);
@@ -556,4 +562,47 @@ function paragraphOf(node: MarkdownNode, start: number, end: number): MarkdownNo
 function detached(node: MarkdownNode): MarkdownNode {
   const { position: _position, ...rest } = node;
   return rest;
+}
+
+/** The tag a run of task cards wears once `orbitLinkGroupRemarkPlugin` has put them in one list. */
+export const ORBIT_LINK_GROUP_TAG = 'orbit-link-group';
+
+/**
+ * The remark pass after `orbitLinkRemarkPlugin`: two or more task cards in a row become one list
+ * (docs/mocks/task-link-card/board.png, B), its rows the cards in order. Only drawing changes: which
+ * links become cards, and where they stand, is still the rule the three clients share and the
+ * fixture proves, which is why this is a pass of its own rather than part of that one.
+ */
+export function orbitLinkGroupRemarkPlugin() {
+  return (tree: MarkdownNode): void => {
+    const children = Array.isArray(tree.children) ? tree.children : [];
+    const out: MarkdownNode[] = [];
+    let run: MarkdownNode[] = [];
+    const flush = () => {
+      if (run.length >= 2) out.push(groupNode(run));
+      else out.push(...run);
+      run = [];
+    };
+    for (const node of children) {
+      if (node?.type === 'orbitLinkCard' && node.data?.hProperties && (node.data.hProperties as { kind?: unknown }).kind === 'task') {
+        run.push(node);
+        continue;
+      }
+      flush();
+      out.push(node);
+    }
+    flush();
+    tree.children = out;
+  };
+}
+
+/** The list node: its rows ride on it as JSON, each one the props a card node carries. */
+function groupNode(cards: MarkdownNode[]): MarkdownNode {
+  return {
+    type: 'orbitLinkGroup',
+    data: {
+      hName: ORBIT_LINK_GROUP_TAG,
+      hProperties: { cards: JSON.stringify(cards.map((card) => card.data?.hProperties)) },
+    },
+  };
 }

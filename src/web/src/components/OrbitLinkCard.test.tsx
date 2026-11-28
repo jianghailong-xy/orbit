@@ -8,6 +8,7 @@ import type { LinkPreview } from '@orbit/shared';
 import {
   OrbitLinkCard,
   OrbitLinkCardsProvider,
+  OrbitLinkGroup,
   orbitLinkLastRun,
   orbitLinkProgressLine,
   orbitLinkRuns,
@@ -216,17 +217,28 @@ async function renderCard(linkRef: OrbitLinkRef, preview?: LinkPreview, stateWor
 }
 
 describe('the cards, one per kind', () => {
-  it('draws a task: its pill, the project it is filed under, and how its run came out', async () => {
+  it('draws a task in two lines: its state, its title, the project it is filed under, and how its run came out', async () => {
     const card = await renderCard(link('task', TASK, `${BASE}/tasks/${TASK}`), previews.task());
     expect(card.dataset.state).toBe('ready');
-    expect(text('.olc-kind')).toEqual(['Task']);
+    expect(card.className).toContain('is-compact');
+    // The state's glyph stands where the type's name was.
+    expect(text('.olc-kind')).toEqual([]);
+    expect(container.querySelector('.olc-glyph')?.className).toContain('is-done');
     expect(container.querySelector('.olc-title a')?.getAttribute('href')).toBe(`/tasks/${TASK}`);
     expect(text('.olc-title')).toEqual(['runner + web：配额按账户归属']);
-    expect(text('.olc-line')[0]).toBe('Codex 多账户：一台机器上登录多个 Codex');
+    expect(text('.olc-word')).toEqual(['Done']);
     // The relative time is `relTime`'s (the transcript's own), so only what precedes it is pinned
     // here; the sentences themselves are asserted whole in their own case below.
-    expect(text('.olc-line')[1]).toContain('orbit · 2 runs · last Finished, 93 turns');
-    expect(text('.status-pill')).toEqual(['Done']);
+    expect(text('.olc-meta')[0]).toContain(
+      'Codex 多账户：一台机器上登录多个 Codex · orbit · 2 runs · last Finished, 93 turns · ',
+    );
+  });
+
+  it('says a running task in the task list’s word, in the live tone', async () => {
+    await renderCard(link('task', TASK, `${BASE}/tasks/${TASK}`), previews.task({ status: 'IN_PROGRESS', running: true, project: null }));
+    expect(text('.olc-word')).toEqual(['Running']);
+    expect(container.querySelector('.olc-word')?.className).toContain('is-live');
+    expect(text('.olc-meta')[0]).toMatch(/^orbit · 2 runs/);
   });
 
   it('draws a session: the page’s own word, and the Coordinator badge it coordinates with', async () => {
@@ -356,6 +368,79 @@ describe('the cards, one per kind', () => {
       'no longer sent to agents',
     ]);
     expect(text('.wk-anchor')).toEqual(['Changed']);
+  });
+});
+
+describe('task cards in a row, as one list', () => {
+  const OTHER = '34TqaiSUMbQfgTGgyTuNK';
+  const ref = (id: string): OrbitLinkRef => ({
+    target: { kind: 'task', id: decodeId(id) as string },
+    source: { kind: 'ref', ref: `orbit-task:${id}` },
+  });
+  async function renderGroup(answer: (id: string) => LinkPreview | undefined) {
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <OrbitLinkGroup
+            links={[ref(TASK), ref(OTHER)]}
+            previewFor={(l) => answer(l.target.id)}
+            stateWord={statusLabel}
+          />
+        </MemoryRouter>,
+      );
+    });
+  }
+
+  it('says the project once when every row shares it, and the count', async () => {
+    await renderGroup((id) =>
+      previews.task(id === decodeId(OTHER) ? { title: 'Second', status: 'FAILED', lastRun: null, runs: 0 } : {}),
+    );
+    expect(text('.olc-group-project')).toEqual(['Codex 多账户：一台机器上登录多个 Codex']);
+    expect(text('.olc-group-count')).toEqual(['2 tasks']);
+    expect(text('.olc-group-row .olc-title')).toEqual(['runner + web：配额按账户归属', 'Second']);
+    expect(text('.olc-group-row .olc-word')).toEqual(['Done', 'Failed']);
+    expect(text('.olc-group-body .olc-meta')).toEqual(['orbit · 2 runs · last Finished, 93 turns', 'orbit · never run']);
+    expect([...container.querySelectorAll('.olc-group-row .olc-title a')].map((a) => a.getAttribute('href'))).toEqual([
+      `/tasks/${TASK}`,
+      `/tasks/${OTHER}`,
+    ]);
+  });
+
+  it('puts each row’s own project on it when they differ, and holds a row still being read', async () => {
+    await renderGroup((id) => (id === decodeId(OTHER) ? previews.task({ project: null }) : previews.task()));
+    expect(text('.olc-group-project')).toEqual([]);
+    expect(text('.olc-group-body .olc-meta')[0]).toBe('Codex 多账户：一台机器上登录多个 Codex · orbit · 2 runs · last Finished, 93 turns');
+    expect(text('.olc-group-body .olc-meta')[1]).toBe('orbit · 2 runs · last Finished, 93 turns');
+
+    await renderGroup((id) => (id === decodeId(OTHER) ? undefined : previews.task()));
+    expect(container.querySelectorAll('.olc-group-row.is-loading .olc-skeleton')).toHaveLength(1);
+    expect(text('.olc-group-project')).toEqual([]);
+  });
+
+  it('is what two task references in a row become in a conversation; one alone stays a card', async () => {
+    fetchMock = vi.fn(async (url: string, init: RequestInit = {}) => {
+      if (url !== '/api/link-previews') return okJson({});
+      const { refs } = JSON.parse(String(init.body)) as { refs: Array<{ kind: string; id: string }> };
+      return okJson({ previews: refs.map((r) => ({ ...previews.task(), id: r.id })) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const message = `Watching:\n\n[a](orbit-task:${TASK})\n\n[b](orbit-task:${OTHER})\n\nAnd alone:\n\n[c](orbit-task:${TASK})`;
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={queryClient()}>
+          <MemoryRouter>
+            <OrbitLinkCardsProvider stateWord={statusLabel} host={HOST}>
+              <Transcript events={[userTurn(message)]} />
+            </OrbitLinkCardsProvider>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+    });
+    await settle();
+    expect(container.querySelectorAll('.olc-group')).toHaveLength(1);
+    expect(container.querySelectorAll('.olc-group-row')).toHaveLength(2);
+    expect(container.querySelectorAll('.orbit-link-card.is-compact')).toHaveLength(1);
+    expect(linkRequests()).toHaveLength(1);
   });
 });
 
