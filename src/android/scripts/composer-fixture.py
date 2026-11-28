@@ -1,3 +1,4 @@
+import os
 #!/usr/bin/env python3
 """A07 loopback contract fixture. Records authenticated requests and accepted state, not a deployment."""
 import base64
@@ -45,21 +46,19 @@ class State:
         return {'drivePosts':self.drivePosts,'scope':'controlled HTTP fixture; not deployed backend','uniqueTurns':len(self.turns),'attempts':self.attempts,
             'turns':self.turns,'attachments':{k:{a:b for a,b in v.items() if a!='bytes'} for k,v in self.attachments.items()},
             'calls':self.calls,'controls':self.controls,'config':self.config,'rotations':self.rotation,'creations':self.creations,'downloads':self.downloads}
-MC_COMMITS=[{'sha':sha*40,'subject':subject,'body':'Opening Settings swapped the sidebar for a narrower nav, so the page panel moved 24 px left and back.' if i==0 else '',
-    'committedAt':ts,'files':[{'path':path,'status':'M','additions':a,'deletions':d} for path,a,d in files],'filesTruncated':False}
-    for i,(sha,subject,ts,files) in enumerate([
-    ('0','fix(web): Settings and Admin nav take the sidebar\'s width','2026-11-28T09:00:00Z',[('src/web/src/index.css',18,6),('../SettingsLayout.tsx',6,3)]),
-    ('5','fix(web): centre the account menu\'s popover','2026-11-28T08:20:00Z',[('src/web/src/Account.tsx',4,2)]),
-    ('c','feat(web): session header Share is an icon','2026-11-28T07:00:00Z',[('a.tsx',1,1),('b.tsx',1,1),('c.tsx',1,1),('d.tsx',1,1),('e.tsx',1,1)]),
-    ('3','docs(mocks): session header Share a button','2026-11-28T06:00:00Z',[('m1.html',1,0),('m2.html',1,0),('m3.html',1,0)])])]
+# The runner's real answers for 21 commits not pushed with 3 dirty files and for one commit's read, as the web task captured them
+# (src/shared/src/main-checkout-unpushed.fixture.json): served as they are, but for the files list, which `files:0` empties.
+MC=json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'..','..','shared','src','main-checkout-unpushed.fixture.json')))
+MC_COMMITS=MC['plain']['snapshot']['commits']
+def main_checkout_snapshot():
+    snap=dict(MC['plain']['snapshot']); n=state.mainCheckout['files']
+    if n==0: snap.update(files=[],fileCount=0,state='clean')
+    return snap
 def main_checkout_view(q):
-    n=state.mainCheckout['files']; paths=['src/web/src/Nav.tsx','src/web/src/index.css','docs/nav.md'][:n]
-    snapshot={'root':'/root/orbit','branch':'develop','head':MC_COMMITS[0]['sha'],'state':'dirty' if n else 'clean','upstream':'origin/develop','ahead':4,'behind':0,
-        'files':[{'path':p,'status':'M','additions':8,'deletions':0} for p in paths],'fileCount':n,'truncated':False,'fingerprint':'mc1:a:b',
-        'checkedAt':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'commits':MC_COMMITS}
     commit=q.get('commit',[None])[0]
-    diffs=[{'path':p,'patch':'@@ -1,2 +1,3 @@\n context\n-old line\n+new line\n+another line\n'} for p in q.get('diff',[])] if commit else []
-    return {'snapshot':snapshot,'diffs':diffs,'actionsSupported':True}
+    if commit is None: return {'snapshot':main_checkout_snapshot(),'actionsSupported':True}
+    paths=q.get('diff',[])
+    return {**MC['commit'],'snapshot':main_checkout_snapshot(),'diffs':[x for x in MC['commit']['diffs'] if x['path'] in paths],'actionsSupported':True}
 state=State()
 class Handler(BaseHTTPRequestHandler):
     protocol_version='HTTP/1.1'
@@ -236,8 +235,7 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/api/workspaces': return self.reply([{'id':WORKSPACE,'name':'Composer fixture','runnerId':RUNNER,'enabled':True}])
         if path==f'/api/workspaces/{WORKSPACE}/main-checkout' and state.mainCheckout is not None: return self.reply(main_checkout_view(parse_qs(url.query)))
         if path==f'/api/workspaces/{WORKSPACE}': return self.reply({'id':WORKSPACE,'name':'Composer fixture','runnerId':RUNNER,'provider':'codex','model':'fixture-model',
-            **({'mainCheckoutActions':True,'repoHealth':{'root':'/root/orbit','branch':'develop','head':MC_COMMITS[0]['sha'],'state':'dirty' if state.mainCheckout['files'] else 'clean',
-                'upstream':'origin/develop','ahead':4,'behind':0,'fileCount':state.mainCheckout['files'],'fingerprint':'mc1:a:b'}} if state.mainCheckout is not None else {})})
+            **({'mainCheckoutActions':True,'repoHealth':{k:v for k,v in main_checkout_snapshot().items() if k in ('root','branch','head','state','upstream','ahead','behind','fileCount','fingerprint')}} if state.mainCheckout is not None else {})})
         if path=='/api/sessions': return self.reply([state.detail()] if parse_qs(url.query).get('view',['open'])[0]=='open' else [])
         if path==f'/api/sessions/{SESSION}': return self.reply(state.detail())
         if path==f'/api/sessions/{CREATED}': return self.reply({**state.detail(),'id':CREATED,'title':'Created conversation'})

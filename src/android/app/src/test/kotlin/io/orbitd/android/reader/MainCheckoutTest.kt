@@ -117,6 +117,34 @@ class MainCheckoutTest {
         assertTrue(snapshot(20, ahead = 25, truncated = true).commitsTruncated)
     }
 
+    /** The runner's real answers (21 commits not pushed, 3 dirty files; one commit's read), as the web task captured them. */
+    private val unpushed by lazy { Wire.json.parseToJsonElement(shared("main-checkout-unpushed.fixture.json").readText()).jsonObject }
+
+    @Test fun theRunnersRealSnapshotParsesWithItsTwentyCommitsAndTheTruncationFlag() {
+        val snap = MainCheckout.snapshot(unpushed["plain"]!!.jsonObject["snapshot"]!!.jsonObject)!!
+        assertEquals(21, snap.ahead)
+        assertEquals(20, snap.commits!!.size)
+        assertTrue(snap.commitsTruncated)
+        assertEquals(3, snap.files.size)
+        assertEquals("fix(web): Settings and Admin nav take the sidebar's width, so the page panel doesn't jump", snap.commits!![0].subject)
+        assertEquals(listOf("src/web/src/index.css", "src/web/src/pages/SettingsLayout.tsx"), snap.commits!![0].files.map { it.path })
+        // The runner's commit files carry no status letter and no filesTruncated: the worktree's shape, read as it reads it.
+        assertEquals("", snap.commits!![0].files[0].status)
+        assertFalse(snap.commits!![0].filesTruncated)
+        val group = MainCheckout.notPushed(snap)!!
+        assertEquals("Not pushed · 21", group.heading)
+        assertEquals(1, group.shown.size); assertEquals(19, group.hidden); assertEquals(1, group.notListed)
+        assertEquals("and 1 more not listed", MainCheckout.notListed(group.notListed))
+        assertEquals("a clean checkout lists all twenty", 20, MainCheckout.notPushed(snap.copy(files = emptyList()))!!.shown.size)
+    }
+
+    @Test fun aCommitReadAnswersItsOwnPatchesAlongsideTheSnapshot() {
+        val view = MainCheckout.view(unpushed["commit"]!!.jsonObject.let { JsonObject(it + ("actionsSupported" to JsonPrimitive(true))) })!!
+        assertEquals(20, view.snapshot.commits!!.size)
+        assertEquals("src/web/src/index.css", view.diffs.single()["path"]!!.jsonPrimitive.content)
+        assertTrue(view.diffs.single()["patch"]!!.jsonPrimitive.content.contains("@@ -1,3 +1,2 @@"))
+    }
+
     @Test fun theBarStatusIsTheShortFormWhenCleanAndKeepsTodaysWordsWhenDirty() {
         assertEquals("4 not pushed", MainCheckout.barStatus(0, 4))
         assertEquals("Clean", MainCheckout.barStatus(0, 0))

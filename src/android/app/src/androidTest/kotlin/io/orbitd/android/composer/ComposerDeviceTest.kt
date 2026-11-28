@@ -857,14 +857,22 @@ class ComposerDeviceTest {
         compose.waitUntil(30000) { compose.onAllNodes(hasTestTag("main-checkout-bar")).fetchSemanticsNodes().isNotEmpty() }
         compose.waitForIdle(); capture("bar")
         compose.onNodeWithTag("main-checkout-bar").performTouchInput { click(percentOffset(0.3f, 0.5f)) }  // the row, not its Push pill
-        compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("main-checkout-commit")).fetchSemanticsNodes().size == 4 }
+        compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("main-checkout-commit")).fetchSemanticsNodes().size == 20 }
         capture("sheet-clean")
+        compose.onNodeWithText("and 1 more not listed").performScrollTo()
+        capture("sheet-clean-end")
+        compose.onAllNodes(hasTestTag("main-checkout-commit"))[0].performScrollTo()
         compose.onAllNodes(hasTestTag("main-checkout-commit"))[0].performClick()
         compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("commit-screen")).fetchSemanticsNodes().isNotEmpty() }
         capture("commit")
+        compose.onNodeWithText("index.css", substring = true).performClick()
+        compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("worktree-diff")).fetchSemanticsNodes().isNotEmpty() }
+        capture("commit-file")
+        instrument.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+        compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("worktree-diff")).fetchSemanticsNodes().isEmpty() }
         instrument.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
         compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("commit-screen")).fetchSemanticsNodes().isEmpty() }
-        compose.onAllNodes(hasTestTag("main-checkout-commit")).assertCountEquals(4)
+        compose.onAllNodes(hasTestTag("main-checkout-commit")).assertCountEquals(20)
         // Dirty: the files first, the group folded to one row and "3 more".
         control("""{"mainCheckout":{"files":3}}""")
         instrument.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
