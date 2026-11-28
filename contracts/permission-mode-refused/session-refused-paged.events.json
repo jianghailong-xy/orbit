@@ -1,0 +1,2008 @@
+{
+  "hasMore": true,
+  "events": [
+    {
+      "seq": 54,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 42 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 55,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 43 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 56,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 44 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 57,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 45 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 58,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 46 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 59,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 47 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 60,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 48 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 61,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 49 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 62,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 50 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 63,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 51 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 64,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 52 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 65,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 53 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 66,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 54 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 67,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 55 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 68,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 56 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 69,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 57 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 70,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 58 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 71,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 59 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 72,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 60 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 73,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 61 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 74,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 62 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 75,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 63 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 76,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 64 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 77,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 65 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 78,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 66 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 79,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 67 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 80,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 68 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 81,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 69 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 82,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 70 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 83,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 71 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 84,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 72 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 85,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 73 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 86,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 74 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 87,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 75 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 88,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 76 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 89,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 77 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 90,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 78 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 91,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 79 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 92,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 80 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 93,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 81 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 94,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 82 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 95,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 83 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 96,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 84 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 97,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 85 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 98,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 86 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 99,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 87 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 100,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 88 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.117Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 101,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 89 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 102,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 90 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 103,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 91 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 104,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 92 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 105,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 93 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 106,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 94 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 107,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 95 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 108,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 96 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 109,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 97 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 110,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 98 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 111,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 99 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 112,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 100 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 113,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 101 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 114,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 102 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 115,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 103 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 116,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 104 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 117,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 105 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 118,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 106 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 119,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 107 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 120,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 108 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 121,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 109 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 122,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 110 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 123,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 111 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 124,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 112 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 125,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 113 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 126,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 114 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 127,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 115 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 128,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 116 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 129,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 117 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 130,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 118 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 131,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 119 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 132,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 120 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 133,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 121 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 134,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 122 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 135,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 123 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 136,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 124 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 137,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 125 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 138,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 126 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 139,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 127 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 140,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 128 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 141,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 129 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 142,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 130 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 143,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 131 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 144,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 132 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 145,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 133 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 146,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 134 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 147,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 135 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 148,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 136 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 149,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 137 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 150,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 138 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 151,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 139 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 152,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 140 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 153,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 141 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 154,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 142 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 155,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 143 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 156,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 144 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 157,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 145 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 158,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 146 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 159,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 147 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 160,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 148 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 161,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 149 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 162,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 150 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 163,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 151 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 164,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 152 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 165,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 153 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 166,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 154 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 167,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 155 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 168,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 156 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 169,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 157 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 170,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 158 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 171,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 159 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 172,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 160 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 173,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 161 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 174,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 162 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 175,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 163 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 176,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 164 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 177,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 165 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 178,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 166 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 179,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 167 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 180,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 168 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 181,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 169 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 182,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 170 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 183,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 171 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 184,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 172 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 185,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 173 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 186,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 174 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 187,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 175 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 188,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 176 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 189,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 177 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 190,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 178 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 191,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 179 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 192,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 180 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 193,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 181 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 194,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 182 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 195,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 183 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 196,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 184 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 197,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 185 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 198,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 186 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 199,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 187 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 200,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 188 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 201,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 189 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 202,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 190 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 203,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 191 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 204,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 192 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 205,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 193 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 206,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 194 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 207,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 195 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 208,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 196 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 209,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 197 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 210,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 198 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 211,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 199 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 212,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 200 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 213,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 201 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 214,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 202 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 215,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 203 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 216,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 204 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 217,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 205 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 218,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 206 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 219,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 207 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 220,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 208 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 221,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 209 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 222,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 210 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 223,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 211 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 224,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 212 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 225,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 213 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 226,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 214 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 227,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 215 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 228,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 216 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 229,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 217 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 230,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 218 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 231,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 219 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 232,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 220 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 233,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 221 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 234,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 222 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 235,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 223 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 236,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 224 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 237,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 225 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 238,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 226 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 239,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 227 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 240,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 228 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 241,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 229 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 242,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 230 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 243,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 231 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 244,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 232 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 245,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 233 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 246,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 234 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 247,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 235 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 248,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 236 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 249,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 237 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 250,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 238 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 251,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 239 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 252,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilding the index, step 240 of 240."
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.118Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    },
+    {
+      "seq": 253,
+      "type": "turn_end",
+      "payload": {
+        "costUsd": 0,
+        "subtype": "success",
+        "numTurns": 1,
+        "contextTokens": 0
+      },
+      "turnId": "355QzJlSKfCkqc1OnDOXv",
+      "ts": "2026-11-28T13:01:59.121Z",
+      "turnPublicId": "355QzJlSKfCkqc1OnDOXv"
+    }
+  ]
+}
