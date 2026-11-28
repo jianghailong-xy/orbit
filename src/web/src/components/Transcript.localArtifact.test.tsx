@@ -260,3 +260,55 @@ describe('an HTML file', () => {
     expect(frame?.getAttribute('srcdoc')).toBe(PAGE);
   });
 });
+
+/**
+ * Any other file a reply links relative to the checkout was an ordinary link too, and opened a page of
+ * the app that does not exist. It is the file now: a picture drawn, anything else the chip that
+ * downloads it. What cannot be a checkout file stays the link it was.
+ */
+describe('a file named relative to the checkout', () => {
+  it('becomes the chip that downloads it', async () => {
+    resolve.mockResolvedValue('blob:notes');
+    await renderReply('Notes are in [the README](docs/mocks/task-link-card/README.md).\n');
+    expect(container.querySelector('a')).toBeNull();
+    const chip = container.querySelector<HTMLButtonElement>('button.chat-file');
+    expect(chip?.getAttribute('aria-label')).toBe('Download README.md');
+    expect(chip?.textContent).toBe('the README');
+    await act(async () => {
+      chip?.click();
+      await Promise.resolve();
+    });
+    expect(resolve).toHaveBeenCalledWith(SESSION, 'docs/mocks/task-link-card/README.md');
+  });
+
+  it.each([
+    ['src/web/src/App.tsx:42', 'src/web/src/App.tsx'],
+    ['./scripts/run.sh', 'scripts/run.sh'],
+    ['package.json', 'package.json'],
+  ])('asks for %s as %s', async (href, path) => {
+    resolve.mockResolvedValue('blob:file');
+    await renderReply(`See [this](${href}).\n`);
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('button.chat-file')?.click();
+      await Promise.resolve();
+    });
+    expect(resolve).toHaveBeenCalledWith(SESSION, path);
+  });
+
+  it('draws a picture an ordinary link names', async () => {
+    resolve.mockResolvedValue('blob:mock-image');
+    await renderReply('[the board](docs/mocks/task-link-card/board.png)\n');
+    expect(resolve).toHaveBeenCalledWith(SESSION, 'docs/mocks/task-link-card/board.png');
+    expect(container.querySelector('img.md-image')?.getAttribute('alt')).toBe('the board');
+  });
+
+  it.each(['../other/notes.md', 'docs/guide', '#setup', 'https://example.com/a.md', '/settings/profile.json'])(
+    'leaves %s the link it was',
+    async (href) => {
+      await renderReply(`See [this](${href}).\n`);
+      expect(container.querySelector('button.chat-file')).toBeNull();
+      expect(container.querySelector('a')).not.toBeNull();
+      expect(resolve).not.toHaveBeenCalled();
+    },
+  );
+});

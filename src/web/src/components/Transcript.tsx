@@ -4359,18 +4359,25 @@ function looksLikeHtmlPath(name: string): boolean {
   return /\.html?$/i.test(name.split(/[?#]/)[0] ?? name);
 }
 
-// `docs/mocks/x/board.html`, as an agent names the file it wrote: the runner attaches it when its
-// upload lands, and a reply whose upload was lost still holds the path. Left as a link, the browser
-// would resolve it against the page's own address and open a page that does not exist.
-function isCheckoutRelativeHtmlSrc(src: string): boolean {
-  return looksLikeHtmlPath(src) && !/[?#]/.test(src)
-    && !/^(?:[a-z][a-z0-9+.-]*:|\/|\\|~)/i.test(src);
-}
-
 // Source references often add `:line` (or `:line-line`) after the file name. It is useful to the
 // reader, but the artifact route and the runner need the path without that location hint.
 function artifactPathFromLink(src: string): string {
   return src.replace(/:\d+(?::\d+)?(?:-\d+(?::\d+)?)?$/, '');
+}
+
+// A link to a file named relative to the checkout, as an agent names what it wrote or read
+// (`docs/mocks/x/board.html`, `src/web/src/App.tsx:42`, `./README.md`): the runner attaches it when
+// its upload lands, and a reply whose upload was lost still holds the path. Left as a link, the
+// browser would resolve it against the page's own address and open a page that does not exist.
+// The path the artifact route reads (no `./`, no `:line`), or null when the link is not one: a URL,
+// a site or home path, an anchor, a path that climbs out with `..` (the route refuses it), or a
+// last segment with no extension, which may as well be an ordinary relative link.
+function checkoutRelativeFilePath(src: string): string | null {
+  const path = artifactPathFromLink(src).replace(/^(?:\.\/)+/, '');
+  if (/[?#]/.test(path) || /^(?:[a-z][a-z0-9+.-]*:|\/|\\|~)/i.test(path)) return null;
+  const parts = path.split('/');
+  if (parts.some((part) => part === '' || part === '.' || part === '..')) return null;
+  return /\.[a-z0-9]{1,10}$/i.test(parts[parts.length - 1]) ? path : null;
 }
 
 function isLegacyArtifactSrc(src: string): boolean {
@@ -4666,10 +4673,13 @@ function MarkdownLink({ node: _node, href, title, children, ...rest }: any) {
       />
     );
   }
-  if (typeof href === 'string' && isCheckoutRelativeHtmlSrc(href)) {
-    return (
-      <LocalArtifactFile artifactPath={href} label={nodeText(children).trim() || fileLabel(href)} downloadName={fileLabel(href)} />
-    );
+  const relativePath = typeof href === 'string' ? checkoutRelativeFilePath(href) : null;
+  if (relativePath) {
+    const label = nodeText(children).trim() || fileLabel(relativePath);
+    if (looksLikeImagePath(relativePath)) {
+      return <LocalArtifactImage artifactPath={relativePath} alt={label} />;
+    }
+    return <LocalArtifactFile artifactPath={relativePath} label={label} downloadName={fileLabel(relativePath)} />;
   }
   if (typeof href === 'string' && isLocalFileSrc(href)) {
     return (
