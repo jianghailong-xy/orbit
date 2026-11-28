@@ -1,6 +1,6 @@
 import { readSessionCoordinatorHandoffs } from '../projects/coordinator-handoff';
 import { CLEARED_RUN_FAILURE } from '../runner-api/run-failure-columns';
-import type { BackgroundJobStopResponse, BackgroundJobTailResponse, HelpAskMarker, SubagentRunView, WorkflowRunView } from '@orbit/shared';
+import type { BackgroundJobStopResponse, BackgroundJobTailResponse, HelpAskMarker, SessionPermissionModeChangePage, SubagentRunView, WorkflowRunView } from '@orbit/shared';
 import { BG_JOB_STOPPED_BY_OWNER, BG_JOB_TAIL_MAX_BYTES, BG_OUTPUT_TAIL_V1, BG_OWNER_STOP_V1, cloneRootFor, newFolderPath } from '@orbit/shared';
 import { RunnerHints } from '../realtime/runner-hints';
 import { boundTailLines } from './background-job-tail';
@@ -93,7 +93,8 @@ import {
   type ConfigChangeOrigin,
   configTurnKey,
   PERMISSION_MODE_CHANGES_INCLUDE,
-  permissionModeChangesOf,
+  permissionModeChangesOfDetail,
+  readPermissionModeChangePage,
 } from './actual-permission-mode';
 import { readOrbitMessageFrom } from './orbit-message';
 import { claimPermissionMode, claimPermissionModeLogLine } from '../queue/claim-permission-mode';
@@ -5942,7 +5943,7 @@ export class SessionsService {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
       include: {
-        // How the actual mode came to be, newest first (permissionModeChangesOf turns it oldest first).
+        // How the actual mode came to be, newest first (permissionModeChangesOfDetail turns it oldest first).
         permissionModeChanges: PERMISSION_MODE_CHANGES_INCLUDE,
         workspace: true,
         assignedRunner: {
@@ -6094,7 +6095,7 @@ export class SessionsService {
       notifyTurnFinished: _notifyTurnFinished,
       notifyNeedsYou: _notifyNeedsYou,
       notificationsMuted: _notificationsMuted,
-      // Read, never spread: answered oldest first as `permissionModeChanges`, below.
+      // Read, never spread: answered oldest first as `permissionModeChanges` and `permissionModeChangesHasMore`, below.
       permissionModeChanges,
       ...rest
     } = projected;
@@ -6217,7 +6218,7 @@ export class SessionsService {
       engineVersion,
       // `permissionMode` (the intent) and `actualPermissionMode`/`actualPermissionModeAt` (what the engine runs
       // in) ride along in the spread; here, how the actual mode came to be (actual-permission-mode.ts).
-      permissionModeChanges: permissionModeChangesOf(permissionModeChanges),
+      ...permissionModeChangesOfDetail(permissionModeChanges),
     }, Date.now(), landing);
     return {
       ...detail,
@@ -6619,6 +6620,20 @@ export class SessionsService {
    * and marks those events `truncated`, so the client downloads what the folded transcript shows
    * and refetches the rest per card from getEventFull.
    */
+  /** A page of the session's mode changes older than the detail's (GET /sessions/:id/permission-mode-changes). */
+  async getPermissionModeChangePage(
+    userId: string,
+    id: string,
+    opts: { before?: number; limit?: number },
+  ): Promise<SessionPermissionModeChangePage> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId: userId },
+      select: { id: true },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    return readPermissionModeChangePage(this.prisma, id, opts);
+  }
+
   async getEventPage(
     userId: string,
     id: string,

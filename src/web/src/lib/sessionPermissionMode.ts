@@ -222,7 +222,9 @@ export function modeChangeLines(
     const gap = latest && gapOpen && change.toMode === facts.actual;
     const mode = permissionModeLabel(change.toMode);
     const line = (before: string, after = ''): void => {
-      lines.push({ key: `${change.at}|${change.cause}|${change.toMode}|${i}`, at: change.at, before, mode, after, gap });
+      // By seq where the server numbers its changes: two can share a moment, cause and mode, never a seq.
+      const key = change.seq !== undefined ? `seq-${change.seq}` : `${change.at}|${change.cause}|${change.toMode}|${i}`;
+      lines.push({ key, at: change.at, before, mode, after, gap });
     };
     // Why the mode is not the intent, for the line behind a gap the server's substitution opened.
     const substituted = gap && startingMode(intent, facts) === change.toMode;

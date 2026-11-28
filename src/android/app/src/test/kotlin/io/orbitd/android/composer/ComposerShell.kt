@@ -42,6 +42,8 @@ internal object ComposerShell {
     @Volatile var pageGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
     /** The same for any request (`METHOD path` → gate): a read a test wants still out while the page draws without it. */
     val gates = ConcurrentHashMap<String, kotlinx.coroutines.CompletableDeferred<Unit>>()
+    /** GET …/permission-mode-changes, by its `before` query: the page of older mode changes the server answers for it. */
+    @Volatile var modeChangePages: Map<String, String> = emptyMap()
     /** GET …/retry-message. */
     @Volatile var retryMessage = """{"text":""}"""
     /** Attachment bytes by id. */
@@ -55,6 +57,7 @@ internal object ComposerShell {
         calls.clear(); bodies.clear(); answers.clear(); gates.clear(); disk.clear(); diskGates.clear()
         session = emptyMap(); workspace = emptyMap(); providers = "[]"; pools = "[]"; sharedPools = "[]"
         events = emptyList(); around = null; pageGate = null; retryMessage = """{"text":""}"""; attachments = emptyMap()
+        modeChangePages = emptyMap()
         runner = obj("""{"id":"$RUNNER","name":"Fixture runner","online":true,"status":"ONLINE","version":"0.1.230",
             "engines":[{"engine":"claude","installed":true,"auth":"yes"},{"engine":"codex","installed":true,"auth":"yes"}],
             "modelCatalog":{"claude":[{"value":"claude-opus-5-5","label":"Opus 5.5"}],"codex":[{"value":"gpt-6","label":"GPT-6"}]}}""")
@@ -102,6 +105,8 @@ internal object ComposerShell {
             path == "sessions/$SESSION/events/page" -> ok((around?.takeIf { api.query.any { it.first == "around" } } ?: buildJsonObject {
                 put("events", JsonArray(events)); put("hasMore", false)
             }).toString())
+            path == "sessions/$SESSION/permission-mode-changes" && method == "GET" ->
+                ok(modeChangePages[api.query.firstOrNull { it.first == "before" }?.second] ?: """{"changes":[],"hasMore":false}""")
             path == "sessions/$SESSION/retry-message" && method == "GET" -> ok(retryMessage)
             path == "sessions/$SESSION/turns" && method == "POST" || path == "sessions/$SESSION/resume" ->
                 ok("""{"turnId":"turn-1","kind":"message","status":"PENDING"}""")

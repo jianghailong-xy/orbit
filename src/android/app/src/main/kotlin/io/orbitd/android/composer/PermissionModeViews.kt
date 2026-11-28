@@ -25,6 +25,7 @@ import io.orbitd.android.R
 import io.orbitd.android.core.cards.ModeCapsule
 import io.orbitd.android.core.cards.ModeLine
 import io.orbitd.android.core.cards.PermissionModeDisplay
+import io.orbitd.android.core.protocol.PermissionModeChange
 import io.orbitd.android.core.protocol.PermissionModes
 import io.orbitd.android.core.protocol.SessionFacts
 import io.orbitd.android.ui.LocalOrbitColors
@@ -68,12 +69,10 @@ internal fun modeCapsule(detail: JsonObject, effective: JsonObject, engine: Stri
     now = now,
 )
 
-/** The transcript's mode lines for the session [detail] (B1), judged against the intent the server holds: a pick held on this device
- * for a resume is not one the engine was asked for. */
-internal fun modeLines(detail: JsonObject?, catalog: ComposerCatalog?): List<ModeLine> {
-    if (detail == null) return emptyList()
-    val changes = PermissionModes.changes(detail)
-    if (changes.isEmpty()) return emptyList()
+/** The transcript's mode lines for [changes] of the session [detail] (B1) — its own newest and the older ones read as the transcript
+ * pages back — judged against the intent the server holds: a pick held on this device for a resume is not one the engine was asked for. */
+internal fun modeLines(detail: JsonObject?, changes: List<PermissionModeChange>, catalog: ComposerCatalog?): List<ModeLine> {
+    if (detail == null || changes.isEmpty()) return emptyList()
     val engine = ProviderChoices.engine(detail, catalog?.providers.orEmpty())
     return PermissionModeDisplay.lines(changes, shownPermissionMode(detail, engine), PermissionModes.actual(detail),
         noAutoModel(catalog, engine, detail.text("provider") ?: engine, detail.text("model").orEmpty()),

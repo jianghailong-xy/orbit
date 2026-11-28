@@ -3617,6 +3617,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // and 1756, and to 1807 after main took 1780-1800 and they moved to 1805 and 1806; it stays after 1805, which
       // creates the table it alters.
       '1807_permission_mode_change_claim_substitution',
+      // 1810 adds session_permission_mode_change.seq (a sequence, numbering the rows already there by created_at) and an
+      // index on (session_id, seq); it is none of the preserved relations, and no trigger, function or DONE fence changes.
+      // It stays after the migration that creates the table it alters. Written as 1780, renumbered to 1810 after main took
+      // 1780-1800 (1806 the highest on any branch then).
+      '1810_permission_mode_change_seq',
       // 1811 re-declares 1807's check on session_permission_mode_change to allow an OWNER_PICK or ORBIT_CHANGE row to
       // carry the mode asked for and why; it is none of the preserved relations, no row is written, and no trigger,
       // function or DONE fence changes. It stays after 1807, whose check it replaces. Written as 1808, renumbered to 1811

@@ -26,6 +26,7 @@ const TERMINAL_ALLOWED: Readonly<Record<string, TerminalRouteKind>> = {
   'POST /sessions/:id/turns': 'SESSION',
   'POST /sessions/:id/interrupt': 'SESSION',
   'GET /sessions/:id/events/page': 'SESSION',
+  'GET /sessions/:id/permission-mode-changes': 'SESSION',
   'GET /sessions/:id/events': 'SESSION',
   'GET /sessions/:id/approvals': 'SESSION',
   'POST /sessions/:id/approvals/:approvalId/decision': 'SESSION',

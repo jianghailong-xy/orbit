@@ -3224,7 +3224,9 @@ model RunEvent {
 /// (the runner switched the engine itself), RESPAWN (the engine came back from a re-spawn in this mode) or ORBIT_CHANGE
 /// (a config change Orbit made). Append-only; the cause CHECK lives in the migration. A CLAIM, OWNER_PICK or
 /// ORBIT_CHANGE that handed another mode than the one asked for carries the mode asked for and why (`requestedMode`,
-/// `reason`: ROOT_RUNNER or SCHEDULED_RUN, migrations 1807 and 1811); both are null on every other row.
+/// `reason`: ROOT_RUNNER or SCHEDULED_RUN, migrations 1807 and 1811); both are null on every other row. `seq` is the
+/// order the rows were inserted in (migration 1810): `createdAt` has milliseconds only, so two changes can share it,
+/// and the detail and the page of older changes order and continue by `seq`.
 model SessionPermissionModeChange {
   id            String   @id @db.Uuid
   sessionId     String   @map("session_id") @db.Uuid
@@ -3236,8 +3238,10 @@ model SessionPermissionModeChange {
   requestedMode String?  @map("requested_mode")
   reason        String?
   createdAt     DateTime @default(now()) @map("created_at")
+  seq           BigInt   @default(autoincrement())
 
   @@index([sessionId, createdAt])
+  @@index([sessionId, seq])
   @@map("session_permission_mode_change")
 }
 

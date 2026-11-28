@@ -1,7 +1,8 @@
 // Holds the web tests' mode fixtures (src/web/src/test/permissionModeFixtures.ts, which the Vitest tests of the running-mode
 // states build their sessions with) to what this checkout's apiserver really answers on the seeded stack:
 //   GET /sessions/:id                        the detail: permissionMode, actualPermissionMode, actualPermissionModeAt,
-//                                            permissionModeChanges and each change's fields
+//                                            permissionModeChanges and each change's fields, permissionModeChangesHasMore
+//   GET /sessions/:id/permission-mode-changes  the page route, newest and before the detail's oldest
 //   GET /sessions?runnerId&workspaceId&view=open   the Open list as the web reads it (lib/queries.ts fetchSessions)
 // For each seeded session the fixture builders are given what the server recorded (cause, modes, time, and the app for an
 // owner's pick) and must produce the server's answer exactly: the same keys in the same order, the same values, the same
@@ -37,13 +38,29 @@ for (const s of Object.values(state.sessions)) {
   const changes = detail.permissionModeChanges;
   if (!Array.isArray(changes)) { differ(`${s.key} detail.permissionModeChanges`, changes, 'an array'); continue; }
   // Each change, rebuilt by the fixture builder from what the server recorded.
-  const rebuilt = changes.map((c) => modeChange(c.cause, c.toMode, c.fromMode, c.at, c.cause === 'OWNER_PICK' ? c.client : undefined));
+  const rebuilt = changes.map((c) => modeChange(c.cause, c.toMode, c.fromMode, c.at, c.cause === 'OWNER_PICK' ? c.client : undefined, c.seq));
   changes.forEach((c, i) => {
     if (!same(Object.keys(c), Object.keys(rebuilt[i]))) differ(`${s.key} change ${i} keys`, Object.keys(c), Object.keys(rebuilt[i]));
     if (!same(c, rebuilt[i])) differ(`${s.key} change ${i} (${c.cause})`, c, rebuilt[i]);
     if (!INSTANT.test(c.at)) differ(`${s.key} change ${i} at`, c.at, 'an ISO instant with milliseconds');
   });
   if (!same(changes.map((c) => c.at), [...changes.map((c) => c.at)].sort())) differ(`${s.key} order`, changes.map((c) => c.at), 'oldest first');
+  if (!changes.every((c, i) => Number.isInteger(c.seq) && (i === 0 || c.seq > changes[i - 1].seq))) {
+    differ(`${s.key} seq`, changes.map((c) => c.seq), 'an integer each, rising in the order they were recorded');
+  }
+  // The page route answers the same changes: without `before` the detail's newest, and before the oldest of them nothing
+  // older than the detail says there is.
+  const newest = await call('GET', `/sessions/${s.id}/permission-mode-changes`, accessToken);
+  if (!same(newest, { changes, hasMore: detail.permissionModeChangesHasMore })) {
+    differ(`${s.key} GET permission-mode-changes`, newest, { changes, hasMore: detail.permissionModeChangesHasMore });
+  }
+  if (changes.length > 0) {
+    const before = await call('GET', `/sessions/${s.id}/permission-mode-changes?before=${changes[0].seq}`, accessToken);
+    const want = detail.permissionModeChangesHasMore ? 'older changes' : { changes: [], hasMore: false };
+    if (detail.permissionModeChangesHasMore ? before.changes.length === 0 : !same(before, want)) {
+      differ(`${s.key} GET permission-mode-changes?before=${changes[0].seq}`, before, want);
+    }
+  }
   // The session's own facts are its newest change's, as the fixtures make them. Its stamp is the same statement's own
   // clock_timestamp() (recordActualPermissionMode calls it for the session row, then for the change row), so it may read up
   // to a millisecond earlier than the change's; the fixtures use the change's instant, the other end of that range.
