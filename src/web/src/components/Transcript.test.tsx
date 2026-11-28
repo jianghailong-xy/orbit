@@ -28,6 +28,7 @@ import { encodeId } from '../lib/idCodec';
 import type { RunnerAgentFix } from '@orbit/shared';
 import { ApiError } from '../api';
 import { readTaskRunConflict } from '../lib/taskRunHandoff';
+import { OrbitLinkCardsCtx, type OrbitLinkCards } from './OrbitLinkCard';
 import { transcriptEventsWithDurableDeliveryReceipts } from '../lib/acceptedUserTurn';
 
 // A static render opens no tip: the app Tooltip also puts what it would say on its child here.
@@ -2563,6 +2564,37 @@ describe('tool run folding', () => {
     expect(html).toContain('chat-tone-agent');
     // The card splits the run: a steps line either side of it.
     expect(html.split('class="chat-steps"').length - 1).toBe(2);
+  });
+
+  // The call's answer is the child as it was born — untitled and PENDING. Inside a conversation
+  // view the card reads the child as it is now, so a rename and a run show on it.
+  it('draws a spawned child session by its current title and state', () => {
+    const childUuid = '0193f2a1-0000-7000-8000-000000000001';
+    const linkCards: OrbitLinkCards = {
+      host: 'orbit.test',
+      register: () => {},
+      previewFor: (link) =>
+        link.target.kind === 'session' && link.target.id === childUuid
+          ? ({ kind: 'session', id: childUuid, state: 'ok', session: { title: 'Fix login redirect', status: 'RUNNING' } } as any)
+          : undefined,
+      stateWord: (row: any) => (row.status === 'RUNNING' ? 'Running' : String(row.status)),
+    };
+    const created = JSON.stringify({ id: encodeId(childUuid), status: 'PENDING' });
+    const events = callWith('mcp__orbit__session_create', { prompt: 'go' }, created);
+    const doc = new JSDOM(
+      renderToStaticMarkup(
+        <OrbitLinkCardsCtx.Provider value={linkCards}>
+          <Transcript events={events} />
+        </OrbitLinkCardsCtx.Provider>,
+      ),
+    ).window.document;
+    expect(doc.querySelector('.chat-session-card-title')?.textContent).toBe('Fix login redirect');
+    expect(doc.querySelector('.chat-session-card-status')?.textContent).toBe('running');
+
+    // Without a conversation view (the shared page, an export) it stays the call's answer.
+    const bare = new JSDOM(renderToStaticMarkup(<Transcript events={events} />)).window.document;
+    expect(bare.querySelector('.chat-session-card-title')?.textContent).toBe('New session');
+    expect(bare.querySelector('.chat-session-card-status')?.textContent).toBe('pending');
   });
 
   // A sub-workspace card was kept out only by its children, which arrive after the call — so it
