@@ -1,0 +1,77 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Idle bubble: original vs today</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #eceef1; font: 15px/1.5 Inter, "Noto Sans SC", sans-serif; color: #1d1d1f; }
+  .b-part { padding: 32px 36px 36px; width: 1500px; }
+  .b-h1 { font-size: 26px; font-weight: 700; margin: 0 0 6px; }
+  .b-lede { color: #555; margin: 0 0 24px; max-width: 1300px; }
+  .b-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .b-col h2 { font-size: 17px; margin: 0 0 4px; }
+  .b-col .b-sub { color: #666; font-size: 13.5px; margin: 0 0 12px; }
+  .b-list { background: #f7f7f8; border-radius: 14px; padding: 8px; }
+  .b-row { display: grid; grid-template-columns: 34px 1fr auto; column-gap: 12px; align-items: center;
+           background: #fff; border-radius: 10px; padding: 11px 16px 11px 14px; margin: 0 0 6px; }
+  .b-row:last-child { margin: 0; }
+  .b-ic { grid-row: 1 / span 2; display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; color: #a1a1a6; }
+  .b-t { font-size: 17px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .b-time { font-size: 15px; color: #a1a1a6; white-space: nowrap; }
+  .b-s { grid-column: 2 / span 2; font-size: 15px; color: #86868b; display: flex; gap: 8px; min-width: 0; }
+  .b-s span.txt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+  .b-mark { flex: none; font-size: 12.5px; font-weight: 600; padding: 0 7px; border-radius: 6px; line-height: 20px; align-self: center; }
+  .m-red { background: #fde8e8; color: #c62828; } .m-green { background: #e3f4e8; color: #1d7a3a; } .m-amber { background: #fdf0d8; color: #a35a00; }
+  .b-zoom { margin-top: 28px; background: #fff; border-radius: 12px; padding: 18px 22px; }
+  .b-zoom h3 { margin: 0 0 12px; font-size: 15px; }
+  .b-zgrid { display: grid; grid-template-columns: 220px repeat(4, 110px); align-items: center; row-gap: 14px; color: #8e8e93; }
+  .b-zgrid .h { font-size: 12.5px; color: #888; } .b-zgrid .n { color: #333; font-size: 14px; font-weight: 600; }
+  .b-zgrid .n small { display: block; font-weight: 400; color: #777; }
+  .b-notes { margin-top: 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 28px; font-size: 14px; color: #333; }
+  .b-notes ul { margin: 0; padding-left: 18px; } .b-notes li { margin: 0 0 4px; }
+  .b-pros { color: #1d7a3a; } .b-cons { color: #b3261e; }
+</style></head>
+<body>
+<section class="b-part" id="part-1">
+  <p class="b-h1">Idle icon: the original speech bubble vs the one live now</p>
+  <p class="b-lede">Left: the bubble idle rows wore before 11/25 on web, antd <code>MessageOutlined</code>, drawn from its own path in
+  <code>@ant-design/icons-svg</code>. Right: the rectangle production draws since today (<code>ccd43103ea</code>). Same rows, same 16 px icon size, same grey (<code>--text-3</code>).
+  Mac and iOS draw Apple's SF Symbol <code>message</code> (a round bubble, no dots), which can't be rendered on this Linux box.</p>
+  <div class="b-cols" id="cols"></div>
+  <div class="b-zoom"><h3>The icon alone, at row size and enlarged</h3><div class="b-zgrid" id="zoom"></div></div>
+  <div class="b-notes">
+    <div><b>Original: round bubble with three dots</b><ul>
+      <li class="b-pros">The real shape the product shipped for months; people who used it before 11/25 know it.</li>
+      <li class="b-pros">Close to Apple's round <code>message</code>, so web, Mac and iOS read as one icon.</li>
+      <li class="b-cons">The three dots read as "typing…" / "someone is writing", a hint of activity on a row that is idle.</li>
+      <li class="b-cons">Busier at 16 px: four shapes in one glyph, heavier than the clock and the spinner.</li>
+    </ul></div>
+    <div><b>Live now: rectangular outline</b><ul>
+      <li class="b-pros">Quietest of the two: one thin outline, the same weight as the Queued clock beside it.</li>
+      <li class="b-pros">No dots, so it says "a conversation", not "someone is typing".</li>
+      <li class="b-cons">New: it was drawn for the board, not taken from the early product.</li>
+      <li class="b-cons">Differs from Apple's round <code>message</code>; Mac and iOS would need a custom glyph to match.</li>
+    </ul></div>
+  </div>
+</section>
+<script>
+const ANT = (s) => `<svg width="${s}" height="${s}" viewBox="64 64 896 896" fill="currentColor"><path d="M464 512a48 48 0 1096 0 48 48 0 10-96 0zm200 0a48 48 0 1096 0 48 48 0 10-96 0zm-400 0a48 48 0 1096 0 48 48 0 10-96 0zm661.2-173.6c-22.6-53.7-55-101.9-96.3-143.3a444.35 444.35 0 00-143.3-96.3C630.6 75.7 572.2 64 512 64h-2c-60.6.3-119.3 12.3-174.5 35.9a445.35 445.35 0 00-142 96.5c-40.9 41.3-73 89.3-95.2 142.8-23 55.4-34.6 114.3-34.3 174.9A449.4 449.4 0 00112 714v152a46 46 0 0046 46h152.1A449.4 449.4 0 00510 960h2.1c59.9 0 118-11.6 172.7-34.3a444.48 444.48 0 00142.8-95.2c41.3-40.9 73.8-88.7 96.5-142 23.6-55.2 35.6-113.9 35.9-174.5.3-60.9-11.5-120-34.8-175.6zm-151.1 438C704 845.8 611 884 512 884h-1.7c-60.3-.3-120.2-15.3-173.1-43.5l-8.4-4.5H188V695.2l-4.5-8.4C155.3 633.9 140.3 574 140 513.7c-.4-99.7 37.7-193.3 107.6-263.8 69.8-70.5 163.1-109.5 262.8-109.9h1.7c50 0 98.5 9.7 144.2 28.9 44.6 18.7 84.6 45.6 119 80 34.3 34.3 61.3 74.4 80 119 19.4 46.2 29.1 95.2 28.9 145.8-.6 99.6-39.7 192.9-110.1 262.7z"/></svg>`;
+const RECT = (s) => `<svg width="${s}" height="${s}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.7 3.7h10.6a.7.7 0 0 1 .7.7v6a.7.7 0 0 1-.7.7H6.7l-3 2.3V11.1h-1a.7.7 0 0 1-.7-.7v-6a.7.7 0 0 1 .7-.7z"/></svg>`;
+const SP = `<svg width="16" height="16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="#d7e3fb" stroke-width="2.6"/><path d="M12 3a9 9 0 0 1 9 9" fill="none" stroke="#2f6fed" stroke-width="2.6" stroke-linecap="round"/></svg>`;
+const CLOCK = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a1a1a6" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`;
+const rows = [
+  ['idle', 'Check background job status', '11/22, 21:36', 'Recorded the stale background-job count as an open task to fix next…', null],
+  ['running', 'Runner "full" notice lingers', '11/22, 17:48', 'Running tests: npm run test -- runner-capacity…', null],
+  ['idle', 'Trim long reply cards', '11/22, 17:48', 'Landed reply-fold on main; tests and Mac/iOS builds pass.', ['Finished','m-green']],
+  ['idle', 'Parking bar style pass', '11/22, 16:36', 'Beta is released on macOS, iOS and Android after the re-run passed…', null],
+  ['queued', 'Agents strip hidden by default', '11/22, 15:55', 'Waiting for a runner…', null],
+  ['idle', 'Deploy the gateway fix', '11/22, 14:10', 'Approve the production deploy to continue.', ['Needs you','m-amber']],
+  ['idle', 'Nightly wiki maintenance', '11/22, 12:02', 'The run stopped: the provider returned an error.', ['Failed','m-red']],
+];
+const cols = [['Original (until 11/25): antd MessageOutlined', 'Round bubble with three dots, filled glyph.', ANT],
+              ['Live now: rectangular outline', 'One 1.5 px outline, no dots.', RECT]];
+document.getElementById('cols').innerHTML = cols.map(([n, sub, f]) => `<div class="b-col"><h2>${n}</h2><p class="b-sub">${sub}</p><div class="b-list">${
+  rows.map(([st, t, time, s, m]) => `<div class="b-row"><div class="b-ic">${st === 'running' ? SP : st === 'queued' ? CLOCK : f(16)}</div><div class="b-t">${t}</div><div class="b-time">${time}</div><div class="b-s"><span class="txt">${s}</span>${m ? `<span class="b-mark ${m[1]}">${m[0]}</span>` : ''}</div></div>`).join('')}</div></div>`).join('');
+const sizes = [16, 24, 48, 72];
+document.getElementById('zoom').innerHTML = '<div></div>' + sizes.map(s => `<div class="h">${s} px</div>`).join('')
+  + cols.map(([n, , f]) => `<div class="n">${n.split(':')[0]}<small>${n.split(':')[1] || ''}</small></div>` + sizes.map(s => `<div>${f(s)}</div>`).join('')).join('');
+</script>
+</body></html>
