@@ -202,7 +202,7 @@ export const ArtifactResolverContext =
 // signed out: the page's resolver answers for every AppLink and SameOriginLink in the tree.
 export { PublicLinkResolverCtx, type PublicLinkResolver } from '../lib/publicLinks';
 import Markdown from './Markdown';
-import { canonicalId, loneReference, orbitLinkRemarkPlugin, targetForReference, type OrbitLinkRef } from '../lib/orbitLink';
+import { canonicalId, orbitLinkRemarkPlugin, type OrbitLinkRef } from '../lib/orbitLink';
 import { OrbitLinkCardsCtx, orbitLinkCardComponents } from './OrbitLinkCard';
 import { remarkHardBreaks } from '../lib/remarkHardBreaks';
 import { dshRepair, type DshRepair } from '../lib/dshRuntime';
@@ -4754,24 +4754,10 @@ function TranslatedReply({ node }: { node: TextNode }) {
 // the translation with the original's matching block right under it, smaller and grey, and no divider
 // inside a pair. An item's original sits under its own words, indented with them; a heading's under the
 // heading, in a lighter weight. Code, tables and images are drawn once, from the translation.
-//
-// A block that is nothing but an Orbit reference is drawn as its card, here as anywhere else MD draws a
-// block on its own. The card shows the object as it is now, the same in either language, so its original
-// would be the same card again; and an item that is only a card is drawn without a bullet beside it.
 function InterleavedReply({ pairs, seq }: { pairs: BilingualPair[]; seq?: number }) {
   const agentLanguage = useContext(TranslationCtx)?.agentLanguage ?? DEFAULT_AGENT_LANGUAGE;
-  const cards = useContext(OrbitLinkCardsCtx);
-  const exporting = useContext(ExportCtx) != null;
-  const cardsDrawn = cards != null && !exporting;
-  const cardOf = (text: string | undefined) => {
-    const ref = cardsDrawn && text !== undefined ? loneReference(text) : null;
-    return ref && targetForReference(ref) ? ref : null;
-  };
-  // Nothing to read under a block that its original repeats: the same words, or the same card.
-  const repeats = (pair: BilingualPair) =>
-    pair.original?.trim() === pair.text.trim() || (cardOf(pair.text) != null && cardOf(pair.text) === cardOf(pair.original));
   const original = (pair: BilingualPair) =>
-    pair.original && !repeats(pair) ? (
+    pair.original ? (
       <div className={pair.kind === 'heading' ? 'chat-bilingual-original is-heading' : 'chat-bilingual-original'} lang={agentLanguage}>
         <MD breaks>{pair.original}</MD>
       </div>
@@ -4781,14 +4767,7 @@ function InterleavedReply({ pairs, seq }: { pairs: BilingualPair[]; seq?: number
       {pairs.map((pair, i) => {
         const indent = pair.depth > 0 ? { paddingLeft: `${pair.depth * 22}px` } : undefined;
         let body: ReactNode;
-        if (pair.kind === 'item' && cardOf(pair.text)) {
-          body = (
-            <>
-              <MD>{pair.text}</MD>
-              {original(pair)}
-            </>
-          );
-        } else if (pair.kind === 'item') {
+        if (pair.kind === 'item') {
           const ordered = /^\d/.test(pair.marker ?? '');
           const item = (
             <li>
