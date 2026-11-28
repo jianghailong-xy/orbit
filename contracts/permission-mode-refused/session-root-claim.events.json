@@ -1,0 +1,83 @@
+{
+  "hasMore": false,
+  "events": [
+    {
+      "seq": 1,
+      "type": "user",
+      "payload": {
+        "text": "Rebuild the sessions index on staging."
+      },
+      "turnId": "O4lJMgVwbm97yFrbjFOul",
+      "ts": "2026-11-28T06:33:42.742Z",
+      "turnPublicId": "O4lJMgVwbm97yFrbjFOul"
+    },
+    {
+      "seq": 2,
+      "type": "system",
+      "payload": {
+        "subtype": "agent_tools",
+        "agentTools": {
+          "v": 1,
+          "at": "2026-11-28T06:33:42.760Z",
+          "mcp": {
+            "tools": 102,
+            "status": "connected"
+          },
+          "skill": {
+            "name": "orbit:playbooks",
+            "loaded": true,
+            "offered": true
+          },
+          "engine": "claude",
+          "families": [
+            {
+              "id": "tasks",
+              "total": 21,
+              "served": 21
+            }
+          ],
+          "switches": {
+            "wiki": true,
+            "watches": true,
+            "orchestration": true
+          },
+          "versions": {
+            "guide": "1.2.0",
+            "primer": "1.8.1",
+            "catalog": "1.8.1",
+            "contract": "1.15.0",
+            "playbooks": "1.0.0"
+          },
+          "instructions": {
+            "carrier": "append_system_prompt",
+            "workspace": false,
+            "agent": false
+          },
+          "engineVersion": "2.1.325",
+          "permissionMode": "auto"
+        }
+      },
+      "turnId": "O4lJMgVwbm97yFrbjFOul",
+      "ts": "2026-11-28T06:33:42.760Z",
+      "turnPublicId": "O4lJMgVwbm97yFrbjFOul"
+    },
+    {
+      "seq": 3,
+      "type": "assistant",
+      "payload": {
+        "text": "Rebuilt it concurrently; no lock was held."
+      },
+      "turnId": "O4lJMgVwbm97yFrbjFOul",
+      "ts": "2026-11-28T06:33:42.777Z",
+      "turnPublicId": "O4lJMgVwbm97yFrbjFOul"
+    },
+    {
+      "seq": 4,
+      "type": "turn_end",
+      "payload": {},
+      "turnId": "O4lJMgVwbm97yFrbjFOul",
+      "ts": "2026-11-28T06:33:42.777Z",
+      "turnPublicId": "O4lJMgVwbm97yFrbjFOul"
+    }
+  ]
+}

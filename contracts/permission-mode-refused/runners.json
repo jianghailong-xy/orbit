@@ -1,0 +1,538 @@
+[
+  {
+    "id": "355HRgA04yA3ABGm27nEu",
+    "name": "pmcf-runner",
+    "displayName": null,
+    "hostname": "workstation",
+    "labels": [],
+    "status": "ONLINE",
+    "maxConcurrent": 24,
+    "burstConcurrent": 2,
+    "version": "dev",
+    "lastHeartbeatAt": "2026-11-28T06:33:40.158Z",
+    "enrolledAt": "2026-11-28T06:32:10.122Z",
+    "position": null,
+    "planUsage": null,
+    "modelCatalog": {
+      "codex": [
+        {
+          "label": "GPT-6.2-Sol",
+          "value": "gpt-6.2-sol",
+          "priority": 1,
+          "serviceTiers": [
+            "priority"
+          ],
+          "contextWindow": 500000,
+          "reasoningLevels": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ],
+          "defaultReasoningLevel": "low"
+        },
+        {
+          "label": "GPT-6.2-Astra",
+          "value": "gpt-6.2-astra",
+          "priority": 2,
+          "serviceTiers": [
+            "priority"
+          ],
+          "contextWindow": 272000,
+          "reasoningLevels": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ],
+          "defaultReasoningLevel": "low"
+        },
+        {
+          "label": "GPT-6.1 Terra",
+          "value": "gpt-6.1-terra",
+          "priority": 3,
+          "serviceTiers": [
+            "priority"
+          ],
+          "contextWindow": 500000,
+          "reasoningLevels": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ],
+          "defaultReasoningLevel": "low"
+        },
+        {
+          "label": "GPT-6.1-Sol",
+          "value": "gpt-6.1-sol",
+          "priority": 4,
+          "serviceTiers": [
+            "priority"
+          ],
+          "contextWindow": 500000,
+          "reasoningLevels": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ],
+          "defaultReasoningLevel": "low"
+        },
+        {
+          "label": "GPT-6-Astra",
+          "value": "gpt-6-astra",
+          "priority": 5,
+          "serviceTiers": [
+            "priority"
+          ],
+          "contextWindow": 272000,
+          "reasoningLevels": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ],
+          "defaultReasoningLevel": "low"
+        },
+        {
+          "label": "GPT-6-Sol",
+          "value": "gpt-6-sol",
+          "priority": 6,
+          "serviceTiers": [
+            "priority"
+          ],
+          "contextWindow": 272000,
+          "reasoningLevels": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ],
+          "defaultReasoningLevel": "medium"
+        },
+        {
+          "label": "GPT-6-Luna",
+          "value": "gpt-6-luna",
+          "priority": 7,
+          "serviceTiers": [
+            "priority"
+          ],
+          "contextWindow": 272000,
+          "reasoningLevels": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "defaultReasoningLevel": "medium"
+        },
+        {
+          "label": "GPT-5.6-Sol",
+          "value": "gpt-5.6-sol",
+          "priority": 8,
+          "serviceTiers": [
+            "priority"
+          ],
+          "contextWindow": 272000,
+          "reasoningLevels": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ],
+          "defaultReasoningLevel": "low"
+        },
+        {
+          "label": "GPT-5.6-Terra",
+          "value": "gpt-5.6-terra",
+          "priority": 9,
+          "serviceTiers": [
+            "priority"
+          ],
+          "contextWindow": 272000,
+          "reasoningLevels": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ],
+          "defaultReasoningLevel": "medium"
+        },
+        {
+          "label": "GPT-5.6-Luna",
+          "value": "gpt-5.6-luna",
+          "priority": 10,
+          "serviceTiers": [
+            "priority"
+          ],
+          "contextWindow": 272000,
+          "reasoningLevels": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "defaultReasoningLevel": "medium"
+        },
+        {
+          "label": "GPT-5.5",
+          "value": "gpt-5.5",
+          "priority": 13,
+          "serviceTiers": [
+            "priority"
+          ],
+          "contextWindow": 272000,
+          "reasoningLevels": [
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "defaultReasoningLevel": "medium"
+        }
+      ]
+    },
+    "runsAsRoot": true,
+    "minFreeDiskMb": 10240,
+    "reposRoot": "/var/tmp/pmcf-stack/runner-home/orbit-repos",
+    "registerDir": "/var/tmp/pmcf-stack/work",
+    "capabilities": [
+      "abandoned-checkout-v1",
+      "antigravity-account-login/v1",
+      "antigravity-account-remove/v1",
+      "antigravity-default-sign-out/v1",
+      "antigravity-google-login-macos/v1",
+      "antigravity-google-login/v1",
+      "bg-output-tail/v1",
+      "bg-owner-stop/v1",
+      "claude-account-login/v1",
+      "claude-account-move/v1",
+      "claude-account-remove/v1",
+      "claude-account-swap/v1",
+      "claude-default-sign-out/v1",
+      "claude-region/v1",
+      "claude-scheduled-check-only-asks/v1",
+      "clone-workdir/v1",
+      "clone-workdir/v2",
+      "codeless-checkout/v1",
+      "codex-account-login/v1",
+      "codex-account-move/v1",
+      "codex-account-remove/v1",
+      "codex-default-sign-out/v1",
+      "codex-rate-limit-reset-v1",
+      "codex-rate-limit-reset-v2",
+      "condition-probe/v1",
+      "create-workdir/v1",
+      "create-workdir/v2",
+      "cursor-account-login/v1",
+      "cursor-account-remove/v1",
+      "cursor-default-sign-out/v1",
+      "cursor-key-check/v1",
+      "dir-probe/v1",
+      "help-ask/v1",
+      "integration-job/v1",
+      "integration-observe/v1",
+      "integration-progress/v2",
+      "integration-pull-request/v1",
+      "kimi-account-login/v1",
+      "kimi-account-move/v1",
+      "kimi-account-remove/v1",
+      "kimi-default-sign-out/v1",
+      "kimi-login-region/v1",
+      "machine-resources/v1",
+      "main-checkout-discard/v1",
+      "main-checkout-git/v1",
+      "over-capacity/v1",
+      "owner-secret/v1",
+      "promotion-automatic-land/v1",
+      "push-as-me/v1",
+      "self-update-now/v1",
+      "self-update-postpone/v1",
+      "session-claude-coordinator-context-v1",
+      "session-claude-steer-withdraw-v1",
+      "session-codex-coordinator-context-v1",
+      "session-codex-steer-v1",
+      "session-current-work-routing-v1",
+      "session-merge-beside-turn-v1",
+      "session-merge-pull-request/v1",
+      "session-merge-recovery-v1",
+      "session-move/v1",
+      "session-orchestration-credential-v1",
+      "session-terminal-handoff-v1",
+      "session-worktree-ops-v1",
+      "source-pin/v1",
+      "subagent-remote-in-place/v1",
+      "subagent-remote-resume/v1",
+      "task-fork/v1",
+      "wiki-repo-op-folder/v1",
+      "wiki-repo-op-probe/v1",
+      "wiki-repo-op-read/v1",
+      "wiki-repo-op/v1",
+      "provider:claude",
+      "provider:codex",
+      "provider:opencode",
+      "provider:antigravity",
+      "provider:dsh",
+      "os:linux"
+    ],
+    "heartbeatLeaseOwner": "3be65df1-c289-4c05-a1fe-19f66a78a82f",
+    "heartbeatDraining": null,
+    "managed": false,
+    "runtimeDefaultModels": {},
+    "selfUpdate": {
+      "state": "disabledByEnv",
+      "reason": "ORBIT_NO_SELFUPDATE is set",
+      "installDir": "/var/tmp/pmcf-stack/bin",
+      "quietWindowSeconds": 600
+    },
+    "region": null,
+    "engines": [
+      {
+        "engine": "claude",
+        "installed": true,
+        "version": "0.0.0 (Fake Claude)",
+        "auth": "unknown",
+        "accounts": [
+          {
+            "id": "default",
+            "home": "/var/tmp/pmcf-stack/runner-home/.claude",
+            "auth": "unknown",
+            "activeSessions": 0
+          }
+        ]
+      },
+      {
+        "engine": "codex",
+        "installed": true,
+        "version": "codex-cli 0.172.0",
+        "auth": "no",
+        "accounts": [
+          {
+            "id": "default",
+            "home": "/var/tmp/pmcf-stack/runner-home/.codex",
+            "codexHome": "/var/tmp/pmcf-stack/runner-home/.codex",
+            "auth": "no",
+            "activeSessions": 0
+          }
+        ]
+      },
+      {
+        "engine": "kimi",
+        "installed": false,
+        "auth": "unknown"
+      },
+      {
+        "engine": "opencode",
+        "installed": false,
+        "auth": "unknown"
+      },
+      {
+        "engine": "antigravity",
+        "installed": false,
+        "auth": "unknown"
+      },
+      {
+        "engine": "dsh",
+        "installed": false,
+        "auth": "unknown",
+        "dsh": {
+          "versionCompatible": false,
+          "credentialPresent": false,
+          "modelCatalogReadable": false,
+          "requestValidation": "unknown",
+          "sandboxEnforcement": "unknown"
+        },
+        "installationError": "DSH_NOT_INSTALLED"
+      },
+      {
+        "engine": "cursor",
+        "installed": false,
+        "auth": "unknown",
+        "installationError": "CURSOR_NOT_INSTALLED"
+      }
+    ],
+    "engineUpdateDismissals": {},
+    "agentFix": {
+      "workspaceId": "355HRjOQ3SmGDXJIluIDU",
+      "workspaceName": "orbit",
+      "engine": "claude",
+      "engineName": "Claude Code",
+      "blocked": null,
+      "fixing": [],
+      "handled": [],
+      "workspacePublicId": "355HRjOQ3SmGDXJIluIDU",
+      "agentId": "355HRjOQ3SmGDXJIluIDU",
+      "agentName": "orbit"
+    },
+    "antigravity": {
+      "supported": true,
+      "installed": false,
+      "version": null,
+      "envKeyAvailable": false,
+      "authSource": null,
+      "googleLogin": "available"
+    },
+    "install": {
+      "status": null,
+      "engine": null,
+      "command": null,
+      "message": null,
+      "mode": null
+    },
+    "accountRemove": {
+      "engine": "codex",
+      "account": null,
+      "status": null,
+      "message": null
+    },
+    "claudeAccountSwap": {
+      "account": null,
+      "status": null,
+      "message": null,
+      "waitingOn": [],
+      "foreignProcesses": []
+    },
+    "online": true,
+    "activeSessions": 0,
+    "commands": [],
+    "skills": [],
+    "publicId": "355HRgA04yA3ABGm27nEu"
+  },
+  {
+    "id": "355HU1FGexcjZ0muWU6FG",
+    "name": "root-runner",
+    "displayName": null,
+    "hostname": "root-runner-host",
+    "labels": [],
+    "status": "ONLINE",
+    "maxConcurrent": 4,
+    "burstConcurrent": 2,
+    "version": "0.1.261-beta.109",
+    "lastHeartbeatAt": "2026-11-28T06:33:42.618Z",
+    "enrolledAt": "2026-11-28T06:33:42.400Z",
+    "position": null,
+    "planUsage": null,
+    "modelCatalog": {
+      "claude": [
+        {
+          "label": "Opus 5.5",
+          "value": "claude-opus-5-5",
+          "permissionModes": [
+            "default",
+            "acceptEdits",
+            "plan",
+            "auto",
+            "dontAsk",
+            "bypassPermissions"
+          ]
+        },
+        {
+          "label": "Haiku 4.5",
+          "value": "claude-haiku-4-5",
+          "permissionModes": [
+            "default",
+            "acceptEdits",
+            "plan",
+            "dontAsk",
+            "bypassPermissions"
+          ]
+        }
+      ]
+    },
+    "runsAsRoot": true,
+    "minFreeDiskMb": 10240,
+    "reposRoot": null,
+    "registerDir": null,
+    "capabilities": [
+      "provider:claude",
+      "os:linux"
+    ],
+    "heartbeatLeaseOwner": "ba6b6f2f-40fb-492a-9b9f-7d574efbd856",
+    "heartbeatDraining": false,
+    "managed": false,
+    "runtimeDefaultModels": {},
+    "selfUpdate": null,
+    "region": null,
+    "engines": [
+      {
+        "engine": "claude",
+        "installed": true,
+        "version": "2.1.325 (Claude Code)",
+        "auth": "yes",
+        "accounts": [
+          {
+            "id": "default",
+            "home": "/root/.claude",
+            "auth": "yes",
+            "activeSessions": 0
+          }
+        ]
+      }
+    ],
+    "engineUpdateDismissals": {},
+    "agentFix": {
+      "workspaceId": "355HU1WuaCB5P3d9s0gQe",
+      "workspaceName": "orbit-root",
+      "engine": "claude",
+      "engineName": "Claude Code",
+      "blocked": null,
+      "fixing": [],
+      "handled": [],
+      "workspacePublicId": "355HU1WuaCB5P3d9s0gQe",
+      "agentId": "355HU1WuaCB5P3d9s0gQe",
+      "agentName": "orbit-root"
+    },
+    "antigravity": {
+      "supported": false,
+      "installed": null,
+      "version": null,
+      "envKeyAvailable": false,
+      "authSource": null,
+      "googleLogin": "needs_update"
+    },
+    "install": {
+      "status": null,
+      "engine": null,
+      "command": null,
+      "message": null,
+      "mode": null
+    },
+    "accountRemove": {
+      "engine": "codex",
+      "account": null,
+      "status": null,
+      "message": null
+    },
+    "claudeAccountSwap": {
+      "account": null,
+      "status": null,
+      "message": null,
+      "waitingOn": [],
+      "foreignProcesses": []
+    },
+    "online": true,
+    "activeSessions": 0,
+    "commands": [],
+    "skills": [],
+    "publicId": "355HU1FGexcjZ0muWU6FG"
+  }
+]
