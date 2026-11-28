@@ -979,7 +979,7 @@ public enum RunnerPageFormat {
     /// `Default · ~/.codex isn’t used by Orbit`. Nil while Default is in use.
     public static func removedDefaultLine(_ health: RunnerEngineHealth) -> String? {
         guard let removed = health.removedDefault, !(health.accounts ?? []).isEmpty,
-              let name = removedDefaultName(health) else { return nil }
+              removed.auth != "no", let name = removedDefaultName(health) else { return nil }
         return RunnerAccountCopy.runnerDefaultRemovedLine(name: name, dir: tildePath(removed.home))
     }
 

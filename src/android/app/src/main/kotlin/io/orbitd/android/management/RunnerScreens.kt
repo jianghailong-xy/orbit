@@ -1104,7 +1104,7 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
                             resume = { scope.launch { show(pause(line, null)) } }, openSession = ::openSession)
                     }
                     // A Default removed from Orbit ends the accounts that remain, with the way back.
-                    RunnerPage.removedDefault(health)?.let { removed ->
+                    RunnerPage.removedDefault(health)?.takeIf(RunnerPage::removedDefaultShown)?.let { removed ->
                         HorizontalDivider()
                         RemovedDefaultRow(RunnerPage.removedDefaultLine(removed), busy = restoring) { useAgain(RunnerPage.removedDefaultName(removed)) }
                     }

@@ -43,11 +43,11 @@ class RemoveDefaultTest {
 
     /** Codex as the server serves it with Default removed: the remaining accounts, the marker, the engine's sign-in read from the
      * first of them signed in, and Default's windows gone from its quota — one remaining account's becoming the snapshot's own. */
-    private fun removed(vararg remaining: JsonObject, name: String? = null, accountRemove: JsonObject? = null) = runner(buildJsonObject {
+    private fun removed(vararg remaining: JsonObject, name: String? = null, defaultAuth: String? = null, accountRemove: JsonObject? = null) = runner(buildJsonObject {
         put("engine", "codex"); put("installed", true)
         put("auth", (remaining.firstOrNull { it.text("auth") == "yes" } ?: remaining.first()).text("auth"))
         put("accounts", JsonArray(remaining.toList()))
-        putJsonObject("removedDefault") { put("home", "/root/.codex"); name?.let { put("name", it) }; put("fingerprintPrefix", "cxa1_2b7e9013") }
+        putJsonObject("removedDefault") { put("home", "/root/.codex"); name?.let { put("name", it) }; put("fingerprintPrefix", "cxa1_2b7e9013"); defaultAuth?.let { put("auth", it) } }
     }, buildJsonObject {
         put("provider", "codex")
         if (remaining.size == 1) window(USED.getValue(remaining[0].text("id"))).filterKeys { it != "provider" }.forEach { (key, value) -> put(key, value) }
@@ -115,6 +115,10 @@ class RemoveDefaultTest {
         assertEquals("~/.orbit/codex-accounts/$WORK", one.subtitle)
         assertEquals("jianghailong.main · ~/.codex isn’t used by Orbit",
             RunnerPage.removedDefaultLine(RunnerPage.removedDefault(health(removed(work(), name = "jianghailong.main")))!!))
+        // Once its login is off the machine the line goes; yes, unknown and an older server's silence keep it.
+        fun shown(auth: String?) = RunnerPage.removedDefault(health(removed(work(), defaultAuth = auth)))!!.let(RunnerPage::removedDefaultShown)
+        assertFalse(shown("no"))
+        listOf("yes", "unknown", null).forEach { assertTrue(it.toString(), shown(it)) }
         // With Default in use there is no such line, and a lone Default is the engine's sign-in, as before.
         assertNull(RunnerPage.removedDefault(health(withDefault(work()))))
         assertEquals(listOf("default" to null), lines(withDefault()).map { it.id to it.signInAccount })

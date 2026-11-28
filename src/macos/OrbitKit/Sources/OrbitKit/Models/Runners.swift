@@ -359,11 +359,14 @@ public struct RunnerRemovedDefault: Codable, Equatable, Sendable {
     public let name: String?
     /// As on its account (`RunnerEngineAccount.fingerprintPrefix`). Absent where the runner read none.
     public let fingerprintPrefix: String?
+    /// Whether its login is still on the machine. `no`: the line is left out; absent (an older apiserver): shown.
+    public let auth: String?
 
-    public init(home: String, name: String? = nil, fingerprintPrefix: String? = nil) {
+    public init(home: String, name: String? = nil, fingerprintPrefix: String? = nil, auth: String? = nil) {
         self.home = home
         self.name = name
         self.fingerprintPrefix = fingerprintPrefix
+        self.auth = auth
     }
 }
 

@@ -191,7 +191,7 @@ test('a runner served with a Default removed from Orbit', { skip, concurrency: 1
         // Default is signed out on the machine; the accounts Orbit uses are signed in.
         auth: 'yes',
         accounts: [codexAccount(WORK, 'Work'), codexAccount(HOME, 'Home')],
-        removedDefault: { home: '/root/.codex', name: 'Machine login', fingerprintPrefix: 'cxa1_9f3a41c7' },
+        removedDefault: { home: '/root/.codex', name: 'Machine login', fingerprintPrefix: 'cxa1_9f3a41c7', auth: 'no' },
       },
     ]);
     assert.deepEqual(two.planUsage, { ...PLAN_USAGE, codex: { provider: 'codex', accounts: { [WORK]: WORK_USAGE } } });
@@ -205,7 +205,7 @@ test('a runner served with a Default removed from Orbit', { skip, concurrency: 1
       version: '2.1.287 (Claude Code)',
       auth: 'yes',
       accounts: [TEAM_ACCOUNT],
-      removedDefault: { home: '/root/.claude' },
+      removedDefault: { home: '/root/.claude', auth: 'no' },
     });
     assert.deepEqual(one.planUsage.claude, { ...TEAM_USAGE, accounts: { [TEAM]: TEAM_USAGE } });
     assert.deepEqual(one.engines[1], two.engines[1], 'Codex as it was');
