@@ -275,7 +275,7 @@ export const PERMISSION_MODE_CORRECTION_FAILED_EVENT_SUBTYPE = 'permission_mode_
 /**
  * Why a claim handed the runner another mode than the one the session asked for (`session_permission_mode_change.reason`,
  * migration 1807). A config change's setconfig or reload turn and a SubAgent's spawn make the same two and no other
- * (migration 1808, SubagentAttempt.permissionModeSubstitution). They are the only substitutions, and neither predicts
+ * (migration 1811, SubagentAttempt.permissionModeSubstitution). They are the only substitutions, and neither predicts
  * what the engine can do:
  *  - ROOT_RUNNER: Bypass on a runner that runs as root, where Claude Code exits before it says anything; Auto instead;
  *  - SCHEDULED_RUN: a scheduled run on Claude Code, which runs in Auto whatever its level.

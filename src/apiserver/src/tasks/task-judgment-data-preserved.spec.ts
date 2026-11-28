@@ -3617,10 +3617,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // and 1756, and to 1807 after main took 1780-1800 and they moved to 1805 and 1806; it stays after 1805, which
       // creates the table it alters.
       '1807_permission_mode_change_claim_substitution',
-      // 1808 re-declares 1807's check on session_permission_mode_change to allow an OWNER_PICK or ORBIT_CHANGE row to
+      // 1811 re-declares 1807's check on session_permission_mode_change to allow an OWNER_PICK or ORBIT_CHANGE row to
       // carry the mode asked for and why; it is none of the preserved relations, no row is written, and no trigger,
-      // function or DONE fence changes. It stays after 1807, whose check it replaces.
-      '1808_permission_mode_change_config_substitution'],
+      // function or DONE fence changes. It stays after 1807, whose check it replaces. Written as 1808, renumbered to 1811
+      // after this project's 1810 landed before it.
+      '1811_permission_mode_change_config_substitution'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.

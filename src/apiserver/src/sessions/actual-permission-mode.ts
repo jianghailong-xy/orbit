@@ -46,7 +46,7 @@ export interface ClaimedModeSubstitution {
  * two columns only when the mode differs from the one recorded, and inserts the change row only then. Returns
  * whether anything changed. A mode this server does not know is ignored. clock_timestamp(), not now(): two changes
  * recorded in one transaction must not share a time, or the detail could not order them. `substitution` is a CLAIM's,
- * or a config turn's (OWNER_PICK, ORBIT_CHANGE; migration 1808), and rides on its row.
+ * or a config turn's (OWNER_PICK, ORBIT_CHANGE; migration 1811), and rides on its row.
  */
 export async function recordActualPermissionMode(
   db: Pick<Prisma.TransactionClient, '$queryRaw'>,

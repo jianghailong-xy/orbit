@@ -1,4 +1,5 @@
--- 1808 — a config change that hands the engine another mode than the one asked for says so on the mode change it causes.
+-- 1811 — a config change that hands the engine another mode than the one asked for says so on the mode change it causes.
+-- Written as 1808, renumbered to 1811 after this project's 1810 (permission_mode_change_seq) landed before it.
 --
 -- 1807 let a CLAIM row carry the mode asked for and why. A config change (SessionsService.updateConfig) now hands the
 -- engine the mode asked for under the same two substitutions as the claim, and no prediction: Bypass on a root runner
