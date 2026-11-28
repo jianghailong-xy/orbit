@@ -211,3 +211,52 @@ describe('a path in the session’s own directories', () => {
     expect(await hoverTooltip(chip!)).toBe(path);
   });
 });
+
+/**
+ * An HTML file a reply links is an agent's mock board, made to be looked at. A relative link to one
+ * (`docs/mocks/x/board.html`, a reply whose upload was lost) used to be an ordinary link that opened
+ * a page of the app that does not exist; an attached one downloaded. Both open a sandboxed preview.
+ */
+describe('an HTML file', () => {
+  const PAGE = '<!doctype html><h1>Task link card</h1>';
+
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(PAGE)));
+    URL.revokeObjectURL = vi.fn();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  async function openPreview(): Promise<HTMLIFrameElement | null> {
+    const chip = container.querySelector<HTMLButtonElement>('button.chat-file');
+    expect(chip?.getAttribute('aria-label')).toBe('Preview board.html');
+    await act(async () => {
+      chip?.click();
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    return document.querySelector<HTMLIFrameElement>('iframe.chat-html-preview-page');
+  }
+
+  it('named relative to the checkout opens in a sandboxed preview, not a link into the app', async () => {
+    resolve.mockResolvedValue('blob:board');
+    await renderReply('The HTML source is [board.html](docs/mocks/task-link-card/board.html).\n');
+    expect(container.querySelector('a')).toBeNull();
+    expect(resolve).not.toHaveBeenCalled(); // read when opened
+    const frame = await openPreview();
+    expect(resolve).toHaveBeenCalledWith(SESSION, 'docs/mocks/task-link-card/board.html');
+    expect(frame?.getAttribute('sandbox')).toBe('');
+    expect(frame?.getAttribute('srcdoc')).toBe(PAGE);
+  });
+
+  it('attached to the reply opens in the same preview instead of downloading', async () => {
+    resolveAttachment.mockResolvedValue('blob:board');
+    await renderReply('[board.html](orbit-attachment:01a0c992-61c0-727a-bbbb-d985dd45d0e0 "board.html")\n');
+    const frame = await openPreview();
+    expect(resolveAttachment).toHaveBeenCalledWith('01a0c992-61c0-727a-bbbb-d985dd45d0e0');
+    expect(frame?.getAttribute('srcdoc')).toBe(PAGE);
+  });
+});

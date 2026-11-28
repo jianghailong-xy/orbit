@@ -10555,6 +10555,18 @@ button.chat-jump-start:hover {
   font-size: 12px;
   cursor: pointer;
 }
+.chat-html-preview-page {
+  display: block;
+  width: 100%;
+  height: 70vh;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: #fff;
+}
+.chat-html-preview-state {
+  padding: 24px 0;
+  color: var(--text-secondary);
+}
 .chat-file:hover {
   background: var(--bg-hover);
 }

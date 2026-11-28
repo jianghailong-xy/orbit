@@ -12,6 +12,7 @@ import {
   DownOutlined,
   EditOutlined,
   EyeOutlined,
+  DownloadOutlined,
   FileAddOutlined,
   FileTextOutlined,
   FolderAddOutlined,
@@ -78,7 +79,7 @@ import {
   evidenceExpiryDate,
   evidenceFileExpiredLine,
 } from '../lib/evidenceFiles';
-import { saveUserFile } from '../lib/userFile';
+import { inertObjectUrl, saveUserFile } from '../lib/userFile';
 import { stripAnsi } from '../lib/ansi';
 import { Diff, ExportCtx, KeyVals, Pre, relPath, safeJson, type ExportMode } from './ToolBlocks';
 import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
@@ -93,6 +94,7 @@ import { buildBatchGraph, describeShape, type BatchTaskInput } from '../lib/batc
 import { RunnerSignIn } from './RunnerSignIn';
 import { AppLink } from './AppLink';
 import { Button } from './ui/Button';
+import { Dialog } from './ui/Dialog';
 import { sandboxFixView } from '../lib/agentFix';
 import { AGENT_FIX_BUTTON, AGENT_FIX_OPEN_SESSION, agentFixFixed, agentFixFixing } from '../lib/runnerCopy';
 import type { RunnerAgentFix } from '@orbit/shared';
@@ -4103,6 +4105,7 @@ export function AttachmentFile({ id, name }: { id: string; name?: string }) {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const [expired, setExpired] = useState<{ at: string | null } | null>(null);
+  const [previewing, setPreviewing] = useState(false);
   const label = name || 'file';
   // Static export: the download endpoint is bearer-guarded and non-image files aren't
   // embedded, so surface the attachment's name as an inert chip rather than a dead button.
@@ -4124,6 +4127,22 @@ export function AttachmentFile({ id, name }: { id: string; name?: string }) {
           <span className="chat-file-expired">{`· ${evidenceFileExpiredLine(expired.at)}`}</span>
         </span>
       </Tooltip>
+    );
+  }
+  if (looksLikeHtmlPath(label)) {
+    return (
+      <HtmlFileChip
+        name={label}
+        label={label}
+        open={previewing}
+        onOpenChange={setPreviewing}
+        load={() => resolveFileObjectUrl(resolve, id)}
+        onError={(error) => {
+          if (!(error instanceof ExpiredAttachmentError)) return;
+          setPreviewing(false);
+          setExpired({ at: error.expiredAt });
+        }}
+      />
     );
   }
   const download = async (): Promise<void> => {
@@ -4334,6 +4353,20 @@ function isCheckoutRelativeImageSrc(src: string): boolean {
     && !/^(?:[a-z][a-z0-9+.-]*:|\/|\\|~)/i.test(src);
 }
 
+// An HTML file a reply links (an agent's mock board, most of the time) is read in place rather than
+// downloaded: drawn in a sandboxed frame, as Drive previews one (HtmlFilePreview).
+function looksLikeHtmlPath(name: string): boolean {
+  return /\.html?$/i.test(name.split(/[?#]/)[0] ?? name);
+}
+
+// `docs/mocks/x/board.html`, as an agent names the file it wrote: the runner attaches it when its
+// upload lands, and a reply whose upload was lost still holds the path. Left as a link, the browser
+// would resolve it against the page's own address and open a page that does not exist.
+function isCheckoutRelativeHtmlSrc(src: string): boolean {
+  return looksLikeHtmlPath(src) && !/[?#]/.test(src)
+    && !/^(?:[a-z][a-z0-9+.-]*:|\/|\\|~)/i.test(src);
+}
+
 // Source references often add `:line` (or `:line-line`) after the file name. It is useful to the
 // reader, but the artifact route and the runner need the path without that location hint.
 function artifactPathFromLink(src: string): string {
@@ -4445,6 +4478,7 @@ function LocalArtifactFile({
   const exp = useContext(ExportCtx);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const shown = label || fileLabel(artifactPath);
   const filename = downloadName || fileLabel(artifactPath);
   if (!resolve || exp) {
@@ -4471,6 +4505,17 @@ function LocalArtifactFile({
       setBusy(false);
     }
   };
+  if (looksLikeHtmlPath(filename)) {
+    return (
+      <HtmlFileChip
+        name={filename}
+        label={shown}
+        open={previewing}
+        onOpenChange={setPreviewing}
+        load={() => resolveFileObjectUrl(resolve, artifactPath)}
+      />
+    );
+  }
   return (
     <Tooltip content={failed ? `Retry download ${filename}` : `Download ${filename}`}>
       <button
@@ -4484,6 +4529,93 @@ function LocalArtifactFile({
         <span className="chat-file-name">{shown}</span>
       </button>
     </Tooltip>
+  );
+}
+
+// An HTML file's chip: pressing it opens the page in a dialog, in a frame with no scripts and no
+// origin of its own (sandbox="", as Drive's HtmlPreview), with Download beside it. The bytes are
+// read when it opens, and again on Try again. `onError` hears why a read failed, for a chip that
+// says so itself (an attachment whose bytes have gone).
+function HtmlFileChip({
+  name,
+  label,
+  open,
+  onOpenChange,
+  load,
+  onError,
+}: {
+  name: string;
+  label: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  load: () => Promise<string>;
+  onError?: (error: unknown) => void;
+}) {
+  const [page, setPage] = useState<{ html: string } | 'failed' | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const loadRef = useRef({ load, onError });
+  loadRef.current = { load, onError };
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    setPage(null);
+    loadRef.current.load()
+      .then(async (url) => {
+        try {
+          const html = await (await fetch(url)).text();
+          if (active) setPage({ html });
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setPage('failed');
+        loadRef.current.onError?.(error);
+      });
+    return () => {
+      active = false;
+    };
+  }, [open, attempt]);
+  const html = page && page !== 'failed' ? page.html : null;
+  return (
+    <>
+      <Tooltip content={`Preview ${name}`}>
+        <button type="button" className="chat-file" onClick={() => onOpenChange(true)} aria-label={`Preview ${name}`}>
+          <PaperClipOutlined />
+          <span className="chat-file-name">{label}</span>
+        </button>
+      </Tooltip>
+      <Dialog
+        open={open}
+        onClose={() => onOpenChange(false)}
+        title={name}
+        width="min(1100px, 94vw)"
+        className="chat-html-preview"
+        footer={
+          <Button
+            icon={<DownloadOutlined />}
+            disabled={html == null}
+            onClick={() => html != null && saveUserFile(inertObjectUrl(new Blob([html], { type: 'text/html' })), name)}
+          >
+            Download
+          </Button>
+        }
+      >
+        {html != null ? (
+          <iframe className="chat-html-preview-page" sandbox="" srcDoc={html} title={name} />
+        ) : page === 'failed' ? (
+          <div className="chat-html-preview-state">
+            Couldn't load {name}.{' '}
+            <Button size="small" onClick={() => setAttempt((n) => n + 1)}>
+              Try again
+            </Button>
+          </div>
+        ) : (
+          <div className="chat-html-preview-state">Loading preview…</div>
+        )}
+      </Dialog>
+    </>
   );
 }
 
@@ -4532,6 +4664,11 @@ function MarkdownLink({ node: _node, href, title, children, ...rest }: any) {
         label={label}
         downloadName={fileLabel(artifactPath)}
       />
+    );
+  }
+  if (typeof href === 'string' && isCheckoutRelativeHtmlSrc(href)) {
+    return (
+      <LocalArtifactFile artifactPath={href} label={nodeText(children).trim() || fileLabel(href)} downloadName={fileLabel(href)} />
     );
   }
   if (typeof href === 'string' && isLocalFileSrc(href)) {

@@ -59,7 +59,7 @@ async function reply(text: string): Promise<void> {
 }
 
 const IMAGE = 'Here it is.\n\n![menu-open.png](orbit-attachment:pic)';
-const FILE = 'Here it is.\n\n[report.html](orbit-attachment:doc "report.html")';
+const FILE = 'Here it is.\n\n[report.pdf](orbit-attachment:doc "report.pdf")';
 
 describe('a picture in a reply', () => {
   it('draws the grey tile with its date when the read says the bytes went', async () => {
@@ -110,7 +110,7 @@ describe('a file in a reply', () => {
     await settle();
     expect(chip().tagName).toBe('SPAN');
     expect(chip().className).toContain('is-expired');
-    expect(chip().textContent).toBe('report.html· Expired Sep 14');
+    expect(chip().textContent).toBe('report.pdf· Expired Sep 14');
     expect(saved).not.toHaveBeenCalled();
   });
 
@@ -119,7 +119,7 @@ describe('a file in a reply', () => {
     await reply(FILE);
     await act(async () => chip().click());
     await settle();
-    expect(chip().textContent).toBe('report.html· Expired');
+    expect(chip().textContent).toBe('report.pdf· Expired');
   });
 
   it('stays retryable on any other failure, and a retry that works saves it', async () => {
@@ -129,11 +129,24 @@ describe('a file in a reply', () => {
     await settle();
     expect(chip().tagName).toBe('BUTTON');
     expect(chip().className).toContain('is-error');
-    expect(chip().getAttribute('aria-label')).toBe('Retry download report.html');
+    expect(chip().getAttribute('aria-label')).toBe('Retry download report.pdf');
     read.mockResolvedValueOnce('blob:test/doc');
     await act(async () => chip().click());
     await settle();
-    expect(saved).toHaveBeenCalledWith('blob:test/doc', 'report.html');
+    expect(saved).toHaveBeenCalledWith('blob:test/doc', 'report.pdf');
+  });
+
+  // An HTML file opens in a preview rather than downloading; a preview told the bytes went closes on
+  // the same placeholder.
+  it('closes an HTML preview on the placeholder when the bytes went', async () => {
+    read.mockRejectedValue(new ExpiredAttachmentError('2026-09-14T12:00:00.000Z'));
+    await reply('Here it is.\n\n[board.html](orbit-attachment:doc "board.html")');
+    expect(chip().getAttribute('aria-label')).toBe('Preview board.html');
+    await act(async () => chip().click());
+    await settle();
+    expect(chip().className).toContain('is-expired');
+    expect(chip().textContent).toBe('board.html· Expired Sep 14');
+    expect(document.querySelector('.chat-html-preview-state')).toBeNull();
   });
 });
 
