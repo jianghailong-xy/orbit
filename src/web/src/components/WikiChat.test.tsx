@@ -192,14 +192,13 @@ async function serve(url: string, init?: RequestInit): Promise<Response> {
   if (path === '/api/users/me') return reply(200, { id: 'u1', preferences: { defaultPermissionMode: 'default' } });
   // The composer's `@` menu: your recent sessions, this chat's own among them.
   if (path === '/api/sessions/search') {
-    return reply(200, {
-      q: '', contentSearched: false, total: 3,
-      hits: [
+    const q = (new URL(url, 'http://x').searchParams.get('q') ?? '').toLowerCase();
+    const hits = ([
         { id: 'S1chat', title: 'This wiki chat', agent: { id: 'w1', name: 'orbit-develop' }, taskId: null, phase: 'IDLE' },
         { id: 'S2', title: 'Deploy main to staging', agent: { id: 'w1', name: 'orbit-prod' }, taskId: null, phase: 'IDLE', lastTurnOutcome: 'FAILED' },
         { id: 'S3', title: 'Region check run', agent: { id: 'w1', name: 'orbit-develop' }, taskId: 'T1', phase: 'RUNNING' },
-      ],
-    });
+      ] as Array<{ title: string }>).filter((hit) => hit.title.toLowerCase().includes(q));
+    return reply(200, { q, contentSearched: false, total: hits.length, hits });
   }
   // The composer's `#` menu: open projects.
   if (path === '/api/projects/sidebar') {
@@ -1119,18 +1118,22 @@ describe('the history the title opens (board 45 ④, owner 11-11: Q3 A, Q4 A)', 
 
 describe('@ sessions and # projects in the composer (docs/composer-references-design.md rev. 3)', () => {
   const menu = () =>
-    [...document.querySelectorAll<HTMLElement>('.composer-slash-menu [role="option"]')].map(
-      (row) => row.querySelector('.composer-slash-name')?.textContent,
+    [...document.querySelectorAll<HTMLElement>('.composer-ref-menu [role="option"]')].map(
+      (row) => row.querySelector('.composer-ref-title')?.textContent,
     );
   const key = async (name: string) =>
     act(async () => field().dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true })));
   const sent = () => writes.filter((write) => write.path === '/api/sessions/S1chat/turns/current-work-routing').at(-1)?.body;
 
-  it('@ lists your recent sessions, never the one you are in, and sends the pick as a session link', async () => {
+  it('@ lists your recent sessions, never the one you are in nor a task run, and sends the pick as a session link', async () => {
     await open('/wiki/orbit?chat=S1chat');
     await type('compare with @');
     await settle();
-    expect(menu()).toEqual(['@Deploy main to staging', '@Region check run']);
+    expect(menu()).toEqual(['Deploy main to staging']);
+    // The row says where it lives and how its last turn ended.
+    const row = document.querySelector('.composer-ref-menu [role="option"]')!;
+    expect(row.querySelector('.composer-ref-sub')?.textContent).toBe('orbit-prod');
+    expect(row.querySelector('.composer-ref-state')?.textContent).toBe('Failed');
     await key('Enter');
     expect(field().value).toBe('compare with @Deploy main to staging ');
     await type(`${field().value}please`);
@@ -1142,10 +1145,33 @@ describe('@ sessions and # projects in the composer (docs/composer-references-de
     await open('/wiki/orbit?chat=S1chat');
     await type('what is left in #');
     await settle();
-    expect(menu()).toEqual(['#Runner link hardening', '#Older project']);
+    expect(menu()).toEqual(['Runner link hardening', 'Older project']);
     await key('Enter');
     await press(byLabel('Send'));
     expect(sent()?.content).toBe('what is left in [Runner link hardening](orbit-project:P2)');
+  });
+
+  it('one Backspace after a session chip deletes the whole chip', async () => {
+    await open('/wiki/orbit?chat=S1chat');
+    await type('see @');
+    await settle();
+    await key('Enter');
+    expect(field().value).toBe('see @Deploy main to staging ');
+    const area = field();
+    area.setSelectionRange(area.value.length, area.value.length);
+    await key('Backspace');
+    await settle();
+    expect(field().value).toBe('see ');
+  });
+
+  it('says when nothing matches, and closes once the query reads like prose', async () => {
+    await open('/wiki/orbit?chat=S1chat');
+    await type('ask @zzz');
+    await settle();
+    expect(document.querySelector('.composer-ref-empty')?.textContent).toMatch(/^Nothing matches/);
+    await type('ask @zzz is it a b');
+    await settle();
+    expect(document.querySelector('.composer-ref-menu')).toBeNull();
   });
 });
 
