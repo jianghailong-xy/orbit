@@ -290,6 +290,9 @@ internal class WorktreeModel(private val api: DirectoryApi, private val id: Stri
                 val target = detail.string("mergeTarget") ?: "main"
                 return when (detail.string("mergeStatus")) {
                     "merged" -> WorktreeNotice("Merged into $target", key = "merge")
+                    // GitHub refused the push to the target, so the runner opened a pull request (design §4.6).
+                    "pull_request" -> WorktreeBarLogic.mergePullRequestNotice(detail["mergePullRequest"] as? JsonObject, target)
+                        .let { (headline, why) -> WorktreeNotice(headline, why, ToastTone.NEUTRAL, key = "merge") }
                     "conflict" -> {
                         // The same branch and target the bar's Resolve in session hands the session.
                         val onto = WorktreeBarLogic.conflictTarget(detail.string("mergeTarget"),

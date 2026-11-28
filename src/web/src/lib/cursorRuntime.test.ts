@@ -11,7 +11,7 @@ import { cursorUsageLimit, currentPlanUsageRows, planUsageSnapshotForProvider } 
 import { brandForProvider, engineChoices, engineProviders, runtimeSummary, type ChoiceSources } from './sessionProviderChoices';
 import { slashAssetMatchesEngine } from './slashCommands';
 import {
-  clampPermissionModeForModel,
+  clampPermissionModeForEngine,
   defaultModelFor,
   effortOptionsFor,
   MODE_OPTIONS,
@@ -135,10 +135,10 @@ describe('Cursor CLI’s models, efforts and modes', () => {
   it('refuses Default and falls back to Accept Edits (D6), and keeps every mode Cursor CLI can be held to', () => {
     const offered = MODE_OPTIONS.filter((m) => permissionModeSupported(m.value, CURSOR)).map((m) => m.value);
     expect(offered).toEqual(['plan', 'acceptEdits', 'auto', 'dontAsk', 'bypassPermissions']);
-    expect(clampPermissionModeForModel('default', 'default', CURSOR, CURSOR, [], catalog)).toBe('acceptEdits');
-    expect(clampPermissionModeForModel('auto', 'default', CURSOR, CURSOR, [], catalog)).toBe('auto');
-    // Every other engine falls back as before.
-    expect(clampPermissionModeForModel('default', 'claude-opus-5', CLAUDE, CLAUDE, [], catalog)).toBe('default');
+    expect(clampPermissionModeForEngine('default', CURSOR)).toBe('acceptEdits');
+    expect(clampPermissionModeForEngine('auto', CURSOR)).toBe('auto');
+    // Every other engine keeps it.
+    expect(clampPermissionModeForEngine('default', CLAUDE)).toBe('default');
     // The picker's caveat is the shared table's, not the web's own words.
     expect(derivePermissionSemantics(CURSOR, 'default').shortNote).toBe('unsupported on Cursor CLI; session configuration is rejected');
   });

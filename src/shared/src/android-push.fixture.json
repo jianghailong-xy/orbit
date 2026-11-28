@@ -171,6 +171,58 @@
       }
     },
     {
+      "name": "runner-offline",
+      "pushType": "alert",
+      "collapseId": "runner-presence-019a0000-0000-7000-8000-000000000003",
+      "source": {
+        "aps": {
+          "alert": {
+            "title": "studio-mac",
+            "body": "studio-mac is offline: Orbit hasn't heard from it for 5 minutes. Sessions on it can't run until it's back."
+          },
+          "sound": "default",
+          "thread-id": "runner-019a0000-0000-7000-8000-000000000003"
+        },
+        "runnerID": "019a0000-0000-7000-8000-000000000003",
+        "kind": "runner-offline"
+      },
+      "data": {
+        "version": "1",
+        "type": "alert",
+        "registrationKey": "019a0000-0000-7000-8000-000000000001",
+        "eventId": "40000000-0000-4000-8000-0000000000f1",
+        "notificationKey": "runner-presence-019a0000-0000-7000-8000-000000000003",
+        "sentAt": "2026-11-01T10:20:00.000Z",
+        "payload": "{\"runnerID\":\"019a0000-0000-7000-8000-000000000003\",\"kind\":\"runner-offline\",\"title\":\"studio-mac\",\"body\":\"studio-mac is offline: Orbit hasn't heard from it for 5 minutes. Sessions on it can't run until it's back.\",\"threadId\":\"runner-019a0000-0000-7000-8000-000000000003\"}"
+      }
+    },
+    {
+      "name": "runner-online",
+      "pushType": "alert",
+      "collapseId": "runner-presence-019a0000-0000-7000-8000-000000000003",
+      "source": {
+        "aps": {
+          "alert": {
+            "title": "studio-mac",
+            "body": "studio-mac is back online."
+          },
+          "sound": "default",
+          "thread-id": "runner-019a0000-0000-7000-8000-000000000003"
+        },
+        "runnerID": "019a0000-0000-7000-8000-000000000003",
+        "kind": "runner-online"
+      },
+      "data": {
+        "version": "1",
+        "type": "alert",
+        "registrationKey": "019a0000-0000-7000-8000-000000000001",
+        "eventId": "40000000-0000-4000-8000-0000000000f2",
+        "notificationKey": "runner-presence-019a0000-0000-7000-8000-000000000003",
+        "sentAt": "2026-11-01T10:20:00.000Z",
+        "payload": "{\"runnerID\":\"019a0000-0000-7000-8000-000000000003\",\"kind\":\"runner-online\",\"title\":\"studio-mac\",\"body\":\"studio-mac is back online.\",\"threadId\":\"runner-019a0000-0000-7000-8000-000000000003\"}"
+      }
+    },
+    {
       "name": "project-orphan",
       "pushType": "alert",
       "collapseId": "project-orphan-019a0000-0000-5000-8000-00000000000b",

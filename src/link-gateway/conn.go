@@ -367,6 +367,7 @@ func (c *conn) dispatch(f *linkpb.Frame) bool {
 // (§5.7, heartbeat.go). A gateway without backends, as some tests build it, answers it at once with nothing to apply.
 func (c *conn) onHeartbeat(hb *linkpb.Heartbeat) {
 	c.g.metrics.heartbeats.inc()
+	c.g.metrics.countHeartbeatBytes(hb)
 	if c.link != nil {
 		c.link.onHeartbeat(hb)
 		return

@@ -63,9 +63,6 @@ struct SessionFolderRowView: View {
             case .running:
                 SpinnerGlyph(color: .secondary)
                     .accessibilityLabel("Session running")
-            case .jobs:
-                BreathingGlyph(systemImage: "terminal")
-                    .accessibilityLabel("Background job running")
             case .idle:
                 EmptyView()
             }
@@ -103,7 +100,6 @@ struct SessionFolderRowView: View {
         switch status {
         case .needsYou(let count): return "\(count) waiting for you, \(sessionCount) sessions"
         case .running:             return "Session running"
-        case .jobs:                return "Background job running"
         case .idle:                return "\(sessionCount) sessions"
         }
     }

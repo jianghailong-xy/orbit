@@ -1,8 +1,10 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
+import type { DriveChatChangeGroup } from '@orbit/shared';
 import { driveChatsQuery } from './driveChat';
 import {
   driveChangesNeedYou,
+  driveGroupNeedsYou,
   driveChatGroupsQuery,
   driveChatQuestionsQuery,
   driveMarks,
@@ -22,6 +24,8 @@ const CHATS_READ = 20;
  */
 export function useDriveChanges(): {
   needsYou: number;
+  /** The held groups, each with the title of the chat that holds them. */
+  held: { group: DriveChatChangeGroup; chatTitle: string }[];
   markOf: (entryId: string) => DriveMark | null;
   opened: (entryId: string) => void;
 } {
@@ -63,5 +67,7 @@ export function useDriveChanges(): {
     },
     [marks, seen, scope],
   );
-  return { needsYou, markOf, opened };
+  const titles = new Map((list.data?.chats ?? []).map((chat) => [chat.sessionId, chat.title]));
+  const held = allGroups.filter(driveGroupNeedsYou).map((group) => ({ group, chatTitle: titles.get(group.sessionId) ?? 'Drive chat' }));
+  return { needsYou, held, markOf, opened };
 }

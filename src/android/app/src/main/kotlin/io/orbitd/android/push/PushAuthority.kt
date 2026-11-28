@@ -116,7 +116,12 @@ class PushAuthority(private val api: OrbitApi, private val handle: SessionHandle
                 // The runner's effective region verdict (docs/claude-region-check-contract.md §6): the flip stands while it
                 // reads blocked. A runner that reads no region says nothing either way.
                 // Something of the owner's waits on its drain while GET /runners says so (D3); the drain's end, or the wait's, retires it.
-                else if (payload.kind == "runner-updating") {
+                // Offline stands while GET /runners reads the machine offline, back online while it reads online.
+                else if (payload.kind == "runner-offline" || payload.kind == "runner-online") {
+                    val online = (runner["online"] as? JsonPrimitive)?.booleanOrNull
+                    if (online == null) PushCheck.UNKNOWN
+                    else if (online == (payload.kind == "runner-online")) PushCheck.ACTIVE else PushCheck.STALE
+                } else if (payload.kind == "runner-updating") {
                     if (runner["drainWaiting"] is JsonObject) PushCheck.ACTIVE else PushCheck.STALE
                 } else if (payload.kind == "claude-region-blocked") {
                     when (runner.obj("region")?.text("verdict")) { "blocked" -> PushCheck.ACTIVE; "allowed" -> PushCheck.STALE; else -> PushCheck.UNKNOWN }

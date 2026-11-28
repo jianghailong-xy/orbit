@@ -52,6 +52,15 @@ S3_ACCESS_KEY_ID="${ORBIT_DRIVE_S3_ACCESS_KEY_ID:-${ORBIT_DOCUMENTS_S3_ACCESS_KE
 S3_SECRET_ACCESS_KEY="${ORBIT_DRIVE_S3_SECRET_ACCESS_KEY:-${ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY:-${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}}}"
 S3_REGION="${ORBIT_DRIVE_S3_REGION:-${ORBIT_DOCUMENTS_S3_REGION:-${ORBIT_FILES_S3_REGION:-us-east-1}}}"
 BUCKET_SYNC_TARGET="${SYNC_TARGET%/}-bucket"
+# The archive's off-host copy in an S3 bucket, as <bucket>/<prefix>, e.g. orbit-pg-archive/prod. With it set the archive
+# goes there instead of to ORBIT_BACKUP_SYNC_TARGET, which then takes only the files copies. Endpoint, region and key pair
+# default to the Drive bucket's. Give the prefix to the archive alone: the copy deletes whatever there it did not put there.
+ARCHIVE_S3_TARGET="${ORBIT_BACKUP_S3_TARGET:-}"
+ARCHIVE_S3_ENDPOINT="${ORBIT_BACKUP_S3_ENDPOINT:-$S3_ENDPOINT}"
+ARCHIVE_S3_REGION="${ORBIT_BACKUP_S3_REGION:-$S3_REGION}"
+ARCHIVE_S3_ACCESS_KEY_ID="${ORBIT_BACKUP_S3_ACCESS_KEY_ID:-$S3_ACCESS_KEY_ID}"
+ARCHIVE_S3_SECRET_ACCESS_KEY="${ORBIT_BACKUP_S3_SECRET_ACCESS_KEY:-$S3_SECRET_ACCESS_KEY}"
+ARCHIVE_S3_NAME="s3://${ARCHIVE_S3_TARGET%/}"
 # The database that names those files (POSTGRES_DB in docker-compose.yml); PGDATABASE here is postgres.
 FILES_DB=orbit
 # When the off-host files copy was last pruned: at most once per interval, since it lists the whole copy.
@@ -200,27 +209,37 @@ target_is_ours() {
     log "ERROR: off-host sync to $SYNC_TARGET failed: could not read the target: $remote_base"
     return 1
   fi
+  archive_owns "$SYNC_TARGET" fetch_rsync
+}
+
+# A segment of the rsync target, to $2. What went wrong on stdout.
+fetch_rsync() { rsync --timeout=600 -e "ssh $ssh_opts" "$SYNC_TARGET/wal/$1" "$2" >/dev/null 2>"$rsync_stderr" || { rsync_said; return 1; }; }
+
+# The rest of target_is_ours, for target $1 whatever it is: given its listings of wal/ and base/ in $remote_wal and
+# $remote_base, as rsync --list-only prints them (the size second, the name last), and a command $2 that fetches one of
+# its segments to a file.
+archive_owns() {
   held="$(printf '%s\n' "$remote_base" | awk 'NF && $NF != "." {sub("/.*", "", $NF); print $NF}' | LC_ALL=C sort -u | tr '\n' ' ' | tail -c 200)"
   remote_segments="$(printf '%s\n' "$remote_wal" | segment_lines)"
   if [ -z "$remote_segments" ]; then
     if [ -n "$held" ]; then
-      log "ERROR: refusing off-host sync to $SYNC_TARGET: it holds base backups and no WAL to tell whose they are (${held% }), and --delete would replace them. $(replace_target_advice)"
+      log "ERROR: refusing off-host sync to $1: it holds base backups and no WAL to tell whose they are (${held% }), and --delete would replace them. $(replace_target_advice)"
       return 1
     fi
     return 0
   fi
 
   if ! here="$(psql -Atc 'select system_identifier from pg_control_system()' 2>&1)"; then
-    log "ERROR: off-host sync to $SYNC_TARGET skipped: could not read this cluster's system identifier: $(printf '%s' "$here" | tr '\n' ' ' | tail -c 200)"
+    log "ERROR: off-host sync to $1 skipped: could not read this cluster's system identifier: $(printf '%s' "$here" | tr '\n' ' ' | tail -c 200)"
     return 1
   fi
-  local_segments="$(rsync --list-only "$WAL_DIR/" | segment_lines)"
+  local_segments="$(ls -1A "$WAL_DIR" | segment_lines)"
   newest_here="$(printf '%s\n' "$local_segments" | newest_segment)"
   newest_there="$(printf '%s\n' "$remote_segments" | newest_segment)"
   # Old WAL copied back under a new cluster: its segments would pass as the target's own below.
   archived="$(segment_system_id "$WAL_DIR/$newest_here")"
   if [ "$archived" != "$here" ]; then
-    log "ERROR: refusing off-host sync to $SYNC_TARGET: the newest WAL in $ARCHIVE_DIR ($newest_here) belongs to cluster ${archived:-unknown}, and this one is $here, and --delete would carry that to the target. $(replace_target_advice)"
+    log "ERROR: refusing off-host sync to $1: the newest WAL in $ARCHIVE_DIR ($newest_here) belongs to cluster ${archived:-unknown}, and this one is $here, and --delete would carry that to the target. $(replace_target_advice)"
     return 1
   fi
 
@@ -228,9 +247,9 @@ target_is_ours() {
   there=""
   for segment in $(printf '%s\n' "$remote_segments" | tr -d , | sort -n -k2 | head -n 3 | awk '{print $NF}'); do
     rm -f "$scratch/segment"
-    if ! rsync --timeout=600 -e "ssh $ssh_opts" "$SYNC_TARGET/wal/$segment" "$scratch/segment" >/dev/null 2>"$rsync_stderr"; then
+    if ! why="$("$2" "$segment" "$scratch/segment")"; then
       rm -rf "$scratch"
-      log "ERROR: off-host sync to $SYNC_TARGET failed: could not read $segment from the target: $(rsync_said)"
+      log "ERROR: off-host sync to $1 failed: could not read $segment from the target: $why"
       return 1
     fi
     there="$(segment_system_id "$scratch/segment")"
@@ -238,13 +257,13 @@ target_is_ours() {
   done
   rm -rf "$scratch"
   if [ "$there" != "$here" ]; then
-    log "ERROR: refusing off-host sync to $SYNC_TARGET: its archive belongs to cluster ${there:-unknown} (newest segment $newest_there) and this one is $here (newest segment $newest_here), and --delete would replace it. $(replace_target_advice)"
+    log "ERROR: refusing off-host sync to $1: its archive belongs to cluster ${there:-unknown} (newest segment $newest_there) and this one is $here (newest segment $newest_here), and --delete would replace it. $(replace_target_advice)"
     return 1
   fi
 
   # This cluster's, and further on than this archive: a timeline or a segment this archive has never held.
   if [ "$(printf '%s\n%s\n' "$newest_here" "$newest_there" | LC_ALL=C sort | tail -n1)" != "$newest_here" ]; then
-    log "ERROR: refusing off-host sync to $SYNC_TARGET: it holds WAL newer than $ARCHIVE_DIR (newest segment $newest_there there, $newest_here here), and --delete would remove it. $(replace_target_advice)"
+    log "ERROR: refusing off-host sync to $1: it holds WAL newer than $ARCHIVE_DIR (newest segment $newest_there there, $newest_here here), and --delete would remove it. $(replace_target_advice)"
     return 1
   fi
   shared_segments="$(printf '%s\n%s\n' "$remote_segments" "$local_segments" | awk '{print $NF}' | LC_ALL=C sort | uniq -d)"
@@ -312,6 +331,82 @@ sync_archive() {
   MIRRORED=yes
   changed="$(printf '%s\n%s\n' "$sent" "$out" | grep -c . || true)"
   [ "$changed" -eq 0 ] || log "mirrored $changed change(s) to $SYNC_TARGET"
+}
+
+need_rclone() { command -v rclone >/dev/null 2>&1 || apk add --no-cache rclone >/dev/null 2>&1; }
+
+# rclone against the archive's bucket, with no config file: everything it needs is here.
+archive_rclone() {
+  RCLONE_S3_ACCESS_KEY_ID="$ARCHIVE_S3_ACCESS_KEY_ID" RCLONE_S3_SECRET_ACCESS_KEY="$ARCHIVE_S3_SECRET_ACCESS_KEY" \
+    rclone --config /dev/null --s3-provider Other --s3-force-path-style \
+      --s3-endpoint "$ARCHIVE_S3_ENDPOINT" --s3-region "$ARCHIVE_S3_REGION" --contimeout 15s --timeout 600s "$@"
+}
+
+# What the last rclone said on stderr, as rsync_said does for rsync.
+rclone_said() { tr -d '\r' < "$s3_stderr" | grep -v ' NOTICE: ' | tr '\n' ' ' | tail -c 300; }
+
+# A directory of the bucket in the shape of an rsync listing, the size second and the name last, so that archive_owns reads it.
+# A prefix with nothing under it lists empty, and so does a bucket not made yet (rclone's exit 3), which the first copy makes.
+s3_list() {
+  listed=0
+  listing="$(archive_rclone lsf --format sp --separator ' ' "$@" 2>"$s3_stderr")" || listed=$?
+  case "$listed" in
+    0) printf '%s\n' "$listing" | awk 'NF {print "-", $0}' ;;
+    3) ;;
+    *) return 1 ;;
+  esac
+}
+
+fetch_s3() { archive_rclone copyto ":s3:${ARCHIVE_S3_TARGET%/}/wal/$1" "$2" 2>"$s3_stderr" || { rclone_said; return 1; }; }
+
+# The archive to the bucket, with the guards sync_archive has: never an empty archive, never over another cluster's or one
+# further on. WAL goes first, on its own and deleting nothing, so the bucket holds a segment to read before a base backup.
+# Then `rclone sync`, which deletes only after every copy has gone through, and not at all after an error, so the bucket
+# keeps its old base backups until the new ones are there. --size-only because nothing here changes once named: a segment
+# is never overwritten and a base backup is renamed into place whole; it spares reading every object's metadata.
+sync_archive_s3() {
+  MIRRORED=no
+  if [ -z "$(list_backups)" ] || [ -z "$(ls -A "$WAL_DIR" | segment_lines)" ]; then
+    log "ERROR: refusing off-host sync to $ARCHIVE_S3_NAME: $ARCHIVE_DIR holds no base backup or no WAL, and --delete would empty the target"
+    return 1
+  fi
+  if [ -z "$ARCHIVE_S3_ENDPOINT" ] || [ -z "$ARCHIVE_S3_ACCESS_KEY_ID" ] || [ -z "$ARCHIVE_S3_SECRET_ACCESS_KEY" ]; then
+    log "ERROR: cannot sync to $ARCHIVE_S3_NAME: set ORBIT_BACKUP_S3_ENDPOINT and the S3 key pair, or the Drive bucket's"
+    return 1
+  fi
+  if ! need_rclone; then
+    log "ERROR: cannot install rclone, skipping off-host sync to $ARCHIVE_S3_NAME"
+    return 1
+  fi
+  if ! s3_stderr="$(mktemp)"; then
+    log "ERROR: off-host sync to $ARCHIVE_S3_NAME failed: could not make a temporary file"
+    return 1
+  fi
+  if s3_round; then rm -f "$s3_stderr"; return 0; fi
+  rm -f "$s3_stderr"
+  return 1
+}
+
+s3_round() {
+  remote="${ARCHIVE_S3_TARGET%/}"
+  if ! remote_wal="$(s3_list ":s3:$remote/wal/")" || ! remote_base="$(s3_list -R --files-only ":s3:$remote/base/")"; then
+    log "ERROR: off-host sync to $ARCHIVE_S3_NAME failed: could not read the target: $(rclone_said)"
+    return 1
+  fi
+  archive_owns "$ARCHIVE_S3_NAME" fetch_s3 || return 1
+  if ! archive_rclone copy --size-only --log-level INFO --stats 0 "$WAL_DIR" ":s3:$remote/wal" 2>"$s3_stderr"; then
+    log "ERROR: off-host sync to $ARCHIVE_S3_NAME failed: $(rclone_said)"
+    return 1
+  fi
+  sent="$(grep -c ': Copied' "$s3_stderr" || true)"
+  if ! archive_rclone sync --size-only --log-level INFO --stats 0 --exclude '/base/.staging-*/**' --exclude '/metrics/**' \
+       "$ARCHIVE_DIR" ":s3:$remote" 2>"$s3_stderr"; then
+    log "ERROR: off-host sync to $ARCHIVE_S3_NAME failed: $(rclone_said)"
+    return 1
+  fi
+  MIRRORED=yes
+  changed="$((sent + $(grep -c -E ': (Copied|Deleted)' "$s3_stderr" || true)))"
+  [ "$changed" -eq 0 ] || log "mirrored $changed change(s) to $ARCHIVE_S3_NAME"
 }
 
 # Copy the attachment files to the same machine. A name is a sha256 and never changes its
@@ -551,7 +646,11 @@ mkdir -p "$BASE_DIR" "$WAL_DIR"
 # A base backup cut short when this container stopped: an upgrade recreates it when this script
 # changes. Nothing is running yet, and no later run would come back for this one's disk space.
 rm -rf "$BASE_DIR"/.staging-*
-log "watching: base backup every ${INTERVAL}s, keeping $KEEP, ${MIN_FREE_MB}MB headroom on $ARCHIVE_DIR${SYNC_TARGET:+, mirroring to $SYNC_TARGET and $FILES_SYNC_TARGET}"
+if [ -n "$ARCHIVE_S3_TARGET" ]; then
+  log "watching: base backup every ${INTERVAL}s, keeping $KEEP, ${MIN_FREE_MB}MB headroom on $ARCHIVE_DIR, mirroring to $ARCHIVE_S3_NAME${SYNC_TARGET:+ and $FILES_SYNC_TARGET}"
+else
+  log "watching: base backup every ${INTERVAL}s, keeping $KEEP, ${MIN_FREE_MB}MB headroom on $ARCHIVE_DIR${SYNC_TARGET:+, mirroring to $SYNC_TARGET and $FILES_SYNC_TARGET}"
+fi
 write_metrics
 while :; do
   if backup_due; then
@@ -561,8 +660,12 @@ while :; do
   # The archive first: bytes reach the files directory before the row naming them commits, so
   # a round that finishes leaves the mirror with the bytes of every row in its WAL. Neither
   # copy failing stops the other.
+  # With a bucket for the archive, ORBIT_BACKUP_SYNC_TARGET is only where the files go.
+  if [ -n "$ARCHIVE_S3_TARGET" ]; then
+    sync_archive_s3 || MIRROR_FAILED_ARCHIVE=$((MIRROR_FAILED_ARCHIVE + 1))
+  fi
   if sync_ready; then
-    sync_archive || MIRROR_FAILED_ARCHIVE=$((MIRROR_FAILED_ARCHIVE + 1))
+    [ -n "$ARCHIVE_S3_TARGET" ] || sync_archive || MIRROR_FAILED_ARCHIVE=$((MIRROR_FAILED_ARCHIVE + 1))
     sync_files || MIRROR_FAILED_FILES=$((MIRROR_FAILED_FILES + 1))
     bucket_copied=no
     if [ "$FILES_S3_MIRROR" = 1 ]; then
@@ -572,7 +675,7 @@ while :; do
     rm -f "$rsync_stderr"
   elif [ -n "$SYNC_TARGET" ]; then
     # A target and no way to reach it (sync_ready said why): nothing was copied.
-    MIRROR_FAILED_ARCHIVE=$((MIRROR_FAILED_ARCHIVE + 1))
+    [ -n "$ARCHIVE_S3_TARGET" ] || MIRROR_FAILED_ARCHIVE=$((MIRROR_FAILED_ARCHIVE + 1))
     MIRROR_FAILED_FILES=$((MIRROR_FAILED_FILES + 1))
     [ "$FILES_S3_MIRROR" != 1 ] || MIRROR_FAILED_BUCKET=$((MIRROR_FAILED_BUCKET + 1))
   elif [ "$FILES_S3_MIRROR" = 1 ]; then

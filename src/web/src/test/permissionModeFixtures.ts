@@ -35,3 +35,34 @@ export function modeFacts(changes: readonly SessionPermissionModeChange[]): {
   const newest = changes.at(-1);
   return { actualPermissionMode: newest?.toMode ?? null, actualPermissionModeAt: newest?.at ?? null };
 }
+
+/** The detail of a live wiki chat on Claude Code (GET /sessions/:id), the fields the chat panel reads:
+ *  fixture-diff.mjs holds these keys and their kinds to the real answer. */
+export function wikiChatDetail(
+  chat: {
+    id: string;
+    title: string;
+    workspace: { id: string; name: string };
+    assignedRunnerId: string;
+    model: string;
+    permissionMode: string;
+    /** A turn of the chat is open; else it waits for the owner. */
+    running?: boolean;
+  },
+  changes: readonly SessionPermissionModeChange[],
+) {
+  const { running, ...own } = chat;
+  const state = running ? 'RUNNING' : 'AWAITING_INPUT';
+  return {
+    ...own,
+    engine: 'claude',
+    provider: 'claude',
+    status: state,
+    runState: state,
+    lifecycleState: 'OPEN',
+    deletedAt: null,
+    numTurns: 2,
+    ...modeFacts(changes),
+    permissionModeChanges: [...changes],
+  };
+}

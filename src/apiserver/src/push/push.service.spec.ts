@@ -933,6 +933,50 @@ test('the shared Android fixture carries what notifyClaudeRegionBlocked sends, k
   assert.deepEqual([sample.pushType, sample.collapseId], [sent[0].type, sent[0].collapseId]);
 });
 
+/** The runner presence push (ReaperService.alertRunnerPresence), sent for runner `runnerId`. */
+async function runnerPresencePush(runnerId: string, runner: { name: string; displayName: string | null } | null, presence: 'offline' | 'online') {
+  const prisma = {
+    runner: { findUnique: async () => (runner ? { ...runner, ownerId: 'owner-1' } : null) },
+    deviceToken: { findMany: async () => [{ token: 'device-1', userId: 'owner-1' }] },
+  };
+  const service = new PushService(prisma as any, enabledConfig());
+  (service as any).authToken = () => 'auth-token';
+  const sent: { body: string; type: unknown; collapseId?: string }[] = [];
+  (service as any).deliver = async (_tokens: unknown, body: string, type: unknown, _priority: unknown, collapseId?: string) => {
+    sent.push({ body, type, collapseId });
+  };
+  await service.notifyRunnerPresence(runnerId, presence);
+  return sent;
+}
+
+test('a runner gone offline, and back, is announced about the machine under one collapse id', async () => {
+  const [offline] = await runnerPresencePush('runner-1', { name: 'studio-mac', displayName: 'Studio' }, 'offline');
+  const payload = JSON.parse(offline.body);
+  assert.equal(payload.aps.alert.title, 'Studio');
+  assert.equal(payload.aps.alert.body,
+    "Studio is offline: Orbit hasn't heard from it for 5 minutes. Sessions on it can't run until it's back.");
+  assert.equal(payload.aps.badge, undefined);
+  assert.equal(payload.sessionID, undefined);
+  assert.deepEqual([payload.kind, payload.runnerID, offline.type, offline.collapseId],
+    ['runner-offline', 'runner-1', 'alert', 'runner-presence-runner-1']);
+  const [online] = await runnerPresencePush('runner-1', { name: 'studio-mac', displayName: null }, 'online');
+  const back = JSON.parse(online.body);
+  assert.equal(back.aps.alert.body, 'studio-mac is back online.');
+  assert.deepEqual([back.kind, online.collapseId], ['runner-online', 'runner-presence-runner-1']);
+  assert.equal((await runnerPresencePush('runner-3', null, 'offline')).length, 0);
+});
+
+test('the shared Android fixture carries what notifyRunnerPresence sends, key for key', async () => {
+  const fixture = JSON.parse(readFileSync(path.resolve(__dirname, '../../../shared/src/android-push.fixture.json'), 'utf8'));
+  for (const presence of ['offline', 'online'] as const) {
+    const sample = fixture.samples.find((candidate: { name: string }) => candidate.name === `runner-${presence}`);
+    assert.ok(sample, `the shared Android fixture has no runner-${presence} sample`);
+    const [sent] = await runnerPresencePush(sample.source.runnerID, { name: 'studio-mac', displayName: null }, presence);
+    assert.equal(sent.body, JSON.stringify(sample.source));
+    assert.deepEqual([sample.pushType, sample.collapseId], [sent.type, sent.collapseId]);
+  }
+});
+
 /** The owner's devices, as the alerts below reach them: one registered token, each send recorded. */
 function deviceAlertHarness(deliver?: () => Promise<void>) {
   const prisma = { deviceToken: { findMany: async () => [{ token: 'device-1', userId: 'owner-1' }] } };

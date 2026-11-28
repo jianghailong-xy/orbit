@@ -341,6 +341,8 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   ...driveUnderEveryPrefix({
     'GET /drive/entries/:id': { request: (of) => ({ params: { id: of.driveFileId } }) },
     'GET /drive/syncs/:id': { request: (of) => ({ params: { id: of.driveSyncId } }) },
+    'POST /drive/syncs/:id/handled': { request: (of) => ({ params: { id: of.driveSyncId } }) },
+    'POST /drive/syncs/:id/fix': { request: (of) => ({ params: { id: of.driveSyncId } }) },
     'PATCH /drive/entries/:id': { request: (of) => ({ params: { id: of.driveFileId }, body: { name: 'renamed by the census.txt' } }) },
     'POST /drive/entries/:id/share-check': { request: (of) => ({ params: { id: of.driveFileId } }) },
     'GET /drive/entries/:id/versions': { request: (of) => ({ params: { id: of.driveFileId } }) },

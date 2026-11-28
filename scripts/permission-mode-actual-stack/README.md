@@ -2,8 +2,9 @@
 
 The web's Mode capsule, its menu, the transcript's mode-change lines and the Agent tools drawer (board
 `docs/mocks/permission-mode-actual`, task 350TVt7QvzeqPJKO7tFuS), shot against this checkout's apiserver on PostgreSQL
-instead of the ui-migration fixtures, and the web tests' mode fixtures held to what that server answers. Loopback only;
-nothing runs an engine.
+instead of the ui-migration fixtures, and the web tests' mode fixtures held to what that server answers. The Wiki's chat
+panel (task 354kMqC6hhwBWk2gH93W7) is shot there too: its chats are made through `POST /wiki/spaces/:id/chats`. Loopback
+only; nothing runs an engine.
 
 ```sh
 bash scripts/worktree-overlay.sh                      # once per checkout: node_modules, Prisma client, shared dist

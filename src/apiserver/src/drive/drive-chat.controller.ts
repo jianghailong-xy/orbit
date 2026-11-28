@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { DRIVE_CHAT_RULES, type DriveChatListPage } from '@orbit/shared';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden } from '../auth/pat-scope.decorator';
@@ -7,6 +7,7 @@ import { PublicIdPipe } from '../common/public-id';
 import { actingSession } from '../wiki/wiki.controller';
 import { DRIVE_PAT } from './drive.controller';
 import { DriveChat } from './drive-chat';
+import { DriveSyncFix, type DriveSyncFixAnswer } from './drive-sync-fix';
 import { DRIVE_ROUTE_PREFIXES } from './drive-routes';
 import { DriveEnabledGuard } from './drive-switch';
 
@@ -18,11 +19,30 @@ import { DriveEnabledGuard } from './drive-switch';
  *
  * A chat's later messages are the session's own message door's (`POST /api/sessions/:id/turns`), which takes a Drive
  * chat's `driveContext: { folderId, entryIds }`.
+ *
+ * Handing a failed sync to an agent (drive-sync-fix.ts) sends a turn or starts a chat, so it is here and held to the
+ * same rules as making a chat.
  */
 @UseGuards(JwtAuthGuard, DriveEnabledGuard)
 @Controller(DRIVE_ROUTE_PREFIXES)
 export class DriveChatController {
-  constructor(private readonly chats: DriveChat) {}
+  constructor(
+    private readonly chats: DriveChat,
+    private readonly syncFix: DriveSyncFix,
+  ) {}
+
+  /** "Have the agent fix it" / "Fix in a new chat", and Retry failed with `{ mode: 'retry' }`. */
+  @PatForbidden('OWNER_INTERACTIVE')
+  @Post('syncs/:id/fix')
+  @HttpCode(HttpStatus.OK)
+  fixSync(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() body: unknown,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ): Promise<DriveSyncFixAnswer> {
+    return this.syncFix.fix(user.userId, id, body, actingSession(request.headers), user.credential);
+  }
 
   @PatForbidden('OWNER_INTERACTIVE')
   @Post('chats')

@@ -1,0 +1,99 @@
+{
+  "groups": [
+    {
+      "sessionId": "5pu3sVhSNWsFh6MTxqzyjZ",
+      "sessionTitle": "Sync the books",
+      "isDriveChat": false,
+      "at": "2026-11-28T01:03:28.725Z",
+      "lines": [
+        {
+          "op": "SYNCED",
+          "count": 120,
+          "folderPath": "/exports",
+          "bytes": 1200000,
+          "at": "2026-11-28T01:03:28.725Z"
+        }
+      ],
+      "sessionPublicId": "5pu3sVhSNWsFh6MTxqzyjZ"
+    },
+    {
+      "sessionId": "7OM3zBx4SgOtzaBywaDw0Q",
+      "sessionTitle": "Tidy up Books",
+      "isDriveChat": true,
+      "at": "2026-11-28T01:03:28.624Z",
+      "lines": [
+        {
+          "op": "RENAMED",
+          "count": 2,
+          "folderPath": "/Books",
+          "held": true,
+          "at": "2026-11-28T01:03:28.624Z"
+        },
+        {
+          "op": "RENAMED",
+          "count": 3,
+          "folderPath": "/Books",
+          "undo": {
+            "kind": "CHANGE_GROUP",
+            "id": "4DRhUmZIJPVp7q6tuawd5L",
+            "publicId": "4DRhUmZIJPVp7q6tuawd5L"
+          },
+          "at": "2026-11-28T01:03:28.536Z"
+        }
+      ],
+      "sessionPublicId": "7OM3zBx4SgOtzaBywaDw0Q"
+    },
+    {
+      "sessionId": "69O2f1S0KCuuTyXHBYiYEN",
+      "sessionTitle": "Write the quarterly report",
+      "isDriveChat": false,
+      "at": "2026-11-28T01:03:28.359Z",
+      "lines": [
+        {
+          "op": "DELETED",
+          "count": 2,
+          "folderPath": "/scratch",
+          "bytes": 3,
+          "undo": {
+            "kind": "TRASH_GROUP",
+            "id": "3559NYQWK6tqxt34Pxt13",
+            "publicId": "3559NYQWK6tqxt34Pxt13"
+          },
+          "at": "2026-11-28T01:03:28.359Z"
+        },
+        {
+          "op": "WROTE",
+          "count": 2,
+          "folderPath": "/Reports",
+          "bytes": 22,
+          "at": "2026-11-28T01:03:28.102Z"
+        }
+      ],
+      "sessionPublicId": "69O2f1S0KCuuTyXHBYiYEN"
+    },
+    {
+      "sessionId": "5pu3sVhSNWsFh6MTxqzyjZ",
+      "sessionTitle": "Sync the books",
+      "isDriveChat": false,
+      "at": "2026-11-27T22:03:28.661Z",
+      "lines": [
+        {
+          "op": "SYNCED",
+          "count": 11267,
+          "folderPath": "/Books",
+          "bytes": 0,
+          "at": "2026-11-27T22:03:28.661Z"
+        },
+        {
+          "op": "SYNCED",
+          "count": 209,
+          "folderPath": "/Video",
+          "bytes": 0,
+          "at": "2026-11-27T16:03:28.704Z"
+        }
+      ],
+      "sessionPublicId": "5pu3sVhSNWsFh6MTxqzyjZ"
+    }
+  ],
+  "nextBefore": null
+}

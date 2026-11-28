@@ -84,7 +84,7 @@ export interface ListingFolder {
 export interface ListingActivity {
   needsYou: ReadonlySet<string>;
   running: ReadonlySet<string>;
-  /** Background jobs still moving: the tally's `jobs`, not `stalledJobs`. */
+  /** Background jobs in flight, quiet or not: the tally's `jobs` and `stalledJobs` together. */
   jobs: ReadonlySet<string>;
 }
 
@@ -233,14 +233,16 @@ export function buildSessionListing(input: {
     const placedAtDate = latest.listedAt ?? latest.createdAt;
     const activity = input.activity;
     const running = !!activity && members.some((s) => activity.running.has(s.id));
+    const jobs = !!activity && members.some((s) => activity.jobs.has(s.id));
     entries.push({
       kind: 'project', order, rank: 1, id: projectId,
-      section: sectionOf(coordinator?.pinnedAt ?? null, members.some((s) => (s.row?.pendingApprovals ?? 0) > 0), running),
+      // A member with a background job in flight is working too (its row spins on `phase` RUNNING).
+      section: sectionOf(coordinator?.pinnedAt ?? null, members.some((s) => (s.row?.pendingApprovals ?? 0) > 0), running || jobs),
       placedAt: time(placedAtDate), createdAt: time(coordinator?.createdAt ?? latest.createdAt),
       placedAtDate, spokeAtDate: spoke.lastTurnAt ?? spoke.createdAt,
       memberCount: members.length, coordinatorId: coordinator?.id ?? null,
       running,
-      jobs: !!activity && members.some((s) => activity.jobs.has(s.id)),
+      jobs,
     });
   }
   entries.sort(compareListingKeys);

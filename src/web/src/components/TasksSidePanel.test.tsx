@@ -262,7 +262,6 @@ describe('TasksSidePanel workspace rows', () => {
         active={false}
         offline={false}
         running={false}
-        jobs={0}
         needsYou={0}
         onOpen={() => undefined}
       />,
@@ -295,7 +294,6 @@ describe('TasksSidePanel workspace rows', () => {
           active={false}
           offline={false}
           running={false}
-          jobs={0}
           needsYou={0}
           onOpen={() => undefined}
         />,
@@ -315,7 +313,6 @@ describe('TasksSidePanel workspace rows', () => {
         active
         offline={false}
         running={false}
-        jobs={0}
         needsYou={0}
         onOpen={() => undefined}
       />,
@@ -341,7 +338,6 @@ describe('TasksSidePanel workspace rows', () => {
         active={false}
         offline={false}
         running={false}
-        jobs={0}
         needsYou={0}
         shortcutLabel="⌘1"
         onOpen={() => undefined}
@@ -354,7 +350,6 @@ describe('TasksSidePanel workspace rows', () => {
         active={false}
         offline={false}
         running
-        jobs={0}
         needsYou={0}
         shortcutLabel="⌘1"
         onOpen={() => undefined}
@@ -367,7 +362,6 @@ describe('TasksSidePanel workspace rows', () => {
         active={false}
         offline={false}
         running
-        jobs={0}
         needsYou={2}
         shortcutLabel="⌘1"
         onOpen={() => undefined}
@@ -408,7 +402,6 @@ describe('TasksSidePanel workspace rows', () => {
         active
         offline={false}
         running
-        jobs={0}
         needsYou={0}
         onOpen={() => undefined}
       />,
@@ -452,62 +445,11 @@ describe('TasksSidePanel workspace rows', () => {
     expect(collapsedDotRule).not.toContain('animation');
   });
 
-  it('marks background work the rail was silent about, one slot below the working dot', () => {
-    const row = (jobs: number, running = false) =>
-      renderToStaticMarkup(
-        <WorkspaceRow
-          workspace={workspace}
-          runnerLabel="wikova"
-          active={false}
-          offline={false}
-          running={running}
-          jobs={jobs}
-          needsYou={0}
-          onOpen={() => undefined}
-        />,
-      );
-
-    // A job in flight with nobody generating: the workspace row was previously blank here.
-    const jobsOnly = row(2);
-    expect(jobsOnly).toContain('tp-workspace-icon-jobs');
-    expect(jobsOnly).toContain('data-tip="2 background jobs running"');
-    expect(jobsOnly).toContain('aria-label="Workspace has a background job running"');
-    expect(jobsOnly).not.toContain('tp-workspace-icon-running');
-
-    // The same count with a turn also in flight: generation is the louder claim and keeps the slot.
-    const both = row(2, true);
-    expect(both).toContain('tp-workspace-icon-running');
-    expect(both).not.toContain('tp-workspace-icon-jobs');
-
-    // The drawer draws this same breathing dot on the folder; its trailing slot stays the count's.
-    const trailing = renderToStaticMarkup(
-      <WorkspaceStateMark offline={false} running={false} jobs={1} needsYou={0} />,
-    );
-    expect(trailing).toBe('');
-
-    // Same brand blue as the dot above — work in flight is activity too — and the only animated
-    // mark in this rail: the dot beside it stays still.
-    const jobsRule = styles.match(/\.tp-workspace-icon-jobs\s*\{([\s\S]*?)\}/)?.[1] ?? '';
-    expect(jobsRule).toMatch(/background:\s*var\(--brand\)/);
-    expect(jobsRule).toContain('animation: status-glyph-breathe');
-    expect(styles).toMatch(
-      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.tp-workspace-icon-jobs\s*\{\s*animation:\s*none;/,
-    );
-
-    // The collapsed rail keeps the language it already has for the spinner: the mark sits at the
-    // avatar's corner and becomes the same brand dot there, breathing instead of still.
-    const collapsed = renderToStaticMarkup(
-      <WorkspaceStateMark compact offline={false} running={false} jobs={1} needsYou={0} />,
-    );
-    expect(collapsed).toContain('tp-rail-jobs');
-    expect(styles).toMatch(/\.tp-rail-jobs\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?right:\s*1px;/);
+  it('draws no breathing mark: a background job in flight lights the same still running dot', () => {
+    // `running` already counts every session whose row spins, a background job's included (see `workspaceRunning`).
+    expect(styles).not.toMatch(/tp-workspace-icon-jobs|tp-rail-jobs/);
     const desktopBlock = styles.slice(styles.indexOf('@media (min-width: 961px)'));
-    expect(desktopBlock).toMatch(
-      /\.app-shell \.app-nav\.collapsed \.tp-rail-jobs > svg\s*\{\s*visibility:\s*hidden;/,
-    );
-    expect(
-      desktopBlock.match(/\.app-shell \.app-nav\.collapsed \.tp-rail-jobs::after\s*\{([\s\S]*?)\}/)?.[1] ?? '',
-    ).toMatch(/background:\s*var\(--brand\);[\s\S]*animation:\s*status-glyph-breathe/);
+    expect(desktopBlock).not.toContain('status-glyph-breathe');
   });
 
   it('shows activity beside a needs-you count in every density, and keeps offline ahead of it', () => {
@@ -519,7 +461,6 @@ describe('TasksSidePanel workspace rows', () => {
           active={false}
           offline={false}
           running={running}
-          jobs={3}
           needsYou={2}
           onOpen={() => undefined}
         />,
@@ -531,35 +472,31 @@ describe('TasksSidePanel workspace rows', () => {
         active={false}
         offline
         running
-        jobs={3}
         needsYou={0}
         onOpen={() => undefined}
       />,
     );
     // The count and the dot sit at opposite ends of the row and say different things: the server
-    // leaves the sessions waiting on you out of `running`/`jobs`, so the dot is other work.
+    // leaves the sessions waiting on you out of `running`, so the dot is other work.
     expect(needsYou(true)).toContain('tp-count needs-you');
     expect(needsYou(true)).toContain('tp-workspace-icon-running');
-    expect(needsYou(true)).not.toContain('tp-workspace-icon-jobs');
     // The drawer shows the same folder dot, so no spinner squeezes in front of the count there.
     expect(needsYou(true)).not.toContain('anticon-loading');
     expect(needsYou(false)).toContain('tp-count needs-you');
-    expect(needsYou(false)).toContain('tp-workspace-icon-jobs');
     expect(needsYou(false)).not.toContain('tp-workspace-icon-running');
     expect(offline).toContain('tp-workspace-icon-offline');
     expect(offline).not.toContain('tp-workspace-icon-running');
-    expect(offline).not.toContain('tp-workspace-icon-jobs');
     expect(offline).not.toContain('anticon-loading');
 
     // The collapsed rail: the count in the avatar's top corner, activity in its bottom one.
-    const rail = (running: boolean, jobs: number) =>
+    const rail = (running: boolean) =>
       renderToStaticMarkup(
-        <WorkspaceStateMark compact offline={false} running={running} jobs={jobs} needsYou={2} />,
+        <WorkspaceStateMark compact offline={false} running={running} needsYou={2} />,
       );
-    expect(rail(true, 0)).toContain('tp-rail-badge needs-you');
-    expect(rail(true, 0)).toContain('tp-rail-running');
-    expect(rail(false, 1)).toContain('tp-rail-badge needs-you');
-    expect(rail(false, 1)).toContain('tp-rail-jobs');
+    expect(rail(true)).toContain('tp-rail-badge needs-you');
+    expect(rail(true)).toContain('tp-rail-running');
+    expect(rail(false)).toContain('tp-rail-badge needs-you');
+    expect(rail(false)).not.toContain('tp-rail-running');
     expect(styles).toMatch(/\.tp-rail-badge\s*\{[\s\S]*?top:\s*1px;[\s\S]*?right:\s*1px;/);
     expect(styles).toMatch(/\.tp-rail-running\s*\{[\s\S]*?right:\s*1px;[\s\S]*?bottom:\s*1px;/);
   });
@@ -572,7 +509,6 @@ describe('TasksSidePanel workspace rows', () => {
         active={false}
         offline
         running
-        jobs={0}
         needsYou={0}
         onOpen={() => undefined}
       />,
@@ -601,7 +537,6 @@ describe('TasksSidePanel workspace rows', () => {
         active={false}
         offline
         running
-        jobs={0}
         needsYou={2}
         onOpen={() => undefined}
       />,
@@ -666,7 +601,6 @@ describe('TasksSidePanel arranging the Workspace rows', () => {
         active
         offline
         running
-        jobs={1}
         needsYou={2}
         shortcutLabel="⌘1"
         onOpen={noop}

@@ -201,7 +201,8 @@ func delegateToolDescriptor(obj func(map[string]interface{}, ...string) map[stri
 			" name) or needs (runner capabilities such as \"os:darwin\"), it runs on that workspace's machine instead:" +
 			" remote SubAgents run on that workspace's own HEAD in its own repository and return text only, plus" +
 			" any file they keep with file_upload. They do not see your uncommitted" +
-			" changes (commit and push first if they must), and nothing they change comes back; the result names what" +
+			" changes (commit and push first if they must, or file_upload a file and name its id in the prompt for them to" +
+			" file_fetch), and nothing they change comes back; the result names what" +
 			" they discarded. Before naming a workspace, provider_list with that workspace says which provider × engine" +
 			" its runner can run, with the reason for each it cannot. " + subagentTypesDescription(defs),
 		"inputSchema": obj(map[string]interface{}{

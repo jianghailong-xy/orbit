@@ -370,6 +370,7 @@ model User {
   driveTrashGroups   DriveTrashGroup[]
   driveCommits       DriveCommit[]
   driveChanges       DriveChange[]
+  driveMoves         DriveMove[]
   /// Files a replacing rename removed, for a handle still writing one (migration 1438).
   driveRemovedEntries DriveRemovedEntry[]
   /// Its Drive chats' change groups, their changes, held writes and overwrite questions (migration 1700).
@@ -1029,6 +1030,9 @@ model Runner {
   // The owner's Update Now (0590): install the waiting release now, interrupting the turns in
   // flight. Handed to the next heartbeat as selfUpdateNow and cleared there, like the two above.
   selfUpdateNowRequestedAt DateTime? @map("self_update_now_requested_at")
+  // When the owner was last pushed that this runner went offline without signing off (1800): set by the reaper's
+  // presence alert, cleared with a "back online" push when it is heard again. Null: no offline alert open.
+  offlineAlertedAt  DateTime?    @map("offline_alerted_at")
   // The managed runner browser as the last heartbeat reported it (1090; @orbit/shared RunnerBrowserReport, with the
   // beat's time as reportedAt). Rewritten by every beat, to NULL when one omits it: a runner with no browser.
   browserState      Json?        @map("browser_state")
@@ -2223,7 +2227,7 @@ model Session {
   // must be preserved until first claim snapshots it.
   usesRuntimeDefaultModel Boolean @default(false) @map("uses_runtime_default_model")
   permissionMode       String?   @map("permission_mode")
-  // The owner's intent above; this is the mode the session's engine is actually running in (migration 1755):
+  // The owner's intent above; this is the mode the session's engine is actually running in (migration 1805):
   // read from the engine where it says (Claude Code's init frame, a set_permission_mode acknowledgement), else the
   // mode the runner was handed. Null until the next claim. Written only by sessions/actual-permission-mode.ts, which
   // logs each change in session_permission_mode_change. The mode ceiling rules compare it (owner ruling R3).
@@ -3215,7 +3219,7 @@ model RunEvent {
 }
 
 /// Every change of the mode a session's engine is actually running in (session.actual_permission_mode,
-/// migration 1755), with what caused it: CLAIM (the mode a claim handed the runner), OWNER_PICK (the owner's config
+/// migration 1805), with what caused it: CLAIM (the mode a claim handed the runner), OWNER_PICK (the owner's config
 /// change, `client` naming the app when known), ENGINE_REPORT (the engine said it runs in another mode), RUNNER_CORRECTION
 /// (the runner switched the engine itself), RESPAWN (the engine came back from a re-spawn in this mode) or ORBIT_CHANGE
 /// (a config change Orbit made). Append-only; the cause CHECK lives in the migration. `seq` is the order the rows were
@@ -3993,6 +3997,7 @@ model DriveVersion {
   @@unique([id, ownerId], map: "drive_version_id_owner_id_key")
   @@index([entryId], map: "drive_version_entry_idx")
   @@index([ownerId, trashGroupId], map: "drive_version_trash_group_idx")
+  @@index([ownerId, createdAt], map: "drive_version_owner_created_idx")
   @@map("drive_version")
 }
 
@@ -4082,6 +4087,7 @@ model DriveChatChange {
 
   @@index([groupId, ord], map: "drive_chat_change_group_ord_idx")
   @@index([groupId, entryId], map: "drive_chat_change_group_entry_idx")
+  @@index([ownerId, createdAt], map: "drive_chat_change_owner_created_idx")
   @@map("drive_chat_change")
 }
 
@@ -4153,6 +4159,29 @@ model DriveChange {
   @@index([ownerId, at], map: "drive_change_owner_at_idx")
   @@index([at], map: "drive_change_at_idx")
   @@map("drive_change")
+}
+
+/// One move or rename the name layer made (1780, drive.service.ts rename): the entry, `kind` (`MOVE` when its folder
+/// changed, else `RENAME`), the folder it went into, and who did it as checkedWriter kept it, for GET /drive/activity.
+/// Not written for the owner's Apply of a Drive chat's held changes (drive_chat_change has those). No foreign key to the
+/// entry, the folder or the session: each is read by id. Kept 30 days (file-retention-sweep.ts).
+model DriveMove {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  ownerId        String   @map("owner_id") @db.Uuid
+  owner          User     @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "drive_move_owner_id_fkey")
+  entryId        String   @map("entry_id") @db.Uuid
+  /// `MOVE` | `RENAME` (drive_move_kind_chk).
+  kind           String
+  folderId       String   @map("folder_id") @db.Uuid
+  /// `OWNER` | `AGENT` (drive_move_actor_kind_chk).
+  actorKind      String   @map("actor_kind")
+  actorSessionId String?  @map("actor_session_id") @db.Uuid
+  actorRunnerId  String?  @map("actor_runner_id") @db.Uuid
+  at             DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([ownerId, at], map: "drive_move_owner_at_idx")
+  @@index([at], map: "drive_move_at_idx")
+  @@map("drive_move")
 }
 
 /// What the mount daemon of one managed-runner generation presents at /runner/drive/* (1339,
@@ -11480,6 +11509,12 @@ model DriveSync {
   startedAt    DateTime  @default(now()) @map("started_at") @db.Timestamptz(3)
   updatedAt    DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
   endedAt      DateTime? @map("ended_at") @db.Timestamptz(3)
+  /// When a failed sync stopped needing the owner (migration 1790): cleared by them, or a later clean sync of the same
+  /// source and destination. A sync that ended with failures and has none is kept and listed whatever its age.
+  handledAt      DateTime? @map("handled_at") @db.Timestamptz(3)
+  /// The session the failures were handed to, and when: history read by id, not a key.
+  fixSessionId   String?   @map("fix_session_id") @db.Uuid
+  fixRequestedAt DateTime? @map("fix_requested_at") @db.Timestamptz(3)
 
   @@index([ownerId, startedAt(sort: Desc)], map: "drive_sync_owner_started_idx")
   @@index([runnerId], map: "drive_sync_runner_id_idx")

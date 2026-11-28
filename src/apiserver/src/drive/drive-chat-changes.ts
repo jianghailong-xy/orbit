@@ -17,6 +17,7 @@ import {
   DRIVE_NAME_TAKEN,
   DRIVE_PARENT_GONE,
   drivePathSegments,
+  drivePathsOf,
   DriveService,
   OWNER_WRITER,
   suffixedName,
@@ -525,19 +526,7 @@ export class DriveChatChanges {
 
   /** The paths of folders `ids` from the root, whether or not they are in Trash; one gone is left out. */
   private async paths(ownerId: string, ids: readonly string[]): Promise<Map<string, string>> {
-    if (!ids.length) return new Map();
-    const rows = await this.prisma.$queryRaw<Array<{ id: string; path: string }>>`
-      WITH RECURSIVE "up" AS (
-        SELECT e."id" AS "start", e."id", e."parent_id", e."name", 0 AS "depth"
-          FROM "drive_entry" e WHERE e."owner_id" = ${ownerId}::uuid AND e."id" = ANY(${[...ids]}::uuid[])
-        UNION ALL
-        SELECT "up"."start", p."id", p."parent_id", p."name", "up"."depth" + 1
-          FROM "drive_entry" p JOIN "up" ON p."id" = "up"."parent_id" WHERE p."owner_id" = ${ownerId}::uuid
-      )
-      SELECT "start"::text AS "id",
-             '/' || COALESCE(string_agg("name", '/' ORDER BY "depth" DESC) FILTER (WHERE "parent_id" IS NOT NULL), '') AS "path"
-        FROM "up" GROUP BY "start"`;
-    return new Map(rows.map((row) => [row.id, row.path]));
+    return drivePathsOf(this.prisma, ownerId, ids);
   }
 
   private async views(ownerId: string, groups: GroupRow[]): Promise<DriveChatChangeGroup[]> {

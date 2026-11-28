@@ -31,7 +31,7 @@ const { DrivePage } = await import('./DrivePage');
 /**
  * The Drive chat (board docs/mocks/drive-chat/01-board.html ② ⑤, owner Q1 A and Q3 A) on the real Drive page over a fake
  * API: the Wiki's chat host, open by default as the right-hand panel at ≥ 1200 on the chat that needs the owner, else
- * the most recent open one, else New chat; ✕ remembered per account on this device until the round button is pressed;
+ * the most recent open one, else New chat; ✕ remembered per account on this device until Agents is pressed;
  * the button's four looks; a new chat's Runs in with the server's default workspace, gone once the first message went;
  * the folder open as a removable chip `Folder · <name>`; and the history of Drive chats.
  */
@@ -198,7 +198,7 @@ async function reread(): Promise<void> {
 }
 
 const where = (): string | null => container.querySelector('output')?.getAttribute('data-where') ?? null;
-const fab = (): HTMLButtonElement | null => document.querySelector<HTMLButtonElement>('.wk-chat-fab');
+const fab = (): HTMLButtonElement | null => document.querySelector<HTMLButtonElement>('.files-head-actions button.files-agents');
 const panel = (): HTMLElement | null => document.querySelector<HTMLElement>('.wk-chat-panel');
 const frame = (): HTMLElement | null => document.querySelector<HTMLElement>('.wk-chat-frame');
 const title = (): string | null => document.querySelector('.wk-chat-title .t')?.textContent ?? null;
@@ -227,7 +227,9 @@ describe('open by default (board ②, owner Q1 A)', () => {
     expect(panel()?.classList.contains('is-wide')).toBe(true);
     expect(frame()?.className).toBe('wk-chat-frame is-columned is-drive');
     expect(title()).toBe('New chat');
-    expect(fab(), 'the button is hidden while the panel shows').toBeNull();
+    expect(fab()?.getAttribute('aria-pressed'), 'Agents is pressed while the panel shows').toBe('true');
+    expect(document.querySelector('.wk-chat-fab'), 'no round button on Drive').toBeNull();
+    expect(document.querySelector('.files-tray'), 'no upload tray on Drive').toBeNull();
     expect(where(), 'derived, never written to the address').toBe('/drive?folder=scans');
 
     windowWidth(1200);
@@ -270,21 +272,39 @@ describe('open by default (board ②, owner Q1 A)', () => {
     expect(panel()).toBeNull();
     expect(fab()).toBeNull();
   });
+
+  it('ends the header with Agents, the only primary button, which opens and closes the panel', async () => {
+    await open('/drive');
+    // The hidden file input is not a control: the last control is the last button.
+    const buttons = document.querySelectorAll<HTMLElement>('.files-head-actions button');
+    const last = buttons[buttons.length - 1]!;
+    expect(last).toBe(fab());
+    expect(last.textContent).toBe('Agents');
+    expect(document.querySelectorAll('.files-head .orbit-button-primary')).toHaveLength(1);
+    expect(last.classList.contains('orbit-button-primary')).toBe(true);
+    expect(panel()).toBeTruthy();
+    await press(fab());
+    expect(panel()).toBeNull();
+    expect(fab()?.getAttribute('aria-pressed')).toBe('false');
+    await press(fab());
+    expect(panel()).toBeTruthy();
+    expect(fab()?.classList.contains('is-open')).toBe(true);
+  });
 });
 
 describe('✕ (board ② note 1)', () => {
-  it('is remembered per account on this device until the round button is pressed', async () => {
+  it('is remembered per account on this device until Agents is pressed', async () => {
     await open('/drive');
     await press(byLabel('Hide chat'));
     expect(panel()).toBeNull();
-    expect(fab()).toBeTruthy();
+    expect(fab()?.getAttribute('aria-pressed')).toBe('false');
     expect(JSON.parse(storage.local.get('orbit.driveChat.closed')!)).toEqual({ u1: true });
 
     // A reload, and a new tab: still hidden.
     storage.session.clear();
     await open('/drive');
     expect(panel()).toBeNull();
-    expect(fab()).toBeTruthy();
+    expect(fab()?.getAttribute('aria-pressed')).toBe('false');
 
     // Another account on this device opens by default as ever.
     me = { id: 'u2' };
@@ -313,42 +333,36 @@ describe('✕ (board ② note 1)', () => {
   });
 });
 
-describe('the round button (board ⑤): the Wiki’s four looks', () => {
+describe('the Agents button (board drive-web 01 ①④)', () => {
   beforeEach(() => storage.local.set('orbit.driveChat.closed', JSON.stringify({ u1: true })));
 
-  const look = () => ({ state: fab()?.getAttribute('data-state'), label: fab()?.getAttribute('aria-label'), badge: fab()?.querySelector('.wk-chat-fab-badge')?.textContent ?? null });
+  const look = () => ({
+    ring: !!fab()?.querySelector('.files-agents-ring'),
+    count: fab()?.querySelector('.files-agents-count')?.textContent ?? null,
+  });
 
-  it('reads Chat at rest, Working… while a chat works, N needs you, and Drive updated once work finished unseen', async () => {
+  it('is quiet at rest, rings while a chat works, and counts what needs the owner in amber', async () => {
     chats.chats = [row({ sessionId: 'S1' })];
     await open('/drive');
-    expect(look()).toEqual({ state: 'idle', label: 'Chat', badge: null });
+    expect(look()).toEqual({ ring: false, count: null });
 
     chats.chats = [row({ sessionId: 'S1', working: true })];
     chats.fab = { needsYou: 0, working: true };
     await reread();
-    expect(look()).toEqual({ state: 'working', label: 'Working…', badge: null });
-    expect(fab()?.querySelector('.wk-chat-fab-ring')).toBeTruthy();
-
-    chats.chats = [row({ sessionId: 'S1' })];
-    chats.fab = { needsYou: 0, working: false };
-    await reread();
-    expect(look().state).toBe('updated');
-    expect(look().label).toBe('Drive updated');
-    expect(fab()?.querySelector('.wk-chat-fab-badge.ok')).toBeTruthy();
+    expect(look()).toEqual({ ring: true, count: null });
 
     chats.chats = [row({ sessionId: 'S1', needsYou: 2 })];
     chats.fab = { needsYou: 2, working: false };
     await reread();
-    expect(look()).toEqual({ state: 'needs_you', label: '2 need you', badge: '2' });
+    expect(look()).toEqual({ ring: false, count: '2' });
+    expect(fab()?.querySelector('.files-agents-count')?.getAttribute('aria-label')).toBe('2 need you');
 
-    // Pressing it opens the chat that needs the owner, and has seen the update.
+    // Pressing it opens the chat that needs the owner.
     await press(fab());
     expect(shownSession()).toBe('S1');
-    await press(byLabel('Hide chat'));
-    chats.chats = [row({ sessionId: 'S1' })];
-    chats.fab = { needsYou: 0, working: false };
-    await reread();
-    expect(look().state).toBe('idle');
+    await press(fab());
+    expect(panel()).toBeNull();
+    expect(document.querySelector('.wk-chat-fab')).toBeNull();
   });
 });
 
@@ -422,7 +436,7 @@ describe('the folder chip (board ② note 3)', () => {
     expect(second.body).not.toHaveProperty('driveContext');
 
     // After a message the folder is attached again; at the top level it is the drive itself, sent as null.
-    await press([...document.querySelectorAll('.files-crumbs a')].find((a) => a.textContent === 'Drive'));
+    await press([...document.querySelectorAll('.files-title a')].find((a) => a.textContent === 'Drive'));
     expect(chips()).toEqual(['Folder · Drive']);
     await type('Anything big?');
     await press(byLabel('Send'));

@@ -949,12 +949,7 @@ button.toast--pill:focus-visible {
      --brand-tint is translucent and would visually merge the dot back into the folder. */
   box-shadow: 0 0 0 1.5px var(--bg-raised);
 }
-/* The second activity mark: this workspace has a background JOB in flight (a bg_run that will
-   end), not a process it merely left up. Same slot, same dot, same brand blue — a workspace with
-   work in it reads as active whether or not somebody is generating — and breathing rather than
-   still, which is the whole vocabulary here (see the session row's terminal glyph, which breathes
-   for the same reason). Motion is what separates it from the dot above at a glance; without it the
-   two would be the same shape in the same blue. */
+/* A session row's terminal breathes for a background job in flight (an older server's row). */
 @keyframes status-glyph-breathe {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.42; }
@@ -962,27 +957,8 @@ button.toast--pill:focus-visible {
 .status-glyph-active {
   animation: status-glyph-breathe 2.4s ease-in-out infinite;
 }
-.tp-workspace-icon-jobs {
-  position: absolute;
-  right: -3px;
-  bottom: -2px;
-  z-index: 2;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--brand);
-  box-shadow: 0 0 0 1.5px var(--bg-raised);
-  animation: status-glyph-breathe 2.4s ease-in-out infinite;
-}
-.tp-item:hover .tp-workspace-icon-jobs {
-  box-shadow: 0 0 0 1.5px var(--bg-hover);
-}
-.tp-item.active .tp-workspace-icon-jobs {
-  box-shadow: 0 0 0 1.5px var(--bg-raised);
-}
 @media (prefers-reduced-motion: reduce) {
-  .status-glyph-active,
-  .tp-workspace-icon-jobs {
+  .status-glyph-active {
     animation: none;
   }
 }
@@ -1622,14 +1598,6 @@ button.toast--pill:focus-visible {
   border-radius: 50%;
   background: var(--bg-raised);
 }
-/* The collapsed rail's own slot for the background-work mark — same corner as the spinner. */
-.tp-rail-jobs {
-  position: absolute;
-  right: 1px;
-  bottom: 1px;
-  border-radius: 50%;
-  background: var(--bg-raised);
-}
 
 /* Desktop collapse behaviour. Scoped to >960px so the ≤960 off-canvas drawer
    (which toggles on .open, not .collapsed) is never touched — there the panel
@@ -1663,30 +1631,6 @@ button.toast--pill:focus-visible {
   .app-shell .app-nav.collapsed .tp-rail-running {
     background: transparent;
     animation: none !important;
-  }
-  /* Both activity kinds speak the same shape in the collapsed rail — a brand-blue dot on the
-     avatar's corner — and differ by motion: still for the agent generating, breathing for
-     background work. */
-  .app-shell .app-nav.collapsed .tp-rail-jobs {
-    background: transparent;
-    animation: none !important;
-  }
-  .app-shell .app-nav.collapsed .tp-rail-jobs > svg {
-    visibility: hidden;
-    animation: none !important;
-  }
-  .app-shell .app-nav.collapsed .tp-rail-jobs::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--brand);
-    box-shadow: 0 0 0 1.5px var(--bg-raised);
-    transform: translate(-50%, -50%);
-    animation: status-glyph-breathe 2.4s ease-in-out infinite;
   }
   .app-shell .app-nav.collapsed .tp-rail-running > svg {
     visibility: hidden;
@@ -4684,6 +4628,17 @@ button.toast--pill:focus-visible {
   font-weight: 600;
   color: var(--success);
 }
+/* A merge waiting on its pull request (GitHub refused the direct push): the pull request's state, linking to it. */
+.wt-merge-pr {
+  flex: none;
+  font-weight: 600;
+  color: var(--link);
+  text-decoration: none;
+}
+.wt-merge-pr:hover { text-decoration: underline; }
+.wt-merge-pr[data-tone='green'] { color: var(--success); }
+.wt-merge-pr[data-tone='red'] { color: var(--error); }
+.wt-merge-pr[data-tone='amber'] { color: var(--warning); }
 /* Branch divergence: the worktree is on a branch Orbit isn't tracking (an in-worktree checkout -b).
    An amber flag naming the untracked branch, with an Adopt action to re-point the session. */
 .wt-diverged {
@@ -5648,9 +5603,6 @@ button.toast--pill:focus-visible {
 }
 .session-project-status.needs-you {
   background: var(--warning);
-}
-.session-project-status.jobs {
-  animation: status-glyph-breathe 2.4s ease-in-out infinite;
 }
 .session-project-progress {
   display: inline-flex;
@@ -6903,8 +6855,7 @@ button.toast--pill:focus-visible {
 .session-folder-row.editing .session-folder-icon {
   margin-top: 5px;
 }
-/* What the sessions inside are doing, on the folder as the sidebar marks a Workspace: still while
-   one runs, breathing while only a background job does. */
+/* What the sessions inside are doing, on the folder as the sidebar marks a Workspace: a dot while one runs. */
 .session-folder-activity {
   position: absolute;
   right: -3px;
@@ -6914,14 +6865,6 @@ button.toast--pill:focus-visible {
   border-radius: 50%;
   background: var(--brand);
   box-shadow: 0 0 0 1.5px var(--row-bg);
-}
-.session-folder-activity.jobs {
-  animation: status-glyph-breathe 2.4s ease-in-out infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .session-folder-activity.jobs {
-    animation: none;
-  }
 }
 .session-folder-name {
   flex: 1;
@@ -32124,3 +32067,46 @@ td > .routing-report-tier + .model-routing-flag {
     box-shadow: var(--panel-shadow);
   }
 }
+
+/* Drive's Agents button (board drive-web 01 ①④): pressed while the chat panel is open; a white ring while work runs. */
+.files-agents.is-open, .files-agents.is-open:hover:where(:not(:disabled)) { background: var(--orbit-control-primary-active); }
+.files-agents-ring { display: block; width: 14px; height: 14px; box-sizing: border-box; border-radius: 50%;
+                     border: 2px solid rgba(255, 255, 255, .35); border-top-color: #fff; animation: runner-spin 1.1s linear infinite; }
+.files-agents-count { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px;
+                      padding: 0 4px; box-sizing: border-box; border-radius: 8px; background: var(--warning-solid); color: #fff;
+                      font-size: 11px; font-weight: 700; line-height: 1; }
+
+/* The controls of a pending upload row: small text buttons at the list's scale. */
+.files-pending-actions { display: inline-flex; gap: 8px; margin-left: 6px; }
+.files-pending-actions button { padding: 0; border: 0; background: none; font: inherit; color: var(--brand); cursor: pointer; }
+.files-pending-actions button:hover { text-decoration: underline; }
+
+/* The activity icon in the Drive chat panel's header and its view (board drive-web 01 ④⑤). */
+.files-activity { position: relative; }
+.files-activity.is-open { background: var(--brand-bg, var(--bg-hover)); color: var(--brand); }
+.files-activity-count { position: absolute; top: -3px; right: -4px; min-width: 15px; height: 15px; padding: 0 4px; box-sizing: border-box; border-radius: 8px;
+                        background: var(--warning-solid); color: #fff; font-size: 10px; font-weight: 700; line-height: 15px; text-align: center; }
+.wk-chat-title.is-static { cursor: default; }
+.wk-chat-view { flex: 1; min-height: 0; overflow-y: auto; }
+.drive-act { padding: 4px 14px 16px; font-size: 12.5px; }
+.drive-act-section { margin-top: 14px; }
+.drive-act-h { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--text-3); }
+.drive-act-row { padding: 9px 10px; margin-bottom: 8px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-raised); }
+.drive-act-row.is-amber { border-color: var(--warning-border, var(--border)); background: var(--warning-bg, var(--bg-hover)); }
+.drive-act-title { font-weight: 600; color: var(--text-1); overflow-wrap: anywhere; }
+.drive-act-dest, .drive-act-meta { color: var(--text-3); font-weight: 400; }
+.drive-act-bad { color: var(--danger, #d92d20); }
+.drive-act-failed { margin: 6px 0 0; padding: 6px 8px; list-style: none; border-radius: 6px; background: var(--bg-hover); color: var(--text-2); }
+.drive-act-failed code { font-size: 11.5px; }
+.drive-act-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.drive-act-btn { padding: 2px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-raised); font: inherit; color: var(--text-1); cursor: pointer; }
+.drive-act-btn.is-primary { border-color: var(--brand); background: var(--brand); color: #fff; }
+.drive-act-btn:disabled { opacity: .55; cursor: default; }
+.drive-act-group { margin-bottom: 10px; }
+.drive-act-ghead { display: flex; align-items: center; gap: 8px; }
+.drive-act-ghead b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drive-act-link { margin-left: auto; border: 0; background: none; padding: 0; font: inherit; color: var(--brand); cursor: pointer; }
+.drive-act-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 3px 0 3px 10px; color: var(--text-2); }
+.drive-act-empty { margin-top: 20px; color: var(--text-3); text-align: center; }
+.drive-act-ask { margin-top: 6px; color: var(--text-2); }
+.drive-act-ask span { color: var(--text-1); }

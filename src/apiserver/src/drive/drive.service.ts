@@ -1082,6 +1082,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
           ? [{ entryId: id, parentId: entry.parentId, op: 'REMOVE' }, { entryId: id, parentId: dest.id, op: 'UPSERT' }]
           : [{ entryId: id, parentId: dest.id, op: 'UPSERT' }];
         const seq = await recordChanges(tx, ownerId, changes);
+        await recordMove(tx, ownerId, writer, id, moving ? 'MOVE' : 'RENAME', dest.id, now);
         await recordDriveChatChange(tx, ownerId, writer, {
           kind: moving ? 'MOVE' : 'RENAME', entryId: id, entryKind: entry.kind, beforeParentId: entry.parentId,
           beforeName: entry.name, afterParentId: dest.id, afterName: name, afterSeq: seq,
@@ -1131,6 +1132,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
       { entryId: source.id, parentId: source.parentId, op: 'REMOVE' },
       { entryId: target.id, parentId: target.parentId, op: 'UPSERT' },
     ]);
+    await recordMove(tx, ownerId, writer, target.id, source.parentId === target.parentId ? 'RENAME' : 'MOVE', target.parentId!, now);
     return { entry: { ...updated, seq: BigInt(seq) }, seq };
   }
 
@@ -1600,6 +1602,23 @@ async function pathOf(db: Tx | PrismaService, ownerId: string, entryId: string):
   return '/' + rows.map((r) => r.name).join('/');
 }
 
+/** The paths of entries `ids` from the root, whether or not they are in Trash; one gone is left out. */
+export async function drivePathsOf(db: Tx | PrismaService, ownerId: string, ids: readonly string[]): Promise<Map<string, string>> {
+  if (!ids.length) return new Map();
+  const rows = await db.$queryRaw<Array<{ id: string; path: string }>>`
+    WITH RECURSIVE "up" AS (
+      SELECT e."id" AS "start", e."id", e."parent_id", e."name", 0 AS "depth"
+        FROM "drive_entry" e WHERE e."owner_id" = ${ownerId}::uuid AND e."id" = ANY(${[...ids]}::uuid[])
+      UNION ALL
+      SELECT "up"."start", p."id", p."parent_id", p."name", "up"."depth" + 1
+        FROM "drive_entry" p JOIN "up" ON p."id" = "up"."parent_id" WHERE p."owner_id" = ${ownerId}::uuid
+    )
+    SELECT "start"::text AS "id",
+           '/' || COALESCE(string_agg("name", '/' ORDER BY "depth" DESC) FILTER (WHERE "parent_id" IS NOT NULL), '') AS "path"
+      FROM "up" GROUP BY "start"`;
+  return new Map(rows.map((row) => [row.id, row.path]));
+}
+
 /** The writer as recorded (§3.6): an agent's session only when it is the owner's and runs on the runner the write came through. */
 async function checkedWriter(tx: Tx, ownerId: string, writer: DriveWriter): Promise<DriveWriter> {
   if (writer.kind === 'OWNER') {
@@ -1622,6 +1641,20 @@ function lastWriterFields(writer: DriveWriter, now: Date) {
 
 function versionWriterFields(writer: DriveWriter) {
   return { writerKind: writer.kind, writerSessionId: writer.sessionId ?? null, writerRunnerId: writer.runnerId ?? null };
+}
+
+/**
+ * Who moved or renamed an entry, for GET /drive/activity (1780): one drive_move row. The owner's Apply of a Drive chat's
+ * held changes writes none: the chat's change group records it (drive_chat_change).
+ */
+async function recordMove(tx: Tx, ownerId: string, writer: DriveWriter, entryId: string, kind: 'MOVE' | 'RENAME', folderId: string, now: Date) {
+  if (writer.changeGroupId) return;
+  await tx.driveMove.create({
+    data: {
+      ownerId, entryId, kind, folderId, actorKind: writer.kind, actorSessionId: writer.sessionId ?? null,
+      actorRunnerId: writer.runnerId ?? null, at: now,
+    },
+  });
 }
 
 /**

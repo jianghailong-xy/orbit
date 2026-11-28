@@ -2107,9 +2107,13 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     public let baseSha: String?
     /// True while the worktree has uncommitted changes (drives Commit vs Merge). Nil = not reported.
     public let worktreeDirty: Bool?
-    /// "Merge to main" outcome: pending | merged | conflict | error. Nil until the user merges.
+    /// "Merge to main" outcome: pending | merged | conflict | error | pull_request. Nil until the user
+    /// merges. `pull_request`: GitHub refused the push to the target because of its rules, so the runner
+    /// opened a pull request and the merge waits on it (docs/design/protected-branch-landing.md §4.6).
     public let mergeStatus: String?
     public let mergeError: String?
+    /// The pull request this session's Merge waits on or landed through; nil for a direct push.
+    public let mergePullRequest: LandingPullRequestView?
     public let mergeRecovery: MergeRecovery?
     public let mergeRepairSession: MergeRepairSession?
     public let mergeRecoverySupported: Bool?
@@ -2214,6 +2218,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         worktreeDirty = try values.decodeIfPresent(Bool.self, forKey: .worktreeDirty)
         mergeStatus = try values.decodeIfPresent(String.self, forKey: .mergeStatus)
         mergeError = try values.decodeIfPresent(String.self, forKey: .mergeError)
+        mergePullRequest = try? values.decodeIfPresent(LandingPullRequestView.self, forKey: .mergePullRequest)
         mergeRecovery = try values.decodeIfPresent(MergeRecovery.self, forKey: .mergeRecovery)
         mergeRepairSession = try values.decodeIfPresent(MergeRepairSession.self, forKey: .mergeRepairSession)
         mergeRecoverySupported = try values.decodeIfPresent(Bool.self, forKey: .mergeRecoverySupported)
@@ -2251,6 +2256,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
                 changedFiles: [SessionChangedFile]? = nil, branchCommits: [BranchCommit]? = nil,
                 baseSha: String? = nil, worktreeDirty: Bool? = nil,
                 mergeStatus: String? = nil, mergeError: String? = nil, mergeTarget: String? = nil,
+                mergePullRequest: LandingPullRequestView? = nil,
                 mergeRecovery: MergeRecovery? = nil, mergeRecoverySupported: Bool? = nil,
                 mergeRepairSession: MergeRepairSession? = nil,
                 mergeRecoveryAction: String? = nil, mergeRepairTurnEndedAt: String? = nil,
@@ -2283,6 +2289,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         self.worktreeDirty = worktreeDirty
         self.mergeStatus = mergeStatus
         self.mergeError = mergeError
+        self.mergePullRequest = mergePullRequest
         self.mergeRecovery = mergeRecovery
         self.mergeRepairSession = mergeRepairSession
         self.mergeRecoverySupported = mergeRecoverySupported

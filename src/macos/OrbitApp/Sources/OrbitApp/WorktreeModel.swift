@@ -320,6 +320,10 @@ final class WorktreeModel {
             switch detail.mergeStatus {
             case "merged":
                 return ToastRequest(message: "Merged into \(target)", key: "merge")
+            case "pull_request":
+                // GitHub refused the push to the target, so the runner opened a pull request (design §4.6).
+                let notice = WorktreeBarLogic.mergePullRequestNotice(detail.mergePullRequest, target: target)
+                return ToastRequest(message: notice.headline, detail: notice.detail, tone: .neutral, key: "merge")
             case "conflict":
                 let target = WorktreeBarLogic.conflictTarget(
                     mergeTarget: detail.mergeTarget, targets: detail.mergeTargets ?? [],

@@ -11,14 +11,13 @@ import type { SessionListView } from './queries';
 /** One folder's row at the top of a workspace's session list. The sessions filed in it don't
  *  appear outside it, so the row reports for them, by the rule the sidebar's Workspace row reports
  *  for a workspace (`WorkspaceRow`): how many wait on you at the far end, and on the folder itself a
- *  still dot while one runs, else a breathing one while a background job is in flight. */
+ *  still dot while one runs or has a background job in flight. */
 export interface SessionFolderRow {
   folder: SessionFolder;
   /** How many of the list's sessions are filed in it — 0 for an empty folder in Open. */
   sessionCount: number;
   needsYou: number;
   running: boolean;
-  jobs: boolean;
 }
 
 /** A workspace's list as it is drawn: the folder rows on top, then the sessions in no folder, which
@@ -86,8 +85,8 @@ export function sessionFolderListing<T extends { folderId?: string | null }>(
       folder,
       sessionCount: inside.length,
       needsYou: inside.filter(opts.needsYou).length,
-      running: motions.includes('spinner'),
-      jobs: motions.includes('pulse'),
+      // An older server's row breathes for a background job rather than spinning: running here all the same.
+      running: motions.some((motion) => motion !== null),
     });
   }
   return { folders: rows, sessions: loose };

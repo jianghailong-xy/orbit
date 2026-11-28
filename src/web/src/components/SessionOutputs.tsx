@@ -5,6 +5,7 @@ import type { BranchCommit, RunnerRepoHealth, MergeRecoveryAction } from '@orbit
 import { MAIN_CHECKOUT_COPY } from '@orbit/shared';
 import { MergeOperationLine, MergeRepairStrip, mergeRecoveryChecking, mergeRecoveryFastForward } from './MergeRecoveryPanel';
 import { MainCheckoutBar } from './MainCheckout';
+import { pullRequestCard } from './LandingPullRequest';
 import { useMainCheckoutHost } from '../lib/mainCheckout';
 import { refreshSessionDiff } from '../api';
 import type { SessionChangedFile, SessionDetail, SessionFilePatch } from '../api';
@@ -392,6 +393,7 @@ export function SessionOutputs({
             <MergeButton
               status={detail.mergeStatus}
               mergeError={detail.mergeError}
+              pullRequest={detail.mergePullRequest}
               busy={merging}
               targets={detail.mergeTargets ?? []}
               mergeTarget={detail.mergeTarget}
@@ -738,7 +740,8 @@ function AdoptButton({
  *  otherwise the workspace/runner default), and a caret
  *  opens a dropdown of the repo's other branches (mergeTargets) to merge into instead. Drives
  *  off the server-reported mergeStatus: idle → the split button; pending → "Merging…"; merged →
- *  a ✓ chip (naming the target); conflict → "Resolve in session" (resume so the workspace rebases the
+ *  a ✓ chip (naming the target); pull_request → the pull request's state, linking to it
+ *  (GitHub refused the direct push, design §4.6/§11.2); conflict → "Resolve in session" (resume so the workspace rebases the
  *  branch onto the target and fixes the conflicts); error →
  *  "Retry merge" (a precondition failure like a dirty main that a rebase can't fix — re-runs the
  *  same target). The failure detail + a copyable rebase fallback live in the expandable file
@@ -747,6 +750,7 @@ function AdoptButton({
 function MergeButton({
   status,
   mergeError,
+  pullRequest,
   busy,
   targets,
   mergeTarget,
@@ -759,6 +763,8 @@ function MergeButton({
   status?: SessionDetail['mergeStatus'];
   /** Why the last merge failed (for an 'error'); surfaced on the failed button's hover. */
   mergeError?: string | null;
+  /** The pull request a 'pull_request' merge waits on; absent until the server has read it. */
+  pullRequest?: SessionDetail['mergePullRequest'];
   busy?: boolean;
   /** Candidate target branches reported by the runner (empty for older runners). */
   targets: string[];
@@ -790,6 +796,28 @@ function MergeButton({
         <span className="wt-merge-done">
           ✓ Merged{elsewhere ? ` → ${mergeTarget}` : ''}
         </span>
+      </Tooltip>
+    );
+  }
+  // GitHub refused the push to the target because of its rules, so the runner opened a pull request and the
+  // merge waits on it. Not a failure (design §11.2): the bar names the pull request's state and links to it.
+  if (status === 'pull_request') {
+    const target = mergeTarget || 'main';
+    const card = pullRequest ? pullRequestCard(pullRequest, target) : null;
+    const number = pullRequest?.number != null ? ` #${pullRequest.number}` : '';
+    const label = card ? `${card.head}${card.stage === 'MERGED' ? '' : number}${card.right ? ` · ${card.right}` : ''}` : 'Pull request open';
+    const hint = card?.detail ?? `${target} requires a pull request. Orbit merges it once the branch's rules pass.`;
+    const url = pullRequest?.url ?? null;
+    return (
+      <Tooltip content={hint} delay={TEXT_TOOLTIP_DELAY_MS}>
+        {url ? (
+          <a className="wt-merge-pr" data-tone={card?.tone} href={url} target="_blank" rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}>
+            {label} ↗
+          </a>
+        ) : (
+          <span className="wt-merge-pr" data-tone={card?.tone}>{label}</span>
+        )}
       </Tooltip>
     );
   }

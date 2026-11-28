@@ -462,6 +462,46 @@ class PushAuthorityTest {
         }
     }
 
+    /** The server's pushes for a runner gone offline without signing off, and for it back (ReaperService.alertRunnerPresence): each parses
+     * exactly as the server sends it (the shared fixture's samples), opens the runner, shares one notification key so "back online" takes
+     * the place of "offline", and stands while GET /runners reads the runner offline or online respectively. Without its runner it is no
+     * notification. */
+    @Test fun aRunnerPresencePushOpensItsRunnerAndStandsWhileThePresenceItSaysDoes() = runBlocking {
+        val samples = pushFixture()["samples"]!!.jsonArray.map { it.jsonObject }
+        val pushes = listOf("runner-offline", "runner-online").map { kind ->
+            val sample = samples.single { it["name"]!!.jsonPrimitive.content == kind }
+            val data = sample["data"]!!.jsonObject.mapValues { it.value.jsonPrimitive.content }
+            val push = PushMessage.parse(data) ?: throw AssertionError("the server's $kind push is dropped")
+            assertEquals(PushType.ALERT, push.type)
+            assertEquals(kind, push.payload.kind)
+            assertTrue(ObjectId.same(push.payload.runnerId, sample["source"]!!.jsonObject["runnerID"]!!.jsonPrimitive.content))
+            assertEquals(Destination.RUNNER, push.link?.let { OrbitLinks.parse(it) }?.destination)
+            assertNull("it names its runner", PushMessage.parse(data + ("payload" to
+                """{"title":"studio-mac","body":"studio-mac is back online.","kind":"$kind"}""")))
+            push
+        }
+        val (offline, online) = pushes
+        assertEquals(offline.notificationKey, online.notificationKey)
+        val machine = offline.payload.runnerId!!
+        authorityFixture { authority, server, _ ->
+            var state = "false"
+            var listed = true
+            server.respond = { request ->
+                assertEquals("/api/runners", request.path)
+                response(if (listed) """[{"id":"$machine","online":$state}]""" else "[]")
+            }
+            assertEquals(PushCheck.ACTIVE, authority.check(offline))
+            assertEquals(PushCheck.STALE, authority.check(online))
+            state = "true"
+            assertEquals(PushCheck.STALE, authority.check(offline))
+            assertEquals(PushCheck.ACTIVE, authority.check(online))
+            state = "null"
+            assertEquals(PushCheck.UNKNOWN, authority.check(offline))
+            listed = false
+            assertEquals(PushCheck.MISSING, authority.check(online))
+        }
+    }
+
     @Test fun aRunnerUpdatingPushOpensItsRunnerAndStandsWhileWorkWaits() = runBlocking {
         val sample = pushFixture()["samples"]!!.jsonArray.map { it.jsonObject }
             .single { it["name"]!!.jsonPrimitive.content == "runner-updating" }

@@ -433,7 +433,7 @@ test('the stored mode, the mode running, and the ceiling on PostgreSQL', { skip,
     await say(w2, runsAuto, init('claude', PermissionMode.AUTO));
     await sessions.assertMayStartInMode(w2.ownerId, runsAuto, { engine: AgentProvider.CLAUDE, workspaceId: w2.workspaceId }, NEXT);
 
-    // No actual mode recorded (claimed before migration 1755): the stored mode decides, as before R3.
+    // No actual mode recorded (claimed before migration 1805): the stored mode decides, as before R3.
     const unrecorded = await pending(w, { permissionMode: PermissionMode.DEFAULT, turnState: null });
     assert.equal((await row(unrecorded)).actualPermissionMode, null);
     await assert.rejects(

@@ -45,8 +45,8 @@ export function listingFolderRows(
       folder,
       sessionCount: tally?.rowCount ?? 0,
       needsYou: tally?.needsYou ?? 0,
-      running: !opts.runnerOffline && !!tally?.running,
-      jobs: !opts.runnerOffline && !!tally?.jobs,
+      // A session with a background job in flight spins on its row (`phase` RUNNING, quiet job or not): running here too.
+      running: !opts.runnerOffline && !!(tally?.running || tally?.jobs),
     }];
   });
 }

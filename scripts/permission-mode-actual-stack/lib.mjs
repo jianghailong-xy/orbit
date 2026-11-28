@@ -104,13 +104,14 @@ export async function sessionLease(prisma, sessionId) {
   });
 }
 
-/** A runner's heartbeat through the controller's own reconcile path: its engines, model catalogue and whether it runs as root. */
-export const heartbeat = (api, r) => api.heartbeat(
+/** A runner's heartbeat through the controller's own reconcile path: its engines, model catalogue and whether it runs as root
+ *  (and, with `extra`, whatever else a beat carries, such as what its folder probes read). */
+export const heartbeat = (api, r, extra = {}) => api.heartbeat(
   { id: r.runnerId, version: r.version, lastHeartbeatAt: null },
   { status: 'ONLINE', idleCapacity: 4, version: r.version, runsAsRoot: r.runsAsRoot, leaseOwner: r.leaseOwner, draining: false,
     engines: [{ engine: 'claude', installed: true, version: '2.1.325 (Claude Code)', auth: 'yes',
       accounts: [{ id: 'default', home: '/root/.claude', auth: 'yes' }] }],
-    modelCatalog: MODEL_CATALOG },
+    modelCatalog: MODEL_CATALOG, ...extra },
   undefined, 'claude', 'linux', undefined, undefined, {},
 );
 

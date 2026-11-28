@@ -48,19 +48,26 @@ for (const r of Object.values(state.runners)) {
 writeState(state);
 
 // ── a session, as its runner has it ────────────────────────────────────────────────────────────────────────────────────────
-async function startSession(key, { runnerName = 'workstation-gpu', title, prompt, model, permissionMode, redeployedAsRoot = false }) {
+async function startSession(key, { runnerName = 'workstation-gpu', title, prompt, model, permissionMode, redeployedAsRoot = false, wikiChat = false }) {
   const r = state.runners[runnerName];
   // Bypass is refused at admission on a runner that runs as root: this one is made while its runner says it does not, and the
   // runner is redeployed as root before the claim — the case the claim's substitution exists for.
   if (redeployedAsRoot) await heartbeat(api, { ...r, runsAsRoot: false });
-  const created = await call('POST', '/sessions', owner, {
-    workspaceId: state.workspaces[runnerName].id, title, prompt, provider: 'claude', engine: 'claude', model, permissionMode,
-  });
+  // A wiki chat is made through its own door, and named by the owner as the panel's history names it.
+  const created = wikiChat
+    ? await call('POST', `/wiki/spaces/${state.wiki.spaceId}/chats`, owner, {
+        workspaceId: state.wiki.workspaceId, content: prompt, clientTurnId: randomUUID(), model, permissionMode,
+      }, fromApp('web'))
+    : await call('POST', '/sessions', owner, {
+        workspaceId: state.workspaces[runnerName].id, title, prompt, provider: 'claude', engine: 'claude', model, permissionMode,
+      });
+  const id = wikiChat ? created.sessionId : created.id;
+  if (wikiChat) await call('PATCH', `/sessions/${id}`, owner, { title }, fromApp('web'));
   await heartbeat(api, r);
   const job = await queue.claimSessionForRunner({ id: r.runnerId });
-  if (job?.title !== title) throw new Error(`${runnerName} claimed ${JSON.stringify(job?.title)}, made "${title}"`);
-  const s = { key, id: created.id, uuid: job.sessionId, runnerName, runnerId: r.runnerId, title, seq: 0 };
-  state.sessions[key] = s;
+  if (job?.sessionId !== toUuid(id)) throw new Error(`${runnerName} claimed ${JSON.stringify(job?.title)}, made "${title}"`);
+  const s = { key, id, uuid: job.sessionId, runnerName, runnerId: r.runnerId, title, seq: 0 };
+  (wikiChat ? state.wikiChats : state.sessions)[key] = s;
   const opening = await fetchTurn(s);
   log(`${key}: claimed (handed ${job.agent.permissionMode}), opening turn ${opening.turnId}`);
   writeState(state);
@@ -181,7 +188,49 @@ const ownerSays = async (s, text) => {
 }
 writeState(state);
 
-for (const s of Object.values(state.sessions)) {
+// ── the Wiki's chats (components/WikiChatPanel.tsx): a space on the repository one workspace's folder is a clone of ─────────
+{
+  const REPO = 'https://github.com/pma-stack/orbit.git';
+  const r = state.runners['workstation-gpu'];
+  const ws = await call('POST', '/workspaces', owner, {
+    name: 'orbit-wiki', description: 'Running-mode stack: the wiki chats’ folder', runnerId: r.publicId,
+    workDir: '/srv/workstation-gpu/orbit-wiki', enableWorktree: true, defaultMergeTarget: 'main',
+  });
+  // The folder's remote, as the runner's probe reads it and its beat reports it.
+  await heartbeat(api, r, { agentDirProbes: [{ agentId: toUuid(ws.id), exists: true, isGitRepo: true, workDir: '/srv/workstation-gpu/orbit-wiki', repoUrl: REPO }] });
+  const space = await call('POST', '/wiki/spaces', owner, { title: 'orbit', repoUrl: REPO });
+  state.wiki = { spaceId: space.id, slug: space.slug, workspaceId: ws.id };
+  state.wikiChats = {};
+  writeState(state);
+
+  // ① Runs in the Auto asked for.
+  {
+    const { s, turnId } = await startSession('wikiRunning', { wikiChat: true, title: 'Why three heartbeats', prompt: Q1, model: 'claude-opus-5-5', permissionMode: 'auto' });
+    await exchange(s, turnId, Q1, A1, [() => report(s, 'auto', turnId)]);
+  }
+  // ③ Claude settles in Default and the runner corrects it; the owner moves the chat to Plan and back from two apps; the
+  // owner moves it to Haiku 4.5, which has no Auto: ② the gap that lasts, with every change above it.
+  {
+    const { s, turnId } = await startSession('wikiNoAuto', { wikiChat: true, title: 'Runner offline: the check', prompt: Q1, model: 'claude-opus-5-5', permissionMode: 'auto' });
+    await exchange(s, turnId, Q1, A1, [
+      () => report(s, 'default', turnId),
+      () => events(s, ['system', { subtype: 'permission_mode_corrected', mode: 'auto' }, turnId]),
+    ]);
+    await ownerPicks(s, { permissionMode: 'plan' }, 'web');
+    await ownerPicks(s, { permissionMode: 'auto' }, 'ios', 'iphone');
+    await exchange(s, await ownerSays(s, Q2), Q2, A2);
+    await ownerPicks(s, { model: 'claude-haiku-4-5' }, 'web');
+  }
+  // ② The short gap, as `correcting` above: its first turn open until capture.mjs reports the engine's Default.
+  {
+    const { s, turnId } = await startSession('wikiCorrecting', { wikiChat: true, title: 'Check the staging index', prompt: Q1, model: 'claude-opus-5-5', permissionMode: 'auto' });
+    await events(s, ['user', { text: Q1 }, turnId]);
+    s.openTurnId = turnId;
+  }
+  writeState(state);
+}
+
+for (const s of [...Object.values(state.sessions), ...Object.values(state.wikiChats)]) {
   const d = await call('GET', `/sessions/${s.id}`, owner);
   log(`${s.key}: intent ${d.permissionMode} · running ${d.actualPermissionMode} · model ${d.model} · ${d.permissionModeChanges?.length ?? 0} change(s): ${
     (d.permissionModeChanges ?? []).map((c) => `${c.cause}${c.client ? `(${c.client})` : ''} ${c.fromMode ?? '∅'}→${c.toMode}`).join(', ')}`);
