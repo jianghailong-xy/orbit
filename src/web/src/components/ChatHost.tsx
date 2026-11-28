@@ -73,6 +73,11 @@ export interface ChatHostOptions {
   fixedWidth?: number | null;
   /** A class of the host's frame, so a page can lay its own content out beside the panel. */
   frameClass?: string;
+  /**
+   * The page draws its own entry (Drive's Agents button) instead of the round button: nothing floats, and `toggle` is what
+   * the page's button presses.
+   */
+  ownEntry?: boolean;
 }
 
 /**
@@ -94,10 +99,10 @@ export interface ChatHostOptions {
  * with no scrim and is not opened by default; under 640 it is a sheet.
  */
 export function useChatHost(options: ChatHostOptions) {
-  const { scope, store, list, shown, fab, toOpen, fixedWidth = null, frameClass } = options;
+  const { scope, store, list, shown, fab, toOpen, fixedWidth = null, frameClass, ownEntry = false } = options;
   const location = useLocation();
   const navigate = useNavigate();
-  const fabShown = shown && list.data !== null;
+  const fabShown = shown && list.data !== null && !ownEntry;
 
   const asked = new URLSearchParams(location.search).get(WIKI_CHAT_PARAM);
   const kept = scope ? readWikiChatOpen(scope, store.open) : null;
@@ -190,6 +195,20 @@ export function useChatHost(options: ChatHostOptions) {
     [closeHelp, go],
   );
 
+  /** The button undoes ✕: pages open with the panel shown again (board 45, Q1 A). Straight to the card that needs the owner. */
+  const openFromEntry = () => {
+    const next = toOpen(chats);
+    setClosed(false);
+    openChat(next, fab.state === 'needs_you' ? WIKI_CHAT_FOCUS_NEEDS_YOU : null);
+  };
+  /** A page's own entry: opens the panel, or closes it as ✕ does (remembered on the device). */
+  const toggle = () => {
+    if (open) {
+      setClosed(true);
+      go(null);
+    } else openFromEntry();
+  };
+
   const render = (
     children: ReactNode,
     panel: {
@@ -247,20 +266,14 @@ export function useChatHost(options: ChatHostOptions) {
             state={fab.state}
             label={fab.label}
             count={fab.count}
-            onOpen={() => {
-              // The button undoes ✕: pages open with the panel shown again (board 45, Q1 A). Straight to the card that
-              // needs the owner, when one does (design §3).
-              const next = toOpen(chats);
-              setClosed(false);
-              openChat(next, fab.state === 'needs_you' ? WIKI_CHAT_FOCUS_NEEDS_YOU : null);
-            }}
+            onOpen={openFromEntry}
           />
         )}
       </>
     );
   };
 
-  return { chat, open, shownChat, chats, go, openChat, closeHelp, render };
+  return { chat, open, shownChat, chats, go, openChat, closeHelp, toggle, render };
 }
 
 /** Where the panel's top is: below the Wiki's head while it shows, else the top of the page's own scroll. */

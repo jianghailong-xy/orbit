@@ -20,11 +20,11 @@ import {
   UploadOutlined,
 } from '@ant-design/icons';
 import Markdown from '../components/Markdown';
-import { DriveChatHost } from '../components/drive/DriveChatHost';
+import { DriveChatHost, type DriveAgents } from '../components/drive/DriveChatHost';
 import { DriveWriterName } from '../components/drive/DriveWriterName';
 import { DriveMoveDialog } from '../components/drive/DriveMoveDialog';
 import { DriveShareDialog } from '../components/drive/DriveShareDialog';
-import { DriveUploadTray } from '../components/drive/DriveUploadTray';
+import { DriveAgentsButton } from '../components/drive/DriveAgentsButton';
 import { DriveSettingsMenu } from '../components/drive/DriveSettingsMenu';
 import { DriveTrash } from '../components/drive/DriveTrash';
 import { Button } from '../components/ui/Button';
@@ -60,7 +60,6 @@ import {
 } from '../lib/drive';
 import { driveDetailsOverlay, type DriveMark } from '../lib/driveChanges';
 import { useDriveChanges } from '../lib/useDriveChanges';
-import { useDriveSyncs } from '../lib/driveSyncs';
 import { addUploads, useDriveUploads, type UploadRequest } from '../lib/driveUploads';
 import { showToast } from '../lib/toastStore';
 import { useToast } from '../lib/toast';
@@ -535,7 +534,6 @@ function DriveBrowser() {
   const listing = useQuery(driveFolderQuery(folderId));
   const links = useQuery(driveShareLinksQuery());
   const { uploads, completed } = useDriveUploads();
-  const syncs = useDriveSyncs();
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -756,7 +754,7 @@ function DriveBrowser() {
 
   return (
     <DriveChatHost folderId={folder?.parentId ? folder.id : null} folderName={folder ? folderName : null} selection={selection}>
-      {({ chatOpen }) => {
+      {({ chatOpen, agents }) => {
       const overlay = driveDetailsOverlay(chatOpen, windowWidth);
       return (
       <div className={`files-page${overlay ? ' details-over' : ''}`}>
@@ -799,6 +797,7 @@ function DriveBrowser() {
               Upload
             </Button>
             <DriveSettingsMenu />
+            <DriveAgentsButton agents={agents} />
             <input
               ref={picker}
               type="file"
@@ -996,7 +995,6 @@ function DriveBrowser() {
                 <span>Files or folders, any size</span>
               </div>
             )}
-            <DriveUploadTray uploads={uploads} syncs={syncs} />
           </section>
           {selected && (
             <DetailsPane

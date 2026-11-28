@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useReducer, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useChatHost } from '../ChatHost';
 import type { ChatOrigin } from '../WikiChatPanel';
@@ -24,16 +24,26 @@ import {
 import { meQuery, runnersQuery, workspacesQuery } from '../../lib/queries';
 import { WIKI_CHAT_NO_ATTACHMENTS, wikiChatAttach, type WikiChatFiles, type WikiChatPage } from '../../lib/wikiChat';
 import { useDriveChanges } from '../../lib/useDriveChanges';
+import { syncRunning, useDriveSyncs } from '../../lib/driveSyncs';
+import { useDriveUploads } from '../../lib/driveUploads';
+
+/** The Agents button's state (board drive-web 01 ①④): pressed while the panel is open, a ring while work runs, an amber count. */
+export interface DriveAgents {
+  open: boolean;
+  working: boolean;
+  /** What waits on the owner: chats' approvals, held change groups, open overwrite questions, failed syncs. */
+  count: number;
+  toggle: () => void;
+}
 
 /**
  * Drive's chat (board docs/mocks/drive-chat/01-board.html ② ⑤, owner Q1 A, Q3 A): the Wiki's host, docked beside the
  * drive. At ≥ 1200 it opens by default as the right-hand panel on the chat that needs the owner, else the most recent
- * open one, else New chat; ✕ is remembered per account on this device until the round button is pressed. The folder
+ * open one, else New chat; ✕ is remembered per account on this device until the Agents button is pressed. The folder
  * open is the composer's first chip, `Folder · <name>`; a new chat runs in the server's default workspace unless
  * another is picked. Only the files view hosts it: Trash, Storage and share pages do not.
  *
- * The button's green check ("Drive updated") is lit when a Drive chat's work finishes while the panel is closed, until
- * the button is pressed: the chats read counts what needs the owner and what is working, not what changed.
+ * The page's own Agents button (not the round one) opens and closes the panel: see `DriveAgents`.
  */
 export function DriveChatHost({
   folderId,
@@ -48,18 +58,20 @@ export function DriveChatHost({
   /** The rows selected in the list: they ride in the composer's attachment row as one chip. */
   selection: WikiChatFiles | null;
   /** The page, given whether the chat panel is open (file details overlay the list while it is). */
-  children: ReactNode | ((state: { chatOpen: boolean }) => ReactNode);
+  children: ReactNode | ((state: { chatOpen: boolean; agents: DriveAgents }) => ReactNode);
 }) {
   const me = useQuery(meQuery());
   const list = useQuery(driveChatsQuery());
   const workspaces = useQuery(workspacesQuery());
   const runners = useQuery(runnersQuery());
 
-  const working = list.data?.fab.working ?? false;
-  const [updated, setUpdated] = useState(false);
-  // The chats read counts approvals; held groups and open overwrite questions wait on the owner too.
+  // The chats read counts approvals; held groups, open overwrite questions and failed syncs wait on the owner too.
   const changes = useDriveChanges();
-  const fab = driveChatFab(list.data ? { ...list.data.fab, needsYou: list.data.fab.needsYou + changes.needsYou, updated: updated ? 1 : 0 } : null);
+  const syncs = useDriveSyncs();
+  const { uploads } = useDriveUploads();
+  // Every failed sync in the list: the server has no "handled" mark on a sync yet.
+  const failedSyncs = syncs.filter((sync) => sync.status === 'FAILED').length;
+  const fab = driveChatFab(list.data ? { ...list.data.fab, needsYou: list.data.fab.needsYou + changes.needsYou, updated: 0 } : null);
   const host = useChatHost({
     scope: me.data?.id ?? null,
     store: DRIVE_CHAT_STORE,
@@ -69,14 +81,17 @@ export function DriveChatHost({
     toOpen: driveChatToOpen,
     fixedWidth: DRIVE_CHAT_PANEL_WIDTH,
     frameClass: 'is-drive',
+    ownEntry: true,
   });
-  // Work that finished while the panel was closed lights the check; opening the panel has seen it.
-  const wasWorking = useRef(working);
-  useEffect(() => {
-    if (host.open) setUpdated(false);
-    else if (wasWorking.current && !working) setUpdated(true);
-    wasWorking.current = working;
-  }, [working, host.open]);
+  const agents: DriveAgents = {
+    open: host.open,
+    working:
+      (list.data?.fab.working ?? false) ||
+      syncs.some(syncRunning) ||
+      uploads.some((u) => u.status === 'queued' || u.status === 'uploading'),
+    count: (list.data?.fab.needsYou ?? 0) + changes.needsYou + failedSyncs,
+    toggle: host.toggle,
+  };
 
   const [attachments, dispatch] = useReducer(wikiChatAttach, WIKI_CHAT_NO_ATTACHMENTS);
   const page = useMemo<WikiChatPage | null>(
@@ -122,5 +137,5 @@ export function DriveChatHost({
     [choices],
   );
 
-  return host.render(typeof children === 'function' ? children({ chatOpen: host.open }) : children, { origin, attachments, dispatch });
+  return host.render(typeof children === 'function' ? children({ chatOpen: host.open, agents }) : children, { origin, attachments, dispatch });
 }
