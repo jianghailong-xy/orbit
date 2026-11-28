@@ -14,6 +14,7 @@ import type {
   SessionGuestPerson,
   SessionGuestSuggestion,
   SessionPermissionModeChange,
+  SessionPermissionModeCorrectionRefusal,
   SessionPermissionModeChangePage,
   TranslationActionResponse,
   TurnTranslation,
@@ -2158,6 +2159,9 @@ export interface SessionDetail {
   permissionModeChanges?: SessionPermissionModeChange[];
   /** Whether older changes than those are recorded (getSessionPermissionModeChanges); absent from an older server. */
   permissionModeChangesHasMore?: boolean;
+  /** The newest correction to Auto Claude refused, while it still answers the newest change; null once a later change
+   *  supersedes it. Its event may have paged out of the conversation loaded. Absent from an older server. */
+  permissionModeCorrectionRefusal?: SessionPermissionModeCorrectionRefusal | null;
   /** The session's Agent Tools report (lib/agentTools): what its engine was given from Orbit and took, in the
    *  engine's own words. Null until the runner sends one; optional, because an older server does not send it. */
   agentTools?: AgentToolsReport | null;

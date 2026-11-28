@@ -7,6 +7,7 @@ import {
   modeChangeLines,
   modeCorrectionRefusals,
   type ModeFacts,
+  standingRefusal,
 } from './sessionPermissionMode';
 
 /**
@@ -254,6 +255,19 @@ describe('a correction Claude refused (permission_mode_correction_failed)', () =
     expect(said(modeChangeLines(later, { ...OPUS, intent: 'default', actual: 'default', refusals: [refusal!] })).at(-1)).toBe(
       `Claude stays in [Default] — the runner couldn’t switch it to Auto: ${WORDS}`,
     );
+  });
+
+  it('stands from the session detail when its event is not among those loaded', () => {
+    const detail = { mode: 'default', requestedMode: 'auto', reason: ` ${WORDS}\n`, at: '2026-11-27T09:00:20.500Z' };
+    const fromDetail = standingRefusal(detail, []);
+    expect(fromDetail).toEqual({ at: detail.at, mode: 'default', requested: 'auto', reason: WORDS });
+    const capsule = modeCapsule({ ...OPUS, actual: 'default', latest: report, refusal: fromDetail, now: NOW });
+    expect(capsule).toMatchObject({ gap: 'lasting', label: 'Default' });
+    expect(capsule.reason?.rest).toBe(`You asked for Auto, but the runner couldn’t switch Claude to it: ${WORDS}.`);
+    // Without it, the same moment reads as switching.
+    expect(modeCapsule({ ...OPUS, actual: 'default', latest: report, refusal: standingRefusal(null, []), now: NOW }).gap).toBe('switching');
+    // An older server sends none: the events loaded still say it.
+    expect(standingRefusal(undefined, [refusal!])).toBe(refusal);
   });
 });
 

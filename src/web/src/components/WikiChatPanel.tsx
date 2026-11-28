@@ -33,6 +33,7 @@ import {
   runtimeTakesMidTurnSteer,
   wikiChatCardNeedsYou,
   type SessionPermissionModeChange,
+  type SessionPermissionModeCorrectionRefusal,
   type SessionTurnIntent,
 } from '@orbit/shared';
 import {
@@ -84,7 +85,7 @@ import { meQuery, providersQuery, runnersQuery, sessionQuery, wikiChatHistoryQue
 import { returnsToComposer } from '../lib/queuedTurnRestore';
 import { engineTitleFor } from '../lib/sessionProviderChoices';
 import { outlivingSessionWork } from '../lib/sessionActivity';
-import { autoMenuNote, modeCorrectionRefusals, type ModeCorrectionRefusal } from '../lib/sessionPermissionMode';
+import { autoMenuNote, modeCorrectionRefusals, standingRefusal, type StandingRefusal } from '../lib/sessionPermissionMode';
 import { isSessionLive, isSessionTerminal, sessionRetryPending, sessionRunStateOf, sessionRunStatusOf } from '../lib/sessionState';
 import { defaultSessionTurnIntent } from '../lib/sessionTurnIntent';
 import { sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
@@ -667,7 +668,7 @@ function useChatToolbar({
     actual?: string | null;
     latest?: SessionPermissionModeChange | null;
     pickedAt?: number | null;
-    refusal?: ModeCorrectionRefusal | null;
+    refusal?: StandingRefusal | null;
   };
   change: (next: ChatConfigChange) => void;
 }) {
@@ -1224,6 +1225,8 @@ interface ChatSession {
   /** The mode the server recorded the engine running in, and how it came to be, oldest first. */
   actualPermissionMode?: string | null;
   permissionModeChanges?: SessionPermissionModeChange[];
+  /** The newest correction Claude refused, while it still stands, whether or not its event is loaded. */
+  permissionModeCorrectionRefusal?: SessionPermissionModeCorrectionRefusal | null;
   codexSandboxUnavailable?: boolean;
   effort?: string | null;
   fastMode?: boolean | null;
@@ -1359,7 +1362,13 @@ function WikiChatSession({
     resolved,
     current,
     codexSandboxUnavailable: session?.codexSandboxUnavailable,
-    recorded: { actual: recordedMode, latest: modeChanges?.at(-1) ?? null, pickedAt: modePickedAt, refusal: modeRefusals.at(-1) ?? null },
+    recorded: {
+      actual: recordedMode,
+      latest: modeChanges?.at(-1) ?? null,
+      pickedAt: modePickedAt,
+      // The detail's, which stands whether or not its event is loaded; else the newest of those loaded.
+      refusal: standingRefusal(session?.permissionModeCorrectionRefusal, modeRefusals),
+    },
     change: (config) => configMut.mutate(config),
   });
   const online = runner?.online ?? false;
