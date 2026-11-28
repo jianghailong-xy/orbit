@@ -6,6 +6,7 @@ import {
   RunEventType,
   type RemoteSubagentEvent,
   SUBAGENT_REMOTE_IN_PLACE_V1,
+  type SubagentAttempt,
   type SubagentCandidateTarget,
   type SubagentDecision,
   type SubagentRunCreateRequest,
@@ -19,10 +20,11 @@ import {
   subagentChildMode,
 } from '../common/permission-mode';
 import { dispatchAllowedTools } from '../common/permission-rules';
-import { normalizeBuiltinPermissionMode, normalizeEffortForRuntimeModel } from '../common/runtime-provider';
+import { normalizeEffortForRuntimeModel } from '../common/runtime-provider';
+import { claimPermissionMode } from '../queue/claim-permission-mode';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 import { dispatchKeyRow } from '../providers/engine-provider';
-import { runAccessLevel, scheduleRunDisallowedTools, scheduleRunPermissionMode } from '../schedules/schedule-access';
+import { runAccessLevel, scheduleRunDisallowedTools } from '../schedules/schedule-access';
 import type { PrismaService } from '../prisma/prisma.service';
 import { RUNNER_PRESENCE, runnerIsOnline, runnerOfflineSql } from '../runners/runner-presence';
 import { routeSubagent, subagentCandidateRefusal, subagentRunnableModels } from '../tasks/model-routing';
@@ -309,6 +311,8 @@ export interface RemoteSubagentExec {
   effort?: string | null;
   /** The parent session's mode, which a read-only child's requests are answered by on the target runner. */
   parentMode?: PermissionMode;
+  /** When `exec.permissionMode` is not the mode the child asked for: what it asked for, and why (claimPermissionMode). */
+  permissionModeSubstitution?: NonNullable<SubagentAttempt['permissionModeSubstitution']>;
   refusal?: string;
 }
 
@@ -408,16 +412,16 @@ export async function remoteSubagentExec(
   // A scheduled run's SubAgent is held to the run's level, as the run is: Auto on Claude Code, the level's denials on
   // every engine (schedule-access.ts). It never waits on a card nobody is there to answer.
   const level = runAccessLevel(parent.scheduleRun);
+  // The child's mode as a claim hands a session's (claim-permission-mode.ts): Auto stays Auto on a model whose catalogue
+  // row lists none; only a scheduled run, Bypass on a root runner and DeepSeek Harness's and Cursor's refusals remain.
+  const handed = claimPermissionMode(provider, childMode, level, workspace.runner.runsAsRoot);
   return {
     exec: {
       provider,
       model: runnerModel,
       allowedTools: dispatchAllowedTools(provider, ALWAYS_ALLOWED_TOOLS, workspace.permissionRules ?? []),
       disallowedTools: scheduleRunDisallowedTools((workspace.disallowedTools as string[] | null) ?? [], level, provider),
-      permissionMode: normalizeBuiltinPermissionMode(
-        provider, runnerModel, scheduleRunPermissionMode(childMode, level, provider), keyRow?.enabled === true,
-        workspace.runner.runsAsRoot, catalog,
-      ),
+      permissionMode: handed.mode,
       effort,
       env: resolved.env,
     },
@@ -426,6 +430,7 @@ export async function remoteSubagentExec(
     model: resolved.model,
     effort: effort ?? null,
     parentMode,
+    ...(handed.substitution ? { permissionModeSubstitution: { ...handed.substitution, mode: handed.mode } } : {}),
   };
 }
 

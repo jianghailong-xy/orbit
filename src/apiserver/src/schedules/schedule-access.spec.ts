@@ -300,7 +300,8 @@ test('a scheduled run\'s SubAgents, local and remote, get the run\'s mode and de
   ] as const) {
     const source = readFileSync(join(root, file), 'utf8');
     assert.ok(source.includes(`const level = runAccessLevel(${parent}.scheduleRun);`), `${file}: reads the run's level`);
-    assert.ok(source.includes('scheduleRunPermissionMode(childMode, level, provider)'), `${file}: the run's mode`);
+    // As a claim takes it (claimPermissionMode applies scheduleRunPermissionMode, and records the substitution).
+    assert.ok(source.includes('claimPermissionMode(provider, childMode, level, '), `${file}: the run's mode`);
     assert.ok(source.includes('disallowedTools: scheduleRunDisallowedTools((workspace'), `${file}: the run's denials`);
   }
 });

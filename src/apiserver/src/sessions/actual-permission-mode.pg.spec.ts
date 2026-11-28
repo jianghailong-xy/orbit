@@ -5,8 +5,9 @@
  * production doors (QueueService's claim, SessionsService.updateConfig, the runner inbox, /events and
  * /turn-complete):
  *
- *   (1) A Claude session in Auto moved to a model with no Auto and back keeps Auto as its stored mode; the engine is
- *       told Default and then Auto, and the actual mode follows each acknowledgement, naming the owner's app.
+ *   (1) A Claude session in Auto moved to a model whose catalogue row lists no Auto and back keeps Auto as its stored
+ *       mode; the engine is told Auto both ways (claimPermissionMode), its init frame says it settled on Default, and
+ *       the actual mode follows the engine and each acknowledgement, naming the owner's app.
  *   (2) The actual mode follows what the engine says: the claim's mode, Claude Code's init frame (ENGINE_REPORT), the
  *       init frame after a re-spawn (RESPAWN) and a runner's correction (RUNNER_CORRECTION). A report that restates
  *       the recorded mode records nothing. For Codex, which reports no mode, it is the mode handed at claim and on a
@@ -218,7 +219,7 @@ test('the stored mode, the mode running, and the ceiling on PostgreSQL', { skip,
     agentTools: { v: 1, engine, permissionMode, mcp: { status: 'connected', tools: 1 } },
   });
 
-  await t.test('(1) a model without Auto and back leaves the stored mode Auto', async () => {
+  await t.test('(1) a model without Auto and back leaves the stored mode Auto, and the engine is told Auto', async () => {
     const w = await world('roundtrip');
     const { id, handed } = await claimed(w, { permissionMode: PermissionMode.AUTO });
     assert.equal(handed, PermissionMode.AUTO, 'the claim handed the runner Auto');
@@ -232,11 +233,14 @@ test('the stored mode, the mode running, and the ceiling on PostgreSQL', { skip,
     assert.equal(away.kind, 'setconfig');
     assert.deepEqual(
       JSON.parse(away.content ?? '{}'),
-      { model: WITHOUT_AUTO, permissionMode: PermissionMode.DEFAULT },
-      'the engine is told Default, the model having no Auto',
+      { model: WITHOUT_AUTO, permissionMode: PermissionMode.AUTO },
+      'the engine is told the Auto asked for: the catalogue row is a prediction, not the engine',
     );
-    await acknowledge(w, id, away.turnId, `applied to the running engine: model "${WITHOUT_AUTO}", permission mode "default"`);
-    assert.equal((await row(id)).actualPermissionMode, PermissionMode.DEFAULT, 'the acknowledgement recorded Default as running');
+    await acknowledge(w, id, away.turnId, `applied to the running engine: model "${WITHOUT_AUTO}"`);
+    assert.equal((await row(id)).actualPermissionMode, PermissionMode.AUTO, 'the acknowledgement changed no mode');
+    // The engine says it settled on Default on this model: that is what runs.
+    await say(w, id, init('claude', PermissionMode.DEFAULT));
+    assert.equal((await row(id)).actualPermissionMode, PermissionMode.DEFAULT, "the engine's report is what runs");
 
     await sessions.updateConfig(w.ownerId, id, { model: WITH_AUTO }, undefined, {
       origin: 'OWNER',
@@ -255,7 +259,7 @@ test('the stored mode, the mode running, and the ceiling on PostgreSQL', { skip,
     assert.equal(after.actualPermissionMode, PermissionMode.AUTO);
     assert.deepEqual(await changes(id), [
       { fromMode: null, toMode: PermissionMode.AUTO, cause: 'CLAIM', client: null },
-      { fromMode: PermissionMode.AUTO, toMode: PermissionMode.DEFAULT, cause: 'OWNER_PICK', client: 'web' },
+      { fromMode: PermissionMode.AUTO, toMode: PermissionMode.DEFAULT, cause: 'ENGINE_REPORT', client: null },
       { fromMode: PermissionMode.DEFAULT, toMode: PermissionMode.AUTO, cause: 'OWNER_PICK', client: 'ios' },
     ]);
   });
@@ -263,15 +267,18 @@ test('the stored mode, the mode running, and the ceiling on PostgreSQL', { skip,
   await t.test('(3) a model move Orbit makes itself is not put down to the owner', async () => {
     const w = await world('orbit-change');
     const { id } = await claimed(w, { permissionMode: PermissionMode.AUTO });
-    // As TasksService.movePausedRunToPinnedModel moves a paused run onto its task's pinned model.
+    // The engine settled on Default; then Orbit moves the run, as TasksService.movePausedRunToPinnedModel moves a paused
+    // run onto its task's pinned model, and the engine is told the Auto asked for with it.
+    await say(w, id, init('claude', PermissionMode.DEFAULT));
     await sessions.updateConfig(w.ownerId, id, { model: WITHOUT_AUTO }, undefined, { origin: 'ORBIT' });
     const turn = await fetch(w, id);
-    await acknowledge(w, id, turn.turnId, `applied to the running engine: model "${WITHOUT_AUTO}", permission mode "default"`);
+    assert.deepEqual(JSON.parse(turn.content ?? '{}'), { model: WITHOUT_AUTO, permissionMode: PermissionMode.AUTO });
+    await acknowledge(w, id, turn.turnId, `applied to the running engine: model "${WITHOUT_AUTO}", permission mode "auto"`);
     const after = await row(id);
     assert.equal(after.permissionMode, PermissionMode.AUTO);
-    assert.equal(after.actualPermissionMode, PermissionMode.DEFAULT);
-    assert.deepEqual((await changes(id)).slice(1), [
-      { fromMode: PermissionMode.AUTO, toMode: PermissionMode.DEFAULT, cause: 'ORBIT_CHANGE', client: 'orbit' },
+    assert.equal(after.actualPermissionMode, PermissionMode.AUTO);
+    assert.deepEqual((await changes(id)).slice(2), [
+      { fromMode: PermissionMode.DEFAULT, toMode: PermissionMode.AUTO, cause: 'ORBIT_CHANGE', client: 'orbit' },
     ]);
   });
 

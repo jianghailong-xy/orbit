@@ -85,6 +85,25 @@ type claudeModeCorrection struct {
 	judged bool
 	// superseded is set when a setconfig turn tells the engine a mode of its own (supersede).
 	superseded bool
+	// reported is the mode the engine last said it runs in: every top-level init or status frame's
+	// (claudeEngineModeReading), then the mode a correction or a setconfig got it to take. Empty until it first says. A setconfig judges whether its
+	// mode is news against this (engineMode), not against the spawn's: an engine spawned in Auto that settled on
+	// Default is not in Auto, and an Auto the control plane restates has to be asked for.
+	reported string
+}
+
+// engineMode is the mode the engine last said it runs in, or "" before it has said.
+func (c *claudeModeCorrection) engineMode() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.reported
+}
+
+// took records that the engine accepted a set_permission_mode for mode (a setconfig's frame).
+func (c *claudeModeCorrection) took(mode string) {
+	c.mu.Lock()
+	c.reported = mode
+	c.mu.Unlock()
 }
 
 // newClaudeModeCorrection reads the mode a process is spawned with off its argv.
@@ -143,6 +162,10 @@ func claudeEngineModeReading(msg map[string]interface{}) (string, bool) {
 func (c *claudeModeCorrection) begin(rt *claudeRuntime, msg map[string]interface{}) *pendingModeCorrection {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	// Every reading, judged or not, is the mode the engine runs in now (engineMode).
+	if mode, ok := claudeEngineModeReading(msg); ok {
+		c.reported = mode
+	}
 	if msg["type"] == "system" && msg["subtype"] == "init" && msg["parent_tool_use_id"] == nil {
 		c.initSeen = true
 	}
@@ -197,6 +220,7 @@ func (c *claudeModeCorrection) report(ctx context.Context, rt *claudeRuntime, p 
 		logln("interactive run", sessionID, "— permission mode: the engine took Auto after settling on", p.settled+
 			", but a setconfig has sent the engine a mode since; that change reports the mode the engine runs in")
 	case err == nil:
+		c.took(claudeAutoPermissionMode)
 		logln("interactive run", sessionID, "— permission mode: the engine settled on", p.settled,
 			"although it was spawned in Auto; switched it to Auto")
 		emit(evSystem, map[string]interface{}{
