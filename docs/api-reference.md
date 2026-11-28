@@ -87,12 +87,12 @@ answers one page of the list as top-level entries, with an ETag answered `304` w
 | Caller | Routes |
 | --- | --- |
 | `public` | 41 |
-| `user` | 592 |
+| `user` | 594 |
 | `admin` | 31 |
 | `runner` | 259 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **927** |
+| **Total** | **929** |
 
 ## Public routes
 
@@ -209,6 +209,7 @@ answers one page of the list as top-level entries, with an ETag answered `304` w
 | `GET` | `/api/documents/search` | query `cursor`, `limit`, `q` | `DriveController.search` |
 | `GET` | `/api/documents/syncs` | — | `DriveController.listSyncs` |
 | `GET` | `/api/documents/syncs/:id` | path `id` | `DriveController.getSync` |
+| `POST` | `/api/documents/syncs/:id/fix` | body `Object`; path `id` | `DriveChatController.fixSync` |
 | `POST` | `/api/documents/syncs/:id/handled` | path `id` | `DriveController.markSyncHandled` |
 | `DELETE` | `/api/documents/trash` | — | `DriveController.emptyTrash` |
 | `GET` | `/api/documents/trash` | query `cursor`, `limit` | `DriveController.trash` |
@@ -248,6 +249,7 @@ answers one page of the list as top-level entries, with an ETag answered `304` w
 | `GET` | `/api/drive/search` | query `cursor`, `limit`, `q` | `DriveController.search` |
 | `GET` | `/api/drive/syncs` | — | `DriveController.listSyncs` |
 | `GET` | `/api/drive/syncs/:id` | path `id` | `DriveController.getSync` |
+| `POST` | `/api/drive/syncs/:id/fix` | body `Object`; path `id` | `DriveChatController.fixSync` |
 | `POST` | `/api/drive/syncs/:id/handled` | path `id` | `DriveController.markSyncHandled` |
 | `DELETE` | `/api/drive/trash` | — | `DriveController.emptyTrash` |
 | `GET` | `/api/drive/trash` | query `cursor`, `limit` | `DriveController.trash` |
@@ -922,7 +924,7 @@ answers one page of the list as top-level entries, with an ETag answered `304` w
 | `POST` | `/api/runner/sessions/:id/archive` | path `id` | `RunnerSessionsController.archiveSessionCompatibility` |
 | `POST` | `/api/runner/sessions/:id/artifacts/result` | body `Object`; path `id` | `RunnerApiController.artifactResult` |
 | `POST` | `/api/runner/sessions/:id/attachments` | path `id` | `RunnerApiController.uploadAttachment` |
-| `GET` | `/api/runner/sessions/:id/attachments/:attId` | path `attId`, `id` | `RunnerApiController.attachment` |
+| `GET` | `/api/runner/sessions/:id/attachments/:attId` | path `attId`, `id`; query `subagentRunId` | `RunnerApiController.attachment` |
 | `POST` | `/api/runner/sessions/:id/background-wake` | body `BackgroundWakeDto`; path `id` | `RunnerApiController.backgroundWake` |
 | `POST` | `/api/runner/sessions/:id/commit-result` | body `Object`; path `id` | `RunnerApiController.commitResult` |
 | `POST` | `/api/runner/sessions/:id/complete-session` | path `id` | `RunnerSessionsController.completeSession` |
@@ -933,7 +935,7 @@ answers one page of the list as top-level entries, with an ETag answered `304` w
 | `POST` | `/api/runner/sessions/:id/events` | body `Object`; path `id` | `RunnerApiController.events` |
 | `POST` | `/api/runner/sessions/:id/file-bundles` | body `CreateFileBundleDto`; path `id`; query `subagentRunId` | `RunnerFilesController.createBundle` |
 | `POST` | `/api/runner/sessions/:id/files` | body `UploadFileDto`; path `id`; query `subagentRunId` | `RunnerApiController.uploadFile` |
-| `GET` | `/api/runner/sessions/:id/files/:fileId` | path `fileId`, `id` | `RunnerFilesController.describe` |
+| `GET` | `/api/runner/sessions/:id/files/:fileId` | path `fileId`, `id`; query `subagentRunId` | `RunnerFilesController.describe` |
 | `DELETE` | `/api/runner/sessions/:id/files/:fileId/pin` | path `fileId`, `id`; query `subagentRunId` | `RunnerFilesController.unpin` |
 | `PUT` | `/api/runner/sessions/:id/files/:fileId/pin` | path `fileId`, `id`; query `subagentRunId` | `RunnerFilesController.pin` |
 | `POST` | `/api/runner/sessions/:id/finalize` | body `Object`; path `id` | `RunnerApiController.finalize` |
