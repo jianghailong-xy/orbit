@@ -71,7 +71,8 @@ before(async () => {
   // NULL on every case here, as on every session still held.
   // `sender_client` is the app a turn came from (migration 0595): the claim returns it, and a reload it hands out
   // records the mode it carries as the session's actual mode (migration 1755: `actual_permission_mode{,_at}` and one
-  // `session_permission_mode_change` row, sessions/actual-permission-mode.ts), so those are mirrored too.
+  // `session_permission_mode_change` row, sessions/actual-permission-mode.ts, whose insert also names 1770's nullable
+  // `requested_mode` and `reason`), so those are mirrored too.
   // `drive_context` is the folder and selection a Drive chat message carried (migration 1680): the claim returns it
   // with the turn it hands out, NULL on every case here, as on every turn outside a Drive chat.
   // `turn_state` is where the session's turn stands for the runner (migration 1611): the lock and the inbox predicate
@@ -114,6 +115,8 @@ before(async () => {
       to_mode text NOT NULL,
       cause text NOT NULL,
       client text,
+      requested_mode text,
+      reason text,
       created_at timestamp(3) NOT NULL
     );
     CREATE TABLE steer_dequeue_test."inbox_lease_generation" (
