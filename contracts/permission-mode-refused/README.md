@@ -3,6 +3,10 @@
 Payloads the web, OrbitKit and Android tests of the running-mode states read (board `docs/mocks/permission-mode-actual`,
 A1 and B1; project 350NMcNDulzkqRAFFUsXZ, task 354kzrnSltZOM5gAfavxq). Nothing here is written by hand.
 
+The `session-refused-paged.*` files came from a later run of the same kit on task 355JM5aLiNscahuF5Xnes's branch (the
+runner, the fake CLI and the link gateway rebuilt from it; the fake CLI's second turn scripted to answer with 240 replies).
+They belong to another stack than the files beside them: other ids, another owner.
+
 How they were made, on this branch's server and runner code (scripts kept with the task's evidence: `stack.sh`,
 `capture.mjs`, `claim.mjs`, `run_all.sh`, the fake CLI's shim and script):
 
@@ -23,4 +27,7 @@ How they were made, on this branch's server and runner code (scripts kept with t
 | `session-refused.events.json` | Its events: the `permission_mode_correction_failed` system event with `mode`, `requested`, `reason`. |
 | `session-root-claim.{web,ios,android}.json` | Bypass asked for on a runner that runs as root: the claim handed Auto and recorded `requestedMode: bypassPermissions`, `reason: ROOT_RUNNER`. Claimed through `QueueService.claimSessionForRunner` on the same database (the runner's side played as `scripts/permission-mode-actual-stack/lib.mjs` plays it): a root runner refuses Bypass at admission, so no daemon can be handed it. |
 | `session-root-claim.events.json` | Its events. |
+| `session-refused-paged.{web,ios,android}.json` | The same refusal in a long session (task 355JM5aLiNscahuF5Xnes): the owner's second message got 240 replies, so the refusal paged out of the 200-event tail every client loads first. The detail carries it as `permissionModeCorrectionRefusal` (migration 1821). Read once that turn ended. |
+| `session-refused-paged.events.json` | That session's `GET /api/sessions/:id/events/page?tail=200`: `hasMore: true`, and no refusal event in it. |
+| `session-refused-paged.{runners,workspace}.json` | That stack's runners and the session's workspace. |
 | `runners.json`, `workspace.json` | The runners and the refused session's workspace. |
