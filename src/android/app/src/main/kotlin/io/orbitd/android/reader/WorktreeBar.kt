@@ -25,6 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.AnnotatedString
@@ -38,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import io.orbitd.android.ui.LocalOrbitColors
+import io.orbitd.android.core.cards.PullRequestTone
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.*
 import java.time.Instant
@@ -329,6 +331,20 @@ private fun MergeControl(model: WorktreeModel, state: WorktreeState, d: JsonObje
         }
         d.flag("branchMerged") == true && status == null ->
             Chip("✓ In ${d.string("mergeTarget") ?: if ("main" in targets) "main" else if ("master" in targets) "master" else "main"}")
+        status == "pull_request" -> {
+            val line = WorktreeBarLogic.mergePullRequestLine(d["mergePullRequest"] as? JsonObject, d.string("mergeTarget") ?: defaultTarget ?: "main")
+            val uri = LocalUriHandler.current
+            val ink = when (line.tone) {
+                PullRequestTone.BLUE -> MaterialTheme.colorScheme.primary
+                PullRequestTone.GREEN -> LocalOrbitColors.current.success
+                PullRequestTone.RED -> error
+                PullRequestTone.AMBER -> warning
+            }
+            Text(if (line.url != null) "${line.label} ↗" else line.label, color = ink, style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 220.dp).semantics { contentDescription = "${line.label}. ${line.detail}" }
+                    .then(line.url?.let { url -> Modifier.clickable(role = Role.Button) { uri.openUri(url) } } ?: Modifier))
+        }
         status == "pending" -> PillButton("Merging…", enabled = false) {}
         status == "conflict" -> {
             val onto = WorktreeBarLogic.conflictTarget(d.string("mergeTarget"), targets, (d["agent"] as? JsonObject)?.string("defaultMergeTarget"))

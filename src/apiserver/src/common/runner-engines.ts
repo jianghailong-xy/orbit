@@ -506,6 +506,7 @@ function withoutDefault(entry: RunnerEngineHealth): RunnerEngineHealth {
       home: own.home,
       ...(own.name ? { name: own.name } : {}),
       ...(own.fingerprintPrefix ? { fingerprintPrefix: own.fingerprintPrefix } : {}),
+      ...(own.auth ? { auth: own.auth } : {}),
     },
   };
 }

@@ -4684,6 +4684,17 @@ button.toast--pill:focus-visible {
   font-weight: 600;
   color: var(--success);
 }
+/* A merge waiting on its pull request (GitHub refused the direct push): the pull request's state, linking to it. */
+.wt-merge-pr {
+  flex: none;
+  font-weight: 600;
+  color: var(--link);
+  text-decoration: none;
+}
+.wt-merge-pr:hover { text-decoration: underline; }
+.wt-merge-pr[data-tone='green'] { color: var(--success); }
+.wt-merge-pr[data-tone='red'] { color: var(--error); }
+.wt-merge-pr[data-tone='amber'] { color: var(--warning); }
 /* Branch divergence: the worktree is on a branch Orbit isn't tracking (an in-worktree checkout -b).
    An amber flag naming the untracked branch, with an Adopt action to re-point the session. */
 .wt-diverged {
