@@ -905,7 +905,7 @@ func installRelease(server, key string, manifest Manifest, exe string, runProbe 
 	}
 
 	asset := "orbit-" + key + ".gz"
-	client := &http.Client{Timeout: 120 * time.Second}
+	client := &http.Client{Timeout: 300 * time.Second}
 	resp, err := client.Get(server + "/dl/" + manifest.dir + asset)
 	if err != nil {
 		logf("download failed: " + err.Error() + "\n")

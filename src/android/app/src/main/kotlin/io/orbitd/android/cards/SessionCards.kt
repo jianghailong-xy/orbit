@@ -244,8 +244,11 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
                 // The waiting card a project row opened onto shows its top, not its foot: a span from its top nearly the list's height.
                 if (waiting) requester.bringIntoView(Rect(0f, 0f, 1f, viewport * 0.9f))
                 else requester.bringIntoView()
-                // Spent, and then held where it was brought to: the reader re-applies it as the conversation moves around it.
+                // Spent, and then held where it was brought to: the reader re-applies it as the conversation moves around it. Held
+                // once the card has reported where it stands, which on a slow device can be a few frames after it was brought in:
+                // holding before that would hold nothing, and the spent request would leave the card free to drift.
                 withFrameNanos { }
+                repeat(30) { if (CardFocus.position(session.id, card.key) == null) withFrameNanos { } }
                 CardFocus.hold(session.id, card.key, waiting)
                 CardFocus.spend(session.id)
             }

@@ -202,7 +202,7 @@ export const ArtifactResolverContext =
 // signed out: the page's resolver answers for every AppLink and SameOriginLink in the tree.
 export { PublicLinkResolverCtx, type PublicLinkResolver } from '../lib/publicLinks';
 import Markdown from './Markdown';
-import { orbitLinkRemarkPlugin } from '../lib/orbitLink';
+import { canonicalId, orbitLinkRemarkPlugin, type OrbitLinkRef } from '../lib/orbitLink';
 import { OrbitLinkCardsCtx, orbitLinkCardComponents } from './OrbitLinkCard';
 import { remarkHardBreaks } from '../lib/remarkHardBreaks';
 import { dshRepair, type DshRepair } from '../lib/dshRuntime';
@@ -6013,16 +6013,32 @@ function QuestionReplay({ questions, outcome }: { questions: AskedQuestion[]; ou
 }
 
 // SessionCreateCard renders the result of mcp__orbit__session_create as a clickable card that
-// jumps to the spawned child session, instead of the default folded JSON blob.
+// jumps to the spawned child session, instead of the default folded JSON blob. The result is what
+// the session was at creation; inside a conversation view the card also asks the view's link
+// previews (`OrbitLinkCardsProvider`) for the session as it is now, so a rename or a run shows.
 function SessionCreateCard({ result }: { result: any }) {
   const nav = useContext(SessionNavCtx);
-  let s: any = null;
-  try {
-    s = JSON.parse(resultText(result));
-  } catch {
-    return null;
-  }
-  if (!s || typeof s.id !== 'string') return null;
+  const cards = useContext(OrbitLinkCardsCtx);
+  const s = useMemo(() => {
+    try {
+      const parsed = JSON.parse(resultText(result));
+      return parsed && typeof parsed.id === 'string' ? parsed : null;
+    } catch {
+      return null;
+    }
+  }, [result]);
+  const link = useMemo<OrbitLinkRef | null>(() => {
+    const id = s ? canonicalId(s.id) : null;
+    return id ? { target: { kind: 'session', id }, source: { kind: 'ref', ref: `orbit-session:${s.id}` } } : null;
+  }, [s]);
+  useEffect(() => {
+    if (link) cards?.register(link);
+  }, [cards, link]);
+  if (!s) return null;
+  const preview = link ? cards?.previewFor(link) : undefined;
+  const live = preview?.state === 'ok' && preview.kind === 'session' ? preview.session : undefined;
+  const title = live?.title || s.title || 'New session';
+  const status = live ? cards!.stateWord(live) : s.status ? String(s.status) : '';
   const clickable = !!nav;
   return (
     <div
@@ -6036,11 +6052,11 @@ function SessionCreateCard({ result }: { result: any }) {
         <ApiOutlined />
       </span>
       <span className="chat-session-card-main">
-        <span className="chat-session-card-title">{s.title || 'New session'}</span>
+        <span className="chat-session-card-title">{title}</span>
         <span className="chat-session-card-meta">
           {s.workspaceName && <span className="chat-session-card-workspace">{s.workspaceName}</span>}
           {s.provider && <span className="chat-session-card-provider">{s.provider}</span>}
-          {s.status && <span className="chat-session-card-status">{String(s.status).toLowerCase()}</span>}
+          {status && <span className="chat-session-card-status">{status.toLowerCase()}</span>}
         </span>
       </span>
       {clickable && (
