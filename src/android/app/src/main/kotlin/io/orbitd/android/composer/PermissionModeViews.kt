@@ -56,7 +56,8 @@ internal fun noAutoModel(catalog: ComposerCatalog?, engine: String, provider: St
 internal fun scheduledOnClaude(detail: JsonObject, engine: String) = engine == ProviderEngines.CLAUDE && detail.text("scheduleRunId") != null
 
 /** The composer's mode control for the session [detail] reads, under the box's picks [effective] — a draft's, or the ones held for an
- * ended session's resume — on [engine]. [events] are the conversation's loaded events, where a correction Claude refused is said. */
+ * ended session's resume — on [engine]. [events] are the conversation's loaded events, where a correction Claude refused is said; the
+ * detail carries the one that stands, for when its event is not among them. */
 internal fun modeCapsule(detail: JsonObject, effective: JsonObject, engine: String, catalog: ComposerCatalog?, draft: Boolean,
     now: Instant, events: List<RunEvent> = emptyList()): ModeCapsule = PermissionModeDisplay.capsule(
     intent = shownPermissionMode(effective, engine),
@@ -68,7 +69,8 @@ internal fun modeCapsule(detail: JsonObject, effective: JsonObject, engine: Stri
     runsAsRoot = catalog?.runner?.flag("runsAsRoot") == true,
     scheduledOnClaude = scheduledOnClaude(detail, engine),
     now = now,
-    refusal = PermissionModes.refusals(events).lastOrNull(),
+    refusal = PermissionModeDisplay.standingRefusal(PermissionModes.refusals(events), PermissionModes.detailRefusal(detail),
+        PermissionModes.changes(detail).lastOrNull(), PermissionModes.actual(detail)),
 )
 
 /** The transcript's mode lines for [changes] of the session [detail] (B1) — its own newest and the older ones read as the transcript

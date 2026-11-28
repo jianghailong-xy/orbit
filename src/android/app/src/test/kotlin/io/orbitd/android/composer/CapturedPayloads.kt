@@ -35,9 +35,10 @@ internal open class CapturedPayloadsIn(relative: String) {
     /** A captured session detail whole, as the server sent it. */
     fun detail(name: String): JsonObject = json("session-$name").jsonObject
 
-    /** The captured runner of [name] from GET /runners, as [ComposerShell.runner]: the shell's id and name, everything else the server's. */
-    fun runner(name: String): JsonObject {
-        val list = json("runners")
+    /** The captured runner of [name] from GET /runners (the payload [file]), as [ComposerShell.runner]: the shell's id and name,
+     * everything else the server's. */
+    fun runner(name: String, file: String = "runners"): JsonObject {
+        val list = json(file)
         val rows = (list as? JsonArray ?: list.jsonObject["runners"]!!.jsonArray).map { it.jsonObject }
         val row = rows.first { (it["name"] as? kotlinx.serialization.json.JsonPrimitive)?.content == name }
         return JsonObject(row.filterKeys { !ROUTING.matches(it) } + ComposerShell.obj("""{"id":"${ComposerShell.RUNNER}"}"""))

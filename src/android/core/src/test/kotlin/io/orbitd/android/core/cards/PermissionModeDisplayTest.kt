@@ -3,7 +3,10 @@ package io.orbitd.android.core.cards
 import io.orbitd.android.core.cards.ModeCapsule.Gap
 import io.orbitd.android.core.protocol.PermissionModeChange
 import io.orbitd.android.core.protocol.PermissionModeRefusal
+import io.orbitd.android.core.protocol.PermissionModes
+import io.orbitd.android.core.protocol.Wire
 import java.time.Instant
+import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -234,6 +237,24 @@ class PermissionModeDisplayTest {
         val later = PermissionModeDisplay.lines(listOf(report, change("default", "plan", "OWNER_PICK", "android", at = "2026-11-22T12:09:00.000Z")),
             "plan", "plan", null, false, false, listOf(refusal))
         assertFalse(later.last().gap)
+    }
+
+    @Test fun theDetailsRefusalStandsWhenItsEventIsNotLoaded() {
+        val detail = Wire.json.parseToJsonElement("{\"actualPermissionMode\":\"default\",\"permissionModeCorrectionRefusal\":{\"mode\":\"default\",\"requestedMode\":\"auto\",\"reason\":\" $words\\n\",\"at\":\"2026-11-22T12:00:06.500Z\"}}") as JsonObject
+        val carried = PermissionModes.detailRefusal(detail)
+        assertEquals(PermissionModeRefusal(PermissionModes.DETAIL_SEQ, "2026-11-22T12:00:06.500Z", "default", "auto", words), carried)
+        val standing = PermissionModeDisplay.standingRefusal(emptyList(), carried, report, "default")
+        assertEquals(carried, standing)
+        assertEquals(Gap.STANDING, PermissionModeDisplay.capsule("auto", "default", true, false, report, null, false, false, now, standing).gap)
+        // Without it, the same moment reads as being switched back.
+        assertEquals(Gap.CORRECTING, PermissionModeDisplay.capsule("auto", "default", true, false, report, null, false, false, now,
+            PermissionModeDisplay.standingRefusal(emptyList(), null, report, "default")).gap)
+        // Loaded too: the event's is the one that stands, so its transcript line is the gap's.
+        assertEquals(refusal, PermissionModeDisplay.standingRefusal(listOf(refusal), carried, report, "default"))
+        // A later change supersedes it; an older server sends none.
+        val picked = change("default", "plan", "OWNER_PICK", "android", at = "2026-11-22T12:09:00.000Z")
+        assertNull(PermissionModeDisplay.standingRefusal(emptyList(), carried, picked, "plan"))
+        assertNull(PermissionModes.detailRefusal(JsonObject(emptyMap())))
     }
 
     @Test fun theClaimLineIsWordedFromTheServersRequestedModeAndReason() {

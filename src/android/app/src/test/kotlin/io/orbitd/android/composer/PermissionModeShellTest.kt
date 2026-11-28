@@ -301,6 +301,48 @@ class PermissionModeShellTest : ComposerShellTest() {
         shot("11-refused-menu")
     }
 
+    /** A long session: its second turn's 240 replies pushed the refusal out of the 200 events the reader loads. The detail still carries
+     * it (`permissionModeCorrectionRefusal`): the gap stands with the CLI's words, read seconds after Claude's report, while a report
+     * nothing answered would still read as being switched. */
+    @Test fun aRefusalPagedOutOfTheEventsLoadedStandsFromTheDetail() {
+        val detail = RefusedPayloads.detail("refused-paged.android")
+        val events = RefusedPayloads.events("refused-paged.events")
+        assertEquals(200, events.size)
+        assertTrue("the refusal's event is not loaded", events.none { it.toString().contains(PermissionModes.CORRECTION_FAILED) })
+        assertEquals(PermissionModes.DETAIL_SEQ, PermissionModes.detailRefusal(detail)?.seq)
+        ComposerShell.runner = RefusedPayloads.runner("pmcf-runner", "session-refused-paged.runners")
+        ComposerShell.session = RefusedPayloads.session("refused-paged.android")
+        ComposerShell.events = events
+        modeClock = { Instant.parse(PermissionModes.changes(detail).last().at).plusSeconds(5) }
+        signIn(); openSession()
+        await { has(hasTestTag("composer-mode") and hasText("Default")) }
+        compose.onNodeWithTag("composer-mode-gap", useUnmergedTree = true).assertExists()
+        assertFalse(has(hasTestTag("composer-mode-correcting"), unmerged = true))
+        assertFalse(has(hasText("Default → Auto")))
+        shot("13-refused-paged")
+        openModeMenu()
+        compose.onNodeWithTag("composer-mode-head").assertTextEquals("Running in Default. You asked for Auto, but the runner couldn’t switch " +
+            "Claude to it: $words.")
+        shot("13-refused-paged-menu")
+    }
+
+    /** The control: the same payloads as a server before migration 1821 answered them, with no refusal on the detail. */
+    @Test fun withoutTheDetailsWordThePagedOutRefusalDoesNotSayWhy() {
+        val detail = RefusedPayloads.detail("refused-paged.android")
+        ComposerShell.runner = RefusedPayloads.runner("pmcf-runner", "session-refused-paged.runners")
+        ComposerShell.session = RefusedPayloads.session("refused-paged.android") - "permissionModeCorrectionRefusal"
+        ComposerShell.events = RefusedPayloads.events("refused-paged.events")
+        modeClock = { Instant.parse(PermissionModes.changes(detail).last().at).plusSeconds(5) }
+        signIn(); openSession()
+        await { has(hasTestTag("composer-mode")) }
+        openModeMenu()
+        // A gap, but not the refusal's: the events loaded say nothing of what Claude said.
+        val head = compose.onNodeWithTag("composer-mode-head").fetchSemanticsNode().config
+            .getOrElse(androidx.compose.ui.semantics.SemanticsProperties.Text) { emptyList() }.joinToString { it.text }
+        assertTrue("the head reads: $head", head.startsWith("Running in Default."))
+        assertFalse("the head reads: $head", head.contains(words) || head.contains("couldn’t switch Claude"))
+    }
+
     @Test fun theClaimLineIsWordedFromTheServersRequestedModeAndReason() {
         ComposerShell.runner = RefusedPayloads.runner("root-runner")
         ComposerShell.session = RefusedPayloads.session("root-claim.android")

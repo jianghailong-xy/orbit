@@ -28,7 +28,9 @@ data class PermissionModeChange(val fromMode: String?, val toMode: String, val c
 /**
  * The runner's report that Claude would not take the Auto it asked for (`permission_mode_correction_failed`, runner-go
  * claude_mode_correction.go): [mode] is the mode it stays in, [requested] the one asked for, [reason] the CLI's own words. A system
- * event of the conversation, not a mode change, so it is read off the events loaded; [at] is the runner's stamp.
+ * event of the conversation, not a mode change, so it is read off the events loaded; [at] is the runner's stamp. The session detail
+ * carries the one that still stands (`PermissionModes.detailRefusal`, seq [PermissionModes.DETAIL_SEQ]), whether or not its event is
+ * loaded.
  */
 data class PermissionModeRefusal(val seq: Long, val at: String, val mode: String, val requested: String, val reason: String) {
     /** Its line in the transcript. */
@@ -90,6 +92,17 @@ object PermissionModes {
         if (event.type != "system" || word(event.fields, "subtype") != CORRECTION_FAILED) return@mapNotNull null
         PermissionModeRefusal(event.seq, event.ts.orEmpty(), word(event.fields, "mode") ?: return@mapNotNull null,
             word(event.fields, "requested") ?: AUTO, word(event.fields, "reason")?.trim().orEmpty())
+    }
+
+    /** The seq of a refusal read off the session detail, which names no event: it is never a transcript line of its own. */
+    const val DETAIL_SEQ = -1L
+
+    /** The detail's newest refused correction while it still answers the newest change (`permissionModeCorrectionRefusal`, migration
+     * 1821); null once a later change supersedes it, and from an older server. */
+    fun detailRefusal(o: JsonObject): PermissionModeRefusal? {
+        val r = o["permissionModeCorrectionRefusal"] as? JsonObject ?: return null
+        return PermissionModeRefusal(DETAIL_SEQ, word(r, "at") ?: return null, word(r, "mode") ?: return null,
+            word(r, "requestedMode") ?: AUTO, (r["reason"] as? JsonPrimitive)?.contentOrNull?.trim().orEmpty())
     }
 
     private fun word(o: JsonObject, key: String): String? =

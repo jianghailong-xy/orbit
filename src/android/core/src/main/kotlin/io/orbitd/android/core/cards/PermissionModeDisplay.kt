@@ -106,6 +106,12 @@ object PermissionModeDisplay {
         return !refusedAt.isBefore(reportedAt.minus(REFUSAL_CLOCK_SLACK))
     }
 
+    /** The refusal that is the gap now, if one is: the newest of [loaded] (the events loaded) when it stands, so its transcript line is
+     * the gap's; else the detail's [carried], which stands whether or not its event is loaded (paged out of a long session). */
+    fun standingRefusal(loaded: List<PermissionModeRefusal>, carried: PermissionModeRefusal?, latest: PermissionModeChange?,
+        actual: String?): PermissionModeRefusal? =
+        loaded.lastOrNull()?.takeIf { refusalStands(it, latest, actual) } ?: carried?.takeIf { refusalStands(it, latest, actual) }
+
     /** The index of the change [refusal] answers: the newest report of the mode it stays in, from before it. */
     private fun answered(changes: List<PermissionModeChange>, refusal: PermissionModeRefusal): Int? {
         val refusedAt = parse(refusal.at)
