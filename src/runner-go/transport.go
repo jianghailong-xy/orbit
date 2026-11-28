@@ -1299,12 +1299,17 @@ const maxSessionAttachmentBytes = 25 << 20
 var errAttachmentTooLarge = errors.New("File exceeds the 25 MiB limit")
 
 func (t *Transport) uploadSessionAttachmentFile(ctx context.Context, sessionID string, file *os.File, mimeType, filename string) (id string, err error) {
-	noteTransportAttempt()
-	defer func() { noteTransportResult(http.MethodPost, err) }()
-	return t.uploadSessionAttachmentFileOnce(ctx, sessionID, file, mimeType, filename)
+	return t.uploadSessionAttachmentFileWithin(ctx, 35*time.Second, sessionID, file, mimeType, filename)
 }
 
-func (t *Transport) uploadSessionAttachmentFileOnce(ctx context.Context, sessionID string, file *os.File, mimeType, filename string) (string, error) {
+// uploadSessionAttachmentFileWithin is uploadSessionAttachmentFile with the time the request may take.
+func (t *Transport) uploadSessionAttachmentFileWithin(ctx context.Context, timeout time.Duration, sessionID string, file *os.File, mimeType, filename string) (id string, err error) {
+	noteTransportAttempt()
+	defer func() { noteTransportResult(http.MethodPost, err) }()
+	return t.uploadSessionAttachmentFileOnce(ctx, timeout, sessionID, file, mimeType, filename)
+}
+
+func (t *Transport) uploadSessionAttachmentFileOnce(ctx context.Context, timeout time.Duration, sessionID string, file *os.File, mimeType, filename string) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -1350,7 +1355,7 @@ func (t *Transport) uploadSessionAttachmentFileOnce(ctx context.Context, session
 		return "", err
 	}
 
-	cctx, cancel := context.WithTimeout(ctx, 35*time.Second)
+	cctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(cctx, "POST", t.baseURL+"/api/runner/sessions/"+sessionID+"/attachments", &body)
 	if err != nil {

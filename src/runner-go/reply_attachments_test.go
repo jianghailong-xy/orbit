@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // The reply an agent sends when it drew something: prose, then a markdown image naming the file it
@@ -201,8 +202,8 @@ func TestAttachLocalReplyFilesLeavesUnreachablePaths(t *testing.T) {
 		t.Fatalf("present file = %q", got)
 	}
 
-	// A server that refuses the upload, and a budget already spent (the flush bounds this call —
-	// see replyAttachmentBudget): same answer either way, the path stays.
+	// A server that refuses the upload (answered, so not tried again), and a flush already cancelled:
+	// same answer either way, the path stays.
 	for _, tc := range []struct {
 		name string
 		ctx  context.Context
@@ -224,6 +225,61 @@ func TestAttachLocalReplyFilesLeavesUnreachablePaths(t *testing.T) {
 	defer mu.Unlock()
 	if requests != 2 {
 		t.Fatalf("requests = %d, want 2 (the missing file is never asked for)", requests)
+	}
+}
+
+// What a reply on 2026-11-28 lost: a 700 KB mock whose upload hit its window, after which the next
+// file in the reply had no time left at all. Each file gets its own window and one more try, so a
+// timed-out picture still arrives, and the file after it is uploaded too.
+func TestAttachLocalReplyFilesRetriesATimedOutUpload(t *testing.T) {
+	was := replyAttachmentUploadTimeout
+	replyAttachmentUploadTimeout = 200 * time.Millisecond
+	defer func() { replyAttachmentUploadTimeout = was }()
+
+	dir := t.TempDir()
+	png := filepath.Join(dir, "board.png")
+	html := filepath.Join(dir, "board.html")
+	if err := os.WriteFile(png, []byte("\x89PNG\r\n\x1a\nbytes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(html, []byte("<!doctype html><p>board</p>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	var bodies []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, header, err := r.FormFile("file")
+		if err != nil {
+			t.Errorf("form file: %v", err)
+			return
+		}
+		f, _ := header.Open()
+		data, _ := io.ReadAll(f)
+		mu.Lock()
+		bodies = append(bodies, header.Filename+"="+string(data))
+		first := len(bodies) == 1
+		mu.Unlock()
+		if first {
+			time.Sleep(time.Second) // past the window: the first try of board.png times out
+		}
+		fmt.Fprintf(w, `{"id":"att-%s"}`, header.Filename)
+	}))
+	defer srv.Close()
+
+	events := []RunEvent{{Seq: 1, Type: evAssistant, Payload: map[string]interface{}{
+		"text": "![Board](" + png + ")\n\nThe source is [board.html](" + html + ").",
+	}}}
+	attachLocalReplyFiles(context.Background(), NewTransport(srv.URL, "token"), "s1",
+		events, []string{dir}, newReplyAttachmentIDs())
+	want := "![Board](orbit-attachment:att-board.png)\n\nThe source is [board.html](orbit-attachment:att-board.html \"board.html\")."
+	if got := events[0].Payload["text"]; got != want {
+		t.Fatalf("text = %q, want %q", got, want)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	// The retry sends the whole file again, not what was left after the first try read it.
+	if len(bodies) != 3 || bodies[1] != bodies[0] || !strings.HasPrefix(bodies[2], "board.html=") {
+		t.Fatalf("uploads = %q", bodies)
 	}
 }
 

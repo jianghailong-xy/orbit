@@ -870,13 +870,10 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		if len(taken) == 0 {
 			return nil
 		}
-		// Bounded, because this runs under the flush permit: a server that takes the whole 35s
-		// the upload itself allows would hold back every later event with it — the rest of the
-		// reply, and the turn's own completion. Spent, the budget costs the file its rewrite,
-		// which is the chip that was there before this existed.
-		uploadCtx, cancelUploads := context.WithTimeout(flushCtx, replyAttachmentBudget)
-		attachLocalReplyFiles(uploadCtx, t, sessionID, taken, replyFileRoots, replyFiles)
-		cancelUploads()
+		// This runs under the flush permit, so a slow upload holds back the events after it. Each
+		// file is still given its own time (replyAttachmentUploadTimeout): a reply whose pictures
+		// arrive late beats one whose pictures never arrive.
+		attachLocalReplyFiles(flushCtx, t, sessionID, taken, replyFileRoots, replyFiles)
 		return taken
 	}
 	// flushWithoutLink posts what is buffered on a transport with no link, which no daemon has: the session

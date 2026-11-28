@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,9 +13,13 @@ import (
 	"time"
 )
 
-// How long one flush may spend uploading the files its batch references. Generous next to a
-// same-connection upload of a screenshot-sized PNG, and small next to the flush permit it holds.
-const replyAttachmentBudget = 20 * time.Second
+// How long one upload of one reply file may take, and how many times a file is tried. Each file has
+// its own window: a slow server used to spend a shared 20s budget on the first picture and leave
+// every later file in the reply as a path no client can open. A second try is for a timeout or a
+// dropped connection only; a server that answers no has answered.
+var replyAttachmentUploadTimeout = 60 * time.Second
+
+const replyAttachmentUploadAttempts = 2
 
 // What an agent writes when it means "here is the thing I drew": a markdown link to the file it
 // just wrote — `![卡在聊天区怎么出现](/root/.orbit/worktrees/<session>/docs/mocks/x.png)`. Those
@@ -208,7 +215,18 @@ func (a *replyAttachmentIDs) uploader(t *Transport, sessionID string) artifactUp
 		if cached {
 			return id, nil
 		}
-		id, err := t.uploadSessionAttachmentFile(ctx, sessionID, file, mimeType, filepath.Base(path))
+		var err error
+		for attempt := 1; ; attempt++ {
+			id, err = t.uploadSessionAttachmentFileWithin(ctx, replyAttachmentUploadTimeout, sessionID, file, mimeType, filepath.Base(path))
+			var netErr net.Error
+			if err == nil || attempt == replyAttachmentUploadAttempts || ctx.Err() != nil || !errors.As(err, &netErr) {
+				break
+			}
+			logln("assistant attachment upload of", path, "failed, trying again:", err)
+			if _, err = file.Seek(0, io.SeekStart); err != nil {
+				break
+			}
+		}
 		if err != nil {
 			return "", err
 		}
