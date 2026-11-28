@@ -3,11 +3,13 @@ import type { Prisma } from '@prisma/client';
 import {
   type ClaimPermissionModeSubstitutionReason,
   PERMISSION_MODE_CORRECTED_EVENT_SUBTYPE,
+  PERMISSION_MODE_CORRECTION_FAILED_EVENT_SUBTYPE,
   PermissionMode,
   type PermissionModeChangeCause,
   RunEventType,
   type SessionPermissionModeChange,
   type SessionPermissionModeChangePage,
+  type SessionPermissionModeCorrectionRefusal,
   SESSION_PERMISSION_MODE_CHANGES_LIMIT,
 } from '@orbit/shared';
 
@@ -24,6 +26,10 @@ import {
  *  - a `setconfig` turn's acknowledgement, and a `reload` handed to the runner, record the mode they carried
  *    (OWNER_PICK, or ORBIT_CHANGE when Orbit made the change, which the turn's key says: configTurnKey);
  *  - a runner's `permission_mode_corrected` event records a correction it made by itself (RUNNER_CORRECTION).
+ *
+ * A runner's `permission_mode_correction_failed` event (Claude refused the Auto it was asked for) is no change: it is
+ * written onto the change it answers (recordCorrectionRefusal), and the detail carries it while that change is the
+ * newest (permissionModeChangesOfDetail).
  *
  * Every change is one row of session_permission_mode_change naming its cause; recording the mode already recorded
  * writes nothing. A claim that hands another mode than the session asked for says so on its row: the mode asked for
@@ -93,12 +99,39 @@ export async function recordActualPermissionMode(
 }
 
 /**
+ * Write a refused correction onto the change it answers: the session's newest, when that is Claude's own report
+ * (ENGINE_REPORT, or RESPAWN) of the mode the engine stays in. Any other newest change has moved on from what was
+ * refused, and the refusal is left to its event. A later refusal of the same report replaces the earlier one.
+ * Returns whether a change took it.
+ */
+export async function recordCorrectionRefusal(
+  db: Pick<Prisma.TransactionClient, '$queryRaw'>,
+  sessionId: string,
+  refusal: { mode?: unknown; requested?: unknown; reason?: unknown },
+): Promise<boolean> {
+  if (!isKnownPermissionMode(refusal.mode)) return false;
+  const requested = isKnownPermissionMode(refusal.requested) ? refusal.requested : PermissionMode.AUTO;
+  const reason = typeof refusal.reason === 'string' ? refusal.reason.trim() : '';
+  const rows = await db.$queryRaw<Array<{ id: string }>>`
+    UPDATE "session_permission_mode_change" AS c
+    SET "refusal_requested_mode" = ${requested}, "refusal_reason" = ${reason}, "refused_at" = clock_timestamp()
+    FROM (
+      SELECT "id" FROM "session_permission_mode_change" WHERE "session_id" = ${sessionId}::uuid ORDER BY "seq" DESC LIMIT 1
+    ) AS newest
+    WHERE c."id" = newest."id" AND c."cause" IN ('ENGINE_REPORT', 'RESPAWN') AND c."to_mode" = ${refusal.mode}
+    RETURNING c."id"
+  `;
+  return rows.length > 0;
+}
+
+/**
  * What a batch of runner events says about the mode the engine runs in, recorded in seq order:
  *  - Claude Code's init frame, which the runner forwards as the Agent Tools report's `permissionMode` (runner-go
  *    agent_tools_report.go) and sends again whenever it changes. ENGINE_REPORT, or RESPAWN when the batch said
  *    before it that the runner restarted the engine (`resumed`). Only Claude's: the other engines' reports restate
  *    the mode they were handed, which the claim recorded already;
- *  - a runner's own correction (`permission_mode_corrected`, carrying `mode`): RUNNER_CORRECTION.
+ *  - a runner's own correction (`permission_mode_corrected`, carrying `mode`): RUNNER_CORRECTION;
+ *  - a correction Claude refused (`permission_mode_correction_failed`): onto the report it answers.
  */
 export async function recordEngineReportedModes(
   db: Pick<Prisma.TransactionClient, '$queryRaw'>,
@@ -108,7 +141,9 @@ export async function recordEngineReportedModes(
   let respawned = false;
   for (const e of [...events].sort((a, b) => a.seq - b.seq)) {
     if (e.type !== RunEventType.SYSTEM) continue;
-    const payload = (e.payload ?? {}) as { subtype?: unknown; agentTools?: unknown; mode?: unknown };
+    const payload = (e.payload ?? {}) as {
+      subtype?: unknown; agentTools?: unknown; mode?: unknown; requested?: unknown; reason?: unknown;
+    };
     if (payload.subtype === 'resumed') {
       respawned = true;
     } else if (payload.subtype === 'agent_tools') {
@@ -117,6 +152,8 @@ export async function recordEngineReportedModes(
       await recordActualPermissionMode(db, sessionId, report.permissionMode, respawned ? 'RESPAWN' : 'ENGINE_REPORT');
     } else if (payload.subtype === PERMISSION_MODE_CORRECTED_EVENT_SUBTYPE) {
       await recordActualPermissionMode(db, sessionId, payload.mode, 'RUNNER_CORRECTION');
+    } else if (payload.subtype === PERMISSION_MODE_CORRECTION_FAILED_EVENT_SUBTYPE) {
+      await recordCorrectionRefusal(db, sessionId, payload);
     }
   }
 }
@@ -161,7 +198,10 @@ export function configTurnPayload(
 export const PERMISSION_MODE_CHANGES_INCLUDE = {
   orderBy: { seq: 'desc' },
   take: SESSION_PERMISSION_MODE_CHANGES_LIMIT + 1,
-  select: { fromMode: true, toMode: true, cause: true, client: true, requestedMode: true, reason: true, createdAt: true, seq: true },
+  select: {
+    fromMode: true, toMode: true, cause: true, client: true, requestedMode: true, reason: true, createdAt: true, seq: true,
+    refusalRequestedMode: true, refusalReason: true, refusedAt: true,
+  },
 } satisfies Prisma.Session$permissionModeChangesArgs;
 
 type ModeChangeRow = {
@@ -173,6 +213,9 @@ type ModeChangeRow = {
   reason?: string | null;
   createdAt: Date;
   seq: bigint;
+  refusalRequestedMode?: string | null;
+  refusalReason?: string | null;
+  refusedAt?: Date | null;
 };
 
 /** Rows read newest first, `limit` and one more, as a page: those `limit`, oldest first, and whether one more was read.
@@ -199,13 +242,31 @@ function permissionModeChangePageOf(
   };
 }
 
-/** The detail's read of them as it answers it: the newest, oldest first, and whether older ones are recorded. */
+/** The detail's read of them as it answers it: the newest, oldest first, whether older ones are recorded, and the
+ *  refused correction that still stands. */
 export function permissionModeChangesOfDetail(rows: ReadonlyArray<ModeChangeRow> | undefined): {
   permissionModeChanges: SessionPermissionModeChange[];
   permissionModeChangesHasMore: boolean;
+  permissionModeCorrectionRefusal: SessionPermissionModeCorrectionRefusal | null;
 } {
   const page = permissionModeChangePageOf(rows);
-  return { permissionModeChanges: page.changes, permissionModeChangesHasMore: page.hasMore };
+  return {
+    permissionModeChanges: page.changes,
+    permissionModeChangesHasMore: page.hasMore,
+    permissionModeCorrectionRefusal: correctionRefusalOf(rows?.[0]),
+  };
+}
+
+/** The refusal written on the newest change (rows are read newest first), if any: a later change supersedes it by
+ *  being newer, so nothing else ever clears it. */
+function correctionRefusalOf(newest: ModeChangeRow | undefined): SessionPermissionModeCorrectionRefusal | null {
+  if (!newest?.refusedAt || !newest.refusalRequestedMode) return null;
+  return {
+    mode: newest.toMode,
+    requestedMode: newest.refusalRequestedMode,
+    reason: newest.refusalReason ?? '',
+    at: newest.refusedAt.toISOString(),
+  };
 }
 
 /**

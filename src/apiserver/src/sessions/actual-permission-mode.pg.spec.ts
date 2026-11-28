@@ -25,6 +25,10 @@
  *       `residentEngines`) hands the turn to that engine, which is not spawned again: the actual mode stays what the
  *       engine reported and no CLAIM change is recorded over it. A claim that spawns a new engine records CLAIM as
  *       before, and so does a claim handed to a running Codex, which reports no mode of its own.
+ *   (7) A correction Claude refused rides on the session detail (`permissionModeCorrectionRefusal`: the mode it stays
+ *       in, the mode asked for, the CLI's words and when) while it answers the newest change, Claude's report of that
+ *       mode, so a client that never loaded the refusal's event still knows. A later change supersedes it; a refusal
+ *       that answers no such report is not carried. The change list and its pages keep their shape.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/actual-permission-mode.pg.spec.ts
  *
@@ -600,5 +604,91 @@ test('the stored mode, the mode running, and the ceiling on PostgreSQL', { skip,
     await nextMessage(codex);
     assert.equal((await claimNaming([codex]))?.sessionId, codex);
     assert.equal((await row(codex)).actualPermissionMode, PermissionMode.AUTO);
+  });
+
+  await t.test('(7) the newest refused correction rides on the detail until a later change supersedes it', async () => {
+    const w = await world('refusal');
+    type Detail = {
+      actualPermissionMode: string | null;
+      permissionModeChanges: Array<SessionPermissionModeChange & Record<string, unknown>>;
+      permissionModeCorrectionRefusal: { mode: string; requestedMode: string; reason: string; at: string } | null;
+    };
+    const detail = async (id: string) => (await sessions.get(w.ownerId, id)) as unknown as Detail;
+    const HAIKU_REFUSAL = 'Cannot set permission mode to auto: auto mode unavailable for this model';
+    const refused = (reason: string, mode: string = PermissionMode.DEFAULT) => ({
+      subtype: PERMISSION_MODE_CORRECTION_FAILED_EVENT_SUBTYPE, mode, requested: PermissionMode.AUTO, reason,
+    });
+
+    // As the local stack measured it (contracts/permission-mode-refused): claimed in Auto, Claude's init frame says
+    // Default, and the runner's correction is refused, in the same batch, after the report.
+    const { id } = await claimed(w, { permissionMode: PermissionMode.AUTO });
+    assert.equal((await detail(id)).permissionModeCorrectionRefusal, null, 'nothing refused yet');
+    const before = Date.now();
+    await say(w, id, init('claude', PermissionMode.DEFAULT), refused(`  ${HAIKU_REFUSAL}\n`));
+    const standing = await detail(id);
+    assert.equal(standing.actualPermissionMode, PermissionMode.DEFAULT);
+    const carried = standing.permissionModeCorrectionRefusal;
+    assert.ok(carried, 'the detail carries the refusal');
+    assert.deepEqual(
+      { ...carried, at: undefined },
+      { mode: PermissionMode.DEFAULT, requestedMode: PermissionMode.AUTO, reason: HAIKU_REFUSAL, at: undefined },
+      'the mode it stays in, the mode asked for, and the CLI\'s words, trimmed',
+    );
+    const at = Date.parse(carried.at);
+    assert.ok(at >= before - 1_000 && at <= Date.now() + 1_000, `and when (${carried.at})`);
+    assert.deepEqual(
+      standing.permissionModeChanges.map((c) => c.cause),
+      ['CLAIM', 'ENGINE_REPORT'],
+      'the refusal is no mode change',
+    );
+    for (const change of standing.permissionModeChanges) {
+      assert.deepEqual(
+        Object.keys(change).filter((k) => /refus/i.test(k)),
+        [],
+        'no change in the list carries refusal fields',
+      );
+    }
+    const page = await sessions.getPermissionModeChangePage(w.ownerId, id, {});
+    assert.deepEqual(page.changes, standing.permissionModeChanges, 'the page of changes keeps its shape');
+
+    // A second refusal of the same report replaces the first.
+    await say(w, id, refused('auto mode is not available on this plan'));
+    assert.equal((await detail(id)).permissionModeCorrectionRefusal?.reason, 'auto mode is not available on this plan');
+
+    // The owner picks Plan and the engine acknowledges it: a later change, and the refusal no longer stands.
+    await sessions.updateConfig(w.ownerId, id, { permissionMode: PermissionMode.PLAN }, undefined, {
+      origin: 'OWNER',
+      senderClient: { client: 'android' },
+    });
+    const turn = await fetch(w, id);
+    await acknowledge(w, id, turn.turnId, 'applied to the running engine: permission mode "plan"');
+    const picked = await detail(id);
+    assert.equal(picked.actualPermissionMode, PermissionMode.PLAN);
+    assert.equal(picked.permissionModeCorrectionRefusal, null, 'the owner\'s pick superseded the refusal');
+    assert.ok(
+      (await db.sessionPermissionModeChange.findFirstOrThrow({ where: { sessionId: id, cause: 'ENGINE_REPORT' } })).refusedAt,
+      'the report keeps what was refused of it',
+    );
+
+    // A refusal that answers no report of the mode it names is not carried: the newest change is the owner's.
+    await say(w, id, refused(HAIKU_REFUSAL, PermissionMode.PLAN));
+    assert.equal((await detail(id)).permissionModeCorrectionRefusal, null, 'an owner pick is not what Claude refused');
+    // Nor one naming another mode than the report's.
+    await say(w, id, init('claude', PermissionMode.DEFAULT), refused(HAIKU_REFUSAL, PermissionMode.ACCEPT_EDITS));
+    assert.equal((await detail(id)).permissionModeCorrectionRefusal, null, 'a refusal of another mode is not this report\'s');
+
+    // The engine is re-spawned in Default and the correction is refused again: carried, on the RESPAWN.
+    await say(w, id, { subtype: 'resumed' }, init('claude', PermissionMode.AUTO));
+    await say(w, id, { subtype: 'resumed' }, init('claude', PermissionMode.DEFAULT), refused(HAIKU_REFUSAL));
+    const respawned = await detail(id);
+    assert.equal(respawned.permissionModeChanges.at(-1)?.cause, 'RESPAWN');
+    assert.equal(respawned.permissionModeCorrectionRefusal?.reason, HAIKU_REFUSAL, 'a refusal after a re-spawn is carried');
+
+    // The runner's later correction that took supersedes it.
+    await say(w, id, { subtype: PERMISSION_MODE_CORRECTED_EVENT_SUBTYPE, mode: PermissionMode.AUTO, from: PermissionMode.DEFAULT });
+    const corrected = await detail(id);
+    assert.equal(corrected.actualPermissionMode, PermissionMode.AUTO);
+    assert.equal(corrected.permissionModeChanges.at(-1)?.cause, 'RUNNER_CORRECTION');
+    assert.equal(corrected.permissionModeCorrectionRefusal, null, 'the correction that took superseded the refusal');
   });
 });
