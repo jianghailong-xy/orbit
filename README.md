@@ -18,9 +18,7 @@
   <a href="docs/README.md">Docs</a> ·
   <a href="docs/self-hosting.md">Self-hosting</a> ·
   <a href="SECURITY.md">Security</a> ·
-  <a href="CHANGELOG.md">Changelog</a> ·
-  <a href="https://jianghailong-xy.github.io/orbit/?utm_source=github&utm_medium=readme&utm_campaign=launch&utm_content=top-en">Website</a> ·
-  <a href="https://jianghailong-xy.github.io/orbit/zh/?utm_source=github&utm_medium=readme&utm_campaign=launch&utm_content=top-zh">中文</a>
+  <a href="CHANGELOG.md">Changelog</a>
 </p>
 
 Orbit is for small engineering and infrastructure teams already running coding agents against private code or
