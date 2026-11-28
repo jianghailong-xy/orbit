@@ -293,6 +293,9 @@ func (c *conn) readFrame() (*linkpb.Frame, error) {
 		c.log.Warn("frame does not decode", "type", typ.String(), "bytes", len(data), "raw", base64.StdEncoding.EncodeToString(raw))
 		return nil, errUndecodable
 	}
+	if hb := f.GetHeartbeat(); hb != nil {
+		c.g.metrics.countHeartbeatBytes(hb, data)
+	}
 	return &f, nil
 }
 

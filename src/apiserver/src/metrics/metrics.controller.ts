@@ -4,6 +4,7 @@ import { PatForbidden } from '../auth/pat-scope.decorator';
 import { renderDbConflictMetrics } from '../common/db-conflict-metrics';
 import { renderHttpRequestMetrics } from '../common/http-request-metrics';
 import { PrismaService } from '../prisma/prisma.service';
+import { renderLinkHeartbeatMetrics } from '../runner-api/link-heartbeat-metrics';
 import { renderRunEventSeqConflictMetrics } from '../runner-api/run-event-seq-conflicts';
 import { renderCodexResetMetrics } from '../runners/codex-reset-metrics';
 import { renderWatchMetrics } from '../watches/watch-metrics';
@@ -52,7 +53,7 @@ export class MetricsController {
  * once per FLEET_GAUGES_TTL_MS (fleet-metrics.ts).
  */
 export async function renderMetrics(prisma?: PrismaService): Promise<string> {
-  return renderDbConflictMetrics() + renderCodexResetMetrics() + renderRunEventSeqConflictMetrics()
+  return renderDbConflictMetrics() + renderCodexResetMetrics() + renderLinkHeartbeatMetrics() + renderRunEventSeqConflictMetrics()
     + renderHttpRequestMetrics()
     + (await renderWatchMetrics(prisma))
     + (await renderWikiModelMetrics(prisma))
