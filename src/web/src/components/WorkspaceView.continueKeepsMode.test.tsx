@@ -255,7 +255,9 @@ describe('Continue on a stopped session keeps its mode', { timeout: 60_000 }, ()
     expect(await continueAfter({ model: 'claude-sonnet-5-5' }, stoppedRun('claude-opus-5-5'))).toBe('auto');
   });
 
-  it('still resumes in Default when its own model has no Auto', async () => {
-    expect(await continueAfter({ model: 'claude-opus-5-5' }, stoppedRun('claude-no-auto'))).toBe('default');
+  // The intent is never rewritten here (docs/mocks/permission-mode-actual, C1): the server starts a model with no
+  // Auto in Default, records that as the mode running, and keeps Auto for a model that has it.
+  it('keeps Auto when its own model has no Auto, which the server runs as Default', async () => {
+    expect(await continueAfter({ model: 'claude-opus-5-5' }, stoppedRun('claude-no-auto'))).toBe('auto');
   });
 });

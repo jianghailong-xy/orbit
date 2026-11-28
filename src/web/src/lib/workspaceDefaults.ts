@@ -763,6 +763,12 @@ export const permissionModeSupported = (mode: string, engine: AgentProvider): bo
 export const fallbackPermissionMode = (engine: AgentProvider): string =>
   engine === AgentProvider.CURSOR ? CURSOR_DEFAULT_PERMISSION_MODE : 'default';
 
+/** The mode a composer may send on `engine`: the intent itself, unless the engine refuses it outright at
+ *  admission (permissionModeSupported). Auto on a model with no Auto is not refused but run as Default by the
+ *  server, which keeps the intent (docs/mocks/permission-mode-actual), so it is sent as picked. */
+export const clampPermissionModeForEngine = (mode: string, engine: AgentProvider): string =>
+  permissionModeSupported(mode, engine) ? mode : fallbackPermissionMode(engine);
+
 export const clampPermissionModeForModel = (
   mode: string,
   model: string,
