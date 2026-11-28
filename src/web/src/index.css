@@ -32077,3 +32077,31 @@ td > .routing-report-tier + .model-routing-flag {
 .files-pending-actions { display: inline-flex; gap: 8px; margin-left: 6px; }
 .files-pending-actions button { padding: 0; border: 0; background: none; font: inherit; color: var(--brand); cursor: pointer; }
 .files-pending-actions button:hover { text-decoration: underline; }
+
+/* The activity icon in the Drive chat panel's header and its view (board drive-web 01 ④⑤). */
+.files-activity { position: relative; }
+.files-activity.is-open { background: var(--brand-bg, var(--bg-hover)); color: var(--brand); }
+.files-activity-count { position: absolute; top: -3px; right: -4px; min-width: 15px; height: 15px; padding: 0 4px; box-sizing: border-box; border-radius: 8px;
+                        background: var(--warning-solid); color: #fff; font-size: 10px; font-weight: 700; line-height: 15px; text-align: center; }
+.wk-chat-title.is-static { cursor: default; }
+.wk-chat-view { flex: 1; min-height: 0; overflow-y: auto; }
+.drive-act { padding: 4px 14px 16px; font-size: 12.5px; }
+.drive-act-section { margin-top: 14px; }
+.drive-act-h { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--text-3); }
+.drive-act-row { padding: 9px 10px; margin-bottom: 8px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-raised); }
+.drive-act-row.is-amber { border-color: var(--warning-border, var(--border)); background: var(--warning-bg, var(--bg-hover)); }
+.drive-act-title { font-weight: 600; color: var(--text-1); overflow-wrap: anywhere; }
+.drive-act-dest, .drive-act-meta { color: var(--text-3); font-weight: 400; }
+.drive-act-bad { color: var(--danger, #d92d20); }
+.drive-act-failed { margin: 6px 0 0; padding: 6px 8px; list-style: none; border-radius: 6px; background: var(--bg-hover); color: var(--text-2); }
+.drive-act-failed code { font-size: 11.5px; }
+.drive-act-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.drive-act-btn { padding: 2px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-raised); font: inherit; color: var(--text-1); cursor: pointer; }
+.drive-act-btn.is-primary { border-color: var(--brand); background: var(--brand); color: #fff; }
+.drive-act-btn:disabled { opacity: .55; cursor: default; }
+.drive-act-group { margin-bottom: 10px; }
+.drive-act-ghead { display: flex; align-items: center; gap: 8px; }
+.drive-act-ghead b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drive-act-link { margin-left: auto; border: 0; background: none; padding: 0; font: inherit; color: var(--brand); cursor: pointer; }
+.drive-act-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 3px 0 3px 10px; color: var(--text-2); }
+.drive-act-empty { margin-top: 20px; color: var(--text-3); text-align: center; }

@@ -1,0 +1,122 @@
+{
+  "syncs": [
+    {
+      "id": "3559NZ067ine4HM2Mahv0",
+      "status": "UPLOADING",
+      "sourceName": "exports-stage",
+      "destPath": "/exports",
+      "destEntryId": null,
+      "session": {
+        "id": "5pu3sVhSNWsFh6MTxqzyjZ",
+        "title": "Sync the books",
+        "publicId": "5pu3sVhSNWsFh6MTxqzyjZ"
+      },
+      "filesSeen": 0,
+      "filesTotal": 400,
+      "filesDone": 120,
+      "filesSame": 0,
+      "filesDeleted": 0,
+      "bytesTotal": 4000000,
+      "bytesSent": 1200000,
+      "currentPath": "a/b.pdf",
+      "failed": [],
+      "failedCount": 0,
+      "error": null,
+      "startedAt": "2026-11-28T01:03:28.725Z",
+      "updatedAt": "2026-11-28T01:03:28.725Z",
+      "endedAt": null,
+      "handledAt": null,
+      "fixSessionId": null,
+      "fixRequestedAt": null,
+      "publicId": "3559NZ067ine4HM2Mahv0",
+      "destEntryPublicId": null,
+      "fixSessionPublicId": null
+    },
+    {
+      "id": "3559NYu9QDurlqqNKu81f",
+      "status": "DONE",
+      "sourceName": "books-stage",
+      "destPath": "/Books",
+      "destEntryId": null,
+      "session": {
+        "id": "5pu3sVhSNWsFh6MTxqzyjZ",
+        "title": "Sync the books",
+        "publicId": "5pu3sVhSNWsFh6MTxqzyjZ"
+      },
+      "filesSeen": 0,
+      "filesTotal": 11271,
+      "filesDone": 11267,
+      "filesSame": 0,
+      "filesDeleted": 0,
+      "bytesTotal": null,
+      "bytesSent": 0,
+      "currentPath": null,
+      "failed": [
+        {
+          "path": "0412/scan.tiff",
+          "error": "file changed while reading"
+        },
+        {
+          "path": "0977/cover.png",
+          "error": "permission denied"
+        },
+        {
+          "path": "0978/cover.png",
+          "error": "permission denied"
+        },
+        {
+          "path": "0979/cover.png",
+          "error": "permission denied"
+        }
+      ],
+      "failedCount": 4,
+      "error": null,
+      "startedAt": "2026-11-27T22:03:28.661Z",
+      "updatedAt": "2026-11-28T01:03:28.664Z",
+      "endedAt": "2026-11-27T23:03:28.661Z",
+      "handledAt": null,
+      "fixSessionId": null,
+      "fixRequestedAt": null,
+      "publicId": "3559NYu9QDurlqqNKu81f",
+      "destEntryPublicId": null,
+      "fixSessionPublicId": null
+    },
+    {
+      "id": "3559NYyFAattPQq3Br6rl",
+      "status": "DONE",
+      "sourceName": "anime-stage",
+      "destPath": "/Video",
+      "destEntryId": null,
+      "session": {
+        "id": "5pu3sVhSNWsFh6MTxqzyjZ",
+        "title": "Sync the books",
+        "publicId": "5pu3sVhSNWsFh6MTxqzyjZ"
+      },
+      "filesSeen": 0,
+      "filesTotal": 212,
+      "filesDone": 209,
+      "filesSame": 0,
+      "filesDeleted": 0,
+      "bytesTotal": null,
+      "bytesSent": 0,
+      "currentPath": null,
+      "failed": [
+        {
+          "path": "ep3.mkv",
+          "error": "file changed while reading"
+        }
+      ],
+      "failedCount": 3,
+      "error": null,
+      "startedAt": "2026-11-27T16:03:28.704Z",
+      "updatedAt": "2026-11-28T01:03:28.706Z",
+      "endedAt": "2026-11-27T17:03:28.704Z",
+      "handledAt": null,
+      "fixSessionId": "5pu3sVhSNWsFh6MTxqzyjZ",
+      "fixRequestedAt": "2026-11-28T01:03:28.704Z",
+      "publicId": "3559NYyFAattPQq3Br6rl",
+      "destEntryPublicId": null,
+      "fixSessionPublicId": "5pu3sVhSNWsFh6MTxqzyjZ"
+    }
+  ]
+}

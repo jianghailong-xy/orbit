@@ -216,6 +216,8 @@ export function useChatHost(options: ChatHostOptions) {
       attachments: WikiChatAttachments;
       dispatch: Dispatch<WikiChatAttachAction>;
       cards?: readonly WikiChatDraftView[] | null;
+      headerActions?: ReactNode;
+      view?: { title: string; body: ReactNode } | null;
     },
   ) => {
     const className = [
@@ -248,6 +250,8 @@ export function useChatHost(options: ChatHostOptions) {
               dispatch={panel.dispatch}
               cards={shownChat ? (panel.cards ?? null) : null}
               focus={focus}
+              headerActions={panel.headerActions}
+              view={panel.view}
               onChat={go}
               onClose={() => {
                 // ✕ is the owner saying no: kept on the device until the button opens the panel again (board 45, Q1 A).

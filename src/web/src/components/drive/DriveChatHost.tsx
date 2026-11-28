@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useReducer, type ReactNode } from 'react';
+import { useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
+import { UnorderedListOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { useChatHost } from '../ChatHost';
 import type { ChatOrigin } from '../WikiChatPanel';
@@ -26,6 +27,16 @@ import { WIKI_CHAT_NO_ATTACHMENTS, wikiChatAttach, type WikiChatFiles, type Wiki
 import { useDriveChanges } from '../../lib/useDriveChanges';
 import { syncRunning, useDriveSyncs } from '../../lib/driveSyncs';
 import { useDriveUploads } from '../../lib/driveUploads';
+import {
+  DRIVE_ACTIVITY_CLOSE,
+  DRIVE_ACTIVITY_OPEN,
+  DRIVE_ACTIVITY_TITLE,
+  readDrivePanelView,
+  writeDrivePanelView,
+  type DrivePanelView,
+} from '../../lib/driveActivity';
+import { Tooltip } from '../ui/Tooltip';
+import { DriveActivityView } from './DriveActivityView';
 
 /** The Agents button's state (board drive-web 01 ①④): pressed while the panel is open, a ring while work runs, an amber count. */
 export interface DriveAgents {
@@ -93,6 +104,41 @@ export function DriveChatHost({
     toggle: host.toggle,
   };
 
+  // The panel shows the chat or the activity log; the choice is kept on this browser. A chat opened or picked turns it
+  // back to the chat.
+  const [view, setView] = useState<DrivePanelView>(readDrivePanelView);
+  const showView = (next: DrivePanelView) => {
+    setView(next);
+    writeDrivePanelView(next);
+  };
+  const shownChat = useRef(host.chat);
+  useEffect(() => {
+    const was = shownChat.current;
+    shownChat.current = host.chat;
+    // Turning to another chat is going back to chat; the first chat the panel shows (it opens as the list is read) is not.
+    if (was !== null && host.chat !== null && was !== host.chat) showView('chat');
+  }, [host.chat]);
+  const activityOpen = view === 'activity';
+  const count = agents.count;
+  const activityIcon = (
+    <Tooltip content={activityOpen ? DRIVE_ACTIVITY_CLOSE : DRIVE_ACTIVITY_OPEN} side="bottom">
+      <button
+        type="button"
+        className={`wk-chat-ib files-activity${activityOpen ? ' is-open' : ''}`}
+        aria-label={activityOpen ? DRIVE_ACTIVITY_CLOSE : DRIVE_ACTIVITY_OPEN}
+        aria-pressed={activityOpen}
+        onClick={() => showView(activityOpen ? 'chat' : 'activity')}
+      >
+        <UnorderedListOutlined />
+        {count > 0 && (
+          <span className="files-activity-count" aria-label={`${count} need you`}>
+            {count > 99 ? '99+' : count}
+          </span>
+        )}
+      </button>
+    </Tooltip>
+  );
+
   const [attachments, dispatch] = useReducer(wikiChatAttach, WIKI_CHAT_NO_ATTACHMENTS);
   const page = useMemo<WikiChatPage | null>(
     () => (folderName === null ? null : { kind: 'folder', folderId, label: driveChatFolderLabel(folderName) }),
@@ -137,5 +183,26 @@ export function DriveChatHost({
     [choices],
   );
 
-  return host.render(typeof children === 'function' ? children({ chatOpen: host.open, agents }) : children, { origin, attachments, dispatch });
+  return host.render(typeof children === 'function' ? children({ chatOpen: host.open, agents }) : children, {
+    origin,
+    attachments,
+    dispatch,
+    headerActions: activityIcon,
+    view: activityOpen
+      ? {
+          title: DRIVE_ACTIVITY_TITLE,
+          body: (
+            <DriveActivityView
+              held={changes.held}
+              syncs={syncs}
+              uploads={uploads}
+              onOpenChat={(sessionId) => {
+                showView('chat');
+                host.openChat(sessionId);
+              }}
+            />
+          ),
+        }
+      : null,
+  });
 }
