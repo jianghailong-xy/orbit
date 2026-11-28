@@ -39,6 +39,7 @@ vi.mock('../components/SessionConversation', () => ({
 }));
 
 const { DrivePage } = await import('./DrivePage');
+const { refreshDriveSyncs, resetDriveSyncs } = await import('../lib/driveSyncs');
 
 /**
  * The Drive chat (board docs/mocks/drive-chat/01-board.html ② ⑤, owner Q1 A and Q3 A) on the real Drive page over a fake
@@ -63,6 +64,7 @@ const entryView = (f: { id: string; parentId: string | null; name: string }) => 
 const fileView = (id: string, name: string) => ({ ...entryView({ id, parentId: 'root', name }), kind: 'FILE', sizeBytes: 1200 });
 const files = [fileView('fa', 'a.pdf'), fileView('fb', 'b.pdf'), fileView('fc', 'c.pdf')];
 let groups: unknown[] = [];
+let syncList: unknown[] = [];
 
 const row = (over: Partial<DriveChatRow> & { sessionId: string }): DriveChatRow => ({
   title: over.sessionId, status: 'AWAITING_INPUT', open: true, completed: false, working: false, needsYou: 0,
@@ -114,7 +116,7 @@ async function serve(url: string, init?: RequestInit): Promise<Response> {
     return reply(200, { ...chats, chats: chats.chats.filter((c) => !q || c.title.toLowerCase().includes(q)) });
   }
   if (path === '/api/share-links') return reply(200, { links: [] });
-  if (path === '/api/drive/syncs') return reply(200, { syncs: [] });
+  if (path === '/api/drive/syncs') return reply(200, { syncs: syncList });
   if (path === '/api/users/me') return reply(200, { ...me, preferences: { defaultPermissionMode: 'default' } });
   if (path === '/api/workspaces') {
     return reply(200, [
@@ -159,6 +161,8 @@ beforeEach(() => {
   me = { id: 'u1' };
   groups = [];
   questions = [];
+  syncList = [];
+  resetDriveSyncs();
   streamState.events = [];
   writes = [];
   chatReads = [];
@@ -223,7 +227,7 @@ async function reread(): Promise<void> {
 }
 
 const where = (): string | null => container.querySelector('output')?.getAttribute('data-where') ?? null;
-const fab = (): HTMLButtonElement | null => document.querySelector<HTMLButtonElement>('.wk-chat-fab');
+const fab = (): HTMLButtonElement | null => document.querySelector<HTMLButtonElement>('.files-head-actions button.files-agents');
 const panel = (): HTMLElement | null => document.querySelector<HTMLElement>('.wk-chat-panel');
 const frame = (): HTMLElement | null => document.querySelector<HTMLElement>('.wk-chat-frame');
 const title = (): string | null => document.querySelector('.wk-chat-title .t')?.textContent ?? null;
@@ -480,7 +484,7 @@ describe('the overlay\'s place in the stylesheet', () => {
   });
 });
 
-describe('the round button count (board ⑤)', () => {
+describe('the Agents button count (board ⑤)', () => {
   it('adds held groups and open questions to the chats\' approvals', async () => {
     chats.chats = [row({ sessionId: 'S1', needsYou: 1 })];
     chats.fab = { needsYou: 1, working: false };
@@ -488,7 +492,33 @@ describe('the round button count (board ⑤)', () => {
     questions = [{ id: 'q1', sessionId: 'S1', status: 'OPEN', createdAt: AT, moving: { entryId: 'm', path: '/m', sizeBytes: 1, modifiedAt: AT, lastWriter: { kind: 'OWNER' } }, existing: { entryId: 'x', path: '/x', sizeBytes: 1, modifiedAt: AT, lastWriter: { kind: 'OWNER' } } }];
     await open('/drive');
     await press(byLabel('Hide chat'));
-    expect(text(fab())).toBe('3');
-    expect(fab()?.getAttribute('aria-label')).toContain('need you');
+    expect(text(fab()?.querySelector('.files-agents-count'))).toBe('3');
+    expect(fab()?.querySelector('.files-agents-count')?.getAttribute('aria-label')).toBe('3 need you');
+  });
+
+  const sync = (over: Record<string, unknown>) => ({
+    id: 's1', status: 'FAILED', sourceName: 'books-stage/', destPath: '/Books', destEntryId: null, session: null,
+    filesSeen: 4, filesTotal: 4, filesDone: 0, filesSame: 0, filesDeleted: 0, bytesTotal: 100, bytesSent: 0, currentPath: null,
+    failed: [{ path: 'a.pdf', error: 'permission denied' }], failedCount: 1, error: null,
+    startedAt: AT, updatedAt: AT, endedAt: AT, handledAt: null, fixSessionId: null, fixRequestedAt: null, ...over,
+  });
+
+  it('counts a sync that failed or finished with failed files and is not handled, and none that were handled or ran clean', async () => {
+    syncList = [
+      sync({ id: 's1' }),
+      sync({ id: 's2', status: 'DONE' }),
+      sync({ id: 's3', handledAt: AT }),
+      sync({ id: 's5', status: 'DONE', handledAt: AT }),
+      sync({ id: 's6', status: 'DONE', failed: [], failedCount: 0 }),
+    ];
+    await open('/drive');
+    expect(text(fab()?.querySelector('.files-agents-count'))).toBe('2');
+    expect(fab()?.querySelector('.files-agents-ring')).toBeNull();
+
+    syncList = [sync({ id: 's4', status: 'UPLOADING', failed: [], failedCount: 0, endedAt: null })];
+    await act(async () => refreshDriveSyncs());
+    await settle();
+    expect(fab()?.querySelector('.files-agents-ring')).toBeTruthy();
+    expect(fab()?.querySelector('.files-agents-count')).toBeNull();
   });
 });
