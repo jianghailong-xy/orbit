@@ -3222,16 +3222,20 @@ model RunEvent {
 /// migration 1805), with what caused it: CLAIM (the mode a claim handed the runner), OWNER_PICK (the owner's config
 /// change, `client` naming the app when known), ENGINE_REPORT (the engine said it runs in another mode), RUNNER_CORRECTION
 /// (the runner switched the engine itself), RESPAWN (the engine came back from a re-spawn in this mode) or ORBIT_CHANGE
-/// (a config change Orbit made). Append-only; the cause CHECK lives in the migration.
+/// (a config change Orbit made). Append-only; the cause CHECK lives in the migration. A CLAIM that handed another mode
+/// than the session asked for carries the mode asked for and why (`requestedMode`, `reason`: ROOT_RUNNER or
+/// SCHEDULED_RUN, migration 1807); both are null on every other row.
 model SessionPermissionModeChange {
-  id        String   @id @db.Uuid
-  sessionId String   @map("session_id") @db.Uuid
-  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  fromMode  String?  @map("from_mode")
-  toMode    String   @map("to_mode")
-  cause     String
-  client    String?
-  createdAt DateTime @default(now()) @map("created_at")
+  id            String   @id @db.Uuid
+  sessionId     String   @map("session_id") @db.Uuid
+  session       Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  fromMode      String?  @map("from_mode")
+  toMode        String   @map("to_mode")
+  cause         String
+  client        String?
+  requestedMode String?  @map("requested_mode")
+  reason        String?
+  createdAt     DateTime @default(now()) @map("created_at")
 
   @@index([sessionId, createdAt])
   @@map("session_permission_mode_change")

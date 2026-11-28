@@ -3610,7 +3610,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1806 adds a partial index on activity. No preserved relation or row is changed.
       // Written as 1461 on its task branch, it was renumbered to 1470 after main took 1462, to 1495 after main took
       // 1491, to 1540 after other branches took 1495, to 1736 after main took 1547-1730 (1730 the highest on main then), and to 1756 after main took 1750, then to 1806 after main took 1780-1800.
-      '1806_default_permission_mode_audit'],
+      '1806_default_permission_mode_audit',
+      // 1807 adds the nullable session_permission_mode_change.requested_mode and .reason and one check on that table;
+      // it is none of the preserved relations, no row is written, and no trigger, function or DONE fence changes.
+      // Written as 1740, it was renumbered to 1770 after main took 1750 and this project's 1735 and 1736 moved to 1755
+      // and 1756, and to 1807 after main took 1780-1800 and they moved to 1805 and 1806; it stays after 1805, which
+      // creates the table it alters.
+      '1807_permission_mode_change_claim_substitution'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
