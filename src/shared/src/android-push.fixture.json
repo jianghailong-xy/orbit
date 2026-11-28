@@ -236,7 +236,9 @@
           "thread-id": "019a0000-0000-7000-8000-000000000004"
         },
         "kind": "project-orphan",
-        "projectID": "019a0000-0000-7000-8000-000000000004"
+        "projectID": "019a0000-0000-7000-8000-000000000004",
+        "taskID": "019a0000-0000-7000-8000-000000000027",
+        "sessionID": "019a0000-0000-7000-8000-000000000028"
       },
       "data": {
         "version": "1",
@@ -245,7 +247,7 @@
         "eventId": "40000000-0000-4000-8000-000000000008",
         "notificationKey": "project-orphan-019a0000-0000-5000-8000-00000000000b",
         "sentAt": "2026-11-12T13:00:00.000Z",
-        "payload": "{\"kind\":\"project-orphan\",\"projectID\":\"019a0000-0000-7000-8000-000000000004\",\"title\":\"Session translation: nobody has this\",\"body\":\"Task “task D” has a running session. Nobody can move it now.\",\"threadId\":\"019a0000-0000-7000-8000-000000000004\"}"
+        "payload": "{\"kind\":\"project-orphan\",\"projectID\":\"019a0000-0000-7000-8000-000000000004\",\"taskID\":\"019a0000-0000-7000-8000-000000000027\",\"sessionID\":\"019a0000-0000-7000-8000-000000000028\",\"title\":\"Session translation: nobody has this\",\"body\":\"Task “task D” has a running session. Nobody can move it now.\",\"threadId\":\"019a0000-0000-7000-8000-000000000004\"}"
       }
     },
     {
