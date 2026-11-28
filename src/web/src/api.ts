@@ -1,6 +1,7 @@
 import type {
   ApprovalTranslation,
   BranchCommit,
+  LandingPullRequestView,
   GuestSessionSummary,
   MainCheckoutActionAnswer,
   MainCheckoutActionPost,
@@ -2241,9 +2242,13 @@ export interface SessionDetail {
   isolationStatus?: string | null;
   // "Merge to main" outcome (see mergeSessionToMain): 'pending' while the runner works,
   // then 'merged' (mergedAt set) | 'conflict' | 'error' (mergeError carries why). Null
-  // until the user clicks merge.
-  mergeStatus?: 'pending' | 'merged' | 'conflict' | 'error' | null;
+  // until the user clicks merge. 'pull_request': GitHub refused the push to the target
+  // because of its rules, so the runner pushed a landing branch and the merge waits on the
+  // pull request `mergePullRequest` describes (docs/design/protected-branch-landing.md §4.6).
+  mergeStatus?: 'pending' | 'merged' | 'conflict' | 'error' | 'pull_request' | null;
   mergeError?: string | null;
+  /** The pull request this session's Merge waits on or landed through; null for a direct push. */
+  mergePullRequest?: LandingPullRequestView | null;
   mergeRecovery?: MergeRecovery | null;
   mergeRepairSession?: MergeRepairSession | null;
   mergeRecoveryAction?: MergeRecoveryAction | null;

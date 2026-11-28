@@ -93,12 +93,12 @@ const withDefault = (others: RunnerEngineAccount[], over: Partial<Runner> = {}) 
 /** Codex as the control plane serves it with Default removed (usedRunnerEngines): the remaining accounts,
  *  the marker, the engine's sign-in read from one of them (the first signed in), and Default's windows
  *  gone from its quota — one remaining account's becoming the snapshot's own. */
-const removed = (remaining: RunnerEngineAccount[], over: Partial<Runner> = {}, name?: string) =>
+const removed = (remaining: RunnerEngineAccount[], over: Partial<Runner> = {}, name?: string, defaultAuth?: RunnerEngineAccount['auth']) =>
   runner(
     {
       accounts: remaining,
       auth: (remaining.find((a) => a.auth === 'yes') ?? remaining[0]).auth,
-      removedDefault: { home: DEFAULT.home, ...(name ? { name } : {}), fingerprintPrefix: DEFAULT.fingerprintPrefix },
+      removedDefault: { home: DEFAULT.home, ...(name ? { name } : {}), fingerprintPrefix: DEFAULT.fingerprintPrefix, ...(defaultAuth ? { auth: defaultAuth } : {}) },
     },
     {
       planUsage: {
@@ -382,6 +382,19 @@ describe('an engine whose Default is removed from Orbit', () => {
     expect(removedLine(page)?.querySelector('.re-removed-line')?.textContent).toBe(
       'jianghailong.main · ~/.codex isn’t used by Orbit',
     );
+  });
+
+  it('draws no line once Default’s login is off the machine, and the last account then ends the group', () => {
+    const page = mount([removed([WORK, PERSONAL], {}, undefined, 'no')]);
+    expect(removedLine(page)).toBeNull();
+    expect(accountsOf(page).map(nameOf)).toEqual(['Work', 'Personal']);
+    expect(accountsOf(page)[1].classList.contains('re-acct-end')).toBe(true);
+  });
+
+  it.each(['yes', 'unknown', undefined] as const)('keeps the line and Use again while Default’s sign-in is %s', (auth) => {
+    const page = mount([removed([WORK, PERSONAL], {}, undefined, auth)]);
+    expect(removedLine(page)?.querySelector('.re-removed-line')?.textContent).toBe('Default · ~/.codex isn’t used by Orbit');
+    expect(rows(removedLine(page)!, 'button').map((b) => b.textContent?.trim())).toEqual(['Use again']);
   });
 
   it('no longer offers Default anything — its row is gone', async () => {

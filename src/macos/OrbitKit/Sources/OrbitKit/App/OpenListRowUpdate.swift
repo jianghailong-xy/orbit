@@ -96,21 +96,17 @@ public struct OpenListDerived: Equatable, Sendable {
     public struct Activity: Equatable, Sendable {
         /// `WorkspaceActivityLogic.runningWorkspaceIDs(list)`.
         public var runningWorkspaceIDs: Set<String>
-        /// `WorkspaceActivityLogic.jobWorkspaceIDs(list)`.
-        public var jobWorkspaceIDs: Set<String>
         /// `ProjectAttention.coordinatorPulses(list)`.
         public var coordinatorPulses: [String: ProjectCoordinatorPulse]
 
-        public init(runningWorkspaceIDs: Set<String>, jobWorkspaceIDs: Set<String>,
+        public init(runningWorkspaceIDs: Set<String>,
                     coordinatorPulses: [String: ProjectCoordinatorPulse]) {
             self.runningWorkspaceIDs = runningWorkspaceIDs
-            self.jobWorkspaceIDs = jobWorkspaceIDs
             self.coordinatorPulses = coordinatorPulses
         }
 
         public init(_ list: [Session]) {
             self.init(runningWorkspaceIDs: WorkspaceActivityLogic.runningWorkspaceIDs(list),
-                      jobWorkspaceIDs: WorkspaceActivityLogic.jobWorkspaceIDs(list),
                       coordinatorPulses: ProjectAttention.coordinatorPulses(list))
         }
     }
@@ -175,10 +171,6 @@ public struct OpenListDerived: Equatable, Sendable {
         if oldAgent != newAgent
             || WorkspaceActivityLogic.isRunning(old) != WorkspaceActivityLogic.isRunning(new) {
             marks.runningWorkspaceIDs = WorkspaceActivityLogic.runningWorkspaceIDs(list)
-        }
-        if oldAgent != newAgent
-            || WorkspaceActivityLogic.isRunningJob(old) != WorkspaceActivityLogic.isRunningJob(new) {
-            marks.jobWorkspaceIDs = WorkspaceActivityLogic.jobWorkspaceIDs(list)
         }
         // Only a project's coordinator conversation carries a pulse; the rest of the list is none.
         if old.projectId != nil || new.projectId != nil {

@@ -193,6 +193,11 @@
 // chose: old names keep working wherever a host .env still uses them). The apiserver's and pgbackup's ORBIT_FILES_*
 // lines become ORBIT_DRIVE_*, each defaulting to its ORBIT_FILES_* value and then to the default it had, so a host
 // .env from before renders the same values under the new names. Nothing else moves; the blocks below pin the lines.
+//
+// On 2026-11-27 the account owner approved five lines of pgbackup's environment, asked in the session that added them, once
+// Ceph S3 was available: the bucket and prefix the archive's off-host copy goes to instead of ORBIT_BACKUP_SYNC_TARGET, and
+// that bucket's endpoint, region and key pair, each empty unless the host's .env sets it (docs/postgres-backup-restore.md).
+// No service, mount or port is added, and a deployment whose .env sets none of them mirrors over rsync as before.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -660,6 +665,14 @@ const PGBACKUP_S3_MIRROR = [
   '      ORBIT_DRIVE_S3_SECRET_ACCESS_KEY: "${ORBIT_DRIVE_S3_SECRET_ACCESS_KEY:-${ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY:-${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}}}"',
   '      ORBIT_DRIVE_S3_REGION: "${ORBIT_DRIVE_S3_REGION:-${ORBIT_DOCUMENTS_S3_REGION:-${ORBIT_FILES_S3_REGION:-}}}"',
 ];
+// The archive's S3 copy (2026-11-27, the top of this file), right after the Drive bucket's lines.
+const PGBACKUP_S3_ARCHIVE = [
+  '      ORBIT_BACKUP_S3_TARGET: "${ORBIT_BACKUP_S3_TARGET:-}"',
+  '      ORBIT_BACKUP_S3_ENDPOINT: "${ORBIT_BACKUP_S3_ENDPOINT:-}"',
+  '      ORBIT_BACKUP_S3_REGION: "${ORBIT_BACKUP_S3_REGION:-}"',
+  '      ORBIT_BACKUP_S3_ACCESS_KEY_ID: "${ORBIT_BACKUP_S3_ACCESS_KEY_ID:-}"',
+  '      ORBIT_BACKUP_S3_SECRET_ACCESS_KEY: "${ORBIT_BACKUP_S3_SECRET_ACCESS_KEY:-}"',
+];
 // The approved additions to postgres's command that (k) sets aside, which (i) pins byte for byte with the rest of the
 // service. Each is found by its LAST line: `      - -c` opens every setting, so a block's first line would find the
 // command's first setting instead. Only its lines and the comment directly above them go, up to the directive before
@@ -674,7 +687,7 @@ const APPROVED_POSTGRES_BLOCKS = [
   ],
 ];
 test('nothing beyond the approved configuration was added to pgbackup, apiserver or web', () => {
-  const approved = { pgbackup: [...PGBACKUP_S3_MIRROR, PGBACKUP_FILES_MOUNT], apiserver: APPROVED_APISERVER_ADDITIONS, web: APPROVED_WEB_BLOCK };
+  const approved = { pgbackup: [...PGBACKUP_S3_MIRROR, ...PGBACKUP_S3_ARCHIVE, PGBACKUP_FILES_MOUNT], apiserver: APPROVED_APISERVER_ADDITIONS, web: APPROVED_WEB_BLOCK };
   for (const [name, additions] of Object.entries(approved)) {
     assert.deepEqual(
       directivesNotInBaseline(currentServices.get(name), survivingConfigurationServices.get(name)),
@@ -719,7 +732,7 @@ function withoutService(source, name) {
  */
 function withoutApprovedAdditions(source) {
   let lines = source.split('\n');
-  for (const block of [PGBACKUP_S3_MIRROR, ...APPROVED_APISERVER_BLOCKS, [PGBACKUP_FILES_MOUNT], APPROVED_WEB_BLOCK]) {
+  for (const block of [PGBACKUP_S3_MIRROR, PGBACKUP_S3_ARCHIVE, ...APPROVED_APISERVER_BLOCKS, [PGBACKUP_FILES_MOUNT], APPROVED_WEB_BLOCK]) {
     const first = lines.indexOf(block[0]);
     assert.ok(first > 0, `docker-compose.yml no longer has the approved ${block[0].trim()}`);
     const last = lines.indexOf(block[block.length - 1], first);

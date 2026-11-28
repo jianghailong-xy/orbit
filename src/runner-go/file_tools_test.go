@@ -413,6 +413,27 @@ func TestFileUploadFromASubAgentNamesItsRun(t *testing.T) {
 	}
 }
 
+// A remote SubAgent fetches a file its parent kept the same way: both the description and the bytes name the run.
+func TestFileFetchFromASubAgentNamesItsRun(t *testing.T) {
+	api := newFakeFileServer(t)
+	s := api.mcp(t)
+	t.Setenv(envSubagentRunID, "run-1")
+	file := api.keep("patch.diff", "text/plain", "", "file", []byte("diff bytes"))
+
+	if got := fileResult(t, s, "file_fetch", map[string]interface{}{"id": file.id}); got.SHA256 != sha256Hex([]byte("diff bytes")) {
+		t.Fatalf("fetched = %+v", got)
+	}
+	want := []string{"GET /api/runner/sessions/session-1/files/" + file.id, "GET /api/runner/sessions/session-1/attachments/" + file.id}
+	if !equalStrings(api.calls, want) {
+		t.Fatalf("calls = %v, want %v", api.calls, want)
+	}
+	for i, query := range api.queries {
+		if query != "subagentRunId=run-1" {
+			t.Errorf("%s came with query %q, want the run named", api.calls[i], query)
+		}
+	}
+}
+
 // A remote SubAgent's checkout is a worktree under Orbit's own directory (addRemoteSubagentTree): it may upload from
 // that one, and from no other run's.
 func TestFileUploadFromARemoteSubAgentReadsItsOwnWorktree(t *testing.T) {

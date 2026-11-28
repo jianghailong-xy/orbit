@@ -1,6 +1,6 @@
--- 1770 — a claim that hands the runner another mode than the session asked for says so on the mode change it records.
+-- 1807 — a claim that hands the runner another mode than the session asked for says so on the mode change it records.
 --
--- A claim records the mode it hands the runner as the session's actual mode (cause CLAIM, migration 1755). Where that
+-- A claim records the mode it hands the runner as the session's actual mode (cause CLAIM, migration 1805). Where that
 -- mode is not the one the session asked for, the row now carries the mode asked for and why
 -- (CLAIM_PERMISSION_MODE_SUBSTITUTION_REASONS in @orbit/shared): Bypass on a root runner (ROOT_RUNNER), a scheduled run
 -- on Claude Code (SCHEDULED_RUN). Both are NULL on every other row, and on every row written before this migration;

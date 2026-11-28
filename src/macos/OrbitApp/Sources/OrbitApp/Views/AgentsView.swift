@@ -78,9 +78,6 @@ struct WorkspaceNavigationRow: View {
     let selected: Bool
     let offline: Bool
     let running: Bool
-    /// Background work in flight in this Workspace (`AppModel.jobWorkspaceIDs`). Drawn below
-    /// `running` and never as the spinner: nobody is generating, something is happening anyway.
-    var jobs: Bool = false
     let waiting: Int
     var shortcut: Int? = nil
     var runnerOnHover: Bool = false
@@ -98,7 +95,7 @@ struct WorkspaceNavigationRow: View {
         // The heartbeat's offline reading is not said of a managed runner: its shared state is.
         let offlineNow = offline && managedRow == nil
         let status = WorkspaceNavigationStatusLogic.resolve(
-            waiting: waiting, running: running, jobs: jobs, runnerOffline: offlineNow)
+            waiting: waiting, running: running, runnerOffline: offlineNow)
         HStack(spacing: 12) {
             WorkspaceFolderIcon(selected: selected, offline: offlineNow,
                                 cloud: RunnerPageFormat.isManaged(agent.runnerId, managedRunnerID: app.managedRunner?.status?.runnerId),
@@ -121,12 +118,6 @@ struct WorkspaceNavigationRow: View {
                 // amber count above is the only thing in this column asking for you.
                 SpinnerGlyph(color: .secondary)
                     .accessibilityLabel("Session running")
-            } else if status == .jobs {
-                // The session row's own mark for the same fact, in the same slot: a background job
-                // in flight, with nobody generating. Breathing rather than turning, so it can never
-                // be read as the spinner above it.
-                BreathingGlyph(systemImage: "terminal")
-                    .accessibilityLabel("Background job running")
             } else if let managedRow, managedRow.kind != .available {
                 Text(managedRow.label)
                     .font(.orbitMeta)

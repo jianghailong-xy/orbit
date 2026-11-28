@@ -1,0 +1,136 @@
+{
+  "groups": [
+    {
+      "id": "4DRhUmZIJPVp7q6tuawd5L",
+      "sessionId": "7OM3zBx4SgOtzaBywaDw0Q",
+      "turnId": "2pHSm0zLTa7cOuP30x2n8G",
+      "status": "DONE",
+      "held": false,
+      "createdAt": "2026-11-28T01:03:28.447Z",
+      "appliedAt": null,
+      "undoneAt": null,
+      "counts": {
+        "RENAME": 3
+      },
+      "total": 3,
+      "skipped": 0,
+      "items": [
+        {
+          "id": "3559NYa4Lk4PPcNhy52V7",
+          "kind": "RENAME",
+          "entryId": "3559NWHGW7f6j5mUaQnnH",
+          "entryKind": "FILE",
+          "before": {
+            "parentId": "3559NWEEypvO6rHZjj4sG",
+            "parentPath": "/Books",
+            "name": "a.jpg",
+            "parentPublicId": "3559NWEEypvO6rHZjj4sG"
+          },
+          "after": {
+            "parentId": "3559NWEEypvO6rHZjj4sG",
+            "parentPath": "/Books",
+            "name": "0412-a.jpg",
+            "parentPublicId": "3559NWEEypvO6rHZjj4sG"
+          },
+          "state": "DONE",
+          "reason": null,
+          "publicId": "3559NYa4Lk4PPcNhy52V7",
+          "entryPublicId": "3559NWHGW7f6j5mUaQnnH"
+        },
+        {
+          "id": "3559NYf2fOksmS3SDV1P0",
+          "kind": "RENAME",
+          "entryId": "3559NWXLfCr39sHo5fjDJ",
+          "entryKind": "FILE",
+          "before": {
+            "parentId": "3559NWEEypvO6rHZjj4sG",
+            "parentPath": "/Books",
+            "name": "b.jpg",
+            "parentPublicId": "3559NWEEypvO6rHZjj4sG"
+          },
+          "after": {
+            "parentId": "3559NWEEypvO6rHZjj4sG",
+            "parentPath": "/Books",
+            "name": "0412-b.jpg",
+            "parentPublicId": "3559NWEEypvO6rHZjj4sG"
+          },
+          "state": "DONE",
+          "reason": null,
+          "publicId": "3559NYf2fOksmS3SDV1P0",
+          "entryPublicId": "3559NWXLfCr39sHo5fjDJ"
+        },
+        {
+          "id": "3559NYhfpgBiIzh9ptAYE",
+          "kind": "RENAME",
+          "entryId": "3559NWhHwb4A0xXLuDHMw",
+          "entryKind": "FILE",
+          "before": {
+            "parentId": "3559NWEEypvO6rHZjj4sG",
+            "parentPath": "/Books",
+            "name": "c.jpg",
+            "parentPublicId": "3559NWEEypvO6rHZjj4sG"
+          },
+          "after": {
+            "parentId": "3559NWEEypvO6rHZjj4sG",
+            "parentPath": "/Books",
+            "name": "0412-c.jpg",
+            "parentPublicId": "3559NWEEypvO6rHZjj4sG"
+          },
+          "state": "DONE",
+          "reason": null,
+          "publicId": "3559NYhfpgBiIzh9ptAYE",
+          "entryPublicId": "3559NWhHwb4A0xXLuDHMw"
+        }
+      ],
+      "heldItems": [],
+      "publicId": "4DRhUmZIJPVp7q6tuawd5L",
+      "sessionPublicId": "7OM3zBx4SgOtzaBywaDw0Q",
+      "turnPublicId": "2pHSm0zLTa7cOuP30x2n8G"
+    },
+    {
+      "id": "6gkwBcCVZXd0epocIJwZoV",
+      "sessionId": "7OM3zBx4SgOtzaBywaDw0Q",
+      "turnId": "2pHSm0zLTa7cOuP30x2n8G",
+      "status": "PENDING",
+      "held": true,
+      "createdAt": "2026-11-28T01:03:28.558Z",
+      "appliedAt": null,
+      "undoneAt": null,
+      "counts": {
+        "RENAME": 2
+      },
+      "total": 2,
+      "skipped": 0,
+      "items": [],
+      "heldItems": [
+        {
+          "id": "6TE7XxhUuRuy6y770m3eDk",
+          "kind": "RENAME",
+          "entryId": null,
+          "name": "d.jpg",
+          "fromPath": "/Books/d.jpg",
+          "toPath": "/Books/0412-d.jpg",
+          "state": "PENDING",
+          "reason": null,
+          "publicId": "6TE7XxhUuRuy6y770m3eDk",
+          "entryPublicId": null
+        },
+        {
+          "id": "hGb2YuUzsA2zxfANsiFb0",
+          "kind": "RENAME",
+          "entryId": null,
+          "name": "e.jpg",
+          "fromPath": "/Books/e.jpg",
+          "toPath": "/Books/0412-e.jpg",
+          "state": "PENDING",
+          "reason": null,
+          "publicId": "hGb2YuUzsA2zxfANsiFb0",
+          "entryPublicId": null
+        }
+      ],
+      "publicId": "6gkwBcCVZXd0epocIJwZoV",
+      "sessionPublicId": "7OM3zBx4SgOtzaBywaDw0Q",
+      "turnPublicId": "2pHSm0zLTa7cOuP30x2n8G"
+    }
+  ]
+}

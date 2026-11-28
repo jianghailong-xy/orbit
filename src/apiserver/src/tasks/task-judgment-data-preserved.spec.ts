@@ -3587,22 +3587,36 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1750 adds the nullable `runner_presence.last_heard_at` (catalog only, no row rewritten) to the UNLOGGED presence
       // table. No `task`, `session`, ledger table or preserved trigger/function is touched, and no DONE fence changes.
       '1750_runner_presence_last_heard_at',
-      // 1755 adds two nullable columns on session, actual_permission_mode and actual_permission_mode_at, and a new
+      // 1780 creates `drive_move` only (who moved or renamed a drive entry), with a foreign key to "user"; 1781 builds two
+      // indexes CONCURRENTLY on drive_version and drive_chat_change. No row is written, and no preserved relation,
+      // trigger, function or DONE fence changes.
+      '1780_drive_move',
+      '1781_drive_activity_indexes',
+      // 1790 adds three nullable columns to `drive_sync` (handled_at, fix_session_id, fix_requested_at), catalog only,
+      // no row rewritten. No `task`, `session`, ledger table or preserved trigger/function is touched, and no DONE fence
+      // changes.
+      '1790_drive_sync_handled',
+      // 1800 adds the nullable `runner.offline_alerted_at` (catalog only, no row rewritten), which the reaper's runner
+      // presence alert sets and clears. No `task`, `session`, ledger table or preserved trigger/function is touched, and
+      // no DONE fence changes.
+      '1800_runner_offline_alerted_at',
+      // 1805 adds two nullable columns on session, actual_permission_mode and actual_permission_mode_at, and a new
       // append-only table session_permission_mode_change (cascades with its session); no row is written, and no preserved
       // relation, trigger, function or DONE fence changes. Written as 1317, renumbered to 1437 to sit after main's
       // migrations, and to 1735 after main took 1438-1730 (1730 the highest on main then), and to 1755 after main took 1750 (the
-      // highest on main then), below the project's 1757 onward,
+      // highest on main then), and to 1805 after main took 1780-1800, below the project's 1807 onward,
       // which alters this table.
-      '1755_session_actual_permission_mode',
-      // 1756 adds a partial index on activity. No preserved relation or row is changed.
+      '1805_session_actual_permission_mode',
+      // 1806 adds a partial index on activity. No preserved relation or row is changed.
       // Written as 1461 on its task branch, it was renumbered to 1470 after main took 1462, to 1495 after main took
-      // 1491, to 1540 after other branches took 1495, to 1736 after main took 1547-1730 (1730 the highest on main then), and to 1756 after main took 1750.
-      '1756_default_permission_mode_audit',
-      // 1770 adds the nullable session_permission_mode_change.requested_mode and .reason and one check on that table;
+      // 1491, to 1540 after other branches took 1495, to 1736 after main took 1547-1730 (1730 the highest on main then), and to 1756 after main took 1750, then to 1806 after main took 1780-1800.
+      '1806_default_permission_mode_audit',
+      // 1807 adds the nullable session_permission_mode_change.requested_mode and .reason and one check on that table;
       // it is none of the preserved relations, no row is written, and no trigger, function or DONE fence changes.
       // Written as 1740, it was renumbered to 1770 after main took 1750 and this project's 1735 and 1736 moved to 1755
-      // and 1756 (1762 the highest on any branch then); it stays after 1755, which creates the table it alters.
-      '1770_permission_mode_change_claim_substitution'],
+      // and 1756, and to 1807 after main took 1780-1800 and they moved to 1805 and 1806; it stays after 1805, which
+      // creates the table it alters.
+      '1807_permission_mode_change_claim_substitution'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.

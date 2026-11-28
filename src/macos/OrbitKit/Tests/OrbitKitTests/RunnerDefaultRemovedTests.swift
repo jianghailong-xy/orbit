@@ -65,10 +65,11 @@ final class RunnerDefaultRemovedTests: XCTestCase {
     /// Codex as the control plane serves it with Default removed (usedRunnerEngines): the accounts that
     /// remain, the marker, the engine's sign-in the first signed in's, and Default's windows gone from its
     /// quota — one remaining account's becoming the snapshot's own.
-    private func removed(_ remaining: [[String: Any]], name: String? = nil,
+    private func removed(_ remaining: [[String: Any]], name: String? = nil, defaultAuth: String? = nil,
                          _ changes: [String: Any] = [:]) throws -> Runner {
         var marker: [String: Any] = ["home": "/root/.codex", "fingerprintPrefix": "cxa1_2b7e9013"]
         if let name { marker["name"] = name }
+        if let defaultAuth { marker["auth"] = defaultAuth }
         var usage: [String: Any] = remaining.count == 1 ? Self.window(Self.used[Self.id(remaining[0])]!) : ["provider": "codex"]
         usage["accounts"] = Dictionary(uniqueKeysWithValues: remaining.map { (Self.id($0), Self.window(Self.used[Self.id($0)]!)) })
         let auth = (remaining.first { $0["auth"] as? String == "yes" } ?? remaining[0])["auth"] ?? "unknown"
@@ -204,6 +205,17 @@ final class RunnerDefaultRemovedTests: XCTestCase {
         XCTAssertEqual(RunnerPageFormat.signedOutNote(only, alone: true, engine: "codex"),
                        "Sessions on this runner can’t use Codex until you sign in again.")
         XCTAssertEqual(RunnerPageFormat.removedDefaultLine(health), "Default · ~/.codex isn’t used by Orbit")
+    }
+
+    func testTheLineIsLeftOutOnceDefaultsLoginIsOffTheMachine() throws {
+        let gone = try codex(try removed([Self.workAccount, Self.personalAccount], defaultAuth: "no"))
+        XCTAssertNil(RunnerPageFormat.removedDefaultLine(gone))
+        // The marker stays: removal wording and Automatic's pick still know Default is removed.
+        XCTAssertEqual(RunnerPageFormat.removedDefaultName(gone), "Default")
+        for auth in ["yes", "unknown", nil] as [String?] {
+            let health = try codex(try removed([Self.workAccount, Self.personalAccount], defaultAuth: auth))
+            XCTAssertEqual(RunnerPageFormat.removedDefaultLine(health), "Default · ~/.codex isn’t used by Orbit", "\(auth ?? "absent")")
+        }
     }
 
     func testItNamesARenamedDefaultByItsNameOnItsLine() throws {

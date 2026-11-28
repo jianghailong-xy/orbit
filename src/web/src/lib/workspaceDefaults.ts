@@ -769,20 +769,6 @@ export const fallbackPermissionMode = (engine: AgentProvider): string =>
 export const clampPermissionModeForEngine = (mode: string, engine: AgentProvider): string =>
   permissionModeSupported(mode, engine) ? mode : fallbackPermissionMode(engine);
 
-export const clampPermissionModeForModel = (
-  mode: string,
-  model: string,
-  engine: AgentProvider,
-  provider?: string | null,
-  configured?: ConfiguredProvider[] | null,
-  modelCatalog?: RunnerModelCatalog | null,
-): string =>
-  !permissionModeSupported(mode, engine)
-    ? fallbackPermissionMode(engine)
-    : mode === 'auto' && !supportsAuto(model, engine, provider, configured, modelCatalog)
-      ? fallbackPermissionMode(engine)
-      : mode;
-
 // App defaults used when the user has set no preference of their own.
 export const DEFAULT_MODEL = 'claude-opus-5';
 export const DEFAULT_PERMISSION_MODE = 'auto';

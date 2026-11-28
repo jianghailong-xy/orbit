@@ -1,5 +1,8 @@
 package io.orbitd.android.reader
 
+import io.orbitd.android.core.cards.LandingPullRequest
+import io.orbitd.android.core.cards.PullRequestStage
+import io.orbitd.android.core.cards.PullRequestTone
 import io.orbitd.android.core.protocol.SessionFacts
 import kotlinx.serialization.json.*
 
@@ -95,6 +98,28 @@ internal object WorktreeBarLogic {
 
     fun conflictTarget(mergeTarget: String?, targets: List<String>, agentDefaultTarget: String?): String =
         mergeTarget ?: defaultTarget(targets, agentDefaultTarget) ?: "main"
+
+    /**
+     * A merge waiting on its pull request (`mergeStatus == "pull_request"`): GitHub refused the push to the target because of its
+     * rules, so the runner opened a pull request (design §4.6). Not a failure (§11.2): the merge slot names the pull request's state
+     * in one line and opens it. OrbitKit's `mergePullRequestLine`, web's `MergeButton`.
+     */
+    data class MergePullRequestLine(val label: String, val detail: String, val url: String?, val tone: PullRequestTone)
+
+    fun mergePullRequestLine(pr: JsonObject?, target: String): MergePullRequestLine {
+        pr ?: return MergePullRequestLine("Pull request open", pullRequestFallback(target), null, PullRequestTone.BLUE)
+        val card = LandingPullRequest.card(pr, target)
+        val number = if (card.stage == PullRequestStage.MERGED) "" else (pr["number"] as? JsonPrimitive)?.intOrNull?.let { " #$it" }.orEmpty()
+        return MergePullRequestLine(card.head + number + card.right?.let { " · $it" }.orEmpty(), card.detail,
+            pr.string("url")?.takeIf { it.isNotEmpty() }, card.tone)
+    }
+
+    /** The notice a merge that opened a pull request reports: its headline and detail (web's merge-result notice). */
+    fun mergePullRequestNotice(pr: JsonObject?, target: String): Pair<String, String> =
+        ((pr?.get("number") as? JsonPrimitive)?.intOrNull?.let { "Opened pull request #$it into $target" } ?: "Opened a pull request into $target") to
+            (pr?.let { LandingPullRequest.card(it, target).detail } ?: pullRequestFallback(target))
+
+    private fun pullRequestFallback(target: String) = "$target requires a pull request. Orbit merges it once the branch's rules pass."
 
     /** The failed commit or merge in words, keeping the runner's raw git output (a phone has no hover tooltip). */
     fun failureMessage(mergeStatus: String?, mergeError: String?, commitStatus: String?, commitError: String?): String? = when {

@@ -153,7 +153,10 @@ func (p *heartbeatTelemetryProbe) wait() { <-p.done }
 // snapshotFor filters the cache against the current active set. A session that
 // parked after its last scan must not have stale mid-turn state replayed after its
 // turn-complete update, and neither must one still active whose turn-complete, finalize
-// or diff report was sent after its scan began (worktreeReportClock).
+// or diff report was sent after its scan began (worktreeReportClock). The result is
+// sorted by SessionID: the heartbeat's sessions fact is digested over its bytes, so
+// the same states in another order would be sent whole again. The scan keeps the
+// pool's random order, so a scan that times out does not always miss the same sessions.
 func (p *heartbeatTelemetryProbe) snapshotFor(activeTargets []heartbeatTelemetryTarget) []SessionLiveState {
 	active := make(map[string]heartbeatTelemetryTarget, len(activeTargets))
 	for _, target := range activeTargets {
@@ -171,6 +174,7 @@ func (p *heartbeatTelemetryProbe) snapshotFor(activeTargets []heartbeatTelemetry
 			out = append(out, sample.state)
 		}
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i].SessionID < out[j].SessionID })
 	return out
 }
 

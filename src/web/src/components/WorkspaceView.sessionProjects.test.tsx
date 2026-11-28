@@ -659,10 +659,12 @@ describe('project entry status and second line', { timeout: 60_000 }, () => {
     expect(preview()?.classList.contains('tone-approval')).toBe(false);
   });
 
-  it('breathes only for active background jobs after all member turns have parked', async () => {
+  // A member with a job in flight spins on its own row (`phase` RUNNING), so the project row spins too rather than breathing.
+  it('spins for a background job in flight after all member turns have parked', async () => {
     rows = [LOOSE, COORDINATOR, { ...TASK, status: 'AWAITING_INPUT', runState: 'AWAITING_INPUT', runningBgCount: 1, runningBgJobCount: 1 }];
     await mount();
-    expect(projectRow().querySelector('.session-project-status')?.getAttribute('data-state')).toBe('jobs');
+    expect(projectRow().querySelector('.session-project-icon .anticon-loading')).not.toBeNull();
+    expect(projectRow().querySelector('.session-project-status')).toBeNull();
   });
 });
 

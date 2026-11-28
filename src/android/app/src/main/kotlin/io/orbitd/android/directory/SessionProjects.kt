@@ -59,7 +59,7 @@ data class ProjectPause(
 data class SessionProjectRow(
     val projectId: String, val title: String, val status: String, val members: List<DirectorySession>, val sessionCount: Int,
     val coordinator: DirectorySession?, val folderId: String?, val pinnedAt: String?, val lastTurnAt: String?, val createdAt: String?,
-    val needsYou: Boolean, val running: Boolean, val jobs: Boolean, val indicator: Indicator?, val line: SessionLine, val target: Target,
+    val needsYou: Boolean, val running: Boolean, val indicator: Indicator?, val line: SessionLine, val target: Target,
     val taskCounts: ProjectTaskCounts?, val runningCount: Int, val pause: ProjectPause = ProjectPause.NONE,
     val started: Boolean = true, val pauseLine: PauseLine? = null,
     /** The newest listing among the members: the order key and the row's time, as [DirectorySession.listedAt] is a session's. */
@@ -67,7 +67,7 @@ data class SessionProjectRow(
 ) {
     /** Which pause the second line says (design §4.2 2a, 2b), or null when it says something else. */
     enum class PauseLine { DAILY_LIMIT, OWNER }
-    enum class Indicator { NEEDS_YOU, RUNNING, JOBS }
+    enum class Indicator { NEEDS_YOU, RUNNING }
     /** Whether the row's menu leads with Complete (design §4.3, owner 2026-11-07; iOS `offersComplete(in:)`): only a DONE or
      * CANCELLED project, and only in Open, where there is something left to move to Completed. */
     fun offersComplete(view: SessionView) = view == SessionView.OPEN && (status == "DONE" || status == "CANCELLED")
@@ -233,13 +233,13 @@ object SessionProjectGrouping {
             val spoke = members.maxBy { instant(it.lastTurnAt ?: it.createdAt) }
             // Unlike the counted badges, the row shows a start request as amber too.
             val needsYou = members.any { lines[it.id]?.tone == SessionLine.Tone.APPROVAL }
-            val runningCount = if (runnerOffline) 0 else members.count { it.isRunning() }
-            val jobs = !runnerOffline && members.any { it.isRunningJob(watch(it)) }
+            // A member with a background job in flight runs too: no separate, quieter mark.
+            val runningCount = if (runnerOffline) 0 else members.count { it.isRunning() || it.isRunningJob(watch(it)) }
             val counts = taskCounts(summary)
             rows += SessionProjectRow(membership.projectId, summary?.text("title") ?: membership.projectTitle, summary?.text("status") ?: membership.projectStatus,
                 members, content.size, coordinator, rowFolder, coordinator?.pinnedAt, spoke.lastTurnAt ?: spoke.createdAt, coordinator?.createdAt ?: latest.createdAt,
-                needsYou, runningCount > 0, jobs, when { needsYou -> SessionProjectRow.Indicator.NEEDS_YOU; runningCount > 0 -> SessionProjectRow.Indicator.RUNNING
-                    jobs -> SessionProjectRow.Indicator.JOBS; else -> null }, selected, target, counts,
+                needsYou, runningCount > 0, when { needsYou -> SessionProjectRow.Indicator.NEEDS_YOU; runningCount > 0 -> SessionProjectRow.Indicator.RUNNING
+                    else -> null }, selected, target, counts,
                 if (summary != null) summary.obj("buckets")?.number("running") ?: 0 else runningCount, pause, ProjectPause.started(summary),
                 if (selected === pauseSaid) pauseLineKind else null,
                 latest.listedAt ?: latest.createdAt)
@@ -364,11 +364,10 @@ object SessionProjectCopy {
         else -> null
     }
 
-    /** What a project row's state says to a reader who cannot see its dot, spinner or breathing mark. */
+    /** What a project row's state says to a reader who cannot see its dot or spinner. */
     fun statusWords(row: SessionProjectRow) = when (row.indicator) {
         SessionProjectRow.Indicator.NEEDS_YOU -> "Waiting for you"
         SessionProjectRow.Indicator.RUNNING -> "Session running"
-        SessionProjectRow.Indicator.JOBS -> "Background job running"
         null -> statusLabel(row.status)
     }
     /** `ProjectStatus.label`: a status this build does not know reads Unknown. */

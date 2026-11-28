@@ -152,8 +152,6 @@ struct SessionProjectRowView: View {
             Circle().fill(.orange).frame(width: 7, height: 7)
         case .running:
             SpinnerGlyph(color: .secondary)
-        case .jobs:
-            BreathingGlyph(systemImage: "terminal")
         case nil:
             EmptyView()
         }
@@ -171,7 +169,6 @@ struct SessionProjectRowView: View {
         switch row.indicator {
         case .needsYou: return "Waiting for you"
         case .running: return "Session running"
-        case .jobs: return "Background job running"
         case nil: return row.status.label
         }
     }

@@ -3,8 +3,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import remarkGfm from 'remark-gfm';
 import {
-  DatabaseOutlined,
-  DeleteOutlined,
   DownloadOutlined,
   DownOutlined,
   EllipsisOutlined,
@@ -14,19 +12,22 @@ import {
   FilePdfOutlined,
   FileTextOutlined,
   FolderAddOutlined,
-  FolderFilled,
+  FolderOutlined,
   CloseOutlined,
   Html5Outlined,
   LinkOutlined,
   RightOutlined,
+  SearchOutlined,
   UploadOutlined,
 } from '@ant-design/icons';
 import Markdown from '../components/Markdown';
-import { DriveChatHost } from '../components/drive/DriveChatHost';
+import { DriveChatHost, type DriveAgents } from '../components/drive/DriveChatHost';
 import { DriveWriterName } from '../components/drive/DriveWriterName';
 import { DriveMoveDialog } from '../components/drive/DriveMoveDialog';
 import { DriveShareDialog } from '../components/drive/DriveShareDialog';
-import { DriveUploadTray } from '../components/drive/DriveUploadTray';
+import { DriveAgentsButton } from '../components/drive/DriveAgentsButton';
+import { DrivePendingActions, pendingStatus } from '../components/drive/DrivePendingActions';
+import { DriveSettingsMenu } from '../components/drive/DriveSettingsMenu';
 import { DriveTrash } from '../components/drive/DriveTrash';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -61,7 +62,6 @@ import {
 } from '../lib/drive';
 import { driveDetailsOverlay, type DriveMark } from '../lib/driveChanges';
 import { useDriveChanges } from '../lib/useDriveChanges';
-import { useDriveSyncs } from '../lib/driveSyncs';
 import { addUploads, useDriveUploads, type UploadRequest } from '../lib/driveUploads';
 import { showToast } from '../lib/toastStore';
 import { useToast } from '../lib/toast';
@@ -191,7 +191,7 @@ function TreeFolder({
         >
           {isOpen ? <DownOutlined /> : <RightOutlined />}
         </button>
-        <FolderFilled className="files-folder-icon" aria-hidden="true" />
+        <FolderOutlined className="files-folder-icon" aria-hidden="true" />
         <span className="files-tree-name">{folder.name}</span>
         {mark && <span className="files-mark">{mark}</span>}
       </div>
@@ -218,7 +218,7 @@ function TreeFolder({
 // ── the preview pane ───────────────────────────────────────────────────────────────────────────
 
 function EntryIcon({ entry }: { entry: Pick<DriveEntry, 'kind' | 'name'> }) {
-  if (entry.kind === 'FOLDER') return <FolderFilled className="files-folder-icon" aria-hidden="true" />;
+  if (entry.kind === 'FOLDER') return <FolderOutlined className="files-folder-icon" aria-hidden="true" />;
   if (pictureType(entry.name)) return <FileImageOutlined className="files-file-icon picture" aria-hidden="true" />;
   if (isMarkdown(entry.name)) return <FileMarkdownOutlined className="files-file-icon" aria-hidden="true" />;
   if (isPdf(entry.name)) return <FilePdfOutlined className="files-file-icon" aria-hidden="true" />;
@@ -536,7 +536,6 @@ function DriveBrowser() {
   const listing = useQuery(driveFolderQuery(folderId));
   const links = useQuery(driveShareLinksQuery());
   const { uploads, completed } = useDriveUploads();
-  const syncs = useDriveSyncs();
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -757,32 +756,51 @@ function DriveBrowser() {
 
   return (
     <DriveChatHost folderId={folder?.parentId ? folder.id : null} folderName={folder ? folderName : null} selection={selection}>
-      {({ chatOpen }) => {
+      {({ chatOpen, agents }) => {
       const overlay = driveDetailsOverlay(chatOpen, windowWidth);
       return (
       <div className={`files-page${overlay ? ' details-over' : ''}`}>
         <header className="files-head">
-          <h1>Drive</h1>
+          <h1 className="files-title">
+            {crumbs.length === 0 ? (
+              'Drive'
+            ) : (
+              <>
+                <Link to="/drive" className="files-title-parent">
+                  Drive
+                </Link>
+                {crumbs.map((name, i) => (
+                  <span key={`${name}-${i}`}>
+                    <span className="files-title-sep"> / </span>
+                    {i === crumbs.length - 2 && folder?.parentId && folder.parentId !== rootId ? (
+                      <button type="button" className="files-title-parent" onClick={() => openFolder(folder.parentId)}>
+                        {name}
+                      </button>
+                    ) : (
+                      <span className={i === crumbs.length - 1 ? undefined : 'files-title-parent'}>{name}</span>
+                    )}
+                  </span>
+                ))}
+              </>
+            )}
+          </h1>
           <div className="files-head-actions">
             <Input
-              size="small"
-              aria-label="Search Files"
-              placeholder="Search all of Files"
+              className="files-search-box"
+              prefix={<SearchOutlined />}
+              aria-label="Search Drive"
+              placeholder="Search Drive"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
             <Button icon={<FolderAddOutlined />} onClick={() => void newFolder(folder?.id ?? null)}>
               New folder
             </Button>
-            <Button variant="primary" icon={<UploadOutlined />} onClick={() => picker.current?.click()}>
+            <Button icon={<UploadOutlined />} onClick={() => picker.current?.click()}>
               Upload
             </Button>
-            <Button icon={<DeleteOutlined />} onClick={() => navigate('/drive/trash')}>
-              Trash
-            </Button>
-            <Button icon={<DatabaseOutlined />} onClick={() => navigate('/drive/storage')}>
-              Storage
-            </Button>
+            <DriveSettingsMenu />
+            <DriveAgentsButton agents={agents} />
             <input
               ref={picker}
               type="file"
@@ -825,21 +843,6 @@ function DriveBrowser() {
             }}
             onDrop={(event) => dropInto(event, null)}
           >
-            <div className="files-crumbs">
-              <Link to="/drive">Drive</Link>
-              {crumbs.map((name, i) => (
-                <span key={`${name}-${i}`}>
-                  <span className="files-crumb-sep"> › </span>
-                  {i === crumbs.length - 2 && folder?.parentId && folder.parentId !== rootId ? (
-                    <button type="button" className="files-link-button" onClick={() => openFolder(folder.parentId)}>
-                      {name}
-                    </button>
-                  ) : (
-                    <span className={i === crumbs.length - 1 ? 'files-crumb-here' : undefined}>{name}</span>
-                  )}
-                </span>
-              ))}
-            </div>
             {searching ? (
               <div className="files-search" role="region" aria-label="Search results">
                 {found.isError ? (
@@ -852,6 +855,12 @@ function DriveBrowser() {
                   <div className="files-empty">Nothing matches “{settled}”.</div>
                 ) : (
                   <table className="files-list">
+                    <colgroup>
+                      <col className="files-col-name" />
+                      <col className="files-col-writer" />
+                      <col className="files-col-size" />
+                      <col className="files-col-when" />
+                      </colgroup>
                     <thead>
                       <tr>
                         <th className="files-col-name">Name</th>
@@ -892,7 +901,14 @@ function DriveBrowser() {
                 Couldn't read this folder: {messageOf(listing.error)}
               </div>
             ) : (
-              <table className="files-list">
+              <table className={`files-list${selected ? ' no-writer' : ''}`}>
+                <colgroup>
+                      <col className="files-col-name" />
+                      <col className="files-col-writer" />
+                      <col className="files-col-size" />
+                      <col className="files-col-when" />
+                      <col className="files-col-more" />
+                      </colgroup>
                 <thead>
                   <tr>
                     <th className="files-col-name">Name</th>
@@ -941,7 +957,7 @@ function DriveBrowser() {
                         </span>
                       </td>
                       <td className="files-col-writer">
-                        <DriveWriterName writer={entry.lastWriter} />
+                        <DriveWriterName writer={entry.lastWriter} glyph />
                       </td>
                       <td className="files-col-size">{entry.kind === 'FILE' ? formatSize(entry.sizeBytes) : '—'}</td>
                       <td className="files-col-when">{formatWhen(entry.lastWriter.at)}</td>
@@ -959,11 +975,7 @@ function DriveBrowser() {
                         </span>
                       </td>
                       <td className="files-col-writer">
-                        {u.status === 'uploading' || u.status === 'queued'
-                          ? `Uploading · ${u.size ? Math.floor((u.sentBytes / u.size) * 100) : 0}%`
-                          : u.status === 'failed'
-                            ? "Couldn't upload"
-                            : `Paused · ${u.size ? Math.floor((u.sentBytes / u.size) * 100) : 0}%`}
+                        {pendingStatus(u)} <DrivePendingActions upload={u} />
                       </td>
                       <td className="files-col-size">{formatSize(u.size)}</td>
                       <td className="files-col-when">—</td>
@@ -982,7 +994,6 @@ function DriveBrowser() {
                 <span>Files or folders, any size</span>
               </div>
             )}
-            <DriveUploadTray uploads={uploads} syncs={syncs} />
           </section>
           {selected && (
             <DetailsPane

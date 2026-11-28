@@ -1,4 +1,21 @@
-import type { ModeChangeLine } from '../lib/sessionPermissionMode';
+import type { SessionPermissionModeChange } from '@orbit/shared';
+import { decisionReceiptAnchor } from '../lib/decisionReceipt';
+import { modeChangeLines, type ModeChangeLine, type ModeFacts } from '../lib/sessionPermissionMode';
+import type { TranscriptInsert } from './Transcript';
+
+/** The mode-change lines as a conversation's inserts, each drawn where it happened among the events loaded. */
+export function modeChangeInserts(
+  changes: readonly SessionPermissionModeChange[],
+  facts: ModeFacts & { actual?: string | null },
+  events: Parameters<typeof decisionReceiptAnchor>[0],
+): TranscriptInsert[] {
+  return modeChangeLines(changes, facts).flatMap((line) => {
+    const anchor = decisionReceiptAnchor(events, line.at);
+    return anchor === null
+      ? []
+      : [{ anchor, moment: line.at, key: `mode-change:${line.key}`, element: <PermissionModeLine line={line} /> }];
+  });
+}
 
 /**
  * One recorded change of the session's permission mode, drawn where it happened in the conversation

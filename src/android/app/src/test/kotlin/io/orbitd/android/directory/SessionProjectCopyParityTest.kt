@@ -150,9 +150,9 @@ class SessionProjectCopyParityTest {
 
     /** A project row read aloud, and the status a row says without the sidebar (`ProjectStatus.label`). */
     @Test fun theRowsSpokenWordsAreTheSwifts() {
-        val row = SessionProjectRow("p1", "Launch", "DONE", emptyList(), 0, null, null, null, null, null, false, false, false, null,
+        val row = SessionProjectRow("p1", "Launch", "DONE", emptyList(), 0, null, null, null, null, null, false, false, null,
             SessionLine("x", SessionLine.Tone.PREVIEW), SessionProjectRow.Target.Project("p1"), null, 0)
-        listOf(SessionProjectRow.Indicator.NEEDS_YOU, SessionProjectRow.Indicator.RUNNING, SessionProjectRow.Indicator.JOBS).forEach {
+        listOf(SessionProjectRow.Indicator.NEEDS_YOU, SessionProjectRow.Indicator.RUNNING).forEach {
             val words = SessionProjectCopy.statusWords(row.copy(indicator = it))
             assertTrue("SessionProjectPage.swift no longer says \"$words\"", page.contains("return \"$words\""))
         }
@@ -165,7 +165,7 @@ class SessionProjectCopyParityTest {
     /** Design §4.3 (owner 2026-11-07), as iOS's `offersComplete(in:)`: a DONE or CANCELLED project's row leads its menu with Complete,
      * in Open only; an OPEN project's row has no completion. */
     @Test fun onlyAFinishedProjectInOpenOffersComplete() {
-        val row = SessionProjectRow("p1", "Launch", "OPEN", emptyList(), 0, null, null, null, null, null, false, false, false, null,
+        val row = SessionProjectRow("p1", "Launch", "OPEN", emptyList(), 0, null, null, null, null, null, false, false, null,
             SessionLine("x", SessionLine.Tone.PREVIEW), SessionProjectRow.Target.Project("p1"), null, 0)
         for (status in listOf("OPEN", "DONE", "CANCELLED", "SOMETHING_NEW")) for (view in SessionView.entries) {
             assertEquals("$status in $view", view == SessionView.OPEN && status in setOf("DONE", "CANCELLED"),

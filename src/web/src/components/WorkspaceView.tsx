@@ -299,6 +299,7 @@ import {
 } from '../lib/contextSeed';
 import { InitializeGitSteps, SessionOutputs } from './SessionOutputs';
 import { mergeRepairLoopLive } from './MergeRecoveryPanel';
+import { pullRequestCard } from './LandingPullRequest';
 import { BrandMark, NewSessionProviderHero, type NewSessionPlace } from './NewSessionProviderHero';
 import { orderWorkspaces, workspaceRunnerId } from '../lib/workspaceOrder';
 import { runnerUpdateIndicator } from '../lib/runnerUpdateIndicator';
@@ -576,12 +577,10 @@ import { Select } from './ui/Select';
 import { Spinner } from './ui/Spinner';
 import { Textarea } from './ui/Textarea';
 import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
-import { PermissionModeLine } from './PermissionModeLine';
-import { ModeCapsuleValue, ModeOptionLabel, ModeReason } from './ModeCapsule';
+import { modeChangeInserts } from './PermissionModeLine';
+import { ModeCapsuleValue, ModeOptionLabel, ModeReason, useModeCapsule } from './ModeCapsule';
 import {
   autoMenuNote,
-  modeCapsule,
-  modeChangeLines,
   type ModeCapsule,
 } from '../lib/sessionPermissionMode';
 import type {
@@ -1815,7 +1814,7 @@ function SessionProjectLanding({ projectId, onOpen }: { projectId: string; onOpe
 }
 
 /** A project's icon and two lines, as a session row has them: the Projects glyph (the spinner while a
- *  member runs, a dot while one waits on you or has background jobs), the title and time, then the
+ *  member runs, a dot while one waits on you), the title and time, then the
  *  progress chip and the row's line (docs/session-list-projects-design.md §4.1–§4.2). The row around it
  *  is its coordinator's session row (`SessionListRow`). */
 export function SessionProjectRowContent({ project }: { project: SessionProjectRow<any> }) {
@@ -1830,7 +1829,7 @@ export function SessionProjectRowContent({ project }: { project: SessionProjectR
               <span
                 className={`session-project-status ${project.indicator}`}
                 data-state={project.indicator}
-                aria-label={project.indicator === 'needs-you' ? 'Waiting for you' : 'Background jobs'}
+                aria-label="Waiting for you"
               />
             )}
           </>
@@ -4123,6 +4122,19 @@ export function WorkspaceView({
             tone: d.mergeRecovery?.code === 'LOCAL_SYNC_PENDING' ? 'warning' : 'success',
             icon: 'check',
           });
+        } else if (status === 'pull_request') {
+          // GitHub refused the push to the target because of its rules, so the runner opened a pull request:
+          // the merge waits on it (design §4.6). Not a failure; the bar shows the pull request's state.
+          const pr = d.mergePullRequest;
+          message.sessionNotice({
+            sessionId: operation.id,
+            sessionTitle: operation.title,
+            event: 'merge-result',
+            headline: pr?.number != null ? `Opened pull request #${pr.number} into ${target}` : `Opened a pull request into ${target}`,
+            detail: pr ? pullRequestCard(pr, target).detail : `${target} requires a pull request. Orbit merges it once the branch's rules pass.`,
+            tone: 'neutral',
+            icon: 'info',
+          });
         } else if (status === 'conflict') {
           message.sessionNotice({
             sessionId: operation.id,
@@ -4538,7 +4550,7 @@ export function WorkspaceView({
     const folders = live.folders.map((row) => {
       const prev = before.folders.get(row.folder.id);
       return prev && prev.folder === row.folder && prev.sessionCount === row.sessionCount && prev.needsYou === row.needsYou &&
-        prev.running === row.running && prev.jobs === row.jobs ? prev : row;
+        prev.running === row.running ? prev : row;
     });
     const projects = new Map(live.projects.map((row) => {
       const prev = before.projects.get(row.projectId);
@@ -6791,20 +6803,19 @@ export function WorkspaceView({
     () =>
       !selectedId || selectedTrashed || !permissionModeChanges
         ? []
-        : modeChangeLines(permissionModeChanges, {
-            intent: effectivePermissionMode,
-            actual: recordedPermissionMode,
-            engine: shownEngine,
-            modelHasAuto: lineModelHasAuto,
-            modelLabel: lineModelLabel,
-            runsAsRoot: runner.runsAsRoot,
-            scheduled: isScheduleRun,
-          }).flatMap((line) => {
-            const anchor = decisionReceiptAnchor(transcriptEvents, line.at);
-            return anchor === null
-              ? []
-              : [{ anchor, moment: line.at, key: `mode-change:${line.key}`, element: <PermissionModeLine line={line} /> }];
-          }),
+        : modeChangeInserts(
+            permissionModeChanges,
+            {
+              intent: effectivePermissionMode,
+              actual: recordedPermissionMode,
+              engine: shownEngine,
+              modelHasAuto: lineModelHasAuto,
+              modelLabel: lineModelLabel,
+              runsAsRoot: runner.runsAsRoot,
+              scheduled: isScheduleRun,
+            },
+            transcriptEvents,
+          ),
     [
       effectivePermissionMode,
       isScheduleRun,
@@ -10252,10 +10263,6 @@ export function WorkspaceView({
             <Tooltip content="Running" align="start" delay={TEXT_TOOLTIP_DELAY_MS}>
               <span className="session-folder-activity" aria-label="Running" />
             </Tooltip>
-          ) : row.jobs ? (
-            <Tooltip content="Background job running" align="start" delay={TEXT_TOOLTIP_DELAY_MS}>
-              <span className="session-folder-activity jobs" aria-label="Background job running" />
-            </Tooltip>
           ) : null}
         </span>
         <span className="session-folder-name">{row.folder.name}</span>
@@ -10721,21 +10728,12 @@ export function WorkspaceView({
     runsAsRoot: runner.runsAsRoot,
     scheduled: isScheduleRun,
   };
-  const shownModeCapsule = modeCapsule({
+  const shownModeCapsule = useModeCapsule({
     ...shownModeFacts,
     actual: recordedPermissionMode,
     latest: permissionModeChanges?.at(-1) ?? null,
     pickedAt: modePickedAt?.sessionId === selectedId ? modePickedAt.at : null,
-    now: Date.now(),
   });
-  // A switch under way stops being one when its window closes, which nothing else re-renders for.
-  const [, setModeSwitchTick] = useState(0);
-  const modeSwitchingUntil = shownModeCapsule.switchingUntil;
-  useEffect(() => {
-    if (modeSwitchingUntil === null) return;
-    const timer = setTimeout(() => setModeSwitchTick((tick) => tick + 1), Math.max(0, modeSwitchingUntil - Date.now()) + 50);
-    return () => clearTimeout(timer);
-  }, [modeSwitchingUntil]);
   // Auto stays selectable on a model with no Auto, and its row says what the session does instead (C1).
   const autoModeNote = autoMenuNote(shownModeFacts, !!recordedPermissionMode);
   const shownEffortLabel = shownEffortOptions.find((o) => o.value === shownEffort)?.label ?? shownEffort;

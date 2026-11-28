@@ -77,7 +77,6 @@ internal object SessionListCopy {
     const val FOLDER_ACTIONS = "Folder actions"
     const val FOLDER_EMPTY = "Nothing in this folder"
     const val FOLDER_RUNNING = "Session running"
-    const val FOLDER_JOBS = "Background job running"
     const val WORKSPACES_FAILED = "Workspaces couldn't be loaded"
     const val REQUEST_FAILED = "Request failed — check your connection."
     const val SESSION_EXPIRED = "Session expired — sign in again."
@@ -186,15 +185,14 @@ internal fun RowSpinner(modifier: Modifier = Modifier) {
 }
 
 /** A folder's row (iOS `SessionFolderRowView`): its name, what the sessions it holds would have said — how many wait on you, else a
- * spinner, else the breathing mark, by the drawer's rule — their count (unless some wait on you) and a chevron. A tap opens it and a long press is its menu. */
+ * spinner while one runs or has a background job in flight, by the drawer's rule — their count (unless some wait on you) and a chevron. A tap opens it and a long press is its menu. */
 @Composable
 internal fun FolderRow(folder: Folder, sessions: List<DirectorySession>, count: Int, runnerOffline: Boolean, watching: Map<String, WatchSessionSummary>,
     onOpen: () -> Unit, onOptions: () -> Unit) {
     FolderRow(folder.id, folder.name, FolderRowSummary(
         count = count,
         needsYou = sessions.folderNeedsYouCount(),
-        running = !runnerOffline && sessions.any { it.isRunning() },
-        jobs = !runnerOffline && sessions.any { it.isRunningJob(watching[watchKey(it.id)]) },
+        running = !runnerOffline && sessions.any { it.isRunning() || it.isRunningJob(watching[watchKey(it.id)]) },
     ), onOpen, onOptions)
 }
 
@@ -203,7 +201,7 @@ internal fun FolderRow(folder: Folder, sessions: List<DirectorySession>, count: 
 internal fun FolderRow(id: String, name: String, summary: FolderRowSummary, onOpen: () -> Unit, onOptions: (() -> Unit)? = null) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val scheduled = id == ScheduledRunsFolder.ID
-    val (count, waiting, running, jobs) = summary
+    val (count, waiting, running) = summary
     val words = if (scheduled) listOfNotNull(
         SessionListCopy.folderSessions(count),
         DrawerCopy.waitingForYou(waiting).takeIf { waiting > 0 },
@@ -211,7 +209,6 @@ internal fun FolderRow(id: String, name: String, summary: FolderRowSummary, onOp
     ).joinToString(". ") else when {
         waiting > 0 -> "${DrawerCopy.waitingForYou(waiting)}. ${SessionListCopy.folderSessions(count)}"
         running -> SessionListCopy.FOLDER_RUNNING
-        jobs -> SessionListCopy.FOLDER_JOBS
         else -> SessionListCopy.folderSessions(count)
     }
     val openFolder = if (onOptions == null) Modifier.clickable(role = Role.Button, onClick = onOpen)
@@ -230,7 +227,6 @@ internal fun FolderRow(id: String, name: String, summary: FolderRowSummary, onOp
         when {
             waiting > 0 -> NeedsYouCount(waiting)
             running && !scheduled -> RowSpinner()
-            jobs -> BreathingTerminal()
         }
         // One number on the row (owner 2026-11-19, as on the web): who waits on you takes the total's place, which `words` still reads.
         if (waiting == 0) Text("$count", style = MaterialTheme.typography.labelMedium, color = muted, modifier = Modifier.clearAndSetSemantics {})

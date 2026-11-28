@@ -196,7 +196,7 @@ internal fun listShowsFolders(isFolder: Boolean, view: SessionView, tag: String?
 
 internal fun List<DirectorySession>.withoutScheduledRuns() = filterNot { it.isScheduledRun || it.isScheduleChange }
 
-internal data class FolderRowSummary(val count: Int, val needsYou: Int, val running: Boolean, val jobs: Boolean = false)
+internal data class FolderRowSummary(val count: Int, val needsYou: Int, val running: Boolean)
 
 internal fun List<DirectorySession>.folderNeedsYouCount() = count { it.pendingApprovals > 0 && it.waitingKind != "START_REQUEST" }
 

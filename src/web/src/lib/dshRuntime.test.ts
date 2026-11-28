@@ -4,7 +4,7 @@ import { DSH_CONNECT_HREF, dshRepair, dshRunnerState } from './dshRuntime';
 import { engineChoices, engineProviders, runtimeSummary, type ChoiceSources } from './sessionProviderChoices';
 import { supportsRunnerSlashAssets, slashAssetMatchesEngine } from './slashCommands';
 import {
-  clampPermissionModeForModel,
+  clampPermissionModeForEngine,
   defaultEngineOf,
   defaultModelFor,
   effortOptionsFor,
@@ -185,12 +185,12 @@ describe('DeepSeek Harness in the pickers, by the engine', () => {
       // Every other engine keeps every mode — the same DeepSeek key on Claude Code included.
       expect(permissionModeSupported(mode, CLAUDE)).toBe(true);
     }
-    expect(clampPermissionModeForModel('plan', token, DSH, 'deepseek', [deepseek], catalog)).toBe('default');
-    expect(clampPermissionModeForModel('bypassPermissions', token, DSH, 'deepseek', [deepseek], catalog)).toBe('default');
-    expect(clampPermissionModeForModel('acceptEdits', token, DSH, 'deepseek', [deepseek], catalog)).toBe('default');
-    expect(clampPermissionModeForModel('auto', token, DSH, 'deepseek', [deepseek], catalog)).toBe('auto');
-    expect(clampPermissionModeForModel('dontAsk', token, DSH, 'deepseek', [deepseek], catalog)).toBe('dontAsk');
-    expect(clampPermissionModeForModel('plan', 'deepseek-v4-pro', CLAUDE, 'deepseek', [deepseek], catalog)).toBe('plan');
+    expect(clampPermissionModeForEngine('plan', DSH)).toBe('default');
+    expect(clampPermissionModeForEngine('bypassPermissions', DSH)).toBe('default');
+    expect(clampPermissionModeForEngine('acceptEdits', DSH)).toBe('default');
+    expect(clampPermissionModeForEngine('auto', DSH)).toBe('auto');
+    expect(clampPermissionModeForEngine('dontAsk', DSH)).toBe('dontAsk');
+    expect(clampPermissionModeForEngine('plan', CLAUDE)).toBe('plan');
   });
 
   it('withholds runner slash commands from Harness sessions', () => {

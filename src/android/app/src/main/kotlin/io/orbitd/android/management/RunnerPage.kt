@@ -1660,6 +1660,10 @@ internal object RunnerPage {
      * the runner reports another account of it, so this is null whenever Default is in use. */
     fun removedDefault(health: JsonObject): JsonObject? = health.obj("removedDefault")
 
+    /** Whether the engine page draws the removed Default's line: not once its login is off the machine (`auth` no). Shown for yes,
+     * unknown, and an apiserver too old to say. */
+    fun removedDefaultShown(removed: JsonObject) = removed.str("auth") != "no"
+
     /** What a removed Default goes by: the name it was given in Orbit, else Default. */
     fun removedDefaultName(removed: JsonObject) = removed.str("name")?.takeIf { it.isNotEmpty() } ?: "Default"
 

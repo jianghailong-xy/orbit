@@ -86,7 +86,7 @@ test('removed while two other accounts are reported: Default is left out, and th
     // Default says no; the two accounts Orbit uses say yes.
     auth: 'yes',
     accounts: [WORK, HOME],
-    removedDefault: { home: '/home/ada/.codex', fingerprintPrefix: 'cxa1_9f3a41c7' },
+    removedDefault: { home: '/home/ada/.codex', fingerprintPrefix: 'cxa1_9f3a41c7', auth: 'no' },
   });
   // Another engine's Default is its own.
   assert.deepEqual(claude, namedRunnerEngines(row([CLAUDE]))![0]);
@@ -103,7 +103,7 @@ test('removed while one other account is reported: the engine is that account, a
     // the one account it does use.
     auth: 'no',
     accounts: [signedOut],
-    removedDefault: { home: '/home/ada/.codex', fingerprintPrefix: 'cxa1_9f3a41c7' },
+    removedDefault: { home: '/home/ada/.codex', fingerprintPrefix: 'cxa1_9f3a41c7', auth: 'yes' },
   });
 });
 
@@ -177,7 +177,7 @@ test("Antigravity reads as the Google accounts that remain, never as the machine
     accounts: [google],
     // Its one account's quota is the engine's own, as Default's was.
     planUsage: { ...reading, accounts: { [google.id]: reading } },
-    removedDefault: { home: '/home/ada/.orbit/antigravity/google' },
+    removedDefault: { home: '/home/ada/.orbit/antigravity/google', auth: 'no' },
   });
   // That account signed out, the engine is signed out: the key was Default's, and so is no credential
   // Orbit runs on.
@@ -274,10 +274,18 @@ test('the marker names Default as Orbit calls it, and the accounts that remain k
   });
   const [served] = usedRunnerEngines(r)!;
   assert.deepEqual(served.accounts, [{ ...WORK, name: 'Clients' }, { ...HOME, pausedUntil: until }]);
-  assert.deepEqual(served.removedDefault, { home: '/home/ada/.codex', name: 'Machine login', fingerprintPrefix: 'cxa1_9f3a41c7' });
+  assert.deepEqual(served.removedDefault, { home: '/home/ada/.codex', name: 'Machine login', fingerprintPrefix: 'cxa1_9f3a41c7', auth: 'no' });
   // Never renamed, and no fingerprint read: its directory alone.
   const { fingerprintPrefix: _fingerprint, ...unread } = DEFAULT;
-  assert.deepEqual(usedRunnerEngines(row([codex([unread, WORK])], ['codex']))![0].removedDefault, { home: '/home/ada/.codex' });
+  assert.deepEqual(usedRunnerEngines(row([codex([unread, WORK])], ['codex']))![0].removedDefault, { home: '/home/ada/.codex', auth: 'no' });
+});
+
+test('the marker carries what the runner reports for Default\'s sign-in, so a client can hide it once it is gone', () => {
+  for (const auth of ['yes', 'no', 'unknown'] as const) {
+    const [served] = usedRunnerEngines(row([codex([{ ...DEFAULT, auth }, WORK])], ['codex']))!;
+    assert.equal(served.removedDefault?.auth, auth);
+    assert.deepEqual(served.accounts, [WORK], 'Default stays out of accounts');
+  }
 });
 
 test('every engine that keeps accounts leaves its Default out the same way, and only its own', () => {
@@ -294,7 +302,7 @@ test('every engine that keeps accounts leaves its Default out the same way, and 
     for (const entry of usedRunnerEngines(row(engines, [removed]))!) {
       const left = entry.engine === removed;
       assert.deepEqual(entry.accounts?.map((account) => account.id), left ? ['abcdef01'] : ['default', 'abcdef01'], `${removed}: ${entry.engine}`);
-      assert.deepEqual(entry.removedDefault, left ? { home: `/home/ada/.${removed}` } : undefined, `${removed}: ${entry.engine}`);
+      assert.deepEqual(entry.removedDefault, left ? { home: `/home/ada/.${removed}`, auth: 'yes' } : undefined, `${removed}: ${entry.engine}`);
     }
   }
 });

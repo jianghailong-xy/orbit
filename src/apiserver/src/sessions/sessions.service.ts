@@ -5169,7 +5169,9 @@ export class SessionsService {
       activity: activity && {
         needsYou: new Set(activity.needsYou.keys()),
         running: new Set(activity.running.map((session) => session.id)),
-        jobs: new Set(activity.jobs.flatMap((session) => session.stalled ? [] : [session.id])),
+        // Every session with a background job in flight, quiet or not: a quiet job still executes (common/session-working.ts),
+        // and its row spins on `phase` RUNNING. Leaving the quiet ones out lit nothing on a folder while its row spun.
+        jobs: new Set(activity.jobs.map((session) => session.id)),
       },
     });
     let built = listing(tallied);
@@ -5697,7 +5699,7 @@ export class SessionsService {
         providerBuiltin: r.providerBuiltin,
         model: r.model,
         permissionMode: r.permissionMode,
-        // What the engine runs in, beside the intent (actual-permission-mode.ts); null until a claim since 1755.
+        // What the engine runs in, beside the intent (actual-permission-mode.ts); null until a claim since 1805.
         actualPermissionMode: r.actualPermissionMode,
         actualPermissionModeAt: r.actualPermissionModeAt,
         codexSandboxUnavailable: r.codexSandboxUnavailable,

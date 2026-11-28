@@ -43,8 +43,9 @@ export class RunnerFilesController {
     @CurrentRunner() runner: Runner,
     @Param('id', PublicIdPipe) sessionId: string,
     @Param('fileId', PublicIdPipe) fileId: string,
+    @Query('subagentRunId', PublicIdPipe) subagentRunId?: string,
   ) {
-    const session = await this.hostedSession(runner, sessionId);
+    const session = await this.hostedSession(runner, sessionId, subagentRunId);
     const file = await this.files.describeFile(await this.files.readableInSession(session, fileId));
     if (!file) throw new NotFoundException('file not found in this session');
     return file;

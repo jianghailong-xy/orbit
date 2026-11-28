@@ -36,6 +36,9 @@ const sync = (over: Partial<DriveSyncView> = {}): DriveSyncView => ({
   startedAt: '2026-11-24T06:57:00Z',
   updatedAt: '2026-11-24T07:30:00Z',
   endedAt: null,
+  handledAt: null,
+  fixSessionId: null,
+  fixRequestedAt: null,
   ...over,
 });
 

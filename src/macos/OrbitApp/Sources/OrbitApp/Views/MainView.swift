@@ -400,7 +400,6 @@ struct SectionSidebar: View {
                     selected: false,
                     offline: agents?.runnerIsOffline(agent.runnerId) ?? false,
                     running: model.runningWorkspaceIDs.contains(agent.id),
-                    jobs: model.jobWorkspaceIDs.contains(agent.id),
                     waiting: model.agentNeedsYou[agent.id] ?? 0,
                     shortcut: shortcutIndex[agent.id],
                     runnerOnHover: !sharedNames.contains(agent.name)
