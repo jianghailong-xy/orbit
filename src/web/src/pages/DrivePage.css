@@ -1190,17 +1190,15 @@
 .drive-settings-menu { min-width: 260px; }
 .drive-meter { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 10px 12px; border: 0; background: transparent; text-align: left; cursor: pointer; color: var(--text-1, inherit); font: inherit; }
 .drive-meter-head { display: flex; justify-content: space-between; font-size: 12px; }
-.drive-meter[data-level='amber'] .drive-meter-head b { color: var(--warning); }
-.drive-meter[data-level='red'] .drive-meter-head b { color: var(--error); }
 .drive-meter-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; }
-.drive-meter-bar.has-track { background: var(--border); }
 .drive-seg-drive { background: #3b6df2; }
 .drive-seg-trash { background: #a6abb4; }
 .drive-seg-other { background: #1fa38a; }
 .drive-meter-legend { display: flex; gap: 8px; font-size: 11px; color: var(--text-3); }
 .drive-meter-note { font-size: 11px; }
-.drive-meter[data-level='amber'] .drive-meter-note { color: var(--warning); }
-.drive-meter[data-level='red'] .drive-meter-note { color: var(--error); }
+.drive-meter-note { color: var(--text-3); }
+.drive-meter-note[data-level='amber'] { color: var(--warning); }
+.drive-meter-note[data-level='red'] { color: var(--error); }
 .drive-meter-note.is-quiet { color: var(--text-3); }
 .drive-meter-empty { padding: 10px 12px; font-size: 12px; color: var(--text-3); }
 .drive-menu-rule { height: 1px; background: var(--border); margin: 2px 0; }

@@ -7,17 +7,24 @@ import { formatSize } from '../../lib/drive';
 
 export type DriveStorageLevel = 'ok' | 'amber' | 'red';
 
-/** What the meter and the gear's dot say, read from the two answers: the account's limit against what it keeps, and
- *  the server store's own nearQuota flag. */
+/** The per-account limit counts attachments only (GET /storage/usage totalBytes against quotaBytes); the drive's own
+ *  limit is the server store's (storeUsedBytes of storeQuotaBytes, flagged by nearQuota). Each is read apart, and the
+ *  worst of the two sets the gear's dot. */
 export function driveStorageState(
-  drive: { totalBytes: number; nearQuota?: boolean } | undefined,
-  quotaBytes: number | null | undefined,
-): { level: DriveStorageLevel; percent: number | null } {
-  const limit = quotaBytes ?? null;
-  if (!drive || limit === null || limit <= 0) return { level: drive?.nearQuota ? 'amber' : 'ok', percent: null };
-  const percent = Math.floor((drive.totalBytes / limit) * 100);
-  if (drive.totalBytes >= limit) return { level: 'red', percent };
-  return { level: percent >= 90 || drive.nearQuota ? 'amber' : 'ok', percent };
+  drive: { nearQuota?: boolean; storeUsedBytes?: number; storeQuotaBytes?: number } | undefined,
+  attachments: { totalBytes: number; quotaBytes: number | null } | undefined,
+) {
+  const limit = attachments?.quotaBytes ?? null;
+  const quotaPercent = attachments && limit !== null && limit > 0 ? Math.floor((attachments.totalBytes / limit) * 100) : null;
+  const quotaFull = quotaPercent !== null && attachments!.totalBytes >= limit!;
+  const hasStore = drive?.storeUsedBytes !== undefined && !!drive.storeQuotaBytes;
+  const storeFull = hasStore && drive!.storeUsedBytes! >= drive!.storeQuotaBytes!;
+  const storePercent = hasStore ? Math.floor((drive!.storeUsedBytes! / drive!.storeQuotaBytes!) * 100) : null;
+  const storeNear = !!drive?.nearQuota || (storePercent !== null && storePercent >= 90);
+  const quotaLevel: DriveStorageLevel = quotaFull ? 'red' : quotaPercent !== null && quotaPercent >= 90 ? 'amber' : 'ok';
+  const storeLevel: DriveStorageLevel = storeFull ? 'red' : storeNear ? 'amber' : 'ok';
+  const level: DriveStorageLevel = quotaLevel === 'red' || storeLevel === 'red' ? 'red' : quotaLevel === 'amber' || storeLevel === 'amber' ? 'amber' : 'ok';
+  return { level, quotaLevel, storeLevel, quotaPercent, storePercent, limit };
 }
 
 function Meter() {
@@ -25,37 +32,30 @@ function Meter() {
   const { data: drive } = useQuery(driveUsageQuery());
   const { data: usage } = useQuery(storageUsageQuery());
   if (!drive) return <div className="drive-meter-empty">Reading storage…</div>;
-  const limit = usage?.quotaBytes ?? null;
-  const { level, percent } = driveStorageState(drive, limit);
-  const limited = limit !== null && limit > 0;
-  const full = level === 'red';
-  const storeFull = drive.storeUsedBytes !== undefined && drive.storeQuotaBytes !== undefined && drive.storeUsedBytes >= drive.storeQuotaBytes;
-  const storePercent =
-    drive.storeUsedBytes !== undefined && drive.storeQuotaBytes
-      ? Math.floor((drive.storeUsedBytes / drive.storeQuotaBytes) * 100)
-      : null;
-  // Shares of the bar: of the limit when there is one (the rest is the grey track), of the total when there is not.
-  const base = limited ? limit : drive.totalBytes || 1;
+  const s = driveStorageState(drive, usage);
+  const base = drive.totalBytes || 1;
   const share = (bytes: number) => `${Math.min(100, (bytes / base) * 100)}%`;
   const driveOnly = Math.max(0, drive.driveBytes - drive.trashBytes);
 
-  let note: string | null = null;
-  if (limited && full) note = `Uploads are refused. Empty Trash or open Storage.`;
-  else if (limited && level === 'amber' && (percent ?? 0) >= 90) {
-    note = `Uploads stop at ${formatSize(limit)}. Empty Trash to free ${formatSize(drive.trashBytes)}.`;
-  } else if (drive.nearQuota) {
-    note = storeFull || storePercent === null
-      ? "Orbit's storage is full. Ask the operator to raise the limit."
-      : `Orbit's storage is ${storePercent}% full. Ask the operator to raise the limit.`;
+  let quotaLine: string;
+  if (s.limit === null || !usage) quotaLine = 'No limit set';
+  else if (s.quotaLevel === 'red') quotaLine = `Other files ${formatSize(usage.totalBytes)} of ${formatSize(s.limit)}. New attachments are refused.`;
+  else if (s.quotaLevel === 'amber') quotaLine = `Other files ${formatSize(usage.totalBytes)} of ${formatSize(s.limit)}. New attachments stop at ${formatSize(s.limit)}.`;
+  else quotaLine = `Other files ${formatSize(usage.totalBytes)} of ${formatSize(s.limit)}`;
+
+  let storeLine: string | null = null;
+  if (s.storeLevel === 'red') storeLine = "The drive's storage is full. Ask the operator to raise the limit.";
+  else if (s.storeLevel === 'amber') {
+    storeLine = `Drive storage is ${s.storePercent ?? 90}% full. Uploads stop at 100%. Ask the operator to raise the limit.`;
   }
 
   return (
-    <button type="button" className="drive-meter" data-level={level} aria-label="Storage" onClick={() => navigate('/drive/storage')}>
+    <button type="button" className="drive-meter" data-level={s.level} aria-label="Storage" onClick={() => navigate('/drive/storage')}>
       <span className="drive-meter-head">
-        <span>{limited ? `${formatSize(drive.totalBytes)} of ${formatSize(limit)}` : 'Storage'}</span>{' '}
-        <b>{limited ? (full ? 'Full' : `${percent}%`) : formatSize(drive.totalBytes)}</b>
+        <span>Storage</span>{' '}
+        <b>{formatSize(drive.totalBytes)}</b>
       </span>{' '}
-      <span className={`drive-meter-bar${limited ? ' has-track' : ''}`} aria-hidden="true">
+      <span className="drive-meter-bar" aria-hidden="true">
         <i className="drive-seg-drive" style={{ width: share(driveOnly) }} />
         <i className="drive-seg-trash" style={{ width: share(drive.trashBytes) }} />
         <i className="drive-seg-other" style={{ width: share(drive.otherBytes) }} />
@@ -65,11 +65,9 @@ function Meter() {
         <span>Trash {formatSize(drive.trashBytes)}</span>{' '}
         <span>Other {formatSize(drive.otherBytes)}</span>
       </span>{' '}
-      {note ? (
-        <span className="drive-meter-note">{note}</span>
-      ) : (
-        !limited && <span className="drive-meter-note is-quiet">No limit set · Open Storage <RightOutlined /></span>
-      )}
+      <span className="drive-meter-note" data-level={s.quotaLevel}>{quotaLine}</span>{' '}
+      {storeLine && <span className="drive-meter-note" data-level={s.storeLevel}>{storeLine}</span>}{' '}
+      <span className="drive-meter-note is-quiet">Open Storage <RightOutlined /></span>
     </button>
   );
 }
@@ -80,7 +78,7 @@ export function DriveSettingsMenu() {
   const navigate = useNavigate();
   const { data: drive } = useQuery(driveUsageQuery());
   const { data: usage } = useQuery(storageUsageQuery());
-  const { level } = driveStorageState(drive, usage?.quotaBytes);
+  const { level } = driveStorageState(drive, usage);
   const items: MenuItem[] = [
     {
       key: 'trash',

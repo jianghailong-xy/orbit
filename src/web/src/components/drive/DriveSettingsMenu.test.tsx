@@ -9,9 +9,9 @@ import { DriveSettingsMenu } from './DriveSettingsMenu';
 
 const GB = 1000 * 1000 * 1000;
 
-/** Shaped as GET /attachments/usage answers. */
-const stored = (quotaBytes: number | null): StorageUsage => ({ totalBytes: 0, fileCount: 0, quotaBytes, projects: [], tasks: [], weeks: [] });
-/** Shaped as GET /drive/usage answers. */
+/** Shaped as GET /attachments/usage answers: what the per-account limit counts, attachments only. */
+const stored = (totalBytes: number, quotaBytes: number | null): StorageUsage => ({ totalBytes, fileCount: 0, quotaBytes, projects: [], tasks: [], weeks: [] });
+/** Shaped as GET /drive/usage answers; driveBytes includes Trash. */
 const drive = (extra: Partial<DriveUsage> = {}): DriveUsage => ({
   totalBytes: 47.1 * GB, driveBytes: 44.7 * GB, trashBytes: 3.1 * GB, otherBytes: 2.4 * GB, ...extra,
 });
@@ -24,10 +24,11 @@ function Where() {
   return null;
 }
 
+/** The attachments total is the drive payload's otherBytes, as the server counts them. */
 async function render(usage: DriveUsage, quotaBytes: number | null) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   qc.setQueryData(driveUsageQuery().queryKey, usage);
-  qc.setQueryData(storageUsageQuery().queryKey, stored(quotaBytes));
+  qc.setQueryData(storageUsageQuery().queryKey, stored(usage.otherBytes, quotaBytes));
   await act(async () => {
     root.render(
       <QueryClientProvider client={qc}>
@@ -61,47 +62,57 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
+const bar = () => document.querySelector('.drive-meter-bar')!;
+
 describe('Drive Settings gear menu', () => {
-  it('no limit: the total, a split bar with no track, the legend, and no dot', async () => {
+  it('no quota: the total over a split bar with no track, the legend, No limit set, and no dot', async () => {
     await render(drive(), null);
     expect(dot()).toBeNull();
     await openMenu();
-    expect(meter()).toBe('Storage 47 GB Drive 42 GB Trash 3.1 GB Other 2.4 GB No limit set · Open Storage');
-    expect(document.querySelector('.drive-meter-bar')!.classList.contains('has-track')).toBe(false);
+    expect(meter()).toBe('Storage 47 GB Drive 42 GB Trash 3.1 GB Other 2.4 GB No limit set Open Storage');
+    expect(bar().classList.contains('has-track')).toBe(false);
   });
 
-  it('47% of a limit: used of limit with the percent on a grey track, no dot', async () => {
-    await render(drive(), 100 * GB);
+  it('attachments at 47% of the quota: a second line, the bar still a plain split, no dot', async () => {
+    await render(drive({ otherBytes: 2.36 * GB }), 5 * GB);
     expect(dot()).toBeNull();
     await openMenu();
-    expect(meter()).toContain('47 GB of 100 GB 47%');
-    expect(document.querySelector('.drive-meter-bar')!.classList.contains('has-track')).toBe(true);
-    expect(meter()).not.toContain('Uploads');
+    expect(meter()).toContain('Storage 47 GB');
+    expect(meter()).toContain('Other files 2.4 GB of 5 GB Open Storage');
+    expect(meter()).not.toContain('%');
+    expect(meter()).not.toContain('stop');
+    expect(bar().classList.contains('has-track')).toBe(false);
   });
 
-  it('92%: amber with where uploads stop and what Trash frees; an amber dot', async () => {
-    await render(drive({ totalBytes: 92.4 * GB, driveBytes: 90 * GB, trashBytes: 9.6 * GB }), 100 * GB);
+  it('attachments at 92%: amber, new attachments stop at the quota; an amber dot', async () => {
+    await render(drive({ otherBytes: 4.6 * GB }), 5 * GB);
     expect(dot()).toBe('amber');
     await openMenu();
-    expect(meter()).toContain('92 GB of 100 GB 92%');
-    expect(meter()).toContain('Uploads stop at 100 GB. Empty Trash to free 9.6 GB.');
-    expect(document.querySelector('.drive-meter')!.getAttribute('data-level')).toBe('amber');
+    expect(meter()).toContain('Other files 4.6 GB of 5 GB. New attachments stop at 5 GB.');
+    expect(meter()).not.toContain('Empty Trash');
+    expect(document.querySelector('.drive-meter-note[data-level="amber"]')).toBeTruthy();
   });
 
-  it('full: red, uploads refused; a red dot', async () => {
-    await render(drive({ totalBytes: 100 * GB }), 100 * GB);
+  it('attachments full: red, new attachments refused; a red dot', async () => {
+    await render(drive({ otherBytes: 5 * GB }), 5 * GB);
     expect(dot()).toBe('red');
     await openMenu();
-    expect(meter()).toContain('100 GB of 100 GB Full');
-    expect(meter()).toContain('Uploads are refused.');
-    expect(document.querySelector('.drive-meter')!.getAttribute('data-level')).toBe('red');
+    expect(meter()).toContain('Other files 5 GB of 5 GB. New attachments are refused.');
+    expect(document.querySelector('.drive-meter-note[data-level="red"]')).toBeTruthy();
   });
 
-  it("the server store's nearQuota: amber with the operator's remedy; an amber dot", async () => {
+  it("the server store near full: amber with the operator's remedy; an amber dot", async () => {
     await render(drive({ nearQuota: true, storeUsedBytes: 94 * GB, storeQuotaBytes: 100 * GB }), null);
     expect(dot()).toBe('amber');
     await openMenu();
-    expect(meter()).toContain("Orbit's storage is 94% full. Ask the operator to raise the limit.");
+    expect(meter()).toContain('Drive storage is 94% full. Uploads stop at 100%. Ask the operator to raise the limit.');
+  });
+
+  it('the server store full: red; a red dot even with attachments well under their quota', async () => {
+    await render(drive({ nearQuota: true, storeUsedBytes: 100 * GB, storeQuotaBytes: 100 * GB, otherBytes: 1 * GB }), 5 * GB);
+    expect(dot()).toBe('red');
+    await openMenu();
+    expect(meter()).toContain("The drive's storage is full. Ask the operator to raise the limit.");
   });
 
   it('has a Trash row with its size that opens /drive/trash, and the meter opens /drive/storage', async () => {
