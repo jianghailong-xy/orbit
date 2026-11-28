@@ -316,6 +316,23 @@ export interface SessionPermissionModeFacts {
   /** Detail only: whether older changes than those are recorded, read with GET /sessions/:id/permission-mode-changes
    *  ?before=<the oldest one's seq>. Absent from a server that does not page them. */
   permissionModeChangesHasMore?: boolean;
+  /** Detail only: the newest correction to Auto Claude refused, while it still answers the newest change (Claude's
+   *  report of the mode it stays in); null once a later change supersedes it, or when there is none. The refusal's own
+   *  event (PERMISSION_MODE_CORRECTION_FAILED_EVENT_SUBTYPE) may have paged out of what a client loaded. Absent from a
+   *  server older than migration 1821. */
+  permissionModeCorrectionRefusal?: SessionPermissionModeCorrectionRefusal | null;
+}
+
+/** A correction to Auto the engine would not take, as the session detail carries it. */
+export interface SessionPermissionModeCorrectionRefusal {
+  /** The mode the engine stays in: the newest change's `toMode`. */
+  mode: string;
+  /** The mode the runner asked for. */
+  requestedMode: string;
+  /** The engine's own words (Claude Code's). */
+  reason: string;
+  /** When the runner said so. */
+  at: string;
 }
 
 /** How many mode changes the session detail carries, and a page of older ones at most. */

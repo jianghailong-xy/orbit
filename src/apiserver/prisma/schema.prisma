@@ -3222,23 +3222,27 @@ model RunEvent {
 /// migration 1805), with what caused it: CLAIM (the mode a claim handed the runner), OWNER_PICK (the owner's config
 /// change, `client` naming the app when known), ENGINE_REPORT (the engine said it runs in another mode), RUNNER_CORRECTION
 /// (the runner switched the engine itself), RESPAWN (the engine came back from a re-spawn in this mode) or ORBIT_CHANGE
-/// (a config change Orbit made). Append-only; the cause CHECK lives in the migration. A CLAIM, OWNER_PICK or
-/// ORBIT_CHANGE that handed another mode than the one asked for carries the mode asked for and why (`requestedMode`,
+/// (a config change Orbit made). Append-only, but for a refused correction written onto the report it answers
+/// (migration 1821); the CHECKs live in the migrations. A CLAIM, OWNER_PICK or ORBIT_CHANGE that handed another mode than the one asked for carries the mode asked for and why (`requestedMode`,
 /// `reason`: ROOT_RUNNER or SCHEDULED_RUN, migrations 1807 and 1811); both are null on every other row. `seq` is the
 /// order the rows were inserted in (migration 1810): `createdAt` has milliseconds only, so two changes can share it,
 /// and the detail and the page of older changes order and continue by `seq`.
 model SessionPermissionModeChange {
-  id            String   @id @db.Uuid
-  sessionId     String   @map("session_id") @db.Uuid
-  session       Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  fromMode      String?  @map("from_mode")
-  toMode        String   @map("to_mode")
-  cause         String
-  client        String?
-  requestedMode String?  @map("requested_mode")
-  reason        String?
-  createdAt     DateTime @default(now()) @map("created_at")
-  seq           BigInt   @default(autoincrement())
+  id                   String    @id @db.Uuid
+  sessionId            String    @map("session_id") @db.Uuid
+  session              Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  fromMode             String?   @map("from_mode")
+  toMode               String    @map("to_mode")
+  cause                String
+  client               String?
+  requestedMode        String?   @map("requested_mode")
+  reason               String?
+  // A correction to Auto that Claude refused, written onto the report of the mode it stays in (migration 1821).
+  refusalRequestedMode String?   @map("refusal_requested_mode")
+  refusalReason        String?   @map("refusal_reason")
+  refusedAt            DateTime? @map("refused_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  seq                  BigInt    @default(autoincrement())
 
   @@index([sessionId, createdAt])
   @@index([sessionId, seq])
