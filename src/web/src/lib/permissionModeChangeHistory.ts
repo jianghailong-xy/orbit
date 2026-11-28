@@ -35,7 +35,7 @@ function joined(older: readonly SessionPermissionModeChange[], newer: readonly S
 
 /**
  * What is held once the detail's read of the session is taken in. The same object when it adds nothing, so a render
- * can call it with what it holds and keep that. A change with no seq (a server older than migration 1780, which pages
+ * can call it with what it holds and keep that. A change with no seq (a server older than migration 1810, which pages
  * none) is held as the detail says, alone.
  */
 export function adoptDetailChanges(

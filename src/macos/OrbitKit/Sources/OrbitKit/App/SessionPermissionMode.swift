@@ -1,7 +1,7 @@
 import Foundation
 
 /// One durable mode change from the session detail, oldest first. `seq` is the order it was recorded in
-/// (migration 1780): two changes can share `at`, never a seq. Nil from a server older than that, which pages none.
+/// (migration 1810): two changes can share `at`, never a seq. Nil from a server older than that, which pages none.
 public struct SessionPermissionModeChange: Codable, Equatable, Sendable {
     public let fromMode: String?
     public let toMode: String

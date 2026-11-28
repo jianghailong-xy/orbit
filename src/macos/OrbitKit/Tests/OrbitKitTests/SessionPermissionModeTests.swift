@@ -89,7 +89,7 @@ final class SessionPermissionModeTests: XCTestCase {
         XCTAssertEqual(rows.map(\.id), [cards[0].id, "message", cards[1].id, cards[2].id, "transcript-bottom"])
     }
 
-    /// Since migration 1780: each change's seq, the detail's word that older ones exist, and a page of them. Repeated
+    /// Since migration 1810: each change's seq, the detail's word that older ones exist, and a page of them. Repeated
     /// transitions in one millisecond are rows apart and each drawn once, in the order they were recorded.
     func testRepeatedTransitionsAtOneMomentAreEachDrawnOnceInOrder() throws {
         let detail = try session(#"""

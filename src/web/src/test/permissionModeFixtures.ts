@@ -7,7 +7,7 @@ import type { PermissionModeChangeCause, SessionPermissionModeChange } from '@or
  *  - a change is exactly { fromMode, toMode, cause, client, at, seq }: `at` an ISO instant with
  *    milliseconds; `client` the app for OWNER_PICK, 'orbit' for ORBIT_CHANGE (the setconfig turn's
  *    sender), null for every other cause (sessions/actual-permission-mode.ts); `seq` the order it was
- *    recorded in (migration 1780), left out by a test that reads a server older than that;
+ *    recorded in (migration 1810), left out by a test that reads a server older than that;
  *  - the session's actualPermissionMode is its newest change's toMode, and actualPermissionModeAt that
  *    change's instant: one statement writes both (recordActualPermissionMode), each with its own
  *    clock_timestamp(), so the server's session stamp can read up to a millisecond earlier;

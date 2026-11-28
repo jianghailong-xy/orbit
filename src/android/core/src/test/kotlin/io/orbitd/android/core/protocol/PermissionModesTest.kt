@@ -63,7 +63,7 @@ class PermissionModesTest {
         assertTrue(PermissionModes.changes(json("""{"permissionModeChanges":{"toMode":"auto"}}""")).isEmpty())
     }
 
-    /** Since migration 1780 each change carries the order it was recorded in, and the detail says whether older ones are recorded:
+    /** Since migration 1810 each change carries the order it was recorded in, and the detail says whether older ones are recorded:
      * two repeated transitions at one moment are two lines, and a page of older ones decodes the same way. */
     @Test fun eachChangeCarriesItsSeqAndThePageOfOlderOnesDecodes() {
         val detail = json("""{"permissionModeChangesHasMore":true,"permissionModeChanges":[

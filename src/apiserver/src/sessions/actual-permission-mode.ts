@@ -128,7 +128,7 @@ export function configTurnPayload(content: string | null | undefined): { permiss
 
 /** The session detail's mode changes as its `include` reads them: the newest SESSION_PERMISSION_MODE_CHANGES_LIMIT, and
  *  one more, which says only whether older ones are recorded (permissionModeChangePageOf). By `seq`, the order they were
- *  recorded in: two can share a time (migration 1780). */
+ *  recorded in: two can share a time (migration 1810). */
 export const PERMISSION_MODE_CHANGES_INCLUDE = {
   orderBy: { seq: 'desc' },
   take: SESSION_PERMISSION_MODE_CHANGES_LIMIT + 1,

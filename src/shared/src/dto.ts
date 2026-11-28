@@ -274,7 +274,7 @@ export interface SessionPermissionModeChange {
   /** For OWNER_PICK, the app it came from (`web`, `ios`, `macos`, `android`, `terminal`) when known. */
   client: string | null;
   at: string;
-  /** The order it was recorded in (migration 1780): two changes can share `at`, never `seq`. What a page of older
+  /** The order it was recorded in (migration 1810): two changes can share `at`, never `seq`. What a page of older
    *  changes continues from, and what tells one change from another. Absent from a server older than 1780. */
   seq?: number;
 }

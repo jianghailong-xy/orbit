@@ -1,4 +1,5 @@
--- 1780 — the order mode changes were recorded in, which their time alone cannot give.
+-- 1810 — the order mode changes were recorded in, which their time alone cannot give.
+-- Written as 1780, renumbered to 1810 after main took 1780-1800 and this project's 1755/1756 moved to 1805/1806.
 --
 -- session_permission_mode_change.created_at is TIMESTAMP(3): two changes recorded in the same millisecond (a pick and
 -- the engine's report of it, Auto → Plan → Auto in one batch) share a time, and the row's random id says nothing about

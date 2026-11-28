@@ -14,7 +14,7 @@ import kotlinx.serialization.json.longOrNull
  * the app it came from when the request said), ENGINE_REPORT (Claude Code's init frame said another mode), RUNNER_CORRECTION (the
  * runner switched the engine itself), RESPAWN (the engine came back from a re-spawn in this mode) or ORBIT_CHANGE (a config change
  * Orbit made, not the owner). [fromMode] is null for the session's first recorded mode. [seq] is the order it was recorded in
- * (migration 1780): two changes can share [at], never a seq. Null from a server older than that, which pages none.
+ * (migration 1810): two changes can share [at], never a seq. Null from a server older than that, which pages none.
  */
 data class PermissionModeChange(val fromMode: String?, val toMode: String, val cause: String, val client: String?, val at: String,
     val seq: Long? = null) {
