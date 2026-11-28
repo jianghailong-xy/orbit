@@ -3586,7 +3586,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1730_session_client_request_id',
       // 1750 adds the nullable `runner_presence.last_heard_at` (catalog only, no row rewritten) to the UNLOGGED presence
       // table. No `task`, `session`, ledger table or preserved trigger/function is touched, and no DONE fence changes.
-      '1750_runner_presence_last_heard_at'],
+      '1750_runner_presence_last_heard_at',
+      // 1760 adds the nullable `user.drive_quota_bytes` (catalog only, no row rewritten) and a CHECK that it is
+      // positive. No `task`, `session`, ledger table or preserved trigger/function is touched, and no DONE fence changes.
+      '1760_user_drive_quota_bytes'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.

@@ -82,7 +82,7 @@ export interface FilesConfig {
   s3?: S3FilesConfig;
   /** The deployment mirrors its bucket off host (ORBIT_DRIVE_S3_MIRROR=1), so s3 bytes are in the off-host copy as local ones are. */
   s3Mirror?: boolean;
-  /** The most one account may keep (ORBIT_DRIVE_QUOTA_BYTES). Unset: no limit, a self-hosted deployment's default. */
+  /** The most one account may keep (ORBIT_DRIVE_QUOTA_BYTES) unless its own user.drive_quota_bytes says otherwise. Unset: no limit, a self-hosted deployment's default. */
   quotaBytes?: number;
   /** Configured capacity of the S3 store, shared by all accounts. */
   storeQuotaBytes?: number;

@@ -326,6 +326,15 @@ Settings shows an account's storage, its largest projects and tasks, and what ea
 self-hosted deployment needs no limit, and has none unless you set one. Each content counts once, an expired file no longer
 counts, and uploads racing at the limit can pass it by at most 25 MiB each.
 
+One account can have a quota of its own, larger or smaller than `ORBIT_DRIVE_QUOTA_BYTES` or where it is unset. Set it in
+SQL, in bytes; it applies to the next upload, with no restart. `NULL`, every account's value until you set one, gives the
+account the deployment's quota again. Zero and negative values are refused.
+
+```sql
+UPDATE "user" SET drive_quota_bytes = 107374182400 WHERE email = 'someone@example.com';  -- 100 GiB
+UPDATE "user" SET drive_quota_bytes = NULL WHERE email = 'someone@example.com';          -- the deployment's quota
+```
+
 ### Monitoring
 
 The `monitoring` Compose profile runs Prometheus beside the stack, with two exporters, and collects the metrics of

@@ -94,7 +94,7 @@ export interface StorageUsage {
   /** What the account keeps now, each content once. */
   totalBytes: number;
   fileCount: number;
-  /** ORBIT_DRIVE_QUOTA_BYTES, when this deployment sets one. */
+  /** The account's own quota (user.drive_quota_bytes), else ORBIT_DRIVE_QUOTA_BYTES; null when neither is set. */
   quotaBytes: number | null;
   /** Largest first. A file counts under its task, and its task's project. */
   projects: { projectId: string; title: string; bytes: number; fileCount: number }[];
@@ -872,12 +872,21 @@ export class FilesService implements OnApplicationBootstrap {
   }
 
   /**
-   * Refuses an upload that would take the account past its quota, when the deployment sets one. Bytes the account already
+   * The account's quota: its own (user.drive_quota_bytes, set by the operator in SQL) in place of the deployment's
+   * ORBIT_DRIVE_QUOTA_BYTES. Undefined: no limit.
+   */
+  private async quotaFor(ownerId: string): Promise<number | undefined> {
+    const user = await this.prisma.user.findUnique({ where: { id: ownerId }, select: { driveQuotaBytes: true } });
+    return user?.driveQuotaBytes != null ? Number(user.driveQuotaBytes) : this.config.quotaBytes;
+  }
+
+  /**
+   * Refuses an upload that would take the account past its quota, when it has one. Bytes the account already
    * keeps cost nothing more. Read without a lock, so uploads racing at the limit can pass it by what they carry, at most
    * 25 MiB each: a quota is there to bound what an account keeps, not to count its last byte.
    */
   private async assertWithinQuota(ownerId: string, upload: Pick<HashedTempFile, 'sha256' | 'size'>): Promise<void> {
-    const quota = this.config.quotaBytes;
+    const quota = await this.quotaFor(ownerId);
     if (!quota) return;
     const kept = await this.prisma.attachment.findFirst({
       where: { ownerId, sha256: upload.sha256, expiredAt: null },
@@ -1004,7 +1013,7 @@ export class FilesService implements OnApplicationBootstrap {
     return {
       totalBytes: totals.bytes,
       fileCount: totals.files,
-      quotaBytes: this.config.quotaBytes ?? null,
+      quotaBytes: (await this.quotaFor(ownerId)) ?? null,
       projects: projects.map(({ id, title, bytes, files }) => ({ projectId: id, title, bytes: Number(bytes), fileCount: Number(files) })),
       tasks: tasks.map(({ id, title, bytes, files }) => ({ taskId: id, title, bytes: Number(bytes), fileCount: Number(files) })),
       weeks: Array.from({ length: USAGE_WEEKS }, (_, index) => {
