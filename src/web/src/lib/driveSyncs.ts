@@ -3,9 +3,9 @@ import { api } from '../api';
 
 /**
  * An agent's directory syncs into Drive (docs/drive-directory-sync-design.md, S4): `GET /drive/syncs` is the
- * running ones and those that ended in the last 24 h. The store reads it when the page opens, when the control plane hears
- * `drive.sync`, on focus and after a reconnect, and every 5 s while one is running and the page is visible. "Clear finished"
- * only hides ended syncs on this browser (their ids are kept in localStorage).
+ * running ones, those that ended in the last 24 h and failed ones nobody has handled yet. The store reads it when the page
+ * opens, when the control plane hears `drive.sync`, on focus and after a reconnect, and every 5 s while one is running and
+ * the page is visible. "Clear finished" only hides ended syncs on this browser (their ids are kept in localStorage).
  */
 
 export type DriveSyncStatus = 'CHECKING' | 'UPLOADING' | 'DONE' | 'FAILED' | 'STOPPED';
@@ -16,7 +16,8 @@ export interface DriveSyncView {
   sourceName: string;
   destPath: string;
   destEntryId: string | null;
-  session: { id: string; title: string } | null;
+  /** The session that ran it; `open` while it can take a turn. */
+  session: { id: string; title: string; open: boolean } | null;
   filesSeen: number;
   filesTotal: number | null;
   filesDone: number;
@@ -31,6 +32,13 @@ export interface DriveSyncView {
   startedAt: string;
   updatedAt: string;
   endedAt: string | null;
+  /** When the failures stopped needing the owner; null while they do (or there were none). */
+  handledAt: string | null;
+  /** The session the failures were handed to, and when. */
+  fixSessionId: string | null;
+  fixRequestedAt: string | null;
+  /** Where that session stands: working on it, or stopped (with what it asks the owner, if anything). Null with no hand-off. */
+  fix: { title: string | null; working: boolean; question: string | null } | null;
 }
 
 /** A sync as the tray draws it: the server's view and the bytes a second between the last two reads. */
@@ -40,6 +48,9 @@ export interface DriveSync extends DriveSyncView {
 
 export const syncRunning = (sync: Pick<DriveSyncView, 'status'>): boolean =>
   sync.status === 'CHECKING' || sync.status === 'UPLOADING';
+
+/** A sync whose failures an agent is working on: read again while it does, since its session's end sends no drive.sync. */
+const fixWorking = (sync: Pick<DriveSyncView, 'fix'>): boolean => sync.fix?.working === true;
 
 const DISMISSED_KEY = 'orbit:documents-syncs-dismissed';
 const POLL_MS = 5000;
@@ -106,6 +117,16 @@ export async function refreshDriveSyncs(): Promise<void> {
   }
 }
 
+/**
+ * Put one sync's view in place of the one held, until the next read: the activity view's optimistic hand-off, and the
+ * server's answer to it. A sync not held is left alone.
+ */
+export function replaceDriveSync(view: DriveSyncView): void {
+  if (!syncs.some((sync) => sync.id === view.id)) return;
+  syncs = syncs.map((sync) => (sync.id === view.id ? { ...view, rate: sync.rate } : sync));
+  publish();
+}
+
 /** Hide the ended syncs from the tray. */
 export function clearFinishedSyncs(): void {
   readDismissed();
@@ -127,7 +148,7 @@ function start(): void {
   window.addEventListener('focus', onFocus);
   document.addEventListener('visibilitychange', onFocus);
   timer = setInterval(() => {
-    if (document.visibilityState !== 'hidden' && syncs.some(syncRunning)) void refreshDriveSyncs();
+    if (document.visibilityState !== 'hidden' && syncs.some((sync) => syncRunning(sync) || fixWorking(sync))) void refreshDriveSyncs();
   }, POLL_MS);
 }
 

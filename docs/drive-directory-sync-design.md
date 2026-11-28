@@ -211,6 +211,8 @@ web Documents page: GET /drive/syncs on open/focus/reconnect; drive.sync re-read
   - `PATCH /runner/drive/syncs/:id {status, counts, currentPath, failed?}`. Only the runner that opened the sync may
     update it, and an ended sync refuses updates.
 - Owner route `GET /drive/syncs`: running syncs, and syncs ended in the last 24 hours, newest first.
+  A sync that ended with failures stays listed (and is not pruned) whatever its age until it is handled: the owner's
+  `POST /drive/syncs/:id/handled`, or a later clean sync of the same source into the same destination.
 - A `RUNNING`/`CHECKING`/`UPLOADING` row not updated for 2 minutes reads as `STOPPED` (worked out when the row is
   read). The retention sweep deletes ended rows after 24 hours.
 - Event `drive.sync`, payload `{id}` only, published to the owner's scope, and **only to streams that declared

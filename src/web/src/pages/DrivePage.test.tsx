@@ -348,7 +348,8 @@ describe('the folder tree and the list', () => {
     await visit('/drive?folder=f-ui');
     await until(() => expect(row('sign-in-v3.png')).toBeTruthy());
     const writer = (name: string) => row(name).querySelector('.files-col-writer')!.textContent;
-    await until(() => expect(writer('sign-in-v3.png')).toBe('Agent in Redesign the sign-in page'));
+    await until(() => expect(writer('sign-in-v3.png')).toBe('Redesign the sign-in page'));
+    expect(row('sign-in-v3.png').querySelector('a')!.getAttribute('aria-label')).toBe('Agent in Redesign the sign-in page');
     expect(row('sign-in-v3.png').querySelector('a')!.getAttribute('href')).toBe('/sessions/sess-1');
     expect(writer('migration-notes.md')).toBe('An agent on Orbit Cloud');
     expect(writer('deploy-checklist.md')).toBe('You');
@@ -360,7 +361,7 @@ describe('the folder tree and the list', () => {
   it('searches the whole drive from the box, each result with its folder, and opens a result in its folder', async () => {
     entries.push({ id: 'notes2', parentId: 'f-data', kind: 'FILE', name: 'field-notes.csv', sizeBytes: 10 });
     await visit('/drive?folder=f-data');
-    const box = document.querySelector<HTMLInputElement>('input[aria-label="Search Files"]')!;
+    const box = document.querySelector<HTMLInputElement>('input[aria-label="Search Drive"]')!;
     await type(box, 'NOTES');
     // The box asks the server once typing has stopped.
     await act(async () => {
@@ -373,8 +374,8 @@ describe('the folder tree and the list', () => {
     expect(row('sign-in-v3.png')).toBeNull();
     await click(row('migration-notes.md'));
     expect(location).toBe('/drive?folder=f-ui&file=notes');
-    expect(document.querySelector('input[aria-label="Search Files"]')).toBeTruthy();
-    expect((document.querySelector('input[aria-label="Search Files"]') as HTMLInputElement).value).toBe('');
+    expect(document.querySelector('input[aria-label="Search Drive"]')).toBeTruthy();
+    expect((document.querySelector('input[aria-label="Search Drive"]') as HTMLInputElement).value).toBe('');
   });
 
   it('opens a folder from the tree', async () => {
@@ -440,6 +441,32 @@ describe('the folder tree and the list', () => {
   });
 });
 
+describe('the header', () => {
+  // Project acceptance: these controls in this order, and none of what they replaced.
+  it('holds Search Drive, New folder, Upload, an icon-only Settings and a primary Agents, and nothing it replaced', async () => {
+    await visit('/drive?folder=f-ui');
+    await until(() => expect(row('sign-in-v3.png')).toBeTruthy());
+    const controls = [
+      ...document.querySelectorAll<HTMLElement>('.files-head-actions input:not([type="file"]), .files-head-actions button'),
+    ];
+    const names = controls.map((c) => c.getAttribute('aria-label') ?? c.textContent!.trim());
+    expect(names).toEqual(['Search Drive', 'New folder', 'Upload', 'Settings', 'Agents']);
+    const [search, , , settings, agents] = controls;
+    expect(search.getAttribute('placeholder')).toBe('Search Drive');
+    expect(settings.textContent).toBe('');
+    expect(settings.querySelector('.anticon-setting')).toBeTruthy();
+    expect(controls.filter((c) => c.classList.contains('orbit-button-primary'))).toEqual([agents]);
+
+    const replaced = [...document.querySelectorAll('button, a')].filter((el) =>
+      /^(Trash|Storage)\b/.test((el.getAttribute('aria-label') ?? el.textContent ?? '').trim()),
+    );
+    expect(replaced.map((el) => el.outerHTML)).toEqual([]);
+    expect(document.querySelector('.files-crumbs')).toBeNull();
+    expect(document.querySelector('.files-tray')).toBeNull();
+    expect(document.querySelector('.wk-chat-fab')).toBeNull();
+  });
+});
+
 describe('upload', () => {
   it('sends a picked file in chunks, each named by its sha256, then completes it into the open folder', async () => {
     await visit('/drive?folder=f-ui');
@@ -451,11 +478,11 @@ describe('upload', () => {
     // Chunks of the size the open answered (4 bytes here), every one with its digest.
     expect(chunks.map((c) => c.body)).toEqual(['hell', 'o wo', 'rld']);
     expect(chunks.map((c) => c.sha256)).toEqual(['hell', 'o wo', 'rld'].map(sha));
-    await until(() => expect(document.querySelector('.files-tray')?.textContent).toContain('Uploaded 1 file'));
+    expect(document.querySelector('.files-tray')).toBeNull();
     await until(() => expect(row('labels.csv')).toBeTruthy());
   });
 
-  it('resumes after a reload: the same file picked again sends only the chunks the server does not have', async () => {
+  it('goes on from a reload when the same file is chosen again on the row: only the chunks the server lacks are sent', async () => {
     uploadStatus['upload-7'] = { chunks: [{ idx: 0, sha256: sha('hell'), sizeBytes: 4 }] };
     localStorage.setItem(
       'orbit:drive-uploads',
@@ -464,9 +491,13 @@ describe('upload', () => {
       ]),
     );
     resetDriveUploadsForTest();
-    await visit('/drive?folder=f-ui');
-    await until(() => expect(document.querySelector('.files-tray')?.textContent).toContain('Pick the same file again'));
-    const again = document.querySelector<HTMLInputElement>('input[aria-label="Pick eval.zip again"]')!;
+    await visit('/drive?folder=f-data');
+    await until(() => expect(document.querySelector('tr.pending')?.textContent).toContain('Stopped'));
+    expect(document.querySelector('.files-tray')).toBeNull();
+    const pending = document.querySelector<HTMLElement>('tr.pending')!;
+    expect(button('Choose file again', pending)).toBeTruthy();
+    expect(button('Cancel', pending)).toBeTruthy();
+    const again = pending.querySelector<HTMLInputElement>('input[aria-label="Pick eval.zip again"]')!;
     await pick(again, [new File(['hello world'], 'eval.zip', { lastModified: 5 })]);
     await until(() => expect(calls.some((c) => c.path === '/drive/uploads/upload-7/complete')).toBe(true));
     // Nothing opened anew; chunk 0 was there already.
@@ -474,7 +505,7 @@ describe('upload', () => {
     expect(chunks.map((c) => c.path)).toEqual(['/api/drive/uploads/upload-7/chunks/1', '/api/drive/uploads/upload-7/chunks/2']);
   });
 
-  it('pauses on a lost connection, saying what is kept, and goes on from there on Resume', async () => {
+  it('pauses on a lost connection, saying so on its row, and goes on from there on Resume', async () => {
     let fail = true;
     const served = vi.mocked(authedFetch).getMockImplementation()!;
     vi.mocked(authedFetch).mockImplementation((async (input: string, init: RequestInit) => {
@@ -489,14 +520,29 @@ describe('upload', () => {
       await act(async () => {
         await vi.advanceTimersByTimeAsync(10_000);
       });
-      await until(() => expect(document.querySelector('.files-tray')?.textContent).toContain('Connection lost. 4 B of 11 B is kept'));
+      await until(() => expect(document.querySelector('tr.pending')?.textContent).toContain('Connection lost'));
+      expect(document.querySelector('.files-tray')).toBeNull();
       fail = false;
-      await click(button('Resume', document.querySelector('.files-tray')!));
+      await click(button('Resume', document.querySelector('tr.pending')!));
       await until(() => expect(calls.some((c) => c.path === '/drive/uploads/upload-1/complete')).toBe(true));
       expect(chunks.map((c) => c.body)).toEqual(['hell', 'o wo', 'rld']);
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('cancels a paused upload from its row', async () => {
+    localStorage.setItem(
+      'orbit:drive-uploads',
+      JSON.stringify([
+        { key: 'k2', name: 'old.zip', size: 11, lastModified: 5, parentId: 'f-ui', parentName: 'UI', relativePath: null, dropKey: null, uploadId: null },
+      ]),
+    );
+    resetDriveUploadsForTest();
+    await visit('/drive?folder=f-ui');
+    await until(() => expect(document.querySelector('tr.pending')).toBeTruthy());
+    await click(button('Cancel', document.querySelector('tr.pending')!));
+    expect(document.querySelector('tr.pending')).toBeNull();
   });
 
   it('drops a folder as one drop: its files keep their paths and share the top folder the first one made', async () => {

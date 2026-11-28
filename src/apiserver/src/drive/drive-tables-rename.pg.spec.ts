@@ -42,6 +42,8 @@ const MIGRATION_1592 = migration('1592_drive_tables');
 const BASES = ['staging', 'staging_chunk', 'version_chunk', 'trash_group', 'entry', 'version', 'commit',
   'removed_entry', 'change', 'mount_credential'];
 const ALL = [...BASES, 'sync'];
+/** Names a migration after 1592 added to these tables, which 1592 itself cannot leave: 1781's index on drive_version. */
+const ADDED_AFTER_1592 = ['index drive_version.drive_version_owner_created_idx'];
 type Prefix = 'drive_' | 'document_';
 
 /** Every name a schema's drive or document tables carry: the tables, their constraints, indexes and owned sequences. */
@@ -198,7 +200,9 @@ test('migrations 1551 and 1592 rename the drive tables there and back without to
   assert.deepEqual(namesAfter, documentNames.map((n) => n.replace(/(^|[ .])document_/g, '$1drive_')).sort(),
     'every name is the old one with document_ replaced by drive_, and nothing is added or dropped');
   assert.deepEqual(await names(sql, scratch, 'drive_'), namesBefore, 'the ten tables carry the names they had before 1551');
-  assert.deepEqual(namesAfter, migrated, 'the names are the ones the fully migrated database has');
+  for (const name of ADDED_AFTER_1592) assert.ok(migrated.includes(name), `${name} is in the migrated database`);
+  assert.deepEqual(namesAfter, migrated.filter((name) => !ADDED_AFTER_1592.includes(name)),
+    'the names are the ones the fully migrated database has, less those later migrations added');
   assert.deepEqual(await contents(sql, scratch, 'drive_', ALL), rowsBefore1592,
     'every table keeps its row count and every row');
   assert.deepEqual(await contents(sql, scratch, 'drive_'), rowsBefore, 'the ten tables hold what they held before 1551');

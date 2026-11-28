@@ -29,6 +29,9 @@ const view = (id: string, status: DriveSyncView['status']): DriveSyncView => ({
   startedAt: '2026-11-24T10:00:00Z',
   updatedAt: '2026-11-24T10:00:00Z',
   endedAt: null,
+  handledAt: null,
+  fixSessionId: null,
+  fixRequestedAt: null,
 });
 
 beforeEach(() => {
