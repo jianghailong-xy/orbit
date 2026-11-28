@@ -72,8 +72,19 @@ func branchCommitsBetween(dir, base, tip string) []BranchCommit {
 	if base == tip {
 		return []BranchCommit{}
 	}
-	out, err := git(dir, "log", "--first-parent", "--no-merges", "--no-color", "-n", strconv.Itoa(branchCommitsMax),
-		"--format=%x1e%H%x1f%cI%x1f%s%x1f%b%x1d", "--numstat", base+".."+tip)
+	out, err := git(dir, branchCommitsLogArgs(base, tip, branchCommitsMax)...)
+	return readBranchCommits(dir, out, err)
+}
+
+// branchCommitsLogArgs is the git log that lists at most limit commits of base..tip, with any extra log options.
+func branchCommitsLogArgs(base, tip string, limit int, extra ...string) []string {
+	args := []string{"log", "--first-parent", "--no-merges", "--no-color", "-n", strconv.Itoa(limit),
+		"--format=%x1e%H%x1f%cI%x1f%s%x1f%b%x1d", "--numstat"}
+	return append(append(args, extra...), base+".."+tip)
+}
+
+// readBranchCommits reads that log's answer, secrets redacted; nil when git failed.
+func readBranchCommits(dir, out string, err error) []BranchCommit {
 	if err != nil {
 		logln("branch commits failed in", dir+":", err)
 		return nil
