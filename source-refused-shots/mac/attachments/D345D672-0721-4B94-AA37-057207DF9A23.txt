@@ -1,0 +1,126 @@
+07:21:40 "GET /api/sessions HTTP/1.1" 200 -
+07:34:04 "POST /__reset HTTP/1.1" 200 -
+07:34:24 "GET /api/users/me HTTP/1.1" 200 -
+07:34:24 "GET /api/projects/sidebar HTTP/1.1" 200 -
+07:34:24 NOT SERVED /api/auth/capabilities
+07:34:24 "GET /api/auth/capabilities HTTP/1.1" 404 -
+07:34:24 "GET /api/wiki/spaces HTTP/1.1" 200 -
+07:34:24 "GET /api/projects HTTP/1.1" 200 -
+07:34:24 NOT SERVED /api/auth/capabilities
+07:34:24 NOT SERVED /api/schedules
+07:34:24 NOT SERVED /api/guest-sessions
+07:34:24 "GET /api/auth/capabilities HTTP/1.1" 404 -
+07:34:25 "GET /api/guest-sessions HTTP/1.1" 404 -
+07:34:25 "GET /api/schedules HTTP/1.1" 404 -
+07:34:26 "GET /api/users/me HTTP/1.1" 200 -
+07:34:26 "GET /api/events?hints=list_changed HTTP/1.1" 200 -
+07:34:26 NOT SERVED /api/wiki/trash
+07:34:26 NOT SERVED /api/drive/syncs
+07:34:26 "GET /api/agents HTTP/1.1" 200 -
+07:34:26 "GET /api/wiki/trash HTTP/1.1" 404 -
+07:34:26 "GET /api/agents HTTP/1.1" 200 -
+07:34:26 "GET /api/drive/syncs HTTP/1.1" 404 -
+07:34:26 "GET /api/sessions?view=open&since= HTTP/1.1" 200 -
+07:34:26 "GET /api/runners HTTP/1.1" 200 -
+07:34:26 "GET /api/providers HTTP/1.1" 200 -
+07:34:26 "GET /api/sessions?view=open HTTP/1.1" 200 -
+07:34:26 "GET /api/providers HTTP/1.1" 200 -
+07:34:26 "GET /api/providers/pools HTTP/1.1" 200 -
+07:34:26 "GET /api/session-folders HTTP/1.1" 200 -
+07:34:26 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+07:34:26 NOT SERVED /api/wiki/trash
+07:34:26 "GET /api/wiki/spaces HTTP/1.1" 200 -
+07:34:26 "GET /api/wiki/trash HTTP/1.1" 404 -
+07:34:26 "GET /api/providers/pools HTTP/1.1" 200 -
+07:34:26 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+07:34:26 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+07:34:26 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+07:34:26 "GET /api/watches HTTP/1.1" 200 -
+07:34:26 NOT SERVED /api/terminals/requests
+07:34:27 "GET /api/terminals/requests HTTP/1.1" 404 -
+07:34:27 "GET /api/session-tags HTTP/1.1" 200 -
+07:34:27 "GET /api/sessions?workspaceId=a1&view=open&scheduled=1 HTTP/1.1" 200 -
+07:34:27 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+07:34:27 "GET /api/agents HTTP/1.1" 200 -
+07:34:27 "GET /api/wiki/spaces HTTP/1.1" 200 -
+07:34:27 NOT SERVED /api/guest-sessions
+07:34:27 "GET /api/guest-sessions HTTP/1.1" 404 -
+07:34:27 "GET /api/projects/sidebar HTTP/1.1" 200 -
+07:34:27 "GET /api/projects HTTP/1.1" 200 -
+07:34:27 NOT SERVED /api/auth/capabilities
+07:34:27 "GET /api/auth/capabilities HTTP/1.1" 404 -
+07:34:27 "GET /api/users/me HTTP/1.1" 200 -
+07:34:27 NOT SERVED /api/terminals/requests
+07:34:27 "GET /api/session-tags HTTP/1.1" 200 -
+07:34:27 "GET /api/sessions?workspaceId=a1&view=open&scheduled=1 HTTP/1.1" 200 -
+07:34:27 "GET /api/terminals/requests HTTP/1.1" 404 -
+07:34:27 "GET /api/sessions?view=open HTTP/1.1" 200 -
+07:34:27 "GET /api/session-folders HTTP/1.1" 200 -
+07:34:27 "GET /api/agents HTTP/1.1" 200 -
+07:34:27 "GET /api/runners HTTP/1.1" 200 -
+07:34:27 NOT SERVED /api/wiki/trash
+07:34:27 NOT SERVED /api/owner-requests?state=open
+07:34:27 "GET /api/owner-requests?state=open HTTP/1.1" 404 -
+07:34:27 "GET /api/wiki/trash HTTP/1.1" 404 -
+07:34:28 "GET /api/sessions/S1/created-tasks HTTP/1.1" 200 -
+07:34:28 "GET /api/sessions/S1/events/page?tail=200&maxPayload=2048 HTTP/1.1" 200 -
+07:34:28 "GET /api/sessions/S1 HTTP/1.1" 200 -
+07:34:28 NOT SERVED /api/sessions/S1/task-moves
+07:34:28 NOT SERVED /api/drive/syncs
+07:34:28 "GET /api/session-folders HTTP/1.1" 200 -
+07:34:28 "GET /api/agents HTTP/1.1" 200 -
+07:34:28 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S1
+07:34:28 "GET /api/providers HTTP/1.1" 200 -
+07:34:28 "GET /api/providers HTTP/1.1" 200 -
+07:34:28 "GET /api/sessions/S1/task-moves HTTP/1.1" 404 -
+07:34:28 "GET /api/sessions/S1 HTTP/1.1" 200 -
+07:34:28 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S1 HTTP/1.1" 404 -
+07:34:28 "GET /api/drive/syncs HTTP/1.1" 404 -
+07:34:28 NOT SERVED /api/sessions/S1/approvals?toolName=AskUserQuestion
+07:34:28 NOT SERVED /api/sessions/S1/approvals?status=PENDING
+07:34:28 NOT SERVED /api/sessions/S1/turns?view=active
+07:34:28 "GET /api/projects/sidebar HTTP/1.1" 200 -
+07:34:28 NOT SERVED /api/sessions/S1/schedule-cards
+07:34:28 "GET /api/projects HTTP/1.1" 200 -
+07:34:28 "GET /api/sessions/S1/approvals?status=PENDING HTTP/1.1" 404 -
+07:34:28 "GET /api/sessions/S1/turns?view=active HTTP/1.1" 404 -
+07:34:28 "GET /api/sessions/S1/approvals?toolName=AskUserQuestion HTTP/1.1" 404 -
+07:34:28 "GET /api/projects/sidebar HTTP/1.1" 200 -
+07:34:28 "GET /api/projects HTTP/1.1" 200 -
+07:34:28 "GET /api/sessions/S1/schedule-cards HTTP/1.1" 404 -
+07:34:28 NOT SERVED /api/sessions/S1/events?sinceSeq=8&maxPayload=2048
+07:34:28 "GET /api/sessions/S1/events?sinceSeq=8&maxPayload=2048 HTTP/1.1" 404 -
+07:34:28 "GET /api/runners HTTP/1.1" 200 -
+07:34:29 NOT SERVED /api/sessions/S1/background
+07:34:29 "GET /api/sessions/S1/background HTTP/1.1" 404 -
+07:34:29 "GET /api/runners HTTP/1.1" 200 -
+07:34:29 "GET /api/providers/pools HTTP/1.1" 200 -
+07:34:29 "GET /api/providers/pools HTTP/1.1" 200 -
+07:34:29 "GET /api/providers HTTP/1.1" 200 -
+07:34:29 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S1
+07:34:29 NOT SERVED /api/sessions/S1/schedule-cards
+07:34:29 "GET /api/providers/pools HTTP/1.1" 200 -
+07:34:29 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S1 HTTP/1.1" 404 -
+07:34:29 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+07:34:29 "GET /api/providers/pools HTTP/1.1" 200 -
+07:34:29 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+07:34:29 "GET /api/sessions/S1/schedule-cards HTTP/1.1" 404 -
+07:34:29 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+07:34:29 "GET /api/task-lists HTTP/1.1" 200 -
+07:34:29 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+07:34:29 "GET /api/providers HTTP/1.1" 200 -
+07:34:29 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+07:34:30 "GET /api/sessions/S1/events/page?after=8&limit=200&maxPayload=2048 HTTP/1.1" 200 -
+07:34:30 NOT SERVED /api/sessions/S1/background
+07:34:30 NOT SERVED /api/sessions/S1/turns?view=active
+07:34:30 NOT SERVED /api/sessions/S1/approvals?status=PENDING
+07:34:30 "GET /api/sessions/S1/approvals?status=PENDING HTTP/1.1" 404 -
+07:34:30 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S1
+07:34:30 NOT SERVED /api/sessions/S1/task-moves
+07:34:30 "GET /api/runners HTTP/1.1" 200 -
+07:34:30 "GET /api/sessions/S1/task-moves HTTP/1.1" 404 -
+07:34:30 "GET /api/sessions/S1/turns?view=active HTTP/1.1" 404 -
+07:34:30 "GET /api/sessions/S1/background HTTP/1.1" 404 -
+07:34:30 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S1 HTTP/1.1" 404 -
+07:34:30 NOT SERVED /api/sessions/S1/events?sinceSeq=8&maxPayload=2048
+07:34:30 "GET /api/sessions/S1/events?sinceSeq=8&maxPayload=2048 HTTP/1.1" 404 -

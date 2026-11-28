@@ -1,0 +1,300 @@
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-macos14.0 -bundle -isysroot /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk -O0 -L/Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Intermediates.noindex/EagerLinkingTBDs/Debug -L/Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug -L/Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib -F/Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Intermediates.noindex/EagerLinkingTBDs/Debug -F/Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug -iframework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks -filelist /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Intermediates.noindex/RunStartProbe.build/Debug/RunStartMacProbeUITests.build/Objects-normal/arm64/RunStartMacProbeUITests.LinkFileList -Xlinker -rpath -Xlinker /usr/lib/swift -Xlinker -rpath -Xlinker @loader_path/../Frameworks -Xlinker -rpath -Xlinker @executable_path/Frameworks -Xlinker -rpath -Xlinker @loader_path/Frameworks -Xlinker -object_path_lto -Xlinker /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Intermediates.noindex/RunStartProbe.build/Debug/RunStartMacProbeUITests.build/Objects-normal/arm64/RunStartMacProbeUITests_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -dependency_info -Xlinker /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Intermediates.noindex/RunStartProbe.build/Debug/RunStartMacProbeUITests.build/Objects-normal/arm64/RunStartMacProbeUITests_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Intermediates.noindex/RunStartProbe.build/Debug/RunStartMacProbeUITests.build/Objects-normal/arm64/RunStartMacProbeUITests.swiftmodule @/Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Intermediates.noindex/RunStartProbe.build/Debug/RunStartMacProbeUITests.build/Objects-normal/arm64/RunStartMacProbeUITests-linker-args.resp -Xlinker -needed_framework -Xlinker XCTest -framework XCTest -Xlinker -needed-lXCTestSwiftSupport -lXCTestSwiftSupport -Xlinker -no_adhoc_codesign -o /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PlugIns/RunStartMacProbeUITests.xctest/Contents/MacOS/RunStartMacProbeUITests
+
+ProcessInfoPlistFile /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PlugIns/RunStartMacProbeUITests.xctest/Contents/Info.plist /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Intermediates.noindex/RunStartProbe.build/Debug/RunStartMacProbeUITests.build/empty-RunStartMacProbeUITests.plist (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    builtin-infoPlistUtility /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Intermediates.noindex/RunStartProbe.build/Debug/RunStartMacProbeUITests.build/empty-RunStartMacProbeUITests.plist -producttype com.apple.product-type.bundle.ui-testing -expandbuildsettings -platform macosx -additionalcontentfile /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Intermediates.noindex/RunStartProbe.build/Debug/RunStartMacProbeUITests.build/ProductTypeInfoPlistAdditions.plist -o /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PlugIns/RunStartMacProbeUITests.xctest/Contents/Info.plist
+
+ExtractAppIntentsMetadata (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.8NRwiU/Metal.xctoolchain --module-name RunStartMacProbeUITests --sdk-root /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk --xcode-version 17F113 --platform-family macOS --deployment-target 14.0 --bundle-identifier io.orbitd.crossingsmacprobe.uitests --output /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PlugIns/RunStartMacProbeUITests.xctest/Contents/Resources --target-triple arm64-apple-macos14.0 --binary-file /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PlugIns/RunStartMacProbeUITests.xctest/Contents/MacOS/RunStartMacProbeUITests --dependency-file /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Intermediates.noindex/RunStartProbe.build/Debug/RunStartMacProbeUITests.build/Objects-normal/arm64/RunStartMacProbeUITests_dependency_info.dat --stringsdata-file /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Intermediates.noindex/RunStartProbe.build/Debug/RunStartMacProbeUITests.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Intermediates.noindex/RunStartProbe.build/Debug/RunStartMacProbeUITests.build/Objects-normal/arm64/RunStartMacProbeUITests.SwiftFileList --metadata-file-list /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Intermediates.noindex/RunStartProbe.build/Debug/RunStartMacProbeUITests.build/RunStartMacProbeUITests.DependencyMetadataFileList --static-metadata-file-list /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Intermediates.noindex/RunStartProbe.build/Debug/RunStartMacProbeUITests.build/RunStartMacProbeUITests.DependencyStaticMetadataFileList --swift-const-vals-list /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Intermediates.noindex/RunStartProbe.build/Debug/RunStartMacProbeUITests.build/Objects-normal/arm64/RunStartMacProbeUITests.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2026-11-28 07:33:49.936 appintentsmetadataprocessor[37154:100375] Starting appintentsmetadataprocessor export
+2026-11-28 07:33:49.945 appintentsmetadataprocessor[37154:100375] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+CopySwiftLibs /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PlugIns/RunStartMacProbeUITests.xctest (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PlugIns/RunStartMacProbeUITests.xctest/Contents/MacOS/RunStartMacProbeUITests --scan-folder /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PlugIns/RunStartMacProbeUITests.xctest/Contents/Frameworks --scan-folder /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PlugIns/RunStartMacProbeUITests.xctest/Contents/PlugIns --scan-folder /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PlugIns/RunStartMacProbeUITests.xctest/Contents/Library/SystemExtensions --scan-folder /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PlugIns/RunStartMacProbeUITests.xctest/Contents/Extensions --platform macosx --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.8NRwiU/Metal.xctoolchain --toolchain /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PlugIns/RunStartMacProbeUITests.xctest/Contents/Frameworks --strip-bitcode --scan-executable /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib --strip-bitcode-tool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Intermediates.noindex/RunStartProbe.build/Debug/RunStartMacProbeUITests.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os --back-deploy-swift-span
+
+MkDir /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    /bin/mkdir -p /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app
+
+CopyAndPreserveArchs /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/MacOS/RunStartMacProbeUITests-Runner (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/lipo /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Contents/MacOS/XCTRunner -output /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/MacOS/RunStartMacProbeUITests-Runner -extract arm64
+
+CopyPlistFile /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Info.plist /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Contents/Info.plist (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    builtin-copyPlist --validate --convert xml1 --macro-expansion WRAPPEDPRODUCTNAME RunStartMacProbeUITests-Runner --macro-expansion WRAPPEDPRODUCTBUNDLEIDENTIFIER io.orbitd.crossingsmacprobe.uitests.xctrunner --macro-expansion TESTPRODUCTNAME RunStartMacProbeUITests --macro-expansion TESTPRODUCTBUNDLEIDENTIFIER io.orbitd.crossingsmacprobe.uitests --copy-value UIDeviceFamily /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PlugIns/RunStartMacProbeUITests.xctest/Contents/Info.plist --outdir /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents -- /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Contents/Info.plist
+
+Copy /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PkgInfo /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Contents/PkgInfo (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Contents/PkgInfo /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents
+
+Copy /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/libXCTestSwiftSupport.dylib /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCUnit.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCUnit.framework (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCUnit.framework /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCUIAutomation.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/XCUIAutomation.framework (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/XCUIAutomation.framework /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/XCTest.framework (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/XCTest.framework /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks
+
+CodeSign /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/libXCTestSwiftSupport.dylib (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/libXCTestSwiftSupport.dylib
+/Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/libXCTestSwiftSupport.dylib: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCUnit.framework (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCUnit.framework
+/Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCUnit.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCUIAutomation.framework (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCUIAutomation.framework
+/Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCUIAutomation.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework
+/Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework
+/Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework
+/Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework
+/Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework
+/Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PlugIns/RunStartMacProbeUITests.xctest (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --entitlements /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Intermediates.noindex/RunStartProbe.build/Debug/RunStartMacProbeUITests.build/RunStartMacProbeUITests.xctest.xcent --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PlugIns/RunStartMacProbeUITests.xctest
+
+RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PlugIns/RunStartMacProbeUITests.xctest (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    builtin-RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PlugIns/RunStartMacProbeUITests.xctest
+
+Touch /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PlugIns/RunStartMacProbeUITests.xctest (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    /usr/bin/touch -c /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PlugIns/RunStartMacProbeUITests.xctest
+
+CodeSign /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --entitlements /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Intermediates.noindex/RunStartProbe.build/Debug/RunStartMacProbeUITests.build/RunStartMacProbeUITests.xctest.xcent --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app
+/Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app: replacing existing signature
+
+2026-11-28 07:33:59.883380+0000 RunStartMacProbeUITests-Runner[37565:101423] [Default] Running tests...
+Test Suite 'All tests' started at 2026-11-28 07:34:02.017.
+Test Suite 'RunStartMacProbeUITests.xctest' started at 2026-11-28 07:34:02.017.
+Test Suite 'PermissionModeShotTests' started at 2026-11-28 07:34:02.017.
+Test Case '-[RunStartMacProbeUITests.PermissionModeShotTests testMacShowsTheRefusedCorrection]' started.
+    t =     0.00s Start Test at 2026-11-28 07:34:02.018
+    t =     2.08s Set Up
+    t =     2.43s Open io.orbitd.crossingsmacprobe
+    t =     2.43s     Launch io.orbitd.crossingsmacprobe
+2026-11-28 07:34:05.144 xcodebuild[12408:41651] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-28 07:34:05.144 xcodebuild[12408:41651] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     5.47s         Wait for accessibility to load
+    t =     6.33s         Setting up automation session
+    t =     6.41s         Wait for io.orbitd.crossingsmacprobe to idle
+    t =     6.46s Get number of matches for: Descendants matching type Window
+    t =     7.55s Get number of matches for: Descendants matching type Window
+    t =     8.15s Get number of matches for: Descendants matching type Window
+    t =     8.69s Get number of matches for: Descendants matching type Window
+    t =     9.23s Get number of matches for: Descendants matching type Window
+    t =     9.77s Get number of matches for: Descendants matching type Window
+    t =    10.29s Get number of matches for: Descendants matching type Window
+    t =    10.84s Get number of matches for: Descendants matching type Window
+    t =    11.36s Get number of matches for: Descendants matching type Window
+    t =    11.90s Get number of matches for: Descendants matching type Window
+    t =    12.42s Get number of matches for: Descendants matching type Window
+    t =    12.95s Get number of matches for: Descendants matching type Window
+    t =    13.47s Get number of matches for: Descendants matching type Window
+    t =    14.01s Get number of matches for: Descendants matching type Window
+    t =    14.54s Get number of matches for: Descendants matching type Window
+    t =    15.07s Get number of matches for: Descendants matching type Window
+    t =    15.61s Get number of matches for: Descendants matching type Window
+    t =    16.17s Get number of matches for: Descendants matching type Window
+    t =    16.70s Get number of matches for: Descendants matching type Window
+    t =    17.22s Get number of matches for: Descendants matching type Window
+    t =    17.75s Get number of matches for: Descendants matching type Window
+    t =    18.28s Get number of matches for: Descendants matching type Window
+    t =    18.80s Get number of matches for: Descendants matching type Window
+    t =    19.33s Get number of matches for: Descendants matching type Window
+    t =    19.86s Get number of matches for: Descendants matching type Window
+    t =    20.40s Get number of matches for: Descendants matching type Window
+    t =    20.93s Get number of matches for: Descendants matching type Window
+    t =    21.49s Type 'n' key with modifiers '⌘' (0x10)
+    t =    21.49s     Wait for io.orbitd.crossingsmacprobe to idle
+    t =    21.49s     Find the Target Application 'io.orbitd.crossingsmacprobe'
+    t =    21.53s     Check for interrupting elements affecting "RunStartMacProbe" Application
+    t =    21.53s     Synthesize event
+    t =    23.85s     Wait for io.orbitd.crossingsmacprobe to idle
+    t =    23.86s Get number of matches for: Descendants matching type Window
+    t =    24.02s Checking existence of `Any (First Match)`
+    t =    24.18s Checking existence of `StaticText (First Match)`
+    t =    24.25s Checking existence of `Any (First Match)`
+    t =    24.80s Checking existence of `Any (First Match)`
+    t =    24.97s Checking existence of `StaticText (First Match)`
+    t =    25.25s Checking existence of `Any (First Match)`
+    t =    25.99s Checking existence of `Any (First Match)`
+    t =    26.09s Checking existence of `StaticText (First Match)`
+    t =    26.16s Checking existence of `Any (First Match)`
+    t =    26.82s Checking existence of `Any (First Match)`
+    t =    26.94s Checking existence of `StaticText (First Match)`
+    t =    27.03s Checking existence of `StaticText (First Match)`
+    t =    28.58s Checking existence of `Any (First Match)`
+    t =    28.63s Find the Any (First Match)
+    t =    28.80s Find the "Mode: Default" MenuButton
+    t =    28.83s Checking existence of `Any (First Match)`
+    t =    28.97s Checking existence of `StaticText (First Match)`
+    t =    29.04s Checking existence of `StaticText (First Match)`
+    t =    29.13s Checking existence of `Any (First Match)`
+    t =    29.22s Checking existence of `StaticText (First Match)`
+    t =    29.30s Checking existence of `StaticText (First Match)`
+    t =    30.57s Checking existence of `Window (First Match)`
+    t =    30.81s Checking existence of `"Mode: Default" MenuButton`
+    t =    30.86s Find the "Mode: Default" MenuButton
+    t =    31.13s Checking existence of `"Mode: Default" MenuButton`
+    t =    31.18s Added attachment named 'mac-requests.txt'
+    t =    31.18s Terminate io.orbitd.crossingsmacprobe:37791
+    t =    32.28s Open io.orbitd.crossingsmacprobe
+    t =    32.28s     Launch io.orbitd.crossingsmacprobe
+2026-11-28 07:34:34.328 xcodebuild[12408:41651] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-28 07:34:34.328 xcodebuild[12408:41651] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    33.79s         Wait for accessibility to load
+    t =    33.89s         Setting up automation session
+    t =    33.92s         Wait for io.orbitd.crossingsmacprobe to idle
+    t =    33.92s Get number of matches for: Descendants matching type Window
+    t =    34.52s Get number of matches for: Descendants matching type Window
+    t =    35.05s Get number of matches for: Descendants matching type Window
+    t =    35.57s Get number of matches for: Descendants matching type Window
+    t =    36.09s Get number of matches for: Descendants matching type Window
+    t =    36.62s Get number of matches for: Descendants matching type Window
+    t =    37.14s Get number of matches for: Descendants matching type Window
+    t =    37.66s Get number of matches for: Descendants matching type Window
+    t =    38.18s Get number of matches for: Descendants matching type Window
+    t =    38.70s Get number of matches for: Descendants matching type Window
+    t =    39.24s Get number of matches for: Descendants matching type Window
+    t =    39.76s Get number of matches for: Descendants matching type Window
+    t =    40.28s Get number of matches for: Descendants matching type Window
+    t =    40.80s Get number of matches for: Descendants matching type Window
+    t =    41.32s Get number of matches for: Descendants matching type Window
+    t =    41.85s Get number of matches for: Descendants matching type Window
+    t =    42.37s Get number of matches for: Descendants matching type Window
+    t =    42.90s Get number of matches for: Descendants matching type Window
+    t =    43.43s Get number of matches for: Descendants matching type Window
+    t =    43.97s Get number of matches for: Descendants matching type Window
+    t =    44.48s Get number of matches for: Descendants matching type Window
+    t =    45.02s Get number of matches for: Descendants matching type Window
+    t =    45.55s Get number of matches for: Descendants matching type Window
+    t =    46.08s Get number of matches for: Descendants matching type Window
+    t =    46.60s Get number of matches for: Descendants matching type Window
+    t =    47.13s Get number of matches for: Descendants matching type Window
+    t =    47.65s Get number of matches for: Descendants matching type Window
+    t =    48.18s Get number of matches for: Descendants matching type Window
+    t =    48.71s Get number of matches for: Descendants matching type Window
+    t =    49.25s Type 'n' key with modifiers '⌘' (0x10)
+    t =    49.25s     Wait for io.orbitd.crossingsmacprobe to idle
+    t =    49.25s     Find the Target Application 'io.orbitd.crossingsmacprobe'
+    t =    49.27s     Check for interrupting elements affecting "RunStartMacProbe" Application
+    t =    49.27s     Synthesize event
+    t =    50.00s     Wait for io.orbitd.crossingsmacprobe to idle
+    t =    50.02s Get number of matches for: Descendants matching type Window
+    t =    50.12s Checking existence of `Any (First Match)`
+    t =    50.21s Checking existence of `StaticText (First Match)`
+    t =    50.27s Checking existence of `Any (First Match)`
+    t =    50.82s Checking existence of `Any (First Match)`
+    t =    50.87s Checking existence of `StaticText (First Match)`
+    t =    50.91s Checking existence of `Any (First Match)`
+    t =    51.45s Checking existence of `Any (First Match)`
+    t =    51.65s Checking existence of `StaticText (First Match)`
+    t =    51.79s Checking existence of `StaticText (First Match)`
+    t =    54.55s Checking existence of `Window (First Match)`
+    t =    54.64s Terminate io.orbitd.crossingsmacprobe:38723
+    t =    55.73s Tear Down
+    t =    55.73s     Added attachment named 'PermissionModeShotTeststestMacShowsTheRefusedCorrection-notes.txt'
+Test Case '-[RunStartMacProbeUITests.PermissionModeShotTests testMacShowsTheRefusedCorrection]' passed (55.841 seconds).
+Test Suite 'PermissionModeShotTests' passed at 2026-11-28 07:34:57.860.
+	 Executed 1 test, with 0 failures (0 unexpected) in 55.841 (55.842) seconds
+Test Suite 'RunStartMacProbeUITests.xctest' passed at 2026-11-28 07:34:57.861.
+	 Executed 1 test, with 0 failures (0 unexpected) in 55.841 (55.844) seconds
+Test Suite 'All tests' passed at 2026-11-28 07:34:57.862.
+	 Executed 1 test, with 0 failures (0 unexpected) in 55.841 (55.845) seconds
+2026-11-28 07:34:58.393 xcodebuild[12408:41651] [MT] IDETestOperationsObserverDebug: 66.602 elapsed -- Testing started completed.
+2026-11-28 07:34:58.393 xcodebuild[12408:41651] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-11-28 07:34:58.393 xcodebuild[12408:41651] [MT] IDETestOperationsObserverDebug: 66.602 sec, +66.602 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.sr-probe/results/mac.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

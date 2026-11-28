@@ -1,0 +1,4 @@
+ios: mode control 'Mode: Default'
+ios: refusal line shown
+ios: report line shown
+ios: menu head shown

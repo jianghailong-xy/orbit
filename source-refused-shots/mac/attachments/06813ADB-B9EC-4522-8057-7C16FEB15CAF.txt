@@ -1,0 +1,8 @@
+mac-refused: no window after launch; pressing ⌘N
+mac: mode control 'Mode: Default'
+mac: refusal line shown
+mac: report line shown
+mac-1-refused: no window to photograph
+mac: no hittable mode control to open (exists: true)
+mac-root-claim: no window after launch; pressing ⌘N
+mac-3-root-claim: no window to photograph

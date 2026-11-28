@@ -1,0 +1,49 @@
+==> iPhone 6478AFFB-AE17-412A-A1E5-51BCFFD300B6
+==> stub ready on 127.0.0.1:8765 (pid 12241, after 3s)
+==> mac
+Test Case '-[RunStartMacProbeUITests.PermissionModeShotTests testMacShowsTheRefusedCorrection]' started.
+Test Case '-[RunStartMacProbeUITests.PermissionModeShotTests testMacShowsTheRefusedCorrection]' passed (55.841 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 55.841 (55.842) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 55.841 (55.844) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 55.841 (55.845) seconds
+** TEST SUCCEEDED **
+==> stub ready on 127.0.0.1:8765 (pid 40048, after 2s)
+==> ios
+Test Case '-[RunStartProbeUITests.PermissionModeShotTests testIPhoneShowsTheRefusedCorrection]' started.
+Test Case '-[RunStartProbeUITests.PermissionModeShotTests testIPhoneShowsTheRefusedCorrection]' passed (56.801 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 56.801 (56.805) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 56.801 (56.807) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 56.801 (56.810) seconds
+** TEST SUCCEEDED **
+.sr-probe/run.sh: line 82: 40048 Terminated: 15          python3 -u stub.py 8765 "$1" > "$1.out" 2>&1
+/Users/runner/work/orbit/orbit/.sr-probe/shots/ios:
+total 2984
+drwxr-xr-x  16 runner  staff     512 Nov 28 07:47 .
+drwxr-xr-x   5 runner  staff     160 Nov 28 07:47 ..
+drwxr-xr-x  12 runner  staff     384 Nov 28 07:47 attachments
+-rw-r--r--   1 runner  staff  198153 Nov 28 07:45 ios-1-refused.png
+-rw-r--r--   1 runner  staff  305647 Nov 28 07:45 ios-2-refused-menu.png
+-rw-r--r--   1 runner  staff  161725 Nov 28 07:46 ios-3-root-claim.png
+-rw-r--r--@  1 runner  staff    7398 Nov 28 07:46 ios-requests.txt
+-rw-r--r--   1 runner  staff    1128 Nov 28 07:47 not-served.txt
+-rw-r--r--@  1 runner  staff     101 Nov 28 07:46 PermissionModeShotTeststestIPhoneShowsTheRefusedCorrection-notes.txt
+-rw-r--r--   1 runner  staff   12898 Nov 28 07:46 requests.log
+-rw-r--r--   1 runner  staff       0 Nov 28 07:35 requests.log.out
+-rw-r--r--@  1 runner  staff   18709 Nov 28 07:45 tree-ios-1-refused.txt
+-rw-r--r--@  1 runner  staff   21881 Nov 28 07:46 tree-ios-2-refused-menu.txt
+-rw-r--r--@  1 runner  staff   16882 Nov 28 07:46 tree-ios-3-root-claim.txt
+-rw-r--r--   1 runner  staff      80 Nov 28 07:47 writes.txt
+-rw-r--r--   1 runner  staff  749817 Nov 28 07:47 xcodebuild-ios.log
+
+/Users/runner/work/orbit/orbit/.sr-probe/shots/mac:
+total 1840
+drwxr-xr-x  10 runner  staff     320 Nov 28 07:47 .
+drwxr-xr-x   5 runner  staff     160 Nov 28 07:47 ..
+drwxr-xr-x   5 runner  staff     160 Nov 28 07:35 attachments
+-rw-r--r--   1 runner  staff   91901 Nov 28 07:34 mac-window-S1.png
+-rw-r--r--   1 runner  staff   77126 Nov 28 07:34 mac-window-S2.png
+-rw-r--r--   1 runner  staff    1168 Nov 28 07:47 not-served.txt
+-rw-r--r--   1 runner  staff   13662 Nov 28 07:34 requests.log
+-rw-r--r--   1 runner  staff       0 Nov 28 07:21 requests.log.out
+-rw-r--r--   1 runner  staff      80 Nov 28 07:47 writes.txt
+-rw-r--r--   1 runner  staff  742952 Nov 28 07:34 xcodebuild-mac.log

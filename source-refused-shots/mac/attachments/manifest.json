@@ -1,0 +1,26 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "2b1ceb75c92077196222698816fcd76ec2c0b50b",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "06813ADB-B9EC-4522-8057-7C16FEB15CAF.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "PermissionModeShotTeststestMacShowsTheRefusedCorrection-notes_0_DAEFDB5E-6125-4AB3-878D-FDC04B899E5B.txt",
+        "timestamp" : 1795851297.752
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "2b1ceb75c92077196222698816fcd76ec2c0b50b",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "D345D672-0721-4B94-AA37-057207DF9A23.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "mac-requests_0_455B09B8-0252-4217-9204-C4690F71708B.txt",
+        "timestamp" : 1795851273.198
+      }
+    ],
+    "testIdentifier" : "PermissionModeShotTests/testMacShowsTheRefusedCorrection()",
+    "testIdentifierURL" : "test://com.apple.xcode/RunStartProbe/RunStartMacProbeUITests/PermissionModeShotTests/testMacShowsTheRefusedCorrection"
+  }
+]

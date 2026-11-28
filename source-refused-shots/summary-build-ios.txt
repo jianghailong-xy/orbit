@@ -1,0 +1,6 @@
+Test Case '-[RunStartProbeUITests.PermissionModeShotTests testIPhoneShowsTheRefusedCorrection]' started.
+Test Case '-[RunStartProbeUITests.PermissionModeShotTests testIPhoneShowsTheRefusedCorrection]' passed (56.801 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 56.801 (56.805) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 56.801 (56.807) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 56.801 (56.810) seconds
+** TEST SUCCEEDED **

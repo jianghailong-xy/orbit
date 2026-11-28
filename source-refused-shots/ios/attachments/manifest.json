@@ -1,0 +1,88 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "6478AFFB-AE17-412A-A1E5-51BCFFD300B6",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "DD52995D-09A4-4460-9CA1-CDB11EB2875A.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "PermissionModeShotTeststestIPhoneShowsTheRefusedCorrection-notes_0_12095BFA-DB4F-47C9-9A7F-B921D463E568.txt",
+        "timestamp" : 1795851976.124
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "6478AFFB-AE17-412A-A1E5-51BCFFD300B6",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "6EF77BAB-070C-45AD-92BF-DA68AFEEF255.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "tree-ios-3-root-claim_0_45544503-3EF0-4BC5-BF93-F54261F86129.txt",
+        "timestamp" : 1795851975.092
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "6478AFFB-AE17-412A-A1E5-51BCFFD300B6",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "E94AB52E-996B-4098-A197-A98FDC6957A1.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-3-root-claim_0_11545C0B-5214-49F0-AEAF-D19492337A60.png",
+        "timestamp" : 1795851974.408
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "6478AFFB-AE17-412A-A1E5-51BCFFD300B6",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "9439F5A8-DBE4-4CB0-803D-916B34AEC691.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-requests_0_0F3C9C62-FFD2-43E3-AEA7-7A879260A57E.txt",
+        "timestamp" : 1795851960.847
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "6478AFFB-AE17-412A-A1E5-51BCFFD300B6",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "0BF0785C-2875-4D3D-9B23-CCDC472915BC.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "tree-ios-2-refused-menu_0_684157E4-00E6-42F3-ACB1-5BB66E0F67C0.txt",
+        "timestamp" : 1795851960.803
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "6478AFFB-AE17-412A-A1E5-51BCFFD300B6",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "DBD87801-294B-4C6A-84A9-9B0B84433250.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-2-refused-menu_0_3D8A4A56-E01E-463B-A6DC-51018800008E.png",
+        "timestamp" : 1795851959.354
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "6478AFFB-AE17-412A-A1E5-51BCFFD300B6",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "51C68736-6A3A-4379-A170-E924EA41C7AA.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "tree-ios-1-refused_0_7E7B0AEA-61FB-48EE-A7C9-7AE07DF877F0.txt",
+        "timestamp" : 1795851953.801
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "6478AFFB-AE17-412A-A1E5-51BCFFD300B6",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "22EF3817-3CAC-44DC-B4F1-5FCD104693AE.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-1-refused_0_F3FB941B-9836-4170-9984-81DB690C78B3.png",
+        "timestamp" : 1795851952.529
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "6478AFFB-AE17-412A-A1E5-51BCFFD300B6",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "0517C10B-D2B2-408B-AC2B-B8A4C6A65216.txt",
+        "isAssociatedWithFailure" : true,
+        "suggestedHumanReadableName" : "Complete Issue Description.txt"
+      }
+    ],
+    "testIdentifier" : "PermissionModeShotTests/testIPhoneShowsTheRefusedCorrection()",
+    "testIdentifierURL" : "test://com.apple.xcode/RunStartProbe/RunStartProbeUITests/PermissionModeShotTests/testIPhoneShowsTheRefusedCorrection"
+  }
+]
