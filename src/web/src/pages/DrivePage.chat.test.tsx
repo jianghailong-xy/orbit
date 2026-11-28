@@ -422,7 +422,7 @@ describe('the folder chip (board ② note 3)', () => {
     expect(second.body).not.toHaveProperty('driveContext');
 
     // After a message the folder is attached again; at the top level it is the drive itself, sent as null.
-    await press([...document.querySelectorAll('.files-crumbs a')].find((a) => a.textContent === 'Drive'));
+    await press([...document.querySelectorAll('.files-title a')].find((a) => a.textContent === 'Drive'));
     expect(chips()).toEqual(['Folder · Drive']);
     await type('Anything big?');
     await press(byLabel('Send'));

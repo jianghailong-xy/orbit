@@ -348,7 +348,8 @@ describe('the folder tree and the list', () => {
     await visit('/drive?folder=f-ui');
     await until(() => expect(row('sign-in-v3.png')).toBeTruthy());
     const writer = (name: string) => row(name).querySelector('.files-col-writer')!.textContent;
-    await until(() => expect(writer('sign-in-v3.png')).toBe('Agent in Redesign the sign-in page'));
+    await until(() => expect(writer('sign-in-v3.png')).toBe('Redesign the sign-in page'));
+    expect(row('sign-in-v3.png').querySelector('a')!.getAttribute('aria-label')).toBe('Agent in Redesign the sign-in page');
     expect(row('sign-in-v3.png').querySelector('a')!.getAttribute('href')).toBe('/sessions/sess-1');
     expect(writer('migration-notes.md')).toBe('An agent on Orbit Cloud');
     expect(writer('deploy-checklist.md')).toBe('You');
@@ -360,7 +361,7 @@ describe('the folder tree and the list', () => {
   it('searches the whole drive from the box, each result with its folder, and opens a result in its folder', async () => {
     entries.push({ id: 'notes2', parentId: 'f-data', kind: 'FILE', name: 'field-notes.csv', sizeBytes: 10 });
     await visit('/drive?folder=f-data');
-    const box = document.querySelector<HTMLInputElement>('input[aria-label="Search Files"]')!;
+    const box = document.querySelector<HTMLInputElement>('input[aria-label="Search Drive"]')!;
     await type(box, 'NOTES');
     // The box asks the server once typing has stopped.
     await act(async () => {
@@ -373,8 +374,8 @@ describe('the folder tree and the list', () => {
     expect(row('sign-in-v3.png')).toBeNull();
     await click(row('migration-notes.md'));
     expect(location).toBe('/drive?folder=f-ui&file=notes');
-    expect(document.querySelector('input[aria-label="Search Files"]')).toBeTruthy();
-    expect((document.querySelector('input[aria-label="Search Files"]') as HTMLInputElement).value).toBe('');
+    expect(document.querySelector('input[aria-label="Search Drive"]')).toBeTruthy();
+    expect((document.querySelector('input[aria-label="Search Drive"]') as HTMLInputElement).value).toBe('');
   });
 
   it('opens a folder from the tree', async () => {

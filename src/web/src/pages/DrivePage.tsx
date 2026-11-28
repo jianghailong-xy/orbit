@@ -12,7 +12,7 @@ import {
   FilePdfOutlined,
   FileTextOutlined,
   FolderAddOutlined,
-  FolderFilled,
+  FolderOutlined,
   CloseOutlined,
   Html5Outlined,
   LinkOutlined,
@@ -190,7 +190,7 @@ function TreeFolder({
         >
           {isOpen ? <DownOutlined /> : <RightOutlined />}
         </button>
-        <FolderFilled className="files-folder-icon" aria-hidden="true" />
+        <FolderOutlined className="files-folder-icon" aria-hidden="true" />
         <span className="files-tree-name">{folder.name}</span>
         {mark && <span className="files-mark">{mark}</span>}
       </div>
@@ -217,7 +217,7 @@ function TreeFolder({
 // ── the preview pane ───────────────────────────────────────────────────────────────────────────
 
 function EntryIcon({ entry }: { entry: Pick<DriveEntry, 'kind' | 'name'> }) {
-  if (entry.kind === 'FOLDER') return <FolderFilled className="files-folder-icon" aria-hidden="true" />;
+  if (entry.kind === 'FOLDER') return <FolderOutlined className="files-folder-icon" aria-hidden="true" />;
   if (pictureType(entry.name)) return <FileImageOutlined className="files-file-icon picture" aria-hidden="true" />;
   if (isMarkdown(entry.name)) return <FileMarkdownOutlined className="files-file-icon" aria-hidden="true" />;
   if (isPdf(entry.name)) return <FilePdfOutlined className="files-file-icon" aria-hidden="true" />;
@@ -761,12 +761,34 @@ function DriveBrowser() {
       return (
       <div className={`files-page${overlay ? ' details-over' : ''}`}>
         <header className="files-head">
-          <h1>Drive</h1>
+          <h1 className="files-title">
+            {crumbs.length === 0 ? (
+              'Drive'
+            ) : (
+              <>
+                <Link to="/drive" className="files-title-parent">
+                  Drive
+                </Link>
+                {crumbs.map((name, i) => (
+                  <span key={`${name}-${i}`}>
+                    <span className="files-title-sep"> / </span>
+                    {i === crumbs.length - 2 && folder?.parentId && folder.parentId !== rootId ? (
+                      <button type="button" className="files-title-parent" onClick={() => openFolder(folder.parentId)}>
+                        {name}
+                      </button>
+                    ) : (
+                      <span className={i === crumbs.length - 1 ? undefined : 'files-title-parent'}>{name}</span>
+                    )}
+                  </span>
+                ))}
+              </>
+            )}
+          </h1>
           <div className="files-head-actions">
             <Input
               size="small"
-              aria-label="Search Files"
-              placeholder="Search all of Files"
+              aria-label="Search Drive"
+              placeholder="Search Drive"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
@@ -819,21 +841,6 @@ function DriveBrowser() {
             }}
             onDrop={(event) => dropInto(event, null)}
           >
-            <div className="files-crumbs">
-              <Link to="/drive">Drive</Link>
-              {crumbs.map((name, i) => (
-                <span key={`${name}-${i}`}>
-                  <span className="files-crumb-sep"> › </span>
-                  {i === crumbs.length - 2 && folder?.parentId && folder.parentId !== rootId ? (
-                    <button type="button" className="files-link-button" onClick={() => openFolder(folder.parentId)}>
-                      {name}
-                    </button>
-                  ) : (
-                    <span className={i === crumbs.length - 1 ? 'files-crumb-here' : undefined}>{name}</span>
-                  )}
-                </span>
-              ))}
-            </div>
             {searching ? (
               <div className="files-search" role="region" aria-label="Search results">
                 {found.isError ? (
@@ -846,6 +853,12 @@ function DriveBrowser() {
                   <div className="files-empty">Nothing matches “{settled}”.</div>
                 ) : (
                   <table className="files-list">
+                    <colgroup>
+                      <col className="files-col-name" />
+                      <col className="files-col-writer" />
+                      <col className="files-col-size" />
+                      <col className="files-col-when" />
+                      </colgroup>
                     <thead>
                       <tr>
                         <th className="files-col-name">Name</th>
@@ -886,7 +899,14 @@ function DriveBrowser() {
                 Couldn't read this folder: {messageOf(listing.error)}
               </div>
             ) : (
-              <table className="files-list">
+              <table className={`files-list${selected ? ' no-writer' : ''}`}>
+                <colgroup>
+                      <col className="files-col-name" />
+                      <col className="files-col-writer" />
+                      <col className="files-col-size" />
+                      <col className="files-col-when" />
+                      <col className="files-col-more" />
+                      </colgroup>
                 <thead>
                   <tr>
                     <th className="files-col-name">Name</th>
@@ -935,7 +955,7 @@ function DriveBrowser() {
                         </span>
                       </td>
                       <td className="files-col-writer">
-                        <DriveWriterName writer={entry.lastWriter} />
+                        <DriveWriterName writer={entry.lastWriter} glyph />
                       </td>
                       <td className="files-col-size">{entry.kind === 'FILE' ? formatSize(entry.sizeBytes) : '—'}</td>
                       <td className="files-col-when">{formatWhen(entry.lastWriter.at)}</td>
