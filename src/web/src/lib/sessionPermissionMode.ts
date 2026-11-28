@@ -1,4 +1,4 @@
-import type { SessionPermissionModeChange } from '@orbit/shared';
+import { PERMISSION_MODE_CORRECTION_FAILED_EVENT_SUBTYPE, type SessionPermissionModeChange } from '@orbit/shared';
 import { MODE_OPTIONS } from './workspaceDefaults';
 
 /**
@@ -13,6 +13,8 @@ import { MODE_OPTIONS } from './workspaceDefaults';
  *
  * A gap between the two is either a switch under way (A1, short: "Default → Auto" with a spinner) or
  * one that lasts until something changes ("Default" with an amber dot); both carry their reason.
+ * A correction Claude refused (the runner's `permission_mode_correction_failed`) is a gap that lasts,
+ * with the CLI's own words, from the moment the runner says so.
  */
 
 /** A mode's word, as the capsule and the menu write it: `acceptEdits` → "Accept Edits". */
@@ -52,6 +54,87 @@ export interface ModeFacts {
   scheduled?: boolean;
 }
 
+/**
+ * The runner's report that Claude would not take the Auto it asked for (runner-go claude_mode_correction.go):
+ * `mode` is the mode it stays in, `reason` the CLI's own words. It travels as a system event of the
+ * conversation and is no mode change, so it is read off the events loaded.
+ */
+export interface ModeCorrectionRefusal {
+  seq: number;
+  at: string;
+  mode: string;
+  requested: string;
+  reason: string;
+}
+
+/** How far the runner's clock may run behind the server's: the refusal is stamped by the runner, the
+ *  report of the lower mode it answers by the server when it took the batch. */
+const REFUSAL_CLOCK_SLACK_MS = 60_000;
+
+/** Every refused correction among `events`, oldest first. */
+export function modeCorrectionRefusals(
+  events: ReadonlyArray<{ seq: number; type: string; ts?: string; payload?: unknown }>,
+): ModeCorrectionRefusal[] {
+  const out: ModeCorrectionRefusal[] = [];
+  for (const event of events) {
+    if (event.type !== 'system') continue;
+    const p = (event.payload ?? {}) as { subtype?: unknown; mode?: unknown; requested?: unknown; reason?: unknown };
+    if (p.subtype !== PERMISSION_MODE_CORRECTION_FAILED_EVENT_SUBTYPE || typeof p.mode !== 'string') continue;
+    out.push({
+      seq: event.seq,
+      at: event.ts ?? '',
+      mode: p.mode,
+      requested: typeof p.requested === 'string' ? p.requested : 'auto',
+      reason: typeof p.reason === 'string' ? p.reason.trim() : '',
+    });
+  }
+  return out;
+}
+
+/**
+ * Whether `refusal` answers the change the engine runs under now: Claude's report of the mode it
+ * settled on (or came back from a re-spawn in), which the runner then failed to correct. Any later
+ * change (a correction that took, the owner's pick) ends it.
+ */
+export function refusalStands(
+  refusal: ModeCorrectionRefusal | null | undefined,
+  latest: SessionPermissionModeChange | null | undefined,
+  actual: string | null | undefined,
+): refusal is ModeCorrectionRefusal {
+  if (!refusal || !latest || !actual) return false;
+  if (latest.cause !== 'ENGINE_REPORT' && latest.cause !== 'RESPAWN') return false;
+  if (latest.toMode !== actual || refusal.mode !== actual) return false;
+  const at = Date.parse(refusal.at);
+  return !Number.isFinite(at) || at >= Date.parse(latest.at) - REFUSAL_CLOCK_SLACK_MS;
+}
+
+/** The index of the change `refusal` answers: the newest report of the mode it stays in, from before it. */
+function answeredChange(changes: readonly SessionPermissionModeChange[], refusal: ModeCorrectionRefusal): number | null {
+  const at = Date.parse(refusal.at);
+  for (let i = changes.length - 1; i >= 0; i--) {
+    const change = changes[i]!;
+    if (change.cause !== 'ENGINE_REPORT' && change.cause !== 'RESPAWN') continue;
+    if (change.toMode !== refusal.mode) continue;
+    if (Number.isFinite(at) && Date.parse(change.at) > at + REFUSAL_CLOCK_SLACK_MS) continue;
+    return i;
+  }
+  return null;
+}
+
+/** The CLI's words as a sentence. */
+const sentence = (words: string): string => (/[.!?]$/.test(words) ? words : `${words}.`);
+
+/** Why the capsule shows a refused correction (the board's lasting gap, with the CLI's reason). */
+function refusalReason(refusal: ModeCorrectionRefusal): { lead: string; rest: string } {
+  const asked = permissionModeLabel(refusal.requested);
+  return {
+    lead: `Running in ${permissionModeLabel(refusal.mode)}.`,
+    rest: refusal.reason
+      ? `You asked for ${asked}, but the runner couldn’t switch Claude to it: ${sentence(refusal.reason)}`
+      : `You asked for ${asked}, but the runner couldn’t switch Claude to it.`,
+  };
+}
+
 export interface ModeCapsuleInput extends ModeFacts {
   /** What the server recorded the engine running in. Absent before a claim, from an older server, and
    *  for a draft or an ended session, whose capsule shows the mode it will start in. */
@@ -60,6 +143,8 @@ export interface ModeCapsuleInput extends ModeFacts {
   latest?: SessionPermissionModeChange | null;
   /** When this client last picked the intent of the running session, while it travels to the engine. */
   pickedAt?: number | null;
+  /** The newest refused correction among the conversation's events (modeCorrectionRefusals). */
+  refusal?: ModeCorrectionRefusal | null;
   now: number;
 }
 
@@ -122,6 +207,8 @@ export function modeCapsule(input: ModeCapsuleInput): ModeCapsule {
     return starting === intent ? plain(intent) : lasting(starting, substitutionReason(intent, starting, input, false));
   }
   if (actual === intent) return plain(actual);
+  // The runner asked Claude for Auto and Claude said no: nothing is under way, and the CLI's words say why.
+  if (refusalStands(input.refusal, input.latest, actual)) return lasting(actual, refusalReason(input.refusal));
   if (starting !== intent) {
     // The intent cannot run here; the engine runs in what the server put in its place.
     return actual === starting
@@ -178,6 +265,8 @@ export interface ModeChangeLine {
   after: string;
   /** Whether this is the change behind the gap the capsule shows now, drawn amber. */
   gap: boolean;
+  /** For a refused correction, the event it is: the line goes right where the runner said it. */
+  seq?: number;
 }
 
 /** Where the owner was when they changed it, as `session_permission_mode_change.client` names it. */
@@ -211,18 +300,21 @@ function byWhom(client: string | null): string {
  */
 export function modeChangeLines(
   changes: readonly SessionPermissionModeChange[],
-  facts: ModeFacts & { actual?: string | null },
+  facts: ModeFacts & { actual?: string | null; refusals?: readonly ModeCorrectionRefusal[] },
 ): ModeChangeLine[] {
   const intent = intentOf(facts);
   const gapOpen = !!facts.actual && facts.actual !== intent;
+  const refusals = facts.refusals ?? [];
+  // A refusal that still stands is the gap's own line; the report it answers is then said plainly.
+  const standing = refusalStands(refusals.at(-1), changes.at(-1), facts.actual) && gapOpen ? refusals.at(-1)! : null;
   const lines: ModeChangeLine[] = [];
   changes.forEach((change, i) => {
     const next = changes[i + 1];
     const latest = i === changes.length - 1;
-    const gap = latest && gapOpen && change.toMode === facts.actual;
+    const gap = latest && gapOpen && change.toMode === facts.actual && !standing;
     const mode = permissionModeLabel(change.toMode);
-    const line = (before: string, after = ''): void => {
-      lines.push({ key: `${change.at}|${change.cause}|${change.toMode}|${i}`, at: change.at, before, mode, after, gap });
+    const line = (before: string, after = '', amber = gap): void => {
+      lines.push({ key: `${change.at}|${change.cause}|${change.toMode}|${i}`, at: change.at, before, mode, after, gap: amber });
     };
     // Why the mode is not the intent, for the line behind a gap the server's substitution opened.
     const substituted = gap && startingMode(intent, facts) === change.toMode;
@@ -235,7 +327,14 @@ export function modeChangeLines(
         : '';
     switch (change.cause) {
       case 'CLAIM':
-        if (facts.scheduled && facts.engine === CLAUDE && change.toMode === 'auto') {
+        // The server says when the claim handed another mode than the one asked for, and why.
+        if (change.reason === 'SCHEDULED_RUN') {
+          // The rule, not a gap.
+          line(change.fromMode ? 'Resumed in ' : 'Started in ', ' — scheduled runs always use Auto', false);
+        } else if (change.reason === 'ROOT_RUNNER') {
+          const asked = permissionModeLabel(change.requestedMode ?? 'bypassPermissions');
+          line(change.fromMode ? 'Resumed in ' : 'Started in ', `, not ${asked} — ${asked} can’t run on a root runner`);
+        } else if (facts.scheduled && facts.engine === CLAUDE && change.toMode === 'auto') {
           line(change.fromMode ? 'Resumed in ' : 'Started in ', ' — scheduled runs always use Auto');
         } else if (change.fromMode) {
           line('Resumed in ', because);
@@ -270,5 +369,23 @@ export function modeChangeLines(
         line('Mode now ', because);
     }
   });
+  for (const refusal of refusals) {
+    // The report it answers goes right before it: the server stamps a change when it took the runner's batch, after the
+    // runner's own stamp on the refusal, so by time alone the report would land below its answer.
+    const answered = answeredChange(changes, refusal);
+    const reportLine = answered === null ? undefined : lines.find((l) => l.key.endsWith(`|${answered}`) && l.seq === undefined);
+    if (reportLine) reportLine.seq = refusal.seq;
+    lines.push({
+      key: `refused|${refusal.seq}`,
+      at: refusal.at,
+      seq: refusal.seq,
+      before: 'Claude stays in ',
+      mode: permissionModeLabel(refusal.mode),
+      after: refusal.reason
+        ? ` — the runner couldn’t switch it to ${permissionModeLabel(refusal.requested)}: ${refusal.reason}`
+        : ` — the runner couldn’t switch it to ${permissionModeLabel(refusal.requested)}`,
+      gap: refusal === standing,
+    });
+  }
   return lines;
 }
