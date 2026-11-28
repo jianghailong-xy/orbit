@@ -116,7 +116,7 @@
   </div>
 
   <!-- PROPOSED FLOW -->
-  <div class="b-step"><span class="b-tag rec">Proposed</span><h2>One panel; a task opens inside it</h2><p>① click a task row in the project panel → ② the same panel shows the task, with ‹ back to the project.</p></div>
+  <div class="b-step"><span class="b-tag rec">Proposed</span><h2>One panel; a task opens inside it</h2><p>① click a <i>task</i> row in the project panel → ② the same panel shows the task, with ‹ back to the project. (A <i>run</i> row opens the run in the conversation: see ⑤.)</p></div>
   <div class="flow">
     <div class="app">
       <div class="pin" style="left:-10px;top:-10px">①</div>
@@ -165,7 +165,7 @@
       </div>
       <div class="pane conv">
         <div class="ph">Permission mode: Auto is guaranteed…</div>
-        <div class="fill">The conversation does not change: drilling in only changes the panel.</div>
+        <div class="fill">Opening a task changes only the panel; the coordinator stays in the conversation.</div>
         <div class="comp">Reply…</div>
       </div>
       <div class="pane rp" style="width:260px">
@@ -213,6 +213,66 @@
     </div>
   </div>
 
+  <!-- BACK TO THE COORDINATOR -->
+  <div class="b-step"><span class="b-tag rec">Proposed</span><h2>Back to the coordinator</h2><p>⑤ a run row under Needs you opens that run in the conversation → ⑥ its header starts with "‹ coordinator"; one click returns, and the panel keeps the task open.</p></div>
+  <div class="flow">
+    <div class="app">
+      <div class="pane side" style="width:120px">
+        <div>Projects</div><div>Tasks</div><div>Wiki</div>
+        <div class="h">Workspaces</div><div class="sel">orbit-ws01</div><div>orbit-ws02</div>
+      </div>
+      <div class="pane list" style="width:190px">
+        <div class="ph">Orbit Session</div>
+        <div class="lbl">Working</div>
+        <div class="row">Main checkout bar…<span class="s">2/5 · Queued</span></div>
+        <div class="row">Permission mode…<span class="s">20/23 · Confirmed…</span></div>
+        <div class="row">Cursor Auto: stop…<span class="s">4/6 · Holding…</span></div>
+      </div>
+      <div class="pane conv">
+        <div class="ph" style="white-space:nowrap"><span class="back" style="outline:2px solid #e8710a;border-radius:5px;padding:0 4px">‹ Permission mode…</span><span class="pin il" style="margin:0 2px 0 0">⑥</span><span style="color:#aaa;font-weight:400">·</span> <span style="overflow:hidden;text-overflow:ellipsis;min-width:0">Task: Tasks run only on models th…</span> <span class="chip c-b" style="flex:none">Task ›</span></div>
+        <div class="card"><b>Task started</b><br>Tasks run only on models that have Auto…</div>
+        <div class="err">✖ Cursor said: "Add a payment method to continue."</div>
+        <div class="banner">Run 3 of 6 · superseded. <a>Open Run 6 ›</a></div>
+        <div class="comp">Reply…</div>
+        <div class="w">Run 3, opened from Needs you <span style="opacity:.8">⑤</span></div>
+      </div>
+      <div class="pane rp" style="width:240px">
+        <div class="ph"><span class="back">‹ Permission mode…</span> <span class="x">⤢ ✕</span></div>
+        <div style="font-weight:600">Tasks run only on models that have Auto…</div>
+        <div style="margin:6px 0"><span class="chip c-g">Done</span><span class="chip c-g">Landed</span></div>
+        <div class="lbl">Runs</div><div>Run 6 · landed<br>Run 5 · failed<br><b>Run 3 · this conversation</b></div>
+        <div class="w">task stays open</div>
+      </div>
+    </div>
+    <div class="arrow"><div class="a">→</div>click<br>‹ coordinator</div>
+    <div class="app">
+      <div class="pane side" style="width:120px">
+        <div>Projects</div><div>Tasks</div><div>Wiki</div>
+        <div class="h">Workspaces</div><div class="sel">orbit-ws01</div><div>orbit-ws02</div>
+      </div>
+      <div class="pane list" style="width:190px">
+        <div class="ph">Orbit Session</div>
+        <div class="lbl">Working</div>
+        <div class="row">Main checkout bar…<span class="s">2/5 · Queued</span></div>
+        <div class="row hl">Permission mode…<span class="s">20/23 · Confirmed…</span></div>
+        <div class="row">Cursor Auto: stop…<span class="s">4/6 · Holding…</span></div>
+      </div>
+      <div class="pane conv">
+        <div class="ph">Permission mode: Auto is guaranteed… <span class="chip c-b">Coordinator</span></div>
+        <div class="fill">Coordinator conversation… (no ‹ link: it is the top of the project)</div>
+        <div class="comp">Reply…</div>
+        <div class="w">coordinator, in one click from any run</div>
+      </div>
+      <div class="pane rp" style="width:240px">
+        <div class="ph"><span class="back">‹ Permission mode…</span> <span class="x">⤢ ✕</span></div>
+        <div style="font-weight:600">Tasks run only on models that have Auto…</div>
+        <div style="margin:6px 0"><span class="chip c-g">Done</span><span class="chip c-g">Landed</span></div>
+        <div class="lbl">Runs</div><div>Run 6 · landed<br>Run 5 · failed<br>Run 3 · failed</div>
+        <div class="w">unchanged</div>
+      </div>
+    </div>
+  </div>
+
   <div class="b-notes">
     <div><b>The rules</b><ol>
       <li>The right side shows at most one panel.</li>
@@ -220,6 +280,7 @@
       <li>From anywhere else (the conversation's "Task ›" chip, the Tasks page, a link), the task opens on its own; a breadcrumb names its project and drills <i>out</i> to it.</li>
       <li>✕ closes the panel at any depth. Esc goes back one level, then closes.</li>
       <li>⤢ (expand) still opens the task as a full page.</li>
+      <li>A run row under Needs you opens the run in the conversation. Any session of a project other than its coordinator has "‹ Coordinator name" at the start of its header: one click back to the coordinator, from any depth, panel untouched.</li>
     </ol></div>
     <div><b>What changes in each frame</b>
       <table class="st">
@@ -235,6 +296,7 @@
       </ul></div>
     <div><b>Open questions</b><ul>
       <li>Should very wide windows (≥ 2400 px) offer an explicit "pin side by side"? Proposed: not now; add it only if coordinators ask for it.</li>
+      <li>The ‹ link goes to the coordinator, not to the previous page: Run 3 → Run 6 → Run 5 is still one click back. No browser-history walk.</li>
       <li>Does the panel remember its depth per conversation (come back and still see the task), or reset to the project? Proposed: remember it.</li>
       <li>④, the superseded-run banner, and taking failed runs of a landed task out of Needs you are separate changes; they're shown here because they appear on the same screen.</li>
     </ul></div>
