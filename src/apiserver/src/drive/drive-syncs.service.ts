@@ -1,7 +1,9 @@
 import { HttpException, HttpStatus, Injectable, Optional } from '@nestjs/common';
 import type { DriveSync, Prisma } from '@prisma/client';
+import { isSessionExecuting } from '../common/session-working';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { turnStateOf } from '../sessions/session-turn-state';
 
 /**
  * An agent's directory sync into the owner's Drive, as the upload tray shows it
@@ -46,7 +48,8 @@ export interface DriveSyncView {
   sourceName: string;
   destPath: string;
   destEntryId: string | null;
-  session: { id: string; title: string } | null;
+  /** The session that ran it; `open` while it can take a turn (not ended, stopping or in Trash). */
+  session: { id: string; title: string; open: boolean } | null;
   filesSeen: number;
   filesTotal: number | null;
   filesDone: number;
@@ -66,6 +69,62 @@ export interface DriveSyncView {
   /** The session the failures were handed to, and when. */
   fixSessionId: string | null;
   fixRequestedAt: string | null;
+  /** Where that session stands, null with no hand-off. */
+  fix: DriveSyncFixState | null;
+}
+
+/**
+ * The session a sync's failures were handed to: `working` while a turn of it is queued or running and it asks nobody
+ * anything; `question` is what it asks the owner, if it does (a pending approval). A hand-off that is not working and
+ * not handled is back with the owner.
+ */
+export interface DriveSyncFixState {
+  /** Null when the session is gone. */
+  title: string | null;
+  working: boolean;
+  question: string | null;
+}
+
+/** The session columns a sync's two sessions are read with. */
+const SESSION_FACTS_SELECT = {
+  id: true,
+  title: true,
+  deletedAt: true,
+  cancelRequestedAt: true,
+  finishedAt: true,
+  turnState: true,
+  engineTurnActive: true,
+  runningSubagents: true,
+  runningBgJobs: true,
+} satisfies Prisma.SessionSelect;
+
+type SessionFactsRow = Prisma.SessionGetPayload<{ select: typeof SESSION_FACTS_SELECT }>;
+
+/** A session as a sync's view reads it, with the newest question it has the owner pending. */
+export interface DriveSyncSessionFacts extends SessionFactsRow {
+  question: string | null;
+}
+
+/** Whether a session takes a new turn: what `POST /sessions/:id/turns` refuses as ended or in Trash, it does not. */
+export const sessionTakesTurn = (session: Pick<SessionFactsRow, 'deletedAt' | 'cancelRequestedAt' | 'finishedAt'>): boolean =>
+  session.deletedAt === null && session.cancelRequestedAt === null && session.finishedAt === null;
+
+/** What a pending approval asks the owner: an AskUserQuestion's first question, or the tool it wants to use. */
+function questionOf(approval: { toolName: string; input: Prisma.JsonValue }): string {
+  if (approval.toolName === 'AskUserQuestion') {
+    const questions = (approval.input as { questions?: Array<{ question?: unknown }> } | null)?.questions;
+    const first = Array.isArray(questions) ? questions[0]?.question : undefined;
+    if (typeof first === 'string' && first.trim() !== '') return first.trim();
+  }
+  return `It is waiting for your approval to use ${approval.toolName}.`;
+}
+
+function fixStateOf(session: DriveSyncSessionFacts | undefined): DriveSyncFixState {
+  if (!session) return { title: null, working: false, question: null };
+  const working = sessionTakesTurn(session)
+    && session.question === null
+    && (turnStateOf(session) === 'QUEUED' || isSessionExecuting(session));
+  return { title: session.title, working, question: session.question };
 }
 
 export interface DriveSyncOpen {
@@ -206,10 +265,7 @@ export class DriveSyncsService {
   async get(ownerId: string, id: string, now = new Date()): Promise<DriveSyncView> {
     const row = await this.prisma.driveSync.findFirst({ where: { id, ownerId } });
     if (!row) throw refusal(HttpStatus.NOT_FOUND, 'DOCUMENTS_SYNC_NOT_FOUND', 'No such sync.');
-    const session = row.sessionId
-      ? await this.prisma.session.findFirst({ where: { id: row.sessionId, ownerId }, select: { id: true, title: true } })
-      : null;
-    return viewOf(row, new Map(session ? [[session.id, session.title]] : []), now);
+    return viewOf(row, await this.sessionFacts(ownerId, [row]), now);
   }
 
   /**
@@ -227,26 +283,46 @@ export class DriveSyncsService {
     ]);
     const rows = [...new Map([...recent, ...unhandled].map((row) => [row.id, row])).values()]
       .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
-    const sessionIds = [...new Set(rows.map((row) => row.sessionId).filter((id): id is string => id !== null))];
-    const sessions = sessionIds.length
-      ? await this.prisma.session.findMany({ where: { id: { in: sessionIds }, ownerId }, select: { id: true, title: true } })
-      : [];
-    const titles = new Map(sessions.map((session) => [session.id, session.title]));
-    return { syncs: rows.map((row) => viewOf(row, titles, now)) };
+    const sessions = await this.sessionFacts(ownerId, rows);
+    return { syncs: rows.map((row) => viewOf(row, sessions, now)) };
+  }
+
+  /**
+   * The owner's sessions the rows name, as ran them or as their failures were handed to, each with the newest question
+   * it has pending for the owner. Another account's session is not read, so it is named by no title.
+   */
+  private async sessionFacts(
+    ownerId: string,
+    rows: ReadonlyArray<Pick<DriveSync, 'sessionId' | 'fixSessionId'>>,
+  ): Promise<Map<string, DriveSyncSessionFacts>> {
+    const ids = [...new Set(rows.flatMap((row) => [row.sessionId, row.fixSessionId]).filter((id): id is string => id !== null))];
+    if (ids.length === 0) return new Map();
+    const fixIds = new Set(rows.map((row) => row.fixSessionId).filter((id): id is string => id !== null));
+    const [sessions, approvals] = await Promise.all([
+      this.prisma.session.findMany({ where: { id: { in: ids }, ownerId }, select: SESSION_FACTS_SELECT }),
+      this.prisma.approval.findMany({
+        where: { sessionId: { in: [...fixIds] }, status: 'PENDING', session: { ownerId } },
+        orderBy: { createdAt: 'desc' },
+        select: { sessionId: true, toolName: true, input: true },
+      }),
+    ]);
+    const questions = new Map<string, string>();
+    for (const approval of approvals) if (!questions.has(approval.sessionId)) questions.set(approval.sessionId, questionOf(approval));
+    return new Map(sessions.map((session) => [session.id, { ...session, question: questions.get(session.id) ?? null }]));
   }
 }
 
 /** A row as the tray reads it. A running row nothing reported into for DRIVE_SYNC_STALE_MS reads as STOPPED. */
-export function viewOf(row: DriveSync, titles: Map<string, string>, now: Date): DriveSyncView {
+export function viewOf(row: DriveSync, sessions: Map<string, DriveSyncSessionFacts>, now: Date): DriveSyncView {
   const stale = row.endedAt === null && now.getTime() - row.updatedAt.getTime() > DRIVE_SYNC_STALE_MS;
-  const title = row.sessionId ? titles.get(row.sessionId) : undefined;
+  const session = row.sessionId ? sessions.get(row.sessionId) : undefined;
   return {
     id: row.id,
     status: stale ? 'STOPPED' : (row.status as DriveSyncStatus),
     sourceName: row.sourceName,
     destPath: row.destPath,
     destEntryId: row.destEntryId,
-    session: row.sessionId && title !== undefined ? { id: row.sessionId, title } : null,
+    session: session ? { id: session.id, title: session.title, open: sessionTakesTurn(session) } : null,
     filesSeen: row.filesSeen,
     filesTotal: row.filesTotal,
     filesDone: row.filesDone,
@@ -264,5 +340,6 @@ export function viewOf(row: DriveSync, titles: Map<string, string>, now: Date): 
     handledAt: row.handledAt?.toISOString() ?? null,
     fixSessionId: row.fixSessionId,
     fixRequestedAt: row.fixRequestedAt?.toISOString() ?? null,
+    fix: row.fixSessionId ? fixStateOf(sessions.get(row.fixSessionId)) : null,
   };
 }

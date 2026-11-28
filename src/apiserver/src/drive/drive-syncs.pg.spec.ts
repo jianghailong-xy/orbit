@@ -92,7 +92,7 @@ test('Documents: an agent directory sync reported for the upload tray', { skip: 
     const id = opened(await as(aliceRunner.token, 'POST', '', { sourceName: 'out', destPath: '/Reports/out', sessionId: aliceSession }), 'open');
     let view = await listed(alice, id);
     assert.equal(view?.status, 'CHECKING');
-    assert.deepEqual(view?.session, { id: aliceSession, title: 'Weekly report' });
+    assert.deepEqual(view?.session, { id: aliceSession, title: 'Weekly report', open: true });
     assert.equal(view?.sourceName, 'out');
 
     ok(await as(aliceRunner.token, 'PATCH', `/${id}`, {
