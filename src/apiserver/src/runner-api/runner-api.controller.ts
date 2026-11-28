@@ -47,6 +47,7 @@ import { importForkSessionId } from '../sessions/import-fork';
 import { reloadCarriesEnv } from '../sessions/session-settings';
 import {
   causeOfConfigTurn,
+  claimRecordsMode,
   configTurnPayload,
   recordActualPermissionMode,
   recordEngineReportedModes,
@@ -4559,10 +4560,16 @@ export class RunnerApiController {
      * ordinary claim may take. It sends one only to a server whose heartbeat answer says `capacityClaims`.
      */
     @Query('fullScope') fullScopeParam?: string,
+    /**
+     * The sessions whose engine runs on this runner now, comma-separated (ClaimingRunner.residentEngines): a claim of
+     * one does not record its mode over what that engine reported. Ids that are not UUIDs are dropped.
+     */
+    @Query('residentEngines') residentEnginesParam?: string,
   ): Promise<ClaimedSession | null> {
     const onlySessionIds = drainScope === undefined ? undefined : parseDrainScope(drainScope);
     if (onlySessionIds?.length === 0) return null;
     const fullScope = fullScopeParam === undefined ? undefined : parseDrainScope(fullScopeParam);
+    const residentEngines = residentEnginesParam === undefined ? undefined : parseDrainScope(residentEnginesParam);
     // The claim outlives the request otherwise: a runner that stopped — a self-update re-exec, a
     // restart, its own claim timeout — leaves it going here, and the session it claims is answered
     // to nobody (see claimSessionForRunner). The response closing before anything was written to
@@ -4610,6 +4617,7 @@ export class RunnerApiController {
         ...(link?.requestId ? { claimRequestId: link.requestId } : {}),
         ...(onlySessionIds ? { onlySessionIds } : {}),
         ...(fullScope ? { fullScope } : {}),
+        ...(residentEngines ? { residentEngines } : {}),
       },
       hungUp,
     );
@@ -4641,7 +4649,13 @@ export class RunnerApiController {
     // to withdraw Bypass for the machine that is about to spawn the process, not for some other.
     @CurrentRunner() runner: { id: string; ownerId: string; runsAsRoot?: boolean | null; capabilities?: string[] | null },
     @Headers(RUNNER_PROVIDERS_HEADER) providerHeader?: string,
+    /**
+     * The sessions whose engine runs on this runner now, comma-separated (runner-go residentEngineSessionIDs): their
+     * reclaim does not record its mode over what that engine reported (claimRecordsMode).
+     */
+    @Query('residentEngines') residentEnginesParam?: string,
   ): Promise<ReclaimResponse> {
+    const residentEngines = new Set(residentEnginesParam === undefined ? [] : parseDrainScope(residentEnginesParam));
     const sessions = await this.prisma.session.findMany({
       where: {
         assignedRunnerId: runner.id,
@@ -4880,8 +4894,10 @@ export class RunnerApiController {
         }));
       }
       // The reclaim re-spawns the engine in this mode: until it says otherwise, the session's actual mode, as a
-      // claim's is (actual-permission-mode.ts).
-      await recordActualPermissionMode(this.prisma, s.id, handedPermissionMode, 'CLAIM', null, claimedMode.substitution);
+      // claim's is (actual-permission-mode.ts). Not over what a Claude engine the runner still runs reported.
+      if (claimRecordsMode(provider, residentEngines.has(s.id))) {
+        await recordActualPermissionMode(this.prisma, s.id, handedPermissionMode, 'CLAIM', null, claimedMode.substitution);
+      }
       // The stored session model wins over Runtime/ModelProvider defaults, so a resumed process
       // keeps the model it was created with; cross-provider ids are still coerced safely.
       const workspaceCfg: AgentExecConfig = {
