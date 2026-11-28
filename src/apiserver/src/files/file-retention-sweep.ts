@@ -24,6 +24,9 @@ export const DRIVE_STAGING_IDLE_MS = 7 * 24 * 60 * 60 * 1000;
 /** How long the drive keeps a commit's answer and a change-feed row (docs/drive-technical-design.md §1.1). */
 export const DRIVE_FEED_KEEP_MS = 24 * 60 * 60 * 1000;
 
+/** How long the drive keeps who moved or renamed an entry (drive_move, 1780), what the activity view reads. */
+export const DRIVE_MOVE_KEEP_MS = 30 * 24 * 60 * 60 * 1000;
+
 /** What one sweep did. */
 export interface FileSweepResult {
   /**
@@ -31,7 +34,10 @@ export interface FileSweepResult {
    * removed (drive_removed_entry) kept that long for a handle still writing one.
    */
   stagingsRemoved: number;
-  /** Drive commit answers and change-feed rows removed because they were older than DRIVE_FEED_KEEP_MS. */
+  /**
+   * Drive commit answers and change-feed rows removed because they were older than DRIVE_FEED_KEEP_MS, and drive_move rows
+   * older than DRIVE_MOVE_KEEP_MS.
+   */
   feedRowsRemoved: number;
   /** Rows given a date: those whose task was deleted, and those no date was ever written for. */
   dated: number;
@@ -134,10 +140,21 @@ export class FileRetentionSweep implements OnApplicationBootstrap, OnModuleDestr
     return { stagingsRemoved, feedRowsRemoved, dated, tombstoned, deleted, failed };
   }
 
-  /** Step 0's second half: drive commit answers and change-feed rows older than a day, a batch at a time. */
+  /**
+   * Step 0's second half: drive commit answers and change-feed rows older than a day, and moves older than 30 days, a
+   * batch at a time.
+   */
   private async pruneDriveFeed(now: Date): Promise<number> {
     const before = new Date(now.getTime() - DRIVE_FEED_KEEP_MS).toISOString();
+    const movesBefore = new Date(now.getTime() - DRIVE_MOVE_KEEP_MS).toISOString();
     let total = 0;
+    for (;;) {
+      const removed = await this.prisma.$executeRaw`
+        DELETE FROM drive_move
+         WHERE id IN (SELECT id FROM drive_move WHERE at < ${movesBefore}::timestamptz LIMIT ${SWEEP_BATCH})`;
+      total += removed;
+      if (removed < SWEEP_BATCH) break;
+    }
     for (;;) {
       const removed = await this.prisma.$executeRaw`
         DELETE FROM drive_commit

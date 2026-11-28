@@ -49,6 +49,7 @@ import { DriveUploadsService } from './drive-uploads.service';
 import { DriveController, DriveDownloadController } from './drive.controller';
 import { DriveService } from './drive.service';
 import { DriveSyncsService } from './drive-syncs.service';
+import { DriveActivity } from './drive-activity';
 
 // Drive is off unless switched on (drive-switch.ts); this harness mounts its controller, so it switches it on.
 process.env.ORBIT_DRIVE_ENABLED = 'true';
@@ -124,6 +125,7 @@ test('Documents drive: bounded Trash operations on folders of 100,000 entries', 
       { provide: PrismaService, useValue: db },
       { provide: FilesService, useValue: files },
       DriveService, DriveChunksService, DriveUploadsService, DriveContentService, DriveDownloadLinks, DriveSyncsService,
+      DriveActivity,
     ],
   })
   class DriveHarness {}

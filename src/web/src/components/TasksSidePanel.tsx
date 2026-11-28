@@ -3,7 +3,6 @@ import {
   CaretDownOutlined,
   CheckOutlined,
   CloudOutlined,
-  CodeOutlined,
   DeleteOutlined,
   DesktopOutlined,
   DisconnectOutlined,
@@ -784,19 +783,10 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
     () => new Map((sessionCounts.data ?? []).map((c) => [c.workspaceId, c.needsYou])),
     [sessionCounts.data],
   );
-  // Unlike `active` (which also includes queued sessions), `running` mirrors the blue working
-  // spinner in the Session list. A queued-only, online workspace keeps the normal empty slot.
+  // Every session whose row spins in the Session list (`phase` RUNNING): generating, or a background job in flight,
+  // quiet or not. Unlike `active`, queued sessions are left out, so a queued-only workspace keeps the empty slot.
   const workspaceRunning = useMemo(
-    () => new Map((sessionCounts.data ?? []).map((c) => [c.workspaceId, c.running ?? 0])),
-    [sessionCounts.data],
-  );
-  // Neither of the two above: sessions with a background JOB in flight. The rail was silent about
-  // these — a workspace running a build or a stress test, with nobody generating in it, looked
-  // exactly like one that had left a dev server up. Work in flight is activity, so the workspace
-  // dot lights up brand blue here too; what still separates it from the generating dot is motion
-  // (breathing, not still), never colour.
-  const workspaceJobs = useMemo(
-    () => new Map((sessionCounts.data ?? []).map((c) => [c.workspaceId, c.jobs ?? 0])),
+    () => new Map((sessionCounts.data ?? []).map((c) => [c.workspaceId, (c.running ?? 0) + (c.jobs ?? 0) + (c.stalledJobs ?? 0)])),
     [sessionCounts.data],
   );
 
@@ -1009,7 +999,6 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                     workspaceRunnerIsOffline(runnerId, runnerId ? runnerOnlineById.get(runnerId) : undefined)
                   }
                   running={(workspaceRunning.get(a.id) ?? 0) > 0}
-                  jobs={workspaceJobs.get(a.id) ?? 0}
                   needsYou={workspaceNeedsYou.get(a.id) ?? 0}
                   runnerLabel={runnerLabel}
                 />
@@ -1117,7 +1106,6 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                           workspaceRunnerIsOffline(runnerId, runnerId ? runnerOnlineById.get(runnerId) : undefined)
                         }
                         running={(workspaceRunning.get(a.id) ?? 0) > 0}
-                        jobs={workspaceJobs.get(a.id) ?? 0}
                         needsYou={workspaceNeedsYou.get(a.id) ?? 0}
                         shortcutLabel={workspaceShortcutLabel(dragPreviewIds?.indexOf(a.id) ?? index)}
                         onOpen={openWorkspace}
@@ -1573,14 +1561,13 @@ export function WikiRow({
  * row's marks line up in one column whether or not a count sits at the row's far end. The compact
  * rail pins the count to the avatar's top corner and activity to its bottom one: beside it rather
  * than replaced by it, because the two answer different questions and the server leaves the
- * sessions waiting on you out of `running`/`jobs`. The rail keeps its existing Disconnect overlay
+ * sessions waiting on you out of `running`. The rail keeps its existing Disconnect overlay
  * in that bottom corner because its avatar is a separate surface, and a count still outranks it.
  */
 export function WorkspaceStateMark({
   offline,
   managed = null,
   running,
-  jobs = 0,
   needsYou,
   runnerLabel,
   compact = false,
@@ -1589,8 +1576,6 @@ export function WorkspaceStateMark({
   /** The account's managed runner, when it is this workspace's: its shared state instead of Offline. */
   managed?: ManagedRunnerRow | null;
   running: boolean;
-  /** Sessions in this workspace with a background job in flight — see `workspaceJobs`. */
-  jobs?: number;
   needsYou: number;
   runnerLabel?: string;
   compact?: boolean;
@@ -1642,26 +1627,6 @@ export function WorkspaceStateMark({
       </>
     );
   }
-  // Below the spinner and said in the terminal glyph's own words: something is running here, but
-  // nobody is generating. A left-up process does not qualify (the server counts only jobs with an
-  // end) — otherwise this slot would be lit for the rest of the workspace's life.
-  if (jobs > 0) {
-    const title = `${jobs} background ${jobs === 1 ? 'job' : 'jobs'} running`;
-    return (
-      <>
-        <Tooltip content={title}>
-          <CodeOutlined
-            // In the collapsed rail this mark sits at the avatar's corner like the spinner it
-            // replaces, and the desktop rule below turns it into a quiet dot there.
-            className="tp-rail-jobs status-glyph-active"
-            aria-label={title}
-            style={{ color: 'var(--text-3)', fontSize: 16 }}
-          />
-        </Tooltip>
-        {badge}
-      </>
-    );
-  }
   return badge;
 }
 
@@ -1696,7 +1661,6 @@ export function WorkspaceRow({
   offline,
   managed = null,
   running,
-  jobs,
   needsYou,
   shortcutLabel,
   onOpen,
@@ -1712,7 +1676,6 @@ export function WorkspaceRow({
   /** The account's managed runner, when it is this workspace's: Asleep or Waking up…, never Offline. */
   managed?: ManagedRunnerRow | null;
   running: boolean;
-  jobs: number;
   needsYou: number;
   shortcutLabel?: string | null;
   onOpen: (a: Workspace) => void;
@@ -1758,12 +1721,9 @@ export function WorkspaceRow({
   const offlineTitle = runnerLabel ? `${runnerLabel} is offline` : 'Runner offline';
   // Disconnection remains higher priority than background activity. A needs-you count does not
   // hide it: the count sits at the row's other end, and the server leaves the sessions waiting on
-  // you out of `running` and `jobs`, so a dot beside it is other work still moving. The desktop
+  // you out of `running`, so a dot beside it is other work still moving. The desktop
   // sidebar and the drawer draw this same quiet mark.
   const showRunningDot = running && !offline;
-  // One slot, one blue: this dot means a job is in flight here with nobody generating, which the
-  // still dot above outranks when generation happens. The two differ by breathing only.
-  const showJobsDot = jobs > 0 && !running && !offline;
   return (
     <div
       className={`tp-item ${active ? 'active' : ''}${menuOpen ? ' menu-open' : ''}`}
@@ -1779,7 +1739,7 @@ export function WorkspaceRow({
         aria-label={offline ? offlineTitle : undefined}
       >
         {cloud ? <CloudOutlined aria-hidden="true" data-machine="cloud" /> : <FolderOutlined aria-hidden="true" />}
-        {managedRest(managed) && !showRunningDot && !showJobsDot && (
+        {managedRest(managed) && !showRunningDot && (
           <ManagedRunnerMark row={managed!} className="tp-workspace-icon-managed" />
         )}
         {offline && (
@@ -1796,15 +1756,6 @@ export function WorkspaceRow({
               className="tp-workspace-icon-running"
               role="img"
               aria-label="Workspace has a running session"
-            />
-          </Tooltip>
-        )}
-        {showJobsDot && (
-          <Tooltip content={`${jobs} background ${jobs === 1 ? 'job' : 'jobs'} running`} delay={TEXT_TOOLTIP_DELAY_MS}>
-            <span
-              className="tp-workspace-icon-jobs"
-              role="img"
-              aria-label="Workspace has a background job running"
             />
           </Tooltip>
         )}

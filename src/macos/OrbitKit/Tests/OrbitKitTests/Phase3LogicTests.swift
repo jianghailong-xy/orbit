@@ -188,8 +188,9 @@ final class Phase3LogicTests: XCTestCase {
                        .open(.runner(PublicID.toPublic("019a0000-0000-7000-8000-000000000003"))))
         XCTAssertNil(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
                                           userInfo: ["kind": "runner-updating"]), "it names its runner")
-        // An engine signed out and Claude blocked in the runner's region name the runner too, and open it.
-        for kind in ["engine-signed-out", "claude-region-blocked"] {
+        // An engine signed out, Claude blocked in the runner's region, and the runner gone offline or back name the runner
+        // too, and open it.
+        for kind in ["engine-signed-out", "claude-region-blocked", "runner-offline", "runner-online"] {
             XCTAssertEqual(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
                                                 userInfo: ["kind": kind, "runnerID": "019a0000-0000-7000-8000-000000000003"]),
                            .open(.runner(PublicID.toPublic("019a0000-0000-7000-8000-000000000003"))), kind)

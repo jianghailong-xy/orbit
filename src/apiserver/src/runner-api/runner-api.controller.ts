@@ -537,6 +537,7 @@ import {
   type LinkBeatDigests,
   type LinkBeatRow,
 } from './link-heartbeat';
+import { countLinkHeartbeatFull, countLinkHeartbeatQuiet, countLinkHeartbeatReport } from './link-heartbeat-metrics';
 import { RunnerReleaseFeed } from './runner-release-feed';
 import { ReferenceExpansionService } from '../tasks/reference-expansion';
 import { ListEventsService } from '../task-lists/list-events.service';
@@ -2237,11 +2238,13 @@ export class RunnerApiController {
       // A managed runner is admitted with its instance, as RunnerAuthGuard admits it, and reconciles in full.
       const admitted = await readAdmittedLinkRunner(this.prisma, { runnerId, credential: admission.credential });
       const instance = await authorizeManagedRunnerInstance(this.prisma, admitted.id, headers.all);
+      countLinkHeartbeatFull('MANAGED');
       return this.reconcileHeartbeat(admitted, dto, headers.capabilities, headers.providerHeader, headers.osHeader, instance, link);
     }
     if (row.landingNamed) assertEngineSessionRow({ sessionKind: 'LANDING' });
     await this.recordExecuting(runnerId, leaseOwner, dto);
     let verdict = linkBeatVerdict(runnerId, row, digests, supervised.length);
+    let unwritable = false;
     if (verdict.answer === 'REPORT') {
       // A beat whose checkout report changed is written here, not by the full reconcile: read what it overwrites, so
       // the owner's clients are told which workspaces' checkouts moved, as reconcileHeartbeat tells them.
@@ -2273,8 +2276,12 @@ export class RunnerApiController {
         if (!(error instanceof LinkReportUnwritable)) throw error;
         // What one statement cannot write, the full reconcile writes, and refuses, as an HTTPS beat does.
         verdict = { answer: 'FULL', reason: 'INPUTS' };
+        unwritable = true;
       }
     }
+    if (verdict.answer === 'FULL') countLinkHeartbeatFull(unwritable ? 'REPORT_UNWRITABLE' : verdict.reason);
+    else if (verdict.answer === 'REPORT') countLinkHeartbeatReport(verdict.reports);
+    else countLinkHeartbeatQuiet();
     if (verdict.answer !== 'FULL') {
       // Whichever apiserver process holds them (cursor-key-check-relay.ts): the gateway forwards a beat to any.
       const cursorKeyChecks = await cursorKeyCheckRelay.takeAnywhere(runnerId);
@@ -5908,7 +5915,8 @@ export class RunnerApiController {
    * (not the user-JWT /api/attachments/:id): the session must be one this runner owns, and the
    * file one that session may read (`FilesService.readableInSession`): its own, or one cited by
    * evidence it judges. So a runner can't read another tenant's blobs. Streamed from the file
-   * store, or from the row for one stored before it.
+   * store, or from the row for one stored before it. A remote SubAgent's `file_fetch` reads as its parent's session by
+   * naming its run (sessionOfRemoteSubagent, docs/subagent-design.md §10.2).
    */
   @UseGuards(RunnerAuthGuard)
   @StaysOnHttps()
@@ -5918,8 +5926,11 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Param('attId', PublicIdPipe) attId: string,
     @Res({ passthrough: true }) res?: Response,
+    @Query('subagentRunId', PublicIdPipe) subagentRunId?: string,
   ): Promise<StreamableFile> {
-    const session = await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
+    const ownerId = (runner as { ownerId?: string }).ownerId;
+    const session = (await sessionOfRemoteSubagent(this.prisma, { id: runner.id, ownerId }, sessionId, subagentRunId))
+      ?? (await this.assertSessionOwnership(sessionId, runner.id, ownerId));
     const file = await this.files.open(await this.files.readableInSession(session, attId));
     if (!file) throw new NotFoundException('attachment not found');
     return streamable(file, res);

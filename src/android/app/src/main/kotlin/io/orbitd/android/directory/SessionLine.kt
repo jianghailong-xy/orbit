@@ -335,9 +335,12 @@ internal val DirectorySession.effectiveLifecycleState: String get() = when {
     else -> "OPEN"
 }
 
-/** Whether its glyph is the working spinner (`WorkspaceActivityLogic.isRunning`, read off `SessionStatusGlyph`); a watch it is
- * parked on never takes the spinner's place. */
+/** Whether its row draws the working spinner (`WorkspaceActivityLogic.isRunning`): with the session facts, `phase` RUNNING alone, as
+ * [SessionLiveMark] draws it — a background job or SubAgent between turns too, quiet job or not; else read off `SessionStatusGlyph`,
+ * where a watch it is parked on never takes the spinner's place. A folder, a project and the drawer's workspace read this, so none of
+ * them sits idle over a row that spins. */
 internal fun DirectorySession.isRunning(): Boolean {
+    SessionDisplay.state(displayFacts)?.let { return it == SessionDisplayState.RUNNING }
     if (pendingApprovals > 0 || confirmationUnderReview != null) return false
     return when (effectiveRunState) {
         RunState.RUNNING -> true
@@ -356,7 +359,8 @@ internal fun DirectorySession.hasBackgroundProcess(watching: WatchSessionSummary
 
 /** Whether that terminal breathes (`WorkspaceActivityLogic.isRunningJob`): at least one of those processes is a job in flight. */
 internal fun DirectorySession.isRunningJob(watching: WatchSessionSummary? = null): Boolean =
-    hasBackgroundProcess(watching) && runningBgJobCount > 0
+    // With the session facts no row breathes: a job in flight is `phase` RUNNING, the spinner of [isRunning].
+    SessionDisplay.state(displayFacts) == null && hasBackgroundProcess(watching) && runningBgJobCount > 0
 
 private val DirectorySession.reviewerTitle get() = (confirmationUnderReview?.get("reviewerTitle") as? JsonPrimitive)?.contentOrNull
 

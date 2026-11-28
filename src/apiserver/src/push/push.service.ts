@@ -72,6 +72,18 @@ function agentNotifyWait(rang: Date | null, now: Date): number | null {
   return left > 0 ? Math.ceil(left / 1000) : null;
 }
 
+/** A runner that went offline without signing off or draining, and one of those that is back (notifyRunnerPresence). */
+export const RUNNER_OFFLINE_PUSH_KIND = 'runner-offline';
+export const RUNNER_ONLINE_PUSH_KIND = 'runner-online';
+
+/** What a runner presence push says. */
+export function runnerPresencePushBody(runner: { name: string | null; displayName: string | null }, presence: 'offline' | 'online'): string {
+  const machine = runner.displayName || runner.name || 'Your runner';
+  return presence === 'offline'
+    ? `${machine} is offline: Orbit hasn't heard from it for 5 minutes. Sessions on it can't run until it's back.`
+    : `${machine} is back online.`;
+}
+
 /** The held-message push's body (frame 4B of docs/ux/translation-failure-policy.html). */
 export const HELD_MESSAGE_PUSH_BODY = "Your message wasn't sent: it couldn't be translated.";
 
@@ -131,6 +143,8 @@ const FEISHU_EVENT_KINDS: Readonly<Record<string, string>> = {
   'account-needs-action': 'Account needs action',
   'claude-region-blocked': 'Claude is not available on this runner',
   'runner-updating': 'Runner updating',
+  [RUNNER_OFFLINE_PUSH_KIND]: 'Runner offline',
+  [RUNNER_ONLINE_PUSH_KIND]: 'Runner back online',
   'confirmation-raised': 'Coordinator raised this for your decision',
   'confirmation-problems': 'Problems found after you confirmed',
   'owner-request': 'Request for you',
@@ -632,6 +646,37 @@ export class PushService {
       await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`Claude region notify failed: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * Tell a runner's owner that it went offline without signing off, or that a runner they were told so about is back
+   * (ReaperService.alertRunnerPresence decides when, once each). About the machine, as notifyEngineSignedOut is: no
+   * badge and no sessionID, and a tap opens the runner. Both carry one collapse id, so "back online" takes the place of
+   * "offline" on a device that still shows it.
+   */
+  async notifyRunnerPresence(runnerId: string, presence: 'offline' | 'online'): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const runner = await this.prisma.runner.findUnique({
+        where: { id: runnerId },
+        select: { name: true, displayName: true, ownerId: true },
+      });
+      if (!runner) return;
+      const { tokens, feishu } = await this.channels(runner.ownerId);
+      if (tokens.length === 0 && !feishu) return;
+      const alert = { title: runner.displayName || runner.name || 'Orbit', body: runnerPresencePushBody(runner, presence) };
+      const kind = presence === 'offline' ? RUNNER_OFFLINE_PUSH_KIND : RUNNER_ONLINE_PUSH_KIND;
+      const collapseId = `runner-presence-${runnerId}`;
+      const body = JSON.stringify({
+        aps: { alert, sound: 'default', 'thread-id': `runner-${runnerId}` },
+        runnerID: runnerId,
+        kind,
+      });
+      this.background(this.feishuOther(feishu, { kind, ...alert, collapseId }));
+      await this.deliver(tokens, body, 'alert', '10', collapseId);
+    } catch (err) {
+      this.log.warn(`runner ${presence} notify failed: ${(err as Error).message}`);
     }
   }
 

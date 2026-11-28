@@ -490,7 +490,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 disabled = !workspace.enabled,
                                 stateLabel = if (runner?.online == false) ManagedRunner.row(runner.id, managedForLanding.shown?.status)?.label ?: "Offline" else null,
                                 waiting = sessions.sumOf { it.pendingApprovals },
-                                running = sessions.count { it.runState == "RUNNING" || it.status == "RUNNING" }, live = drawerLive,
+                                running = sessions.count { it.isRunning() || it.isRunningJob() }, live = drawerLive,
                                 selected = navigation.section == workspace.id,
                                 onClick = { select(workspace.id, OrbitRoute(Destination.WORKSPACE, workspace.id, workspace.id, origin = Origin.DRAWER)) })
                         }

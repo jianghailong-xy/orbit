@@ -244,7 +244,7 @@ export interface AgentExecConfig {
 
 /**
  * What changed the mode a session's engine is actually running in (`session_permission_mode_change.cause`,
- * migration 1755):
+ * migration 1805):
  *  - CLAIM: a claim handed the runner this mode (for an engine that reports none, that is the mode it runs in);
  *  - OWNER_PICK: the owner's config change reached the engine (`client` names the app when the request said);
  *  - ENGINE_REPORT: the engine said it runs in another mode than the one recorded (Claude Code's init frame);
@@ -278,7 +278,7 @@ export interface SessionPermissionModeChange {
 
 /**
  * The session detail's and list row's word on its mode. `permissionMode` is the owner's intent and is never
- * rewritten by normalization; `actualPermissionMode` is what the engine runs in (null until a claim since 1755,
+ * rewritten by normalization; `actualPermissionMode` is what the engine runs in (null until a claim since 1805,
  * and absent from an older server). Clients that read neither keep working: both are additions.
  */
 export interface SessionPermissionModeFacts {
@@ -2655,6 +2655,10 @@ export interface RunnerRemovedDefault {
   /** As on its account (RunnerEngineAccount.fingerprintPrefix): a remaining account showing the same
    *  one is the same login. Absent where the runner read none. */
   fingerprintPrefix?: string;
+  /** Whether its login is still on the machine, as the runner reports it for Default. Clients leave
+   *  the line out on `no` (the login is gone, there is nothing to offer back) and show it on `yes`,
+   *  `unknown` and when absent (an older apiserver). */
+  auth?: RunnerEngineAccount['auth'];
 }
 
 export interface DshRuntimeHealth {

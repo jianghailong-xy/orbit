@@ -65,8 +65,9 @@ data class PushPayload(
         // A condition that cannot be read: the conversation it came from, which draws its card, else the card in Waiting on you.
         kind == CONDITION -> sessionId?.let { "orbit-session:$it" } ?: ownerRequestId?.let { "orbit://owner-request/$it" }
         // About a machine: its sign-in lapsed, its Claude connection to Anthropic is in a region Anthropic does not offer Claude in,
-        // or it drains for an update with the owner's work waiting on it.
-        kind == "engine-signed-out" || kind == "claude-region-blocked" || kind == "runner-updating" -> runnerId?.let { "orbit://runner/$it" }
+        // or it drains for an update with the owner's work waiting on it; it went offline without signing off, or is back.
+        kind == "engine-signed-out" || kind == "claude-region-blocked" || kind == "runner-updating" ||
+            kind == "runner-offline" || kind == "runner-online" -> runnerId?.let { "orbit://runner/$it" }
         // An account the provider refused: its machine's page, or for a key or pool login the Providers screen, where its row is.
         kind == ACCOUNT_NEEDS_ACTION -> runnerId?.let { "orbit://runner/$it" } ?: PROVIDERS_LINK
         // A merge into main waiting on the owner opens its project's sessions page, where its card is, as that project's root
@@ -119,7 +120,7 @@ data class PushMessage(
         private val kinds = PushPayload.ownerItemKinds + setOf("project-done", "project-orphan", "approval", "finished", "failed", "agent-message",
             "engine-signed-out", "confirmation-problems", "watch-matched", "wiki-review-mode-manual",
             "wiki-review-mode-tiered", "wiki-maintenance-failing", "loop-missed", "wakeup-dropped", "claude-region-blocked",
-            "runner-updating", PushPayload.OWNER_REQUEST, PushPayload.TERMINAL_LOGIN, PushPayload.CROSSING_REQUEST,
+            "runner-updating", "runner-offline", "runner-online", PushPayload.OWNER_REQUEST, PushPayload.TERMINAL_LOGIN, PushPayload.CROSSING_REQUEST,
             PushPayload.CONFIRMATION_RAISED, PushPayload.DECISION_CARD, PushPayload.SCHEDULE, PushPayload.CONDITION, PushPayload.ACCOUNT_NEEDS_ACTION)
 
         /** No unknown version, malformed identifier, or partial route can become a notification. */
@@ -184,6 +185,8 @@ data class PushMessage(
                     "engine-signed-out", "claude-region-blocked" -> require(payload.runnerId != null && !payload.engine.isNullOrBlank())
                     // A runner draining for its update with the owner's work waiting: about the machine, no engine.
                     "runner-updating" -> require(payload.runnerId != null)
+                    // A runner gone offline without signing off, and one of those back online: about the machine, no engine.
+                    "runner-offline", "runner-online" -> require(payload.runnerId != null)
                     "watch-matched" -> require(payload.watchId != null && (payload.generation ?: 0) > 0)
                     in PushPayload.ownerItemKinds -> require(payload.projectId != null && payload.openItemId != null)
                     else -> require(payload.wikiSpaceId != null)

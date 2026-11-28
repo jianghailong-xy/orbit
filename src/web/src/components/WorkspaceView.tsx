@@ -299,6 +299,7 @@ import {
 } from '../lib/contextSeed';
 import { InitializeGitSteps, SessionOutputs } from './SessionOutputs';
 import { mergeRepairLoopLive } from './MergeRecoveryPanel';
+import { pullRequestCard } from './LandingPullRequest';
 import { BrandMark, NewSessionProviderHero, type NewSessionPlace } from './NewSessionProviderHero';
 import { orderWorkspaces, workspaceRunnerId } from '../lib/workspaceOrder';
 import { runnerUpdateIndicator } from '../lib/runnerUpdateIndicator';
@@ -1813,7 +1814,7 @@ function SessionProjectLanding({ projectId, onOpen }: { projectId: string; onOpe
 }
 
 /** A project's icon and two lines, as a session row has them: the Projects glyph (the spinner while a
- *  member runs, a dot while one waits on you or has background jobs), the title and time, then the
+ *  member runs, a dot while one waits on you), the title and time, then the
  *  progress chip and the row's line (docs/session-list-projects-design.md §4.1–§4.2). The row around it
  *  is its coordinator's session row (`SessionListRow`). */
 export function SessionProjectRowContent({ project }: { project: SessionProjectRow<any> }) {
@@ -1828,7 +1829,7 @@ export function SessionProjectRowContent({ project }: { project: SessionProjectR
               <span
                 className={`session-project-status ${project.indicator}`}
                 data-state={project.indicator}
-                aria-label={project.indicator === 'needs-you' ? 'Waiting for you' : 'Background jobs'}
+                aria-label="Waiting for you"
               />
             )}
           </>
@@ -4121,6 +4122,19 @@ export function WorkspaceView({
             tone: d.mergeRecovery?.code === 'LOCAL_SYNC_PENDING' ? 'warning' : 'success',
             icon: 'check',
           });
+        } else if (status === 'pull_request') {
+          // GitHub refused the push to the target because of its rules, so the runner opened a pull request:
+          // the merge waits on it (design §4.6). Not a failure; the bar shows the pull request's state.
+          const pr = d.mergePullRequest;
+          message.sessionNotice({
+            sessionId: operation.id,
+            sessionTitle: operation.title,
+            event: 'merge-result',
+            headline: pr?.number != null ? `Opened pull request #${pr.number} into ${target}` : `Opened a pull request into ${target}`,
+            detail: pr ? pullRequestCard(pr, target).detail : `${target} requires a pull request. Orbit merges it once the branch's rules pass.`,
+            tone: 'neutral',
+            icon: 'info',
+          });
         } else if (status === 'conflict') {
           message.sessionNotice({
             sessionId: operation.id,
@@ -4536,7 +4550,7 @@ export function WorkspaceView({
     const folders = live.folders.map((row) => {
       const prev = before.folders.get(row.folder.id);
       return prev && prev.folder === row.folder && prev.sessionCount === row.sessionCount && prev.needsYou === row.needsYou &&
-        prev.running === row.running && prev.jobs === row.jobs ? prev : row;
+        prev.running === row.running ? prev : row;
     });
     const projects = new Map(live.projects.map((row) => {
       const prev = before.projects.get(row.projectId);
@@ -10248,10 +10262,6 @@ export function WorkspaceView({
           {row.running ? (
             <Tooltip content="Running" align="start" delay={TEXT_TOOLTIP_DELAY_MS}>
               <span className="session-folder-activity" aria-label="Running" />
-            </Tooltip>
-          ) : row.jobs ? (
-            <Tooltip content="Background job running" align="start" delay={TEXT_TOOLTIP_DELAY_MS}>
-              <span className="session-folder-activity jobs" aria-label="Background job running" />
             </Tooltip>
           ) : null}
         </span>

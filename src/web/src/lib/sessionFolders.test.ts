@@ -69,8 +69,9 @@ describe('sessionFolderListing', () => {
 
   it('reports for the sessions inside: who waits on you, and what is moving', () => {
     const [, release, wiki] = sessionFolderListing(sessions, folders, { view: 'open', byTag: false, ...readings }).folders;
-    expect(release).toMatchObject({ needsYou: 1, running: true, jobs: false });
-    expect(wiki).toMatchObject({ needsYou: 0, running: false, jobs: true });
+    expect(release).toMatchObject({ needsYou: 1, running: true });
+    // A background job in flight runs the folder too: no separate, quieter mark.
+    expect(wiki).toMatchObject({ needsYou: 0, running: true });
   });
 
   it('draws no activity while the Runner is offline, but still counts who waits on you', () => {
@@ -80,8 +81,8 @@ describe('sessionFolderListing', () => {
       runnerOffline: true,
       ...readings,
     }).folders;
-    expect(release).toMatchObject({ needsYou: 1, running: false, jobs: false });
-    expect(wiki).toMatchObject({ running: false, jobs: false });
+    expect(release).toMatchObject({ needsYou: 1, running: false });
+    expect(wiki).toMatchObject({ running: false });
   });
 
   it('shows only the folders a completed session is in on Completed', () => {

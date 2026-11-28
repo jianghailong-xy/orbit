@@ -223,6 +223,8 @@ export function WikiChatPanel({
   onChat,
   onClose,
   onResize,
+  headerActions = null,
+  view = null,
 }: {
   origin: ChatOrigin;
   /** The chat shown: a session's public id, or `WIKI_CHAT_NEW_PARAM`. */
@@ -242,6 +244,10 @@ export function WikiChatPanel({
   onChat: (chat: string) => void;
   onClose: () => void;
   onResize: (width: number, done: boolean) => void;
+  /** Extra buttons the host puts in the header, before ✕ (Drive's activity icon); the Wiki gives none. */
+  headerActions?: ReactNode;
+  /** A view the host shows in place of the chat, under its own title (Drive's activity); the chat stays mounted behind it. */
+  view?: { title: string; body: ReactNode } | null;
 }) {
   const navigate = useNavigate();
   const fresh = chat === WIKI_CHAT_NEW_PARAM;
@@ -253,6 +259,7 @@ export function WikiChatPanel({
   const [history, setHistory] = useState(false);
   // While the history shows, the title names it (board 45 ④ ①).
   const title = history ? WIKI_CHAT_HISTORY_TITLE : chatTitle;
+  const viewed = view !== null;
   const [sheetFull, setSheetFull] = useState(false);
   // A chat's first message, kept from the create until its own conversation draws it.
   const [opening, setOpening] = useState<{ sessionId: string; message: ChatOpening } | null>(null);
@@ -279,17 +286,21 @@ export function WikiChatPanel({
         </button>
       )}
       <div className="wk-chat-head">
-        <Tooltip content={origin.copy.history} side="bottom" align="start">
-          <button
-            type="button"
-            className="wk-chat-title"
-            aria-expanded={history}
-            onClick={() => setHistory((open) => !open)}
-          >
-            <span className="t">{title}</span>
-            <CaretDownOutlined className="caret" />
-          </button>
-        </Tooltip>
+        {viewed ? (
+          <span className="wk-chat-title is-static"><span className="t">{view.title}</span></span>
+        ) : (
+          <Tooltip content={origin.copy.history} side="bottom" align="start">
+            <button
+              type="button"
+              className="wk-chat-title"
+              aria-expanded={history}
+              onClick={() => setHistory((open) => !open)}
+            >
+              <span className="t">{title}</span>
+              <CaretDownOutlined className="caret" />
+            </button>
+          </Tooltip>
+        )}
         <Tooltip content={WIKI_CHAT_NEW} side="bottom">
           <button type="button" className="wk-chat-ib" aria-label={WIKI_CHAT_NEW} onClick={() => onChat(WIKI_CHAT_NEW_PARAM)}>
             <PlusOutlined />
@@ -300,19 +311,21 @@ export function WikiChatPanel({
             type="button"
             className="wk-chat-ib"
             aria-label={WIKI_CHAT_OPEN_SESSION}
-            disabled={fresh || history}
+            disabled={fresh || history || viewed}
             onClick={() => navigate(`/sessions/${encodeId(sessionId!)}`)}
           >
             <ArrowRightOutlined />
           </button>
         </Tooltip>
+        {headerActions}
         <Tooltip content={WIKI_CHAT_CLOSE} side="bottom" align="end">
           <button type="button" className="wk-chat-ib" aria-label={WIKI_CHAT_CLOSE} onClick={onClose}>
             <CloseOutlined />
           </button>
         </Tooltip>
       </div>
-      {history && (
+      {viewed && <div className="wk-chat-view">{view.body}</div>}
+      {history && !viewed && (
         <WikiChatHistory
           origin={origin}
           current={chat}
@@ -324,7 +337,7 @@ export function WikiChatPanel({
         />
       )}
       {/* Kept while the history shows, so what was typed stays (board 45 ④ ①). */}
-      <div className="wk-chat-main" hidden={history}>
+      <div className="wk-chat-main" hidden={history || viewed}>
       {fresh ? (
         <WikiChatNew
           origin={origin}

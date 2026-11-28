@@ -2,6 +2,7 @@ import {
   Body, Controller, Delete, Get, Headers, HttpCode, HttpException, HttpStatus, Param, ParseIntPipe, Patch, Post, Put, Query, Req, Res,
   StreamableFile, UseGuards,
 } from '@nestjs/common';
+import type { DriveActivityPage } from '@orbit/shared';
 import type { Request, Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatScope } from '../auth/pat-scope.decorator';
@@ -11,6 +12,7 @@ import { DRIVE_CHUNK_MAX, DRIVE_CHUNK_TOO_LARGE, DriveChunksService } from './dr
 import { DriveContentService, type DriveContent } from './drive-content.service';
 import { DriveUploadsService } from './drive-uploads.service';
 import { FilesService, type DriveUsage } from '../files/files.service';
+import { DriveActivity } from './drive-activity';
 import { DriveService } from './drive.service';
 import { DriveDownloadLinks } from './drive-download-links';
 import { DRIVE_ROUTE_PREFIXES } from './drive-routes';
@@ -40,9 +42,10 @@ export class DriveController {
     private readonly downloadLinks: DriveDownloadLinks,
     private readonly files: FilesService,
     private readonly syncs: DriveSyncsService,
+    private readonly activity: DriveActivity,
   ) {}
 
-  /** Agents' directory syncs for the upload tray: running ones and those ended in the last day (S4). */
+  /** Agents' directory syncs for the upload tray: running ones, those ended in the last day and unhandled failures (S4). */
   @DRIVE_PAT()
   @Get('syncs')
   listSyncs(@CurrentUser() user: AuthUser): Promise<{ syncs: DriveSyncView[] }> {
@@ -54,6 +57,14 @@ export class DriveController {
   @Get('syncs/:id')
   getSync(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string): Promise<DriveSyncView> {
     return this.syncs.get(user.userId, id);
+  }
+
+  /** The owner has dealt with a sync's failures (the Drive page's Clear): it stops being kept past the day. */
+  @DRIVE_PAT()
+  @Post('syncs/:id/handled')
+  @HttpCode(HttpStatus.OK)
+  markSyncHandled(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string): Promise<DriveSyncView> {
+    return this.syncs.markHandled(user.userId, id);
   }
 
   // What Files → Storage shows: the drive's share and the rest, each content once (§2.5).
@@ -180,6 +191,16 @@ export class DriveController {
   @Delete('trash')
   emptyTrash(@CurrentUser() user: AuthUser) {
     return this.drive.emptyTrash(user.userId);
+  }
+
+  /**
+   * The owner's drive work grouped by session and day, newest first (drive-activity.ts): whole days of `tz` (an IANA
+   * zone, UTC by default) a page, the next before `before`, the `nextBefore` the page answered.
+   */
+  @DRIVE_PAT()
+  @Get('activity')
+  activityPage(@CurrentUser() user: AuthUser, @Query('before') before?: string, @Query('tz') tz?: string): Promise<DriveActivityPage> {
+    return this.activity.page(user.userId, { before, tz });
   }
 
   /** The change feed (§5.4): `since` is the cursor the previous call answered. Also announced as `drive.changed`. */

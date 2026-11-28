@@ -53,6 +53,7 @@ import {
   APISERVER_PROCESS_QUIET_AFTER_MS,
   RUNNER_SILENT_AFTER_MS,
   RunnerPresenceService,
+  runnerIsOnline,
   runnerPresentAt,
   type CellLosses,
   type RunnerBeats,
@@ -118,6 +119,12 @@ export const MASS_DISCONNECT_HOLD_MS = RUNNER_SILENT_AFTER_MS + MASS_SILENCE_WIN
  * that land late. A heartbeat period and a half, as RUNNER_SILENT_AFTER_MS is.
  */
 export const MASS_DISCONNECT_SPREAD_MS = RUNNER_SILENT_AFTER_MS;
+/**
+ * How long a runner may have been silent and still be pushed as gone offline (alertRunnerPresence): one that went
+ * quiet before that — before this sweep existed, or while no apiserver ran it — is long known, and an owner is not
+ * told of every machine they stopped using in one burst.
+ */
+export const RUNNER_OFFLINE_ALERT_WITHIN_MS = 60 * 60_000;
 
 /**
  * A mass disconnection as the reaper reads and keeps it (migration 0450): the span of the last beats its runners were
@@ -366,6 +373,63 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     await this.returnWaitingSessions().catch((e: unknown) =>
       this.log.error('waiting-session sweep failed: ' + (e as Error).message));
     await this.sweep();
+    await this.alertRunnerPresence().catch((e: unknown) =>
+      this.log.error('runner presence alert failed: ' + (e as Error).message));
+  }
+
+  /**
+   * Push the owner of a runner that went offline without saying so, once, and once more when it is back.
+   *
+   * Offline is read as the reaper reads it, from RUNNER_REAP_AFTER_MS of silence, so a network flap the runner comes back
+   * from sends nothing; and it is held by everything that holds the reaping (`silenceHold`, a refusal of the database, a
+   * mass disconnection), since a silence the control plane may have caused is not news about the machine. A runner that
+   * signed off (OFFLINE) or whose last beat said it was draining — a stop or an update — went away on purpose, and an
+   * Orbit-managed runner sleeps by design: none of them is pushed. `offline_alerted_at` records the alert (migration
+   * 1800); set and cleared by a conditional update, so each is sent once whichever process sweeps. Only a runner whose
+   * offline push was sent is pushed back online.
+   */
+  async alertRunnerPresence(now: number = Date.now()): Promise<void> {
+    if (!this.push) return;
+    const liveness = { id: true, offlineAlertedAt: true, heartbeatDraining: true, ...RUNNER_LIVENESS } as const;
+    for (const r of await this.prisma.runner.findMany({ where: { offlineAlertedAt: { not: null } }, select: liveness })) {
+      if (!runnerIsOnline(r, now)) continue;
+      const cleared = await this.prisma.runner.updateMany({
+        where: { id: r.id, offlineAlertedAt: r.offlineAlertedAt },
+        data: { offlineAlertedAt: null },
+      });
+      if (cleared.count === 1) void this.push.notifyRunnerPresence(r.id, 'online');
+    }
+    if (this.databaseRefusedWorkLastSweep || (await this.silenceHold(now)) !== null) return;
+    const since = new Date(now - RUNNER_OFFLINE_ALERT_WITHIN_MS);
+    const silent = await this.prisma.runner.findMany({
+      where: {
+        offlineAlertedAt: null,
+        status: { not: 'OFFLINE' },
+        managedRunner: { is: null },
+        // `not: true` alone would leave out NULL, a runner too old to say whether it drains.
+        AND: [
+          { OR: [{ heartbeatDraining: null }, { heartbeatDraining: false }] },
+          { OR: [{ lastHeartbeatAt: { gte: since } }, { presence: { lastBeatAt: { gte: since } } }] },
+        ],
+      },
+      select: liveness,
+    });
+    const gone = silent.filter((r) => {
+      const at = runnerPresentAt(r)?.getTime();
+      return at !== undefined && at >= since.getTime() && now - at > RUNNER_REAP_AFTER_MS;
+    });
+    if (gone.length === 0) return;
+    const held = (await this.prisma.runnerMassDisconnect.findMany({
+      where: { lostTo: { gte: new Date(now - MASS_DISCONNECT_HOLD_MS) } },
+    })).map((row) => ({ from: row.lostFrom.getTime(), to: row.lostTo.getTime(), runners: row.runners, heard: row.heard }));
+    for (const r of gone) {
+      if (massDisconnectOf(held, r, now)) continue;
+      const alerted = await this.prisma.runner.updateMany({
+        where: { id: r.id, offlineAlertedAt: null },
+        data: { offlineAlertedAt: new Date(now) },
+      });
+      if (alerted.count === 1) void this.push.notifyRunnerPresence(r.id, 'offline');
+    }
   }
 
   /**

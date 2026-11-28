@@ -1,0 +1,402 @@
+{
+  "syncs": [
+    {
+      "id": "355A2p8oYcufwThmeWkbH",
+      "status": "DONE",
+      "sourceName": "photos-stage",
+      "destPath": "/Photos",
+      "destEntryId": null,
+      "session": {
+        "id": "355A2p79qC6RP2amTZwcC",
+        "title": "Sync the photos",
+        "open": false,
+        "publicId": "355A2p79qC6RP2amTZwcC"
+      },
+      "filesSeen": 0,
+      "filesTotal": null,
+      "filesDone": 0,
+      "filesSame": 0,
+      "filesDeleted": 0,
+      "bytesTotal": null,
+      "bytesSent": 0,
+      "currentPath": null,
+      "failed": [
+        {
+          "path": "0977/cover.png",
+          "error": "permission denied"
+        }
+      ],
+      "failedCount": 2,
+      "error": null,
+      "startedAt": "2026-11-28T01:30:35.771Z",
+      "updatedAt": "2026-11-28T01:30:35.776Z",
+      "endedAt": "2026-11-28T01:30:35.776Z",
+      "handledAt": null,
+      "fixSessionId": null,
+      "fixRequestedAt": null,
+      "fix": null,
+      "publicId": "355A2p8oYcufwThmeWkbH",
+      "destEntryPublicId": null,
+      "fixSessionPublicId": null
+    },
+    {
+      "id": "355A2p5nAeZyZq5AFfKX4",
+      "status": "DONE",
+      "sourceName": "books-stage",
+      "destPath": "/Books",
+      "destEntryId": null,
+      "session": {
+        "id": "355A2p4ibz8vZWSGUfnd1",
+        "title": "Sync the books",
+        "open": true,
+        "publicId": "355A2p4ibz8vZWSGUfnd1"
+      },
+      "filesSeen": 0,
+      "filesTotal": null,
+      "filesDone": 9,
+      "filesSame": 0,
+      "filesDeleted": 0,
+      "bytesTotal": null,
+      "bytesSent": 0,
+      "currentPath": null,
+      "failed": [
+        {
+          "path": "0412/scan.tiff",
+          "error": "file changed while reading"
+        },
+        {
+          "path": "0977/cover.png",
+          "error": "permission denied"
+        }
+      ],
+      "failedCount": 4,
+      "error": null,
+      "startedAt": "2026-11-28T01:30:35.740Z",
+      "updatedAt": "2026-11-28T01:30:35.746Z",
+      "endedAt": "2026-11-28T01:30:35.746Z",
+      "handledAt": null,
+      "fixSessionId": null,
+      "fixRequestedAt": null,
+      "fix": null,
+      "publicId": "355A2p5nAeZyZq5AFfKX4",
+      "destEntryPublicId": null,
+      "fixSessionPublicId": null
+    },
+    {
+      "id": "355A2ozGCGKxc7vtm7lN4",
+      "status": "DONE",
+      "sourceName": "covers-stage",
+      "destPath": "/Covers",
+      "destEntryId": null,
+      "session": {
+        "id": "355A2oy5iVVxDXa8hHA3s",
+        "title": "Sync the covers",
+        "open": true,
+        "publicId": "355A2oy5iVVxDXa8hHA3s"
+      },
+      "filesSeen": 0,
+      "filesTotal": null,
+      "filesDone": 0,
+      "filesSame": 0,
+      "filesDeleted": 0,
+      "bytesTotal": null,
+      "bytesSent": 0,
+      "currentPath": null,
+      "failed": [
+        {
+          "path": "0977/cover.png",
+          "error": "permission denied"
+        }
+      ],
+      "failedCount": 1,
+      "error": null,
+      "startedAt": "2026-11-28T01:30:35.673Z",
+      "updatedAt": "2026-11-28T01:30:35.679Z",
+      "endedAt": "2026-11-28T01:30:35.679Z",
+      "handledAt": null,
+      "fixSessionId": "355A2oy5iVVxDXa8hHA3s",
+      "fixRequestedAt": "2026-11-28T01:30:35.705Z",
+      "fix": {
+        "title": "Sync the covers",
+        "working": false,
+        "question": "0977/cover.png is owned by root. Allow sudo?"
+      },
+      "publicId": "355A2ozGCGKxc7vtm7lN4",
+      "destEntryPublicId": null,
+      "fixSessionPublicId": "355A2oy5iVVxDXa8hHA3s"
+    },
+    {
+      "id": "355A2owvETKVNm4tfSd4y",
+      "status": "DONE",
+      "sourceName": "anime-stage",
+      "destPath": "/Video",
+      "destEntryId": null,
+      "session": {
+        "id": "355A2ovSZr8QNUs71PWXB",
+        "title": "Sync the anime",
+        "open": true,
+        "publicId": "355A2ovSZr8QNUs71PWXB"
+      },
+      "filesSeen": 0,
+      "filesTotal": null,
+      "filesDone": 0,
+      "filesSame": 0,
+      "filesDeleted": 0,
+      "bytesTotal": null,
+      "bytesSent": 0,
+      "currentPath": null,
+      "failed": [
+        {
+          "path": "ep3.mkv",
+          "error": "file changed while reading"
+        }
+      ],
+      "failedCount": 3,
+      "error": null,
+      "startedAt": "2026-11-28T01:30:35.648Z",
+      "updatedAt": "2026-11-28T01:30:35.655Z",
+      "endedAt": "2026-11-28T01:30:35.655Z",
+      "handledAt": null,
+      "fixSessionId": "355A2ovSZr8QNUs71PWXB",
+      "fixRequestedAt": "2026-11-28T01:30:35.684Z",
+      "fix": {
+        "title": "Sync the anime",
+        "working": true,
+        "question": null
+      },
+      "publicId": "355A2owvETKVNm4tfSd4y",
+      "destEntryPublicId": null,
+      "fixSessionPublicId": "355A2ovSZr8QNUs71PWXB"
+    },
+    {
+      "id": "355A2orqs8FfhYVn4hXLV",
+      "status": "FAILED",
+      "sourceName": "scans",
+      "destPath": "/Scans",
+      "destEntryId": null,
+      "session": null,
+      "filesSeen": 0,
+      "filesTotal": null,
+      "filesDone": 0,
+      "filesSame": 0,
+      "filesDeleted": 0,
+      "bytesTotal": null,
+      "bytesSent": 0,
+      "currentPath": null,
+      "failed": [
+        {
+          "path": "0412/scan.tiff",
+          "error": "file changed while reading"
+        }
+      ],
+      "failedCount": 1,
+      "error": "Disk gone",
+      "startedAt": "2026-11-28T01:30:35.597Z",
+      "updatedAt": "2026-11-28T01:30:35.604Z",
+      "endedAt": "2026-11-28T01:30:35.604Z",
+      "handledAt": null,
+      "fixSessionId": "355A2otngMhpUTCL7L0VL",
+      "fixRequestedAt": "2026-11-28T01:30:35.609Z",
+      "fix": {
+        "title": "Sync scans → /Scans · 1 failed",
+        "working": true,
+        "question": null
+      },
+      "publicId": "355A2orqs8FfhYVn4hXLV",
+      "destEntryPublicId": null,
+      "fixSessionPublicId": "355A2otngMhpUTCL7L0VL"
+    },
+    {
+      "id": "355A2oistBtXe1CynEwWg",
+      "status": "DONE",
+      "sourceName": "exports",
+      "destPath": "/Lab evidence",
+      "destEntryId": null,
+      "session": {
+        "id": "355A2ohcLkE2Hn6WPiWKF",
+        "title": "Export lab evidence",
+        "open": false,
+        "publicId": "355A2ohcLkE2Hn6WPiWKF"
+      },
+      "filesSeen": 0,
+      "filesTotal": null,
+      "filesDone": 0,
+      "filesSame": 0,
+      "filesDeleted": 0,
+      "bytesTotal": null,
+      "bytesSent": 0,
+      "currentPath": null,
+      "failed": [
+        {
+          "path": "0977/cover.png",
+          "error": "permission denied"
+        }
+      ],
+      "failedCount": 1,
+      "error": null,
+      "startedAt": "2026-11-28T01:30:35.505Z",
+      "updatedAt": "2026-11-28T01:30:35.513Z",
+      "endedAt": "2026-11-28T01:30:35.513Z",
+      "handledAt": null,
+      "fixSessionId": "355A2oovbqvY8iCWyYSni",
+      "fixRequestedAt": "2026-11-28T01:30:35.553Z",
+      "fix": {
+        "title": "Sync exports → /Lab evidence · 1 failed",
+        "working": true,
+        "question": null
+      },
+      "publicId": "355A2oistBtXe1CynEwWg",
+      "destEntryPublicId": null,
+      "fixSessionPublicId": "355A2oovbqvY8iCWyYSni"
+    },
+    {
+      "id": "355A2ofTGxm7uEEqH3H0u",
+      "status": "DONE",
+      "sourceName": "books-stage",
+      "destPath": "/Books",
+      "destEntryId": null,
+      "session": {
+        "id": "355A2oIMyZwEZa45mmLN2",
+        "title": "同步书格到 Orbit",
+        "open": true,
+        "publicId": "355A2oIMyZwEZa45mmLN2"
+      },
+      "filesSeen": 0,
+      "filesTotal": null,
+      "filesDone": 4,
+      "filesSame": 0,
+      "filesDeleted": 0,
+      "bytesTotal": null,
+      "bytesSent": 0,
+      "currentPath": null,
+      "failed": [],
+      "failedCount": 0,
+      "error": null,
+      "startedAt": "2026-11-28T01:30:35.470Z",
+      "updatedAt": "2026-11-28T01:30:35.476Z",
+      "endedAt": "2026-11-28T01:30:35.476Z",
+      "handledAt": null,
+      "fixSessionId": null,
+      "fixRequestedAt": null,
+      "fix": null,
+      "publicId": "355A2ofTGxm7uEEqH3H0u",
+      "destEntryPublicId": null,
+      "fixSessionPublicId": null
+    },
+    {
+      "id": "355A2oQeZilF9BRfkSl1G",
+      "status": "CHECKING",
+      "sourceName": "live",
+      "destPath": "/Live",
+      "destEntryId": null,
+      "session": {
+        "id": "355A2oIMyZwEZa45mmLN2",
+        "title": "同步书格到 Orbit",
+        "open": true,
+        "publicId": "355A2oIMyZwEZa45mmLN2"
+      },
+      "filesSeen": 0,
+      "filesTotal": null,
+      "filesDone": 0,
+      "filesSame": 0,
+      "filesDeleted": 0,
+      "bytesTotal": null,
+      "bytesSent": 0,
+      "currentPath": null,
+      "failed": [],
+      "failedCount": 0,
+      "error": null,
+      "startedAt": "2026-11-28T01:30:35.317Z",
+      "updatedAt": "2026-11-28T01:30:35.317Z",
+      "endedAt": null,
+      "handledAt": null,
+      "fixSessionId": null,
+      "fixRequestedAt": null,
+      "fix": null,
+      "publicId": "355A2oQeZilF9BRfkSl1G",
+      "destEntryPublicId": null,
+      "fixSessionPublicId": null
+    },
+    {
+      "id": "355A2oOVmLgxnqL3dsGCy",
+      "status": "DONE",
+      "sourceName": "clean",
+      "destPath": "/Clean",
+      "destEntryId": null,
+      "session": {
+        "id": "355A2oIMyZwEZa45mmLN2",
+        "title": "同步书格到 Orbit",
+        "open": true,
+        "publicId": "355A2oIMyZwEZa45mmLN2"
+      },
+      "filesSeen": 0,
+      "filesTotal": null,
+      "filesDone": 3,
+      "filesSame": 0,
+      "filesDeleted": 0,
+      "bytesTotal": null,
+      "bytesSent": 0,
+      "currentPath": null,
+      "failed": [],
+      "failedCount": 0,
+      "error": null,
+      "startedAt": "2026-11-28T01:30:35.296Z",
+      "updatedAt": "2026-11-28T01:30:35.302Z",
+      "endedAt": "2026-11-28T01:30:35.302Z",
+      "handledAt": null,
+      "fixSessionId": null,
+      "fixRequestedAt": null,
+      "fix": null,
+      "publicId": "355A2oOVmLgxnqL3dsGCy",
+      "destEntryPublicId": null,
+      "fixSessionPublicId": null
+    },
+    {
+      "id": "355A2oMGdmKLLwnh7trUl",
+      "status": "DONE",
+      "sourceName": "books-stage",
+      "destPath": "/Books",
+      "destEntryId": null,
+      "session": {
+        "id": "355A2oIMyZwEZa45mmLN2",
+        "title": "同步书格到 Orbit",
+        "open": true,
+        "publicId": "355A2oIMyZwEZa45mmLN2"
+      },
+      "filesSeen": 0,
+      "filesTotal": null,
+      "filesDone": 9,
+      "filesSame": 0,
+      "filesDeleted": 0,
+      "bytesTotal": null,
+      "bytesSent": 0,
+      "currentPath": null,
+      "failed": [
+        {
+          "path": "0412/scan.tiff",
+          "error": "file changed while reading"
+        },
+        {
+          "path": "0977/cover.png",
+          "error": "permission denied"
+        }
+      ],
+      "failedCount": 4,
+      "error": null,
+      "startedAt": "2026-11-28T01:30:35.271Z",
+      "updatedAt": "2026-11-28T01:30:35.282Z",
+      "endedAt": "2026-11-28T01:30:35.282Z",
+      "handledAt": "2026-11-28T01:30:35.476Z",
+      "fixSessionId": "355A2oIMyZwEZa45mmLN2",
+      "fixRequestedAt": "2026-11-28T01:30:35.336Z",
+      "fix": {
+        "title": "同步书格到 Orbit",
+        "working": false,
+        "question": "0977/cover.png is owned by root. Allow sudo?"
+      },
+      "publicId": "355A2oMGdmKLLwnh7trUl",
+      "destEntryPublicId": null,
+      "fixSessionPublicId": "355A2oIMyZwEZa45mmLN2"
+    }
+  ]
+}

@@ -74,8 +74,8 @@ final class OpenListRowUpdateTests: XCTestCase {
         XCTAssertEqual(derived.menu.badge, "2")
         XCTAssertEqual(Set(derived.needsYou.map(\.id)), ["a", "e"])
         XCTAssertEqual(derived.agentNeedsYou, ["w1": 1, "w3": 1])
-        // b still spins in w1, so the workspace keeps its mark.
-        XCTAssertEqual(derived.activity?.runningWorkspaceIDs, ["w1", "w4"])
+        // b still spins in w1, so the workspace keeps its mark; f's background job keeps w3's.
+        XCTAssertEqual(derived.activity?.runningWorkspaceIDs, ["w1", "w3", "w4"])
     }
 
     func testApprovalAnsweredDropsTheBadge() {
@@ -90,10 +90,10 @@ final class OpenListRowUpdateTests: XCTestCase {
     func testRunEndingClearsTheWorkspaceSpinnerOnlyWithItsLastRunningRow() {
         var list = busy
         var derived = assertMatchesSnapshot(list, replacing: 0, with: row("a", "AWAITING_INPUT")).derived
-        XCTAssertEqual(derived.activity?.runningWorkspaceIDs, ["w1", "w4"])
+        XCTAssertEqual(derived.activity?.runningWorkspaceIDs, ["w1", "w3", "w4"])
         list[0] = row("a", "AWAITING_INPUT")
         derived = assertMatchesSnapshot(list, replacing: 1, with: row("b", "AWAITING_INPUT")).derived
-        XCTAssertEqual(derived.activity?.runningWorkspaceIDs, ["w4"])
+        XCTAssertEqual(derived.activity?.runningWorkspaceIDs, ["w3", "w4"])
         // A run settling for good is announced; one the server is about to retry is not.
         let settled = assertMatchesSnapshot(busy, replacing: 0, with: row("a", "SUCCEEDED"))
         XCTAssertEqual(settled.events, [.finished(sessionID: "a", title: "a", status: .succeeded)])

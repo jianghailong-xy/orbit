@@ -48,17 +48,15 @@ final class WorkspaceActivityLogicTests: XCTestCase {
         ]), ["workspace"])
     }
 
-    func testJobWorkspaceIDsCountJobsButNotProcessesLeftRunning() {
-        let ids = WorkspaceActivityLogic.jobWorkspaceIDs([
+    func testRunningWorkspaceIDsCountJobsButNotProcessesLeftRunning() {
+        let ids = WorkspaceActivityLogic.runningWorkspaceIDs([
             // Two processes up, one of them a job: this workspace is doing work.
             session("job", state: .awaitingInput, agentID: "job",
                     runningBgCount: 2, runningBgJobCount: 1),
             // The same two processes, neither with an end: a dev server and a watcher, which is
             // the case the rail stayed silent about on purpose.
             session("service", state: .awaitingInput, agentID: "service", runningBgCount: 2),
-            // Generating, with a job beside it: NOT in this set, because the set is read off the
-            // same glyph the row draws and that glyph is the working spinner. The rail's `running`
-            // outranks `jobs` in the same slot, so the two can never disagree about one workspace.
+            // Generating, with a job beside it.
             session("generating", state: .running, agentID: "generating",
                     engineTurnActive: false, runningBgCount: 1, runningBgJobCount: 1),
             // Jobs belong to live work only: the server clears them as a session ends, and an
@@ -68,19 +66,16 @@ final class WorkspaceActivityLogicTests: XCTestCase {
             session("idle", state: .awaitingInput, agentID: "idle"),
         ])
 
-        XCTAssertEqual(ids, ["job"])
+        XCTAssertEqual(ids, ["job", "generating"])
     }
 
-    func testWorkspaceNavigationStatusPutsRunningAboveJobsAndOfflineAboveBoth() {
+    func testWorkspaceNavigationStatusPutsWaitingAboveRunningAndOfflineAboveRunning() {
         XCTAssertEqual(WorkspaceNavigationStatusLogic.resolve(
-            waiting: 0, running: true, jobs: true, runnerOffline: false), .running)
+            waiting: 0, running: true, runnerOffline: false), .running)
         XCTAssertEqual(WorkspaceNavigationStatusLogic.resolve(
-            waiting: 0, running: false, jobs: true, runnerOffline: false), .jobs)
+            waiting: 0, running: true, runnerOffline: true), .idle)
         XCTAssertEqual(WorkspaceNavigationStatusLogic.resolve(
-            waiting: 0, running: false, jobs: true, runnerOffline: true), .idle)
-        XCTAssertEqual(WorkspaceNavigationStatusLogic.resolve(
-            waiting: 1, running: false, jobs: true, runnerOffline: false), .needsYou(1))
-        // Absent entirely: a caller that predates the mark keeps the old reading.
+            waiting: 1, running: true, runnerOffline: false), .needsYou(1))
         XCTAssertEqual(WorkspaceNavigationStatusLogic.resolve(
             waiting: 0, running: false, runnerOffline: false), .idle)
     }
@@ -128,5 +123,23 @@ final class WorkspaceActivityLogicTests: XCTestCase {
             waiting: 0, running: true, runnerOffline: true), .idle)
         XCTAssertEqual(WorkspaceNavigationStatusLogic.resolve(
             waiting: 0, running: false, runnerOffline: false), .idle)
+    }
+    /// The row a folder and its workspace stayed idle over (2026-11-28): parked, with one background
+    /// job gone quiet. Its row spins on `phase` RUNNING, so its folder and its workspace spin too.
+    func testWithTheSessionFactsPhaseDecidesLikeTheRow() throws {
+        let quietJob = try JSONDecoder().decode(Session.self, from: Data(#"""
+        {"id":"s1","status":"AWAITING_INPUT","runState":"AWAITING_INPUT","phase":"RUNNING","released":false,
+         "lastTurnOutcome":"ANSWERED","activity":"BACKGROUND_JOB","runningBgCount":1,"runningBgJobCount":0,
+         "agentId":"w1","folderId":"f1"}
+        """#.utf8))
+        XCTAssertTrue(WorkspaceActivityLogic.isRunning(quietJob))
+        XCTAssertEqual(WorkspaceActivityLogic.runningWorkspaceIDs([quietJob]), ["w1"])
+        XCTAssertEqual(SessionFolderGrouping.status(of: [quietJob], runnerOffline: false), .running)
+
+        // Generating by the legacy fields, IDLE by the facts: the facts win, as on the row.
+        let idle = try JSONDecoder().decode(Session.self, from: Data(#"""
+        {"id":"s2","status":"RUNNING","runState":"RUNNING","phase":"IDLE","released":false,"agentId":"w1"}
+        """#.utf8))
+        XCTAssertFalse(WorkspaceActivityLogic.isRunning(idle))
     }
 }

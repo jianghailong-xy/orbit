@@ -164,6 +164,14 @@ services:
       ORBIT_DRIVE_S3_ACCESS_KEY_ID: "${ORBIT_DRIVE_S3_ACCESS_KEY_ID:-${ORBIT_DOCUMENTS_S3_ACCESS_KEY_ID:-${ORBIT_FILES_S3_ACCESS_KEY_ID:-}}}"
       ORBIT_DRIVE_S3_SECRET_ACCESS_KEY: "${ORBIT_DRIVE_S3_SECRET_ACCESS_KEY:-${ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY:-${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}}}"
       ORBIT_DRIVE_S3_REGION: "${ORBIT_DRIVE_S3_REGION:-${ORBIT_DOCUMENTS_S3_REGION:-${ORBIT_FILES_S3_REGION:-}}}"
+      # The archive's off-host copy in an S3 bucket instead, as <bucket>/<prefix> (unset: it goes to ORBIT_BACKUP_SYNC_TARGET,
+      # which then still takes the files). Endpoint, region and key pair default to the Drive bucket's; give the backups a key
+      # of their own, which the apiserver does not hold.
+      ORBIT_BACKUP_S3_TARGET: "${ORBIT_BACKUP_S3_TARGET:-}"
+      ORBIT_BACKUP_S3_ENDPOINT: "${ORBIT_BACKUP_S3_ENDPOINT:-}"
+      ORBIT_BACKUP_S3_REGION: "${ORBIT_BACKUP_S3_REGION:-}"
+      ORBIT_BACKUP_S3_ACCESS_KEY_ID: "${ORBIT_BACKUP_S3_ACCESS_KEY_ID:-}"
+      ORBIT_BACKUP_S3_SECRET_ACCESS_KEY: "${ORBIT_BACKUP_S3_SECRET_ACCESS_KEY:-}"
     depends_on:
       postgres:
         condition: service_healthy
