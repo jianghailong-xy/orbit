@@ -2,7 +2,6 @@ import type { ReactNode } from 'react';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import type { DriveChatChangeGroup } from '@orbit/shared';
-import { sendTurn } from '../../api';
 import { encodeId } from '../../lib/idCodec';
 import { formatSize, formatWhen, restoreDriveGroup } from '../../lib/drive';
 import { driveChangesPending, driveGroupLines, undoDriveChatGroup } from '../../lib/driveChanges';
@@ -12,11 +11,14 @@ import {
   driveActivityLineText,
   driveActivityQuery,
   driveActivityUndoLabel,
+  driveSyncFixLabel,
+  driveSyncHandedOff,
+  fixDriveSync,
   markDriveSyncHandled,
   syncAgentWorking,
   syncNeedsYou,
 } from '../../lib/driveActivity';
-import { refreshDriveSyncs, syncRunning, type DriveSync } from '../../lib/driveSyncs';
+import { refreshDriveSyncs, replaceDriveSync, syncRunning, type DriveSync } from '../../lib/driveSyncs';
 import type { DriveUpload } from '../../lib/driveUploads';
 import { useToast } from '../../lib/toast';
 import { DrivePendingActions, pendingStatus } from './DrivePendingActions';
@@ -77,30 +79,12 @@ function HeldRow({ group, chatTitle, onOpenChat }: { group: DriveChatChangeGroup
   );
 }
 
-function SyncRow({ sync, children }: { sync: DriveSync; children?: ReactNode }) {
-  const client = useQueryClient();
-  const toast = useToast();
-  const clear = useMutation({
-    mutationFn: () => markDriveSyncHandled(sync.id),
-    onSuccess: async () => {
-      await refreshDriveSyncs();
-      await client.invalidateQueries({ queryKey: ['drive', 'activity'] });
-    },
-    onError: (e) => toast.warning("Couldn't clear", messageOf(e)),
-  });
-  // A plain retry: the session that ran the sync is the one that can read the source folder.
-  const retry = useMutation({
-    mutationFn: () =>
-      sendTurn(
-        sync.session!.id,
-        `Sync ${sync.sourceName} to ${sync.destPath} again. ${sync.failedCount} files failed last time:\n` +
-          sync.failed.map((f) => `${f.path}: ${f.error}`).join('\n'),
-      ),
-    onError: (e) => toast.warning("Couldn't retry", messageOf(e)),
-  });
-  const needs = syncNeedsYou(sync);
+/** Hands a sync's failures to an agent: `fix` asks it to find out why, `retry` only to sync them again. */
+type HandOff = (sync: DriveSync, mode: 'fix' | 'retry') => void;
+
+function SyncFailures({ sync }: { sync: DriveSync }) {
   return (
-    <div className={`drive-act-row${needs ? ' is-amber' : ''}`} data-sync={sync.id}>
+    <>
       <div className="drive-act-title">
         {sync.sourceName} → {sync.destPath}
         {sync.failedCount > 0 && <b className="drive-act-bad"> {sync.failedCount} failed</b>}
@@ -109,6 +93,7 @@ function SyncRow({ sync, children }: { sync: DriveSync; children?: ReactNode }) 
         {formatWhen(sync.endedAt ?? sync.startedAt)}
         {sync.filesTotal !== null ? ` · ${sync.filesTotal.toLocaleString()} files` : ''}
         {sync.session ? ` · ${sync.session.title}` : ''}
+        {sync.session && !sync.session.open ? ' · the session has ended' : ''}
       </div>
       {sync.failed.length > 0 && (
         <ul className="drive-act-failed">
@@ -121,15 +106,71 @@ function SyncRow({ sync, children }: { sync: DriveSync; children?: ReactNode }) 
         </ul>
       )}
       {sync.failed.length === 0 && sync.error && <div className="drive-act-meta">{sync.error}</div>}
-      {children}
-      {needs && (
-        <div className="drive-act-actions">
-          {/* The hand-off button ("Have the agent fix it") is wired by the next task. */}
-          <span className="drive-act-handoff" data-slot="hand-off" />
-          <button type="button" className="drive-act-btn" disabled={!sync.session || retry.isPending} onClick={() => retry.mutate()}>Retry failed</button>
-          <button type="button" className="drive-act-btn" disabled={clear.isPending} onClick={() => clear.mutate()}>Clear</button>
+    </>
+  );
+}
+
+/**
+ * A failed sync under Needs you: never handed off, or handed back — the agent asks something (Answer in session) or
+ * stopped without a clean sync (it can be handed off again).
+ */
+function SyncRow({ sync, handOff, handingOff, onOpenSession }: { sync: DriveSync; handOff: HandOff; handingOff: boolean; onOpenSession: (id: string) => void }) {
+  const client = useQueryClient();
+  const toast = useToast();
+  const clear = useMutation({
+    mutationFn: () => markDriveSyncHandled(sync.id),
+    onSuccess: async () => {
+      await refreshDriveSyncs();
+      await client.invalidateQueries({ queryKey: ['drive', 'activity'] });
+    },
+    onError: (e) => toast.warning("Couldn't clear", messageOf(e)),
+  });
+  const question = sync.fix?.question ?? null;
+  const fixSession = sync.fixSessionId;
+  return (
+    <div className="drive-act-row is-amber" data-sync={sync.id}>
+      <SyncFailures sync={sync} />
+      {question !== null && (
+        <div className="drive-act-ask">
+          The agent needs you: <span>{question}</span>
         </div>
       )}
+      {question === null && sync.fix && <div className="drive-act-meta">The agent stopped before these were fixed.</div>}
+      <div className="drive-act-actions">
+        {question !== null && fixSession ? (
+          <button type="button" className="drive-act-btn is-primary" onClick={() => onOpenSession(fixSession)}>Answer in session</button>
+        ) : (
+          <>
+            <button type="button" className="drive-act-btn is-primary" disabled={handingOff} onClick={() => handOff(sync, 'fix')}>
+              {driveSyncFixLabel(sync)}
+            </button>
+            <button type="button" className="drive-act-btn" disabled={handingOff} onClick={() => handOff(sync, 'retry')}>Retry failed</button>
+          </>
+        )}
+        <button type="button" className="drive-act-btn" disabled={clear.isPending} onClick={() => clear.mutate()}>Clear</button>
+        {question === null && sync.fix && fixSession && (
+          <button type="button" className="drive-act-link" onClick={() => onOpenSession(fixSession)}>Open session ›</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** A failed sync an agent is working on (board frame 6 ③), with a link to watch its session. */
+function WorkingRow({ sync, onOpenSession }: { sync: DriveSync; onOpenSession: (id: string) => void }) {
+  const fixSession = sync.fixSessionId;
+  return (
+    <div className="drive-act-row" data-sync={sync.id}>
+      <div className="drive-act-title">{sync.sourceName} → {sync.destPath}</div>
+      <div className="drive-act-meta">
+        {sync.failedCount > 0 ? `Fixing ${sync.failedCount.toLocaleString()} failed ${sync.failedCount === 1 ? 'file' : 'files'}` : 'Fixing the failed sync'}
+      </div>
+      <div className="drive-act-actions">
+        {sync.fix?.title && <span className="drive-act-meta">{sync.fix.title}</span>}
+        {fixSession && (
+          <button type="button" className="drive-act-link" onClick={() => onOpenSession(fixSession)}>Open session ›</button>
+        )}
+      </div>
     </div>
   );
 }
@@ -180,6 +221,25 @@ export function DriveActivityView({
     onError: (e) => toast.warning("Couldn't undo", messageOf(e)),
   });
 
+  // The row moves under Agents working on it the moment it is pressed, and back if the server refuses.
+  const handOff = useMutation({
+    mutationFn: ({ sync, mode }: { sync: DriveSync; mode: 'fix' | 'retry' }) => fixDriveSync(sync.id, mode),
+    onMutate: ({ sync }) => {
+      replaceDriveSync(driveSyncHandedOff(sync));
+      return { before: sync };
+    },
+    onSuccess: async (answer) => {
+      replaceDriveSync(answer.sync);
+      await refreshDriveSyncs();
+    },
+    onError: (e, _vars, context) => {
+      if (context) replaceDriveSync(context.before);
+      void refreshDriveSyncs();
+      toast.warning("Couldn't hand it to an agent", messageOf(e));
+    },
+  });
+  const openSession = (id: string) => navigate(`/sessions/${encodeId(id)}`);
+
   const needsYou = syncs.filter(syncNeedsYou);
   const working = syncs.filter(syncAgentWorking);
   const running = syncs.filter(syncRunning);
@@ -191,20 +251,20 @@ export function DriveActivityView({
       {(held.length > 0 || needsYou.length > 0) && (
         <Section title="Needs you">
           {held.map((h) => <HeldRow key={h.group.id} group={h.group} chatTitle={h.chatTitle} onOpenChat={onOpenChat} />)}
-          {needsYou.map((sync) => <SyncRow key={sync.id} sync={sync} />)}
+          {needsYou.map((sync) => (
+            <SyncRow
+              key={sync.id}
+              sync={sync}
+              handOff={(target, mode) => handOff.mutate({ sync: target, mode })}
+              handingOff={handOff.isPending && handOff.variables?.sync.id === sync.id}
+              onOpenSession={openSession}
+            />
+          ))}
         </Section>
       )}
       {working.length > 0 && (
         <Section title="Agents working on it">
-          {working.map((sync) => (
-            <SyncRow key={sync.id} sync={sync}>
-              <div className="drive-act-actions">
-                {sync.fixSessionId && (
-                  <button type="button" className="drive-act-btn" onClick={() => navigate(`/sessions/${encodeId(sync.fixSessionId!)}`)}>Open session ›</button>
-                )}
-              </div>
-            </SyncRow>
-          ))}
+          {working.map((sync) => <WorkingRow key={sync.id} sync={sync} onOpenSession={openSession} />)}
         </Section>
       )}
       {(running.length > 0 || live.length > 0) && (

@@ -64,10 +64,14 @@ import groupsJson from '../components/drive/__captured__/groups.json';
 const AT = '2026-11-28T01:00:00.000Z';
 const CHAT = chatsJson.chats[0]!.sessionId;
 const [DONE_GROUP, HELD_GROUP] = groupsJson.groups as Array<{ id: string }>;
+// The list as the server sends it (drive-sync-fix.pg.spec.ts writes it): newest first, so the first books-stage is the
+// failure still waiting on the owner; its session can take a turn. photos-stage's session has ended; covers-stage was
+// handed to its session, which asks a question; anime-stage's session is working on it.
 const FAILED_SYNC = syncsJson.syncs.find((s) => s.sourceName === 'books-stage')!;
+const ENDED_SYNC = syncsJson.syncs.find((s) => s.sourceName === 'photos-stage')!;
+const ASKING_SYNC = syncsJson.syncs.find((s) => s.sourceName === 'covers-stage')!;
 const FIX_SYNC = syncsJson.syncs.find((s) => s.sourceName === 'anime-stage')!;
 const TRASH_GROUP = activityJson.groups.flatMap((g) => g.lines).find((l) => l.undo?.kind === 'TRASH_GROUP')!.undo!.id;
-const SYNC_SESSION = activityJson.groups.find((g) => g.sessionTitle === 'Sync the books')!.sessionId;
 
 const folders: Record<string, { id: string; parentId: string | null; name: string }> = { root: { id: 'root', parentId: null, name: '' } };
 const entryView = (f: { id: string; parentId: string | null; name: string }) => ({
@@ -75,7 +79,9 @@ const entryView = (f: { id: string; parentId: string | null; name: string }) => 
   createdAt: AT, updatedAt: AT, lastWriter: { kind: 'OWNER', sessionId: null, runnerId: null, at: AT }, trashedAt: null, trashGroupId: null,
 });
 
-let writes: Array<{ method: string; path: string }>;
+let writes: Array<{ method: string; path: string; body?: unknown }>;
+/** What POST /drive/syncs/:id/fix answers; a test that holds it sets a promise here. */
+let fixAnswer: (id: string) => Promise<Response>;
 let syncs: typeof syncsJson.syncs;
 let client: QueryClient;
 let container: HTMLDivElement;
@@ -89,7 +95,9 @@ async function serve(url: string, init?: RequestInit): Promise<Response> {
   const [path, query = ''] = url.split('?') as [string, string?];
   const method = (init?.method ?? 'GET').toUpperCase();
   if (method !== 'GET') {
-    writes.push({ method, path });
+    writes.push({ method, path, ...(init?.body ? { body: JSON.parse(String(init.body)) } : {}) });
+    const fix = /^\/api\/drive\/syncs\/([^/]+)\/fix$/.exec(path);
+    if (fix) return fixAnswer(fix[1]!);
     const handled = /^\/api\/drive\/syncs\/([^/]+)\/handled$/.exec(path);
     if (handled) {
       syncs = syncs.map((s) => (s.id === handled[1] ? { ...s, handledAt: AT } : s));
@@ -130,6 +138,12 @@ beforeEach(() => {
   uploadCalls.length = 0;
   heldUploads = [];
   syncs = structuredClone(syncsJson.syncs);
+  fixAnswer = async (id) => {
+    // As the server answers a hand-off to the sync's own session: the row now reads as anime-stage's, working.
+    syncs = syncs.map((s) => (s.id === id ? { ...s, fixSessionId: s.session!.id, fixRequestedAt: AT, fix: { ...FIX_SYNC.fix!, title: s.session!.title } } : s));
+    const sync = syncs.find((s) => s.id === id)!;
+    return reply(200, { via: 'SESSION', sessionId: sync.session!.id, sync });
+  };
   local = new Map();
   Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
   vi.stubGlobal('ResizeObserver', class { observe(): void {} unobserve(): void {} disconnect(): void {} });
@@ -201,11 +215,11 @@ const press = async (node: Element | null | undefined): Promise<void> => {
 const section = (name: string): HTMLElement => document.querySelector<HTMLElement>(`section[aria-label="${name}"]`)!;
 
 describe('the activity icon in the panel header', () => {
-  it('carries the Agents button\'s count: one held group and two failed syncs nobody has handled', async () => {
+  it('carries the Agents button\'s count: one held group and three failed syncs no agent is working on', async () => {
     await open();
     const agents = document.querySelector('.files-head-actions .files-agents-count');
-    expect(agents?.textContent).toBe('3');
-    expect(icon()?.querySelector('.files-activity-count')?.textContent).toBe('3');
+    expect(agents?.textContent, 'anime-stage, scans and exports have agents on them; covers-stage asks the owner').toBe('4');
+    expect(icon()?.querySelector('.files-activity-count')?.textContent).toBe('4');
     expect(icon()?.getAttribute('aria-label')).toBe('Show activity');
     expect(icon()?.getAttribute('aria-pressed')).toBe('false');
   });
@@ -250,12 +264,14 @@ describe('the activity view', () => {
     expect(needs.textContent).toContain('file changed while reading');
     expect(needs.textContent).toContain('2 more');
     expect(needs.textContent).not.toContain('anime-stage');
-    expect(needs.querySelector('[data-slot="hand-off"]'), 'the slot for the hand-off button').not.toBeNull();
 
-    expect(section('Agents working on it').textContent).toContain('anime-stage → /Video');
+    const working = section('Agents working on it');
+    expect(working.textContent).toContain('anime-stage → /Video');
+    expect(working.textContent).toContain('Fixing 3 failed files');
+    expect(working.textContent).toContain('Sync the anime');
 
     const running = section('Running');
-    expect(running.textContent).toContain('exports-stage → /exports');
+    expect(running.textContent).toContain('live → /Live');
     expect(running.querySelectorAll('[role="progressbar"]').length).toBe(2);
     expect(running.textContent).toContain('a.zip');
     expect(running.textContent).toContain('Elsewhere');
@@ -286,15 +302,75 @@ describe('the activity view', () => {
     await press(button(row, 'Clear'));
     expect(writes).toContainEqual({ method: 'POST', path: `/api/drive/syncs/${FAILED_SYNC.id}/handled` });
     expect(document.querySelector(`section[aria-label="Needs you"] [data-sync="${FAILED_SYNC.id}"]`)).toBeNull();
-    expect(icon()?.querySelector('.files-activity-count')?.textContent).toBe('2');
+    expect(icon()?.querySelector('.files-activity-count')?.textContent).toBe('3');
   });
 
-  it('Retry failed sends the failures to the session that ran the sync', async () => {
+  it('the hand-off button reads by whether the sync\'s session can take a turn', async () => {
+    await open();
+    await press(icon());
+    const own = document.querySelector<HTMLElement>(`section[aria-label="Needs you"] [data-sync="${FAILED_SYNC.id}"]`)!;
+    expect(button(own, 'Have the agent fix it'), 'its session can take a turn').toBeTruthy();
+    expect(button(own, 'Fix in a new chat')).toBeUndefined();
+    const ended = document.querySelector<HTMLElement>(`section[aria-label="Needs you"] [data-sync="${ENDED_SYNC.id}"]`)!;
+    expect(button(ended, 'Fix in a new chat'), 'its session has ended').toBeTruthy();
+    expect(button(ended, 'Have the agent fix it')).toBeUndefined();
+    expect(ended.textContent).toContain('the session has ended');
+  });
+
+  it('Have the agent fix it moves the row under Agents working on it at once, and the count drops', async () => {
+    let answer!: () => void;
+    const held = new Promise<void>((resolve) => (answer = resolve));
+    const served = fixAnswer;
+    fixAnswer = async (id) => {
+      await held;
+      return served(id);
+    };
+    await open();
+    await press(icon());
+    const row = document.querySelector<HTMLElement>(`section[aria-label="Needs you"] [data-sync="${FAILED_SYNC.id}"]`)!;
+    await press(button(row, 'Have the agent fix it'));
+    expect(writes).toContainEqual({ method: 'POST', path: `/api/drive/syncs/${FAILED_SYNC.id}/fix`, body: { mode: 'fix' } });
+    expect(document.querySelector(`section[aria-label="Needs you"] [data-sync="${FAILED_SYNC.id}"]`), 'left Needs you before the answer').toBeNull();
+    const moved = section('Agents working on it').querySelector<HTMLElement>(`[data-sync="${FAILED_SYNC.id}"]`);
+    expect(moved?.textContent).toContain('Fixing 4 failed files');
+    expect(icon()?.querySelector('.files-activity-count')?.textContent).toBe('3');
+
+    answer();
+    await settle();
+    const after = section('Agents working on it').querySelector<HTMLElement>(`[data-sync="${FAILED_SYNC.id}"]`)!;
+    expect(after.textContent).toContain('Sync the books');
+    await press(button(after, 'Open session ›'));
+    expect(where()).toBe(`/sessions/${FAILED_SYNC.session!.id}`);
+  });
+
+  it('a refused hand-off puts the row back under Needs you', async () => {
+    fixAnswer = async () => reply(409, { code: 'DRIVE_SYNC_HANDLED', message: "This sync's failures have been handled." });
+    await open();
+    await press(icon());
+    const row = document.querySelector<HTMLElement>(`[data-sync="${ENDED_SYNC.id}"]`)!;
+    await press(button(row, 'Fix in a new chat'));
+    expect(writes).toContainEqual({ method: 'POST', path: `/api/drive/syncs/${ENDED_SYNC.id}/fix`, body: { mode: 'fix' } });
+    expect(section('Needs you').querySelector(`[data-sync="${ENDED_SYNC.id}"]`)).not.toBeNull();
+    expect(icon()?.querySelector('.files-activity-count')?.textContent).toBe('4');
+  });
+
+  it('Retry failed hands the failures off too, asking only for a resync', async () => {
     await open();
     await press(icon());
     const row = document.querySelector<HTMLElement>(`[data-sync="${FAILED_SYNC.id}"]`)!;
     await press(button(row, 'Retry failed'));
-    expect(writes).toContainEqual({ method: 'POST', path: `/api/sessions/${SYNC_SESSION}/turns/current-work-routing` });
+    expect(writes).toContainEqual({ method: 'POST', path: `/api/drive/syncs/${FAILED_SYNC.id}/fix`, body: { mode: 'retry' } });
+    expect(section('Agents working on it').querySelector(`[data-sync="${FAILED_SYNC.id}"]`)).not.toBeNull();
+  });
+
+  it('a hand-off whose agent asks something is back under Needs you with its question and Answer in session', async () => {
+    await open();
+    await press(icon());
+    const row = section('Needs you').querySelector<HTMLElement>(`[data-sync="${ASKING_SYNC.id}"]`)!;
+    expect(row.textContent).toContain('The agent needs you: 0977/cover.png is owned by root. Allow sudo?');
+    expect(button(row, 'Have the agent fix it'), 'answered in the session, not handed off again').toBeUndefined();
+    await press(button(row, 'Answer in session'));
+    expect(where()).toBe(`/sessions/${ASKING_SYNC.fixSessionId}`);
   });
 
   it('Undo a chat\'s change group and Restore a deletion call the routes that take them', async () => {

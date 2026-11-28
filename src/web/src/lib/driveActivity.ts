@@ -6,7 +6,7 @@ import { infiniteQueryOptions } from '@tanstack/react-query';
 import type { DriveActivityGroup, DriveActivityLine, DriveActivityPage } from '@orbit/shared';
 import { api } from '../api';
 import { formatSize } from './drive';
-import type { DriveSync } from './driveSyncs';
+import { syncRunning, type DriveSync, type DriveSyncView } from './driveSyncs';
 
 export const DRIVE_ACTIVITY_TITLE = 'Activity';
 export const DRIVE_ACTIVITY_OPEN = 'Show activity';
@@ -112,9 +112,39 @@ export function driveActivityDays(groups: readonly DriveActivityGroup[], now = n
   return days;
 }
 
-/** A sync that needs the owner: failed, or ended with failed files, nobody has handled it and no agent has it. */
-export const syncNeedsYou = (sync: DriveSync): boolean =>
-  (sync.status === 'FAILED' || sync.failedCount > 0) && sync.handledAt === null && sync.fixSessionId === null;
+const syncFailed = (sync: DriveSyncView): boolean =>
+  (sync.status === 'FAILED' || sync.failedCount > 0) && !syncRunning(sync) && sync.handledAt === null;
 
-/** A failure handed to an agent that nobody has handled yet. */
-export const syncAgentWorking = (sync: DriveSync): boolean => sync.fixSessionId !== null && sync.handledAt === null;
+/**
+ * A sync that needs the owner: it ended failed, or with failed files, nobody has handled it, and no agent is working on
+ * it — never handed to one, or handed back (the agent asked something, or stopped without a clean sync).
+ */
+export const syncNeedsYou = (sync: DriveSyncView): boolean => syncFailed(sync) && sync.fix?.working !== true;
+
+/** A failure handed to an agent whose session is still working on it. */
+export const syncAgentWorking = (sync: DriveSyncView): boolean => syncFailed(sync) && sync.fix?.working === true;
+
+export const DRIVE_SYNC_FIX = 'Have the agent fix it';
+export const DRIVE_SYNC_FIX_NEW_CHAT = 'Fix in a new chat';
+
+/** The hand-off button: to the session that ran the sync while it can take a turn, else to a new Drive chat. */
+export const driveSyncFixLabel = (sync: DriveSyncView): string => (sync.session?.open ? DRIVE_SYNC_FIX : DRIVE_SYNC_FIX_NEW_CHAT);
+
+/** What `POST /drive/syncs/:id/fix` answers: where the failures went, and the sync as it reads now. */
+export interface DriveSyncFixAnswer {
+  via: 'SESSION' | 'NEW_CHAT';
+  sessionId: string;
+  sync: DriveSyncView;
+}
+
+/** Hand a sync's failures to an agent; `retry` asks it to sync the failed files again and nothing more. */
+export const fixDriveSync = (id: string, mode: 'fix' | 'retry' = 'fix') =>
+  api<DriveSyncFixAnswer>(`/drive/syncs/${encodeURIComponent(id)}/fix`, { method: 'POST', body: { mode } });
+
+/** The sync as it reads the moment it is handed off, before the server answers: under Agents working on it. */
+export const driveSyncHandedOff = (sync: DriveSyncView): DriveSyncView => ({
+  ...sync,
+  fixSessionId: sync.session?.open ? sync.session.id : null,
+  fixRequestedAt: new Date().toISOString(),
+  fix: { title: sync.session?.open ? sync.session.title : null, working: true, question: null },
+});
