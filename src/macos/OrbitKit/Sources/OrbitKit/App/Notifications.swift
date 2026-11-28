@@ -246,6 +246,7 @@ public enum Notifications {
     public static let runnerUpdatingKind = "runner-updating"
     /// The server's runner pushes that name a `runnerID` and no session; a tap opens that runner.
     static let runnerKinds: Set<String> = [runnerUpdatingKind, "engine-signed-out", "claude-region-blocked",
+                                       "runner-offline", "runner-online",
                                        AccountHealth.pushKind]
     /// The owner-item alert kind of a merge into main waiting on the owner (`OWNER_ITEM_PUSH_KINDS`).
     static let approveMergeKind = "approve-merge-to-main"

@@ -1030,6 +1030,9 @@ model Runner {
   // The owner's Update Now (0590): install the waiting release now, interrupting the turns in
   // flight. Handed to the next heartbeat as selfUpdateNow and cleared there, like the two above.
   selfUpdateNowRequestedAt DateTime? @map("self_update_now_requested_at")
+  // When the owner was last pushed that this runner went offline without signing off (1800): set by the reaper's
+  // presence alert, cleared with a "back online" push when it is heard again. Null: no offline alert open.
+  offlineAlertedAt  DateTime?    @map("offline_alerted_at")
   // The managed runner browser as the last heartbeat reported it (1090; @orbit/shared RunnerBrowserReport, with the
   // beat's time as reportedAt). Rewritten by every beat, to NULL when one omits it: a runner with no browser.
   browserState      Json?        @map("browser_state")
