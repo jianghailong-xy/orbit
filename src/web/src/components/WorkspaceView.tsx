@@ -14092,7 +14092,7 @@ export function SessionComposer({
         // file). Only swallow the paste when it carries files, so pasting text is untouched.
         onPaste={(e) => {
           // A pasted session, project or task link becomes its chip once its title is read.
-          const pastedText = e.clipboardData?.getData('text/plain');
+          const pastedText = typeof e.clipboardData?.getData === 'function' ? e.clipboardData.getData('text/plain') : '';
           if (pastedText) chipPastedUrl(pastedText);
           if (!canAttach) return;
           const files = Array.from(e.clipboardData?.items ?? [])
