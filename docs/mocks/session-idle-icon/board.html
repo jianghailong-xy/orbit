@@ -3,10 +3,10 @@
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; background: #eceef1; font: 15px/1.5 Inter, "Noto Sans SC", sans-serif; color: #1d1d1f; }
-  .b-part { padding: 32px 36px 36px; width: 1640px; }
+  .b-part { padding: 32px 36px 36px; width: 2120px; }
   .b-h1 { font-size: 26px; font-weight: 700; margin: 0 0 6px; }
   .b-lede { color: #555; margin: 0 0 24px; max-width: 1200px; }
-  .b-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+  .b-cols { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
   .b-col h2 { font-size: 17px; margin: 0 0 4px; display: flex; gap: 8px; align-items: center; }
   .b-tag { font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 10px; background: #dfe3e8; color: #444; }
   .b-tag.rec { background: #d6f0dd; color: #1d7a3a; }
@@ -23,7 +23,7 @@
   .b-mark { flex: none; font-size: 12.5px; font-weight: 600; padding: 0 7px; border-radius: 6px; line-height: 20px; align-self: center; }
   .m-red { background: #fde8e8; color: #c62828; } .m-green { background: #e3f4e8; color: #1d7a3a; }
   .m-amber { background: #fdf0d8; color: #a35a00; } .m-grey { background: #eef0f2; color: #6b6f76; }
-  .b-notes { margin-top: 28px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; font-size: 14px; color: #333; }
+  .b-notes { margin-top: 28px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; font-size: 14px; color: #333; }
   .b-notes ul { margin: 0; padding-left: 18px; } .b-notes li { margin: 0 0 4px; }
   .b-pros { color: #1d7a3a; } .b-cons { color: #b3261e; }
   .b-zoom { display: flex; gap: 28px; margin-top: 28px; align-items: flex-start; }
@@ -39,10 +39,17 @@
   <p class="b-h1">Session list: what the Idle icon should be</p>
   <p class="b-lede">Today an idle session wears an empty grey circle, the same shape as an unticked to-do checkbox (Reminders, Things, Linear)
   and as Orbit's own pickers (<code>circle</code> → <code>checkmark.circle.fill</code>). Most sessions are idle, so the leftmost column
-  is a stack of checkboxes that invite a click and do nothing. Same eight sample rows in each column; only the Idle icon changes.
+  is a stack of checkboxes that invite a click and do nothing. Same eight sample rows in each column. The first column is what rows drew before the three-states change of 11/25 (web <code>StatusIcon</code>, Mac <code>SessionStatusGlyph</code>); the other three differ only in the Idle icon.
   The Queued clock and the blue Running spinner stay as they are.</p>
   <div class="b-cols" id="cols"></div>
   <div class="b-notes">
+    <div><b>Before (until 11/25)</b><ul>
+      <li class="b-pros">The idle icon was a speech bubble: nothing about it said "tick me".</li>
+      <li class="b-pros">Each row's icon told you something (reply, approval, failed, done).</li>
+      <li class="b-cons">Five of the nine icons are circles (pause, check, cross, minus): the ended rows' grey ✓ circle is itself checkbox-like, and reads as "done".</li>
+      <li class="b-cons">The bubble said "Waiting for your reply" on every parked conversation, even ones that asked nothing; the three-states work removed that claim.</li>
+      <li class="b-cons">Colour and shape carried state and outcome at once; the mark chips now say outcome in words.</li>
+    </ul></div>
     <div><b>Today</b><ul>
       <li class="b-cons">Reads as "tick me to finish": the most repeated shape in the list is a false affordance.</li>
       <li class="b-cons">The one Running row is one icon among eight; it has to be searched for.</li>
@@ -77,26 +84,34 @@ const SP = (rot) => `<svg width="22" height="22" viewBox="0 0 24 24"><circle cx=
 const CLOCK = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a1a1a6" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`;
 const CIRCLE = `<svg width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="#8e8e93" stroke-width="1.7"/></svg>`;
 const DOT = `<svg width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3.5" fill="#c7c7cc"/></svg>`;
+const OLD = {
+  msg: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a1a1a6" stroke-width="1.7" stroke-linejoin="round"><path d="M4 5.5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H10l-4.5 3.5V16.5H4a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1z"/></svg>`,
+  okfill: `<svg width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#34a853"/><path d="M7.5 12.3l3 3 6-6.3" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  okline: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a1a1a6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M7.8 12.3l2.8 2.8 5.6-5.9"/></svg>`,
+  pause: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#e08a00" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9.5"/><path d="M10 8.5v7M14 8.5v7"/></svg>`,
+  xfill: `<svg width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#e53935"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>`,
+};
 const rows = [
-  ['idle',    'Check background job status',      '11/22, 21:36', 'Recorded the stale background-job count as an open task to fix next…', null],
-  ['running', 'Runner "full" notice lingers',     '11/22, 17:48', 'Running tests: npm run test -- runner-capacity…', null],
-  ['idle',    'Trim long reply cards',            '11/22, 17:48', 'Landed reply-fold on main; tests and Mac/iOS builds pass.', ['Finished','m-green']],
-  ['idle',    'Parking bar style pass',           '11/22, 16:36', 'Beta is released on macOS, iOS and Android after the re-run passed…', null],
-  ['queued',  'Agents strip hidden by default',   '11/22, 15:55', 'Waiting for a runner…', null],
-  ['idle',    'Deploy the gateway fix',           '11/22, 14:10', 'Approve the production deploy to continue.', ['Needs you','m-amber']],
-  ['idle',    'Nightly wiki maintenance',         '11/22, 12:02', 'The run stopped: the provider returned an error.', ['Failed','m-red']],
-  ['idle',    'Release notes for beta.109',       '11/22, 10:41', 'Drafted the notes and opened them for review.', ['Ended','m-grey']],
+  ['idle',    'Check background job status',      '11/22, 21:36', 'Recorded the stale background-job count as an open task to fix next…', null, 'msg'],
+  ['running', 'Runner "full" notice lingers',     '11/22, 17:48', 'Running tests: npm run test -- runner-capacity…', null, 'spin'],
+  ['idle',    'Trim long reply cards',            '11/22, 17:48', 'Landed reply-fold on main; tests and Mac/iOS builds pass.', ['Finished','m-green'], 'okfill'],
+  ['idle',    'Parking bar style pass',           '11/22, 16:36', 'Beta is released on macOS, iOS and Android after the re-run passed…', null, 'msg'],
+  ['queued',  'Agents strip hidden by default',   '11/22, 15:55', 'Waiting for a runner…', null, 'clock'],
+  ['idle',    'Deploy the gateway fix',           '11/22, 14:10', 'Approve the production deploy to continue.', ['Needs you','m-amber'], 'pause'],
+  ['idle',    'Nightly wiki maintenance',         '11/22, 12:02', 'The run stopped: the provider returned an error.', ['Failed','m-red'], 'xfill'],
+  ['idle',    'Release notes for beta.109',       '11/22, 10:41', 'Drafted the notes and opened them for review.', ['Ended','m-grey'], 'okline'],
 ];
 const variants = [
+  ['Before (until 11/25)', 'One icon per situation: a grey speech bubble for an idle conversation, checks for done, amber pause for approval, red cross for failure.', '', 'OLD'],
   ['Today', 'Empty grey circle for Idle', '', CIRCLE],
   ['A · Nothing for Idle', 'Empty slot of the same width for Idle; only Queued and Running draw an icon.', 'rec', ''],
   ['B · Small grey dot', '7 px light-grey dot for Idle, centred in the same slot.', '', DOT],
 ];
-const icon = (st, idle) => st === 'running' ? SP() : st === 'queued' ? CLOCK : idle;
+const icon = (st, idle, old) => idle === 'OLD' ? (old === 'spin' ? SP() : old === 'clock' ? CLOCK : OLD[old]) : st === 'running' ? SP() : st === 'queued' ? CLOCK : idle;
 document.getElementById('cols').innerHTML = variants.map(([name, sub, tag, idle]) => `
   <div class="b-col"><h2>${name}${tag ? '<span class="b-tag rec">Recommended</span>' : ''}</h2><p class="b-sub">${sub}</p>
-  <div class="b-list">${rows.map(([st, t, time, s, mark]) => `
-    <div class="b-row"><div class="b-ic">${icon(st, idle)}</div><div class="b-t">${t}</div><div class="b-time">${time}</div>
+  <div class="b-list">${rows.map(([st, t, time, s, mark, old]) => `
+    <div class="b-row"><div class="b-ic">${icon(st, idle, old)}</div><div class="b-t">${t}</div><div class="b-time">${time}</div>
     <div class="b-s"><span class="txt">${s}</span>${mark ? `<span class="b-mark ${mark[1]}">${mark[0]}</span>` : ''}</div></div>`).join('')}
   </div></div>`).join('');
 document.getElementById('zoom').innerHTML = [
