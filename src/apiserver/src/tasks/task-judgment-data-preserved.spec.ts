@@ -3626,7 +3626,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // carry the mode asked for and why; it is none of the preserved relations, no row is written, and no trigger,
       // function or DONE fence changes. It stays after 1807, whose check it replaces. Written as 1808, renumbered to 1811
       // after this project's 1810 landed before it.
-      '1811_permission_mode_change_config_substitution'],
+      '1811_permission_mode_change_config_substitution',
+      // 1821 adds three nullable columns on session_permission_mode_change (refusal_requested_mode, refusal_reason,
+      // refused_at) and one check on that table; it is none of the preserved relations, no row is written, and no
+      // trigger, function or DONE fence changes. It stays after 1805, which creates the table it alters.
+      '1821_permission_mode_change_correction_refusal'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
