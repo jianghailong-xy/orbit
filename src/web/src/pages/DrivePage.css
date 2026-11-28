@@ -156,6 +156,11 @@ span.files-title-parent {
 .files-list col.files-col-more {
   width: 40px;
 }
+.files-list td.files-col-more {
+  padding: 0;
+  text-align: center;
+  overflow: visible;
+}
 .files-list.no-writer .files-col-writer {
   display: none;
 }
