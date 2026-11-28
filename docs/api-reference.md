@@ -87,12 +87,12 @@ answers one page of the list as top-level entries, with an ETag answered `304` w
 | Caller | Routes |
 | --- | --- |
 | `public` | 41 |
-| `user` | 590 |
+| `user` | 592 |
 | `admin` | 31 |
 | `runner` | 259 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **925** |
+| **Total** | **927** |
 
 ## Public routes
 
