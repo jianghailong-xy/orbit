@@ -129,4 +129,24 @@ final class WorkspaceActivityLogicTests: XCTestCase {
         XCTAssertEqual(WorkspaceNavigationStatusLogic.resolve(
             waiting: 0, running: false, runnerOffline: false), .idle)
     }
+    /// The row a folder and its workspace stayed idle over (2026-11-28): parked, with one background
+    /// job gone quiet. Its row spins on `phase` RUNNING, so its folder and its workspace spin too —
+    /// not the breathing mark, which no row with the session facts draws.
+    func testWithTheSessionFactsPhaseDecidesLikeTheRow() throws {
+        let quietJob = try JSONDecoder().decode(Session.self, from: Data(#"""
+        {"id":"s1","status":"AWAITING_INPUT","runState":"AWAITING_INPUT","phase":"RUNNING","released":false,
+         "lastTurnOutcome":"ANSWERED","activity":"BACKGROUND_JOB","runningBgCount":1,"runningBgJobCount":0,
+         "agentId":"w1","folderId":"f1"}
+        """#.utf8))
+        XCTAssertTrue(WorkspaceActivityLogic.isRunning(quietJob))
+        XCTAssertFalse(WorkspaceActivityLogic.isRunningJob(quietJob))
+        XCTAssertEqual(WorkspaceActivityLogic.runningWorkspaceIDs([quietJob]), ["w1"])
+        XCTAssertEqual(SessionFolderGrouping.status(of: [quietJob], runnerOffline: false), .running)
+
+        // Generating by the legacy fields, IDLE by the facts: the facts win, as on the row.
+        let idle = try JSONDecoder().decode(Session.self, from: Data(#"""
+        {"id":"s2","status":"RUNNING","runState":"RUNNING","phase":"IDLE","released":false,"agentId":"w1"}
+        """#.utf8))
+        XCTAssertFalse(WorkspaceActivityLogic.isRunning(idle))
+    }
 }

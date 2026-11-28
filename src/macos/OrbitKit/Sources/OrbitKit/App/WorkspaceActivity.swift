@@ -4,7 +4,8 @@ import Foundation
 ///
 /// The API still names the owning relation `agent`, while the product calls it a Workspace. Keeping
 /// this mapping here lets navigation surfaces use the exact same definition of "running" as a
-/// Session row: only a session whose shared status glyph is the animated spinner counts.
+/// Session row: only a session whose row draws the animated spinner counts — `phase` RUNNING with the
+/// session facts, else the shared status glyph's spinner.
 public enum WorkspaceActivityLogic {
     /// Workspace ids that currently contain at least one Session-row spinner.
     public static func runningWorkspaceIDs(_ sessions: [Session]) -> Set<String> {
@@ -42,6 +43,10 @@ public enum WorkspaceActivityLogic {
     }
 
     static func isRunning(_ session: Session, watching: WatchSessionSummary?) -> Bool {
+        // With the session facts, the row's spinner is `phase` alone (`SessionLiveIndicator`): a
+        // background job or sub-agent between turns turns it too, quiet job or not. Read the same
+        // here, or a folder or workspace sits idle over a row that spins.
+        if let state = SessionDisplay.state(session.displayFacts) { return state == .running }
         if case .spinner = SessionStatusGlyph.make(for: session, watching: watching).shape { return true }
         return false
     }
@@ -52,7 +57,9 @@ public enum WorkspaceActivityLogic {
     }
 
     static func isRunningJob(_ session: Session, watching: WatchSessionSummary?) -> Bool {
-        SessionStatusGlyph.make(for: session, watching: watching).pulse
+        // With the session facts no row breathes: a job in flight is `phase` RUNNING, the spinner above.
+        if SessionDisplay.state(session.displayFacts) != nil { return false }
+        return SessionStatusGlyph.make(for: session, watching: watching).pulse
     }
 }
 
