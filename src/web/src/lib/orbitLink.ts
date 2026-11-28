@@ -384,6 +384,12 @@ const LONE_REFERENCE = new RegExp(
   String.raw`^\[([^\]]*)\]\((orbit-(?:${ORBIT_LINK_KINDS.join('|')}):[^)\s]+)\)$`,
 );
 
+/** The address of a block that is nothing but `[名字](orbit-task:<id>)` — what a paragraph of its own
+ *  draws as a card — or null when the block is anything else. */
+export function loneReference(text: string): string | null {
+  return LONE_REFERENCE.exec(text.trim())?.[2] ?? null;
+}
+
 /**
  * A paragraph's links, as parts to draw in order — or null when nothing in it becomes a card.
  *
@@ -397,10 +403,10 @@ const LONE_REFERENCE = new RegExp(
  *     wall of cards.
  */
 export function placeParagraph(text: string, host: string): OrbitLinkPart[] | null {
-  const lone = LONE_REFERENCE.exec(text.trim());
-  if (lone) {
-    const target = targetForReference(lone[2]);
-    if (target) return [{ kind: 'card', ref: { target, source: { kind: 'ref', ref: lone[2] } } }];
+  const ref = loneReference(text);
+  if (ref) {
+    const target = targetForReference(ref);
+    if (target) return [{ kind: 'card', ref: { target, source: { kind: 'ref', ref } } }];
   }
 
   const matches = scanPageURLs(text, host);

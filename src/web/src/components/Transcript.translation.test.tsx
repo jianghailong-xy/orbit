@@ -434,6 +434,38 @@ describe('Show both languages', () => {
     expect(container.querySelector('.chat-translate-foot.is-reply')!.textContent).toBe('Translated·Hide original');
   });
 
+  it('a list of task references is one card per task: no bullet beside it, no second card under it', async () => {
+    const { OrbitLinkCardsCtx } = await import('./OrbitLinkCard');
+    const cards = { host: 'orbit.test', register: () => {}, previewFor: () => undefined, stateWord: () => '' };
+    const tasks = ['34OEE9MQXMEm0h0Ptm1GG', '34TqaiSUMbQfgTGgyTuNK'];
+    const list = tasks.map((id) => `- [Fix the runner](orbit-task:${id})`).join('\n');
+    const event: RunEvent = {
+      seq: 2,
+      type: 'assistant',
+      payload: {
+        text: `I set a watch on these tasks:\n\n${list}`,
+        translation: { lang: 'zh-Hans', text: `我对这些任务设置了监视：\n\n${list}` },
+      },
+      ts: TS,
+    };
+    await both(
+      <OrbitLinkCardsCtx.Provider value={cards}>
+        <Transcript events={[user(1, done), event]} />
+      </OrbitLinkCardsCtx.Provider>,
+    );
+    const items = [...container.querySelectorAll('.chat-interleaved-pair.is-item')];
+    expect(items).toHaveLength(2);
+    items.forEach((item) => {
+      expect(item.querySelectorAll('.orbit-link-card')).toHaveLength(1);
+      expect(item.querySelector('li')).toBeNull();
+      expect(item.querySelector('.chat-bilingual-original')).toBeNull();
+    });
+    // The sentence above them still has its original.
+    expect(container.querySelector('.chat-interleaved-pair.is-paragraph .chat-bilingual-original')!.textContent).toBe(
+      'I set a watch on these tasks:',
+    );
+  });
+
   it('code blocks and tables are drawn once, from the translation, between the pairs', async () => {
     await both(<Transcript events={[user(1, done), fixtureReply(2, CODE)]} />);
     expect(container.querySelectorAll('.chat-interleaved pre')).toHaveLength(2);
