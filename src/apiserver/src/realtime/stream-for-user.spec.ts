@@ -22,6 +22,7 @@ type Row = {
   workspaceId: string | null;
   title: string | null;
   status: string;
+  turnState: string | null;
   endReason?: string | null;
   completedAt?: Date | null;
   archivedAt?: Date | null;
@@ -37,7 +38,7 @@ type Row = {
     lastHeartbeatAt: Date | null;
   } | null;
   lastTurnAt: Date | null;
-  /** The list's order key (session.listed_at, migration 1434), and the creation it is read as where it is NULL. */
+  /** The list's order key (session.listed_at, migration 1490), and the creation it is read as where it is NULL. */
   listedAt: Date | null;
   createdAt: Date;
   workspace: { id: string; name: string | null; model: string | null; effort: string | null } | null;
@@ -141,6 +142,7 @@ const rowA: Row = {
   workspaceId: 'workspaceA',
   title: 'Fix bug',
   status: RunStatus.RUNNING,
+  turnState: 'IN_FLIGHT',
   cancelRequestedAt: null,
   startedAt: new Date('2026-06-26T00:00:00.000Z'),
   numTurns: 1,
@@ -290,6 +292,7 @@ test('a parked conversation counts the cards a live runner-hosted job is still r
     id: 'sessParked',
     ownerId: 'userB',
     status: RunStatus.AWAITING_INPUT,
+    turnState: null,
     engineTurnActive: false,
     runningBgShells: ['bgj_up'],
   };
@@ -418,7 +421,7 @@ test('publishSessionCreated surfaces as session.created with the full summary', 
 
 test('publishSessionLifecycleChanged preserves run outcome and exposes Completed canonically', async () => {
   // The row as the end left it, released: the event's four new fields are read from it (sessions/session-phase.ts).
-  const ended = { ...rowA, status: RunStatus.CANCELLED, finishedAt: new Date('2026-06-27T00:00:00.000Z') };
+  const ended = { ...rowA, status: RunStatus.CANCELLED, turnState: null, finishedAt: new Date('2026-06-27T00:00:00.000Z') };
   const svc = svcWith({ sessA: ended }, 0);
   const got: ControlEvent[] = [];
   const sub = svc.streamForUser('userA').subscribe((e) => got.push(e));
@@ -452,7 +455,7 @@ test('publishSessionLifecycleChanged preserves run outcome and exposes Completed
 
 test('completing an already-ended session preserves its actual runState', async () => {
   // The row as the end left it, released: the event's four new fields are read from it (sessions/session-phase.ts).
-  const ended = { ...rowA, status: RunStatus.CANCELLED, finishedAt: new Date('2026-06-27T00:00:00.000Z') };
+  const ended = { ...rowA, status: RunStatus.CANCELLED, turnState: null, finishedAt: new Date('2026-06-27T00:00:00.000Z') };
   const svc = svcWith({ sessA: ended }, 0);
   const got: ControlEvent[] = [];
   const sub = svc.streamForUser('userA').subscribe((e) => got.push(e));

@@ -153,7 +153,8 @@ public enum GuestFollow {
     /// new; nil once the conversation has stopped and gone quiet. `expecting`: a message was just
     /// sent and the run it starts has not been seen yet, so a quiet session is still asked.
     public static func delay(_ state: GuestSessionState, moved: Bool, expecting: Bool = false) -> TimeInterval? {
-        let busy = state.phase.map { $0 == .pending || $0 == .running } ?? state.busy
+        // PENDING on a wake is an armed retry, which can be hours out on a spent quota: it waits, as an idle one does.
+        let busy = state.phase.map { $0 == .running || ($0 == .pending && state.waitingOn != .wake) } ?? state.busy
         if moved || (state.released != true && busy) { return workingInterval }
         if state.live { return waitingInterval }
         return expecting ? workingInterval : nil

@@ -1,6 +1,7 @@
 import type {
   ApprovalTranslation,
   BranchCommit,
+  LandingPullRequestView,
   GuestSessionSummary,
   MainCheckoutActionAnswer,
   MainCheckoutActionPost,
@@ -565,9 +566,13 @@ export const createInteractiveSession = (body: {
   /** Prompt optimizer (D2): the opening message is still exactly what Use put in the box. */
   skipTranslation?: true;
   optimizedTranslation?: string;
-}) =>
+  /** This request's own key: a repeat with the same one answers with the session the first made (migration 1730),
+   *  so the composer's Retry of a first message whose answer was lost opens no second session. */
+  clientRequestId?: string;
+}, signal?: AbortSignal) =>
   api<{ id: string; workspaceId?: string | null }>('/sessions', {
     method: 'POST',
+    signal,
     body: {
       ...body,
       // Shell-launched sessions get a `$ …` title so they read as a command in the list. A
@@ -688,6 +693,8 @@ export const sendTurn = (
   /** Prompt optimizer (D2): the text is still exactly what Use put in the box, so the server sends it
    *  as written or with the optimizer's own translation. Absent for anything else. */
   optimized?: OptimizedSend,
+  /** Ends the request: the composer gives up on an answer after SEND_ANSWER_TIMEOUT_MS. */
+  signal?: AbortSignal,
 ) =>
   api<{
     turnId: string;
@@ -707,6 +714,7 @@ export const sendTurn = (
       ...(kind === 'shell' ? { kind } : {}),
       ...optimized,
     },
+    signal,
   });
 
 /** Upload one image to the control plane (multipart/form-data — the shared `api` helper
@@ -967,6 +975,8 @@ export const resumeSession = (
   stopSessionId?: string,
   /** As sendTurn's: the text is still exactly what the optimizer's Use put in the box (D2). */
   optimized?: OptimizedSend,
+  /** As sendTurn's. */
+  signal?: AbortSignal,
 ) =>
   api<{
     turnId: string;
@@ -991,6 +1001,7 @@ export const resumeSession = (
       ...(stopSessionId ? { stopSessionId } : {}),
       ...optimized,
     },
+    signal,
   });
 
 export interface ApprovalInfo {
@@ -1135,10 +1146,11 @@ export const renameSession = (sessionId: string, title: string) =>
 export const interruptSession = (
   sessionId: string,
   followUp?: { content: string; attachmentIds?: string[] },
-  options?: { stopBackgroundWork?: boolean },
+  options?: { stopBackgroundWork?: boolean; signal?: AbortSignal },
 ) =>
   api<{ ok: true; turnId?: string; seq?: number }>(`/sessions/${sessionId}/interrupt`, {
     method: 'POST',
+    signal: options?.signal,
     ...(followUp || options?.stopBackgroundWork
       ? {
           body: {
@@ -2221,9 +2233,13 @@ export interface SessionDetail {
   isolationStatus?: string | null;
   // "Merge to main" outcome (see mergeSessionToMain): 'pending' while the runner works,
   // then 'merged' (mergedAt set) | 'conflict' | 'error' (mergeError carries why). Null
-  // until the user clicks merge.
-  mergeStatus?: 'pending' | 'merged' | 'conflict' | 'error' | null;
+  // until the user clicks merge. 'pull_request': GitHub refused the push to the target
+  // because of its rules, so the runner pushed a landing branch and the merge waits on the
+  // pull request `mergePullRequest` describes (docs/design/protected-branch-landing.md §4.6).
+  mergeStatus?: 'pending' | 'merged' | 'conflict' | 'error' | 'pull_request' | null;
   mergeError?: string | null;
+  /** The pull request this session's Merge waits on or landed through; null for a direct push. */
+  mergePullRequest?: LandingPullRequestView | null;
   mergeRecovery?: MergeRecovery | null;
   mergeRepairSession?: MergeRepairSession | null;
   mergeRecoveryAction?: MergeRecoveryAction | null;
@@ -2284,8 +2300,8 @@ export interface SessionDetail {
 
 /** Fetch one session by id (accepts a base62 public id or a raw UUID). Used to
  *  resolve the runner behind a `/sessions/:id` deep link and show its worktree output. */
-export const getSession = (idOrPublicId: string) =>
-  api<SessionDetail>(`/sessions/${idOrPublicId}`);
+export const getSession = (idOrPublicId: string, signal?: AbortSignal) =>
+  api<SessionDetail>(`/sessions/${idOrPublicId}`, { signal });
 
 /** One session request as it stands now — the state a request card shows (lib/sessionRequest). */
 export const getSessionRequest = (requestId: string) =>

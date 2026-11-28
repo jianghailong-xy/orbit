@@ -149,14 +149,13 @@ final class SessionFolderGroupingTests: XCTestCase {
         XCTAssertEqual(WorkspaceNavigationStatusLogic.resolve(
             waiting: NeedsYouLogic.byAgent(list)["w1"] ?? 0,
             running: WorkspaceActivityLogic.runningWorkspaceIDs(list).contains("w1"),
-            jobs: WorkspaceActivityLogic.jobWorkspaceIDs(list).contains("w1"),
             runnerOffline: false), .needsYou(2))
     }
 
-    /// Nothing waiting: a running session spins the row, else a background job makes it breathe,
-    /// else it is idle — and an explicitly offline Runner stops a stale spinner as it does on the
-    /// Workspace row, without hiding what waits on you.
-    func testAFolderRowRunsThenBreathesThenRests() {
+    /// Nothing waiting: a running session spins the row, a background job in flight too, else it is
+    /// idle — and an explicitly offline Runner stops a stale spinner as it does on the Workspace row,
+    /// without hiding what waits on you.
+    func testAFolderRowRunsThenRests() {
         let notes = [folder("f1", "Notes")]
         func status(_ list: [Session], offline: Bool = false) -> WorkspaceNavigationStatus? {
             listing(list, folders: notes, runnerOffline: offline).folders.first?.status
@@ -165,7 +164,7 @@ final class SessionFolderGroupingTests: XCTestCase {
         let job = session("job", folder: "f1", bg: 2, jobs: 1)
         let service = session("service", folder: "f1", bg: 1)
         XCTAssertEqual(status([job, running]), .running)
-        XCTAssertEqual(status([job, service]), .jobs)
+        XCTAssertEqual(status([job, service]), .running)
         XCTAssertEqual(status([service]), .idle)
         XCTAssertEqual(status([running], offline: true), .idle)
         XCTAssertEqual(status([running, session("asks", folder: "f1", approvals: 1)], offline: true),

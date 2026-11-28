@@ -4,6 +4,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as listingRules from '../../../apiserver/src/sessions/session-listing';
+import { answerListing } from '../test/sessionListingAnswer';
 import type { Runner } from './TasksSidePanel';
 import { ToastViewport } from './ToastViewport';
 import { clearToasts } from '../lib/toastStore';
@@ -38,6 +40,7 @@ const { api, getSession, getSessionEventPage, getSessionRetryMessage, listQueued
 const apiMock = vi.mocked(api);
 const { WorkspaceView } = await import('./WorkspaceView');
 const { encodeId } = await import('../lib/idCodec');
+const { TASK_COLUMN_QUERY } = await import('../lib/useMediaQuery');
 
 const RUNNER_ID = '0195c0de-0000-7000-8000-0000000000e1';
 const WORKSPACE = encodeId('0195c0de-0000-7000-8000-0000000000e2');
@@ -224,6 +227,7 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
       if (p === '/workspaces') {
         return reply([{ id: WORKSPACE, name: 'orbit', runnerId: RUNNER_ID, createdAt: '2026-01-01T00:00:00Z' }]);
       }
+      if (p.startsWith('/sessions/listing?')) return reply(answerListing(listingRules, [detail], [], p));
       if (p.startsWith('/sessions/')) {
         if (p.includes('/events/page')) return reply({ events: [], hasMore: false });
         if (p.includes('/diff')) return reply({ files: [] });
@@ -494,10 +498,145 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
     expect(mounted().querySelector('.workspace-header-task')).toBeNull();
     const badge = line()!.querySelector<HTMLButtonElement>('button.coordinator-badge-link');
     expect(badge?.textContent).toBe('Task');
-    expect(badge?.getAttribute('title')).toBe('Open task · Fix the red checks');
+    expect(await hoverTooltip(badge!)).toBe('Open task · Fix the red checks');
     expect(badge?.getAttribute('aria-label')).toBe('Task · Open task Fix the red checks');
     await act(async () => badge!.click());
-    await waitFor(() => expect(new URLSearchParams(search).get('task')).toBeTruthy());
+    // Open beside the conversation, with the address left as it was (owner 2026-11-27).
+    await waitFor(() => expect(badge?.getAttribute('aria-pressed')).toBe('true'));
+    expect(new URLSearchParams(search).get('task')).toBeNull();
+  });
+
+  it('the title reads the same hovered as at rest: no tooltip, no ›, still Session settings to a screen reader', async () => {
+    // docs/mocks/session-title-hover (owner 2026-11-27): on hover the › took room and pushed the Task badge.
+    detail = session({ title: 'Task: Fix the red checks', taskId: '0195c0de-0000-7000-8000-0000000000f1', taskTitle: 'Fix the red checks' });
+    await mount();
+    const line = () => mounted().querySelector('.workspace-title-line');
+    await waitFor(() => expect(line()?.querySelector('.workspace-name-text')).not.toBeNull());
+    const title = line()!.querySelector<HTMLButtonElement>('button.workspace-name-button')!;
+    expect(title.getAttribute('aria-label')).toBe('Session settings');
+    expect(title.querySelector('.workspace-name-chevron, .anticon')).toBeNull();
+    expect(await hoverTooltip(title)).toBeNull();
+  });
+
+  it('the Task badge toggles its task beside the conversation, one column at a time with session settings', async () => {
+    // docs/mocks/session-task-column: pressed while the task is open, a second press closes it, and the
+    // task and session settings never stand side by side.
+    detail = session({ title: 'Task: Fix the red checks', taskId: '0195c0de-0000-7000-8000-0000000000f1', taskTitle: 'Fix the red checks' });
+    await mount();
+    const line = () => mounted().querySelector('.workspace-title-line');
+    await waitFor(() => expect(line()?.querySelector('.workspace-name-text')).not.toBeNull());
+    const badge = () => line()!.querySelector<HTMLButtonElement>('button.coordinator-badge-link')!;
+    const title = () => line()!.querySelector<HTMLButtonElement>('button.workspace-name-button')!;
+    const taskOpen = () => {
+      expect(new URLSearchParams(search).get('task')).toBeNull();
+      return badge().getAttribute('aria-pressed') === 'true';
+    };
+
+    await act(async () => title().click());
+    await waitFor(() => expect(title().getAttribute('aria-expanded')).toBe('true'));
+    await act(async () => badge().click());
+    await waitFor(() => expect(taskOpen()).toBe(true));
+    expect(title().getAttribute('aria-expanded')).toBe('false');
+    await waitFor(() => expect(badge().getAttribute('aria-pressed')).toBe('true'));
+
+    await act(async () => badge().click());
+    await waitFor(() => expect(taskOpen()).toBe(false));
+    expect(badge().getAttribute('aria-pressed')).toBe('false');
+
+    await act(async () => badge().click());
+    await waitFor(() => expect(taskOpen()).toBe(true));
+    await act(async () => title().click());
+    await waitFor(() => expect(taskOpen()).toBe(false));
+    expect(title().getAttribute('aria-expanded')).toBe('true');
+  });
+
+  describe('the task run sidebar in its own run conversation (docs/task-run-sidebar-design.md, D2 = B)', () => {
+    const TASK = '0195c0de-0000-7000-8000-0000000000f1';
+    const taskRun = () => session({ title: 'Task: Fix the red checks', taskId: TASK, taskTitle: 'Fix the red checks' });
+    const badge = () => mounted().querySelector<HTMLButtonElement>('.workspace-title-line button.coordinator-badge-link');
+    /** Whether the task is open beside the conversation: held there, so the address never names it (owner 11-27). */
+    const taskOpen = () => {
+      expect(new URLSearchParams(search).get('task')).toBeNull();
+      return badge()?.getAttribute('aria-pressed') === 'true';
+    };
+    /** A window `width` px wide: min-width and max-width queries answer for it, nothing else matches. */
+    const windowWidth = (width: number) => vi.stubGlobal('matchMedia', (query: string) => {
+      const bounds = [...query.matchAll(/\((min|max)-width:\s*(\d+)px\)/g)];
+      const matches = bounds.length > 0 && !/hover|pointer|prefers/.test(query)
+        && bounds.every(([, side, px]) => (side === 'min' ? width >= Number(px) : width <= Number(px)));
+      return {
+        matches, media: query, onchange: null,
+        addListener: () => {}, removeListener: () => {},
+        addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false,
+      };
+    });
+    /** A storage that keeps what it is given, for the remembered close. */
+    const store = new Map<string, string>();
+    beforeEach(() => {
+      store.clear();
+      vi.stubGlobal('localStorage', {
+        getItem: (k: string) => store.get(k) ?? null,
+        setItem: (k: string, v: string) => void store.set(k, v),
+        removeItem: (k: string) => void store.delete(k),
+      });
+    });
+    // The task held beside a conversation outlives an unmount, so a test that leaves it open closes it.
+    afterEach(async () => {
+      if (container && badge()?.getAttribute('aria-pressed') === 'true') await act(async () => badge()!.click());
+    });
+    const remount = async () => {
+      const mountedRoot = root;
+      await act(async () => mountedRoot?.unmount());
+      container?.remove();
+      await mount();
+    };
+    const wide = Number(/min-width:\s*(\d+)px/.exec(TASK_COLUMN_QUERY)![1]);
+
+    it('opens the task beside its own run conversation by default on a window wide enough to dock it', async () => {
+      windowWidth(wide);
+      detail = taskRun();
+      await mount();
+      await waitFor(() => expect(taskOpen()).toBe(true));
+    });
+
+    it('remembers a close in that conversation, and opening it again forgets the close', async () => {
+      windowWidth(wide);
+      detail = taskRun();
+      await mount();
+      await waitFor(() => expect(taskOpen()).toBe(true));
+      await act(async () => badge()!.click());
+      await waitFor(() => expect(taskOpen()).toBe(false));
+      expect(JSON.parse(store.get('orbit.taskRunSidebarClosed') ?? '[]')).toEqual([encodeId(SESSION)]);
+
+      // Back in the same conversation later: it stays closed.
+      await remount();
+      await settle();
+      await settle();
+      expect(taskOpen()).toBe(false);
+
+      // Opened again by hand, the close is forgotten and the next visit opens it by default.
+      await act(async () => badge()!.click());
+      await waitFor(() => expect(taskOpen()).toBe(true));
+      expect(JSON.parse(store.get('orbit.taskRunSidebarClosed') ?? '[]')).toEqual([]);
+    });
+
+    it('opens nothing by itself below the docking width, where the task would lie over the conversation', async () => {
+      windowWidth(wide - 1);
+      detail = taskRun();
+      await mount();
+      await settle();
+      await settle();
+      expect(taskOpen()).toBe(false);
+    });
+
+    it('opens nothing by itself in a conversation that is no task\'s run', async () => {
+      windowWidth(wide);
+      detail = session();
+      await mount();
+      await settle();
+      await settle();
+      expect(taskOpen()).toBe(false);
+    });
   });
 
   it('02-3: opens the successor with the note card and the waits that moved here', async () => {

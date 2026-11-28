@@ -56,7 +56,7 @@ struct SessionProjectRowView: View {
                     HStack(spacing: 8) {
                         Text(row.title).foregroundStyle(.primary).lineLimit(1).layoutPriority(1)
                         Spacer(minLength: 8)
-                        if let timestamp = row.lastTurnAt ?? row.createdAt,
+                        if let timestamp = row.listedAt ?? row.createdAt,
                            let relative = RelativeTime.format(timestamp) {
                             Text(relative).font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1).fixedSize()
                         }
@@ -117,7 +117,7 @@ struct SessionProjectRowView: View {
                 .layoutPriority(1)
             Spacer(minLength: 8)
             liveIndicator
-            if let timestamp = row.lastTurnAt ?? row.createdAt,
+            if let timestamp = row.listedAt ?? row.createdAt,
                let relative = RelativeTime.format(timestamp) {
                 Text(relative)
                     .font(.orbitMeta)
@@ -152,8 +152,6 @@ struct SessionProjectRowView: View {
             Circle().fill(.orange).frame(width: 7, height: 7)
         case .running:
             SpinnerGlyph(color: .secondary)
-        case .jobs:
-            BreathingGlyph(systemImage: "terminal")
         case nil:
             EmptyView()
         }
@@ -171,7 +169,6 @@ struct SessionProjectRowView: View {
         switch row.indicator {
         case .needsYou: return "Waiting for you"
         case .running: return "Session running"
-        case .jobs: return "Background job running"
         case nil: return row.status.label
         }
     }

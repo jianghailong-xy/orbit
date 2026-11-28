@@ -429,8 +429,11 @@ public final class APIClient: @unchecked Sendable {
                       query: limit.map { [URLQueryItem(name: "limit", value: String($0))] } ?? [])
     }
 
+    /// Ended with its caller: a first message that waited out its answer deadline (`UserBubble.answerTimeout`)
+    /// takes the HTTP request with it, and the server answers Retry's repeat of its `clientRequestId` with the
+    /// session the first made.
     public func createSession(_ req: CreateSessionRequest) async throws -> Session {
-        try await post("sessions", body: req)
+        try await postCancellable("sessions", body: req)
     }
 
     /// Start (or return) the server-owned repair conversation attached to a merge recovery.
@@ -439,7 +442,7 @@ public final class APIClient: @unchecked Sendable {
     }
 
     public func sendTurn(sessionID: String, _ req: SessionTurnRequest) async throws -> TurnAccepted {
-        try await post("sessions/\(sessionID)/turns", body: req)
+        try await postCancellable("sessions/\(sessionID)/turns", body: req)
     }
 
     /// The user turns no transcript event draws yet, oldest first, each with its `placement`: the
@@ -467,7 +470,7 @@ public final class APIClient: @unchecked Sendable {
     /// The reply names the turn the follow-up was filed as — an ordinary queued `message`, never a
     /// steer. Accepting it is not a claim the engine stopped: the transcript's `interrupt` event is.
     public func interruptAndSend(sessionID: String, _ req: SessionInterruptRequest) async throws -> TurnAccepted {
-        try await post("sessions/\(sessionID)/interrupt", body: req)
+        try await postCancellable("sessions/\(sessionID)/interrupt", body: req)
     }
 
     // Lifecycle: gracefully end (settles CANCELLED but stays dormant/resumable), move between
@@ -1550,6 +1553,12 @@ public final class APIClient: @unchecked Sendable {
     public func createTask(_ req: CreateTaskRequest) async throws -> TaskItem { try await post("tasks", body: req) }
     public func updateTask(_ id: String, _ req: UpdateTaskRequest) async throws -> TaskItem { try await patch("tasks/\(id)", body: req) }
     public func deleteTask(_ id: String) async throws { try await deleteRaw("tasks/\(id)") }
+    /// Re-run the check on a FAILED EXECUTABLE task (docs/task-run-sidebar-design.md, D3 = A): its acceptance
+    /// command runs once more in its latest run, and no agent turn starts. No body: the server names the press,
+    /// so a double press queues one round.
+    public func rerunTaskCheck(_ id: String) async throws {
+        try await postRaw("tasks/\(id)/rerun-check", body: Optional<Empty>.none)
+    }
     /// Run one owned task now, under the name of the press that asked for it — see `RunTaskRequest`.
     ///
     /// `triggerId` is REQUIRED rather than optional. The server still accepts the bodiless POST
@@ -1868,6 +1877,40 @@ public final class APIClient: @unchecked Sendable {
     /// under the client's UUID; the page and the selection ride beside the words (`wikiContext`).
     public func createWikiChat(spaceID: String, _ req: WikiChatCreateRequest) async throws -> WikiChatCreateAnswer {
         try await post("wiki/spaces/\(spaceID)/chats", body: req)
+    }
+    // MARK: Drive chat (src/shared/src/driveChat.ts; apiserver drive/drive-chat.controller.ts, drive-chat-changes.controller.ts)
+
+    /// `GET /drive/chats`: the owner's Drive chats, a page at a time (`q`, `offset`), the button's counts over all of them
+    /// and the workspace a new one runs in.
+    public func driveChats(q: String = "", offset: Int = 0) async throws -> DriveChatList {
+        var query: [URLQueryItem] = []
+        let words = q.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !words.isEmpty { query.append(URLQueryItem(name: "q", value: words)) }
+        if offset > 0 { query.append(URLQueryItem(name: "offset", value: String(offset))) }
+        return try await get("drive/chats", query: query)
+    }
+    /// `POST /drive/chats`: a chat made with the owner's first words, its first turn filed under the client's UUID.
+    public func createDriveChat(_ req: DriveChatCreateRequest) async throws -> DriveChatCreateAnswer {
+        try await post("drive/chats", body: req)
+    }
+    /// `GET /drive/chats/:id/groups`: what each of the chat's turns changed, oldest first.
+    public func driveChatGroups(sessionID: String) async throws -> [DriveChatChangeGroup] {
+        let read: DriveChatGroups = try await get("drive/chats/\(sessionID)/groups")
+        return read.groups
+    }
+    /// `POST /drive/chats/:id/groups/:groupId/undo` or `/apply`.
+    public func pressDriveChatGroup(sessionID: String, groupID: String, apply: Bool) async throws -> DriveChatChangeGroup {
+        try await postEmpty("drive/chats/\(sessionID)/groups/\(groupID)/\(apply ? "apply" : "undo")")
+    }
+    /// `GET /drive/chats/:id/questions`: the overwrites the chat asked the owner about.
+    public func driveChatQuestions(sessionID: String) async throws -> [DriveChatQuestion] {
+        let read: DriveChatQuestions = try await get("drive/chats/\(sessionID)/questions")
+        return read.questions
+    }
+    /// `POST /drive/chats/:id/questions/:questionId { choice }`: Keep both or Replace.
+    public func answerDriveChatQuestion(sessionID: String, questionID: String,
+                                        _ choice: DriveChatQuestion.Choice) async throws -> DriveChatQuestion {
+        try await post("drive/chats/\(sessionID)/questions/\(questionID)", body: DriveChatAnswerRequest(choice: choice))
     }
     /// `GET /wiki/chats/:id/drafts`: every card of a chat (its session id), oldest first.
     public func wikiChatDrafts(sessionID: String) async throws -> WikiChatDrafts {
@@ -2394,7 +2437,7 @@ public final class APIClient: @unchecked Sendable {
     }
 
     public func resume(sessionID: String, _ req: ResumeRequest) async throws -> TurnAccepted {
-        try await post("sessions/\(sessionID)/resume", body: req)
+        try await postCancellable("sessions/\(sessionID)/resume", body: req)
     }
 
     public func updateConfig(sessionID: String, _ req: ConfigUpdateRequest) async throws {
@@ -2880,6 +2923,15 @@ public final class APIClient: @unchecked Sendable {
 
     private func post<T: Decodable, B: Encodable>(_ path: String, body: B) async throws -> T {
         let data = try await send(makeRequest(path, method: "POST", body: body))
+        return try decoder.decode(T.self, from: data)
+    }
+
+    /// A message's send: a composer that waited out its answer (`UserBubble.answerTimeout`) ends the
+    /// request rather than leaving it open, so a cancelled caller takes the HTTP work with it (web
+    /// parity: `answerDeadline` aborts the fetch). The server is idempotent on the request's
+    /// `clientTurnId`, so a request that did arrive before it was ended is answered again by Retry.
+    private func postCancellable<T: Decodable, B: Encodable>(_ path: String, body: B) async throws -> T {
+        let data = try await send(makeRequest(path, method: "POST", body: body), cancellationAware: true)
         return try decoder.decode(T.self, from: data)
     }
 

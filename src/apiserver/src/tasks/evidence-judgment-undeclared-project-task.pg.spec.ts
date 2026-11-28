@@ -47,10 +47,10 @@ import { ConflictException, ForbiddenException } from '@nestjs/common';
 import {
   CreatorType,
   type PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import { uuidToBase62 } from '@orbit/shared';
 import {
@@ -164,7 +164,7 @@ suite('a project task is decided against the standard it declares, or its own', 
       title: 'the project coordinator',
       prompt: 'coordinate the project',
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });
@@ -195,7 +195,7 @@ suite('a project task is decided against the standard it declares, or its own', 
         title: `${label}: the run that did the work`,
         prompt: 'run the task',
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: true,
       },

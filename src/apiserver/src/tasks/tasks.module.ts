@@ -23,6 +23,8 @@ import { SessionCreatedTasksController } from './session-created-tasks.controlle
 import { SessionCreatedTasksService } from './session-created-tasks.service';
 import { TaskModelRoutingReportController } from './task-model-routing-report.controller';
 import { TaskModelRoutingReportService } from './task-model-routing-report.service';
+import { TaskRerunCheckController } from './task-rerun-check.controller';
+import { TaskRerunCheckService } from './task-rerun-check.service';
 import { SubagentRoutingReportService } from './subagent-routing-report.service';
 
 @Module({
@@ -50,6 +52,7 @@ import { SubagentRoutingReportService } from './subagent-routing-report.service'
     TaskProgressController,
     SessionCreatedTasksController,
     TaskModelRoutingReportController,
+    TaskRerunCheckController,
   ],
   providers: [
     TasksService,
@@ -62,6 +65,7 @@ import { SubagentRoutingReportService } from './subagent-routing-report.service'
     SessionCreatedTasksService,
     TaskModelRoutingReportService,
     SubagentRoutingReportService,
+    TaskRerunCheckService,
     // Rides TasksService's reconcile timer; provided here, once, for the reason the `exports` note gives.
     ProjectOrphanSweepService,
   ],

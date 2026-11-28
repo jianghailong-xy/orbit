@@ -323,9 +323,9 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertFalse(row.contains("SessionCoordinatorBadge"))
         XCTAssertFalse(row.contains("NeedsYouCountCapsule"), "attention is a dot, never a count")
         XCTAssertTrue(row.contains("SpinnerGlyph(color: .secondary)"))
-        XCTAssertTrue(row.contains("BreathingGlyph(systemImage: \"terminal\")"))
+        XCTAssertFalse(row.contains("BreathingGlyph"), "a background job spins the row, no separate breathing mark")
         XCTAssertTrue(row.contains(".fill(.orange)"))
-        XCTAssertTrue(row.contains("row.lastTurnAt"), "time follows the group's newest activity")
+        XCTAssertTrue(row.contains("row.listedAt"), "time follows the group's newest listing, where the row sits")
     }
 
     /// One tap target: the shell is the button, and the content carries no press of its own — the

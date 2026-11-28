@@ -5,6 +5,7 @@ import io.orbitd.android.directory.SearchHit
 import io.orbitd.android.directory.SessionDisplay
 import io.orbitd.android.directory.SessionDisplayState
 import io.orbitd.android.directory.SessionMark
+import io.orbitd.android.directory.SessionRowIcon
 import io.orbitd.android.directory.displayFacts
 import java.io.File
 import kotlinx.serialization.json.*
@@ -27,13 +28,15 @@ class SearchDisplayRowsTest {
     private fun payload(name: String, kind: String) = cases.single { it["name"]!!.jsonPrimitive.content == name }[kind]!!.jsonObject
     private fun hit(p: JsonObject) = json.decodeFromJsonElement(SearchHit.serializer(), p)
 
-    private fun check(name: String, state: SessionDisplayState, vararg marks: SessionMark) {
+    private fun check(name: String, state: SessionDisplayState, vararg marks: SessionMark, icons: List<SessionRowIcon> = emptyList()) {
         val hit = hit(payload(name, "searchHit"))
         assertEquals("$name state", state, SessionDisplay.state(hit.displayFacts))
         assertEquals("$name marks", marks.toList(), SessionDisplay.marks(hit.displayFacts))
+        assertEquals("$name row icons", icons, SessionDisplay.rowIcons(hit.displayFacts))
         val row = json.decodeFromJsonElement(DirectorySession.serializer(), payload(name, "listRow"))
         assertEquals("$name list row state", state, SessionDisplay.state(row.displayFacts))
         assertEquals("$name list row marks", marks.toList(), SessionDisplay.marks(row.displayFacts))
+        assertEquals("$name list row icons", icons, SessionDisplay.rowIcons(row.displayFacts))
         val older = hit(JsonObject(payload(name, "searchHit") - facts))
         assertNull("$name older state", SessionDisplay.state(older.displayFacts))
         assertNull("$name older marks", SessionDisplay.marks(older.displayFacts))
@@ -44,31 +47,33 @@ class SearchDisplayRowsTest {
     @Test fun pending_isQueued() = check("PENDING", Q)
     @Test fun running_isRunning() = check("RUNNING", R)
     @Test fun awaitingInput_isIdle() = check("AWAITING_INPUT", I)
-    @Test fun interrupted_isIdleInterrupted() = check("INTERRUPTED", I, SessionMark.INTERRUPTED)
-    @Test fun succeeded_isIdleFinished() = check("SUCCEEDED", I, SessionMark.FINISHED)
-    @Test fun failed_isIdleFailed() = check("FAILED", I, SessionMark.FAILED)
-    @Test fun cancelled_isIdleEnded() = check("CANCELLED", I, SessionMark.ENDED)
-    @Test fun jobRunning_isRunningBackground() = check("job running", R, SessionMark.BACKGROUND)
+    @Test fun interrupted_isIdle() = check("INTERRUPTED", I)
+    @Test fun succeeded_isIdle() = check("SUCCEEDED", I)
+    @Test fun failed_isIdleFailed() = check("FAILED", I, SessionMark.FAILED, icons = listOf(SessionRowIcon.FAILED))
+    @Test fun cancelled_isIdle() = check("CANCELLED", I)
+    @Test fun jobRunning_isRunningWithTheBackgroundIcon() = check("job running", R, icons = listOf(BG))
     @Test fun waitingOnAnApproval_isRunningNeedsYou() = check("waiting on an approval", R, SessionMark.NEEDS_YOU)
-    @Test fun watchArmed_isIdleWillResume() = check("watch armed", I, SessionMark.WILL_RESUME)
-    @Test fun pausedAccount_isQueuedOnHold() = check("paused account", Q, SessionMark.ON_HOLD)
-    @Test fun endedRunnerNeverConfirmed_isIdleEnded() = check("ended, runner never confirmed", I, SessionMark.ENDED)
-    @Test fun oldPlainSucceeded_isIdleEnded() = check("old plain row stored SUCCEEDED", I, SessionMark.ENDED)
-    @Test fun endingAfterAnInterruptedTurn_isIdleInterrupted() = check("ending after an interrupted turn", I, SessionMark.INTERRUPTED)
+    @Test fun watchArmed_isIdleWithTheWillResumeIcon() = check("watch armed", I, icons = listOf(WAKE))
+    @Test fun pausedAccount_isQueuedOnHold() = check("paused account", Q, SessionMark.ON_HOLD, icons = listOf(SessionRowIcon.ON_HOLD))
+    @Test fun endedRunnerNeverConfirmed_isIdle() = check("ended, runner never confirmed", I)
+    @Test fun oldPlainSucceeded_isIdle() = check("old plain row stored SUCCEEDED", I)
+    @Test fun endingAfterAnInterruptedTurn_isIdle() = check("ending after an interrupted turn", I)
     @Test fun engineStartedItsOwnTurn_isRunning() = check("parked, engine started its own turn", R)
     @Test fun subAgentRunning_isRunning() = check("parked, sub-agent running", R)
-    @Test fun processLeftUp_isIdleBackground() = check("parked, background process left up", I, SessionMark.BACKGROUND)
-    @Test fun parkedRetryArmed_isIdleWillResume() = check("parked, retry armed", I, SessionMark.WILL_RESUME)
-    @Test fun failedRetryArmed_isIdleRetrying() = check("failed, retry armed", I, SessionMark.RETRYING)
-    @Test fun failedRunnerOffline_isIdleFailed() = check("failed, runner offline", I, SessionMark.FAILED)
-    @Test fun approvalBesideABackgroundJob_isRunningNeedsYouBackground() =
-        check("approval beside a background job", R, SessionMark.NEEDS_YOU, SessionMark.BACKGROUND)
-    @Test fun interruptedProcessUpRetryArmed_isIdleInterruptedBackgroundWillResume() =
-        check("interrupted, a process up, retry armed", I, SessionMark.INTERRUPTED, SessionMark.BACKGROUND, SessionMark.WILL_RESUME)
+    @Test fun processLeftUp_isIdleWithTheBackgroundIcon() = check("parked, background process left up", I, icons = listOf(BG))
+    @Test fun parkedRetryArmed_isIdleWithTheWillResumeIcon() = check("parked, retry armed", I, icons = listOf(WAKE))
+    @Test fun failedRetryArmed_isIdleRetrying() = check("failed, retry armed", I, SessionMark.RETRYING, icons = listOf(SessionRowIcon.RETRYING))
+    @Test fun failedRunnerOffline_isIdleFailed() = check("failed, runner offline", I, SessionMark.FAILED, icons = listOf(SessionRowIcon.FAILED))
+    @Test fun approvalBesideABackgroundJob_isRunningNeedsYouWithTheBackgroundIcon() =
+        check("approval beside a background job", R, SessionMark.NEEDS_YOU, icons = listOf(BG))
+    @Test fun interruptedProcessUpRetryArmed_isIdleWithBothIcons() =
+        check("interrupted, a process up, retry armed", I, icons = listOf(BG, WAKE))
 
     private companion object {
         val Q = SessionDisplayState.QUEUED
         val R = SessionDisplayState.RUNNING
         val I = SessionDisplayState.IDLE
+        val BG = SessionRowIcon.BACKGROUND
+        val WAKE = SessionRowIcon.WILL_RESUME
     }
 }

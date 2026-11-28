@@ -685,8 +685,13 @@ const RESUME_REFUSED_TURN_FAILED: ReadonlySet<string> = new Set([
   'NO_RUNNER', 'RUNNER_OFFLINE', 'NOT_STARTED', 'MISSING_CONTEXT', 'NOT_TERMINAL',
 ]);
 
+/** How many times `offerLandingFix` offers a turn refused with a 409 that is no answer about the session (a row
+ *  being written a moment), and how long it waits before the next, times the attempt, before handing it back. */
+const LANDING_FIX_DELIVERY_ATTEMPTS = 3;
+const LANDING_FIX_RETRY_MS = 200;
+
 /** Which hand-back a refused landing-fix delivery is (W7, R3), or null for a refusal that is no answer about the
- *  session — a lock held a moment, a key with other words — which the backstop delivers again. */
+ *  session — a lock held a moment, a key with other words — which `offerLandingFix` retries, then hands back. */
 function landingFixRefusalReturn(error: unknown): LandingFixReturnReason | null {
   if (error instanceof LandingFixSessionEnded || error instanceof SessionNotSendable || error instanceof NotFoundException) {
     return 'SESSION_ENDED';
@@ -953,7 +958,7 @@ export class ProjectOpenItemService {
    * Once: the turn row under its key is the receipt, so a delivery that finds it writes nothing — a
    * session the turn revived, that ended again when its turn did, is not revived a second time.
    */
-  async offerLandingFix(itemId: string): Promise<void> {
+  async offerLandingFix(itemId: string, attempt = 1): Promise<void> {
     const item = await this.prisma.projectOpenItem.findUnique({
       where: { id: itemId },
       select: {
@@ -1030,12 +1035,18 @@ export class ProjectOpenItemService {
         await this.returnLandingFix(item.id, now ? reason : 'SESSION_ENDED');
         return;
       }
-      if (error instanceof ConflictException) {
-        // A row being written right now, or a key already holding other words: the backstop delivers again.
-        this.logger.warn(`landing fix ${clientTurnId} was not delivered to ${sessionId}: ${error.message}`);
-        return;
+      // A row being written right now (409): offered again from the top, a moment later.
+      if (error instanceof ConflictException && attempt < LANDING_FIX_DELIVERY_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, LANDING_FIX_RETRY_MS * attempt));
+        return this.offerLandingFix(itemId, attempt + 1);
       }
-      throw error;
+      // Anything else — a conflict that outlasted its retries, a turn the session door refuses outright (a message over
+      // its size limit), an error — is not delivered, and nothing would offer it again: the session has finished, and
+      // the coordinator's turn ends never reach an item in the session's hands. So it is handed back now (TURN_FAILED),
+      // with its escalation time, rather than held with no turn and every door refusing OPEN_ITEM_WITH_WORK_SESSION.
+      this.logger.warn(`landing fix ${clientTurnId} was not delivered to ${sessionId}, handed back: `
+        + `${error instanceof Error ? error.message : String(error)}`);
+      await this.returnLandingFix(item.id, 'TURN_FAILED');
     }
   }
 
@@ -2760,13 +2771,40 @@ export class ProjectOpenItemService {
       }
 
       if (baselineItem && baselineFailure) {
-        const queued = await tx.projectIntegrationJob.findFirstOrThrow({
+        // K5: the baseline result queued the next generation behind the hold, and this retry releases it. A task
+        // filed to fix the OPEN baseline item gets none — it is exempt from the hold — so when its own landing came
+        // back baseline-red under a new (U, T0), the retry queues that generation itself, as J-T1b reruns any other
+        // failure (2026-11-26: findFirstOrThrow here answered the coordinator 500 / P2025).
+        const held = await tx.projectIntegrationJob.findFirst({
           where: { taskId, kind: 'LAND_TASK', state: 'QUEUED' },
           orderBy: [{ generation: 'desc' }],
         });
-        const landing = queued.landingId
-          ? await tx.projectLanding.findUnique({ where: { id: queued.landingId }, select: { sessionId: true } })
+        const landing = held?.landingId
+          ? await tx.projectLanding.findUnique({ where: { id: held.landingId }, select: { sessionId: true } })
           : null;
+        const queued = held
+          ? { jobId: held.id, generation: held.generation, sourceRef: held.sourceRef,
+            landingSessionId: landing?.sessionId ?? null }
+          : await queueLandingRetry(tx, {
+            ownerId,
+            projectId,
+            taskId,
+            retry: {
+              ofJobId: baselineFailure.id,
+              failureClass: decision.failureClass,
+              reason,
+              requestedBySessionId: ownerRequester ? undefined : asking!,
+              requestedByUserId: ownerRequester ?? undefined,
+            },
+          });
+        if (!queued) {
+          throw new ConflictException({
+            code: INTEGRATION_RETRY_NOT_APPLICABLE,
+            message:
+              'the landing could not be queued: the task has no work branch to hand the line, or the '
+              + 'project no longer integrates on a branch of its own.',
+          });
+        }
         const closed = await tx.projectOpenItem.updateMany({
           where: { id: baselineItem.id, state: 'OPEN' },
           data: { state: 'RESOLVED', resolution: 'RETRIED', resolvedAt: new Date(),
@@ -2775,8 +2813,7 @@ export class ProjectOpenItemService {
             resolutionNote: reason },
         });
         if (closed.count === 0) throw new ConflictException('the baseline item is no longer open');
-        return { taskId, jobId: queued.id, generation: queued.generation, sourceRef: queued.sourceRef,
-          landingSessionId: landing?.sessionId ?? null, retryOfJobId: baselineFailure.id,
+        return { taskId, ...queued, retryOfJobId: baselineFailure.id,
           failureClass: decision.failureClass, reason, handlingItemIds: [] };
       }
       const queued = await queueLandingRetry(tx, {

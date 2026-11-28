@@ -37,6 +37,7 @@ import { RUN_SETTING_DIFFERS } from '../lib/projectStart';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import { ENTER_HINT } from './CardHotkey';
 import { shortSeal } from './CriteriaDecisionCard';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
  * The settlement confirmation card, wired to its two reads and its door, in the states a coordinator
@@ -944,8 +945,9 @@ describe('the record a confirmation leaves', () => {
       .toBe('project/34Wvw… · Automatic on · 3 tasks at a time · merge check set');
     // What the owner changed is marked where it stands, and nothing else is.
     const changed = [...receipt!.querySelectorAll('.run-settings-changed')];
-    expect(changed.map((part) => part.getAttribute('title'))).toEqual([RUN_SETTING_DIFFERS]);
+    expect(changed).toHaveLength(1);
     expect(changed[0]?.textContent).toContain('3 tasks at a time');
+    expect(await hoverTooltip(changed[0]!)).toBe(RUN_SETTING_DIFFERS);
   });
 
   it('says You confirmed for every other confirmation — with what it changed, off the record', async () => {

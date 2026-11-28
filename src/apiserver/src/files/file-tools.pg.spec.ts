@@ -29,7 +29,8 @@
  *       folder's other files are kept and bundle as usual.
  *  (11) a remote SubAgent's runner, which does not host the parent session, keeps a file, a folder and a pin under it by
  *       naming its run while that run is RUNNING (docs/subagent-design.md §10.2); its run ended, another runner, or a
- *       run of another session is refused as before, writing nothing.
+ *       run of another session is refused as before, writing nothing. By the same run it fetches a file its parent
+ *       uploaded, description and bytes, and is refused it once no run, or no running one, is named.
  *
  * Not destructive: every row belongs to users this run creates.
  */
@@ -162,7 +163,7 @@ test('the doors behind file_upload, file_fetch and file_list', { skip: !URL, con
     await db.session.create({
       data: {
         id, title, prompt: title, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: machine.id,
-        status: 'AWAITING_INPUT', startedAt: new Date(), runtimeSessionId: `runtime-${id}`, taskId,
+        turnState: null, startedAt: new Date(), runtimeSessionId: `runtime-${id}`, taskId,
       },
     });
     return id;
@@ -233,7 +234,7 @@ test('the doors behind file_upload, file_fetch and file_list', { skip: !URL, con
     created(await upload(api, `/api/runner/sessions/${b62(firstRun)}/attachments`, machine.token, { name: 'reply.png' }), 'a reply image');
     const kept = created(await upload(api, door(firstRun), machine.token, { name: 'kept.png' }), 'a file_upload');
     // One run of a task at a time: the second starts when the first has ended.
-    await db.session.update({ where: { id: firstRun }, data: { status: 'SUCCEEDED', finishedAt: new Date()} });
+    await db.session.update({ where: { id: firstRun }, data: { turnState: null, finishedAt: new Date()} });
     await copyInto(await sessionOf('the second run', inputTaskId));
     const { json } = await list(`?taskId=${b62(inputTaskId)}`);
     assert.deepEqual(
@@ -483,6 +484,22 @@ test('the doors behind file_upload, file_fetch and file_list', { skip: !URL, con
     const bundle = await call(api, 'POST', named(bundleDoor(sessionId), run), otherMachine.token, { name: 'shots', files: [{ path: 'dark.png', id: part.publicId }] });
     assert.equal(bundle.status, 201, bundle.text);
 
+    const handed = await uploaded(sessionId, 'patch.diff');
+    const described = await call(api, 'GET', named(`${door(sessionId)}/${handed.publicId}`, run), otherMachine.token);
+    assert.equal(described.status, 200, described.text);
+    assert.equal(described.json.sha256, sha256(handed.bytes), 'the remote file_fetch is told what the parent kept');
+    const bytesRoute = (id: string) => `/api/runner/sessions/${b62(sessionId)}/attachments/${id}`;
+    const fetched = await fetch(`http://127.0.0.1:${api.port}${named(bytesRoute(handed.publicId), run)}`, {
+      headers: { authorization: `Bearer ${otherMachine.token}` },
+    });
+    assert.equal(fetched.status, 200, 'the remote file_fetch reads the bytes');
+    assert.deepEqual(Buffer.from(await fetched.arrayBuffer()), handed.bytes);
+    const refusedRead = async (route: string) => (await fetch(`http://127.0.0.1:${api.port}${route}`, {
+      headers: { authorization: `Bearer ${otherMachine.token}` },
+    })).status;
+    assert.equal((await call(api, 'GET', `${door(sessionId)}/${handed.publicId}`, otherMachine.token)).status, 403, 'no run named: no description');
+    assert.equal(await refusedRead(bytesRoute(handed.publicId)), 403, 'no run named: no bytes');
+
     const before = await rowsOf({});
     assert.equal((await upload(api, door(sessionId), otherMachine.token)).status, 403, 'no run named');
     assert.equal((await upload(api, named(door(otherSessionId), run), otherMachine.token)).status, 403, 'a run of another session');
@@ -490,6 +507,8 @@ test('the doors behind file_upload, file_fetch and file_list', { skip: !URL, con
     assert.equal((await upload(api, named(door(sessionId), run), third.token)).status, 403, 'a runner the run was not handed to');
     await db.subagentRun.update({ where: { id: run }, data: { status: 'DONE', endedAt: new Date() } });
     assert.equal((await upload(api, named(door(sessionId), run), otherMachine.token)).status, 403, 'the run has ended');
+    assert.equal((await call(api, 'GET', named(`${door(sessionId)}/${handed.publicId}`, run), otherMachine.token)).status, 403, 'the run has ended: no description');
+    assert.equal(await refusedRead(named(bytesRoute(handed.publicId), run)), 403, 'the run has ended: no bytes');
     assert.equal(await rowsOf({}), before, 'nothing refused was kept');
     assert.deepEqual(tempFiles(), [], 'no temporary file is left');
   });

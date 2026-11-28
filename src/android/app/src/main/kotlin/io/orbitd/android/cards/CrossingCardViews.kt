@@ -128,16 +128,17 @@ fun CrossingReview(asked: CrossingBatch, state: CrossingCardStore.State, close: 
     var showOriginal by remember(asked.id) { mutableStateOf(false) }
     val owner = LocalTranslation.current.cardLanguage
     val translated = remember(asked, owner) { asked.rows.map { OwnerCardTranslation.crossing(it, owner) } }
-    val batch = if (translated.any { it != null } && !showOriginal) CrossingBatch(asked.rows.mapIndexed { i, row -> translated[i] ?: row }) else asked
+    val batch = if (translated.any { it != null } && !showOriginal) asked.copy(rows = asked.rows.mapIndexed { i, row -> translated[i] ?: row }) else asked
     val tone = LocalOrbitColors.current.needsYou
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     val sending = batch.id in state.sending
     var all by remember(batch.id) { mutableStateOf(false) }
     val tag = "${batch.id}:review"
-    Column(Modifier.fillMaxWidth().fillMaxHeight().testTag(tag)) {
+    // The sheet hugs what it says, a few lines for most batches; a long one scrolls with the answer still in reach.
+    Column(Modifier.fillMaxWidth().testTag(tag)) {
         SheetHead(CrossingCards.title(batch), tag, close)
         HorizontalDivider()
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp),
+        Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (batch.live) Text(CrossingCards.waitingLine(batch), Modifier.testTag("$tag:waiting"),
                 style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold), color = tone)
@@ -155,7 +156,7 @@ fun CrossingReview(asked: CrossingBatch, state: CrossingCardStore.State, close: 
                     shown.forEachIndexed { index, row ->
                         if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                         CrossingRow(row, state.refusals[ProjectCrossings.doorId(row)].takeIf { ProjectCrossings.isAnswerable(row.text("state")) },
-                            "$tag:row:${ProjectCrossings.doorId(row)}")
+                            "$tag:row:${ProjectCrossings.doorId(row)}", CrossingCards.showsRowStates(batch))
                     }
                     if (!all) CrossingCards.showMore(batch)?.let { more ->
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -164,11 +165,15 @@ fun CrossingReview(asked: CrossingBatch, state: CrossingCardStore.State, close: 
                     }
                 }
             }
-            CrossingCards.reasons(batch).forEach { reason ->
+            val reasons = CrossingCards.reasons(batch)
+            if (reasons.isNotEmpty()) Text(CrossingCards.reasonsHead(reasons.size), Modifier.testTag("$tag:reasons-head"),
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold), color = secondary)
+            reasons.forEach { reason ->
                 Text(reason, Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp))
                     .padding(horizontal = 10.dp, vertical = 8.dp), style = MaterialTheme.typography.bodyMedium)
             }
-            Text(CrossingCards.consequence(batch), Modifier.testTag("$tag:consequence"), style = MaterialTheme.typography.bodySmall, color = secondary)
+            // What a yes does, only while there is a yes to give.
+            if (batch.live) Text(CrossingCards.consequence(batch), Modifier.testTag("$tag:consequence"), style = MaterialTheme.typography.bodySmall, color = secondary)
             if (batch.live) state.batchRefusals[batch.id]?.let { BatchRefusal(it, "$tag:refused") }
             if (translated.any { it != null }) CardTranslationFoot(showOriginal, { showOriginal = !showOriginal })
         }
@@ -178,9 +183,9 @@ fun CrossingReview(asked: CrossingBatch, state: CrossingCardStore.State, close: 
             if (receipt != null) ReceiptLine(receipt, Modifier.align(Alignment.CenterHorizontally).testTag("$tag:receipt"))
             else {
                 Button(onClick = { answer(true) }, enabled = batch.live && !sending,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("$tag:approve")) { Text(CrossingCards.approve) }
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("$tag:approve")) { Text(CrossingCards.approveLabel(batch)) }
                 OutlinedButton(onClick = { answer(false) }, enabled = batch.live && !sending,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("$tag:refuse")) { Text(CrossingCards.refuse) }
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("$tag:refuse")) { Text(CrossingCards.refuseLabel(batch)) }
             }
         }
     }
@@ -188,11 +193,11 @@ fun CrossingReview(asked: CrossingBatch, state: CrossingCardStore.State, close: 
 
 /** One crossing in the review's list: its subject, the criteria lines, its state once answered, and the door's refusal. */
 @Composable
-private fun CrossingRow(row: kotlinx.serialization.json.JsonObject, refusal: ProjectCrossings.Refusal?, tag: String) {
+private fun CrossingRow(row: kotlinx.serialization.json.JsonObject, refusal: ProjectCrossings.Refusal?, tag: String, showState: Boolean) {
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     Column(Modifier.fillMaxWidth().padding(vertical = 8.dp).testTag(tag), verticalArrangement = Arrangement.spacedBy(1.dp)) {
         Text(CrossingCards.subject(row), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        CrossingCards.rowNotes(row).forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = secondary) }
+        CrossingCards.rowNotes(row, showState).forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = secondary) }
         refusal?.let {
             Text(CrossingCards.refusalHead(it), Modifier.testTag("$tag:refused"), style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
                 color = MaterialTheme.colorScheme.error)

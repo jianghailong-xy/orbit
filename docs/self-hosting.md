@@ -412,10 +412,14 @@ task.
 | --- | --- |
 | `orbit_http_request_duration_seconds` | A histogram of the time from a request reaching the apiserver to its answer being written, labelled `route` (the template, such as `/api/sessions/:id`, never the URL; `unmatched` when no route matched), `method` (`GET`, `POST` and the other five, or `other`) and `status` (`2xx` to `5xx`, or `other`). Recorded when the answer is written, so the status is the one sent, 500s from a failed handler included. Past 1,024 label combinations, new ones are counted in one `overflow` series. |
 | `orbit_runners{state}` | Runners by state: `online` and `draining` were heard from in the last 90 seconds, `draining` taking no new work; `silent` were not, and did not sign off; `offline` signed off. |
-| `orbit_runner_oldest_heartbeat_age_seconds` | Seconds since the least recently heard of the `online` and `draining` runners last beat, 0 with none. Runners beat every 30 seconds, so it sits near 30 and climbs to 90 as beats stop; a runner past that is counted `silent`. |
+| `orbit_runner_oldest_heartbeat_age_seconds` | Seconds since the least recently heard of the `online` and `draining` runners last beat, 0 with none. Runners beat every 30 seconds, so it sits near 30 and climbs to 90 as beats stop; a runner past that is counted `silent`. A runner on the link is also heard each time it opens a connection, for up to 5 minutes past its last beat. |
+| `orbit_runner_reconcile_stale` | How many `online` and `draining` runners on the link last reconciled in full more than 5 minutes and 45 seconds ago (a runner reconciles at least once every 5 minutes). A runner whose reconcile is still owed is not counted. |
+| `orbit_link_heartbeat_outcomes_total{outcome}` | Link heartbeats by how they were answered: `quiet` (nothing changed), `report` (changed facts written by one statement) or `full` (reconciled in full). A counter since the process started; the rate of `full` against the other two is the cost of heartbeats. |
+| `orbit_link_heartbeat_reports_total{kind}` | The fact kinds `report` beats wrote, one count per kind. |
+| `orbit_link_heartbeat_full_reconciles_total{reason}` | Why a beat reconciled in full: `no_record` (no reconcile recorded, or the last left something pending), `lease`, `changed` (the runner's change count moved), `inputs` (a fact that decides the answer changed), `period` (the 5-minute cycle), `managed` (a managed runner always does) or `report_unwritable`. |
 | `orbit_sessions{state}` | Sessions not in the Trash whose turn is `queued` for a runner or `running` on one. |
 | `orbit_tasks{state}` | Tasks a session is working on, as the task list shows them: `queued` while its turn waits for a runner, `running` otherwise, which includes a session waiting for something that will wake it. |
-| `orbit_fleet_gauges_up` | 1 when the four above could be read from the database, 0 when they could not; they are then absent. |
+| `orbit_fleet_gauges_up` | 1 when the five above could be read from the database, 0 when they could not; they are then absent. |
 
 The histogram leaves out the requests that are held open on purpose, because their time is what they wait for: the
 event streams (`/api/events`, `/api/sessions/:id/events` and the share-link and guest streams), the approval

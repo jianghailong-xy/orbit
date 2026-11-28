@@ -5,10 +5,10 @@ import { test } from 'node:test';
 import { ConflictException, ForbiddenException, HttpException } from '@nestjs/common';
 import {
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -132,7 +132,7 @@ async function world(db: PrismaClient, label: string): Promise<World> {
       title: `coordinator: ${label}`,
       prompt: `coordinator: ${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
       startedAt: new Date(),

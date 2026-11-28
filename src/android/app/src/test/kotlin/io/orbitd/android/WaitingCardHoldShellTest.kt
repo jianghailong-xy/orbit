@@ -123,7 +123,11 @@ class WaitingCardHoldShellTest {
         openMember()
         await { shows(headLine) }
         // The read lands off the main thread, in real time: the card is measured once the open has brought it in, held it and laid it out.
-        await { CardFocus.pending(ProjectShell.WAITING) == null && CardFocus.held(ProjectShell.WAITING)?.key == "approval:a-quota" }
+        val brought = runCatching {
+            await { CardFocus.pending(ProjectShell.WAITING) == null && CardFocus.held(ProjectShell.WAITING)?.key == "approval:a-quota" }
+        }
+        assertTrue("the open brought the card in and held it: pending=${CardFocus.pending(ProjectShell.WAITING)} " +
+            "held=${CardFocus.held(ProjectShell.WAITING)} reported=${CardFocus.position(ProjectShell.WAITING, "approval:a-quota")}", brought.isSuccess)
         settle()
         await { waitingCard()?.boundsInRoot?.isEmpty == false }
         val top = topNow()

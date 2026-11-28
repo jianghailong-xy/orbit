@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from 'react';
-import { CheckSquareOutlined, EyeOutlined } from '@ant-design/icons';
+import { CheckSquareOutlined, EyeOutlined, LoadingOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
@@ -78,9 +78,11 @@ export function SessionCreatedTasksStrip({
         <span className="bg-tray-title ct-head">{COPY.title}</span>
         {single ? (
           <>
-            <span className="ct-one" title={single.title}>
-              {single.title}
-            </span>
+            <Tooltip content={single.title} truncatedOnly>
+              <span className="ct-one">
+                {single.title}
+              </span>
+            </Tooltip>
             {single.watched && <WatchEye stale={single.stale} />}
           </>
         ) : (
@@ -110,8 +112,14 @@ export function SessionCreatedTasksStrip({
           </>
         )}
         <span className="wt-spacer" />
-        {/* The pill sits at the right edge, as the Agents line's failed count and the branch bar's state do. */}
-        {pill && <TaskStatusPill {...pill} />}
+        {/* The pill sits at the right edge, as the Agents line's failed count and the branch bar's state do. A running
+            task shows the spinner alone, in the same column as the Agents and Background rows. */}
+        {pill &&
+          (pill.running ? (
+            <LoadingOutlined spin className="chat-tool-status running" aria-label="Running" />
+          ) : (
+            <TaskStatusPill {...pill} />
+          ))}
         <button
           type="button"
           className="wt-expand"
@@ -136,12 +144,14 @@ export function SessionCreatedTasksStrip({
               <Link key={row.id} className="ct-row" data-row-focus="" to={pageHref({ kind: 'task', id: toUuid(row.id) })}>
                 <span className="ct-pill">{row.standing && <TaskStatusPill {...row.standing} />}</span>
                 <span className="ct-eye">{row.watched && <WatchEye stale={row.stale} />}</span>
-                <span className="ct-title" title={row.title}>
-                  {row.title}
-                  {row.replaces && (
-                    <span className="ct-replaces">{` · ${COPY.replacesPrefix}${row.replaces.title}`}</span>
-                  )}
-                </span>
+                <Tooltip content={row.title} truncatedOnly>
+                  <span className="ct-title">
+                    {row.title}
+                    {row.replaces && (
+                      <span className="ct-replaces">{` · ${COPY.replacesPrefix}${row.replaces.title}`}</span>
+                    )}
+                  </span>
+                </Tooltip>
                 <span className="ct-age">{row.createdAt ? relTime(row.createdAt) : COPY.elsewhere}</span>
                 <span className="ct-caret">›</span>
               </Link>

@@ -28,7 +28,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { toUuid, uuidToBase62 } from '@orbit/shared';
-import { RunStatus, RunnerStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunnerStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { call, startApiserver, type Apiserver } from '../auth/pat-test-apiserver';
@@ -37,6 +38,7 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 // The heartbeat is called over plain HTTP, as the link gateway's forwarded call reaches the same handler.
 import '../test-support/daemon-routes-over-http';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -84,7 +86,7 @@ test('browser_open: starts the account\'s Orbit Cloud browser for any session of
     (await prisma.session.create({
       data: {
         ownerId, creatorId: ownerId, assignedRunnerId: runnerId, provider: 'claude', engine: 'claude', model: 'claude-opus-5-5',
-        title, prompt: 'browse', status, dispatchOrigin: SessionDispatchOrigin.USER,
+        title, prompt: 'browse', turnState: turnStateOfWord(status), dispatchOrigin: SessionDispatchOrigin.USER,
       },
       select: { id: true },
     })).id;

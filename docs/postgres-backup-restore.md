@@ -163,6 +163,44 @@ The sidecar runs the script it started with, so a newer `scripts/pg-backup.sh` d
 recreated. `/upgrade` does that when the two differ; by hand it is `docker compose up -d --no-deps --force-recreate
 pgbackup`. A target already in use goes on syncing as before.
 
+### The archive in an S3 bucket
+
+The archive can go to an S3 bucket instead, such as a Ceph RGW one. Name it as `<bucket>/<prefix>`, and the sidecar
+copies the archive there on every poll in place of `ORBIT_BACKUP_SYNC_TARGET`. That target, if set, then takes only the
+[files copy](#attachment-files):
+
+```bash
+ORBIT_BACKUP_S3_TARGET=orbit-pg-archive/prod
+ORBIT_BACKUP_S3_ENDPOINT=http://10.66.0.2:7480   # these four default to ORBIT_DRIVE_S3_*
+ORBIT_BACKUP_S3_REGION=default
+ORBIT_BACKUP_S3_ACCESS_KEY_ID=...
+ORBIT_BACKUP_S3_SECRET_ACCESS_KEY=...
+```
+
+Give the backups a key of their own that reaches only their bucket. The apiserver holds the Drive bucket's key,
+and a key that can write the backups can also delete them. Give the prefix to the archive alone, because the copy
+deletes anything else there.
+
+The copy is rclone, which the sidecar installs from Alpine's mirror at its first poll. It keeps the mirror's guards: it
+refuses an archive with no base backup or no finished segment, a bucket holding another cluster's archive or WAL further
+on than this one, and base backups with no WAL to say whose they are. Every refusal logs
+`ERROR: refusing off-host sync to s3://…` and leaves the bucket as it was. WAL goes first and deletes nothing. Then
+`rclone sync` brings the bucket to this archive. It deletes only after every copy has finished, and not at all after an
+error, so the bucket keeps its old base backups until the new ones are there. A bucket that does not exist yet reads as a
+first install, and the first copy creates it. A failed round is `ERROR: off-host sync to s3://… failed: …` and counts as a
+failed `archive` copy in [the metrics](#checking-it-works).
+
+To restore from it, copy it back the way [Restore on a replacement host](#restore-on-a-replacement-host) does, with
+`ORBIT_BACKUP_S3_TARGET` left out of `.env` as well:
+
+```bash
+rclone copy --s3-provider Other --s3-endpoint http://10.66.0.2:7480 --s3-force-path-style \
+  :s3:orbit-pg-archive/prod data/pg-archive/      # the key pair in RCLONE_S3_ACCESS_KEY_ID / RCLONE_S3_SECRET_ACCESS_KEY
+```
+
+Moving an archive from rsync to a bucket starts a new generation there. The old mirror stops where it is, because nothing
+syncs to it any more. Keep it until the bucket holds a base backup and the WAL after it.
+
 ### Attachment files
 
 Postgres only names an attachment's bytes. They are in `./data/files`, which neither the WAL archive
@@ -241,8 +279,8 @@ in the checkout the deployment runs from.
 Restoring from the mirror is the same runbook with the archive copied back first (or `restore_command`
 pointed at a mount of the mirror). Follow these steps in order:
 
-1. Put `.env` back **without `ORBIT_BACKUP_SYNC_TARGET`**. With it unset the sidecar makes no off-host
-   copy, so nothing on this host can touch the mirror until the restore is done.
+1. Put `.env` back **without `ORBIT_BACKUP_SYNC_TARGET`** (or `ORBIT_BACKUP_S3_TARGET`). With it unset the sidecar
+   makes no off-host copy, so nothing on this host can touch the mirror until the restore is done.
 2. Copy the archive back **before the first `docker compose up -d`**. A new cluster has a real archive
    of its own, and starting one first gives you a database and a `data/pg-archive` you have to move aside
    again. The sidecar [refuses to mirror it](#the-off-host-mirror) over the old archive even with a target

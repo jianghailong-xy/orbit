@@ -5,11 +5,11 @@ import { test } from 'node:test';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -32,6 +32,7 @@ import { CriterionUnlandedProducer } from './criterion-unlanded.producer';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * The coordinator's fuse counts what the AGENT spends on its own, and nothing that happened to it.
@@ -180,7 +181,7 @@ async function fixture(db: PrismaClient, label: string): Promise<Fixture> {
       title: `协调：${label}`,
       prompt: `协调：${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
       startedAt: new Date(),
@@ -255,7 +256,7 @@ async function finishServingWork(db: PrismaClient, f: Fixture, n: number): Promi
     data: {
       id: randomUUID(), ownerId: f.ownerId, creatorId: f.ownerId, taskId, workspaceId: f.workspaceId,
       assignedRunnerId: f.runnerId, title: `serving work ${n}`, prompt: `serving work ${n}`, provider: 'claude',
-      status: RunStatus.SUCCEEDED, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      turnState: null, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       isolationStatus: 'worktree', branch: `orbit/serving-work-${n}-${taskId}`, changedFiles: ['src/work.ts'],
       // Its own branch tip is past the commit it forked from: commits of its own, not a checkout.
       baseSha: 'b'.repeat(40), branchSha: 'c'.repeat(40), worktreeBranch: `orbit/serving-work-${n}-${taskId}`,
@@ -312,7 +313,7 @@ async function openSession(
       title: `session ${id}`,
       prompt: `session ${id}`,
       provider: 'claude',
-      status: options.status ?? RunStatus.AWAITING_INPUT,
+      turnState: turnStateOfWord(options.status ?? RunStatus.AWAITING_INPUT),
       ...(options.status === RunStatus.SUCCEEDED || options.status === RunStatus.FAILED
         ? { finishedAt: new Date()}
         : options.status === RunStatus.CANCELLED ? { finishedAt: new Date()} : {}),
@@ -364,7 +365,7 @@ async function coordinatorReads(db: PrismaClient, f: Fixture, seq: number): Prom
   const next = await turnEnds(db, f.coordinatorSessionId, seq, 1, unread[0]!.id);
   await db.session.update({
     where: { id: f.coordinatorSessionId },
-    data: { status: RunStatus.AWAITING_INPUT },
+    data: { turnState: null },
   });
   return next;
 }

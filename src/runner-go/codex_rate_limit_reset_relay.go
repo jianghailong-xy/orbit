@@ -32,8 +32,10 @@ import (
 // kept on disk: a restart loses what is in memory, the claim ages into a takeover by the next process
 // (§7.4), and that process starts the step again under the operation's one key.
 //
-// A process is handed commands only once it declares codexRateLimitResetCapabilityV1, which the runner
-// declares for this relay together with the executor that carries the steps out: codexResetConsumer (§4).
+// A process is handed commands only once it declares codexRateLimitResetCapabilityV1 or
+// codexRateLimitResetCapabilityV2: a v2 declarer gets v2 commands for every slot, Default's too, and a v1-only one
+// gets v1 commands for Default's alone (§12.3). The runner declares both for this relay together with the
+// executor that carries the steps out: codexResetConsumer (§4). One that declares neither is handed nothing.
 
 const (
 	codexResetResultPath = "/runner/codex-rate-limit-reset-result"
@@ -377,10 +379,15 @@ func codexResetResultRetryable(err error) bool {
 }
 
 // codexResetResult is a result of `kind` (with `code`, when the kind carries one) for the claim cmd
-// was delivered under.
+// was delivered under, in cmd's protocol version (§12.3). A command of a version this binary does not
+// speak is answered in version 1, which every control plane reads.
 func codexResetResult(cmd CodexRateLimitResetCommand, kind, code string) CodexRateLimitResetResultRequest {
+	version := cmd.ProtocolVersion
+	if !codexResetVersionIn("result", version) {
+		version = codexRateLimitResetProtocolVersion
+	}
 	return CodexRateLimitResetResultRequest{
-		ProtocolVersion: codexRateLimitResetProtocolVersion,
+		ProtocolVersion: version,
 		OperationID:     cmd.OperationID,
 		LeaseOwner:      cmd.LeaseOwner,
 		ClaimGeneration: cmd.ClaimGeneration,

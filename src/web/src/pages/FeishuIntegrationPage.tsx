@@ -39,6 +39,7 @@ import { useToast } from '../lib/toast';
 import { workspacesQuery } from '../lib/queries';
 import { useManagedRunnerId } from '../lib/managedRunner';
 import { FEISHU_GROUP_MODES, feishuChatsQuery, modeLabel, runnerName, type WorkspaceRow } from './FeishuConnectGroupPage';
+import { Tooltip } from '../components/ui/Tooltip';
 
 /** `GET /integrations/feishu` (docs/feishu-bot-design.md §4.1, §10): never the App Secret, only whether one is saved and readable. */
 export const feishuIntegrationQuery = () =>
@@ -378,9 +379,14 @@ function OwnerSection({ app }: { app: FeishuAppSettings }) {
               }
             />
           )}
-          <Button disabled={!owner} loading={test.isPending} title={owner ? undefined : 'Connect your Feishu account first'} onClick={() => test.mutate()}>
-            {SEND_TEST}
-          </Button>
+          {/* The span takes the pointer while the button is disabled, so the reason still shows. */}
+          <Tooltip content={owner ? undefined : 'Connect your Feishu account first'}>
+            <span style={{ display: 'inline-flex' }}>
+              <Button disabled={!owner} loading={test.isPending} onClick={() => test.mutate()}>
+                {SEND_TEST}
+              </Button>
+            </span>
+          </Tooltip>
           <Button variant={owner ? 'default' : 'primary'} loading={generate.isPending} onClick={() => generate.mutate()}>
             {owner ? (shown ? 'Generate another code' : 'Connect a different account') : shown ? 'Generate another code' : CONNECT_ACCOUNT}
           </Button>

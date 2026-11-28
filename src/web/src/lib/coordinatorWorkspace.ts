@@ -139,12 +139,10 @@ const sentence = (text: string): string => (/[.!?]$/.test(text) ? text : `${text
 export function changeMoveParagraphs(args: {
   to: string;
   from: string;
-  needsEnd: boolean;
   files: string | null;
 }): string[] {
-  const { to, from, needsEnd, files } = args;
+  const { to, from, files } = args;
   const move = [`this conversation goes to ${to} and continues there.`];
-  if (needsEnd) move.push('It ends first.');
   if (files) move.push(files);
   return [
     `Move conversation: ${move.join(' ')}`,

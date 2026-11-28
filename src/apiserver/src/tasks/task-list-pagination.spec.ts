@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { TaskStatus } from '@orbit/shared';
 import { RUNNER_OFFLINE_AFTER_MS } from '../runners/runner-presence';
 import { TasksService } from './tasks.service';

@@ -38,7 +38,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -47,6 +48,8 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import { APPROVAL_ABANDONED_STATUS } from './abandoned-approvals';
+import { turnStateOfWord } from './session-turn-state';
+import { restoreStatusColumn } from '../test-support/session-d3-database';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -126,7 +129,7 @@ async function session(
       title: `${label} session`,
       prompt: `${label} session`,
       provider: 'claude',
-      status,
+      turnState: turnStateOfWord(status),
       ...(status === RunStatus.SUCCEEDED || status === RunStatus.FAILED
         ? { finishedAt: new Date()}
         : status === RunStatus.CANCELLED ? { finishedAt: new Date()} : {}),
@@ -213,6 +216,9 @@ test('0258 settles the pre-0252 approvals nothing is asking any more, and only t
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
+  // The replayed migration predates deploy D4 (migration 1711), which dropped session.status: it runs on the
+  // database deploy D3 left, as the D4 down script restores it.
+  await restoreStatusColumn(sql);
   const db = prismaClientFor(url);
   t.after(async () => {
     await db.$disconnect().catch(() => undefined);

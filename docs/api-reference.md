@@ -68,17 +68,31 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
   server can push to.
 - `{"delivered": false, "reason": "NOT_ACCEPTED"}`: APNs and FCM accepted it for none of your devices.
 
+## Paging a workspace’s session list
+
+`GET /api/sessions/listing?workspaceId=<id>&view=open|completed[&folderId=<id>][&limit=40][&after=<cursor>]`
+answers one page of the list as top-level entries, with an ETag answered `304` when nothing moved:
+
+| Field | Meaning |
+| --- | --- |
+| `folders` | The folder rows, `{ folderId, rowCount, needsYou, running, jobs }`: only on a first page without `folderId`. |
+| `entries` | `{ kind: "session", session }` or `{ kind: "project", projectId, placedAt, spokeAt, memberCount, running, jobs, coordinator }`, in list order (in Open: Pinned, then Needs you, then Working, then the rest, each newest listed first, as the web's sections draw them); a project's `running` / `jobs` say whether a member it holds runs / has a background job moving. |
+| `next` | The `after` of the following page, or `null` at the end. |
+| `restarted` | `true` when `after` was written under an order the list no longer has (Completed switches order on whether any session is held by a project): this is the first page again, with its `folders`, and replaces the pages already read. Absent otherwise. |
+
+`limit` is 1 to 200 (40 when absent); a malformed `after` is refused `400`.
+
 ## Summary
 
 | Caller | Routes |
 | --- | --- |
 | `public` | 41 |
-| `user` | 570 |
+| `user` | 594 |
 | `admin` | 31 |
 | `runner` | 259 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **905** |
+| **Total** | **929** |
 
 ## Public routes
 
@@ -172,7 +186,16 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/auth/google/link` | body `GoogleLinkDto` | `GoogleAuthController.link` |
 | `POST` | `/api/auth/google/link/confirm` | body `GoogleExchangeDto` | `GoogleAuthController.confirmLink` |
 | `GET` | `/api/conditions/:id` | path `id` | `ConditionsController.get` |
+| `GET` | `/api/documents/activity` | query `before`, `tz` | `DriveController.activityPage` |
 | `GET` | `/api/documents/changes` | query `since` | `DriveController.changes` |
+| `GET` | `/api/documents/chats` | query `offset`, `q`, `status` | `DriveChatController.list` |
+| `POST` | `/api/documents/chats` | body `Object` | `DriveChatController.create` |
+| `GET` | `/api/documents/chats/:sessionId/groups` | path `sessionId` | `DriveChatChangesController.groups` |
+| `GET` | `/api/documents/chats/:sessionId/groups/:groupId` | path `groupId`, `sessionId` | `DriveChatChangesController.group` |
+| `POST` | `/api/documents/chats/:sessionId/groups/:groupId/apply` | path `groupId`, `sessionId` | `DriveChatChangesController.apply` |
+| `POST` | `/api/documents/chats/:sessionId/groups/:groupId/undo` | path `groupId`, `sessionId` | `DriveChatChangesController.undo` |
+| `GET` | `/api/documents/chats/:sessionId/questions` | path `sessionId` | `DriveChatChangesController.questions` |
+| `POST` | `/api/documents/chats/:sessionId/questions/:questionId` | body `AnswerDriveChatQuestionDto`; path `questionId`, `sessionId` | `DriveChatChangesController.answer` |
 | `GET` | `/api/documents/entries` | query `cursor`, `limit`, `parentId` | `DriveController.list` |
 | `DELETE` | `/api/documents/entries/:id` | path `id` | `DriveController.moveToTrash` |
 | `GET` | `/api/documents/entries/:id` | path `id` | `DriveController.get` |
@@ -186,6 +209,8 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `GET` | `/api/documents/search` | query `cursor`, `limit`, `q` | `DriveController.search` |
 | `GET` | `/api/documents/syncs` | — | `DriveController.listSyncs` |
 | `GET` | `/api/documents/syncs/:id` | path `id` | `DriveController.getSync` |
+| `POST` | `/api/documents/syncs/:id/fix` | body `Object`; path `id` | `DriveChatController.fixSync` |
+| `POST` | `/api/documents/syncs/:id/handled` | path `id` | `DriveController.markSyncHandled` |
 | `DELETE` | `/api/documents/trash` | — | `DriveController.emptyTrash` |
 | `GET` | `/api/documents/trash` | query `cursor`, `limit` | `DriveController.trash` |
 | `DELETE` | `/api/documents/trash/groups/:id` | path `id` | `DriveController.deleteGroup` |
@@ -201,7 +226,16 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `DELETE` | `/api/documents/versions/:id` | path `id` | `DriveController.deleteVersion` |
 | `GET` | `/api/documents/versions/:id/content` | path `id` | `DriveController.downloadVersion` |
 | `POST` | `/api/documents/versions/:id/restore` | body `RestoreDriveVersionDto`; path `id` | `DriveController.restoreVersion` |
+| `GET` | `/api/drive/activity` | query `before`, `tz` | `DriveController.activityPage` |
 | `GET` | `/api/drive/changes` | query `since` | `DriveController.changes` |
+| `GET` | `/api/drive/chats` | query `offset`, `q`, `status` | `DriveChatController.list` |
+| `POST` | `/api/drive/chats` | body `Object` | `DriveChatController.create` |
+| `GET` | `/api/drive/chats/:sessionId/groups` | path `sessionId` | `DriveChatChangesController.groups` |
+| `GET` | `/api/drive/chats/:sessionId/groups/:groupId` | path `groupId`, `sessionId` | `DriveChatChangesController.group` |
+| `POST` | `/api/drive/chats/:sessionId/groups/:groupId/apply` | path `groupId`, `sessionId` | `DriveChatChangesController.apply` |
+| `POST` | `/api/drive/chats/:sessionId/groups/:groupId/undo` | path `groupId`, `sessionId` | `DriveChatChangesController.undo` |
+| `GET` | `/api/drive/chats/:sessionId/questions` | path `sessionId` | `DriveChatChangesController.questions` |
+| `POST` | `/api/drive/chats/:sessionId/questions/:questionId` | body `AnswerDriveChatQuestionDto`; path `questionId`, `sessionId` | `DriveChatChangesController.answer` |
 | `GET` | `/api/drive/entries` | query `cursor`, `limit`, `parentId` | `DriveController.list` |
 | `DELETE` | `/api/drive/entries/:id` | path `id` | `DriveController.moveToTrash` |
 | `GET` | `/api/drive/entries/:id` | path `id` | `DriveController.get` |
@@ -215,6 +249,8 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `GET` | `/api/drive/search` | query `cursor`, `limit`, `q` | `DriveController.search` |
 | `GET` | `/api/drive/syncs` | — | `DriveController.listSyncs` |
 | `GET` | `/api/drive/syncs/:id` | path `id` | `DriveController.getSync` |
+| `POST` | `/api/drive/syncs/:id/fix` | body `Object`; path `id` | `DriveChatController.fixSync` |
+| `POST` | `/api/drive/syncs/:id/handled` | path `id` | `DriveController.markSyncHandled` |
 | `DELETE` | `/api/drive/trash` | — | `DriveController.emptyTrash` |
 | `GET` | `/api/drive/trash` | query `cursor`, `limit` | `DriveController.trash` |
 | `DELETE` | `/api/drive/trash/groups/:id` | path `id` | `DriveController.deleteGroup` |
@@ -419,7 +455,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `GET` | `/api/runners/:id/claude-history` | path `id`; query `workDir` | `RunnersController.claudeHistory` |
 | `POST` | `/api/runners/:id/claude-history` | body `Object`; path `id` | `RunnersController.askClaudeHistory` |
 | `DELETE` | `/api/runners/:id/codex-accounts/:account` | path `account`, `id` | `RunnersController.removeCodexAccount` |
-| `GET` | `/api/runners/:id/codex-rate-limit-reset` | path `id` | `CodexRateLimitResetController.list` |
+| `GET` | `/api/runners/:id/codex-rate-limit-reset` | path `id`; query `accountFingerprint` | `CodexRateLimitResetController.list` |
 | `POST` | `/api/runners/:id/codex-rate-limit-reset` | body `Object`; path `id` | `CodexRateLimitResetController.create` |
 | `GET` | `/api/runners/:id/codex-rate-limit-reset/:operationId` | path `id`, `operationId` | `CodexRateLimitResetController.get` |
 | `GET` | `/api/runners/:id/dir-probe` | path `id`; query `path` | `RunnersController.dirProbe` |
@@ -550,6 +586,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/sessions/import` | body `Object` | `SessionsController.importSession` |
 | `POST` | `/api/sessions/import-batch` | body `Object` | `SessionsController.importBatch` |
 | `GET` | `/api/sessions/imported` | query `workspaceId` | `SessionsController.importedCount` |
+| `GET` | `/api/sessions/listing` | query `after`, `folderId`, `limit`, `view`, `workspaceId` | `SessionsController.listing` |
 | `GET` | `/api/sessions/project-placement` | query `projectIds`, `view` | `SessionsController.projectPlacement` |
 | `POST` | `/api/sessions/remove-imported` | body `Object` | `SessionsController.removeImported` |
 | `GET` | `/api/sessions/search` | query `folderId`, `limit`, `q` | `SessionsController.search` |
@@ -581,6 +618,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/tasks/:id/execute` | body `RunTaskDto`; path `id` | `TasksController.execute` |
 | `GET` | `/api/tasks/:id/progress` | path `id` | `TaskProgressController.get` |
 | `POST` | `/api/tasks/:id/progress` | body `ReportTaskProgressDto`; path `id` | `TaskProgressController.report` |
+| `POST` | `/api/tasks/:id/rerun-check` | path `id` | `TaskRerunCheckController.rerun` |
 | `GET` | `/api/tasks/:id/row` | path `id` | `TasksController.listRow` |
 | `DELETE` | `/api/tasks/:id/share` | path `id` | `ShareLinksController.turnOffTaskLink` |
 | `GET` | `/api/tasks/:id/share` | path `id` | `ShareLinksController.taskLink` |
@@ -886,7 +924,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/runner/sessions/:id/archive` | path `id` | `RunnerSessionsController.archiveSessionCompatibility` |
 | `POST` | `/api/runner/sessions/:id/artifacts/result` | body `Object`; path `id` | `RunnerApiController.artifactResult` |
 | `POST` | `/api/runner/sessions/:id/attachments` | path `id` | `RunnerApiController.uploadAttachment` |
-| `GET` | `/api/runner/sessions/:id/attachments/:attId` | path `attId`, `id` | `RunnerApiController.attachment` |
+| `GET` | `/api/runner/sessions/:id/attachments/:attId` | path `attId`, `id`; query `subagentRunId` | `RunnerApiController.attachment` |
 | `POST` | `/api/runner/sessions/:id/background-wake` | body `BackgroundWakeDto`; path `id` | `RunnerApiController.backgroundWake` |
 | `POST` | `/api/runner/sessions/:id/commit-result` | body `Object`; path `id` | `RunnerApiController.commitResult` |
 | `POST` | `/api/runner/sessions/:id/complete-session` | path `id` | `RunnerSessionsController.completeSession` |
@@ -897,7 +935,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/runner/sessions/:id/events` | body `Object`; path `id` | `RunnerApiController.events` |
 | `POST` | `/api/runner/sessions/:id/file-bundles` | body `CreateFileBundleDto`; path `id`; query `subagentRunId` | `RunnerFilesController.createBundle` |
 | `POST` | `/api/runner/sessions/:id/files` | body `UploadFileDto`; path `id`; query `subagentRunId` | `RunnerApiController.uploadFile` |
-| `GET` | `/api/runner/sessions/:id/files/:fileId` | path `fileId`, `id` | `RunnerFilesController.describe` |
+| `GET` | `/api/runner/sessions/:id/files/:fileId` | path `fileId`, `id`; query `subagentRunId` | `RunnerFilesController.describe` |
 | `DELETE` | `/api/runner/sessions/:id/files/:fileId/pin` | path `fileId`, `id`; query `subagentRunId` | `RunnerFilesController.unpin` |
 | `PUT` | `/api/runner/sessions/:id/files/:fileId/pin` | path `fileId`, `id`; query `subagentRunId` | `RunnerFilesController.pin` |
 | `POST` | `/api/runner/sessions/:id/finalize` | body `Object`; path `id` | `RunnerApiController.finalize` |
@@ -930,7 +968,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/runner/sessions/:id/turns/:turnId/suggestion` | path `id`, `turnId` | `RunnerApiController.turnSuggestion` |
 | `POST` | `/api/runner/sessions/:id/workflows` | body `WorkflowRunCreateDto`; path `id` | `RunnerSubagentsController.openWorkflowRun` |
 | `PATCH` | `/api/runner/sessions/:id/workflows/:workflowRunId` | body `WorkflowRunUpdateDto`; path `id`, `workflowRunId` | `RunnerSubagentsController.updateWorkflowRun` |
-| `GET` | `/api/runner/sessions/claim` | query `drainScope` | `RunnerApiController.claim` |
+| `GET` | `/api/runner/sessions/claim` | query `drainScope`, `fullScope` | `RunnerApiController.claim` |
 | `POST` | `/api/runner/sessions/import` | body `Object` | `RunnerSessionsController.importSession` |
 | `GET` | `/api/runner/sessions/reclaim` | — | `RunnerApiController.reclaim` |
 | `GET` | `/api/runner/sessions/search` | query `limit`, `q` | `RunnerSessionsController.searchSessions` |

@@ -1590,13 +1590,15 @@ function AccountRow({
           {/* Where the account lives and which one it is — never who: the account's email and id
               stay on the machine, and the fingerprint is a prefix of a non-reversible one. A Kimi
               account says its site first, which is each account's own (kimi.com or kimi.ai). */}
-          <div className="re-meta" title={accountDir(account)}>
-            {engine === 'kimi' && account.kimiRegion && `${KIMI_SITE[account.kimiRegion].domain} · `}
-            {/* A Cursor CLI account says its plan first, as Cursor names it. */}
-            {engine === 'cursor' && snapshot?.planName && `${snapshot.planName} plan · `}
-            {tildePath(accountDir(account))}
-            {account.fingerprintPrefix && ` · account ${account.fingerprintPrefix}…`}
-          </div>
+          <Tooltip content={accountDir(account)} truncatedOnly mono>
+            <div className="re-meta">
+              {engine === 'kimi' && account.kimiRegion && `${KIMI_SITE[account.kimiRegion].domain} · `}
+              {/* A Cursor CLI account says its plan first, as Cursor names it. */}
+              {engine === 'cursor' && snapshot?.planName && `${snapshot.planName} plan · `}
+              {tildePath(accountDir(account))}
+              {account.fingerprintPrefix && ` · account ${account.fingerprintPrefix}…`}
+            </div>
+          </Tooltip>
           <AccountHealthLine runnerId={runner.id} engine={engine} account={account.id} />
         </div>
       </div>
@@ -1793,9 +1795,11 @@ function RemovedDefault({ runner, engine, removed }: { runner: Runner; engine: L
     <div className="re-row re-acct re-acct-end re-removed">
       <div className="re-id">
         <span className="re-rail" aria-hidden="true" />
-        <div id={line} className="re-removed-line" title={removed.home}>
-          {runnerDefaultRemovedLine(name, tildePath(removed.home))}
-        </div>
+        <Tooltip content={removed.home} delay={TEXT_TOOLTIP_DELAY_MS} mono>
+          <div id={line} className="re-removed-line">
+            {runnerDefaultRemovedLine(name, tildePath(removed.home))}
+          </div>
+        </Tooltip>
       </div>
       <div className="re-act">
         <Button size="small" className="re-action re-use-again" loading={restore.isPending} aria-describedby={line} onClick={() => restore.mutate()}>
@@ -2001,6 +2005,8 @@ export function MachineEngines({
         const open = openAccounts.includes(accountsGroup(runner.id, engine));
         // A Default removed from Orbit ends its engine's group (RemovedDefault).
         const removed = accounts.length > 0 ? health?.removedDefault : undefined;
+        // Its line goes once the login is off the machine (auth `no`); an absent auth shows it.
+        const removedLine = removed?.auth === 'no' ? undefined : removed;
         // What a removal leaves: an account on its way out is as good as gone.
         const staying = accounts.filter((account) => !beingRemoved(runner, engine, account.id));
         return (
@@ -2029,14 +2035,14 @@ export function MachineEngines({
                 others={staying.filter((entry) => entry.id !== account.id).length}
                 next={account.id === next}
                 duplicateOf={repeats.get(account.id)}
-                lastOfGroup={index === accounts.length - 1 && !removed}
+                lastOfGroup={index === accounts.length - 1 && !removedLine}
                 envKey={runsOnEnvKey(health, account)}
                 regionBlocked={blockedForRegion}
                 signIn={signIn}
                 onSignIn={onSignIn}
               />
             ))}
-            {accountEngine !== null && open && removed && <RemovedDefault runner={runner} engine={accountEngine} removed={removed} />}
+            {accountEngine !== null && open && removedLine && <RemovedDefault runner={runner} engine={accountEngine} removed={removedLine} />}
           </Fragment>
         );
   };

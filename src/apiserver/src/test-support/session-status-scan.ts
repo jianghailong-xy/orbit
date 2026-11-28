@@ -266,6 +266,9 @@ export function decidesSlots(file: string): boolean {
 const STATUS_WORDS = new Set(['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED', 'SUCCEEDED', 'FAILED', 'CANCELLED']);
 const SESSION_NAME = /(^s|S)ession$/;
 const SESSION_LIST_NAME = /(^s|S)essions$/;
+/** Columns only the session table has: a fragment naming one by an alias reads that alias as a session. */
+const SESSION_ONLY_COLUMNS = 'turn_state|batch_max_concurrent|over_capacity_turn_id|cancel_requested_at|root_session_id';
+
 /** A status word only a session has, beside which a bare `<alias>.status` in an SQL fragment is the session's. */
 const SESSION_ONLY_WORD = /^\s*(=|<>|!=|NOT\s+IN\s*\(|IN\s*\()\s*[^)]*'(AWAITING_INPUT|INTERRUPTED|SUCCEEDED)'/i;
 
@@ -706,7 +709,10 @@ class Scan {
       const interpolatedSession = alias.startsWith('⟨') && /session/i.test(alias);
       const cast = /^\s*(::\s*text\b)?[^\n]{0,80}?::\s*"?run_status\b/.test(after) && !/\bAND\b|\bOR\b/.test(after.split('run_status')[0]);
       const fragment = ofSession.length === 0 && (alias === 's' || alias === 'session' || alias.startsWith('⟨'))
-        && SESSION_ONLY_WORD.test(after);
+        && (SESSION_ONLY_WORD.test(after)
+          // Or the same fragment names, by the same alias, a column no other table has: `s.status = 'PENDING'` beside
+          // `s.cancel_requested_at` (the Run now gate, which a word PENDING alone does not give away).
+          || (!alias.startsWith('⟨') && new RegExp(`(?<![\\w])"?${alias}"?\\."?(${SESSION_ONLY_COLUMNS})\\b`).test(sql)));
       if (aliases.has(alias) || interpolatedSession || cast || fragment) seen(at, 'raw SQL');
     }
     // A bare `status` of a statement whose only table is session.

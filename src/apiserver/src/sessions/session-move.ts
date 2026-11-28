@@ -34,15 +34,18 @@ export const MOVE_REFUSAL = {
   COORDINATOR: "A project's coordinator stays in its project's workspace.",
   TASK: "A task run stays in its task's workspace.",
   IMPORTING: 'The session is still being imported.',
-  ENDING: 'The session is ending. Try again in a moment.',
   STOP: 'Stop the session first.',
   BACKGROUND: 'Background tasks are still running.',
   MERGE: 'A merge is in progress. Try again when it finishes.',
   COMMIT: 'A commit is in progress. Try again when it finishes.',
   MERGE_REPAIR: 'Finish the merge repair first.',
   RETRY: 'An automatic retry is scheduled. Try again after it runs.',
-  /** The move itself only takes an ended session; the client ends an idle one first (End and Move). */
-  END: 'End the session first.',
+  /** The move itself only takes a released session, and `POST /sessions/:id/move` releases an idle one first; this
+   *  is a session that a new message woke up again in between. */
+  END: 'The session is working again. Try again when it’s idle.',
+  /** The move asked the session's runner to let it go, and the runner was still committing what the session left
+   *  uncommitted when the move stopped waiting. */
+  RELEASE_TIMED_OUT: 'The session’s work is still being saved, so it wasn’t moved. Try again in a moment.',
   /** Its engine was never recorded and its provider is gone (sessionEngine answered null), so nothing
    *  says which CLI's conversation would have to be carried over. */
   ENGINE_UNKNOWN: "This session's provider is gone, so Orbit can't tell which engine it runs on.",
@@ -50,8 +53,6 @@ export const MOVE_REFUSAL = {
 
 /** The session's own state, as §5.2 judges it. */
 export interface SessionMoveFacts extends TurnStateFacts {
-  /** The stored word, which turnStateOf reads only for a held row not yet backfilled (session-turn-state.ts). */
-  status: string;
   /** The release column (common/session-release.ts): set on an ended session. */
   finishedAt: Date | null;
   /** Why an end was asked for, and the last turn's outcome: with the status and the release column, what "released by a
@@ -87,13 +88,16 @@ export interface SessionMoveFacts extends TurnStateFacts {
 export type SessionMoveVerdict =
   /** It cannot move anywhere now, for `reason`. */
   | { reason: string; needsEnd: false }
-  /** It can move: at once when ended, after being ended when `needsEnd` (idle but still open). */
+  /** It can move: at once when released; when `needsEnd` (idle but still held, or already being let go) the move
+   *  releases it first and waits for that. The wire keeps the name `needsEnd` for clients that still end it themselves. */
   | { reason: null; needsEnd: boolean };
 
 /**
- * May this session leave its workspace? Only an ended session moves: ending is when its runner
+ * May this session leave its workspace? Only a released session moves: releasing is when its runner
  * commits what it left uncommitted, and a session moved before that would leave the work on the old
- * machine with nobody to commit it. An idle one is movable once ended — the client's End and Move.
+ * machine with nobody to commit it. An idle one is movable: the move releases it first (SessionsService
+ * releaseForMove), which the person moving it never sees. So is one whose end was already asked for: its
+ * release is under way, and the move waits for it.
  *
  * Except a session the region check holds (§11 of docs/claude-region-check-contract.md): queued, with
  * nothing running and nothing out on a delivery, and waiting on its machine rather than on anybody. It
@@ -125,10 +129,11 @@ export function sessionMoveVerdict(s: SessionMoveFacts): SessionMoveVerdict {
   }
   const ended = isReleased(s);
   const turn = turnStateOf(s);
+  // Its end was asked for: whatever it was doing stops, and the runner releases it.
+  const releasing = !ended && s.cancelRequestedAt != null;
   // Held for its runner's region: its queue is what moves with it.
-  const regionHeld = !!s.regionHeld && turn === 'QUEUED' && s.liveApprovals === 0;
-  if (!ended) {
-    if (s.cancelRequestedAt) return refuse(MOVE_REFUSAL.ENDING);
+  const regionHeld = !releasing && !!s.regionHeld && turn === 'QUEUED' && s.liveApprovals === 0;
+  if (!ended && !releasing) {
     // Generating (isSessionGenerating's rule, common/session-generating.ts, on the turn state): a dispatched turn, or
     // the engine's own turn on a parked session.
     const generating = turn === 'IN_FLIGHT' || (turn === null && s.engineTurnActive);
@@ -192,6 +197,12 @@ export function moveTargetRefusal(
   // Without it the runner would reuse the old checkout of another repository (§5.5).
   if (!target.runner.capabilities.includes(SESSION_MOVE_V1)) return `Update ${runner} to move sessions here`;
   return null;
+}
+
+/** Why a held session can't move now: the move releases it first, which its runner does (commits what it left), and
+ *  that runner is away. */
+export function moveNeedsRunnerOnline(runner: { name: string; displayName: string | null } | null): string {
+  return `${runner ? runnerLabel(runner) : 'Its runner'} has to be online to move this session.`;
 }
 
 /**

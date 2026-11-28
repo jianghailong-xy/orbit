@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import {
   ArrowRightOutlined,
   CaretDownOutlined,
@@ -17,6 +17,8 @@ import {
   CloseOutlined,
   DownOutlined,
   EllipsisOutlined,
+  FileOutlined,
+  FolderOutlined,
   LoadingOutlined,
   PlusOutlined,
   ReadOutlined,
@@ -72,7 +74,10 @@ import { encodeId, routeId } from '../lib/idCodec';
 import { useMachineName } from '../lib/managedRunner';
 import { currentPromptSuggestion, offeredPromptSuggestion } from '../lib/promptSuggestion';
 import { poolsAsProviders, providerPoolsQuery } from '../lib/providerPools';
-import { meQuery, providersQuery, runnersQuery, sessionQuery, wikiChatHistoryQuery, wikiChatsQuery, workspacesQuery, type Me } from '../lib/queries';
+import { driveChatHistoryQuery } from '../lib/driveChat';
+import { driveSelectionLabel } from '../lib/driveChanges';
+import { useDriveChatCards } from './drive/DriveChangeCards';
+import { meQuery, providersQuery, runnersQuery, sessionQuery, wikiChatHistoryQuery, workspacesQuery, type Me } from '../lib/queries';
 import { returnsToComposer } from '../lib/queuedTurnRestore';
 import { engineTitleFor } from '../lib/sessionProviderChoices';
 import { outlivingSessionWork } from '../lib/sessionActivity';
@@ -84,17 +89,13 @@ import { useToast } from '../lib/toast';
 import { turnPlacementOf } from '../lib/turnPlacement';
 import { useSessionStream } from '../lib/useSessionStream';
 import {
-  WIKI_CHAT_CHOOSE_WORKSPACE,
   WIKI_CHAT_CLOSE,
   WIKI_CHAT_ENDED,
   WIKI_CHAT_FOCUS_NEEDS_YOU,
-  WIKI_CHAT_EMPTY_HINT,
-  WIKI_CHAT_EMPTY_NOTE,
   WIKI_CHAT_ACTION_FAILED,
   WIKI_CHAT_COMPLETE,
   WIKI_CHAT_GROUP_COMPLETED,
   WIKI_CHAT_GROUP_OPEN,
-  WIKI_CHAT_HISTORY,
   WIKI_CHAT_HISTORY_TITLE,
   WIKI_CHAT_MOVE_TO_TRASH,
   WIKI_CHAT_NEW,
@@ -106,21 +107,16 @@ import {
   WIKI_CHAT_SHOW_MORE,
   WIKI_CHAT_TRASH_NOTE,
   WIKI_CHAT_NEW_PARAM,
-  WIKI_CHAT_NO_HISTORY,
-  WIKI_CHAT_NO_WORKTREE,
   WIKI_CHAT_OPEN_SESSION,
-  WIKI_CHAT_PLACEHOLDER,
-  WIKI_CHAT_PLACEHOLDER_DRAFT,
   WIKI_CHAT_RESIZE,
   WIKI_CHAT_RUNS_IN,
   WIKI_CHAT_TRASHED,
   WIKI_CHAT_WORKSPACE,
   WIKI_CHAT_WIDTH,
-  createWikiChat,
+  sendChatTurn,
   sendWikiChatTurn,
   wikiChatCapped,
   wikiChatCardOf,
-  wikiChatContext,
   wikiChatHistoryGroups,
   wikiChatHistoryLine,
   wikiChatOffline,
@@ -130,13 +126,14 @@ import {
   wikiChatRunsIn,
   wikiChatSendError,
   wikiChatShown,
+  wikiChatShownFiles,
   wikiChatWorkspaceName,
+  type ChatHostList,
   type WikiChatAttachAction,
   type WikiChatAttachments,
-  type WikiChatContext,
+  type WikiChatCreate,
   type WikiChatDraftView,
   type WikiChatLayout,
-  type WikiChatList,
   type WikiChatRow,
   type WikiChatWorkspace,
 } from '../lib/wikiChat';
@@ -162,6 +159,42 @@ import { wikiPlanDocPath, wikiPlanPath } from '../lib/wikiPlan';
 import { wikiSettingsPath } from '../lib/wikiReviewMode';
 
 /**
+ * What a page that docks the chat makes it (board drive-chat 01, owner Q1 A): its words, where its chats are read and
+ * made, what a message carries beside the words from the composer's chips, and where a new chat may run. The panel,
+ * the composer, the history and the button are the same on every page; the Wiki's origin adds its space, whose cards
+ * open beside the chat.
+ */
+export interface ChatOrigin {
+  copy: {
+    /** The title's hover and the history's name: "Chats in this space", "Drive chats". */
+    history: string;
+    noHistory: string;
+    emptyHint: string;
+    emptyNote: string;
+    placeholder: string;
+    /** While a card of the chat is open (the Wiki's drafts); else the placeholder. */
+    placeholderDraft?: string;
+    /** Nowhere a chat can run: no composer, this instead. */
+    noWorkspace: string;
+    chooseWorkspace: string;
+    /** Under a new chat's empty state while its box is empty: each fills the box and sends nothing. */
+    examples?: readonly string[];
+  };
+  /** The chats read, made fresh after a chat is made or a row's action. */
+  listKey: QueryKey;
+  create: (body: Omit<WikiChatCreate, 'wikiContext'>, attachments: WikiChatAttachments) => Promise<{ sessionId: string }>;
+  /** What a message carries beside its words from what the composer's chips show: `{ wikiContext }`, `{ driveContext }`. */
+  turnContext: (attachments: WikiChatAttachments) => Record<string, unknown> | undefined;
+  /** Where a new chat may run when the chats read does not list them (Drive: the owner's workspaces). */
+  choices?: WikiChatWorkspace[];
+  /** The Wiki's space: its chats' cards open its sections, entries and Review beside the chat, and the history is its
+   *  chats. Absent, the history is the Drive chats. */
+  space?: WikiSpaceRow;
+  /** Drive: the chat shows its change cards and overwrite questions, each with its turn. */
+  cards?: boolean;
+}
+
+/**
  * The panel the round button opens (design §4.1, board 42 ①): docked on the right of the page, or over it, or a
  * sheet, by the window's width (`wikiChatLayout`). Its head is the chat's title — pressed, the space's chats —
  * then `+` a new chat, `↗` the full session page, `✕` hide it (the chat goes on). A new chat's one line under the
@@ -173,7 +206,7 @@ import { wikiSettingsPath } from '../lib/wikiReviewMode';
  * page's.
  */
 export function WikiChatPanel({
-  space,
+  origin,
   chat,
   list,
   layout,
@@ -186,12 +219,14 @@ export function WikiChatPanel({
   onChat,
   onClose,
   onResize,
+  headerActions = null,
+  view = null,
 }: {
-  space: WikiSpaceRow;
+  origin: ChatOrigin;
   /** The chat shown: a session's public id, or `WIKI_CHAT_NEW_PARAM`. */
   chat: string;
-  /** The space's chats read: undefined while it is read, null from a server that has none. */
-  list: WikiChatList | null | undefined;
+  /** The chats read: undefined while it is read, null from a server that has none. */
+  list: ChatHostList | null | undefined;
   layout: WikiChatLayout;
   width: number | null;
   /** Where the panel's top is, in the window: under the Wiki's head until that scrolls away. */
@@ -205,6 +240,10 @@ export function WikiChatPanel({
   onChat: (chat: string) => void;
   onClose: () => void;
   onResize: (width: number, done: boolean) => void;
+  /** Extra buttons the host puts in the header, before ✕ (Drive's activity icon); the Wiki gives none. */
+  headerActions?: ReactNode;
+  /** A view the host shows in place of the chat, under its own title (Drive's activity); the chat stays mounted behind it. */
+  view?: { title: string; body: ReactNode } | null;
 }) {
   const navigate = useNavigate();
   const fresh = chat === WIKI_CHAT_NEW_PARAM;
@@ -216,6 +255,7 @@ export function WikiChatPanel({
   const [history, setHistory] = useState(false);
   // While the history shows, the title names it (board 45 ④ ①).
   const title = history ? WIKI_CHAT_HISTORY_TITLE : chatTitle;
+  const viewed = view !== null;
   const [sheetFull, setSheetFull] = useState(false);
   // A chat's first message, kept from the create until its own conversation draws it.
   const [opening, setOpening] = useState<{ sessionId: string; message: ChatOpening } | null>(null);
@@ -242,17 +282,21 @@ export function WikiChatPanel({
         </button>
       )}
       <div className="wk-chat-head">
-        <Tooltip content={WIKI_CHAT_HISTORY} side="bottom" align="start">
-          <button
-            type="button"
-            className="wk-chat-title"
-            aria-expanded={history}
-            onClick={() => setHistory((open) => !open)}
-          >
-            <span className="t">{title}</span>
-            <CaretDownOutlined className="caret" />
-          </button>
-        </Tooltip>
+        {viewed ? (
+          <span className="wk-chat-title is-static"><span className="t">{view.title}</span></span>
+        ) : (
+          <Tooltip content={origin.copy.history} side="bottom" align="start">
+            <button
+              type="button"
+              className="wk-chat-title"
+              aria-expanded={history}
+              onClick={() => setHistory((open) => !open)}
+            >
+              <span className="t">{title}</span>
+              <CaretDownOutlined className="caret" />
+            </button>
+          </Tooltip>
+        )}
         <Tooltip content={WIKI_CHAT_NEW} side="bottom">
           <button type="button" className="wk-chat-ib" aria-label={WIKI_CHAT_NEW} onClick={() => onChat(WIKI_CHAT_NEW_PARAM)}>
             <PlusOutlined />
@@ -263,21 +307,23 @@ export function WikiChatPanel({
             type="button"
             className="wk-chat-ib"
             aria-label={WIKI_CHAT_OPEN_SESSION}
-            disabled={fresh || history}
+            disabled={fresh || history || viewed}
             onClick={() => navigate(`/sessions/${encodeId(sessionId!)}`)}
           >
             <ArrowRightOutlined />
           </button>
         </Tooltip>
+        {headerActions}
         <Tooltip content={WIKI_CHAT_CLOSE} side="bottom" align="end">
           <button type="button" className="wk-chat-ib" aria-label={WIKI_CHAT_CLOSE} onClick={onClose}>
             <CloseOutlined />
           </button>
         </Tooltip>
       </div>
-      {history && (
+      {viewed && <div className="wk-chat-view">{view.body}</div>}
+      {history && !viewed && (
         <WikiChatHistory
-          space={space}
+          origin={origin}
           current={chat}
           onPick={(picked) => {
             setHistory(false);
@@ -287,10 +333,10 @@ export function WikiChatPanel({
         />
       )}
       {/* Kept while the history shows, so what was typed stays (board 45 ④ ①). */}
-      <div className="wk-chat-main" hidden={history}>
+      <div className="wk-chat-main" hidden={history || viewed}>
       {fresh ? (
         <WikiChatNew
-          space={space}
+          origin={origin}
           list={list}
           attachments={attachments}
           dispatch={dispatch}
@@ -304,7 +350,7 @@ export function WikiChatPanel({
           key={sessionId!}
           sessionId={sessionId!}
           session={session.data ?? null}
-          space={space}
+          origin={origin}
           list={list}
           cards={cards}
           focus={focus}
@@ -354,12 +400,12 @@ function WikiChatResizer({ width, onResize }: { width: number; onResize: (width:
  * session list's. Pages of rules.chatsListed come one at a time (contract `chat.list.page`).
  */
 function WikiChatHistory({
-  space,
+  origin,
   current,
   onPick,
   onCurrentGone,
 }: {
-  space: WikiSpaceRow;
+  origin: ChatOrigin;
   current: string;
   onPick: (chat: string) => void;
   /** The chat shown was moved to Trash: the panel turns to a new chat. */
@@ -368,7 +414,10 @@ function WikiChatHistory({
   const [q, setQ] = useState('');
   const [completedOpen, setCompletedOpen] = useState(false);
   const [renaming, setRenaming] = useState<{ id: string; draft: string } | null>(null);
-  const pages = useInfiniteQuery(wikiChatHistoryQuery(space.id, q.trim()));
+  // The space's chats on the Wiki, the Drive chats on Drive: each read only where it is the history.
+  const wikiPages = useInfiniteQuery({ ...wikiChatHistoryQuery(origin.space?.id ?? '', q.trim()), enabled: !!origin.space });
+  const drivePages = useInfiniteQuery({ ...driveChatHistoryQuery(q.trim()), enabled: !origin.space });
+  const pages = origin.space ? wikiPages : drivePages;
   const qc = useQueryClient();
   const toast = useToast();
   const navigate = useNavigate();
@@ -391,7 +440,7 @@ function WikiChatHistory({
   const showCompleted = completedOpen || q.trim() !== '';
 
   const refresh = (id: string) => {
-    void qc.invalidateQueries({ queryKey: wikiChatsQuery(space.id).queryKey });
+    void qc.invalidateQueries({ queryKey: origin.listKey });
     void qc.invalidateQueries({ queryKey: ['session', id] });
     void qc.invalidateQueries({ queryKey: ['sessions'] });
   };
@@ -486,14 +535,14 @@ function WikiChatHistory({
   };
 
   return (
-    <div className="wk-chat-history" aria-label={WIKI_CHAT_HISTORY}>
+    <div className="wk-chat-history" aria-label={origin.copy.history}>
       <label className="wk-chat-history-search">
         <SearchOutlined />
         <input type="search" placeholder={WIKI_CHAT_SEARCH} aria-label={WIKI_CHAT_SEARCH} value={q} onChange={(event) => setQ(event.target.value)} />
       </label>
       <div className="wk-chat-history-list">
         {pages.isPending ? null : rows.length === 0 ? (
-          <div className="wk-chat-history-none">{q.trim() ? WIKI_CHAT_NO_MATCH : WIKI_CHAT_NO_HISTORY}</div>
+          <div className="wk-chat-history-none">{q.trim() ? WIKI_CHAT_NO_MATCH : origin.copy.noHistory}</div>
         ) : (
           <>
             {groups.open.length > 0 && (
@@ -735,21 +784,23 @@ function useChatDraft(sessionId: string | null, canAttach: boolean) {
   };
 }
 
-/** The page and the selection: the first chips of the composer's attachment row (board 43 ④), each with its cross. */
+/** The page (Drive: the folder) and the selection: the first chips of the composer's attachment row (board 43 ④), each with its cross. */
 function wikiChatChips(attachments: WikiChatAttachments, dispatch: Dispatch<WikiChatAttachAction>): ReactNode {
   const { page, quote } = wikiChatShown(attachments);
-  if (!page && !quote) return null;
+  const files = wikiChatShownFiles(attachments);
+  if (!page && !quote && !files) return null;
   return (
     <>
       {page && (
-        <span className="composer-pill composer-file wk-chat-chip" data-kind="page">
-          <ReadOutlined className="composer-file-icon ic" />
+        <span className="composer-pill composer-file wk-chat-chip" data-kind={page.kind === 'folder' ? 'folder' : 'page'}>
+          {page.kind === 'folder' ? <FolderOutlined className="composer-file-icon ic" /> : <ReadOutlined className="composer-file-icon ic" />}
           <span className="composer-file-name l">{page.label}</span>
           <button type="button" className="composer-file-remove x" aria-label={wikiChatRemove(page.label)} onClick={() => dispatch({ type: 'crossPage' })}>
             <CloseOutlined />
           </button>
         </span>
       )}
+      {files && <FilesChip names={files.names} onCross={() => dispatch({ type: 'crossFiles' })} />}
       {quote && (
         <Tooltip content={quote.selected > quote.sentenceIds.length ? wikiChatCapped(quote.selected) : undefined} delay={TEXT_TOOLTIP_DELAY_MS}>
           <span
@@ -765,6 +816,30 @@ function wikiChatChips(attachments: WikiChatAttachments, dispatch: Dispatch<Wiki
         </Tooltip>
       )}
     </>
+  );
+}
+
+/** The rows selected in Drive's list as one chip, `12 files`, which opens to their names (board drive-chat 01 ③). */
+function FilesChip({ names, onCross }: { names: readonly string[]; onCross: () => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const label = driveSelectionLabel(names);
+  return (
+    <span className="composer-pill composer-file wk-chat-chip" data-kind="files">
+      <FileOutlined className="composer-file-icon ic" />
+      <button type="button" className="composer-file-name l wk-chat-files-toggle" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
+        {label}
+      </button>
+      {expanded && (
+        <ul className="wk-chat-files-names" aria-label={label}>
+          {names.map((name, index) => (
+            <li key={`${name}-${index}`}>{name}</li>
+          ))}
+        </ul>
+      )}
+      <button type="button" className="composer-file-remove x" aria-label={wikiChatRemove(label)} onClick={onCross}>
+        <CloseOutlined />
+      </button>
+    </span>
   );
 }
 
@@ -824,14 +899,14 @@ function statusCard(rows: Parameters<typeof localStatusRows>[0]): LocalStatusCar
 // ── A chat not started yet: where it will run, and its first message ───────────────────────────────
 
 function WikiChatNew({
-  space,
+  origin,
   list,
   attachments,
   dispatch,
   onCreated,
 }: {
-  space: WikiSpaceRow;
-  list: WikiChatList | null | undefined;
+  origin: ChatOrigin;
+  list: ChatHostList | null | undefined;
   attachments: WikiChatAttachments;
   dispatch: Dispatch<WikiChatAttachAction>;
   onCreated: (sessionId: string, message: ChatOpening) => void;
@@ -839,7 +914,7 @@ function WikiChatNew({
   const qc = useQueryClient();
   const message = useToast();
   const [picked, setPicked] = useState<string | null>(null);
-  const runsIn = list ? wikiChatRunsIn(list, picked) : null;
+  const runsIn = list ? wikiChatRunsIn(origin.choices ? { workspace: list.workspace, choices: origin.choices } : list, picked) : null;
   const workspace = runsIn?.kind === 'chosen' ? runsIn.workspace : null;
   // The model, mode, effort and speed a chat on `workspace` starts with unless the owner picks others, read as a new
   // session of that workspace reads them: the workspace's provider and model, the runner's catalogue, the account's
@@ -898,22 +973,24 @@ function WikiChatNew({
   );
 
   const create = useMutation({
-    mutationFn: (vars: { content: string; images: ComposerImage[]; context: WikiChatContext | undefined }) =>
-      createWikiChat(space.id, {
-        workspaceId: workspace!.id,
-        content: vars.content,
-        wikiContext: vars.context,
-        ...(vars.images.length > 0 ? { attachmentIds: vars.images.map((image) => image.id!) } : {}),
-        // Named only when the owner picked them; otherwise the chat starts as a session of its workspace does.
-        ...(picks.model !== undefined ? { model: picks.model } : {}),
-        ...(picks.permissionMode !== undefined ? { permissionMode: picks.permissionMode } : {}),
-        ...(picks.effort !== undefined ? { effort: toolbar.shownEffort } : {}),
-        ...(picks.fastMode !== undefined ? { fastMode: picks.fastMode } : {}),
-      }),
+    mutationFn: (vars: { content: string; images: ComposerImage[]; attachments: WikiChatAttachments }) =>
+      origin.create(
+        {
+          workspaceId: workspace!.id,
+          content: vars.content,
+          ...(vars.images.length > 0 ? { attachmentIds: vars.images.map((image) => image.id!) } : {}),
+          // Named only when the owner picked them; otherwise the chat starts as a session of its workspace does.
+          ...(picks.model !== undefined ? { model: picks.model } : {}),
+          ...(picks.permissionMode !== undefined ? { permissionMode: picks.permissionMode } : {}),
+          ...(picks.effort !== undefined ? { effort: toolbar.shownEffort } : {}),
+          ...(picks.fastMode !== undefined ? { fastMode: picks.fastMode } : {}),
+        },
+        vars.attachments,
+      ),
     onSuccess: (created, vars) => {
       pushHistory(routeId(created.sessionId) ?? created.sessionId, vars.content);
       dispatch({ type: 'sent' });
-      void qc.invalidateQueries({ queryKey: wikiChatsQuery(space.id).queryKey });
+      void qc.invalidateQueries({ queryKey: origin.listKey });
       // The create has no turn of this tab's to keep previews under: the transcript draws the files from the server.
       vars.images.forEach((image) => image.previewUrl && URL.revokeObjectURL(image.previewUrl));
       draft.clear();
@@ -961,7 +1038,7 @@ function WikiChatNew({
     if (!words || draft.uploading) return;
     draft.setHistIdx(-1);
     setFailed(null);
-    create.mutate({ content: materializeReferences(words, draft.composerRefs), images: draft.readyImages, context: wikiChatContext(attachments) });
+    create.mutate({ content: materializeReferences(words, draft.composerRefs), images: draft.readyImages, attachments });
   };
 
   return (
@@ -984,15 +1061,34 @@ function WikiChatNew({
       {runsIn?.kind === 'chosen' && !runsIn.workspace.online && runsIn.workspace.runner && (
         <div className="wk-chat-note">{wikiChatOffline(runsIn.workspace.runner)}</div>
       )}
-      {runsIn?.kind === 'choose' && <WikiChatChoose choices={runsIn.choices} onPick={setPicked} />}
+      {runsIn?.kind === 'choose' && <WikiChatChoose title={origin.copy.chooseWorkspace} choices={runsIn.choices} onPick={setPicked} />}
       <div className="wk-chat-body">
         {runsIn?.kind === 'none' || list === null ? (
-          <div className="wk-chat-empty">{WIKI_CHAT_NO_WORKTREE}</div>
+          <div className="wk-chat-empty">{origin.copy.noWorkspace}</div>
         ) : (
           <div className="wk-chat-empty">
-            {WIKI_CHAT_EMPTY_HINT}
+            {origin.copy.emptyHint}
             <br />
-            {WIKI_CHAT_EMPTY_NOTE}
+            {origin.copy.emptyNote}
+            {/* Examples while the box is empty: a press fills it and sends nothing (board drive-chat 01 ②). */}
+            {origin.copy.examples && draft.text === '' && runsIn?.kind === 'chosen' && (
+              <ul className="wk-chat-examples">
+                {origin.copy.examples.map((example) => (
+                  <li key={example}>
+                    <button
+                      type="button"
+                      className="wk-chat-example"
+                      onClick={() => {
+                        draft.setText(example);
+                        setTimeout(() => draft.taRef.current?.focus(), 0);
+                      }}
+                    >
+                      “{example}”
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
         {statusCards.map((card) => (
@@ -1011,7 +1107,7 @@ function WikiChatNew({
             selectedId={null}
             canAttach={!!workspace && online}
             attachmentsBefore={wikiChatChips(attachments, dispatch)}
-            composerPlaceholder={WIKI_CHAT_PLACEHOLDER}
+            composerPlaceholder={origin.copy.placeholder}
             offeredSuggestion={null}
             acceptSuggestion={() => undefined}
             slashItems={slashItems}
@@ -1047,11 +1143,11 @@ function useModelMenuState() {
   return { modelMenuOpen, setModelMenuOpen, setProviderMenuOpen };
 }
 
-/** The space's first chat, or one whose remembered workspace no longer qualifies: choose where it runs (§5.1). */
-function WikiChatChoose({ choices, onPick }: { choices: readonly WikiChatWorkspace[]; onPick: (id: string) => void }) {
+/** The first chat, or one whose remembered workspace no longer qualifies: choose where it runs (§5.1). */
+function WikiChatChoose({ title, choices, onPick }: { title: string; choices: readonly WikiChatWorkspace[]; onPick: (id: string) => void }) {
   return (
     <div className="wk-chat-choose">
-      <div className="h">{WIKI_CHAT_CHOOSE_WORKSPACE}</div>
+      <div className="h">{title}</div>
       {choices.map((choice) => (
         <button type="button" key={choice.id} className="wk-chat-choice" onClick={() => onPick(choice.id)}>
           <span className="t">{choice.name}</span>
@@ -1077,17 +1173,19 @@ function WikiChatPick({
   onChange: (value: string) => void;
 }) {
   return (
-    <span className="wk-chat-pick" title={label}>
-      <span className="v">{shown}</span>
-      <DownOutlined className="ic" />
-      <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </span>
+    <Tooltip content={label}>
+      <span className="wk-chat-pick">
+        <span className="v">{shown}</span>
+        <DownOutlined className="ic" />
+        <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}>
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </span>
+    </Tooltip>
   );
 }
 
@@ -1121,13 +1219,14 @@ interface ChatSendVars {
   images: ComposerImage[];
   intent: SessionTurnIntent;
   shell?: boolean;
-  context?: WikiChatContext;
+  /** What rides beside the words: the origin's `turnContext` of the chips shown when it went. */
+  context?: Record<string, unknown>;
 }
 
 function WikiChatSession({
   sessionId,
   session,
-  space,
+  origin,
   list,
   cards,
   focus,
@@ -1138,8 +1237,8 @@ function WikiChatSession({
 }: {
   sessionId: string;
   session: (ChatSession & Parameters<typeof isSessionLive>[0]) | null;
-  space: WikiSpaceRow;
-  list: WikiChatList | null | undefined;
+  origin: ChatOrigin;
+  list: ChatHostList | null | undefined;
   cards: readonly WikiChatDraftView[] | null;
   focus: string | null;
   attachments: WikiChatAttachments;
@@ -1286,7 +1385,7 @@ function WikiChatSession({
   const queueOffered = defaultSendIntent === 'CURRENT_WORK' && !showStop && runtimeTakesMidTurnSteer(engine);
 
   /** Where a message landed: the next turn now (a bubble), or the tray — waiting for the next turn, or into this one. */
-  const placed = (res: Awaited<ReturnType<typeof sendWikiChatTurn>>, vars: Pick<ChatSendVars, 'content' | 'images' | 'shell'>) => {
+  const placed = (res: Awaited<ReturnType<typeof sendChatTurn>>, vars: Pick<ChatSendVars, 'content' | 'images' | 'shell'>) => {
     const placement = turnPlacementOf(res);
     if (placement === 'accepted') {
       setIdle(false);
@@ -1328,7 +1427,7 @@ function WikiChatSession({
 
   const send = useMutation({
     mutationFn: (vars: ChatSendVars) =>
-      sendWikiChatTurn(sessionId, vars.content, vars.shell ? undefined : vars.context, {
+      sendChatTurn(sessionId, vars.content, vars.shell ? undefined : vars.context, {
         intent: vars.intent,
         attachmentIds: vars.images.flatMap((image) => (image.id ? [image.id] : [])),
         kind: vars.shell ? 'shell' : undefined,
@@ -1424,7 +1523,7 @@ function WikiChatSession({
       else draft.setText('');
       return;
     }
-    send.mutate({ content: materializeReferences(words, draft.composerRefs), images: draft.readyImages, intent, context: wikiChatContext(attachments) });
+    send.mutate({ content: materializeReferences(words, draft.composerRefs), images: draft.readyImages, intent, context: origin.turnContext(attachments) });
   };
 
   // The engine's guess at the next message, offered in an idle, empty composer as on the session page.
@@ -1451,6 +1550,7 @@ function WikiChatSession({
   };
 
   const { decide, untranslated } = useApprovalDecisions(sessionId, setApprovals);
+  const driveCards = useDriveChatCards(origin.cards ? sessionId : null, stream.transcriptEvents);
 
   // The card the chat was opened at: one named, or the first that needs the owner (design §3).
   const focusCard = useMemo(() => {
@@ -1459,21 +1559,24 @@ function WikiChatSession({
   }, [focus, cards]);
 
   // What the chat's cards open, they open beside it: a section on its document, an entry in its drawer, Review. A
-  // card's own sentence (Redo) waits for the next turn, whatever the composer would do with one typed now.
-  const wikiCards = useMemo<WikiDraftCardHost>(
-    () => ({
-      spaceId: space.id,
-      openSection: (doc, key) => navigate(wikiDocSectionPath(space.slug, doc, key)),
-      openEntry: (entryId) => navigate(wikiEntryPath(space.slug, entryId)),
-      openReview: (changesetId, seq) => navigate(wikiChatReviewPath(space.slug, changesetId, seq)),
-      openSettings: () => navigate(wikiSettingsPath(space.slug)),
-      openPlan: (docSlug) => navigate(docSlug ? wikiPlanDocPath(space.slug, docSlug) : wikiPlanPath(space.slug)),
-      send: async (text) => placed(await sendWikiChatTurn(sessionId, text, undefined), { content: text, images: [] }),
-      focus: focusCard,
-    }),
+  // card's own sentence (Redo) waits for the next turn, whatever the composer would do with one typed now. Only the
+  // Wiki's chats have cards.
+  const space = origin.space ?? null;
+  const wikiCards = useMemo<WikiDraftCardHost | null>(
+    () =>
+      space && {
+        spaceId: space.id,
+        openSection: (doc, key) => navigate(wikiDocSectionPath(space.slug, doc, key)),
+        openEntry: (entryId) => navigate(wikiEntryPath(space.slug, entryId)),
+        openReview: (changesetId, seq) => navigate(wikiChatReviewPath(space.slug, changesetId, seq)),
+        openSettings: () => navigate(wikiSettingsPath(space.slug)),
+        openPlan: (docSlug) => navigate(docSlug ? wikiPlanDocPath(space.slug, docSlug) : wikiPlanPath(space.slug)),
+        send: async (text) => placed(await sendWikiChatTurn(sessionId, text, undefined), { content: text, images: [] }),
+        focus: focusCard,
+      },
     // `placed` reads this chat's stream setters, which keep their identity for the chat's life.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [navigate, space.id, space.slug, focusCard, sessionId],
+    [navigate, space, focusCard, sessionId],
   );
 
   // The newest card nearest the composer, as the session page keeps it — unless the chat was opened at a card, which is
@@ -1508,7 +1611,7 @@ function WikiChatSession({
           stream={stream}
           live={live}
           turnImages={turnImages}
-          inserts={NO_INSERTS}
+          inserts={driveCards.inserts}
           authErrorHelp={null}
           autoRetryHelp={null}
           restoreUndelivered={restoreUndelivered}
@@ -1518,6 +1621,7 @@ function WikiChatSession({
           answeredQuestions={null}
           wikiChat={wikiCards}
         />
+        {driveCards.rest}
         {!session?.deletedAt &&
           approvals.map((approval) => (
             <ApprovalPanel
@@ -1553,7 +1657,7 @@ function WikiChatSession({
             selectedId={sessionId}
             canAttach={live && online}
             attachmentsBefore={wikiChatChips(attachments, dispatch)}
-            composerPlaceholder={draftOpen ? WIKI_CHAT_PLACEHOLDER_DRAFT : WIKI_CHAT_PLACEHOLDER}
+            composerPlaceholder={draftOpen ? (origin.copy.placeholderDraft ?? origin.copy.placeholder) : origin.copy.placeholder}
             offeredSuggestion={offeredSuggestion}
             acceptSuggestion={acceptSuggestion}
             slashItems={slashItems}
@@ -1569,7 +1673,8 @@ function WikiChatSession({
             shownProvider={provider}
             configuredProviders={machine.configured}
             showStop={showStop}
-            onStop={() => stop.mutate()}
+            onStop={() => !stop.isPending && stop.mutate()}
+            stopping={stop.isPending}
             canSend={(!!draft.text.trim() || draft.readyImages.length > 0) && !send.isPending && !draft.uploading && live}
             sending={send.isPending}
             onSend={onSend}
@@ -1582,4 +1687,3 @@ function WikiChatSession({
   );
 }
 
-const NO_INSERTS: never[] = [];

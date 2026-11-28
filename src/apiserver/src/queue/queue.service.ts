@@ -88,7 +88,6 @@ import {
 import { worktreeOperationFenceSql } from '../common/session-inbox-fence';
 import { sessionDiskHoldSql } from '../common/runner-disk-gate';
 import { workspaceCloneHoldSql } from '../common/workspace-clone-gate';
-import { engineNamingJob } from '../sessions/naming';
 import {
   batchActiveTurns,
   overCapacityPassPendingSql,
@@ -126,6 +125,7 @@ import { DISPATCH_PAUSED } from './dispatch-pause';
 import { CLAUDE_REGION_ERROR_PREFIX, claudeRegionHold } from '../runners/runner-region';
 import { holdNoticeSql } from './hold-notice';
 import { openingTurnId } from '../sessions/orbit-authored-turn';
+import { chatFiledItsOpening } from '../sessions/chat-opening';
 import {
   runAccessLevel,
   scheduleRunAgentFields,
@@ -166,6 +166,14 @@ export interface ClaimingRunner {
    * claim takes any session as it always has; an empty list takes none.
    */
   onlySessionIds?: readonly string[];
+  /**
+   * A full runner's claim scope (runner-go sessionPool.claimScope): every slot of the runner is taken, by turns and by
+   * sessions its background jobs hold, so an ordinary claim may take only the sessions named — those held by a
+   * background job of their own, whose message the slot their job holds admits — and a Run now claim may take any.
+   * Empty takes no ordinary claim. Absent, the claim is the runner's ordinary one. Sent only to a server whose heartbeat
+   * answer says `capacityClaims`.
+   */
+  fullScope?: readonly string[];
 }
 
 /**
@@ -494,9 +502,8 @@ export class QueueService {
           id: string; engine: string | null; provider: string; providerBuiltin: boolean; ownerId: string;
         }>>(Prisma.sql`
         UPDATE "session" SET
-          -- QUEUED to IN_FLIGHT, the word beside it (deploy 2 writes both; docs/session-status-retirement-plan.md §1.4).
-          -- The engine claim guards (migration 1641) test exactly this transition.
-          status = 'RUNNING',
+          -- QUEUED to IN_FLIGHT (docs/session-status-retirement-plan.md §1.4). The engine claim guards (migration 1641)
+          -- test exactly this transition.
           "turn_state" = 'IN_FLIGHT',
           -- The pass is spent by whichever claim starts its turn. An overflow claim keeps it, so the RUNNING row says
           -- it runs over the limit until that turn ends (turnComplete clears it); an ordinary one started the turn in
@@ -549,6 +556,11 @@ export class QueueService {
             -- and this claim makes it RUNNING again. No other session is claimed while it drains.
             AND (${runner.onlySessionIds ? [...runner.onlySessionIds] : null}::uuid[] IS NULL
               OR s.id = ANY(${runner.onlySessionIds ? [...runner.onlySessionIds] : null}::uuid[]))
+            -- A full runner names the only sessions an ordinary claim may take (ClaimingRunner.fullScope): it would
+            -- have to hand any other back. Run now's overflow claim is not held to it.
+            AND (${overflow}::boolean
+              OR ${runner.fullScope ? [...runner.fullScope] : null}::uuid[] IS NULL
+              OR s.id = ANY(${runner.fullScope ? [...runner.fullScope] : null}::uuid[]))
             AND s."cancel_requested_at" IS NULL
             AND s."assigned_runner_id" = ${runnerId}
             -- Settings › Translation (sessions/turn-translation.ts): a new or revived session whose only
@@ -708,7 +720,11 @@ export class QueueService {
             AND (${overflow}::boolean OR ${scopedClaim}::boolean OR (
               -- A slot is an active turn, not a warm process. Idle AWAITING_INPUT and
               -- legacy INTERRUPTED sessions remain resumable without consuming capacity.
-              ${runnerActiveTurns(runnerId)}
+              -- Plus the slots other sessions' background jobs hold, which the runner admits a turn
+              -- against (runnerBackgroundHeldSessions): counted by turns alone, a runner whose jobs and
+              -- turns fill it was handed a claim it could not start, and the row read RUNNING, "Getting
+              -- the session ready", until a turn ended, instead of queued behind a full runner.
+              ${runnerActiveTurns(runnerId)} + ${runnerBackgroundHeldSessions(runnerId, Prisma.sql`s.id`)}
                 < (SELECT r."max_concurrent" FROM "runner" r WHERE r.id = ${runnerId})
               -- Batch-run cap, independent of the runner cap above: a closed set the user
               -- dispatched together, with the cap they chose for it.
@@ -735,7 +751,7 @@ export class QueueService {
               AND EXISTS (
                 SELECT 1 FROM "runner" r WHERE r.id = ${runnerId}
                   AND ${OVER_CAPACITY_V1} = ANY(r.capabilities)
-                  AND ${runnerActiveTurns(runnerId)} + ${runnerBackgroundHeldSessions(runnerId)}
+                  AND ${runnerActiveTurns(runnerId)} + ${runnerBackgroundHeldSessions(runnerId, Prisma.sql`s.id`)}
                       < r."max_concurrent" + r."burst_concurrent"
               )
             ))
@@ -821,7 +837,6 @@ export class QueueService {
         await this.prisma.session.updateMany({
           where: { id: rows[0].id, ...turnStateFilter(['IN_FLIGHT']) },
           data: {
-            status: 'PENDING',
             turnState: 'QUEUED',
             error: refusal.code === 'POOL_ACCOUNT_PAUSED' ? `Account paused until ${refusal.pausedUntil}` : refusal.message,
           },
@@ -1009,10 +1024,10 @@ export class QueueService {
     // @@unique([sessionId, seq]) for the seq the message had already taken, after committing the
     // session to RUNNING.
     //
-    // And a wiki chat lays no turn down here: its opening turn was filed with the session, under the
-    // owner's own UUID (SessionsService.writeChat), so its words are first-hand. A seed under
+    // And a wiki chat or a Drive chat lays no turn down here: its opening turn was filed with the session, under
+    // the owner's own UUID (SessionsService.writeChat), so its words are first-hand. A seed under
     // `initial-` would hand the engine the same message twice.
-    if (!session.importedAt && session.prompt !== '' && !session.wikiChatSpaceId) {
+    if (!session.importedAt && session.prompt !== '' && !chatFiledItsOpening(session)) {
       await withTransactionRetry(this.prisma, async (tx) => {
         await tx.$queryRaw`SELECT id FROM "session" WHERE id = ${session.id}::uuid FOR UPDATE`;
         const seedClientTurnId = `initial-${session.id}`;
@@ -1241,9 +1256,6 @@ export class QueueService {
         ? ((await forkAuthorityBindings(this.prisma, [session])).get(session.id) ?? null)
         : await this.sourceBinding(session.sourceCodebaseId),
     );
-    // A session nothing else will name is named by the engine about to run it (engineNamingJob). An Ask is not:
-    // its title is its first question, and no model is asked for another (help-ask.ts; board 03).
-    const naming = session.helpAsk == null ? engineNamingJob(session, provider, configuredRow) : undefined;
     return {
       sessionId: session.id,
       provider,
@@ -1399,7 +1411,8 @@ export class QueueService {
         env: exec.env,
       },
       source,
-      ...(naming ? { naming } : {}),
+      // No `naming`: a session is titled only on the server's DeepSeek key (SessionsService.beautifySessionLater),
+      // never by the engine running it on the session's own provider.
     };
   }
 

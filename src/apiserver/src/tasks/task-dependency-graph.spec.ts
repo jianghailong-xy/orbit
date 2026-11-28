@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { TaskStatus } from '@orbit/shared';
 import { TasksController } from './tasks.controller';
 import { renderRawQuery } from '../test-support/prisma-transaction-double';

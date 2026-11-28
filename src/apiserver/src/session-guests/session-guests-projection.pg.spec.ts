@@ -33,8 +33,13 @@ import { test } from 'node:test';
 import { JwtService } from '@nestjs/jwt';
 import { ControlEventType, uuidToBase62 } from '@orbit/shared';
 import {
-  CreatorType, type PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, TaskCompletionCriterion,
+  CreatorType,
+  type PrismaClient,
+  RunnerStatus,
+  SessionDispatchOrigin,
+  TaskCompletionCriterion,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import { filter, firstValueFrom, timeout } from 'rxjs';
 
@@ -124,7 +129,7 @@ test('session guests: the guest door shows only what the public link may, and th
       provider: 'claude', providerBuiltin: true, model: SECRET.model, permissionMode: 'acceptEdits',
       claudeAccount: SECRET.account, branch: SECRET.branch, baseSha: SECRET.sha, worktreeBranch: SECRET.worktreeBranch,
       costUsd: 1.25, contextTokens: 4321,
-      dispatchOrigin: SessionDispatchOrigin.USER, status: RunStatus.AWAITING_INPUT, numTurns: 1, engineTurnActive: false,
+      dispatchOrigin: SessionDispatchOrigin.USER, turnState: null, numTurns: 1, engineTurnActive: false,
       runtimeSessionId: SECRET.runtime, startedAt: new Date(),
     },
   });
@@ -224,7 +229,7 @@ test('session guests: the guest door shows only what the public link may, and th
     await sql.query('BEGIN');
     await sql.query(`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`);
     await sql.query(
-      `UPDATE "session" SET "status" = 'RUNNING', "assigned_runner_id" = $2::uuid, "inbox_lease_owner" = $3::uuid,
+      `UPDATE "session" SET "turn_state" = 'IN_FLIGHT', "assigned_runner_id" = $2::uuid, "inbox_lease_owner" = $3::uuid,
               "inbox_lease_generation" = $4::uuid, "started_at" = coalesce("started_at", now())
         WHERE "id" = $1::uuid`, [sessionId, runnerId, lease.owner, lease.generation]);
     await sql.query('COMMIT');
@@ -433,7 +438,7 @@ test('session guests: the guest door shows only what the public link may, and th
     const durable = async (type: string, payload: unknown) => live(type, payload, await stored(type, payload));
     const NEW_TITLE = `Renamed while watched ${RUN}`;
     const approvalId = randomUUID();
-    await db.session.update({ where: { id: sessionId }, data: { title: NEW_TITLE, status: RunStatus.AWAITING_INPUT } });
+    await db.session.update({ where: { id: sessionId }, data: { title: NEW_TITLE, turnState: null } });
     await db.approval.create({ data: { id: approvalId, sessionId, toolName: 'Bash', input: { command: OWNER_ONLY.approval } } });
     await live('text_delta', { text: 'Hel' });
     await live('thinking_delta', { text: 'hmm' });

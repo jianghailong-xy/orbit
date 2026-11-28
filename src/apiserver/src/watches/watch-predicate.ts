@@ -138,7 +138,7 @@ export type WatchTargetFact =
       /** The word the session reads on the wire (session-legacy-words.ts): what an observation records. */
       status: string;
       /** Where a held session's turn stands (session-turn-state.ts); null when parked or released. */
-      turnState?: string | null;
+      turnState: string | null;
       /** `session.finished_at`: the release column. */
       finishedAt: Date | null;
       endReason: string | null;
@@ -166,7 +166,7 @@ type WatchSessionFact = Extract<WatchTargetFact, { kind: 'SESSION' }>;
 
 function workingRow(fact: WatchSessionFact): SessionWorkingRow {
   return {
-    status: fact.status as SessionWorkingRow['status'],
+    turnState: fact.turnState,
     finishedAt: fact.finishedAt,
     engineTurnActive: fact.engineTurnActive,
     runningSubagents: fact.runningSubagents,
@@ -347,8 +347,8 @@ export function leafHolds(test: WatchLeafTest, fact: WatchTargetFact, now: numbe
         && !sessionFactWakeArmed(fact);
     case 'SESSION_RUN_TERMINAL':
       // The run is over: released (`finished_at`), or interrupted with an end recorded. Never which terminal value
-      // the session holds: the stored meaning (the derived run state is SUCCEEDED, FAILED or ENDED) is the same
-      // rows under session_release_fact_chk (plan step 4.8; common/session-release.ts runIsOver).
+      // the session holds: the meaning (the derived run state is SUCCEEDED, FAILED or ENDED) is the same rows
+      // (plan step 4.8; common/session-release.ts runIsOver).
       return fact.kind === 'SESSION' && runIsOver(fact);
     case 'SESSION_LIFECYCLE_TERMINAL':
       return fact.kind === 'SESSION' && TERMINAL_LIFECYCLE_STATES.includes(deriveSessionLifecycleState(fact));

@@ -25,16 +25,18 @@ const TABLE: [string, string, string, string[], boolean, boolean, boolean][] = [
   ['waiting on an approval', 'RUNNING', 'Running', ['NEEDS_YOU'], true, true, true],
   ["parked with the engine's own turn", 'AWAITING_INPUT', 'Running', [], true, true, true],
   ['parked with a sub-agent running', 'AWAITING_INPUT', 'Running', [], true, false, true],
-  ['running a job with no turn', 'AWAITING_INPUT', 'Running', ['BACKGROUND'], true, false, true],
-  ['will wake', 'AWAITING_INPUT', 'Idle', ['WILL_RESUME'], false, false, false],
+  ['running a job with no turn', 'AWAITING_INPUT', 'Running', [], true, false, true],
+  ['will wake', 'AWAITING_INPUT', 'Idle', [], false, false, false],
   ['held idle', 'AWAITING_INPUT', 'Idle', [], false, false, false],
-  ['interrupted', 'INTERRUPTED', 'Idle', ['INTERRUPTED'], false, false, false],
+  ['interrupted', 'INTERRUPTED', 'Idle', [], false, false, false],
   ['released by a failed turn', 'FAILED', 'Idle', ['FAILED'], false, false, false],
-  ['released by End', 'ENDED', 'Idle', ['ENDED'], false, false, false],
-  ['a task run that finished', 'SUCCEEDED', 'Idle', ['FINISHED'], false, false, false],
-  // Waiting for retry counts as running (the owner, 2026-11-26): the word is Running; the run is still the failed
-  // release, with no Stop and the waiting pace.
-  ['released with a retry armed', 'FAILED', 'Running', ['RETRYING'], false, false, false],
+  ['released by End', 'ENDED', 'Idle', [], false, false, false],
+  ['a task run that finished', 'SUCCEEDED', 'Idle', [], false, false, false],
+  // Waiting for retry is PENDING (the owner, 2026-11-26): the word is Queued; the run is still the failed release, or
+  // the parked session, with no Stop and the waiting pace.
+  ['released with a retry armed', 'FAILED', 'Queued', ['RETRYING'], false, false, false],
+  ['parked with a retry armed', 'AWAITING_INPUT', 'Queued', [], false, false, false],
+  ['parked with a retry armed, an answer owed', 'AWAITING_INPUT', 'Queued', ['NEEDS_YOU'], false, false, false],
 ];
 
 describe('the fixtures are the server shape', () => {

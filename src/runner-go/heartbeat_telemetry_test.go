@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -568,5 +570,93 @@ func TestHeartbeatTelemetryDropsASampleScannedBeforeTheTurnReport(t *testing.T) 
 	got := telemetry.snapshotFor(targets)
 	if len(got) != 1 || got[0].BranchSha != committed {
 		t.Fatalf("the scan after the report = %#v, want one sample at %s", got, committed)
+	}
+}
+
+func TestHeartbeatSessionsFactIgnoresCollectionOrder(t *testing.T) {
+	pool := newSessionPool(3)
+	for _, id := range []string{"sA", "sB", "sC"} {
+		registerPoolSession(t, pool, id, true)
+	}
+	_, targets := pool.heartbeatSnapshot()
+	sort.Slice(targets, func(i, j int) bool { return targets[i].sessionID < targets[j].sessionID })
+	telemetry := newHeartbeatTelemetryProbe(time.Hour, nil)
+
+	fact := func(order ...int) (string, string) {
+		telemetry.state = nil
+		for _, i := range order {
+			telemetry.state = append(telemetry.state, heartbeatTelemetrySample{
+				target: targets[i],
+				state:  SessionLiveState{SessionID: targets[i].sessionID, IsolationStatus: isoWorktree},
+			})
+		}
+		body, err := json.Marshal(HeartbeatRequest{Sessions: telemetry.snapshotFor(targets)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		hb, err := linkHeartbeatOf(body, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, f := range hb.Facts {
+			if f.Kind == "sessions" {
+				return string(f.Json), f.Sha256
+			}
+		}
+		t.Fatalf("no sessions fact in %s", body)
+		return "", ""
+	}
+
+	firstJSON, firstSum := fact(0, 1, 2)
+	secondJSON, secondSum := fact(2, 0, 1)
+	if firstJSON != secondJSON || firstSum != secondSum {
+		t.Fatalf("sessions fact depends on collection order:\n%s %s\n%s %s", firstSum, firstJSON, secondSum, secondJSON)
+	}
+	if a, b := strings.Index(firstJSON, "sA"), strings.Index(firstJSON, "sC"); a < 0 || b < a {
+		t.Fatalf("sessions fact is not sorted by session id: %s", firstJSON)
+	}
+}
+
+// errBudgetContext expires after a fixed number of Err calls, which stops a scan partway through
+// its targets without depending on the clock.
+type errBudgetContext struct {
+	context.Context
+	left int
+}
+
+func (c *errBudgetContext) Err() error {
+	if c.left <= 0 {
+		return context.DeadlineExceeded
+	}
+	c.left--
+	return nil
+}
+
+func TestHeartbeatTelemetryTimedOutScansRotateCoverage(t *testing.T) {
+	const sessions = 8
+	pool := newSessionPool(sessions)
+	for i := 0; i < sessions; i++ {
+		registerPoolSession(t, pool, fmt.Sprintf("s%d", i), true)
+	}
+	telemetry := newHeartbeatTelemetryProbe(time.Hour, nil)
+	covered := map[string]bool{}
+	for scan := 0; scan < 500 && len(covered) < sessions; scan++ {
+		_, targets := pool.heartbeatSnapshot()
+		for i := range targets {
+			// No worktree: the scan runs no git, so each session costs the same budget.
+			targets[i].isolationStatus = isoWorktree
+			targets[i].worktree = nil
+		}
+		telemetry.state = collectHeartbeatSessionStates(&errBudgetContext{Context: context.Background(), left: 7}, targets)
+		got := telemetry.snapshotFor(targets)
+		if len(got) == 0 || len(got) >= sessions {
+			t.Fatalf("scan covered %d of %d sessions, want a partial scan", len(got), sessions)
+		}
+		for _, state := range got {
+			covered[state.SessionID] = true
+		}
+	}
+	if len(covered) != sessions {
+		t.Fatalf("timed-out scans only ever covered %v of %d sessions", covered, sessions)
 	}
 }

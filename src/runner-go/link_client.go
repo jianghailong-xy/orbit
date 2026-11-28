@@ -39,8 +39,6 @@ const (
 	linkDialTimeout = 15 * time.Second
 	// linkWelcomeTimeout is how long after Hello the gateway may take to answer it.
 	linkWelcomeTimeout = 10 * time.Second
-	// linkWriteTimeout bounds one message's write. A write that cannot finish in it ends the connection.
-	linkWriteTimeout = 10 * time.Second
 	// linkTokenTimeout bounds one POST /api/runner/link-token.
 	linkTokenTimeout = 30 * time.Second
 	// linkRenewBefore is how long before its token expires a connection is replaced. Version 0 of the gateway
@@ -218,18 +216,21 @@ func newLinkClient(serverURL, runnerToken, processID string, hello func() *linkp
 // and NO_PROXY name (proxy), verifies TLS against the system's roots (which SSL_CERT_FILE replaces where it is
 // set) or roots when they are given, and speaks HTTP/1.1 only: a TLSClientConfig of its own turns off net/http's
 // automatic HTTP/2, and a WebSocket upgrade is an HTTP/1.1 request.
+//
+// It keeps no connection idle: each request is dialled for, so a WebSocket opens on the socket dialled for it, which
+// is counted (link_socket.go). A request asking to switch protocols goes without "Connection: close". The link-token
+// requests come about once an hour, so nothing is lost by it.
 func newLinkHTTPTransport(proxy func(*http.Request) (*url.URL, error), tlsConfig *tls.Config) *http.Transport {
 	if tlsConfig == nil {
 		tlsConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 	}
 	return &http.Transport{
 		Proxy:                 proxy,
-		DialContext:           (&net.Dialer{Timeout: linkDialTimeout, KeepAlive: 30 * time.Second}).DialContext,
+		DialContext:           linkSocketDialer(&net.Dialer{Timeout: linkDialTimeout, KeepAlive: 30 * time.Second}),
 		TLSClientConfig:       tlsConfig,
 		TLSHandshakeTimeout:   linkDialTimeout,
 		ResponseHeaderTimeout: linkDialTimeout,
-		MaxIdleConns:          2,
-		IdleConnTimeout:       90 * time.Second,
+		DisableKeepAlives:     true,
 	}
 }
 
@@ -359,8 +360,22 @@ type linkConn struct {
 	welcome *linkpb.Welcome
 	token   *linkToken
 
+	// writeMu is held for each message written, and for every message of a frame but an EventBatch. bulkMu is held
+	// for the whole of an EventBatch, which takes writeMu one message at a time, so that the other frames go between
+	// its pieces; and by trySend, so that a live frame never does. Taken in that order, bulkMu first.
 	writeMu sync.Mutex
-	lastID  uint64 // the id of the last frame sent, guarded by writeMu
+	bulkMu  sync.Mutex
+	lastID  uint64 // the id of the last message sent, guarded by writeMu
+
+	// sock is the socket the connection was dialled on, counted (link_socket.go). writes is the context every write
+	// after Hello goes with, which the watchdog cancels once a write has made no progress for linkWriteStallLimit;
+	// stopWrites cancels it.
+	sock       *linkSocket
+	writes     context.Context
+	stopWrites context.CancelFunc
+	// failure is why the connection was taken for dead, for a deadline or a write that made no progress (the watchdog,
+	// the pinger): the first one recorded wins, and it is recorded before the connection is closed.
+	failure atomic.Pointer[string]
 
 	done    chan struct{} // closed when reading stops, which is when the connection has ended
 	err     error         // why reading stopped; read it after done
@@ -368,15 +383,22 @@ type linkConn struct {
 	onFrame func(*linkConn, *linkpb.Frame)
 }
 
+// linkCompressionThreshold is the smallest message the runner compresses: below it, a heartbeat by digest and most
+// live batches, deflate saves nothing worth its CPU (docs/runner-link-design.md §15.17).
+const linkCompressionThreshold = 512
+
 // dialLink opens a connection to linkURL with token, says hello and waits for Welcome. An upgrade refused with an
 // HTTP status comes back as a *linkHTTPError, and a Close in place of Welcome as a *linkCloseError.
 func dialLink(ctx context.Context, client *http.Client, linkURL, token string, hello *linkpb.Hello,
 	onFrame func(*linkConn, *linkpb.Frame)) (*linkConn, error) {
-	dctx, cancel := context.WithTimeout(ctx, linkDialTimeout)
+	slot := &linkSocketSlot{}
+	dctx, cancel := context.WithTimeout(context.WithValue(ctx, linkSocketSlotKey{}, slot), linkDialTimeout)
 	ws, resp, err := websocket.Dial(dctx, linkURL, &websocket.DialOptions{
-		HTTPClient:      client,
-		HTTPHeader:      http.Header{"Authorization": {"Bearer " + token}},
-		CompressionMode: websocket.CompressionDisabled,
+		HTTPClient: client,
+		HTTPHeader: http.Header{"Authorization": {"Bearer " + token}},
+		// permessage-deflate without context takeover, when the gateway accepts it (docs/runner-link-design.md §15.17):
+		// event batches go at half their size. A gateway from before it accepts none, and the link runs uncompressed.
+		CompressionMode: websocket.CompressionNoContextTakeover, CompressionThreshold: linkCompressionThreshold,
 	})
 	cancel()
 	if err != nil {
@@ -389,18 +411,34 @@ func dialLink(ctx context.Context, client *http.Client, linkURL, token string, h
 		}
 		return nil, err
 	}
-	ws.SetReadLimit(linkMaxFrameBytes)
-	c := &linkConn{ws: ws, done: make(chan struct{}), onFrame: onFrame}
-	if _, err := c.send(&linkpb.Frame{Body: &linkpb.Frame_Hello{Hello: hello}}); err != nil {
+	sock := slot.s.Load()
+	if sock == nil {
+		// The transport keeps no connection idle (newLinkHTTPTransport), so this is a transport that is not the link's.
 		_ = ws.CloseNow()
-		return nil, fmt.Errorf("%w: sending Hello: %v", errLinkNoWelcome, err)
+		return nil, errors.New("the WebSocket did not open on a connection dialled for it")
 	}
+	ws.SetReadLimit(linkMaxFrameBytes)
+	c := &linkConn{ws: ws, sock: sock, done: make(chan struct{}), onFrame: onFrame}
+	c.writes, c.stopWrites = context.WithCancel(context.Background())
+	// Hello goes before anything reads the connection, so it is bounded as Welcome is.
 	wctx, cancel := context.WithTimeout(ctx, linkWelcomeTimeout)
 	defer cancel()
+	c.writeMu.Lock()
+	_, err = c.sendLocked(wctx, &linkpb.Frame{Body: &linkpb.Frame_Hello{Hello: hello}})
+	c.writeMu.Unlock()
+	if err != nil {
+		c.stopWrites()
+		_ = ws.CloseNow()
+		if wctx.Err() != nil && ctx.Err() == nil {
+			return nil, fmt.Errorf("%w: Hello could not be sent within %s", errLinkNoWelcome, linkWelcomeTimeout)
+		}
+		return nil, fmt.Errorf("%w: sending Hello: %v", errLinkNoWelcome, err)
+	}
 	var chunks linkReassembler
 	for {
 		f, err := c.readFrame(wctx, &chunks)
 		if err != nil {
+			c.stopWrites()
 			_ = ws.CloseNow()
 			if wctx.Err() != nil && ctx.Err() == nil {
 				return nil, fmt.Errorf("%w within %s", errLinkNoWelcome, linkWelcomeTimeout)
@@ -418,6 +456,7 @@ func dialLink(ctx context.Context, client *http.Client, linkURL, token string, h
 			continue // a piece of a frame
 		}
 		if cl := f.GetClose(); cl != nil {
+			c.stopWrites()
 			_ = ws.CloseNow()
 			return nil, &linkCloseError{code: cl.GetCode(), message: cl.GetMessage(),
 				retryAfter: time.Duration(cl.GetRetryAfterMs()) * time.Millisecond}
@@ -425,6 +464,7 @@ func dialLink(ctx context.Context, client *http.Client, linkURL, token string, h
 		if w := f.GetWelcome(); w != nil {
 			c.welcome, c.id = w, w.GetConnectionId()
 			go c.readLoop(chunks)
+			go c.watch()
 			return c, nil
 		}
 		// Anything else ahead of Welcome is a body this binary does not take there; it is ignored, as the protocol
@@ -453,6 +493,7 @@ func (c *linkConn) readFrame(ctx context.Context, chunks *linkReassembler) (*lin
 // rather than the runner: it is the connection's error.
 func (c *linkConn) readLoop(chunks linkReassembler) {
 	defer close(c.done)
+	defer c.stopWrites()
 	defer func() {
 		if r := recover(); r != nil {
 			c.err = fmt.Errorf("panic reading the connection: %v", r)
@@ -478,42 +519,142 @@ func (c *linkConn) readLoop(chunks linkReassembler) {
 	}
 }
 
-// send writes f, cut into Chunks when it is larger than one message may be, and returns the id it gave f. A write
-// that fails, or does not finish within linkWriteTimeout, ends the connection.
+// send writes f, cut into Chunks of at most linkSendPieceBytes when it is larger, and returns the id it gave f. An
+// EventBatch lets every other frame but a live one go between its pieces (sendBulk); any other frame goes in one piece
+// after another, nothing between them. A write has no deadline of its own: it ends the connection when it fails, or
+// when it has made no progress for linkWriteStallLimit with nothing read meanwhile (watch), however long it takes
+// while it moves.
 func (c *linkConn) send(f *linkpb.Frame) (uint64, error) {
+	if _, bulk := f.GetBody().(*linkpb.Frame_EventBatch); bulk {
+		return c.sendBulk(f)
+	}
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
-	return c.sendLocked(f)
+	return c.sendLocked(c.writes, f)
 }
 
-// trySend writes f only when nothing else is being written on the connection, and reports whether it did: what a live
-// stream frame takes, so that it never holds up a control frame or a call behind it (§5.1). The caller drops or keeps
-// a frame that did not go.
+// trySend writes f only when nothing else is being written on the connection, an EventBatch between its pieces
+// included, and reports whether it did: what a live stream frame takes, so that it never holds up a control frame or a
+// call behind it (§5.1). The caller drops or keeps a frame that did not go.
 func (c *linkConn) trySend(f *linkpb.Frame) (bool, error) {
+	if !c.bulkMu.TryLock() {
+		return false, nil
+	}
+	defer c.bulkMu.Unlock()
 	if !c.writeMu.TryLock() {
 		return false, nil
 	}
 	defer c.writeMu.Unlock()
-	_, err := c.sendLocked(f)
+	_, err := c.sendLocked(c.writes, f)
 	return err == nil, err
 }
 
-func (c *linkConn) sendLocked(f *linkpb.Frame) (uint64, error) {
+// sendLocked writes every message of f, with writeMu held.
+func (c *linkConn) sendLocked(ctx context.Context, f *linkpb.Frame) (uint64, error) {
 	c.lastID++
 	f.Id = c.lastID
-	msgs, err := encodeLinkFrame(f, linkMaxFrameBytes, func() uint64 { c.lastID++; return c.lastID })
+	pieces, err := newLinkPieces(f, linkSendPieceBytes)
 	if err != nil {
 		return 0, err
 	}
-	for _, b := range msgs {
-		ctx, cancel := context.WithTimeout(context.Background(), linkWriteTimeout)
-		err := c.ws.Write(ctx, websocket.MessageBinary, b)
-		cancel()
-		if err != nil {
+	for !pieces.done() {
+		if err := c.writePiece(ctx, pieces); err != nil {
 			return 0, err
 		}
 	}
 	return f.Id, nil
+}
+
+// sendBulk writes an EventBatch, holding writeMu for one message at a time: a heartbeat, a call or an answer waiting
+// for it goes next, between two pieces. A waiter that has waited over a millisecond is handed writeMu at its next
+// unlock (sync.Mutex's starvation mode), so on a slow path it waits for the piece being written and one more at most.
+// One EventBatch goes at a time (bulkMu), and every other frame goes whole once begun, so at most two frames are in
+// pieces at once on the connection, inside the gateway's bound of four.
+func (c *linkConn) sendBulk(f *linkpb.Frame) (uint64, error) {
+	c.bulkMu.Lock()
+	defer c.bulkMu.Unlock()
+	c.writeMu.Lock()
+	c.lastID++
+	f.Id = c.lastID
+	pieces, err := newLinkPieces(f, linkSendPieceBytes)
+	for err == nil && !pieces.done() {
+		if err = c.writePiece(c.writes, pieces); err != nil || pieces.done() {
+			break
+		}
+		c.writeMu.Unlock()
+		c.writeMu.Lock()
+	}
+	c.writeMu.Unlock()
+	if err != nil {
+		return 0, err
+	}
+	return f.Id, nil
+}
+
+// writePiece writes the next message of pieces, with writeMu held: encoded now, with the next id, so that the ids of
+// the messages on the connection go up one by one whatever goes between the pieces of a frame.
+func (c *linkConn) writePiece(ctx context.Context, pieces *linkPieces) error {
+	var id uint64
+	if !pieces.whole {
+		c.lastID++
+		id = c.lastID
+	}
+	b, err := pieces.next(id)
+	if err != nil {
+		return err
+	}
+	// Room in the send buffer first, outside the library's write lock, which its pongs need (link_socket.go).
+	if err := c.sock.waitRoom(ctx, len(b)); err != nil {
+		return err
+	}
+	return c.ws.Write(ctx, websocket.MessageBinary, b)
+}
+
+// watch ends the connection once a write on its socket has made no progress, and nothing has been read from it, for
+// linkWriteStallLimit: the path carries nothing either way. It runs until the connection ends. The clock runs only
+// while a write is in flight, never on a quiet connection, which the pings watch (linkWork.pinger). Its reason is
+// recorded before the write is cancelled, which is what has the WebSocket library close the connection.
+func (c *linkConn) watch() {
+	tick := time.NewTicker(c.sock.limits.checkEvery)
+	defer tick.Stop()
+	for {
+		select {
+		case <-c.done:
+			return
+		case now := <-tick.C:
+			stalled := c.sock.stalledFor(now)
+			if stalled < c.sock.limits.stall {
+				continue
+			}
+			c.fail(fmt.Sprintf("a write on the socket made no progress for %s, and nothing was read from the gateway meanwhile",
+				stalled.Round(time.Second)))
+			c.stopWrites()
+			_ = c.ws.CloseNow()
+			return
+		}
+	}
+}
+
+// fail records why the connection is taken for dead, unless a reason is recorded already.
+func (c *linkConn) fail(why string) {
+	c.failure.CompareAndSwap(nil, &why)
+}
+
+// endReason is why the connection ended, as this side knows it: a failure recorded (fail), else the WebSocket library
+// closing it on a control frame's deadline while a write was blocked, else the error reading stopped with. Read it
+// after done.
+func (c *linkConn) endReason() string {
+	if why := c.failure.Load(); why != nil {
+		return *why
+	}
+	if d := time.Duration(c.sock.closedWriting.Load()); d > 0 && errors.Is(c.err, net.ErrClosed) {
+		return fmt.Sprintf("the WebSocket library closed the connection when a ping or a pong could not be written within its 5s: a write on the socket had made no progress for %s",
+			d.Round(100*time.Millisecond))
+	}
+	if c.err != nil {
+		return c.err.Error()
+	}
+	return ""
 }
 
 // ping sends a WebSocket ping and waits for its pong, within timeout: the round trip, or an error after which the

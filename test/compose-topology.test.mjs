@@ -156,6 +156,12 @@
 // sets it. No service, mount or port is added. The account owner approved all six lines on 2026-11-19 (in session
 // 34zBKhFsZ22eRi985pbrK: "Approve them and add them to the baseline"), and the blocks below pin them.
 //
+// Web Push to browsers (62c49e4e5c, docs/web-push-design.md) then added three apiserver environment lines,
+// WEB_PUSH_PUBLIC_KEY, WEB_PUSH_PRIVATE_KEY and WEB_PUSH_SUBJECT: the VAPID key pair and its contact, each empty unless the
+// host's .env sets it, and empty disables browser notifications. No service, mount or port is added. It reached main
+// without a pin here, which left this file red there. The account owner approved the three lines on 2026-11-27 (in
+// session 354bD7rmAscc6Yi0PBsEI: "Fix both of these"), and the block below pins them.
+//
 // On 2026-11-19 the Orbit Cloud browser's switch (project 34z8OKBXxDRYsIZwzJ35E, docs/runner-browser-design.md §2)
 // gained its apiserver environment line, ORBIT_MANAGED_RUNNER_BROWSER_ENABLED, off unless the host's .env says true,
 // right after the managed runners' switch (Orbit task 3507XXbnib94qfwmCPaOA, filed by that project's coordinator).
@@ -187,6 +193,11 @@
 // chose: old names keep working wherever a host .env still uses them). The apiserver's and pgbackup's ORBIT_FILES_*
 // lines become ORBIT_DRIVE_*, each defaulting to its ORBIT_FILES_* value and then to the default it had, so a host
 // .env from before renders the same values under the new names. Nothing else moves; the blocks below pin the lines.
+//
+// On 2026-11-27 the account owner approved five lines of pgbackup's environment, asked in the session that added them, once
+// Ceph S3 was available: the bucket and prefix the archive's off-host copy goes to instead of ORBIT_BACKUP_SYNC_TARGET, and
+// that bucket's endpoint, region and key pair, each empty unless the host's .env sets it (docs/postgres-backup-restore.md).
+// No service, mount or port is added, and a deployment whose .env sets none of them mirrors over rsync as before.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -535,6 +546,13 @@ const APPROVED_APISERVER_BLOCKS = [
     '      APNS_PRODUCTION_KEY: "${APNS_PRODUCTION_KEY:-}"',
     '      APNS_PRODUCTION_KEY_ID: "${APNS_PRODUCTION_KEY_ID:-}"',
   ],
+  // Web Push to browsers (2026-11-27, the top of this file), each empty unless the host's .env sets it. The lines come
+  // right after FCM's, before the runner link's.
+  [
+    '      WEB_PUSH_PUBLIC_KEY: "${WEB_PUSH_PUBLIC_KEY:-}"',
+    '      WEB_PUSH_PRIVATE_KEY: "${WEB_PUSH_PRIVATE_KEY:-}"',
+    '      WEB_PUSH_SUBJECT: "${WEB_PUSH_SUBJECT:-}"',
+  ],
   // The runner link's connection tokens (2026-10-25, the top of this file): the Ed25519 signing key, the link
   // gateway's address and the secret the gateway reads revocations with, each empty unless the host's .env sets it.
   // Listed before the managed runners' because the lines come before theirs in the file.
@@ -647,6 +665,14 @@ const PGBACKUP_S3_MIRROR = [
   '      ORBIT_DRIVE_S3_SECRET_ACCESS_KEY: "${ORBIT_DRIVE_S3_SECRET_ACCESS_KEY:-${ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY:-${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}}}"',
   '      ORBIT_DRIVE_S3_REGION: "${ORBIT_DRIVE_S3_REGION:-${ORBIT_DOCUMENTS_S3_REGION:-${ORBIT_FILES_S3_REGION:-}}}"',
 ];
+// The archive's S3 copy (2026-11-27, the top of this file), right after the Drive bucket's lines.
+const PGBACKUP_S3_ARCHIVE = [
+  '      ORBIT_BACKUP_S3_TARGET: "${ORBIT_BACKUP_S3_TARGET:-}"',
+  '      ORBIT_BACKUP_S3_ENDPOINT: "${ORBIT_BACKUP_S3_ENDPOINT:-}"',
+  '      ORBIT_BACKUP_S3_REGION: "${ORBIT_BACKUP_S3_REGION:-}"',
+  '      ORBIT_BACKUP_S3_ACCESS_KEY_ID: "${ORBIT_BACKUP_S3_ACCESS_KEY_ID:-}"',
+  '      ORBIT_BACKUP_S3_SECRET_ACCESS_KEY: "${ORBIT_BACKUP_S3_SECRET_ACCESS_KEY:-}"',
+];
 // The approved additions to postgres's command that (k) sets aside, which (i) pins byte for byte with the rest of the
 // service. Each is found by its LAST line: `      - -c` opens every setting, so a block's first line would find the
 // command's first setting instead. Only its lines and the comment directly above them go, up to the directive before
@@ -661,7 +687,7 @@ const APPROVED_POSTGRES_BLOCKS = [
   ],
 ];
 test('nothing beyond the approved configuration was added to pgbackup, apiserver or web', () => {
-  const approved = { pgbackup: [...PGBACKUP_S3_MIRROR, PGBACKUP_FILES_MOUNT], apiserver: APPROVED_APISERVER_ADDITIONS, web: APPROVED_WEB_BLOCK };
+  const approved = { pgbackup: [...PGBACKUP_S3_MIRROR, ...PGBACKUP_S3_ARCHIVE, PGBACKUP_FILES_MOUNT], apiserver: APPROVED_APISERVER_ADDITIONS, web: APPROVED_WEB_BLOCK };
   for (const [name, additions] of Object.entries(approved)) {
     assert.deepEqual(
       directivesNotInBaseline(currentServices.get(name), survivingConfigurationServices.get(name)),
@@ -706,7 +732,7 @@ function withoutService(source, name) {
  */
 function withoutApprovedAdditions(source) {
   let lines = source.split('\n');
-  for (const block of [PGBACKUP_S3_MIRROR, ...APPROVED_APISERVER_BLOCKS, [PGBACKUP_FILES_MOUNT], APPROVED_WEB_BLOCK]) {
+  for (const block of [PGBACKUP_S3_MIRROR, PGBACKUP_S3_ARCHIVE, ...APPROVED_APISERVER_BLOCKS, [PGBACKUP_FILES_MOUNT], APPROVED_WEB_BLOCK]) {
     const first = lines.indexOf(block[0]);
     assert.ok(first > 0, `docker-compose.yml no longer has the approved ${block[0].trim()}`);
     const last = lines.indexOf(block[block.length - 1], first);
@@ -1014,7 +1040,9 @@ test('(p) NATS is named to the apiserver and the link gateway alone, and stores 
 // hints and turn prefix requests and reads live streams and the answers to its requests, and its processes ask and
 // answer each other on api.> (2026-10-28, the top of this file); the gateway reads runners' hints and requests, publishes
 // live streams, answers a request once, and relays the browser's byte streams on vnc.> (docs/runner-browser-design.md §4,
-// 2026-11-17), which the apiserver sends on vnc.*.down and reads on vnc.*.up (the viewer route, 2026-11-18). No trace or debug logging, here or in the service's command (p). Changing
+// 2026-11-17), which the apiserver sends on vnc.*.down and reads on vnc.*.up (the viewer route, 2026-11-18); its nodes
+// ask each other for a runner process's heartbeat facts on lfx.<runnerId> and take the answers on their own inbox,
+// _LFX.> (docs/runner-link-design.md §15.17, 2026-11-27). No trace or debug logging, here or in the service's command (p). Changing
 // any of it is a new decision, made here.
 test('(q) the runner link\'s NATS configuration is exactly the one task B4 added: two nkey users, each allowed only what it does', () => {
   const conf = readFileSync(path.join(repo, NATS_CONF), 'utf8');
@@ -1035,8 +1063,8 @@ test('(q) the runner link\'s NATS configuration is exactly the one task B4 added
     '{',
     'nkey: $RUNNER_LINK_NATS_GATEWAY_KEY',
     'permissions: {',
-    'publish: { allow: ["ses.*.live", "vnc.>"] }',
-    'subscribe: { allow: ["rnr.>", "vnc.>"] }',
+    'publish: { allow: ["ses.*.live", "vnc.>", "lfx.*"] }',
+    'subscribe: { allow: ["rnr.>", "vnc.>", "lfx.*", "_LFX.>"] }',
     'allow_responses: true',
     '}',
     '}',

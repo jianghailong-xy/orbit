@@ -82,15 +82,16 @@ function Row({ row }: { row: PendingTrayRow }) {
       </span>
       {thumb}
       <span className="pending-tray-body">
-        <button
-          type="button"
-          className={`pending-tray-text${words ? '' : ' is-files'}${row.shell ? ' is-shell' : ''}${open ? ' is-open' : ''}`}
-          title={words ? shown : undefined}
-          aria-expanded={words ? open : undefined}
-          onClick={() => words && setOpen((o) => !o)}
-        >
-          {shown}
-        </button>
+        <Tooltip content={words ? shown : undefined} truncatedOnly>
+          <button
+            type="button"
+            className={`pending-tray-text${words ? '' : ' is-files'}${row.shell ? ' is-shell' : ''}${open ? ' is-open' : ''}`}
+            aria-expanded={words ? open : undefined}
+            onClick={() => words && setOpen((o) => !o)}
+          >
+            {shown}
+          </button>
+        </Tooltip>
         <span className="pending-tray-state">{row.state}</span>
       </span>
       {!row.busy && (row.onSteer || row.onWithdraw) && (

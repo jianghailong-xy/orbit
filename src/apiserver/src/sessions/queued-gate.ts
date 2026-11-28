@@ -14,6 +14,7 @@ import {
   WORKSPACE_CLONING,
 } from '../common/workspace-clone-gate';
 import { queuedReasonSql } from './queued-reason-sql';
+import { sessionTurnStateSql } from './session-turn-state';
 
 /**
  * Which gate is holding a queued session, and against what numbers: the session list's `queuedReason`, and what Run
@@ -22,7 +23,7 @@ import { queuedReasonSql } from './queued-reason-sql';
  * decides with (session-tree-sql.ts).
  *
  * The lateral reads the session as `s` and its runner as `r` (a LEFT JOIN: `r.id` NULL when it has none). Only a
- * PENDING row the owner has not cancelled carries an answer; for the rest it yields no row. Asked inside, behind
+ * queued row the owner has not cancelled carries an answer; for the rest it yields no row. Asked inside, behind
  * OFFSET 0, rather than on the join: as a join condition the planner flattened this subquery and computed every gate's
  * counts for every row of the list, then dropped all but the PENDING ones (production, 2026-11-19: 1,297 rows for 15,
  * 130k of the statement's 154k buffers and 175 ms of its 289). Here it is a one-time filter.
@@ -37,7 +38,9 @@ export function queuedGateLateral(): Prisma.Sql {
         -- The gate itself is queuedReasonSql: one CASE for the list, a scheduled run's watch and this door.
         ${queuedReasonSql()} AS reason,
         ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`)} AS runner_active,
-        ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`)} AS runner_held,
+        -- Other sessions' holders, as the gate itself and the runner count them: a session's own job holds no slot
+        -- against its own message, so counted here it read one over the limit (5/4).
+        ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`, Prisma.sql`s.id`)} AS runner_held,
         r.max_concurrent AS runner_limit,
         -- What Run now decides on beside the counts: the runner's Extra sessions on demand, whether its process
         -- admits a turn claimed over its limit, and whether this session already holds a pass for its queued turn.
@@ -67,7 +70,7 @@ export function queuedGateLateral(): Prisma.Sql {
           -- full runner its list of running turns does not show.
           CASE g.reason WHEN 'runner_at_capacity' THEN g.runner_held END AS held
       ) n
-     WHERE s.status = 'PENDING' AND s.cancel_requested_at IS NULL
+     WHERE ${sessionTurnStateSql('s')} = 'QUEUED' AND s.cancel_requested_at IS NULL
     OFFSET 0`;
 }
 

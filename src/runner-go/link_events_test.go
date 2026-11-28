@@ -547,6 +547,7 @@ func TestLinkEventsKeptAcrossARestartAreSentFirst(t *testing.T) {
 	t.Cleanup(m.close)
 	m.work.client.api, m.work.client.dial = r.m.work.client.api, r.m.work.client.dial
 	m.work.pingEvery, m.work.pingTimeout = 200*time.Millisecond, 2*time.Second
+	m.work.youngBackoff = 0
 	s2 := m.events.open("session-rs")
 	defer s2.release()
 	if got := s2.firstSeq(11); got != 31 {

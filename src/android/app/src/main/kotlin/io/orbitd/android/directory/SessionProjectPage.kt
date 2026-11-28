@@ -102,7 +102,7 @@ internal fun SessionProjectRowView(row: SessionProjectRow, onOpen: () -> Unit, o
             Text(row.title, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
             ProjectIndicator(row.indicator)
             // An instant this clock cannot read draws no time at all.
-            (row.lastTurnAt ?: row.createdAt)?.let { WikiDate.relative(it, Instant.now()) }?.let {
+            (row.listedAt ?: row.createdAt)?.let { WikiDate.relative(it, Instant.now()) }?.let {
                 Text(it, style = MaterialTheme.typography.labelMedium, color = muted, maxLines = 1, softWrap = false)
             }
         }
@@ -229,14 +229,13 @@ internal fun lineColor(tone: SessionLine.Tone): Color = when (tone) {
     else -> MaterialTheme.colorScheme.onSurfaceVariant
 }
 
-/** Waiting on you: the amber dot; a member running: the spinner; only a background job left: the terminal mark, breathing. */
+/** Waiting on you: the amber dot; a member running (a background job in flight included): the spinner. */
 @Composable
 private fun ProjectIndicator(indicator: SessionProjectRow.Indicator?) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     when (indicator) {
         SessionProjectRow.Indicator.NEEDS_YOU -> Box(Modifier.size(7.dp).background(LocalOrbitColors.current.needsYou, CircleShape).testTag("project-row-needs-you"))
         SessionProjectRow.Indicator.RUNNING -> CircularProgressIndicator(Modifier.size(12.dp).testTag("project-row-running"), color = muted, strokeWidth = 1.5.dp)
-        SessionProjectRow.Indicator.JOBS -> BreathingTerminal(Modifier.testTag("project-row-jobs"))
         null -> Unit
     }
 }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { isReleasedStatus } from '../common/session-release';
 import { SESSION_MERGE_BESIDE_TURN_V1 } from '@orbit/shared';
 import { newTerminalResumeHandoffOwner } from '../common/session-inbox-fence';

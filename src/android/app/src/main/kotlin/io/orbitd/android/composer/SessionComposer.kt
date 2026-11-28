@@ -65,6 +65,7 @@ import io.orbitd.android.management.LocalPromptOptimizer
 import io.orbitd.android.core.promptoptimizer.PromptOptimizer
 import io.orbitd.android.core.promptoptimizer.PromptOptimizerCopy
 import io.orbitd.android.core.translation.Translation
+import io.orbitd.android.core.protocol.SessionFacts
 import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.management.personalPermissions
 import io.orbitd.android.reader.ComposerFold
@@ -82,7 +83,9 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
     openTask: ((String) -> Unit)? = null, openRunner: ((runner: String, engine: String) -> Unit)? = null,
     openTranslationSettings: (() -> Unit)? = null,
     /** The page's own placeholder, over the composer's: a new account's welcome card (WelcomeCopy.WELCOME_PLACEHOLDER). */
-    placeholder: String? = null) {
+    placeholder: String? = null,
+    /** A page chat's chips over the text, ahead of the staged files: `Folder · Scans ✕` (PageChat). */
+    chips: (@Composable () -> Unit)? = null) {
     val model = remember(app, handle, sessionId) { app.composer(handle, sessionId, target) }
     val state by model.state.collectAsState()
     val context = LocalContext.current
@@ -101,6 +104,15 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
     LaunchedEffect(draft.text, draft.selectionStart, draft.selectionEnd) {
         if (field.text != draft.text) field = TextFieldValue(draft.text,
             TextRange(draft.selectionStart.coerceIn(0, draft.text.length), draft.selectionEnd.coerceIn(0, draft.text.length)))
+    }
+    // The conversation this box sends into, as the page reads it (docs/mocks/composer-sending-bubble): the seq a message sent now is
+    // recognised after, and each change of it settles the bubbles — an echo replaces a Not sent one; the queue or the echo takes over
+    // from a sent one. Only once the server's own tail is in: a copy off the disk could be older than what was said since.
+    val liveEvents = session?.takeIf { target == null && it.transcript.seeded && !it.seededFromCache }?.transcript?.events
+    val listedTurns = session?.snapshot?.queuedTurns
+    LaunchedEffect(model, liveEvents, listedTurns, state.sending, state.draft.pending, state.sent) {
+        model.seenSeq = liveEvents?.let(::newestSeq)
+        if (liveEvents != null) model.settle(liveEvents, listedTurns.orEmpty())
     }
     var menu by remember { mutableStateOf(false) }
     var drivePicker by remember { mutableStateOf(false) }
@@ -267,17 +279,19 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                     Button(enabled = !state.busy, onClick = model::retrySend) { Text("Retry saving confirmation") }
                 }
                 selectionNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                if (target == null && terminal(detail)) {
+                // Not for a session a move let go: nothing tells its reader it ended (SessionFacts.releasedByMove).
+                if (target == null && terminal(detail) && !SessionFacts.releasedByMove(detail)) {
                     Text("Sending a message will resume this session in Open.", style = MaterialTheme.typography.bodySmall)
                     (detail["capabilities"] as? JsonObject)?.text("resumeBlockedReason")?.let { reason ->
                         Text(reason); TextButton(onClick = { app.realtime.refreshSession() }) { Text("Check Again") }
                     }
                 }
                 if (!session.canCompose()) Text("Reconnect to send. Your draft is saved.", style = MaterialTheme.typography.bodySmall)
-                draft.pending?.let { pending ->
+                // A message into the session waits in the conversation as its bubble, Retry in its foot (owner decision 1, 2026-11-27);
+                // only a chat's create, which has no bubble,, still says it above the box.
+                draft.pending?.takeIf { !bubbled(it.endpoint) }?.let { pending ->
                     Text("Delivery unconfirmed: ${pending.text.take(120)}", style = MaterialTheme.typography.bodySmall)
-                    if (pending.endpoint == "create") Text("Creation is unconfirmed. Check this workspace's sessions before creating another session.")
-                    else Button(enabled = !state.busy && !state.waiting && session?.accessDenied != true, onClick = model::retrySend) { Text("Retry saved send") }
+                    Text("Creation is unconfirmed. Check this workspace's sessions before creating another session.")
                 }
                 // Frame 6: the press failed; the draft below is untouched.
                 if (optimizer.failed) PromptOptimizationFailureLine(retry = model::retryOptimize, dismiss = model::dismissOptimization)
@@ -287,6 +301,7 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
             Column(Modifier.weight(1f, fill = false).fillMaxWidth().composerCardLift().clip(ComposerCardShape).background(composerCardColor())
                 .border(1.dp, composerCardBorder(focused), ComposerCardShape).testTag("composer-card")) {
                 Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+                    chips?.invoke()
                     // Decided 2026-11-19: inside the card, above the text, as iOS draws them.
                     AttachmentStrip(draft.attachments, state.uploads, bytes = { model.attachmentBytes(it) },
                         open = { preview = it }, remove = { model.removeAttachment(it.id) })
@@ -415,7 +430,8 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                         var queueMenu by remember { mutableStateOf(false) }
                         LaunchedEffect(queueOffered) { if (!queueOffered) queueMenu = false }
                         Box {
-                            RoundSend(stop = stop, waiting = state.waiting || state.busy, enabled = sendEnabled,
+                            // Uploading is the one wait Send draws; a message on its way is its bubble's, and Send a plain disabled arrow.
+                            RoundSend(stop = stop, waiting = state.waiting, enabled = sendEnabled,
                                 label = if (state.waiting) "Uploading…" else if (state.busy) "Sending…" else if (stop) "Stop" else "Send",
                                 modifier = Modifier.testTag("composer-send").holdToOffer(queueOffered) { queueMenu = true }.semantics {
                                     if (queueOffered) customActions = listOf(CustomAccessibilityAction(PendingTray.QUEUE_FOR_NEXT_TURN) { send(true); true })

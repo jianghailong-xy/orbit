@@ -7,7 +7,7 @@ import {
 } from '@orbit/shared';
 import { sanitizeRunnerEngines } from '../common/runner-engines';
 import { relayPeers, type RelayPeers } from '../runners/relay-peers';
-import { runnerIsOnline, runnerLastBeatAt, type RunnerBeats } from '../runners/runner-presence';
+import { runnerIsOnline, runnerPresentAt, type RunnerBeats } from '../runners/runner-presence';
 import { keyFingerprint } from './provider-engine-resolution';
 
 /** What one process asks another of the checks it holds (runners/relay-peers.ts): hand their keys over, or take an
@@ -79,7 +79,7 @@ export function cursorKeyCheckers<T extends CursorKeyCheckerRow>(runners: readon
       const cursor = sanitizeRunnerEngines(runner.engines)?.find((engine) => engine.engine === AgentProvider.CURSOR);
       return !!cursor?.installed && !cursor.installationError;
     })
-    .sort((a, b) => (runnerLastBeatAt(b)?.getTime() ?? 0) - (runnerLastBeatAt(a)?.getTime() ?? 0));
+    .sort((a, b) => (runnerPresentAt(b)?.getTime() ?? 0) - (runnerPresentAt(a)?.getTime() ?? 0));
 }
 
 interface HeldCheck {

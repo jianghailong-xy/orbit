@@ -546,6 +546,10 @@ type HeartbeatResponse struct {
 	// (drainClaimScope). False/absent on older control planes, which would ignore the scope, so the
 	// runner claims nothing while it drains, as before.
 	DrainScopedClaims bool `json:"drainScopedClaims,omitempty"`
+	// CapacityClaims: the control plane takes a full runner's claim scope (GET /runner/sessions/claim?fullScope=) and
+	// takes back a claim the runner cannot start (return-slot reason runner_full). Said on every answer; absent from older
+	// control planes, which hand out claims as before, and a claim the runner cannot start then waits for its slot.
+	CapacityClaims bool `json:"capacityClaims,omitempty"`
 	// SessionReleaseV1: this server's operator says every replica serves the session-release protocol (the apiserver's
 	// switch ORBIT_SESSION_RELEASE_V1), so this runner may report a failed turn and the release separately
 	// (session_release.go). Absent from an older control plane and while the switch is off: declared on nothing.
@@ -585,7 +589,8 @@ type HeartbeatResponse struct {
 	// The one Codex rate-limit reset step claimed for this process
 	// (docs/codex-rate-limit-reset-contract.md §6). Nil from older control planes and whenever no
 	// operation is claimed for it; nothing acts on it until this binary declares
-	// codex-rate-limit-reset-v1.
+	// codex-rate-limit-reset-v1. A protocol version 2 command names its account slot (AccountSlot,
+	// contract v2 §12) and is sent only to a binary that declares codex-rate-limit-reset-v2.
 	CodexRateLimitResetRequest *CodexRateLimitResetCommand `json:"codexRateLimitResetRequest,omitempty"`
 	// Integration jobs this process has just been handed: the platform's own git work, putting a
 	// task's branch onto its project's integration line

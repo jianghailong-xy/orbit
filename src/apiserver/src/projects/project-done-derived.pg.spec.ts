@@ -89,10 +89,10 @@ import {
   CreatorType,
   type Prisma,
   ProjectStatus,
-  RunStatus,
   SessionDispatchOrigin,
   type PrismaClient,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -278,7 +278,7 @@ test('project.status = DONE is projected from confirmed criteria that landed, an
         taskId,
         title: `ran ${branch}`,
         prompt: 'do the work',
-        status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
+        turnState: null, finishedAt: new Date(), 
         branch,
         isolationStatus: 'worktree',
       },
@@ -410,7 +410,7 @@ test('project.status = DONE is projected from confirmed criteria that landed, an
         title: 'a session acting on this project',
         prompt: 'act',
         provider: 'claude',
-        status: RunStatus.RUNNING,
+        turnState: 'IN_FLIGHT',
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: false,
       },
@@ -819,7 +819,7 @@ test('the clause for a criterion its own evidence wrote takes its place in order
         title,
         prompt: 'do the work',
         provider: 'claude',
-        status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
+        turnState: null, finishedAt: new Date(), 
         branch,
         isolationStatus: 'worktree',
         dispatchOrigin: SessionDispatchOrigin.USER,
@@ -1197,7 +1197,7 @@ test('a check that did not pass, and work reopened after it settled, do not stor
         taskId,
         title: `ran ${branch}`,
         prompt: 'do the work',
-        status: RunStatus.SUCCEEDED,
+        turnState: null,
         // Finished, as the runner's /finalize writes SUCCEEDED: a work session with no `finished_at`
         // is work still moving, and a DONE over it has its landing deferred to the finish (§12.15
         // P-M1), which the closing guardrail reads as LANDING_IN_FLIGHT.

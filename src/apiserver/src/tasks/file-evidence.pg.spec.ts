@@ -36,7 +36,8 @@ import { test } from 'node:test';
 
 import { JwtService } from '@nestjs/jwt';
 import { toUuid, uuidToBase62 } from '@orbit/shared';
-import type { Prisma, PrismaClient, RunStatus } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
+import type { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-test-apiserver';
@@ -44,6 +45,7 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { evidenceReviewBlock } from './evidence-review';
 import { completionDigest } from './task-completion-evidence.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -149,12 +151,12 @@ test('evidence that cites a file', { skip: !URL, concurrency: 1, timeout: 600_00
   const secondMachine = await accountOf('second-machine');
   await db.runner.update({ where: { id: secondMachine.runnerId }, data: { ownerId: owner.ownerId } });
 
-  const sessionOf = async (title: string, taskId?: string, who: Account = owner, status: RunStatus = 'AWAITING_INPUT') => {
+  const sessionOf = async (title: string, taskId?: string, who: Account = owner, status: `${RunStatus}` = 'AWAITING_INPUT') => {
     const id = randomUUID();
     await db.session.create({
       data: {
         id, title, prompt: title, ownerId: who.ownerId, creatorId: who.ownerId, workspaceId: who.workspaceId,
-        assignedRunnerId: who.runnerId, status, startedAt: new Date(), runtimeSessionId: `runtime-${id}`,
+        assignedRunnerId: who.runnerId, turnState: turnStateOfWord(status), startedAt: new Date(), runtimeSessionId: `runtime-${id}`,
         ...(status === 'SUCCEEDED' || status === 'FAILED'
           ? { finishedAt: new Date()}
           : status === 'CANCELLED' ? { finishedAt: new Date()} : {}),
@@ -490,7 +492,7 @@ test('evidence that cites a file', { skip: !URL, concurrency: 1, timeout: 600_00
     created(await submit(moving, [asFile(picture)]), 'the evidence');
     await reads(project.coordinator, picture, 'its coordinator, before it moves');
     // A task moves once its run has ended: a live claim holds it where it is.
-    await db.session.update({ where: { id: moving.sessionId }, data: { status: 'SUCCEEDED', finishedAt: new Date()} });
+    await db.session.update({ where: { id: moving.sessionId }, data: { turnState: null, finishedAt: new Date()} });
     const elsewhere = await projectOf('the project it moved to');
     await db.task.update({ where: { id: moving.taskId }, data: { projectId: elsewhere.id, criterionDefinitionId: elsewhere.definitionId } });
     await readsNothing(project.coordinator, picture, 'the coordinator of the project it left');

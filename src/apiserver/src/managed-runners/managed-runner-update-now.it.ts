@@ -82,6 +82,7 @@ import { DockerChannelClient } from './docker-channel-client';
 import type { DockerRunnerProfile } from './managed-runner-profile';
 import { MANAGED_RUNNER_RUNTIME, type ManagedRunnerRuntime } from './managed-runner-runtime';
 import { MANAGED_RUNNER_UPDATE_NOW_ACTIVITY } from './managed-runner.service';
+import { wordOf } from '../test-support/session-word';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -608,14 +609,14 @@ test('Update Now of a busy Orbit Cloud runner, on real Docker', { skip: !CONFIG 
     turnId = toolUse.turnId!;
     await sleep(5_000);
     const running = await db.session.findUniqueOrThrow({ where: { id: sessionId } });
-    assert.equal(running.status, 'RUNNING', 'the turn is in flight');
+    assert.equal(wordOf(running), 'RUNNING', 'the turn is in flight');
     const processes = await shell(containerOf(first), `for p in /proc/[0-9]*; do tr '\\0' ' ' < $p/cmdline 2>/dev/null; echo; done | grep -c '^${LONG_COMMAND}' || true`);
     if (earlier) {
       transcript = await until('the turn\'s Claude Code transcript', () => transcriptIn(containerOf(first), `${earlier}/.claude/projects/${claudeSlug(workDir)}`), 120_000, 1_000);
       const volume = await shell(containerOf(first), `cd /var/lib/orbit && find . -maxdepth 3 -not -path './home/.orbit/*/*' | sort | head -80`);
       note('(1) the earlier layout', { home: earlier, workDir, transcript, signIns: Object.keys(SIGN_INS), volume: volume.split('\n') });
     }
-    note('(1) turn in flight', { sessionId, turnId, status: running.status, toolUse: toolUse.payload, longCommandProcesses: processes });
+    note('(1) turn in flight', { sessionId, turnId, status: wordOf(running), toolUse: toolUse.payload, longCommandProcesses: processes });
   });
 
   if (cfg.middleImage) {
@@ -651,7 +652,7 @@ test('Update Now of a busy Orbit Cloud runner, on real Docker', { skip: !CONFIG 
         return Number(out) > 0;
       }, 300_000, 1_000);
       const session = await db.session.findUniqueOrThrow({ where: { id: sessionId } });
-      assert.equal(session.status, 'RUNNING', 'the turn is in flight on the middle image');
+      assert.equal(wordOf(session), 'RUNNING', 'the turn is in flight on the middle image');
       continueWithCommand = false;
       const root = (await shell(name, 'echo "$HOME"; ls -A /home/orbit | sort | tr "\\n" " "')).split('\n');
       const signedIn = await shell(name, `for f in ${Object.keys(SIGN_INS).join(' ')}; do [ -e /home/orbit/$f ] && echo $f; done; true`);
@@ -687,8 +688,8 @@ test('Update Now of a busy Orbit Cloud runner, on real Docker', { skip: !CONFIG 
     const m = await mappingOf();
     const container = await inspect(containerOf(m));
     const session = await db.session.findUniqueOrThrow({ where: { id: sessionId } });
-    assert.deepEqual({ generation: m.generation, podUid: m.podUid, image: container?.Image, session: session.status }, { generation: current.generation, podUid: current.podUid, image: currentImage, session: 'RUNNING' });
-    note('(2) upgraded around the running container', { update, currentImageSha: m.currentImageSha, imageOutdatedSince: m.imageOutdatedSince, session: session.status });
+    assert.deepEqual({ generation: m.generation, podUid: m.podUid, image: container?.Image, session: wordOf(session) }, { generation: current.generation, podUid: current.podUid, image: currentImage, session: 'RUNNING' });
+    note('(2) upgraded around the running container', { update, currentImageSha: m.currentImageSha, imageOutdatedSince: m.imageOutdatedSince, session: wordOf(session) });
   });
 
   await t.test('(3) Update Now without interruptTurns: refused 409 MANAGED_RUNNER_BUSY, naming the running turn', async () => {
@@ -813,10 +814,10 @@ test('Update Now of a busy Orbit Cloud runner, on real Docker', { skip: !CONFIG 
     }, 600_000, 1_000);
     const settled = await until('the session settled after its turn', async () => {
       const s = await db.session.findUniqueOrThrow({ where: { id: sessionId } });
-      return s.status !== 'RUNNING' && s.status !== 'PENDING' ? s : null;
+      return wordOf(s) !== 'RUNNING' && wordOf(s) !== 'PENDING' ? s : null;
     }, 300_000, 1_000);
     const turn = await db.conversationTurn.findUniqueOrThrow({ where: { id: turnId } });
-    note('(5) the turn continued and ended', { session: settled.status, assignedRunnerId: settled.assignedRunnerId, turn: { deliveryStatus: turn.deliveryStatus, outcome: turn.outcome }, answer: answered.payload });
+    note('(5) the turn continued and ended', { session: wordOf(settled), assignedRunnerId: settled.assignedRunnerId, turn: { deliveryStatus: turn.deliveryStatus, outcome: turn.outcome }, answer: answered.payload });
     assert.equal(settled.assignedRunnerId, next.runnerId, 'on the same runner');
     assert.ok(cut.length > 0, 'the runner marked the cut');
     assert.ok(continuation.lastUserText.includes(RUNNER_UPDATE_RESUME_NOTE), `the continuation opens with the update's note: ${continuation.lastUserText.slice(0, 400)}`);

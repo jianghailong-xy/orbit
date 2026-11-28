@@ -105,14 +105,15 @@ const WATCH = {
   expiryDeliveries: [],
 };
 
-/** Interrupted, a process left up, a retry armed: the list row's facts for a case that draws three marks. */
+/** An approval waiting, interrupted, a process left up: the list row's facts for a case that draws three marks. */
 const THREE = {
   ...row(encodeId('0195c0de-0000-7000-8000-0000000000c6'), 'Three marks', 'Stopped halfway.'),
   status: 'INTERRUPTED',
   phase: 'IDLE',
   released: false,
   lastTurnOutcome: 'INTERRUPTED',
-  waitingOn: 'WAKE',
+  waitingOn: 'PERSON',
+  pendingApprovals: 1,
   endReason: null,
   workFinished: false,
   runningBgCount: 1,
@@ -258,19 +259,23 @@ describe('the session list over a session a watch will resume', { timeout: 60_00
 });
 
 describe('the session list row with three marks', { timeout: 60_000 }, () => {
-  // jsdom lays nothing out: that no chip is clipped is the stylesheet's wrapping, seen in the 1440 px screenshot.
-  it('draws all three chips, and no "+N"', async () => {
+  // Interrupted is not drawn; Background is a title-line icon, not a chip (the owner, 2026-11-27); Needs you stays a chip.
+  it('draws Background as an icon on the title line and Needs you as its only chip', async () => {
     listed = [WATCHING, PLAIN, THREE];
     await mountList();
     await act(async () => {
-      await vi.waitFor(() => expect(listRow(THREE.title).querySelector('.session-marks')).not.toBeNull(), {
+      await vi.waitFor(() => expect(listRow(THREE.title).querySelector('.session-row-icon')).not.toBeNull(), {
         timeout: 20_000,
         interval: 20,
       });
     });
 
+    const icons = [...listRow(THREE.title).querySelectorAll('.session-title-row .session-row-icon')];
+    expect(icons.map((icon) => [icon.getAttribute('data-icon'), icon.getAttribute('aria-label')])).toEqual([
+      ['BACKGROUND', 'Background work running'],
+    ]);
     const chips = [...listRow(THREE.title).querySelectorAll('.session-marks .session-mark')];
-    expect(chips.map((chip) => chip.textContent)).toEqual(['Interrupted', 'Background', 'Will resume']);
+    expect(chips.map((chip) => chip.textContent)).toEqual(['Needs you']);
   });
 
   it('lets the chips wrap under a readable line, in a row that grows with them', () => {

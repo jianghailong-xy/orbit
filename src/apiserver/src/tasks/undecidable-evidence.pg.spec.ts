@@ -6,11 +6,11 @@ import { HttpException } from '@nestjs/common';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { uuidToBase62 } from '@orbit/shared';
@@ -49,6 +49,7 @@ import {
 } from './task-completion-evidence.service';
 import { TasksService } from './tasks.service';
 import { standardDigest, undecidableEvidenceTurnId, type HeldStandard } from './undecidable-evidence';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * ONE SHARED PATH WHEN AN UNANSWERED REVISION BECOMES UNDECIDABLE
@@ -185,7 +186,7 @@ async function conversation(
       title,
       prompt: title,
       provider: 'claude',
-      status: options.status ?? RunStatus.AWAITING_INPUT,
+      turnState: turnStateOfWord(options.status ?? RunStatus.AWAITING_INPUT),
       ...(['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(options.status ?? RunStatus.AWAITING_INPUT)
         ? { finishedAt: new Date()}
         : {}),

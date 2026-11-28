@@ -63,6 +63,7 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import { controlPlaneNoteOf } from '../runner-api/control-plane-note';
 import { SessionsService } from '../sessions/sessions.service';
 import { isOwnerTurn } from './wiki.service';
+import { wordSql } from '../test-support/session-word';
 import '../test-support/daemon-routes-over-http';
 
 /** When WIKI_CHAT_PAYLOADS names a file, each server answer a client draws is appended to it as one JSON line (src/shared/src/wiki-chat.server-payloads.json is built from it). */
@@ -265,7 +266,9 @@ test('the wiki chat is an ordinary session of the workspace the space chose, sta
   const create = (body: Record<string, unknown>, bearer = ownerToken, headers?: Record<string, string>) =>
     api('POST', chats, bearer, { clientTurnId: randomUUID(), content: 'Is the lease really ninety seconds?', ...body }, headers);
   const list = (bearer = ownerToken, headers?: Record<string, string>) => api('GET', chats, bearer, undefined, headers);
-  const sessionRow = async (id: string) => (await sql.query(`SELECT * FROM "session" WHERE "id" = $1::uuid`, [id])).rows[0];
+  /** The session's row, with `status` the word its facts give. */
+  const sessionRow = async (id: string) =>
+    (await sql.query(`SELECT *, ${wordSql()} AS status FROM "session" WHERE "id" = $1::uuid`, [id])).rows[0];
   const turnsOf = async (sessionId: string) =>
     (await sql.query(`SELECT * FROM "conversation_turn" WHERE "session_id" = $1::uuid ORDER BY "seq"`, [sessionId])).rows;
   const sessionsIn = async (workspaceId: string) =>
@@ -526,9 +529,9 @@ test('the wiki chat is an ordinary session of the workspace the space chose, sta
       /SOURCE_PIN_IMMUTABLE/u, 'and its selector is frozen like every other');
     // The CHECKs: the chat's is the one SOURCE shape with no codebase, and it is a ref.
     const insert = (columns: Record<string, unknown>) => sql.query(
-      `INSERT INTO "session" (id, title, prompt, owner_id, creator_id, workspace_id, status, dispatch_origin, updated_at, source_state,
+      `INSERT INTO "session" (id, title, prompt, owner_id, creator_id, workspace_id, turn_state, dispatch_origin, updated_at, source_state,
          source_kind, source_codebase_id, source_repo_url, source_ref, source_revision_sha, source_config_revision, source_ref_authority)
-       VALUES ($1, 'shape', 'p', $2, $2, $3, 'PENDING', 'USER', now(), 'SELECTED', 'CHAT_UPSTREAM', $4, $5, $6, $7, $8, 'REMOTE')`,
+       VALUES ($1, 'shape', 'p', $2, $2, $3, 'QUEUED', 'USER', now(), 'SELECTED', 'CHAT_UPSTREAM', $4, $5, $6, $7, $8, 'REMOTE')`,
       [randomUUID(), owner.id, wsDelivery, columns.codebase ?? null, REPO_URL, columns.ref === undefined ? 'refs/heads/main' : columns.ref,
         columns.revision ?? null, columns.config ?? null],
     );

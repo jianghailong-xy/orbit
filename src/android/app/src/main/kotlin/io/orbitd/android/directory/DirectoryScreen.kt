@@ -144,7 +144,7 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
                 contentSessions = sessions, watching = watching, recaps = recaps, workspaceId = workspace)
         }
         val groups = directoryGroups(listing?.entries?.map { it.groupingSession } ?: visibleSessions(local, data.folders, workspace,
-            folderId, view, tag, grouping == Grouping.TAG), view, grouping)
+            folderId, view, tag, grouping == Grouping.TAG), view, grouping, tagFiltered = tag != null)
         // A folder counts a project's members where their coordinator is filed.
         val counted = listing?.assigned ?: local
         val folders = if (!showFolders) emptyList() else data.folders.filter { f ->

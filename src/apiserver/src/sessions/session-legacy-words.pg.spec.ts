@@ -2,13 +2,14 @@
  * THE SQL TWIN OF THE LEGACY STATUS WORD PROJECTOR, AND THE ?status= CONDITION, AGAINST POSTGRESQL (task T4 of
  * docs/session-status-retirement-plan.md, §3.1 and §6):
  *
- *   (1) session_legacy_status (migration 1621) answers what legacySessionStatus answers over every combination of
- *       the facts it reads, the landing's settlement among them
+ *   (1) session_legacy_status (migration 1671's eight-argument form, the only one since deploy D4's migration 1711
+ *       dropped 1621's nine-argument one) answers what legacySessionStatus answers over every combination of the facts
+ *       it reads, the landing's settlement among them
  *   (2) a session of every shape of session-legacy-words.fixture.ts, written to the database, derives from its stored
  *       columns the word the fixture's facts derive, in TypeScript and in SQL
  *   (3) statusWordFilter(word) selects exactly the conversation sessions the projector gives that word
- *   (4) a held row with no turn_state, as one not yet backfilled has, answers its stored word for every held word, in
- *       TypeScript, in SQL and on the payload fields, and statusWordFilter of that word selects it (task T10)
+ *   (4) a held row with no turn_state is parked: in TypeScript, in SQL and on the payload fields, and only
+ *       statusWordFilter('AWAITING_INPUT') selects it (task T14 retired the NULL fallback that read the stored word)
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/session-legacy-words.pg.spec.ts
  */
@@ -24,7 +25,7 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { LEGACY_STATUS_SELECT, legacySessionStatus, statusWordFilter } from './session-legacy-words';
 import { withSessionState } from './session-state';
 import { WORD_SHAPES } from './session-legacy-words.fixture';
-import { ALLOW_UNFILLED_SESSIONS } from '../test-support/unfilled-sessions';
+import { turnStateOfWord } from './session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -45,22 +46,19 @@ test('the projector, its SQL twin and statusWordFilter agree', { skip, timeout: 
   assertCoordinatorPgUrlIsIsolated(URL!);
   const db = prismaClientFor(URL!);
   t.after(() => db.$disconnect());
-  await db.$executeRawUnsafe(ALLOW_UNFILLED_SESSIONS);
 
   await t.test('(1) session_legacy_status over every combination of the facts', async () => {
     const combos = FINISHED.flatMap((finishedAt) => TURN_STATES.flatMap((turnState) => END_REASONS.flatMap(
       (endReason) => OUTCOMES.flatMap((lastTurnOutcome) => STARTED.flatMap((startedAt) => IMPORTS.flatMap(
         (importSourceCwd) => KINDS.flatMap((sessionKind) => SETTLED.map((settledAs) => ({
           finishedAt, turnState, endReason, lastTurnOutcome, startedAt, importSourceCwd, sessionKind, settledAs,
-        })))))))))
-      // The stored word beside them, each in turn (the cycle of seven shares no factor with the others' sizes).
-      .map((combo, i) => ({ ...combo, status: WORDS[i % WORDS.length] as string }));
+        })))))))));
     const words = await db.$queryRawUnsafe<Array<{ word: string }>>(`
       SELECT session_legacy_status(c."finishedAt", c."turnState", c."endReason", c."lastTurnOutcome", c."startedAt",
-                                   c."importSourceCwd", c."sessionKind", c."settledAs", c."status") AS word
+                                   c."importSourceCwd", c."sessionKind", c."settledAs") AS word
         FROM jsonb_to_recordset($1::jsonb) AS c(
           "finishedAt" timestamp, "turnState" text, "endReason" text, "lastTurnOutcome" text, "startedAt" timestamp,
-          "importSourceCwd" text, "sessionKind" text, "settledAs" text, "status" text)`, JSON.stringify(combos));
+          "importSourceCwd" text, "sessionKind" text, "settledAs" text)`, JSON.stringify(combos));
     assert.equal(words.length, combos.length);
     const differences = combos.flatMap((c, i) => {
       const word = legacySessionStatus(c, c.settledAs === null ? null : { settledAt: AT, settledAs: c.settledAs });
@@ -96,11 +94,11 @@ test('the projector, its SQL twin and statusWordFilter agree', { skip, timeout: 
         data: { ownerId, creatorType: 'USER', creatorId: ownerId, title: shape.name, projectId: project.id, completionCriterion: 'EVIDENCE_JUDGMENT' },
       })
       : null;
-    const { turnState: _fromTheWord, status: _asStored, ...facts } = shape.facts;
-    // Through the stored word alone for turn_state: the D1 trigger keeps it, as every writer today leaves it.
+    const { turnState: _fromTheWord, ...facts } = shape.facts;
+    // The turn state the shape's held word stands for, as every writer leaves it.
     const { id } = await db.session.create({
       data: {
-        ownerId, creatorId: ownerId, title: shape.name, prompt: 'words', status: shape.stored,
+        ownerId, creatorId: ownerId, title: shape.name, prompt: 'words', turnState: turnStateOfWord(shape.stored),
         dispatchOrigin: SessionDispatchOrigin.USER,
         ...(landing
           ? { provider: 'orbit', providerBuiltin: true, startsTaskWork: false }
@@ -123,7 +121,7 @@ test('the projector, its SQL twin and statusWordFilter agree', { skip, timeout: 
     const rows = await db.session.findMany({ where: { ownerId }, select: { id: true, ...LEGACY_STATUS_SELECT } });
     const sql = await db.$queryRawUnsafe<Array<{ id: string; word: string }>>(`
       SELECT s.id::text AS id, session_legacy_status(s.finished_at, s.turn_state, s.end_reason, s.last_turn_outcome,
-               s.started_at, s.import_source_cwd, s.kind, l.settled_as, s.status::text) AS word
+               s.started_at, s.import_source_cwd, s.kind, l.settled_as) AS word
         FROM session s LEFT JOIN project_landing l ON l.session_id = s.id
        WHERE s.owner_id = $1::uuid`, ownerId);
     const stored = new Map(rows.map((row) => [row.id, row]));
@@ -149,41 +147,41 @@ test('the projector, its SQL twin and statusWordFilter agree', { skip, timeout: 
     }
   });
 
-  await t.test('(4) a held row with no turn_state answers its stored word', async () => {
+  await t.test('(4) a held row with no turn_state is parked', async () => {
     // Compared all at once, so a failure shows every word that is answered wrong.
     const answers: Record<string, unknown> = {};
     for (const word of HELD_WORDS) {
       const { id } = await db.session.create({
         data: {
-          ownerId, creatorId: ownerId, title: `unfilled ${word}`, prompt: 'words', status: word,
+          ownerId, creatorId: ownerId, title: `no turn state ${word}`, prompt: 'words', turnState: null,
           dispatchOrigin: SessionDispatchOrigin.USER, provider: 'claude', providerBuiltin: true,
           workspaceId: workspace.id, assignedRunnerId: runnerId, startedAt: new Date(),
         },
       });
-      // As a row nothing has written since migration 1611: the word trigger fires on `status` alone.
-      await db.$executeRawUnsafe('UPDATE session SET turn_state = NULL WHERE id = $1::uuid', id);
       const row = await db.session.findUniqueOrThrow({
         where: { id }, select: { ...LEGACY_STATUS_SELECT, completedAt: true, archivedAt: true, deletedAt: true },
       });
-      assert.equal(row.turnState, null, word);
       const [sql] = await db.$queryRawUnsafe<Array<{ word: string }>>(`
         SELECT session_legacy_status(finished_at, turn_state, end_reason, last_turn_outcome, started_at,
-                 import_source_cwd, kind, NULL, status::text) AS word
+                 import_source_cwd, kind, NULL) AS word
           FROM session WHERE id = $1::uuid`, id);
       const payload = withSessionState(row);
-      answers[word] = { typescript: legacySessionStatus(row), sql: sql.word, status: payload.status, runStatus: payload.runStatus };
+      answers[word] = {
+        typescript: legacySessionStatus(row), sql: sql.word,
+        status: payload.status, runStatus: payload.runStatus,
+      };
     }
+    const parked = RunStatus.AWAITING_INPUT;
     assert.deepEqual(answers, Object.fromEntries(HELD_WORDS.map((word) =>
-      [word, { typescript: word, sql: word, status: word, runStatus: word }])));
-    // The ?status= condition matches an unfilled row by its stored word, and no other word's condition does.
-    const matched: Record<string, string[]> = {};
+      [word, { typescript: parked, sql: parked, status: parked, runStatus: parked }])));
+    // The ?status= condition matches them as parked, and no other word's condition does.
+    const matched: Record<string, number> = {};
     for (const word of Object.values(RunStatus)) {
-      const found = await db.session.findMany({
-        where: { AND: [{ ownerId, title: { startsWith: 'unfilled ' } }, statusWordFilter(word)!] }, select: { title: true },
+      matched[word] = await db.session.count({
+        where: { AND: [{ ownerId, title: { startsWith: 'no turn state ' } }, statusWordFilter(word)!] },
       });
-      matched[word] = found.map((row) => row.title);
     }
     assert.deepEqual(matched, Object.fromEntries(Object.values(RunStatus).map((word) =>
-      [word, (HELD_WORDS as readonly string[]).includes(word) ? [`unfilled ${word}`] : []])));
+      [word, word === parked ? HELD_WORDS.length : 0])));
   });
 });

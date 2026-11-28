@@ -28,7 +28,22 @@ import { encodeId } from '../lib/idCodec';
 import type { RunnerAgentFix } from '@orbit/shared';
 import { ApiError } from '../api';
 import { readTaskRunConflict } from '../lib/taskRunHandoff';
+import { OrbitLinkCardsCtx, type OrbitLinkCards } from './OrbitLinkCard';
 import { transcriptEventsWithDurableDeliveryReceipts } from '../lib/acceptedUserTurn';
+
+// A static render opens no tip: the app Tooltip also puts what it would say on its child here.
+vi.mock('./ui/Tooltip', async (importOriginal) => {
+  const real = await importOriginal<typeof import('./ui/Tooltip')>();
+  const { cloneElement, createElement } = await import('react');
+  return {
+    ...real,
+    Tooltip: (props: import('./ui/Tooltip').TooltipProps) =>
+      createElement(real.Tooltip, {
+        ...props,
+        children: typeof props.content === 'string' ? cloneElement(props.children, { 'data-tip': props.content } as object) : props.children,
+      }),
+  };
+});
 
 const LIST_UUID = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
 const LIST_B62 = encodeId(LIST_UUID);
@@ -1118,7 +1133,8 @@ describe('engine stderr', () => {
 
       expect(html.split('chat-diagnostic"').length - 1).toBe(1);
       expect(html).toContain(`×${times}`);
-      expect(html).toContain('2026-10-28T15:13:06.979719Z');
+      // The folded row's tip keeps the first stamp the engine wrote.
+      expect(html).toMatch(/data-tip="2026-10-28T15:13:06\.979719Z/);
       expect(html).not.toContain('chat-error');
     }
   });
@@ -1517,6 +1533,7 @@ describe('engine stderr', () => {
     vi.stubGlobal('window', dom.window);
     vi.stubGlobal('document', dom.window.document);
     vi.stubGlobal('HTMLElement', dom.window.HTMLElement);
+    vi.stubGlobal('Element', dom.window.Element);
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
     const root = createRoot(dom.window.document.getElementById('root')!);
     const start = vi.fn();
@@ -2549,6 +2566,37 @@ describe('tool run folding', () => {
     expect(html.split('class="chat-steps"').length - 1).toBe(2);
   });
 
+  // The call's answer is the child as it was born — untitled and PENDING. Inside a conversation
+  // view the card reads the child as it is now, so a rename and a run show on it.
+  it('draws a spawned child session by its current title and state', () => {
+    const childUuid = '0193f2a1-0000-7000-8000-000000000001';
+    const linkCards: OrbitLinkCards = {
+      host: 'orbit.test',
+      register: () => {},
+      previewFor: (link) =>
+        link.target.kind === 'session' && link.target.id === childUuid
+          ? ({ kind: 'session', id: childUuid, state: 'ok', session: { title: 'Fix login redirect', status: 'RUNNING' } } as any)
+          : undefined,
+      stateWord: (row: any) => (row.status === 'RUNNING' ? 'Running' : String(row.status)),
+    };
+    const created = JSON.stringify({ id: encodeId(childUuid), status: 'PENDING' });
+    const events = callWith('mcp__orbit__session_create', { prompt: 'go' }, created);
+    const doc = new JSDOM(
+      renderToStaticMarkup(
+        <OrbitLinkCardsCtx.Provider value={linkCards}>
+          <Transcript events={events} />
+        </OrbitLinkCardsCtx.Provider>,
+      ),
+    ).window.document;
+    expect(doc.querySelector('.chat-session-card-title')?.textContent).toBe('Fix login redirect');
+    expect(doc.querySelector('.chat-session-card-status')?.textContent).toBe('running');
+
+    // Without a conversation view (the shared page, an export) it stays the call's answer.
+    const bare = new JSDOM(renderToStaticMarkup(<Transcript events={events} />)).window.document;
+    expect(bare.querySelector('.chat-session-card-title')?.textContent).toBe('New session');
+    expect(bare.querySelector('.chat-session-card-status')?.textContent).toBe('pending');
+  });
+
   // A sub-workspace card was kept out only by its children, which arrive after the call — so it
   // spent the start of every run inside the summary and hopped out on the first child event.
   it('keeps a sub-workspace out of the fold before its first child event', () => {
@@ -2641,6 +2689,7 @@ describe('clipped screenshot results', () => {
     const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost' });
     vi.stubGlobal('window', dom.window);
     vi.stubGlobal('document', dom.window.document);
+    vi.stubGlobal('Element', dom.window.Element);
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
     const root = createRoot(dom.window.document.getElementById('root')!);
     await act(async () => {

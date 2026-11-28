@@ -50,6 +50,8 @@ type gateway struct {
 	watchers *watcherBook
 	// streams is every byte stream of the gateway's connections (streams.go).
 	streams *streamBook
+	// facts is the heartbeat facts of every runner process this node holds (facts.go).
+	facts *factStore
 
 	// forward hands an Rpc to a backend (forwardRPC); nil without backends.
 	forward func(c *conn, rpc *linkpb.Rpc)
@@ -79,6 +81,8 @@ func newGateway(cfg config, logger *slog.Logger) *gateway {
 	g.credit = newCreditBook(g, cfg.link)
 	g.watchers = newWatcherBook(cfg.link.WatchersTTL)
 	g.streams = newStreamBook()
+	g.facts = newFactStore(time.Now)
+	g.metrics.factProcesses.fn = func() float64 { return float64(g.facts.processes()) }
 	g.metrics.openStreams.fn = func() float64 { return float64(g.streams.open()) }
 	g.metrics.ingestEvents.fn = func() float64 { return float64(g.credit.depth().Events) }
 	g.metrics.ingestBytes.fn = func() float64 { return float64(g.credit.depth().Bytes) }
@@ -169,7 +173,9 @@ func (g *gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			fmt.Sprintf("this runner already has %d connections", g.cfg.MaxConnsPerRunner), 30*time.Second)
 		return
 	}
-	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{CompressionMode: websocket.CompressionDisabled})
+	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		CompressionMode: websocket.CompressionNoContextTakeover, CompressionThreshold: linkCompressionThreshold,
+	})
 	if err != nil {
 		g.reg.release(claims.RunnerID)
 		m.handshakes.inc("upgrade_failed")
@@ -184,6 +190,14 @@ func (g *gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// its life, to be scanned at each GC.
 	go c.run(started)
 }
+
+// linkCompressionThreshold is the smallest message the gateway compresses (docs/runner-link-design.md §15.17).
+// Compression is permessage-deflate without context takeover, and only with a runner that offers it: a runner from
+// before it offers none and is answered uncompressed. Each message is compressed alone, from pooled writers, so a
+// connection keeps no 1.2 MB writer of its own. Measured on the link's traffic, real engine output's event batches go
+// to 0.51 of their size and a first heartbeat to 0.34; a steady heartbeat (digests) and the frames under 512 bytes
+// (acks, most live batches) gain nothing worth their CPU. The read limit holds what a message inflates to.
+const linkCompressionThreshold = 512
 
 // refuseHTTP answers an upgrade request the gateway will not upgrade. The body's code names the CloseCode the same
 // refusal would carry after the upgrade, and Retry-After says when to come back.

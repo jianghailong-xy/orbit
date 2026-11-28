@@ -281,9 +281,6 @@ const CORE_TRIGGERS_AFTER: Readonly<Record<string, readonly string[]>> = {
   ],
   run_event: ['run_event_ingestion_provenance_guard'],
   session: [
-    // 1611's: session.turn_state follows the stored word (docs/session-status-retirement-plan.md, deploy D1). Another
-    // SIBLING change, like `session_zz_phase` below.
-    'session_aa_turn_state_from_status',
     // 0414's: a session's recorded engine is claimed and leased only by a transaction that declares it
     // reads it, so an older control plane cannot run it on the engine its slug suggests. Another SIBLING
     // change, like the two below it.
@@ -353,7 +350,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
   // `task` carries 24; naming all of them here would restate the inventory rather than check it.
   // What matters for it is the same two properties, stated directly.
   const core = TRIGGER_WRITE_SOURCES.filter((entry) => CENSUS_TABLES.includes(entry.table));
-  assert.equal(core.length, 70,
+  assert.equal(core.length, 69,
     'these four tables carried 43 triggers before 0224, 40 after it, 39 once 0226 removed '
     + '`failure_successor_task_binding_immutable` from `task`, 38 once 0227 removed '
     + '`task_executable_plan_bind` with the EXECUTABLE acceptance runtime, 35 once 0228 '
@@ -385,7 +382,9 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + 'and 67 once 1060 added `condition_ended_with_task` to `task`, which ends a task\'s condition when it is cancelled, '
     + 'done or failed, and 68 once 1434 added `session_listed_at_settle` to `session`, which moves the session list\'s '
     + 'order key when a session ends or is completed, and 70 once 1611 added `session_aa_turn_state_from_status` and '
-    + '`session_zz_phase` to `session`, which keep the row\'s own `turn_state` and `phase` from its stored word');
+    + '`session_zz_phase` to `session`, which kept the row\'s own `turn_state` and `phase` from its stored word; 1671 '
+    + 'replaced the first with `session_aa_status_from_facts`, which kept the stored word from the facts, and 69 once '
+    + '1711 dropped it with the column');
   assert.deepEqual(core.filter((entry) => entry.since.startsWith('0207_')), [],
     'no trigger attributed to 0207 may still be registered');
   // Every one of them installed BEFORE 0207 is still here. Derived from the inventory's own
@@ -405,7 +404,6 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
       'project_rollup_candidate_task_insert', 'project_rollup_candidate_task_update',
       'project_task_status_count_delete', 'project_task_status_count_insert',
       'project_task_status_count_move', 'run_event_ingestion_provenance_guard',
-      'session_aa_turn_state_from_status',
       'session_acquisition_engine_guard',
       'session_antigravity_runner_claim_guard',
       'session_cursor_runner_acquisition_guard',
@@ -433,7 +431,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + 'and 0476\'s `session_wiki_chat_space_guard`. '
     + '0484\'s nine `open_list_epoch_*` triggers and `conversation_turn_evidence_review_deadline`, '
     + 'and 0615\'s `task_fork_guard`, and 0850\'s `session_help_ask_guard`, and 1060\'s `condition_ended_with_task`, '
-    + 'and 1434\'s `session_listed_at_settle`, and 1611\'s `session_aa_turn_state_from_status` and `session_zz_phase`. '
+    + 'and 1434\'s `session_listed_at_settle` and 1611\'s `session_zz_phase`. '
     + '0212\'s `failure_successor_task_binding_immutable` was another, and 0226 removed it',
   );
   assert.ok(

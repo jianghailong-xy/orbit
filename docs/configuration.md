@@ -52,7 +52,7 @@ output into a public report: expanded values can contain secrets.
 | `ORBIT_WIKI_MODE` → container `ORBIT_WIKI` | `enum`: `on`, `canary`, `off` | Optional; `on` | Wiki rollout. Disabled accounts receive `WIKI_DISABLED` and no Wiki tools/context. | No | Recreate API; no migration or runner release |
 | `ORBIT_WIKI_CANARY_OWNERS` | `string` | Optional; empty | Comma-separated account IDs enabled in Wiki canary mode. | No; account identifiers are private diagnostic data | Recreate API |
 | `ORBIT_RUN_STOPPED_WAKE_MODE` → container `ORBIT_RUN_STOPPED_WAKE` | `enum`: `on`, `off` | Optional; `on` | `off` stops the "Run stopped" wake (`TASK_RUN_STOPPED`), which tells a project's lead session when a task's run parks with nothing to wake it. | No | Recreate API; no migration or runner release |
-| `DEEPSEEK_API_KEY` | `secret` | Optional; empty names sessions with their own provider | Asynchronous session title/tag enrichment. When empty, a session is named by its own provider instead: on a configured API key the server holds (title and tags; not a Claude subscription token or an internal-host endpoint), or, for an engine's own sign-in, by Claude Code or Codex from inside the process running the session (title only). | Yes | Recreate API |
+| `DEEPSEEK_API_KEY` | `secret` | Optional; empty turns session naming and recaps off | Asynchronous session title/tag enrichment. When empty, nothing names a session: it keeps the title cut from its first prompt, and neither its provider's key nor the engine running it is asked for one. Session recaps use only this key: when it is empty, recap is off, and a session's own provider key is never spent on one. | Yes | Recreate API |
 | `DEEPSEEK_BASE_URL` | `URL` | Optional; `https://api.deepseek.com` | Endpoint for title/tag enrichment. | No; avoid credential-bearing URLs | Recreate API |
 | `DEEPSEEK_MODEL` | `string` | Optional; `deepseek-chat` | Model used for title/tag enrichment. | No | Recreate API |
 | `APNS_KEY` | `secret` (base64) | Optional; empty disables APNs unless environment keys are configured | Base64-encoded contents of the Apple `AuthKey_XXXX.p8` key. Default for both APNs environments; needs the key/team identifiers. | Yes | Recreate API |
@@ -322,6 +322,11 @@ credential changes and the API connection rather than deleting or reinitializing
 | `ORBIT_BACKUP_SYNC_TARGET` | `string` | Optional; empty means local only | SSH rsync destination dedicated to the archive. The mirror deletes unrelated destination files. `./data/files` is copied beside it, to `<target>-files`, so the SSH user must be able to create that directory too. | No; redact private host/path | Recreate `pgbackup` |
 | `ORBIT_BACKUP_SYNC_SSH_PORT` | `integer` | Optional; `22` | SSH port for the off-host mirror. | No | Recreate `pgbackup` |
 | `ORBIT_BACKUP_SSH_DIR` | `path` | Optional; `/root/.ssh` | Host directory mounted read-only at `/ssh`, containing `id_rsa` and `known_hosts` for the mirror. | Contents include a private key | Recreate `pgbackup`; keep host-key checking enabled |
+| `ORBIT_BACKUP_S3_TARGET` | `string` (`<bucket>/<prefix>`) | Optional; empty means the archive goes to `ORBIT_BACKUP_SYNC_TARGET` | S3 bucket and prefix the archive is copied to instead, used only by the archive. The copy deletes unrelated objects under the prefix. `ORBIT_BACKUP_SYNC_TARGET` then takes only the files copy. | No | Recreate `pgbackup` |
+| `ORBIT_BACKUP_S3_ENDPOINT` | `URL` | Optional; `ORBIT_DRIVE_S3_ENDPOINT` | Endpoint of the archive's bucket. | No | Recreate `pgbackup` |
+| `ORBIT_BACKUP_S3_REGION` | `string` | Optional; `ORBIT_DRIVE_S3_REGION` | Region of the archive's bucket. | No | Recreate `pgbackup` |
+| `ORBIT_BACKUP_S3_ACCESS_KEY_ID` | `string` | Optional; `ORBIT_DRIVE_S3_ACCESS_KEY_ID` | Access key for the archive's bucket. Give it a key of its own, one the apiserver does not hold. | Yes | Recreate `pgbackup` |
+| `ORBIT_BACKUP_S3_SECRET_ACCESS_KEY` | `string` | Optional; `ORBIT_DRIVE_S3_SECRET_ACCESS_KEY` | Secret key for the archive's bucket. | Yes | Recreate `pgbackup` |
 
 The data and local archive live at `./data/postgres` and `./data/pg-archive`. Local backups share the
 database disk; configure an off-host copy and test restoration using the
@@ -359,7 +364,7 @@ two secrets (`JWT_SECRET`, `PROVIDER_SECRET_KEY`) in the same protected backup.
 | Path | What it holds | Backup |
 | --- | --- | --- |
 | `./data/postgres` | The PostgreSQL data directory. | `pgbackup` base backups plus archived WAL. |
-| `./data/pg-archive` | `base/` base backups and `wal/` archived WAL segments. | Mirrored to `ORBIT_BACKUP_SYNC_TARGET` when set. |
+| `./data/pg-archive` | `base/` base backups and `wal/` archived WAL segments. | Mirrored to `ORBIT_BACKUP_S3_TARGET`, or else to `ORBIT_BACKUP_SYNC_TARGET`, when set. |
 | `./data/files` | Attachment bytes of the local store, and `tmp/` for uploads in flight. Mounted at `/var/lib/orbit/files`. | Copied to `<target>-files` beside the off-host mirror; with `ORBIT_DRIVE_BACKEND=s3`, the bucket holds them instead. |
 | `./data/files/tmp` | Upload staging. Each apiserver start removes files there untouched for a day. | No. |
 | `./data/managed-runners` | `profile.json`, `channel.json`, the channel's token and socket, and runner state. | No built-in backup; losing the token re-issues it, and losing the profile loses the runner limits. |

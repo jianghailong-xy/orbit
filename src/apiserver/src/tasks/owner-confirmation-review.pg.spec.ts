@@ -38,7 +38,6 @@ import {
 } from '@nestjs/common';
 import {
   CreatorType,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
@@ -70,6 +69,9 @@ import { TaskOwnerConfirmationController } from './task-owner-confirmation.contr
 import { TaskOwnerConfirmationService } from './task-owner-confirmation.service';
 import { TasksService } from './tasks.service';
 import '../test-support/dequeue-under-lease';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { type SessionFixture, wordOf } from '../test-support/session-word';
+import { RunStatus } from '@orbit/shared';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const suite = URL ? test : test.skip;
@@ -187,9 +189,9 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
   const decide = (dto: Record<string, unknown>) => dto as unknown as DecideOwnerConfirmationDto;
 
   /** A conversation of this account that runs no task: a coordinator, the session a task was filed from. */
-  async function conversation(title: string, over: Partial<Prisma.SessionUncheckedCreateInput> = {}) {
+  async function conversation(title: string, over: SessionFixture = {}) {
     const id = randomUUID();
-    const status = over.status ?? RunStatus.AWAITING_INPUT;
+    const { status = RunStatus.AWAITING_INPUT, ...overFacts } = over;
     await db.session.create({
       data: {
         id,
@@ -201,14 +203,14 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
         title,
         prompt: title,
         provider: 'claude',
-        status,
+        turnState: turnStateOfWord(status),
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: false,
         // A conversation that has run: it can be resumed, as a reviewer that failed is by its retry.
         numTurns: 1,
         startedAt: new Date(),
         runtimeSessionId: randomUUID(),
-        ...over,
+        ...overFacts,
         ...(isReleasedStatus(status) ? { finishedAt: over.finishedAt ?? new Date()} : {}),
         // A failure release carries FAILED on its turn (removal step R2), which is what reads it as one since R7.
         ...(status === RunStatus.FAILED && over.lastTurnOutcome === undefined ? { lastTurnOutcome: 'FAILED' } : {}),
@@ -255,7 +257,7 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
         title,
         prompt: title,
         provider: 'claude',
-        status: RunStatus.RUNNING,
+        turnState: 'IN_FLIGHT',
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: true,
         startedAt: new Date(),
@@ -288,7 +290,7 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
         deliveredAt: new Date(),
       },
     });
-    await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING, finishedAt: null} });
+    await db.session.update({ where: { id: sessionId }, data: { turnState: 'IN_FLIGHT', finishedAt: null} });
     await say(sessionId, turnId, words);
     return turnId;
   }
@@ -327,7 +329,7 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
   }
   /** What the runner's claim does: the next queued turn of a session, handed out. */
   async function handOut(sessionId: string) {
-    await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING, finishedAt: null} });
+    await db.session.update({ where: { id: sessionId }, data: { turnState: 'IN_FLIGHT', finishedAt: null} });
     return (runnerApi as unknown as {
       dequeueTurn(sessionId: string, runnerId: string, leaseGeneration: null): Promise<{ turnId: string; content?: string } | null>;
     }).dequeueTurn(sessionId, runnerId, null);
@@ -402,7 +404,8 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
     assert.deepEqual(view.review?.lead?.points, view.review?.review?.needsYou);
     assert.equal(view.review?.reviewer.title, 'Coordinator');
     assert.equal(await waitingOn(run.sessionId), 1);
-    assert.ok(!(await badgePush.needsYouSessions(ownerId)).includes(run.sessionId), 'N6: confirmation cards do not enter push badges');
+    // N6 as amended on 2026-11-27: a confirmation waiting on its owner is a decision card the badge counts (owner-cards.ts).
+    assert.ok((await badgePush.needsYouSessions(ownerId)).includes(run.sessionId), 'N6: the raised confirmation counts in the badge');
     assert.deepEqual(raised, [receipt.recordId]);
     await raisedPush.feishuIdle();
     assert.equal(alerts.length, 1);
@@ -450,14 +453,14 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
     assert.equal((await reviewRow(requestId))?.delivery, 'PENDING');
     assert.equal((await card(run.taskId)).waiting, null);
     assert.equal(await waitingOn(run.sessionId), 0);
-    await db.session.update({ where: { id: coordinator }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null} });
+    await db.session.update({ where: { id: coordinator }, data: { turnState: null, finishedAt: null} });
     await reviews.deliverPendingFor(coordinator);
     const delivered = (await reviewRow(requestId))!;
     assert.equal(delivered.delivery, 'DELIVERED');
     await db.conversationTurn.updateMany({ where: { sessionId: coordinator }, data: { status: 'ANSWERED', answeredAt: new Date() } });
-    await db.session.update({ where: { id: coordinator }, data: { status: RunStatus.FAILED, lastTurnOutcome: 'FAILED', finishedAt: new Date()} });
+    await db.session.update({ where: { id: coordinator }, data: { turnState: null, lastTurnOutcome: 'FAILED', finishedAt: new Date()} });
     assert.equal((await card(run.taskId)).waiting, null, 'a drained delivery is still held during pause');
-    await db.session.update({ where: { id: coordinator }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null} });
+    await db.session.update({ where: { id: coordinator }, data: { turnState: null, finishedAt: null} });
     await Promise.all([reviews.deliverPendingFor(coordinator), reviews.deliverPendingFor(coordinator)]);
     const recovered = (await reviewRow(requestId))!;
     assert.notEqual(recovered.deliveryTurnClientId, delivered.deliveryTurnClientId);
@@ -466,7 +469,7 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
     await db.taskOwnerConfirmationReview.update({ where: { requestId }, data: { dueAt: new Date(Date.now() - 1000) } });
     assert.equal((await card(run.taskId)).waiting?.review?.notReviewedReason, 'TIMED_OUT');
     assert.equal(await waitingOn(run.sessionId), 1);
-    assert.ok(!(await badgePush.needsYouSessions(ownerId)).includes(run.sessionId));
+    assert.ok((await badgePush.needsYouSessions(ownerId)).includes(run.sessionId), 'N6: the timed-out confirmation counts in the badge');
     assert.deepEqual(raised, []);
     await handOut(coordinator);
     await runnerDoor.review(runner, run.taskId, coordinator, reviewInput(requestId));
@@ -490,7 +493,7 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
     assert.equal((await read(due)).dueAt?.getTime(), due.getTime());
     await db.conversationTurn.updateMany({ where: { sessionId: coordinator }, data: { status: 'ANSWERED', answeredAt: new Date() } });
     assert.equal((await read(request.requestedAt)).notReviewedReason, 'REVIEWER_STOPPED');
-    await db.session.update({ where: { id: coordinator }, data: { status: RunStatus.FAILED, lastTurnOutcome: 'FAILED', finishedAt: new Date()} });
+    await db.session.update({ where: { id: coordinator }, data: { turnState: null, lastTurnOutcome: 'FAILED', finishedAt: new Date()} });
     assert.equal((await read(new Date(due.getTime() - 1))).state, 'UNDER_REVIEW');
     assert.equal((await read(due)).notReviewedReason, 'TIMED_OUT');
   });
@@ -718,7 +721,7 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
       numTurns: 1, costUsd: 0, error: OVERLOADED,
     } as never);
     const failed = await db.session.findUniqueOrThrow({ where: { id: retried.reviewer } });
-    assert.equal(failed.status, RunStatus.FAILED);
+    assert.equal(wordOf(failed), RunStatus.FAILED);
     assert.ok(failed.retryAt, 'an overload arms a retry');
     assert.equal((await card(retried.taskId)).waiting?.review?.state, 'UNDER_REVIEW', 'a failure with a retry armed has not ended the reviewer');
     await db.session.update({ where: { id: retried.reviewer }, data: { retryAt: new Date(Date.now() - 60_000) } });
@@ -734,7 +737,7 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
       const reviewer = await conversation(`creator waiting: ${outage}`);
       const waiting = { ...(await runOf(`reviewer waiting: ${outage}`, { creatorSessionId: reviewer })), reviewer };
       await db.session.update({ where: { id: waiting.reviewer }, data: {
-        status: outage === 'FAILED' ? RunStatus.FAILED : outage === 'PENDING' ? RunStatus.PENDING : RunStatus.AWAITING_INPUT,
+        turnState: turnStateOfWord(outage === 'FAILED' ? RunStatus.FAILED : outage === 'PENDING' ? RunStatus.PENDING : RunStatus.AWAITING_INPUT),
         finishedAt: outage === 'FAILED' ? new Date() : null,
         lastTurnOutcome: outage === 'FAILED' ? 'FAILED' : null,
         retryAt: outage === 'RETRY' ? new Date(Date.now() + 3_600_000) : null,
@@ -752,7 +755,7 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
       assert.equal((await read(farFuture)).state, 'UNDER_REVIEW');
       assert.equal((await read(farFuture)).dueAt, null);
       if (outage !== 'PENDING') assert.equal((await turnsKeyed(waiting.reviewer, REVIEW_PREFIX)).length, 0);
-      await db.session.update({ where: { id: waiting.reviewer }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null, retryAt: null } });
+      await db.session.update({ where: { id: waiting.reviewer }, data: { turnState: null, finishedAt: null, retryAt: null } });
       await Promise.all([reviews.deliverPendingFor(), reviews.deliverPendingFor(waiting.reviewer)]);
       assert.equal((await turnsKeyed(waiting.reviewer, REVIEW_PREFIX)).length, 1);
       assert.equal((await read(farFuture)).state, 'UNDER_REVIEW', 'queued is still unread');
@@ -816,18 +819,18 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
   await t.test('(8) temporary outages and unread turns wait; genuine ends and Automatic retain their behavior', async () => {
     const failing = await filedRun('the reviewer failed for good');
     const failingRequest = await declare(failing, 'Done.');
-    await sql.query(`UPDATE "session" SET "status" = 'FAILED', "last_turn_outcome" = 'FAILED', "finished_at" = COALESCE("finished_at", now()) WHERE "id" = $1`, [failing.reviewer]);
+    await sql.query(`UPDATE "session" SET "turn_state" = NULL, "last_turn_outcome" = 'FAILED', "finished_at" = COALESCE("finished_at", now()) WHERE "id" = $1`, [failing.reviewer]);
     assert.equal((await reviewRow(failingRequest))?.reviewerEndedAt, null, 'a failed open conversation has not ended');
     assert.equal((await card(failing.taskId)).waiting?.review?.state, 'UNDER_REVIEW');
     assert.equal(await waitingOn(failing.sessionId), 0);
-    await sql.query(`UPDATE "session" SET "status" = 'AWAITING_INPUT', "finished_at" = NULL WHERE "id" = $1`, [failing.reviewer]);
+    await sql.query(`UPDATE "session" SET "turn_state" = NULL, "finished_at" = NULL WHERE "id" = $1`, [failing.reviewer]);
     assert.equal((await card(failing.taskId)).waiting?.review?.state, 'UNDER_REVIEW', 'recovery keeps the review');
     assert.equal(await waitingOn(failing.sessionId), 0);
 
     const retrying = await filedRun('the reviewer has a retry armed');
     const retryingRequest = await declare(retrying, 'Done.');
     await sql.query(
-      `UPDATE "session" SET "status" = 'FAILED', "last_turn_outcome" = 'FAILED', "finished_at" = COALESCE("finished_at", now()), "retry_at" = now() + interval '1 hour' WHERE "id" = $1`,
+      `UPDATE "session" SET "turn_state" = NULL, "last_turn_outcome" = 'FAILED', "finished_at" = COALESCE("finished_at", now()), "retry_at" = now() + interval '1 hour' WHERE "id" = $1`,
       [retrying.reviewer],
     );
     assert.equal((await reviewRow(retryingRequest))?.reviewerEndedAt, null, 'a retry armed is not an end');
@@ -841,7 +844,7 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
     await sql.query(`DELETE FROM "conversation_turn" WHERE "session_id" = $1 AND "client_turn_id" LIKE $2`,
       [withdrawn.reviewer, `${REVIEW_PREFIX}%`]);
     assert.equal((await card(withdrawn.taskId)).waiting?.review?.state, 'UNDER_REVIEW');
-    await db.session.update({ where: { id: withdrawn.reviewer }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null} });
+    await db.session.update({ where: { id: withdrawn.reviewer }, data: { turnState: null, finishedAt: null} });
     await Promise.all([reviews.deliverPendingFor(withdrawn.reviewer), reviews.deliverPendingFor(withdrawn.reviewer)]);
     const replacements = await turnsKeyed(withdrawn.reviewer, REVIEW_PREFIX);
     assert.equal(replacements.length, 1, 'one replacement for a deleted unread turn');
@@ -852,7 +855,7 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
     await sql.query(`UPDATE "conversation_turn" SET "status" = 'ANSWERED', "answered_at" = now()
                       WHERE "session_id" = $1 AND "client_turn_id" LIKE $2`, [drained.reviewer, `${REVIEW_PREFIX}%`]);
     assert.equal((await card(drained.taskId)).waiting?.review?.state, 'UNDER_REVIEW');
-    await db.session.update({ where: { id: drained.reviewer }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null} });
+    await db.session.update({ where: { id: drained.reviewer }, data: { turnState: null, finishedAt: null} });
     await Promise.all([reviews.deliverPendingFor(drained.reviewer), reviews.deliverPendingFor(drained.reviewer)]);
     assert.equal((await turnsKeyed(drained.reviewer, REVIEW_PREFIX)).length, 2, 'one replacement for an unread drained turn');
 
@@ -1086,7 +1089,7 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
   await t.test('returns and owner answers survive recipient outages and unread drains exactly once', async () => {
     for (const outage of ['FAILED', 'RETRY', 'PENDING', 'ENDED'] as const) {
       const paused = {
-        status: outage === 'FAILED' ? RunStatus.FAILED : outage === 'PENDING' ? RunStatus.PENDING : RunStatus.AWAITING_INPUT,
+        turnState: turnStateOfWord(outage === 'FAILED' ? RunStatus.FAILED : outage === 'PENDING' ? RunStatus.PENDING : RunStatus.AWAITING_INPUT),
         finishedAt: outage === 'FAILED' ? new Date() : null,
         lastTurnOutcome: outage === 'FAILED' ? 'FAILED' : null,
         retryAt: outage === 'RETRY' ? new Date(Date.now() + 3_600_000) : null,
@@ -1135,7 +1138,7 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
       const retry = (await db.session.findUniqueOrThrow({ where: { id: sessionId } })).retryAt;
       await reviews.deliverOwedTo(sessionId);
       assert.equal((await db.session.findUniqueOrThrow({ where: { id: sessionId } })).retryAt?.getTime(), retry?.getTime());
-      await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null, retryAt: null } });
+      await db.session.update({ where: { id: sessionId }, data: { turnState: null, finishedAt: null, retryAt: null } });
       await Promise.all([reviews.deliverOwedTo(sessionId), reviews.deliverOwedTo()]);
       const [first] = await turnsKeyed(sessionId, key);
       assert.ok(first);

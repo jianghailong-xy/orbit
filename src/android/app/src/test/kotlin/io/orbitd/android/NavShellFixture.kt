@@ -52,6 +52,8 @@ internal object NavShell {
     @Volatile var scheduled: Map<String, List<String>> = emptyMap()
     @Volatile var scheduleHistory = false
     @Volatile var folders = "[]"
+    /** The folder each of the fixture's own sessions is filed in, on its row and its detail alike. */
+    @Volatile var filedIn: Map<String, String> = emptyMap()
     @Volatile var tags = "[]"
     @Volatile var failWorkspaces: Int? = null
     /** Answers a test adds before the fixture's own (the drive's routes): null passes the request on. */
@@ -64,7 +66,7 @@ internal object NavShell {
         // and post its toast here.
         holdDelete = null; holdOpen = null; holdDeletes.clear()
         holdScope = null; scopeStatus = null; extra = emptyMap(); scheduled = emptyMap(); scheduleHistory = false
-        folders = "[]"; tags = "[]"; failWorkspaces = null; routes = null
+        folders = "[]"; filedIn = emptyMap(); tags = "[]"; failWorkspaces = null; routes = null
     }
 
     /** A row of Alpha's. [fields] are more of its JSON, starting with a comma. */
@@ -95,7 +97,7 @@ internal object NavShell {
         return """{"id":"$id","title":"$title","status":"${if (run == "ENDED") "CANCELLED" else run}",
             "runState":"$run","lifecycleState":"$state",
             "agent":{"id":"$ALPHA","name":"Alpha"},"agentId":"$ALPHA","createdAt":"2026-10-08T08:00:00Z","lastTurnAt":"2026-10-09T01:00:00Z",
-            "capabilities":{"canComplete":${state == "OPEN"},"canRestore":${state != "OPEN"}},"tags":[],"pendingApprovals":0$linked,
+            "capabilities":{"canComplete":${state == "OPEN"},"canRestore":${state != "OPEN"}},"tags":[],"pendingApprovals":0$linked${filedIn[id]?.let { ""","folderId":"$it"""" } ?: ""},
             "engine":"claude","engineVersion":"2.4.1","settings":${settings()},
             "usage":{"inputTokens":190000,"outputTokens":108000,"cacheReadTokens":1520000,"cacheCreationTokens":0,"costUsd":4.37,"numTurns":23}}"""
     }

@@ -6,7 +6,8 @@ import { Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { RunnerStatus as HeartbeatRunnerStatus, uuidToBase62, type AgentDirProbe } from '@orbit/shared';
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -271,7 +272,7 @@ async function project(stack: Stack, label: string, repoUrl: string | null = REP
       title: `协调：${label}`,
       prompt: `协调：${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
     },
@@ -344,7 +345,7 @@ async function workSession(
       title: label,
       prompt: label,
       provider: 'claude',
-      status: RunStatus.SUCCEEDED,
+      turnState: null,
       // A SUCCEEDED run is a finished one: its finish is what settles the work (§10.5 O-L4 3), and a
       // DONE over work that has not finished decides its landing at that finish (§12.15 P-M1).
       finishedAt: new Date(), 

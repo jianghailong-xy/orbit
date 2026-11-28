@@ -51,11 +51,11 @@ import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import {
   CreatorType,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { PrismaClient } from '@prisma/client';
 import {
   type ProjectStartedCard,
@@ -330,7 +330,7 @@ test('the owner starts a project in one write, once', {
         title: `协调：${label}`,
         prompt: `协调：${label}`,
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
         runtimeSessionId: randomUUID(),
@@ -889,7 +889,7 @@ test('the owner starts a project in one write, once', {
           title: 'a session that ran',
           prompt: 'run it',
           provider: 'claude',
-          status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
+          turnState: null, finishedAt: new Date(), 
           dispatchOrigin: SessionDispatchOrigin.USER,
           startsTaskWork,
           createdAt,

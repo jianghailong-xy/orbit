@@ -76,16 +76,17 @@ function AgentRow({
   return (
     <div className="agent-progress-entry">
       {transcript ? (
-        <button
-          type="button"
-          className={`agent-progress-agent is-${lane}`}
-          title={agent.error || undefined}
-          aria-label={`${agent.label} transcript`}
-          aria-expanded={open}
-          onClick={() => setOpen((value) => !value)}
-        >
-          {row}
-        </button>
+        <Tooltip content={agent.error || undefined}>
+          <button
+            type="button"
+            className={`agent-progress-agent is-${lane}`}
+            aria-label={`${agent.label} transcript`}
+            aria-expanded={open}
+            onClick={() => setOpen((value) => !value)}
+          >
+            {row}
+          </button>
+        </Tooltip>
       ) : (
         <Tooltip content={agent.error || undefined} delay={TEXT_TOOLTIP_DELAY_MS}>
           <div className={`agent-progress-agent is-${lane}`}>{row}</div>

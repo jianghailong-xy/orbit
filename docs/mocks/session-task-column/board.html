@@ -1,0 +1,68 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<style>
+@font-face { font-family: "Inter"; src: url("file:///var/tmp/landing-mock-render/fonts/Inter.ttf"); font-weight: 100 900; }
+@font-face { font-family: "Noto Sans SC"; src: url("file:///var/tmp/landing-mock-render/fonts/NotoSansSC.ttf"); font-weight: 100 900; }
+@font-face { font-family: "JetBrains Mono"; src: url("file:///var/tmp/landing-mock-render/fonts/JetBrainsMono.ttf"); font-weight: 100 900; }
+* { box-sizing: border-box; }
+body { margin: 0; padding: 40px 48px 56px; background: #e6e6eb; color: #16161a; width: 2160px; font: 15px/1.6 "Inter", "Noto Sans SC", sans-serif; }
+h1 { font-size: 28px; margin: 0 0 10px; letter-spacing: -.02em; }
+h2 { font-size: 19px; margin: 36px 0 12px; }
+.lede, .foot { color: #4f4f58; max-width: 2060px; }
+.lede b, .foot b, .cap b { color: #16161a; }
+code { font: 13px "JetBrains Mono", monospace; background: rgba(0,0,0,.06); border-radius: 4px; padding: 0 4px; }
+.row { display: flex; gap: 40px; align-items: flex-start; }
+.col { width: 1028px; flex: none; }
+.col.small { width: 560px; }
+.shot { position: relative; }
+.shot img { width: 100%; display: block; border-radius: 12px; box-shadow: 0 0 0 1px rgba(0,0,0,.08), 0 14px 34px rgba(0,0,0,.12); }
+.tag { display: inline-flex; font-size: 12.5px; font-weight: 650; border-radius: 999px; padding: 2px 10px; margin-bottom: 10px; }
+.now { background: #ffd9d4; color: #8f1d13; } .rec { background: #d6e4ff; color: #14428f; } .alt { background: #e3e3e8; color: #3a3a40; }
+.cap { margin-top: 14px; font-size: 14px; color: #4f4f58; }
+.cap h3 { font-size: 16px; color: #16161a; margin: 0 0 6px; }
+.mk { position: absolute; border: 2px dashed #ff3b30; border-radius: 8px; }
+.num { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: #ff3b30; color: #fff; font: 700 12px/22px "Inter"; text-align: center; box-shadow: 0 0 0 2px #fff; }
+.n { display: inline-flex; width: 18px; height: 18px; border-radius: 50%; background: #ff3b30; color: #fff; font: 700 11px/18px "Inter"; justify-content: center; margin-right: 4px; }
+table { border-collapse: collapse; max-width: 2060px; font-size: 14px; }
+td { padding: 6px 14px 6px 0; vertical-align: top; color: #4f4f58; } td:first-child { font-weight: 650; color: #16161a; white-space: nowrap; }
+</style>
+<body>
+<h1>会话里按「Task ›」：任务停在右边一栏，不再盖住会话</h1>
+<p class="lede">owner 11-26：点完之后，用右边的侧栏展示任务详情会不会更好？下面都是真页面截图（今天 main 的构建，窗口按你的截图 2056×1171），「改后」是同一构建里把今天那块浮层收进页面的一栏（像 Help 那样把页面挤窄）后拍的，不是画的。</p>
+
+<h2>今天</h2>
+<div class="row">
+<div class="col"><span class="tag now">今天 · 浮在会话上面</span><div class="shot"><img src="shots/today-open.png">
+<div class="mk" style="left:634px;top:44px;width:380px;height:536px"></div><div class="num" style="left:624px;top:34px">1</div>
+<div class="mk" style="left:634px;top:6px;width:380px;height:34px"></div><div class="num" style="left:1004px;top:-4px">2</div></div>
+<div class="cap"><h3>任务盖住了刚来的那段会话</h3><span class="n">1</span>780px 宽的任务浮层压在会话右半边：回复被截断、看不到会话尾部，也就没法一边看任务一边看它的执行。<span class="n">2</span>会话顶栏的 ⋯、Share 和「Task ›」本身都在浮层下面，只能用 ✕ 或返回关它。这块浮层是项目页的（项目页一挤窄就会重排图和卡片，所以那里故意浮着），会话页借来用了。</div></div>
+<div class="col"><span class="tag alt">今天 · 同一位置的会话设置</span><div class="shot"><img src="shots/settings-open.png"></div>
+<div class="cap"><h3>会话设置已经是一栏</h3>按标题打开设置：它是会话右边 340px 的一栏，会话挤窄、不被盖住，再按标题收起。同一页上，设置是栏，任务却是浮层——两种做法。</div></div>
+</div>
+
+<h2>改后（推荐 A：420px 的一栏）</h2>
+<div class="row">
+<div class="col"><span class="tag rec">A · 420px 一栏（推荐）</span><div class="shot"><img src="shots/dock-narrow.png">
+<div class="mk" style="left:556px;top:14px;width:38px;height:20px"></div><div class="num" style="left:546px;top:4px">1</div></div>
+<div class="cap"><h3>会话和任务并排都读得全</h3>任务收进右边一栏，会话留约 980px：消息、顶栏（⋯、Share、Task ›）都在。<span class="n">1</span>「Task ›」开着时显示为按下（截图里还是平常样子），再按一下收起（和按标题收设置一样）。窄栏里「Runs with」的几枚会换行、标题两行，内容都在。</div></div>
+<div class="col"><span class="tag alt">B · 今天的 780px 一栏</span><div class="shot"><img src="shots/dock-wide.png"></div>
+<div class="cap"><h3>任务排版不变，会话只剩约 620px</h3>任务和今天浮层一样宽，一行不换；会话被挤到约 620px（你的屏上），代码和长回复换行多。窗口再窄一点，会话就太窄了。</div></div>
+</div>
+
+<h2>窄窗（≤960px）不变</h2>
+<div class="row">
+<div class="col small"><span class="tag alt">≤960px · 今天和改后一样</span><div class="shot"><img src="shots/narrow-open.png"></div>
+<div class="cap"><h3>放不下两栏：任务占整屏</h3>和今天一样是整页，✕ 或返回回到会话。</div></div>
+<div class="col" style="width:1400px">
+<h2 style="margin-top:0">规格</h2>
+<table>
+<tr><td>哪儿</td><td>只改会话页：<code>?task=&lt;id&gt;</code> 在会话页时，任务是页面右边的一栏（会话挤窄），不再是浮层。项目页、Tasks 页、其它页照旧浮着/并排，不动。</td></tr>
+<tr><td>宽度</td><td>A：420px（推荐）；B：今天的 780px。窗口宽到放不下「会话 ≥ 560px + 任务栏」时，任务退回今天的浮层；≤960px 是整页。</td></tr>
+<tr><td>一次一栏</td><td>任务栏和会话设置栏同时只开一个：按「Task ›」收起设置，按标题收起任务。</td></tr>
+<tr><td>开和关</td><td>「Task ›」开/关同一栏，开着时显示为按下；✕、Esc、返回都关。地址照旧 <code>?task=</code>，返回、复制链接、刷新都和今天一样。</td></tr>
+<tr><td>栏里的任务</td><td>就是今天的任务详情（同一个组件），只是放进栏里；栏里点依赖任务，替换为那个任务（今天也是）。</td></tr>
+<tr><td>顺带</td><td>任务的 Activity 里那条「这个会话」：在这栏里不再链接到自己（可选，见待定 ③）。</td></tr>
+</table>
+<p class="foot"><b>落地</b>：一个 web 任务——<code>TaskOverPagePanel</code> 在会话页用栏的样式、和 <code>settingsOpen</code> 互斥、「Task ›」变开关；测试：会话页打开任务后会话仍可见、再按收起、和设置互斥、窄窗整页。手机不受影响（11-26 定了手机顶栏不加 Task）。<br>
+<b>待你定</b>：① 会话页的任务改成右边一栏（推荐）还是保持浮层；② 栏宽 A 420px（推荐）/ B 780px；③ Activity 里「这个会话」那条在栏里不再链接自己（推荐，小）。</p>
+</div></div>
+</body></html>

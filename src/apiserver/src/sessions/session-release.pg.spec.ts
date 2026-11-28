@@ -50,8 +50,14 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import {
-  CreatorType, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, SessionRunSource, TaskCompletionPolicy,
+  CreatorType,
+  PrismaClient,
+  RunnerStatus,
+  SessionDispatchOrigin,
+  SessionRunSource,
+  TaskCompletionPolicy,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunStatus as SharedRunStatus, SessionEndReason } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -65,6 +71,9 @@ import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { releaseWasFailure, releaseWasFailureSql } from '../common/session-release';
 import { RELEASE_SHAPES } from '../common/session-release-shapes.fixture';
 import { SessionsService } from './sessions.service';
+import { turnStateOfWord } from './session-turn-state';
+import { fixtureFacts } from '../test-support/session-word';
+import { restoreStatusColumn } from '../test-support/session-d3-database';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -136,29 +145,54 @@ async function world(db: PrismaClient, label: string): Promise<World> {
   return { ownerId, runnerId, workspaceId };
 }
 
+/** Migration 1671 (deploy D3) and its rollback: (9) and (10) rehearse migrations that read and write the stored word,
+ *  on the database deploy D2 left (1711's column restored, then 1671 rolled back), and put 1671 back after. */
+const D3_DOWN = readFileSync(join(__dirname, '..', '..', '..', '..', 'scripts', 'session-status-from-facts-down.sql'), 'utf8');
+const D3_UP = readFileSync(join(__dirname, '..', '..', 'prisma', 'migrations', '1671_session_status_from_facts', 'migration.sql'), 'utf8');
+/** While 1671 is rolled back: the helper writes the fixture word as the stored word, as writers before deploy D3 did. */
+let storedWords = false;
+
 /** A conversation on the world's runner, in the given state. */
 async function session(db: PrismaClient, w: World, data: Record<string, unknown> = {}): Promise<string> {
   const id = randomUUID();
-  await db.session.create({
-    data: {
-      id,
-      ownerId: w.ownerId,
-      creatorId: w.ownerId,
-      workspaceId: w.workspaceId,
-      assignedRunnerId: w.runnerId,
-      title: 'a conversation',
-      prompt: 'Explain the error in the log',
-      status: RunStatus.RUNNING,
-      provider: 'claude',
-      providerBuiltin: true,
-      engine: 'claude',
-      dispatchOrigin: SessionDispatchOrigin.USER,
-      runSource: SessionRunSource.MANUAL,
-      startedAt: new Date(),
-      runtimeSessionId: randomUUID(),
-      ...data,
-    },
+  const { finishedAt, ...facts } = fixtureFacts(data) as Record<string, unknown> & { finishedAt?: Date | null };
+  const row = {
+    id,
+    ownerId: w.ownerId,
+    creatorId: w.ownerId,
+    workspaceId: w.workspaceId,
+    assignedRunnerId: w.runnerId,
+    title: 'a conversation',
+    prompt: 'Explain the error in the log',
+    turnState: 'IN_FLIGHT',
+    provider: 'claude',
+    providerBuiltin: true,
+    engine: 'claude',
+    dispatchOrigin: SessionDispatchOrigin.USER,
+    runSource: SessionRunSource.MANUAL,
+    startedAt: new Date(),
+    runtimeSessionId: randomUUID(),
+    ...facts,
+  };
+  if (!storedWords) {
+    await db.session.create({ data: { ...row, finishedAt } as never });
+    return id;
+  }
+  // While 1671 is rolled back: in as the default word's row (PENDING, QUEUED) with the row triggers off for the insert
+  // alone, since an insert guard such as the aggregate parent's would read that default where deploy 2's writer
+  // inserted the row as it is; then the word alone, with its release column, as that writer wrote it, 1611's trigger
+  // keeping the facts from it, under the engine read's declaration, as a claim makes it, so the engine guards let a
+  // move to RUNNING through. The helper's own word is RUNNING, the turn in flight it writes.
+  await db.$transaction(async (tx) => {
+    await tx.$executeRaw`SET LOCAL session_replication_role = replica`;
+    // phase too, which session_zz_phase writes when the triggers are on: a queued turn with nothing executing.
+    await tx.session.create({ data: { ...row, turnState: 'QUEUED', phase: 'PENDING' } as never });
   });
+  await db.$transaction([
+    db.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`,
+    db.$executeRawUnsafe(`UPDATE "session" SET "status" = $2::run_status, "finished_at" = $3 WHERE "id" = $1::uuid`,
+      id, String(data.status ?? 'RUNNING'), finishedAt ?? null),
+  ]);
   return id;
 }
 
@@ -187,7 +221,7 @@ function assertReleased(row: Released, status: string, why: string, failure?: bo
   // honoured, is a stop; while the cause was read, it was a failure. `failure` names the cases removal step R7 (the
   // status bridge gone) answers otherwise, each where it is called.
   const failed = releaseWasFailure({
-    finishedAt: row.finished_at, endReason: row.end_reason, lastTurnOutcome: row.last_turn_outcome, status: row.status,
+    finishedAt: row.finished_at, endReason: row.end_reason, lastTurnOutcome: row.last_turn_outcome, turnState: turnStateOfWord(row.status),
   });
   assert.equal(failed, failure ?? (row.status === 'FAILED' && row.end_reason == null),
     `${status}/${why}: read as a failure ${failure === undefined ? 'exactly when FAILED with no end reason' : `: ${failure}`}`);
@@ -228,6 +262,9 @@ test('every release writes the release column and its cause, and the revive clea
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
+  // The column session.status was dropped in deploy D4 (migration 1711): this file rehearses deploys it
+  // was part of, on the database deploy D3 left, as the D4 down script restores it.
+  await restoreStatusColumn(sql);
   const s = stackFor(url, sql);
   t.after(async () => {
     await s.db.$disconnect().catch(() => undefined);
@@ -247,7 +284,8 @@ test('every release writes the release column and its cause, and the revive clea
     const succeeded = await session(s.db, w, { status: RunStatus.AWAITING_INPUT });
     await s.api.finalize({ id: w.runnerId }, succeeded, { status: SharedRunStatus.SUCCEEDED } as never);
     const row = await released(sql, succeeded);
-    assertReleased(row, 'SUCCEEDED', 'engine_exited');
+    // The runner's SUCCEEDED with no end asked (plan §3.4 C5): the stored word is the release facts' since deploy D3.
+    assertReleased(row, 'CANCELLED', 'engine_exited');
     assert.equal(row.end_reason, null, 'end_reason is written exactly as before: not at all');
   });
 
@@ -283,7 +321,7 @@ test('every release writes the release column and its cause, and the revive clea
     assertReleased(await released(sql, id), 'FAILED', 'import_failed', false);
   });
 
-  await t.test('(5) the reaper\'s sweep: an end settled late keeps its reason, a cancel never honoured is FAILED', async () => {
+  await t.test('(5) the reaper\'s sweep: an end settled late keeps its reason, a cancel never honoured is a stop', async () => {
     const w = await world(s.db, 'reaper-end');
     const stale = new Date(Date.now() - 10 * 60_000);
     // A graceful end the runner never acknowledged, and a cancel that landed on a queued row.
@@ -308,11 +346,13 @@ test('every release writes the release column and its cause, and the revive clea
     const unhonouredRow = await released(sql, unhonoured);
     // W7 with no reason recorded (no current writer leaves one: every end request writes its reason): the turn the
     // reaper cut off records CANCELLED, so once the status bridge went (R7) it reads as the stop W7's rule says.
-    assertReleased(unhonouredRow, 'FAILED', 'end_not_honored', false);
+    // Its stored word is the facts' since deploy D3: CANCELLED (plan §3.4 C6).
+    assertReleased(unhonouredRow, 'CANCELLED', 'end_not_honored', false);
     assert.equal(unhonouredRow.end_reason, null, 'end_reason is written exactly as before: not at all');
     assert.equal(unhonouredRow.last_turn_outcome, 'CANCELLED', 'the cut-off records CANCELLED');
     const deleteRow = await released(sql, deleteUnhonoured);
-    assertReleased(deleteRow, 'FAILED', 'end_not_honored');
+    // An end asked for and not honoured (plan §3.4 C1): CANCELLED since deploy D3.
+    assertReleased(deleteRow, 'CANCELLED', 'end_not_honored');
     assert.equal(deleteRow.end_reason, 'deleted', 'end_reason keeps the end that was asked for');
     assertReleased(await released(sql, doneLate), 'SUCCEEDED', 'task_done');
   });
@@ -365,6 +405,9 @@ test('every release writes the release column and its cause, and the revive clea
   });
 
   await t.test('(9) prisma migrate deploy of 1202 and 1262 on a populated database backfills every terminal row; the counts are zero', async () => {
+    // The database deploy D2 left (1671 rolled back), whose writers wrote the word these rows are made of.
+    await sql.query(D3_DOWN);
+    storedWords = true;
     const w = await world(s.db, 'backfill');
     const now = new Date();
     // Rows from before 1261 break session_release_fact_chk (1401) by design; the check comes back, by its own two
@@ -514,7 +557,9 @@ test('every release writes the release column and its cause, and the revive clea
     };
     const held = await session(s.db, w, { status: RunStatus.AWAITING_INPUT });
     const done = await session(s.db, w);
-    await s.api.finalize({ id: w.runnerId }, done, { status: SharedRunStatus.SUCCEEDED } as never);
+    // Released as a deploy-2 writer released it, the word and the release column in one statement: this database is
+    // the one D2 left (1671 rolled back in (9)), whose CHECK this case is about; D3's writers name the facts only.
+    await sql.query(`UPDATE "session" SET status = 'SUCCEEDED', turn_state = NULL, finished_at = now() WHERE id = $1::uuid`, [done]);
     assertReleased(await released(sql, done), 'SUCCEEDED', 'engine_exited');
 
     await refused('a terminal status with no finished_at', () =>
@@ -524,9 +569,9 @@ test('every release writes the release column and its cause, and the revive clea
     await refused('a revive that clears the status but not the release column', () =>
       sql.query(`UPDATE "session" SET status = 'PENDING' WHERE id = $1::uuid`, [done]));
     // Through Prisma the driver error is wrapped; the constraint is still named in its message.
-    await assert.rejects(() => session(s.db, w, { status: RunStatus.CANCELLED }), /session_release_fact_chk/);
+    await assert.rejects(() => session(s.db, w, { status: RunStatus.CANCELLED, finishedAt: null }), /session_release_fact_chk/);
     await assert.rejects(
-      () => s.db.session.update({ where: { id: held }, data: { status: RunStatus.FAILED } }), /session_release_fact_chk/);
+      () => s.db.$executeRawUnsafe(`UPDATE "session" SET status = 'FAILED' WHERE id = $1::uuid`, held), /session_release_fact_chk/);
     // The rows are as they were, and the legal writes still go through.
     assert.equal((await released(sql, held)).finished_at, null);
     await sql.query(
@@ -535,6 +580,9 @@ test('every release writes the release column and its cause, and the revive clea
     await sql.query(
       `UPDATE "session" SET status = 'PENDING', finished_at = NULL WHERE id = $1::uuid`, [held],
     );
+    // Deploy D3 back, as every migration leaves the database, for what runs after.
+    storedWords = false;
+    await sql.query(D3_UP);
   });
 });
 
@@ -560,8 +608,18 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
+  // The column session.status was dropped in deploy D4 (migration 1711): this file rehearses deploys it
+  // was part of, on the database deploy D3 left, as the D4 down script restores it.
+  await restoreStatusColumn(sql);
   const db = prismaClientFor(url);
+  // The database deploy D2 left: what this test shows is that its guards and ended-triggers read the release fact
+  // and not the word, by writing the fact alone and leaving the word as it was, which since deploy D3 follows the
+  // facts (1671). Rolled back for it, and put back after.
+  await sql.query(D3_DOWN);
+  storedWords = true;
   t.after(async () => {
+    storedWords = false;
+    await sql.query(D3_UP).catch(() => undefined);
     await db.$disconnect().catch(() => undefined);
     await sql.end().catch(() => undefined);
   });
@@ -705,7 +763,7 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
       || (['FAILED', 'INTERRUPTED'].includes(n.status) && ended(n));
     // The clauses 1442 states: released, and not by a failure (the release module's question), or no retry armed.
     const failed = (n: Row) => releaseWasFailure({
-      finishedAt: n.finished_at, endReason: n.end_reason, lastTurnOutcome: n.last_turn_outcome, status: n.status,
+      finishedAt: n.finished_at, endReason: n.end_reason, lastTurnOutcome: n.last_turn_outcome, turnState: turnStateOfWord(n.status),
     });
     const newRecipient = (o: Row, n: Row) => filed(n) || (n.finished_at != null && (!failed(n) || noRetry(o, n)))
       || (n.status === 'INTERRUPTED' && ended(n));
@@ -969,7 +1027,7 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
       const byFact = await session(db, w, { ...data, status: RunStatus.AWAITING_INPUT, finishedAt: new Date() });
       assert.equal(await revive(byFact, settings), 1, `${engine}: OLD.finished_at set is a revive`);
       // A terminal status word with no release fact: not exempt.
-      const byWord = await session(db, w, { ...data, status: RunStatus.CANCELLED });
+      const byWord = await session(db, w, { ...data, status: RunStatus.CANCELLED, finishedAt: null });
       if (engine === 'claude') {
         await assert.rejects(() => revive(byWord, settings), refusedWith(/does not read session engines/));
       } else {

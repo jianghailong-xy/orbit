@@ -5,7 +5,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 
-import { Prisma, PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { IntegrationCheckResult, IntegrationJobCommand, IntegrationJobResultRequest } from '@orbit/shared';
@@ -170,7 +171,7 @@ async function world(
   const coordinatorSessionId = (await db.session.create({
     data: {
       ownerId, creatorId: ownerId, workspaceId, title: `${label} coordinator`,
-      prompt: `${label} coordinator`, status: RunStatus.RUNNING, branch: null,
+      prompt: `${label} coordinator`, turnState: 'IN_FLIGHT', branch: null,
     },
     select: { id: true },
   })).id;
@@ -227,7 +228,7 @@ async function doneTask(
     data: {
       ownerId: w.ownerId, creatorId: w.ownerId, taskId: created.id, workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId, title, prompt: title, branch, isolationStatus: 'worktree',
-      baseSha: sha('b'), status: RunStatus.SUCCEEDED, startsTaskWork: true,
+      baseSha: sha('b'), turnState: null, startsTaskWork: true,
       finishedAt: new Date(Date.now() - 60_000), worktreeBranch: branch, worktreeDirty: false,
       changedFiles: [{ path: 'src/the-work.ts' }] as never,
     },
@@ -258,7 +259,7 @@ async function bareWork(
     data: {
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId, workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId, title: label, prompt: label, provider: 'claude',
-      status: RunStatus.SUCCEEDED, dispatchOrigin: 'USER', startsTaskWork: true, startedAt: new Date(),
+      turnState: null, dispatchOrigin: 'USER', startsTaskWork: true, startedAt: new Date(),
       branch, isolationStatus: 'worktree', baseSha: sha('b'),
       finishedAt: new Date(),
     } as never,

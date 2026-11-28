@@ -47,6 +47,7 @@ import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-te
 import { hashPassword } from '../common/crypto.util';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
+import { wordSql } from '../test-support/session-word';
 import '../test-support/daemon-routes-over-http';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
@@ -143,9 +144,9 @@ test('a source is settled where its op is: a redacted quote applies, a call not 
   const running = async (sessionId: string) => {
     await sql.query('BEGIN');
     await sql.query(`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`);
-    await sql.query(`UPDATE "session" SET "status" = 'RUNNING', "run_claimed_at" = now() WHERE "id" = $1::uuid`, [sessionId]);
+    await sql.query(`UPDATE "session" SET "turn_state" = 'IN_FLIGHT', "run_claimed_at" = now() WHERE "id" = $1::uuid`, [sessionId]);
     await sql.query('COMMIT');
-    assert.equal((await sql.query(`SELECT "status" FROM "session" WHERE "id" = $1::uuid`, [sessionId])).rows[0].status, 'RUNNING');
+    assert.equal((await sql.query(`SELECT ${wordSql()} AS status FROM "session" WHERE "id" = $1::uuid`, [sessionId])).rows[0].status, 'RUNNING');
     return sessionId;
   };
   /** A chat, its turn running unless `between` says it waits between turns. */

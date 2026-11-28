@@ -1,0 +1,28 @@
+{
+  "workspace": null,
+  "workspaceFrom": null,
+  "fab": {
+    "needsYou": 0,
+    "working": true
+  },
+  "chats": [
+    {
+      "sessionId": "7OM3zBx4SgOtzaBywaDw0Q",
+      "title": "Tidy up Books",
+      "status": "RUNNING",
+      "open": true,
+      "completed": false,
+      "working": true,
+      "needsYou": 0,
+      "workspaceId": null,
+      "createdAt": "2026-11-28T01:03:27.736Z",
+      "updatedAt": "2026-11-28T01:03:27.737Z",
+      "lastActiveAt": "2026-11-28T01:03:27.736Z",
+      "sessionPublicId": "7OM3zBx4SgOtzaBywaDw0Q",
+      "workspacePublicId": null,
+      "agentId": null
+    }
+  ],
+  "more": false,
+  "agent": null
+}

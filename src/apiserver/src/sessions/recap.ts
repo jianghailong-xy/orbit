@@ -1,8 +1,7 @@
-import { RunEventType, type OpenCodeDialect } from '@orbit/shared';
+import { RunEventType } from '@orbit/shared';
 import type { Prisma } from '@prisma/client';
 import { AsyncWorkQueue } from '../common/async-work-queue';
-import { sessionHeldKey, type HeldKey } from '../providers/held-key';
-import { deepSeekCall, heldKeyCall } from './naming';
+import { deepSeekCall } from './naming';
 import { truncatePayload } from './truncate-payload';
 
 /**
@@ -73,7 +72,7 @@ export interface RecapInput {
   /**
    * A pass a person asked for — POST /sessions/:id/recap. It ignores the throttle window exactly
    * as a finalize does, and says nothing about the session being over. It obeys every other gate:
-   * the kill switch, the minimum event count, and a provider that may simply have no key.
+   * the kill switch and the minimum event count.
    */
   force?: boolean;
   /**
@@ -103,7 +102,6 @@ export type RecapSkipReason =
   | 'throttled'
   | 'too-few-events'
   | 'no-events'
-  | 'no-key'
   | 'llm-failed'
   | 'cas-lost'
   | 'error';
@@ -137,8 +135,7 @@ export function sanitizeRecap(value: unknown): string | undefined {
 
 /**
  * The recap out of a model's reply: the answer itself, or its `recap` field when the model wrapped
- * it in a JSON object — the DeepSeek call asks for plain text here, but a held key's model may
- * answer in whatever shape its vendor prefers.
+ * it in a JSON object — the DeepSeek call asks for plain text, but a model may wrap it anyway.
  */
 export function parseRecap(content: string): string | undefined {
   const text = content.trim();
@@ -253,9 +250,13 @@ const RECAP_SYSTEM_PROMPT =
   'line: no markdown, no quotes, no bullet points. Write it from the owner\'s point of view and in ' +
   'the SAME language as the conversation. Reply with the recap and nothing else.';
 
-/** The deployment's kill switch: ORBIT_RECAP_ENABLED=0 turns every pass off. */
+/**
+ * Whether this deployment writes recaps at all: ORBIT_RECAP_ENABLED=0 turns every pass off, and so
+ * does a server without DEEPSEEK_API_KEY. A recap is spent only on the server's own DeepSeek key,
+ * never on the key of the provider a session runs on.
+ */
 export function recapEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.ORBIT_RECAP_ENABLED !== '0';
+  return env.ORBIT_RECAP_ENABLED !== '0' && Boolean(env.DEEPSEEK_API_KEY?.trim());
 }
 
 /** A session's two-minute window as a pass reads it: its last recap, and the last claim of a pass. */
@@ -340,16 +341,12 @@ async function releaseRecapWindow(input: RecapInput, claimedAt: Date): Promise<v
   }
 }
 
-/** What a pass reads of the session: the recap and its cursor, and what a held key needs. */
+/** What a pass reads of the session: the recap and its cursor. */
 const RECAP_SESSION_SELECT = {
   recapText: true,
   recapEventSeq: true,
   recapAt: true,
   recapClaimedAt: true,
-  provider: true,
-  providerBuiltin: true,
-  ownerId: true,
-  model: true,
 } satisfies Prisma.SessionSelect;
 
 /** The session's own event count against RECAP_MIN_EVENTS — one indexed aggregate. */
@@ -375,37 +372,8 @@ async function loadRecapEvents(
   return rows.reverse();
 }
 
-/**
- * The model a held key is spent on: fixed per dialect and chosen cheap — Anthropic's Haiku tier
- * for an Anthropic endpoint. Never the session's own model, which may be an Opus or a Sonnet at
- * ten to sixty times the price. An endpoint that does not serve the fixed model fails, and the
- * pass degrades to lastAssistantText in silence, which is the whole point of the ceiling.
- */
-const RECAP_HELD_KEY_MODELS: Record<OpenCodeDialect, string> = {
-  anthropic: 'claude-haiku-4-5-20251001',
-  openai: 'gpt-5.1-mini',
-  'openai-compatible': 'kimi-k2.6',
-  gemini: 'gemini-3.6-flash',
-};
-
-export function recapHeldKeyModel(dialect: OpenCodeDialect): string {
-  return RECAP_HELD_KEY_MODELS[dialect];
-}
-
 /** One recap request: where it goes, how it is signed, and where the reply's text sits. */
 type RecapCall = ReturnType<typeof deepSeekCall>;
-
-/**
- * Where a recap request goes, in the order the project settled on: the server's own DeepSeek key
- * first, the session's provider key second, and nothing at all when neither exists — the caller
- * treats that as no key and stops.
- */
-function recapCall(system: string, task: string, heldKey: HeldKey | null): RecapCall | null {
-  const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
-  if (apiKey) return deepSeekCall(apiKey, system, task, { json: false, maxTokens: RECAP_MAX_TOKENS });
-  if (heldKey) return heldKeyCall({ ...heldKey, model: recapHeldKeyModel(heldKey.dialect) }, system, task);
-  return null;
-}
 
 /**
  * One attempt, bounded by an explicit race so a fetch implementation that ignores abort cannot hang
@@ -418,7 +386,7 @@ async function requestRecap(call: RecapCall, timeoutMs: number): Promise<string 
   const request = (async (): Promise<string | null> => {
     const resp = await fetch(call.url, {
       method: 'POST',
-      // A session's key points wherever its owner typed: a redirect is not followed off it.
+      // A redirect is not followed off the configured endpoint.
       redirect: 'manual',
       headers: call.headers,
       body: JSON.stringify(call.body),
@@ -477,12 +445,14 @@ export async function generateRecap(input: RecapInput, opts: RecapOptions = {}):
     const events = await loadRecapEvents(input.db, input.sessionId, session.recapEventSeq);
     const activity = fitRecapActivity(events, Math.max(0, budget));
     if (!activity.text || activity.lastSeq === null) return { written: false, reason: 'no-events' };
-    // Only a pass that has something to send pays for the held-key lookup, and the server's own
-    // key skips it entirely.
-    const heldKey = process.env.DEEPSEEK_API_KEY?.trim() ? null : await sessionHeldKey(input.db, session);
-    const call = recapCall(RECAP_SYSTEM_PROMPT, buildRecapTask(session.recapText, activity.text), heldKey);
-    if (!call) return { written: false, reason: 'no-key' };
-    // Last, so a pass that has nothing to send or no key to send it with never touches the window.
+    // recapEnabled, checked by recapSkipReason above, has already required the key.
+    const call = deepSeekCall(
+      process.env.DEEPSEEK_API_KEY!.trim(),
+      RECAP_SYSTEM_PROMPT,
+      buildRecapTask(session.recapText, activity.text),
+      { json: false, maxTokens: RECAP_MAX_TOKENS },
+    );
+    // Last, so a pass that has nothing to send never touches the window.
     // A finalize and a person's refresh ignore the window, and so the claim too.
     if (!input.finalize && !input.force) {
       if (!(await claimRecapWindow(input, now))) return { written: false, reason: 'throttled' };

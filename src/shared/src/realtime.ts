@@ -8,7 +8,7 @@ import {
   SessionState,
 } from './enums';
 import type { SessionCoordinatorHandoff, SessionCoordinatorHandoffReceived } from './coordinator-handoff';
-import type { SessionCapabilities } from './dto';
+import type { SessionCapabilities, SessionSlotWait } from './dto';
 import type { ConfirmationUnderReview } from './owner-confirmation-review';
 import type { SessionOwnerItem, SessionOwnerRequest, SessionTaskMoveGroup, SessionWaitingKind } from './project-progress';
 import type { ExternalMessageFrom, OrbitMessageFrom, SessionMessageFrom } from './session-message';
@@ -358,7 +358,7 @@ export interface ControlSessionSummary {
   /** The sessions waiting on a reply from this one, oldest first. Same `[]` convention. */
   owesReplyTo?: SessionRequestPeer[];
   lastTurnAt: string | null;
-  /** Where the row sits in the session list (session.listed_at, migration 1434): moved only when the session changes
+  /** Where the row sits in the session list (session.listed_at, migration 1490): moved only when the session changes
    *  for its owner — created, a person's message, a turn ending on them, ended or completed — never by streamed
    *  activity, which moves lastTurnAt. Clients sort by this. Absent from an older control plane. */
   listedAt?: string;
@@ -389,6 +389,9 @@ export interface ControlSessionSummary {
   /** When enginePhase entered the phase it holds; null whenever enginePhase is. A keepalive that
    *  re-announces the same phase does not move it. Absent from an older control plane. */
   enginePhaseSince?: string | null;
+  /** Beside enginePhase `waiting_for_slot` only: the full runner's counts (SessionSlotWait). The session list row
+   *  carries it; a summary that leaves it out leaves it as it was, and null is "no such wait". */
+  slotWait?: SessionSlotWait | null;
   /** The rolling recap and when it was written (`Session.recapText`/`recapAt`), the line the list
    *  prefers to `lastAssistantText`. Sent as null on a session that has none — a value, so a client
    *  folding this summary into a row clears the recap a manual refresh dropped; only an absent key,

@@ -1,0 +1,117 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="../needs-you-capsule/kit.css">
+<script src="../needs-you-capsule/kit.js"></script>
+<style>
+  .lede, .foot { max-width: 1880px; }
+  .row4 { display: flex; gap: 32px; align-items: flex-start; }
+  .row4 .col { width: 440px; }
+  /* 顶栏里的玻璃件（同 needs-you 板的量法：44pt 高，y 62–106） */
+  .gl { position: absolute; top: 62px; height: 44px; border-radius: 22px; z-index: 12; background: var(--navg);
+        box-shadow: inset 0 .75px 0 var(--glass-hi), 0 0 0 .5px var(--glass-edge), 0 2px 10px rgba(0,0,0,.08);
+        display: flex; align-items: center; gap: 4px; padding: 0 14px; color: var(--l1); font: 600 17px "Inter"; white-space: nowrap; }
+  .grid { display: grid; grid-template-columns: 8px 8px; gap: 3px; }
+  .grid i { width: 8px; height: 8px; border: 1.8px solid var(--l1); border-radius: 2px; }
+  .qcap { position: absolute; top: 62px; left: 89px; height: 44px; border-radius: 22px; z-index: 13; background: var(--navg);
+          box-shadow: inset 0 .75px 0 var(--glass-hi), 0 0 0 .5px var(--glass-edge), 0 2px 10px rgba(0,0,0,.08);
+          display: flex; align-items: center; gap: 8px; padding: 0 14px; color: var(--l1); font-size: 16px; white-space: nowrap; overflow: hidden; }
+  .qcap .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  /* 网页同款的蓝色小徽标（B） */
+  .wb { position: absolute; top: 73px; height: 22px; z-index: 13; display: flex; align-items: center; gap: 3px; padding: 0 9px; border-radius: 999px;
+        border: 1px solid #b9cdf7; background: #e8f0ff; color: #1f5fd6; font: 600 13px "Inter"; }
+  /* ⋯ 菜单（示意） */
+  .menu { position: absolute; top: 112px; right: 20px; width: 250px; z-index: 18; border-radius: 22px; background: rgba(250,250,252,.98);
+          box-shadow: 0 0 0 .5px rgba(0,0,0,.08), 0 14px 40px rgba(0,0,0,.18); padding: 6px 0; font: 17px "Inter"; color: #000; }
+  .menu div { display: flex; justify-content: space-between; align-items: center; padding: 9px 18px; }
+  .menu hr { border: 0; border-top: 6px solid rgba(120,120,128,.08); margin: 4px 0; }
+  .menu .hi { background: rgba(10,132,255,.12); }
+  .menu .mut { color: rgba(60,60,67,.6); font-size: 15px; }
+  .note { position: absolute; z-index: 22; font: 600 12.5px/1.35 "Inter", "Noto Sans SC"; color: #0A60D0; background: rgba(214,228,255,.95); padding: 4px 8px; border-radius: 8px; }
+  .ubub { position: absolute; right: 16px; z-index: 3; }
+  /* Android（Pixel 10 Pro，412dp 宽；Material 3 顶栏 64dp） */
+  .ad { width: 412px; position: relative; overflow: hidden; border-radius: 34px 34px 0 0; background: #fdfbff; color: #1b1b1f;
+        box-shadow: 0 0 0 1px rgba(0,0,0,.08), 0 18px 40px rgba(0,0,0,.14); font-family: "Inter", "Noto Sans SC", sans-serif; }
+  .ad::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 56px; z-index: 30; background: linear-gradient(to bottom, rgba(230,230,235,0), #e6e6eb); }
+  .ad .sb { height: 40px; display: flex; justify-content: space-between; align-items: center; padding: 0 26px; font: 600 14px "Inter"; }
+  .ad .bar { height: 64px; display: flex; align-items: center; padding: 0 4px; gap: 4px; }
+  .ad .ib { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; }
+  .ad .sp { flex: 1; }
+  .ad .chip { height: 32px; display: flex; align-items: center; gap: 4px; padding: 0 10px 0 14px; border-radius: 8px; border: 1px solid #c4c6d0; font: 600 14px "Inter"; color: #1b1b1f; }
+  .ad .tx2 { padding: 12px 16px; font: 16px/25px "Inter", "Noto Sans SC"; color: #1b1b1f; }
+  .ad .ub2 { margin: 4px 16px 12px auto; width: max-content; background: #dfe2f9; border-radius: 18px; padding: 8px 14px; font-size: 15px; }
+  .col.a { width: 412px; }
+</style>
+<body>
+<h1>会话页顶栏 · 一按就到任务的「Task ›」（iOS / Android）</h1>
+<p class="lede">网页 11-26 上线（生产 <code>037cdcfded</code>）：任务会话标题上面那行重复的「← 任务名」去掉，改成标题旁一枚「Task ›」徽标，按下打开任务；协调员会话同样是「Coordinator ›」。手机这边不一样：<b>会话页顶栏 10-15 起不显示标题</b>（你说的「标题不需要」），所以没有那行重复，任务只在 ⋯ 菜单的 Open Task 里——要按两下。这板只问一件事：<b>要不要在手机顶栏给任务一个一按就到的入口，放哪儿。</b>英文是上线文案，中文是说明。</p>
+
+<h2>今天</h2>
+<div class="row4" id="today"></div>
+
+<h2>改后（推荐 A：⋯ 左边一枚玻璃「Task ›」）</h2>
+<div class="row4" id="after"></div>
+
+<h2>放哪儿、长什么样（推荐 A）</h2>
+<div class="row4" id="opts"></div>
+
+<h2>规格</h2>
+<table class="tok" id="spec"></table>
+<p class="foot" id="foot"></p>
+<script>
+const TT = 'Fix login redirect';
+const TXT = `<div class="tx" style="top:122px">
+<p>The redirect now keeps the path you asked for: a signed-out visit to /projects/42 lands on /projects/42 after sign-in, not on the home page.</p></div>
+<div class="ubub" style="top:232px">Also cover the deep link from email</div>
+<div class="tx" style="top:290px"><p>Done — the email link goes through the same check. Both are covered by the new test.</p></div>`;
+const back = `<div class="nav"><div class="gc l">${ic('chevl', 22, 'var(--l1)', 2.6)}</div></div>`;
+const dotsC = `<div class="nav"><div class="gc r">${dots()}</div></div>`;
+const grp = (n) => `<div class="gl" style="right:20px;width:128px;justify-content:space-between"><span class="grid"><i></i><i></i><i></i><i></i></span><span>${n}</span>${dots()}</div>`;
+const task = (right) => `<div class="gl" style="right:${right}px">Task${ic('chevr', 14, 'var(--l2)', 2.6)}</div>`;
+const qcap = (w, txt = 'Also cover the deep link from email') => `<div class="qcap" style="width:${w}px">${ic('chevu', 15, 'var(--l2)', 2.4)}<span class="t">${txt}</span></div>`;
+const shell = (top, body = TXT, h = 400) => phone('light', `${statusBar('10:19')}${back}${top}${body}${edge('light', 70, 112)}<div class="home"></div>`, { h, cls: 'crop' });
+const note = (txt, x, y) => `<div class="note" style="left:${x}px;top:${y}px">${txt}</div>`;
+const menu = `<div class="menu"><div>Share…</div><div>Copy Link</div><hr><div>Rename…</div><div>Pin</div><div>Move…</div><div>Tags…</div><div>Settings…</div><hr><div class="hi">Open Task <span class="mut">↗</span></div><hr><div>Complete Session</div></div>`;
+const col = (tag, cls, ph, h3, cap, extra = '') => `<div class="col ${extra}"><span class="tag ${cls}">${tag}</span>${ph}<div class="cap"><h3>${h3}</h3>${cap}</div></div>`;
+
+const t1 = shell(dotsC);
+const t2 = shell(dotsC + menu, TXT, 560);
+const t3 = shell(grp(36), TXT.replace('Fix', 'Fix'));
+document.getElementById('today').innerHTML =
+  col('今天 · 任务会话', 'now', t1, '顶栏只有 ‹ 和 ⋯', '中间那枚「↑ 你的问题」只在读历史时出现；跟着最新处时中间是空的。看不出这是哪个任务的会话。') +
+  col('今天 · 去任务要两下', 'now', t2, '⋯ → Open Task', '任务在菜单第四组。会话列表、任务页里都能看到任务，但在会话里想回任务，只能走这里。') +
+  col('今天 · 协调员会话', 'now', t3, '网格 = 项目的会话', '项目里的会话（协调员和成员）都有网格按钮，按下是项目会话的抽屉，抽屉顶上能进项目页；⋯ 里另有 Open Project。');
+
+const a1 = shell(task(72) + dotsC + note('按下 → 打开任务（和 Open Task 同一处）', 160, 116));
+const a2 = shell(qcap(180) + task(72) + dotsC + note('中间那枚让出 ~18pt', 100, 116));
+const a3 = shell(task(156) + grp(5));
+const ad = `<div class="ad" style="height:400px"><div class="sb"><span>10:19</span><span>▾ ▴ ▮</span></div>
+<div class="bar"><div class="ib">${ic('chevl', 22, '#1b1b1f', 2.4)}</div><div class="sp"></div><div class="chip">Task${ic('chevr', 13, '#44474f', 2.6)}</div><div class="ib"><svg width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2" fill="#1b1b1f"/><circle cx="12" cy="12" r="2" fill="#1b1b1f"/><circle cx="12" cy="19" r="2" fill="#1b1b1f"/></svg></div></div>
+<div class="tx2">The redirect now keeps the path you asked for: a signed-out visit to /projects/42 lands on /projects/42 after sign-in, not on the home page.</div>
+<div class="ub2">Also cover the deep link from email</div>
+<div class="tx2">Done — the email link goes through the same check. Both are covered by the new test.</div></div>`;
+document.getElementById('after').innerHTML =
+  col('改后 · 跟着最新处', 'rec', a1, '⋯ 左边一枚「Task ›」', '同顶栏其它件的玻璃、44pt 高、17pt 半粗，和网页徽标同一个词。按下：iPhone 把任务推在会话上（返回回到会话），iPad 在旁边那栏打开。') +
+  col('改后 · 读历史时', 'rec', a2, '和「↑ 你的问题」并排', '中间那枚从 198pt 让到约 180pt，问题照样读得出。按处各自够大（44pt 高）。') +
+  col('改后 · 项目里的任务', 'rec', a3, '「Task ›」+ 网格 + ⋯', '项目任务的会话也有网格按钮：Task 在它左边。读历史时中间那枚只剩约 100pt——这是最挤的一种（见下面 B/C）。') +
+  col('Android · 同样', 'rec', ad, '⋮ 左边一枚「Task ›」', 'Material 的 assist chip（32dp 高、描边）放在 ⋮ 左边；按下打开任务，返回回到会话。照 iOS，Android 跟 iOS 走。', 'a');
+
+const o1 = shell(task(72) + dotsC, TXT, 200);
+const o2 = shell(`<div class="wb" style="right:76px">Task${ic('chevr', 10, '#1f5fd6', 2.6)}</div>` + dotsC, TXT, 200);
+const o3 = shell(`<div class="qcap" style="width:276px;font-weight:600">${TT} ${ic('chevr', 14, 'var(--l2)', 2.6)}</div>` + dotsC, TXT, 200);
+const o4 = shell(dotsC, TXT, 200);
+document.getElementById('opts').innerHTML =
+  col('A · 玻璃胶囊（推荐）', 'rec', o1, '和顶栏一家', '同 ‹ / ⋯ 的玻璃件，一眼是按钮；44pt 高好按。代价：占约 86pt，项目任务读历史时中间最挤。') +
+  col('B · 网页同款蓝色小徽标', 'alt', o2, '和网页长得一样', '22pt 高的蓝色小圆角徽标。省地方，但在 iOS 顶栏里像标签不像按钮，22pt 也低于 44pt 的按处。') +
+  col('C · 中间放任务名，按下去任务', 'alt', o3, '把标题请回来', '跟着最新处时中间显示任务名 ›，读历史时让给「↑ 你的问题」。说清是哪个任务，但这等于收回 10-15「不要标题」，而且同一处一会儿是任务一会儿是问题。') +
+  col('D · 不加', 'alt', o4, '保持今天', '⋯ → Open Task 两下。顶栏最干净；网页和手机不一致。');
+
+document.getElementById('spec').innerHTML = `
+<tr><td>何时出现</td><td>会话有 <code>taskId</code>（任务的执行会话），且不是落地会话（<code>isLanding</code>）。没有任务的会话、协调员会话不出现（协调员见下面待定 ②）。</td></tr>
+<tr><td>文案</td><td>「Task」+ ›。读屏：<code>Task · Open task &lt;任务名&gt;</code>，和网页一样。</td></tr>
+<tr><td>按下</td><td>iOS：<code>openFromConversation(.task(id), overConsole:, overPage:)</code>，即 ⋯ 里 Open Task 走的那条。Android：<code>open(OrbitRoute(Destination.TASK, id, origin = LINK))</code>，即 <code>SessionMenu</code> 里那条。</td></tr>
+<tr><td>位置</td><td>iOS：<code>ConsoleView</code> 顶栏 <code>.topBarTrailing</code>，在网格按钮和 ⋯ 之前。Android：<code>SessionReader</code> 的 <code>PageBar.Bind(actions:)</code>，在 <code>ProjectSessionsButton</code> 之前。打字时顶栏收起，它一起收起。</td></tr>
+<tr><td>⋯ 菜单</td><td>Open Task 留着（菜单是完整清单）。</td></tr>
+<tr><td>iPad / Mac</td><td>iPad 用同一个 <code>ConsoleView</code> 顶栏，同样出现；Mac 窗口工具栏不在这次。</td></tr>`;
+document.getElementById('foot').innerHTML = `<b>落地（按代价排）</b>：① iOS 一个顶栏项 + 一条 wiring 测试（小）；② Android 一个 chip + 一条 Compose 测试 + 按 iOS 对截图（小）。两边各一个任务，Android 在 iOS 之后。<br>
+<b>待你定</b>：① 放哪儿、长什么样：A 玻璃胶囊（推荐）/ B 蓝色小徽标 / C 中间放任务名 / D 不加；② 协调员会话要不要也加「Coordinator ›」去项目页（推荐不加：它已有网格按钮，抽屉里一按就到项目页）；③ iPad 一起做（推荐，同一份代码）。`;
+</script>
+</body></html>

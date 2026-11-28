@@ -24,7 +24,7 @@ final class SessionProjectSheetTests: XCTestCase {
                      members: [Session] = []) -> SessionProjectRow {
         SessionProjectRow(projectId: "p1", title: "Search index", status: .open, members: members,
                           sessionCount: 11, coordinator: coordinator, folderId: nil, pinnedAt: nil,
-                          lastTurnAt: nil, createdAt: nil, needsYou: false, running: false, jobs: false,
+                          lastTurnAt: nil, createdAt: nil, needsYou: false, running: false,
                           indicator: nil, line: line, target: target,
                           taskCounts: nil, runningCount: 0, started: true, pause: nil)
     }

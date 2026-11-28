@@ -1,0 +1,281 @@
+<!doctype html>
+<!-- Design board (2026-11-27): a sent message leaves the composer at once and waits in the transcript
+     as a "Sending…" bubble, instead of sitting in the box behind a spinner until the server answers.
+     Drawn on the shipped stylesheet (src/web/src/index.css): the bubble, its foot row, the failure
+     line and its links are the real classes (.chat-user-wrap, .chat-user-meta, .chat-steer-state,
+     .chat-undelivered, .chat-undelivered-retry). The composer is drawn by hand on the real tokens.
+     Render: node render.mjs <repo root> docs/mocks/composer-sending-bubble/01-board.html <prefix> -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sending… bubble</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<style>
+  body { margin: 0; background: #eef0f3; }
+  .b-part { font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; color: var(--text-1); background: #fff;
+            padding: 28px 32px 30px; width: 1880px; box-sizing: border-box; margin: 0 0 2px; }
+  .b-part h1 { font-size: 22px; margin: 0 0 4px; }
+  .b-part h2 { font-size: 17px; margin: 0 0 14px; }
+  .b-sub { color: var(--text-2); font-size: 13.5px; margin: 0 0 20px; max-width: 1400px; }
+  .b-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 26px; align-items: start; }
+  .b-row.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .b-h { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px; font-size: 14px; font-weight: 600; }
+  .b-n { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px;
+         border-radius: 6px; background: var(--text-1); color: #fff; font: 700 12.5px/1 Inter, sans-serif; }
+  .b-n.bad { background: var(--error-solid); }
+  .b-n.rec { background: #16833a; }
+  .b-when { font-weight: 400; color: var(--text-3); font-size: 12.5px; }
+  .b-cap { font-size: 12.5px; line-height: 1.7; color: var(--text-2); margin: 10px 2px 0; }
+  .b-cap b { color: var(--text-1); }
+  .b-cap code, .b-sub code, .b-t code { font-size: 11.5px; background: #f0f2f5; padding: 0 4px; border-radius: 4px; }
+
+  /* One session pane: transcript tail over the composer. */
+  .b-pane { position: relative; border-radius: 12px; background: var(--bg, #fafafa); overflow: hidden;
+            box-shadow: 0 0 0 1px rgba(15,23,42,.09), 0 1px 3px rgba(15,23,42,.06); padding: 18px 18px 16px;
+            height: 470px; display: flex; flex-direction: column; }
+  .b-tx { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; padding: 0 4px 10px; }
+  .b-tx .chat-assistant { margin: 6px 0; }
+  .b-tx .chat-user-meta > .chat-copy, .b-tx .chat-user-meta > .chat-time { opacity: 0; }
+
+  .b-sending { opacity: .62; }
+  .b-ctx { display: flex; align-items: center; gap: 8px; padding: 6px 12px; margin: 0 0 8px; border: 1px solid var(--border-subtle);
+           border-radius: 10px; background: var(--bg-raised); font-size: 12.5px; color: var(--text-2); }
+  .b-ctx i { width: 7px; height: 7px; border-radius: 50%; background: #f59e0b; }
+  .b-ctx code { font-size: 11.5px; padding: 0 5px; border: 1px solid var(--border-subtle); border-radius: 4px; color: var(--text-1); }
+  .b-box { border: 1px solid var(--border-subtle); border-radius: 22px; background: var(--bg-raised); box-shadow: var(--panel-shadow); }
+  .b-field { padding: 12px 18px 4px; font-size: 14px; line-height: 1.55; min-height: 44px; color: var(--text-1); white-space: pre-wrap; }
+  .b-field.ph { color: var(--text-3); }
+  .b-caret { display: inline-block; width: 1px; height: 17px; background: var(--text-1); vertical-align: -3px; }
+  .b-tool { display: flex; align-items: center; gap: 12px; padding: 4px 10px 9px 16px; font-size: 13px; color: var(--text-2); }
+  .b-tool .sp { flex: 1; }
+  .b-tool .model b { color: var(--text-1); font-weight: 600; }
+  .b-send { width: 34px; height: 34px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+            background: var(--brand); color: #fff; }
+  .b-send.off { background: #e7e9ee; color: #b4b9c2; }
+  .b-spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #c9ced6; border-top-color: transparent; }
+
+  /* Marks drawn over the pane. */
+  .b-mk { position: absolute; border: 1.5px dashed var(--warning-solid, #d97706); border-radius: 9px; pointer-events: none; }
+  .b-mk > span { position: absolute; top: -11px; right: -11px; width: 20px; height: 20px; border-radius: 50%;
+                 background: var(--warning-solid, #d97706); color: #fff; font: 700 11.5px/20px Inter, sans-serif; text-align: center;
+                 box-shadow: 0 0 0 2px #fff; }
+  .b-tip { position: absolute; padding: 5px 9px; border-radius: 6px; background: #1f2329; color: #fff; font-size: 12px; line-height: 1.45;
+           max-width: 300px; box-shadow: 0 4px 14px rgba(0,0,0,.18); }
+
+  .b-t { border-collapse: collapse; font-size: 13px; line-height: 1.6; width: 100%; }
+  .b-t th, .b-t td { border: 1px solid #dde0e6; padding: 8px 12px; text-align: left; vertical-align: top; }
+  .b-t th { background: #f5f6f8; font-weight: 600; white-space: nowrap; }
+  .b-t td:first-child { font-weight: 600; white-space: nowrap; }
+  .b-rec { color: #16833a; font-weight: 700; }
+  .b-ask { background: #fff8eb; border: 1px solid #f3d9a6; border-radius: 10px; padding: 14px 18px; font-size: 13.5px; line-height: 1.75; }
+  .b-ask h3 { margin: 0 0 6px; font-size: 14.5px; }
+  .b-ask ol { margin: 0; padding-left: 20px; }
+</style>
+</head>
+<body>
+
+<template id="ctx"><div class="b-ctx"><i></i>Main checkout <code>develop</code> 2 uncommitted files</div></template>
+
+<section class="b-part" id="part-1">
+  <h1>A sent message leaves the box at once and waits in the transcript as "Sending…"</h1>
+  <p class="b-sub">Today, the box keeps the text and draws no bubble until the server answers. A slow or lost answer looks
+    like Enter did nothing, and since the request has no timeout, it can stay that way for good. In the proposal, the
+    message moves up the moment you press Enter. Its bubble says how far it got, and a failure gives you a way to send it
+    again or put it back. Nothing you typed is ever lost.</p>
+
+  <div class="b-row">
+    <div>
+      <div class="b-h"><span class="b-n bad">1</span>Today <span class="b-when">· 2 min after Enter</span></div>
+      <div class="b-pane" id="f1">
+        <div class="b-tx">
+          <div class="chat-msg chat-assistant">Done. The nightly export finished and the summary is in <code>reports/</code>.</div>
+        </div>
+        <div class="b-ctxslot"></div>
+        <div class="b-box">
+          <div class="b-field" id="f1-text">Check the cluster's state and load every half hour.
+If anything looks wrong, compare it against the code in ws analytics.</div>
+          <div class="b-tool">＋ <span>Auto</span><span class="sp"></span><span class="model"><b>DeepSeek V4.1 Flash</b> Ultra</span><span>◌ 10%</span><span>✦</span>
+            <span class="b-send off" id="f1-send"><span class="b-spin"></span></span></div>
+        </div>
+      </div>
+      <p class="b-cap"><b>Nothing reads as sent.</b> The text is still in the box ⓐ, and the only sign of a request is a faint spinner on a
+        grey button ⓑ that looks disabled. It has no time limit, no error and no way out but a reload. If you start typing
+        the next message, a late success clears the box and takes that text with it (<code>composerDraftAfterSend</code>).</p>
+    </div>
+
+    <div>
+      <div class="b-h"><span class="b-n rec">2</span>Proposal · Sending… <span class="b-when">· right after Enter</span></div>
+      <div class="b-pane" id="f2">
+        <div class="b-tx">
+          <div class="chat-msg chat-assistant">Done. The nightly export finished and the summary is in <code>reports/</code>.</div>
+          <div class="chat-user-wrap" id="f2-bubble">
+            <div class="chat-msg chat-user b-sending">Check the cluster's state and load every half hour.
+If anything looks wrong, compare it against the code in ws analytics.</div>
+            <div class="chat-user-meta"><span class="chat-time">now</span><div class="chat-steer-state" id="f2-state">Sending…</div></div>
+          </div>
+        </div>
+        <div class="b-ctxslot"></div>
+        <div class="b-box">
+          <div class="b-field ph"><span class="b-caret"></span> Reply…</div>
+          <div class="b-tool">＋ <span>Auto</span><span class="sp"></span><span class="model"><b>DeepSeek V4.1 Flash</b> Ultra</span><span>◌ 10%</span><span>✦</span>
+            <span class="b-send off">↑</span></div>
+        </div>
+      </div>
+      <p class="b-cap"><b>The message is on its way, and the box is free.</b> The bubble is the ordinary user bubble, dimmed ①, with
+        <code>Sending…</code> in its grey foot row ② (the steer-state voice, no colour, per the "your words are the visual center"
+        rule). The box empties at once, and you can type the next message. Send waits until this one settles, so messages
+        never cross (decision Ⓐ).</p>
+    </div>
+
+    <div>
+      <div class="b-h"><span class="b-n rec">3</span>Proposal · Sent <span class="b-when">· server accepted</span></div>
+      <div class="b-pane" id="f3">
+        <div class="b-tx">
+          <div class="chat-msg chat-assistant">Done. The nightly export finished and the summary is in <code>reports/</code>.</div>
+          <div class="chat-user-wrap">
+            <div class="chat-msg chat-user">Check the cluster's state and load every half hour.
+If anything looks wrong, compare it against the code in ws analytics.</div>
+            <div class="chat-user-meta"><span class="chat-time">now</span></div>
+          </div>
+          <div class="chat-msg chat-assistant" style="color:var(--text-3)">Thinking…</div>
+        </div>
+        <div class="b-ctxslot"></div>
+        <div class="b-box">
+          <div class="b-field">Also post a short summary to the channel<span class="b-caret"></span></div>
+          <div class="b-tool">＋ <span>Auto</span><span class="sp"></span><span class="model"><b>DeepSeek V4.1 Flash</b> Ultra</span><span>◌ 10%</span><span>✦</span>
+            <span class="b-send">↑</span></div>
+        </div>
+      </div>
+      <p class="b-cap"><b>The same bubble, now at full strength, with nothing in its foot.</b> That's the state every delivered message
+        already has, so nothing jumps or reflows. What you typed while it was sending stays in the box ③: a success no longer
+        empties the box, because the sent text left it at Enter.</p>
+    </div>
+  </div>
+</section>
+
+<section class="b-part" id="part-2">
+  <h2>When it doesn't get through</h2>
+  <div class="b-row">
+    <div>
+      <div class="b-h"><span class="b-n rec">4</span>No answer <span class="b-when">· 20 s after Enter (decision Ⓑ)</span></div>
+      <div class="b-pane" id="f4">
+        <div class="b-tx">
+          <div class="chat-msg chat-assistant">Done. The nightly export finished and the summary is in <code>reports/</code>.</div>
+          <div class="chat-user-wrap" id="f4-bubble">
+            <div class="chat-msg chat-user">Check the cluster's state and load every half hour.
+If anything looks wrong, compare it against the code in ws analytics.</div>
+            <div class="chat-user-meta"><span class="chat-time">20s ago</span><div class="chat-undelivered" id="f4-state">⚠ Not sent<button type="button" class="chat-undelivered-retry">Retry</button><button type="button" class="chat-undelivered-retry">Put back in the composer</button></div></div>
+          </div>
+        </div>
+        <div class="b-ctxslot"></div>
+        <div class="b-box">
+          <div class="b-field ph"><span class="b-caret"></span> Reply…</div>
+          <div class="b-tool">＋ <span>Auto</span><span class="sp"></span><span class="model"><b>DeepSeek V4.1 Flash</b> Ultra</span><span>◌ 10%</span><span>✦</span>
+            <span class="b-send off">↑</span></div>
+        </div>
+        <div class="b-tip" id="f4-tip">The server didn't answer in 20 seconds. Retry sends the same message again; it can't arrive twice.</div>
+      </div>
+      <p class="b-cap"><b>The failure line that ships today, on the same bubble.</b> The bubble returns to full strength, and the foot reads
+        <code>⚠ Not sent</code> with two links ④: <b>Retry</b> sends it again with the same <code>clientTurnId</code>, so if the first
+        request did arrive, the server treats the retry as the same message, not a second one. <b>Put back in the composer</b>
+        takes it out of the transcript and puts it back in the box to edit. The reason is in the tooltip.</p>
+    </div>
+
+    <div>
+      <div class="b-h"><span class="b-n rec">5</span>Refused <span class="b-when">· the server said no</span></div>
+      <div class="b-pane" id="f5">
+        <div class="b-tx">
+          <div class="chat-msg chat-assistant">Done. The nightly export finished and the summary is in <code>reports/</code>.</div>
+          <div class="chat-user-wrap">
+            <div class="chat-msg chat-user">Check the cluster's state and load every half hour.
+If anything looks wrong, compare it against the code in ws analytics.</div>
+            <div class="chat-user-meta"><span class="chat-time">now</span><div class="chat-undelivered" id="f5-state">⚠ Not sent<button type="button" class="chat-undelivered-retry">Retry</button><button type="button" class="chat-undelivered-retry">Put back in the composer</button></div></div>
+          </div>
+        </div>
+        <div class="b-ctxslot"></div>
+        <div class="b-box">
+          <div class="b-field ph"><span class="b-caret"></span> Reply…</div>
+          <div class="b-tool">＋ <span>Auto</span><span class="sp"></span><span class="model"><b>DeepSeek V4.1 Flash</b> Ultra</span><span>◌ 10%</span><span>✦</span>
+            <span class="b-send off">↑</span></div>
+        </div>
+        <div class="b-tip" id="f5-tip">Restore this session to Open before sending a message</div>
+      </div>
+      <p class="b-cap"><b>Same line, with the server's reason in the tooltip.</b> This replaces today's "Couldn't send the message" toast.
+        Refusals that already have their own card (a task held by another run, a hand-over) keep that card. The bubble then
+        steps aside, and its text goes back into the box, as today.</p>
+    </div>
+
+    <div>
+      <div class="b-h"><span class="b-n">6</span>Where each case goes</div>
+      <table class="b-t">
+        <tr><th>Case</th><th>Bubble foot</th><th>Box</th></tr>
+        <tr><td>Enter</td><td>Sending…, dimmed</td><td>empties at once</td></tr>
+        <tr><td>Accepted</td><td>nothing (normal)</td><td>untouched</td></tr>
+        <tr><td>Queued / steer</td><td>today's queue tray and steer states take over</td><td>untouched</td></tr>
+        <tr><td>Routed to another run</td><td>bubble leaves, the run's card says where it went</td><td>untouched</td></tr>
+        <tr><td>No answer in 20 s</td><td>⚠ Not sent · Retry · Put back</td><td>untouched</td></tr>
+        <tr><td>Refused, plain</td><td>⚠ Not sent · Retry · Put back, reason in tooltip</td><td>untouched</td></tr>
+        <tr><td>Refused, has a card</td><td>bubble leaves</td><td>text comes back</td></tr>
+        <tr><td>New session</td><td>same bubble, on the new-session page until it opens. Retry needs the create request to carry <code>clientTurnId</code> too (a server change); today only turns and resumes are deduplicated by it</td><td>empties at once</td></tr>
+        <tr><td>Page reloaded mid-send</td><td>gone; if it reached the server, the transcript shows it</td><td>—</td></tr>
+      </table>
+      <p class="b-cap">Web only in this round. iOS and Android follow the same shape later.</p>
+    </div>
+  </div>
+</section>
+
+<section class="b-part" id="part-3">
+  <h2>To decide</h2>
+  <div class="b-row two">
+    <div class="b-ask">
+      <h3>Ⓐ While one message is sending, can you send the next?</h3>
+      <ol>
+        <li><span class="b-rec">A · Type yes, send waits (recommended).</span> The box is free, and Send lights up once the first
+          message settles, usually in well under a second. No ordering problem, and nothing new on the server.</li>
+        <li><b>B · Send it too.</b> The second bubble waits behind the first and goes when it settles. This needs a small
+          client-side queue, and a failure of the first one would have to hold the second.</li>
+      </ol>
+    </div>
+    <div class="b-ask">
+      <h3>Ⓑ How long before "Not sent"?</h3>
+      <ol>
+        <li><span class="b-rec">A · 20 seconds (recommended).</span> A send normally comes back in under a second. A new session
+          (create) can take a few seconds. 20 s leaves room for both and still tells you before you give up.</li>
+        <li><b>B · 60 seconds.</b> Fewer false "Not sent" lines on a very slow link, but a long time to look at "Sending…".</li>
+      </ol>
+      <p class="b-cap" style="margin-top:8px">Either way, a late success after the line appears turns the bubble back into a normal
+        sent message. Nothing is sent twice, because Retry reuses the same <code>clientTurnId</code>.</p>
+    </div>
+  </div>
+</section>
+
+<script>
+  const ctx = document.getElementById('ctx');
+  document.querySelectorAll('.b-ctxslot').forEach((s) => s.replaceWith(ctx.content.cloneNode(true)));
+  // Marks and tooltips placed after layout, relative to each pane.
+  window.drawMarks = () => {
+    const mark = (paneId, elId, n, pad = 4) => {
+      const pane = document.getElementById(paneId), el = document.getElementById(elId);
+      const p = pane.getBoundingClientRect(), r = el.getBoundingClientRect();
+      const m = document.createElement('div');
+      m.className = 'b-mk';
+      Object.assign(m.style, { left: `${r.left - p.left - pad}px`, top: `${r.top - p.top - pad}px`,
+        width: `${r.width + pad * 2}px`, height: `${r.height + pad * 2}px` });
+      m.innerHTML = `<span>${n}</span>`;
+      pane.appendChild(m);
+    };
+    const tip = (paneId, elId, tipId) => {
+      const pane = document.getElementById(paneId), el = document.getElementById(elId), t = document.getElementById(tipId);
+      const p = pane.getBoundingClientRect(), r = el.getBoundingClientRect();
+      t.style.right = `${p.right - r.right}px`;
+      t.style.top = `${r.bottom - p.top + 8}px`;
+    };
+    mark('f1', 'f1-text', 'a'); mark('f1', 'f1-send', 'b', 5);
+    mark('f2', 'f2-bubble', '1', 5); mark('f2', 'f2-state', '2', 3);
+    tip('f4', 'f4-state', 'f4-tip'); mark('f4', 'f4-state', '4', 6);
+    tip('f5', 'f5-state', 'f5-tip');
+    const f3 = document.querySelector('#f3 .b-field'); f3.id = 'f3-text'; mark('f3', 'f3-text', '3', 2);
+  };
+</script>
+</body>
+</html>

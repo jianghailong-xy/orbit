@@ -77,7 +77,6 @@ internal object SessionListCopy {
     const val FOLDER_ACTIONS = "Folder actions"
     const val FOLDER_EMPTY = "Nothing in this folder"
     const val FOLDER_RUNNING = "Session running"
-    const val FOLDER_JOBS = "Background job running"
     const val WORKSPACES_FAILED = "Workspaces couldn't be loaded"
     const val REQUEST_FAILED = "Request failed — check your connection."
     const val SESSION_EXPIRED = "Session expired — sign in again."
@@ -97,12 +96,12 @@ internal object ScheduledRunsFolderCopy {
 }
 
 /** The time on a row's first line (OrbitKit `SessionListTime`): how long the turn has run while its spinner shows, nothing if the
- * server sent no start, and otherwise when it last moved. */
+ * server sent no start, and otherwise when it was listed. */
 internal object SessionListTime {
     fun format(session: DirectorySession, now: Instant = Instant.now()): String? =
         if (session.isRunning()) session.currentTurnStartedAt?.let { TaskTime.elapsed(it, now) }
-        // The last message, not listedAt: a wake turn leaves the row where it is but still says when it last spoke (owner 2026-11-25).
-        else (session.lastTurnAt ?: session.createdAt)?.let { WikiDate.relative(it, now) }
+        // listedAt, not lastTurnAt: the time a row shows agrees with where it sits (owner 2026-11-26).
+        else (session.listedAt ?: session.createdAt)?.let { WikiDate.relative(it, now) }
 }
 
 /**
@@ -126,15 +125,18 @@ internal fun SessionRow(session: DirectorySession, machine: String?, onOpen: () 
     val line = remember(session, deleted, watching, recaps, machine, cloneProgress) {
         SessionLine.make(session, live = !deleted, watching = watching, recaps = recaps, machine = machine, cloneProgress = cloneProgress)
     }
-    // With the session facts, the row's value is the state and its marks ("Idle, Finished"); from an older server, today's word.
+    // With the session facts, the row's value is the state and its marks ("Idle, Needs you"); from an older server, today's word.
     val word = remember(session, watching) { SessionDisplay.text(session.displayFacts, ", ") ?: SessionHeader.statusWord(session, watching) }
-    val marks = remember(session) { SessionDisplay.marks(session.displayFacts) }
+    // The chips after the line: Needs you alone, the rest being title-line icons.
+    val marks = remember(session) { SessionDisplay.rowMarks(session.displayFacts) }
+    val rowIcons = remember(session) { SessionDisplay.rowIcons(session.displayFacts) }
     Column(Modifier.fillMaxWidth()
         .combinedClickable(role = Role.Button, onLongClickLabel = "Options for ${session.name}", onLongClick = onOptions, onClick = onOpen)
         .semantics { stateDescription = word }
         .padding(horizontal = 16.dp, vertical = 11.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(session.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
+            SessionRowIcons(rowIcons)
             SessionLiveMark(session, watching)
             SessionListTime.format(session)?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = muted, maxLines = 1, softWrap = false) }
         }
@@ -154,12 +156,13 @@ internal fun SessionRow(session: DirectorySession, machine: String?, onOpen: () 
 
 /** iOS `SessionLiveIndicator`: what must never go silent on a row. A working session's spinner, the eye of one a watch will resume, the
  * clock of a report under review or a session queued for a slot, the terminal of a background process — breathing for a job in flight,
- * still for one merely left up — an amber dot when it waits on you and a red one when it failed. The settled states draw nothing: the
+ * still for one merely left up — an amber dot when it waits on you and a red one when it failed. The settled states, Idle among them, draw nothing: the
  * line and the row's value say them. */
 @Composable
 internal fun SessionLiveMark(session: DirectorySession, watching: WatchSessionSummary?) {
-    // With the session facts, always one of the three state icons, from `phase` alone (the board); the facts are the marks on the line.
-    SessionDisplay.state(session.displayFacts)?.let { return SessionStateGlyph(it) }
+    // With the session facts, the state icon from `phase` alone (the board); the facts are the marks on the line. Idle draws nothing
+    // (owner, 2026-11-27, as on iOS): a settled row is said by its line and its TalkBack value, and the circle read as a control.
+    SessionDisplay.state(session.displayFacts)?.let { if (it != SessionDisplayState.IDLE) SessionStateGlyph(it); return }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val parked = session.effectiveRunState == RunState.AWAITING_INPUT
     when {
@@ -182,15 +185,14 @@ internal fun RowSpinner(modifier: Modifier = Modifier) {
 }
 
 /** A folder's row (iOS `SessionFolderRowView`): its name, what the sessions it holds would have said — how many wait on you, else a
- * spinner, else the breathing mark, by the drawer's rule — their count (unless some wait on you) and a chevron. A tap opens it and a long press is its menu. */
+ * spinner while one runs or has a background job in flight, by the drawer's rule — their count (unless some wait on you) and a chevron. A tap opens it and a long press is its menu. */
 @Composable
 internal fun FolderRow(folder: Folder, sessions: List<DirectorySession>, count: Int, runnerOffline: Boolean, watching: Map<String, WatchSessionSummary>,
     onOpen: () -> Unit, onOptions: () -> Unit) {
     FolderRow(folder.id, folder.name, FolderRowSummary(
         count = count,
         needsYou = sessions.folderNeedsYouCount(),
-        running = !runnerOffline && sessions.any { it.isRunning() },
-        jobs = !runnerOffline && sessions.any { it.isRunningJob(watching[watchKey(it.id)]) },
+        running = !runnerOffline && sessions.any { it.isRunning() || it.isRunningJob(watching[watchKey(it.id)]) },
     ), onOpen, onOptions)
 }
 
@@ -199,7 +201,7 @@ internal fun FolderRow(folder: Folder, sessions: List<DirectorySession>, count: 
 internal fun FolderRow(id: String, name: String, summary: FolderRowSummary, onOpen: () -> Unit, onOptions: (() -> Unit)? = null) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val scheduled = id == ScheduledRunsFolder.ID
-    val (count, waiting, running, jobs) = summary
+    val (count, waiting, running) = summary
     val words = if (scheduled) listOfNotNull(
         SessionListCopy.folderSessions(count),
         DrawerCopy.waitingForYou(waiting).takeIf { waiting > 0 },
@@ -207,7 +209,6 @@ internal fun FolderRow(id: String, name: String, summary: FolderRowSummary, onOp
     ).joinToString(". ") else when {
         waiting > 0 -> "${DrawerCopy.waitingForYou(waiting)}. ${SessionListCopy.folderSessions(count)}"
         running -> SessionListCopy.FOLDER_RUNNING
-        jobs -> SessionListCopy.FOLDER_JOBS
         else -> SessionListCopy.folderSessions(count)
     }
     val openFolder = if (onOptions == null) Modifier.clickable(role = Role.Button, onClick = onOpen)
@@ -226,7 +227,6 @@ internal fun FolderRow(id: String, name: String, summary: FolderRowSummary, onOp
         when {
             waiting > 0 -> NeedsYouCount(waiting)
             running && !scheduled -> RowSpinner()
-            jobs -> BreathingTerminal()
         }
         // One number on the row (owner 2026-11-19, as on the web): who waits on you takes the total's place, which `words` still reads.
         if (waiting == 0) Text("$count", style = MaterialTheme.typography.labelMedium, color = muted, modifier = Modifier.clearAndSetSemantics {})

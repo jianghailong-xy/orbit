@@ -107,8 +107,9 @@ data class DirectorySession(
      *  read by [RunningOverLimit.of]. */
     val runningOverLimit: JsonElement? = null,
     val runSource: String? = null,
-    /** When the session last changed for its owner, the order the Open list keeps (contracts/session-list-order.fixtures.json). Unlike
-     *  [lastTurnAt] it does not move with streamed text or background output. Null from an older server: the row reads as [createdAt]. */
+    /** When the session last changed for its owner: what every list view but Completed orders by, and the time its row shows
+     *  (contracts/session-list-order.fixtures.json). Unlike [lastTurnAt] it does not move with streamed text or background output.
+     *  Null from an older server: the row reads as [createdAt]. */
     val listedAt: String? = null,
 ) {
     /** Whether this row is a landing session (platform work), not a conversation. */
@@ -195,7 +196,7 @@ internal fun listShowsFolders(isFolder: Boolean, view: SessionView, tag: String?
 
 internal fun List<DirectorySession>.withoutScheduledRuns() = filterNot { it.isScheduledRun || it.isScheduleChange }
 
-internal data class FolderRowSummary(val count: Int, val needsYou: Int, val running: Boolean, val jobs: Boolean = false)
+internal data class FolderRowSummary(val count: Int, val needsYou: Int, val running: Boolean)
 
 internal fun List<DirectorySession>.folderNeedsYouCount() = count { it.pendingApprovals > 0 && it.waitingKind != "START_REQUEST" }
 
@@ -212,7 +213,7 @@ internal object ScheduledRunsFolder {
         else null
 }
 
-/** Where the Open list places a row: its `listedAt`, or `createdAt` from an older server. */
+/** Where the list places a row: its `listedAt`, or `createdAt` from an older server. */
 internal fun DirectorySession.listedInstant(): Instant? = runCatching { Instant.parse(listedAt ?: createdAt) }.getOrNull()
 
 /** Open's first three sections, ahead of the day sections (contracts/session-list-order.fixtures.json). */
@@ -226,17 +227,27 @@ internal fun DirectorySession.needsOwner() = pendingApprovals > 0 || (failedForL
 private fun DirectorySession.failedForList() = if (phase != null && released != null) displayRunState == RunState.FAILED else status == "FAILED"
 
 
-internal fun DirectorySession.isWorkingForList() = status == "RUNNING" || status == "PENDING" || (status == "FAILED" && retryAt != null)
+/** At work: the phase where the row carries one (RUNNING covers a background job or a SubAgent running between turns), otherwise the
+ * legacy status; or a failure the server is retrying (web `sessionIsWorking`). */
+internal fun DirectorySession.isWorkingForList() = when (phase) {
+    "RUNNING", "PENDING" -> true
+    "IDLE" -> false
+    else -> status == "RUNNING" || status == "PENDING"
+} || (status == "FAILED" && retryAt != null)
 
+/** [tagFiltered]: the list is narrowed to one tag, so Open draws no Pinned section. */
 fun directoryGroups(sessions: List<DirectorySession>, view: SessionView, grouping: Grouping,
-    now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): List<SessionGroup> {
+    now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault(), tagFiltered: Boolean = false): List<SessionGroup> {
     val open = view == SessionView.OPEN
-    // Open orders by listedAt, which only moves when the session changes for its owner; the other views and tag groups keep the
-    // activity clock they always had.
-    fun date(s: DirectorySession) = if (open) s.listedInstant() else runCatching { Instant.parse(s.lastTurnAt ?: s.createdAt) }.getOrNull()
+    // A pin counts only in Open with no tag filter: it draws the Pinned section, and under Group by tag it leads its tag's section, as
+    // web and Apple keep it.
+    val pins = open && !tagFiltered
+    // Every view buckets by listedAt, which only moves when the session changes for its owner; all but Completed, which keeps the
+    // server's order, are ordered by it too.
+    fun date(s: DirectorySession) = s.listedInstant()
     fun created(s: DirectorySession) = runCatching { Instant.parse(s.createdAt) }.getOrNull() ?: Instant.MIN
-    val sorted = if (view == SessionView.COMPLETED) sessions else sessions.sortedWith(compareByDescending<DirectorySession> { open && it.pinnedAt != null }
-        .thenByDescending { date(it) ?: Instant.MIN }.thenByDescending { if (open) created(it) else Instant.MIN }.thenBy { it.id })
+    val sorted = if (view == SessionView.COMPLETED) sessions else sessions.sortedWith(compareByDescending<DirectorySession> { pins && it.pinnedAt != null }
+        .thenByDescending { date(it) ?: Instant.MIN }.thenByDescending { created(it) }.thenBy { it.id })
     if (grouping == Grouping.TAG) {
         val tags = sorted.mapNotNull { it.tags.firstOrNull() }.distinctBy { it.id }
             .sortedWith(compareByDescending<Tag> { it.isSystem }.thenBy { it.position }.thenBy { it.name })
@@ -246,7 +257,7 @@ fun directoryGroups(sessions: List<DirectorySession>, view: SessionView, groupin
     val today = now.atZone(zone).toLocalDate()
     // 0 Pinned, then (Open only) Needs you and Working, then the day sections by [recencyBucket].
     fun bucket(s: DirectorySession) = when {
-        open && s.pinnedAt != null -> 0
+        pins && grouping == Grouping.RECENCY && s.pinnedAt != null -> 0
         open && s.needsOwner() -> NEEDS_YOU_BUCKET
         open && s.isWorkingForList() -> WORKING_BUCKET
         else -> recencyBucket(date(s), today, zone)

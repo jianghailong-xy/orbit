@@ -2,11 +2,13 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { Client } from 'pg';
-import { RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { isReleasedStatus } from '../common/session-release';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { RunnersService } from './runners.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const url = process.env.COORDINATOR_PG_URL;
 const MINUTE = 60_000;
@@ -43,7 +45,7 @@ test('a draining runner lists the viewer’s turns it waits for; no other runner
     const id = randomUUID();
     await db.session.create({ data: {
       id, ownerId, creatorId: ownerId, workspaceId: r.workspaceId, assignedRunnerId: r.id, title, prompt: title,
-      provider: 'claude', providerBuiltin: true, status, dispatchOrigin: SessionDispatchOrigin.USER,
+      provider: 'claude', providerBuiltin: true, turnState: turnStateOfWord(status), dispatchOrigin: SessionDispatchOrigin.USER,
       ...(isReleasedStatus(status) ? {
         finishedAt: new Date(),
       } : {}),

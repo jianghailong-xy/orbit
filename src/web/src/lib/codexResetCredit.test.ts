@@ -12,6 +12,7 @@ import {
   CODEX_RESET_REFUSAL_REASON,
   CODEX_RESET_UNREFRESHED_SPEND_REASON,
   clearCodexResetIntent,
+  codexResetAccountSlots,
   codexResetCard,
   codexResetCountLabel,
   codexResetCreateFailure,
@@ -22,12 +23,17 @@ import {
   codexResetStatusCopy,
   decodeCodexResetOperation,
   decodeCodexResetOperations,
-  readCodexResetIntent,
+  findCodexResetIntent,
+  readCodexResetIntents,
   writeCodexResetIntent,
   type CodexResetIntent,
   type CodexResetRunner,
 } from './codexResetCredit';
 import {
+  SIDE_SLOT,
+  WORK_FINGERPRINT,
+  WORK_SLOT,
+  resetAccountsRunner,
   OTHER_FINGERPRINT,
   RESET_FINGERPRINT,
   RESET_REQUEST_ID,
@@ -438,10 +444,39 @@ describe('what a failed create proves', () => {
   });
 });
 
+describe('the accounts a popover draws a card for', () => {
+  const at = new Date('2026-09-11T12:00:00.000Z');
+
+  it("lists the session's own first, then the runner's order, and one ChatGPT account once", () => {
+    const runner = resetAccountsRunner(at);
+    expect(codexResetAccountSlots(runner, 'default')).toEqual(['default', WORK_SLOT, SIDE_SLOT]);
+    expect(codexResetAccountSlots(runner, SIDE_SLOT)).toEqual([SIDE_SLOT, 'default', WORK_SLOT]);
+    const twice = resetAccountsRunner(at, { side: { accountFingerprint: WORK_FINGERPRINT } });
+    expect(codexResetAccountSlots(twice, SIDE_SLOT)).toEqual([SIDE_SLOT, 'default']);
+    expect(codexResetAccountSlots(resetRunner(at), 'default')).toEqual(['default']);
+  });
+
+  it("judges each account's card on its own block, and an added one needs reset v2", () => {
+    const runner = resetAccountsRunner(at);
+    expect(codexResetCard(runner, at, false, null, WORK_SLOT)).toMatchObject({
+      accountFingerprint: WORK_FINGERPRINT,
+      details: { availableCount: 2 },
+      availability: { kind: 'ready' },
+    });
+    const v1 = { ...runner, capabilities: resetRunner(at).capabilities };
+    expect(codexResetCard(v1, at, false, null, WORK_SLOT)?.availability).toMatchObject({ code: 'CAPABILITY_MISSING' });
+    expect(codexResetCard(v1, at, false)?.availability).toEqual({ kind: 'ready' });
+  });
+});
+
 describe('a confirmation remembered across reloads', () => {
   beforeEach(() => {
     const items = new Map<string, string>();
     vi.stubGlobal('localStorage', {
+      get length() {
+        return items.size;
+      },
+      key: (index: number) => [...items.keys()][index] ?? null,
       getItem: (key: string) => items.get(key) ?? null,
       setItem: (key: string, value: string) => void items.set(key, value),
       removeItem: (key: string) => void items.delete(key),
@@ -459,25 +494,54 @@ describe('a confirmation remembered across reloads', () => {
     ...overrides,
   });
 
-  it('round-trips per runner and forgets anything malformed', () => {
+  const KEY = `orbit.codexReset:Runner1:${RESET_FINGERPRINT}`;
+
+  it('round-trips per runner and account, and forgets anything malformed', () => {
+    const work = intent({ accountFingerprint: WORK_FINGERPRINT, accountSlot: WORK_SLOT });
     writeCodexResetIntent(intent());
-    expect(readCodexResetIntent('Runner1')).toEqual(intent());
-    expect(readCodexResetIntent('Runner2')).toBeNull();
-    localStorage.setItem('orbit.codexReset:Runner1', '{not json');
-    expect(readCodexResetIntent('Runner1')).toBeNull();
+    writeCodexResetIntent(work);
+    expect(readCodexResetIntents('Runner1')).toEqual([intent(), work]);
+    expect(readCodexResetIntents('Runner2')).toEqual([]);
+    clearCodexResetIntent('Runner1', RESET_FINGERPRINT);
+    expect(readCodexResetIntents('Runner1')).toEqual([work]);
+    clearCodexResetIntent('Runner1', WORK_FINGERPRINT);
     for (const broken of [
-      intent({ clientRequestId: 'nope' }),
-      intent({ accountFingerprint: OTHER_FINGERPRINT.toUpperCase() }),
-      intent({ clientRequestId: undefined }),
-      intent({ settledAt: minutesAgo(0) }),
+      '{not json',
+      ...[
+        intent({ clientRequestId: 'nope' }),
+        intent({ accountFingerprint: OTHER_FINGERPRINT.toUpperCase() }),
+        intent({ accountSlot: 'Work' }),
+        intent({ clientRequestId: undefined }),
+        intent({ settledAt: minutesAgo(0) }),
+        // Filed under another account's key.
+        work,
+      ].map((value) => JSON.stringify(value)),
     ]) {
-      localStorage.setItem('orbit.codexReset:Runner1', JSON.stringify(broken));
-      expect(readCodexResetIntent('Runner1')).toBeNull();
-      expect(localStorage.getItem('orbit.codexReset:Runner1')).toBeNull();
+      localStorage.setItem(KEY, broken);
+      expect(readCodexResetIntents('Runner1')).toEqual([]);
+      expect(localStorage.getItem(KEY)).toBeNull();
     }
-    writeCodexResetIntent(intent());
-    clearCodexResetIntent('Runner1');
-    expect(readCodexResetIntent('Runner1')).toBeNull();
+  });
+
+  it('moves a confirmation remembered under the runner alone to its account', () => {
+    localStorage.setItem('orbit.codexReset:Runner1', JSON.stringify(intent()));
+    expect(readCodexResetIntents('Runner1')).toEqual([intent()]);
+    expect(localStorage.getItem('orbit.codexReset:Runner1')).toBeNull();
+    expect(JSON.parse(localStorage.getItem(KEY)!)).toEqual(intent());
+  });
+
+  it("gives each account's card its own confirmation, and a slot that changed accounts the one it made", () => {
+    const runner = { ...resetAccountsRunner(NOW), id: 'Runner1' };
+    const work = intent({ accountFingerprint: WORK_FINGERPRINT, accountSlot: WORK_SLOT });
+    writeCodexResetIntent(work);
+    expect(findCodexResetIntent(runner, WORK_SLOT)).toEqual(work);
+    expect(findCodexResetIntent(runner, 'default')).toBeNull();
+    expect(findCodexResetIntent(runner, SIDE_SLOT)).toBeNull();
+    // Side was signed in to an account no slot holds now: still Side's card to report on.
+    const before = intent({ accountFingerprint: OTHER_FINGERPRINT, accountSlot: SIDE_SLOT });
+    writeCodexResetIntent(before);
+    expect(findCodexResetIntent(runner, SIDE_SLOT)).toEqual(before);
+    expect(findCodexResetIntent(runner, 'default')).toBeNull();
   });
 
   it('sends an unanswered create again only inside the consume deadline, and after it only looks', () => {

@@ -33,7 +33,7 @@ interface MenuAction {
   levelFooter?: ReactNode;
   /** A class on the item itself, for a row the page styles apart (the account menu's profile row). */
   className?: string;
-  /** The item's native tip, as the replaced item's `title` (P5.3: a session row's Complete that cannot run says why). */
+  /** The item's tip, the app tooltip beside the menu (P5.3: a session row's Complete that cannot run says why). */
   title?: string;
   type?: 'item';
 }
@@ -54,6 +54,9 @@ export interface MenuProps extends FloatingProps {
    *  search. The items scroll above it; keys pressed in it stay its own, except Escape and Tab, which close the menu
    *  as they do from an item. */
   footer?: ReactNode;
+  /** Content over the items and outside their navigation, as a level's `levelHeader` is: the place menu's search
+   *  (docs/mocks/new-session-place ②). The items scroll under it, so it stays where it is however long they are. */
+  header?: ReactNode;
   /** False when the trigger is not a `<button>` but a span the page draws as a pill or a ⋯ (P5.3): the menu gives it
    *  the button role, a Tab stop, and Enter and Space. */
   nativeButton?: boolean;
@@ -102,7 +105,7 @@ function Submenu({ item, contents, container, zIndex, slide }: { item: MenuActio
   const { positioner, ...placement } = useSubmenuPlacement(anchor, slide);
   const framed = item.levelHeader != null || item.levelFooter != null;
   return <BaseMenu.SubmenuRoot open={layer.open} onOpenChange={layer.setOpen}>
-    <BaseMenu.SubmenuTrigger ref={anchor} className={itemClass(item)} label={item.textValue} onKeyDown={(event) => {
+    <BaseMenu.SubmenuTrigger ref={anchor} className={itemClass(item)} label={item.textValue} data-selected={item.selected || undefined} onKeyDown={(event) => {
       // Opened from the keyboard, the submenu highlights its first item before focus moves into it; until then
       // the parent menu would take these keys, an arrow, Home or End moving to another of its items for the next
       // Enter to run. Opened by hover, nothing in it is highlighted and the keys stay the parent's.
@@ -138,22 +141,27 @@ function Items({ items, container, zIndex, slide }: { items: MenuItem[]; contain
       {item.icon != null && <span className="orbit-menu-icon" aria-hidden>{item.icon}</span>}
       <span className="orbit-menu-label">{item.label}</span>
     </>;
-    const common = { className: itemClass(item), disabled: item.disabled, label: item.textValue, title: item.title,
+    const common = { className: itemClass(item), disabled: item.disabled, label: item.textValue,
       'data-danger': item.danger || undefined, 'data-selected': item.selected || undefined };
+    // An item's tip (why it is unavailable, what it does) is the app's tooltip beside the menu, not the browser's
+    // title: a disabled item is a plain row, so its tip still opens on hover (docs/mocks/web-tooltips-c, Q4).
+    const tip = (element: ReactElement) => item.title
+      ? <Tooltip key={item.key} content={item.title} side="right">{element}</Tooltip>
+      : element;
     // Disabled actions remain readable but are outside arrow-key navigation,
     // matching the existing workspace menus. They register no selectable item.
-    if (item.disabled) return <div key={item.key} role={item.checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
-      aria-disabled="true" aria-checked={item.checked} className={itemClass(item)} title={item.title} data-disabled>{contents}</div>;
+    if (item.disabled) return tip(<div key={item.key} role={item.checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
+      aria-disabled="true" aria-checked={item.checked} className={itemClass(item)} data-disabled>{contents}</div>);
     if (item.children) return <Submenu key={item.key} item={item} contents={contents} container={container} zIndex={zIndex} slide={slide} />;
-    if (item.checked !== undefined) return <BaseMenu.CheckboxItem key={item.key} {...common}
+    if (item.checked !== undefined) return tip(<BaseMenu.CheckboxItem key={item.key} {...common}
       checked={item.checked} onCheckedChange={item.onCheckedChange} onClick={item.onSelect} closeOnClick={item.closeOnSelect ?? false}>
       {contents}<BaseMenu.CheckboxItemIndicator className="orbit-menu-check" keepMounted><CheckOutlined aria-hidden /></BaseMenu.CheckboxItemIndicator>
-    </BaseMenu.CheckboxItem>;
-    return <BaseMenu.Item key={item.key} {...common} onClick={item.onSelect} closeOnClick={item.closeOnSelect ?? true}>{contents}</BaseMenu.Item>;
+    </BaseMenu.CheckboxItem>);
+    return tip(<BaseMenu.Item key={item.key} {...common} onClick={item.onSelect} closeOnClick={item.closeOnSelect ?? true}>{contents}</BaseMenu.Item>);
   });
 }
 
-export function Menu({ trigger, items, disabled, variant = 'default', openOnArrowKeys = true, footer, nativeButton = true,
+export function Menu({ trigger, items, disabled, variant = 'default', openOnArrowKeys = true, footer, header, nativeButton = true,
   submenuOverflow = 'flip', tooltip, side = 'bottom', align = 'start', popupClassName, popupStyle, returnFocus, ...state }: MenuProps) {
   const slide = submenuOverflow === 'slide';
   const layer = useFloating(state);
@@ -186,11 +194,12 @@ export function Menu({ trigger, items, disabled, variant = 'default', openOnArro
     {tooltip == null ? menuTrigger : <Tooltip content={tooltip} disabled={layer.open} side="bottom" align={align}>{menuTrigger}</Tooltip>}
     <BaseMenu.Portal container={layer.container()}>
       <BaseMenu.Positioner ref={positioner} side={side} align={align} {...placement} positionMethod={layer.positionMethod} className="orbit-floating-positioner" style={{ zIndex: layer.zIndex }}>
-        <BaseMenu.Popup ref={popup} finalFocus={returnFocus} className={`orbit-menu${footer != null ? ' orbit-menu-footed' : ''}${popupClassName ? ` ${popupClassName}` : ''}`} data-variant={variant} onClick={(event) => event.stopPropagation()}
+        <BaseMenu.Popup ref={popup} finalFocus={returnFocus} className={`orbit-menu${footer != null || header != null ? ' orbit-menu-footed' : ''}${popupClassName ? ` ${popupClassName}` : ''}`} data-variant={variant} onClick={(event) => event.stopPropagation()}
           style={{ '--orbit-menu-anchor-width': anchorWidth === undefined ? undefined : `${anchorWidth}px`, ...popupStyle } as CSSProperties}>
-          {footer == null ? <Items items={items} container={layer.container} zIndex={layer.zIndex} slide={slide} /> : <>
+          {footer == null && header == null ? <Items items={items} container={layer.container} zIndex={layer.zIndex} slide={slide} /> : <>
+            {header != null && <div className="orbit-menu-header" onKeyDown={keepTypedKeys}>{header}</div>}
             {items.length > 0 && <div className="orbit-menu-list"><Items items={items} container={layer.container} zIndex={layer.zIndex} slide={slide} /></div>}
-            <div className="orbit-menu-footer" onKeyDown={keepTypedKeys}>{footer}</div>
+            {footer != null && <div className="orbit-menu-footer" onKeyDown={keepTypedKeys}>{footer}</div>}
           </>}
         </BaseMenu.Popup>
       </BaseMenu.Positioner>

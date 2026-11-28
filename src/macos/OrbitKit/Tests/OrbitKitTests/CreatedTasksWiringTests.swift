@@ -110,6 +110,26 @@ final class CreatedTasksWiringTests: XCTestCase {
         XCTAssertTrue(chip.contains("tasks.clearCreatorFilter()"), "the chip is removable")
     }
 
+    /// Folded, a running task is the spinner alone, the Agents row's running mark, so the three band rows'
+    /// spinners stand in one column; every other state keeps its pill, and the opened list keeps them all.
+    func testTheFoldedLineDrawsARunningTaskAsTheSpinnerAlone() throws {
+        let card = try source("Views/CreatedTasksCard.swift")
+        let header = code(try slice(card, from: "private func header(", to: "\n    }\n"))
+        XCTAssertEqual(header.components(separatedBy: "trailing(").count - 1, 2, "both the one-task and the band line")
+        XCTAssertFalse(header.contains("TaskStatusPill("), "the folded line draws its pill through trailing(_:)")
+        let trailing = code(try slice(card, from: "private func trailing(", to: "\n    }\n"))
+        let running = try XCTUnwrap(trailing.range(of: "if pill.kind == .running {"))
+        let spinner = try XCTUnwrap(trailing.range(of: "SpinnerGlyph(color: .accentColor)"))
+        let pill = try XCTUnwrap(trailing.range(of: "TaskStatusPill(pill: pill)"))
+        XCTAssertLessThan(running.lowerBound, spinner.lowerBound)
+        XCTAssertLessThan(spinner.lowerBound, pill.lowerBound, "the pill is the else branch")
+        let agents = code(try slice(source("Views/Console/AgentBlockViews.swift"),
+                                    from: "struct AgentsBandRow: View {", to: "\n}\n"))
+        XCTAssertTrue(agents.contains("SpinnerGlyph(color: .accentColor)"), "the Agents row's mark changed; match it")
+        let list = code(try slice(card, from: "private func taskRow(", to: "\n    }\n"))
+        XCTAssertTrue(list.contains("TaskStatusPill(pill: pill)"), "the opened list keeps every pill")
+    }
+
     /// View all narrows the page, its tab counts and the rows events fold in — the same scope on every
     /// read, so no read of the whole account can land in the session's page. The prerequisite picker
     /// and the drawer's No-list count are not the page and stay unscoped.

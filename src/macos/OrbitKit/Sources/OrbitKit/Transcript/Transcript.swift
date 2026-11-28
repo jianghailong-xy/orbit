@@ -310,6 +310,11 @@ public struct UserBubble: Equatable, Sendable, Codable {
     /// The server keeps it, so neither the held tag (`HeldCancel.offers`) nor a failed translation's
     /// line (`SessionTranslation.offersCancel`) offers Cancel under it. False on every other message.
     public var opening: Bool = false
+    /// Sent from here and not taken: the server refused it, or did not answer in time
+    /// (`UserBubble.answerTimeout`). The bubble stays, `Not sent`, and this is why — the server's own
+    /// words, or the timeout's. Nil on every other message, and cleared by Retry until the next answer
+    /// (docs/mocks/composer-sending-bubble, board 04-native-parity; web `pending.state === 'notSent'`).
+    public var notSentReason: String? = nil
 
     public init(id: String, text: String, attachments: [TurnAttachment] = [], ts: String? = nil,
                 clientTurnId: String? = nil, turnId: String? = nil, pending: Bool, queued: Bool = false,
@@ -379,7 +384,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
         case sessionMessage, externalSender, sessionReplies
         case authoredByOrbit, reviewRequest, reviewReturn, reviewAnswers, withdrawable, shell
         case evidenceReview, evidenceSendBack, runQuestion, runNotice, sessionOpening
-        case receipt, deliveryCode, deliveryReason, opensTurn, translation, opening
+        case receipt, deliveryCode, deliveryReason, opensTurn, translation, opening, notSentReason
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -432,6 +437,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
         opensTurn = try? c.decodeIfPresent(TurnOpening.self, forKey: .opensTurn)
         translation = try? c.decodeIfPresent(TurnTranslation.self, forKey: .translation)
         opening = (try? c.decodeIfPresent(Bool.self, forKey: .opening)) ?? false
+        notSentReason = try? c.decodeIfPresent(String.self, forKey: .notSentReason)
     }
 }
 

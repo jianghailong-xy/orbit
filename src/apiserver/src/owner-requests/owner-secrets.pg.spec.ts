@@ -42,7 +42,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { BadRequestException, ConflictException, NotFoundException, ServiceUnavailableException, UnprocessableEntityException } from '@nestjs/common';
-import { RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import { lastValueFrom, of } from 'rxjs';
 
@@ -105,7 +106,7 @@ test('owner request secrets: one runner, removed when the scope ends', { skip, c
       await db.session.create({
         data: {
           id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: opts.on ?? runnerId, title: 'asks', prompt: 'asks',
-          provider: 'claude', status: RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(),
+          provider: 'claude', turnState: 'IN_FLIGHT', dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(),
           taskId: opts.taskId ?? null,
         },
       });

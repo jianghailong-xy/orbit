@@ -32,7 +32,8 @@ import { test } from 'node:test';
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import { type PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, SessionRunSource } from '@prisma/client';
+import { type PrismaClient, RunnerStatus, SessionDispatchOrigin, SessionRunSource } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -173,7 +174,7 @@ test('a create whose answer was lost after the commit, or whose wait failed, rec
     data: {
       id: parent, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
       title: 'the caller', prompt: 'the caller', provider: 'claude', providerBuiltin: true, engine: 'claude',
-      status: RunStatus.RUNNING, startedAt: new Date(), runtimeSessionId: `runtime-${parent}`,
+      turnState: 'IN_FLIGHT', startedAt: new Date(), runtimeSessionId: `runtime-${parent}`,
       dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
     },
   });

@@ -31,7 +31,8 @@ import { test } from 'node:test';
 import { BadRequestException, type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import { PrismaClient, RunnerStatus, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { isReleasedStatus } from '../common/session-release';
 import { toUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
@@ -56,6 +57,8 @@ import { SessionsController } from '../sessions/sessions.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import { SessionFoldersController } from './session-folders.controller';
 import { SessionFoldersService } from './session-folders.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordSql } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -168,7 +171,7 @@ test('session folders: owned, unique per workspace, deleted without deleting a s
     await db.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId: extra.workspaceId ?? alpha, assignedRunnerId: runnerId,
-        title, prompt: title, status,
+        title, prompt: title, turnState: turnStateOfWord(status),
         ...(isReleasedStatus(status) ? {
           finishedAt: new Date(),
         } : {}),
@@ -461,7 +464,7 @@ test('session folders: owned, unique per workspace, deleted without deleting a s
     const live = await move(running, { folderId: pub(first) });
     assert.equal(live.status, 201, live.text);
     assert.equal(await folderOf(running), first);
-    const stillRunning = (await sql.query('SELECT status::text AS status FROM session WHERE id = $1::uuid', [running])).rows[0];
+    const stillRunning = (await sql.query(`SELECT ${wordSql()} AS status FROM session WHERE id = $1::uuid`, [running])).rows[0];
     assert.equal(stillRunning.status, 'RUNNING', 'moving a running session touched its run');
     const completed = await conversation('Completed', { status: RunStatus.CANCELLED, completedAt: new Date() });
     assert.equal((await move(completed, { folderId: pub(second) })).status, 201);
@@ -474,10 +477,11 @@ test('session folders: owned, unique per workspace, deleted without deleting a s
     assert.equal(inTrash.status, 409, inTrash.text);
     assert.match(inTrash.json.message, /Trash/);
     assert.equal(await folderOf(trashed), first);
-    // Another workspace takes only an ended session — sessions/session-move-workspace.pg.spec.
+    // Another workspace is asked of its runner before the session is touched — sessions/session-move-workspace.pg.spec.
+    // This runner reports no session-move/v1, so the move is refused and the idle session is not released for it.
     const elsewhere = await move(idle, { workspaceId: pub(beta), folderId: null });
     assert.equal(elsewhere.status, 409, elsewhere.text);
-    assert.equal(elsewhere.json.message, 'End the session first.');
+    assert.match(elsewhere.json.message, /^Update .* to move sessions here$/);
     assert.equal((await move(idle, { folderId: pub(first) }, other)).status, 404, 'another owner moved my session');
     assert.equal((await move(randomUUID(), { folderId: null })).status, 404);
     assert.equal(await folderOf(idle), null);

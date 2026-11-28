@@ -25,7 +25,8 @@ import { test } from 'node:test';
 
 import { JwtService } from '@nestjs/jwt';
 import { toUuid, uuidToBase62, type SubagentRunView, type WorkflowRunView } from '@orbit/shared';
-import { type PrismaClient, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-test-apiserver';
@@ -86,7 +87,7 @@ test('a session\'s Orbit workflows and their calls, as clients read them before 
     data: {
       id: sessionId, ownerId: owner.id, creatorId: owner.id, workspaceId, assignedRunnerId: runnerId,
       title: 'review the parser', prompt: 'review the parser', provider: 'claude', engine: 'claude', model: 'claude-opus-5-5',
-      effort: 'high', status: RunStatus.AWAITING_INPUT, numTurns: 1, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
+      effort: 'high', turnState: null, numTurns: 1, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
     },
   });
 

@@ -363,7 +363,7 @@ final class SessionProjectGroupingTests: XCTestCase {
         XCTAssertEqual(listing([session("worker", approvals: 1)]).projects.first?.target, .session("worker"))
     }
 
-    func testIndicatorUsesSharedReadingsWaitingThenRunningThenJobs() {
+    func testIndicatorUsesSharedReadingsWaitingThenRunning() {
         let coord = coordinator()
         let background = session("background", bg: 2, jobs: 1)
         let service = session("service", bg: 1)
@@ -373,7 +373,7 @@ final class SessionProjectGroupingTests: XCTestCase {
         XCTAssertTrue(NeedsYouLogic.isCounted(waiting))
         XCTAssertEqual(listing([coord, background, running]).projects.first?.indicator, .running)
         XCTAssertTrue(WorkspaceActivityLogic.isRunning(running))
-        XCTAssertEqual(listing([coord, background, service]).projects.first?.indicator, .jobs)
+        XCTAssertEqual(listing([coord, background, service]).projects.first?.indicator, .running)
         XCTAssertTrue(SessionStatusGlyph.make(for: background).pulse)
         XCTAssertNil(listing([coord, service]).projects.first?.indicator)
         XCTAssertNil(listing([coord]).projects.first?.indicator)
@@ -389,7 +389,6 @@ final class SessionProjectGroupingTests: XCTestCase {
         let background = session("background", bg: 1, jobs: 1)
         let offline = listing([coord, running, background], offline: true)
         XCTAssertEqual(offline.projects.first?.running, false)
-        XCTAssertEqual(offline.projects.first?.jobs, false)
         XCTAssertNil(offline.projects.first?.indicator)
         XCTAssertEqual(listing([coord, running], projects: []).projects.first?.runningCount, 1)
         XCTAssertEqual(listing([coord, running], offline: true, projects: []).projects.first?.runningCount, 0)

@@ -296,7 +296,7 @@ final class MachineSetupWiringTests: XCTestCase {
 
     func testTheConversationOpensWithWhatItMade() throws {
         let view = try app("Views/Console/ConsoleView.swift")
-        XCTAssertTrue(view.contains("createdWorkspace: console.createdWorkspaceLine)"))
+        XCTAssertTrue(view.contains("createdWorkspace: console.createdWorkspaceLine,"))
         XCTAssertTrue(view.contains("case .createdWorkspace(let line):\n            CreatedWorkspaceLineView(line: line, console: console)"))
         let model = try app("ConsoleModel.swift")
         XCTAssertTrue(model.contains("if session.createdWorkspace == true {\n            madeWorkspace = session.agent\n            madeWorkspaceReadAt = Date()"),

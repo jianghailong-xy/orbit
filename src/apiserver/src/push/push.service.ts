@@ -37,6 +37,7 @@ import { ownerItemAlert } from './owner-item-alert';
 import { ownerRequestAlert, ownerRequestPushCategory, type FiledOwnerRequestKind } from '../owner-requests/owner-request';
 import { ownerStarted, settleAlert } from './settle-alert';
 import { crossingRequestAlert } from './crossing-request-alert';
+import { DECISION_CARD_PUSH_KIND, ownerConfirmationCardKey, ownersWithPossibleCards, readOwnerCards, type OwnerCard } from './owner-cards';
 import { CARD_SESSION_SELECT, crossingCardSessionId } from '../projects/project-handoff.service';
 import { FcmTransport } from './fcm-transport';
 import { WebPushTransport, webPushMessage, type WebPushKeys } from './web-push-transport';
@@ -69,6 +70,18 @@ function agentNotifyWait(rang: Date | null, now: Date): number | null {
   if (rang === null) return null;
   const left = AGENT_NOTIFY_MIN_INTERVAL_MS - (now.getTime() - rang.getTime());
   return left > 0 ? Math.ceil(left / 1000) : null;
+}
+
+/** A runner that went offline without signing off or draining, and one of those that is back (notifyRunnerPresence). */
+export const RUNNER_OFFLINE_PUSH_KIND = 'runner-offline';
+export const RUNNER_ONLINE_PUSH_KIND = 'runner-online';
+
+/** What a runner presence push says. */
+export function runnerPresencePushBody(runner: { name: string | null; displayName: string | null }, presence: 'offline' | 'online'): string {
+  const machine = runner.displayName || runner.name || 'Your runner';
+  return presence === 'offline'
+    ? `${machine} is offline: Orbit hasn't heard from it for 5 minutes. Sessions on it can't run until it's back.`
+    : `${machine} is back online.`;
 }
 
 /** The held-message push's body (frame 4B of docs/ux/translation-failure-policy.html). */
@@ -130,10 +143,13 @@ const FEISHU_EVENT_KINDS: Readonly<Record<string, string>> = {
   'account-needs-action': 'Account needs action',
   'claude-region-blocked': 'Claude is not available on this runner',
   'runner-updating': 'Runner updating',
+  [RUNNER_OFFLINE_PUSH_KIND]: 'Runner offline',
+  [RUNNER_ONLINE_PUSH_KIND]: 'Runner back online',
   'confirmation-raised': 'Coordinator raised this for your decision',
   'confirmation-problems': 'Problems found after you confirmed',
   'owner-request': 'Request for you',
   'crossing-request': 'Cross-project request',
+  [DECISION_CARD_PUSH_KIND]: 'Decision for you',
   'watch-matched': 'Watch matched',
   'loop-missed': 'Wakeup loop missed',
   'wakeup-dropped': 'Scheduled wakeup dropped',
@@ -630,6 +646,37 @@ export class PushService {
       await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`Claude region notify failed: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * Tell a runner's owner that it went offline without signing off, or that a runner they were told so about is back
+   * (ReaperService.alertRunnerPresence decides when, once each). About the machine, as notifyEngineSignedOut is: no
+   * badge and no sessionID, and a tap opens the runner. Both carry one collapse id, so "back online" takes the place of
+   * "offline" on a device that still shows it.
+   */
+  async notifyRunnerPresence(runnerId: string, presence: 'offline' | 'online'): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const runner = await this.prisma.runner.findUnique({
+        where: { id: runnerId },
+        select: { name: true, displayName: true, ownerId: true },
+      });
+      if (!runner) return;
+      const { tokens, feishu } = await this.channels(runner.ownerId);
+      if (tokens.length === 0 && !feishu) return;
+      const alert = { title: runner.displayName || runner.name || 'Orbit', body: runnerPresencePushBody(runner, presence) };
+      const kind = presence === 'offline' ? RUNNER_OFFLINE_PUSH_KIND : RUNNER_ONLINE_PUSH_KIND;
+      const collapseId = `runner-presence-${runnerId}`;
+      const body = JSON.stringify({
+        aps: { alert, sound: 'default', 'thread-id': `runner-${runnerId}` },
+        runnerID: runnerId,
+        kind,
+      });
+      this.background(this.feishuOther(feishu, { kind, ...alert, collapseId }));
+      await this.deliver(tokens, body, 'alert', '10', collapseId);
+    } catch (err) {
+      this.log.warn(`runner ${presence} notify failed: ${(err as Error).message}`);
     }
   }
 
@@ -1338,9 +1385,16 @@ export class PushService {
         where: { id: recordId },
         select: { kind: true, ownerId: true, taskId: true, body: true,
           task: { select: { title: true } },
-          review: { select: { request: { select: { sessionId: true } } } } },
+          review: { select: { request: { select: { id: true, sessionId: true } } } } },
       });
       if (!record || record.kind !== 'REVIEW') return;
+      // The raise is the moment this request's confirmation card becomes the owner's: it takes the card's one push, so
+      // the decision-card sweep (`notifyDecisionCards`) does not ring a second time for the same request.
+      if (!(await this.claimDecisionCard(record.ownerId, {
+        key: ownerConfirmationCardKey(record.review.request.id),
+        kind: 'OWNER_CONFIRMATION',
+        sessionId: record.review.request.sessionId,
+      }))) return;
       const count = ((record.body ?? {}) as { needsYou?: unknown[] }).needsYou?.length ?? 0;
       const { tokens, feishu } = await this.channels(record.ownerId);
       if (tokens.length === 0 && !feishu) return;
@@ -1358,6 +1412,96 @@ export class PushService {
       await this.deliver(tokens, body, 'alert', '10', collapseId);
     } catch (err) {
       this.log.warn(`confirmation raised notify failed: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * The decision cards that became the account owner's since the last pass, pushed once each (task
+   * 354adqnR5U6CZFIfyR5df, `owner-cards.ts`). On the reconcile timer (`TasksService.reconcileTick`), because several
+   * of them become the owner's with no write to hang a push on: an evidence revision whose dispatching session's 30
+   * minutes ran out or that ended, a review that timed out, a project past its window. A minute is the resolution.
+   *
+   * Once is the ledger (`owner_card_push`): a card's key is claimed before its push is sent, so a second pass, a
+   * second apiserver or a restart finds it claimed and sends nothing. A card nobody holds any more — decided,
+   * superseded, held again by a reviewer — is not read at all, so it is never pushed late. Returns the cards claimed
+   * by this pass (a muted conversation's included: muted means this card does not ring, not that it rings later).
+   */
+  async notifyDecisionCards(readAt: Date = new Date()): Promise<OwnerCard[]> {
+    if (!this.enabled) return [];
+    const claimed: OwnerCard[] = [];
+    let owners: string[];
+    try {
+      owners = await ownersWithPossibleCards(this.prisma);
+    } catch (err) {
+      this.log.warn(`decision card sweep failed: ${(err as Error).message}`);
+      return claimed;
+    }
+    for (const ownerId of owners) {
+      try {
+        const cards = await readOwnerCards(this.prisma, ownerId, readAt);
+        if (cards.length === 0) continue;
+        const pushed = new Set((await this.prisma.ownerCardPush.findMany({
+          where: { ownerId, cardKey: { in: cards.map((card) => card.key) } },
+          select: { cardKey: true },
+        })).map((row) => row.cardKey));
+        for (const card of cards) {
+          if (pushed.has(card.key) || !(await this.claimDecisionCard(ownerId, card))) continue;
+          claimed.push(card);
+          await this.sendDecisionCard(ownerId, card);
+        }
+      } catch (err) {
+        this.log.warn(`decision card sweep of an owner failed: ${(err as Error).message}`);
+      }
+    }
+    return claimed;
+  }
+
+  /** True when this call claimed the card's one push (`owner_card_push`, ON CONFLICT DO NOTHING). */
+  private async claimDecisionCard(ownerId: string, card: Pick<OwnerCard, 'key' | 'kind' | 'sessionId'>): Promise<boolean> {
+    const written = await this.prisma.ownerCardPush.createMany({
+      data: [{ ownerId, cardKey: card.key, kind: card.kind, sessionId: card.sessionId }],
+      skipDuplicates: true,
+    });
+    return written.count === 1;
+  }
+
+  /**
+   * One card's push: the card's own words over the title of what it is about, opening the conversation it is drawn in.
+   * The session's own switches (Settings → Notifications) decide it as they decide an approval's: muted, or "needs you"
+   * off, and it does not ring. Carries the badge, which counts the conversation it names (`needsYouSessions`).
+   */
+  private async sendDecisionCard(ownerId: string, card: OwnerCard): Promise<void> {
+    try {
+      const session = await this.prisma.session.findFirst({
+        where: { id: card.sessionId, ownerId, deletedAt: null },
+        select: { notificationsMuted: true, notifyNeedsYou: true },
+      });
+      if (!session || session.notificationsMuted || session.notifyNeedsYou === 'off') return;
+      const { tokens, feishu } = await this.channels(ownerId);
+      if (tokens.length === 0 && !feishu) return;
+      const ids = await this.needsYouSessions(ownerId);
+      this.badgeState.set(ownerId, { badge: ids.length, sessions: new Set(ids) });
+      const alert = { title: card.title, body: card.body };
+      const collapseId = `decision-card-${card.key}`;
+      const body = JSON.stringify({
+        aps: {
+          alert,
+          sound: 'default',
+          badge: ids.length,
+          'thread-id': card.taskId ? `task-${card.taskId}` : card.projectId ?? card.sessionId,
+        },
+        kind: DECISION_CARD_PUSH_KIND,
+        cardKind: card.kind,
+        sessionID: card.sessionId, // OrbitKit Notifications.keySession — the tap opens the conversation the card is drawn in
+        ...(card.projectId ? { projectID: card.projectId } : {}),
+        ...(card.taskId ? { taskID: card.taskId } : {}),
+      });
+      this.background(this.feishuOther(feishu, {
+        kind: DECISION_CARD_PUSH_KIND, ...alert, collapseId, sessionId: card.sessionId, projectId: card.projectId,
+      }));
+      await this.deliver(tokens, body, 'alert', '10', collapseId);
+    } catch (err) {
+      this.log.warn(`decision card notify failed: ${(err as Error).message}`);
     }
   }
 
@@ -1755,7 +1899,7 @@ export class PushService {
    *  same way and for the same reason: a card only the owner can answer, on the conversation that
    *  asked (and, for a move, the target project's coordinator) — `readOwnerRequestSessionIds`. */
   async needsYouSessions(ownerId: string): Promise<string[]> {
-    const [rows, blockedOnOwner, withSubagents, outsideTurn, askedOfOwner] = await Promise.all([
+    const [rows, blockedOnOwner, withSubagents, outsideTurn, askedOfOwner, decisionCards] = await Promise.all([
       this.prisma.session.findMany({
         where: {
           ownerId,
@@ -1816,6 +1960,9 @@ export class PushService {
       }),
       // The conversations an open owner request or a waiting task move is counted on (MOVE_REQUEST).
       readOwnerRequestSessionIds(this.prisma, ownerId),
+      // The conversations a decision card of the owner's is drawn in (`owner-cards.ts`): what `notifyDecisionCards`
+      // pushes about, so the badge its push carries counts the conversation it opens.
+      readOwnerCards(this.prisma, ownerId),
     ]);
     const visible = new Set((await visibleQuestions(this.prisma, rows.filter(r => r.taskId).flatMap(r => r.approvals))).map(a => a.id));
     // A running SubAgent's card is a question whatever its parent is doing (docs/subagent-design.md §5.3): a
@@ -1842,6 +1989,7 @@ export class PushService {
       ...outsideTurnIds,
       ...blockedOnOwner,
       ...askedOfOwner,
+      ...decisionCards.filter((card) => card.open).map((card) => card.sessionId),
     ])];
   }
 

@@ -1,0 +1,151 @@
+<!doctype html>
+<!-- Parity board: the web Sending… bubble (main ba05a22514; frames in real/) against today's iPhone and Android, with a drawn
+     proposal on each platform's own components. iPhone frames: iPhone 17 Pro Simulator, iOS 26.5, app code 66ea11b05230 on a stub
+     server (native/ios-*.png). Android frames: Pixel 10 Pro display emulator, API 36, ComposerDeviceTest parity journeys on the
+     composer fixture (native/android-*.png). Proposal phones are drawn in HTML/CSS (script at the foot). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sending… bubble — web, iPhone and Android</title>
+<style>
+  :root { --text-1:#111827; --text-2:#4b5563; --text-3:#6b7280; --err:#c8321a; --link:#2563eb; --bub:#e4e9fb; }
+  body { margin:0; background:#eef0f3; font:15px/1.6 Inter,"Noto Sans SC",sans-serif; color:var(--text-1); }
+  .b-part { background:#fff; padding:26px 32px 28px; width:1500px; box-sizing:border-box; margin:0 0 2px; }
+  h1 { font-size:22px; margin:0 0 4px; } h2 { font-size:17px; margin:0 0 10px; display:flex; gap:8px; align-items:baseline; }
+  .n { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:6px; background:#16833a; color:#fff; font:700 12.5px/1 Inter,sans-serif; }
+  .sub,.cap { color:var(--text-2); font-size:13.5px; max-width:1350px; margin:4px 0 8px; } .cap { font-size:12.5px; line-height:1.7; margin:10px 2px 0; }
+  code { font-size:11.5px; background:#f0f2f5; padding:0 4px; border-radius:4px; }
+  .row { display:grid; gap:22px; align-items:start; } .r3 { grid-template-columns:1.25fr 1fr 1fr; } .r2 { grid-template-columns:1fr 1fr 1.25fr; }
+  .lab { font-size:12px; font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:.04em; margin:0 0 6px; }
+  .row img { display:block; width:100%; border-radius:10px; box-shadow:0 0 0 1px rgba(15,23,42,.09),0 1px 3px rgba(15,23,42,.06); }
+  .shot { max-height:760px; overflow:hidden; border-radius:10px; } .shot img { width:100%; }
+  .gap { border:2px dashed #d97706; border-radius:10px; padding:18px; color:#92400e; background:#fffbeb; font-size:13px; }
+  table { border-collapse:collapse; width:100%; font-size:12.5px; line-height:1.5; }
+  th,td { border:1px solid #e5e7eb; padding:7px 9px; vertical-align:top; text-align:left; } th { background:#f3f4f6; font-size:12px; }
+  td.m { font-weight:600; white-space:nowrap; } .same { color:#16833a; } .diff { color:#b45309; }
+  .dec { border:1px solid #e5e7eb; border-radius:10px; padding:12px 16px; margin:0 0 10px; } .dec b.rec { color:#16833a; }
+  /* drawn phones */
+  .ph { width:100%; aspect-ratio:1206/1700; background:#fff; border-radius:26px; box-shadow:0 0 0 1px rgba(15,23,42,.14),0 2px 6px rgba(15,23,42,.08); position:relative; overflow:hidden; font-size:13px; line-height:1.35; }
+  .ph .sb { height:30px; padding:8px 18px 0; font-size:11px; font-weight:600; display:flex; justify-content:space-between; }
+  .ph .hd { height:44px; display:flex; align-items:center; gap:10px; padding:0 14px; font-weight:600; font-size:14px; }
+  .ph .msgs { padding:8px 14px; display:flex; flex-direction:column; align-items:flex-end; gap:2px; }
+  .ph .msgs.top { padding-top:10px; }
+  .ph .agent { align-self:flex-start; color:#374151; margin:6px 0; }
+  .ph .bub { background:var(--bub); padding:9px 13px; border-radius:17px; max-width:78%; font-size:14px; }
+  .ph .bub.dim { opacity:.55; } .ph.android .bub { border-radius:16px; }
+  .ph .foot { font-size:11px; color:#6b7280; display:flex; gap:5px; align-items:center; flex-wrap:wrap; justify-content:flex-end; margin-top:3px; max-width:92%; text-align:right; }
+  .ph .foot .e { color:var(--err); font-weight:600; } .ph .foot a { color:var(--link); text-decoration:underline; }
+  .ph.android .foot a { text-decoration:none; font-weight:600; font-size:12px; padding:2px 6px; border-radius:12px; }
+  .ph .why { color:var(--err); font-size:11px; align-self:flex-end; max-width:92%; text-align:right; }
+  .ph .box { position:absolute; left:10px; right:10px; bottom:16px; border:1px solid #c8ccd2; border-radius:24px; padding:12px 14px 10px; background:#fbfbfc; }
+  .ph .box .ph-t { color:#9ca3af; font-size:14px; min-height:20px; } .ph .box .bar { display:flex; align-items:center; gap:8px; margin-top:14px; color:#4b5563; font-size:12px; }
+  .ph .box .send { margin-left:auto; width:30px; height:30px; border-radius:50%; background:#c9ccd2; color:#fff; display:flex; align-items:center; justify-content:center; font-size:15px; }
+  .ph.android { font-family:Roboto,"Noto Sans",sans-serif; } .ph.ios { font-family:-apple-system,"SF Pro Text",Inter,sans-serif; }
+  .ph .hero { text-align:center; margin-top:46px; color:#6b7280; font-size:13px; } .ph .hero i { display:block; width:50px; height:50px; margin:0 auto 8px; border-radius:12px; background:#d1d5db; }
+  .tag { font-size:11px; color:#6b7280; margin-top:6px; }
+</style>
+</head>
+<body>
+<section class="b-part">
+  <h1>Sending… bubble: web, iPhone, Android</h1>
+  <p class="sub">Web frames are the shipped build (<code>real/*.png</code>, main <code>ba05a22514</code>). iPhone frames are today's app on the iPhone 17 Pro
+    Simulator (iOS 26.5, code <code>66ea11b05230</code>) against a stub server; macOS shares that code. Android frames are today's
+    composer on the API 36 emulator (Pixel 10 Pro display) against the composer fixture. Neither native client signs in to a real account.
+    For each state: row 1 is today (web | iPhone | Android), row 2 is the proposal drawn on each platform's own components. The proposal
+    phones are drawn, not built. The soft keyboard is in the real native frames because both apps focus the box.</p>
+  <p class="sub"><b>Two findings from reading and photographing today.</b> (1) Android's transcript draws nothing for a message in flight: the words live only
+    in a strip above the box, <code>Delivery unconfirmed: …</code> with <code>Retry saved send</code>. (2) iPhone already draws a bubble reading <code>Sending…</code>,
+    at full strength, with the "working" dots under it, but when the send fails it removes the bubble and puts the words back in the box.</p>
+</section>
+<div id="states"></div>
+<section class="b-part">
+  <h2>Line by line: web | iOS today | Android today | proposal</h2>
+  <p class="sub">"same as web" means the proposal does what web does. Anything else names its platform reason. Android follows iOS where the two must differ.
+    Rows marked <i>(code)</i> come from reading the send path and were not photographed.</p>
+  <table id="t"></table>
+</section>
+<section class="b-part">
+  <h2>Open decisions, each with a recommendation</h2>
+  <div id="decs"></div>
+</section>
+<script>
+const F = 'native/', W = 'real/';
+const states = [
+ { k:'sending', t:'Sending… — right after Send, the POST not yet answered', web:W+'sending.png', ios:F+'ios-sending.png', and:F+'android-sending.png',
+   cap:'<b>iPhone today:</b> bubble at full strength, caption <code>Sending…</code>, the working dots under it, Send a grey arrow. Photographed 6.8 s after the tap because XCUITest\'s tap waits for the app to go quiet; the stub held the POST 8 s. <b>Android today:</b> no bubble at all. <code>No messages yet</code> above, <code>Delivery unconfirmed: Ship the quarterly report</code> and a disabled <code>Retry saved send</code> above the box; Send is a grey button with a stray glyph.',
+   pro:{ s:'sending' }, pnote:'Dimmed bubble, <code>Sending…</code> in its foot, an empty box, Send a plain disabled arrow, and no working dots (no turn has opened). Android draws the bubble from its outbox entry (<code>PendingSend</code>), so the strip above the box goes.' },
+ { k:'sent', t:'Sent — the server accepted it', web:W+'sent.png', ios:F+'ios-sent.png', and:F+'android-sent.png',
+   cap:'<b>iPhone today:</b> bubble settled, caption <code>just now</code>. <b>Android today:</b> the server\'s own message row with only a copy icon; the one line left is the notice <code>Message queued.</code> above the box (the fixture answers PENDING).',
+   pro:{ s:'sent' }, pnote:'Full strength, nothing in the foot beyond what each platform already draws. Android\'s <code>Message queued.</code> / <code>Message accepted.</code> notices stay: they say where the message went, not whether it left.' },
+ { k:'unans', t:'Not sent — nothing answered. Web: after 20 s. Today on native: only when the connection drops', web:W+'not-answered.png', ios:F+'ios-not-sent-unanswered.png', and:F+'android-not-sent-unanswered.png',
+   cap:'<b>iPhone today:</b> no 20 s rule. The stub dropped each connection after 3 s; the app replayed the same <code>clientTurnId</code> four times (3 s + 0.8 + 2 + 4 s backoff) and gave up at 19.9 s with <code>Couldn\'t send — the connection dropped. Your message is back in the composer.</code> The bubble is gone and the words are back in the box. A held (never dropped) POST would wait on the 60 s request timeout. <b>Android today:</b> the first message sits as the server\'s row; the second shows <code>Delivery unconfirmed</code> and the saved copy stays in the outbox. The error was <code>Can\'t reach Orbit. Check your connection and try again.</code> (state file: <code>pending=true</code>). No 20 s rule either.',
+   pro:{ s:'notsent' }, pnote:'After 20 s with no answer the bubble stays, dimmed, its foot reading <code>⚠ Not sent · Retry · Put back in the composer</code>. Retry replays the same <code>clientTurnId</code>; the request is not cancelled, so a late answer turns the bubble into a sent one.' },
+ { k:'ref', t:'Refused — the server says no (409, the session has ended)', web:W+'refused.png', ios:F+'ios-refused.png', and:F+'android-refused.png',
+   cap:'<b>iPhone today:</b> 0.1 s after Send the bubble is gone, the words are back in the box, and a line reads <code>Couldn\'t send — the session has ended. Your message is back in the composer.</code> <b>Android today:</b> the words come back into the box, with a red <code>the session has ended</code>, <code>Dismiss error</code>, and <code>Sending a message will resume this session in Open.</code> Web shows the reason in a tooltip on hover.',
+   pro:{ s:'refused' }, pnote:'The same Not sent foot as above, plus the server\'s reason as one red line under it. A touch screen has no hover, so the reason is printed instead of tooltipped.' },
+ { k:'nsend', t:'New session — first message waiting for the session to be created', web:W+'new-sending.png', ios:F+'ios-new-sending.png', and:F+'android-new-sending.png',
+   cap:'<b>iPhone today:</b> the words stay in the box (<code>Build me a release checklist</code>), Send is disabled, nothing else says it is working. Photographed 2.0 s after Send, create held 8 s. <b>Android today:</b> the box empties, and above it sit <code>Delivery unconfirmed: Build me a release checklist</code> and <code>Creation is unconfirmed. Check this workspace\'s sessions before creating another session.</code> Both are wording for a lost answer shown during an ordinary wait.',
+   pro:{ s:'sending', nw:true }, pnote:'As <code>03-new-session.html</code>: the bubble waits top-aligned on the new-session page, dimmed, with <code>Sending…</code>. The hero gives way to it.' },
+ { k:'nfail', t:'New session — not sent', web:W+'new-refused.png', ios:F+'ios-new-not-sent.png', and:F+'android-new-not-sent.png',
+   cap:'<b>iPhone today:</b> <code>Couldn\'t start the session — the server is restarting.</code> above a box that still holds the words, Send enabled (create answered 503 after 3 s). Note the copy differs from the existing-session <code>Couldn\'t send</code>. <b>Android today:</b> the connection was dropped on create. The box is empty, the hero stays, and three lines sit above it: a red <code>Can\'t reach Orbit. Check your connection and try again.</code> with <code>Dismiss error</code>, <code>Delivery unconfirmed: Build me a release checklist</code>, and <code>Creation is unconfirmed. Check this workspace\'s sessions before creating another session.</code> There is no Retry: the model refuses one for a create.',
+   pro:{ s:'notsent', nw:true }, pnote:'The same Not sent foot, top-aligned. Retry sends the same <code>clientRequestId</code> on <code>POST /sessions</code> (migration 1730 made that safe), so a lost answer cannot make a second session.' }
+];
+function phone(os, p) {
+  const nw = p.nw, s = p.s;
+  const dim = s==='sending' || s==='notsent' || s==='refused';
+  const droid = os==='android';
+  let foot = '';
+  if (s==='sending') foot = '<span>Sending…</span>';
+  else if (s==='sent') foot = droid ? '' : '<span>just now</span>';
+  else foot = '<span class="e">⚠ Not sent</span> · <a>Retry</a> · <a>Put back in the composer</a>';
+  const why = s==='refused' ? '<div class="why">the session has ended</div>' : '';
+  const agent = nw ? '' : '<div class="agent">Done — the sign-up test now waits on the cookie too.</div>';
+  const head = nw ? '<div class="hd">‹ &nbsp;orbit-develop</div>' : '';
+  return `<div class="ph ${os}"><div class="sb"><span>${droid?'2:39':'09:41'}</span><span>▪▪▪</span></div>${head}
+    <div class="msgs ${nw?'top':''}">${agent}<div class="bub ${dim?'dim':''}">${nw?'Build me a release checklist':'Ship the quarterly report'}</div>
+    <div class="foot">${foot}</div>${why}</div>
+    <div class="box"><div class="ph-t">${droid?'Message…':'Message...'}</div><div class="bar"><span>＋</span><span>${nw?'Auto':'Default'}</span><span style="margin-left:auto"><b>Opus 5.5</b> High</span><span class="send">↑</span></div></div></div>`;
+}
+const host = document.getElementById('states');
+states.forEach((st, i) => {
+  const sec = document.createElement('section'); sec.className = 'b-part';
+  const andImg = `<div class="shot"><img src="${st.and}"></div>`;
+  sec.innerHTML = `<h2><span class="n">${i+1}</span>${st.t}</h2>
+   <div class="row r3"><div><p class="lab">Web (shipped)</p><img src="${st.web}"></div><div><p class="lab">iPhone today</p><div class="shot"><img src="${st.ios}"></div></div><div><p class="lab">Android today</p>${andImg}</div></div>
+   <p class="cap">${st.cap}</p>
+   <div class="row r2" style="margin-top:16px"><div><p class="lab">iPhone proposal (drawn)</p>${phone('ios', st.pro)}</div><div><p class="lab">Android proposal (drawn)</p>${phone('android', st.pro)}</div>
+   <div><p class="lab">Proposal</p><p class="cap" style="margin-top:0">${st.pnote}</p></div></div>`;
+  host.appendChild(sec);
+});
+const rows = [
+ ['A sent message leaves the box at once','Yes','Yes for an existing session. A new session\'s words stay in the box until it is created','Yes (moved into the outbox). New session: yes','Same as web, on every send path, new session included','same'],
+ ['Where the waiting message shows','Dimmed bubble in the transcript, <code>Sending…</code> in its foot','Bubble at full strength, <code>Sending…</code> caption (<code>addOptimisticUser</code>)','None in the transcript. A strip above the box: <code>Delivery unconfirmed: &lt;words&gt;</code>','Dimmed bubble + <code>Sending…</code>. Android draws it from the outbox entry because its transcript holds only server rows','same|The Android bubble is a local row beside the server\'s rows: a platform reason, not a different look'],
+ ['"Working" indicator while unsent','None. No turn has opened','Three working dots appear under the bubble at once (<code>awaitingReply = true</code>)','None','No dots until the server accepts, as web','same'],
+ ['Send button while in flight','Plain disabled arrow','Grey disabled arrow','Grey button with a stray glyph (busy)','Plain disabled arrow','same'],
+ ['One message in flight at a time','Yes','<code>sending</code> flag for the POST (code)','Yes: <code>draft.pending != null</code> blocks Send (code)','Yes; Send disabled until the bubble resolves or is put back','same'],
+ ['Failure: what happens to the bubble','Stays, dimmed, with <code>⚠ Not sent · Retry · Put back in the composer</code>','Removed; words put back in the box; line <code>Couldn\'t send — …</code>','Refusal (400/403/404/409/413/422): words back in the box, red line + <code>Dismiss error</code>. Lost answer: outbox kept, <code>Retry saved send</code>','Bubble stays with the web foot. Nothing is put back until the person asks','same'],
+ ['20 s without an answer','Foot flips to Not sent','No rule. Four same-key replays over 19.9 s, then Couldn\'t send (a held POST waits 60 s)','No rule. Shows Not sent only when the connection fails','20 s timer from the tap flips the foot; the request stays alive','same'],
+ ['Retry','Same <code>clientTurnId</code>','No button. The 4 replays use one id; a later manual send mints a new one','<code>Retry saved send</code> replays the same <code>clientTurnId</code> (turns only)','<code>Retry</code> in the foot, same key','same'],
+ ['Put back in the composer','A link in the foot','Automatic, on every failure','Automatic on a refusal only','A link in the foot, on every platform. Never automatic; attachments come back with the words','same'],
+ ['Reason for a refusal','Tooltip on hover','Part of the status line','Red line','Printed as one red line under the foot','diff|A touch screen has no hover'],
+ ['New session: first message','Waits as a bubble, top-aligned, on the new-session page','Words stay in the box, Send disabled; nothing says it is working','Box empties; two lines of "unconfirmed" wording above it','Bubble, top-aligned, same as web','same'],
+ ['New session: key and Retry','<code>clientRequestId</code> on POST /sessions; Retry reuses it','No key, no Retry. Failure line <code>Couldn\'t start the session — …</code>','Create has no key; Retry is refused on purpose (a replay could start a second agent)','Both send <code>clientRequestId</code> and offer Retry (the server contract is live, migration 1730)','same'],
+ ['Copy','<code>Sending…</code>, <code>Not sent</code>, <code>Retry</code>, <code>Put back in the composer</code>','<code>Sending…</code>, <code>Couldn\'t send — …</code>, <code>Couldn\'t start the session — …</code>','<code>Delivery unconfirmed</code>, <code>Retry saved send</code>, <code>Creation is unconfirmed…</code>','Web\'s four phrases on both; the old wording retires','same'],
+ ['Across an app restart','Not covered by the shipped board (open decision 2)','Nothing survives: the optimistic bubble lives in memory (code)','Outbox is persisted; on launch it reads <code>Delivery is unconfirmed. Retry the saved message.</code>','Both reload an unsent message as a Not sent bubble and never replay it on their own (decision 2)','diff|Android already persists, iOS must start to']
+];
+document.getElementById('t').innerHTML = '<tr><th>Line</th><th>Web</th><th>iOS today</th><th>Android today</th><th>Proposal</th><th>Parity</th></tr>' +
+  rows.map(r => { const [m,k] = r[5].split('|'); return `<tr><td class="m">${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td class="${m==='same'||k?'':''}${r[5].startsWith('same')?'same':'diff'}">${r[5].startsWith('same')?'same as web'+(k?' — '+k:''):'differs — '+k}</td></tr>`; }).join('');
+const decs = [
+ ['1. Does Android keep its separate retry strip?','Today <code>Retry saved send</code> sits above the box, apart from the message.','No. Retry moves into the bubble\'s foot, where web has it, and the strip goes. Keep one line above the box only for an acknowledged create whose navigation is pending.'],
+ ['2. What a Not sent bubble does across an app restart','Android persists its outbox; iOS holds nothing. Web\'s behaviour was not part of the shipped board.','Persist on both and reload the message as a Not sent bubble, dimmed, with Retry and Put back. Never replay on launch: the person may have moved on, and the same key makes a manual Retry safe. iOS needs a small store (id, words, attachment ids); this is the larger piece of work.'],
+ ['3. What the 20 s timer does to the request','Web only flips the label.','Same on native: flip the label, leave the request alive. A late answer turns the bubble into a sent one. On iPhone the four-replay loop stays, then ends at 20 s, so the two numbers agree.'],
+ ['4. Silent replays versus a Retry button on iPhone','iPhone replays the same id four times, invisibly.','Keep them for the first 20 s (they are what makes a blip invisible), then show Retry. One id throughout.'],
+ ['5. A refusal that is not retryable (409 session ended)','Web shows Retry anyway, with the reason in a tooltip.','Follow web: show Retry and the printed reason. Retry on a closed session just fails again and says why; hiding it would add a second state to learn.'],
+ ['6. New session on Android: Retry for a create','Refused on purpose today, because a replay could start a second agent.','Allow it once the create carries <code>clientRequestId</code>; keep the refusal for any build talking to a server without the key.'],
+ ['7. Attachments on a Not sent bubble','Web: not covered here.','Show the chips on the bubble as iPhone already does for a sent one, and bring them back with Put back in the composer.'],
+ ['8. macOS','Shares the iPhone code (<code>ConsoleModel.send</code>, the transcript reducer).','Ships with iOS. Hover tooltip for the reason on the Mac, as web, since a pointer exists there.']
+];
+document.getElementById('decs').innerHTML = decs.map(d => `<div class="dec"><b>${d[0]}</b><br>${d[1]}<br><b class="rec">Recommendation:</b> ${d[2]}</div>`).join('');
+</script>
+</body>
+</html>

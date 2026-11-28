@@ -215,7 +215,6 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
         creatorId: ownerId,
         workspaceId,
         assignedRunnerId: runnerId,
-        status: 'AWAITING_INPUT',
         startedAt: new Date(),
         runtimeSessionId: `runtime-${id}`,
       },
@@ -394,7 +393,7 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
       data: {
         id: landingSessionId, title: `${name} landing`, ownerId, creatorId: ownerId, workspaceId,
         prompt: 'Orbit runs this landing. This conversation is a record, not an engine.',
-        status: 'AWAITING_INPUT', sessionKind: 'LANDING', startsTaskWork: false,
+        sessionKind: 'LANDING', startsTaskWork: false,
         provider: 'orbit', providerBuiltin: true, titleManagedByProject: true,
         dispatchOrigin: 'USER', runSource: 'MANUAL',
       },
@@ -578,7 +577,6 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
         creatorId: ownerId,
         workspaceId,
         assignedRunnerId: runnerId,
-        status: 'AWAITING_INPUT',
         startedAt: new Date(),
         runtimeSessionId: `runtime-${wikiChatId}`,
         wikiChatSpaceId: wikiSpaceId,
@@ -694,6 +692,33 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
     const driveUploadId = await driveUpload(10);
     // An agent's directory sync of this account's runner (docs/drive-directory-sync-design.md S4).
     const driveSyncId = (await db.driveSync.create({ data: { ownerId, runnerId, sourceName: 'census', destPath: '/census' } })).id;
+    // A Drive chat (drive/drive-chat-changes.ts): a group made and a group held, both empty, and an overwrite question.
+    const driveChatId = randomUUID();
+    await db.session.create({
+      data: {
+        id: driveChatId, title: `${name} drive chat`, prompt: 'sort my files', ownerId, creatorId: ownerId, workspaceId,
+        assignedRunnerId: runnerId, openedBy: 'DRIVE_CHAT',
+      },
+    });
+    const driveChatTurnId = randomUUID();
+    const driveChatGroupId = (await db.driveChatChangeGroup.create({
+      data: { ownerId, sessionId: driveChatId, turnId: driveChatTurnId, status: 'DONE' },
+    })).id;
+    const driveChatHeldGroupId = (await db.driveChatChangeGroup.create({
+      data: { ownerId, sessionId: driveChatId, turnId: driveChatTurnId, status: 'PENDING', held: true },
+    })).id;
+    const questionSource = await drive.createFile(ownerId, { parentId: driveFolder.id, name: 'question-source.txt' });
+    const questionTarget = await drive.createFile(ownerId, { parentId: driveFolder.id, name: 'question-target.txt' });
+    const questionFile = (entryId: string, path: string) => ({
+      entryId, path, sizeBytes: 0, modifiedAt: new Date().toISOString(), lastWriter: { kind: 'OWNER', sessionId: null, sessionTitle: null },
+    });
+    const driveChatQuestionId = (await db.driveChatQuestion.create({
+      data: {
+        ownerId, sessionId: driveChatId, turnId: driveChatTurnId, sourceEntryId: questionSource.id, targetEntryId: questionTarget.id,
+        destParentId: driveFolder.id, destName: 'question-target.txt',
+        moving: questionFile(questionSource.id, '/question-source.txt'), existing: questionFile(questionTarget.id, '/question-target.txt'),
+      },
+    })).id;
     const spareDriveCompleteUploadId = await driveUpload(0);
     const spareDriveAbandonUploadId = await driveUpload(10);
     const spareDriveEntryId = (await drive.createFile(ownerId, { parentId: driveFolder.id, name: 'spare.txt' })).id;
@@ -818,6 +843,10 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
       driveTrashGroupId,
       driveUploadId,
       driveSyncId,
+      driveChatId,
+      driveChatGroupId,
+      driveChatHeldGroupId,
+      driveChatQuestionId,
       spare: {
         accessTokenId: idOf(await as('POST', '/access-tokens', { name: `${name} spare`, scopes: ['tasks:read'] }), 'a token'),
         adminProviderId: await adminProvider(`${name}-admin-provider-spare`),

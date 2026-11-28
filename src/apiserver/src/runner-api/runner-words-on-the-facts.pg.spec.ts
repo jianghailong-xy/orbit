@@ -3,10 +3,9 @@
  * §2.3 and §3.2).
  *
  * The runner API no longer reads `session.status`: it reads the turn state (`turn_state`, through
- * sessions/session-turn-state.ts) and answers runners the projector's word (sessions/session-legacy-words.ts). A held row the backfill (task T3) has not
- * reached has no turn state, and reads its stored word's. This file pins, through the runner door's own handlers, for
- * every held word, both with its turn state (as the D1 trigger keeps it) and without one (as a row not written since
- * migration 1611 has it):
+ * sessions/session-turn-state.ts) and answers runners the projector's word (sessions/session-legacy-words.ts). This file
+ * pins, through the runner door's own handlers, for every held word written as its turn state (the rows with none that
+ * the NULL fallback read until task T14 no longer exist):
  *
  *   (1) the reclaim answers every held session with its stored word
  *   (2) the single and the batch takeover answer the stored word, on a first takeover and on one this process owns
@@ -41,13 +40,14 @@ import {
 import { WORD_SHAPES } from '../sessions/session-legacy-words.fixture';
 import { RunnerApiController } from './runner-api.controller';
 import { readRunnerLinkHints } from './runner-link-hints';
-import { ALLOW_UNFILLED_SESSIONS } from '../test-support/unfilled-sessions';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordSql } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
 
 const HELD_WORDS = [RunStatus.PENDING, RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED] as const;
-const FILLS = ['filled', 'unfilled'] as const;
+const FILLS = ['filled'] as const;
 type Fill = (typeof FILLS)[number];
 
 const GOLDEN = path.resolve(__dirname, '../../../../src/apiserver/src/sessions/session-legacy-words.golden.json');
@@ -80,7 +80,6 @@ test('the runner API answers runners today\'s words from the facts', { skip, con
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
-  await sql.query(ALLOW_UNFILLED_SESSIONS);
   const { db, api } = connect(url);
   t.after(async () => {
     await db.$disconnect().catch(() => undefined);
@@ -105,8 +104,7 @@ test('the runner API answers runners today\'s words from the facts', { skip, con
   type Account = Awaited<ReturnType<typeof account>>;
 
   /**
-   * A session of `of` stored at `status`, with the turn state the D1 trigger derives from it, or (unfilled) with
-   * none, as a row nothing has written since migration 1611. `facts` are the other columns of a released shape.
+   * A session of `of` at `status`, written as its turn state. `facts` are the other columns of a released shape.
    */
   async function session(of: Account, status: string, fill: Fill, facts: Record<string, unknown> = {}): Promise<string> {
     const id = randomUUID();
@@ -114,15 +112,14 @@ test('the runner API answers runners today\'s words from the facts', { skip, con
       data: {
         id, ownerId: of.ownerId, creatorId: of.ownerId, workspaceId: of.workspaceId, assignedRunnerId: of.runnerId,
         title: `${status} ${fill}`, prompt: 'hi', provider: 'claude', providerBuiltin: true,
-        status: status as RunStatus, dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(),
+        turnState: turnStateOfWord(status as RunStatus), dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(),
         // An engine conversation to resume: the reclaim hands back none without one (reclaimRuntimeIds).
         runtimeSessionId: randomUUID(),
         ...facts,
       },
     });
-    if (fill === 'unfilled') await sql.query('UPDATE "session" SET turn_state = NULL WHERE id = $1::uuid', [id]);
     const { rows } = await sql.query('SELECT turn_state FROM "session" WHERE id = $1::uuid', [id]);
-    assert.equal(rows[0].turn_state == null, fill === 'unfilled' || !['PENDING', 'RUNNING', 'INTERRUPTED'].includes(status),
+    assert.equal(rows[0].turn_state == null, !['PENDING', 'RUNNING', 'INTERRUPTED'].includes(status),
       `${status} ${fill}: the turn state as set up`);
     return id;
   }
@@ -187,7 +184,7 @@ test('the runner API answers runners today\'s words from the facts', { skip, con
     const answers: Record<string, unknown> = {};
     const expected: Record<string, unknown> = {};
     for (const shape of released) {
-      const { status: _status, turnState: _turnState, ...facts } = shape.facts;
+      const { turnState: _turnState, ...facts } = shape.facts;
       const id = await session(of, shape.stored, 'filled', facts);
       answers[shape.name] = (await api.turnComplete(of.runner, id, { turnId: randomUUID(), status: RunStatus.SUCCEEDED } as never)).status;
       const row = golden.rows.find((r) => r.shape === shape.name)!;
@@ -201,7 +198,7 @@ test('the runner API answers runners today\'s words from the facts', { skip, con
   await t.test('(4) the runner-driven writers find their rows on the turn state, and write it beside the word', async () => {
     const of = await account('writers');
     const facts = async (id: string) =>
-      (await sql.query('SELECT status::text AS status, turn_state AS "turnState", finished_at IS NOT NULL AS released FROM "session" WHERE id = $1::uuid', [id])).rows[0];
+      (await sql.query(`SELECT ${wordSql()} AS status, turn_state AS "turnState", finished_at IS NOT NULL AS released FROM "session" WHERE id = $1::uuid`, [id])).rows[0];
     const parked: Record<string, unknown> = {};
     const released: Record<string, unknown> = {};
     for (const fill of FILLS) {
@@ -225,9 +222,9 @@ test('the runner API answers runners today\'s words from the facts', { skip, con
       released[fill] = await facts(idle);
     }
     const parkedRow = { reply: RunStatus.AWAITING_INPUT, row: { status: 'AWAITING_INPUT', turnState: null, released: false } };
-    assert.deepEqual(parked, { filled: parkedRow, unfilled: parkedRow });
+    assert.deepEqual(parked, { filled: parkedRow });
     const releasedRow = { status: 'CANCELLED', turnState: null, released: true };
-    assert.deepEqual(released, { filled: releasedRow, unfilled: releasedRow });
+    assert.deepEqual(released, { filled: releasedRow });
 
     // A queued session is not finalized: /finalize never ends a turn still waiting for its claim.
     for (const fill of FILLS) {

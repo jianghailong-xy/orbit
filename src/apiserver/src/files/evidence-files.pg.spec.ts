@@ -134,7 +134,7 @@ test('the files of a version of evidence', { skip: !URL, concurrency: 1, timeout
     await db.session.create({
       data: {
         id: sessionId, title, prompt: title, ownerId: owner.ownerId, creatorId: owner.ownerId, workspaceId: owner.workspaceId,
-        assignedRunnerId: owner.runnerId, status: 'AWAITING_INPUT', startedAt: new Date(), runtimeSessionId: `runtime-${sessionId}`,
+        assignedRunnerId: owner.runnerId, turnState: null, startedAt: new Date(), runtimeSessionId: `runtime-${sessionId}`,
         provider: 'claude', taskId, startsTaskWork: true,
       },
     });

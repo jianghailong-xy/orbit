@@ -69,8 +69,8 @@ final class ToastHostWiringTests: XCTestCase {
         XCTAssertTrue(retry.contains(#"key: "commit", inProgress: true"#), retry)
         let results = try slice(worktree, from: "static func resultCard(", to: "private static func failure(")
         let merge = try slice(results, from: "case .merge:", to: "case .commit:")
-        XCTAssertEqual(merge.components(separatedBy: #"key: "merge""#).count - 1, 4,
-                       "recovery, merged, conflict and error each take the merge's place")
+        XCTAssertEqual(merge.components(separatedBy: #"key: "merge""#).count - 1, 5,
+                       "recovery, merged, pull request, conflict and error each take the merge's place")
         let commit = String(results[try XCTUnwrap(results.range(of: "case .commit:")).lowerBound...])
         XCTAssertEqual(commit.components(separatedBy: #"key: "commit""#).count - 1, 3,
                        "error, committed and no-change each take the commit's place")

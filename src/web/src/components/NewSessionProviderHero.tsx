@@ -1,11 +1,12 @@
-import { CheckOutlined, CodeOutlined, FolderOutlined, StopOutlined } from '@ant-design/icons';
-import { useState, type ReactNode } from 'react';
+import { CodeOutlined, FolderOutlined, SearchOutlined } from '@ant-design/icons';
+import { useState, type ComponentPropsWithRef, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { AgentProvider } from '@orbit/shared';
 import { CLAUDE_REGION_DETAILS, CLAUDE_REGION_USE_ANOTHER_PROVIDER, anthropicUnavailableOn } from '../lib/claudeRegionCopy';
 import { encodeId } from '../lib/idCodec';
 import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
 import { providerNameOn, type EngineChoice } from '../lib/sessionProviderChoices';
+import { Menu, type MenuItem } from './ui/Menu';
 import { Popover } from './ui/Popover';
 import { Tooltip } from './ui/Tooltip';
 
@@ -57,93 +58,126 @@ export interface NewSessionPlace {
   workspace: { id: string; name: string };
   /** Every workspace a session can start in, in sidebar order. */
   workspaces: { id: string; name: string }[];
-  onPickWorkspace: (id: string) => void;
   /** The folder the session starts in; null is none. */
   folder: { id: string; name: string } | null;
-  /** This workspace's folders. With none, the line names the workspace alone. */
-  folders: { id: string; name: string }[];
-  onPickFolder: (id: string | null) => void;
+  /** The folders a session can be filed in, of every workspace above: each workspace's are its submenu. */
+  folders: { id: string; name: string; workspaceId: string }[];
+  /** A workspace, and a folder of it or none: one pick moves the draft to both. */
+  onPick: (workspaceId: string, folderId: string | null) => void;
+}
+
+/** A component rather than a wrapped element, so the menu's trigger props reach the button through the tooltip. */
+function PlaceButton({ place, label, ...props }: ComponentPropsWithRef<'button'> & { place: NewSessionPlace; label: string }) {
+  return (
+    <Tooltip content={label} truncatedOnly>
+      <button {...props}>
+        <CodeOutlined />
+        <span className="np-place-name">{place.workspace.name}</span>
+        {place.folder && (
+          <>
+            <span className="np-place-slash">/</span>
+            <FolderOutlined />
+            <span className="np-place-name">{place.folder.name}</span>
+          </>
+        )}
+        <span className="np-chev">▾</span>
+      </button>
+    </Tooltip>
+  );
 }
 
 /**
- * The hero's second line (docs/mocks/new-session-top ②⑤): `in [workspace ▾] › [folder ▾]`, each a menu, so
- * where the session runs is read and changed under the engine rather than in a header line far from it.
+ * Under the engine (docs/mocks/new-session-place, option A's pill, board 02 option D's menu): one bordered pill that
+ * says where the session runs, `[workspace] / [folder] ▾`, naming the folder only when one is picked. Its menu lists
+ * the workspaces alone, this one first; a workspace with folders opens them one level down, under None, so a folder of
+ * any workspace is one pick. A search pinned over the list turns both levels into one list of matches.
  */
-function PlaceLine({ place }: { place: NewSessionPlace }) {
-  const [open, setOpen] = useState<'workspace' | 'folder' | null>(null);
-  const menu = (
-    which: 'workspace' | 'folder',
-    icon: ReactNode,
-    label: string,
-    rows: ReactNode,
-  ) => (
-    <Popover
-      title={null}
-      trigger={
-        <button
-          type="button"
-          className={`np-place-chip${open === which ? ' open' : ''}`}
-          aria-haspopup="menu"
-          aria-expanded={open === which}
-          aria-label={`${which === 'workspace' ? 'Workspace' : 'Folder'}: ${label}`}
-          title={label}
-        >
-          {icon}
-          <span className="np-place-name">{label}</span>
-          <span className="np-chev">▾</span>
-        </button>
-      }
-      side="bottom"
-      open={open === which}
-      onOpenChange={(next) => setOpen(next ? which : null)}
-      arrow={false}
-      popupClassName="np-pop"
-    >
-      <div className="np-list np-place-list">{rows}</div>
-    </Popover>
-  );
-  const row = (key: string, icon: ReactNode, name: string, on: boolean, pick: () => void) => (
-    <button
-      key={key}
-      type="button"
-      className={`np-row${on ? ' on' : ''}`}
-      data-row-focus=""
-      onClick={() => {
-        setOpen(null);
-        if (!on) pick();
-      }}
-    >
-      {icon}
-      <span className="np-row-name">{name}</span>
-      {on && <CheckOutlined className="np-place-check" />}
-    </button>
-  );
+function PlacePill({ place }: { place: NewSessionPlace }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const label = place.folder ? `${place.workspace.name} / ${place.folder.name}` : place.workspace.name;
+  const pick = (workspaceId: string, folderId: string | null) => {
+    setOpen(false);
+    setQuery('');
+    if (workspaceId !== place.workspace.id || folderId !== (place.folder?.id ?? null)) place.onPick(workspaceId, folderId);
+  };
+  const foldersOf = (workspaceId: string) => place.folders.filter((f) => f.workspaceId === workspaceId);
+  const current = (workspaceId: string, folderId: string | null) =>
+    workspaceId === place.workspace.id && folderId === (place.folder?.id ?? null);
+  const folderRow = (f: { id: string; name: string; workspaceId: string }, where?: string): MenuItem => ({
+    key: `f-${f.id}`,
+    textValue: f.name,
+    icon: <FolderOutlined />,
+    selected: current(f.workspaceId, f.id),
+    label: where ? <>{f.name}<span className="np-place-where">{`in ${where}`}</span></> : f.name,
+    onSelect: () => pick(f.workspaceId, f.id),
+  });
+  // This workspace first, then the rest in sidebar order.
+  const workspaces = [place.workspace, ...place.workspaces.filter((w) => w.id !== place.workspace.id)];
+  const needle = query.trim().toLowerCase();
+  let items: MenuItem[];
+  if (needle) {
+    const nameOf = new Map(place.workspaces.map((w) => [w.id, w.name]));
+    const wsHits = workspaces.filter((w) => w.name.toLowerCase().includes(needle));
+    const folderHits = place.folders.filter((f) => nameOf.has(f.workspaceId) && f.name.toLowerCase().includes(needle));
+    items = wsHits.length + folderHits.length === 0
+      ? [{ key: 'none', label: 'No matches', disabled: true }]
+      : [
+          ...(wsHits.length > 0 ? [{ key: 'ws', type: 'group' as const, label: 'Workspaces', children: wsHits.map((w): MenuItem => ({
+            key: `w-${w.id}`, textValue: w.name, icon: <CodeOutlined />, selected: current(w.id, null), label: w.name, onSelect: () => pick(w.id, null),
+          })) }] : []),
+          ...(folderHits.length > 0 ? [{ key: 'fd', type: 'group' as const, label: 'Folders',
+            children: folderHits.map((f) => folderRow(f, nameOf.get(f.workspaceId))) }] : []),
+        ];
+  } else {
+    items = workspaces.map((w): MenuItem => {
+      const folders = foldersOf(w.id);
+      const here = w.id === place.workspace.id;
+      const name = <span className="np-place-ws">{w.name}{folders.length > 0 && <span className="np-place-count">{folders.length}</span>}</span>;
+      return folders.length === 0
+        ? { key: `w-${w.id}`, textValue: w.name, icon: <CodeOutlined />, selected: here, label: name, onSelect: () => pick(w.id, null) }
+        : {
+            key: `w-${w.id}`, textValue: w.name, icon: <CodeOutlined />, selected: here, label: name, popupClassName: 'np-place-level',
+            children: [
+              { key: `n-${w.id}`, textValue: 'None', className: 'np-place-none', selected: current(w.id, null), label: 'None', onSelect: () => pick(w.id, null) },
+              ...folders.map((f) => folderRow(f)),
+            ],
+          };
+    });
+  }
   return (
     <div className="np-place">
-      <span className="np-place-in">in</span>
-      {menu(
-        'workspace',
-        <CodeOutlined />,
-        place.workspace.name,
-        place.workspaces.map((w) =>
-          row(w.id, <CodeOutlined />, w.name, w.id === place.workspace.id, () => place.onPickWorkspace(w.id))),
-      )}
-      {place.folders.length > 0 && (
-        <>
-          <span className="np-place-sep">›</span>
-          {menu(
-            'folder',
-            place.folder ? <FolderOutlined /> : <StopOutlined />,
-            place.folder?.name ?? 'No folder',
-            <>
-              {row('none', <StopOutlined />, 'No folder', !place.folder, () => place.onPickFolder(null))}
-              <div className="np-sep" />
-              {place.folders.map((f) =>
-                row(f.id, <FolderOutlined />, f.name, f.id === place.folder?.id, () => place.onPickFolder(f.id)))}
-            </>,
-          )}
-        </>
-      )}
+      <Menu
+        trigger={
+          <PlaceButton
+            type="button"
+            className={`np-place-pill${open ? ' open' : ''}`}
+            aria-label={`Runs in: ${label}`}
+            place={place}
+            label={label}
+          />
+        }
+        items={items}
+        side="bottom"
+        align="center"
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) setQuery('');
+        }}
+        popupClassName="np-place-menu"
+        header={
+          <div className="np-place-search">
+            <SearchOutlined aria-hidden />
+            <input
+              aria-label="Find a workspace or folder"
+              placeholder="Find a workspace or folder"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
+        }
+      />
     </div>
   );
 }
@@ -350,7 +384,7 @@ export function NewSessionProviderHero({
           {list}
         </Popover>
       )}
-      {place && <PlaceLine place={place} />}
+      {place && <PlacePill place={place} />}
       {fixSummary ??
         fallbackSummary ??
         (projectIntent ? (
@@ -361,10 +395,7 @@ export function NewSessionProviderHero({
             <span className="np-dot">·</span>
             <Link to={`/settings/machines/${encodeId(runnerId)}`}>Manage</Link>
           </div>
-        ) : (
-          // The model is said once, in the composer, where it is changed (docs/mocks/new-session-top ③).
-          <div className="np-empty-copy">Send a task to get started.</div>
-        ))}
+        ) : null)}
       {cantRunNote}
       {note && <div className="np-note">{note}</div>}
     </div>

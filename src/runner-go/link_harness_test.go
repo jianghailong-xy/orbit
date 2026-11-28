@@ -558,3 +558,25 @@ func linkTestEvents(from, n int, payloadBytes int) RunEventBatch {
 	}
 	return batch
 }
+
+// encodeLinkFrame encodes f as every WebSocket message it travels in, as the doubles here write a frame: whole when it
+// fits in limit bytes, otherwise Chunks whose Frame ids are taken from nextID.
+func encodeLinkFrame(f *linkpb.Frame, limit int, nextID func() uint64) ([][]byte, error) {
+	p, err := newLinkPieces(f, limit)
+	if err != nil {
+		return nil, err
+	}
+	var out [][]byte
+	for !p.done() {
+		var id uint64
+		if !p.whole {
+			id = nextID()
+		}
+		b, err := p.next(id)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, b)
+	}
+	return out, nil
+}

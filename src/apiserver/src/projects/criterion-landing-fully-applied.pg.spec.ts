@@ -48,7 +48,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { RunStatus, RunnerStatus, type PrismaClient } from '@prisma/client';
+import { RunnerStatus, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { IntegrationJobResultRequest } from '@orbit/shared';
 import { Client } from 'pg';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -236,7 +237,7 @@ test('a landing whose commits the target already had is read as the work being t
         prompt: 'do the work',
         branch,
         isolationStatus: 'worktree',
-        status: RunStatus.SUCCEEDED, 
+        turnState: null, 
         finishedAt: finish.finishedAt ?? new Date(Date.now() - 60_000),
         worktreeBranch: finish.worktreeBranch ?? branch,
         worktreeDirty: false,

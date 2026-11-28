@@ -37,10 +37,14 @@
  *       and read it offline;
  *   (6) the SQL reading (runnerLastBeatSql, runnerOfflineSql) and the JS reading (runnerLastBeatAt,
  *       runnerIsOnline) give the same answer, runner by runner;
- *   (7) `lost_at` (migration 0450) is the last beat a runner was heard with before it last lost contact:
+ *   (7) `lost_at` (migration 0450) is the last instant a runner was heard before it last lost contact:
  *       recordRunnerLinkOpened, which the welcome route runs as the link gateway opens a connection, copies
- *       `last_beat_at` into it, and writes nothing when that changes nothing; a link beat more than 45 s
- *       after the one before keeps that one, and a beat on time leaves it as it was.
+ *       GREATEST(`last_beat_at`, `last_heard_at`) into it and records the process heard (migration 1750), so a
+ *       welcome sent again keeps the first one's heard, and writes nothing when it would change nothing; a
+ *       link beat more than 45 s after the one before keeps that one, and a beat on time leaves it as it was;
+ *   (8) a runner whose last link Welcome was 5 s ago, its last beat 3 min old, reads online in the runners list, the
+ *       runner detail, the session list row and its queue gate, each showing that Welcome as `lastHeartbeatAt`; with its
+ *       beat 7 min old it reads offline in all of them, the 5-minute cap (runner-presence-heard.pg.spec.ts holds the rest).
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runners/runner-presence.pg.spec.ts
  *
@@ -51,7 +55,8 @@ import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { JwtService } from '@nestjs/jwt';
-import { Prisma, RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { Prisma, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { toUuid } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -76,6 +81,8 @@ import {
   runnerOfflineSql,
 } from './runner-presence';
 import '../test-support/daemon-routes-over-http';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { withWord, WORD_SELECT } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -161,6 +168,8 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
       ['resources', 'jsonb', 'YES'],
       // 0780: the sessions its background jobs hold slots for (runners/runner-background-holders.ts).
       ['background_job_session_ids', 'ARRAY', 'NO'],
+      // 1750: when the beating process was last heard over the link by a call of its work (runner-presence-heard.pg.spec.ts).
+      ['last_heard_at', 'timestamp without time zone', 'YES'],
     ]);
     const { rows: [pk] } = await sql.query(
       `SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname = 'runner_presence_pkey'`,
@@ -272,14 +281,14 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
       await db.session.create({
         data: {
           id, ownerId: on.ownerId, creatorId: on.ownerId, workspaceId: on.workspaceId, assignedRunnerId: on.runnerId, title, prompt: title,
-          provider: 'claude', providerBuiltin: true, status: RunStatus.RUNNING, runtimeSessionId: randomUUID(),
+          provider: 'claude', providerBuiltin: true, turnState: 'IN_FLIGHT', runtimeSessionId: randomUUID(),
           startedAt: new Date(now - 10 * MINUTE), runClaimedAt: new Date(now - 10 * MINUTE),
           dispatchOrigin: SessionDispatchOrigin.USER,
         },
       });
       return id;
     };
-    const stateOf = (id: string) => db.session.findUniqueOrThrow({ where: { id }, select: { status: true, error: true } });
+    const stateOf = async (id: string) => withWord(await db.session.findUniqueOrThrow({ where: { id }, select: { ...WORD_SELECT, error: true } }));
     // Thirty runners heard five seconds ago: one silent runner among them is a machine, not an outage. They beat again
     // before each reading below that wants them heard, as runners beating every 30 s would: none of them misses a beat.
     const crowd: string[] = [];
@@ -420,7 +429,7 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
       await db.session.create({
         data: {
           id, ownerId: dana.id, creatorId: dana.id, workspaceId, assignedRunnerId: r.id, title: status, prompt: 'work',
-          provider: 'claude', providerBuiltin: true, status, dispatchOrigin: SessionDispatchOrigin.USER,
+          provider: 'claude', providerBuiltin: true, turnState: turnStateOfWord(status), dispatchOrigin: SessionDispatchOrigin.USER,
         },
       });
       return id;
@@ -458,14 +467,14 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
     await db.session.create({
       data: {
         id: queuedId, ownerId: carol.id, creatorId: carol.id, workspaceId, assignedRunnerId: r.id, title: 'queued',
-        prompt: 'queued', provider: 'claude', providerBuiltin: true, status: RunStatus.PENDING,
+        prompt: 'queued', provider: 'claude', providerBuiltin: true, turnState: 'QUEUED',
         dispatchOrigin: SessionDispatchOrigin.USER,
       },
     });
     await db.session.create({
       data: {
         id: endedId, ownerId: carol.id, creatorId: carol.id, workspaceId, assignedRunnerId: r.id, title: 'ended',
-        prompt: 'ended', provider: 'claude', providerBuiltin: true, status: RunStatus.SUCCEEDED, 
+        prompt: 'ended', provider: 'claude', providerBuiltin: true, turnState: null, 
         startedAt: new Date(Date.now() - 20 * MINUTE), finishedAt: new Date(Date.now() - 15 * MINUTE),
         numTurns: 1, runtimeSessionId: randomUUID(), dispatchOrigin: SessionDispatchOrigin.USER,
       },
@@ -570,7 +579,7 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
     const r = await runner(gil.id, 'lost-at', { lastHeartbeatAt: new Date(Date.now() - 10 * MINUTE) });
     const { tokenHash } = await db.runner.findUniqueOrThrow({ where: { id: r.id }, select: { tokenHash: true } });
     const presenceRow = () =>
-      db.runnerPresence.findUniqueOrThrow({ where: { runnerId: r.id }, select: { lastBeatAt: true, lostAt: true } });
+      db.runnerPresence.findUniqueOrThrow({ where: { runnerId: r.id }, select: { lastBeatAt: true, lostAt: true, lastHeardAt: true } });
     const process = randomUUID();
     /** One link beat, as the beat statement takes it for a gateway's heartbeat. */
     const linkBeat = () => readLinkBeat(db as unknown as PrismaService, {
@@ -585,25 +594,83 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
     await linkBeat();
     assert.equal((await presenceRow()).lostAt, null, 'its first beat leaves nothing lost');
 
-    // The gateway opens a new connection: the beat before it is kept; asked again, it writes nothing.
+    // The gateway opens a new connection: the beat before it is kept, and the process is heard now (migration 1750).
     const { lastBeatAt } = await presenceRow();
     await recordRunnerLinkOpened(db as unknown as PrismaService, r.id, { leaseOwner: process });
-    assert.equal((await presenceRow()).lostAt?.getTime(), lastBeatAt.getTime());
-    const kept = await tuple();
+    const opened = await presenceRow();
+    assert.equal(opened.lostAt?.getTime(), lastBeatAt.getTime());
+    assert.ok(opened.lastHeardAt !== null && opened.lastHeardAt.getTime() > lastBeatAt.getTime() - 1, 'the welcome is heard');
+    // Asked again, the loss it keeps is the last instant the runner was heard before: the first welcome, moments later.
     await recordRunnerLinkOpened(db as unknown as PrismaService, r.id, { leaseOwner: process });
-    assert.equal(await tuple(), kept, 'the same row version: a welcome sent again changes nothing');
+    const again = await presenceRow();
+    assert.equal(again.lostAt?.getTime(), opened.lastHeardAt!.getTime(), 'a welcome sent again keeps the first one\'s heard');
+    assert.ok(again.lastHeardAt!.getTime() >= opened.lastHeardAt!.getTime());
+    // Another process's welcome leaves nothing of it heard, and a row with nothing to change is not written at all.
+    await db.runnerPresence.update({ where: { runnerId: r.id }, data: { lostAt: again.lastHeardAt } });
+    const kept = await tuple();
+    await recordRunnerLinkOpened(db as unknown as PrismaService, r.id, { leaseOwner: randomUUID() });
+    assert.equal(await tuple(), kept, 'the same row version: another process, its loss already kept, changes nothing');
 
     // A beat 30 s after the one before is on time, and leaves lost_at as it was.
     await db.runnerPresence.update({ where: { runnerId: r.id }, data: { lastBeatAt: new Date(Date.now() - 30_000), lostAt: null } });
     await linkBeat();
     assert.equal((await presenceRow()).lostAt, null);
-    // One 46 s after missed a beat: the one before is kept.
+    // One 46 s after missed a beat, the runner not reconnected since it either: the one before is kept. (Welcomed in
+    // between, it lost nothing: runner-presence-heard.pg.spec.ts (4).)
     const before = new Date(Date.now() - 46_000);
-    await db.runnerPresence.update({ where: { runnerId: r.id }, data: { lastBeatAt: before } });
+    await db.runnerPresence.update({ where: { runnerId: r.id }, data: { lastBeatAt: before, lastHeardAt: null } });
     await linkBeat();
     const after = await presenceRow();
     assert.equal(after.lostAt?.getTime(), before.getTime());
     assert.ok(after.lastBeatAt.getTime() > before.getTime() + 45_000, 'and the beat itself is the new last one');
+  });
+
+  await t.test('(8) a runner that sent a Welcome 5 s ago with no beat for 3 min reads online in every reading, until the cap', async () => {
+    const hal = await owner('hal');
+    const jwtToken = await hal.login();
+    const r = await runner(hal.id, 'heard', { lastHeartbeatAt: new Date(Date.now() - 10 * MINUTE), maxConcurrent: 4 });
+    const beatAt = new Date(Date.now() - 3 * MINUTE);
+    const heardAt = new Date(Date.now() - 5_000);
+    await db.runnerPresence.create({ data: { runnerId: r.id, lastBeatAt: beatAt, lastHeardAt: heardAt, linkState: 'LINK', processId: randomUUID() } });
+    const workspaceId = randomUUID();
+    await db.workspace.create({ data: { id: workspaceId, ownerId: hal.id, runnerId: r.id, name: `heard-${RUN}`, enabled: true } });
+    const queuedId = randomUUID();
+    await db.session.create({
+      data: {
+        id: queuedId, ownerId: hal.id, creatorId: hal.id, workspaceId, assignedRunnerId: r.id, title: 'queued', prompt: 'queued',
+        provider: 'claude', providerBuiltin: true, turnState: 'QUEUED', dispatchOrigin: SessionDispatchOrigin.USER,
+      },
+    });
+    async function readings() {
+      const runners = await call(server!, 'GET', '/api/runners', jwtToken);
+      assert.equal(runners.status, 200, runners.text);
+      const listed = (runners.json as Array<Record<string, unknown>>).find((x) => toUuid(String(x.id)) === r.id)!;
+      const detail = await call(server!, 'GET', `/api/runners/${r.id}`, jwtToken);
+      assert.equal(detail.status, 200, detail.text);
+      const sessions = await call(server!, 'GET', '/api/sessions?view=open', jwtToken);
+      assert.equal(sessions.status, 200, sessions.text);
+      const row = (sessions.json as Array<Record<string, any>>).find((x) => toUuid(String(x.id)) === queuedId)!;
+      const [sql] = await db.$queryRaw<Array<{ online: boolean }>>(Prisma.sql`
+        SELECT NOT ${runnerOfflineSql('r')} AS online FROM runner r WHERE r.id = ${r.id}::uuid`);
+      return { listed, detail: detail.json, row, sqlOnline: sql!.online };
+    }
+    const heard = await readings();
+    assert.equal(heard.sqlOnline, true, 'runnerOfflineSql reads it present');
+    assert.equal(heard.listed.online, true, 'the runners list (runners.service.ts, its hand-written presence select)');
+    assert.equal(ms(heard.listed.lastHeartbeatAt), heardAt.getTime(), 'and shows it last present at its Welcome, which clients read offline by');
+    assert.equal(heard.detail.online, true, 'the runner detail');
+    assert.equal(ms(heard.detail.lastHeartbeatAt), heardAt.getTime());
+    assert.equal(ms(heard.row.assignedRunner.lastHeartbeatAt), heardAt.getTime(), 'the session list row');
+    assert.notEqual(heard.row.queuedReason, 'runner_offline', 'and its queue gate (runnerOfflineSql)');
+
+    // Its last beat past the cap: present five minutes past it, so offline everywhere however lately it was heard.
+    await db.runnerPresence.update({ where: { runnerId: r.id }, data: { lastBeatAt: new Date(Date.now() - 7 * MINUTE), lastHeardAt: new Date() } });
+    const capped = await readings();
+    assert.equal(capped.sqlOnline, false);
+    assert.equal(capped.listed.online, false);
+    assert.equal(capped.detail.online, false);
+    assert.equal(capped.row.queuedReason, 'runner_offline');
+    await db.runner.deleteMany({ where: { ownerId: hal.id } });
   });
 
 });

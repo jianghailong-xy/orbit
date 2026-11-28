@@ -623,33 +623,40 @@ func cursorPreApproved(agent AgentExecConfig, ask cursorPermissionAsk) bool {
 	return false
 }
 
-var cursorSandboxHighImpact = regexp.MustCompile(`(?i)(?:\.ssh|\.aws|\bgit(?:\s+[^;|&\n]+)*\s+(?:push|fetch|pull|clone)\b|\b(?:npm|pnpm|yarn|pip[0-9.]*)(?:\s+[^;|&\n]+)*\s+(?:install|ci|add)\b)`)
+// cursorSandboxHighImpact is matched only with the sandbox in force. Besides git's network verbs and secret
+// directories it names the common package installs (a bare `yarn` installs too) and the programs that act
+// outside the sandbox on its behalf: osascript drives other apps, kubectl talks to a cluster.
+var cursorSandboxHighImpact = regexp.MustCompile(`(?i)(?:\.ssh|\.aws|\bgit(?:\s+[^;|&\n]+)*\s+(?:push|fetch|pull|clone)\b|` +
+	`\b(?:npm|pnpm|bun)(?:\s+[^;|&\n]+)*\s+(?:i|install|ci|add)\b|\byarn(?:\s+[^;|&\n]+)*\s+(?:install|add)\b|\byarn\s*(?:$|[;|&)\n])|` +
+	`\b(?:pip[0-9.]*|pipx|uv)(?:\s+[^;|&\n]+)*\s+(?:install|add)\b|\bbrew(?:\s+[^;|&\n]+)*\s+(?:install|reinstall|upgrade)\b|` +
+	`\bgem(?:\s+[^;|&\n]+)*\s+install\b|\bcargo(?:\s+[^;|&\n]+)*\s+(?:install|add)\b|\bgo(?:\s+[^;|&\n]+)*\s+(?:install|get)\b|` +
+	`\b(?:osascript|kubectl)\b)`)
 
-var cursorInlineInterpreter = regexp.MustCompile(`(?:^|[\s;|&(])(?:python[0-9.]*|node|ruby|perl|bash|sh|zsh|dash|ksh)\s+(?:-[ce]|--eval)(?:\s|$)`)
+// cursorGitWorktreeList is the read-only listing of a repository's worktrees. Codex's Auto list
+// refuses every `git worktree` subcommand; with the sandbox in force the listing is routine.
+var cursorGitWorktreeList = regexp.MustCompile(`\bgit\s+worktree\s+list\b`)
 
 // cursorAutoAllows keeps the original unsandboxed policy unless the launcher's sandbox is in force.
-// Sandboxed code still goes to a person when any high-impact marker appears, including in script bodies.
+// With the sandbox in force the OS refuses a write outside the writable roots, so a command may name a
+// path outside the workspace to read it; any command, inline script or not, still goes to a person when
+// a high-impact marker appears anywhere in it — in a script body, or inside a $(…) substitution, whose
+// inner command meets the same markers as the rest of the line.
 func cursorAutoAllows(command, workspace string, sandboxInForce bool) bool {
 	command = strings.TrimSpace(command)
 	if command == "" || !filepath.IsAbs(workspace) {
 		return false
 	}
-	if sandboxInForce && cursorSandboxHighImpact.MatchString(command) {
-		return false
-	}
-	inline := cursorInlineInterpreter.MatchString(command)
-	for _, line := range strings.Split(command, "\n") {
-		if match := dshHeredoc.FindStringIndex(line); match != nil && dshHeredocInterpreter.MatchString(line[:match[0]]) {
-			inline = true
+	if sandboxInForce {
+		if cursorSandboxHighImpact.MatchString(command) {
+			return false
 		}
-	}
-	if sandboxInForce && inline {
 		// Normalize script string arguments as well as shell words, so e.g. ['git', 'push']
 		// and os.system("git push") meet the same markers as a shell invocation.
 		text := strings.Join(strings.Fields(strings.NewReplacer("'", " ", "\"", " ", "(", ";", ")", " ",
 			"[", ";", "]", " ", ",", " ").Replace(command)), " ")
-		if codexAutoCommandNeedsApprovalWithInline(command, dshWritableRoots(workspace)[1:], true) ||
-			codexAutoCommandNeedsApprovalWithInline(text, dshWritableRoots(workspace)[1:], true) ||
+		tempRoots := dshWritableRoots(workspace)[1:]
+		if codexAutoCommandNeedsApprovalWithInline(cursorGitWorktreeList.ReplaceAllString(command, "git-worktree-list"), tempRoots, true) ||
+			codexAutoCommandNeedsApprovalWithInline(cursorGitWorktreeList.ReplaceAllString(text, "git-worktree-list"), tempRoots, true) ||
 			cursorSandboxHighImpact.MatchString(text) || dshContainerCommand.MatchString(text) {
 			return false
 		}

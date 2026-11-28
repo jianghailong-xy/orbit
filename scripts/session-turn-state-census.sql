@@ -1,3 +1,6 @@
+-- D2-era: this reads or writes session.status, which deploy D4 (migration 1711) dropped. It runs on a database of
+-- deploy D1 or D2 only, and is kept for the record of those deploys.
+--
 -- The turn_state / phase census (docs/session-status-retirement-plan.md §4.4, §7.2): how far the stored facts of
 -- migration 1611 agree with the stored word. Run it after scripts/session-turn-state-backfill.sh (task T3), and in
 -- the rehearsal on a production-shaped copy (task T16).
@@ -14,10 +17,10 @@
 --   turn_state_disagrees    0 after the backfill. turn_state is not the word's (PENDING = QUEUED, RUNNING = IN_FLIGHT,
 --                           INTERRUPTED = ABANDONED, any other word = null). Not 0: the backfill has not finished, or
 --                           something wrote turn_state against the word; deploy 2 refuses to run on such a row.
---   phase_disagrees         0 after the backfill. phase is not deriveSessionPhase of the row: released = IDLE (RUNNING
---                           while retry_at is set, migration 1667); RUNNING,
---                           or a held word with the engine's turn, a sub-agent or a background job = RUNNING; PENDING
---                           = PENDING; else IDLE.
+--   phase_disagrees         0 after the backfill. phase is not deriveSessionPhase of the row: released = IDLE (PENDING
+--                           while retry_at is set, migration 1670); RUNNING,
+--                           or a held word with the engine's turn, a sub-agent or a background job = RUNNING; PENDING,
+--                           or any other held word with retry_at set = PENDING; else IDLE.
 --   phase_null              0 after the backfill (deploy 2 sets phase NOT NULL). Before it, the rows not yet written.
 --   parked_rows             0. The dead label PARKED (0071 rewrote every such row); not 0: report it.
 --   released_with_turn      0. A released row whose turn_state is set: the word's table gives none.
@@ -42,12 +45,12 @@ WITH s AS (
            WHEN 'INTERRUPTED' THEN 'ABANDONED'
          END AS word_turn_state,
          CASE
-           WHEN x."finished_at" IS NOT NULL THEN CASE WHEN x."retry_at" IS NOT NULL THEN 'RUNNING' ELSE 'IDLE' END
+           WHEN x."finished_at" IS NOT NULL THEN CASE WHEN x."retry_at" IS NOT NULL THEN 'PENDING' ELSE 'IDLE' END
            WHEN x."status"::text = 'RUNNING' THEN 'RUNNING'
            WHEN x."status"::text IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')
             AND (x."engine_turn_active" OR cardinality(x."running_subagents") > 0
                  OR cardinality(x."running_bg_jobs") > 0) THEN 'RUNNING'
-           WHEN x."status"::text = 'PENDING' THEN 'PENDING'
+           WHEN x."status"::text = 'PENDING' OR x."retry_at" IS NOT NULL THEN 'PENDING'
            ELSE 'IDLE'
          END AS word_phase
     FROM "session" x

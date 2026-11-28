@@ -33,7 +33,8 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { JwtService } from '@nestjs/jwt';
-import { RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { SELF_UPDATE_NOW_V1, toUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -41,6 +42,8 @@ import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-te
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import '../test-support/daemon-routes-over-http';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordSql } from '../test-support/session-word';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -115,7 +118,7 @@ test('a turn ending on a draining runner returns its slot, and Stop on the sessi
       data: {
         id, ownerId, creatorId: ownerId, workspaceId: m.workspaceId, assignedRunnerId: m.id,
         title: `draining ${status.toLowerCase()} ${RUN}`, prompt: 'the work', provider: 'claude', providerBuiltin: true,
-        engine: 'claude', status, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
+        engine: 'claude', turnState: turnStateOfWord(status), dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
         startedAt: new Date(Date.now() - 10 * 60_000), runtimeSessionId: randomUUID(), numTurns: 1,
         inboxLeaseOwner: lease.owner, inboxLeaseGeneration: lease.generation,
         ...extra,
@@ -186,7 +189,7 @@ test('a turn ending on a draining runner returns its slot, and Stop on the sessi
     return reply.json?.sessionId ? toUuid(String(reply.json.sessionId)) : null;
   };
   const statusOf = async (id: string) =>
-    (await sql.query<{ status: string }>(`SELECT "status" FROM "session" WHERE "id" = $1::uuid`, [id])).rows[0].status;
+    (await sql.query<{ status: string }>(`SELECT ${wordSql()} AS status FROM "session" WHERE "id" = $1::uuid`, [id])).rows[0].status;
   const turnStatusOf = async (id: string) =>
     (await sql.query<{ status: string }>(`SELECT "status" FROM "conversation_turn" WHERE "id" = $1::uuid`, [id])).rows[0]?.status;
   const queued = async (s: Run) => (await sql.query<{ n: number }>(
@@ -347,6 +350,70 @@ test('a turn ending on a draining runner returns its slot, and Stop on the sessi
     assert.equal(kept.json?.status, 'RUNNING', 'a slot with a turn in flight was given back');
     assert.equal(await statusOf(busy.id), 'RUNNING');
     await heartbeatDraining(draining, false);
+  });
+
+  await t.test('5b. a full runner gives back a claim it never started: queued behind a full runner, no drain recorded', async () => {
+    // Claimed, and never activated: a claim takes no inbox lease, so the row has no lease owner yet.
+    const full = await machine('full-of-background-jobs');
+    await sql.query(`UPDATE "runner" SET "max_concurrent" = 1 WHERE "id" = $1::uuid`, [full.id]);
+    const s = await session(full, RunStatus.RUNNING, { inboxLeaseOwner: null, inboxLeaseGeneration: null });
+    const message = await turn(s, 'message');
+    const holder = await session(full, RunStatus.AWAITING_INPUT);
+    await db.runnerPresence.create({ data: { runnerId: full.id, lastBeatAt: new Date(), linkState: 'HTTP', backgroundJobSessionIds: [holder.id] } });
+    const giveBack = (reason?: string) => runnerCall(full, 'POST', `/api/runner/sessions/${uuidToBase62(s.id)}/return-slot`,
+      { leaseOwner: s.lease.owner, ...(reason ? { reason } : {}) });
+
+    const returned = await giveBack('runner_full');
+    assert.equal(returned.status, 200, returned.text);
+    assert.deepEqual([returned.json?.status, returned.json?.returned], ['PENDING', true]);
+    assert.equal(await statusOf(s.id), 'PENDING');
+    assert.equal(await turnStatusOf(message), 'PENDING');
+    assert.equal(await runnerDraining(full), false, 'a full runner was recorded as draining for an update');
+    const listed = await row(s);
+    assert.deepEqual([listed.queuedReason, listed.queuedActive, listed.queuedLimit, listed.queuedHeldByJobs],
+      ['runner_at_capacity', 1, 1, 1], 'the returned session does not read queued behind a full runner');
+    // Asked again, nothing is left to give back.
+    const again = await giveBack('runner_full');
+    assert.deepEqual([again.json?.status, again.json?.returned], ['PENDING', false]);
+
+    // While the job holds the one slot the ordinary claim takes nothing; the full runner's scope says so too.
+    assert.equal(await claim(full), null, 'the ordinary claim took a session on a runner its background job fills');
+    // The job ends (the next beat names no holder): the session is claimed again, with no one pressing anything.
+    await db.runnerPresence.update({ where: { runnerId: full.id }, data: { backgroundJobSessionIds: [] } });
+    assert.equal(await claim(full), s.id);
+
+    // A claim another process of the runner holds the lease of (a runner restarted before its reclaim activated an
+    // engine) is not this process's to give back: it keeps its slot, and the session names the wait, which its row
+    // carries with the runner's counts, until an engine activates under the claim.
+    const busy = await machine('full-and-restarted');
+    await sql.query(`UPDATE "runner" SET "max_concurrent" = 1 WHERE "id" = $1::uuid`, [busy.id]);
+    const kept = await session(busy, RunStatus.RUNNING, { engineStartedAt: null });
+    await turn(kept, 'message');
+    const busyHolder = await session(busy, RunStatus.AWAITING_INPUT);
+    await db.runnerPresence.create({ data: { runnerId: busy.id, lastBeatAt: new Date(), linkState: 'HTTP', backgroundJobSessionIds: [busyHolder.id] } });
+    const restarted = randomUUID();
+    const refused = await runnerCall(busy, 'POST', `/api/runner/sessions/${uuidToBase62(kept.id)}/return-slot`,
+      { leaseOwner: restarted, reason: 'runner_full' });
+    assert.equal(refused.status, 200, refused.text);
+    assert.deepEqual([refused.json?.status, refused.json?.returned], ['RUNNING', false]);
+    const phaseOf = async (id: string) => (await sql.query<{ phase: string | null }>(
+      `SELECT "engine_phase" AS phase FROM "session" WHERE "id" = $1::uuid`, [id])).rows[0].phase;
+    assert.equal(await phaseOf(kept.id), 'waiting_for_slot', 'the kept claim was not named as waiting for a slot');
+    assert.deepEqual((await row(kept)).slotWait, { active: 1, heldByJobs: 1, limit: 1 });
+    assert.equal(await runnerDraining(busy), false);
+    const taken = await runnerCall(busy, 'POST', `/api/runner/sessions/${uuidToBase62(kept.id)}/takeover-leases`,
+      { leaseOwner: restarted, expectedLeaseOwner: kept.lease.owner });
+    assert.equal(taken.status, 200, taken.text);
+    const activated = await runnerCall(busy, 'POST', `/api/runner/sessions/${uuidToBase62(kept.id)}/activate-leases`,
+      { leaseGeneration: randomUUID(), leaseOwner: restarted });
+    assert.equal(activated.status, 200, activated.text);
+    assert.equal(await phaseOf(kept.id), null, 'the wait was still named once an engine activated under the claim');
+
+    // Without the reason the drain's fence stands: a claim never started has no lease owner to match.
+    const t2 = await session(full, RunStatus.RUNNING, { inboxLeaseOwner: null, inboxLeaseGeneration: null });
+    await turn(t2, 'message');
+    const drained = await runnerCall(full, 'POST', `/api/runner/sessions/${uuidToBase62(t2.id)}/return-slot`, { leaseOwner: t2.lease.owner });
+    assert.equal(drained.status, 409, drained.text);
   });
 
   await t.test('6. a follow-up fetched and held for the update, handed back INTERRUPTED after Stop, does not run', async () => {

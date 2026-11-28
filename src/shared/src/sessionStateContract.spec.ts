@@ -131,12 +131,14 @@ describe('session-state contract', () => {
       expect(typeof e.released, vector.id).toBe('boolean');
       if (e.lastTurnOutcome !== null) expect(SESSION_TURN_OUTCOMES, vector.id).toContain(e.lastTurnOutcome);
       if (e.waitingOn !== null) expect(SESSION_WAITING_ON, vector.id).toContain(e.waitingOn);
-      // A released session is IDLE, or RUNNING while an armed retry will re-send it, still waiting on that wake.
-      const retrying = e.released && vector.given.retryAt != null;
-      if (e.released) expect(e.phase, vector.id).toBe(retrying ? 'RUNNING' : 'IDLE');
+      // An armed retry with nothing executing and no turn queued is PENDING, held or released, waiting on that wake.
+      const retrying = vector.given.retryAt != null && (e.released
+        || (vector.given.turnState !== 'IN_FLIGHT' && vector.given.turnState !== 'QUEUED'
+          && (vector.given.runningBgJobs?.length ?? 0) === 0));
+      if (e.released) expect(e.phase, vector.id).toBe(retrying ? 'PENDING' : 'IDLE');
       if (e.waitingOn === 'HOLD') expect(e.phase, vector.id).toBe('PENDING');
-      if (e.waitingOn === 'WAKE') expect(e.phase, vector.id).toBe(retrying ? 'RUNNING' : 'IDLE');
-      if (e.phase === 'RUNNING') expect([null, 'PERSON', ...(retrying ? ['WAKE'] : [])], vector.id).toContain(e.waitingOn);
+      if (e.waitingOn === 'WAKE') expect(e.phase, vector.id).toBe(retrying ? 'PENDING' : 'IDLE');
+      if (e.phase === 'RUNNING') expect([null, 'PERSON'], vector.id).toContain(e.waitingOn);
       expect(typeof e.workFinished, vector.id).toBe('boolean');
       if (e.endReason !== null) expect(CONTRACT.fields.endReason.values, vector.id).toContain(e.endReason);
       // releaseFinishedTheWork: released, and task_done or a landing container with no end reason.
@@ -149,9 +151,9 @@ describe('session-state contract', () => {
       expect([null, undefined, 'QUEUED', 'IN_FLIGHT', 'ABANDONED'], vector.id).toContain(g.turnState);
       expect(e.released, vector.id).toBe(g.finishedAt !== null);
       if (e.released) expect(g.turnState ?? null, vector.id).toBeNull();
-      expect(e.phase, vector.id).toBe(e.released ? (retrying ? 'RUNNING' : 'IDLE')
+      expect(e.phase, vector.id).toBe(e.released ? (retrying ? 'PENDING' : 'IDLE')
         : g.turnState === 'IN_FLIGHT' || (g.runningBgJobs?.length ?? 0) > 0 ? 'RUNNING'
-        : g.turnState === 'QUEUED' ? 'PENDING' : 'IDLE');
+        : g.turnState === 'QUEUED' || retrying ? 'PENDING' : 'IDLE');
       expect(e.lastTurnOutcome, vector.id).toBe(g.lastTurnOutcome ?? null);
       // The end reason is the row's, as given.
       expect(e.endReason, vector.id).toBe(vector.given.endReason ?? null);

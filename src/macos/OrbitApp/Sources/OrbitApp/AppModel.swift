@@ -64,6 +64,16 @@ final class AppModel {
     /// folder rows, and on iOS the Move panel, which lists the ones in the session's own workspace.
     /// See `loadSessionFolders`.
     var sessionFolders: [SessionFolder] = []
+    /// Whether the session list is drawing folder rows right now — its scope, tag filter, Group by
+    /// Tag and search wrapped up in `SessionFolderGrouping.listShowsFolders`, written back by the
+    /// list as they change (`AgentPanes`). A route that opens a filed session puts the list on that
+    /// folder's page only where the list would have drawn the folder's row. The default is the list
+    /// a cold launch draws, before any pane has said otherwise.
+    var sessionListShowsFolders = true
+    /// The session whose folder page an open from outside its list has already shown, so leaving
+    /// the folder afterwards is not undone by a later refresh of the same open — the web's
+    /// `folderShownForRef`. Cleared when another session is opened.
+    private var folderShownForSessionID: String?
     // Top-level nav: which AppShell section is showing, and every section's navigation stack. The
     // app lands on the Agents section (the first agent's session list); the agent is selected once
     // the list loads — see `loadAgentsThenLand`.
@@ -346,9 +356,6 @@ final class AppModel {
     /// Workspace ids with at least one Session that draws the shared running spinner. Cached beside
     /// `agentNeedsYou` so the drawer, the iPad sidebar and the Mac sidebar never rescan Open once per row/render.
     private(set) var runningWorkspaceIDs: Set<String> = []
-    /// Workspace ids with a background job in flight and nobody generating — read off the same
-    /// glyph, so the two marks can never disagree about one row. Drawn quieter than the spinner.
-    private(set) var jobWorkspaceIDs: Set<String> = []
     /// Each project's coordinator conversation as the Open list shows it, by project — what the
     /// drawer's project rows read beside their fetched summaries (`ProjectCoordinatorPulse`).
     private(set) var projectCoordinators: [String: ProjectCoordinatorPulse] = [:]
@@ -559,6 +566,9 @@ final class AppModel {
     /// The wiki chat beside every wiki page: its round button, its panel and the cards it draws
     /// (docs/wiki-chat-design.md §9).
     private(set) var wikiChat: WikiChatModel?
+    /// The Drive chat beside the drive's files (board docs/mocks/drive-chat/02-native): the Wiki chat's model, panel and
+    /// button, docked on Drive (`ChatOrigin.drive`).
+    private(set) var driveChat: WikiChatModel?
     /// Warm cache of open consoles + their on-disk transcript store, scoped to this instance.
     private(set) var consoleRegistry: ConsoleRegistry?
     /// What the next cold launch draws first (`persistLaunchSnapshot` / `restoreLaunchSnapshot`),
@@ -675,6 +685,7 @@ final class AppModel {
         driveModel.openSession = { [weak self] id in self?.route(to: .session(id)) }
         drive = driveModel
         wikiChat = WikiChatModel(baseURL: url, tokenStore: tokenStore)
+        driveChat = WikiChatModel(baseURL: url, tokenStore: tokenStore, origin: .drive)
         consoleRegistry = ConsoleRegistry(baseURL: url, tokenStore: tokenStore,
                                           store: ConsoleRegistry.defaultStore(for: url))
         launchSnapshots = LaunchSnapshotStore.defaultStore(for: url)
@@ -994,7 +1005,6 @@ final class AppModel {
         needsYouSessions = []
         agentNeedsYou = [:]
         runningWorkspaceIDs = []
-        jobWorkspaceIDs = []
         projectCoordinators = [:]
         projectSessions = []
         projectSessionsAddress = nil
@@ -1398,6 +1408,8 @@ final class AppModel {
         if selectedSection == .wiki {
             if let wiki { Task { await wiki.reloadLoaded() } }
             if let wikiChat { Task { await wikiChat.reloadLoaded() } }
+        } else if selectedSection == .drive, let driveChat {
+            Task { await driveChat.reloadLoaded() }
         } else if let wiki, wiki.spacesState.hasLoaded {
             Task { await wiki.loadSpaces() }
         }
@@ -1528,7 +1540,11 @@ final class AppModel {
             if syncs {
                 drive?.nudge(syncs: true)
             } else {
-                whenSeen("drive") { $0.drive?.nudge(syncs: false) }
+                whenSeen("drive") {
+                    $0.drive?.nudge(syncs: false)
+                    // A Drive chat's write: its change cards and the list's marks are read again.
+                    $0.driveChat?.nudge()
+                }
             }
         case .wiki:
             whenSeen("wiki") {
@@ -1899,7 +1915,8 @@ final class AppModel {
         // The console on top of the stack, else the wiki chat a panel beside a wiki page shows: it streams
         // while the panel is open on the Wiki, as a console on top would (`WikiChatHost` re-syncs as the
         // panel moves, and as the Wiki comes and goes).
-        let id = focusedConsoleSessionID ?? (selectedSection == .wiki ? wikiChat?.focusedSessionID : nil)
+        let id = focusedConsoleSessionID ?? (selectedSection == .wiki ? wikiChat?.focusedSessionID
+            : selectedSection == .drive ? driveChat?.focusedSessionID : nil)
         // Every focused console needs an exact-detail fallback, not only cold deep links. If an
         // Open row is filed or purged on another client, the next list refresh removes it; retaining
         // this last loaded snapshot makes `needsExactRefresh` detect that absence and GET the new
@@ -2121,7 +2138,6 @@ final class AppModel {
         sessionDetails.reconcile(with: [row])
 
         let activity = OpenListDerived.Activity(runningWorkspaceIDs: runningWorkspaceIDs,
-                                                jobWorkspaceIDs: jobWorkspaceIDs,
                                                 coordinatorPulses: projectCoordinators)
         var derived = OpenListDerived(needsYou: needsYouSessions, agentNeedsYou: agentNeedsYou,
                                       menu: menuSummary, activity: activity)
@@ -2134,7 +2150,6 @@ final class AppModel {
         if derived.agentNeedsYou != agentNeedsYou { agentNeedsYou = derived.agentNeedsYou }
         if let marks = derived.activity {
             if marks.runningWorkspaceIDs != runningWorkspaceIDs { runningWorkspaceIDs = marks.runningWorkspaceIDs }
-            if marks.jobWorkspaceIDs != jobWorkspaceIDs { jobWorkspaceIDs = marks.jobWorkspaceIDs }
             if marks.coordinatorPulses != projectCoordinators { projectCoordinators = marks.coordinatorPulses }
         }
         agents?.applyOpenRow(sessions, workspaceIDs: [old.agent?.id ?? old.agentId, row.agent?.id ?? row.agentId])
@@ -2174,7 +2189,6 @@ final class AppModel {
         needsYouSessions = SessionGrouping.group(list).needsYou
         agentNeedsYou = NeedsYouLogic.byAgent(list)
         runningWorkspaceIDs = WorkspaceActivityLogic.runningWorkspaceIDs(list)
-        jobWorkspaceIDs = WorkspaceActivityLogic.jobWorkspaceIDs(list)
         projectCoordinators = ProjectAttention.coordinatorPulses(list)
         // The agent pane's Open list is this same snapshot narrowed to one agent, so hand it over
         // here instead of leaving it to fetch the identical payload on its own timer.
@@ -2608,6 +2622,17 @@ final class AppModel {
     /// from belongs to the old workspace, so the reborn draft files in none.
     func composeWithAgent(_ id: String) {
         show(.compose(agentID: id, folderID: nil), agent: id)
+    }
+
+    /// A place picked from the draft's place pill (docs/mocks/new-session-place 02, option D): this
+    /// workspace's draft refiled in `folderID` or in none, or another workspace's draft opened in one of
+    /// its folders — the hero's workspace switch, landing in the folder in the same move.
+    func composeInFolder(_ folderID: String?, of agentID: String) {
+        if agentID != selectedAgentID {
+            show(.compose(agentID: agentID, folderID: folderID), agent: agentID)
+        } else {
+            nav.fileDraft(agentID: agentID, folderID: folderID)
+        }
     }
 
     /// Enter the Agents section focused on agent `id` — the one navigation transition behind the
@@ -4070,35 +4095,29 @@ final class AppModel {
 
 
     /// Move a session to another workspace, filed in one of its folders or in none — the
-    /// confirmation's Move, or its End and Move (§5.3–5.4): end the session, wait until it has
-    /// ended, then move it (`SessionWorkspaceMove.run`). `phase` follows those steps for the panel.
+    /// confirmation's Move (§5.3–5.4). One request: the server lets a held session go first and waits
+    /// for its runner to commit what it left (`POST /sessions/:id/move`), so nothing here ends it.
     ///
     /// Nil once the session is there: every loaded copy of the row names the new workspace, which
     /// takes it out of the list it was moved from at once, the toast says where it went, and the
     /// lists are read again behind it. Otherwise why not, as the sentence the panel shows — the lists
-    /// are read again all the same, since an End and Move stopped after the end has still ended the
-    /// session.
-    func moveSession(_ id: String, to target: SessionMoveTarget, folder folderID: String?,
-                     endingFirst: Bool,
-                     phase: @escaping (SessionWorkspaceMove.Phase) -> Void) async -> String? {
+    /// are read again all the same, since a move that stopped waiting may have left the session released.
+    func moveSession(_ id: String, to target: SessionMoveTarget, folder folderID: String?) async -> String? {
         guard let api else { return SessionMoveCopy.moveFailed(APIError.notConfigured) }
         let name = toastSessionTitle(id)
-        let outcome = await SessionWorkspaceMove.run(
-            endingFirst: endingFirst,
-            end: { try await api.endSession(id) },
-            session: { try await api.session(id) },
-            move: { try await api.moveSession(id, toWorkspace: target.workspaceId, folderID: folderID) },
-            phase: { phase($0) })
-        defer { Task { await reloadSessionLists() } }
-        switch outcome {
-        case .moved:
-            patchSessionWorkspace(id, to: target, folder: folderID)
-            showToast(SessionMoveCopy.movedToWorkspace(target.name), sessionID: id, sessionTitle: name,
-                      tone: .info, icon: "folder")
-            return nil
-        case .failed(let reason):
-            return reason
+        let failure: String?
+        do {
+            try await api.moveSession(id, toWorkspace: target.workspaceId, folderID: folderID)
+            failure = nil
+        } catch {
+            failure = SessionMoveCopy.moveFailed(error)
         }
+        defer { Task { await reloadSessionLists() } }
+        if let failure { return failure }
+        patchSessionWorkspace(id, to: target, folder: folderID)
+        showToast(SessionMoveCopy.movedToWorkspace(target.name), sessionID: id, sessionTitle: name,
+                  tone: .info, icon: "folder")
+        return nil
     }
 
     /// Write a move to another workspace into every loaded copy of a row, as `patchSessionFolder`
@@ -4241,6 +4260,10 @@ final class AppModel {
         if let agentID, selectedAgentID != agentID { selectedAgentID = agentID }
         if let folder {
             nav.path = [.folder(folder), node]
+        } else if case .console = node, nav.folderPage != nil {
+            // A link while the reader is on a phone's folder page: the console goes over it, so the
+            // folder stays the page Back returns to and the reader is not moved to another one.
+            push(node)
         } else {
             nav.replaceTop(with: node)
         }
@@ -4352,20 +4375,54 @@ final class AppModel {
         // A route replaces what the detail pane / stack top is showing (a draft included) — the same
         // "select this session" act as a list row, so the three-column shells land exactly where
         // they did when this was a selection write.
-        let folder = inScheduledRuns ? session(id: id).flatMap(SessionFolderAddress.scheduledRuns(for:)) : nil
+        beginOpen(id)
+        let folder = inScheduledRuns
+            ? session(id: id).flatMap(SessionFolderAddress.scheduledRuns(for:))
+            : folderForOpening(id)
         show(.console(sessionID: id, origin: .deepLink), agent: agentID(for: id), folder: folder)
-        refreshUnlistedSession(id, adoptingAgent: true, inScheduledRuns: inScheduledRuns)
+        refreshUnlistedSession(id, adoptingAgent: true, inScheduledRuns: inScheduledRuns, opening: true)
     }
 
     /// Another session's conversation over the one on screen — a link in a conversation, on a phone —
     /// so the back swipe returns to the conversation the link was in rather than to a session list.
     /// Its record is refreshed as a route's is; the agent whose sessions the stack's root lists is
-    /// left alone, since that list is under both conversations.
+    /// left alone, since that list is under both conversations. It is a push even when the session
+    /// is filed in a folder: a folder's page would replace the conversation it was linked from.
     func pushConsole(_ id: String) {
         let id = PublicID.toPublic(id)
         guard nav.focusedConsoleSessionID != id else { return }
         push(.console(sessionID: id, origin: .conversation))
         refreshUnlistedSession(id, adoptingAgent: false)
+    }
+
+    /// Start an open of `id` from outside the list. A second open of the session already on screen
+    /// is not a new one: the "folder already shown" note stays, so a reader who left the folder is
+    /// not walked back into it. Any other id clears it, so a later open of this session may show its
+    /// folder again (the web's `folderShownForRef`, keyed by the selected id).
+    private func beginOpen(_ id: String) {
+        if nav.focusedConsoleSessionID.map(PublicID.storageKey) != PublicID.storageKey(id) {
+            folderShownForSessionID = nil
+        }
+    }
+
+    /// The folder page this open of a filed session should show, or nil. Nil when the session is in
+    /// no folder, its folder is not one of its workspace's known to the app, the list is not drawing
+    /// folders, a folder is already showing, or this open has already settled the question — so
+    /// leaving the folder afterwards stays left.
+    private func folderForOpening(_ id: String) -> SessionFolderAddress? {
+        guard let session = session(id: id) else { return nil }
+        return folderForOpening(session)
+    }
+
+    private func folderForOpening(_ session: Session) -> SessionFolderAddress? {
+        let key = PublicID.storageKey(session.id)
+        guard folderShownForSessionID != key else { return nil }
+        // Settled for this open whether or not a folder comes of it, as the web marks its ref before
+        // it asks about the folder.
+        folderShownForSessionID = key
+        return SessionFolderAddress.forOpening(session, folders: sessionFolders,
+                                               listShowsFolders: sessionListShowsFolders,
+                                               alreadyShowing: nav.folderColumn != nil)
     }
 
     /// What a page opened from inside a conversation does — a link in it, a row of its Watching or
@@ -4415,7 +4472,12 @@ final class AppModel {
     /// control-plane refreshed; everything else (including an old detail-cache hit) is read again so
     /// repeated search/deep-link navigation cannot resurrect stale lifecycle or capability state.
     /// `adoptingAgent`: a route also makes the session's agent the one whose sessions are listed.
-    private func refreshUnlistedSession(_ id: String, adoptingAgent: Bool, inScheduledRuns: Bool = false) {
+    /// `opening`: this refresh is the tail of an open by the session's address (a route), so a
+    /// filed session's folder page is put up from the detail that just arrived; a refresh driven by
+    /// the session stream or a conversation link's push is not, and leaves the stack where the
+    /// reader put it.
+    private func refreshUnlistedSession(_ id: String, adoptingAgent: Bool, inScheduledRuns: Bool = false,
+                                        opening: Bool = false) {
         guard !sessions.contains(where: { $0.id == id }), let api else { return }
         let openingPath = nav.path
         // Capture this instance synchronously. Reading `self.api` only after the Task starts could
@@ -4431,12 +4493,18 @@ final class AppModel {
                 // Feed an already-hydrated console immediately too; ComposerView observes the
                 // same cache, while this closes the race where its initial observation ran first.
                 self.consoleRegistry?.peek(id)?.adoptServerSnapshot(resolved)
-                guard adoptingAgent, self.selectedSection == .agents,
+                guard self.selectedSection == .agents,
                       self.selectedAgentSessionID == id else { return } // stale navigation resolve
-                self.selectedAgentID = resolved.agent?.id ?? resolved.agentId
-                // A cold route learns its folder from the detail. Keep any navigation made while it loaded.
-                if inScheduledRuns, self.nav.path == openingPath,
-                   let folder = SessionFolderAddress.scheduledRuns(for: resolved), self.nav.folderColumn != folder {
+                if adoptingAgent { self.selectedAgentID = resolved.agent?.id ?? resolved.agentId }
+                // A cold open learns its folder from the detail. Keep any navigation made while it
+                // loaded, and leave it alone when this was a refresh, not an open.
+                guard opening, self.nav.path == openingPath else { return }
+                if inScheduledRuns {
+                    if let folder = SessionFolderAddress.scheduledRuns(for: resolved),
+                       self.nav.folderColumn != folder {
+                        self.nav.path = [.folder(folder)] + openingPath.suffix(1)
+                    }
+                } else if let folder = self.folderForOpening(resolved) {
                     self.nav.path = [.folder(folder)] + openingPath.suffix(1)
                 }
             } catch APIError.http(let status, _) where status == 404 {

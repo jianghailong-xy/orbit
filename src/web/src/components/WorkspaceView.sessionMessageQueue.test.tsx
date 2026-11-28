@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionMessageCard as Card } from '@orbit/shared';
 import type { ActiveSessionTurn } from '../api';
 import type { Runner } from './TasksSidePanel';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
  * Another Orbit session's message waits in the queue like any follow-up until a runner takes it
@@ -278,7 +279,7 @@ describe('another session’s message, waiting in the queue', { timeout: 60_000 
     expect(waiting.classList.contains('is-queued'), 'drawn as still queued').toBe(true);
     expect(waiting.querySelector('.smc-from')?.textContent).toBe('Worker: migration review');
     expect(waiting.querySelector('.smc-body .md')?.textContent).toBe(SENT);
-    expect(waiting.querySelector('.smc-head')?.getAttribute('title')).toBe('Sent by another Orbit session, not by you');
+    expect(await hoverTooltip(waiting.querySelector('.smc-head')!)).toBe('Sent by another Orbit session, not by you');
     // The queue's own line: it is waiting, and Cancel withdraws it. No Put back — its words are not
     // the reader's to take back.
     const line = waiting.querySelector('.smc-queued .chat-queued-meta')!;
@@ -326,9 +327,9 @@ describe('another session’s message, waiting in the queue', { timeout: 60_000 
     await waitForUi(() => {
       // The composer's Stop: this session, no follow-up, and the explicit ask that its
       // background work ends with the turn (see WorkspaceView.stopBackgroundWork.test.tsx).
-      expect(interruptMock).toHaveBeenCalledWith(SESSION_PUBLIC, undefined, {
+      expect(interruptMock).toHaveBeenCalledWith(SESSION_PUBLIC, undefined, expect.objectContaining({
         stopBackgroundWork: true,
-      });
+      }));
       // What the reader typed comes back to be edited and resent; the other session's words do not.
       expect(composer()?.value).toBe(TYPED);
     });

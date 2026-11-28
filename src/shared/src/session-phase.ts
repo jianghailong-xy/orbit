@@ -14,9 +14,9 @@ import type { SessionActivity } from './task-run-reason';
 /**
  * What the session is doing (`phase`; the name `activity` is taken by `SessionActivity`):
  *   - `RUNNING`: something is executing for it — a dispatched turn, a turn the engine started for itself,
- *     a sub-agent or a runner-hosted background job — or, on a released session, an armed retry that will re-send it
- *     (the owner, 2026-11-26: waiting for retry counts as the running state);
- *   - `PENDING`: a turn is queued and nothing is executing;
+ *     a sub-agent or a runner-hosted background job;
+ *   - `PENDING`: nothing is executing, and a turn is queued or an armed retry will re-send it, held or released
+ *     (the owner, 2026-11-26: waiting for retry is PENDING). A retry's PENDING waits on `WAKE`, a queued turn's never;
  *   - `IDLE`: neither. A released session is IDLE unless an armed retry will re-send it.
  */
 export const SESSION_PHASES = ['PENDING', 'RUNNING', 'IDLE'] as const;
@@ -30,7 +30,7 @@ export type SessionPhase = (typeof SESSION_PHASES)[number];
  *     its runner offline or updating, or a hold notice on the row (a paused account, an unavailable
  *     provider, the region check);
  *   - `WAKE`: nothing executes, and something will give it a turn without a message — a watch it
- *     observes, a scheduled wake-up, an armed auto-retry.
+ *     observes, a scheduled wake-up (IDLE), an armed auto-retry (PENDING).
  * A parked conversation that asked for nothing is null: it waits for its next message, which nobody owes.
  */
 export const SESSION_WAITING_ON = ['PERSON', 'HOLD', 'WAKE'] as const;

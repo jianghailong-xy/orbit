@@ -11,14 +11,13 @@ import type { SessionListView } from './queries';
 /** One folder's row at the top of a workspace's session list. The sessions filed in it don't
  *  appear outside it, so the row reports for them, by the rule the sidebar's Workspace row reports
  *  for a workspace (`WorkspaceRow`): how many wait on you at the far end, and on the folder itself a
- *  still dot while one runs, else a breathing one while a background job is in flight. */
+ *  still dot while one runs or has a background job in flight. */
 export interface SessionFolderRow {
   folder: SessionFolder;
   /** How many of the list's sessions are filed in it — 0 for an empty folder in Open. */
   sessionCount: number;
   needsYou: number;
   running: boolean;
-  jobs: boolean;
 }
 
 /** A workspace's list as it is drawn: the folder rows on top, then the sessions in no folder, which
@@ -86,8 +85,8 @@ export function sessionFolderListing<T extends { folderId?: string | null }>(
       folder,
       sessionCount: inside.length,
       needsYou: inside.filter(opts.needsYou).length,
-      running: motions.includes('spinner'),
-      jobs: motions.includes('pulse'),
+      // An older server's row breathes for a background job rather than spinning: running here all the same.
+      running: motions.some((motion) => motion !== null),
     });
   }
   return { folders: rows, sessions: loose };
@@ -156,9 +155,7 @@ export const MOVE_COPY = {
   anotherWorkspaceGroup: 'Move to Another Workspace',
   runnerOffline: 'Runner offline',
   loadingWorkspaces: 'Loading workspaces…',
-  ending: 'Ending the session…',
   moving: 'Moving…',
-  endTimedOut: 'The session hasn’t finished ending, so it wasn’t moved. Try again once it has ended.',
   /** After the session's title when it is a project's coordinator. */
   coordinatorOf: (project: string) => `Coordinator of ${project}`,
   /** Under Move to Another Workspace for a project's coordinator. */
@@ -264,7 +261,9 @@ export const moveConfirmTitle = (target: SessionMoveTarget, answer?: SessionMove
 
 /** The confirmation's paragraphs (§5.3): the conversation goes, the agent's memory of it is
  *  summarized when another runner rebuilds it, the changes stay on their branch in the old
- *  workspace — with how many aren't merged yet when some aren't — and an idle session ends first. */
+ *  workspace — with how many aren't merged yet when some aren't — and, for a project's coordinator that is still
+ *  held, where Orbit's updates wait once the move has let it go. The server releasing a held session before it
+ *  moves it (SessionsService.releaseForMove) is not something the person is asked about. */
 export const moveConfirmParagraphs = (
   answer: SessionMoveTargets,
   target: SessionMoveTarget,
@@ -282,14 +281,10 @@ export const moveConfirmParagraphs = (
   }
   const files = moveFilesSentence(answer, fromWorkspace);
   if (files) paragraphs.push(files);
-  if (answer.needsEnd) {
-    // An ended coordinator is not handed Orbit's updates (it is never revived for them): they wait
+  if (answer.needsEnd && answer.coordinates) {
+    // A released coordinator is not handed Orbit's updates (it is never revived for them): they wait
     // on the project page until someone messages it again.
-    paragraphs.push(
-      answer.coordinates
-        ? 'The session ends first. Until you message it again, Orbit’s updates for the project wait on the project page.'
-        : 'The session ends first.',
-    );
+    paragraphs.push('Until you message it again, Orbit’s updates for the project wait on the project page.');
   }
   return paragraphs;
 };
@@ -305,67 +300,7 @@ export const moveFilesSentence = (answer: SessionMoveTargets, fromWorkspace: str
   return `${files} merged into ${answer.mergeTarget ?? 'main'} yet. ${they} on branch ${answer.branch} in ${fromWorkspace}.`;
 };
 
-/** End and Move for a session that has to be ended first. */
-export const moveConfirmAction = (answer: SessionMoveTargets): string =>
-  answer.needsEnd ? 'End and Move' : 'Move';
-
 /** The move's reason goes below the failed-action title. A refusal (409) is the server's own
  *  sentence, shown as it is; other failures also show only their reason. */
 export const moveFailureText = (error: unknown): string =>
   (error instanceof Error && error.message.trim()) || 'something went wrong';
-
-export const endFailureText = (error: unknown): string =>
-  `The session couldn’t be ended, so it wasn’t moved: ${failureReason(error)}.`;
-
-/** How long End and Move waits for the session to end, and how often it looks. Its runner commits
- *  what the session left uncommitted first, which can take a while on a large change. */
-export const END_TIMEOUT_MS = 60_000;
-export const END_POLL_MS = 1_000;
-
-export type MovePhase = 'ending' | 'moving';
-
-/**
- * Move a session to another workspace: end it first when `endingFirst` (End and Move), wait until
- * its run is over, then move it. The move itself only takes an ended session, and ending is when its
- * runner commits what it left uncommitted, so the wait is for the session to have ended — not for
- * the end request to be answered.
- *
- * An end the server refuses with a 409 is a session already ending or ended, so the wait goes on
- * from there; anything else stops the move with why. A status read that fails is only a missed look.
- * Returns null once moved, else the sentence to show.
- */
-export async function runWorkspaceMove(steps: {
-  endingFirst: boolean;
-  end: () => Promise<unknown>;
-  ended: () => Promise<boolean>;
-  move: () => Promise<unknown>;
-  phase?: (phase: MovePhase) => void;
-  sleep?: (ms: number) => Promise<void>;
-  timeoutMs?: number;
-  intervalMs?: number;
-}): Promise<string | null> {
-  const sleep = steps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
-  const timeout = steps.timeoutMs ?? END_TIMEOUT_MS;
-  const interval = steps.intervalMs ?? END_POLL_MS;
-  if (steps.endingFirst) {
-    steps.phase?.('ending');
-    try {
-      await steps.end();
-    } catch (error) {
-      if (!isConflict(error)) return endFailureText(error);
-    }
-    let waited = 0;
-    while (!(await steps.ended().catch(() => false))) {
-      if (waited >= timeout) return MOVE_COPY.endTimedOut;
-      await sleep(interval);
-      waited += interval;
-    }
-  }
-  steps.phase?.('moving');
-  try {
-    await steps.move();
-  } catch (error) {
-    return moveFailureText(error);
-  }
-  return null;
-}

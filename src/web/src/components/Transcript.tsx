@@ -71,7 +71,7 @@ import {
 } from '@orbit/shared';
 import { DELEGATE_TOOL, delegateResultText, delegateRunId, subagentMeta, subagentWhy, subagentWhyDetails } from '../lib/subagentRuns';
 import type { LoginEngine } from '@orbit/shared';
-import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api';
+import { fetchSessionArtifactObjectUrl } from '../api';
 import {
   EVIDENCE_FILE_EXPIRED,
   ExpiredAttachmentError,
@@ -85,6 +85,7 @@ import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 // Re-exported for the modules that have always read them from the transcript.
 export { ExportCtx, Pre, relPath, type ExportMode };
 import { copyText } from '../lib/clipboard';
+import { PENDING_SEND_DELIVERY } from '../lib/acceptedUserTurn';
 import { splitRecordedNote } from '../lib/deliveredMessage';
 import { offersSteerWithdraw, steerDeliveryState, WITHDRAWN_DELIVERY } from '../lib/steerDelivery';
 import { BatchGraph } from './BatchGraph';
@@ -188,11 +189,11 @@ import { SessionMessageCard } from './SessionMessageCard';
 import { parseSessionReplies } from '../lib/sessionRequest';
 import { SessionReplyCards } from './SessionReplyCard';
 
-// How a transcript fetches an attachment's bytes (as an object URL). Defaults to the
-// bearer-guarded owner route; the public shared page overrides it with the share-token route
-// so a logged-out viewer can still see inline images. See SharedSessionPage.
-export const AttachmentResolverContext =
-  createContext<(id: string) => Promise<string>>(fetchAttachmentObjectUrl);
+// How a surface fetches an attachment's bytes (as an object URL), defined in its own module so the
+// cards that draw attachments need not import the transcript. Re-exported here because the pages
+// and tests import it with the transcript's other contexts.
+import { AttachmentResolverContext } from '../lib/attachmentResolver';
+export { AttachmentResolverContext };
 
 export const ArtifactResolverContext =
   createContext<((artifactPath: string) => Promise<string>) | null>(null);
@@ -201,7 +202,7 @@ export const ArtifactResolverContext =
 // signed out: the page's resolver answers for every AppLink and SameOriginLink in the tree.
 export { PublicLinkResolverCtx, type PublicLinkResolver } from '../lib/publicLinks';
 import Markdown from './Markdown';
-import { orbitLinkRemarkPlugin } from '../lib/orbitLink';
+import { canonicalId, orbitLinkRemarkPlugin, type OrbitLinkRef } from '../lib/orbitLink';
 import { OrbitLinkCardsCtx, orbitLinkCardComponents } from './OrbitLinkCard';
 import { remarkHardBreaks } from '../lib/remarkHardBreaks';
 import { dshRepair, type DshRepair } from '../lib/dshRuntime';
@@ -506,6 +507,19 @@ export function AntigravityRepairCard({ repair, help, seq }: {
 export const UndeliveredCtx = createContext<
   ((text: string, attachments?: readonly TurnAttachmentRef[]) => void) | null
 >(null);
+
+/**
+ * A message this tab sent that the server has not taken yet: drawn as its bubble from the press on,
+ * `Sending…` and then, when no answer came or the answer was a refusal, `Not sent` with a way to send
+ * it again or to take it back into the composer (docs/mocks/composer-sending-bubble). Keyed by the
+ * bubble's turn id, which for a pending send is its local key. WorkspaceView supplies it; a reader
+ * who cannot send has no pending sends, so the shared page and the static export leave it null.
+ */
+export interface PendingSendHandle {
+  retry: (key: string) => void;
+  putBack: (key: string) => void;
+}
+export const PendingSendCtx = createContext<PendingSendHandle | null>(null);
 
 /**
  * Take back a message sent into the running turn while nothing has read it yet: a steer whose runner
@@ -1547,6 +1561,7 @@ function buildTranscript(
             images: imgs,
             attachmentRefs: refs,
             delivery: typeof p.delivery === 'string' ? p.delivery : undefined,
+            deliveryReason: typeof p.deliveryReason === 'string' ? p.deliveryReason : undefined,
             steer: p.steer === true,
             withdrawable: p.withdrawable === true ? true : undefined,
             turnId: ev.turnId ?? undefined,
@@ -2227,9 +2242,12 @@ function NodeList({
   const turnFoot = useContext(TurnStatusFootCtx);
   const renderItem = (item: NodeListItem) => {
     const seqs = item.kind === 'node' ? [item.node.seq] : item.nodes.map((node) => node.seq);
-    // The row a turn opens with, under its message and over everything the turn writes.
+    // The row a turn opens with, under its message and over everything the turn writes. A message
+    // the server has not taken (Sending… / Not sent) has opened no turn yet, so nothing is working.
     const head =
-      item.kind === 'node' && item.node.kind === 'user' && item.node.turnHead ? (
+      item.kind === 'node' && item.node.kind === 'user' && item.node.turnHead
+        && item.node.delivery !== PENDING_SEND_DELIVERY.sending
+        && item.node.delivery !== PENDING_SEND_DELIVERY.notSent ? (
         <TurnHead key={`head-${item.node.seq}`} startTs={item.node.ts} endTs={item.node.turnHead.endTs} live={live} />
       ) : null;
     return [
@@ -2967,22 +2985,23 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
         .join(' · ');
       const className = warning ? 'chat-notice chat-diagnostic' : 'chat-error chat-diagnostic';
       const row = (
-        <div
-          className={className}
-          data-diagnostic="true"
-          data-impact={node.impact}
-          data-phase={node.phase}
-          data-level={level}
-          data-seq={node.seq}
-          title={node.message}
-        >
-          <span className="chat-diagnostic-mark">{warning ? '⚠' : !log || level === 'ERROR' ? '✖' : '·'}</span>
-          {label && <span className="chat-diagnostic-label">{label}</span>}
-          <span className="chat-diagnostic-text">{linkifyLogText(log?.text ?? node.message)}</span>
-          {(node.repeats ?? 1) > 1 && (
-            <span className={warning ? 'chat-diagnostic-repeat' : 'chat-error-repeat'}>×{node.repeats}</span>
-          )}
-        </div>
+        <Tooltip content={log ? node.message : undefined} delay={TEXT_TOOLTIP_DELAY_MS}>
+          <div
+            className={className}
+            data-diagnostic="true"
+            data-impact={node.impact}
+            data-phase={node.phase}
+            data-level={level}
+            data-seq={node.seq}
+          >
+            <span className="chat-diagnostic-mark">{warning ? '⚠' : !log || level === 'ERROR' ? '✖' : '·'}</span>
+            {label && <span className="chat-diagnostic-label">{label}</span>}
+            <span className="chat-diagnostic-text">{linkifyLogText(log?.text ?? node.message)}</span>
+            {(node.repeats ?? 1) > 1 && (
+              <span className={warning ? 'chat-diagnostic-repeat' : 'chat-error-repeat'}>×{node.repeats}</span>
+            )}
+          </div>
+        </Tooltip>
       );
       // The sandbox warning offers the agent that installs what Codex wants
       // (docs/mocks/codex-sandbox-fix-with-agent); every other diagnostic stays a plain row.
@@ -3085,9 +3104,11 @@ function ToolFailureCard({
       </div>
       <div className="chat-error-card-detail">
         {summary.path && <div className="chat-error-card-path">{summary.path}</div>}
-        <div className="chat-error-card-reason" title={summary.reason}>
-          {summary.reason}
-        </div>
+        <Tooltip content={summary.reason} truncatedOnly>
+          <div className="chat-error-card-reason">
+            {summary.reason}
+          </div>
+        </Tooltip>
         <button
           className="chat-error-card-disclosure"
           type="button"
@@ -3649,6 +3670,7 @@ function SteerState({ node, typed }: { node: TextNode; typed: string }) {
 function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   const exp = useContext(ExportCtx);
   const putBack = useContext(UndeliveredCtx);
+  const pendingSend = useContext(PendingSendCtx);
   const foot = useContext(TurnStatusFootCtx);
   const held = foot && !foot.running && !queued && foot.seq === node.seq ? foot.tag : null;
   const [copied, setCopied] = useState(false);
@@ -3701,8 +3723,35 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   // button and the time before it do. A message that did not land says so (the one thing a
   // bubble must never do is stand there looking sent; the reason rides in the tooltip); a steer
   // says how far it got.
+  const sending = node.delivery === PENDING_SEND_DELIVERY.sending;
   const status =
-    node.delivery === 'failed' || node.delivery === 'unconfirmed' ? (
+    sending ? (
+      <div className="chat-steer-state">Sending…</div>
+    ) : node.delivery === PENDING_SEND_DELIVERY.notSent ? (
+      <Tooltip content={node.deliveryReason} delay={TEXT_TOOLTIP_DELAY_MS}>
+        <div className="chat-undelivered">
+          ⚠ Not sent
+          {pendingSend && node.turnId && (
+            <>
+              <button
+                type="button"
+                className="chat-undelivered-retry"
+                onClick={() => pendingSend.retry(node.turnId as string)}
+              >
+                Retry
+              </button>
+              <button
+                type="button"
+                className="chat-undelivered-retry"
+                onClick={() => pendingSend.putBack(node.turnId as string)}
+              >
+                Put back in the composer
+              </button>
+            </>
+          )}
+        </div>
+      </Tooltip>
+    ) : node.delivery === 'failed' || node.delivery === 'unconfirmed' ? (
       <Tooltip content={node.deliveryReason} delay={TEXT_TOOLTIP_DELAY_MS}>
         <div className="chat-undelivered">
           ⚠ {steerDeliveryState(node.delivery).label}
@@ -3725,8 +3774,11 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
       {node.externalSender && <div className="chat-user-from">{externalSenderLabel(node.externalSender)}</div>}
       {node.sentByReader && <div className="chat-user-from">You</div>}
       <div
-        className={queued ? 'chat-msg chat-user chat-queued' : 'chat-msg chat-user'}
+        className={queued ? 'chat-msg chat-user chat-queued' : sending ? 'chat-msg chat-user chat-sending' : 'chat-msg chat-user'}
         data-seq={queued ? undefined : node.seq}
+        // The turn it opened: where the task run sidebar's Output lands for an acceptance round's shell turn. On the
+        // queued card too, which is drawn as the same card its echo becomes.
+        data-turn-id={node.turnId}
       >
         <TurnAttachments node={node} />
         {node.shell ? (
@@ -4058,11 +4110,13 @@ export function AttachmentFile({ id, name }: { id: string; name?: string }) {
   // Its bytes have gone, so there is nothing to press or to try again.
   if (expired) {
     return (
-      <span className="chat-file is-expired" title={label}>
-        <PaperClipOutlined />
-        <span className="chat-file-name">{label}</span>
-        <span className="chat-file-expired">{`· ${evidenceFileExpiredLine(expired.at)}`}</span>
-      </span>
+      <Tooltip content={label} truncatedOnly>
+        <span className="chat-file is-expired">
+          <PaperClipOutlined />
+          <span className="chat-file-name">{label}</span>
+          <span className="chat-file-expired">{`· ${evidenceFileExpiredLine(expired.at)}`}</span>
+        </span>
+      </Tooltip>
     );
   }
   const download = async (): Promise<void> => {
@@ -4316,10 +4370,12 @@ function MarkdownImage({ node: _node, src, alt, className: _className, ...rest }
   }
   if (typeof src === 'string' && isLocalImageSrc(src)) {
     return (
-      <span className="md-image-unavailable" title={src}>
-        <PaperClipOutlined />
-        <code>{fileLabel(src)}</code>
-      </span>
+      <Tooltip content={src} delay={TEXT_TOOLTIP_DELAY_MS} mono>
+        <span className="md-image-unavailable">
+          <PaperClipOutlined />
+          <code>{fileLabel(src)}</code>
+        </span>
+      </Tooltip>
     );
   }
   if (typeof src === 'string' && isCheckoutRelativeImageSrc(src)) {
@@ -4409,17 +4465,18 @@ function LocalArtifactFile({
     }
   };
   return (
-    <button
-      type="button"
-      className={`chat-file${failed ? ' is-error' : ''}`}
-      onClick={download}
-      title={failed ? `Retry download ${filename}` : `Download ${filename}`}
-      aria-label={failed ? `Retry download ${filename}` : `Download ${filename}`}
-      data-download-state={busy ? 'loading' : failed ? 'error' : 'idle'}
-    >
-      {busy ? <LoadingOutlined spin /> : failed ? <CloseCircleFilled /> : <PaperClipOutlined />}
-      <span className="chat-file-name">{shown}</span>
-    </button>
+    <Tooltip content={failed ? `Retry download ${filename}` : `Download ${filename}`}>
+      <button
+        type="button"
+        className={`chat-file${failed ? ' is-error' : ''}`}
+        onClick={download}
+        aria-label={failed ? `Retry download ${filename}` : `Download ${filename}`}
+        data-download-state={busy ? 'loading' : failed ? 'error' : 'idle'}
+      >
+        {busy ? <LoadingOutlined spin /> : failed ? <CloseCircleFilled /> : <PaperClipOutlined />}
+        <span className="chat-file-name">{shown}</span>
+      </button>
+    </Tooltip>
   );
 }
 
@@ -4472,10 +4529,12 @@ function MarkdownLink({ node: _node, href, title, children, ...rest }: any) {
   }
   if (typeof href === 'string' && isLocalFileSrc(href)) {
     return (
-      <span className="md-image-unavailable" title={href}>
-        <PaperClipOutlined />
-        <code>{fileLabel(href)}</code>
-      </span>
+      <Tooltip content={href} delay={TEXT_TOOLTIP_DELAY_MS} mono>
+        <span className="md-image-unavailable">
+          <PaperClipOutlined />
+          <code>{fileLabel(href)}</code>
+        </span>
+      </Tooltip>
     );
   }
   // A `#`-reference routes to the thing it names; anything else is an ordinary link.
@@ -5063,10 +5122,12 @@ function ToolView({ node, live, startOpen }: { node: ToolNode; live?: boolean; s
           <span className="chat-tool-icon">{icon}</span>
           <span className="chat-tool-name">{label}</span>
           {p ? (
-            <span className="chat-tool-summary mono chat-path" title={path}>
-              <b className="chat-path-file">{p.base}</b>
-              {p.dir && <span className="chat-path-dir">{p.dir}</span>}
-            </span>
+            <Tooltip content={path} delay={TEXT_TOOLTIP_DELAY_MS} mono>
+              <span className="chat-tool-summary mono chat-path">
+                <b className="chat-path-file">{p.base}</b>
+                {p.dir && <span className="chat-path-dir">{p.dir}</span>}
+              </span>
+            </Tooltip>
           ) : (
             title && <span className={`chat-tool-summary${summaryMono ? ' mono' : ''}`}>{title}</span>
           )}
@@ -5297,9 +5358,11 @@ function StepLive({ node }: { node: ToolNode }) {
         <span className={what?.mono ? 'mono' : undefined}>{what?.text}</span>
       </div>
       {command && (
-        <div className="chat-steps-live-cmd mono" title={command}>
-          <span className="chat-steps-elbow">⎿</span> $ {command}
-        </div>
+        <Tooltip content={command} truncatedOnly mono>
+          <div className="chat-steps-live-cmd mono">
+            <span className="chat-steps-elbow">⎿</span> $ {command}
+          </div>
+        </Tooltip>
       )}
     </div>
   );
@@ -5950,16 +6013,32 @@ function QuestionReplay({ questions, outcome }: { questions: AskedQuestion[]; ou
 }
 
 // SessionCreateCard renders the result of mcp__orbit__session_create as a clickable card that
-// jumps to the spawned child session, instead of the default folded JSON blob.
+// jumps to the spawned child session, instead of the default folded JSON blob. The result is what
+// the session was at creation; inside a conversation view the card also asks the view's link
+// previews (`OrbitLinkCardsProvider`) for the session as it is now, so a rename or a run shows.
 function SessionCreateCard({ result }: { result: any }) {
   const nav = useContext(SessionNavCtx);
-  let s: any = null;
-  try {
-    s = JSON.parse(resultText(result));
-  } catch {
-    return null;
-  }
-  if (!s || typeof s.id !== 'string') return null;
+  const cards = useContext(OrbitLinkCardsCtx);
+  const s = useMemo(() => {
+    try {
+      const parsed = JSON.parse(resultText(result));
+      return parsed && typeof parsed.id === 'string' ? parsed : null;
+    } catch {
+      return null;
+    }
+  }, [result]);
+  const link = useMemo<OrbitLinkRef | null>(() => {
+    const id = s ? canonicalId(s.id) : null;
+    return id ? { target: { kind: 'session', id }, source: { kind: 'ref', ref: `orbit-session:${s.id}` } } : null;
+  }, [s]);
+  useEffect(() => {
+    if (link) cards?.register(link);
+  }, [cards, link]);
+  if (!s) return null;
+  const preview = link ? cards?.previewFor(link) : undefined;
+  const live = preview?.state === 'ok' && preview.kind === 'session' ? preview.session : undefined;
+  const title = live?.title || s.title || 'New session';
+  const status = live ? cards!.stateWord(live) : s.status ? String(s.status) : '';
   const clickable = !!nav;
   return (
     <div
@@ -5973,11 +6052,11 @@ function SessionCreateCard({ result }: { result: any }) {
         <ApiOutlined />
       </span>
       <span className="chat-session-card-main">
-        <span className="chat-session-card-title">{s.title || 'New session'}</span>
+        <span className="chat-session-card-title">{title}</span>
         <span className="chat-session-card-meta">
           {s.workspaceName && <span className="chat-session-card-workspace">{s.workspaceName}</span>}
           {s.provider && <span className="chat-session-card-provider">{s.provider}</span>}
-          {s.status && <span className="chat-session-card-status">{String(s.status).toLowerCase()}</span>}
+          {status && <span className="chat-session-card-status">{status.toLowerCase()}</span>}
         </span>
       </span>
       {clickable && (

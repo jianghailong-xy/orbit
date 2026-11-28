@@ -4,13 +4,13 @@
  *
  *   GET /sessions/compact?status= and the runner's GET /runner/sessions?status= both end in
  *   SessionsService.listForOrchestration, which used to filter `status = <word>` and now asks statusWordFilter(word).
- *   On a database seeded with a conversation of every row shape of session-legacy-words.fixture.ts, written through
- *   its stored word as every writer before deploy 2 leaves it, and with a held row of every held word whose turn_state
- *   is still NULL (not yet backfilled):
+ *   On a database seeded with a conversation of every row shape of session-legacy-words.fixture.ts, written as its
+ *   facts (since deploy D3 nothing writes the word):
  *
- *   (1) for every word, the rows listed are the rows whose stored word is that word, except exactly the plan's §3.4
- *       kinds (named in session-legacy-words.golden.json), which are listed under the word the projector gives them
- *   (2) for every held word the rows are the same as before, the unfilled ones among them
+ *   (1) for every word, the rows listed are the rows whose word a writer stored before deploy 3 is that word, except
+ *       exactly the plan's §3.4 kinds (named in session-legacy-words.golden.json), which are listed under the word the
+ *       projector gives them
+ *   (2) for every held word the rows are the same as before
  *   (3) a word the protocol does not have, or one in another case, is ignored: the whole list, as before
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/session-status-filter.pg.spec.ts
@@ -28,7 +28,7 @@ import { assertCoordinatorPgUrlIsIsolated } from '../projects/coordinator-pg-tes
 import { prismaClientFor } from '../prisma/prisma-client';
 import { WORD_SHAPES } from './session-legacy-words.fixture';
 import { SessionsService } from './sessions.service';
-import { ALLOW_UNFILLED_SESSIONS } from '../test-support/unfilled-sessions';
+import { turnStateOfWord } from './session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -43,7 +43,6 @@ test('?status= lists the rows the stored word listed, but for the §3.4 kinds', 
   assertCoordinatorPgUrlIsIsolated(URL!);
   const db = prismaClientFor(URL!);
   t.after(() => db.$disconnect());
-  await db.$executeRawUnsafe(ALLOW_UNFILLED_SESSIONS);
   // listForOrchestration reads nothing but the database.
   const sessions = Object.create(SessionsService.prototype) as SessionsService;
   Object.assign(sessions, { prisma: db });
@@ -63,41 +62,24 @@ test('?status= lists the rows the stored word listed, but for the §3.4 kinds', 
   const conversations = WORD_SHAPES.filter((shape) => shape.facts.sessionKind === 'CONVERSATION');
   const title = new Map<string, string>();
   for (const shape of conversations) {
-    const { turnState: _fromTheWord, status: _asStored, ...facts } = shape.facts;
-    // Through the stored word alone: migration 1611's trigger keeps turn_state, as every writer before deploy 2 does.
+    const { turnState: _fromTheWord, ...facts } = shape.facts;
+    // Its turn state is its stored word's; the release facts are the shape's.
     const { id } = await db.session.create({
       data: {
-        ownerId, creatorId: ownerId, title: shape.name, prompt: 'filter', status: shape.stored,
+        ownerId, creatorId: ownerId, title: shape.name, prompt: 'filter', turnState: turnStateOfWord(shape.stored),
         dispatchOrigin: SessionDispatchOrigin.USER, provider: 'claude', providerBuiltin: true,
         workspaceId: workspace.id, assignedRunnerId: runnerId, ...facts,
       },
     });
     title.set(id, shape.name);
   }
-  for (const word of HELD_WORDS) {
-    const name = `unfilled ${word}`;
-    const { id } = await db.session.create({
-      data: {
-        ownerId, creatorId: ownerId, title: name, prompt: 'filter', status: word as RunStatus,
-        dispatchOrigin: SessionDispatchOrigin.USER, provider: 'claude', providerBuiltin: true,
-        workspaceId: workspace.id, assignedRunnerId: runnerId, startedAt: new Date(),
-      },
-    });
-    // As a row nothing has written since migration 1611: the word trigger fires on `status` alone.
-    await db.$executeRawUnsafe('UPDATE session SET turn_state = NULL WHERE id = $1::uuid', id);
-    title.set(id, name);
-  }
-  const unfilled = await db.session.count({ where: { ownerId, turnState: null, finishedAt: null } });
-  // The four unfilled rows, and the parked shapes, which have no turn state either.
-  assert.ok(unfilled >= HELD_WORDS.length, 'the unfilled rows are still unfilled');
   // listForOrchestration answers 100 rows at most: the seed must fit, or a word's rows could be cut short.
   assert.ok(title.size < 100, `${title.size} rows seeded`);
 
-  /** The rows of the stored word, as the filter read them before: `status = <word>` on the same list. */
-  const before = async (word: string): Promise<string[]> => (await db.session.findMany({
-    where: { ownerId, deletedAt: null, sessionKind: 'CONVERSATION', status: word as RunStatus },
-    select: { title: true },
-  })).map((row) => row.title).sort();
+  /** The rows of the stored word, as the filter read them before: `status = <word>`, the word each shape's writer
+   *  stored before deploy 3. */
+  const before = async (word: string): Promise<string[]> =>
+    conversations.filter((shape) => shape.stored === word).map((shape) => shape.name).sort();
   const listed = async (status?: string) => {
     const rows = await sessions.listForOrchestration(ownerId, { status });
     return rows.map((row) => ({ title: title.get(row.id) ?? row.id, status: row.status as string }));
@@ -125,13 +107,13 @@ test('?status= lists the rows the stored word listed, but for the §3.4 kinds', 
     assert.ok([...kindOf.keys()].some((name) => conversations.some((shape) => shape.name === name)));
   });
 
-  await t.test('(2) every held word: exactly the rows of before, the unfilled ones among them', async () => {
+  await t.test('(2) every held word: exactly the rows of before', async () => {
     const answers: Record<string, string[]> = {};
     const expected: Record<string, string[]> = {};
     for (const word of HELD_WORDS) {
       answers[word] = (await listed(word)).map((row) => row.title).sort();
       expected[word] = await before(word);
-      assert.ok(expected[word].includes(`unfilled ${word}`), `${word}: the unfilled row is in the seed`);
+      assert.ok(expected[word].length > 0, `${word}: a row of the word is in the seed`);
     }
     assert.deepEqual(answers, expected);
   });

@@ -95,13 +95,18 @@ export async function readLandingFixFacts(
   if (check) {
     // The log first: it holds the failure section as the runner uploaded it, beside the whole output. The
     // check's own tail carries the same section, and is what an older runner left.
+    // Only this check's own log, by its place in the run (the runner's `index`, its position in `checks`): a red
+    // LANDING_CHECK is run once more on the baseline under the same name, and that run's whole output, read after
+    // this one's failure heading, was taken for failure lines — past the turn's size limit, so nothing was delivered.
+    const checkIndex = (job.checks as unknown[]).indexOf(check) + 1;
     const rows = await db.$queryRaw<Array<{ text: string }>>(Prisma.sql`
       SELECT "text" FROM "project_integration_job_log"
        WHERE "job_id" = ${item.integrationJobId}::uuid
          AND "claim_generation" = ${job.claimGeneration}
          AND "round" = ${job.round ?? 1}
          AND "check_name" = ${check.name}
-       ORDER BY "check_index" ASC, "seq" ASC`);
+         AND "check_index" = ${checkIndex}
+       ORDER BY "seq" ASC`);
     failureLines = failureLinesIn(rows.map((row) => row.text).join(''))
       ?? failureLinesIn(check.outputTail)
       ?? [];

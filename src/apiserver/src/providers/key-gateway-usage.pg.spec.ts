@@ -28,7 +28,8 @@ import test from 'node:test';
 
 import { Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, RunStatus as SharedRunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -179,13 +180,13 @@ suite('the gateway books a Claude-on-OpenAI session\'s usage and cost, on real P
   const sessionId = (await sessions.create(ownerId, {
     prompt: 'hello', title: 'metered', workspaceId, provider: key.slug, engine: 'claude', model: 'gpt-5.1',
   } as never)).id;
-  await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.PENDING, cancelRequestedAt: null } });
+  await db.session.update({ where: { id: sessionId }, data: { turnState: 'QUEUED', cancelRequestedAt: null } });
   const claimed = await queue.claimSessionForRunner({ id: runnerId });
   assert.ok(claimed, 'the runner was offered no session');
   assert.equal(claimed.sessionId, sessionId);
   const token = claimed.agent.env!.ANTHROPIC_AUTH_TOKEN;
   assert.match(token, /^orbit-gwk-/);
-  await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+  await db.session.update({ where: { id: sessionId }, data: { turnState: null } });
 
   /** The recorded answer's figures: OpenAI's counts, and their price from openai-prices.ts. */
   const u = COMPLETED.usage;
@@ -260,7 +261,7 @@ suite('the gateway books a Claude-on-OpenAI session\'s usage and cost, on real P
     const before = await sessionCost();
     const rowsBefore = await usageRows();
     // A turn the CLI answered, and its completion with Claude Code's own running totals for the GPT id.
-    await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING, engineTurnActive: true, assignedRunnerId: runnerId } });
+    await db.session.update({ where: { id: sessionId }, data: { turnState: 'IN_FLIGHT', engineTurnActive: true, assignedRunnerId: runnerId } });
     // The session's opening prompt is not this turn's to answer: settled, so nothing else is queued behind it.
     await db.conversationTurn.updateMany({ where: { sessionId }, data: { status: 'ANSWERED', answeredAt: new Date() } });
     const { _max } = await db.conversationTurn.aggregate({ where: { sessionId }, _max: { seq: true } });

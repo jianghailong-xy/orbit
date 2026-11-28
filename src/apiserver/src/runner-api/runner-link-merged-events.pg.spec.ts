@@ -67,7 +67,8 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 import { type INestApplication, Logger, Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
-import { type PrismaClient, RunStatus } from '@prisma/client';
+import { type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { isReleasedStatus } from '../common/session-release';
 import { PermissionMode, RunEventType, type NormalizedRunEvent } from '@orbit/shared';
 import { Client } from 'pg';
@@ -105,6 +106,8 @@ import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer
 import { resetRunEventSeqConflictMetrics, runEventSeqConflictsSnapshot } from './run-event-seq-conflicts';
 import { WATCH_TURN_KEY_PREFIX } from '../sessions/watch-turn-key';
 import '../test-support/daemon-routes-over-http';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordSql } from '../test-support/session-word';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -353,7 +356,7 @@ test('the link gateway\'s merged event call: many sessions in one transaction, e
         prompt: title,
         provider: 'claude',
         providerBuiltin: true,
-        status,
+        turnState: turnStateOfWord(status),
         ...(isReleasedStatus(status) ? {
           finishedAt: new Date(),
         } : {}),
@@ -432,7 +435,7 @@ test('the link gateway\'s merged event call: many sessions in one transaction, e
   /** What the ingest derives onto the session row, the instants it stamps as whether it stamped them. */
   async function derivedState(sessionId: string) {
     const { rows } = await sql.query(
-      `SELECT status::text AS status, last_assistant_text, last_tool_use, last_user_text,
+      `SELECT ${wordSql()} AS status, last_assistant_text, last_tool_use, last_user_text,
               last_user_from_session_id::text AS last_user_from_session_id, last_user_from_title, last_user_from_orbit,
               engine_turn_active,
               engine_phase, context_tokens, context_window, running_bg_shells, running_bg_jobs, running_subagents,

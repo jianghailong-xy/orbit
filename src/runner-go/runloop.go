@@ -1567,6 +1567,10 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	t.draining = pool.isDrainingForUpdate // every inbox fetch says whether the pool drains for an update
 	// A slot with nothing running under it is given back while the pool drains (§7.3). Its callers run it on a
 	// goroutine of its own: it waits for the control plane's answer.
+	// A full runner names the claims it can still start, and gives back one it cannot (session_pool.go claimScope,
+	// waitActive), where the control plane says it takes them (HeartbeatResponse.CapacityClaims).
+	t.fullClaimScope = pool.claimScope
+	pool.returnFullSlot = t.returnFullSlot
 	t.returnHeldSlot = func(sessionID string) {
 		pool.returnHeldSlot(sessionID, func() (string, error) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -1810,10 +1814,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	claudeActive := func() int { return activeProviderCount(providerClaude) }
 	claudeIdle := idleUsage(providerClaude, providerConfigured, engineHealth)
 	go claudeUsage.run(loopCtx, claudeActive, claudeIdle)
-	// Codex keeps one snapshot per account slot: Default's — its usage probe, which the reset steps
-	// read through too — and every added slot's own.
+	// Codex keeps one snapshot per account slot: Default's and every added slot's own, each with its
+	// own reset block, and the reset steps read and consume through the probe of the slot they name.
 	codexUsage := newCodexAccountUsage(t.leaseOwner)
-	codexUsageProbe := codexUsage.def
 	codexActive := func() int { return activeProviderCount(providerCodex) }
 	codexIdle := idleUsage(providerCodex, providerConfigured, engineHealth)
 	go codexUsage.run(loopCtx, codexActive, codexIdle)
@@ -1995,7 +1998,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// process nothing, so nothing more can be delivered to it.
 	resetCtx, stopResets := context.WithCancel(context.Background())
 	defer stopResets()
-	resetConsumer := newCodexResetConsumer(codexUsageProbe)
+	resetConsumer := newCodexResetConsumer(codexUsage)
 	resetConsumer.wakeHeartbeat = beatNow
 	resets := newCodexResetRelay(resetCtx, t, resetConsumer.execute, &heartbeatOps)
 	// A managed instance's side of idle sleep (managed_sleep.go); unused by a self-managed runner.
@@ -2107,6 +2110,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			beatTaken = true
 			// Whether the control plane takes a claim scoped to named sessions (drainClaimScope).
 			drainScopedClaims.Store(resp.DrainScopedClaims)
+			pool.setCapacityClaims(resp.CapacityClaims)
 			// Whether this runner reports a failed turn and the release separately (session_release.go): this answer's word.
 			t.noteSessionReleaseOffer(resp)
 			// Idle sleep: accept the manager's request while there is still nothing to do here, and stop
@@ -2738,8 +2742,27 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// rather than at the first tick, so that the control plane sees it online, with its engines,
 		// before its first claim. The ticker keeps its cadence from the start.
 		if currentManagedInstance() != nil {
-			managedStartupBeat(loopCtx, engineHealth.probed(), managedStartupProbeWait, managedStartupBeatRetry, heartbeatInterval,
-				func() bool { beat(); return beatTaken })
+			probed := engineHealth.probed()
+			waitStarted := time.Now()
+			var timing startupBeatTiming
+			timing.taken = managedStartupBeat(loopCtx, probed, managedStartupProbeWait, managedStartupBeatRetry, heartbeatInterval,
+				func() bool {
+					if timing.attempts == 0 {
+						timing.waited = time.Since(waitStarted)
+						select {
+						case <-probed:
+							timing.probed = true
+						default:
+						}
+					}
+					timing.attempts++
+					sent := time.Now()
+					beat()
+					timing.lastRoundTrip = time.Since(sent)
+					return beatTaken
+				})
+			timing.sinceStart = time.Since(runnerProcessStarted)
+			logln(startupBeatLine(timing))
 		}
 		close(startupBeatDone)
 		beatUntilStopped(hbStop, ticker.C, hbNow, beat)

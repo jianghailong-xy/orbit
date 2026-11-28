@@ -6,12 +6,12 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   SessionRunSource,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { INTEGRATION_JOB_CLAIM } from '../projects/project-integration-job';
@@ -47,6 +47,7 @@ import {
   ENGINE_SESSION_DOORS,
   ENGINE_SESSION_FIELD_CASES,
 } from './engine-session-cases';
+import { fixtureFacts, sessionWord, WORD_SELECT, withWord, wordOf } from '../test-support/session-word';
 
 /**
  * The engine-path guard and the kind census, against a real PostgreSQL (contract §2.9 LS1, LS6;
@@ -220,14 +221,14 @@ async function landingRow(stack: Stack, w: World, overrides: Record<string, unkn
       titleManagedByProject: true,
       prompt: 'Orbit runs this landing. This conversation is a record, not an engine.',
       sessionKind: 'LANDING',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       startsTaskWork: false,
       provider: 'orbit',
       providerBuiltin: true,
       engine: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       runSource: SessionRunSource.MANUAL,
-      ...overrides,
+      ...fixtureFacts(overrides),
     },
   });
   return id;
@@ -246,13 +247,13 @@ async function conversationRow(stack: Stack, w: World, overrides: Record<string,
       title: 'a conversation',
       prompt: 'hello',
       sessionKind: 'CONVERSATION',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       provider: 'claude',
       providerBuiltin: true,
       engine: 'claude',
       dispatchOrigin: SessionDispatchOrigin.USER,
       runSource: SessionRunSource.MANUAL,
-      ...overrides,
+      ...fixtureFacts(overrides),
     },
   });
   return id;
@@ -444,9 +445,9 @@ test('every user door refuses a LANDING session with 409 SESSION_IS_PLATFORM_DRI
       await expectPlatformDriven(drive(stack, w, landing), route);
       const after = await stack.db.session.findUniqueOrThrow({
         where: { id: landing },
-        select: { status: true, title: true, deletedAt: true, completedAt: true, prompt: true },
+        select: { ...WORD_SELECT, title: true, deletedAt: true, completedAt: true, prompt: true },
       });
-      assert.deepEqual(after, {
+      assert.deepEqual(withWord(after), {
         status: RunStatus.AWAITING_INPUT,
         title: 'Land · a task',
         deletedAt: null,
@@ -557,9 +558,9 @@ test('the queue and the reaper do not touch a LANDING row', { skip }, async () =
     await (stack.reaper as unknown as { sweep(): Promise<void> }).sweep();
     const after = await stack.db.session.findUniqueOrThrow({
       where: { id: parked },
-      select: { status: true, error: true, retryAt: true, cancelRequestedAt: true },
+      select: { ...WORD_SELECT, error: true, retryAt: true, cancelRequestedAt: true },
     });
-    assert.deepEqual(after, {
+    assert.deepEqual(withWord(after), {
       status: RunStatus.AWAITING_INPUT, error: null, retryAt: null, cancelRequestedAt: null,
     }, 'the reaper touched the landing row');
   } finally {
@@ -642,7 +643,7 @@ async function landingFixture(stack: Stack, label: string): Promise<LandingFixtu
       taskId,
       title: `${label} work`,
       prompt: 'do the work',
-      status: RunStatus.SUCCEEDED, 
+      turnState: null, 
       provider: 'claude',
       providerBuiltin: true,
       engine: 'claude',
@@ -765,10 +766,13 @@ test('only a claimed subject gets a session row, and the compensation points ins
     await stack.api.integrationJobProgress({ id: f.runnerId } as never, queued, {
       claimGeneration: '1', leaseOwner: 'lease', phase: 'FETCH',
     } as never);
-    const inserted = await stack.db.session.findUnique({
-      where: { id: await preGeneratedId(stack, f) },
-      select: { sessionKind: true, provider: true, startsTaskWork: true, status: true },
-    });
+    const insertedId = await preGeneratedId(stack, f);
+    const inserted = {
+      ...await stack.db.session.findUnique({
+        where: { id: insertedId }, select: { sessionKind: true, provider: true, startsTaskWork: true },
+      }),
+      status: await sessionWord(stack.db, insertedId),
+    };
     assert.deepEqual(inserted, {
       sessionKind: 'LANDING', provider: 'orbit', startsTaskWork: false, status: RunStatus.AWAITING_INPUT,
     });
@@ -783,11 +787,12 @@ test('only a claimed subject gets a session row, and the compensation points ins
       capabilities: [INTEGRATION_JOB_CLAIM],
     });
     assert.ok(commands.some((command) => command.jobId === dispatched), 'the fixture job was not dispatched');
+    const dispatchedId = await preGeneratedId(stack, d);
     assert.deepEqual(
-      await stack.db.session.findUnique({
-        where: { id: await preGeneratedId(stack, d) },
-        select: { sessionKind: true, status: true },
-      }),
+      {
+        ...await stack.db.session.findUnique({ where: { id: dispatchedId }, select: { sessionKind: true } }),
+        status: await sessionWord(stack.db, dispatchedId),
+      },
       { sessionKind: 'LANDING', status: RunStatus.AWAITING_INPUT },
       'the heartbeat claim did not insert the landing row',
     );
@@ -804,11 +809,12 @@ test('only a claimed subject gets a session row, and the compensation points ins
       testedSha: 'c'.repeat(40), testedTreeSha: 'd'.repeat(40),
       landedSha: 'c'.repeat(40), landedTreeSha: 'd'.repeat(40), aheadOfUpstream: 1,
     } as never);
+    const resultId = await preGeneratedId(stack, r);
     assert.deepEqual(
-      await stack.db.session.findUnique({
-        where: { id: await preGeneratedId(stack, r) },
-        select: { sessionKind: true, status: true },
-      }),
+      {
+        ...await stack.db.session.findUnique({ where: { id: resultId }, select: { sessionKind: true } }),
+        status: await sessionWord(stack.db, resultId),
+      },
       { sessionKind: 'LANDING', status: RunStatus.SUCCEEDED },
       'the result did not insert the landing row',
     );
@@ -823,9 +829,9 @@ test('only a claimed subject gets a session row, and the compensation points ins
     const settled = await ensureLandingSession(stack.db, g.landingId, claimed);
     assert.ok(settled?.created);
     const settledRow = await stack.db.session.findUniqueOrThrow({
-      where: { id: settled!.sessionId }, select: { status: true, finishedAt: true},
+      where: { id: settled!.sessionId }, select: { ...WORD_SELECT, finishedAt: true},
     });
-    assert.equal(settledRow.status, RunStatus.SUCCEEDED);
+    assert.equal(await sessionWord(stack.db, settled!.sessionId), RunStatus.SUCCEEDED);
     // Released from the start, at the moment its landing settled (plan step 3.1).
     const settledAt = (await stack.db.projectLanding.findUniqueOrThrow({ where: { id: g.landingId } })).settledAt;
     assert.equal(settledRow.finishedAt?.getTime(), settledAt?.getTime(), 'the release column is the settlement time');
@@ -883,10 +889,10 @@ test("another account's landing id is answered exactly like an id that names not
     ) as { cancelSessionIds?: string[] };
     assert.ok(!(beat.cancelSessionIds ?? []).includes(foreignLanding));
     assert.deepEqual(
-      await stack.db.session.findUniqueOrThrow({
+      withWord(await stack.db.session.findUniqueOrThrow({
         where: { id: foreignLanding },
-        select: { sessionKind: true, status: true, cancelRequestedAt: true },
-      }),
+        select: { ...WORD_SELECT, cancelRequestedAt: true },
+      }), 'sessionKind'),
       { sessionKind: 'LANDING', status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null },
     );
   } finally {
@@ -919,7 +925,7 @@ test('a SESSION_TURN_SETTLED watch on an open landing waits for the landing to e
     // The landing ends: the same watch now matches, and its row is the one that moved.
     await stack.db.session.update({
       where: { id: landing },
-      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), completedAt: new Date() },
+      data: { turnState: null, finishedAt: new Date(), completedAt: new Date() },
     });
     const evaluation = await new WatchEvaluatorService(stack.prisma, noopRealtime(), {
       rollout: { mode: 'on', canaryOwners: new Set<string>(), problems: [] },

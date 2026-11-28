@@ -13,22 +13,9 @@ datasource db {
   provider = "postgresql"
 }
 
-enum RunStatus {
-  PENDING
-  RUNNING
-  SUCCEEDED
-  FAILED
-  CANCELLED
-  // Interactive sessions (Route B). Appended last to match ALTER TYPE ADD VALUE.
-  AWAITING_INPUT
-  INTERRUPTED
-  // NOTE: the `run_status` DB type still carries a now-unused 'PARKED' label — Postgres has
-  // no ALTER TYPE ... DROP VALUE, and rebuilding the type would rewrite/lock `session`. It is
-  // absent here on purpose: migration 0071 backfilled every PARKED row to CANCELLED and no
-  // code path writes it any more, so no row can carry a value this enum can't decode.
-
-  @@map("run_status")
-}
+// A session stores no status word: deploys D3 and D4 (migrations 1671 and 1711;
+// docs/session-status-retirement-plan.md §4.1, §4.3) took the stored one and its enum type away. The words the API
+// answers are `RunStatus` of @orbit/shared, derived from the facts.
 
 enum RunnerStatus {
   ONLINE
@@ -383,8 +370,14 @@ model User {
   driveTrashGroups   DriveTrashGroup[]
   driveCommits       DriveCommit[]
   driveChanges       DriveChange[]
+  driveMoves         DriveMove[]
   /// Files a replacing rename removed, for a handle still writing one (migration 1438).
   driveRemovedEntries DriveRemovedEntry[]
+  /// Its Drive chats' change groups, their changes, held writes and overwrite questions (migration 1700).
+  driveChatChangeGroups DriveChatChangeGroup[]
+  driveChatChanges      DriveChatChange[]
+  driveChatHeldChanges  DriveChatHeldChange[]
+  driveChatQuestions    DriveChatQuestion[]
   /// The mount credentials of its managed runner's generations (migration 1339).
   driveMountCredentials DriveMountCredential[]
 
@@ -1037,6 +1030,9 @@ model Runner {
   // The owner's Update Now (0590): install the waiting release now, interrupting the turns in
   // flight. Handed to the next heartbeat as selfUpdateNow and cleared there, like the two above.
   selfUpdateNowRequestedAt DateTime? @map("self_update_now_requested_at")
+  // When the owner was last pushed that this runner went offline without signing off (1800): set by the reaper's
+  // presence alert, cleared with a "back online" push when it is heard again. Null: no offline alert open.
+  offlineAlertedAt  DateTime?    @map("offline_alerted_at")
   // The managed runner browser as the last heartbeat reported it (1090; @orbit/shared RunnerBrowserReport, with the
   // beat's time as reportedAt). Rewritten by every beat, to NULL when one omits it: a runner with no browser.
   browserState      Json?        @map("browser_state")
@@ -1324,6 +1320,10 @@ model RunnerPresence {
   /// The link gateway node holding the runner's connection. Null over HTTP.
   gatewayId     String?  @map("gateway_id")
   lastBeatAt    DateTime @map("last_beat_at")
+  /// When the beating process last opened a link connection: its Welcome, written by the welcome route; event batches
+  /// and RPCs do not write it. Null until one does (migration 1750). Presence counts it only up to 5 min past
+  /// `lastBeatAt` (runners/runner-presence.ts runnerPresentAt).
+  lastHeardAt   DateTime? @map("last_heard_at")
   /// What carried the beat: 'HTTP' (POST /api/runner/heartbeat) or 'LINK' (the link gateway).
   linkState     String   @map("link_state")
   /// The runner's hash of the facts it reports (model catalogue, skills, engine state, repository
@@ -2047,6 +2047,10 @@ model WorkspacePermissionRule {
 // calls, and llm usage hang directly off the Session.
 model Session {
   id                   String    @id @default(uuid(7)) @db.Uuid
+  /// The key a person's POST /sessions carried, so a repeat of the same request (a Retry whose first answer was
+  /// lost) returns the session it made instead of opening a second. Unique per owner over the rows that have one
+  /// (1730's partial index `session_owner_client_request_key`, which Prisma cannot declare). Never an address.
+  clientRequestId      String?   @map("client_request_id")
   title                String
   /// True while the project this Session coordinates owns its display title. A manual session
   /// rename clears this in the same UPDATE as the new title, so later project renames cannot take
@@ -2254,13 +2258,11 @@ model Session {
   phase                String?
   /// Who opened this conversation (migration 0670, docs/workspace-default-model-design.md §2.2):
   /// PERSON, or the Orbit door that opened it on its own — COORDINATOR, COORDINATOR_JUDGMENT,
-  /// TASK_LIST_CONSOLE, WIKI_CHAT, FEISHU, SERVICE_TOKEN, MENTION_REPLY, or ORBIT for a row 0670 knew
+  /// TASK_LIST_CONSOLE, WIKI_CHAT, DRIVE_CHAT, FEISHU, SERVICE_TOKEN, MENTION_REPLY, or ORBIT for a row 0670 knew
   /// was Orbit's but not through which door. Held to that set by `session_opened_by_check`. Written by
   /// the creating door, never from a title; the workspace default (workspace-provider.ts) counts only
   /// PERSON, through the partial index `session_workspace_person_opened_idx` (SQL only).
   openedBy             String    @default("PERSON") @map("opened_by")
-  // PENDING = created, claimable by its assigned runner.
-  status               RunStatus @default(PENDING)
   // billing, accrued per turn
   numTurns             Int       @default(0) @map("num_turns")
   costUsd              Float     @default(0) @map("cost_usd")
@@ -2291,7 +2293,7 @@ model Session {
   // report one; a reader with no window shows the token count, not a percentage of a guess.
   contextWindow        Int?      @map("context_window")
   lastTurnAt           DateTime? @map("last_turn_at")
-  // Where the session sits in the session list (migration 1434). Unlike lastTurnAt, the liveness clock, it moves only
+  // Where the session sits in the session list (migration 1490). Unlike lastTurnAt, the liveness clock, it moves only
   // when the session changes for its owner: created, a person's message, a turn ending on the owner, ended or completed
   // (the last two by the session_listed_at_settle trigger). Null only on a row an older server inserted mid-deploy.
   listedAt             DateTime? @default(now()) @map("listed_at")
@@ -2527,6 +2529,14 @@ model Session {
   /// delivery'"'"'s own transaction, so a claim rolled back sends both again; NULL = never delivered.
   wikiChatPromptDigest     String?   @map("wiki_chat_prompt_digest")
   wikiChatContentsVersion  Int?      @map("wiki_chat_contents_version")
+  /// What this Drive chat's delivery last told its agent (migration 1680, drive/drive-chat-notes.ts): the digest of the
+  /// `<orbit_drive_chat>` guidance. Written in the delivery's own transaction, so a claim rolled back sends it again;
+  /// NULL = never delivered. A session is a Drive chat when `openedBy` is DRIVE_CHAT; its partial index over
+  /// (owner_id, created_at) is migration 1681's alone, as schema.prisma cannot spell one.
+  driveChatPromptDigest    String?   @map("drive_chat_prompt_digest")
+  /// A Drive chat's changes, one group a turn, and the overwrites it asked the owner about (migration 1700).
+  driveChatChangeGroups    DriveChatChangeGroup[]
+  driveChatQuestions       DriveChatQuestion[]
   /// The help center's Ask (migration 0850, @orbit/shared HelpAskMarker `{ page }`): a session is an Ask exactly
   /// when it is set. Written by the Ask door (help/help-ask.ts) in this row's own INSERT and never afterwards (a
   /// trigger refuses the UPDATE). An Ask belongs to no workspace, is in no session list, starts read-only on its
@@ -2790,17 +2800,13 @@ model Session {
   /// The opening Orbit drew for it, as the schedule was when the conversation was opened (`ScheduleChangeOpening`).
   scheduleChangeOpening Json?     @map("schedule_change_opening")
 
-  @@index([assignedRunnerId, status])
   // "what did this workspace last run on", the derived seed a new session inherits when the
   // caller names no provider (workspaces/workspace-provider.ts).
   @@index([workspaceId, createdAt(sort: Desc)])
-  @@index([batchId, status])
   @@index([parentSessionId])
-  // The claim queue's tree cap: a tree's active turns.
-  @@index([rootSessionId, status])
+  // The indexes on `status` went with the column (deploy D4, migration 1711); their replacements on the facts are
+  // migrations 1627 to 1633.
   @@index([ownerId])
-  @@index([ownerId, status, taskId], map: "session_owner_status_task_idx")
-  @@index([status])
   // The session's Settings panel (docs/mocks/session-settings, migration 0700). `env` is the
   // session's own variables, a string→string map laid over the workspace's when the engine starts;
   // null is none. `envChangedAt` is when it last changed, `envAppliedAt` when an engine last started
@@ -3301,8 +3307,8 @@ model ConversationTurn {
   /// platform's own deliveries, and every turn written before 0662.
   senderClient       String? @map("sender_client")
   senderClientDetail String? @map("sender_client_detail")
-  // A person sent this turn — the owner at their own doors, a guest, a Feishu sender (migration 1434). Its end, waiting
-  // for input, moves the session's listedAt; a platform delivery's end does not.
+  // A person sent this turn — the owner at their own doors, a guest, a Feishu sender (migration 1490). Its arrival moves
+  // the session's listedAt; a platform delivery's arrival does not (any turn's end on the owner does, owner 2026-11-26).
   byPerson        Boolean   @default(false) @map("by_person")
   /// Session translation (migration 0532, @orbit/shared translation.ts): what the owner wrote, when the turn was
   /// translated for the engine — `content` is then the English delivered. Null on every turn translation was not
@@ -3329,6 +3335,10 @@ model ConversationTurn {
   /// `chat.notes.wikiContext`, migration 0476), as ids. Delivery reads what they name and appends it as
   /// the control plane's note, so `content` stays the owner's words. Null for every other turn.
   wikiContext     Json?     @map("wiki_context")
+  /// A Drive chat's message: the folder the owner had open and the items they selected (`{ folderId, entryIds }`,
+  /// migration 1680), as ids. Delivery reads what they name and appends it as `<orbit_drive_chat>`, so `content` stays
+  /// the owner's words. Null for every other turn.
+  driveContext    Json?     @map("drive_context")
   answeredAt      DateTime? @map("answered_at")
   /// How this turn's latest completion ended (migration 1201, CHECK conversation_turn_outcome_chk):
   /// ANSWERED | FAILED | INTERRUPTED | CANCELLED, written by runner turn-complete in the write that settles
@@ -3341,6 +3351,9 @@ model ConversationTurn {
   // Image blobs sent with this turn (web composer). Linked when the turn is enqueued;
   // the inbox hands their refs to the runner. Cascade so withdrawing/ending drops them.
   attachments Attachment[]
+  /// The acceptance round this turn was, when it is a server-queued acceptance shell turn (migration 1672). At most
+  /// one: task_acceptance_round.turn_id is unique.
+  acceptanceRounds TaskAcceptanceRound[]
 
   @@unique([sessionId, clientTurnId])
   @@unique([sessionId, seq])
@@ -3953,6 +3966,7 @@ model DriveVersion {
   @@unique([id, ownerId], map: "drive_version_id_owner_id_key")
   @@index([entryId], map: "drive_version_entry_idx")
   @@index([ownerId, trashGroupId], map: "drive_version_trash_group_idx")
+  @@index([ownerId, createdAt], map: "drive_version_owner_created_idx")
   @@map("drive_version")
 }
 
@@ -3990,6 +4004,114 @@ model DriveRemovedEntry {
   @@map("drive_removed_entry")
 }
 
+/// The drive changes one turn of a Drive chat made, which one Undo reverses (1700, drive/drive-chat-changes.ts). `status`:
+/// DONE | PENDING (held past the turn's 200th change: nothing made until Apply) | APPLYING | UNDOING | UNDONE. `held`: it
+/// began PENDING. Two partial unique indexes the schema cannot spell: one collecting group a turn (DONE, not held), one
+/// waiting (PENDING or APPLYING). No foreign key to the turn: it is read by id.
+model DriveChatChangeGroup {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  ownerId    String    @map("owner_id") @db.Uuid
+  owner      User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "drive_chat_change_group_owner_id_fkey")
+  sessionId  String    @map("session_id") @db.Uuid
+  session    Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade, map: "drive_chat_change_group_session_id_fkey")
+  turnId     String    @map("turn_id") @db.Uuid
+  status     String
+  held       Boolean   @default(false)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
+  appliedAt  DateTime? @map("applied_at") @db.Timestamptz(3)
+  undoneAt   DateTime? @map("undone_at") @db.Timestamptz(3)
+  changes    DriveChatChange[]
+  heldChanges DriveChatHeldChange[]
+
+  @@index([sessionId, createdAt], map: "drive_chat_change_group_session_idx")
+  @@map("drive_chat_change_group")
+}
+
+/// One change of a Drive chat's group, in the order made (1700). `kind`: NEW_FOLDER | NEW_FILE | MOVE | RENAME | TRASH |
+/// EDIT; before and after are (parent id, name); `afterSeq` the entry's seq after it, what Undo reads "changed since"
+/// from. `state`: DONE | UNDONE | SKIPPED (with `reason`). No foreign key to the entry, its versions or its Trash group.
+model DriveChatChange {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  ord               BigInt    @default(autoincrement())
+  groupId           String    @map("group_id") @db.Uuid
+  group             DriveChatChangeGroup @relation(fields: [groupId], references: [id], onDelete: Cascade, map: "drive_chat_change_group_id_fkey")
+  ownerId           String    @map("owner_id") @db.Uuid
+  owner             User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "drive_chat_change_owner_id_fkey")
+  kind              String
+  entryId           String    @map("entry_id") @db.Uuid
+  entryKind         String    @map("entry_kind")
+  beforeParentId    String?   @map("before_parent_id") @db.Uuid
+  beforeName        String?   @map("before_name")
+  afterParentId     String?   @map("after_parent_id") @db.Uuid
+  afterName         String    @map("after_name")
+  afterSeq          BigInt    @map("after_seq")
+  trashGroupId      String?   @map("trash_group_id") @db.Uuid
+  versionId         String?   @map("version_id") @db.Uuid
+  replacedVersionId String?   @map("replaced_version_id") @db.Uuid
+  state             String    @default("DONE")
+  reason            String?
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  @@index([groupId, ord], map: "drive_chat_change_group_ord_idx")
+  @@index([groupId, entryId], map: "drive_chat_change_group_entry_idx")
+  @@index([ownerId, createdAt], map: "drive_chat_change_owner_created_idx")
+  @@map("drive_chat_change")
+}
+
+/// One write a Drive chat asked for past its turn's 200th change, held in a PENDING group until Apply (1700): `op` as
+/// asked, and what the card shows. `kind`: NEW_FOLDER | MOVE | RENAME | TRASH. `state`: PENDING | APPLIED | SKIPPED.
+model DriveChatHeldChange {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  ord       BigInt    @default(autoincrement())
+  groupId   String    @map("group_id") @db.Uuid
+  group     DriveChatChangeGroup @relation(fields: [groupId], references: [id], onDelete: Cascade, map: "drive_chat_held_change_group_id_fkey")
+  ownerId   String    @map("owner_id") @db.Uuid
+  owner     User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "drive_chat_held_change_owner_id_fkey")
+  kind      String
+  op        Json
+  entryId   String?   @map("entry_id") @db.Uuid
+  name      String
+  fromPath  String?   @map("from_path")
+  toPath    String?   @map("to_path")
+  state     String    @default("PENDING")
+  reason    String?
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  @@index([groupId, ord], map: "drive_chat_held_change_group_ord_idx")
+  @@map("drive_chat_held_change")
+}
+
+/// A move or rename a Drive chat asked for onto a live file, refused and kept as the owner's Keep both / Replace card
+/// (1700). `status`: OPEN | ANSWERING | ANSWERED | STALE; `choice`: KEEP_BOTH | REPLACE. `moving` and `existing` are both
+/// files as they were when asked (path, size, last writer, modified).
+model DriveChatQuestion {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  ownerId       String    @map("owner_id") @db.Uuid
+  owner         User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "drive_chat_question_owner_id_fkey")
+  sessionId     String    @map("session_id") @db.Uuid
+  session       Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade, map: "drive_chat_question_session_id_fkey")
+  turnId        String    @map("turn_id") @db.Uuid
+  status        String    @default("OPEN")
+  choice        String?
+  sourceEntryId String    @map("source_entry_id") @db.Uuid
+  targetEntryId String    @map("target_entry_id") @db.Uuid
+  destParentId  String    @map("dest_parent_id") @db.Uuid
+  destName      String    @map("dest_name")
+  moving        Json
+  existing      Json
+  outcome       Json?
+  reason        String?
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
+  answeredAt    DateTime? @map("answered_at") @db.Timestamptz(3)
+
+  @@index([sessionId, createdAt], map: "drive_chat_question_session_idx")
+  @@map("drive_chat_question")
+}
+
 /// The drive's change feed (1327, §5.4): one row per change to an entry, kept a day. `at` is the clock when the row was
 /// inserted, which the feed's look-back reads. No foreign key to the entry: a REMOVE outlives it.
 model DriveChange {
@@ -4006,6 +4128,29 @@ model DriveChange {
   @@index([ownerId, at], map: "drive_change_owner_at_idx")
   @@index([at], map: "drive_change_at_idx")
   @@map("drive_change")
+}
+
+/// One move or rename the name layer made (1780, drive.service.ts rename): the entry, `kind` (`MOVE` when its folder
+/// changed, else `RENAME`), the folder it went into, and who did it as checkedWriter kept it, for GET /drive/activity.
+/// Not written for the owner's Apply of a Drive chat's held changes (drive_chat_change has those). No foreign key to the
+/// entry, the folder or the session: each is read by id. Kept 30 days (file-retention-sweep.ts).
+model DriveMove {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  ownerId        String   @map("owner_id") @db.Uuid
+  owner          User     @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "drive_move_owner_id_fkey")
+  entryId        String   @map("entry_id") @db.Uuid
+  /// `MOVE` | `RENAME` (drive_move_kind_chk).
+  kind           String
+  folderId       String   @map("folder_id") @db.Uuid
+  /// `OWNER` | `AGENT` (drive_move_actor_kind_chk).
+  actorKind      String   @map("actor_kind")
+  actorSessionId String?  @map("actor_session_id") @db.Uuid
+  actorRunnerId  String?  @map("actor_runner_id") @db.Uuid
+  at             DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([ownerId, at], map: "drive_move_owner_at_idx")
+  @@index([at], map: "drive_move_at_idx")
+  @@map("drive_move")
 }
 
 /// What the mount daemon of one managed-runner generation presents at /runner/drive/* (1339,
@@ -5103,6 +5248,23 @@ model ProjectOrphanNotice {
   @@map("project_orphan_notice")
 }
 
+/// One decision card the account owner was pushed about once it became theirs (migration 1720,
+/// PushService.notifyDecisionCards, push/owner-cards.ts). The key names the card and its version, so a
+/// card is pushed once whatever the number of sweeps or restarts. History rather than foreign keys.
+model OwnerCardPush {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  ownerId   String   @map("owner_id") @db.Uuid
+  cardKey   String   @map("card_key")
+  /// EVIDENCE | OWNER_CONFIRMATION | CRITERIA_DECISION | STANDARD_SET | DONE_REQUEST | RECORD_AS_DONE
+  kind      String
+  /// The conversation the card is drawn in, which the push opened.
+  sessionId String?  @map("session_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([ownerId, cardKey], map: "owner_card_push_owner_key")
+  @@map("owner_card_push")
+}
+
 /// One time a project's coordinator spent more on its own than the project allows, and what became of
 /// it (docs/project-integration-line-contract.md §6.2, migration 0280).
 ///
@@ -6023,6 +6185,30 @@ model TaskDispatchEpoch {
 /// progress. The `task_progress_epoch_advance` trigger starts the next epoch, with nothing reported in
 /// it, whenever a Task leaves DONE, CANCELLED or FAILED for OPEN or IN_PROGRESS. Nothing here is derived
 /// from a transcript or from a shell's output: progress is what a reporter states.
+model TaskAcceptanceRound {
+  /// One EXECUTABLE acceptance round, recorded by POST /runner/sessions/:id/turn-complete outside the exit-code
+  /// comparison (migration 1672, tasks/task-acceptance-round.ts). A record of what ran: nothing derives state from it.
+  id               String           @id @default(uuid(7)) @db.Uuid
+  ownerId          String           @map("owner_id") @db.Uuid
+  taskId           String           @map("task_id") @db.Uuid
+  task             Task             @relation(fields: [taskId], references: [id], onDelete: Cascade, map: "task_acceptance_round_task_fkey")
+  sessionId        String           @map("session_id") @db.Uuid
+  turnId           String           @unique @map("turn_id") @db.Uuid
+  turn             ConversationTurn @relation(fields: [sessionId, turnId], references: [sessionId, id], onDelete: Cascade, map: "task_acceptance_round_turn_fkey")
+  /// Null when the runner reported no exit code.
+  exitCode         Int?             @map("exit_code")
+  /// The code the turn was queued to expect (its client_turn_id).
+  expectedExitCode Int              @map("expected_exit_code")
+  /// The branch SHA reported with the completion; null when none was, or it was not a SHA.
+  branchSha        String?          @map("branch_sha")
+  finishedAt       DateTime         @default(now()) @map("finished_at") @db.Timestamptz(3)
+  /// The last 16 KB of the output, redacted (runner-api/check-output-redaction.ts#clipCheckTail).
+  outputTail       String           @map("output_tail")
+
+  @@index([taskId, finishedAt(sort: Desc)])
+  @@map("task_acceptance_round")
+}
+
 model TaskProgress {
   taskId String @id @map("task_id") @db.Uuid
   task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
@@ -6867,6 +7053,8 @@ model Task {
   /// Public links with this task as their root, ended ones included (migration 0306).
   shareLinks   ShareLink[]
   completionEvidence TaskCompletionEvidence[]
+  /// Each EXECUTABLE acceptance round its runs ran (migration 1672).
+  acceptanceRounds TaskAcceptanceRound[]
   routeDecisions TaskRouteDecision[]
   legacyEvidenceImports TaskLegacyEvidenceImport[]
   evidenceDecisions TaskEvidenceDecision[]
@@ -8673,6 +8861,8 @@ model CodexRateLimitResetOperation {
   runnerId               String    @map("runner_id") @db.Uuid
   runner                 Runner    @relation(fields: [runnerId], references: [id], onDelete: Cascade)
   accountFingerprint     String    @map("account_fingerprint")
+  /// `default` or an added slot's 8-hex id: the Codex login the reset runs in (migration 1669). Immutable.
+  accountSlot            String    @default("default") @map("account_slot")
   clientRequestId        String    @map("client_request_id") @db.Uuid
   providerIdempotencyKey String    @unique @map("provider_idempotency_key") @db.Uuid
   consumeState           String    @map("consume_state")
@@ -11288,6 +11478,12 @@ model DriveSync {
   startedAt    DateTime  @default(now()) @map("started_at") @db.Timestamptz(3)
   updatedAt    DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
   endedAt      DateTime? @map("ended_at") @db.Timestamptz(3)
+  /// When a failed sync stopped needing the owner (migration 1790): cleared by them, or a later clean sync of the same
+  /// source and destination. A sync that ended with failures and has none is kept and listed whatever its age.
+  handledAt      DateTime? @map("handled_at") @db.Timestamptz(3)
+  /// The session the failures were handed to, and when: history read by id, not a key.
+  fixSessionId   String?   @map("fix_session_id") @db.Uuid
+  fixRequestedAt DateTime? @map("fix_requested_at") @db.Timestamptz(3)
 
   @@index([ownerId, startedAt(sort: Desc)], map: "drive_sync_owner_started_idx")
   @@index([runnerId], map: "drive_sync_runner_id_idx")

@@ -150,7 +150,8 @@ export interface SessionMoveTargets {
   folders: SessionMoveFolder[];
   /** Why the session cannot move to another workspace at all; null when it can. */
   reason: string | null;
-  /** Idle but not ended: it has to be ended before it moves (the panel's End and Move). */
+  /** Still held (idle, or already being let go): the move releases it first, on the server. Kept for older clients that end
+   *  it themselves; newer ones read it only for a coordinator's confirmation. */
   needsEnd: boolean;
   /** The branch its changes stay on in the old workspace's repository. */
   branch: string | null;
@@ -507,11 +508,13 @@ export interface PlanUsageRateLimitResetCredits {
   credits: PlanUsageRateLimitResetCredit[] | null;
 }
 
-/** Earned rate-limit reset state of the runner's default Codex account, carried inside the Codex
- *  plan-usage snapshot. Absent from runners that predate docs/codex-rate-limit-reset-contract.md,
- *  which every reader treats as "reset not offered" — never as "zero credits". */
+/** Earned rate-limit reset state of one Codex account, carried inside that account's plan-usage
+ *  snapshot: Default's beside Default's windows, an added slot's in its entry under `accounts`
+ *  (contract v2, docs/codex-rate-limit-reset-contract.md §12). Absent from runners that predate the
+ *  contract, and from an account the runner has not read one for, which every reader treats as
+ *  "reset not offered" — never as "zero credits". */
 export interface PlanUsageRateLimitReset {
-  /** The contract version this block was written under (CODEX_RATE_LIMIT_RESET_PROTOCOL_VERSION). */
+  /** The block format version: 1, which contract v2 keeps (CODEX_RATE_LIMIT_RESET_PROTOCOL_VERSIONS.block). */
   protocolVersion: number;
   support: CodexRateLimitResetSupport;
   /** Non-sensitive account fingerprint, `cxa1_` + 32 hex. Present exactly when `support` is
@@ -594,12 +597,15 @@ export interface PlanUsageSnapshot {
   credits?: PlanUsageCredits;
   /** All Codex limit buckets, in display order. */
   rateLimits?: PlanUsageRateLimit[];
-  /** Codex earned rate-limit reset state (docs/codex-rate-limit-reset-contract.md). Absent from
-   *  older runners and from non-Codex snapshots. */
+  /** Codex earned rate-limit reset state of the account this snapshot is about
+   *  (docs/codex-rate-limit-reset-contract.md): Default's here, an added slot's in its `accounts`
+   *  entry. Read with codexRateLimitResetOf(planUsage, slot). Absent from older runners and from
+   *  non-Codex snapshots. */
   rateLimitReset?: PlanUsageRateLimitReset;
   /** The snapshot of every other account on the runner — of Codex, Claude Code, Antigravity, Kimi
    *  Code or Cursor CLI — keyed by its id (RunnerEngineAccount.id); the windows beside it are Default's
-   *  (codexAccountSnapshot). An entry never carries a reset block — reset is Default's alone. Absent
+   *  (codexAccountSnapshot). A Codex entry may carry its own reset block (contract v2 §12), ordered on
+   *  its own; an entry of any other engine never does. Absent
    *  from older runners, and until the runner has read an account other than Default. On a runner
    *  Orbit serves with that engine's Default removed (RunnerEngineHealth.removedDefault), the windows
    *  beside it are the one remaining account's, and there are none when two or more remain. */
@@ -1706,6 +1712,11 @@ export interface RunnerHeartbeatResponse {
    *  which a runner draining for an update sends for the sessions whose engine is running a turn on it.
    *  Absent from an older server, to which such a runner sends no claim while it drains. */
   drainScopedClaims?: boolean;
+  /** This server takes a full runner's claim scope (`GET /runner/sessions/claim?fullScope=`: an ordinary claim only for
+   *  the sessions named, a Run now claim for any) and a claim given back because the runner is full (return-slot
+   *  `reason: runner_full`). Said on every answer. Absent from an older server: a runner then asks as before, and a
+   *  claim it cannot start waits on it for its slot. */
+  capacityClaims?: boolean;
   /** This server's operator says every replica serves SESSION_RELEASE_V1 (the switch ORBIT_SESSION_RELEASE_V1): a runner
    *  may declare it on its turn-complete and release reports. Absent from an older server and while the switch is
    *  off; a runner that does not read it on its latest answer declares nothing. */
@@ -2177,6 +2188,9 @@ export interface CodexRateLimitResetCommand {
   /** The account the operation is bound to. The runner re-reads the account before acting and
    *  calls nothing when it no longer matches. */
   accountFingerprint: string;
+  /** Which Codex login the runner reads and consumes in: `default` (the runner's own CODEX_HOME) or
+   *  an added slot's 8-hex id. Present exactly on protocolVersion 2; a version 1 command is Default's. */
+  accountSlot?: string;
   /** The operation's persisted provider idempotency key, present exactly on CONSUME. Sent to
    *  `account/rateLimitResetCredit/consume` as `idempotencyKey`, alone: protocol v1 has no creditId. */
   providerIdempotencyKey?: string;
@@ -2218,6 +2232,9 @@ export interface CreateCodexRateLimitResetRequest {
   clientRequestId: string;
   /** The fingerprint of the snapshot the user confirmed against. */
   accountFingerprint: string;
+  /** The account slot whose block the user confirmed against: `default` or an added slot's 8-hex id.
+   *  Absent means `default`. */
+  accountSlot?: string;
   /** The workspace whose Plan usage the confirmation came from, when not the runner's own page. */
   workspaceId?: string;
 }
@@ -2228,6 +2245,9 @@ export interface CodexRateLimitResetOperationView {
   runnerId: string;
   clientRequestId: string;
   accountFingerprint: string;
+  /** The added slot (8-hex id) the operation resets in. Absent for Default's, so a Default view
+   *  reads exactly as it did under contract v1. */
+  accountSlot?: string;
   status: CodexRateLimitResetOperationStatus;
   consumeState: CodexRateLimitResetConsumeState;
   consumeOutcome: CodexRateLimitResetConsumeOutcome | null;
@@ -2585,6 +2605,10 @@ export interface RunnerRemovedDefault {
   /** As on its account (RunnerEngineAccount.fingerprintPrefix): a remaining account showing the same
    *  one is the same login. Absent where the runner read none. */
   fingerprintPrefix?: string;
+  /** Whether its login is still on the machine, as the runner reports it for Default. Clients leave
+   *  the line out on `no` (the login is gone, there is nothing to offer back) and show it on `yes`,
+   *  `unknown` and when absent (an older apiserver). */
+  auth?: RunnerEngineAccount['auth'];
 }
 
 export interface DshRuntimeHealth {
@@ -4005,12 +4029,29 @@ export interface ReleaseTurnLeasesRequest {
 export interface ReturnSlotRequest {
   /** Stable for one runner process: the process that holds the session. */
   leaseOwner?: string;
+  /** `runner_full`: not a drain. Every slot of the runner is taken — by turns and by sessions its background jobs hold —
+   *  so it gives back a claim it cannot start (runner-go sessionPool.waitActive). The session goes back to the queue,
+   *  where it reads queued behind a full runner, and the runner is not recorded draining. A session whose engine never
+   *  started has no inbox lease owner yet, so the fence for this reason is the runner, and an owner that is this
+   *  process or none. Sent only to a server whose heartbeat answer says `capacityClaims`. */
+  reason?: 'runner_full';
+}
+
+/** A claimed session a full runner keeps waiting for its slot (enginePhase `waiting_for_slot`), counted as the runner
+ *  admits it: what holds the runner's slots other than this session, the part of that sessions running background jobs
+ *  hold, and the runner's limit. Carried on the session list row beside that phase only (SessionsService list). */
+export interface SessionSlotWait {
+  active: number;
+  heldByJobs: number;
+  limit: number;
 }
 
 /** The session's status after a slot return: RUNNING when a turn in flight kept the slot, which the runner keeps too. */
 export interface ReturnSlotResponse {
   ok: true;
   status: string;
+  /** Whether the slot was given back by this call. Absent from an older server. */
+  returned?: boolean;
 }
 
 /** Runner → control plane: make one freshly reserved engine generation the sole inbox consumer.
@@ -4142,6 +4183,29 @@ export interface OrchestrationCredentialResponse {
  * cancel-grace sweep releases the held session as a failure.
  */
 export const SESSION_RELEASE_V1 = 'session-release/v1';
+
+/**
+ * One EXECUTABLE acceptance round: what the runner's turn-complete reported for a server-queued acceptance shell turn
+ * (migration 1672). GET /tasks/:id lists them on each of its runs, as `sessions[].acceptanceRounds`, newest first; a
+ * run that ran none has an empty list. A record for a reader: the task's status is still decided by the exit-code
+ * comparison alone.
+ */
+export interface TaskAcceptanceRound {
+  id: string;
+  /** The acceptance shell turn of the run's conversation that this round was. */
+  turnId: string;
+  /** What the command exited with; null when the runner reported no code. -1 is the runner's "no comparable code"
+   *  (a start failure, a timeout kill, a signal). */
+  exitCode: number | null;
+  /** The code the declaration asked for when the round was queued. */
+  expectedExitCode: number;
+  /** The commit the run's branch stood at when the round finished; null when the runner reported none. */
+  branchSha: string | null;
+  /** ISO time the server recorded the round's completion. */
+  finishedAt: string;
+  /** The last 16 KB of the command's combined output, with secrets redacted; empty when it printed nothing. */
+  outputTail: string;
+}
 
 /**
  * Runner → control plane: a single interactive turn finished (the per-turn `result`),

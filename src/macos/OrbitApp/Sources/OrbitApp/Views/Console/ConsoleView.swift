@@ -307,7 +307,11 @@ struct ConsoleView: View {
             // run itself rather than the message being sent, and drawn INSTEAD of the
             // two engine-repair cards below when it has something to say — one fact,
             // one card (an engine reason it does not claim is theirs, and the reverse).
-            if let runStart = console.runStart {
+            // A scheduled run that did not get under way in this session says so on its own card in the
+            // transcript (board scheduled-run-not-started): none of these notes about this session, no composer.
+            if console.scheduleRunCard != nil {
+                EmptyView()
+            } else if let runStart = console.runStart {
                 SessionRunStartCardView(console: console, card: runStart, onMove: moveFromCard)
                     .padding(.bottom, .composerBandGap)
             } else if let repair = console.queuedDshRepair {
@@ -406,7 +410,9 @@ struct ConsoleView: View {
                     .padding(.bottom, .composerBandGap)
                 }
             }
-            if case .completed(let successor)? = handoffRow {
+            if console.scheduleRunCard != nil {
+                EmptyView()
+            } else if case .completed(let successor)? = handoffRow {
                 CoordinatorHandedOverBanner { appModel.route(to: .session(successor)) }
             } else if CoordinatorContextActions.locksComposer(handoff) {
                 CoordinatorHandoffLockedComposer()
@@ -966,10 +972,29 @@ private struct TypingFold: ViewModifier {
     }
 }
 
+/// The cards a page's chat hangs under the conversation's turns (`TranscriptChatCard`), and how the page draws one:
+/// a Drive chat's change groups and overwrite questions (board drive-chat 02). Nil everywhere else.
+struct TranscriptChatCards {
+    let cards: [TranscriptChatCard]
+    let render: (String) -> AnyView
+}
+
+private struct TranscriptChatCardsKey: EnvironmentKey {
+    static let defaultValue: TranscriptChatCards? = nil
+}
+
+extension EnvironmentValues {
+    var transcriptChatCards: TranscriptChatCards? {
+        get { self[TranscriptChatCardsKey.self] }
+        set { self[TranscriptChatCardsKey.self] = newValue }
+    }
+}
+
 struct TranscriptView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openApprovalReview) private var openApprovalReview
+    @Environment(\.transcriptChatCards) private var chatCards
     @Environment(\.openPromotionReview) private var openPromotionReview
     let console: ConsoleModel
     /// The sticky "↑ Your question" header folds away while a phone's composer holds the keyboard,
@@ -1161,6 +1186,11 @@ struct TranscriptView: View {
         .environment(\.runnerUpdatingFoot, runnerUpdatingFoot)
         // …and where that message is one no runner has taken, Cancel beside the tag (`HeldCancel`).
         .environment(\.heldCancel, { [console] bubble in Task { await console.cancelHeld(bubble) } })
+        // A `Not sent` message's Retry and Put back; Retry waits while another send is on its way.
+        .environment(\.notSentActions, NotSentActions(
+            retry: { [console] bubble in Task { await console.retryUnsent(bubble) } },
+            putBack: { [console] bubble in console.putBackUnsent(bubble) },
+            retryEnabled: !console.sending))
         .overlay { runnerUpdatingPage }
         // macOS shows the session state in this band. iOS gave the state up with the nav-bar title,
         // for reading space (see `ConsoleView`'s toolbar), so the band is retired there.
@@ -1637,7 +1667,8 @@ struct TranscriptView: View {
                              recap: recapCard,
                              watchName: watchWakeName,
                              handoffReceived: app.session(id: console.sessionID)?.coordinatorHandoffReceived,
-                             createdWorkspace: console.createdWorkspaceLine)
+                             createdWorkspace: console.createdWorkspaceLine,
+                             chatCards: chatCards?.cards ?? [])
     }
 
     /// The name a folded watch turn gives its one target (`OrbitExchangeFold.orbitTurn`): the watch's
@@ -1800,6 +1831,9 @@ struct TranscriptView: View {
         case .approval(let approval):
             // No `AnchorRow`: an approval isn't a "Your question" the sticky header names.
             ApprovalCard(console: console, approval: approval).orbitCardWidth()
+        case .chatCard(let card):
+            // No `AnchorRow`: drawn by the page whose chat hangs it here.
+            if let chatCards { chatCards.render(card.id).orbitCardWidth() }
         case .recap(let card):
             // No `AnchorRow`: the recap sums the conversation up; it asks nothing.
             RecapCardView(card: card, onHide: hideRecap)

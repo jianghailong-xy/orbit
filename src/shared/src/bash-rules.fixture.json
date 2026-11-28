@@ -1,9 +1,11 @@
 {
   "about": [
-    "What \"always allow\" remembers from a Bash command a person approved — one set of cases both",
-    "clients are proved against. `bashRules.spec.ts` walks it through `bashCommandRules`, which the web",
+    "What \"always allow\" remembers from a Bash command a person approved — one set of cases every",
+    "client is proved against. `bashRules.spec.ts` walks it through `bashCommandRules`, which the web",
     "card calls; OrbitKit's `ApprovalRememberParityTests` walks the same file through",
-    "`Approvals.bashCommandRules` on Linux. A rule change starts here and lands at both ends or neither.",
+    "`Approvals.bashCommandRules` on Linux, Android's `CardContractTest` through `ApprovalRules.bash`, and the",
+    "runner's terminal card (`TestTUIBashRulePrefixes`) through `bashRulePrefixes`.",
+    "A rule change starts here and lands at every end or none.",
     "",
     "Each case: `command` (the approval's `input.command`, exactly as the engine sent it) and `rules` —",
     "the command prefixes remembered, in order, each stored as `Bash(<prefix>:*)`. An empty list means",
@@ -171,19 +173,34 @@
       "rules": ["ls", "git status"]
     },
     {
-      "name": "a shell keyword alone is never remembered: it names no program",
+      "name": "a shell keyword alone is never remembered, nor a loop's header: they name no program",
       "command": "for f in a b\ndo\n  ./run.sh\ndone",
-      "rules": ["for f", "./run.sh", "done"]
+      "rules": ["./run.sh"]
     },
     {
-      "name": "a keyword ahead of something that is no clean word is never remembered either",
+      "name": "a keyword is skipped and what follows it is judged",
       "command": "if ./check.sh; then ./run.sh; fi",
-      "rules": ["fi"]
+      "rules": ["./check.sh", "./run.sh"]
     },
     {
-      "name": "a keyword ahead of a program word names that program",
+      "name": "a keyword ahead of a program word names that program alone",
       "command": "for f in a; do echo x; done",
-      "rules": ["for f", "do echo", "done"]
+      "rules": ["echo"]
+    },
+    {
+      "name": "then, elif, else and ! lead to the program after them",
+      "command": "if [ -d x ]; then cd x; elif test -f y; then ls y; else ! grep -q z f; fi",
+      "rules": ["cd", "test", "ls", "grep"]
+    },
+    {
+      "name": "time and a { group lead to the program after them",
+      "command": "time git status; { echo a; }",
+      "rules": ["git status", "echo"]
+    },
+    {
+      "name": "case and select headers name no program",
+      "command": "case $x in a) echo a;; esac",
+      "rules": []
     },
     {
       "name": "a single-quoted heredoc's body is not a sub-command",
@@ -504,6 +521,101 @@
       "name": "an open quote in the word runs to the end of the command",
       "command": "cat <<'EOF\ngit status",
       "rules": ["cat"]
+    },
+    {
+      "name": "recorded card 1 of session 4FwPbT4Fa0wz8VbxYjHfVz (2026-11-18): git worktree list, a $(…) and an if block",
+      "command": "git worktree list | rg -i 'set-as-default|0cc5aa|c333b8|f1f63a'; echo '---'; WT=$(git worktree list | awk '/0cc5aa/{print $1}'); echo \"wt=$WT\"; if [ -n \"$WT\" ]; then cd \"$WT\" && git status -sb && git diff --stat && ls -la docs/evidence 2>/dev/null | head; find . -name '*SetDefault*' -o -name '*set-as-default*' -o -name '*SetAsDefault*' 2>/dev/null | head -40; ls OrbitKitTests 2>/dev/null; find . -path '*uploads*' -name '*.png' 2>/dev/null | head; find /Users/long/.orbit/runs -path '*5OK81*' -name '*.png' 2>/dev/null | head; fi",
+      "rules": ["git worktree", "rg", "echo", "cd", "git status", "git diff", "ls", "head"]
+    },
+    {
+      "name": "recorded card 2 of session 4FwPbT4Fa0wz8VbxYjHfVz (2026-11-18): copies, then git apply",
+      "command": "PRIOR=/Users/long/.orbit/worktrees/b12cd4a3-8c1b-59b1-9515-267a36e1f48c\ncp \"$PRIOR/src/macos/OrbitApp/Sources/OrbitApp/Views/RunnerEngineSetDefaultViews.swift\" src/macos/OrbitApp/Sources/OrbitApp/Views/RunnerEngineSetDefaultViews.swift\ncp \"$PRIOR/src/macos/OrbitApp/Tests/OrbitAppTests/SetDefaultShotsTests.swift\" src/macos/OrbitApp/Tests/OrbitAppTests/SetDefaultShotsTests.swift\n# Apply the page + wiring diffs from the prior worktree onto our cherry-picked base\ngit -C \"$PRIOR\" diff -- src/macos/OrbitApp/Sources/OrbitApp/Views/RunnerEnginePage.swift src/macos/OrbitKit/Tests/OrbitKitTests/MachinesAndModelsPageWiringTests.swift > /tmp/set-default-followup.patch\ngit apply /tmp/set-default-followup.patch && echo APPLIED_OK || echo APPLY_FAILED\ngit status --short\nwc -l /tmp/set-default-followup.patch\n",
+      "rules": ["git apply", "echo", "git status", "wc"]
+    },
+    {
+      "name": "recorded card 3 of session 4FwPbT4Fa0wz8VbxYjHfVz (2026-11-18): Xcode and swift versions",
+      "command": "ls /Applications/Xcode*.app 2>/dev/null; xcode-select -p; echo DEVELOPER_DIR=${DEVELOPER_DIR:-}; which swift; swift --version 2>&1 | head -3\n# How other shot tests are invoked\nrg -n 'ShotsTests|xcodebuild.*OrbitApp|swift test --filter' src/macos --glob '*.{md,yml,sh,swift}' | head -40\nls src/macos/OrbitApp/Tests/OrbitAppTests/ | rg -i 'shot|render|screenshot' | head\n",
+      "rules": ["ls", "xcode-select", "echo", "which", "head", "rg"]
+    },
+    {
+      "name": "recorded card 4 of session 4FwPbT4Fa0wz8VbxYjHfVz (2026-11-18): where Xcode is installed",
+      "command": "ls -la /Applications/ | rg -i 'xcode|Xcode'; ls -la /Applications/Xcode.app/Contents/Developer/usr/bin/swift 2>&1 | head -3; ls /Users/long/Applications 2>/dev/null | head; mdfind 'kMDItemCFBundleIdentifier == \"com.apple.dt.Xcode\"' 2>/dev/null | head; echo '---'; # prior session may have left build artifacts / commands\nls /Users/long/.orbit/worktrees/b12cd4a3-8c1b-59b1-9515-267a36e1f48c/src/macos/build/evidence/set-default-macos 2>/dev/null\n# agent transcripts for build commands used previously\nrg -l 'SetDefaultShots|DEVELOPER_DIR.*Xcode' /Users/long/.orbit/runs/8be03e4f-b83c-5fdf-91b7-08ba95568fab/cursor/data/projects/Users-long-orbit-worktrees-8be03e4f-b83c-5fdf-91b7-08ba95568fab/agent-transcripts 2>/dev/null | head\nrg -n 'DEVELOPER_DIR|/Applications/Xcode' /Users/long/.orbit/worktrees/b12cd4a3-8c1b-59b1-9515-267a36e1f48c -g '*.md' 2>/dev/null | head\n# check client.yml for how macOS builds\nrg -n 'DEVELOPER_DIR|OrbitApp|swift test' .github/workflows/client.yml 2>/dev/null | head -40\n",
+      "rules": ["ls", "rg", "head", "mdfind", "echo"]
+    },
+    {
+      "name": "recorded card 5 of session 4FwPbT4Fa0wz8VbxYjHfVz (2026-11-18): Xcode's contents and version",
+      "command": "ls /Applications/Xcode.app/Contents/ | head -30; ls /Applications/Xcode.app/Contents/Developer 2>&1 | head -20; ls /Applications/Xcode.app/Contents/Developer/Toolchains 2>&1 | head; # maybe xcode is incomplete?\nfile /Applications/Xcode.app; defaults read /Applications/Xcode.app/Contents/Info.plist CFBundleShortVersionString 2>&1; # check prior evidence pngs origin\nfile /Users/long/.orbit/worktrees/b12cd4a3-8c1b-59b1-9515-267a36e1f48c/src/macos/build/evidence/set-default-macos/*.png 2>&1 | head\nls -la /Users/long/.orbit/worktrees/b12cd4a3-8c1b-59b1-9515-267a36e1f48c/src/macos/build/evidence/set-default-macos/\n# Package.swift for OrbitApp tests\nhead -80 src/macos/OrbitApp/Package.swift\n",
+      "rules": ["ls", "head", "file", "defaults read"]
+    },
+    {
+      "name": "recorded card 6 of session 4FwPbT4Fa0wz8VbxYjHfVz (2026-11-18): an export, then swift through $DEVELOPER_DIR",
+      "command": "ls /Applications/Xcode.app/Contents/Developer/usr/bin/ | rg 'swift|xcodebuild' | head; ls /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift; export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer; \"$DEVELOPER_DIR/usr/bin/swift\" --version 2>&1 | head -5; \"$DEVELOPER_DIR/usr/bin/xcodebuild\" -version 2>&1 | head -5\n",
+      "rules": ["ls", "rg", "head"]
+    },
+    {
+      "name": "nothing inside $(…) is remembered, even past a pipe in it",
+      "command": "WT=$(git worktree list | awk '{print $1}'); ls \"$WT\"",
+      "rules": ["ls"]
+    },
+    {
+      "name": "nothing inside backticks is remembered",
+      "command": "echo `git rev-parse HEAD; whoami`",
+      "rules": ["echo"]
+    },
+    {
+      "name": "a $(…) inside double quotes is one piece of its word",
+      "command": "git commit -m \"$(git log -1 --format=%s | tr a-z A-Z); done\"",
+      "rules": ["git commit"]
+    },
+    {
+      "name": "a program built by a substitution names nothing",
+      "command": "$(which swift) --version; `which node` -v",
+      "rules": []
+    },
+    {
+      "name": "an argument is never part of the name",
+      "command": "ls OrbitKitTests; echo APPLIED_OK; cat notes",
+      "rules": ["ls", "echo", "cat"]
+    },
+    {
+      "name": "a program that takes sub-commands keeps its sub-command",
+      "command": "npm test; docker compose ps; go test ./...",
+      "rules": ["npm test", "docker compose", "go test"]
+    },
+    {
+      "name": "a program that takes sub-commands with none after it remembers nothing",
+      "command": "git -C ../other status; swift --version; git",
+      "rules": []
+    },
+    {
+      "name": "file-changing programs are never remembered",
+      "command": "cp a b; mv a b; rm -f a; ln -s a b; chmod +x a; chown me a; tee out < a; dd if=a of=b; find . -name '*.tmp' -delete; sed -i s/a/b/ f; ls",
+      "rules": ["ls"]
+    },
+    {
+      "name": "environment-changing programs are never remembered",
+      "command": "export A=1; env A=1 make; set -e; unset A; source ./env.sh; . ./env.sh; pwd",
+      "rules": ["pwd"]
+    },
+    {
+      "name": "a path to a file-changing program is the same program",
+      "command": "/bin/cp a b && /usr/bin/env FOO=1 ls",
+      "rules": []
+    },
+    {
+      "name": "programs that run whatever they are given are never remembered",
+      "command": "sudo ls; xargs rm < list; eval \"$CMD\"; exec ls; nohup ./run.sh; timeout 5 rm -rf x; nice make; command rm x; builtin cd /",
+      "rules": []
+    },
+    {
+      "name": "shells and interpreters are never remembered: a rule for one covers every script",
+      "command": "sh x.sh; bash ./build.sh; zsh -f x; dash x; ksh x; fish x; python x.py; python3 -c \"print(1)\"; python3.12 x.py; /usr/bin/python3 x.py; node x.js; ruby x.rb; perl -e 1; php x.php; osascript -e 1; awk '{print $1}' f; source x; . x; pwd",
+      "rules": ["pwd"]
+    },
+    {
+      "name": "a runner's sub-command that runs any code it is given is never remembered; its others are",
+      "command": "bun run x.ts; bun x cowsay; deno run x.ts; deno eval 1; npm exec foo; pnpm dlx foo; yarn dlx foo; bun test; deno fmt; npm test; pnpm install",
+      "rules": ["bun test", "deno fmt", "npm test", "pnpm install"]
     }
   ]
 }

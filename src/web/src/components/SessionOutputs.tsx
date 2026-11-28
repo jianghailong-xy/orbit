@@ -5,6 +5,7 @@ import type { BranchCommit, RunnerRepoHealth, MergeRecoveryAction } from '@orbit
 import { MAIN_CHECKOUT_COPY } from '@orbit/shared';
 import { MergeOperationLine, MergeRepairStrip, mergeRecoveryChecking, mergeRecoveryFastForward } from './MergeRecoveryPanel';
 import { MainCheckoutBar } from './MainCheckout';
+import { pullRequestCard } from './LandingPullRequest';
 import { useMainCheckoutHost } from '../lib/mainCheckout';
 import { refreshSessionDiff } from '../api';
 import type { SessionChangedFile, SessionDetail, SessionFilePatch } from '../api';
@@ -327,18 +328,19 @@ export function SessionOutputs({
         onClick={() => (commits ? toggleCommits() : firstFile && setOpenFile(firstFile))}
         aria-expanded={commits ? commitsOpen : undefined}
       >
-        <button
-          type="button"
-          className="wt-branch"
-          title="Copy branch name"
-          onClick={(e) => {
-            e.stopPropagation();
-            copy(displayBranch, 'branch');
-          }}
-        >
-          <span className="wt-branch-ico">⎇</span>
-          <BranchLabel branch={displayBranch} />
-        </button>
+        <Tooltip content="Copy branch name">
+          <button
+            type="button"
+            className="wt-branch"
+            onClick={(e) => {
+              e.stopPropagation();
+              copy(displayBranch, 'branch');
+            }}
+          >
+            <span className="wt-branch-ico">⎇</span>
+            <BranchLabel branch={displayBranch} />
+          </button>
+        </Tooltip>
         {commits ? (
           <>
             <CommitSummary commits={commits} dirty={dirtyNow} fileCount={files.length} />
@@ -391,6 +393,7 @@ export function SessionOutputs({
             <MergeButton
               status={detail.mergeStatus}
               mergeError={detail.mergeError}
+              pullRequest={detail.mergePullRequest}
               busy={merging}
               targets={detail.mergeTargets ?? []}
               mergeTarget={detail.mergeTarget}
@@ -482,18 +485,22 @@ export function SessionOutputs({
                 <li>
                   <span className="wt-merge-step-n" aria-hidden="true">1</span>
                   <span className="wt-merge-where">In the session’s worktree</span>
-                  <code className="wt-merge-cmd" title="Copy" onClick={() => copy(manualRebaseCmd, 'command')}>
-                    {manualRebaseCmd}
-                    <span className="wt-merge-cmd-copy" aria-hidden="true">Copy</span>
-                  </code>
+                  <Tooltip content="Copy">
+                    <code className="wt-merge-cmd" onClick={() => copy(manualRebaseCmd, 'command')}>
+                      {manualRebaseCmd}
+                      <span className="wt-merge-cmd-copy" aria-hidden="true">Copy</span>
+                    </code>
+                  </Tooltip>
                 </li>
                 <li>
                   <span className="wt-merge-step-n" aria-hidden="true">2</span>
                   <span className="wt-merge-where">Then in the repo</span>
-                  <code className="wt-merge-cmd" title="Copy" onClick={() => copy(manualFfCmd, 'command')}>
-                    {manualFfCmd}
-                    <span className="wt-merge-cmd-copy" aria-hidden="true">Copy</span>
-                  </code>
+                  <Tooltip content="Copy">
+                    <code className="wt-merge-cmd" onClick={() => copy(manualFfCmd, 'command')}>
+                      {manualFfCmd}
+                      <span className="wt-merge-cmd-copy" aria-hidden="true">Copy</span>
+                    </code>
+                  </Tooltip>
                 </li>
               </ol>
             </div>
@@ -501,17 +508,19 @@ export function SessionOutputs({
             // A precondition failure, not a conflict: no git command run here would help, and the
             // old copyable rebase actively misled (it can't run against a checkout it can't have).
             // The runner's message names what is in the way — that IS the next step.
-            <span className="wt-merge-err" title={detail.mergeError ?? undefined}>
-              {detail.mergeError || 'Merge failed — nothing was changed.'}
-              {mainCheckout?.actionsSupported && isFfClash(detail.mergeError) && (
-                <>
-                  {' '}
-                  <button type="button" className="mck-link" onClick={() => mainCheckout.openReview()}>
-                    {MAIN_CHECKOUT_COPY.reviewMainCheckout}
-                  </button>
-                </>
-              )}
-            </span>
+            <Tooltip content={detail.mergeError ?? undefined} truncatedOnly>
+              <span className="wt-merge-err">
+                {detail.mergeError || 'Merge failed — nothing was changed.'}
+                {mainCheckout?.actionsSupported && isFfClash(detail.mergeError) && (
+                  <>
+                    {' '}
+                    <button type="button" className="mck-link" onClick={() => mainCheckout.openReview()}>
+                      {MAIN_CHECKOUT_COPY.reviewMainCheckout}
+                    </button>
+                  </>
+                )}
+              </span>
+            </Tooltip>
           )}
         </div>
       )}
@@ -731,7 +740,8 @@ function AdoptButton({
  *  otherwise the workspace/runner default), and a caret
  *  opens a dropdown of the repo's other branches (mergeTargets) to merge into instead. Drives
  *  off the server-reported mergeStatus: idle → the split button; pending → "Merging…"; merged →
- *  a ✓ chip (naming the target); conflict → "Resolve in session" (resume so the workspace rebases the
+ *  a ✓ chip (naming the target); pull_request → the pull request's state, linking to it
+ *  (GitHub refused the direct push, design §4.6/§11.2); conflict → "Resolve in session" (resume so the workspace rebases the
  *  branch onto the target and fixes the conflicts); error →
  *  "Retry merge" (a precondition failure like a dirty main that a rebase can't fix — re-runs the
  *  same target). The failure detail + a copyable rebase fallback live in the expandable file
@@ -740,6 +750,7 @@ function AdoptButton({
 function MergeButton({
   status,
   mergeError,
+  pullRequest,
   busy,
   targets,
   mergeTarget,
@@ -752,6 +763,8 @@ function MergeButton({
   status?: SessionDetail['mergeStatus'];
   /** Why the last merge failed (for an 'error'); surfaced on the failed button's hover. */
   mergeError?: string | null;
+  /** The pull request a 'pull_request' merge waits on; absent until the server has read it. */
+  pullRequest?: SessionDetail['mergePullRequest'];
   busy?: boolean;
   /** Candidate target branches reported by the runner (empty for older runners). */
   targets: string[];
@@ -783,6 +796,28 @@ function MergeButton({
         <span className="wt-merge-done">
           ✓ Merged{elsewhere ? ` → ${mergeTarget}` : ''}
         </span>
+      </Tooltip>
+    );
+  }
+  // GitHub refused the push to the target because of its rules, so the runner opened a pull request and the
+  // merge waits on it. Not a failure (design §11.2): the bar names the pull request's state and links to it.
+  if (status === 'pull_request') {
+    const target = mergeTarget || 'main';
+    const card = pullRequest ? pullRequestCard(pullRequest, target) : null;
+    const number = pullRequest?.number != null ? ` #${pullRequest.number}` : '';
+    const label = card ? `${card.head}${card.stage === 'MERGED' ? '' : number}${card.right ? ` · ${card.right}` : ''}` : 'Pull request open';
+    const hint = card?.detail ?? `${target} requires a pull request. Orbit merges it once the branch's rules pass.`;
+    const url = pullRequest?.url ?? null;
+    return (
+      <Tooltip content={hint} delay={TEXT_TOOLTIP_DELAY_MS}>
+        {url ? (
+          <a className="wt-merge-pr" data-tone={card?.tone} href={url} target="_blank" rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}>
+            {label} ↗
+          </a>
+        ) : (
+          <span className="wt-merge-pr" data-tone={card?.tone}>{label}</span>
+        )}
       </Tooltip>
     );
   }
@@ -876,19 +911,19 @@ function MergeButton({
         e.stopPropagation();
         onMerge(primaryTarget);
       }}
-      title={failed ? undefined : `Merge this branch into ${effectiveTarget ?? 'main'}`}
     >
       {primaryLabel}
     </button>
   );
-  // On failure, hover surfaces the real reason via a Tooltip (native title cleared above); otherwise
-  // the plain button with its native title is enough.
+  // Hover says where it merges, or on failure the real reason, in the app's tooltip.
   const mainBtnEl = failed ? (
     <Tooltip content={failureHint} side="top">
       {mainBtn}
     </Tooltip>
   ) : (
-    mainBtn
+    <Tooltip content={`Merge this branch into ${effectiveTarget ?? 'main'}`} side="top">
+      {mainBtn}
+    </Tooltip>
   );
   // Older runner (no reported targets) or mid-merge → the plain button, no caret.
   if (!hasMenu) return mainBtnEl;
@@ -1040,26 +1075,29 @@ function CommitButton({
   if (!onCommit) return null;
   const pending = busy || status === 'pending';
   const failed = status === 'error';
+  const tip = turnActive && !pending
+    ? 'Wait for the current turn to finish before committing'
+    : failed
+      ? 'Commit failed — try again'
+      : 'Commit the worktree changes onto this branch';
+  // The span takes the pointer while the button is disabled for a running turn, so the reason still shows.
   return (
-    <button
-      type="button"
-      className={`wt-merge-btn${failed ? ' wt-merge-btn-failed' : ''}`}
-      disabled={pending || turnActive}
-      onClick={(e) => {
-        // Don't let the click bubble to the row's toggle — committing shouldn't expand the panel.
-        e.stopPropagation();
-        onCommit();
-      }}
-      title={
-        turnActive && !pending
-          ? 'Wait for the current turn to finish before committing'
-          : failed
-            ? 'Commit failed — try again'
-            : 'Commit the worktree changes onto this branch'
-      }
-    >
-      {pending ? 'Committing…' : failed ? 'Retry commit' : 'Commit'}
-    </button>
+    <Tooltip content={tip} side="top">
+      <span style={{ display: 'inline-flex' }}>
+        <button
+          type="button"
+          className={`wt-merge-btn${failed ? ' wt-merge-btn-failed' : ''}`}
+          disabled={pending || turnActive}
+          onClick={(e) => {
+            // Don't let the click bubble to the row's toggle — committing shouldn't expand the panel.
+            e.stopPropagation();
+            onCommit();
+          }}
+        >
+          {pending ? 'Committing…' : failed ? 'Retry commit' : 'Commit'}
+        </button>
+      </span>
+    </Tooltip>
   );
 }
 
@@ -1255,27 +1293,28 @@ function TreeNodes({
           />
         ) : (
           <div key={node.path} className="wt-tree-dir">
-            <button
-              type="button"
-              className="wt-diff-group-head"
-              style={{ paddingLeft: 8 + depth * 16 }}
-              onClick={() => toggle(node)}
-              title={node.path}
-            >
-              <span className="wt-diff-group-caret">{collapsed(node) ? '▸' : '▾'}</span>
-              <span className="wt-diff-group-dir">{node.name}/</span>
-              <span className="wt-diff-group-meta">
-                <span className="wt-diff-group-n">{node.fileCount}</span>
-                {node.binaryOnly ? (
-                  <span className="session-file-bin">binary</span>
-                ) : (
-                  <>
-                    <span className="add">+{node.add}</span>
-                    <span className="del">−{node.del}</span>
-                  </>
-                )}
-              </span>
-            </button>
+            <Tooltip content={node.path} truncatedOnly mono>
+              <button
+                type="button"
+                className="wt-diff-group-head"
+                style={{ paddingLeft: 8 + depth * 16 }}
+                onClick={() => toggle(node)}
+              >
+                <span className="wt-diff-group-caret">{collapsed(node) ? '▸' : '▾'}</span>
+                <span className="wt-diff-group-dir">{node.name}/</span>
+                <span className="wt-diff-group-meta">
+                  <span className="wt-diff-group-n">{node.fileCount}</span>
+                  {node.binaryOnly ? (
+                    <span className="session-file-bin">binary</span>
+                  ) : (
+                    <>
+                      <span className="add">+{node.add}</span>
+                      <span className="del">−{node.del}</span>
+                    </>
+                  )}
+                </span>
+              </button>
+            </Tooltip>
             {!collapsed(node) && (
               <TreeNodes
                 nodes={node.children}
@@ -1320,9 +1359,11 @@ function FileRow({
         style={indent != null ? { paddingLeft: 8 + indent * 16 } : undefined}
         onClick={onClick}
       >
-        <span className={`session-file-status st-${status.toLowerCase()}`} title={status}>
-          {status}
-        </span>
+        <Tooltip content={status} truncatedOnly>
+          <span className={`session-file-status st-${status.toLowerCase()}`}>
+            {status}
+          </span>
+        </Tooltip>
         <span className="session-file-path">
           {display === 'full' && dir && <span className="session-file-dir">{dir}</span>}
           <span className="session-file-name">{name}</span>
@@ -1585,15 +1626,12 @@ export function WorktreeDiffDrawer({
         )
       }
       headerActions={
-        <button
-          type="button"
-          className="wt-diff-max-btn"
-          onClick={toggleMax}
-          title={maximized ? 'Restore to side panel' : 'Maximize to full screen'}
-        >
-          {maximized ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
-          {maximized ? 'Restore' : 'Maximize'}
-        </button>
+        <Tooltip content={maximized ? 'Restore to side panel' : 'Maximize to full screen'} side="bottom" align="end">
+          <button type="button" className="wt-diff-max-btn" onClick={toggleMax}>
+            {maximized ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
+            {maximized ? 'Restore' : 'Maximize'}
+          </button>
+        </Tooltip>
       }
     >
       <div className="wt-diff-body" ref={bodyRef}>

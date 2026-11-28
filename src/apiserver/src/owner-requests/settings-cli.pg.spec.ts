@@ -33,7 +33,8 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 import { JwtService } from '@nestjs/jwt';
-import { Prisma, PrismaClient, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { Prisma, PrismaClient, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -232,7 +233,7 @@ async function account(db: PrismaClient, label: string): Promise<Account> {
       title: 'Reading replies in Japanese',
       prompt: 'Reading replies in Japanese',
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startedAt: new Date(),
     },

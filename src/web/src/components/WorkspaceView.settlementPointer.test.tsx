@@ -637,7 +637,9 @@ describe('the settlement question on the pinned line on a phone', { timeout: 60_
     });
     const controls = [...strip()!.querySelectorAll<HTMLButtonElement>('button')];
     expect(controls.map((button) => button.className), 'the phone strip is not one line').toEqual(['decision-strip-line']);
-    expect(strip()!.closest('.chat-older-top'), 'the phone line is not the capsule over the transcript').not.toBeNull();
+    expect(strip()!.closest('.workspace-title-jump'), 'the phone line is not the capsule in the title row').not.toBeNull();
+    // The capsule takes the title's row there: one row in both states, nothing added under it.
+    expect(strip()!.closest('.workspace-title-line')!.classList.contains('shows-jump'), 'the title row is not given to the capsule').toBe(true);
     expect(controls[0]!.hasAttribute('aria-expanded'), 'the phone line is a fold').toBe(false);
 
     const card = settlementCards()[0]!;

@@ -7,6 +7,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { conversationProjectPage, setConversationProjectPage } from '../lib/conversationProjectPage';
 import { MemoryRouter, useLocation, useNavigate, type NavigateFunction } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as listingRules from '../../../apiserver/src/sessions/session-listing';
+import { answerListing } from '../test/sessionListingAnswer';
 import type { Runner } from './TasksSidePanel';
 import { SessionSearch } from './SessionSearch';
 import { hoverTooltip } from '../test/tooltipHover';
@@ -269,6 +271,10 @@ beforeEach(() => {
       return reply(inScope.filter((r) => r.lifecycleState === lifecycle &&
         (!params.has('projectId') || r.projectMembership?.projectId === params.get('projectId'))));
     }
+    if (path.startsWith('/sessions/listing?')) {
+      listCalls.push(path);
+      return reply(answerListing(listingRules, [...rows, ...remoteRows], folders, path));
+    }
     if (path.startsWith('/sessions/project-placement?')) {
       // What the server answers (SessionsService.projectPlacement), from every workspace's rows.
       listCalls.push(path);
@@ -529,7 +535,10 @@ describe('project entry status and second line', { timeout: 60_000 }, () => {
     rows = [LOOSE, COORDINATOR, newer, older];
     await mount();
     expect(preview()?.textContent).toBe('Waiting for your confirmation · Build the package');
-    expect(preview()?.getAttribute('title')).toBe('Waiting for your confirmation · Build the package');
+    // jsdom lays nothing out: give the label a cut-off box so its tip opens.
+    Object.defineProperty(preview()!, 'scrollWidth', { value: 500, configurable: true });
+    Object.defineProperty(preview()!, 'clientWidth', { value: 200, configurable: true });
+    expect(await hoverTooltip(preview()!)).toBe('Waiting for your confirmation · Build the package');
     expect(preview()?.classList.contains('tone-approval')).toBe(true);
   });
 
@@ -650,10 +659,12 @@ describe('project entry status and second line', { timeout: 60_000 }, () => {
     expect(preview()?.classList.contains('tone-approval')).toBe(false);
   });
 
-  it('breathes only for active background jobs after all member turns have parked', async () => {
+  // A member with a job in flight spins on its own row (`phase` RUNNING), so the project row spins too rather than breathing.
+  it('spins for a background job in flight after all member turns have parked', async () => {
     rows = [LOOSE, COORDINATOR, { ...TASK, status: 'AWAITING_INPUT', runState: 'AWAITING_INPUT', runningBgCount: 1, runningBgJobCount: 1 }];
     await mount();
-    expect(projectRow().querySelector('.session-project-status')?.getAttribute('data-state')).toBe('jobs');
+    expect(projectRow().querySelector('.session-project-icon .anticon-loading')).not.toBeNull();
+    expect(projectRow().querySelector('.session-project-status')).toBeNull();
   });
 });
 
@@ -835,7 +846,8 @@ describe('project members outside the coordinator’s workspace, the arrow keys 
     const here = withWorkspace(pid(823), 'slow workspace');
     rows = [{ ...TASK, ...here }, { ...OLDER, ...here }];
     remoteRows = [{ ...COORDINATOR, ...elsewhere }];
-    // The placement read is held: until it answers, the member waits in a row like a folder's.
+    // The placement read is held. The listing has placed the member as its own row already (its coordinator runs
+    // elsewhere), and the list still lands only once the placement answers.
     let answer = (): void => {};
     const held = new Promise<void>((resolve) => { answer = resolve; });
     const fixtureApi = vi.mocked(apiModule.api).getMockImplementation()! as (...args: unknown[]) => Promise<unknown>;
@@ -843,7 +855,8 @@ describe('project members outside the coordinator’s workspace, the arrow keys 
       path.startsWith('/sessions/project-placement?')
         ? held.then(() => fixtureApi(path, ...rest))
         : fixtureApi(path, ...rest)) as unknown as typeof apiModule.api);
-    await mount(() => expect(titles()).toEqual(['Project Alpha', 'Older conversation']), `/workspaces/${here.workspaceId}`);
+    await mount(() => expect(titles()).toEqual(['Build the package', 'Older conversation']), `/workspaces/${here.workspaceId}`);
+    await settle();
     expect(shown()).toBe(`/workspaces/${here.workspaceId}`);
     await act(async () => answer());
     await untilAt(`/sessions/${TASK.id}`);

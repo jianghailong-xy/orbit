@@ -94,11 +94,11 @@ const EXEMPT: Record<string, string> = {
   'src/lib/queries.ts#9': "attachment storage usage; no control-plane event announces it",
   'src/lib/queries.ts#10': "the files attachment storage keeps, listed for one scope; no control-plane event announces them",
   'src/lib/queries.ts#11': "the owner's avatar, versioned by the profile read; no control-plane event announces it",
-  'src/lib/queries.ts#31': "account secrets are written from this tab; no control-plane event announces them",
-  'src/lib/queries.ts#51': "share-link tokens are written from this tab; no control-plane event announces them",
-  'src/lib/queries.ts#52': "access tokens are written from this tab; no control-plane event announces them",
-  'src/lib/queries.ts#85': "link preview metadata read from the linked pages; no control-plane event announces it",
-  'src/lib/queries.ts#86': "the drive's share of storage, read when Files → Storage opens; no control-plane event announces it",
+  'src/lib/queries.ts#32': "account secrets are written from this tab; no control-plane event announces them",
+  'src/lib/queries.ts#52': "share-link tokens are written from this tab; no control-plane event announces them",
+  'src/lib/queries.ts#53': "access tokens are written from this tab; no control-plane event announces them",
+  'src/lib/queries.ts#86': "link preview metadata read from the linked pages; no control-plane event announces it",
+  'src/lib/queries.ts#87': "the drive's share of storage, read when Files → Storage opens; no control-plane event announces it",
   'src/lib/useDirProbe.ts#1': "a runner filesystem probe; no control-plane event announces directory state",
   'src/pages/AdminEmailPage.tsx#1': "admin email settings are written from this tab; no control-plane event announces them",
   'src/pages/AdminGithubPage.tsx#1': "admin GitHub App settings are written from this tab; no control-plane event announces them",
@@ -111,6 +111,7 @@ const EXEMPT: Record<string, string> = {
   'src/pages/FeishuIntegrationPage.tsx#1': "Feishu integration settings are written from this tab; no control-plane event announces them",
   'src/pages/settings/NotificationsPage.tsx#1': "the server's web push key, set in its environment; no control-plane event announces it",
   'src/components/settings/SettingsLayout.tsx#2': "the server's web push key, which only decides whether search lists This browser's row; no control-plane event announces it",
+  'src/components/WebPushOffer.tsx#1': "whether this browser is offered web push: the server's key and this browser's own subscription, read once; no control-plane event announces either",
 };
 
 /** Calls whose first argument is a query options object (useQueries names its queries property). */

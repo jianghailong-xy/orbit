@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { AgentProvider, PermissionMode } from '@orbit/shared';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { isReleasedStatus } from '../common/session-release';
 import { encryptSecret } from '../providers/provider-crypto';
 import { providerDispatchWhereOn, resolveProviderExec } from '../providers/custom-provider';

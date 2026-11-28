@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunStatus as SharedRunStatus, SessionEndReason } from '@orbit/shared';
 import { currentWorkTerminalizationDouble } from '../test-support/prisma-transaction-double';
 import { RunnerApiController } from './runner-api.controller';
+import { writtenWord } from '../test-support/session-word';
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
 const RUNNER_ID = '22222222-2222-4222-8222-222222222222';
@@ -61,9 +62,10 @@ function makeController(current: LockedSnapshot) {
       // reading is not collected with the turn (`sessions/abandoned-approvals.ts`). None here —
       // the lock ordering this file pins is about turns, and a job would only add a second reader.
       findUnique: async () => ({ runningBgShells: [] }),
-      updateMany: async ({ data }: { data: { status: RunStatus } }) => {
+      updateMany: async ({ data }: { data: Record<string, unknown> }) => {
         order.push('update');
-        statusWrites.push(data.status);
+        // The word the write leaves on the locked row: its facts with the write's laid over them.
+        statusWrites.push(writtenWord({ ...current, ...data }) as RunStatus);
         return { count: 1 };
       },
       count: async ({ where }: { where: { taskId: string } }) => {

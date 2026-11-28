@@ -94,6 +94,7 @@ const PROJECT_ID = '7bV4mNc1';
 const OTHER_PROJECT_ID = '2wX8dHt5';
 /** A run of the task, as the public id the panel links by. */
 const LIVE_RUN = '34MOJw69NzKSq2X0exxf9';
+const SECOND_RUN = '34MOJw69NzKSq2X0exxf8';
 
 /** A runnable task: assigned, unblocked, nothing in flight. */
 function task(over: Record<string, unknown> = {}) {
@@ -222,7 +223,8 @@ describe('the landing of a DONE task, apart from its status (§2.7a)', () => {
     expect(block).toContain('<span class="land-task-task-state">Task DONE</span>');
     expect(block).toContain(`<span class="tdp-badge ${tone}">${label}</span>`);
     expect(block).toContain('generation 19');
-    expect(block).toContain('<code title="refs/heads/project/landing-visibility">project/landing-visibility</code>');
+    // The full ref is the app tooltip's now (ProjectIntegrationLine.test asserts it); the markup shows the branch.
+    expect(block).toMatch(/<code[^>]*>project\/landing-visibility<\/code>/);
     expect(block).toContain('<dt>Queue wait</dt><dd>2m</dd>');
     expect(block).toContain(`dateTime="${QUEUED_AT}"`);
     expect(block).not.toMatch(/<button|<a /);
@@ -463,12 +465,18 @@ describe('the task panel’s delete', () => {
     expect(deleteButton(renderPanel(task()))).toBeNull();
   });
 
-  it('leaves ⋯ and Close beside the actions row rather than in it, so the phone rule keeps them by the title', () => {
-    // Below 600px index.css lifts exactly `.tdp-head > .orbit-button-icon-only` — the panel's own two
-    // window buttons — out of the pressing row and leaves them on the title's line.
+  it('leaves ⋯ and Close beside the actions rather than in them, at the end of the header’s first row', () => {
+    // A long action label wraps the actions inside their own box; the panel's own two window
+    // buttons are the toolbar's last children, so they stay at its right end.
     expect(renderPanel(task())).toMatch(
-      /<div class="tdp-head-actions">[\s\S]*?<\/div><button[^>]*aria-label="More actions"[\s\S]*?<button[^>]*aria-label="Close"/,
+      /<div class="tdp-head-actions">[\s\S]*?<\/div><button[^>]*aria-label="More actions"[\s\S]*?<button[^>]*aria-label="Close"[^>]*><[\s\S]*?<\/button><\/div><div class="tdp-head-main">/,
     );
+  });
+
+  it('gives the title its own row under the presses (docs/mocks/task-panel-header, A)', () => {
+    const html = renderPanel(task());
+    expect(html).toContain('<div class="tdp-head has-toolbar"><div class="tdp-toolbar">');
+    expect(html.indexOf('aria-label="Close"')).toBeLessThan(html.indexOf('class="tdp-title"'));
   });
 });
 
@@ -1266,6 +1274,39 @@ describe('the task page led by the run', () => {
     expect(filed).toBeGreaterThan(-1);
     expect(filed).toBeLessThan(run);
     expect(run).toBeLessThan(comment);
+  });
+
+  it('docked beside a conversation, names that run This conversation and does not link to it', () => {
+    // docs/mocks/session-task-column: a fixed 420px column with no drag handle, beside the run it lists.
+    const data = task({
+      sessions: [
+        { id: LIVE_RUN, status: 'SUCCEEDED', createdAt: '2026-11-12T09:42:00.000Z', workspace: { name: 'Builder' } },
+        { id: SECOND_RUN, status: 'FAILED', createdAt: '2026-11-12T09:50:00.000Z', workspace: { name: 'Reviewer' } },
+      ],
+    });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnMount: false, retryOnMount: false } } });
+    qc.setQueryData(['task', TASK_ID], data);
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter>
+          <TaskDetailPanel taskId={TASK_ID} onOpenTask={() => {}} onClose={() => {}} onDelete={() => {}} deleting={false}
+            docked hereSessionId={LIVE_RUN} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(html).toContain('class="task-detail-panel is-docked"');
+    expect(html).not.toContain('tdp-resizer');
+    expect(html).toContain('<div class="tdp-session-title">This conversation</div>');
+    expect(html).not.toContain('<div class="tdp-session-title">Builder</div>');
+    expect(html).toContain('<div class="tdp-session-title">Reviewer</div>');
+    expect(html).not.toContain(`href="/sessions/${encodeId(LIVE_RUN)}"`);
+    expect(html).toContain(`href="/sessions/${encodeId(SECOND_RUN)}"`);
+
+    // Over any other page, as before: every run is a link, and the panel can be dragged wider.
+    const plain = renderPanel(data);
+    expect(plain).toContain('tdp-resizer');
+    expect(plain).not.toContain('This conversation');
+    expect(plain).toContain(`href="/sessions/${encodeId(LIVE_RUN)}"`);
   });
 });
 

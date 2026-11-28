@@ -192,6 +192,40 @@ public enum WorktreeBarLogic {
         mergeTarget ?? defaultTarget(targets: targets, agentDefaultTarget: agentDefaultTarget) ?? "main"
     }
 
+    /// A merge waiting on its pull request (`mergeStatus == "pull_request"`): GitHub refused the push to the
+    /// target because of its rules, so the runner opened a pull request (design §4.6). Not a failure (§11.2):
+    /// the merge slot names the pull request's state in one line and opens it. Mirrors web's `MergeButton`.
+    public struct MergePullRequestLine: Equatable, Sendable {
+        public let label: String
+        /// The card's sentence, for the slot's help text.
+        public let detail: String
+        public let url: String?
+        public let tone: LandingPullRequestCard.Tone
+    }
+
+    public static func mergePullRequestLine(_ pr: LandingPullRequestView?, target: String) -> MergePullRequestLine {
+        guard let pr else {
+            return MergePullRequestLine(label: "Pull request open", detail: pullRequestFallback(target: target),
+                                        url: nil, tone: .blue)
+        }
+        let card = LandingPullRequestCard.make(pr, main: target)
+        let number = card.stage == .merged ? "" : pr.number.map { " #\($0)" } ?? ""
+        let right = card.right.map { " · \($0)" } ?? ""
+        return MergePullRequestLine(label: card.head + number + right, detail: card.detail,
+                                    url: pr.url.flatMap { $0.isEmpty ? nil : $0 }, tone: card.tone)
+    }
+
+    /// The card a merge that opened a pull request reports (mirrors web's merge-result notice).
+    public static func mergePullRequestNotice(_ pr: LandingPullRequestView?, target: String) -> (headline: String, detail: String) {
+        let headline = pr?.number.map { "Opened pull request #\($0) into \(target)" } ?? "Opened a pull request into \(target)"
+        let detail = pr.map { LandingPullRequestCard.make($0, main: target).detail } ?? pullRequestFallback(target: target)
+        return (headline, detail)
+    }
+
+    private static func pullRequestFallback(target: String) -> String {
+        "\(target) requires a pull request. Orbit merges it once the branch's rules pass."
+    }
+
     /// User-facing reason for the failed commit/merge state. The runner keeps raw git output in
     /// `mergeError` for conflicts and precondition failures; trim it but do not discard it, because
     /// native clients do not have web's hover-only tooltip as a fallback on iOS.

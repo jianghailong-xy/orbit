@@ -7,7 +7,6 @@ import io.orbitd.android.directory.RunState
 import io.orbitd.android.directory.SessionHeader
 import io.orbitd.android.directory.displayRunState
 import io.orbitd.android.directory.effectiveRunState
-import io.orbitd.android.directory.runEnded
 import io.orbitd.android.push.pushStale
 import io.orbitd.android.reader.WorktreeBarLogic
 import io.orbitd.android.tasks.TaskDetailLogic
@@ -16,7 +15,8 @@ import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
 
-/** Plan step 5.4: the five sites that decided on exact terminal words, each with the session facts present and absent. */
+/** Plan step 5.4: the sites that decided on exact terminal words, each with the session facts present and absent. Site 2, the wait
+ * after End and Move, went when the server took the release over (a move is one request). */
 class SessionFactsSitesTest {
     private fun row(json: String) = Json.parseToJsonElement(json).jsonObject
     private fun directorySession(json: String): DirectorySession =
@@ -45,17 +45,6 @@ class SessionFactsSitesTest {
         assertTrue(pushStale(row("""{"status":"SUCCEEDED","retryAt":"x"}"""), true))
     }
 
-    // Site 2: the wait after End (directory/DirectoryActions.kt).
-    @Test fun theWaitAfterEndReadsReleasedWhenSent() {
-        assertTrue(runEnded(row("""{"status":"AWAITING_INPUT","released":true}""")))
-        assertFalse(runEnded(row("""{"status":"CANCELLED","released":false}""")))
-    }
-    @Test fun theWaitAfterEndFallsBackToTheTerminalStatusWhenAbsent() {
-        for (s in listOf("SUCCEEDED", "FAILED", "CANCELLED")) assertTrue(s, runEnded(row("""{"status":"$s"}""")))
-        assertTrue(runEnded(row("""{"status":"RUNNING","runStatus":"FAILED"}""")))
-        for (s in listOf("RUNNING", "AWAITING_INPUT", "INTERRUPTED")) assertFalse(s, runEnded(row("""{"status":"$s"}""")))
-    }
-
     // Site 3: Commit versus Merge (reader/WorktreeBar.kt).
     @Test fun committedReadsReleasedWhenSent() {
         assertTrue(WorktreeBarLogic.committed(row("""{"released":true,"phase":"IDLE"}"""), "AWAITING_INPUT"))
@@ -80,14 +69,15 @@ class SessionFactsSitesTest {
     }
 
     // Site 5: a task run's result off the session row (tasks/TaskDetail.kt, TaskLogic.kt).
-    // With the facts, the label is the approved board's state from `phase` and its marks (docs/mocks/session-display-three-states).
+    // With the facts, the label is the approved board's state from `phase` and its marks (docs/mocks/session-display-three-states);
+    // Interrupted, Background, Will resume, Finished and Ended are not marks (the owner, 2026-11-27).
     @Test fun aTaskRunReadsItsResultOffTheFactsWhenSent() {
         fun label(json: String) = TaskDetailLogic.runLabel(row(json))
-        assertEquals("Idle · Finished", label("""{"status":"SUCCEEDED","released":true,"phase":"IDLE","endReason":"task_done","workFinished":true}"""))
-        assertEquals("Idle · Ended", label("""{"status":"FAILED","released":true,"phase":"IDLE","endReason":"ended","lastTurnOutcome":"FAILED"}"""))
-        assertEquals("Idle · Ended", label("""{"status":"SUCCEEDED","released":true,"phase":"IDLE","lastTurnOutcome":"ANSWERED"}"""))
+        assertEquals("Idle", label("""{"status":"SUCCEEDED","released":true,"phase":"IDLE","endReason":"task_done","workFinished":true}"""))
+        assertEquals("Idle", label("""{"status":"FAILED","released":true,"phase":"IDLE","endReason":"ended","lastTurnOutcome":"FAILED"}"""))
+        assertEquals("Idle", label("""{"status":"SUCCEEDED","released":true,"phase":"IDLE","lastTurnOutcome":"ANSWERED"}"""))
         assertEquals("Idle · Failed", label("""{"status":"FAILED","released":true,"phase":"IDLE","lastTurnOutcome":"FAILED"}"""))
-        assertEquals("Idle · Interrupted", label("""{"status":"INTERRUPTED","released":false,"phase":"IDLE","lastTurnOutcome":"INTERRUPTED","endReason":"ended"}"""))
+        assertEquals("Idle", label("""{"status":"INTERRUPTED","released":false,"phase":"IDLE","lastTurnOutcome":"INTERRUPTED","endReason":"ended"}"""))
         // A parked session's run state stays parked (web dispatchedTurnInFlight); the label is its phase.
         assertEquals("AWAITING_INPUT", resolvedRunState(row("""{"status":"AWAITING_INPUT","released":false,"phase":"RUNNING"}""")))
         assertEquals("Running", label("""{"status":"AWAITING_INPUT","released":false,"phase":"RUNNING"}"""))
@@ -161,8 +151,8 @@ class SessionFactsSitesTest {
         // The server sends activity TURN on every queued or running row: that is a running turn, not parked work.
         assertEquals("Running", label("""{"status":"RUNNING","released":false,"phase":"RUNNING","activity":"TURN"}"""))
         assertEquals("Queued", label("""{"status":"PENDING","released":false,"phase":"PENDING","activity":"TURN"}"""))
-        // A job with no turn (RUNNING phase, another activity) is Running with the Background mark; its run state stays parked.
-        assertEquals("Running · Background", label("""{"status":"AWAITING_INPUT","released":false,"phase":"RUNNING","activity":"BACKGROUND_JOB"}"""))
+        // A job with no turn (RUNNING phase, another activity) is Running (Background is not a mark); its run state stays parked.
+        assertEquals("Running", label("""{"status":"AWAITING_INPUT","released":false,"phase":"RUNNING","activity":"BACKGROUND_JOB"}"""))
         assertEquals("AWAITING_INPUT", resolvedRunState(row("""{"status":"AWAITING_INPUT","released":false,"phase":"RUNNING","activity":"BACKGROUND_JOB"}""")))
         // A parked session whose engine runs its own turn is Running; its run state is still parked: the status decides before the activity.
         assertEquals("Running", label("""{"status":"AWAITING_INPUT","released":false,"phase":"RUNNING","activity":"TURN"}"""))
@@ -170,7 +160,7 @@ class SessionFactsSitesTest {
         assertEquals("Running", label("""{"status":"RUNNING","released":false,"phase":"RUNNING","activity":"TURN"}"""))
         // An unknown status falls back to the activity.
         assertEquals("Running", label("""{"status":"MYSTERY","released":false,"phase":"RUNNING","activity":"TURN"}"""))
-        assertEquals("Running · Background", label("""{"status":"MYSTERY","released":false,"phase":"RUNNING","activity":"BACKGROUND_JOB"}"""))
+        assertEquals("Running", label("""{"status":"MYSTERY","released":false,"phase":"RUNNING","activity":"BACKGROUND_JOB"}"""))
         assertEquals("AWAITING_INPUT", resolvedRunState(row("""{"status":"MYSTERY","released":false,"phase":"RUNNING","activity":"BACKGROUND_JOB"}""")))
         assertEquals("Running", label("""{"status":"RUNNING","released":false,"phase":"RUNNING","activity":"WAITING"}"""))
         // `released` with an unknown phase is not the facts: web, and now Android, fall back to the status.

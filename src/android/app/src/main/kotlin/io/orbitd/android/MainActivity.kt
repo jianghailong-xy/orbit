@@ -297,6 +297,49 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                 }
             }
         }
+        // A filed session opened from outside the app (a link, a push, a share) lands with its folder's page under it, so Back
+        // reaches its row: the workspace's list hides a filed session behind its folder. A link inside the app opens over the page
+        // it was on, which Back returns to. Its folder is the directory row's, else the detail's once read. Once per open, and
+        // only while the session is still on top: a page opened over it, or Back, ends the open, and a return to it is no new one
+        // (iOS `nav.path == openingPath`).
+        var filedOpening by remember(signedIn.handle) { mutableStateOf<OrbitRoute?>(null) }
+        var shownTop by remember(signedIn.handle) { mutableStateOf<Pair<String, List<OrbitRoute>>?>(null) }
+        LaunchedEffect(navigation.section, navigation.frames) {
+            val before = shownTop
+            shownTop = navigation.section to navigation.frames
+            if (before?.second?.lastOrNull() == route) return@LaunchedEffect
+            val returned = before != null && before.first == navigation.section && before.second.size > navigation.frames.size &&
+                before.second.take(navigation.frames.size) == navigation.frames
+            filedOpening = route.takeIf {
+                !returned && it.destination == Destination.SESSION && it.id != null && it.folderId == null &&
+                    it.origin == Origin.EXTERNAL
+            }
+        }
+        filedOpening?.let { opening ->
+            val read by remember(app, signedIn.handle, opening.id) {
+                app.realtime.state.map { state ->
+                    state.session?.takeIf { state.handle === signedIn.handle && ObjectId.same(it.id, opening.id) }
+                        ?.snapshot?.detail?.let { detail ->
+                            val workspace = sequenceOf(detail.text("workspaceId"), detail.obj("workspace")?.text("id"),
+                                detail.text("agentId"), detail.obj("agent")?.text("id")).firstOrNull { !it.isNullOrEmpty() }
+                            Triple(workspace, detail.text("folderId"), detail.text("lifecycleState"))
+                        }
+                }.distinctUntilChanged()
+            }.collectAsState(null)
+            LaunchedEffect(opening, read, data.sessions, data.folders, data.workspaces) {
+                if (navigation.current != opening) return@LaunchedEffect
+                val row = data.sessions.values.firstNotNullOfOrNull { rows -> rows.firstOrNull { ObjectId.same(it.id, opening.id) } }
+                val (workspace, folderId, lifecycle) = row?.let { Triple(it.workspace, it.folderId, it.lifecycleState) } ?: read ?: return@LaunchedEffect
+                val view = SessionView.entries.firstOrNull { it.query == lifecycle.orEmpty().lowercase() } ?: SessionView.OPEN
+                if (folderId.isNullOrEmpty() || !listShowsFolders(false, view, null, Grouping.RECENCY)) { filedOpening = null; return@LaunchedEffect }
+                val folder = data.folders.firstOrNull { ObjectId.same(it.id, folderId) && ObjectId.same(it.workspaceId, workspace) } ?: return@LaunchedEffect
+                val id = data.workspaces.firstOrNull { ObjectId.same(it.id, workspace) }?.id ?: return@LaunchedEffect
+                filedOpening = null
+                val beneath = navigation.frames.getOrNull(navigation.frames.lastIndex - 1)
+                if (beneath?.destination != Destination.FOLDER || !ObjectId.same(beneath.id, folder.id))
+                    navigation = navigation.underFolder(id, folder.id, view.query)
+            }
+        }
         // A drawer row: the destination already showing only closes the drawer, any other opens at its root (A05-8) — a
         // workspace's, on the folder page its list was left on, while the directory still has that folder.
         fun select(key: String, root: OrbitRoute) {
@@ -440,12 +483,14 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         workspaces.forEach { workspace ->
                             val runner = data.runners.firstOrNull { ObjectId.same(it.id, workspace.runnerId) }
                             val sessions = data.sessions["open"].orEmpty().filter { ObjectId.same(it.workspace, workspace.id) }
+                            val onCloud = runner != null && RunnerPage.isManaged(runner.id, managed = runner.managed)
                             DrawerWorkspaceRow(name = workspace.name,
-                                runner = runner?.let { if (RunnerPage.isManaged(it.id, managed = it.managed)) RunnerCopy.MANAGED_RUNNER_LABEL else it.name },
+                                runner = runner?.let { if (onCloud) RunnerCopy.MANAGED_RUNNER_LABEL else it.name },
+                                cloud = onCloud,
                                 disabled = !workspace.enabled,
                                 stateLabel = if (runner?.online == false) ManagedRunner.row(runner.id, managedForLanding.shown?.status)?.label ?: "Offline" else null,
                                 waiting = sessions.sumOf { it.pendingApprovals },
-                                running = sessions.count { it.runState == "RUNNING" || it.status == "RUNNING" }, live = drawerLive,
+                                running = sessions.count { it.isRunning() || it.isRunningJob() }, live = drawerLive,
                                 selected = navigation.section == workspace.id,
                                 onClick = { select(workspace.id, OrbitRoute(Destination.WORKSPACE, workspace.id, workspace.id, origin = Origin.DRAWER)) })
                         }
@@ -540,7 +585,10 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                     navigation = navigation.dropSession(route.id!!)
                                 }
                                 Destination.DRAFT -> NewSessionComposer(app, signedIn.handle, route, data, ::open, ::land, ::replaceTop)
-                                Destination.TASKS, Destination.TASK, Destination.LIST -> TasksScreen(app, signedIn.handle, route, revision, ::open) { navigation = navigation.back() }
+                                // A task opened over one of its own runs is that run's task card: the frame under it says which conversation.
+                                Destination.TASKS, Destination.TASK, Destination.LIST -> TasksScreen(app, signedIn.handle, route, revision, ::open,
+                                    from = navigation.frames.getOrNull(navigation.frames.lastIndexOf(route) - 1)
+                                        ?.takeIf { it.destination == Destination.SESSION }?.id) { navigation = navigation.back() }
                                 Destination.PROJECTS, Destination.PROJECT -> ProjectsScreen(app, signedIn.handle, route, ::open) { navigation = navigation.back() }
                                 Destination.WIKI, Destination.WIKI_ENTRY, Destination.WIKI_BROWSE, Destination.WIKI_INDEX,
                                 Destination.WIKI_ARTICLE, Destination.WIKI_DOC, Destination.WIKI_REVIEW, Destination.WIKI_SETTINGS,
@@ -560,7 +608,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 Destination.BUILD -> BuildInformation { navigation = navigation.back() }
                                 Destination.GUEST_SESSION -> route.id?.let { GuestSessionPage(app, signedIn.handle, route, it) }
                                 Destination.DRIVE, Destination.DRIVE_FILE, Destination.DRIVE_TRASH, Destination.DRIVE_STORAGE ->
-                                    DriveDestination(app, signedIn.handle, route, ::open) { navigation = navigation.back() }
+                                    DriveDestination(app, signedIn.handle, route, api, data, ::open) { navigation = navigation.back() }
                                 // The timeline (board 01 ②) has its own bottom sheet. Change… opens the schedule's draft
                                 // change conversation (§8.2), no longer a blank new session.
                                 // A scheduled task's and a condition's pending items head the page (no Waiting on you page): the account's

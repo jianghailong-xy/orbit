@@ -141,9 +141,9 @@ async function insertTask(owner: string, status: string): Promise<string> {
 async function insertSession(owner: string, runnerId: string): Promise<string> {
   const id = randomUUID();
   await sql.query(
-    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","status","assigned_runner_id",
+    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","turn_state","assigned_runner_id",
                            "provider","provider_builtin","num_turns","started_at","runtime_session_id")
-     VALUES ($1,'watch rollout','the opening prompt',$2,$2,now(),'AWAITING_INPUT',$3,'claude',TRUE,1,now(),$4)`,
+     VALUES ($1,'watch rollout','the opening prompt',$2,$2,now(),NULL,$3,'claude',TRUE,1,now(),$4)`,
     [id, owner, runnerId, `runtime-${id}`],
   );
   return id;

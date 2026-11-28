@@ -624,17 +624,32 @@ public enum WikiChatLogic {
 
     // MARK: the composer's attachments (design §4.2)
 
-    /// The page the reader is on, as the composer's page chip names it.
+    /// The page the reader is on, as the composer's page chip names it: on the Wiki a document's section, an entry or
+    /// a plan; on Drive the folder open (nil for the drive's top level, board drive-chat 02 ①).
     public enum Page: Equatable, Sendable {
         case doc(docSlug: String, sectionKey: String, label: String)
         case entry(entryId: String, label: String)
         /// A plan page, at one of its document's sections when it shows one (C12).
         case plan(docSlug: String, label: String, sectionKey: String? = nil)
+        /// Drive: the folder open, `Folder · Scans`.
+        case folder(folderId: String?, label: String)
 
         public var label: String {
             switch self {
-            case .doc(_, _, let label), .entry(_, let label), .plan(_, let label, _): return label
+            case .doc(_, _, let label), .entry(_, let label), .plan(_, let label, _), .folder(_, let label): return label
             }
+        }
+    }
+
+    /// Drive: the files the chip names beside the folder — the rows selected in a Mac's list, or the file open on an
+    /// iPhone's or an iPad's page — their entry ids and names, in list order (the web's `WikiChatFiles`).
+    public struct Files: Equatable, Sendable {
+        public let ids: [String]
+        public let names: [String]
+
+        public init(ids: [String], names: [String]) {
+            self.ids = ids
+            self.names = names
         }
     }
 
@@ -667,11 +682,17 @@ public enum WikiChatLogic {
         public var page: Page?
         public var pageCrossed: Bool
         public var quote: Quote?
+        /// Drive: the files, which follow the selection or the file open.
+        public var files: Files?
+        public var filesCrossed: Bool
 
-        public init(page: Page? = nil, pageCrossed: Bool = false, quote: Quote? = nil) {
+        public init(page: Page? = nil, pageCrossed: Bool = false, quote: Quote? = nil, files: Files? = nil,
+                    filesCrossed: Bool = false) {
             self.page = page
             self.pageCrossed = pageCrossed
             self.quote = quote
+            self.files = files
+            self.filesCrossed = filesCrossed
         }
     }
 
@@ -680,6 +701,9 @@ public enum WikiChatLogic {
         case crossPage
         case quote(Quote)
         case crossQuote
+        /// Drive: the selection or the file open changed; a new one is shown again even if the last was crossed out.
+        case files(Files?)
+        case crossFiles
         case sent
     }
 
@@ -697,10 +721,23 @@ public enum WikiChatLogic {
             next.quote = quote
         case .crossQuote:
             next.quote = nil
+        case .files(let files):
+            if files != state.files {
+                next.files = files
+                next.filesCrossed = false
+            }
+        case .crossFiles:
+            next.filesCrossed = true
         case .sent:
-            next = Attachments(page: state.page, pageCrossed: false, quote: nil)
+            next = Attachments(page: state.page, pageCrossed: false, quote: nil, files: state.files, filesCrossed: false)
         }
         return next
+    }
+
+    /// The files chip the composer shows (`wikiChatShownFiles`): the files, unless crossed out or none.
+    public static func shownFiles(_ state: Attachments) -> Files? {
+        guard !state.filesCrossed, let files = state.files, !files.ids.isEmpty else { return nil }
+        return files
     }
 
     /// What the composer shows, which is exactly what the message sends (`wikiChatShown`).
@@ -725,7 +762,7 @@ public enum WikiChatLogic {
         case .doc(let slug, let key, _)?: context.page = .doc(docSlug: slug, sectionKey: key)
         case .entry(let id, _)?:          context.page = .entry(entryId: id)
         case .plan(let slug, _, let key)?: context.page = .plan(docSlug: slug, sectionKey: key)
-        case nil:                         break
+        case .folder?, nil:               break
         }
         if let quote, !quote.sentenceIds.isEmpty {
             context.selection = WikiChatContext.Selection(docSlug: quote.docSlug, sectionKey: quote.sectionKey,

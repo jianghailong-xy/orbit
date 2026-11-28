@@ -88,10 +88,12 @@ data class SessionLine(val text: String, val tone: Tone) {
             }
             // Parked while a sub-agent or workflow it started works on: the workspace itself is still working.
             if (live) s.runningSubagentCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.subagentRunningLine(it, s.runningSubagentTitle), Tone.RUNNING) }
-            // Parked on a live watch that will resume it, in the Watching strip's own line.
-            if (live && watching != null && s.effectiveRunState == RunState.AWAITING_INPUT) return SessionLine(watching.rowLine, Tone.WATCHING)
+            // Parked on a live watch that will resume it, in the Watching strip's own line. Not for a session the server calls
+            // IDLE: a wake to come needs no words of its own (the owner, 2026-11-27; web `resumeWords`).
+            val idle = SessionDisplay.state(s.displayFacts) == SessionDisplayState.IDLE
+            if (live && !idle && watching != null && s.effectiveRunState == RunState.AWAITING_INPUT) return SessionLine(watching.rowLine, Tone.WATCHING)
             // The same place for a wait the server reports and this caller holds no watch for (OrbitKit `resumesOnItsOwn`).
-            if (live && s.resumesOnItsOwn) return SessionLine(SessionLineCopy.waitingToResume, Tone.WATCHING)
+            if (live && !idle && s.resumesOnItsOwn) return SessionLine(SessionLineCopy.waitingToResume, Tone.WATCHING)
             // A message that never got an answer is newer than the reply before it, and what the session waits on.
             s.lastUserText?.takeIf { it.isNotEmpty() }?.let { return orbitLine(it, OrbitMessageFrom.of(s.lastUserFromOrbit)) ?: externalLine(it, ExternalSender.parse(s.lastUserFromExternal)) ?: sentLine(it, s.lastUserFrom) }
             // The rolling recap (0418) takes the place of the reply preview it used to show, below every live line above and
@@ -286,6 +288,8 @@ internal val DirectorySession.effectiveRunState: RunState get() {
  * released, and null when the payload carries no `released` (an older server). */
 internal val DirectorySession.releasedRunState: RunState? get() {
     if (released != true) return null
+    // A move let it go: to its reader it is the idle session it was (SessionFacts.releasedByMove).
+    if (SessionFacts.releasedByMove(released, endReason)) return RunState.AWAITING_INPUT
     return when (SessionFacts.afterRelease(endReason, lastTurnOutcome, workFinished, isLanding)) {
         "FINISHED" -> RunState.SUCCEEDED
         "FAILED" -> RunState.FAILED
@@ -331,9 +335,12 @@ internal val DirectorySession.effectiveLifecycleState: String get() = when {
     else -> "OPEN"
 }
 
-/** Whether its glyph is the working spinner (`WorkspaceActivityLogic.isRunning`, read off `SessionStatusGlyph`); a watch it is
- * parked on never takes the spinner's place. */
+/** Whether its row draws the working spinner (`WorkspaceActivityLogic.isRunning`): with the session facts, `phase` RUNNING alone, as
+ * [SessionLiveMark] draws it — a background job or SubAgent between turns too, quiet job or not; else read off `SessionStatusGlyph`,
+ * where a watch it is parked on never takes the spinner's place. A folder, a project and the drawer's workspace read this, so none of
+ * them sits idle over a row that spins. */
 internal fun DirectorySession.isRunning(): Boolean {
+    SessionDisplay.state(displayFacts)?.let { return it == SessionDisplayState.RUNNING }
     if (pendingApprovals > 0 || confirmationUnderReview != null) return false
     return when (effectiveRunState) {
         RunState.RUNNING -> true
@@ -352,7 +359,8 @@ internal fun DirectorySession.hasBackgroundProcess(watching: WatchSessionSummary
 
 /** Whether that terminal breathes (`WorkspaceActivityLogic.isRunningJob`): at least one of those processes is a job in flight. */
 internal fun DirectorySession.isRunningJob(watching: WatchSessionSummary? = null): Boolean =
-    hasBackgroundProcess(watching) && runningBgJobCount > 0
+    // With the session facts no row breathes: a job in flight is `phase` RUNNING, the spinner of [isRunning].
+    SessionDisplay.state(displayFacts) == null && hasBackgroundProcess(watching) && runningBgJobCount > 0
 
 private val DirectorySession.reviewerTitle get() = (confirmationUnderReview?.get("reviewerTitle") as? JsonPrimitive)?.contentOrNull
 

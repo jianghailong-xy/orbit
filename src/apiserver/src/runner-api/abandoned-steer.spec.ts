@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType } from '@orbit/shared';
 import { RunnerApiController } from './runner-api.controller';
 

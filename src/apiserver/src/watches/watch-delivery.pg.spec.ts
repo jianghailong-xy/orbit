@@ -49,6 +49,7 @@ import {
 } from './watch-delivery.service';
 import { WatchEvaluatorService } from './watch-evaluator.service';
 import { WatchesService } from './watches.service';
+import { wordSql } from '../test-support/session-word';
 import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -307,10 +308,10 @@ async function insertTask(owner: string, status: string): Promise<string> {
 async function insertSession(owner: string, status: string, runnerId: string): Promise<string> {
   const id = randomUUID();
   await sql.query(
-    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","status","assigned_runner_id",
+    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","turn_state","assigned_runner_id",
                            "provider","provider_builtin","num_turns","started_at","runtime_session_id", "finished_at")
-     VALUES ($1,'watch observer','the opening prompt',$2,$2,now(),$3,$4,'claude',TRUE,1,now(),$5,
-             CASE WHEN $3::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END)`,
+     VALUES ($1,'watch observer','the opening prompt',$2,$2,now(),(CASE ($3)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END),$4,'claude',TRUE,1,now(),$5,
+             CASE WHEN $3::text IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END)`,
     [id, owner, status, runnerId, `runtime-${id}`],
   );
   return id;
@@ -422,7 +423,7 @@ async function sessionOf(id: string) {
     trashed: boolean;
     cancelling: boolean;
   }>(
-    `SELECT "status", "end_reason" AS "endReason", "completed_at" IS NOT NULL AS "completed",
+    `SELECT ${wordSql()} AS status, "end_reason" AS "endReason", "completed_at" IS NOT NULL AS "completed",
             "deleted_at" IS NOT NULL AS "trashed", "cancel_requested_at" IS NOT NULL AS "cancelling"
        FROM "session" WHERE "id" = $1`,
     [id],
@@ -720,8 +721,8 @@ test('a wake never revives an observer whose life is over: Completed, ended, end
   const { delivery } = await worker();
   const cases = [
     { name: 'moved to Completed', end: `UPDATE "session" SET "completed_at" = now() WHERE "id" = $1`, code: 'OBSERVER_SESSION_COMPLETED' },
-    { name: 'its run succeeded', end: `UPDATE "session" SET "status" = 'SUCCEEDED', "finished_at" = now() WHERE "id" = $1`, code: 'OBSERVER_SESSION_ENDED' },
-    { name: 'ended, interrupted with an end reason', end: `UPDATE "session" SET "status" = 'INTERRUPTED', "end_reason" = 'ended' WHERE "id" = $1`, code: 'OBSERVER_SESSION_ENDED' },
+    { name: 'its run succeeded', end: `UPDATE "session" SET "turn_state" = NULL, "finished_at" = now() WHERE "id" = $1`, code: 'OBSERVER_SESSION_ENDED' },
+    { name: 'ended, interrupted with an end reason', end: `UPDATE "session" SET "turn_state" = 'ABANDONED', "end_reason" = 'ended' WHERE "id" = $1`, code: 'OBSERVER_SESSION_ENDED' },
     { name: 'being ended', end: `UPDATE "session" SET "cancel_requested_at" = now(), "end_reason" = 'ended' WHERE "id" = $1`, code: 'OBSERVER_SESSION_ENDED' },
     { name: 'in Trash', end: `UPDATE "session" SET "deleted_at" = now() WHERE "id" = $1`, code: 'OBSERVER_SESSION_IN_TRASH' },
   ];
@@ -908,9 +909,9 @@ test('task_await on a forked task: the wake carries its branch, forkSha, the sna
   const plain = await insertTask(owner, 'DONE');
   // The forked task's run, on the branch its work is on; the open one's run has not made one yet.
   await sql.query(
-    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","status","assigned_runner_id",
+    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","turn_state","assigned_runner_id",
                            "provider","provider_builtin","task_id","branch","finished_at")
-     VALUES ($1,'the forked run','go',$2,$2,now(),'SUCCEEDED',$3,'claude',TRUE,$4,'orbit/finish-the-claim-refactor-1a2b3c',now())`,
+     VALUES ($1,'the forked run','go',$2,$2,now(),NULL,$3,'claude',TRUE,$4,'orbit/finish-the-claim-refactor-1a2b3c',now())`,
     [randomUUID(), owner, runner, done],
   );
   const watch = await createWatch(owner, {
@@ -1109,7 +1110,7 @@ test('a wake still queued when its observer\'s runner is lost is a dead letter: 
   await (reaper as unknown as { sweep(): Promise<void> }).sweep();
 
   const { rows: [session] } = await sql.query<{ status: string; retryArmed: boolean }>(
-    `SELECT "status", "retry_at" IS NOT NULL AS "retryArmed" FROM "session" WHERE "id" = $1`,
+    `SELECT ${wordSql()} AS status, "retry_at" IS NOT NULL AS "retryArmed" FROM "session" WHERE "id" = $1`,
     [queued.observer],
   );
   assert.deepEqual(session, { status: 'FAILED', retryArmed: true }, 'the reaper finalized the observer, with its retry armed');

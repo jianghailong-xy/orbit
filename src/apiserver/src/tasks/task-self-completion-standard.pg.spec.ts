@@ -58,11 +58,11 @@ import { HttpException } from '@nestjs/common';
 import {
   CreatorType,
   type PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -189,7 +189,7 @@ suite('a task\'s own run cannot rewrite the standard it is measured by', async (
         title: `the run doing ${fields.title}`,
         prompt: 'do the work',
         provider: 'claude',
-        status: RunStatus.RUNNING,
+        turnState: 'IN_FLIGHT',
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: true,
       },
@@ -215,7 +215,7 @@ suite('a task\'s own run cannot rewrite the standard it is measured by', async (
       title: 'coordinating the goal',
       prompt: 'coordinate',
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });

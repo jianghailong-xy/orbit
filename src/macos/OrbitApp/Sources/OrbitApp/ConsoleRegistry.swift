@@ -113,8 +113,11 @@ final class ConsoleRegistry {
     /// `folderID` is the folder whose page opened this draft (a folder page's ✎): the session it
     /// creates is filed in that folder as it is created (design §3.3). Nil from a list.
     /// Words the next draft opened for a workspace starts with, by workspace id (a main checkout line's
-    /// Open in a new session). Taken by that draft, once.
-    var pendingDraftText: [String: String] = [:]
+    /// Open in a new session). Taken by that draft, once. Not observed: the draft takes it while a
+    /// page's `body` makes the draft, so a tracked take would invalidate every page that made one — and
+    /// two compose pages alive at once (a draft refiled from its place pill) would re-render each
+    /// other without end.
+    @ObservationIgnored var pendingDraftText: [String: String] = [:]
     /// What the next draft shown for a workspace is handed, by workspace id: shared items to stage
     /// in its composer (Share to Orbit). Taken by the draft on screen as it appears, once — not as a
     /// draft model is made, since a view may make several and keep only the first.

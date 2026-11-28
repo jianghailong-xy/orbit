@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -12,6 +13,8 @@ import {
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { readOpenListVersionParts } from './open-list-version';
+import { fixtureFacts } from '../test-support/session-word';
+import { restoreStatusColumn } from '../test-support/session-d3-database';
 
 /**
  * Migration 1464 (docs/list-freshness-scope-hints.md §5.1, §8.2): the Open-list counters of the sources that hang
@@ -71,8 +74,8 @@ async function session(
   await db.session.create({
     data: {
       id, ownerId: f.ownerId, creatorId: f.ownerId, workspaceId, assignedRunnerId: f.runnerId, title: `olsk ${id}`,
-      prompt: 'olsk', provider: 'claude', providerBuiltin: true, status: RunStatus.RUNNING, startedAt: new Date(),
-      dispatchOrigin: SessionDispatchOrigin.USER, ...extra,
+      prompt: 'olsk', provider: 'claude', providerBuiltin: true, turnState: 'IN_FLIGHT', startedAt: new Date(),
+      dispatchOrigin: SessionDispatchOrigin.USER, ...fixtureFacts(extra),
     },
   });
   return id;
@@ -403,6 +406,8 @@ test('8. rollout: the old aggregation sees every bump, and the per-base-source e
   await old.connect();
   t.after(() => old.end());
   await old.query('BEGIN');
+  // Those functions read session.status, dropped in deploy D4 (migration 1711): put back inside this transaction.
+  await restoreStatusColumn(old);
   await old.query(functionsBefore1464());
   const oldStart = await epochs(old, before.ownerId);
   await script(before, (sql, ...args) => old.query(sql, args));

@@ -34,6 +34,9 @@ export enum SessionEndReason {
   COMPLETED = 'completed', // user moved it to Completed
   DELETED = 'deleted', // user deleted it (trash)
   CANCELLED = 'cancelled', // user stopped the run (batch-stop)
+  /** A move to another workspace released it (POST /sessions/:id/move): resumable like ENDED, and every client draws it as
+   *  a held idle session, since the person only moved it. */
+  MOVED = 'moved',
 }
 
 /**
@@ -230,7 +233,7 @@ export function deriveSessionState(input: SessionStateInput): SessionState {
 /**
  * Terminal RunStatus for a session whose end was a *graceful* recycle, or null when it
  * wasn't one (a hard complete/delete/batch-stop, or no reason recorded). TASK_DONE settles
- * SUCCEEDED; TASK_CANCELLED/ENDED settle CANCELLED. Returning an explicit status is
+ * SUCCEEDED; TASK_CANCELLED/ENDED/MOVED settle CANCELLED. Returning an explicit status is
  * load-bearing for the reaper: its forceFinalize defaults to FAILED, so null would
  * resurface an unacknowledged graceful recycle as a run failure. Shared so the runner's
  * /finalize and the reaper's backstop cannot drift apart.
@@ -241,6 +244,7 @@ export function gracefulEndStatus(endReason: string | null | undefined): RunStat
       return RunStatus.SUCCEEDED;
     case SessionEndReason.TASK_CANCELLED:
     case SessionEndReason.ENDED:
+    case SessionEndReason.MOVED:
       return RunStatus.CANCELLED;
     default:
       return null;

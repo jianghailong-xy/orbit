@@ -23,7 +23,7 @@ const codexResetLogRedacted = "[redacted]"
 
 var (
 	codexResetLogStages   = []string{"delivery", "consume", "refresh", "receipt"}
-	codexResetLogAccounts = []string{"match", "mismatch", "unidentified", "unsupported"}
+	codexResetLogAccounts = []string{"match", "mismatch", "unidentified", "unsupported", "slot_gone"}
 	codexResetLogWord     = regexp.MustCompile(`^[a-z][a-z0-9_]{0,47}$`)
 	codexResetLogProcess  = regexp.MustCompile(`^[0-9a-f]{8}$`)
 )

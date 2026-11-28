@@ -28,7 +28,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { AgentProvider, type PlanUsage, type RunnerEngineHealth } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -44,6 +45,8 @@ import { SessionsService } from '../sessions/sessions.service';
 import { sessionLease } from '../test-support/dequeue-under-lease';
 import { CLAUDE_ACCOUNT_SWAP_V1 } from './claude-account-swap';
 import { RunnersService } from './runners.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordSql } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -175,7 +178,7 @@ test('Set as default for Claude Code accounts: the swap relay and the records th
         prompt: 'fix the flaky test',
         provider: 'claude',
         providerBuiltin: true,
-        status,
+        turnState: turnStateOfWord(status),
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
         runtimeSessionId: randomUUID(),
@@ -191,7 +194,7 @@ test('Set as default for Claude Code accounts: the swap relay and the records th
   const message = (m: Machine, sessionId: string, content: string) =>
     sessions.createTurn(m.ownerId, sessionId, { clientTurnId: randomUUID(), content });
   const statusOf = async (id: string) =>
-    (await sql.query(`SELECT status::text AS status FROM "session" WHERE id = $1::uuid`, [id])).rows[0].status as string;
+    (await sql.query(`SELECT ${wordSql()} AS status FROM "session" WHERE id = $1::uuid`, [id])).rows[0].status as string;
 
   /**
    * Deliver what waits for `id` the way a runner takes it: a claim while the session is queued, then its inbox, a reload

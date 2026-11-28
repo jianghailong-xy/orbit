@@ -35,7 +35,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
-import { CreatorType, PrismaClient, RunStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { CreatorType, PrismaClient, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { HttpException } from '@nestjs/common';
 import { type PlanUsageRateLimitReset, type RunnerHeartbeatRequest, type RunnerHeartbeatResponse, RunEventType } from '@orbit/shared';
 import { PrismaPg } from '@prisma/adapter-pg';
@@ -64,6 +65,7 @@ import { LINK_RECONCILE_EVERY_MS, readFactsHash, readLinkBeat } from './link-hea
 import { RunnerApiController } from './runner-api.controller';
 import type { RunnerLinkContext } from './runner-link-call';
 import { runnerLinkCredential } from './runner-link-token';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 
@@ -154,7 +156,7 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     const id = randomUUID();
     await prisma.session.create({
       data: {
-        id, ownerId, creatorId: ownerId, title: 'a session', prompt: 'work', provider: 'claude', status, workspaceId,
+        id, ownerId, creatorId: ownerId, title: 'a session', prompt: 'work', provider: 'claude', turnState: turnStateOfWord(status), workspaceId,
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false, assignedRunnerId: runnerId, numTurns: 1,
         inboxLeaseOwner: process_, branch: `orbit/${id.slice(0, 8)}`, ...extra,
         ...(status === RunStatus.SUCCEEDED || status === RunStatus.FAILED
@@ -259,7 +261,9 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
         // A runner created without a Keep Free has the column's default: 10 GB since 0990_runner_keep_free_default.
         // And burst_concurrent's default, 2 (1465_session_run_now_over_capacity): a Run now's room over the limit.
         cancelSessionIds: [], leaseLostSessionIds: [], maxConcurrent: 1, burstConcurrent: 2, minFreeDiskMb: 10240,
-        mergeRequests: [], commitRequests: [], artifactRequests: [], linkHints: undefined,
+        mergeRequests: [], commitRequests: [], artifactRequests: [],
+        // A word about this server, said on every answer (a full runner's claim scope and its returned claims).
+        capacityClaims: true, linkHints: undefined,
       },
     );
     assert.deepEqual(quiet.answer.linkHints?.inboxSessionIds, []);
@@ -298,7 +302,7 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
       const id = randomUUID();
       await prisma.session.create({
         data: {
-          id, ownerId, creatorId: ownerId, title: 'twin', prompt: 'work', provider: 'claude', status, workspaceId: twinWorkspace,
+          id, ownerId, creatorId: ownerId, title: 'twin', prompt: 'work', provider: 'claude', turnState: turnStateOfWord(status), workspaceId: twinWorkspace,
           dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false, assignedRunnerId: twin, numTurns: 1,
           inboxLeaseOwner: process_, branch: `orbit/${id.slice(0, 8)}`,
         },
@@ -535,7 +539,7 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
       });
       const work = await prisma.session.create({
         data: {
-          ownerId, creatorId: ownerId, title: 'the work', prompt: 'p', taskId, startsTaskWork: true, status: RunStatus.SUCCEEDED, 
+          ownerId, creatorId: ownerId, title: 'the work', prompt: 'p', taskId, startsTaskWork: true, turnState: null, 
           workspaceId, assignedRunnerId: runnerId, finishedAt: new Date(),
         },
       });
@@ -625,8 +629,8 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     // Another process takes a session over, and another writer ends one: no writer marks anything, and the next beat
     // reconciles anyway, because every beat reads the leases of what it supervises.
     await sql.query(`UPDATE "session" SET inbox_lease_owner = gen_random_uuid() WHERE id = $1`, [takenOver]);
-    await sql.query(`UPDATE "session" SET status = 'SUCCEEDED', finished_at = now() - interval '10 minutes' WHERE id = $1`, [ended]);
-    await sql.query(`UPDATE "session" SET status = 'CANCELLED', finished_at = now() - interval '10 minutes' WHERE id = $1`, [cancelled]);
+    await sql.query(`UPDATE "session" SET "turn_state" = NULL, finished_at = now() - interval '10 minutes' WHERE id = $1`, [ended]);
+    await sql.query(`UPDATE "session" SET "turn_state" = NULL, finished_at = now() - interval '10 minutes' WHERE id = $1`, [cancelled]);
     const next = await beat();
     assert.ok(isFull(next.answer));
     assert.deepEqual([...(next.answer.leaseLostSessionIds ?? [])].sort(), [cancelled, takenOver, ended].sort());
@@ -718,7 +722,7 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     await prisma.session.create({
       data: {
         id: landing, ownerId, creatorId: ownerId, title: 'a landing', prompt: 'land', provider: 'orbit', providerBuiltin: true,
-        sessionKind: 'LANDING', status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
+        sessionKind: 'LANDING', turnState: null, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
       },
     });
     await refused(() => beat({ expiredCommitErrors: [{ sessionId: landing, operationId: randomUUID() }] }), 409, 'SESSION_IS_PLATFORM_DRIVEN');
@@ -844,7 +848,7 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     assert.equal(queued.statements.length, 1, queued.statements.join('\n---\n'));
     assert.equal(drainPushes.length, 0, 'the web\'s update indicator says it; nothing is pushed (docs/mocks/runner-update-indicator)');
 
-    await prisma.session.update({ where: { id: waiting }, data: { status: RunStatus.CANCELLED, finishedAt: new Date()} });
+    await prisma.session.update({ where: { id: waiting }, data: { turnState: null, finishedAt: new Date()} });
     for (let i = 0; i < 4 && isFull((await beat()).answer); i += 1);
     await settle();
   });
@@ -858,7 +862,7 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
       const listed = (await runners.listRunners(ownerId)).find((r) => r.id === runnerId)!;
       return listed.activeSessions;
     };
-    const inTurn = await prisma.session.count({ where: { assignedRunnerId: runnerId, status: RunStatus.RUNNING } });
+    const inTurn = await prisma.session.count({ where: { assignedRunnerId: runnerId, turnState: 'IN_FLIGHT' } });
     assert.ok(inTurn >= 1, 'busy is in a turn');
     assert.equal(await running(), inTurn, 'a beat without the member counts turns alone');
     assert.deepEqual(await holders(), []);
@@ -884,7 +888,7 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     await prisma.session.create({
       data: {
         id: theirs, ownerId: strangerId, creatorId: strangerId, title: 'theirs', prompt: 'work', provider: 'claude',
-        status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER, assignedRunnerId: strangerRunner,
+        turnState: null, dispatchOrigin: SessionDispatchOrigin.USER, assignedRunnerId: strangerRunner,
       },
     });
     await beat({ backgroundJobSessionIds: [ended, theirs, 'not-a-session'] } as Partial<RunnerHeartbeatRequest>);
@@ -970,7 +974,7 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
       CAPABILITIES, 'claude,codex', 'linux',
     );
     assert.deepEqual(without(await sets(lost)), { jobs: [], shells: [], subagents: [], activity: {}, turn: false });
-    for (const id of [lost, elsewhere, otherProcess]) await prisma.session.update({ where: { id }, data: { status: RunStatus.CANCELLED, finishedAt: new Date()} });
+    for (const id of [lost, elsewhere, otherProcess]) await prisma.session.update({ where: { id }, data: { turnState: null, finishedAt: new Date()} });
     for (let i = 0; i < 4 && isFull((await beat()).answer); i += 1);
     await settle();
   });
@@ -1015,7 +1019,7 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     await report(job('running'), composed + 5_000);
     await beat({ executing: [nothing] });
     assert.deepEqual(await sets(s), { jobs: [], shells: [] }, 'without executingAt the beat replaces');
-    await prisma.session.update({ where: { id: s }, data: { status: RunStatus.CANCELLED, finishedAt: new Date()} });
+    await prisma.session.update({ where: { id: s }, data: { turnState: null, finishedAt: new Date()} });
     await settle();
   });
 

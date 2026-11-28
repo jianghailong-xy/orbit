@@ -22,7 +22,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 
-import { type PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { SESSION_CLAUDE_STEER_WITHDRAW_V1, toUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -31,6 +32,8 @@ import { hashPassword, sha256 } from '../common/crypto.util';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import '../test-support/daemon-routes-over-http';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordSql } from '../test-support/session-word';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -90,7 +93,7 @@ test('a draining inbox fetch hands out control turns and running work, and no ne
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
         title: `inbox draining ${status.toLowerCase()}`, prompt: 'the work', provider: 'claude', engine: 'claude',
-        status, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
+        turnState: turnStateOfWord(status), dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
         inboxLeaseOwner: lease.owner, inboxLeaseGeneration: lease.generation,
         ...extra,
       },
@@ -164,7 +167,7 @@ test('a draining inbox fetch hands out control turns and running work, and no ne
     return [reply.json?.turnId ? toUuid(reply.json.turnId) : reply.json?.turnId, reply.json?.kind];
   };
   const statusOf = async (sessionId: string) =>
-    (await sql.query<{ status: string }>(`SELECT "status" FROM "session" WHERE "id" = $1::uuid`, [sessionId])).rows[0].status;
+    (await sql.query<{ status: string }>(`SELECT ${wordSql()} AS status FROM "session" WHERE "id" = $1::uuid`, [sessionId])).rows[0].status;
   const turnStatusOf = async (turnId: string) =>
     (await sql.query<{ status: string }>(`SELECT "status" FROM "conversation_turn" WHERE "id" = $1::uuid`, [turnId])).rows[0].status;
   /** The session still has the engine that held it: the same lease, not retired, and the run it had. */

@@ -3543,7 +3543,63 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1667_session_phase_retry_running',
       // 1668 creates `help_ask_conversation` only, with foreign keys to `user` and `task`; no existing table,
       // trigger, function or DONE fence is touched.
-      '1668_help_ask_conversation'],
+      '1668_help_ask_conversation',
+      // 1669 adds `codex_rate_limit_reset_operation.account_slot` (NOT NULL DEFAULT 'default', so no row is rewritten),
+      // a CHECK on it, and replaces that table's own guard function to list the column as immutable. Only that table is
+      // touched; no `task`, `session`, ledger table or preserved trigger/function is named, so it is not another writer
+      // of the DONE fence.
+      '1669_codex_reset_operation_account_slot',
+      // 1670 restates 1667's six-argument session_phase_of (an armed retry reads PENDING, held or released) and writes
+      // phase alone on the rows with retry_at set that it reads differently. Only `session` is touched; no preserved
+      // relation, trigger, function of one or DONE fence changes.
+      '1670_session_phase_retry_pending',
+      // 1671 (deploy D3) adds an eight-argument session_legacy_status and points the nine-argument one at it, drops the
+      // stored-word fallback from session_held_turn_state, replaces session_aa_turn_state_from_status (and its function)
+      // with session_aa_status_from_facts, which writes session.status from the facts, and re-creates nine session
+      // triggers with turn_state or finished_at added to their column lists. Only `session` is touched; no row is
+      // written, and no preserved relation, trigger, function or DONE fence changes.
+      '1671_session_status_from_facts',
+      // 1672 creates task_acceptance_round (one EXECUTABLE acceptance round's record), cascading with task and with its
+      // conversation_turn; no preserved relation, row, trigger, function or DONE fence changes.
+      '1672_task_acceptance_round',
+      // 1680 adds a nullable session.drive_chat_prompt_digest and conversation_turn.drive_context (catalog-only) and
+      // widens session_opened_by_check by 'DRIVE_CHAT' NOT VALID; 1681 validates it and builds a partial index
+      // CONCURRENTLY. No row is written, and no preserved relation's trigger, function or DONE fence changes.
+      '1680_drive_chat_session',
+      '1681_drive_chat_session_index',
+      // 1700 creates four new tables for a Drive chat's changes (drive_chat_change_group, drive_chat_change,
+      // drive_chat_held_change, drive_chat_question), each with foreign keys to "user" and, for the group and the
+      // question, "session". No row is written, and no preserved relation's trigger, function or DONE fence changes.
+      '1700_drive_chat_change_group',
+      // 1711 (deploy D4) drops session.status, the type run_status and what exists only for them (1671's trigger and
+      // function, session_turn_state_of_status, the nine-argument session_legacy_status, the two word CHECKs, six
+      // indexes), points three session functions at the eight-argument projector, and re-creates the 13 session triggers
+      // without `status` in their column lists. Only `session` is touched; no row is written, and no preserved
+      // relation, trigger, function or DONE fence changes.
+      '1711_session_status_drop',
+      // 1720 creates `owner_card_push` only (the decision-card push ledger), with no foreign key; no existing table,
+      // trigger, function or DONE fence is touched.
+      '1720_owner_card_push',
+      // 1730 adds the nullable `session.client_request_id` (no row is rewritten) and a partial unique index on
+      // (owner_id, client_request_id) over the rows that carry one. Only `session` is touched; no trigger, function of
+      // one, preserved relation or DONE fence changes.
+      '1730_session_client_request_id',
+      // 1750 adds the nullable `runner_presence.last_heard_at` (catalog only, no row rewritten) to the UNLOGGED presence
+      // table. No `task`, `session`, ledger table or preserved trigger/function is touched, and no DONE fence changes.
+      '1750_runner_presence_last_heard_at',
+      // 1780 creates `drive_move` only (who moved or renamed a drive entry), with a foreign key to "user"; 1781 builds two
+      // indexes CONCURRENTLY on drive_version and drive_chat_change. No row is written, and no preserved relation,
+      // trigger, function or DONE fence changes.
+      '1780_drive_move',
+      '1781_drive_activity_indexes',
+      // 1790 adds three nullable columns to `drive_sync` (handled_at, fix_session_id, fix_requested_at), catalog only,
+      // no row rewritten. No `task`, `session`, ledger table or preserved trigger/function is touched, and no DONE fence
+      // changes.
+      '1790_drive_sync_handled',
+      // 1800 adds the nullable `runner.offline_alerted_at` (catalog only, no row rewritten), which the reaper's runner
+      // presence alert sets and clears. No `task`, `session`, ledger table or preserved trigger/function is touched, and
+      // no DONE fence changes.
+      '1800_runner_offline_alerted_at'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.

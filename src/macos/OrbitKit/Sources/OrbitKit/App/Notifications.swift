@@ -246,12 +246,17 @@ public enum Notifications {
     public static let runnerUpdatingKind = "runner-updating"
     /// The server's runner pushes that name a `runnerID` and no session; a tap opens that runner.
     static let runnerKinds: Set<String> = [runnerUpdatingKind, "engine-signed-out", "claude-region-blocked",
+                                       "runner-offline", "runner-online",
                                        AccountHealth.pushKind]
     /// The owner-item alert kind of a merge into main waiting on the owner (`OWNER_ITEM_PUSH_KINDS`).
     static let approveMergeKind = "approve-merge-to-main"
     /// An agent asking to take a task out of its project. A tap opens the conversation that draws
     /// the decision card when the payload names one, and the project otherwise.
     public static let crossingRequestKind = "crossing-request"
+    /// A decision card that became the owner's (apiserver `PushService.notifyDecisionCards`): an evidence card, an owner
+    /// confirmation, a project's criteria, standard-set, done or Record as done… card. `cardKind` says which; a tap opens
+    /// the conversation the card is drawn in, and naming none it opens nothing.
+    public static let decisionCardKind = "decision-card"
 
     public static func content(for event: NotificationEvent) -> NotificationContent {
         switch event {
@@ -307,6 +312,9 @@ public enum Notifications {
         if userInfo[keyKind] == crossingRequestKind {
             if let sid = userInfo[keySession] { return .open(.session(sid)) }
             return userInfo[keyProject].map { .openProject(projectID: $0) }
+        }
+        if userInfo[keyKind] == decisionCardKind {
+            return userInfo[keySession].map { .open(.session($0)) }
         }
         if userInfo[keyKind] == "terminal-login" {
             return .openTerminalRequests(requestID: userInfo[keyTerminalLogin])

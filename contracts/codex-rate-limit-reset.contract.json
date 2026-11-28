@@ -1,6 +1,7 @@
 {
   "name": "orbit.codex-rate-limit-reset",
-  "protocolVersion": 1,
+  "protocolVersion": 2,
+  "protocolVersions": { "block": [1], "command": [1, 2], "result": [1, 2] },
   "doc": "docs/codex-rate-limit-reset-contract.md",
   "fixtures": "contracts/codex-rate-limit-reset.fixtures.json",
   "baseline": {
@@ -9,6 +10,20 @@
     "providerSchema": "docs/evidence/codex-rate-limit-reset-0.154.0"
   },
   "capability": "codex-rate-limit-reset-v1",
+  "capabilityV2": "codex-rate-limit-reset-v2",
+  "accountSlot": {
+    "default": "default",
+    "pattern": "^[0-9a-f]{8}$",
+    "snapshotAccountsField": "accounts",
+    "commandSlotFromProtocolVersion": 2,
+    "addedSlotCapability": "codex-rate-limit-reset-v2"
+  },
+  "accountOverride": {
+    "builtinProvider": "codex",
+    "envKeys": ["CODEX_HOME", "CODEX_API_KEY"],
+    "envPrefixes": ["OPENAI_"],
+    "chosenAccountIsOverride": false
+  },
   "provider": {
     "accountReadMethod": "account/read",
     "readMethod": "account/rateLimits/read",
@@ -159,6 +174,7 @@
         "claimGeneration": ["required", "non-null"],
         "phase": ["required", "non-null"],
         "accountFingerprint": ["required", "non-null"],
+        "accountSlot": ["optional", "non-null"],
         "providerIdempotencyKey": ["optional", "non-null"],
         "requestedAt": ["required", "non-null"]
       }
@@ -194,6 +210,7 @@
         "runnerId": ["required", "non-null"],
         "clientRequestId": ["required", "non-null"],
         "accountFingerprint": ["required", "non-null"],
+        "accountSlot": ["optional", "non-null"],
         "status": ["required", "non-null"],
         "consumeState": ["required", "non-null"],
         "consumeOutcome": ["required", "nullable"],
@@ -211,6 +228,7 @@
       "fields": {
         "clientRequestId": ["required", "non-null"],
         "accountFingerprint": ["required", "non-null"],
+        "accountSlot": ["optional", "non-null"],
         "workspaceId": ["optional", "non-null"]
       }
     },

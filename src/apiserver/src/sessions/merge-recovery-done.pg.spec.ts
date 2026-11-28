@@ -25,7 +25,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { BadRequestException, HttpException } from '@nestjs/common';
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import {
   type IntegrationCheckResult,
   type IntegrationJobCommand,
@@ -65,6 +66,7 @@ import { MergeReceiptService } from './merge-receipt.service';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
 import '../test-support/dequeue-under-lease';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -232,7 +234,7 @@ async function finishedSession(
     data: {
       id, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, assignedRunnerId: w.runnerId,
       title: label, prompt: 'ship the feature', provider: 'claude', providerBuiltin: true,
-      dispatchOrigin: SessionDispatchOrigin.USER, status: RunStatus.SUCCEEDED, startedAt: new Date(Date.now() - 7_200_000),
+      dispatchOrigin: SessionDispatchOrigin.USER, turnState: null, startedAt: new Date(Date.now() - 7_200_000),
       finishedAt: new Date(Date.now() - 3_600_000), numTurns: 1, branch: `orbit/${label}-${id.slice(0, 8)}`,
       isolationStatus: 'worktree', ...row,
     },
@@ -320,7 +322,7 @@ async function doneCodeTask(s: Stack, w: ProjectWorld, label: string): Promise<{
   await s.db.session.create({
     data: {
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId: declared.id, workspaceId: w.workspaceId,
-      assignedRunnerId: w.runnerId, title, prompt: title, provider: 'claude', status: RunStatus.RUNNING,
+      assignedRunnerId: w.runnerId, title, prompt: title, provider: 'claude', turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true, startedAt: new Date(),
       branch: `orbit/${label}-${sessionId.slice(0, 8)}`,
       worktreeBranch: `orbit/${label}-${sessionId.slice(0, 8)}`, worktreeDirty: false, isolationStatus: 'worktree',
@@ -349,9 +351,11 @@ async function doneCodeTask(s: Stack, w: ProjectWorld, label: string): Promise<{
   assert.equal(task.status, TaskStatus.DONE, 'the acceptance command agreed');
   // The DONE asks its idle work session to end (`endIdleWorkOfDoneTask`), and the runner's finalize is that end —
   // in production within a second. Until then the session is ending, and a merge of it waits for the turn.
-  const { cancelRequestedAt, status, inboxLeaseOwner } = await s.db.session.findUniqueOrThrow({
-    where: { id: sessionId }, select: { cancelRequestedAt: true, status: true, inboxLeaseOwner: true },
+  const ending = await s.db.session.findUniqueOrThrow({
+    where: { id: sessionId }, select: { cancelRequestedAt: true, ...WORD_SELECT, inboxLeaseOwner: true },
   });
+  const { cancelRequestedAt, inboxLeaseOwner } = ending;
+  const status = wordOf(ending);
   if (cancelRequestedAt && status === RunStatus.AWAITING_INPUT) {
     await s.api.finalize({ id: w.runnerId }, sessionId, {
       status: SharedRunStatus.SUCCEEDED, subtype: 'success', numTurns: 2, costUsd: 0,

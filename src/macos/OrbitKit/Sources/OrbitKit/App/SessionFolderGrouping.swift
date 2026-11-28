@@ -9,7 +9,7 @@ public struct SessionFolderRow: Identifiable, Equatable, Sendable {
     public let sessionCount: Int
     /// The sessions in a folder don't appear outside it, so its row reports for them, by the drawer
     /// Workspace row's rule (`WorkspaceNavigationStatusLogic`): how many wait on you, else the
-    /// spinner while one runs, else the breathing mark while a background job is in flight.
+    /// spinner while one runs (a background job in flight included).
     public let status: WorkspaceNavigationStatus
 
     public var id: String { folder.id }
@@ -83,13 +83,13 @@ public enum SessionFolderGrouping {
 
     /// What a folder's page lists: the sessions filed in `folderID`, in the scope of the list it
     /// was opened from. Ordered the way that list orders the scope
-    /// (`SessionFilter.forAgent(_:agentID:view:)`) — pinned first and then by latest activity,
+    /// (`SessionFilter.forAgent(_:agentID:view:)`) — pinned first in Open and then by `listedAt`,
     /// Completed in the server's order — so `SessionTimeGrouping.sections` gives the page the
     /// same Pinned and time sections the list draws.
     public static func sessions(_ sessions: [Session], inFolder folderID: String,
                                 view: SessionView) -> [Session] {
         let filed = sessions.filter { $0.folderId == folderID }
-        return view == .completed ? filed : SessionFilter.consoleSorted(filed)
+        return view == .completed ? filed : SessionFilter.consoleSorted(filed, pinnedFirst: view == .open)
     }
 
     /// A folder row's trailing slot: `WorkspaceNavigationStatusLogic` over the same per-session
@@ -100,7 +100,6 @@ public enum SessionFolderGrouping {
         WorkspaceNavigationStatusLogic.resolve(
             waiting: sessions.filter(NeedsYouLogic.isCounted).count,
             running: sessions.contains { WorkspaceActivityLogic.isRunning($0, watching: watching[$0.id]) },
-            jobs: sessions.contains { WorkspaceActivityLogic.isRunningJob($0, watching: watching[$0.id]) },
             runnerOffline: runnerOffline)
     }
 

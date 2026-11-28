@@ -777,7 +777,8 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         XCTAssertTrue(items.contains(
             "`${PROJECT_DONE_COPY.openItemsDoneRequest} · ${row.doneRequest.gaps.length} ${PROJECT_DONE_COPY.gapsItCouldntProve}`"),
                       "the request's row on the project page drifted")
-        for part in ["{PROJECT_DONE_COPY.readyToClose}</div>", "title={PROJECT_DONE_COPY.heading}>{PROJECT_DONE_COPY.heading}</div>",
+        for part in ["{PROJECT_DONE_COPY.readyToClose}</div>", "<Tooltip content={PROJECT_DONE_COPY.heading} truncatedOnly>",
+                     "<div className=\"project-open-item-title\">{PROJECT_DONE_COPY.heading}</div>",
                      "{PROJECT_DONE_COPY.recordAsDoneRow}", "{PROJECT_DONE_COPY.notAskedYet}</div>",
                      "{ACTION_LABEL.REVIEW}"] {
             XCTAssertTrue(items.contains(part), "the project page's done rows drifted: no \(part.debugDescription)")

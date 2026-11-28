@@ -20,7 +20,8 @@ import { test } from 'node:test';
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import { RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { toUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -228,7 +229,7 @@ test('the wiki context a session is handed when it starts', {
         title: data.title ?? 'a session that just started',
         prompt: data.prompt ?? 'pick this up',
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: data.dispatchOrigin ?? SessionDispatchOrigin.USER,
         // A run of a task is a session that starts task work; one that merely asks about a
         // codebase is not.
@@ -278,7 +279,7 @@ test('the wiki context a session is handed when it starts', {
     const leaseGeneration = randomUUID();
     await prisma.session.update({
       where: { id: sessionId },
-      data: { inboxLeaseOwner: leaseOwner, status: RunStatus.RUNNING },
+      data: { inboxLeaseOwner: leaseOwner, turnState: 'IN_FLIGHT' },
     });
     const activated = await send('POST', `/runner/sessions/${uuidToBase62(sessionId)}/activate-leases`, {
       leaseOwner,

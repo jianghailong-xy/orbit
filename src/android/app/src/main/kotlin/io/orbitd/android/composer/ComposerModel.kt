@@ -37,6 +37,11 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
     private val uploads = mutableMapOf<String, Job>()
     private val mutable = MutableStateFlow(ComposerState())
     val state: StateFlow<ComposerState> = mutable.asStateFlow()
+    /** The page's chat this composer sends for, while the page shows it (ChatDoor). */
+    @Volatile var door: ChatDoor? = null
+    /** The newest seq of the conversation this composer sends into, as its page last read it: a message sent now is recognised by
+     * its echo after it ([PendingSend.afterSeq]). Null until the page has read one. */
+    @Volatile var seenSeq: Long? = null
 
     init { restore() }
     fun restore() {
@@ -46,8 +51,9 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
         try {
             val bytes = auth.readData(handle, DataKind.DRAFT, key)
             val draft = bytes?.let { Wire.decode(it, ComposerDraft.serializer()) } ?: ComposerDraft()
-            mutable.value = ComposerState(draft = draft, loaded = true,
-                notice = if (draft.pending != null) "Delivery is unconfirmed. Retry the saved message." else null)
+            // A message the last run left in the outbox comes back as its Not sent bubble, with Retry and Put back: never sent again by
+            // itself (owner decision 2, 2026-11-27).
+            mutable.value = ComposerState(draft = draft, loaded = true)
             // An upload the last run left unfinished goes again from its saved copy: the chip spins, then lands or goes with why.
             draft.attachments.filter { it.remoteId == null }.forEach { retryUpload(it.id) }
         } catch (cancel: CancellationException) { throw cancel }
@@ -236,8 +242,10 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                             "Session: ${detail.text("status") ?: "New session"} · Permission: ${detail.text("permissionMode") ?: CursorRuntime.unsetMode(engineId)}") }
                     persist(); return@launch
                 }
+                val door = door
                 val endpoint = if (target != null) {
-                    check(detail.flag("enabled") != false) { "Workspace is disabled." }; "create"
+                    check(detail.flag("enabled") != false) { "Workspace is disabled." }
+                    if (target.chat != null && door != null) CHAT_CREATE + door.createPath.joinToString("/") else "create"
                 } else sendEndpoint(detail)
                 val raw = draft.text.trim()
                 val shell = raw.startsWith("!")
@@ -248,8 +256,12 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                 // a new session's opening message alike. Send never waits for the optimizer: a press still out, or a sheet still open, goes.
                 val optimizedTranslation = state.value.optimizer.optimizedTranslation(draft.text)
                 cancelOptimize(); dismissOptimization()
-                val body = PromptOptimizer.withOptimizedTranslation(if (target != null) {
-                    buildCreateBody(detail, content, shell, draft.attachments, seedModel)
+                val body = PromptOptimizer.withOptimizedTranslation(if (endpoint.startsWith(CHAT_CREATE)) {
+                    val config = state.value.draft.resumeConfig
+                    door!!.createBody(content, id, if (config["model"] == null && seedModel != null) JsonObject(config + ("model" to JsonPrimitive(seedModel))) else config,
+                        draft.attachments.mapNotNull { it.remoteId })
+                } else if (target != null) {
+                    buildCreateBody(detail, content, shell, draft.attachments, seedModel, id)
                 } else buildJsonObject {
                     if (endpoint == "resume") {
                         draft.resumeConfig.filterKeys { it != "account" }.forEach { (k, v) -> put(k, v) }
@@ -258,18 +270,20 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                     put("clientTurnId", id); put("content", content); put("kind", if (shell) "shell" else "message")
                     if (queueForNextTurn && endpoint == "turns") put("intent", "NEXT_TURN")
                     putJsonArray("attachmentIds") { draft.attachments.forEach { add(it.remoteId!!) } }
+                    door?.turnExtra?.invoke()?.forEach { (k, v) -> put(k, v) }
                 }, optimizedTranslation)
-                val pending = PendingSend(id, endpoint, body, draft.text, draft.attachments)
-                mutable.update { it.copy(draft = it.draft.copy(text = "", selectionStart = 0, selectionEnd = 0, attachments = emptyList(), pending = pending)) }
+                val pending = PendingSend(id, endpoint, body, draft.text, draft.attachments, afterSeq = seenSeq)
+                // The words leave the box for their bubble; whatever was typed or attached since the press stays.
+                mutable.update { it.copy(draft = it.draft.afterSend(draft).copy(pending = pending), sending = bubbled(endpoint), notSentReason = null) }
                 try { persist() } catch (e: Exception) {
-                    // Nothing has left the device. In particular, create has no replay contract.
+                    // Nothing has left the device.
                     restoreUnsent(pending)
                     throw e
                 }
                 transmit(pending, firstAttempt = true)
                 // The optimized text is spent.
                 optimizer { it.sent() }
-            } finally { mutable.update { it.copy(busy = false, waiting = false) } }
+            } finally { mutable.update { it.copy(busy = false, waiting = false, sending = false) } }
         }
     }
     /** A message the box never held — the auto-retry card's Continue (A07-12) — sent as anything typed is: written to the outbox
@@ -285,11 +299,11 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                 if (endpoint == "resume") { config.filterKeys { it != "account" }.forEach { (k, v) -> put(k, v) }; config["account"]?.let { put("account", it) } }
                 put("clientTurnId", id); put("content", text); put("kind", "message"); putJsonArray("attachmentIds") {}
             }
-            val pending = PendingSend(id, endpoint, body, text)
-            mutable.update { it.copy(draft = it.draft.copy(pending = pending)) }
+            val pending = PendingSend(id, endpoint, body, text, afterSeq = seenSeq)
+            mutable.update { it.copy(draft = it.draft.copy(pending = pending), sending = true, notSentReason = null) }
             try { persist() } catch (e: Exception) { mutable.update { it.copy(draft = it.draft.copy(pending = null)) }; throw e }
             transmit(pending, firstAttempt = true)
-        } finally { mutable.update { it.copy(busy = false) } }
+        } finally { mutable.update { it.copy(busy = false, sending = false) } }
     }
     /** The context dialog's Compact (board 03): the engine's `/compact`, sent as [sendMessage] sends, a refusal shown as the box's. */
     fun compact() { launch { sendMessage(CoordinatorHandoffCopy.COMPACT_COMMAND) } }
@@ -304,22 +318,85 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
             return
         }
         val pending = state.value.draft.pending ?: return
-        // The existing create-session door has no public idempotency contract. Never replay an
-        // ambiguous create and accidentally start a second agent. Existing turns remain replayable.
-        if (pending.endpoint == "create") return
-        mutable.update { it.copy(busy = true, error = null) }
-        launch { try { persist(); transmit(pending) } finally { mutable.update { it.copy(busy = false) } } }
+        // A chat door's create has no idempotency contract: never replay it into a second chat. POST /sessions does (clientRequestId).
+        if (!bubbled(pending.endpoint)) return
+        // The bubble reads Sending… again from the press, under the same key.
+        mutable.update { it.copy(busy = true, error = null, sending = true, notSentReason = null) }
+        launch { try { persist(); transmit(pending) } finally { mutable.update { it.copy(busy = false, sending = false) } } }
+    }
+    /** The Not sent bubble's Put back in the composer (web `putBack`): its words back in the box under anything typed since, its files
+     * with them, and the outbox empty. Nothing is sent; a send from the box is a new message under a new key. */
+    fun putBackUnsent() {
+        val pending = state.value.draft.pending ?: return
+        if (!state.value.loaded || state.value.sending || !bubbled(pending.endpoint)) return
+        mutable.update { now ->
+            if (now.draft.pending != pending) return@update now
+            val under = if (pending.text.isBlank()) now.draft else now.draft.under(pending.text)
+            now.copy(draft = under.copy(pending = null, attachments = now.draft.attachments + pending.attachments.filter { a ->
+                now.draft.attachments.none { it.id == a.id } }), notSentReason = null)
+        }
+        launch { persist() }
+    }
+    /** The conversation as its page reads it now ([events], and the queue's [listed] turns): a Not sent message whose echo has landed
+     * did reach the server — its answer was lost or ended at 20 s — so the echo replaces its bubble and the outbox lets it go; and the
+     * message the server took last stops being drawn here once the conversation draws it. */
+    fun settle(events: List<io.orbitd.android.core.realtime.RunEvent>, listed: List<JsonObject>) {
+        val now = state.value
+        now.sent?.takeIf { it.shownBy(listed, events) }?.let { sent -> mutable.update { if (it.sent == sent) it.copy(sent = null) else it } }
+        val pending = now.draft.pending ?: return
+        if (!now.loaded || now.sending || isCreate(pending.endpoint) || !echoed(pending.words, pending.afterSeq, events)) return
+        mutable.update { if (it.draft.pending != pending) it else it.copy(draft = it.draft.copy(pending = null, resumeConfig = JsonObject(emptyMap())),
+            notSentReason = null, switchNote = null) }
+        launch {
+            persist()
+            pending.attachments.forEach { auth.writeData(handle, DataKind.DRAFT, "$key:attachment:${it.id}", ByteArray(0)) }
+        }
     }
     private fun restoreUnsent(pending: PendingSend) {
         mutable.update { it.copy(draft = it.draft.copy(pending = null, text = pending.text + it.draft.text,
             selectionStart = pending.text.length, selectionEnd = pending.text.length,
             attachments = pending.attachments + it.draft.attachments)) }
     }
+    /** The box once [sent]'s words have left it for their bubble: emptied of them and of its files, keeping what came after the press. */
+    private fun ComposerDraft.afterSend(sent: ComposerDraft): ComposerDraft {
+        val rest = if (text == sent.text) "" else if (text.startsWith(sent.text)) text.removePrefix(sent.text).trimStart() else text
+        return copy(text = rest, selectionStart = rest.length, selectionEnd = rest.length,
+            attachments = attachments.filter { a -> sent.attachments.none { it.id == a.id } })
+    }
+    /**
+     * One POST of [pending]. A message into a session is drawn by its bubble (docs/mocks/composer-sending-bubble): `Sending…` while the
+     * request is out, and `Not sent` — with why — when the server refuses it or has not answered in 20 s, at which point the request is
+     * ended (owner decision 3, as web's `answerDeadline`). Either way it stays in the outbox for Retry, under the same clientTurnId, and
+     * is never put back by itself. A refusal with a card of its own (a task held by another run) keeps today's handling: a refused first
+     * POST — which proves the message was not taken — puts the words back in the box, and the refusal goes on to its card. A chat door's create
+     * keeps today's handling throughout; POST /sessions is drawn and retried as a message is, its clientRequestId making a repeat safe.
+     */
     private suspend fun transmit(pending: PendingSend, firstAttempt: Boolean = false) {
-        val accepted = try { api.mutation(pending.endpoint, pending.body) } catch (e: ApiError) {
+        val bubble = bubbled(pending.endpoint)
+        if (bubble) mutable.update { it.copy(sending = true, notSentReason = null) }
+        val accepted = try {
+            // OkHttp's own 10 s read timeout would end a slow answer first, as "Can't reach Orbit": the transport waits past the
+            // deadline, so the 20 s rule is the one that ends it.
+            if (bubble) withTimeout(PendingSendCopy.ANSWER_TIMEOUT_MS) {
+                api.mutation(pending.endpoint, pending.body, answerSeconds = PendingSendCopy.ANSWER_TIMEOUT_MS / 1000 + 10)
+            }
+            else api.mutation(pending.endpoint, pending.body)
+        } catch (late: TimeoutCancellationException) {
+            mutable.update { it.copy(sending = false, notSentReason = PendingSendCopy.NOT_ANSWERED) }
+            return
+        } catch (cancel: CancellationException) {
+            if (bubble) mutable.update { it.copy(sending = false) }
+            throw cancel
+        } catch (e: Exception) {
+            val ownCard = e is ApiError && io.orbitd.android.tasks.TaskRunHandoff.readConflict(e) != null
+            if (bubble && !ownCard) {
+                mutable.update { it.copy(sending = false, notSentReason = failure(e)) }
+                return
+            }
+            if (bubble) mutable.update { it.copy(sending = false) }
             // A refusal of the first POST proves this operation was not accepted. A later refusal
             // (e.g. access revoked after a lost ACK) cannot disprove an earlier accepted request.
-            if (firstAttempt && e.status in setOf(400, 403, 404, 409, 413, 422)) {
+            if (e is ApiError && firstAttempt && e.status in setOf(400, 403, 404, 409, 413, 422)) {
                 restoreUnsent(pending)
                 persist()
             }
@@ -333,13 +410,18 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
         }
         // Persist acknowledgement before removing the retry. If disk fails, replay is still safe.
         val previous = state.value.draft
-        val created = if (pending.endpoint == "create") accepted.text("id") ?: error("Creation response has no session id.") else null
+        val created = if (isCreate(pending.endpoint))
+            accepted.text("id") ?: accepted.text("sessionId") ?: error("Creation response has no session id.") else null
+        // Taken: the bubble is the ordinary one until the queue or the echo draws the message — not a steer, which the tray draws on
+        // its way into the turn, nor a message routed to another session, nor a `!` command, which has no echo.
+        val sent = accepted.text("turnId")?.takeIf { bubble && accepted.text("routedToSessionId") == null && accepted.text("kind") != "steer" &&
+            pending.body.text("kind") != "shell" }?.let { SentMessage(it, pending.words, pending.attachments, pending.afterSeq) }
         mutable.update { it.copy(draft = it.draft.copy(pending = null, resumeConfig = JsonObject(emptyMap()), createdSessionId = created),
-            acknowledgementPending = created != null) }
+            acknowledgementPending = created != null, sending = false, notSentReason = null, sent = sent ?: it.sent) }
         try { persist() } catch (e: Exception) {
             // Once create returned an id, retry only its local ACK. Never turn known success back
             // into an ambiguous create or POST it again. Navigation waits for the durable ACK.
-            if (created == null) mutable.update { it.copy(draft = it.draft.copy(pending = pending, resumeConfig = previous.resumeConfig)) }
+            if (created == null) mutable.update { it.copy(draft = it.draft.copy(pending = pending, resumeConfig = previous.resumeConfig), sent = null) }
             throw e
         }
         // The provider pick has done what its line said it would.
@@ -535,11 +617,14 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
         shell: Boolean,
         attachments: List<StagedAttachment>,
         seedModel: String?,
+        clientRequestId: String,
     ): JsonObject {
         val config = state.value.draft.resumeConfig
         return buildJsonObject {
             config.filterKeys { it != "account" }.forEach { (k, v) -> put(k, v) }
             if (config["model"] == null) seedModel?.let { put("model", it) }
+            // The press's PendingSend id: POST /sessions answers a repeat of it with the session the first made, so Retry is safe.
+            put("clientRequestId", clientRequestId)
             put("workspaceId", target!!.workspaceId)
             target.folderId?.let { put("folderId", it) }
             put("prompt", content)

@@ -7,6 +7,7 @@ import {
 } from '../lib/taskDependencyGraph';
 import { TaskStatusPill } from './TaskStatusPill';
 import { Popconfirm } from './ui/Popconfirm';
+import { Tooltip } from './ui/Tooltip';
 
 /** Topologically ordered, keyboard-friendly equivalent of the visual dependency graph. */
 export function TaskDependencyList({
@@ -55,12 +56,16 @@ export function TaskDependencyList({
                 />
                 <span className="tdg-list-copy">
                   <span className="tdg-list-title-row">
-                    <span className="tdg-list-title" title={node.title}>{node.title}</span>
+                    <Tooltip content={node.title} truncatedOnly>
+                      <span className="tdg-list-title">{node.title}</span>
+                    </Tooltip>
                     {isFocus && <span className="tdg-current-tag">Current</span>}
                   </span>
-                  <span className="tdg-list-relation" title={relationships}>
-                    {relationships || 'No adjacent relationships'}
-                  </span>
+                  <Tooltip content={relationships} truncatedOnly>
+                    <span className="tdg-list-relation">
+                      {relationships || 'No adjacent relationships'}
+                    </span>
+                  </Tooltip>
                 </span>
               </button>
               {direct.has(node.id) && onRemoveDependency && (

@@ -28,10 +28,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CurrentManagedRunnerInstance, CurrentRunner } from '../runner-api/current-runner.decorator';
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
 import { DriveChunksService } from './drive-chunks.service';
+import { driveChatOfUnattributedMountWrite, DriveChatTurnFull, type DriveChatTurn } from './drive-chat-change-record';
+import { DriveChatChanges, type DriveChatHeldOp } from './drive-chat-changes';
 import { AcceptsDriveMountCredential, CurrentDriveMount, fenceManagedInstance, type DriveMount } from './drive-mount-credential';
 import { RUNNER_DRIVE_ROUTE_PREFIXES } from './drive-routes';
 import { DriveEnabledGuard } from './drive-switch';
-import { drivePathSegments, DriveService, type DriveEntryRow, type DriveWriter } from './drive.service';
+import { DRIVE_NAME_TAKEN, drivePathSegments, DriveService, type DriveEntryRow, type DriveWriter } from './drive.service';
 import {
   RunnerDriveBatchDto,
   RunnerDriveCommitDto,
@@ -98,6 +100,11 @@ function rangeOf(header: string | undefined, size: number): { start: number; end
  *   - It has no Trash route and no share route: agents cannot see Trash (D11) and only the owner shares (D18). A delete
  *     moves an entry to the owner's Trash, where only the owner's routes reach it.
  *   - A staging is the runner's that opened it. A managed runner's commit is fenced in its own transaction (§8.2).
+ *   - A Drive chat's writes (drive-chat-changes.ts) are recorded into its turn's change group; past the turn's 200th
+ *     change a new folder, a move, a rename or a move to Trash is held for the owner's Apply, and a move or rename onto a
+ *     live file is refused with both files named, the owner asked Keep both or Replace. The mount's writes are held to
+ *     the same rules: by the session it names (§5.8), else, on a mount that names none, as the chat's when the chat is
+ *     the runner's only live session.
  *
  * Every rule of a write is the name layer's (DriveService); this door only names entries by path and says who writes.
  * It answers at /runner/drive, and at /runner/documents for runners and mount daemons already deployed (drive-routes.ts).
@@ -111,6 +118,7 @@ export class RunnerDriveController {
     private readonly drive: DriveService,
     private readonly chunks: DriveChunksService,
     private readonly files: FilesService,
+    private readonly chatChanges: DriveChatChanges,
   ) {}
 
   /** One live entry's attributes, `seq` and current version id. */
@@ -159,20 +167,37 @@ export class RunnerDriveController {
 
   /** A new file at `path` in its live folder, with an empty first version the handle fills (§3.1). A taken name is 409. */
   @Post('create')
-  async create(@CurrentRunner() runner: Runner, @Body() dto: RunnerDriveCreateDto) {
+  async create(
+    @CurrentRunner() runner: Runner,
+    @CurrentDriveMount() mount: DriveMount | undefined,
+    @Body() dto: RunnerDriveCreateDto,
+  ) {
     const { parent, name } = splitDrivePath(dto.path);
     const folder = await this.drive.liveAt(runner.ownerId, parent);
     const created = await this.drive.createFile(runner.ownerId, {
-      parentId: folder.id, name, handleId: dto.handleId ?? null, writer: this.writer(runner, dto.writer), onClash: 'REFUSE',
+      parentId: folder.id, name, handleId: dto.handleId ?? null, writer: await this.writer(runner, mount, dto.writer), onClash: 'REFUSE',
     });
     return this.drive.stat(runner.ownerId, await this.drive.liveById(runner.ownerId, created.id));
   }
 
   /** `mkdir`, or with `parents` `mkdir -p`. */
   @Post('mkdir')
-  async mkdir(@CurrentRunner() runner: Runner, @Body() dto: RunnerDriveMkdirDto) {
-    const made = await this.drive.mkdirPath(runner.ownerId, dto.path, { parents: dto.parents === true, writer: this.writer(runner, dto.writer) });
-    return this.drive.stat(runner.ownerId, await this.drive.liveById(runner.ownerId, made.id));
+  async mkdir(
+    @CurrentRunner() runner: Runner,
+    @CurrentDriveMount() mount: DriveMount | undefined,
+    @Body() dto: RunnerDriveMkdirDto,
+  ) {
+    const writer = await this.writer(runner, mount, dto.writer);
+    const turn = await this.chatChanges.turnOf(runner.ownerId, writer);
+    // A `mkdir -p` of a folder already there changes nothing, so a full turn answers it rather than holding it.
+    if (turn && dto.parents === true) {
+      const there = await this.drive.liveAt(runner.ownerId, dto.path).catch(() => null);
+      if (there?.kind === 'FOLDER') return this.drive.stat(runner.ownerId, there);
+    }
+    return this.chatWrite(turn, { op: 'MKDIR', path: dto.path, parents: dto.parents === true }, async () => {
+      const made = await this.drive.mkdirPath(runner.ownerId, dto.path, { parents: dto.parents === true, writer });
+      return this.drive.stat(runner.ownerId, await this.drive.liveById(runner.ownerId, made.id));
+    });
   }
 
   /** A staging for one handle's or one tool call's write, held by this runner. */
@@ -264,6 +289,7 @@ export class RunnerDriveController {
   @HttpCode(HttpStatus.OK)
   async commit(
     @CurrentRunner() runner: Runner,
+    @CurrentDriveMount() mount: DriveMount | undefined,
     @Body() dto: RunnerDriveCommitDto,
     @CurrentManagedRunnerInstance() instance?: ManagedRunnerInstance,
   ) {
@@ -280,7 +306,7 @@ export class RunnerDriveController {
         chunks: dto.chunks,
         replaceTail: dto.replaceTail ?? null,
         stagingId: dto.stagingId ?? null,
-        writer: this.writer(runner, dto.writer),
+        writer: await this.writer(runner, mount, dto.writer),
       },
       instance ? { fence: (tx) => fenceManagedInstance(tx, instance) } : {},
     );
@@ -295,17 +321,37 @@ export class RunnerDriveController {
   /**
    * Rename and/or move. Onto a live file it replaces it unless `noReplace` (§3.2): the target keeps its id and takes the
    * source's content as a new version, its previous one going to Trash; the answer is the target. The source is gone.
+   * A Drive chat never replaces: onto a live file it is refused 409 DRIVE_CHAT_NO_OVERWRITE naming both files, and the
+   * owner is asked Keep both or Replace (drive-chat-changes.ts).
    */
   @Post('rename')
   @HttpCode(HttpStatus.OK)
-  async rename(@CurrentRunner() runner: Runner, @Body() dto: RunnerDriveRenameDto) {
+  async rename(
+    @CurrentRunner() runner: Runner,
+    @CurrentDriveMount() mount: DriveMount | undefined,
+    @Body() dto: RunnerDriveRenameDto,
+  ) {
     const source = await this.named(runner.ownerId, dto.from, dto.id);
     const { parent, name } = splitDrivePath(dto.to);
-    const folder = await this.drive.liveAt(runner.ownerId, parent);
-    const view = await this.drive.rename(runner.ownerId, source.id, {
-      name, parentId: folder.id, writer: this.writer(runner, dto.writer), replace: dto.noReplace !== true,
+    const writer = await this.writer(runner, mount, dto.writer);
+    const turn = await this.chatChanges.turnOf(runner.ownerId, writer);
+    return this.chatWrite(turn, { op: 'RENAME', entryId: source.id, to: dto.to }, async () => {
+      const folder = await this.drive.liveAt(runner.ownerId, parent);
+      let view;
+      try {
+        view = await this.drive.rename(runner.ownerId, source.id, {
+          name, parentId: folder.id, writer, replace: turn === null && dto.noReplace !== true,
+        });
+      } catch (error) {
+        const code = error instanceof HttpException ? (error.getResponse() as { code?: string }).code : undefined;
+        if (turn && code === DRIVE_NAME_TAKEN) {
+          const asked = await this.chatChanges.overwriteRefusal(turn, source, folder, name);
+          if (asked) throw asked;
+        }
+        throw error;
+      }
+      return this.drive.stat(runner.ownerId, await this.drive.liveById(runner.ownerId, view.id));
     });
-    return this.drive.stat(runner.ownerId, await this.drive.liveById(runner.ownerId, view.id));
   }
 
   /**
@@ -321,11 +367,15 @@ export class RunnerDriveController {
   ) {
     const entry = await this.named(runner.ownerId, dto.path, dto.id);
     const own = dto.writer?.burstKey?.trim();
-    await this.drive.moveToTrash(runner.ownerId, entry.id, {
-      writer: this.writer(runner, dto.writer),
-      ...(own ? { burstKey: own } : mount ? { burstKey: `mount:${mount.credentialId}`, burstWindowMs: DRIVE_MOUNT_BURST_WINDOW_MS } : {}),
+    const writer = await this.writer(runner, mount, dto.writer);
+    const turn = await this.chatChanges.turnOf(runner.ownerId, writer);
+    return this.chatWrite(turn, { op: 'TRASH', entryId: entry.id }, async () => {
+      await this.drive.moveToTrash(runner.ownerId, entry.id, {
+        writer,
+        ...(own ? { burstKey: own } : mount ? { burstKey: `mount:${mount.credentialId}`, burstWindowMs: DRIVE_MOUNT_BURST_WINDOW_MS } : {}),
+      });
+      return { deleted: true, id: entry.id };
     });
-    return { deleted: true, id: entry.id };
   }
 
   /** `utimens`: a live entry's mtime. */
@@ -349,11 +399,12 @@ export class RunnerDriveController {
   @HttpCode(HttpStatus.OK)
   async batch(
     @CurrentRunner() runner: Runner,
+    @CurrentDriveMount() mount: DriveMount | undefined,
     @Body() dto: RunnerDriveBatchDto,
     @CurrentManagedRunnerInstance() instance?: ManagedRunnerInstance,
   ) {
     if (dto.stagingId) await this.staging(runner, dto.stagingId);
-    const writer = this.writer(runner, dto.writer);
+    const writer = await this.writer(runner, mount, dto.writer);
     const results = [];
     for (const item of dto.items) {
       try {
@@ -409,9 +460,13 @@ export class RunnerDriveController {
 
   @Post('utimens')
   @HttpCode(HttpStatus.OK)
-  async utimens(@CurrentRunner() runner: Runner, @Body() dto: RunnerDriveUtimensDto) {
+  async utimens(
+    @CurrentRunner() runner: Runner,
+    @CurrentDriveMount() mount: DriveMount | undefined,
+    @Body() dto: RunnerDriveUtimensDto,
+  ) {
     const entry = await this.named(runner.ownerId, dto.path, dto.id);
-    return this.drive.setMtime(runner.ownerId, entry.id, new Date(dto.mtime), this.writer(runner, dto.writer));
+    return this.drive.setMtime(runner.ownerId, entry.id, new Date(dto.mtime), await this.writer(runner, mount, dto.writer));
   }
 
   /** The account's drive bytes, what the mount shows `df` as used (§5.6). */
@@ -436,6 +491,22 @@ export class RunnerDriveController {
 
   // ── helpers ─────────────────────────────────────────────────────────────────────────────────
 
+  /**
+   * A write of a Drive chat's turn (`turn`; null runs it as it is): once the turn takes no more changes — it made 200, or
+   * already holds some — the write is held for the owner's Apply (`held`) and refused DRIVE_CHAT_HELD, nothing changed.
+   * One the recorder finds over the limit inside its own transaction, rolled back, is held the same way.
+   */
+  private async chatWrite<T>(turn: DriveChatTurn | null, held: DriveChatHeldOp, write: () => Promise<T>): Promise<T> {
+    if (!turn) return write();
+    if (await this.chatChanges.isFull(turn)) return this.chatChanges.hold(turn, held);
+    try {
+      return await write();
+    } catch (error) {
+      if (error instanceof DriveChatTurnFull) return this.chatChanges.hold(turn, held);
+      throw error;
+    }
+  }
+
   /** The live entry a request names by path or by id, exactly one of them. */
   private async named(ownerId: string, path: string | undefined, id: string | undefined): Promise<DriveEntryRow> {
     if ((path === undefined) === (id === undefined)) {
@@ -454,9 +525,15 @@ export class RunnerDriveController {
     return staging;
   }
 
-  /** An agent's write through this runner; the session is the name layer's to check (§3.6). */
-  private writer(runner: Runner, writer?: RunnerDriveWriterDto): DriveWriter {
-    return { kind: 'AGENT', runnerId: runner.id, sessionId: writer?.sessionId ?? null };
+  /**
+   * An agent's write through this runner; the session is the name layer's to check (§3.6). A mount's write that names no
+   * session is the Drive chat's when that chat is the runner's only live session (driveChatOfUnattributedMountWrite):
+   * a Docker mount cannot tell its callers apart (§5.8), and the chat's rules are the server's, not its prompt's.
+   */
+  private async writer(runner: Runner, mount: DriveMount | undefined, writer?: RunnerDriveWriterDto): Promise<DriveWriter> {
+    const named = writer?.sessionId ?? null;
+    const sessionId = named ?? (mount ? await driveChatOfUnattributedMountWrite(this.prisma, runner.ownerId, runner.id) : null);
+    return { kind: 'AGENT', runnerId: runner.id, sessionId };
   }
 
   /** A blob's bytes, or `range` of them, from the store that keeps them. */

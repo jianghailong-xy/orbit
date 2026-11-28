@@ -1,71 +1,141 @@
 /**
- * THE DATABASE SIDE OF "NOTHING READS OR WRITES session.status" (docs/session-status-retirement-plan.md §5).
+ * THE SESSION TABLE HAS NO `status` COLUMN (docs/session-status-retirement-plan.md §5, deploy D4, task T15; migration
+ * 1711). session-status-column.spec.ts reads the server's source; what it cannot see are the objects the database
+ * holds. On a database every migration has been applied to:
  *
- * session-status-column.spec.ts reads the server's source; what it cannot see are the objects the database holds. On a
- * database every migration has been applied to, this lists each one that names `session.status` or its type
- * `run_status`: the column and the type, trigger column lists and WHEN clauses, function bodies, indexes, CHECKs, views
- * and generated columns. Seeded from today's objects (task T1). The list may only shrink: T6 takes out what it
- * restates, and T15 turns this into the check that the column and the type are gone.
+ *   (1) there is no column session.status, no type run_status, and nothing — a trigger column list or WHEN clause, a
+ *       function body, an index, a CHECK, a view, a generated column — names either
+ *   (2) the check fails by name when either is re-added: the column, the type, and a function, trigger, index or CHECK
+ *       that names the column, each planted and reported (and rolled back)
+ *   (3) the session suite's writers run on this schema: the claim, the finalize, the reaper's sweep, the end of a queued
+ *       session, a failed import, a revive and a model read of every field; each row's legacy word is the projector's
  *
- * A function body is told by what it says: `NEW.status` / `OLD.status` in a function a trigger on session runs,
- * `<x>.status` in a function that takes a session row, `<alias>.status` or a `SET status` of a statement on the
- * session table, or a mention of `run_status`.
+ * The migration itself and the way back (scripts/session-status-drop-down.sql) are session-status-drop.pg.spec.ts's.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/session-status-column.pg.spec.ts
  */
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
+import {
+  PrismaClient,
+  RunnerStatus,
+  SessionDispatchOrigin,
+  SessionRunSource,
+} from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
+import { RunStatus as SharedRunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
+import { prismaClientFor } from '../prisma/prisma-client';
+import type { PrismaService } from '../prisma/prisma.service';
+import { QueueService } from '../queue/queue.service';
+import type { RealtimeService } from '../realtime/realtime.service';
+import { ReaperService } from '../realtime/reaper.service';
+import { RunnerApiController } from '../runner-api/runner-api.controller';
+import { SessionsService } from './sessions.service';
+import { fixtureFacts, sessionWord } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
+const skip = !URL;
 
-/** Today's objects. Take a line out when a task removes or restates the object; never add one (the four of deploy D1
- *  below are the plan's own, §4.1, added with the migration that installs them, and T6's one function replaces nine
- *  that read the word each on their own). */
-const NAMING_STATUS: readonly string[] = [
-  // The column and the type (T15).
-  'column session.status',
-  'type run_status',
-  // Trigger column lists and WHEN clauses (T6 restates them in deploy 2; T15 takes `status` out of the lists).
-  'trigger session_acquisition_engine_guard',
-  'trigger session_admission_lock_order_update',
-  'trigger session_antigravity_runner_claim_guard',
-  'trigger session_cursor_runner_acquisition_guard',
-  'trigger session_dsh_runner_acquisition_guard',
-  'trigger session_listed_at_settle',
-  'trigger session_opencode_runner_claim_guard',
-  'trigger session_project_capacity_serialize_update',
-  'trigger session_request_asker_stopped',
-  'trigger session_request_recipient_ended',
-  'trigger session_superseded_task_revive_guard',
-  'trigger task_owner_confirmation_review_reviewer_ended',
-  // Function bodies: T6 (migration 1641) restated the nine that read it on the facts. They reach the stored word only
-  // through this one, the SQL twin of turnStateOf: a held row with no turn_state, as one not yet backfilled has, reads
-  // its stored word (the project's deploy-order rule, 2026-11-25). T14 takes that read out of it.
-  'function session_held_turn_state',
-  // Deploy D1's own (T2, migration 1611; plan §4.1): the facts follow the word until the readers and writers move.
-  // `session_aa_turn_state_from_status` and its function are replaced in D3 (T14) by the trigger that derives the
-  // word from the facts; `session_zz_phase` loses `status` from its list and `session_turn_state_of_status` (the
-  // backfill's) goes with the type in D4 (T15).
-  'trigger session_aa_turn_state_from_status',
-  'trigger session_zz_phase',
-  'function session_turn_state_from_status',
-  'function session_turn_state_of_status',
-  // Deploy D2's own (migration 1651; plan §4.1): the word and turn_state held equal while both exist. T15 drops it
-  // before the column.
-  'check session_turn_state_agrees_chk',
-  // Indexes and the release CHECK (go with the column, T15).
-  'check session_release_fact_chk',
-  'index session_assigned_runner_id_status_idx',
-  'index session_batch_id_status_idx',
-  'index session_over_capacity_pending_idx',
-  'index session_owner_status_task_idx',
-  'index session_root_session_id_status_idx',
-  'index session_status_idx',
-];
+interface Stack {
+  db: PrismaClient;
+  sql: Client;
+  api: RunnerApiController;
+  queue: QueueService;
+  sessions: SessionsService;
+  reaper: ReaperService;
+}
+
+function stackFor(url: string, sql: Client): Stack {
+  const db = prismaClientFor(url);
+  const prisma = db as unknown as PrismaService;
+  const realtime = new Proxy({}, { get: () => () => undefined }) as unknown as RealtimeService;
+  const queue = new QueueService(prisma, realtime);
+  const sessions = new SessionsService(prisma, queue, realtime);
+  return {
+    db,
+    sql,
+    sessions,
+    queue,
+    reaper: new ReaperService(prisma, realtime),
+    api: new RunnerApiController(
+      prisma,
+      queue,
+      realtime,
+      new Proxy({}, { get: () => async () => undefined }) as never,
+      { assert: async (_runner: unknown, callingSessionId?: string) => callingSessionId ?? randomUUID() } as never,
+      { expand: async (_ownerId: string, content?: string) => content } as never,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      sessions,
+    ),
+  };
+}
+
+interface World {
+  ownerId: string;
+  runnerId: string;
+  workspaceId: string;
+}
+
+async function world(db: PrismaClient, label: string): Promise<World> {
+  const ownerId = randomUUID();
+  const runnerId = randomUUID();
+  const workspaceId = randomUUID();
+  await db.user.create({
+    data: { id: ownerId, email: `${label}-${ownerId}@column-less.invalid`, name: label, passwordHash: 'x' },
+  });
+  await db.runner.create({
+    data: {
+      id: runnerId,
+      ownerId,
+      name: `${label}-runner`,
+      tokenHash: `hash-${runnerId}`,
+      status: RunnerStatus.ONLINE,
+      capabilities: [],
+      capabilitiesReportedAt: new Date(),
+      lastHeartbeatAt: new Date(),
+    },
+  });
+  await db.workspace.create({
+    data: { id: workspaceId, ownerId, runnerId, name: `${label}-workspace`, enabled: true, workDir: `/srv/${label}` },
+  });
+  return { ownerId, runnerId, workspaceId };
+}
+
+/** A conversation on the world's runner, in the given state. */
+async function session(db: PrismaClient, w: World, data: Record<string, unknown> = {}): Promise<string> {
+  const id = randomUUID();
+  await db.session.create({
+    data: {
+      id,
+      ownerId: w.ownerId,
+      creatorId: w.ownerId,
+      workspaceId: w.workspaceId,
+      assignedRunnerId: w.runnerId,
+      title: 'a conversation',
+      prompt: 'Explain the error in the log',
+      turnState: 'IN_FLIGHT',
+      provider: 'claude',
+      providerBuiltin: true,
+      engine: 'claude',
+      dispatchOrigin: SessionDispatchOrigin.USER,
+      runSource: SessionRunSource.MANUAL,
+      startedAt: new Date(),
+      runtimeSessionId: randomUUID(),
+      ...fixtureFacts(data),
+    },
+  });
+  return id;
+}
+
 
 function bodyNamesStatus(body: string, onSession: boolean, takesSession = false): boolean {
   const text = body.replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
@@ -125,40 +195,92 @@ async function objectsNamingStatus(sql: Client): Promise<string[]> {
   return found.sort();
 }
 
-test('no database object names session.status beyond the ones listed', { skip: !URL, timeout: 120_000 }, async (t) => {
-  assertCoordinatorPgUrlIsIsolated(URL!);
-  const sql = new Client({ connectionString: URL, connectionTimeoutMillis: 5_000 });
+test('session.status and run_status do not exist, nothing names them, and the session writers run without them', {
+  skip, concurrency: 1, timeout: 300_000,
+}, async (t) => {
+  const url = URL!;
+  assertCoordinatorPgUrlIsIsolated(url);
+  const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
   await sql.connect();
-  t.after(() => sql.end().catch(() => undefined));
   await verifyCoordinatorPgIdentity(sql);
-
-  const added = (found: string[]): string[] => found.filter((name) => !NAMING_STATUS.includes(name));
-
-  await t.test('today: every object that names it is listed', async () => {
-    const found = await objectsNamingStatus(sql);
-    assert.deepEqual(added(found), [], `\nthese name session.status and are not listed:\n${added(found).join('\n')}\n`);
+  const stack = stackFor(url, sql);
+  t.after(async () => {
+    await stack.db.$disconnect().catch(() => undefined);
+    await sql.end().catch(() => undefined);
   });
 
-  await t.test('a planted function, index and CHECK are each reported by name', async () => {
-    await sql.query('BEGIN');
-    try {
-      await sql.query(`CREATE FUNCTION planted_status_reader() RETURNS bigint LANGUAGE sql AS
-        $$ SELECT count(*) FROM session s WHERE s.status = 'RUNNING' $$`);
-      await sql.query('CREATE INDEX planted_status_index ON session (status)');
-      await sql.query('ALTER TABLE session ADD CONSTRAINT planted_status_chk CHECK (status IS NOT NULL) NOT VALID');
-      await sql.query(`CREATE FUNCTION planted_noop() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$`);
-      await sql.query(`CREATE FUNCTION planted_row_reader(s session) RETURNS boolean LANGUAGE sql AS
-        $$ SELECT s.status = 'PENDING' $$`);
-      await sql.query('CREATE TRIGGER planted_status_trigger BEFORE UPDATE OF status ON session FOR EACH ROW EXECUTE FUNCTION planted_noop()');
-      assert.deepEqual(added(await objectsNamingStatus(sql)), [
-        'check planted_status_chk',
-        'function planted_row_reader',
-        'function planted_status_reader',
-        'index planted_status_index',
-        'trigger planted_status_trigger',
-      ]);
-    } finally {
-      await sql.query('ROLLBACK');
+  await t.test('(1) no column, no type, and nothing names either', async () => {
+    const found = await objectsNamingStatus(sql);
+    assert.deepEqual(found, [], `\nthese name session.status or run_status:\n${found.join('\n')}\n`);
+    const column = await sql.query(
+      `SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'session' AND column_name = 'status'`);
+    assert.equal(column.rowCount, 0);
+  });
+
+  await t.test('(2) re-adding the column or the type, or naming the column, is reported by name', async () => {
+    const planted = async (statements: string[]): Promise<string[]> => {
+      await sql.query('BEGIN');
+      try {
+        for (const statement of statements) await sql.query(statement);
+        return await objectsNamingStatus(sql);
+      } finally {
+        await sql.query('ROLLBACK');
+      }
+    };
+    assert.deepEqual(await planted(['ALTER TABLE session ADD COLUMN status text']), ['column session.status']);
+    assert.deepEqual(await planted([`CREATE TYPE run_status AS ENUM ('PENDING')`]), ['type run_status']);
+    assert.deepEqual(await planted([
+      `CREATE TYPE run_status AS ENUM ('PENDING', 'RUNNING')`,
+      `ALTER TABLE session ADD COLUMN status run_status NOT NULL DEFAULT 'PENDING'`,
+      `CREATE FUNCTION planted_status_reader() RETURNS bigint LANGUAGE sql AS
+         $$ SELECT count(*) FROM session s WHERE s.status = 'RUNNING' $$`,
+      'CREATE INDEX planted_status_index ON session (status)',
+      'ALTER TABLE session ADD CONSTRAINT planted_status_chk CHECK (status IS NOT NULL) NOT VALID',
+      'CREATE FUNCTION planted_noop() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$',
+      `CREATE FUNCTION planted_row_reader(s session) RETURNS boolean LANGUAGE sql AS $$ SELECT s.status = 'PENDING' $$`,
+      'CREATE TRIGGER planted_status_trigger BEFORE UPDATE OF status ON session FOR EACH ROW EXECUTE FUNCTION planted_noop()',
+    ]), [
+      'check planted_status_chk',
+      'column session.status',
+      'function planted_row_reader',
+      'function planted_status_reader',
+      'index planted_status_index',
+      'trigger planted_status_trigger',
+      'type run_status',
+    ].sort());
+    assert.deepEqual(await objectsNamingStatus(sql), [], 'rolled back');
+  });
+
+  await t.test('(3) the claim, the releases and the revive run on this schema, and answer the facts\' words', async () => {
+    const w = await world(stack.db, 'column-less');
+    const word = (id: string) => sessionWord(stack.db, id);
+    const queued = await session(stack.db, w, { status: RunStatus.PENDING, startedAt: null, runtimeSessionId: null, engine: null });
+    assert.equal(await word(queued), 'PENDING');
+    const claimed = await stack.queue.claimSessionForRunner({ id: w.runnerId });
+    assert.equal(claimed?.sessionId, queued, 'the claim took the queued turn');
+    assert.equal(await word(queued), 'RUNNING');
+    const failed = await session(stack.db, w);
+    await stack.api.finalize({ id: w.runnerId }, failed, { status: SharedRunStatus.FAILED, error: 'engine crashed' } as never);
+    const cancelled = await session(stack.db, w, { cancelRequestedAt: new Date(Date.now() - 10 * 60_000) });
+    await (stack.reaper as unknown as { sweep(): Promise<void> }).sweep();
+    const ended = await session(stack.db, w, { status: RunStatus.PENDING, startedAt: null });
+    await stack.sessions.end(w.ownerId, ended);
+    const imported = await session(stack.db, w, { importSourceCwd: '/home/someone/project' });
+    await stack.api.importResult({ id: w.runnerId, ownerId: w.ownerId } as never, imported, {
+      ok: false, error: 'transcript holds no conversation',
+    });
+    for (const [name, id, expected] of [
+      ['finalized', failed, 'FAILED'], ['reaped', cancelled, 'CANCELLED'], ['ended queued', ended, 'CANCELLED'],
+      ['failed import', imported, 'FAILED'],
+    ] as const) {
+      const row = await stack.db.session.findUniqueOrThrow({ where: { id } });
+      assert.ok(row.finishedAt instanceof Date, `${name}: released`);
+      assert.equal(await word(id), expected, name);
     }
+    await stack.sessions.resume(w.ownerId, failed, { clientTurnId: randomUUID(), content: 'Try again' });
+    assert.equal(await word(failed), 'PENDING', 'the revive worked');
+    // A model read selects every field of the model: it runs against the table without the column.
+    const read = await stack.db.session.findUniqueOrThrow({ where: { id: failed } });
+    assert.equal('status' in read, false, 'the model has no such field');
   });
 });

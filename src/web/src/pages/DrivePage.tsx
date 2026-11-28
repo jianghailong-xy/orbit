@@ -1,10 +1,8 @@
-import { useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import remarkGfm from 'remark-gfm';
 import {
-  DatabaseOutlined,
-  DeleteOutlined,
   DownloadOutlined,
   DownOutlined,
   EllipsisOutlined,
@@ -14,17 +12,22 @@ import {
   FilePdfOutlined,
   FileTextOutlined,
   FolderAddOutlined,
-  FolderFilled,
+  FolderOutlined,
+  CloseOutlined,
   Html5Outlined,
   LinkOutlined,
   RightOutlined,
+  SearchOutlined,
   UploadOutlined,
 } from '@ant-design/icons';
 import Markdown from '../components/Markdown';
+import { DriveChatHost, type DriveAgents } from '../components/drive/DriveChatHost';
 import { DriveWriterName } from '../components/drive/DriveWriterName';
 import { DriveMoveDialog } from '../components/drive/DriveMoveDialog';
 import { DriveShareDialog } from '../components/drive/DriveShareDialog';
-import { DriveUploadTray } from '../components/drive/DriveUploadTray';
+import { DriveAgentsButton } from '../components/drive/DriveAgentsButton';
+import { DrivePendingActions, pendingStatus } from '../components/drive/DrivePendingActions';
+import { DriveSettingsMenu } from '../components/drive/DriveSettingsMenu';
 import { DriveTrash } from '../components/drive/DriveTrash';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -57,7 +60,8 @@ import {
   type DriveEntry,
   type DriveShareLink,
 } from '../lib/drive';
-import { useDriveSyncs } from '../lib/driveSyncs';
+import { driveDetailsOverlay, type DriveMark } from '../lib/driveChanges';
+import { useDriveChanges } from '../lib/useDriveChanges';
 import { addUploads, useDriveUploads, type UploadRequest } from '../lib/driveUploads';
 import { showToast } from '../lib/toastStore';
 import { useToast } from '../lib/toast';
@@ -134,6 +138,7 @@ function TreeFolder({
   toggle,
   onOpen,
   onDropFiles,
+  markOf,
 }: {
   folder: { id: string; name: string; root?: boolean };
   depth: number;
@@ -142,7 +147,10 @@ function TreeFolder({
   toggle: (id: string) => void;
   onOpen: (id: string | null) => void;
   onDropFiles: (event: DragEvent, folder: { id: string; name: string }) => void;
+  /** The mark a Drive chat left on a folder, until it is opened. */
+  markOf: (entryId: string) => DriveMark | null;
 }) {
+  const mark = folder.root ? null : markOf(folder.id);
   const isOpen = open.has(folder.id);
   const listing = useQuery({ ...driveFolderQuery(folder.root ? null : folder.id), enabled: isOpen });
   const [over, setOver] = useState(false);
@@ -153,7 +161,7 @@ function TreeFolder({
         aria-selected={current === folder.id}
         aria-expanded={isOpen}
         tabIndex={0}
-        className={`files-tree-row${current === folder.id ? ' active' : ''}${over ? ' drop-over' : ''}`}
+        className={`files-tree-row${current === folder.id ? ' active' : ''}${over ? ' drop-over' : ''}${mark ? ' marked' : ''}`}
         data-row-focus=""
         style={{ paddingLeft: 6 + depth * 14 }}
         onClick={() => onOpen(folder.root ? null : folder.id)}
@@ -183,8 +191,9 @@ function TreeFolder({
         >
           {isOpen ? <DownOutlined /> : <RightOutlined />}
         </button>
-        <FolderFilled className="files-folder-icon" aria-hidden="true" />
+        <FolderOutlined className="files-folder-icon" aria-hidden="true" />
         <span className="files-tree-name">{folder.name}</span>
+        {mark && <span className="files-mark">{mark}</span>}
       </div>
       {isOpen &&
         listing.data?.entries
@@ -199,6 +208,7 @@ function TreeFolder({
               toggle={toggle}
               onOpen={onOpen}
               onDropFiles={onDropFiles}
+              markOf={markOf}
             />
           ))}
     </>
@@ -208,7 +218,7 @@ function TreeFolder({
 // ── the preview pane ───────────────────────────────────────────────────────────────────────────
 
 function EntryIcon({ entry }: { entry: Pick<DriveEntry, 'kind' | 'name'> }) {
-  if (entry.kind === 'FOLDER') return <FolderFilled className="files-folder-icon" aria-hidden="true" />;
+  if (entry.kind === 'FOLDER') return <FolderOutlined className="files-folder-icon" aria-hidden="true" />;
   if (pictureType(entry.name)) return <FileImageOutlined className="files-file-icon picture" aria-hidden="true" />;
   if (isMarkdown(entry.name)) return <FileMarkdownOutlined className="files-file-icon" aria-hidden="true" />;
   if (isPdf(entry.name)) return <FilePdfOutlined className="files-file-icon" aria-hidden="true" />;
@@ -401,18 +411,36 @@ function DetailsPane({
   menu,
   onShare,
   onOpenFolder,
+  overlay,
+  onClose,
 }: {
   entry: DriveEntry;
   link: DriveShareLink | null;
   menu: ReactNode;
   onShare: (moveToCurrent: boolean) => void;
   onOpenFolder: (id: string) => void;
+  /** Standing over the list's right (the chat is open in a window under 1760) rather than as a column. */
+  overlay: boolean;
+  onClose: () => void;
 }) {
   const toast = useToast();
+  useEffect(() => {
+    if (!overlay) return;
+    const key = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !(event.target instanceof HTMLInputElement)) onClose();
+    };
+    document.addEventListener('keydown', key);
+    return () => document.removeEventListener('keydown', key);
+  }, [overlay, onClose]);
   const detail = useQuery(driveEntryQuery(entry.id));
   const isFile = entry.kind === 'FILE';
   return (
-    <aside className="files-pane" aria-label={`${entry.name} details`}>
+    <aside className={`files-pane${overlay ? ' is-over' : ''}`} aria-label={`${entry.name} details`}>
+      {overlay && (
+        <button type="button" className="files-pane-close" aria-label="Close details" onClick={onClose}>
+          <CloseOutlined />
+        </button>
+      )}
       {isFile && <Preview file={entry} />}
       <h2 className="files-pane-name">{entry.name}</h2>
       <div className="files-pane-kind">{isFile ? formatSize(entry.sizeBytes) : 'Folder'}</div>
@@ -478,11 +506,24 @@ type Dialog =
 /**
  * Drive (board docs/mocks/drive/02-web): the account's drive in a wide window — the folder tree, the list with
  * who last wrote each file, and the picked file's preview and details. Trash and earlier versions are reached from in
- * here (board choice a). `/drive/trash` is its Trash.
+ * here (board choice a). `/drive/trash` is its Trash. The files view hosts the Drive chat (board drive-chat 01);
+ * Trash does not.
  */
 export function DrivePage({ view = 'files' }: { view?: 'files' | 'trash' }) {
   if (view === 'trash') return <DriveTrash />;
   return <DriveBrowser />;
+}
+
+/** The window's width, kept as it is resized. */
+function useWindowWidth(): number {
+  const read = () => (typeof window === 'undefined' ? 1440 : window.innerWidth);
+  const [width, setWidth] = useState(read);
+  useEffect(() => {
+    const onResize = () => setWidth(read());
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return width;
 }
 
 function DriveBrowser() {
@@ -495,12 +536,16 @@ function DriveBrowser() {
   const listing = useQuery(driveFolderQuery(folderId));
   const links = useQuery(driveShareLinksQuery());
   const { uploads, completed } = useDriveUploads();
-  const syncs = useDriveSyncs();
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [search, setSearch] = useState('');
   const [dropOver, setDropOver] = useState(false);
+  // The rows picked with ⌘/Ctrl and Shift (board drive-chat 01 ③), and where a Shift range starts.
+  const [picked, setPicked] = useState<readonly string[]>([]);
+  const anchor = useRef<string | null>(null);
+  useEffect(() => setPicked([]), [folderId]);
+  const changes = useDriveChanges();
   const picker = useRef<HTMLInputElement>(null);
   // Where a row menu puts focus when it closes: the name field after Rename, so the menu's own return to its ⋯ does
   // not blur the field away; otherwise (null) the ⋯ it opened from.
@@ -551,10 +596,12 @@ function DriveBrowser() {
     });
 
   const openFolder = (id: string | null) => {
+    if (id) changes.opened(id);
     if (id && folder) setOpen((was) => new Set([...was, folder.id]));
     setParams(id ? { folder: id } : {});
   };
   const select = (id: string | null) => {
+    if (id) changes.opened(id);
     const next = new URLSearchParams(params);
     if (id) next.set('file', id);
     else next.delete('file');
@@ -562,6 +609,42 @@ function DriveBrowser() {
   };
 
   const entries = listing.data?.entries ?? [];
+  // A file linked from the chat (?file=) is opened by the address: its mark clears like any opened row.
+  useEffect(() => {
+    if (selectedId) changes.opened(selectedId);
+  }, [selectedId, changes]);
+  // A press on a row: plain selects it and opens its details; ⌘/Ctrl toggles it; Shift takes the range from the last one.
+  const pressRow = (event: ReactMouseEvent, entry: DriveEntry) => {
+    if (event.shiftKey && anchor.current) {
+      const from = entries.findIndex((e) => e.id === anchor.current);
+      const to = entries.findIndex((e) => e.id === entry.id);
+      if (from >= 0 && to >= 0) {
+        const range = entries.slice(Math.min(from, to), Math.max(from, to) + 1).map((e) => e.id);
+        setPicked(range);
+        select(range.length === 1 ? range[0]! : null);
+        return;
+      }
+    }
+    anchor.current = entry.id;
+    if (event.metaKey || event.ctrlKey) {
+      const base = picked.length > 0 ? picked : selectedId ? [selectedId] : [];
+      const next = base.includes(entry.id) ? base.filter((id) => id !== entry.id) : [...base, entry.id];
+      setPicked(next);
+      select(next.length === 1 ? next[0]! : null);
+      return;
+    }
+    setPicked([entry.id]);
+    select(entry.id);
+  };
+  // What the composer's chip carries: the picked rows, or the one the address names.
+  const pickedIds = picked.length > 0 ? picked : selectedId ? [selectedId] : [];
+  const selection = useMemo(() => {
+    const here = new Map(entries.map((e) => [e.id, e.name]));
+    const ids = pickedIds.filter((id) => here.has(id));
+    return ids.length > 0 ? { ids, names: ids.map((id) => here.get(id)!) } : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickedIds.join(','), listing.data]);
+  const windowWidth = useWindowWidth();
   // The search box looks through the whole drive; each result names the folder it is in.
   const searching = search.trim() !== '';
   const settled = useSettled(search.trim());
@@ -672,249 +755,275 @@ function DriveBrowser() {
   const crumbs = (here.data?.path ?? '').split('/').filter(Boolean);
 
   return (
-    <div className="files-page">
-      <header className="files-head">
-        <h1>Drive</h1>
-        <div className="files-head-actions">
-          <Input
-            size="small"
-            aria-label="Search Files"
-            placeholder="Search all of Files"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-          <Button icon={<FolderAddOutlined />} onClick={() => void newFolder(folder?.id ?? null)}>
-            New folder
-          </Button>
-          <Button variant="primary" icon={<UploadOutlined />} onClick={() => picker.current?.click()}>
-            Upload
-          </Button>
-          <Button icon={<DeleteOutlined />} onClick={() => navigate('/drive/trash')}>
-            Trash
-          </Button>
-          <Button icon={<DatabaseOutlined />} onClick={() => navigate('/drive/storage')}>
-            Storage
-          </Button>
-          <input
-            ref={picker}
-            type="file"
-            multiple
-            hidden
-            aria-label="Files to upload"
-            onChange={(event) => {
-              const files = [...(event.target.files ?? [])];
-              event.target.value = '';
-              if (folder && files.length > 0) upload(files.map((file) => ({ file, relativePath: null })), { id: folder.id, name: folderName });
+    <DriveChatHost folderId={folder?.parentId ? folder.id : null} folderName={folder ? folderName : null} selection={selection}>
+      {({ chatOpen, agents }) => {
+      const overlay = driveDetailsOverlay(chatOpen, windowWidth);
+      return (
+      <div className={`files-page${overlay ? ' details-over' : ''}`}>
+        <header className="files-head">
+          <h1 className="files-title">
+            {crumbs.length === 0 ? (
+              'Drive'
+            ) : (
+              <>
+                <Link to="/drive" className="files-title-parent">
+                  Drive
+                </Link>
+                {crumbs.map((name, i) => (
+                  <span key={`${name}-${i}`}>
+                    <span className="files-title-sep"> / </span>
+                    {i === crumbs.length - 2 && folder?.parentId && folder.parentId !== rootId ? (
+                      <button type="button" className="files-title-parent" onClick={() => openFolder(folder.parentId)}>
+                        {name}
+                      </button>
+                    ) : (
+                      <span className={i === crumbs.length - 1 ? undefined : 'files-title-parent'}>{name}</span>
+                    )}
+                  </span>
+                ))}
+              </>
+            )}
+          </h1>
+          <div className="files-head-actions">
+            <Input
+              className="files-search-box"
+              prefix={<SearchOutlined />}
+              aria-label="Search Drive"
+              placeholder="Search Drive"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+            <Button icon={<FolderAddOutlined />} onClick={() => void newFolder(folder?.id ?? null)}>
+              New folder
+            </Button>
+            <Button icon={<UploadOutlined />} onClick={() => picker.current?.click()}>
+              Upload
+            </Button>
+            <DriveSettingsMenu />
+            <DriveAgentsButton agents={agents} />
+            <input
+              ref={picker}
+              type="file"
+              multiple
+              hidden
+              aria-label="Files to upload"
+              onChange={(event) => {
+                const files = [...(event.target.files ?? [])];
+                event.target.value = '';
+                if (folder && files.length > 0) upload(files.map((file) => ({ file, relativePath: null })), { id: folder.id, name: folderName });
+              }}
+            />
+          </div>
+        </header>
+        <div className="files-body">
+          <nav className="files-tree" role="tree" aria-label="Folders">
+            {rootId && (
+              <TreeFolder
+                folder={{ id: rootId, name: 'Drive', root: true }}
+                depth={0}
+                current={folder?.id ?? ''}
+                open={open}
+                toggle={toggle}
+                onOpen={openFolder}
+                onDropFiles={(event, target) => dropInto(event, target)}
+                markOf={changes.markOf}
+              />
+            )}
+          </nav>
+          <section
+            className={`files-list-wrap${dropOver ? ' drop-over' : ''}`}
+            aria-label={`${folderName} contents`}
+            onDragOver={(event) => {
+              if (!event.dataTransfer.types.includes('Files')) return;
+              event.preventDefault();
+              setDropOver(true);
             }}
-          />
-        </div>
-      </header>
-      <div className="files-body">
-        <nav className="files-tree" role="tree" aria-label="Folders">
-          {rootId && (
-            <TreeFolder
-              folder={{ id: rootId, name: 'Drive', root: true }}
-              depth={0}
-              current={folder?.id ?? ''}
-              open={open}
-              toggle={toggle}
-              onOpen={openFolder}
-              onDropFiles={(event, target) => dropInto(event, target)}
+            onDragLeave={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropOver(false);
+            }}
+            onDrop={(event) => dropInto(event, null)}
+          >
+            {searching ? (
+              <div className="files-search" role="region" aria-label="Search results">
+                {found.isError ? (
+                  <div className="files-empty" role="alert">
+                    Couldn't search: {messageOf(found.error)}
+                  </div>
+                ) : settled !== search.trim() || found.isPending ? (
+                  <div className="files-empty">Searching…</div>
+                ) : found.data.entries.length === 0 ? (
+                  <div className="files-empty">Nothing matches “{settled}”.</div>
+                ) : (
+                  <table className="files-list">
+                    <colgroup>
+                      <col className="files-col-name" />
+                      <col className="files-col-writer" />
+                      <col className="files-col-size" />
+                      <col className="files-col-when" />
+                      </colgroup>
+                    <thead>
+                      <tr>
+                        <th className="files-col-name">Name</th>
+                        <th className="files-col-writer">Folder</th>
+                        <th className="files-col-size">Size</th>
+                        <th className="files-col-when">Modified</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {found.data.entries.map((entry) => (
+                        <tr
+                          key={entry.id}
+                          data-entry={entry.name}
+                          className="files-row"
+                          onClick={() => {
+                            const target = entry.kind === 'FOLDER' ? entry.id : entry.parentId;
+                            setSearch('');
+                            setParams(target ? (entry.kind === 'FOLDER' ? { folder: target } : { folder: target, file: entry.id }) : {});
+                          }}
+                        >
+                          <td className="files-col-name">
+                            <span className="files-name-cell">
+                              <EntryIcon entry={entry} />
+                              <span className="files-name">{entry.name}</span>
+                            </span>
+                          </td>
+                          <td className="files-col-writer">{entry.folderPath === '/' ? 'Drive' : `Drive${entry.folderPath}`}</td>
+                          <td className="files-col-size">{entry.kind === 'FILE' ? formatSize(entry.sizeBytes) : '—'}</td>
+                          <td className="files-col-when">{formatWhen(entry.lastWriter.at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            ) : listing.isError ? (
+              <div className="files-empty" role="alert">
+                Couldn't read this folder: {messageOf(listing.error)}
+              </div>
+            ) : (
+              <table className={`files-list${selected ? ' no-writer' : ''}`}>
+                <colgroup>
+                      <col className="files-col-name" />
+                      <col className="files-col-writer" />
+                      <col className="files-col-size" />
+                      <col className="files-col-when" />
+                      <col className="files-col-more" />
+                      </colgroup>
+                <thead>
+                  <tr>
+                    <th className="files-col-name">Name</th>
+                    <th className="files-col-writer">Last written by</th>
+                    <th className="files-col-size">Size</th>
+                    <th className="files-col-when">Modified</th>
+                    <th className="files-col-more" aria-label="Actions" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {entries.map((entry) => (
+                    <tr
+                      key={entry.id}
+                      data-entry={entry.name}
+                      className={`files-row${entry.id === selectedId || pickedIds.includes(entry.id) ? ' selected' : ''}${changes.markOf(entry.id) ? ' marked' : ''}`}
+                      aria-selected={entry.id === selectedId || pickedIds.includes(entry.id)}
+                      onClick={(event) => pressRow(event, entry)}
+                      onDoubleClick={() => entry.kind === 'FOLDER' && openFolder(entry.id)}
+                    >
+                      <td className="files-col-name">
+                        <span className="files-name-cell">
+                        <EntryIcon entry={entry} />
+                        {renaming?.id === entry.id ? (
+                          <Input
+                            ref={renameInput}
+                            autoFocus
+                            size="small"
+                            aria-label={`New name for ${entry.name}`}
+                            value={renaming.name}
+                            onClick={(event) => event.stopPropagation()}
+                            onChange={(event) => setRenaming({ id: entry.id, name: event.target.value })}
+                            onFocus={(event) => {
+                              const dot = entry.kind === 'FILE' ? entry.name.lastIndexOf('.') : -1;
+                              event.target.setSelectionRange(0, dot > 0 ? dot : entry.name.length);
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') void commitRename();
+                              if (event.key === 'Escape') setRenaming(null);
+                            }}
+                          />
+                        ) : (
+                          <span className="files-name">{entry.name}</span>
+                        )}
+                        {linkOf(entry) && <LinkOutlined className="files-shared-mark" aria-label="Shared" />}
+                        {changes.markOf(entry.id) && <span className="files-mark">{changes.markOf(entry.id)}</span>}
+                        </span>
+                      </td>
+                      <td className="files-col-writer">
+                        <DriveWriterName writer={entry.lastWriter} glyph />
+                      </td>
+                      <td className="files-col-size">{entry.kind === 'FILE' ? formatSize(entry.sizeBytes) : '—'}</td>
+                      <td className="files-col-when">{formatWhen(entry.lastWriter.at)}</td>
+                      <td className="files-col-more" onClick={(event) => event.stopPropagation()}>
+                        {moreButton(entry)}
+                      </td>
+                    </tr>
+                  ))}
+                  {pending.map((u) => (
+                    <tr key={u.key} className="files-row pending" data-entry={u.name}>
+                      <td className="files-col-name">
+                        <span className="files-name-cell">
+                          <EntryIcon entry={{ kind: 'FILE', name: u.name }} />
+                          <span className="files-name">{u.name}</span>
+                        </span>
+                      </td>
+                      <td className="files-col-writer">
+                        {pendingStatus(u)} <DrivePendingActions upload={u} />
+                      </td>
+                      <td className="files-col-size">{formatSize(u.size)}</td>
+                      <td className="files-col-when">—</td>
+                      <td />
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {listing.data && entries.length === 0 && pending.length === 0 && (
+              <div className="files-empty">Nothing here yet. Drop files or folders here, or press Upload.</div>
+            )}
+            {dropOver && (
+              <div className="files-drop-hint" aria-hidden="true">
+                <strong>Drop to upload to {folderName}</strong>
+                <span>Files or folders, any size</span>
+              </div>
+            )}
+          </section>
+          {selected && (
+            <DetailsPane
+              entry={selected}
+              link={linkOf(selected)}
+              menu={moreButton(selected, 'files-pane-more')}
+              onShare={(moveToCurrent) => setDialog({ kind: 'share', entry: selected, moveToCurrent })}
+              onOpenFolder={openFolder}
+              overlay={overlay}
+              onClose={() => {
+                setPicked([]);
+                select(null);
+              }}
             />
           )}
-        </nav>
-        <section
-          className={`files-list-wrap${dropOver ? ' drop-over' : ''}`}
-          aria-label={`${folderName} contents`}
-          onDragOver={(event) => {
-            if (!event.dataTransfer.types.includes('Files')) return;
-            event.preventDefault();
-            setDropOver(true);
-          }}
-          onDragLeave={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropOver(false);
-          }}
-          onDrop={(event) => dropInto(event, null)}
-        >
-          <div className="files-crumbs">
-            <Link to="/drive">Drive</Link>
-            {crumbs.map((name, i) => (
-              <span key={`${name}-${i}`}>
-                <span className="files-crumb-sep"> › </span>
-                {i === crumbs.length - 2 && folder?.parentId && folder.parentId !== rootId ? (
-                  <button type="button" className="files-link-button" onClick={() => openFolder(folder.parentId)}>
-                    {name}
-                  </button>
-                ) : (
-                  <span className={i === crumbs.length - 1 ? 'files-crumb-here' : undefined}>{name}</span>
-                )}
-              </span>
-            ))}
-          </div>
-          {searching ? (
-            <div className="files-search" role="region" aria-label="Search results">
-              {found.isError ? (
-                <div className="files-empty" role="alert">
-                  Couldn't search: {messageOf(found.error)}
-                </div>
-              ) : settled !== search.trim() || found.isPending ? (
-                <div className="files-empty">Searching…</div>
-              ) : found.data.entries.length === 0 ? (
-                <div className="files-empty">Nothing matches “{settled}”.</div>
-              ) : (
-                <table className="files-list">
-                  <thead>
-                    <tr>
-                      <th className="files-col-name">Name</th>
-                      <th className="files-col-writer">Folder</th>
-                      <th className="files-col-size">Size</th>
-                      <th className="files-col-when">Modified</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {found.data.entries.map((entry) => (
-                      <tr
-                        key={entry.id}
-                        data-entry={entry.name}
-                        className="files-row"
-                        onClick={() => {
-                          const target = entry.kind === 'FOLDER' ? entry.id : entry.parentId;
-                          setSearch('');
-                          setParams(target ? (entry.kind === 'FOLDER' ? { folder: target } : { folder: target, file: entry.id }) : {});
-                        }}
-                      >
-                        <td className="files-col-name">
-                          <span className="files-name-cell">
-                            <EntryIcon entry={entry} />
-                            <span className="files-name">{entry.name}</span>
-                          </span>
-                        </td>
-                        <td className="files-col-writer">{entry.folderPath === '/' ? 'Drive' : `Drive${entry.folderPath}`}</td>
-                        <td className="files-col-size">{entry.kind === 'FILE' ? formatSize(entry.sizeBytes) : '—'}</td>
-                        <td className="files-col-when">{formatWhen(entry.lastWriter.at)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          ) : listing.isError ? (
-            <div className="files-empty" role="alert">
-              Couldn't read this folder: {messageOf(listing.error)}
-            </div>
-          ) : (
-            <table className="files-list">
-              <thead>
-                <tr>
-                  <th className="files-col-name">Name</th>
-                  <th className="files-col-writer">Last written by</th>
-                  <th className="files-col-size">Size</th>
-                  <th className="files-col-when">Modified</th>
-                  <th className="files-col-more" aria-label="Actions" />
-                </tr>
-              </thead>
-              <tbody>
-                {entries.map((entry) => (
-                  <tr
-                    key={entry.id}
-                    data-entry={entry.name}
-                    className={`files-row${entry.id === selectedId ? ' selected' : ''}`}
-                    aria-selected={entry.id === selectedId}
-                    onClick={() => select(entry.id)}
-                    onDoubleClick={() => entry.kind === 'FOLDER' && openFolder(entry.id)}
-                  >
-                    <td className="files-col-name">
-                      <span className="files-name-cell">
-                      <EntryIcon entry={entry} />
-                      {renaming?.id === entry.id ? (
-                        <Input
-                          ref={renameInput}
-                          autoFocus
-                          size="small"
-                          aria-label={`New name for ${entry.name}`}
-                          value={renaming.name}
-                          onClick={(event) => event.stopPropagation()}
-                          onChange={(event) => setRenaming({ id: entry.id, name: event.target.value })}
-                          onFocus={(event) => {
-                            const dot = entry.kind === 'FILE' ? entry.name.lastIndexOf('.') : -1;
-                            event.target.setSelectionRange(0, dot > 0 ? dot : entry.name.length);
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter') void commitRename();
-                            if (event.key === 'Escape') setRenaming(null);
-                          }}
-                        />
-                      ) : (
-                        <span className="files-name">{entry.name}</span>
-                      )}
-                      {linkOf(entry) && <LinkOutlined className="files-shared-mark" aria-label="Shared" />}
-                      </span>
-                    </td>
-                    <td className="files-col-writer">
-                      <DriveWriterName writer={entry.lastWriter} />
-                    </td>
-                    <td className="files-col-size">{entry.kind === 'FILE' ? formatSize(entry.sizeBytes) : '—'}</td>
-                    <td className="files-col-when">{formatWhen(entry.lastWriter.at)}</td>
-                    <td className="files-col-more" onClick={(event) => event.stopPropagation()}>
-                      {moreButton(entry)}
-                    </td>
-                  </tr>
-                ))}
-                {pending.map((u) => (
-                  <tr key={u.key} className="files-row pending" data-entry={u.name}>
-                    <td className="files-col-name">
-                      <span className="files-name-cell">
-                        <EntryIcon entry={{ kind: 'FILE', name: u.name }} />
-                        <span className="files-name">{u.name}</span>
-                      </span>
-                    </td>
-                    <td className="files-col-writer">
-                      {u.status === 'uploading' || u.status === 'queued'
-                        ? `Uploading · ${u.size ? Math.floor((u.sentBytes / u.size) * 100) : 0}%`
-                        : u.status === 'failed'
-                          ? "Couldn't upload"
-                          : `Paused · ${u.size ? Math.floor((u.sentBytes / u.size) * 100) : 0}%`}
-                    </td>
-                    <td className="files-col-size">{formatSize(u.size)}</td>
-                    <td className="files-col-when">—</td>
-                    <td />
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          {listing.data && entries.length === 0 && pending.length === 0 && (
-            <div className="files-empty">Nothing here yet. Drop files or folders here, or press Upload.</div>
-          )}
-          {dropOver && (
-            <div className="files-drop-hint" aria-hidden="true">
-              <strong>Drop to upload to {folderName}</strong>
-              <span>Files or folders, any size</span>
-            </div>
-          )}
-          <DriveUploadTray uploads={uploads} syncs={syncs} />
-        </section>
-        {selected && (
-          <DetailsPane
-            entry={selected}
-            link={linkOf(selected)}
-            menu={moreButton(selected, 'files-pane-more')}
-            onShare={(moveToCurrent) => setDialog({ kind: 'share', entry: selected, moveToCurrent })}
-            onOpenFolder={openFolder}
+        </div>
+        {dialog?.kind === 'move' && rootId && (
+          <DriveMoveDialog entry={dialog.entry} rootId={rootId} onClose={() => setDialog(null)} />
+        )}
+        {dialog?.kind === 'share' && (
+          <DriveShareDialog
+            file={dialog.entry}
+            existing={linkOf(dialog.entry)}
+            moveToCurrent={dialog.moveToCurrent}
+            onClose={() => setDialog(null)}
           />
         )}
       </div>
-      {dialog?.kind === 'move' && rootId && (
-        <DriveMoveDialog entry={dialog.entry} rootId={rootId} onClose={() => setDialog(null)} />
-      )}
-      {dialog?.kind === 'share' && (
-        <DriveShareDialog
-          file={dialog.entry}
-          existing={linkOf(dialog.entry)}
-          moveToCurrent={dialog.moveToCurrent}
-          onClose={() => setDialog(null)}
-        />
-      )}
-    </div>
+      );
+      }}
+    </DriveChatHost>
   );
 }

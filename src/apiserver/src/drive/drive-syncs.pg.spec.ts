@@ -10,7 +10,10 @@
  *       runner are answered 404, and an ended sync 409, each writing nothing;
  *   (3) the owner's list and read by id: another account's syncs never, a session of another account by no title, a running sync with
  *       no report for two minutes as STOPPED, a sync ended over a day ago not at all (and pruned by the next open);
- *   (4) the body: a source name with a slash, an unknown status and more than 100 failed paths are refused.
+ *   (4) the body: a source name with a slash, an unknown status and more than 100 failed paths are refused;
+ *   (5) a sync that ended with failures is kept and listed past the day until it is handled: by the owner's
+ *       POST /drive/syncs/:id/handled (idempotent, another account's sync not found), or by a later clean sync of the same
+ *       source into the same destination; a handled one and a clean one age out as before.
  *
  * Not destructive: every row belongs to accounts this run creates.
  */
@@ -18,11 +21,12 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { toUuid } from '@orbit/shared';
+import { toUuid, uuidToBase62 } from '@orbit/shared';
 import type { PrismaClient } from '@prisma/client';
 import { Client } from 'pg';
 
 import { call, startApiserver, type Reply } from '../auth/pat-test-apiserver';
+import { hashPassword } from '../common/crypto.util';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { DRIVE_SYNC_KEEP_MS, DRIVE_SYNC_STALE_MS, DriveSyncsService } from './drive-syncs.service';
@@ -50,9 +54,11 @@ test('Documents: an agent directory sync reported for the upload tray', { skip: 
   t.after(() => db.$disconnect().catch(() => undefined));
   const syncs = new DriveSyncsService(db as never);
 
+  const emailOf = (name: string) => `${name}-${RUN}@drive-syncs.invalid`;
+  const passwordOf = (name: string) => `pw-${name}-${RUN}`;
   const account = async (name: string) => {
     const id = randomUUID();
-    await db.user.create({ data: { id, email: `${name}-${RUN}@drive-syncs.invalid`, name, passwordHash: 'x' } });
+    await db.user.create({ data: { id, email: emailOf(name), name, passwordHash: hashPassword(passwordOf(name)) } });
     return id;
   };
   const runnerOf = async (ownerId: string, name: string) => {
@@ -86,7 +92,7 @@ test('Documents: an agent directory sync reported for the upload tray', { skip: 
     const id = opened(await as(aliceRunner.token, 'POST', '', { sourceName: 'out', destPath: '/Reports/out', sessionId: aliceSession }), 'open');
     let view = await listed(alice, id);
     assert.equal(view?.status, 'CHECKING');
-    assert.deepEqual(view?.session, { id: aliceSession, title: 'Weekly report' });
+    assert.deepEqual(view?.session, { id: aliceSession, title: 'Weekly report', open: true });
     assert.equal(view?.sourceName, 'out');
 
     ok(await as(aliceRunner.token, 'PATCH', `/${id}`, {
@@ -155,5 +161,97 @@ test('Documents: an agent directory sync reported for the upload tray', { skip: 
     assert.equal((await as(aliceRunner.token, 'PATCH', `/${id}`, { status: 'PAUSED' })).status, 400);
     const failed = Array.from({ length: 101 }, (_, i) => ({ path: `f${i}`, error: 'x' }));
     assert.equal((await as(aliceRunner.token, 'PATCH', `/${id}`, { status: 'DONE', failed })).status, 400);
+  });
+
+  await t.test('(5) a failed sync stays until it is handled; a handled one and a clean one age out', async () => {
+    const signIn = async (name: string): Promise<string> => {
+      const reply = ok(await call(server, 'POST', '/api/auth/login', undefined, { email: emailOf(name), password: passwordOf(name) }), `${name} signs in`);
+      return reply.json.accessToken as string;
+    };
+    const aliceToken = await signIn('sync-alice');
+    const bobToken = await signIn('sync-bob');
+    const handle = (token: string, id: string) => call(server, 'POST', `/api/drive/syncs/${uuidToBase62(id)}/handled`, token);
+    const handledAt = async (id: string) => (await db.driveSync.findUniqueOrThrow({ where: { id } })).handledAt;
+    const longAgo = new Date(Date.now() - DRIVE_SYNC_KEEP_MS - 60_000);
+    /** A sync of Alice's that ended a day and a minute ago, as the runner left it. */
+    const endedLongAgo = async (sourceName: string, destPath: string, data: Record<string, unknown>) => {
+      const id = opened(await as(aliceRunner.token, 'POST', '', { sourceName, destPath }), `open ${sourceName}`);
+      await db.driveSync.update({ where: { id }, data: { startedAt: longAgo, updatedAt: longAgo, endedAt: longAgo, ...data } });
+      return id;
+    };
+    const failedFiles = await endedLongAgo('books-stage', '/Books', {
+      status: 'DONE', failedCount: 4, failed: [{ path: '0412/scan.tiff', error: 'File changed while reading.' }],
+    });
+    const failedWhole = await endedLongAgo('exports', '/Lab evidence', { status: 'FAILED', error: '/Lab evidence is a file in Drive.' });
+    const handledFailure = await endedLongAgo('scratch', '/scratch', { status: 'DONE', failedCount: 2, handledAt: longAgo });
+    const clean = await endedLongAgo('clean', '/Clean', { status: 'DONE', filesDone: 9 });
+    const stopped = await endedLongAgo('stopped', '/Stopped', { status: 'STOPPED' });
+
+    for (const id of [failedFiles, failedWhole]) {
+      const view = await listed(alice, id);
+      assert.ok(view, 'an unhandled failure older than DRIVE_SYNC_KEEP_MS is listed');
+      assert.equal(view.handledAt, null);
+      assert.equal(view.fixSessionId, null);
+      assert.equal(view.fixRequestedAt, null);
+    }
+    for (const id of [handledFailure, clean, stopped]) assert.equal(await listed(alice, id), undefined, 'a handled, clean or stopped one is not');
+    ok(await as(aliceRunner.token, 'POST', '', { sourceName: 'next', destPath: '/Next' }), 'the next open prunes');
+    assert.equal(await db.driveSync.count({ where: { id: { in: [failedFiles, failedWhole] } } }), 2, 'the unhandled failures stay');
+    assert.equal(await db.driveSync.count({ where: { id: { in: [handledFailure, clean, stopped] } } }), 0, 'the rest age out');
+
+    // Fifty newer syncs fill the tray's page; the old failures are still in it.
+    const now = new Date();
+    await db.driveSync.createMany({
+      data: Array.from({ length: 55 }, (_, i) => ({
+        ownerId: alice, runnerId: aliceRunner.id, sourceName: `filler-${i}`, destPath: '/Filler', status: 'DONE',
+        startedAt: now, updatedAt: now, endedAt: now,
+      })),
+    });
+    const tray = (await syncs.list(alice)).syncs;
+    assert.ok(tray.some((sync) => sync.id === failedFiles) && tray.some((sync) => sync.id === failedWhole), 'not pushed out by newer syncs');
+    const starts = tray.map((sync) => sync.startedAt);
+    assert.deepEqual(starts, [...starts].sort().reverse(), 'still newest first');
+    await db.driveSync.deleteMany({ where: { ownerId: alice, destPath: '/Filler' } });
+
+    // The owner's Clear: another account's is not found and writes nothing; saying it twice keeps the first time.
+    const refused = await handle(bobToken, failedFiles);
+    assert.equal(refused.status, 404, JSON.stringify(refused.json));
+    assert.equal(await handledAt(failedFiles), null, "another account's Clear writes nothing");
+    const first = ok(await handle(aliceToken, failedFiles), 'clear').json;
+    assert.ok(first.handledAt, 'the answer carries handledAt');
+    assert.equal(first.id, uuidToBase62(failedFiles));
+    const again = ok(await handle(aliceToken, failedFiles), 'clear again').json;
+    assert.equal(again.handledAt, first.handledAt, 'idempotent: the first time is kept');
+    assert.equal((await handledAt(failedFiles))?.toISOString(), first.handledAt);
+    assert.equal(await listed(alice, failedFiles), undefined, 'once handled it ages out like any other');
+    ok(await as(aliceRunner.token, 'POST', '', { sourceName: 'next', destPath: '/Next' }), 'the next open prunes it');
+    assert.equal(await db.driveSync.count({ where: { id: failedFiles } }), 0);
+    assert.equal(await handledAt(failedWhole), null, 'the other failure is untouched');
+    assert.ok(await listed(alice, failedWhole));
+    assert.equal((await handle(aliceToken, randomUUID())).status, 404, 'no such sync');
+
+    // A later clean sync of the same source into the same destination settles the earlier failures, and only those.
+    const run = async (runner: { token: string }, sourceName: string, destPath: string, end: Record<string, unknown>) => {
+      const id = opened(await as(runner.token, 'POST', '', { sourceName, destPath }), `open ${sourceName}`);
+      ok(await as(runner.token, 'PATCH', `/${id}`, end), `end ${sourceName}`);
+      return id;
+    };
+    const failing = { status: 'DONE', failed: [{ path: 'cover-001.jpg', error: 'Permission denied.' }], failedCount: 1 };
+    const earlier = await run(aliceRunner, 'photos', '/Photos', failing);
+    const broken = await run(aliceRunner, 'photos', '/Photos', { status: 'FAILED', error: 'Disk gone.' });
+    const elsewhere = await run(aliceRunner, 'photos', '/Elsewhere', failing);
+    const bobs = await run(bobRunner, 'photos', '/Photos', failing);
+    const stillFailing = await run(aliceRunner, 'photos', '/Photos', failing);
+    assert.equal(await handledAt(earlier), null, 'a later sync with failures settles nothing');
+    const stop = await run(aliceRunner, 'photos', '/Photos', { status: 'STOPPED' });
+    assert.equal(await handledAt(earlier), null, 'a stopped sync settles nothing');
+    const fixed = await run(aliceRunner, 'photos', '/Photos', { status: 'DONE', filesDone: 1 });
+    for (const id of [earlier, broken, stillFailing]) {
+      assert.ok(await handledAt(id), 'an earlier failure of the same source and destination is handled');
+      assert.ok((await listed(alice, id))?.handledAt, 'and reads so');
+    }
+    for (const id of [elsewhere, fixed, stop]) assert.equal(await handledAt(id), null, 'another destination, the clean one, a stopped one');
+    assert.equal(await handledAt(bobs), null, "another account's failure is not");
+    assert.equal(await handledAt(failedWhole), null, 'another source is not');
   });
 });

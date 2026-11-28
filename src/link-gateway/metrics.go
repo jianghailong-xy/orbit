@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -217,10 +218,15 @@ type gatewayMetrics struct {
 	tokenRefusals         *counter
 	disconnects           *counter
 	rtt                   *histogram
+	pingWriteBlocked      *counter
 	framesReceived        *counter
 	framesSent            *counter
 	frameDecodeErrors     *counter
 	heartbeats            *counter
+	heartbeatBytes        *counter
+	heartbeatWire         *counter
+	heartbeatWireInflated *counter
+	heartbeatSeen         atomic.Uint64
 	draining              *gauge
 	drainsSent            *counter
 	revocations           *gauge
@@ -245,6 +251,9 @@ type gatewayMetrics struct {
 	heartbeatForwards *counter
 	heartbeatDuration *histogram
 	heartbeatFacts    *counter
+	factProcesses     *gauge
+	factPeerAsks      *counter
+	factPeerAnswers   *counter
 	welcomeLookups    *counter
 	eventBatches      *counter
 	eventsStored      *counter
@@ -274,23 +283,27 @@ type gatewayMetrics struct {
 var (
 	handshakeResults  = []string{"ok", "unauthenticated", "rate_limited", "too_many_connections", "draining", "not_websocket", "hello_timeout", "protocol_error", "upgrade_required", "upgrade_failed"}
 	refusalReasons    = []tokenRefusal{refuseMissing, refuseMalformed, refuseSignature, refuseAudience, refuseExpired, refuseClaims, refuseCell, refuseRevoked}
-	disconnectReasons = []string{"client_closed", "connection_lost", "superseded", "ping_timeout", "token_expired", "revoked", "protocol_error", "slow_consumer", "drained", "shutdown", "internal_error"}
+	disconnectReasons = []string{"client_closed", "connection_lost", "superseded", "ping_timeout", "token_expired", "revoked", "protocol_error", "slow_consumer", "drained", "shutdown", "internal_error", "write_timeout"}
 )
 
 func newGatewayMetrics(version string, deny *denyList) *gatewayMetrics {
 	m := &gatewayMetrics{
-		connections:       newGauge("link_connections", "Open runner connections: those that were sent Welcome and are not closed yet."),
-		handshakes:        newCounter("link_handshakes_total", "Upgrade requests by outcome; ok is a connection that was sent Welcome.", "result"),
-		handshakeDuration: newHistogram("link_handshake_duration_seconds", "From the upgrade request to Welcome written, for handshakes that succeeded.", 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10),
-		tokenRefusals:     newCounter("link_token_refusals_total", "Connection tokens refused before the upgrade, by reason.", "reason"),
-		disconnects:       newCounter("link_disconnects_total", "Closed connections that had been sent Welcome, by reason.", "reason"),
-		rtt:               newHistogram("link_rtt_seconds", "WebSocket ping round trips.", 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60),
-		framesReceived:    newCounter("link_frames_received_total", "Frames received from runners, by body.", "type"),
-		framesSent:        newCounter("link_frames_sent_total", "Frames sent to runners, by body.", "type"),
-		frameDecodeErrors: newCounter("link_frame_decode_errors_total", "WebSocket messages from runners that did not decode as a Frame."),
-		heartbeats:        newCounter("link_heartbeats_total", "Heartbeat frames received."),
-		draining:          newGauge("link_draining", "1 while the gateway drains its connections before it exits."),
-		drainsSent:        newCounter("link_drains_sent_total", "Drain frames sent."),
+		connections:           newGauge("link_connections", "Open runner connections: those that were sent Welcome and are not closed yet."),
+		handshakes:            newCounter("link_handshakes_total", "Upgrade requests by outcome; ok is a connection that was sent Welcome.", "result"),
+		handshakeDuration:     newHistogram("link_handshake_duration_seconds", "From the upgrade request to Welcome written, for handshakes that succeeded.", 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10),
+		tokenRefusals:         newCounter("link_token_refusals_total", "Connection tokens refused before the upgrade, by reason.", "reason"),
+		disconnects:           newCounter("link_disconnects_total", "Closed connections that had been sent Welcome, by reason.", "reason"),
+		rtt:                   newHistogram("link_rtt_seconds", "WebSocket ping round trips.", 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60),
+		pingWriteBlocked:      newCounter("link_ping_write_blocked_total", "WebSocket pings that could not be written within the library's 5 s: those that waited that long for the write lock are tried again at the next interval; one whose write stalled closed its connection (write_timeout)."),
+		framesReceived:        newCounter("link_frames_received_total", "Frames received from runners, by body.", "type"),
+		framesSent:            newCounter("link_frames_sent_total", "Frames sent to runners, by body.", "type"),
+		frameDecodeErrors:     newCounter("link_frame_decode_errors_total", "WebSocket messages from runners that did not decode as a Frame."),
+		heartbeats:            newCounter("link_heartbeats_total", "Heartbeat frames received."),
+		heartbeatBytes:        newCounter("link_heartbeat_bytes_total", "Inflated bytes of heartbeat frames received, by part: typed (typed fields and framing), fact_whole (facts sent whole), fact_digest (facts sent by digest).", "part"),
+		heartbeatWire:         newCounter("link_heartbeat_wire_bytes_total", "Estimated bytes on the wire of the sampled heartbeats: each cut into 16 KiB pieces, the pieces of 512 bytes or more deflated with BestSpeed and no context takeover, and summed."),
+		heartbeatWireInflated: newCounter("link_heartbeat_wire_sampled_inflated_bytes_total", "Inflated bytes of those same sampled frames; link_heartbeat_wire_bytes_total over this is the compression ratio."),
+		draining:              newGauge("link_draining", "1 while the gateway drains its connections before it exits."),
+		drainsSent:            newCounter("link_drains_sent_total", "Drain frames sent."),
 		revocations: newGaugeFunc("link_revocations", "Revoked runner credentials in the deny list.",
 			func() float64 { return float64(deny.size()) }),
 		revocationFetches:     newCounter("link_revocation_fetches_total", "Reads of the apiserver's revocation list, by outcome.", "result"),
@@ -312,7 +325,10 @@ func newGatewayMetrics(version string, deny *denyList) *gatewayMetrics {
 		rpcDuration:       newHistogram("link_rpc_duration_seconds", "From a forwarded request's start to its route's answer.", linkDurationBounds...),
 		heartbeatForwards: newCounter("link_heartbeat_forwards_total", "Heartbeats forwarded, by what became of them.", "result"),
 		heartbeatDuration: newHistogram("link_heartbeat_forward_duration_seconds", "From a heartbeat's forwarding to the route's answer.", linkDurationBounds...),
-		heartbeatFacts:    newCounter("link_heartbeat_facts_total", "Heartbeat facts, by how the gateway read them: whole, cached (a digest it held), unknown_digest, invalid_json, digest_mismatch, ignored.", "result"),
+		heartbeatFacts:    newCounter("link_heartbeat_facts_total", "Heartbeat facts, by how the gateway read them: whole, cached (a digest it held), peer (a digest another node held), unknown_digest (asked of the runner), invalid_json, digest_mismatch, ignored.", "result"),
+		factProcesses:     newGauge("link_fact_processes", "Runner processes whose heartbeat facts this node holds: those with a connection here, and those whose last one ended less than 15 minutes ago."),
+		factPeerAsks:      newCounter("link_fact_peer_asks_total", "Asks of the other nodes for facts a beat sent by a digest this node did not hold, by outcome: answered (all of them), partial, no_answer, malformed.", "result"),
+		factPeerAnswers:   newCounter("link_fact_peer_answers_total", "Answers this node gave another node's ask for a process's facts."),
 		welcomeLookups:    newCounter("link_welcome_lookups_total", "What the welcome route answered for a Welcome; anything but answered sends a Welcome without its sessions and release.", "result"),
 		eventBatches:      newCounter("link_event_batches_total", "Event batches, by what became of them.", "result"),
 		eventsStored:      newCounter("link_events_stored_total", "Durable events the ingest route stored and the gateway acknowledged."),
@@ -335,6 +351,9 @@ func newGatewayMetrics(version string, deny *denyList) *gatewayMetrics {
 		streams:           newCounter("link_streams_total", "Byte stream opens and ends, by what happened: opened, refused, too_many, no_connection, malformed, nats_down, dropped, timeout, flow_violation, slow_runner, closed_by_runner, closed_by_viewer, connection_closed.", "result"),
 		openStreams:       newGauge("link_open_streams", "Byte streams open or opening now."),
 		queueFull:         newCounter("link_queue_full_total", "Frames that found their write queue full, by queue and what became of them: closed (the connection, slow_consumer) or dropped.", "queue", "result"),
+	}
+	for _, part := range []string{"typed", "fact_whole", "fact_digest"} {
+		m.heartbeatBytes.preset(part)
 	}
 	for _, r := range handshakeResults {
 		m.handshakes.preset(r)
@@ -374,6 +393,9 @@ func newGatewayMetrics(version string, deny *denyList) *gatewayMetrics {
 	for _, r := range []string{"forwarded", "want_facts", "failed", "refused", "superseded"} {
 		m.heartbeatForwards.preset(r)
 	}
+	for _, r := range []string{"answered", "partial", "no_answer"} {
+		m.factPeerAsks.preset(r)
+	}
 	for _, r := range []string{"stored", "credit_exceeded", "queue_full", "gap", "no_answer", "refused", "refused_retryable", "failed_behind"} {
 		m.eventBatches.preset(r)
 	}
@@ -399,13 +421,13 @@ func newGatewayMetrics(version string, deny *denyList) *gatewayMetrics {
 	m.all = []collector{
 		&infoGauge{name: "link_gateway_build_info", help: "The gateway's version.", labels: []string{"version"}, values: []string{version}},
 		&gauge{name: "link_gateway_start_time_seconds", help: "When this process started, in Unix seconds.", v: float64(time.Now().Unix())},
-		m.connections, m.handshakes, m.handshakeDuration, m.tokenRefusals, m.disconnects, m.rtt,
-		m.framesReceived, m.framesSent, m.frameDecodeErrors, m.heartbeats, m.draining, m.drainsSent,
+		m.connections, m.handshakes, m.handshakeDuration, m.tokenRefusals, m.disconnects, m.rtt, m.pingWriteBlocked,
+		m.framesReceived, m.framesSent, m.frameDecodeErrors, m.heartbeats, m.heartbeatBytes, m.heartbeatWire, m.heartbeatWireInflated, m.draining, m.drainsSent,
 		m.revocations, m.revocationFetches, m.revocationLastSuccess,
 		m.tlsNotAfter, m.tlsReloads, m.tlsHandshakeErrors,
 		m.rpcs, m.hints, m.hintsSlow, m.hintSubscriptions, m.natsConnected, m.natsReconnects,
 		m.backendCalls, m.backendRetries, m.backendDuration, m.rpcResults, m.rpcDuration,
-		m.heartbeatForwards, m.heartbeatDuration, m.heartbeatFacts, m.welcomeLookups,
+		m.heartbeatForwards, m.heartbeatDuration, m.heartbeatFacts, m.factProcesses, m.factPeerAsks, m.factPeerAnswers, m.welcomeLookups,
 		m.eventBatches, m.eventsStored, m.eventAckDuration, m.ingestEvents, m.ingestBytes, m.ingestWaiting, m.creditReduced, m.creditChanges,
 		m.mergeCalls, m.mergeFlushes, m.mergeAlone, m.mergeBatches, m.mergeCallDuration, m.mergeHeld,
 		m.liveEvents, m.watchedSessions, m.prefixRequests, m.bgTailRequests, m.queueFull, m.streams, m.openStreams,

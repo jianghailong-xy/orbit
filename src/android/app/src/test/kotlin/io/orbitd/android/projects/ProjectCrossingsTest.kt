@@ -113,7 +113,7 @@ class ProjectCrossingsTest {
         assertTrue(ProjectCrossings.hasNoTarget(row)); assertFalse(ProjectCrossings.hasNoTarget(rows.first()))
         val approve = ProjectCrossings.prompt(row, approve = true)
         assertEquals(ProjectCrossings.Prompt("Approve", "Coordinator control loop", "no project", "Wire the drain watchdog",
-            "Confirming takes the task out of this project; no project's acceptance counts it any more."), approve)
+            "Confirming takes the task out of this project as soon as you answer; no project's acceptance counts it any more."), approve)
         assertEquals("Approve moving “Wire the drain watchdog” from Coordinator control loop to no project?", ProjectCrossings.question(approve))
         assertEquals(ProjectCrossings.moveDenyConsequence, ProjectCrossings.prompt(row, approve = false).consequence)
         // The public id absent altogether reads the same; the source is still required.

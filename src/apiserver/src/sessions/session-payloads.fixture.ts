@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
-import { Prisma, PrismaClient, RunnerStatus, RunStatus, SessionDispatchOrigin } from '@prisma/client';
-import { ControlEventType } from '@orbit/shared';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { ControlEventType, RunStatus } from '@orbit/shared';
 
 import type { AttachmentsService } from '../attachments/attachments.service';
 import { LinkPreviewsService } from '../link-previews/link-previews.service';
@@ -12,6 +12,8 @@ import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionGuestsService } from '../session-guests/session-guests.service';
 import { TasksService } from '../tasks/tasks.service';
+import { LEGACY_STATUS_SELECT, legacySessionStatus, readLandingSettlements } from './session-legacy-words';
+import { turnStateOfWord } from './session-turn-state';
 import { SessionsService } from './sessions.service';
 
 /**
@@ -54,6 +56,7 @@ export const FIXTURE_CASES: readonly FixtureCase[] = [
   { label: 'SUCCEEDED', status: RunStatus.SUCCEEDED, row: { endReason: 'task_done', lastTurnOutcome: 'ANSWERED' } },
   { label: 'FAILED', status: RunStatus.FAILED, row: { lastTurnOutcome: 'FAILED', error: 'engine exited' } },
   { label: 'CANCELLED', status: RunStatus.CANCELLED, row: { endReason: 'ended', lastTurnOutcome: 'ANSWERED' } },
+  { label: 'released by a move', status: RunStatus.CANCELLED, row: { endReason: 'moved', lastTurnOutcome: 'ANSWERED' } },
   {
     label: 'job running',
     status: RunStatus.AWAITING_INPUT,
@@ -184,7 +187,9 @@ export async function buildWorld(db: PrismaClient, run: string): Promise<World> 
     await db.session.create({
       data: {
         id, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId, assignedRunnerId: runnerId,
-        title: `payloads ${c.label}`, taskId: taskIdOf(c.label), prompt: 'hello', provider: 'claude', status: c.status,
+        title: `payloads ${c.label}`, taskId: taskIdOf(c.label), prompt: 'hello', provider: 'claude',
+        // The case's word, as its facts (since deploy D3 the stored word follows them, migration 1671).
+        turnState: turnStateOfWord(c.status),
         dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(Date.now() - 60 * MINUTE), numTurns: 1,
         createdAt: new Date(Date.now() - n * MINUTE),
         ...(RELEASED.has(c.status) ? { finishedAt: new Date() } : {}),
@@ -224,7 +229,11 @@ export async function readPayloads(
   };
   const out = new Map<string, Record<PayloadKind, Payload> & { [SEARCH_HIT]: Payload | null }>();
   for (const [label, id] of w.ids) {
-    const row = await stack.db.session.findUniqueOrThrow({ where: { id }, select: { status: true, endReason: true } });
+    const facts = await stack.db.session.findUniqueOrThrow({ where: { id }, select: { id: true, ...LEGACY_STATUS_SELECT } });
+    const row = {
+      status: legacySessionStatus(facts, (await readLandingSettlements(stack.db, [facts])).get(id)),
+      endReason: facts.endReason,
+    };
     const taskDetail = (await stack.tasks.get(w.ownerId, w.taskIds.get(label)!)) as unknown as { sessions: Payload[] };
     const need = <T>(value: T | null | undefined, kind: string): T => {
       if (value == null) throw new Error(`${label}: no ${kind} payload`);

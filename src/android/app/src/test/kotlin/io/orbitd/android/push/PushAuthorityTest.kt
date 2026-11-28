@@ -309,6 +309,39 @@ class PushAuthorityTest {
         }
     }
 
+    /** A decision card that became the owner's (push.service notifyDecisionCards, task 354adqnR5U6CZFIfyR5df): the shared fixture's
+     * sample is what the server sends for an evidence card. It parses — a new kind is dropped here unless `kinds` and the `when` both
+     * name it — rings as an owner decision, opens the conversation the card is drawn in, and stands while that conversation does.
+     * Naming no conversation it is not a notification. */
+    @Test fun aDecisionCardOpensTheConversationItIsDrawnInAndStandsWhileItDoes() = runBlocking {
+        val sample = pushFixture()["samples"]!!.jsonArray.map { it.jsonObject }
+            .single { it["name"]!!.jsonPrimitive.content == "decision-card" }
+        val data = sample["data"]!!.jsonObject.mapValues { it.value.jsonPrimitive.content }
+        val push = PushMessage.parse(data) ?: throw AssertionError("the server's decision-card push is dropped")
+        val session = sample["source"]!!.jsonObject["sessionID"]!!.jsonPrimitive.content
+        assertEquals(PushType.ALERT, push.type)
+        assertEquals(PushPayload.DECISION_CARD, push.payload.kind)
+        assertEquals("Archive the August receipts", push.payload.title)
+        assertEquals("Does this evidence settle the task? · Revision 1", push.payload.body)
+        assertEquals(2, push.payload.badge)
+        assertTrue(ObjectId.same(push.payload.sessionId, session))
+        assertTrue(push.payload.isOwnerDecision)
+        assertEquals(OrbitRoute(Destination.SESSION, session, origin = Origin.EXTERNAL),
+            push.link?.let { OrbitLinks.parse(it, origin = Origin.EXTERNAL) })
+        assertNull("it names the conversation its card is drawn in", PushMessage.parse(data + ("payload" to
+            """{"title":"Archive the August receipts","body":"Does this evidence settle the task?","kind":"decision-card","cardKind":"EVIDENCE"}""")))
+        authorityFixture { authority, server, _ ->
+            var deleted = false
+            server.respond = { request -> when (request.path) {
+                "/api/sessions/$session" -> response("""{"id":"$session","status":"AWAITING_INPUT","lifecycleState":"OPEN","deletedAt":${if (deleted) "\"2026-11-27\"" else "null"}}""")
+                else -> response("{}", 404)
+            } }
+            assertEquals(PushCheck.ACTIVE, authority.check(push))
+            deleted = true
+            assertEquals(PushCheck.MISSING, authority.check(push))
+        }
+    }
+
     /** A scheduled task's alert (push.service notifySchedule): it opens the run's session when it names one, and the schedule on the
      * Scheduled page when it names none. With a session it stands while that session does; without, while its schedule exists.
      * Without its schedule it is not a notification. */
@@ -426,6 +459,46 @@ class PushAuthorityTest {
             assertEquals(PushCheck.ACTIVE, authority.check(push))
             blocks = "[]"
             assertEquals("cleared by Check again", PushCheck.STALE, authority.check(push))
+        }
+    }
+
+    /** The server's pushes for a runner gone offline without signing off, and for it back (ReaperService.alertRunnerPresence): each parses
+     * exactly as the server sends it (the shared fixture's samples), opens the runner, shares one notification key so "back online" takes
+     * the place of "offline", and stands while GET /runners reads the runner offline or online respectively. Without its runner it is no
+     * notification. */
+    @Test fun aRunnerPresencePushOpensItsRunnerAndStandsWhileThePresenceItSaysDoes() = runBlocking {
+        val samples = pushFixture()["samples"]!!.jsonArray.map { it.jsonObject }
+        val pushes = listOf("runner-offline", "runner-online").map { kind ->
+            val sample = samples.single { it["name"]!!.jsonPrimitive.content == kind }
+            val data = sample["data"]!!.jsonObject.mapValues { it.value.jsonPrimitive.content }
+            val push = PushMessage.parse(data) ?: throw AssertionError("the server's $kind push is dropped")
+            assertEquals(PushType.ALERT, push.type)
+            assertEquals(kind, push.payload.kind)
+            assertTrue(ObjectId.same(push.payload.runnerId, sample["source"]!!.jsonObject["runnerID"]!!.jsonPrimitive.content))
+            assertEquals(Destination.RUNNER, push.link?.let { OrbitLinks.parse(it) }?.destination)
+            assertNull("it names its runner", PushMessage.parse(data + ("payload" to
+                """{"title":"studio-mac","body":"studio-mac is back online.","kind":"$kind"}""")))
+            push
+        }
+        val (offline, online) = pushes
+        assertEquals(offline.notificationKey, online.notificationKey)
+        val machine = offline.payload.runnerId!!
+        authorityFixture { authority, server, _ ->
+            var state = "false"
+            var listed = true
+            server.respond = { request ->
+                assertEquals("/api/runners", request.path)
+                response(if (listed) """[{"id":"$machine","online":$state}]""" else "[]")
+            }
+            assertEquals(PushCheck.ACTIVE, authority.check(offline))
+            assertEquals(PushCheck.STALE, authority.check(online))
+            state = "true"
+            assertEquals(PushCheck.STALE, authority.check(offline))
+            assertEquals(PushCheck.ACTIVE, authority.check(online))
+            state = "null"
+            assertEquals(PushCheck.UNKNOWN, authority.check(offline))
+            listed = false
+            assertEquals(PushCheck.MISSING, authority.check(online))
         }
     }
 

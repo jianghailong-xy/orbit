@@ -1404,6 +1404,9 @@ public struct SessionTurnRequest: Codable, Sendable {
     /// A wiki chat's page and selection, beside the owner's words rather than in them (wiki contract
     /// `chat.turns`). Nil leaves the field out: any other session refuses one.
     public let wikiContext: WikiChatContext?
+    /// A Drive chat's folder and selection, beside the owner's words (`driveContext`, src/shared/src/driveChat.ts).
+    /// Nil leaves the field out: any other session refuses one.
+    public let driveContext: DriveChatContext?
     /// Prompt optimizer (D2): the text is the optimizer's prompt, sent exactly as inserted, so
     /// Translation neither holds nor translates it. Nil leaves the key out (`PromptOptimizerState.skipTranslation`).
     public let skipTranslation: Bool?
@@ -1412,14 +1415,15 @@ public struct SessionTurnRequest: Codable, Sendable {
     /// (`PromptOptimizerState.optimizedTranslation`).
     public let optimizedTranslation: String?
     public init(clientTurnId: String, content: String, kind: String = "message", attachmentIds: [String]? = nil,
-                intent: String? = nil, wikiContext: WikiChatContext? = nil, skipTranslation: Bool? = nil,
-                optimizedTranslation: String? = nil) {
+                intent: String? = nil, wikiContext: WikiChatContext? = nil, driveContext: DriveChatContext? = nil,
+                skipTranslation: Bool? = nil, optimizedTranslation: String? = nil) {
         self.clientTurnId = clientTurnId
         self.content = content
         self.kind = kind
         self.attachmentIds = attachmentIds
         self.intent = intent
         self.wikiContext = wikiContext
+        self.driveContext = driveContext
         self.skipTranslation = skipTranslation
         self.optimizedTranslation = optimizedTranslation
     }
@@ -1726,6 +1730,10 @@ public struct CreateSessionRequest: Codable, Sendable {
     /// Prompt optimizer (D2): the opening message is the reading copy Use inserted; this is its agent-language
     /// prompt. Nil omits it.
     public let optimizedTranslation: String?
+    /// A UUID minted at the press of the new-session Send: POST /sessions answers a repeat of it with the
+    /// session the first made (migration 1730), so Retry sends the same one and never makes a second
+    /// session. Nil omits it — a `!cmd` first message and every create that is not a first-message send.
+    public let clientRequestId: String?
     public init(prompt: String, title: String? = nil, agentId: String? = nil, assignedRunnerId: String? = nil,
                 engine: String? = nil, provider: String? = nil,
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
@@ -1734,7 +1742,8 @@ public struct CreateSessionRequest: Codable, Sendable {
                 claudeAccount: String? = nil, antigravityAccount: String? = nil, kimiAccount: String? = nil,
                 cursorAccount: String? = nil, folderId: String? = nil,
                 newWorkspace: NewWorkspaceRequest? = nil, skipTranslation: Bool? = nil,
-                optimizedTranslation: String? = nil) {
+                optimizedTranslation: String? = nil, clientRequestId: String? = nil) {
+        self.clientRequestId = clientRequestId
         self.skipTranslation = skipTranslation
         self.optimizedTranslation = optimizedTranslation
         self.prompt = prompt
@@ -2080,9 +2089,13 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     public let baseSha: String?
     /// True while the worktree has uncommitted changes (drives Commit vs Merge). Nil = not reported.
     public let worktreeDirty: Bool?
-    /// "Merge to main" outcome: pending | merged | conflict | error. Nil until the user merges.
+    /// "Merge to main" outcome: pending | merged | conflict | error | pull_request. Nil until the user
+    /// merges. `pull_request`: GitHub refused the push to the target because of its rules, so the runner
+    /// opened a pull request and the merge waits on it (docs/design/protected-branch-landing.md §4.6).
     public let mergeStatus: String?
     public let mergeError: String?
+    /// The pull request this session's Merge waits on or landed through; nil for a direct push.
+    public let mergePullRequest: LandingPullRequestView?
     public let mergeRecovery: MergeRecovery?
     public let mergeRepairSession: MergeRepairSession?
     public let mergeRecoverySupported: Bool?
@@ -2187,6 +2200,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         worktreeDirty = try values.decodeIfPresent(Bool.self, forKey: .worktreeDirty)
         mergeStatus = try values.decodeIfPresent(String.self, forKey: .mergeStatus)
         mergeError = try values.decodeIfPresent(String.self, forKey: .mergeError)
+        mergePullRequest = try? values.decodeIfPresent(LandingPullRequestView.self, forKey: .mergePullRequest)
         mergeRecovery = try values.decodeIfPresent(MergeRecovery.self, forKey: .mergeRecovery)
         mergeRepairSession = try values.decodeIfPresent(MergeRepairSession.self, forKey: .mergeRepairSession)
         mergeRecoverySupported = try values.decodeIfPresent(Bool.self, forKey: .mergeRecoverySupported)
@@ -2224,6 +2238,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
                 changedFiles: [SessionChangedFile]? = nil, branchCommits: [BranchCommit]? = nil,
                 baseSha: String? = nil, worktreeDirty: Bool? = nil,
                 mergeStatus: String? = nil, mergeError: String? = nil, mergeTarget: String? = nil,
+                mergePullRequest: LandingPullRequestView? = nil,
                 mergeRecovery: MergeRecovery? = nil, mergeRecoverySupported: Bool? = nil,
                 mergeRepairSession: MergeRepairSession? = nil,
                 mergeRecoveryAction: String? = nil, mergeRepairTurnEndedAt: String? = nil,
@@ -2256,6 +2271,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         self.worktreeDirty = worktreeDirty
         self.mergeStatus = mergeStatus
         self.mergeError = mergeError
+        self.mergePullRequest = mergePullRequest
         self.mergeRecovery = mergeRecovery
         self.mergeRepairSession = mergeRepairSession
         self.mergeRecoverySupported = mergeRecoverySupported
@@ -2318,6 +2334,8 @@ public struct ResumeRequest: Codable, Sendable {
     /// A wiki chat's page and selection: a chat's next message may revive it, and carries them here as on
     /// a live one (wiki contract `chat.turns`). Nil leaves the field out.
     public let wikiContext: WikiChatContext?
+    /// A Drive chat's folder and selection, which revive it too. Nil leaves the field out.
+    public let driveContext: DriveChatContext?
     /// Prompt optimizer (D2): a revive whose words are the optimizer's prompt, sent as inserted. Nil omits it.
     public let skipTranslation: Bool?
     /// Prompt optimizer (D2): a revive whose words are the reading copy Use inserted; this is its
@@ -2328,7 +2346,9 @@ public struct ResumeRequest: Codable, Sendable {
                 fastMode: Bool? = nil,
                 attachmentIds: [String]? = nil, provider: String? = nil, account: String? = nil,
                 stopSessionId: String? = nil, wikiContext: WikiChatContext? = nil,
+                driveContext: DriveChatContext? = nil,
                 skipTranslation: Bool? = nil, optimizedTranslation: String? = nil) {
+        self.driveContext = driveContext
         self.skipTranslation = skipTranslation
         self.optimizedTranslation = optimizedTranslation
         self.clientTurnId = clientTurnId
