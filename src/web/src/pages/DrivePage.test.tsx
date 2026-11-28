@@ -441,6 +441,32 @@ describe('the folder tree and the list', () => {
   });
 });
 
+describe('the header', () => {
+  // Project acceptance: these controls in this order, and none of what they replaced.
+  it('holds Search Drive, New folder, Upload, an icon-only Settings and a primary Agents, and nothing it replaced', async () => {
+    await visit('/drive?folder=f-ui');
+    await until(() => expect(row('sign-in-v3.png')).toBeTruthy());
+    const controls = [
+      ...document.querySelectorAll<HTMLElement>('.files-head-actions input:not([type="file"]), .files-head-actions button'),
+    ];
+    const names = controls.map((c) => c.getAttribute('aria-label') ?? c.textContent!.trim());
+    expect(names).toEqual(['Search Drive', 'New folder', 'Upload', 'Settings', 'Agents']);
+    const [search, , , settings, agents] = controls;
+    expect(search.getAttribute('placeholder')).toBe('Search Drive');
+    expect(settings.textContent).toBe('');
+    expect(settings.querySelector('.anticon-setting')).toBeTruthy();
+    expect(controls.filter((c) => c.classList.contains('orbit-button-primary'))).toEqual([agents]);
+
+    const replaced = [...document.querySelectorAll('button, a')].filter((el) =>
+      /^(Trash|Storage)\b/.test((el.getAttribute('aria-label') ?? el.textContent ?? '').trim()),
+    );
+    expect(replaced.map((el) => el.outerHTML)).toEqual([]);
+    expect(document.querySelector('.files-crumbs')).toBeNull();
+    expect(document.querySelector('.files-tray')).toBeNull();
+    expect(document.querySelector('.wk-chat-fab')).toBeNull();
+  });
+});
+
 describe('upload', () => {
   it('sends a picked file in chunks, each named by its sha256, then completes it into the open folder', async () => {
     await visit('/drive?folder=f-ui');
