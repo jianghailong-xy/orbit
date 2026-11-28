@@ -179,7 +179,8 @@ test('the mode a config change hands the engine, and every substitution it still
   async function changes(id: string) {
     return db.sessionPermissionModeChange.findMany({
       where: { sessionId: id },
-      orderBy: { createdAt: 'asc' },
+      // The order they were recorded in (migration 1810): two can share a millisecond.
+      orderBy: { seq: 'asc' },
       select: { fromMode: true, toMode: true, cause: true, client: true, requestedMode: true, reason: true },
     });
   }
@@ -332,7 +333,7 @@ test('the mode a config change hands the engine, and every substitution it still
     };
     assert.equal(detail.permissionMode, PermissionMode.BYPASS);
     assert.deepEqual(
-      detail.permissionModeChanges.map(({ at: _at, ...change }) => change).slice(1),
+      detail.permissionModeChanges.map(({ at: _at, seq: _seq, ...change }) => change).slice(1),
       [
         { fromMode: PermissionMode.AUTO, toMode: PermissionMode.DEFAULT, cause: 'ENGINE_REPORT', client: null },
         { fromMode: PermissionMode.DEFAULT, toMode: PermissionMode.AUTO, cause: 'OWNER_PICK', client: 'web', ...bypassed },
