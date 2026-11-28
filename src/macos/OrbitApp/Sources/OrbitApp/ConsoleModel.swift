@@ -543,6 +543,8 @@ final class ConsoleModel {
     /// The corrections Claude refused, oldest first: system events of the conversation, not mode changes, so
     /// they are read off the events this console loads (`noteModeRefusals`).
     private var permissionModeRefusals: [PermissionModeRefusal] = []
+    /// The detail's word on the refusal that still stands, whether or not its event is loaded (a long session pages it out).
+    private var detailModeRefusal: SessionPermissionModeCorrectionRefusal?
     /// The changes held as far back as the transcript is loaded: the detail's newest and the older pages read as it pages
     /// back (`ModeChangeHistory`). `permissionModeChanges` is its list.
     @ObservationIgnored private var modeHistory = ModeChangeHistory()
@@ -555,7 +557,10 @@ final class ConsoleModel {
                            latestChange: permissionModeChanges.last,
                            runsAsRoot: runnerRunsAsRoot == true,
                            autoStartsInDefault: autoStartHint != nil,
-                           refusal: permissionModeRefusals.last)
+                           refusal: PermissionModeRefusal.standing(loaded: permissionModeRefusals,
+                                                                   detail: detailModeRefusal,
+                                                                   latest: permissionModeChanges.last,
+                                                                   actual: actualPermissionMode))
     }
 
     /// Keep every refused correction among `events` (pages and the live stream alike), once each.
@@ -588,9 +593,9 @@ final class ConsoleModel {
 
     /// The refusal that is the gap the mode control shows now, if one is.
     private var standingRefusal: PermissionModeRefusal? {
-        guard let refusal = permissionModeRefusals.last, permissionMode.rawValue != actualPermissionMode,
-              refusal.stands(latest: permissionModeChanges.last, actual: actualPermissionMode) else { return nil }
-        return refusal
+        guard permissionMode.rawValue != actualPermissionMode else { return nil }
+        return PermissionModeRefusal.standing(loaded: permissionModeRefusals, detail: detailModeRefusal,
+                                              latest: permissionModeChanges.last, actual: actualPermissionMode)
     }
 
     func modeChangeShowsGap(_ change: SessionPermissionModeChange) -> Bool {
@@ -2837,6 +2842,8 @@ final class ConsoleModel {
         actualPermissionMode = session.actualPermissionMode
         actualPermissionModeAt = session.actualPermissionModeAt
         if let changes = session.permissionModeChanges {
+            // The detail's (the list carries no changes, and no refusal either).
+            detailModeRefusal = session.permissionModeCorrectionRefusal
             modeHistory = modeHistory.adopt(changes, hasMore: session.permissionModeChangesHasMore == true)
             permissionModeChanges = modeHistory.changes
             loadOlderPermissionModesIfNeeded()

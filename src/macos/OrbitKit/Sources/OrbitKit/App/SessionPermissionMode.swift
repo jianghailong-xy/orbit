@@ -69,9 +69,26 @@ public struct SessionPermissionModeChange: Codable, Equatable, Sendable {
     }
 }
 
+/// The session detail's word on the newest correction Claude refused (`permissionModeCorrectionRefusal`, migration 1821):
+/// carried while it still answers the newest change, whether or not its event is among those loaded.
+public struct SessionPermissionModeCorrectionRefusal: Codable, Equatable, Sendable {
+    public let mode: String
+    public let requestedMode: String
+    public let reason: String
+    public let at: String
+
+    public init(mode: String, requestedMode: String, reason: String, at: String) {
+        self.mode = mode
+        self.requestedMode = requestedMode
+        self.reason = reason
+        self.at = at
+    }
+}
+
 /// The runner's report that Claude would not take the Auto it asked for (`permission_mode_correction_failed`,
 /// runner-go claude_mode_correction.go): `mode` is the mode it stays in, `reason` the CLI's own words. It is a
-/// system event of the conversation, not a mode change, so it is read off the events loaded.
+/// system event of the conversation, not a mode change, so it is read off the events loaded; the session detail
+/// carries the one that still stands (`init(detail:)`).
 public struct PermissionModeRefusal: Equatable, Hashable, Sendable {
     public let seq: Int
     public let at: String
@@ -87,6 +104,25 @@ public struct PermissionModeRefusal: Equatable, Hashable, Sendable {
         self.mode = mode
         self.requested = requested
         self.reason = reason
+    }
+
+    /// The seq of a refusal read off the session detail, which names no event: it is never a transcript row.
+    public static let detailSeq = -1
+
+    /// The refusal the session detail carries.
+    public init(detail: SessionPermissionModeCorrectionRefusal) {
+        self.init(seq: Self.detailSeq, at: detail.at, mode: detail.mode, requested: detail.requestedMode,
+                  reason: detail.reason.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    /// The refusal that is the gap now, if one is: the newest loaded event's when it stands, so its transcript line is
+    /// the gap's; else the detail's, which stands whether or not its event is loaded (paged out of a long session).
+    public static func standing(loaded: [PermissionModeRefusal], detail: SessionPermissionModeCorrectionRefusal?,
+                                latest: SessionPermissionModeChange?, actual: String?) -> PermissionModeRefusal? {
+        if let event = loaded.last, event.stands(latest: latest, actual: actual) { return event }
+        guard let detail else { return nil }
+        let refusal = PermissionModeRefusal(detail: detail)
+        return refusal.stands(latest: latest, actual: actual) ? refusal : nil
     }
 
     /// The refusal `event` reports, or nil for any other event.

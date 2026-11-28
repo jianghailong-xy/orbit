@@ -51,6 +51,55 @@ final class PermissionModeRefusedFixtureTests: XCTestCase {
         XCTAssertEqual(refused, report + 1, "the refusal follows the report it answers: \(ids)")
     }
 
+    /// A long session: the second turn's 240 replies pushed the refusal out of the tail the app loads (200 events). The
+    /// detail still carries it (`permissionModeCorrectionRefusal`), so the control shows the lasting gap with the CLI's
+    /// words, not "Default → Auto".
+    func testRefusalPagedOutOfTheLoadedEventsStillReadsAsALastingGapFromTheDetail() throws {
+        let detail = try JSONDecoder().decode(Session.self, from: data("session-refused-paged.ios.json"))
+        let page = try JSONDecoder().decode(EventPage.self, from: data("session-refused-paged.events.json"))
+        XCTAssertTrue(page.events.compactMap(PermissionModeRefusal.init(event:)).isEmpty, "the refusal's event is not loaded")
+        XCTAssertTrue(page.hasMore)
+        let changes = try XCTUnwrap(detail.permissionModeChanges)
+        XCTAssertEqual(changes.map(\.cause), ["CLAIM", "ENGINE_REPORT"])
+        XCTAssertEqual(detail.actualPermissionMode, "default")
+        let carried = try XCTUnwrap(detail.permissionModeCorrectionRefusal, "the detail carries the refusal")
+        XCTAssertEqual(carried.mode, "default")
+        XCTAssertEqual(carried.requestedMode, "auto")
+        XCTAssertEqual(carried.reason, words)
+
+        let refusal = try XCTUnwrap(PermissionModeRefusal.standing(loaded: [], detail: carried, latest: changes.last,
+                                                                   actual: detail.actualPermissionMode))
+        let shown = SessionModeDisplay(intent: .auto, actual: detail.actualPermissionMode, beforeStart: false,
+                                       latestChange: changes.last, refusal: refusal)
+        XCTAssertEqual(shown.label, "Default", "the lasting gap, not \"Default → Auto\"")
+        XCTAssertFalse(shown.isCorrecting)
+        XCTAssertEqual(shown.reason, "Running in Default. You asked for Auto, but the runner couldn't switch Claude to it: \(words).")
+
+        // Without the detail's word, the events loaded say nothing of it: the control would read as switching.
+        let blind = SessionModeDisplay(intent: .auto, actual: detail.actualPermissionMode, beforeStart: false,
+                                       latestChange: changes.last, refusal: nil)
+        XCTAssertEqual(blind.label, "Default → Auto")
+        XCTAssertTrue(blind.isCorrecting)
+
+        // A later change supersedes it, here or on the server: a refusal of an older report does not stand.
+        let later = SessionPermissionModeChange(fromMode: "default", toMode: "plan", cause: "OWNER_PICK", client: "ios",
+                                                at: "2099-01-01T00:00:00.000Z", seq: 99)
+        XCTAssertNil(PermissionModeRefusal.standing(loaded: [], detail: carried, latest: later, actual: "plan"))
+    }
+
+    func testLoadedRefusalEventIsTheGapsOwnSoItsLineIsAmber() throws {
+        // Both loaded and carried: the event's refusal is the one that stands, so its transcript line is the gap's.
+        let page = try JSONDecoder().decode(EventPage.self, from: data("session-refused.events.json"))
+        let detail = try JSONDecoder().decode(Session.self, from: data("session-refused-paged.ios.json"))
+        let loaded = page.events.compactMap(PermissionModeRefusal.init(event:))
+        let carried = try XCTUnwrap(detail.permissionModeCorrectionRefusal)
+        let latest = SessionPermissionModeChange(fromMode: "auto", toMode: "default", cause: "ENGINE_REPORT", client: nil,
+                                                 at: try XCTUnwrap(loaded.last).at, seq: 2)
+        let standing = PermissionModeRefusal.standing(loaded: loaded, detail: carried, latest: latest, actual: "default")
+        XCTAssertEqual(standing, loaded.last)
+        XCTAssertNotEqual(standing?.seq, PermissionModeRefusal.detailSeq)
+    }
+
     func testClaimLineIsWordedFromTheServersRequestedModeAndReason() throws {
         let detail = try JSONDecoder().decode(Session.self, from: data("session-root-claim.ios.json"))
         let claim = try XCTUnwrap(detail.permissionModeChanges?.first)
