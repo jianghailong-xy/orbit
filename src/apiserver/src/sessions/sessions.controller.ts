@@ -50,6 +50,7 @@ import {
   MoveSessionDto,
   RetryIdentityDto,
   SessionArmRetryDto,
+  SessionCompleteDto,
   SessionConfigDto,
   SessionAccountDto,
   SessionRenameDto,
@@ -894,8 +895,12 @@ export class SessionsController {
 
   @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Post(':id/complete')
-  complete(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
-    return this.sessions.complete(user.userId, id);
+  complete(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto?: SessionCompleteDto,
+  ) {
+    return this.sessions.complete(user.userId, id, { withdrawPendingQuestions: dto?.withdrawPendingQuestions === true });
   }
 
   /** @deprecated Compatibility route for clients deployed before Complete was canonical. */

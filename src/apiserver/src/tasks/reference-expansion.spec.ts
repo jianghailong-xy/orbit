@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { toUuid, uuidToBase62 } from '@orbit/shared';
-import { parseReferences, ReferenceExpansionService } from './reference-expansion';
+import { parseBareIds, parseReferences, ReferenceExpansionService } from './reference-expansion';
 
 const LIST_ID = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
 const TASK_ID = '550e8400-e29b-41d4-a716-446655440000';
@@ -266,5 +266,176 @@ test('an id is matched case-insensitively and normalised', () => {
 
   assert.deepEqual(parseReferences(`[x](orbit-list:${upper})`), [
     { kind: 'list', id: LIST_ID },
+  ]);
+});
+
+// ── Sessions and projects, as the owner names them (docs/composer-references-design.md §3.1) ──────
+
+const SESSION_ID = '0198b0a1-7c3e-7d2a-9b11-5f2e8c4d6a01';
+const OTHER_SESSION = '0198b0a1-7c3e-7d2a-9b11-5f2e8c4d6a02';
+const PROJECT_ID = '0198b0a1-7c3e-7d2a-9b11-5f2e8c4d6a03';
+const THIS_RUNNER = '0198b0a1-7c3e-7d2a-9b11-5f2e8c4d6a04';
+const HPC_RUNNER = '0198b0a1-7c3e-7d2a-9b11-5f2e8c4d6a05';
+const SESSION_PUBLIC_ID = uuidToBase62(SESSION_ID);
+const PROJECT_PUBLIC_ID = uuidToBase62(PROJECT_ID);
+
+function makeOwnerService() {
+  const queries: string[] = [];
+  const sessionRow = (id: string) => ({
+    id,
+    title: 'Deploy main to staging',
+    openedBy: 'PERSON',
+    createdAt: new Date('2026-11-28T08:14:00.000Z'),
+    lastTurnAt: new Date('2026-11-28T09:02:00.000Z'),
+    numTurns: 14,
+    phase: 'IDLE',
+    finishedAt: null,
+    turnState: null,
+    endReason: null,
+    lastTurnOutcome: 'ANSWERED',
+    startedAt: new Date('2026-11-28T08:14:05.000Z'),
+    importSourceCwd: null,
+    sessionKind: 'CONVERSATION',
+    error: null,
+    deletedAt: null,
+    branch: 'orbit/session-ab12',
+    branchMerged: false,
+    mergeStatus: null,
+    worktreeDirty: false,
+    assignedRunnerId: HPC_RUNNER,
+    assignedRunner: { name: 'hpc' },
+    workspace: { name: 'orbit-prod' },
+    task: null,
+    coordinatorForProject: null,
+  });
+  const owned = new Set([SESSION_ID, OTHER_SESSION]);
+  const prisma = {
+    session: {
+      findMany: async ({ where }: any) => {
+        queries.push('session.findMany');
+        return where.ownerId === OWNER ? where.id.in.filter((id: string) => owned.has(id)).map((id: string) => ({ id })) : [];
+      },
+      findFirst: async ({ where }: any) => {
+        queries.push('session.findFirst');
+        return where.ownerId === OWNER && owned.has(where.id) ? sessionRow(where.id) : null;
+      },
+    },
+    project: {
+      findMany: async ({ where }: any) => {
+        queries.push('project.findMany');
+        return where.ownerId === OWNER && where.id.in.includes(PROJECT_ID) ? [{ id: PROJECT_ID }] : [];
+      },
+      findFirst: async ({ where }: any) =>
+        where.ownerId === OWNER && where.id === PROJECT_ID
+          ? {
+              id: PROJECT_ID,
+              title: 'Runner link hardening',
+              status: 'RUNNING',
+              coordinatorSessionId: OTHER_SESSION,
+              coordinatorSession: { phase: 'IDLE' },
+            }
+          : null,
+    },
+    task: {
+      findMany: async () => {
+        queries.push('task.findMany');
+        return [];
+      },
+    },
+    approval: { count: async () => 0 },
+    projectBlocker: { count: async () => 1 },
+    projectOpenItem: { count: async () => 1 },
+    projectAcceptanceCriterionDefinition: { count: async () => 5 },
+  } as never;
+  const service = new ReferenceExpansionService(prisma);
+  service.panorama = (async () => ({
+    buckets: { running: 1, ready: 0, blocked: 0, awaitingVerification: 0, done: 11, failed: 1, cancelled: 0 },
+    shape: { taskCount: 13 },
+  })) as never;
+  return { service, queries };
+}
+
+const OWNER_OPTS = { byOwner: true, sessionId: OTHER_SESSION, runnerId: THIS_RUNNER };
+
+test('a pasted session URL on the owner\'s message appends the facts of that session', async () => {
+  // How people point at a session most (206 of 413): the web URL, pasted, with the question after it.
+  const { service } = makeOwnerService();
+  const typed = `https://orbit.example.com/sessions/${SESSION_PUBLIC_ID} finished but the list still shows Running. Why?`;
+
+  const out = (await service.expand(OWNER, typed, OWNER_OPTS))!;
+
+  assert.ok(out.startsWith(`${typed}\n\n<referenced-session id="${SESSION_PUBLIC_ID}">`), out);
+  assert.match(out, /Title {7}Deploy main to staging/);
+  // Said outright: a third of referenced sessions are on another machine.
+  assert.match(out, /Runs on {5}runner hpc \(not this runner\)/);
+  assert.match(out, /List shows {2}IDLE · status /);
+  assert.match(out, /Turns {7}14; last ANSWERED at 2026-11-28T09:02:00.000Z/);
+  assert.match(out, /Code {8}branch orbit\/session-ab12 · merged no · nothing uncommitted/);
+  assert.match(out, /Pending {5}0 approvals/);
+  assert.equal(out.includes(SESSION_ID), false, 'the raw uuid reached the agent');
+});
+
+test('a bare session id resolves only when the owner has that session', async () => {
+  // The other half (209 of 413). A token is a candidate, never a reference by its shape alone.
+  const { service } = makeOwnerService();
+  const stranger = uuidToBase62('0198b0a1-7c3e-7d2a-9b11-5f2e8c4d6aff');
+
+  const out = (await service.expand(OWNER, `${SESSION_PUBLIC_ID} vs ${stranger}`, OWNER_OPTS))!;
+
+  assert.equal(out.match(/<referenced-session /g)?.length, 1, out);
+  assert.ok(out.includes(`<referenced-session id="${SESSION_PUBLIC_ID}">`));
+});
+
+test('the composer\'s @ chip and # project chip expand on the owner\'s message', async () => {
+  const { service } = makeOwnerService();
+  const typed = `[@Deploy main to staging](orbit-session:${SESSION_PUBLIC_ID}) and [#Runner link hardening](orbit-project:${PROJECT_PUBLIC_ID})`;
+
+  const out = (await service.expand(OWNER, typed, OWNER_OPTS))!;
+
+  assert.ok(out.includes(`<referenced-session id="${SESSION_PUBLIC_ID}">`), out);
+  assert.ok(out.includes(`<referenced-project id="${PROJECT_PUBLIC_ID}">`), out);
+  assert.match(out, /Tasks {8}13 in total: running 1 \/ done 11 \/ failed 1/);
+  assert.match(out, /Criteria {5}5 stated; project_get says which are met/);
+  assert.match(out, /Blockers {5}1 open · 1 item waiting on the owner/);
+  assert.match(out, new RegExp(`Coordinator {2}session ${uuidToBase62(OTHER_SESSION)} · IDLE`));
+  // In the order written: the session first.
+  assert.ok(out.indexOf('<referenced-session') < out.indexOf('<referenced-project'));
+});
+
+test('an agent\'s or Orbit\'s message is delivered as before: no session, project, URL or bare id', async () => {
+  // Design §8 decision B: agent-to-agent traffic and platform notices keep their prompts.
+  const { service, queries } = makeOwnerService();
+  const typed = `see [s](orbit-session:${SESSION_PUBLIC_ID}), https://orbit.example.com/sessions/${SESSION_PUBLIC_ID}, ${SESSION_PUBLIC_ID}`;
+
+  const out = await service.expand(OWNER, typed, { sessionId: OTHER_SESSION });
+
+  assert.equal(out, typed);
+  assert.deepEqual(queries, []);
+});
+
+test('a message naming the session it is sent to does not describe that session to itself', async () => {
+  const { service } = makeOwnerService();
+
+  const out = await service.expand(OWNER, `continue ${uuidToBase62(OTHER_SESSION)}`, OWNER_OPTS);
+
+  assert.equal(out, `continue ${uuidToBase62(OTHER_SESSION)}`);
+});
+
+test('words, hashes and paths are not bare-id candidates', () => {
+  // Only a token that mixes digits, upper and lower case and stands alone can be a public id.
+  assert.deepEqual(parseBareIds('internationalization abcdefghijklmnopqrstuv'), []);
+  assert.deepEqual(parseBareIds('commit 9078659f13f7cd5cd6ae77d316ea43a2f3f270e2'), []);
+  assert.deepEqual(parseBareIds(`/sessions/${SESSION_PUBLIC_ID} orbit-session:${SESSION_PUBLIC_ID}`), []);
+  assert.deepEqual(parseBareIds(`look at ${SESSION_PUBLIC_ID}.`), [SESSION_ID]);
+  assert.deepEqual(parseBareIds(`uuid ${SESSION_ID.toUpperCase()}`), [SESSION_ID]);
+});
+
+test('URLs are recognised on the owner\'s message only, with any query string after the id', () => {
+  const url = `https://orbit.example.com/sessions/${SESSION_PUBLIC_ID}?project=${PROJECT_PUBLIC_ID}`;
+
+  assert.deepEqual(parseReferences(url), []);
+  assert.deepEqual(parseReferences(url, { recognise: true }), [{ kind: 'session', id: SESSION_ID }]);
+  assert.deepEqual(parseReferences(`https://x.test/projects/${PROJECT_PUBLIC_ID}`, { recognise: true }), [
+    { kind: 'project', id: PROJECT_ID },
   ]);
 });

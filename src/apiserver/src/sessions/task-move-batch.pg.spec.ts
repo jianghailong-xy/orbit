@@ -27,7 +27,10 @@
  *       waiting move into the project it coordinates, each leave it in Open; a session with nothing
  *       waiting, or whose moves are answered, stays where it was put;
  *   (j) the backfill: sessions filed away by any other writer (here, written directly) with something
- *       waiting are brought back by the reaper's sweep, and one with nothing waiting is not.
+ *       waiting are brought back by the reaper's sweep, and one with nothing waiting is not;
+ *   (k) Complete with withdrawPendingQuestions (the owner confirmed it): the session's waiting owner
+ *       requests end EXPIRED with a delivery each, another session's is left PENDING, and the
+ *       session stays in Completed; without the flag nothing ends and the session comes back.
  *
  * Not destructive: every id is freshly generated and every assertion is scoped to its own account.
  */
@@ -481,5 +484,45 @@ test('a batch of task moves is answered at once; a waiting question brings its s
     for (const sessionId of [asker, v.coordA, v.coordB, quiet]) {
       assert.ok(!reopened.includes(sessionId), 'a second sweep finds nothing more of these to move');
     }
+  });
+
+  await t.test('(k) Complete that withdraws the waiting questions leaves the session in Completed', async () => {
+    const v = await seed('withdraw');
+    const asker = v.other;
+    const first = await requests.file(v.ownerId, asker, {
+      kind: 'DECISION', title: 'Pick the region', why: 'the deploy waits for it',
+      options: [{ label: 'eu' }, { label: 'us' }],
+    } as never);
+    const second = await requests.file(v.ownerId, asker, {
+      kind: 'CONFIRM', title: 'Confirm the rollout', why: 'the rollout waits for it',
+    } as never);
+    const elsewhere = await requests.file(v.ownerId, v.coordA, {
+      kind: 'CONFIRM', title: 'Another session asks this', why: 'it waits for it',
+    } as never);
+
+    reopened.length = 0;
+    await sessions.complete(v.ownerId, asker, { withdrawPendingQuestions: true });
+    assert.ok((await lifecycle(asker)).completed_at, 'the session stays in Completed');
+    assert.deepEqual(reopened, [], 'and is not announced as back in Open');
+    const rows = await admin.query<{ id: string; state: string; resolved_at: Date | null; deliveries: number }>(
+      `SELECT r."id", r."state", r."resolved_at",
+              (SELECT count(*)::int FROM "watch_delivery" d WHERE d."owner_request_id" = r."id") AS "deliveries"
+         FROM "owner_request" r WHERE r."id" = ANY($1::uuid[])`,
+      [[first.id, second.id, elsewhere.id]],
+    );
+    const byId = new Map(rows.rows.map((row) => [row.id, row]));
+    for (const id of [first.id, second.id]) {
+      assert.equal(byId.get(id)!.state, 'EXPIRED', 'each question the session asked ends unanswered');
+      assert.ok(byId.get(id)!.resolved_at);
+      assert.equal(byId.get(id)!.deliveries, 1, 'with its one delivery to the session that asked');
+    }
+    assert.equal(byId.get(elsewhere.id)!.state, 'PENDING', "another session's question is not touched");
+
+    // Without the flag nothing ends, and the waiting question brings the session back, as before.
+    reopened.length = 0;
+    await sessions.complete(v.ownerId, v.coordA);
+    assert.deepEqual(await lifecycle(v.coordA), OPEN);
+    assert.equal((await admin.query('SELECT "state" FROM "owner_request" WHERE "id" = $1::uuid', [elsewhere.id])).rows[0].state,
+      'PENDING');
   });
 });

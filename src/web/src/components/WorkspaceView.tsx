@@ -4,6 +4,9 @@ import {
   managedSetupState,
   firstSessionProvider,
   type CoordinatorHandoffSuccessor,
+  type LinkPreview,
+  type LinkPreviewsResponse,
+  type SessionSearchHit,
   type MergeRecoveryAction,
   type ProjectSidebarTaskCounts,
   type SessionCoordinatorHandoff,
@@ -66,8 +69,10 @@ import {
   applyReferencePick,
   materializeReferences,
   referenceToken,
+  sigilOf,
   type ReferenceMap,
 } from '../lib/composerRefs';
+import { publicId, targetForPageURL } from '../lib/orbitLink';
 import {
   ContextActions,
   CoordinatorHandedOverBanner,
@@ -166,6 +171,7 @@ import {
   sessionTagsQuery,
   ownerConfirmationQuery,
   openProjectsQuery,
+  sessionSearchQuery,
   projectDetailsQuery,
   projectSessionsQuery,
   PROJECT_SESSION_REFRESH_MS,
@@ -178,6 +184,7 @@ import {
   sessionCreatedTasksQuery,
   watchesQuery,
   projectDependencyGraphQuery,
+  ownerRequestsQuery,
 } from '../lib/queries';
 import { SEARCH_HINT, openSessionSearch, setSessionSearchScope } from './SessionSearch';
 import { SessionMoveModal, useSessionFolderFiling, type MoveDialogSession } from './SessionMoveModal';
@@ -447,6 +454,8 @@ import {
   OWNER_REQUEST_CHAT_PLACEHOLDER,
   OWNER_REQUEST_CHAT_PREFIX,
   ownerRequestChatContext,
+  COMPLETE_WITH_QUESTIONS_COPY,
+  questionsCompleteEnds,
   type OwnerRequest,
 } from '../lib/ownerRequests';
 import { taskMoveSignal, useCrossingDecisionCards } from './CrossingDecisionCard';
@@ -7778,7 +7787,10 @@ export function WorkspaceView({
     refreshProjectSession(id, projectId);
   };
   const completeMut = useMutation({
-    mutationFn: (session: SessionToastTarget) => completeSession(session.id),
+    mutationFn: (session: SessionToastTarget & { withdrawPendingQuestions?: boolean }) =>
+      (session.withdrawPendingQuestions
+        ? completeSession(session.id, { withdrawPendingQuestions: true })
+        : completeSession(session.id)),
     onSuccess: (_d, session) => {
       leaveIfOpen(session.id);
       dropFromLists(session.id, session.projectId);
@@ -7856,9 +7868,27 @@ export function WorkspaceView({
         message.info('This session cannot be completed right now.');
         return;
       }
-      completeMut.mutate({ id: session.id, title: session.title, projectId: source.projectMembership?.projectId });
+      const target = { id: session.id, title: session.title, projectId: source.projectMembership?.projectId };
+      // A question still waiting on the owner would bring the session straight back to Open; completing it anyway is
+      // the owner's to confirm, and then those questions end unanswered. Read from the cards' own list.
+      const waiting = questionsCompleteEnds(
+        qc.getQueryData(ownerRequestsQuery('open').queryKey)?.requests ?? [],
+        session.id,
+        Date.now(),
+      ).length;
+      if (waiting === 0) {
+        completeMut.mutate(target);
+        return;
+      }
+      void confirm({
+        title: COMPLETE_WITH_QUESTIONS_COPY.title(waiting),
+        description: COMPLETE_WITH_QUESTIONS_COPY.description(waiting),
+        confirmText: COMPLETE_WITH_QUESTIONS_COPY.confirm,
+        cancelText: COMPLETE_WITH_QUESTIONS_COPY.cancel,
+        onConfirm: () => completeMut.mutate({ ...target, withdrawPendingQuestions: true }),
+      });
     },
-    [completeMut, message, selectedSession],
+    [completeMut, confirm, message, qc, selectedSession],
   );
   // An open row menu owns the shortcut, including when its Complete action cannot run.
   // Otherwise ⌘/Ctrl+D completes the selected session, even while the composer is focused.
@@ -13446,6 +13476,23 @@ export interface SessionComposerProps {
   promptOptimizer?: PromptOptimizerTarget;
 }
 
+/** A session's state in the `@` menu, in a word — only when it is worth one: running, failed or waiting on you. */
+function mentionStateWord(hit: SessionSearchHit): string | null {
+  if (hit.waitingOn === 'PERSON') return 'Waiting on you';
+  if (hit.lastTurnOutcome === 'FAILED') return 'Failed';
+  if (hit.phase === 'RUNNING') return 'Running';
+  return null;
+}
+
+/** The title a link preview answers with, or null when the object cannot be shown. */
+function previewTitle(preview: LinkPreview | undefined): string | null {
+  if (!preview || preview.state !== 'ok') return null;
+  if (preview.kind === 'session') return preview.session.title;
+  if (preview.kind === 'project') return preview.project.title;
+  if (preview.kind === 'task') return preview.task.title;
+  return null;
+}
+
 export function SessionComposer({
   text,
   setText,
@@ -13652,27 +13699,28 @@ export function SessionComposer({
     setSlashDismissed(null);
     setTimeout(() => taRef.current?.focus(), 0);
   };
-  // ── `@` workspace-mention autocomplete ─────────────────────────────────────────
-  // Type `@` to reference another workspace on this runner; picking one inserts
-  // `@<name> ` as plain text. The in-session orchestrator reads the mention from
-  // the turn (sent verbatim) and can hand work off to that workspace via its session
-  // tools — so this is purely a composer convenience with no separate send path.
-  // Mirrors the `/` menu above and the task-comment mention menu (TaskDetailPanel).
+  // ── `@` sessions ──────────────────────────────────────────────────────────────────────
+  // `@` names one of your sessions — what people point at in a message far more than anything else
+  // (413 messages on production, 2026-11-28; docs/composer-references-design.md rev. 3). A blank `@`
+  // lists your most recent sessions across every workspace and runner, newest activity first (the
+  // ⌘K switcher's recents); typing searches titles, branches and ids. Picking one inserts
+  // `@<title>` and records its id; send materialises `[title](orbit-session:<id>)`, which the server
+  // expands into that session's facts at delivery. This conversation is left out: nobody points a
+  // session at itself.
   const [mentionIndex, setMentionIndex] = useState(0);
   const [mentionDismissed, setMentionDismissed] = useState<string | null>(null);
-  const mentionToken = /(?:^|\s)@([^\s@]*)$/.exec(text)?.[1] ?? null;
-  const mentionMatches = useMemo(() => {
-    if (mentionToken === null) return [];
-    const q = mentionToken.toLowerCase();
-    return workspacesForRunner
-      .filter((a) => a.name.toLowerCase().includes(q))
-      .sort((a, b) => {
-        const pa = a.name.toLowerCase().startsWith(q) ? 0 : 1;
-        const pb = b.name.toLowerCase().startsWith(q) ? 0 : 1;
-        return pa - pb || a.name.localeCompare(b.name);
-      })
-      .slice(0, 8);
-  }, [workspacesForRunner, mentionToken]);
+  const mentionToken = referenceToken(text, '@');
+  const mentionSearchQ = useQuery({
+    ...sessionSearchQuery(mentionToken?.trim() ?? ''),
+    enabled: mentionToken !== null && !composerDisabled,
+  });
+  const mentionMatches = useMemo(
+    () =>
+      mentionToken === null
+        ? []
+        : (mentionSearchQ.data?.hits ?? []).filter((hit) => hit.id !== selectedId && hit.title).slice(0, 8),
+    [mentionToken, mentionSearchQ.data, selectedId],
+  );
   useEffect(() => {
     setMentionIndex(0);
   }, [mentionToken]);
@@ -13682,29 +13730,28 @@ export function SessionComposer({
     !composerDisabled &&
     mentionMatches.length > 0;
   const mentionIdx = mentionMatches.length ? Math.min(mentionIndex, mentionMatches.length - 1) : 0;
-  const pickMention = (name: string): void => {
-    // Replace only the trailing `@token` ($1 preserves the start-or-whitespace before it),
-    // so picking a workspace mid-message doesn't clobber text typed earlier.
-    setText(text.replace(/(^|\s)@([^\s@]*)$/, `$1@${name} `));
+  const pickMention = (hit: { id: string; title: string }): void => {
+    const next = applyReferencePick(text, hit.title, { kind: 'session', id: hit.id }, composerRefs);
+    setText(next.text);
+    setComposerRefs(next.refs);
     setMentionDismissed(null);
     setTimeout(() => taRef.current?.focus(), 0);
   };
-  // ── `#` task / task-list references ────────────────────────────────────────────────────
-  // Type `#` to reference a list or task; picking one inserts `#<title>` as readable text and
-  // records which id that title meant. The full `[title](orbit-list:<id>)` link is materialised
-  // on send (see materializeReferences) and expanded by the server at delivery — the box never
-  // holds a uuid, because the chip layer that hides one cannot keep the caret aligned with it.
+  // ── `#` projects (and tasks) ──────────────────────────────────────────────────────────────
+  // `#` names the piece of work a message is about: a project. Projects recur (317 references to 77
+  // of them, against 413 to 308 sessions), which is where a menu beats pasting. A blank `#` lists
+  // this conversation's own project first, then open projects by latest activity; typing also
+  // searches tasks, which people reach far less often (agents create 99.7% of them). Picking inserts
+  // `#<title>` and records which id it meant; send materialises the link the server expands at
+  // delivery — the box never holds a uuid, because the chip layer that hides one cannot keep the
+  // caret aligned with it.
   const [refIndex, setRefIndex] = useState(0);
   const [refDismissed, setRefDismissed] = useState<string | null>(null);
   const refToken = referenceToken(text);
-  const refListsQ = useQuery({
-    queryKey: ['task-lists'],
-    meta: { entities: ['task'] },
-    queryFn: () => api<Array<{ id: string; title: string }>>('/task-lists'),
-    // Only once the user reaches for the menu: most drafts never contain a reference, and the
-    // list index is not otherwise needed on this screen.
-    enabled: refToken !== null,
-    staleTime: 30_000,
+  const refProjectsQ = useQuery({
+    ...openProjectsQuery(),
+    // Only once the user reaches for the menu: most drafts never contain a reference.
+    enabled: refToken !== null && !composerDisabled,
   });
   const refTasksQ = useQuery({
     queryKey: ['tasks', 'ref-picker', refToken],
@@ -13713,23 +13760,27 @@ export function SessionComposer({
       api<{ items: Array<{ id: string; title: string }> }>(
         `/tasks/page?limit=8&counts=none&q=${encodeURIComponent(refToken ?? '')}`,
       ).then((p) => p.items),
-    // A blank `#` lists lists only: every task in the deployment is not a useful first screen,
-    // and the search is what makes the task half navigable at 56k rows.
-    enabled: !!refToken,
+    // A blank `#` lists projects only; the search is what makes tasks reachable at 115k rows.
+    enabled: !!refToken?.trim() && !composerDisabled,
     staleTime: 10_000,
   });
   const refMatches = useMemo(() => {
     if (refToken === null) return [];
-    const q = refToken.toLowerCase();
-    const lists = (refListsQ.data ?? [])
-      .filter((l) => l.title.toLowerCase().includes(q))
-      .slice(0, 5)
-      .map((l) => ({ kind: 'list' as const, id: l.id, title: l.title }));
-    const tasks = (refTasksQ.data ?? [])
-      .slice(0, 5)
-      .map((t) => ({ kind: 'task' as const, id: t.id, title: t.title }));
-    return [...lists, ...tasks];
-  }, [refToken, refListsQ.data, refTasksQ.data]);
+    const q = refToken.trim().toLowerCase();
+    const own = projectFolder ?? null;
+    const projects = [...(refProjectsQ.data ?? [])]
+      .sort((a, b) =>
+        (a.id === own?.id ? -1 : 0) - (b.id === own?.id ? -1 : 0) ||
+        (b.lastActivityAt ?? b.createdAt).localeCompare(a.lastActivityAt ?? a.createdAt),
+      )
+      .filter((p) => p.title.toLowerCase().includes(q))
+      .slice(0, 6)
+      .map((p) => ({ kind: 'project' as const, id: p.id, title: p.title }));
+    const tasks = q
+      ? (refTasksQ.data ?? []).slice(0, 4).map((t) => ({ kind: 'task' as const, id: t.id, title: t.title }))
+      : [];
+    return [...projects, ...tasks];
+  }, [refToken, refProjectsQ.data, refTasksQ.data, projectFolder]);
   useEffect(() => {
     setRefIndex(0);
   }, [refToken]);
@@ -13739,12 +13790,32 @@ export function SessionComposer({
     !composerDisabled &&
     refMatches.length > 0;
   const refIdx = refMatches.length ? Math.min(refIndex, refMatches.length - 1) : 0;
-  const pickRef = (m: { kind: 'list' | 'task'; id: string; title: string }): void => {
+  const pickRef = (m: { kind: 'project' | 'task'; id: string; title: string }): void => {
     const next = applyReferencePick(text, m.title, { kind: m.kind, id: m.id }, composerRefs);
     setText(next.text);
     setComposerRefs(next.refs);
     setRefDismissed(null);
     setTimeout(() => taRef.current?.focus(), 0);
+  };
+  // A pasted page URL of this deployment naming a session, project or task becomes the same chip a
+  // pick makes — half of all session references are pasted URLs. The URL goes in as pasted, and is
+  // swapped for the chip once its title is read; if it cannot be read, the URL stays, and the server
+  // still recognises it at delivery.
+  const chipPastedUrl = (pasted: string): void => {
+    const url = pasted.trim();
+    if (/\s/.test(url)) return;
+    const target = targetForPageURL(url, window.location.host);
+    if (!target || (target.kind !== 'session' && target.kind !== 'project' && target.kind !== 'task')) return;
+    const kind = target.kind;
+    void api<LinkPreviewsResponse>('/link-previews', { method: 'POST', body: { refs: [target] } })
+      .then((res) => {
+        const title = previewTitle(res.previews[0])?.trim();
+        if (!title) return;
+        const id = publicId(target);
+        setText((t) => (t.includes(url) ? t.replace(url, () => `${sigilOf(kind)}${title}`) : t));
+        setComposerRefs((r) => ({ ...r, [title]: { kind, id } }));
+      })
+      .catch(() => undefined);
   };
 
   // Open the autocomplete from the `+` menu scoped to one asset kind: drop a `/` (prefixed
@@ -13893,28 +13964,29 @@ export function SessionComposer({
               onMouseEnter={() => setRefIndex(i)}
             >
               <span className="composer-slash-name">#{m.title}</span>
-              <span className="composer-slash-type">{m.kind === 'list' ? 'list' : 'task'}</span>
+              <span className="composer-slash-type">{m.kind === 'project' ? 'project' : 'task'}</span>
             </div>
           ))}
         </div>
       )}
       {showMention && (
         <div className="composer-slash-menu" role="listbox">
-          {mentionMatches.map((a, i) => (
+          {mentionMatches.map((hit, i) => (
             <div
-              key={a.id}
+              key={hit.id}
               role="option"
               aria-selected={i === mentionIdx}
               className={`composer-slash-item${i === mentionIdx ? ' is-active' : ''}`}
               // mousedown (not click) + preventDefault keeps focus in the textarea.
               onMouseDown={(e) => {
                 e.preventDefault();
-                pickMention(a.name);
+                pickMention(hit);
               }}
               onMouseEnter={() => setMentionIndex(i)}
             >
-              <span className="composer-slash-name">@{a.name}</span>
-              <span className="composer-slash-type">workspace</span>
+              <span className="composer-slash-name">@{hit.title}</span>
+              <span className="composer-slash-type">{hit.taskId ? 'task run' : (hit.agent?.name ?? 'session')}</span>
+              {mentionStateWord(hit) && <span className="composer-slash-desc">{mentionStateWord(hit)}</span>}
             </div>
           ))}
         </div>
@@ -14043,6 +14115,9 @@ export function SessionComposer({
         // OS file manager (best-effort: only where the browser exposes it as a clipboard
         // file). Only swallow the paste when it carries files, so pasting text is untouched.
         onPaste={(e) => {
+          // A pasted session, project or task link becomes its chip once its title is read.
+          const pastedText = typeof e.clipboardData?.getData === 'function' ? e.clipboardData.getData('text/plain') : '';
+          if (pastedText) chipPastedUrl(pastedText);
           if (!canAttach) return;
           const files = Array.from(e.clipboardData?.items ?? [])
             .filter((it) => it.kind === 'file')
@@ -14091,7 +14166,7 @@ export function SessionComposer({
             }
             if (e.key === 'Enter' || e.key === 'Tab') {
               e.preventDefault();
-              pickMention(mentionMatches[mentionIdx].name);
+              pickMention(mentionMatches[mentionIdx]);
               return;
             }
             if (e.key === 'Escape') {

@@ -1,4 +1,4 @@
-import { ClockCircleOutlined, LoadingOutlined } from '@ant-design/icons';
+import { ClockCircleOutlined, LoadingOutlined, MessageOutlined } from '@ant-design/icons';
 import type { ReactNode } from 'react';
 import {
   SESSION_MARKS,
@@ -32,7 +32,7 @@ const svg = (body: ReactNode, size: number) => (
   </svg>
 );
 
-/** The state icon: a grey clock for Queued, the blue spinner for Running, an empty grey circle for Idle. */
+/** The state icon: a grey clock for Queued, the blue spinner for Running, a grey speech bubble for Idle. */
 export function SessionStateGlyph({ state, size = 16 }: { state: SessionDisplayState; size?: number }) {
   const label = state.word;
   if (state.icon === 'spinner')
@@ -53,8 +53,8 @@ export function SessionStateGlyph({ state, size = 16 }: { state: SessionDisplayS
     );
   return (
     <Tooltip content={label} delay={TEXT_TOOLTIP_DELAY_MS}>
-      <span aria-label={label} className="session-state-glyph" data-state={state.phase} style={{ color: 'var(--text-3)' }}>
-        {svg(<circle cx="8" cy="8" r="6.25" />, size)}
+      <span aria-label={label} className="session-state-glyph" data-state={state.phase}>
+        <MessageOutlined style={{ color: 'var(--text-3)', fontSize: size }} />
       </span>
     </Tooltip>
   );

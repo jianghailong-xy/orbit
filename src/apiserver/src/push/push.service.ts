@@ -1510,9 +1510,12 @@ export class PushService {
    * or the one who can was never told (docs/evidence-always-has-an-addressee-design.md §4). Called once
    * per orphan, after the sweep's ledger row committed (`ProjectOrphanSweepService`), so a push that
    * fails is not tried again: the item stays on `GET /projects/:id/pending-addressees`.
+   * It names the task the item is about and, for a quiet run, that run's session, so a tap opens what the
+   * alert is about (the session, else the task) rather than a project page that does not show it.
    */
   async notifyProjectOrphan(input: {
     ownerId: string; projectId: string; noticeId: string; title: string; body: string;
+    taskId: string; sessionId: string | null;
   }): Promise<void> {
     if (!this.enabled) return;
     try {
@@ -1522,7 +1525,8 @@ export class PushService {
       const collapseId = `project-orphan-${input.noticeId}`;
       const body = JSON.stringify({
         aps: { alert, sound: 'default', 'thread-id': input.projectId },
-        kind: 'project-orphan', projectID: input.projectId,
+        kind: 'project-orphan', projectID: input.projectId, taskID: input.taskId,
+        ...(input.sessionId ? { sessionID: input.sessionId } : {}),
       });
       this.background(this.feishuOther(feishu, { kind: 'project-orphan', ...alert, collapseId, projectId: input.projectId }));
       await this.deliver(tokens, body, 'alert', '10', collapseId);

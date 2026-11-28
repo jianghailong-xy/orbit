@@ -136,7 +136,7 @@
   "kind": "guestRow",
   "web": {
    "state": "Idle",
-   "icon": "circle",
+   "icon": "message",
    "marks": [],
    "line": "Idle",
    "completed": false
@@ -168,7 +168,7 @@
   "kind": "sharedHead",
   "web": {
    "state": "Idle",
-   "icon": "circle",
+   "icon": "message",
    "marks": [],
    "line": "Idle",
    "completed": false
@@ -202,7 +202,7 @@
   "kind": "guestRow",
   "web": {
    "state": "Idle",
-   "icon": "circle",
+   "icon": "message",
    "marks": [],
    "line": "Idle",
    "completed": false
@@ -234,7 +234,7 @@
   "kind": "sharedHead",
   "web": {
    "state": "Idle",
-   "icon": "circle",
+   "icon": "message",
    "marks": [],
    "line": "Idle",
    "completed": false
@@ -268,7 +268,7 @@
   "kind": "guestRow",
   "web": {
    "state": "Idle",
-   "icon": "circle",
+   "icon": "message",
    "marks": [],
    "line": "Idle",
    "completed": false
@@ -300,7 +300,7 @@
   "kind": "sharedHead",
   "web": {
    "state": "Idle",
-   "icon": "circle",
+   "icon": "message",
    "marks": [],
    "line": "Idle",
    "completed": false
@@ -334,7 +334,7 @@
   "kind": "guestRow",
   "web": {
    "state": "Idle",
-   "icon": "circle",
+   "icon": "message",
    "marks": [
     "Failed"
    ],
@@ -368,7 +368,7 @@
   "kind": "sharedHead",
   "web": {
    "state": "Idle",
-   "icon": "circle",
+   "icon": "message",
    "marks": [
     "Failed"
    ],
@@ -404,7 +404,7 @@
   "kind": "guestRow",
   "web": {
    "state": "Idle",
-   "icon": "circle",
+   "icon": "message",
    "marks": [],
    "line": "Idle",
    "completed": false
@@ -436,7 +436,7 @@
   "kind": "sharedHead",
   "web": {
    "state": "Idle",
-   "icon": "circle",
+   "icon": "message",
    "marks": [],
    "line": "Idle",
    "completed": false
@@ -606,7 +606,7 @@
   "kind": "guestRow",
   "web": {
    "state": "Idle",
-   "icon": "circle",
+   "icon": "message",
    "marks": [],
    "line": "Idle",
    "completed": false
@@ -638,7 +638,7 @@
   "kind": "sharedHead",
   "web": {
    "state": "Idle",
-   "icon": "circle",
+   "icon": "message",
    "marks": [],
    "line": "Idle",
    "completed": false
@@ -742,7 +742,7 @@
   "kind": "guestRow",
   "web": {
    "state": "Idle",
-   "icon": "circle",
+   "icon": "message",
    "marks": [],
    "line": "Idle",
    "completed": false
@@ -774,7 +774,7 @@
   "kind": "sharedHead",
   "web": {
    "state": "Idle",
-   "icon": "circle",
+   "icon": "message",
    "marks": [],
    "line": "Idle",
    "completed": false
@@ -808,7 +808,7 @@
   "kind": "guestRow",
   "web": {
    "state": "Idle",
-   "icon": "circle",
+   "icon": "message",
    "marks": [],
    "line": "Idle",
    "completed": false
@@ -840,7 +840,7 @@
   "kind": "sharedHead",
   "web": {
    "state": "Idle",
-   "icon": "circle",
+   "icon": "message",
    "marks": [],
    "line": "Idle",
    "completed": false
@@ -874,7 +874,7 @@
   "kind": "guestRow",
   "web": {
    "state": "Idle",
-   "icon": "circle",
+   "icon": "message",
    "marks": [],
    "line": "Idle",
    "completed": false
@@ -906,7 +906,7 @@
   "kind": "sharedHead",
   "web": {
    "state": "Idle",
-   "icon": "circle",
+   "icon": "message",
    "marks": [],
    "line": "Idle",
    "completed": false
@@ -940,7 +940,7 @@
   "kind": "guestRow",
   "web": {
    "state": "Idle",
-   "icon": "circle",
+   "icon": "message",
    "marks": [],
    "line": "Idle",
    "completed": false
@@ -972,7 +972,7 @@
   "kind": "sharedHead",
   "web": {
    "state": "Idle",
-   "icon": "circle",
+   "icon": "message",
    "marks": [],
    "line": "Idle",
    "completed": false
@@ -1138,7 +1138,7 @@
   "kind": "guestRow",
   "web": {
    "state": "Idle",
-   "icon": "circle",
+   "icon": "message",
    "marks": [],
    "line": "Idle",
    "completed": false
@@ -1170,7 +1170,7 @@
   "kind": "sharedHead",
   "web": {
    "state": "Idle",
-   "icon": "circle",
+   "icon": "message",
    "marks": [],
    "line": "Idle",
    "completed": false
@@ -1204,7 +1204,7 @@
   "kind": "guestRow",
   "web": {
    "state": "Idle",
-   "icon": "circle",
+   "icon": "message",
    "marks": [],
    "line": "Idle",
    "completed": false
@@ -1236,7 +1236,7 @@
   "kind": "sharedHead",
   "web": {
    "state": "Idle",
-   "icon": "circle",
+   "icon": "message",
    "marks": [],
    "line": "Idle",
    "completed": false
@@ -1270,7 +1270,7 @@
   "kind": "guestRow",
   "web": {
    "state": "Idle",
-   "icon": "circle",
+   "icon": "message",
    "marks": [
     "Retrying"
    ],
@@ -1304,7 +1304,7 @@
   "kind": "sharedHead",
   "web": {
    "state": "Idle",
-   "icon": "circle",
+   "icon": "message",
    "marks": [
     "Retrying"
    ],
@@ -1340,7 +1340,7 @@
   "kind": "guestRow",
   "web": {
    "state": "Idle",
-   "icon": "circle",
+   "icon": "message",
    "marks": [
     "Failed"
    ],
@@ -1374,7 +1374,7 @@
   "kind": "sharedHead",
   "web": {
    "state": "Idle",
-   "icon": "circle",
+   "icon": "message",
    "marks": [
     "Failed"
    ],
@@ -1480,7 +1480,7 @@
   "kind": "guestRow",
   "web": {
    "state": "Idle",
-   "icon": "circle",
+   "icon": "message",
    "marks": [],
    "line": "Idle",
    "completed": false
@@ -1512,7 +1512,7 @@
   "kind": "sharedHead",
   "web": {
    "state": "Idle",
-   "icon": "circle",
+   "icon": "message",
    "marks": [],
    "line": "Idle",
    "completed": false

@@ -41,12 +41,12 @@ public enum SessionDisplayState: String, Equatable, Sendable, CaseIterable {
         }
     }
 
-    /// The state icon: a clock, the spinner, an empty circle. Only Running carries a colour.
+    /// The state icon: a clock, the spinner, a speech bubble. Only Running carries a colour.
     public var glyph: SessionStatusGlyph {
         switch self {
         case .queued:  return .init(shape: .symbol("clock"), tone: .neutral, label: word)
         case .running: return .init(shape: .spinner, tone: .brand, label: word)
-        case .idle:    return .init(shape: .symbol("circle"), tone: .neutral, label: word)
+        case .idle:    return .init(shape: .symbol("message"), tone: .neutral, label: word)
         }
     }
 }

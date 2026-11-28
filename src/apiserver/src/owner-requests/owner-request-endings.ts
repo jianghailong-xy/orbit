@@ -1,4 +1,7 @@
+import { CONDITION_STILL_WAITING_KIND, CONDITION_WAITING_KIND } from '@orbit/shared';
 import { Prisma } from '@prisma/client';
+
+import { SCHEDULE_ITEM_KINDS } from '../schedules/schedule-attention';
 
 /**
  * What every ending of an owner request writes in its own transaction, beside the ending itself.
@@ -38,4 +41,37 @@ export async function endUndeliveredGrants(
     where: { requestId: { in: requestIds }, state: 'PENDING_DELIVERY', fetchedAt: null },
     data: { state: 'REMOVED', endReason: reason, valueEnc: null, removedAt: new Date() },
   });
+}
+
+/**
+ * The owner moved these sessions to Completed after confirming that the questions they still ask would go unanswered:
+ * every PENDING request they asked ends EXPIRED, as an unanswered card does, with its delivery and its key. The
+ * schedule and condition cards a session carries are left alone: they are the schedule's and the watch's, and their own
+ * flows end them. Returns the ids it ended.
+ */
+export async function expirePendingAskedBy(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  sessionIds: string[],
+  now: Date,
+): Promise<string[]> {
+  if (sessionIds.length === 0) return [];
+  const rows = await tx.ownerRequest.updateManyAndReturn({
+    where: {
+      ownerId,
+      askedBySessionId: { in: sessionIds },
+      state: 'PENDING',
+      kind: { notIn: [...SCHEDULE_ITEM_KINDS, CONDITION_WAITING_KIND, CONDITION_STILL_WAITING_KIND] },
+    },
+    data: {
+      state: 'EXPIRED',
+      resolvedAt: now,
+      resolutionNote: 'The owner moved the session to Completed without answering.',
+    },
+    select: { id: true },
+  });
+  const ids = rows.map((row) => row.id);
+  await enqueueResolutions(tx, ids);
+  await endUndeliveredGrants(tx, ids, 'EXPIRED');
+  return ids;
 }

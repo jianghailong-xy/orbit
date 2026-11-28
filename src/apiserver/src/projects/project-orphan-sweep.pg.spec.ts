@@ -74,7 +74,7 @@ interface Stack {
   sessions: SessionsService;
   evidence: TaskCompletionEvidenceService;
   sweep: ProjectOrphanSweepService;
-  pushed: Array<{ ownerId: string; projectId: string; title: string; body: string }>;
+  pushed: Array<{ ownerId: string; projectId: string; title: string; body: string; taskId: string; sessionId: string | null }>;
 }
 
 async function connect(): Promise<Stack> {
@@ -478,12 +478,12 @@ test('a running task run: its own addressee while it works, has a job running or
     assert.deepEqual(await stack.sweep.sweepProject(w.ownerId, w.project, later()), []);
     assert.equal((await messagesOn(stack.db, w.coord)).length, 1);
 
-    // The run takes a turn and goes quiet again: a new state, reported once more.
+    // The run takes a turn and goes quiet again: the same session, so it is not reported again.
     const back = hoursAgo(2.5);
     await stack.db.session.update({ where: { id: quietRun }, data: { lastTurnAt: back } });
-    assert.notEqual((await itemOf(stack, w, quiet)).orphanKey, orphan.orphanKey);
-    assert.equal((await stack.sweep.sweepProject(w.ownerId, w.project, later())).length, 1);
-    assert.equal((await messagesOn(stack.db, w.coord)).length, 2);
+    assert.equal((await itemOf(stack, w, quiet)).orphanKey, orphan.orphanKey);
+    assert.deepEqual(await stack.sweep.sweepProject(w.ownerId, w.project, later()), []);
+    assert.equal((await messagesOn(stack.db, w.coord)).length, 1);
   } finally {
     await stack.db.$disconnect();
   }
@@ -571,6 +571,7 @@ test('no coordinator to tell — none at all, or a Manual one — the owner is t
       assert.equal(pushed.ownerId, w.ownerId);
       assert.equal(pushed.projectId, w.project);
       assert.ok(pushed.body.includes(`${mode} quiet task`));
+      assert.deepEqual([pushed.taskId, pushed.sessionId], [quiet, run], `${mode}: the push does not name the quiet run`);
       const ledger = await notices(stack, w);
       assert.deepEqual(ledger.map((row) => row.recipient), ['OWNER']);
       assert.deepEqual(await messagesOn(stack.db, w.coord), [], `${mode}: a coordinator conversation was written to`);

@@ -43,7 +43,7 @@ final class GuestSessionDisplayTests: XCTestCase {
             let marks = web["marks"] as! [String]
             let shown = web["line"] as! String
             let icon: [String: SessionStatusGlyph.Shape] = ["clock": .symbol("clock"), "spinner": .spinner,
-                                                            "circle": .symbol("circle")]
+                                                            "message": .symbol("message")]
             let (states, subtitle) = try decode(r["payload"] as! [String: Any], kind)
             for s in states {
                 let state = try XCTUnwrap(SessionDisplay.state(s.displayFacts), "\(kind) state", file: file, line: line)

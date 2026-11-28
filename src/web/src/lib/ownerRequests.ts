@@ -1,4 +1,11 @@
-import { SCHEDULE_COPY, type OwnerCardTranslation, type OwnerRequestChangeSpec } from '@orbit/shared';
+import {
+  CONDITION_STILL_WAITING_KIND,
+  CONDITION_WAITING_KIND,
+  SCHEDULE_COPY,
+  SCHEDULE_WAITING_KINDS,
+  type OwnerCardTranslation,
+  type OwnerRequestChangeSpec,
+} from '@orbit/shared';
 import { CONDITION_COPY } from './conditions';
 import { useEffect, useSyncExternalStore } from 'react';
 import { formatSpan, sameResourceId } from './watches';
@@ -204,6 +211,36 @@ export function openableLink(link: string): string | null {
     return null;
   }
 }
+
+/**
+ * The questions this session still has waiting on the owner that a Complete would end (`POST /sessions/:id/complete`
+ * with `withdrawPendingQuestions`): every PENDING one it asked and not past its deadline, but a schedule's or a
+ * condition's card, which the server leaves to its own flow. Without them, a Complete keeps the session in Completed.
+ */
+export function questionsCompleteEnds(
+  requests: readonly OwnerRequest[],
+  sessionId: string,
+  now: number,
+): OwnerRequest[] {
+  return requests.filter((request) => sameResourceId(request.askedBySessionId, sessionId)
+    && request.state === 'PENDING'
+    && !pastDeadline(request, now)
+    && !(SCHEDULE_WAITING_KINDS as readonly string[]).includes(request.kind)
+    && request.kind !== CONDITION_WAITING_KIND
+    && request.kind !== CONDITION_STILL_WAITING_KIND);
+}
+
+/** The confirmation Complete asks for when the session still has questions waiting on the owner. */
+export const COMPLETE_WITH_QUESTIONS_COPY = {
+  title: (count: number) => (count === 1
+    ? 'This session has a question waiting on you'
+    : `This session has ${count} questions waiting on you`),
+  description: (count: number) => (count === 1
+    ? 'Completing it withdraws the question unanswered, and the session goes ahead as if nobody answered.'
+    : 'Completing it withdraws them unanswered, and the session goes ahead as if nobody answered.'),
+  confirm: 'Complete and withdraw',
+  cancel: 'Keep it open',
+} as const;
 
 /** Whether one of these pending requests holds this task up. */
 export function isTaskHeld(requests: readonly Pick<OwnerRequest, 'blocksTaskIds'>[], taskId: string): boolean {
