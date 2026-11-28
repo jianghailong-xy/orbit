@@ -294,6 +294,9 @@ export interface SessionPermissionModeChange {
   requestedMode?: string;
   /** And why (CLAIM_PERMISSION_MODE_SUBSTITUTION_REASONS). Absent otherwise. */
   reason?: ClaimPermissionModeSubstitutionReason;
+  /** The order it was recorded in (migration 1810): two changes can share `at`, never `seq`. What a page of older
+   *  changes continues from, and what tells one change from another. Absent from a server older than 1810. */
+  seq?: number;
 }
 
 /**
@@ -307,10 +310,20 @@ export interface SessionPermissionModeFacts {
   actualPermissionModeAt?: string | null;
   /** Detail only: the newest changes, oldest first (at most SESSION_PERMISSION_MODE_CHANGES_LIMIT). */
   permissionModeChanges?: SessionPermissionModeChange[];
+  /** Detail only: whether older changes than those are recorded, read with GET /sessions/:id/permission-mode-changes
+   *  ?before=<the oldest one's seq>. Absent from a server that does not page them. */
+  permissionModeChangesHasMore?: boolean;
 }
 
-/** How many mode changes the session detail carries. */
+/** How many mode changes the session detail carries, and a page of older ones at most. */
 export const SESSION_PERMISSION_MODE_CHANGES_LIMIT = 50;
+
+/** GET /sessions/:id/permission-mode-changes?before=<seq>&limit=N: the changes recorded just before `seq` (the newest
+ *  when it is absent), oldest first, and whether older ones remain. */
+export interface SessionPermissionModeChangePage {
+  changes: SessionPermissionModeChange[];
+  hasMore: boolean;
+}
 
 // ─────────────────────────────── Runner ⇆ control plane ───────────────────────────────
 

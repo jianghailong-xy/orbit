@@ -31,3 +31,19 @@ How they were made, on this branch's server code:
 
 To make them again: `capture/stack.sh` and `capture/capture.js` from the task's evidence (uploaded with it), against a
 worktree whose `src/apiserver/dist` is built from the server code to capture.
+
+## `paging/`: more changes than the detail carries
+
+A session of 111 changes, made on this branch's server code by `scripts/permission-mode-actual-stack/capture-paging.mjs`
+(after `seed.mjs`, on the stack `stack.sh up` starts): the claim, the owner's six picks from the web, iOS and Android
+(`PATCH /sessions/:id/config`, the inbox's `setconfig`, `turnComplete`), then 13 ingests of Claude's report and the
+runner's correction four times each (`RunnerApiController.events`). Each ingest's eight rows are then stamped with one
+instant, as the pg spec does: the same transition four times at one moment, and both page boundaries fall inside one.
+
+| File | Answer |
+|---|---|
+| `paging/session-paging.json` | `GET /api/sessions/:id`: the newest 50 changes and `permissionModeChangesHasMore: true`. |
+| `paging/session-paging-page-1.json` | `GET /api/sessions/:id/permission-mode-changes?before=<the detail's oldest seq>`: 50, `hasMore: true`. |
+| `paging/session-paging-page-2.json` | The same `?before=<page 1's oldest seq>`: the first 11, `hasMore: false`. |
+
+The same three files are in `src/macos/OrbitKit/Fixtures/permission-mode-paging/` for OrbitKit's tests.

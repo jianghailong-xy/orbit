@@ -1,0 +1,405 @@
+{
+  "changes": [
+    {
+      "fromMode": "auto",
+      "toMode": "default",
+      "cause": "ENGINE_REPORT",
+      "client": null,
+      "at": "2026-11-27T23:41:02.358Z",
+      "seq": 27
+    },
+    {
+      "fromMode": "default",
+      "toMode": "auto",
+      "cause": "RUNNER_CORRECTION",
+      "client": null,
+      "at": "2026-11-27T23:41:02.358Z",
+      "seq": 28
+    },
+    {
+      "fromMode": "auto",
+      "toMode": "default",
+      "cause": "ENGINE_REPORT",
+      "client": null,
+      "at": "2026-11-27T23:41:02.358Z",
+      "seq": 29
+    },
+    {
+      "fromMode": "default",
+      "toMode": "auto",
+      "cause": "RUNNER_CORRECTION",
+      "client": null,
+      "at": "2026-11-27T23:41:02.358Z",
+      "seq": 30
+    },
+    {
+      "fromMode": "auto",
+      "toMode": "default",
+      "cause": "ENGINE_REPORT",
+      "client": null,
+      "at": "2026-11-27T23:41:02.399Z",
+      "seq": 31
+    },
+    {
+      "fromMode": "default",
+      "toMode": "auto",
+      "cause": "RUNNER_CORRECTION",
+      "client": null,
+      "at": "2026-11-27T23:41:02.399Z",
+      "seq": 32
+    },
+    {
+      "fromMode": "auto",
+      "toMode": "default",
+      "cause": "ENGINE_REPORT",
+      "client": null,
+      "at": "2026-11-27T23:41:02.399Z",
+      "seq": 33
+    },
+    {
+      "fromMode": "default",
+      "toMode": "auto",
+      "cause": "RUNNER_CORRECTION",
+      "client": null,
+      "at": "2026-11-27T23:41:02.399Z",
+      "seq": 34
+    },
+    {
+      "fromMode": "auto",
+      "toMode": "default",
+      "cause": "ENGINE_REPORT",
+      "client": null,
+      "at": "2026-11-27T23:41:02.399Z",
+      "seq": 35
+    },
+    {
+      "fromMode": "default",
+      "toMode": "auto",
+      "cause": "RUNNER_CORRECTION",
+      "client": null,
+      "at": "2026-11-27T23:41:02.399Z",
+      "seq": 36
+    },
+    {
+      "fromMode": "auto",
+      "toMode": "default",
+      "cause": "ENGINE_REPORT",
+      "client": null,
+      "at": "2026-11-27T23:41:02.399Z",
+      "seq": 37
+    },
+    {
+      "fromMode": "default",
+      "toMode": "auto",
+      "cause": "RUNNER_CORRECTION",
+      "client": null,
+      "at": "2026-11-27T23:41:02.399Z",
+      "seq": 38
+    },
+    {
+      "fromMode": "auto",
+      "toMode": "default",
+      "cause": "ENGINE_REPORT",
+      "client": null,
+      "at": "2026-11-27T23:41:02.437Z",
+      "seq": 39
+    },
+    {
+      "fromMode": "default",
+      "toMode": "auto",
+      "cause": "RUNNER_CORRECTION",
+      "client": null,
+      "at": "2026-11-27T23:41:02.437Z",
+      "seq": 40
+    },
+    {
+      "fromMode": "auto",
+      "toMode": "default",
+      "cause": "ENGINE_REPORT",
+      "client": null,
+      "at": "2026-11-27T23:41:02.437Z",
+      "seq": 41
+    },
+    {
+      "fromMode": "default",
+      "toMode": "auto",
+      "cause": "RUNNER_CORRECTION",
+      "client": null,
+      "at": "2026-11-27T23:41:02.437Z",
+      "seq": 42
+    },
+    {
+      "fromMode": "auto",
+      "toMode": "default",
+      "cause": "ENGINE_REPORT",
+      "client": null,
+      "at": "2026-11-27T23:41:02.437Z",
+      "seq": 43
+    },
+    {
+      "fromMode": "default",
+      "toMode": "auto",
+      "cause": "RUNNER_CORRECTION",
+      "client": null,
+      "at": "2026-11-27T23:41:02.437Z",
+      "seq": 44
+    },
+    {
+      "fromMode": "auto",
+      "toMode": "default",
+      "cause": "ENGINE_REPORT",
+      "client": null,
+      "at": "2026-11-27T23:41:02.437Z",
+      "seq": 45
+    },
+    {
+      "fromMode": "default",
+      "toMode": "auto",
+      "cause": "RUNNER_CORRECTION",
+      "client": null,
+      "at": "2026-11-27T23:41:02.437Z",
+      "seq": 46
+    },
+    {
+      "fromMode": "auto",
+      "toMode": "default",
+      "cause": "ENGINE_REPORT",
+      "client": null,
+      "at": "2026-11-27T23:41:02.473Z",
+      "seq": 47
+    },
+    {
+      "fromMode": "default",
+      "toMode": "auto",
+      "cause": "RUNNER_CORRECTION",
+      "client": null,
+      "at": "2026-11-27T23:41:02.473Z",
+      "seq": 48
+    },
+    {
+      "fromMode": "auto",
+      "toMode": "default",
+      "cause": "ENGINE_REPORT",
+      "client": null,
+      "at": "2026-11-27T23:41:02.473Z",
+      "seq": 49
+    },
+    {
+      "fromMode": "default",
+      "toMode": "auto",
+      "cause": "RUNNER_CORRECTION",
+      "client": null,
+      "at": "2026-11-27T23:41:02.473Z",
+      "seq": 50
+    },
+    {
+      "fromMode": "auto",
+      "toMode": "default",
+      "cause": "ENGINE_REPORT",
+      "client": null,
+      "at": "2026-11-27T23:41:02.473Z",
+      "seq": 51
+    },
+    {
+      "fromMode": "default",
+      "toMode": "auto",
+      "cause": "RUNNER_CORRECTION",
+      "client": null,
+      "at": "2026-11-27T23:41:02.473Z",
+      "seq": 52
+    },
+    {
+      "fromMode": "auto",
+      "toMode": "default",
+      "cause": "ENGINE_REPORT",
+      "client": null,
+      "at": "2026-11-27T23:41:02.473Z",
+      "seq": 53
+    },
+    {
+      "fromMode": "default",
+      "toMode": "auto",
+      "cause": "RUNNER_CORRECTION",
+      "client": null,
+      "at": "2026-11-27T23:41:02.473Z",
+      "seq": 54
+    },
+    {
+      "fromMode": "auto",
+      "toMode": "default",
+      "cause": "ENGINE_REPORT",
+      "client": null,
+      "at": "2026-11-27T23:41:02.510Z",
+      "seq": 55
+    },
+    {
+      "fromMode": "default",
+      "toMode": "auto",
+      "cause": "RUNNER_CORRECTION",
+      "client": null,
+      "at": "2026-11-27T23:41:02.510Z",
+      "seq": 56
+    },
+    {
+      "fromMode": "auto",
+      "toMode": "default",
+      "cause": "ENGINE_REPORT",
+      "client": null,
+      "at": "2026-11-27T23:41:02.510Z",
+      "seq": 57
+    },
+    {
+      "fromMode": "default",
+      "toMode": "auto",
+      "cause": "RUNNER_CORRECTION",
+      "client": null,
+      "at": "2026-11-27T23:41:02.510Z",
+      "seq": 58
+    },
+    {
+      "fromMode": "auto",
+      "toMode": "default",
+      "cause": "ENGINE_REPORT",
+      "client": null,
+      "at": "2026-11-27T23:41:02.510Z",
+      "seq": 59
+    },
+    {
+      "fromMode": "default",
+      "toMode": "auto",
+      "cause": "RUNNER_CORRECTION",
+      "client": null,
+      "at": "2026-11-27T23:41:02.510Z",
+      "seq": 60
+    },
+    {
+      "fromMode": "auto",
+      "toMode": "default",
+      "cause": "ENGINE_REPORT",
+      "client": null,
+      "at": "2026-11-27T23:41:02.510Z",
+      "seq": 61
+    },
+    {
+      "fromMode": "default",
+      "toMode": "auto",
+      "cause": "RUNNER_CORRECTION",
+      "client": null,
+      "at": "2026-11-27T23:41:02.510Z",
+      "seq": 62
+    },
+    {
+      "fromMode": "auto",
+      "toMode": "default",
+      "cause": "ENGINE_REPORT",
+      "client": null,
+      "at": "2026-11-27T23:41:02.548Z",
+      "seq": 63
+    },
+    {
+      "fromMode": "default",
+      "toMode": "auto",
+      "cause": "RUNNER_CORRECTION",
+      "client": null,
+      "at": "2026-11-27T23:41:02.548Z",
+      "seq": 64
+    },
+    {
+      "fromMode": "auto",
+      "toMode": "default",
+      "cause": "ENGINE_REPORT",
+      "client": null,
+      "at": "2026-11-27T23:41:02.548Z",
+      "seq": 65
+    },
+    {
+      "fromMode": "default",
+      "toMode": "auto",
+      "cause": "RUNNER_CORRECTION",
+      "client": null,
+      "at": "2026-11-27T23:41:02.548Z",
+      "seq": 66
+    },
+    {
+      "fromMode": "auto",
+      "toMode": "default",
+      "cause": "ENGINE_REPORT",
+      "client": null,
+      "at": "2026-11-27T23:41:02.548Z",
+      "seq": 67
+    },
+    {
+      "fromMode": "default",
+      "toMode": "auto",
+      "cause": "RUNNER_CORRECTION",
+      "client": null,
+      "at": "2026-11-27T23:41:02.548Z",
+      "seq": 68
+    },
+    {
+      "fromMode": "auto",
+      "toMode": "default",
+      "cause": "ENGINE_REPORT",
+      "client": null,
+      "at": "2026-11-27T23:41:02.548Z",
+      "seq": 69
+    },
+    {
+      "fromMode": "default",
+      "toMode": "auto",
+      "cause": "RUNNER_CORRECTION",
+      "client": null,
+      "at": "2026-11-27T23:41:02.548Z",
+      "seq": 70
+    },
+    {
+      "fromMode": "auto",
+      "toMode": "default",
+      "cause": "ENGINE_REPORT",
+      "client": null,
+      "at": "2026-11-27T23:41:02.585Z",
+      "seq": 71
+    },
+    {
+      "fromMode": "default",
+      "toMode": "auto",
+      "cause": "RUNNER_CORRECTION",
+      "client": null,
+      "at": "2026-11-27T23:41:02.585Z",
+      "seq": 72
+    },
+    {
+      "fromMode": "auto",
+      "toMode": "default",
+      "cause": "ENGINE_REPORT",
+      "client": null,
+      "at": "2026-11-27T23:41:02.585Z",
+      "seq": 73
+    },
+    {
+      "fromMode": "default",
+      "toMode": "auto",
+      "cause": "RUNNER_CORRECTION",
+      "client": null,
+      "at": "2026-11-27T23:41:02.585Z",
+      "seq": 74
+    },
+    {
+      "fromMode": "auto",
+      "toMode": "default",
+      "cause": "ENGINE_REPORT",
+      "client": null,
+      "at": "2026-11-27T23:41:02.585Z",
+      "seq": 75
+    },
+    {
+      "fromMode": "default",
+      "toMode": "auto",
+      "cause": "RUNNER_CORRECTION",
+      "client": null,
+      "at": "2026-11-27T23:41:02.585Z",
+      "seq": 76
+    }
+  ],
+  "hasMore": true
+}
