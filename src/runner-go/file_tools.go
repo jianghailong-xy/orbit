@@ -65,7 +65,7 @@ func fileDoorRoute(sessionID string) string {
 	return "/runner/sessions/" + sessionID + "/files" + subagentRunQuery()
 }
 
-// subagentRunQuery names the SubAgent run this process belongs to, if any, on a call that keeps a file. The session is
+// subagentRunQuery names the SubAgent run this process belongs to, if any, on a call that keeps or reads a file. The session is
 // the parent's, which a remote SubAgent's runner does not host: the server lets the run's target runner in by it
 // (docs/subagent-design.md §10.2).
 func subagentRunQuery() string {
@@ -257,7 +257,7 @@ func (t *Transport) createFileBundle(sessionID, name, label string, files []bund
 
 func (t *Transport) describeFile(sessionID, fileID string) (sessionFile, error) {
 	var out sessionFile
-	err := t.do(nil, http.MethodGet, "/runner/sessions/"+sessionID+"/files/"+url.PathEscape(fileID), nil, &out, taskOpTimeout)
+	err := t.do(nil, http.MethodGet, "/runner/sessions/"+sessionID+"/files/"+url.PathEscape(fileID)+subagentRunQuery(), nil, &out, taskOpTimeout)
 	return out, err
 }
 
@@ -292,7 +292,7 @@ func (t *Transport) downloadFile(parent context.Context, sessionID, fileID, name
 func (t *Transport) downloadFileOnce(parent context.Context, sessionID, fileID, name, want string, keep io.Writer) (string, string, int64, error) {
 	ctx, cancel := context.WithTimeout(parent, fileCallTimeout)
 	defer cancel()
-	route := "/runner/sessions/" + sessionID + "/attachments/" + url.PathEscape(fileID)
+	route := "/runner/sessions/" + sessionID + "/attachments/" + url.PathEscape(fileID) + subagentRunQuery()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, t.baseURL+"/api"+route, nil)
 	if err != nil {
 		return "", "", 0, err

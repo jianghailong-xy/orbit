@@ -5893,7 +5893,8 @@ export class RunnerApiController {
    * (not the user-JWT /api/attachments/:id): the session must be one this runner owns, and the
    * file one that session may read (`FilesService.readableInSession`): its own, or one cited by
    * evidence it judges. So a runner can't read another tenant's blobs. Streamed from the file
-   * store, or from the row for one stored before it.
+   * store, or from the row for one stored before it. A remote SubAgent's `file_fetch` reads as its parent's session by
+   * naming its run (sessionOfRemoteSubagent, docs/subagent-design.md §10.2).
    */
   @UseGuards(RunnerAuthGuard)
   @StaysOnHttps()
@@ -5903,8 +5904,11 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Param('attId', PublicIdPipe) attId: string,
     @Res({ passthrough: true }) res?: Response,
+    @Query('subagentRunId', PublicIdPipe) subagentRunId?: string,
   ): Promise<StreamableFile> {
-    const session = await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
+    const ownerId = (runner as { ownerId?: string }).ownerId;
+    const session = (await sessionOfRemoteSubagent(this.prisma, { id: runner.id, ownerId }, sessionId, subagentRunId))
+      ?? (await this.assertSessionOwnership(sessionId, runner.id, ownerId));
     const file = await this.files.open(await this.files.readableInSession(session, attId));
     if (!file) throw new NotFoundException('attachment not found');
     return streamable(file, res);
