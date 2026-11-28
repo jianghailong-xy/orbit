@@ -1661,7 +1661,7 @@ struct TranscriptView: View {
                              canPageOlder: canPageOlder,
                              showWorkingIndicator: console.showWorkingIndicator,
                              running: console.state.status == .running,
-                             decisionCards: console.decisionCards,
+                             decisionCards: console.decisionCards + console.permissionModeCards,
                              clocks: console.receiptClocks,
                              conversationCreatedAt: app.session(id: console.sessionID)?.createdAt,
                              recap: recapCard,

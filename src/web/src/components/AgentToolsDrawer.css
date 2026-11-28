@@ -39,6 +39,14 @@
   line-height: 1.55;
   color: var(--text-1);
 }
+/* The gap between the mode running and the one asked for, in the Mode capsule's words. */
+.agent-tools-mode-gap {
+  border-bottom: 1px solid var(--border-subtle);
+}
+.agent-tools-mode-gap b {
+  color: var(--warning);
+  font-weight: 600;
+}
 .agent-tools-foot {
   margin: 7px 0 0;
   font-size: 11.5px;

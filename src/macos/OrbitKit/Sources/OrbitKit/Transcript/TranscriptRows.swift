@@ -168,6 +168,9 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         case scheduleRunStrip(runID: String)
         /// What that run reported, after its last event: placed at the run's end.
         case scheduleRunReport(runID: String)
+        case permissionModeChange(SessionPermissionModeChange)
+        /// A correction Claude refused (`PermissionModeRefusal`), placed at the runner's report.
+        case permissionModeRefusal(PermissionModeRefusal)
 
         /// Historical records obey the conversation's creation boundary when placed by moment.
         /// A promotion approval placed by moment is a blocked candidate's record.
@@ -175,7 +178,7 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
             switch self {
             case .criteriaDecisionReceipt, .evidenceDecisionReceipt,
                  .acceptanceConfirmationReceipt, .ownerDecisionReceipt, .promotionReceipt,
-                 .coordinatorQuestionRecord, .promotionApproval:
+                 .coordinatorQuestionRecord, .promotionApproval, .permissionModeChange, .permissionModeRefusal:
                 return true
             default:
                 return false
@@ -276,6 +279,8 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         case .scheduleChangeOpening:              return "schedule-change-opening"
         case .scheduleRunStrip(let runID):        return "schedule-run-strip-\(PublicID.storageKey(runID))"
         case .scheduleRunReport(let runID):       return "schedule-run-report-\(PublicID.storageKey(runID))"
+        case .permissionModeChange(let change): return change.rowID
+        case .permissionModeRefusal(let refusal): return refusal.rowID
         }
     }
 }
@@ -442,7 +447,8 @@ public enum DeliveryAnchor {
              .evidenceDecision, .ownerDecisionReceipt, .evidenceDecisionReceipt,
              .promotionApproval, .promotionReceipt, .coordinatorQuestion,
              .coordinatorQuestionRecord, .escalatedItem, .fusePause, .ownerRequest, .crossingBatch,
-             .scheduleCard, .scheduleRecord, .scheduleChangeOpening, .scheduleRunStrip, .scheduleRunReport:
+             .scheduleCard, .scheduleRecord, .scheduleChangeOpening, .scheduleRunStrip, .scheduleRunReport,
+             .permissionModeChange, .permissionModeRefusal:
             return items.last?.id
         }
     }

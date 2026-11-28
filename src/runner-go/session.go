@@ -2312,6 +2312,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	var contextReset atomic.Bool
 	contextReset.Store(!firstSpawn)
 	args := claudeCommandArgs(job, scratchDir, firstSpawn)
+	// This process's one chance to put an engine that settles below the Auto it is spawned with back in
+	// Auto, judged on its first init frame (claude_mode_correction.go).
+	modeFix := newClaudeModeCorrection(args)
 	// What this process's running totals start from, read from the transcript --resume is about to
 	// read, before it reads it: every completion it sends carries it (claude_running_totals.go).
 	runningTotals := claudeRunningTotals(job, execDir, firstSpawn)
@@ -2929,7 +2932,10 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				// `interrupt` queued behind it waits out the deadline — only ever reached by a CLI
 				// that has stopped servicing control at all, which would have left the interrupt
 				// unanswered too.
-				frames, err := setConfigFrames(resp.Content, job.Agent)
+				// The mode is judged against the one the engine said it runs in, too: a process spawned in Auto
+				// that settled lower still reads `auto` in job.Agent, and the Auto the control plane hands has to
+				// reach it as a frame (setConfigFramesFor, claude_mode_correction.go).
+				frames, err := setConfigFramesFor(resp.Content, job.Agent, modeFix.engineMode())
 				if err != nil {
 					// The control plane builds this payload with JSON.stringify, so an unreadable
 					// one is version skew rather than anything a person did. Nothing to apply, and
@@ -2938,6 +2944,14 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 					logln("unreadable setconfig payload for", job.SessionID+":", err)
 					settleSetConfigTurn(resp.TurnID, "unreadable payload: "+err.Error(), job, completeTurn)
 					continue
+				}
+				for _, f := range frames {
+					if f.subtype == ctrlSetPermissionMode {
+						// The mode the session's config now names (the owner's pick, or a change Orbit made)
+						// is about to reach the engine, and no correction may overtake it
+						// (claude_mode_correction.go).
+						modeFix.supersede()
+					}
 				}
 				var refused error
 				for _, f := range frames {
@@ -2967,6 +2981,11 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				}
 				job.notePermissionMode(job.Agent.PermissionMode)
 				if refused == nil {
+					for _, f := range frames {
+						if f.subtype == ctrlSetPermissionMode {
+							modeFix.took(job.Agent.PermissionMode)
+						}
+					}
 					// In place: no procCancel, no reloadRequested, and so no `resumed` marker
 					// either. Nothing was resumed, and a transcript that says otherwise teaches
 					// people to read a restart into every setting they change.
@@ -3158,11 +3177,13 @@ scanLoop:
 		if msg["type"] == "system" && msg["subtype"] == "init" {
 			version, _ := msg["claude_code_version"].(string)
 			rt.noteAnnouncedVersion(version)
-			// The same frame names the MCP servers it started and the tools and skills it has: the
-			// session's Agent Tools report, in the engine's own words. A subagent's init is not the session's.
-			if msg["parent_tool_use_id"] == nil {
-				agentTools.send(claudeAgentToolsReport(job, msg), emit)
-			}
+		}
+		// The init frame also names the MCP servers it started, the tools and skills it has and its mode: the
+		// session's Agent Tools report, in the engine's own words, restated with the mode each status frame
+		// names. Then the first turn's mode is judged against the Auto the process may have been spawned with
+		// (claude_mode_correction.go). A subagent's frames are not the session's.
+		if p := claudeEngineModeFrame(job, rt, msg, &agentTools, modeFix, emit); p != nil {
+			go modeFix.report(procCtx, rt, p, emit, job.SessionID)
 		}
 		if msg["type"] == "system" && msg["subtype"] == "compact_boundary" {
 			compactedThisTurn = true

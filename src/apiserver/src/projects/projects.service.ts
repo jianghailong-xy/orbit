@@ -5712,7 +5712,7 @@ export class ProjectsService {
     // A coordinator opens in the account's default mode, so a session that may not start that may
     // not open one. Refused rather than narrowed: the project's standing conversation would keep the
     // narrower mode, and everything it starts after it.
-    const assertMayOpen = () => this.sessions.assertMayStartAtAccountDefault(
+    const assertMayOpen = () => this.sessions.assertMayStartInMode(
       ownerId,
       actingSessionId,
       { workspaceId: project.coordinatorWorkspaceId, anchor: () => previousCoordinatorAnchor(this.prisma, project.id) },

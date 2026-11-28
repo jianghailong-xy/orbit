@@ -55,7 +55,10 @@ import io.orbitd.android.R
 import io.orbitd.android.attachments.*
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.DshRuntime
+import io.orbitd.android.core.cards.ModeCapsule
+import io.orbitd.android.core.cards.PermissionModeDisplay
 import io.orbitd.android.core.cards.WatchWakeQueue
+import io.orbitd.android.core.protocol.PermissionModes
 import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.realtime.SessionState
 import io.orbitd.android.management.EngineAccounts
@@ -257,10 +260,23 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
     // name already carries its effort and settings; a model DeepSeek Harness picks has none to name.
     val chipEffort = if (cursorModel != null || dshPicks) null else effortLabel(effective.text("effort")) +
         if (effective.flag("fastMode") == true && state.catalog?.fast(shownEngine, effective.text("provider") ?: shownEngine, effective.text("model").orEmpty()) == true) " · Fast" else ""
-    // The permission mode beside `+` (iOS `modeMenu`): what the session runs in, by the shared table's name.
-    // Always shown, as iOS's: one the session names, else the mode it runs in with none named (Default; Cursor CLI's Accept Edits).
-    val modeValue = shownPermissionMode(effective, shownEngine)
-    val modeLabel = personalPermissions.firstOrNull { it.first == modeValue }?.second ?: modeValue
+    // The permission mode beside `+` (iOS `modeMenu`): the mode the session runs in, as the server recorded it, and any gap from the
+    // one asked for (board permission-mode-actual A1); before a run starts, what it starts in (C1). Never a guess made here.
+    val startsNext = runStartsNext(detail, target != null)
+    var modeTick by remember { mutableIntStateOf(0) }
+    val modeEvents = session?.transcript?.events.orEmpty()
+    val capsule = remember(detail, effective, shownEngine, state.catalog, target, modeTick, modeEvents) {
+        modeCapsule(detail, effective, shownEngine, state.catalog, target != null, modeClock(), modeEvents)
+    }
+    // Claude's report reads as being switched back for a minute; past that it is drawn again, as the gap it is.
+    val correctingAt = PermissionModes.changes(detail).lastOrNull()?.at?.takeIf { capsule.gap == ModeCapsule.Gap.CORRECTING }
+    LaunchedEffect(correctingAt) {
+        val ends = correctingAt?.let(PermissionModeDisplay::correctionEnds) ?: return@LaunchedEffect
+        kotlinx.coroutines.delay(maxOf(0L, ends.toEpochMilli() - modeClock().toEpochMilli()) + 100); modeTick++
+    }
+    // A gap is explained by the model's name where it has no Auto, which the catalogue says: read it as the gap shows.
+    LaunchedEffect(model, capsule.gap != null) { if (capsule.gap != null && state.catalog == null && !state.catalogLoading) model.loadCatalog() }
+    val modeLabel = capsule.label
     // The plan's binding window, which the gauge draws beside the ring once the catalogue that reports it is in.
     val planRow = state.catalog?.usage(effective)?.let { io.orbitd.android.management.bindingRow(it, System.currentTimeMillis()) }
     var modeMenu by remember { mutableStateOf(false) }
@@ -367,7 +383,7 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                 val optimizeStyle = MaterialTheme.typography.labelMedium
                 BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = (TOOLBAR_EDGE / 2).dp).padding(bottom = 4.dp)) {
                     val fixed = TOOLBAR_PLUS + TOOLBAR_SEND + (if (planRow != null) TOOLBAR_CAPSULE else TOOLBAR_RING) +
-                        measure(modeLabel, toolbarStyle.copy(fontWeight = FontWeight.Medium)) + TOOLBAR_TEXT_PAD
+                        measure(modeLabel, toolbarStyle.copy(fontWeight = FontWeight.Medium)) + modeMarkWidth(capsule.gap) + TOOLBAR_TEXT_PAD
                     val chipWithEffort = measure(chipName, toolbarStyle.copy(fontWeight = FontWeight.SemiBold)) + TOOLBAR_TEXT_PAD +
                         (chipEffort?.let { 5f + measure(it, toolbarStyle) } ?: 0f) + (if (smart != null) 30f else 0f)
                     // PromptOptimizeButton's full pill: its mark (✦, or the 12 dp spinner), 4 dp, the word, 9 dp each side, 2 dp around.
@@ -404,14 +420,13 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                                     onClick = { menu = false; model.control("auto-retry", HttpMethod.DELETE) })
                             }
                         }
-                        modeLabel.let { label ->
-                            Box {
-                                ToolbarMode(label, enabled = usable && !state.busy && draft.pending == null && draft.createdSessionId == null) {
-                                    modeMenu = true; model.loadCatalog()
-                                }
-                                DropdownMenu(modeMenu, onDismissRequest = { modeMenu = false }) {
-                                    PermissionModeItems(model, state, effective, usable) { modeMenu = false }
-                                }
+                        Box {
+                            ToolbarMode(capsule, enabled = usable && !state.busy && draft.pending == null && draft.createdSessionId == null) {
+                                modeMenu = true; model.loadCatalog()
+                            }
+                            DropdownMenu(modeMenu, onDismissRequest = { modeMenu = false }) {
+                                ModeMenuHead(capsule)
+                                PermissionModeItems(model, state, effective, usable, startsNext, capsule.gap != null) { modeMenu = false }
                             }
                         }
                         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
@@ -484,7 +499,7 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
         }, confirmButton = { TextButton(onClick = { slashScope = null }) { Text("Close") } })
     }
     if (models && session?.accessDenied != true) ModelChoices(model, state, effective, usable, smart, detail.text("taskId"), openTask,
-        openRunner) { models = false }
+        openRunner, startsNext) { models = false }
     if (queued) AlertDialog(onDismissRequest = { queued = false }, title = { Text("Queued messages") }, text = {
         Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
             if (session?.fresh != true) Text("Reconnect to check the queue.")
@@ -627,12 +642,15 @@ internal fun shownPermissionMode(detail: JsonObject, engine: String): String =
     detail.text("permissionMode")?.takeIf { it.isNotEmpty() } ?: CursorRuntime.unsetMode(engine)
 
 /**
- * The toolbar's permission mode menu (iOS `modeMenu`): the modes the engine offers for this model, ✓ on the one in use, each written
- * to the session as the model menu's Permissions rows do. Cursor CLI lists Default too, greyed with why (D6, iOS 6 ①); the menu waits
- * for the catalogue that says which modes there are.
+ * The toolbar's permission mode menu (iOS `modeMenu`): the modes the engine offers for this model, ✓ on the one asked for, each written
+ * to the session as the model menu's Permissions rows do. Cursor CLI lists Default too, greyed with why (D6, iOS 6 ①); Auto on a Claude
+ * model with none stays a pick, saying what it starts in, or runs as once the run has started (board permission-mode-actual C1,
+ * [startsNext]). While the engine runs another mode than the one asked for ([gap]), picking that one again asks for it again. The menu
+ * waits for the catalogue that says which modes there are.
  */
 @Composable
-internal fun PermissionModeItems(model: ComposerModel, state: ComposerState, detail: JsonObject, usable: Boolean, close: () -> Unit) {
+internal fun PermissionModeItems(model: ComposerModel, state: ComposerState, detail: JsonObject, usable: Boolean, startsNext: Boolean = false,
+    gap: Boolean = false, close: () -> Unit) {
     val catalog = state.catalog
     if (catalog == null) {
         DropdownMenuItem(text = { Text(state.catalogError ?: "Loading…") }, enabled = state.catalogError != null, onClick = model::loadCatalog)
@@ -643,11 +661,13 @@ internal fun PermissionModeItems(model: ComposerModel, state: ComposerState, det
     val listed = if (engine == CursorRuntime.ENGINE && modes.isNotEmpty()) listOf("default") + modes else modes
     val current = shownPermissionMode(detail, engine)
     val enabled = usable && !state.busy && state.draft.pending == null
+    val noAuto = noAutoModel(catalog, engine, detail.text("provider") ?: engine, detail.text("model").orEmpty())
     listed.forEach { mode ->
         ModeMenuItem(personalPermissions.firstOrNull { it.first == mode }?.second ?: mode, mode == current,
-            if (engine == CursorRuntime.ENGINE) CursorRuntime.modeNote(mode) else null, enabled && mode in modes,
-            Modifier.testTag("composer-toolbar-mode:$mode")) {
-            close(); if (mode != current) model.config(buildJsonObject { put("permissionMode", mode) })
+            if (engine == CursorRuntime.ENGINE) CursorRuntime.modeNote(mode)
+            else noAuto?.takeIf { mode == PermissionModes.AUTO }?.let { PermissionModeDisplay.autoNote(it, startsNext) },
+            enabled && mode in modes, Modifier.testTag("composer-toolbar-mode:$mode")) {
+            close(); if (mode != current || gap && !startsNext) model.config(buildJsonObject { put("permissionMode", mode) })
         }
     }
 }
@@ -678,7 +698,7 @@ internal fun SmartRouteNote(route: JsonObject) = Column(Modifier.testTag("compos
 
 @Composable
 private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: JsonObject, usable: Boolean, smart: JsonObject?,
-    taskId: String?, openTask: ((String) -> Unit)?, openRunner: ((String, String) -> Unit)?, close: () -> Unit) {
+    taskId: String?, openTask: ((String) -> Unit)?, openRunner: ((String, String) -> Unit)?, startsNext: Boolean, close: () -> Unit) {
     val catalog = state.catalog
     val provider = detail.text("provider") ?: ""
     // The session's engine, which nothing here changes (contract §3.5): the menu opens on it, and every row below is its.
@@ -740,12 +760,15 @@ private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: Jso
             val modes = catalog?.permissions(engine, provider, chosen).orEmpty()
             val listed = if (engine == CursorRuntime.ENGINE && modes.isNotEmpty()) listOf("default") + modes else modes
             val current = detail.text("permissionMode")
+            // Auto on a Claude model with none stays a pick, as in the toolbar's menu (board permission-mode-actual C1).
+            val noAuto = noAutoModel(catalog, engine, provider.ifEmpty { engine }, chosen)
             if (listed.isNotEmpty()) { Text("Permissions"); listed.forEach { mode ->
                 TextButton(enabled = enabled && mode in modes, onClick = { change("permissionMode", mode) }, modifier = Modifier.testTag("composer-mode:$mode")) {
                     Column {
                         Text((if (mode == current) "✓ " else "") + (personalPermissions.firstOrNull { it.first == mode }?.second ?: mode))
                         // What the mode does there, in the shared table's words, where it does less than its name says.
-                        (if (engine == CursorRuntime.ENGINE) CursorRuntime.modeNote(mode) else null)?.let {
+                        (if (engine == CursorRuntime.ENGINE) CursorRuntime.modeNote(mode)
+                            else noAuto?.takeIf { mode == PermissionModes.AUTO }?.let { PermissionModeDisplay.autoNote(it, startsNext) })?.let {
                             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }

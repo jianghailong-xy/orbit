@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -596,6 +597,12 @@ func readModelCatalog(ctx context.Context, runtimes []catalogRuntime, signedOut 
 		if rt.engine == providerClaude && signedOut(rt.engine) {
 			for i := range models {
 				models[i].FastMode = nil
+				// The probe ran under no account, while the sessions run under theirs. Its "no Auto"
+				// is not an answer about the accounts that will run the model, so it is unknown; a
+				// signed-out "auto" (what Claude Code 2.1.329 settles on with an empty config) stands.
+				if !slices.Contains(models[i].PermissionModes, "auto") {
+					models[i].PermissionModes = nil
+				}
 			}
 		}
 		*catalog.models(rt.engine) = models
@@ -625,7 +632,12 @@ func mergeModelCatalog(prev, next *ModelCatalog, signedOut map[string]bool) *Mod
 // otherwise blank the other provider until the next hourly refresh. The clients read Codex context
 // windows from this catalog and nowhere else, so a blanked list is a visibly wrong context gauge.
 func carryOverModelCatalog(prev, next *ModelCatalog) *ModelCatalog {
-	if prev == nil || next == nil {
+	if next == nil {
+		return next
+	}
+	if prev == nil {
+		// The first round after a start has nothing to carry, but its "no Auto" is still one reading.
+		next.Claude = carryOverModelCapabilities(nil, next.Claude)
 		return next
 	}
 	if len(next.Codex) == 0 {
@@ -659,29 +671,63 @@ func carryOverModelCatalog(prev, next *ModelCatalog) *ModelCatalog {
 // the list itself they can go missing one model at a time — and a single timed-out probe would
 // otherwise take Auto and the fast lane away from a model that has both, for the four hours until
 // the next refresh. That silent downgrade is the thing the per-model report exists to end, so it
-// must not be reintroduced by the report's own flakiness. A row that DID answer always wins,
-// including when it answers "no".
+// must not be reintroduced by the report's own flakiness. A fast-lane answer that DID come back
+// always wins, including a "no". Auto is the exception (see claudeAutoWithdrawReadings): a reading
+// with Auto wins at once, but a reading without it is reported only once enough trusted readings in
+// a row agree. Until then the row keeps what it reported before, or stays unknown if it had nothing.
 func carryOverModelCapabilities(prev, next []ModelInfo) []ModelInfo {
-	if len(prev) == 0 {
-		return next
-	}
 	previous := make(map[string]ModelInfo, len(prev))
 	for _, model := range prev {
 		previous[model.Value] = model
 	}
 	for i, model := range next {
-		was, known := previous[model.Value]
-		if !known {
-			continue
-		}
-		if model.PermissionModes == nil {
-			next[i].PermissionModes = was.PermissionModes
-		}
+		was := previous[model.Value]
+		next[i].PermissionModes, next[i].autoMissStreak = settleAutoReading(was, model.PermissionModes)
 		if model.FastMode == nil {
 			next[i].FastMode = was.FastMode
 		}
 	}
 	return next
+}
+
+// claudeAutoWithdrawReadings is how many trusted probe readings in a row must find a model without
+// Auto before its catalog row stops listing Auto.
+//
+// Why 3. The server and every client treat the row as authoritative: both claim paths lower an Auto
+// session to Default from it (queue.service.ts and runner-api.controller.ts read the same
+// runner.model_catalog), so one wrong "no" puts every Claude session on the runner in Default until
+// the next round. The root-cause report for 2026-11-18/19 (task 350TVt0PlVghUxkABob6z, file
+// 350dC0p6DSsC4gjJdgl2Z) shows how costly that is: ~31 Default first starts in 12 hours and 22 Auto
+// switches made by hand. It also shows there is no record of the probe's readings to fit a rate to
+// (its U5: the runner does not log them, the server keeps no catalog history), so the number is set
+// by cost, not by a measured flip rate:
+//   - Withdrawing late costs almost nothing: a model that really lost Auto settles on Default when
+//     asked for Auto (the CLI downgrades silently), which is what an early withdrawal would have
+//     given it anyway.
+//   - Withdrawing early costs every session on the runner.
+//   - Rounds are hourly, but an engine update or a sign-in also triggers one (refreshModelCatalog),
+//     so two readings can be seconds apart and see the same passing state. Three in a row spans at
+//     least one hourly tick, and a lasting change is still reported within about two hours.
+//
+// A reading with Auto is trusted at once and resets the count: wrongly granting Auto lets the
+// session ask for it and settle on Default, which is no worse than the withdrawal.
+const claudeAutoWithdrawReadings = 3
+
+// settleAutoReading is the permission modes a model row reports after this round's reading, and the
+// row's new count of consecutive readings without Auto. A nil reading is unknown: it neither counts
+// nor resets, and the row keeps its previous answer.
+func settleAutoReading(was ModelInfo, reading []string) ([]string, int) {
+	if reading == nil {
+		return was.PermissionModes, was.autoMissStreak
+	}
+	if slices.Contains(reading, "auto") {
+		return reading, 0
+	}
+	streak := was.autoMissStreak + 1
+	if streak >= claudeAutoWithdrawReadings {
+		return reading, streak
+	}
+	return was.PermissionModes, streak
 }
 
 // Older servers omitted status and reclaimed RUNNING sessions only. Newer
@@ -1570,6 +1616,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// A full runner names the claims it can still start, and gives back one it cannot (session_pool.go claimScope,
 	// waitActive), where the control plane says it takes them (HeartbeatResponse.CapacityClaims).
 	t.fullClaimScope = pool.claimScope
+	// A claim and a reclaim name the engines running here, whose own report of their mode a claim must not overwrite.
+	t.residentEngines = pool.residentEngineSessionIDs
 	pool.returnFullSlot = t.returnFullSlot
 	t.returnHeldSlot = func(sessionID string) {
 		pool.returnHeldSlot(sessionID, func() (string, error) {

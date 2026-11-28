@@ -12,7 +12,7 @@ import {
   TaskStatus,
 } from '@prisma/client';
 import { RunStatus } from '@orbit/shared';
-import { RunEventType } from '@orbit/shared';
+import { AgentProvider, PermissionMode, RunEventType } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -324,6 +324,39 @@ test('one wake opens exactly one judgment session, and five deliveries of the fa
       assert.equal(wakes.length, 1);
       assert.equal(wakes[0].status, 'SESSION_OPENED');
       assert.equal(wakes[0].sessionId, sessions[0].id, 'the ledger names the session it opened');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('a coordinator judgment is stored and claimed in Auto with a Default account preference',
+  { skip, timeout: 120_000 }, async () => {
+    assertCoordinatorPgUrlIsIsolated(URL!);
+    const stack = connect();
+    try {
+      const project = await fixture(stack.db, 'judgment-start-mode');
+      const workspace = await stack.db.workspace.findUniqueOrThrow({ where: { id: project.workspaceId } });
+      await stack.db.user.update({
+        where: { id: project.ownerId },
+        data: { preferences: { defaultPermissionMode: PermissionMode.DEFAULT } },
+      });
+      await stack.db.runner.update({
+        where: { id: workspace.runnerId! },
+        data: {
+          lastHeartbeatAt: new Date(), runtimeDefaultModels: { claude: 'claude-opus-5-5' },
+          modelCatalog: { claude: [{ value: 'claude-opus-5-5', label: 'Opus 5.5', permissionModes: ['auto'] }] },
+          engines: [{ engine: AgentProvider.CLAUDE, installed: true, auth: 'yes' }],
+        },
+      });
+      const outcome = await stack.judgments.wake(endedFact(project, randomUUID()), ALLOW);
+      assert.equal(outcome.outcome, 'OPENED');
+      const saved = await stack.db.session.findUniqueOrThrow({ where: { id: outcome.sessionId } });
+      assert.equal(saved.permissionMode, PermissionMode.AUTO);
+      const realtime = new Proxy({}, { get: () => () => undefined }) as RealtimeService;
+      const queue = new QueueService(stack.db as unknown as PrismaService, realtime);
+      const claim = await queue.claimSessionForRunner({ id: workspace.runnerId! });
+      assert.equal(claim?.sessionId, saved.id);
+      assert.equal(claim.agent.permissionMode, PermissionMode.AUTO);
     } finally {
       await stack.db.$disconnect();
     }

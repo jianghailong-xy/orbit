@@ -692,8 +692,16 @@ export class SessionsController {
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
     @Body() dto: SessionConfigDto,
+    @Headers('x-orbit-client') client?: string,
+    @Headers('x-orbit-device') device?: string,
+    @Headers('x-orbit-session-id') senderSessionId?: string,
   ) {
-    return this.sessions.updateConfig(user.userId, id, dto, user.credential);
+    // The owner's pick, and the app it came from (turn-sender-client.ts), which the mode change it causes names.
+    return this.sessions.updateConfig(user.userId, id, dto, user.credential, {
+      origin: 'OWNER',
+      senderClient: senderClientOfRequest(user.credential, client, device),
+      senderSessionId,
+    });
   }
 
   /** The session's Settings panel: its own env vars and notification overrides — see
@@ -713,8 +721,13 @@ export class SessionsController {
   @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Post(':id/restart')
   @HttpCode(202)
-  restart(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
-    return this.sessions.restart(user.userId, id);
+  restart(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Headers('x-orbit-client') client?: string,
+    @Headers('x-orbit-device') device?: string,
+  ) {
+    return this.sessions.restart(user.userId, id, senderClientOfRequest(user.credential, client, device));
   }
 
   /** Which of its runner's Codex or Claude accounts the session runs on — see switchAccount. */
@@ -724,8 +737,10 @@ export class SessionsController {
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
     @Body() dto: SessionAccountDto,
+    @Headers('x-orbit-client') client?: string,
+    @Headers('x-orbit-device') device?: string,
   ) {
-    return this.sessions.switchAccount(user.userId, id, dto?.account);
+    return this.sessions.switchAccount(user.userId, id, dto?.account, senderClientOfRequest(user.credential, client, device));
   }
 
   /** Rename a session's display title. Works on any session (live or ended) and never
@@ -1155,6 +1170,28 @@ export class SessionsController {
       limit: num(limit),
       maxPayload: parseMaxPayload(maxPayload),
     });
+  }
+
+  /**
+   * A page of the session's permission-mode changes, for a transcript that pages back past the newest ones its detail
+   * carries (`permissionModeChanges`, `permissionModeChangesHasMore`): `before=<seq>&limit=N` returns the N recorded
+   * just before that change, oldest first, and whether older ones remain; without `before`, the newest N. N is at
+   * most SESSION_PERMISSION_MODE_CHANGES_LIMIT, the default.
+   */
+  @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
+  @TerminalRoute('SESSION')
+  @Get(':id/permission-mode-changes')
+  permissionModeChangePage(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('before') before?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const num = (s?: string): number | undefined => {
+      const n = Number(s);
+      return s !== undefined && s !== '' && Number.isFinite(n) ? n : undefined;
+    };
+    return this.sessions.getPermissionModeChangePage(user.userId, id, { before: num(before), limit: num(limit) });
   }
 
   /**

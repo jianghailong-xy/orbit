@@ -13,6 +13,9 @@ import type {
   ReplyTranslationRetryResponse,
   SessionGuestPerson,
   SessionGuestSuggestion,
+  SessionPermissionModeChange,
+  SessionPermissionModeCorrectionRefusal,
+  SessionPermissionModeChangePage,
   TranslationActionResponse,
   TurnTranslation,
   SubagentRoutingReport,
@@ -472,6 +475,18 @@ export const getSessionEventPageAfter = (
   const qs = new URLSearchParams({ after: String(after), maxPayload: String(MAX_EVENT_PAYLOAD) });
   if (opts.limit != null) qs.set('limit', String(opts.limit));
   return api<TranscriptWindowPage>(`/sessions/${id}/events/page?${qs.toString()}`, { signal: opts.signal });
+};
+
+/** The session's permission-mode changes recorded just before the one numbered `before` (its `seq`), oldest first:
+ *  the page older than the newest ones its detail carries, read as the transcript pages back. */
+export const getSessionPermissionModeChanges = (
+  id: string,
+  opts: { before?: number; limit?: number; signal?: AbortSignal } = {},
+): Promise<SessionPermissionModeChangePage> => {
+  const qs = new URLSearchParams();
+  if (opts.before != null) qs.set('before', String(opts.before));
+  if (opts.limit != null) qs.set('limit', String(opts.limit));
+  return api<SessionPermissionModeChangePage>(`/sessions/${id}/permission-mode-changes?${qs.toString()}`, { signal: opts.signal });
 };
 
 /** The untrimmed payload of one event, fetched when the user expands a card that arrived
@@ -2139,6 +2154,19 @@ export interface SessionDetail {
    *  which can move to another one the engine runs (docs/provider-engine-contract.md §6.1). */
   engine?: string | null;
   provider?: string | null;
+  /** The owner's intent: the stored mode, which normalization never rewrites (SessionPermissionModeFacts). */
+  permissionMode?: string | null;
+  /** The mode the session's engine is actually running in, and when it was recorded: null until a claim records
+   *  one; optional, because an older server does not send it. */
+  actualPermissionMode?: string | null;
+  actualPermissionModeAt?: string | null;
+  /** How the mode running came to be: the newest changes, oldest first, each with what made it. */
+  permissionModeChanges?: SessionPermissionModeChange[];
+  /** Whether older changes than those are recorded (getSessionPermissionModeChanges); absent from an older server. */
+  permissionModeChangesHasMore?: boolean;
+  /** The newest correction to Auto Claude refused, while it still answers the newest change; null once a later change
+   *  supersedes it. Its event may have paged out of the conversation loaded. Absent from an older server. */
+  permissionModeCorrectionRefusal?: SessionPermissionModeCorrectionRefusal | null;
   /** The session's Agent Tools report (lib/agentTools): what its engine was given from Orbit and took, in the
    *  engine's own words. Null until the runner sends one; optional, because an older server does not send it. */
   agentTools?: AgentToolsReport | null;

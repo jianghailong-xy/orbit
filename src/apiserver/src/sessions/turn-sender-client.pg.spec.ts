@@ -37,11 +37,12 @@ import {
   SessionRunSource,
 } from '@prisma/client';
 import { RunStatus } from '@orbit/shared';
-import { uuidToBase62 } from '@orbit/shared';
+import { AgentProvider, PermissionMode, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 import { filter, map, Subject } from 'rxjs';
 
 import type { AuthUser } from '../common/current-user.decorator';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { sha256 } from '../common/crypto.util';
 import { publicIdHeaders } from '../common/public-id-headers';
 import { PublicIdInterceptor } from '../common/public-id.interceptor';
@@ -63,7 +64,9 @@ import { RunnerSessionsController } from '../runner-api/runner-sessions.controll
 import { ListEventsService } from '../task-lists/list-events.service';
 import { ReferenceExpansionService } from '../tasks/reference-expansion';
 import { TasksService } from '../tasks/tasks.service';
+import { AutoRetryService } from './auto-retry.service';
 import { MergeReceiptService } from './merge-receipt.service';
+import { SessionTagsService } from '../session-tags/session-tags.service';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
 import '../test-support/daemon-routes-over-http';
@@ -187,7 +190,7 @@ test('each turn says which client sent it, on the events page and the SSE, and n
 
   // ── the app: the real runner door, its guard, main.ts's middleware and interceptor ─────────────
   @Module({
-    controllers: [RunnerApiController],
+    controllers: [RunnerApiController, SessionsController],
     providers: [
       { provide: PrismaService, useValue: prisma },
       { provide: QueueService, useValue: queue },
@@ -201,6 +204,10 @@ test('each turn says which client sent it, on the events page and the SSE, and n
       { provide: ProjectAcceptanceService, useValue: {} },
       { provide: TasksService, useValue: {} },
       { provide: MergeReceiptService, useValue: {} },
+      { provide: SessionTagsService, useValue: {} },
+      { provide: AutoRetryService, useValue: {} },
+      { provide: JwtService, useValue: { verifyAsync: async () => ({ sub: ownerId }) } },
+      JwtAuthGuard,
       RunnerAuthGuard,
     ],
   })
@@ -213,6 +220,31 @@ test('each turn says which client sent it, on the events page and the SSE, and n
   app.useGlobalInterceptors(new PublicIdInterceptor());
   await app.listen(0, '127.0.0.1');
   const base = await app.getUrl();
+
+  await t.test('PATCH config attributes the setconfig and reload turns to the request sender', async () => {
+    const senderSessionId = await session('Calling session');
+    const select = { senderClient: true, senderClientDetail: true, senderSessionId: true };
+    for (const [engine, model, kind] of [
+      [AgentProvider.CLAUDE, 'claude-opus-5-5', 'setconfig'],
+      [AgentProvider.CODEX, 'gpt-5.5', 'reload'],
+    ] as const) {
+      const id = await session(`Configure ${engine}`, { engine, provider: engine, model });
+      const response = await fetch(`${base}/api/sessions/${uuidToBase62(id)}/config`, {
+        method: 'PATCH',
+        headers: {
+          authorization: 'Bearer owner',
+          'content-type': 'application/json',
+          'x-orbit-client': 'ios/1.0',
+          'x-orbit-device': 'ipad',
+          'x-orbit-session-id': uuidToBase62(senderSessionId),
+        },
+        body: JSON.stringify({ permissionMode: PermissionMode.PLAN }),
+      });
+      assert.equal(response.status, 200, await response.text());
+      const turn = await prisma.conversationTurn.findFirstOrThrow({ where: { sessionId: id, kind }, select });
+      assert.deepEqual(turn, { senderClient: 'ios', senderClientDetail: 'ipad', senderSessionId });
+    }
+  });
 
   async function http(method: 'GET' | 'POST', route: string, body?: unknown): Promise<Answer> {
     const response = await fetch(`${base}/api${route}`, {

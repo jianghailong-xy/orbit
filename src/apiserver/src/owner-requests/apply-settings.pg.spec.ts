@@ -25,7 +25,7 @@ import { test } from 'node:test';
 import { BadRequestException, ConflictException, ForbiddenException, HttpException, NotFoundException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin, type Runner } from '@prisma/client';
-import { RunStatus } from '@orbit/shared';
+import { PermissionMode, RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import type { AuthUser } from '../common/current-user.decorator';
@@ -35,6 +35,7 @@ import { PushService } from '../push/push.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { RunnerOwnerRequestsController } from '../runner-api/runner-owner-requests.controller';
 import { UpdatePreferencesDto } from '../users/dto';
+import { DEFAULT_PERMISSION_MODE_CHANGED_ACTIVITY } from '../users/preferences-merge';
 import { UsersController } from '../users/users.controller';
 import type { ProposeSettingsDto } from './dto';
 import { OwnerRequestsController } from './owner-requests.controller';
@@ -206,6 +207,28 @@ test('apply-settings: the owner saves a settings card, and each key it writes is
     // A conversation since deleted is named by no title.
     await db.session.update({ where: { id: acc.sessionId }, data: { deletedAt: new Date() } });
     assert.equal((await users.me(authOf(acc)))!.changedBy.theme.sessionTitle, null);
+  });
+
+  await t.test('a default-mode change records the approving owner, app, previous value and time', async () => {
+    const acc = await account(db, 'mode-audit');
+    const before = Date.now();
+    const id = await propose(acc, { defaultPermissionMode: 'default' });
+    await apply(acc, id);
+    await users.updatePreferences(authOf(acc), { defaultPermissionMode: PermissionMode.PLAN }, 'ios/1.0', 'iphone');
+    await users.updatePreferences(authOf(acc), { defaultPermissionMode: PermissionMode.PLAN }, 'macos/1.0');
+    await patch(acc, { theme: 'light' });
+    assert.equal((await preferences(acc)).defaultPermissionMode, 'plan');
+    const audit = await db.activity.findMany({
+      where: { actorId: acc.ownerId, type: DEFAULT_PERMISSION_MODE_CHANGED_ACTIVITY },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+    assert.deepEqual(audit.map(({ actorId, payload }) => ({ actorId, payload })), [
+      { actorId: acc.ownerId, payload: { from: null, to: 'default', client: 'web', clientDetail: null } },
+      { actorId: acc.ownerId, payload: { from: 'default', to: 'plan', client: 'ios', clientDetail: 'iphone' } },
+    ]);
+    for (const event of audit) {
+      assert.ok(event.createdAt.getTime() >= before && event.createdAt.getTime() <= Date.now());
+    }
   });
 
   await t.test('(6) only a SETTINGS_CHANGE card of the caller’s own is applied', async () => {

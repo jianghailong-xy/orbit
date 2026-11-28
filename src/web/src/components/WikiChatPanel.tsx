@@ -32,6 +32,8 @@ import {
   fastModeAvailable,
   runtimeTakesMidTurnSteer,
   wikiChatCardNeedsYou,
+  type SessionPermissionModeChange,
+  type SessionPermissionModeCorrectionRefusal,
   type SessionTurnIntent,
 } from '@orbit/shared';
 import {
@@ -46,7 +48,9 @@ import {
 import { Menu } from './ui/Menu';
 import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 import { ApprovalPanel } from './ApprovalPanel';
+import { useModeCapsule } from './ModeCapsule';
 import { PendingTray } from './PendingTray';
+import { modeChangeInserts } from './PermissionModeLine';
 import { SessionConversation } from './SessionConversation';
 import type { TurnImage } from './Transcript';
 import {
@@ -81,6 +85,7 @@ import { meQuery, providersQuery, runnersQuery, sessionQuery, wikiChatHistoryQue
 import { returnsToComposer } from '../lib/queuedTurnRestore';
 import { engineTitleFor } from '../lib/sessionProviderChoices';
 import { outlivingSessionWork } from '../lib/sessionActivity';
+import { autoMenuNote, modeCorrectionRefusals, standingRefusal, type StandingRefusal } from '../lib/sessionPermissionMode';
 import { isSessionLive, isSessionTerminal, sessionRetryPending, sessionRunStateOf, sessionRunStatusOf } from '../lib/sessionState';
 import { defaultSessionTurnIntent } from '../lib/sessionTurnIntent';
 import { sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
@@ -138,7 +143,7 @@ import {
   type WikiChatWorkspace,
 } from '../lib/wikiChat';
 import {
-  clampPermissionModeForModel,
+  clampPermissionModeForEngine,
   DEFAULT_PERMISSION_MODE,
   defaultModelFor,
   effectiveSessionModel,
@@ -634,7 +639,8 @@ const modeLabel = (value: string): string => MODE_OPTIONS.find((option) => optio
 
 /**
  * The composer toolbar's facts and picks for a chat, by the session page's own rules: the models of the engine and
- * provider the chat runs on, the mode and the effort as that model takes them, a fast lane where there is one, and a
+ * provider the chat runs on, the mode the engine runs in with any gap from the one picked
+ * (lib/sessionPermissionMode), the effort as that model takes it, a fast lane where there is one, and a
  * Cursor model's own settings. A pick says what it changes and `change` applies it — a new chat keeps it for its
  * create, a chat that runs writes its session's config — and, as on the session page, an effort picked is
  * remembered as the account's next.
@@ -647,6 +653,7 @@ function useChatToolbar({
   resolved,
   current,
   codexSandboxUnavailable,
+  recorded,
   change,
 }: {
   engine: AgentProvider;
@@ -656,6 +663,13 @@ function useChatToolbar({
   resolved: boolean;
   current: ChatConfig;
   codexSandboxUnavailable?: boolean;
+  /** What the server recorded of a live chat's mode, and when this tab last picked one; absent for a new chat. */
+  recorded?: {
+    actual?: string | null;
+    latest?: SessionPermissionModeChange | null;
+    pickedAt?: number | null;
+    refusal?: StandingRefusal | null;
+  };
   change: (next: ChatConfigChange) => void;
 }) {
   const qc = useQueryClient();
@@ -669,6 +683,15 @@ function useChatToolbar({
     : [{ value: shownModelName, label: shownModelName }, ...catalogModelOptions];
   const shownModelLabel = shownModelOptions.find((option) => option.value === shownModelName)?.label ?? shownModelName;
   const shownMode = modeLabel(current.permissionMode);
+  const modeFacts = {
+    intent: current.permissionMode,
+    engine,
+    modelHasAuto: !resolved || supportsAuto(shownModel, engine, provider, configured, catalog),
+    modelLabel: shownModelLabel,
+    runsAsRoot: runner?.runsAsRoot,
+  };
+  const modeCapsule = useModeCapsule({ ...modeFacts, ...recorded });
+  const autoModeNote = autoMenuNote(modeFacts, !!recorded?.actual);
   const shownEffort = normalizeEffortFor(engine, provider, current.effort, shownModel, catalog, configured);
   const shownEffortOptions = effortOptionsFor(engine, provider, shownModel, catalog, configured);
   const shownEffortLabel = shownEffortOptions.find((option) => option.value === shownEffort)?.label ?? shownEffort;
@@ -686,10 +709,10 @@ function useChatToolbar({
   const pickModel = (model: string): void => {
     // The pick is this chat's alone: no account-wide model memory is written (docs/workspace-default-model-design.md).
     if (model === shownModelName) return;
-    // A model that cannot run Auto drops it to Default, and an effort the model does not take goes too.
-    const drop = shownMode === 'Auto' && !supportsAuto(model, engine, provider, configured, catalog);
+    // An effort the model does not take goes too. The mode is not touched: on a model with no Auto the server runs an
+    // Auto chat as Default and keeps the intent (docs/mocks/permission-mode-actual).
     const effort = normalizeEffortFor(engine, provider, current.effort, model, catalog, configured);
-    change({ model, ...(drop ? { permissionMode: 'default' } : {}), ...(effort !== current.effort ? { effort } : {}) });
+    change({ model, ...(effort !== current.effort ? { effort } : {}) });
   };
   const pickEffort = (effort: string): void => {
     if (effort === shownEffort) return;
@@ -733,6 +756,9 @@ function useChatToolbar({
   return {
     shownModel,
     shownMode,
+    modeCapsule,
+    autoModeNote,
+    modeFacts,
     shownEffort,
     shownModelLabel,
     shownEffortLabel,
@@ -872,6 +898,8 @@ function sharedComposerProps(
     setWorkspaceId: () => undefined,
     ...modelMenu,
     shownMode: toolbar.shownMode,
+    modeCapsule: toolbar.modeCapsule,
+    autoModeNote: toolbar.autoModeNote,
     onDraftMode: toolbar.onMode,
     permissionSemanticsFor: toolbar.permissionSemanticsFor,
     modelMenuItems: toolbar.modelMenuItems,
@@ -939,16 +967,10 @@ function WikiChatNew({
       : defaultModelFor(engine, provider, catalog, machine.configured, machine.runner?.runtimeDefaultModels));
   const current: ChatConfig = {
     model,
+    // Only a mode the engine refuses outright is replaced; Auto on a model with no Auto stays the pick.
     permissionMode:
       picks.permissionMode ??
-      clampPermissionModeForModel(
-        me.data?.preferences?.defaultPermissionMode ?? DEFAULT_PERMISSION_MODE,
-        model,
-        engine,
-        provider,
-        machine.configured,
-        catalog,
-      ),
+      clampPermissionModeForEngine(me.data?.preferences?.defaultPermissionMode ?? DEFAULT_PERMISSION_MODE, engine),
     effort: picks.effort ?? row?.effort ?? me.data?.preferences?.defaultEffort ?? '',
     fastMode: picks.fastMode ?? false,
   };
@@ -1019,7 +1041,7 @@ function WikiChatNew({
           engine: ENGINE_CLI_NAMES[engine],
           provider,
           model: toolbar.shownModel,
-          permissionMode: toolbar.shownMode,
+          permissionMode: toolbar.modeCapsule.label,
           effort: toolbar.shownEffort,
           fastMode: toolbar.fastModeUsable && toolbar.shownFastMode,
           contextTokens: 0,
@@ -1200,6 +1222,11 @@ interface ChatSession {
   provider?: string | null;
   model?: string | null;
   permissionMode?: string | null;
+  /** The mode the server recorded the engine running in, and how it came to be, oldest first. */
+  actualPermissionMode?: string | null;
+  permissionModeChanges?: SessionPermissionModeChange[];
+  /** The newest correction Claude refused, while it still stands, whether or not its event is loaded. */
+  permissionModeCorrectionRefusal?: SessionPermissionModeCorrectionRefusal | null;
   codexSandboxUnavailable?: boolean;
   effort?: string | null;
   fastMode?: boolean | null;
@@ -1287,13 +1314,16 @@ function WikiChatSession({
   const permissionMode = session?.permissionMode ?? me.data?.preferences?.defaultPermissionMode ?? DEFAULT_PERMISSION_MODE;
   const current: ChatConfig = {
     model,
-    permissionMode: resolved ? clampPermissionModeForModel(permissionMode, model, engine, provider, machine.configured, catalog) : permissionMode,
+    permissionMode: resolved ? clampPermissionModeForEngine(permissionMode, engine) : permissionMode,
     effort: session?.effort ?? workspaceRow?.effort ?? '',
     fastMode: session?.fastMode === true,
   };
+  // When this tab last picked the chat's mode: while the pick travels to the engine, the capsule says it is switching.
+  const [modePickedAt, setModePickedAt] = useState<number | null>(null);
   const configMut = useMutation({
     mutationFn: (config: ChatConfigChange) => updateSessionConfig(sessionId, config),
     onMutate: async (config) => {
+      if (config.permissionMode !== undefined) setModePickedAt(Date.now());
       const key = sessionQuery(sessionId).queryKey;
       await qc.cancelQueries({ queryKey: key });
       const previous = qc.getQueryData(key);
@@ -1319,6 +1349,11 @@ function WikiChatSession({
       void qc.invalidateQueries({ queryKey: ['sessions'] });
     },
   });
+  // Only a live chat runs in a mode; an ended one's lines are no reason for a gap.
+  const recordedMode = live ? session?.actualPermissionMode : null;
+  const modeChanges = session?.deletedAt ? undefined : session?.permissionModeChanges;
+  // A correction Claude refused is a system event of the chat, not a mode change: read off the events loaded.
+  const modeRefusals = useMemo(() => modeCorrectionRefusals(stream.transcriptEvents), [stream.transcriptEvents]);
   const toolbar = useChatToolbar({
     engine,
     provider,
@@ -1327,6 +1362,13 @@ function WikiChatSession({
     resolved,
     current,
     codexSandboxUnavailable: session?.codexSandboxUnavailable,
+    recorded: {
+      actual: recordedMode,
+      latest: modeChanges?.at(-1) ?? null,
+      pickedAt: modePickedAt,
+      // The detail's, which stands whether or not its event is loaded; else the newest of those loaded.
+      refusal: standingRefusal(session?.permissionModeCorrectionRefusal, modeRefusals),
+    },
     change: (config) => configMut.mutate(config),
   });
   const online = runner?.online ?? false;
@@ -1497,7 +1539,7 @@ function WikiChatSession({
             engine: ENGINE_CLI_NAMES[engine],
             provider,
             model: toolbar.shownModel,
-            permissionMode: toolbar.shownMode,
+            permissionMode: toolbar.modeCapsule.label,
             effort: toolbar.shownEffort,
             fastMode: toolbar.fastModeUsable && toolbar.shownFastMode,
             contextTokens: tokens,
@@ -1551,6 +1593,23 @@ function WikiChatSession({
 
   const { decide, untranslated } = useApprovalDecisions(sessionId, setApprovals);
   const driveCards = useDriveChatCards(origin.cards ? sessionId : null, stream.transcriptEvents);
+
+  // Each recorded mode change where it happened, with who or what made it, as on the session page; one array,
+  // memoized, as the transcript wants its inserts.
+  const { intent, modelHasAuto, modelLabel, runsAsRoot } = toolbar.modeFacts;
+  const transcriptInserts = useMemo(
+    () => [
+      ...driveCards.inserts,
+      ...(modeChanges
+        ? modeChangeInserts(
+            modeChanges,
+            { intent, actual: recordedMode, engine, modelHasAuto, modelLabel, runsAsRoot, refusals: modeRefusals },
+            stream.transcriptEvents,
+          )
+        : []),
+    ],
+    [driveCards.inserts, modeChanges, intent, recordedMode, engine, modelHasAuto, modelLabel, runsAsRoot, modeRefusals, stream.transcriptEvents],
+  );
 
   // The card the chat was opened at: one named, or the first that needs the owner (design §3).
   const focusCard = useMemo(() => {
@@ -1611,7 +1670,7 @@ function WikiChatSession({
           stream={stream}
           live={live}
           turnImages={turnImages}
-          inserts={driveCards.inserts}
+          inserts={transcriptInserts}
           authErrorHelp={null}
           autoRetryHelp={null}
           restoreUndelivered={restoreUndelivered}

@@ -12,10 +12,10 @@
  *     account's default gives way to the session's own mode, and the answer says so; an engine that
  *     cannot keep that mode refuses it.
  *   - `task_start`, when it would open a session: refused while the session is narrower than the
- *     account's default. Continuing a paused run decides no mode.
+ *     Auto. Continuing a paused run decides no mode.
  *   - `task_update`, setting `runAt` or switching `autoRunWhenReady` on: the same refusal.
  *   - A coordinator's create card in an Automatic project: asked of a person while the coordinator is
- *     narrower than the account's default, and its task's run still takes that default.
+ *     narrower than Auto, and its task's run starts in Auto.
  *   - A coordinator's rotation and first open: the same refusal. Handing a live one a message is not.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/sessions/session-mode-ceiling.pg.spec.ts
@@ -460,27 +460,28 @@ test('a session cannot start a session wider than itself', {
     assert.equal((await runsOf(taskId)).length, 1);
   });
 
-  await t.test('task_start from a session the account default does not exceed starts the run in that default', async () => {
+  await t.test('task_start requires authority to start in Auto, regardless of the account default', async () => {
     // Auto, Bypass, and Don't Ask (which the table lets start Auto on Claude Code).
     for (const mode of ['auto', 'bypassPermissions', 'dontAsk']) {
       await accountDefault(null);
       const taskId = await taskFor(`from ${mode}`);
       const answer = await taskStart(taskId, await sessionIn(mode));
       assert.equal(answer.status, 201, answer.text);
-      assert.deepEqual((await runsOf(taskId)).map((run) => run.permissionMode), [null]);
+      assert.deepEqual((await runsOf(taskId)).map((run) => run.permissionMode), ['auto']);
     }
-    // Cursor CLI with no account default starts in its own, which an ask mode may start.
+    // Cursor CLI also admits Auto, so an ask mode cannot start the task there.
     await accountDefault(null);
     const onCursor = await taskFor('on Cursor CLI', { engine: 'cursor' });
-    const started = await taskStart(onCursor, await sessionIn('default'));
+    assertRefused(await taskStart(onCursor, await sessionIn('default')), /"default".*"auto"/);
+    const started = await taskStart(onCursor, await sessionIn('auto'));
     assert.equal(started.status, 201, started.text);
-    assert.deepEqual((await runsOf(onCursor)).map((run) => run.permissionMode), ['acceptEdits']);
-    // A default the caller may start: an account whose default is Default, from a session in it.
+    assert.deepEqual((await runsOf(onCursor)).map((run) => run.permissionMode), ['auto']);
     await accountDefault('default');
     const taskId = await taskFor('at the account default');
-    const answer = await taskStart(taskId, await sessionIn('default'));
+    assertRefused(await taskStart(taskId, await sessionIn('default')), /"default".*"auto"/);
+    const answer = await taskStart(taskId, await sessionIn('auto'));
     assert.equal(answer.status, 201, answer.text);
-    assert.deepEqual((await runsOf(taskId)).map((run) => run.permissionMode), ['default']);
+    assert.deepEqual((await runsOf(taskId)).map((run) => run.permissionMode), ['auto']);
     await accountDefault(null);
   });
 
@@ -547,8 +548,8 @@ test('a session cannot start a session wider than itself', {
       const taskId = await taskFor(`arranged from ${mode}`);
       const route = `/runner/tasks/${uuidToBase62(taskId)}`;
       const caller = { 'x-orbit-session-id': uuidToBase62(await sessionIn(mode)) };
-      assertRefused(await send('PATCH', route, { runAt: at }, caller), /nothing was written/);
-      assertRefused(await send('PATCH', route, { autoRunWhenReady: true }, caller), /nothing was written/);
+      assertRefused(await send('PATCH', route, { runAt: at }, caller), /would start this task in Auto/);
+      assertRefused(await send('PATCH', route, { autoRunWhenReady: true }, caller), /would start this task in Auto/);
       const row = await prisma.task.findUniqueOrThrow({ where: { id: taskId }, select: { runAt: true, autoRunWhenReady: true } });
       assert.deepEqual(row, { runAt: null, autoRunWhenReady: false });
       // Every other edit from the same session goes on as it did.
@@ -622,8 +623,8 @@ test('a session cannot start a session wider than itself', {
     return answer;
   }
 
-  await t.test('a coordinator narrower than the account default asks a person; its task then runs in that default', async () => {
-    await accountDefault(null);
+  await t.test('a coordinator that cannot start in Auto asks a person; its task then starts in Auto', async () => {
+    await accountDefault('default');
     const coordinator = await sessionIn('default');
     const projectId = await automaticProject(coordinator);
     const input = createInput('filed by a narrower coordinator', projectId);
@@ -645,17 +646,17 @@ test('a session cannot start a session wider than itself', {
     assert.equal(written.status, 201, written.text);
     const task = await prisma.task.findFirstOrThrow({ where: { projectId }, select: { id: true } });
 
-    // The automatic door a sweep takes. It reads no session, so the run takes the account's default.
+    // The approval above authorizes the start made by the sweep.
     const door = tasks as unknown as {
       dispatchReadyTask(owner: string, id: string, epoch: bigint): Promise<{ ok: boolean }>;
       dispatchEpochOf(id: string): Promise<bigint>;
     };
     const dispatched = await door.dispatchReadyTask(ownerId, task.id, await door.dispatchEpochOf(task.id));
     assert.equal(dispatched.ok, true);
-    assert.deepEqual((await runsOf(task.id)).map((run) => run.permissionMode), [null], 'an unset default is Auto');
+    assert.deepEqual((await runsOf(task.id)).map((run) => run.permissionMode), ['auto']);
   });
 
-  await t.test('a coordinator no narrower than the account default is answered by Automatic, with no card', async () => {
+  await t.test('a coordinator allowed to start in Auto is answered by Automatic, with no card', async () => {
     await accountDefault(null);
     for (const mode of ['auto', 'bypassPermissions', 'dontAsk', null]) {
       const coordinator = await sessionIn(mode);
@@ -665,9 +666,9 @@ test('a session cannot start a session wider than itself', {
       assert.equal(card.json.status, 'ALLOWED', `${mode}: ${card.text}`);
       assert.deepEqual(pushed, [], 'no card was raised');
     }
-    // An account whose default is Default, with a coordinator in it: the two are level.
+    // An account default of Default does not narrow the mode the new run starts in.
     await accountDefault('default');
-    const level = await sessionIn('default');
+    const level = await sessionIn('auto');
     const card = await ask(level, createInput('filed', await automaticProject(level)));
     assert.equal(card.json.status, 'ALLOWED', card.text);
     await accountDefault(null);

@@ -80,7 +80,10 @@ import io.orbitd.android.composer.ProviderChoices
 import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.composer.SessionComposer
 import io.orbitd.android.composer.ManagedRunnerAsleepLine
+import io.orbitd.android.composer.PermissionModeLineView
 import io.orbitd.android.composer.SessionPendingTray
+import io.orbitd.android.composer.modeLines
+import io.orbitd.android.core.cards.PermissionModeDisplay
 import io.orbitd.android.cards.AnsweredQuestions
 import io.orbitd.android.cards.conversationCard
 import io.orbitd.android.cards.CardFocus
@@ -131,6 +134,8 @@ import io.orbitd.android.core.cards.ClaudeRegion
 import io.orbitd.android.core.cards.DshRuntime
 import io.orbitd.android.core.cards.SessionRunStart
 import io.orbitd.android.core.net.HttpMethod
+import io.orbitd.android.core.protocol.ModeChangeHistory
+import io.orbitd.android.core.protocol.PermissionModes
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.*
 import io.orbitd.android.directory.*
@@ -424,6 +429,32 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         scheduled.loadSessionNow(route.id!!, scheduleRunId)
     }
     val scheduleInserts = remember(scheduledState.sessions, scheduledState.runs, route.id) { ScheduleInsert.of(scheduledState, route.id!!) }
+    // Each change of the mode the engine runs in, with who or what made it (board permission-mode-actual B1), where it happened: the
+    // session's detail carries the newest, and the runner's catalogue says whether its model has Auto. The older ones are read as
+    // the window pages back to them (GET /sessions/:id/permission-mode-changes, ModeChangeHistory), each held once by its seq.
+    var modeHistory by remember(handle, route.id) { mutableStateOf(ModeChangeHistory()) }
+    val heldModes = remember(modeHistory, snapshotDetail) {
+        snapshotDetail?.let { modeHistory.adopt(PermissionModes.changes(it), PermissionModes.changesHasMore(it)) } ?: ModeChangeHistory()
+    }
+    SideEffect { if (heldModes !== modeHistory) modeHistory = heldModes }
+    val oldestEventTs = state.window.events.firstOrNull()?.ts
+    val windowReachesStart = state.window.seeded && !state.window.hasOlder && state.window.events.isNotEmpty()
+    val olderModesBefore = heldModes.changes.firstOrNull()?.seq
+    val needsOlderModes = heldModes.needsOlder(oldestEventTs, windowReachesStart)
+    LaunchedEffect(handle, route.id, needsOlderModes, olderModesBefore, oldestEventTs) {
+        val before = olderModesBefore ?: return@LaunchedEffect
+        if (!needsOlderModes) return@LaunchedEffect
+        try {
+            val body = app.session.request(handle, io.orbitd.android.core.net.ApiRequest(listOf("sessions", route.id!!, "permission-mode-changes"),
+                query = listOf("before" to "$before"))).body
+            val page = Wire.decode(body, JsonElement.serializer()) as? JsonObject ?: return@LaunchedEffect
+            modeHistory = modeHistory.withOlder(before, PermissionModes.page(page))
+        // Silent: the next page the window loads asks again.
+        } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { }
+    }
+    val permissionModeLines = remember(snapshotDetail, heldModes.changes, composerState.catalog, state.window.events) {
+        modeLines(snapshotDetail, heldModes.changes, composerState.catalog, state.window.events)
+    }
     val drawSchedule: @Composable (ScheduleInsert) -> Unit = { insert ->
         key(insert.key) { Box(Modifier.conversationCard()) {
             ScheduleConversationInsert(insert, scheduled, route.id!!) { id ->
@@ -863,6 +894,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 // Inside the row it follows, so no list index moves: the reader's jumps count rows.
                 val ownerPlaced = remember(displayedRows, ownerRequests) { OwnerRequests.place(displayedRows.map { it.event.ts }, ownerRequests) }
                 val crossingPlaced = remember(displayedRows, crossingBatches) { CrossingCards.place(displayedRows.map { it.event.ts }, crossingBatches) }
+                val modePlaced = remember(displayedRows, permissionModeLines) { PermissionModeDisplay.place(displayedRows.map { it.event.ts }, permissionModeLines) }
                 // An owner request's link opened this conversation onto its card (OwnerRequestLinks): once the reader has placed itself, the
                 // row the card follows is scrolled to, and the card brings itself into view when drawn (OwnerRequestInConversation).
                 val ownerFocus = CardFocus.pending(route.id!!)?.takeIf { it.startsWith(CardFocus.OWNER_REQUEST) }
@@ -923,7 +955,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     if (!displayedWindow.seeded) item(key = "loading") { LoadingMessage("Loading messages…") }
                     item(key = "older") {
                         if (displayedWindow.hasOlder) TextButton(enabled = !displayedLoading, onClick = { follow = false; model.older() }) { Text(if (displayedLoading) "Loading messages…" else "Load earlier messages") }
-                        else if (ownerPlaced[-1] != null || crossingPlaced[-1] != null || schedulePlaced[-1] != null) Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        else if (ownerPlaced[-1] != null || crossingPlaced[-1] != null || schedulePlaced[-1] != null || modePlaced[-1] != null) Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            modePlaced[-1]?.forEach { key(it.key) { PermissionModeLineView(it) } }
                             schedulePlaced[-1]?.forEach { drawSchedule(it) }
                             ownerPlaced[-1]?.forEach { key(it.id) { Box(Modifier.conversationCard()) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink, route.id, discussCard) } } }
                             crossingPlaced[-1]?.forEach { key(it.id) { Box(Modifier.conversationCard()) { CrossingCardView(it, crossingState) { crossingStore.open(it.id) } } } }
@@ -984,6 +1017,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         val asked = ownerPlaced[index]
                         val crossings = crossingPlaced[index]
                         val scheduleThings = schedulePlaced[index]
+                        val modeChanges = modePlaced[index]
                         val chatThings = chatPlaced[index]
                         // The turn's head row sits in its message's item, like the owner's requests, so no list index moves.
                         val head = turnHeads[row.event.seq]?.takeIf { row.event.type == "user" && row.steps.isEmpty() }
@@ -998,9 +1032,10 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                                 head?.let { TurnHeadLine(it, ticking = sessionLive && row.event.seq == newestHead) }
                             }
                         }
-                        if (asked == null && crossings == null && scheduleThings == null && chatThings == null) drawRow()
+                        if (asked == null && crossings == null && scheduleThings == null && modeChanges == null && chatThings == null) drawRow()
                         else Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             drawRow()
+                            modeChanges?.forEach { key(it.key) { PermissionModeLineView(it) } }
                             chatThings?.forEach { key(it.key) { it.content() } }
                             scheduleThings?.forEach { drawSchedule(it) }
                             asked?.forEach { key(it.id) { Box(Modifier.conversationCard()) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink, route.id, discussCard) } } }

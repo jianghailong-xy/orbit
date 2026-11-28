@@ -365,19 +365,21 @@ test('who may write the verification relation', { skip: !URL, concurrency: 1, ti
       refused(await pin(pinPeer.sessionId, { projectId: b62(pinProject.id), model: 'pinned-by-a-peer' }), WRITE_REFUSED, 'by project');
       assert.deepEqual([await stands(check), await stands(ordinary)], before);
     });
+    // The pins that are written name models with Auto: a task runs only on one (task-run-auto.ts), and each
+    // differs from the last so that every one of them changes the row.
     await t.test('a run may pin an ordinary sibling', async () => {
       const sibling = await taskOf('another ordinary sibling', pinProject);
-      assert.deepEqual(ok(await pin(pinPeer.sessionId, { taskIds: [b62(sibling)], model: 'pinned-by-a-peer' }), 'an ordinary sibling'), { changed: 1 });
+      assert.deepEqual(ok(await pin(pinPeer.sessionId, { taskIds: [b62(sibling)], model: 'claude-opus-5-5' }), 'an ordinary sibling'), { changed: 1 });
     });
     await t.test('a verifier\'s run may pin itself, not another verifier', async () => {
-      assert.deepEqual(ok(await pin(checkRun.sessionId, { taskIds: [b62(checkRun.taskId)], model: 'mine' }), 'itself'), { changed: 1 });
+      assert.deepEqual(ok(await pin(checkRun.sessionId, { taskIds: [b62(checkRun.taskId)], model: 'claude-sonnet-5-5' }), 'itself'), { changed: 1 });
       refused(await pin(checkRun.sessionId, { taskIds: [b62(checkRun.taskId), b62(check)], model: 'mine-too' }), WRITE_REFUSED, 'another verifier');
     });
     await t.test('the coordinator, a conversation of no task, and a call with no session pin a verifier', async () => {
-      assert.deepEqual(ok(await pin(pinProject.coordinator, { taskIds: [b62(check)], model: 'by-the-coordinator' }), 'the coordinator'), { changed: 1 });
+      assert.deepEqual(ok(await pin(pinProject.coordinator, { taskIds: [b62(check)], model: 'claude-opus-5-5' }), 'the coordinator'), { changed: 1 });
       const conversation = await sessionOf('a conversation');
-      assert.deepEqual(ok(await pin(conversation, { taskIds: [b62(check)], model: 'by-a-conversation' }), 'a conversation'), { changed: 1 });
-      assert.deepEqual(ok(await pin(undefined, { projectId: b62(pinProject.id), model: 'by-no-session' }), 'no session').changed > 0, true);
+      assert.deepEqual(ok(await pin(conversation, { taskIds: [b62(check)], model: 'claude-sonnet-5-5' }), 'a conversation'), { changed: 1 });
+      assert.deepEqual(ok(await pin(undefined, { projectId: b62(pinProject.id), model: 'claude-fable-5-2' }), 'no session').changed > 0, true);
     });
   });
 

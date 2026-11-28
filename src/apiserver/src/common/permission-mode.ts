@@ -61,12 +61,32 @@ export function resolvePermissionMode(
 }
 
 /**
+ * The mode a session STARTING or REACHING another is judged by (owner ruling R3): the mode its engine is actually
+ * running in (session.actual_permission_mode, sessions/actual-permission-mode.ts), not the stored intent.
+ *
+ * The fallback, when no actual mode is recorded, is the stored mode resolved against the account default. Only a
+ * session claimed before migration 1805 that has not been claimed since has none: every claim records the mode it
+ * hands the runner, and a session that is calling has been claimed. For those few the stored mode is what their
+ * claim handed the runner except where a model lacked Auto, and it is the comparison these rules made before R3, so
+ * nothing they could do yesterday is refused or newly allowed by the fallback.
+ */
+export function runningPermissionMode(
+  session: { permissionMode: string | null; actualPermissionMode?: string | null },
+  owner: OwnerPreferences,
+): PermissionMode {
+  const actual = session.actualPermissionMode;
+  if (actual && (Object.values(PermissionMode) as string[]).includes(actual)) return actual as PermissionMode;
+  return resolvePermissionMode(session.permissionMode, owner);
+}
+
+/**
  * What a session in each mode may not start. A session that may do less than another may not start
  * that other, or the wider session does for it what it may not do itself. Auto and Bypass start
  * anything, so they are not here.
  *
- * Every comparison is of the STORED mode, on both sides, which is not always what the owner chose:
- * moving a session to a model with no Auto writes Default back onto it (SessionsService.updateConfig).
+ * The starting (or reaching) side is compared by the mode it is actually running in (runningPermissionMode, R3);
+ * the side being started or reached by the mode it is asked to run in, or its stored intent, which is what its next
+ * turn is handed.
  */
 const WIDER_THAN: Readonly<Partial<Record<string, ReadonlySet<string>>>> = {
   [PermissionMode.PLAN]: new Set([
@@ -100,7 +120,7 @@ function runsAsBypass(mode: string, engine: string | null): boolean {
   return false;
 }
 
-/** The session starting another: its stored mode and its engine. */
+/** The session starting another: the mode it is actually running in (runningPermissionMode) and its engine. */
 export interface SessionModeStarter {
   mode: string;
   engine: string | null;
@@ -108,7 +128,7 @@ export interface SessionModeStarter {
 
 /**
  * The one comparison. What a child may do is judged by what it will really do on its engine, and what
- * its starter may start by the starter's stored mode. A Codex session in Don't Ask starting another is
+ * its starter may start by the mode the starter is actually running in (R3). A Codex session in Don't Ask starting another is
  * the one exception: the two are the same thing, so neither is wider.
  */
 export function isWiderThanStarter(starter: SessionModeStarter, mode: string, engine: string | null): boolean {

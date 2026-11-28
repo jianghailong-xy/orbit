@@ -1210,7 +1210,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     }
     const { changes } = request.payload as unknown as SettingsChangePayload;
     return this.settle(ownerId, id, 'DONE', { resolvedByUserId: ownerId, resolvedClient: client }, (tx, now) =>
-      applySettingsChanges(tx, { ownerId, requestId: id, askedBySessionId: request.askedBySessionId, changes }, now));
+      applySettingsChanges(tx, { ownerId, requestId: id, askedBySessionId: request.askedBySessionId, changes }, now, client));
   }
 
   /**

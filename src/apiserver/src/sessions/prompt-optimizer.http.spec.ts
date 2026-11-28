@@ -89,6 +89,9 @@ const prisma = {
     findFirst: async ({ where }: { where: Row }) =>
       where.ownerId === OWNER && where.repoUrlNorm === 'github.com/example/orbit' ? { id: SPACE } : null,
   },
+  // The preferences PATCH reads the row it updates under a lock, inside one transaction (users.controller.ts).
+  $queryRaw: async () => [{ preferences }],
+  $transaction: async (work: (tx: unknown) => Promise<unknown>) => work(prisma),
 };
 
 const wiki = {

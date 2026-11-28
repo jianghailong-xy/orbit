@@ -242,6 +242,109 @@ export interface AgentExecConfig {
   env?: Record<string, string>;
 }
 
+/**
+ * What changed the mode a session's engine is actually running in (`session_permission_mode_change.cause`,
+ * migration 1805):
+ *  - CLAIM: a claim handed the runner this mode (for an engine that reports none, that is the mode it runs in);
+ *  - OWNER_PICK: the owner's config change reached the engine (`client` names the app when the request said);
+ *  - ENGINE_REPORT: the engine said it runs in another mode than the one recorded (Claude Code's init frame);
+ *  - RUNNER_CORRECTION: the runner switched the engine itself (a `permission_mode_corrected` system event);
+ *  - RESPAWN: the engine came back from a re-spawn in this mode;
+ *  - ORBIT_CHANGE: a config change Orbit made, not the owner (a paused pinned task run moved to another model).
+ */
+export const PERMISSION_MODE_CHANGE_CAUSES = [
+  'CLAIM',
+  'OWNER_PICK',
+  'ENGINE_REPORT',
+  'RUNNER_CORRECTION',
+  'RESPAWN',
+  'ORBIT_CHANGE',
+] as const;
+export type PermissionModeChangeCause = (typeof PERMISSION_MODE_CHANGE_CAUSES)[number];
+
+/** The system event subtype a runner reports a mode correction it made by itself with, carrying `mode`. */
+export const PERMISSION_MODE_CORRECTED_EVENT_SUBTYPE = 'permission_mode_corrected';
+
+/**
+ * The system event subtype a runner reports a correction the engine would not take with (runner-go
+ * claude_mode_correction.go): `mode` is the mode the engine stays in, `requested` the one asked for, `reason` the
+ * engine's own words. Not a mode change: the mode recorded already is the one the engine said it settled on.
+ */
+export const PERMISSION_MODE_CORRECTION_FAILED_EVENT_SUBTYPE = 'permission_mode_correction_failed';
+
+/**
+ * Why a claim handed the runner another mode than the one the session asked for (`session_permission_mode_change.reason`,
+ * migration 1807). A config change's setconfig or reload turn and a SubAgent's spawn make the same two and no other
+ * (migration 1811, SubagentAttempt.permissionModeSubstitution). They are the only substitutions, and neither predicts
+ * what the engine can do:
+ *  - ROOT_RUNNER: Bypass on a runner that runs as root, where Claude Code exits before it says anything; Auto instead;
+ *  - SCHEDULED_RUN: a scheduled run on Claude Code, which runs in Auto whatever its level.
+ */
+export const CLAIM_PERMISSION_MODE_SUBSTITUTION_REASONS = ['ROOT_RUNNER', 'SCHEDULED_RUN'] as const;
+export type ClaimPermissionModeSubstitutionReason = (typeof CLAIM_PERMISSION_MODE_SUBSTITUTION_REASONS)[number];
+
+/** One change of the mode a session's engine actually runs in, oldest first on the session detail. */
+export interface SessionPermissionModeChange {
+  /** Null for the session's first recorded mode. */
+  fromMode: string | null;
+  toMode: string;
+  cause: PermissionModeChangeCause;
+  /** For OWNER_PICK, the app it came from (`web`, `ios`, `macos`, `android`, `terminal`) when known. */
+  client: string | null;
+  at: string;
+  /** For a CLAIM, OWNER_PICK or ORBIT_CHANGE that handed the engine another mode than the one asked for: the mode
+   *  asked for. Absent otherwise. */
+  requestedMode?: string;
+  /** And why (CLAIM_PERMISSION_MODE_SUBSTITUTION_REASONS). Absent otherwise. */
+  reason?: ClaimPermissionModeSubstitutionReason;
+  /** The order it was recorded in (migration 1810): two changes can share `at`, never `seq`. What a page of older
+   *  changes continues from, and what tells one change from another. Absent from a server older than 1810. */
+  seq?: number;
+}
+
+/**
+ * The session detail's and list row's word on its mode. `permissionMode` is the owner's intent and is never
+ * rewritten by normalization; `actualPermissionMode` is what the engine runs in (null until a claim since 1805,
+ * and absent from an older server). Clients that read neither keep working: both are additions.
+ */
+export interface SessionPermissionModeFacts {
+  permissionMode?: string | null;
+  actualPermissionMode?: string | null;
+  actualPermissionModeAt?: string | null;
+  /** Detail only: the newest changes, oldest first (at most SESSION_PERMISSION_MODE_CHANGES_LIMIT). */
+  permissionModeChanges?: SessionPermissionModeChange[];
+  /** Detail only: whether older changes than those are recorded, read with GET /sessions/:id/permission-mode-changes
+   *  ?before=<the oldest one's seq>. Absent from a server that does not page them. */
+  permissionModeChangesHasMore?: boolean;
+  /** Detail only: the newest correction to Auto Claude refused, while it still answers the newest change (Claude's
+   *  report of the mode it stays in); null once a later change supersedes it, or when there is none. The refusal's own
+   *  event (PERMISSION_MODE_CORRECTION_FAILED_EVENT_SUBTYPE) may have paged out of what a client loaded. Absent from a
+   *  server older than migration 1821. */
+  permissionModeCorrectionRefusal?: SessionPermissionModeCorrectionRefusal | null;
+}
+
+/** A correction to Auto the engine would not take, as the session detail carries it. */
+export interface SessionPermissionModeCorrectionRefusal {
+  /** The mode the engine stays in: the newest change's `toMode`. */
+  mode: string;
+  /** The mode the runner asked for. */
+  requestedMode: string;
+  /** The engine's own words (Claude Code's). */
+  reason: string;
+  /** When the runner said so. */
+  at: string;
+}
+
+/** How many mode changes the session detail carries, and a page of older ones at most. */
+export const SESSION_PERMISSION_MODE_CHANGES_LIMIT = 50;
+
+/** GET /sessions/:id/permission-mode-changes?before=<seq>&limit=N: the changes recorded just before `seq` (the newest
+ *  when it is absent), oldest first, and whether older ones remain. */
+export interface SessionPermissionModeChangePage {
+  changes: SessionPermissionModeChange[];
+  hasMore: boolean;
+}
+
 // ─────────────────────────────── Runner ⇆ control plane ───────────────────────────────
 
 export interface RunnerRegisterRequest {
@@ -3129,6 +3232,13 @@ export interface SubagentAttempt extends SubagentCandidateTarget {
     | { keyId: string; label: string };
   startedAt: string;
   endedAt?: string;
+  /** When this attempt's child was spawned in another mode than the one it asked for: the mode asked for, the mode
+   *  it was spawned in, and why (CLAIM_PERMISSION_MODE_SUBSTITUTION_REASONS). Absent otherwise. */
+  permissionModeSubstitution?: {
+    requestedMode: string;
+    mode: string;
+    reason: ClaimPermissionModeSubstitutionReason;
+  };
 }
 
 /** The runner's ask for the next candidate after a child failed on a usage limit or capacity (§4.3). */

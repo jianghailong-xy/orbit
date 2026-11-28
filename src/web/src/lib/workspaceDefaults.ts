@@ -763,19 +763,11 @@ export const permissionModeSupported = (mode: string, engine: AgentProvider): bo
 export const fallbackPermissionMode = (engine: AgentProvider): string =>
   engine === AgentProvider.CURSOR ? CURSOR_DEFAULT_PERMISSION_MODE : 'default';
 
-export const clampPermissionModeForModel = (
-  mode: string,
-  model: string,
-  engine: AgentProvider,
-  provider?: string | null,
-  configured?: ConfiguredProvider[] | null,
-  modelCatalog?: RunnerModelCatalog | null,
-): string =>
-  !permissionModeSupported(mode, engine)
-    ? fallbackPermissionMode(engine)
-    : mode === 'auto' && !supportsAuto(model, engine, provider, configured, modelCatalog)
-      ? fallbackPermissionMode(engine)
-      : mode;
+/** The mode a composer may send on `engine`: the intent itself, unless the engine refuses it outright at
+ *  admission (permissionModeSupported). Auto on a model with no Auto is not refused but run as Default by the
+ *  server, which keeps the intent (docs/mocks/permission-mode-actual), so it is sent as picked. */
+export const clampPermissionModeForEngine = (mode: string, engine: AgentProvider): string =>
+  permissionModeSupported(mode, engine) ? mode : fallbackPermissionMode(engine);
 
 // App defaults used when the user has set no preference of their own.
 export const DEFAULT_MODEL = 'claude-opus-5';

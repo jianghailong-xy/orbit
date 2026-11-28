@@ -954,35 +954,55 @@ struct ComposerView: View {
     /// model control for room (`layoutPriority(2)` over the chrome's 1), so a long model name is
     /// what truncates — never the mode, which says how much the agent may do on its own.
     private var modeMenu: some View {
-        Menu {
-            ForEach(permissionModeMenuItems, id: \.self) { mode in
-                Button {
-                    console.permissionMode = mode
-                    // An explicit pick — the draft's create path remembers it as the
-                    // account default, which the untouched seed must not overwrite.
-                    console.permissionModeWasEdited = true
-                    Task { await console.applyConfig(permissionMode: mode.rawValue) }
-                } label: {
-                    if console.engine == CursorRuntime.engine {
-                        cursorModeLabel(mode)
-                    } else {
-                        menuItemLabel(modeSupported(mode) ? AgentDefaults.label(mode)
-                                          : "\(AgentDefaults.label(mode)) — not on DeepSeek Harness",
-                                      selected: mode == console.permissionMode)
-                    }
+        let display = console.modeDisplay
+        return Menu {
+            if let reason = display.reason {
+                Section(reason) {
+                    permissionModeItems
                 }
-                .disabled(!modeRunnable(mode))
+            } else {
+                permissionModeItems
             }
         } label: {
-            menuLabel(AgentDefaults.label(console.permissionMode))
+            HStack(spacing: 4) {
+                if display.isCorrecting {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .accessibilityHidden(true)
+                }
+                menuLabel(display.label, highlighted: display.reason != nil)
+            }
         }
+        .accessibilityLabel("Mode: \(display.label)")
+        .accessibilityHint(display.reason ?? "")
+        .help(display.reason ?? "Permission mode")
         .footerMenuChrome()
         .layoutPriority(2)
     }
 
-    /// A mode on Cursor CLI, with what it does there under its name (board iOS 6 ②): the shared short
-    /// note the web's mode picker writes after the mode's name (`CursorRuntime.modeNote`) — Default's,
-    /// greyed, says why it can't run.
+    private var permissionModeItems: some View {
+        ForEach(permissionModeMenuItems, id: \.self) { mode in
+            Button {
+                Task { await console.selectPermissionMode(mode) }
+            } label: {
+                let title = AgentDefaults.label(mode)
+                let selected = mode == console.permissionMode
+                let note = mode == .auto && (console.isDraft || console.sessionStatus == .pending)
+                    ? console.autoStartHint : nil
+                if let note {
+                    menuItemLabel("\(title) — \(note)", selected: selected)
+                } else if console.engine == CursorRuntime.engine {
+                    cursorModeLabel(mode)
+                } else {
+                    menuItemLabel(modeSupported(mode) ? title : "\(title) — unavailable on DeepSeek Harness",
+                                  selected: selected)
+                }
+            }
+            .disabled(!modeRunnable(mode) || console.permissionModeUpdating)
+        }
+    }
+
+    /// The Cursor CLI picker explains what each mode does under its name.
     @ViewBuilder
     private func cursorModeLabel(_ mode: PermissionMode) -> some View {
         let note = CursorRuntime.modeNote(mode)
@@ -1025,9 +1045,8 @@ struct ComposerView: View {
         var settings: [String: String?] = pick.parameters.mapValues { Optional($0) }
         settings[id] = value
         let model = CursorRuntime.encodeModel(pick.model, settings, row: pick.row)
-        let clampedPermissionMode = console.selectModel(model)
-        let permissionMode = clampedPermissionMode ? console.permissionMode.rawValue : nil
-        Task { await console.applyConfig(model: model, permissionMode: permissionMode) }
+        console.selectModel(model)
+        Task { await console.applyConfig(model: model) }
     }
 
     /// The model a Cursor CLI session runs as the chip says it — "Auto", "Claude Opus 5.5 High · 1M · Fast" —
@@ -1173,16 +1192,13 @@ struct ComposerView: View {
                         console.effort, for: console.engine, provider: console.provider, model: m.id,
                         catalog: console.modelCatalog, configured: console.configuredProviders)
                     let resetEffort = nextEffort != console.effort
-                    let clampedPermissionMode = console.selectModel(m.id)
+                    console.selectModel(m.id)
                     // The pick is this session's alone: no account-wide model memory is written
                     // (docs/workspace-default-model-design.md).
-                    let permissionMode = clampedPermissionMode
-                        ? console.permissionMode.rawValue
-                        : nil
                     if resetEffort { console.effort = nextEffort }
                     Task {
                         await console.applyConfig(
-                            model: m.id, permissionMode: permissionMode,
+                            model: m.id,
                             effort: resetEffort ? nextEffort.rawValue : nil)
                     }
                 } label: {
@@ -1465,7 +1481,7 @@ struct ComposerView: View {
     /// The text trigger for a footer menu, styled like the reference composer's "Auto" instead of
     /// macOS's default bordered popup button. No dropdown chevron — the footer is tight on iPhone, so
     /// the labels stand alone (on iOS a medium weight marks them as the set, tappable values).
-    private func menuLabel(_ text: String) -> some View {
+    private func menuLabel(_ text: String, highlighted: Bool = false) -> some View {
         Text(text)
             #if os(iOS)
             // The current value now carries the emphasis on its own — the trigger is neutral (no
@@ -1475,7 +1491,7 @@ struct ComposerView: View {
             .fontWeight(.medium)
             #endif
             .lineLimit(1)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(highlighted ? Color.orange : Color.secondary)
             .contentShape(Rectangle())
     }
 

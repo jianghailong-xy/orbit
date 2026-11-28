@@ -191,6 +191,15 @@ func versionNumbers(version string) []int {
 // time would clear a workspace default nobody touched. Absent and null both read as nil,
 // and both mean the same thing here — say nothing about effort.
 func setConfigFrames(content string, agent AgentExecConfig) ([]setConfigFrame, error) {
+	return setConfigFramesFor(content, agent, "")
+}
+
+// setConfigFramesFor is setConfigFrames with the mode the engine last said it runs in (engineMode, "" when it has
+// not said). A permission mode is news when it differs from the process's config OR from that report: the control
+// plane hands Auto as asked on any model (apiserver claimPermissionMode), so a process spawned in Auto whose engine
+// settled lower still reads `auto` in its config, and an Auto restated by a config change has to be asked for, as
+// the runner's own correction asks for it (claude_mode_correction.go).
+func setConfigFramesFor(content string, agent AgentExecConfig, engineMode string) ([]setConfigFrame, error) {
 	var cfg struct {
 		Model          string  `json:"model"`
 		PermissionMode string  `json:"permissionMode"`
@@ -208,7 +217,7 @@ func setConfigFrames(content string, agent AgentExecConfig) ([]setConfigFrame, e
 			what:    `model "` + model + `"`,
 		})
 	}
-	if mode := cfg.PermissionMode; mode != "" && mode != agent.PermissionMode {
+	if mode := cfg.PermissionMode; mode != "" && (mode != agent.PermissionMode || (engineMode != "" && mode != engineMode)) {
 		out = append(out, setConfigFrame{
 			subtype: ctrlSetPermissionMode,
 			payload: map[string]interface{}{"mode": mode},

@@ -70,11 +70,11 @@ test('a stored value that is not a whole number from 0 to 50 reads as the defaul
   assert.equal(cardFreeTaskCreates({ cardFreeTaskCreates: 50 }), 50);
 });
 
-test('a session narrower than the account default is asked', async () => {
+test('a session that cannot start work in Auto is asked regardless of the account default', async () => {
   assert.equal(await ask('orbit_task_create', {}, { mode: 'plan' }), null);
   assert.equal(await ask('orbit_task_create', {}, { mode: 'default', accountDefault: 'auto' }), null);
-  assert.equal(await ask('orbit_task_create', {}, { mode: 'plan', accountDefault: 'plan' }), SESSION_CREATE_ALLOWANCE_MESSAGE);
-  assert.equal(await ask('orbit_task_create', {}, { mode: null, accountDefault: 'default' }), SESSION_CREATE_ALLOWANCE_MESSAGE);
+  assert.equal(await ask('orbit_task_create', {}, { mode: 'plan', accountDefault: 'plan' }), null);
+  assert.equal(await ask('orbit_task_create', {}, { mode: null, accountDefault: 'default' }), null);
 });
 
 test('other cards, unreadable input and an unknown session are asked', async () => {

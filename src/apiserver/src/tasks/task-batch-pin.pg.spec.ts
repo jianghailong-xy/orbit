@@ -155,20 +155,22 @@ suite('pinMany writes the rows that differ and leaves the ones that do not', asy
     const providerOnly = randomUUID();
     const engineOnly = randomUUID();
     const neither = randomUUID();
+    // Pinned to Claude Code's own sign-in, so a model with Auto: a task runs only on one (task-run-auto.ts).
+    const OPUS = 'claude-opus-5-5';
     await addTask(client, world, {
-      id: providerOnly, owner: world.owner, project: world.project, model: FLASH, provider: 'codex', engine: 'codex',
+      id: providerOnly, owner: world.owner, project: world.project, model: OPUS, provider: 'codex', engine: 'codex',
     });
     // A provider pin an older replica wrote, with no engine beside it: a pin naming only the provider
     // writes its default engine too (docs/provider-engine-contract.md §3.5), which this row lacks.
     await addTask(client, world, {
-      id: engineOnly, owner: world.owner, project: world.project, model: FLASH, provider: 'claude',
+      id: engineOnly, owner: world.owner, project: world.project, model: OPUS, provider: 'claude',
     });
     await addTask(client, world, {
-      id: neither, owner: world.owner, project: world.project, model: FLASH, provider: 'claude', engine: 'claude',
+      id: neither, owner: world.owner, project: world.project, model: OPUS, provider: 'claude', engine: 'claude',
     });
 
     const res = await tasks.pinMany(world.owner,
-      { projectId: world.project, provider: 'claude', model: FLASH });
+      { projectId: world.project, provider: 'claude', model: OPUS });
 
     assert.deepEqual(res, { changed: 2 });
     const after = await pins(client, [providerOnly, engineOnly, neither]);

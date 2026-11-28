@@ -236,8 +236,10 @@ test('both claim paths hand the runner the run\'s allow and deny lists, by the s
     ['runner-api/runner-api.controller.ts', 's', 'runner.capabilities'],
   ] as const) {
     const source = readFileSync(join(root, file), 'utf8');
+    // The mode is claimPermissionMode's, which applies scheduleRunPermissionMode to the level handed here
+    // (queue/claim-permission-mode.spec.ts holds it to the rule).
     assert.ok(
-      source.includes(`scheduleRunPermissionMode(permissionMode, runAccessLevel(${session}.scheduleRun), provider),`),
+      source.includes(`claimPermissionMode(provider, permissionMode, runAccessLevel(${session}.scheduleRun), `),
       `${file}: the mode by the run's level`,
     );
     const level = `runAccessLevel(${session}.scheduleRun),`;
@@ -298,7 +300,8 @@ test('a scheduled run\'s SubAgents, local and remote, get the run\'s mode and de
   ] as const) {
     const source = readFileSync(join(root, file), 'utf8');
     assert.ok(source.includes(`const level = runAccessLevel(${parent}.scheduleRun);`), `${file}: reads the run's level`);
-    assert.ok(source.includes('scheduleRunPermissionMode(childMode, level, provider)'), `${file}: the run's mode`);
+    // As a claim takes it (claimPermissionMode applies scheduleRunPermissionMode, and records the substitution).
+    assert.ok(source.includes('claimPermissionMode(provider, childMode, level, '), `${file}: the run's mode`);
     assert.ok(source.includes('disallowedTools: scheduleRunDisallowedTools((workspace'), `${file}: the run's denials`);
   }
 });

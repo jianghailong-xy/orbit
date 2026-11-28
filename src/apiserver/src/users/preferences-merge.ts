@@ -1,4 +1,35 @@
 import { isTieredSettingKey, type TieredSettingKey } from '@orbit/shared';
+import type { Prisma } from '@prisma/client';
+
+export const DEFAULT_PERMISSION_MODE_CHANGED_ACTIVITY = 'preferences.default_permission_mode.changed';
+
+/** Append the change beside the preference write, while the transaction still holds the user row. */
+export async function recordDefaultPermissionModeChange(
+  tx: Prisma.TransactionClient,
+  actorId: string,
+  current: Readonly<Record<string, unknown>>,
+  next: Readonly<Record<string, unknown>>,
+  sender: { senderClient?: string; senderClientDetail?: string | null },
+): Promise<void> {
+  const from = current.defaultPermissionMode ?? null;
+  const to = next.defaultPermissionMode ?? null;
+  if (from === to) return;
+  await tx.activity.create({
+    data: {
+      actorId,
+      type: DEFAULT_PERMISSION_MODE_CHANGED_ACTIVITY,
+      credentialKind: 'LOGIN',
+      createdAt: new Date(),
+      payload: {
+        from: typeof from === 'string' ? from : null,
+        to: typeof to === 'string' ? to : null,
+        client: sender.senderClient ?? 'unknown',
+        clientDetail: sender.senderClientDetail ?? null,
+      },
+    },
+    select: { id: true },
+  });
+}
 
 /**
  * How a set of preference values is written into `User.preferences`, shared by the owner's

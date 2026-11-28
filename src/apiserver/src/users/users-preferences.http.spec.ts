@@ -18,22 +18,27 @@ const account = () => ({ id: USER_ID, email: 'owner@example.test', preferences, 
 /** `GET /users/me`, as every client reads the preferences back. */
 const me = () => fetch(`${baseUrl}/users/me`, { headers: { authorization: 'Bearer signed-in' } });
 
+const prisma = {
+  user: {
+    findUnique: async () => account(),
+    update: async (args: { where: unknown; data: { preferences: Record<string, unknown> } }) => {
+      writes.push({ where: args.where, data: args.data });
+      preferences = args.data.preferences;
+      return account();
+    },
+  },
+  // The PATCH reads the row it updates under a lock, inside one transaction (users.controller.ts).
+  $queryRaw: async () => [{ preferences }],
+  $transaction: async (work: (tx: unknown) => Promise<unknown>) => work(prisma),
+};
+
 @Module({
   controllers: [UsersController],
   providers: [
     JwtAuthGuard,
     Reflector,
     { provide: JwtService, useValue: { verifyAsync: async () => ({ sub: USER_ID }) } },
-    { provide: PrismaService, useValue: {
-      user: {
-        findUnique: async () => account(),
-        update: async (args: { where: unknown; data: { preferences: Record<string, unknown> } }) => {
-          writes.push({ where: args.where, data: args.data });
-          preferences = args.data.preferences;
-          return account();
-        },
-      },
-    } },
+    { provide: PrismaService, useValue: prisma },
   ],
 })
 class PreferencesModule {}

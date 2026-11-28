@@ -47,7 +47,7 @@ import {
 } from '@prisma/client';
 
 import { PatRefusal, patForbiddenBody } from '../auth/pat-scope.decorator';
-import { isWiderThanStarter, resolvePermissionMode, widerModeRefusal } from '../common/permission-mode';
+import { isWiderThanStarter, resolvePermissionMode, runningPermissionMode, widerModeRefusal } from '../common/permission-mode';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -1461,6 +1461,7 @@ export class SchedulesService {
       select: {
         id: true,
         permissionMode: true,
+        actualPermissionMode: true,
         engine: true,
         workspaceId: true,
         scheduleRun: { select: { scheduleId: true } },
@@ -1479,7 +1480,8 @@ export class SchedulesService {
       sessionId: session.id,
       servesScheduleId: session.scheduleRun?.scheduleId ?? null,
       session: {
-        mode: resolvePermissionMode(session.permissionMode, session.owner),
+        // R3: the mode the calling session is actually running in.
+        mode: runningPermissionMode(session, session.owner),
         engine: session.engine,
         workspaceId: session.workspaceId,
       },

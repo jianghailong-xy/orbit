@@ -39,8 +39,11 @@ export type AgentToolsDrawerProps =
       report: AgentToolsReport | null | undefined;
       /** The session's engine, for a session whose runner sent no report. */
       engine: string | null | undefined;
-      /** The session's permission mode as the server stores it. */
+      /** The mode the session's engine is actually running in, as the server recorded it; else the mode
+       *  it will start in (docs/mocks/permission-mode-actual). */
       permissionMode: string | null | undefined;
+      /** Why that is not the mode the owner asked for, as the composer's Mode capsule says it; null when it is. */
+      modeGap?: { lead: string; rest: string } | null;
       now?: number;
     }
   | {
@@ -73,6 +76,7 @@ function SessionAgentTools({
   report,
   engine,
   permissionMode,
+  modeGap,
   now = Date.now(),
 }: Extract<AgentToolsDrawerProps, { mode: 'session' }>) {
   const orchestrationOn = useOrchestrationOn();
@@ -157,6 +161,11 @@ function SessionAgentTools({
             Permission mode <small>{modeLabel}</small>
           </h3>
           <div className="agent-tools-card">
+            {modeGap && (
+              <p className="agent-tools-plain agent-tools-mode-gap">
+                <b>{modeGap.lead}</b> {modeGap.rest}
+              </p>
+            )}
             <p className="agent-tools-plain">{mode.orbit}</p>
           </div>
         </section>

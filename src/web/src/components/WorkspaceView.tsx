@@ -241,7 +241,7 @@ import {
 } from '../lib/sessionGrouping';
 import {
   type ConfiguredProvider,
-  clampPermissionModeForModel,
+  clampPermissionModeForEngine,
   fallbackPermissionMode,
   permissionModeSupported,
   contextWindowFor,
@@ -587,6 +587,15 @@ import { Select } from './ui/Select';
 import { Spinner } from './ui/Spinner';
 import { Textarea } from './ui/Textarea';
 import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
+import { modeChangeInserts } from './PermissionModeLine';
+import { ModeCapsuleValue, ModeOptionLabel, ModeReason, useModeCapsule } from './ModeCapsule';
+import {
+  autoMenuNote,
+  type ModeCapsule,
+  modeCorrectionRefusals,
+  standingRefusal,
+} from '../lib/sessionPermissionMode';
+import { usePermissionModeChangeHistory } from '../lib/permissionModeChangeHistory';
 import type {
   SessionSourceLanding,
   SessionTurnIntent,
@@ -889,6 +898,17 @@ const PERMISSION_TO_MODE: Record<string, string> = Object.fromEntries(
   Object.entries(MODE_TO_PERMISSION).map(([label, value]) => [value, label]),
 );
 const MODE_OPTIONS = Object.keys(MODE_TO_PERMISSION);
+
+type RecordedMode = { actualPermissionMode?: string | null; actualPermissionModeAt?: string | null };
+/** The mode the server last recorded a session's engine running in, from whichever of its list row and its
+ *  detail recorded it later: the row moves first (the Open list draws the column), the detail on its own read. */
+function newerRecordedMode(row: RecordedMode | null | undefined, detail: RecordedMode | null | undefined): string | null {
+  const rowAt = Date.parse(row?.actualPermissionModeAt ?? '');
+  const detailAt = Date.parse(detail?.actualPermissionModeAt ?? '');
+  if (!row?.actualPermissionMode) return detail?.actualPermissionMode ?? null;
+  if (!detail?.actualPermissionMode) return row.actualPermissionMode;
+  return detailAt > rowAt ? detail.actualPermissionMode : row.actualPermissionMode;
+}
 
 // New-session hotkey hint. The chord itself accepts ⌘/Ctrl on every platform; only the
 // label differs — ⌘ on macOS, Ctrl elsewhere (matches ApprovalPanel's convention). The
@@ -3243,6 +3263,9 @@ export function WorkspaceView({
   const textRef = useRef('');
   const prevDraftKey = useRef(draftKey);
   const [mode, setMode] = useState('Auto');
+  // When this client last changed the live session's mode: while the change travels to the engine, the
+  // Mode capsule says it is switching rather than showing a gap (lib/sessionPermissionMode).
+  const [modePickedAt, setModePickedAt] = useState<{ sessionId: string; at: number } | null>(null);
   const [model, setModel] = useState(DEFAULT_MODEL);
   // Runtime catalogs and configured providers arrive asynchronously. Track whether the user has
   // touched Model within the current draft/session context so a late default can fill an untouched
@@ -5313,10 +5336,6 @@ export function WorkspaceView({
         runner.runtimeDefaultModels,
       )
     : null;
-  const pickedProviderCapabilitiesResolved = providerIdentityResolved(
-    pickedProvider,
-    configuredProvidersLoaded,
-  );
 
   const currentDraftEngine = useMemo(
     () =>
@@ -5431,49 +5450,33 @@ export function WorkspaceView({
 
   // A new session defaults to Auto — the app-level default (DEFAULT_PERMISSION_MODE) — rather
   // than inheriting the picked workspace's stored mode, which still governs task-launched runs
-  // server-side. Clamp when the effective provider/model can't run Auto, as elsewhere.
-  const pickedModeSeed =
-    PERMISSION_TO_MODE[
-      pickedProviderCapabilitiesResolved
-        ? clampPermissionModeForModel(
-            'auto',
-            pickedModelDefault ?? DEFAULT_MODEL,
-            pickedEngine,
-            pickedProvider,
-            configuredProviders,
-            runner.modelCatalog,
-          )
-        : 'auto'
-    ] ?? 'Default';
+  // server-side. Auto stays the pick on a model that has no Auto: the server starts such a session
+  // in Default and keeps the intent, and the capsule says so (docs/mocks/permission-mode-actual, C1).
+  // Only a mode the engine refuses outright is replaced (clampPermissionModeForEngine).
+  const pickedModeSeed = PERMISSION_TO_MODE[clampPermissionModeForEngine('auto', pickedEngine)] ?? 'Default';
   const modeSeed = selectedId
     ? !live && selected
       ? PERMISSION_TO_MODE[
           shownProviderCapabilitiesResolved
-            ? clampPermissionModeForModel(
-                effectivePermissionMode,
-                selectedModelDefault ?? DEFAULT_MODEL,
-                shownEngine,
-                shownProvider,
-                configuredProviders,
-                runner.modelCatalog,
-              )
+            ? clampPermissionModeForEngine(effectivePermissionMode, shownEngine)
             : effectivePermissionMode
         ] ?? 'Default'
       : null
     : pickedModeSeed;
 
   // Mode follows the same context/dirty invariant as Model. This matters when a configured
-  // provider resolves after the draft first renders: Auto may need to clamp to Default for its
-  // effective model, but that late result must not replace a Mode the user already picked.
+  // provider resolves after the draft first renders: an engine that refuses the mode needs its
+  // fallback, but that late result must not replace a Mode the user already picked.
   useEffect(() => {
     const decision = decideContextSeed(modeSeedState.current, modelContextKey, !!modeSeed);
     modeSeedState.current = decision.state;
     if (decision.apply && modeSeed) setMode(modeSeed);
   }, [modelContextKey, modeSeed]);
 
-  // Model and Mode have independent dirty guards. If an untouched model is refined by a late
-  // Runtime heartbeat after the user explicitly chose Auto, correctness still wins: never keep
-  // an invalid pair merely because Mode is dirty.
+  // Model and Mode have independent dirty guards. If the engine is refined by a late resolution
+  // after the user explicitly chose a mode it refuses, correctness still wins: never keep an
+  // invalid pair merely because Mode is dirty. Auto on a model with no Auto is not invalid: the
+  // server runs it as Default and keeps the intent (docs/mocks/permission-mode-actual).
   //
   // Not in the commit a new context arrives in: that commit still holds the previous context's
   // model and mode, the seeds above having only queued this one's. Judged on those, a stopped Claude
@@ -5486,26 +5489,11 @@ export function WorkspaceView({
       clampContextKey.current = modelContextKey;
       return;
     }
-    if (
-      !live &&
-      shownProviderCapabilitiesResolved &&
-      ((mode === 'Auto' && !supportsAuto(model, shownEngine, shownProvider, configuredProviders, runner.modelCatalog)) ||
-        !permissionModeSupported(MODE_TO_PERMISSION[mode], shownEngine))
-    ) {
+    if (!live && shownProviderCapabilitiesResolved && !permissionModeSupported(MODE_TO_PERMISSION[mode], shownEngine)) {
       // Default, except where the engine has none: Cursor CLI starts in Accept Edits (D6).
       setMode(PERMISSION_TO_MODE[fallbackPermissionMode(shownEngine)] ?? 'Default');
     }
-  }, [
-    configuredProviders,
-    live,
-    mode,
-    model,
-    modelContextKey,
-    runner.modelCatalog,
-    shownEngine,
-    shownProvider,
-    shownProviderCapabilitiesResolved,
-  ]);
+  }, [live, mode, modelContextKey, shownEngine, shownProviderCapabilitiesResolved]);
 
   // A fresh interactive session starts from the account's last-picked effort. Older workspaces can
   // still carry the per-workspace default that preceded that preference, so use it only when the
@@ -6824,11 +6812,75 @@ export function WorkspaceView({
     taskMoveSignal(selectedSession as { taskMoves?: Array<{ handoffIds?: string[] }> } | null),
   );
 
+  // The mode this session's engine is actually running in, as the server recorded it, and how it came to be:
+  // each change drawn where it happened, with who or what made it (docs/mocks/permission-mode-actual, B1).
+  // Only a live session runs in one; an ended one's capsule shows the mode its next start runs in, so no line
+  // of it is the reason for a gap.
+  const recordedPermissionMode = live ? newerRecordedMode(selected as RecordedMode | null, detailForSelected) : null;
+  // The detail's newest changes, and the older ones as far back as the transcript is loaded (permissionModeChangeHistory).
+  const permissionModeChanges = usePermissionModeChangeHistory(selectedTrashed ? null : selectedId, detailForSelected, {
+    oldestEventTs: transcriptEvents[0]?.ts,
+    reachesStart: transcriptEvents.length > 0 && !hasOlderNow(),
+  });
+  // A correction Claude refused is a system event of the conversation, not a mode change: read off the events loaded.
+  const permissionModeRefusals = useMemo(() => modeCorrectionRefusals(transcriptEvents), [transcriptEvents]);
+  // The list row learns of a new mode before the detail, whose changes the lines are read from: read it again.
+  const rowModeAt = (selected as RecordedMode | null)?.actualPermissionModeAt ?? null;
+  const detailModeAt = detailForSelected?.actualPermissionModeAt ?? null;
+  const detailLoaded = !!detailForSelected;
+  useEffect(() => {
+    if (!selectedId || !detailLoaded || !rowModeAt) return;
+    if (Date.parse(detailModeAt ?? '') >= Date.parse(rowModeAt)) return;
+    void qc.invalidateQueries({ queryKey: ['session', selectedId], exact: true });
+  }, [qc, selectedId, detailLoaded, rowModeAt, detailModeAt]);
+  const lineModelLabel =
+    (shownProviderCapabilitiesResolved
+      ? modelOptionsFor(shownEngine, shownProvider, runner.modelCatalog, configuredProviders).find(
+          (option) => option.value === effectiveSelectedModel,
+        )?.label
+      : undefined) ?? (shownEngine === AgentProvider.CLAUDE ? claudeModelName(effectiveSelectedModel) : effectiveSelectedModel);
+  const lineModelHasAuto =
+    !shownProviderCapabilitiesResolved ||
+    supportsAuto(effectiveSelectedModel, shownEngine, shownProvider, configuredProviders, runner.modelCatalog);
+  const permissionModeInserts = useMemo(
+    () =>
+      !selectedId || selectedTrashed || !permissionModeChanges
+        ? []
+        : modeChangeInserts(
+            permissionModeChanges,
+            {
+              intent: effectivePermissionMode,
+              actual: recordedPermissionMode,
+              engine: shownEngine,
+              modelHasAuto: lineModelHasAuto,
+              modelLabel: lineModelLabel,
+              runsAsRoot: runner.runsAsRoot,
+              scheduled: isScheduleRun,
+              refusals: permissionModeRefusals,
+            },
+            transcriptEvents,
+          ),
+    [
+      effectivePermissionMode,
+      permissionModeRefusals,
+      isScheduleRun,
+      lineModelHasAuto,
+      lineModelLabel,
+      permissionModeChanges,
+      recordedPermissionMode,
+      runner.runsAsRoot,
+      selectedId,
+      selectedTrashed,
+      shownEngine,
+      transcriptEvents,
+    ],
+  );
+
   // One array for the transcript, memoized: a fresh array on every render would rebuild the whole
   // conversation with it (`Transcript` memoizes on this prop).
   const transcriptInserts = useMemo(
-    () => [...decisionReceipts, ...questionRecords, ...ownerRequestCards, ...scheduleInserts, ...crossingCards.inserts, ...blockedPromotionCard, ...exceptionCards],
-    [decisionReceipts, questionRecords, ownerRequestCards, scheduleInserts, crossingCards.inserts, blockedPromotionCard, exceptionCards],
+    () => [...decisionReceipts, ...questionRecords, ...ownerRequestCards, ...scheduleInserts, ...crossingCards.inserts, ...blockedPromotionCard, ...exceptionCards, ...permissionModeInserts],
+    [decisionReceipts, questionRecords, ownerRequestCards, scheduleInserts, crossingCards.inserts, blockedPromotionCard, exceptionCards, permissionModeInserts],
   );
 
   // Follow `/sessions/<id>?item=<itemId>` only after the open-item insert has been rendered. The
@@ -8520,6 +8572,7 @@ export function WorkspaceView({
       account?: string;
     }) => updateSessionConfig(selected!.id, cfg),
     onMutate: async (cfg) => {
+      if (cfg.permissionMode !== undefined) setModePickedAt({ sessionId: selected!.id, at: Date.now() });
       await qc.cancelQueries({ queryKey: sessionsKey });
       const prev = qc.getQueryData<any[]>(sessionsKey);
       qc.setQueryData<any[]>(sessionsKey, (old) =>
@@ -8634,7 +8687,8 @@ export function WorkspaceView({
       engine: ENGINE_CLI_NAMES[shownEngine],
       provider: providerNameOn(shownEngine, shownProviderChoice(shownProvider)),
       model: shownModel,
-      permissionMode: shownMode,
+      // The capsule's own words, so `/status` and the composer cannot disagree about the mode running.
+      permissionMode: shownModeCapsule.label,
       effort: shownEffort,
       // The pill's own answer, so `/status` and the composer row cannot disagree: usable says
       // there is a lane, shown says this session is in it.
@@ -9903,20 +9957,9 @@ export function WorkspaceView({
       qc,
     ],
   );
-  const shownMode: string = live
-    ? (PERMISSION_TO_MODE[
-        shownProviderCapabilitiesResolved
-          ? clampPermissionModeForModel(
-              effectivePermissionMode,
-              effectiveModel,
-              shownEngine,
-              shownProvider,
-              configuredProviders,
-              runner.modelCatalog,
-            )
-          : effectivePermissionMode
-      ] ?? 'Default')
-    : mode;
+  // The intent, where the Mode menu's check sits: the session's stored mode while it is live, else the
+  // pick the next start sends. What the capsule itself says is the mode actually running (`shownModeCapsule`).
+  const shownMode: string = live ? (PERMISSION_TO_MODE[effectivePermissionMode] ?? 'Default') : mode;
   // Effort is the engine's vocabulary, never the provider slug's: a key on Codex's protocol offers
   // Codex's levels, a key under OpenCode OpenCode's variants.
   const shownEffort: string = normalizeEffortFor(
@@ -10478,15 +10521,13 @@ export function WorkspaceView({
     }
     // Each credential owns its model space on the engine, so carry the running model only when the
     // new one offers it (two Anthropic accounts do; a third-party endpoint with its own list does not)
-    // and otherwise take that one's default. Mode and effort follow the model, exactly as a model
-    // switch makes them.
+    // and otherwise take that one's default. Effort follows the model, exactly as a model switch makes
+    // it; the mode stays the intent, which the server runs as Default on a model with no Auto.
     const nextModel = modelOptionsFor(shownEngine, v, runner.modelCatalog, configuredProviders).some(
       (option) => option.value === shownModelName,
     )
       ? shownModel
       : defaultModelFor(shownEngine, v, runner.modelCatalog, configuredProviders, runner.runtimeDefaultModels);
-    const drop =
-      shownMode === 'Auto' && !supportsAuto(nextModel, shownEngine, v, configuredProviders, runner.modelCatalog);
     const currentEffort = live ? effectiveEffort : effort;
     const nextEffort = normalizeEffortFor(
       shownEngine,
@@ -10501,7 +10542,6 @@ export function WorkspaceView({
         provider: v,
         ...(account !== undefined ? { account } : {}),
         ...(nextModel !== shownModel ? { model: nextModel } : {}),
-        ...(drop ? { permissionMode: 'default' } : {}),
         ...(nextEffort !== currentEffort ? { effort: nextEffort } : {}),
       });
       return;
@@ -10516,10 +10556,6 @@ export function WorkspaceView({
     if (nextModel !== shownModel) {
       modelSeedState.current = dirtyContextSeed(modelContextKey);
       setModel(nextModel);
-    }
-    if (drop) {
-      modeSeedState.current = dirtyContextSeed(modelContextKey);
-      setMode('Default');
     }
     if (nextEffort !== currentEffort) {
       effortSeedState.current = dirtyContextSeed(effortContextKey);
@@ -10694,10 +10730,8 @@ export function WorkspaceView({
       modelSeedState.current = dirtyContextSeed(modelContextKey);
       return;
     }
-    // Switching to a model that can't do Auto while Auto is selected would send a mode claude
-    // rejects — snap back to Default.
-    const drop =
-      shownMode === 'Auto' && !supportsAuto(v, shownEngine, shownProvider, configuredProviders, runner.modelCatalog);
+    // The mode is not touched: on a model with no Auto the server runs an Auto session as Default and
+    // keeps the intent, which applies again on a model that has it (docs/mocks/permission-mode-actual).
     // An OpenCode variant is model-defined: a model switch can strip it.
     const currentEffort = live ? effectiveEffort : effort;
     const nextEffort = normalizeEffortFor(
@@ -10712,17 +10746,12 @@ export function WorkspaceView({
     if (live) {
       configMut.mutate({
         model: v,
-        ...(drop ? { permissionMode: 'default' } : {}),
         ...(resetEffort ? { effort: nextEffort } : {}),
       });
       return;
     }
     modelSeedState.current = dirtyContextSeed(modelContextKey);
     setModel(v);
-    if (drop) {
-      modeSeedState.current = dirtyContextSeed(modelContextKey);
-      setMode('Default');
-    }
     if (resetEffort) {
       effortSeedState.current = dirtyContextSeed(effortContextKey);
       setEffort(nextEffort);
@@ -10758,6 +10787,29 @@ export function WorkspaceView({
     else setFastMode(next);
   };
   const shownModelLabel = shownModelOptions.find((o) => o.value === shownModelName)?.label ?? shownModelName;
+  // The Mode capsule (docs/mocks/permission-mode-actual, A1 and C1): the mode the session's engine actually
+  // runs in, as the server recorded it, with any gap from the intent the menu's check stays on; before the
+  // session runs, the mode it will start in.
+  const shownModeFacts = {
+    intent: MODE_TO_PERMISSION[shownMode] ?? 'default',
+    engine: shownEngine,
+    modelHasAuto:
+      !shownProviderCapabilitiesResolved ||
+      supportsAuto(shownModel, shownEngine, shownProvider, configuredProviders, runner.modelCatalog),
+    modelLabel: shownModelLabel,
+    runsAsRoot: runner.runsAsRoot,
+    scheduled: isScheduleRun,
+  };
+  const shownModeCapsule = useModeCapsule({
+    ...shownModeFacts,
+    actual: recordedPermissionMode,
+    latest: permissionModeChanges?.at(-1) ?? null,
+    pickedAt: modePickedAt?.sessionId === selectedId ? modePickedAt.at : null,
+    // The detail's, which stands whether or not its event is loaded; else the newest of those loaded.
+    refusal: standingRefusal(detailForSelected?.permissionModeCorrectionRefusal, permissionModeRefusals),
+  });
+  // Auto stays selectable on a model with no Auto, and its row says what the session does instead (C1).
+  const autoModeNote = autoMenuNote(shownModeFacts, !!recordedPermissionMode);
   const shownEffortLabel = shownEffortOptions.find((o) => o.value === shownEffort)?.label ?? shownEffort;
   // Cursor CLI on Auto — its catalogue's `default`, or no model named at all, which runs as Auto.
   const cursorAuto = shownEngine === AgentProvider.CURSOR && (!shownModelName || shownModelName === 'default');
@@ -12445,7 +12497,9 @@ export function WorkspaceView({
             onClose={() => setAgentToolsOpen(false)}
             report={detailForSelected?.agentTools}
             engine={detailForSelected?.engine ?? selectedSession?.engine}
-            permissionMode={effectivePermissionMode}
+            // The mode the capsule says, and its gap from the intent (docs/mocks/permission-mode-actual).
+            permissionMode={shownModeCapsule.mode}
+            modeGap={shownModeCapsule.reason}
           />
         )}
         {selected && !selectedTrashed && !composing && (
@@ -13264,6 +13318,8 @@ export function WorkspaceView({
           lockedWorkspaceId={lockedWorkspaceId}
           live={live}
           shownMode={shownMode}
+          modeCapsule={shownModeCapsule}
+          autoModeNote={autoModeNote}
           configMut={configMut}
           onDraftMode={(v) => {
             modeSeedState.current = dirtyContextSeed(modelContextKey);
@@ -13477,7 +13533,13 @@ export interface SessionComposerProps {
   setWorkspaceId: (id: string | undefined) => void;
   lockedWorkspaceId?: string | null;
   live: boolean;
+  /** The intent, which the Mode menu's check sits on. */
   shownMode: string;
+  /** What the Mode capsule says: the mode running (or the one it will start in) and any gap from the intent.
+   *  Without one the capsule says the intent, as a composer that reads no session's mode does. */
+  modeCapsule?: ModeCapsule;
+  /** The Auto row's note where the model has no Auto (C1). */
+  autoModeNote?: string | null;
   /** A live session's config door (`PATCH /sessions/:id/config`); a draft keeps its mode by `onDraftMode`. */
   configMut: { mutate: (config: { permissionMode: string }) => void };
   onDraftMode: (mode: string) => void;
@@ -13566,6 +13628,8 @@ export function SessionComposer({
   lockedWorkspaceId,
   live,
   shownMode,
+  modeCapsule: shownCapsule,
+  autoModeNote = null,
   configMut,
   onDraftMode,
   permissionSemanticsFor,
@@ -13603,6 +13667,14 @@ export function SessionComposer({
   contextActions,
   promptOptimizer,
 }: SessionComposerProps) {
+  const capsule: ModeCapsule = shownCapsule ?? {
+    mode: MODE_TO_PERMISSION[shownMode] ?? shownMode,
+    gap: 'none',
+    label: shownMode,
+    to: null,
+    reason: null,
+    switchingUntil: null,
+  };
   // Settings › Translation (6A): the account's switch and language, for the composer's tag.
   const navigate = useNavigate();
   const me = useQuery(meQuery());
@@ -14593,12 +14665,20 @@ export function SessionComposer({
             />
           </span>
         )}
+        {/* Mode: the mode the engine actually runs in, as the server recorded it, and the gap from the
+            intent the menu's check stays on (docs/mocks/permission-mode-actual, A1 and C1). The reason
+            for a gap is said on hover and at the head of the menu. */}
+        <Tooltip content={capsule.reason ? `${capsule.reason.lead} ${capsule.reason.rest}` : null}>
         <span className="composer-pill">
           <Select
             size="small"
             variant="borderless"
             showArrow={false}
             value={shownMode}
+            renderValue={() => <ModeCapsuleValue capsule={capsule} />}
+            renderOption={(option) => <ModeOptionLabel label={option.label} />}
+            header={capsule.reason ? <ModeReason reason={capsule.reason} /> : undefined}
+            popupClassName={capsule.reason ? 'composer-mode-popup' : undefined}
             onValueChange={(v) => {
               if (v === null) return;
               if (live) {
@@ -14628,7 +14708,8 @@ export function SessionComposer({
               const runnable =
                 permissionModeAvailableOnRunner(MODE_TO_PERMISSION[m], runner.runsAsRoot) &&
                 permissionModeSupported(MODE_TO_PERMISSION[m], shownEngine);
-              const shortNote = semantics?.shortNote;
+              // Auto on a model with no Auto names the model and what the session does instead (C1).
+              const shortNote = m === 'Auto' && autoModeNote ? autoModeNote : semantics?.shortNote;
               return {
                 value: m,
                 label: shortNote ? `${m} — ${shortNote}` : m,
@@ -14639,6 +14720,7 @@ export function SessionComposer({
             matchTriggerWidth={false}
           />
         </span>
+        </Tooltip>
         <span className="composer-pill-spacer" />
         {/* Provider, model, effort and — on a model with a fast lane — speed are one control, the
             way a reference composer writes "model · effort" as one button: the model in the

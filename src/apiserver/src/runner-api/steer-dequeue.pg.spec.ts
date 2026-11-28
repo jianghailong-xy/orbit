@@ -69,12 +69,19 @@ before(async () => {
   // as on every turn the owner or a session sent.
   // `finished_at` is the release column (migrations 1261, 1401): the lock reads it to refuse a released session,
   // NULL on every case here, as on every session still held.
+  // `sender_client` is the app a turn came from (migration 0595): the claim returns it, and a reload it hands out
+  // records the mode it carries as the session's actual mode (migration 1805: `actual_permission_mode{,_at}` and one
+  // `session_permission_mode_change` row, sessions/actual-permission-mode.ts, whose insert also names 1807's nullable
+  // `requested_mode` and `reason`), so those are mirrored too.
+  // `drive_context` is the folder and selection a Drive chat message carried (migration 1680): the claim returns it
+  // with the turn it hands out, NULL on every case here, as on every turn outside a Drive chat.
   // `turn_state` is where the session's turn stands for the runner (migration 1611): the lock and the inbox predicate
   // read it in place of `status` (task T8), IN_FLIGHT on every case here. The lock reads the word through the
   // projector's SQL twin (session_legacy_status, migration 1671, from the migrated public schema), so the row carries
   // the facts it reads, with the application's types: the times are timestamps without a time zone. It has no
   // `status`: since deploy D3 nothing here reads or writes it (task T14).
   await client.query(`
+    DROP TABLE IF EXISTS steer_dequeue_test."session_permission_mode_change";
     DROP TABLE IF EXISTS steer_dequeue_test."conversation_turn";
     DROP TABLE IF EXISTS steer_dequeue_test."inbox_lease_generation";
     DROP TABLE IF EXISTS steer_dequeue_test."session";
@@ -97,7 +104,20 @@ before(async () => {
       last_turn_outcome text,
       started_at timestamp(3),
       import_source_cwd text,
-      kind text NOT NULL DEFAULT 'CONVERSATION'
+      kind text NOT NULL DEFAULT 'CONVERSATION',
+      actual_permission_mode text,
+      actual_permission_mode_at timestamp(3)
+    );
+    CREATE TABLE steer_dequeue_test."session_permission_mode_change" (
+      id uuid PRIMARY KEY,
+      session_id uuid NOT NULL,
+      from_mode text,
+      to_mode text NOT NULL,
+      cause text NOT NULL,
+      client text,
+      requested_mode text,
+      reason text,
+      created_at timestamp(3) NOT NULL
     );
     CREATE TABLE steer_dequeue_test."inbox_lease_generation" (
       generation uuid PRIMARY KEY,
@@ -125,6 +145,7 @@ before(async () => {
       external_sender_source text,
       external_sender_id text,
       external_sender_name text,
+      sender_client text,
       created_at timestamptz NOT NULL DEFAULT now()
     );
   `);

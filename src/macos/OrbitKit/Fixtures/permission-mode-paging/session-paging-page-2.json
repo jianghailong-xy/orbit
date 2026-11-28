@@ -1,0 +1,93 @@
+{
+  "changes": [
+    {
+      "fromMode": null,
+      "toMode": "auto",
+      "cause": "CLAIM",
+      "client": null,
+      "at": "2026-11-27T23:41:01.764Z",
+      "seq": 16
+    },
+    {
+      "fromMode": "auto",
+      "toMode": "plan",
+      "cause": "OWNER_PICK",
+      "client": "web",
+      "at": "2026-11-27T23:41:01.880Z",
+      "seq": 17
+    },
+    {
+      "fromMode": "plan",
+      "toMode": "auto",
+      "cause": "OWNER_PICK",
+      "client": "ios",
+      "at": "2026-11-27T23:41:01.957Z",
+      "seq": 18
+    },
+    {
+      "fromMode": "auto",
+      "toMode": "acceptEdits",
+      "cause": "OWNER_PICK",
+      "client": "android",
+      "at": "2026-11-27T23:41:02.040Z",
+      "seq": 19
+    },
+    {
+      "fromMode": "acceptEdits",
+      "toMode": "auto",
+      "cause": "OWNER_PICK",
+      "client": "web",
+      "at": "2026-11-27T23:41:02.130Z",
+      "seq": 20
+    },
+    {
+      "fromMode": "auto",
+      "toMode": "plan",
+      "cause": "OWNER_PICK",
+      "client": "ios",
+      "at": "2026-11-27T23:41:02.211Z",
+      "seq": 21
+    },
+    {
+      "fromMode": "plan",
+      "toMode": "auto",
+      "cause": "OWNER_PICK",
+      "client": "android",
+      "at": "2026-11-27T23:41:02.294Z",
+      "seq": 22
+    },
+    {
+      "fromMode": "auto",
+      "toMode": "default",
+      "cause": "ENGINE_REPORT",
+      "client": null,
+      "at": "2026-11-27T23:41:02.358Z",
+      "seq": 23
+    },
+    {
+      "fromMode": "default",
+      "toMode": "auto",
+      "cause": "RUNNER_CORRECTION",
+      "client": null,
+      "at": "2026-11-27T23:41:02.358Z",
+      "seq": 24
+    },
+    {
+      "fromMode": "auto",
+      "toMode": "default",
+      "cause": "ENGINE_REPORT",
+      "client": null,
+      "at": "2026-11-27T23:41:02.358Z",
+      "seq": 25
+    },
+    {
+      "fromMode": "default",
+      "toMode": "auto",
+      "cause": "RUNNER_CORRECTION",
+      "client": null,
+      "at": "2026-11-27T23:41:02.358Z",
+      "seq": 26
+    }
+  ],
+  "hasMore": false
+}

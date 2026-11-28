@@ -19,6 +19,7 @@ import {
 } from '@nestjs/common';
 import {
   type AgentExecConfig,
+  PermissionMode,
   type RemoteSubagentClaim,
   type RemoteSubagentEventBatch,
   type RemoteSubagentEventsPage,
@@ -39,12 +40,13 @@ import {
   ALWAYS_ALLOWED_TOOLS,
   isWiderThanParent,
   modesASubagentMayRunIn,
-  resolvePermissionMode,
+  runningPermissionMode,
   subagentChildMode,
   widerModeRefusal,
 } from '../common/permission-mode';
 import { dispatchAllowedTools } from '../common/permission-rules';
-import { normalizeBuiltinPermissionMode, normalizeEffortForRuntimeModel } from '../common/runtime-provider';
+import { normalizeEffortForRuntimeModel } from '../common/runtime-provider';
+import { claimPermissionMode, claimPermissionModeLogLine } from '../queue/claim-permission-mode';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProviderPlanUsageService } from '../providers/plan-usage.service';
@@ -52,7 +54,7 @@ import { QueueService } from '../queue/queue.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { reapApprovalsOfEndedSubagents } from '../sessions/abandoned-approvals';
-import { runAccessLevel, scheduleRunDisallowedTools, scheduleRunPermissionMode } from '../schedules/schedule-access';
+import { runAccessLevel, scheduleRunDisallowedTools } from '../schedules/schedule-access';
 import { assertEngineSession } from '../sessions/engine-session';
 import { SessionsService } from '../sessions/sessions.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -113,6 +115,34 @@ interface ChildExec {
   effort: string | undefined;
   /** The account of an account pool chosen for this SubAgent alone. */
   poolMember?: SubagentPoolMemberChoice;
+  /** When `exec.permissionMode` is not the mode the child asked for: what it asked for, and why (claimPermissionMode). */
+  permissionModeSubstitution?: NonNullable<SubagentAttempt['permissionModeSubstitution']>;
+}
+
+/** What an attempt records of its child's mode substitution, if it had one (SubagentAttempt.permissionModeSubstitution). */
+function attemptSubstitution(
+  built: { permissionModeSubstitution?: SubagentAttempt['permissionModeSubstitution'] },
+): Pick<SubagentAttempt, 'permissionModeSubstitution'> {
+  return built.permissionModeSubstitution ? { permissionModeSubstitution: built.permissionModeSubstitution } : {};
+}
+
+/** The line a SubAgent's spawn writes for a mode substitution, as a claim writes its own; null when it made none. */
+function subagentSubstitutionLine(
+  sessionId: string,
+  runId: string,
+  built: { exec?: AgentExecConfig; permissionModeSubstitution?: SubagentAttempt['permissionModeSubstitution'] },
+): string | null {
+  const substitution = built.permissionModeSubstitution;
+  if (!substitution || !built.exec) return null;
+  return claimPermissionModeLogLine({
+    sessionId,
+    path: 'SUBAGENT',
+    subagentRunId: runId,
+    provider: String(built.exec.provider),
+    model: built.exec.model,
+    mode: substitution.mode as PermissionMode,
+    substitution: { requestedMode: substitution.requestedMode as PermissionMode, reason: substitution.reason },
+  });
 }
 
 /** What a resumed run on this machine was opened under: its last attempt's target, never routed (resumeInPlace). */
@@ -134,6 +164,7 @@ const SUBAGENT_PARENT_SELECT = {
   provider: true,
   effort: true,
   permissionMode: true,
+  actualPermissionMode: true,
   scheduleRun: { select: { accessLevel: true, schedule: { select: { accessLevel: true } } } },
   workspace: {
     select: {
@@ -429,7 +460,10 @@ export class RunnerSubagentsController {
     workspaceReason?: string | null,
   ): Promise<SubagentRunCreateResponse> {
     await this.assertParentOfRunner(sessionId, runner);
-    return withTransactionRetry(this.prisma, async (tx) => {
+    // The spawn's mode substitution is logged once, after commit, by the attempt that wrote the run.
+    let substitutionLine: string | null = null;
+    const answer = await withTransactionRetry(this.prisma, async (tx) => {
+      substitutionLine = null;
       // Chosen first, so that a trial the run claims (§6.5) names the run before its row is written.
       const runId = uuidv7();
       await tx.$queryRaw`SELECT 1 FROM "session" WHERE "id" = ${sessionId}::uuid FOR UPDATE`;
@@ -543,9 +577,11 @@ export class RunnerSubagentsController {
             ...firstAttempt({ ...target, effort: chosen.built.effort ?? target.effort }),
             ...(chosen.built.poolMember ? { poolMember: chosen.built.poolMember } : {}),
             ...('trialOf' in chosen && chosen.trialOf ? { trialOf: chosen.trialOf } : {}),
+            ...attemptSubstitution(chosen.built),
           }] as unknown as Prisma.InputJsonValue,
         },
       });
+      substitutionLine = subagentSubstitutionLine(sessionId, row.id, chosen.built);
       return {
         runId: row.id,
         status: row.status as SubagentRunStatus,
@@ -553,6 +589,8 @@ export class RunnerSubagentsController {
         exec: chosen.built.exec,
       };
     }, loggedRetry(this.logger, 'runnerSubagents.createSubagentRun'));
+    if (substitutionLine) this.logger.log(substitutionLine);
+    return answer;
   }
 
   /**
@@ -723,7 +761,8 @@ export class RunnerSubagentsController {
       const { decision, target: chosen, built } = await planRemoteSubagent(tx, {
         ownerId: session.ownerId, sessionId, dto, facts, pick, planUsage: this.planUsage,
       });
-      const parentMode = resolvePermissionMode(session.permissionMode, session.owner);
+      // R3: the mode the parent is actually running in.
+      const parentMode = runningPermissionMode(session, session.owner);
       const childEngine = String(built.exec!.provider);
       const parentEngine = session.provider ?? childEngine;
       if (!dto.readonly && dto.permissionMode
@@ -798,7 +837,21 @@ export class RunnerSubagentsController {
         await reapApprovalsOfEndedSubagents(tx, run.sessionId, run.id);
         return { refusal: built.refusal! };
       }
-      if (!run.claimedAt) await tx.subagentRun.update({ where: { id: run.id }, data: { claimedAt: new Date() } });
+      // The first claim is where its child's mode is handed: its attempt records a substitution, and it is logged.
+      let substitutionLine: string | null = null;
+      if (!run.claimedAt) {
+        const attempts = attemptsOf(run.attempts);
+        const current = attempts.at(-1);
+        if (current) {
+          delete current.permissionModeSubstitution;
+          Object.assign(current, attemptSubstitution(built));
+        }
+        await tx.subagentRun.update({
+          where: { id: run.id },
+          data: { claimedAt: new Date(), ...(current ? { attempts: attempts as unknown as Prisma.InputJsonValue } : {}) },
+        });
+        substitutionLine = subagentSubstitutionLine(run.sessionId, run.id, built);
+      }
       const workspace = await tx.workspace.findUnique({ where: { id: run.workspaceId! }, select: { workDir: true } });
       const claim: RemoteSubagentClaim = {
         runId: run.id,
@@ -816,8 +869,9 @@ export class RunnerSubagentsController {
         resumeOf: facts.resumeOf ?? null,
         inPlace: facts.inPlace === true && facts.readonly === true,
       };
-      return { claim };
+      return { claim, substitutionLine };
     }, loggedRetry(this.logger, 'runnerSubagents.claimRemoteSubagentRun'));
+    if (outcome.substitutionLine) this.logger.log(outcome.substitutionLine);
     if (outcome.refusal !== undefined) {
       await this.fileWake(runId);
       throw new ConflictException({ code: 'SUBAGENT_TARGET_CANNOT_RUN', message: outcome.refusal });
@@ -964,7 +1018,7 @@ export class RunnerSubagentsController {
     if (!resolved.exec) {
       throw new ConflictException(resolved.refusal ?? 'the session has no provider to run a SubAgent on');
     }
-    const { exec: resolvedExec, customRow } = resolved;
+    const { exec: resolvedExec } = resolved;
     const provider = resolvedExec.provider;
     const runnerModel = resolvedExec.runnerModel ?? resolvedExec.model;
     const workspace = session.workspace;
@@ -977,7 +1031,8 @@ export class RunnerSubagentsController {
     );
     // By the rule a session starting another is held to (SessionsService.assertChildModeOrNarrow), but with no
     // exemption: an Auto parent's SubAgent may not run Bypass either (isWiderThanParent).
-    const parentMode = resolvePermissionMode(session.permissionMode, session.owner);
+    // R3: the mode the parent is actually running in.
+    const parentMode = runningPermissionMode(session, session.owner);
     if (!dto.readonly && dto.permissionMode && isWiderThanParent({ mode: parentMode, engine: provider }, dto.permissionMode, provider)) {
       throw widerModeRefusal(
         parentMode,
@@ -993,23 +1048,24 @@ export class RunnerSubagentsController {
     // A scheduled run's SubAgent is held to the run's level, as the run is: Auto on Claude Code, the level's denials
     // on every engine (schedule-access.ts). It never waits on a card nobody is there to answer.
     const level = runAccessLevel(session.scheduleRun);
+    // The child's mode as a claim hands a session's (claim-permission-mode.ts): Auto stays Auto on a model whose
+    // catalogue row lists none, since that row is a probe's prediction. Only a scheduled run, Bypass on a root runner
+    // and DeepSeek Harness's and Cursor's refusals remain; the attempt records each, and its spawn logs it.
+    const handed = claimPermissionMode(provider, childMode, level, runner.runsAsRoot);
     const exec: AgentExecConfig = {
       provider,
       model: runnerModel,
       allowedTools: dispatchAllowedTools(provider, ALWAYS_ALLOWED_TOOLS, workspace?.permissionRules ?? []),
       disallowedTools: scheduleRunDisallowedTools((workspace?.disallowedTools as string[] | null) ?? [], level, provider),
-      permissionMode: normalizeBuiltinPermissionMode(
-        provider,
-        runnerModel,
-        scheduleRunPermissionMode(childMode, level, provider),
-        customRow?.enabled === true,
-        runner.runsAsRoot,
-        session.assignedRunner?.modelCatalog,
-      ),
+      permissionMode: handed.mode,
       effort,
       env: resolvedExec.env,
     };
-    return { exec, provider, resolvedModel: resolvedExec.model, effort, ...(resolved.poolMember ? { poolMember: resolved.poolMember } : {}) };
+    return {
+      exec, provider, resolvedModel: resolvedExec.model, effort,
+      ...(resolved.poolMember ? { poolMember: resolved.poolMember } : {}),
+      ...(handed.substitution ? { permissionModeSubstitution: { ...handed.substitution, mode: handed.mode } } : {}),
+    };
   }
 
   /**
@@ -1111,6 +1167,7 @@ export class RunnerSubagentsController {
           ...target, attempt, outcome: 'RUNNING', startedAt: now,
           ...(built.poolMember ? { poolMember: built.poolMember } : {}),
           ...(claim === 'CLAIMED' && trial ? { trialOf: trial } : {}),
+          ...attemptSubstitution(built),
         } as TrialAttempt);
         const moved: SubagentDecision = {
           ...decision,
@@ -1121,7 +1178,10 @@ export class RunnerSubagentsController {
           runEffort: built.effort ?? null,
         };
         await save({ decision: moved as unknown as Prisma.InputJsonValue });
-        return { answer: { runId: row.id, attempt, reason, decision: moved, exec: built.exec }, trialOf: trial };
+        return {
+          answer: { runId: row.id, attempt, reason, decision: moved, exec: built.exec }, trialOf: trial,
+          substitutionLine: subagentSubstitutionLine(sessionId, row.id, built),
+        };
       }
       await save();
       return { refusal: new ConflictException({
@@ -1129,6 +1189,7 @@ export class RunnerSubagentsController {
         message: noProviderMessage(decision, attempts, skipped),
       }) };
     }, loggedRetry(this.logger, 'runnerSubagents.nextSubagentCandidate'));
+    if ('substitutionLine' in outcome && outcome.substitutionLine) this.logger.log(outcome.substitutionLine);
     await this.attemptEnded(sessionId, runId, failing, { failed: true, error: dto.error, failure: dto.failure, admission: dto.admission });
     // A trial the failed attempt held ends with it; the refusal it took already released it, unless the next attempt
     // claimed the same account's.

@@ -319,16 +319,17 @@ func TestCarryOverModelCapabilities(t *testing.T) {
 		t.Fatalf("FastMode = %v, want the previous true carried over", merged[0].FastMode)
 	}
 
-	// A round that DID answer always wins, including when it answers no: a model losing a
-	// capability is news, and carrying the old yes over it would pin a lane that is gone.
+	// A fast-lane answer that DID come back always wins, including a no: a model losing a lane is
+	// news, and carrying the old yes over it would pin a lane that is gone. One reading without
+	// Auto is not enough to withdraw Auto (claudeAutoWithdrawReadings; claude_auto_withdraw_test.go).
 	merged = carryOverModelCapabilities(prev, []ModelInfo{
 		{Value: "claude-opus-5-5", PermissionModes: []string{"default"}, FastMode: &no},
 	})
 	if merged[0].FastMode == nil || *merged[0].FastMode {
 		t.Fatalf("FastMode = %v, want this round's false", merged[0].FastMode)
 	}
-	if !reflect.DeepEqual(merged[0].PermissionModes, []string{"default"}) {
-		t.Fatalf("PermissionModes = %#v, want this round's list", merged[0].PermissionModes)
+	if !reflect.DeepEqual(merged[0].PermissionModes, allPermissionModes) {
+		t.Fatalf("PermissionModes = %#v, want Auto kept after one reading without it", merged[0].PermissionModes)
 	}
 
 	// A model this runner has never reported has nothing to inherit.

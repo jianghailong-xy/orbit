@@ -5,6 +5,7 @@ import {
   isWiderThanStarter,
   modeLimitsWhatItStarts,
   resolvePermissionMode,
+  runningPermissionMode,
   widerSessionRefusal,
 } from '../common/permission-mode';
 import { heldFilter } from '../common/session-release';
@@ -15,9 +16,11 @@ import { heldFilter } from '../common/session-release';
  *
  * A session runs a turn in its own mode, whoever asked for the turn. So a session that may do less than
  * another reaches it only as far as this says, by the comparison that holds a session to what it may
- * start (`isWiderThanStarter`), over the stored mode of both, a null one read as the account's default:
+ * start (`isWiderThanStarter`): the caller by the mode it is actually running in (owner ruling R3,
+ * `runningPermissionMode`), the target by its stored mode, a null one read as the account's default — the mode its
+ * next turn is handed:
  *
- *   | The caller's stored mode         | Target no wider | Target wider, directly related | Target wider, unrelated |
+ *   | The caller's running mode        | Target no wider | Target wider, directly related | Target wider, unrelated |
  *   |----------------------------------|-----------------|--------------------------------|-------------------------|
  *   | Auto, Bypass                     | allowed         | allowed                        | allowed                 |
  *   | Default, Accept Edits, Don't Ask | allowed         | allowed, the message says so   | refused                 |
@@ -85,6 +88,7 @@ type ReachDb = Pick<
 const REACH_SELECT = {
   id: true,
   permissionMode: true,
+  actualPermissionMode: true,
   engine: true,
   parentSessionId: true,
   owner: { select: { preferences: true } },
@@ -94,6 +98,7 @@ const REACH_SELECT = {
 interface ReachRow {
   id: string;
   permissionMode: string | null;
+  actualPermissionMode: string | null;
   engine: string | null;
   parentSessionId: string | null;
   owner: { preferences: unknown };
@@ -213,7 +218,7 @@ export async function assertSessionMayReach(
     return refuse(verifierMessageRefusal(target));
   }
 
-  const callerMode = resolvePermissionMode(caller.permissionMode, caller.owner);
+  const callerMode = runningPermissionMode(caller, caller.owner);
   const targetMode = resolvePermissionMode(target.permissionMode, target.owner);
   if (!isWiderThanStarter({ mode: callerMode, engine: caller.engine }, targetMode, target.engine)) {
     return { narrower: false };
@@ -263,10 +268,10 @@ export async function assertMayMoveRuns(
 ): Promise<void> {
   const caller = await db.session.findFirst({
     where: { id: callerSessionId, ownerId },
-    select: { permissionMode: true, engine: true, owner: { select: { preferences: true } } },
+    select: { permissionMode: true, actualPermissionMode: true, engine: true, owner: { select: { preferences: true } } },
   });
   if (!caller) return;
-  const callerMode = resolvePermissionMode(caller.permissionMode, caller.owner);
+  const callerMode = runningPermissionMode(caller, caller.owner);
   if (!modeLimitsWhatItStarts(callerMode)) return;
   const runs = await db.session.findMany({
     where: { ownerId, taskId, id: { not: callerSessionId } },

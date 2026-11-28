@@ -162,8 +162,15 @@ func writeClaudeCapabilityProbeSettings(dir string) (string, error) {
 // parseClaudeModelCapabilities reads the two answers out of one stream-json run: the init frame's
 // settled permission mode, and `/fast`'s verdict in the result frame. Lines that are not JSON, and
 // a run missing either frame, leave that half nil.
+//
+// The mode counts only when the same run also ended in a clean result frame (is_error false). The
+// probe makes no API call (`/fast` is local: duration_api_ms 0, num_turns 0, measured on 2.1.329),
+// so an account that is limited, moved mid-round or otherwise unwell shows up here, if at all, as
+// a run that errored or never finished; a mode read from such a run is unknown, not "no Auto".
 func parseClaudeModelCapabilities(out []byte) claudeModelCapabilities {
 	caps := claudeModelCapabilities{}
+	var settledModes []string
+	finishedClean := false
 	for _, line := range bytes.Split(out, []byte("\n")) {
 		line = bytes.TrimSpace(line)
 		if len(line) == 0 || line[0] != '{' {
@@ -174,18 +181,23 @@ func parseClaudeModelCapabilities(out []byte) claudeModelCapabilities {
 			Subtype        string `json:"subtype"`
 			PermissionMode string `json:"permissionMode"`
 			Result         string `json:"result"`
+			IsError        bool   `json:"is_error"`
 		}
 		if json.Unmarshal(line, &frame) != nil {
 			continue
 		}
 		if frame.Type == "system" && frame.Subtype == "init" && frame.PermissionMode != "" {
-			caps.permissionModes = claudeModelPermissionModes(frame.PermissionMode == "auto")
+			settledModes = claudeModelPermissionModes(frame.PermissionMode == "auto")
 		}
 		if frame.Type == "result" {
+			finishedClean = !frame.IsError
 			if fast, said := parseFastModeVerdict(frame.Result); said {
 				caps.fastMode = &fast
 			}
 		}
+	}
+	if finishedClean {
+		caps.permissionModes = settledModes
 	}
 	return caps
 }

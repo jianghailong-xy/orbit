@@ -1,6 +1,6 @@
 import { readSessionCoordinatorHandoffs } from '../projects/coordinator-handoff';
 import { CLEARED_RUN_FAILURE } from '../runner-api/run-failure-columns';
-import type { BackgroundJobStopResponse, BackgroundJobTailResponse, HelpAskMarker, SubagentRunView, WorkflowRunView } from '@orbit/shared';
+import type { BackgroundJobStopResponse, BackgroundJobTailResponse, HelpAskMarker, SessionPermissionModeChangePage, SubagentRunView, WorkflowRunView } from '@orbit/shared';
 import { BG_JOB_STOPPED_BY_OWNER, BG_JOB_TAIL_MAX_BYTES, BG_OUTPUT_TAIL_V1, BG_OWNER_STOP_V1, cloneRootFor, newFolderPath } from '@orbit/shared';
 import { RunnerHints } from '../realtime/runner-hints';
 import { boundTailLines } from './background-job-tail';
@@ -89,7 +89,15 @@ import {
   type ExternalTurnSender,
 } from './session-message';
 import { senderClientColumns, type TurnSenderClient } from './turn-sender-client';
+import {
+  type ConfigChangeOrigin,
+  configTurnKey,
+  PERMISSION_MODE_CHANGES_INCLUDE,
+  permissionModeChangesOfDetail,
+  readPermissionModeChangePage,
+} from './actual-permission-mode';
 import { readOrbitMessageFrom } from './orbit-message';
+import { claimPermissionMode, claimPermissionModeLogLine } from '../queue/claim-permission-mode';
 import {
   closeRequestsTheRetryWillNotResend,
   isSessionReplyTurn,
@@ -174,6 +182,7 @@ import {
 import {
   ANCHOR_ROLE,
   anchoredSeed,
+  projectTaskRunAnchor,
   sessionAnchor,
   taskRunAnchor,
   type AnchorSeed,
@@ -214,6 +223,7 @@ import {
   isWiderThanStarter,
   modeLimitsWhatItStarts,
   modesItMayStart,
+  runningPermissionMode,
   resolvePermissionMode,
   widerModeRefusal,
 } from '../common/permission-mode';
@@ -1535,7 +1545,7 @@ export class SessionsService {
     // request clones from GitHub starts with it on (createInNewWorkspace), and so does its first session.
     let enableWorktree = !!newWorkspace?.clone;
     // The owner's account-level permission default, materialized onto the session below when the
-    // caller picked none (MCP spawns, task runs — the web/native composers always send one).
+    // caller picked none. Task runs, coordinator judgments and the web/native composers name one.
     // The claim resolves session ?? account ?? auto anyway, so this doesn't change what the
     // runner spawns with; it stops a NULL column from *reading* as one particular mode in every
     // client's Mode pill — a stale pill that the next resume writes back, silently changing a
@@ -2933,6 +2943,7 @@ export class SessionsService {
         spawnDepth: true,
         workspaceId: true,
         permissionMode: true,
+        actualPermissionMode: true,
         engine: true,
         owner: { select: { preferences: true } },
       },
@@ -3143,12 +3154,18 @@ export class SessionsService {
    */
   private async assertChildModeOrNarrow(
     ownerId: string,
-    parent: { permissionMode: string | null; engine: string | null; owner: { preferences: unknown } },
+    parent: {
+      permissionMode: string | null;
+      actualPermissionMode: string | null;
+      engine: string | null;
+      owner: { preferences: unknown };
+    },
     dto: { permissionMode?: string; engine?: string; provider?: string; model?: string },
     workspaceId: string | undefined,
     anchor: () => Promise<AnchorSeed | null>,
   ): Promise<string | undefined> {
-    const starter = { mode: resolvePermissionMode(parent.permissionMode, parent.owner), engine: parent.engine };
+    // R3: judged by the mode the parent is actually running in, not its stored intent.
+    const starter = { mode: runningPermissionMode(parent, parent.owner), engine: parent.engine };
     if (!modeLimitsWhatItStarts(starter.mode)) return undefined;
     const engine = await this.engineOfStart(ownerId, { ...dto, workspaceId, anchor });
     if (dto.permissionMode) {
@@ -3165,13 +3182,12 @@ export class SessionsService {
   }
 
   /**
-   * Refuse a session opening a session at the account's default when that default is wider than the
-   * session may start. For a door with no mode to name (`task_start`, `task_update`, a coordinator's
-   * rotation), so `next` is a person's way forward. A caller that is not a session of this owner has
+   * Refuse a session opening another session in a wider mode. Task starts name Auto and a
+   * coordinator rotation can inherit the account's default. A caller that is not a session of this owner has
    * nothing to compare: an owner's own door passes none, and the header it came from attributes, it
    * does not authorize.
    */
-  async assertMayStartAtAccountDefault(
+  async assertMayStartInMode(
     ownerId: string,
     actingSessionId: string | undefined,
     target: {
@@ -3179,6 +3195,7 @@ export class SessionsService {
       provider?: string | null;
       model?: string | null;
       workspaceId?: string | null;
+      permissionMode?: PermissionMode;
       /** The start's anchor, as create() is handed it (start-anchor.ts). */
       anchor?: () => Promise<AnchorSeed | null>;
     },
@@ -3187,13 +3204,14 @@ export class SessionsService {
     if (!actingSessionId || !UUID_SHAPE.test(actingSessionId)) return;
     const acting = await this.prisma.session.findFirst({
       where: { id: actingSessionId, ownerId },
-      select: { permissionMode: true, engine: true, owner: { select: { preferences: true } } },
+      select: { permissionMode: true, actualPermissionMode: true, engine: true, owner: { select: { preferences: true } } },
     });
     if (!acting) return;
-    const starter = { mode: resolvePermissionMode(acting.permissionMode, acting.owner), engine: acting.engine };
+    // R3: the mode the acting session is actually running in.
+    const starter = { mode: runningPermissionMode(acting, acting.owner), engine: acting.engine };
     if (!modeLimitsWhatItStarts(starter.mode)) return;
     const engine = await this.engineOfStart(ownerId, target);
-    const mode = modeOfNoneNamed(acting.owner, engine);
+    const mode = target.permissionMode ?? modeOfNoneNamed(acting.owner, engine);
     if (isWiderThanStarter(starter, mode, engine)) throw widerModeRefusal(starter.mode, mode, engine, next);
   }
 
@@ -3286,19 +3304,30 @@ export class SessionsService {
    * What a task's next fresh run starts on (start-anchor.ts TaskRunsWith), by the resolution its
    * dispatch makes (TasksService.execute → create() with the task's pins and taskRunAnchor): the task
    * payload's `runsWith` and `orbit status` read this. Routing aside, a run created now gets this pair.
+   * `projectId`, when given, is the project the task is filed under as a write leaves it (null: none), and
+   * names the anchor instead of the task's stored project; a task not written yet has only that.
    */
   async taskRunsWith(
     ownerId: string,
-    task: { id?: string | null; engine?: string | null; provider?: string | null; workspaceId?: string | null },
+    task: {
+      id?: string | null;
+      projectId?: string | null;
+      engine?: string | null;
+      provider?: string | null;
+      workspaceId?: string | null;
+    },
   ): Promise<TaskRunsWith> {
     const taskId = task.id;
+    const projectId = task.projectId;
     const pinned = !!(task.engine || task.provider);
     let seed: ReadSeed | null | undefined;
     const target = {
       engine: task.engine,
       provider: task.provider,
       workspaceId: task.workspaceId,
-      anchor: taskId ? () => taskRunAnchor(this.prisma, taskId) : undefined,
+      anchor: projectId !== undefined
+        ? (projectId ? () => projectTaskRunAnchor(this.prisma, projectId) : undefined)
+        : taskId ? () => taskRunAnchor(this.prisma, taskId) : undefined,
     };
     const source = (): Pick<TaskRunsWith, 'source' | 'anchorSessionId'> => pinned
       ? { source: 'TASK_PIN', anchorSessionId: null }
@@ -5271,6 +5300,8 @@ export class SessionsService {
       providerBuiltin: boolean;
       model: string | null;
       permissionMode: string | null;
+      actualPermissionMode: string | null;
+      actualPermissionModeAt: Date | null;
       codexSandboxUnavailable: boolean;
       effort: string | null;
       fastMode: boolean;
@@ -5406,6 +5437,8 @@ export class SessionsService {
         s.source, s.engine, s.provider, s.model,
         s.provider_builtin AS "providerBuiltin",
         s.permission_mode AS "permissionMode",
+        s.actual_permission_mode AS "actualPermissionMode",
+        s.actual_permission_mode_at AS "actualPermissionModeAt",
         s.codex_sandbox_unavailable AS "codexSandboxUnavailable",
         s.effort,
         s.fast_mode       AS "fastMode",
@@ -5673,6 +5706,9 @@ export class SessionsService {
         providerBuiltin: r.providerBuiltin,
         model: r.model,
         permissionMode: r.permissionMode,
+        // What the engine runs in, beside the intent (actual-permission-mode.ts); null until a claim since 1805.
+        actualPermissionMode: r.actualPermissionMode,
+        actualPermissionModeAt: r.actualPermissionModeAt,
         codexSandboxUnavailable: r.codexSandboxUnavailable,
         effort: r.effort,
         fastMode: r.fastMode,
@@ -5914,6 +5950,8 @@ export class SessionsService {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
       include: {
+        // How the actual mode came to be, newest first (permissionModeChangesOfDetail turns it oldest first).
+        permissionModeChanges: PERMISSION_MODE_CHANGES_INCLUDE,
         workspace: true,
         assignedRunner: {
           select: {
@@ -6064,6 +6102,8 @@ export class SessionsService {
       notifyTurnFinished: _notifyTurnFinished,
       notifyNeedsYou: _notifyNeedsYou,
       notificationsMuted: _notificationsMuted,
+      // Read, never spread: answered oldest first as `permissionModeChanges` and `permissionModeChangesHasMore`, below.
+      permissionModeChanges,
       ...rest
     } = projected;
     const tags = tagLinks
@@ -6183,6 +6223,9 @@ export class SessionsService {
       settings: sessionSettingsOf(session, session.workspace?.env, SessionsService.engineLive(session)),
       usage,
       engineVersion,
+      // `permissionMode` (the intent) and `actualPermissionMode`/`actualPermissionModeAt` (what the engine runs
+      // in) ride along in the spread; here, how the actual mode came to be (actual-permission-mode.ts).
+      ...permissionModeChangesOfDetail(permissionModeChanges),
     }, Date.now(), landing);
     return {
       ...detail,
@@ -6584,6 +6627,20 @@ export class SessionsService {
    * and marks those events `truncated`, so the client downloads what the folded transcript shows
    * and refetches the rest per card from getEventFull.
    */
+  /** A page of the session's mode changes older than the detail's (GET /sessions/:id/permission-mode-changes). */
+  async getPermissionModeChangePage(
+    userId: string,
+    id: string,
+    opts: { before?: number; limit?: number },
+  ): Promise<SessionPermissionModeChangePage> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId: userId },
+      select: { id: true },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    return readPermissionModeChangePage(this.prisma, id, opts);
+  }
+
   async getEventPage(
     userId: string,
     id: string,
@@ -8127,6 +8184,7 @@ export class SessionsService {
       kind: 'reload',
       content: JSON.stringify({ provider: engine }),
       clientTurnId: randomUUID(),
+      senderClient: 'orbit',
     });
     return {
       [ACCOUNT_CHOICE[engine]]: move.to,
@@ -12865,8 +12923,24 @@ export class SessionsService {
    * `credential` is the user door's. A personal access token may not change the permission mode at
    * all, to any value: a mode that runs without asking would take approvals — which only a login may
    * answer — out of the session's way (docs/personal-access-token-design.md §5). The rest is a token's.
+   *
+   * The stored `permissionMode` is the owner's intent: only a mode this PATCH names writes it, and never the mode the
+   * engine is told. That is the intent as a claim hands it (claimPermissionMode): Auto stays Auto on a model whose
+   * catalogue row lists none, since that row is a probe's prediction; the engine says what it settles on and the
+   * runner corrects it when it settles lower, as on a claim. Only the substitutions that are not predictions remain —
+   * Bypass on a root runner, a scheduled run on Claude Code, and DeepSeek Harness's and Cursor's refusals — and each is
+   * logged and carried on the control turn, whose acknowledgement records it with the actual mode
+   * (actual-permission-mode.ts). `origin` says who asked, which the control
+   * turns' keys carry (configTurnKey) so the actual-mode change they cause names it: the owner (with `senderClient`,
+   * the app the request came from, on the turn's own columns), or Orbit itself.
    */
-  async updateConfig(ownerId: string, id: string, dto: SessionConfigDto, credential?: AuthCredential) {
+  async updateConfig(
+    ownerId: string,
+    id: string,
+    dto: SessionConfigDto,
+    credential?: AuthCredential,
+    by: { origin: ConfigChangeOrigin; senderClient?: TurnSenderClient; senderSessionId?: string } = { origin: 'OWNER' },
+  ) {
     // Model, permission mode, effort, provider and account are all engine-path settings (§2.9 LS6).
     await this.assertEngineSession(ownerId, id);
     refuseOwnerFieldsToToken(credential, { permissionMode: dto.permissionMode });
@@ -12890,7 +12964,8 @@ export class SessionsService {
       throw new BadRequestException('nothing to update');
     }
     // Retried whole: a locked re-read decides what the new config may be, and the inbox nudge
-    // below happens once, after commit.
+    // below happens once, after commit — as does the substitution's log line, set by the attempt that committed.
+    let substitutionLine: string | null = null;
     const queuedControlTurn = await withTransactionRetry(this.prisma, async (tx) => {
       // Serialize config patches with each other and with claim/end transitions. The effective
       // model/mode pair must be derived from the latest row: two concurrent partial PATCHes must
@@ -12913,6 +12988,8 @@ export class SessionsService {
           },
           // The account-level permission default, which replaced the per-workspace one.
           owner: { select: { preferences: true } },
+          // A scheduled run's level, which holds its Claude engine in Auto (claimPermissionMode).
+          scheduleRun: { select: { accessLevel: true, schedule: { select: { accessLevel: true } } } },
         },
       });
       if (isReleased(session)) {
@@ -12967,14 +13044,26 @@ export class SessionsService {
       const requestedPermissionMode =
         (dto.permissionMode as PermissionMode | undefined) ??
         resolvePermissionMode(session.permissionMode, session.owner);
-      const normalizedPermissionMode = normalizeBuiltinPermissionMode(
+      // What the engine is told; the row keeps requestedPermissionMode, the intent. As a claim hands it: the intent, but
+      // for the substitutions that are not predictions (claim-permission-mode.ts), each logged here and carried on the
+      // control turn for the mode change it causes. A model whose catalogue row lists no Auto is told Auto all the same.
+      const handed = claimPermissionMode(
         exec.provider,
-        exec.model,
         requestedPermissionMode,
-        next.customRow?.enabled === true,
+        runAccessLevel(session.scheduleRun),
         session.assignedRunner?.runsAsRoot,
-        session.assignedRunner?.modelCatalog,
       );
+      const normalizedPermissionMode = handed.mode;
+      substitutionLine = handed.substitution
+        ? claimPermissionModeLogLine({
+          sessionId: id,
+          path: 'CONFIG_CHANGE',
+          provider: exec.provider,
+          model: exec.model,
+          mode: normalizedPermissionMode,
+          substitution: handed.substitution,
+        })
+        : null;
       const normalizedEffort =
         dto.effort !== undefined
           ? normalizeEffortForProvider(exec.provider, dto.effort)
@@ -13013,10 +13102,11 @@ export class SessionsService {
         where: { id },
         data: {
           lastTurnAt: new Date(), // reset the idle clock so the reaper won't tear down mid-reload
-          // Persist the complete effective pair. This snapshots inherited defaults and keeps DB,
-          // UI and the restarted runtime on the same provider-aware Auto normalization.
+          // The model as resolved, and the mode as INTENDED: an inherited account default is snapshotted as
+          // before, but a model with no Auto never writes Default over it. What the engine runs in is
+          // session.actualPermissionMode, recorded when the engine takes the change.
           model: exec.model,
-          permissionMode: normalizedPermissionMode,
+          permissionMode: requestedPermissionMode,
           ...(dto.effort !== undefined ? { effort: normalizedEffort } : {}),
           ...(normalizedFastMode !== undefined ? { fastMode: normalizedFastMode } : {}),
           // Its engine recorded before its credential moves, so nothing derives it from the new one.
@@ -13090,8 +13180,24 @@ export class SessionsService {
         !modelCrossesProvider &&
         (!respawns ||
           exec.model !== session.model ||
-          normalizedPermissionMode !== session.permissionMode ||
+          // Against what the engine runs in now: the intent no longer says that.
+          normalizedPermissionMode !== (session.actualPermissionMode ?? session.permissionMode) ||
           effortMoved);
+      // A session header is attribution only. Keep it only if it names this owner's session.
+      const senderSession = by.senderSessionId && UUID_SHAPE.test(by.senderSessionId)
+        ? await tx.session.findFirst({
+            where: { id: by.senderSessionId, ownerId, deletedAt: null },
+            select: { id: true },
+          })
+        : null;
+      const sender = {
+        senderClient: by.origin === 'ORBIT' ? 'orbit'
+          : credential?.kind === 'PAT' ? 'pat'
+          : senderSession ? 'session'
+          : 'unknown',
+        ...senderClientColumns(by.senderClient),
+        senderSessionId: senderSession?.id,
+      };
       // Both are enqueued under this same row lock, so their payload is exactly the config
       // committed above. Order matters when both go: the re-spawn re-applies every flag anyway,
       // so putting it last keeps the control frame from being work that is immediately redone.
@@ -13101,6 +13207,9 @@ export class SessionsService {
           content: JSON.stringify({
             model: exec.model,
             permissionMode: normalizedPermissionMode,
+            // Why the mode is not the one asked for, when it is not; the runner reads none of it, and its
+            // acknowledgement records it with the mode (recordSetConfigAck). `undefined` is dropped.
+            permissionModeSubstitution: handed.substitution ?? undefined,
             // Stated only when this PATCH stated it, unlike the pair above. A session with no
             // effort of its own runs on its WORKSPACE's (the claim resolves `session.effort ??
             // workspace.effort`), so the session's committed value is not what the engine was
@@ -13110,7 +13219,9 @@ export class SessionsService {
             // is the exception engineEffort makes: there a model change is an effort change too.)
             effort: engineEffort,
           }),
-          clientTurnId: randomUUID(),
+          // Who asked, for the actual-mode change its acknowledgement records (configTurnKey).
+          clientTurnId: configTurnKey(by.origin),
+          ...sender,
         });
       }
       // `effort: undefined` is omitted by JSON.stringify when it did not change.
@@ -13120,6 +13231,8 @@ export class SessionsService {
           content: JSON.stringify({
             model: exec.model,
             permissionMode: normalizedPermissionMode,
+            // As on setconfig: recorded with the mode when the reload is delivered.
+            permissionModeSubstitution: handed.substitution ?? undefined,
             effort: engineEffort,
             // Stated only when this PATCH moved it, like `effort` and for the same reason: the
             // runner reads an absent `fastMode` as "say nothing about fast mode" and keeps what
@@ -13132,11 +13245,14 @@ export class SessionsService {
             // OPENCODE_CONFIG_CONTENT just as a provider switch does, so it names its provider too.
             provider: next.changed || openCodeKeyMoved ? next.provider : undefined,
           }),
-          clientTurnId: randomUUID(),
+          // Who asked, as on setconfig: its delivery records the mode it re-spawns the engine in.
+          clientTurnId: configTurnKey(by.origin),
+          ...sender,
         });
       }
       return true;
     }, loggedRetry(this.logger, 'sessions.updateConfig'));
+    if (queuedControlTurn && substitutionLine) this.logger.log(substitutionLine);
     if (queuedControlTurn) this.realtime.notifyInbox(id);
     return { ok: true };
   }
@@ -13157,7 +13273,7 @@ export class SessionsService {
    * at once, if it was waiting out the old account's reset. The next engine start says so in the
    * transcript.
    */
-  async switchAccount(ownerId: string, id: string, account: unknown) {
+  async switchAccount(ownerId: string, id: string, account: unknown, senderClient?: TurnSenderClient) {
     // Switching the runner account a session runs on is an engine door (§2.9 LS6).
     await this.assertEngineSession(ownerId, id);
     if (typeof account !== 'string' || (account !== AUTOMATIC_ACCOUNT && !ACCOUNT_ID_PATTERN.test(account))) {
@@ -13291,6 +13407,8 @@ export class SessionsService {
         kind: 'reload',
         content: JSON.stringify({ provider: engine }),
         clientTurnId: randomUUID(),
+        senderClient: 'unknown',
+        ...senderClientColumns(senderClient),
       });
       return true;
     }, loggedRetry(this.logger, 'sessions.switchAccount'));
@@ -13389,6 +13507,7 @@ export class SessionsService {
           kind: 'reload',
           content: JSON.stringify({ provider: engine }),
           clientTurnId: randomUUID(),
+          senderClient: 'orbit',
         });
         return 'reloaded' as const;
       }, loggedRetry(this.logger, 'sessions.moveOffRemovedAccount'));
@@ -13414,6 +13533,7 @@ export class SessionsService {
         kind: 'reload',
         content: JSON.stringify({ provider: AgentProvider.CLAUDE }),
         clientTurnId: randomUUID(),
+        senderClient: 'orbit',
       });
     }, formerDefaultEmail), loggedRetry(this.logger, 'sessions.applyClaudeAccountSwap'));
     for (const id of applied?.release ?? []) this.realtime.notifyInbox(id);
@@ -13483,7 +13603,7 @@ export class SessionsService {
    * An ended engine is refused 409 ENGINE_NOT_RUNNING: there is nothing to reload, and the claim that
    * starts the next one builds it with the env as it is then.
    */
-  async restart(ownerId: string, id: string): Promise<SessionRestartResponse> {
+  async restart(ownerId: string, id: string, senderClient?: TurnSenderClient): Promise<SessionRestartResponse> {
     const { afterTurn, queued } = await withTransactionRetry(this.prisma, async (tx) => {
       // Serialized with the settings PATCH and other restarts, so two restarts cannot both queue one.
       const locked = await tx.$queryRaw<Array<{ id: string }>>`
@@ -13518,6 +13638,8 @@ export class SessionsService {
         kind: 'reload',
         content: RESTART_RELOAD_CONTENT,
         clientTurnId: randomUUID(),
+        senderClient: 'unknown',
+        ...senderClientColumns(senderClient),
       });
       return { afterTurn: inFlight != null, queued: true };
     }, loggedRetry(this.logger, 'sessions.restart'));

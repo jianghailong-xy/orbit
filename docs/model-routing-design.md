@@ -52,7 +52,7 @@
 | 维度 | 今天的来源（先到先得） | 代码 |
 |---|---|---|
 | provider | `task.provider` pin → `agentProviderSeed(workspace)`：这个 Agent 上最近一次**人开的**会话用的引擎（任务运行和 agent 派生的子会话不算），从没开过 = `claude` | `workspaces/workspace-provider.ts` |
-| model | `task.model` pin → create 时留空，首次 claim 时物化为目标 runner 上报的运行时默认模型（`runtimeDefaultModels`），没有就取模型目录第一行，再没有用内置默认（`DEFAULT_MODEL_BY_PROVIDER`） | `providers/custom-provider.ts` `resolveProviderExec` |
+| model | `task.model` pin → create 时留空，首次 claim 时物化为目标 runner 上报的运行时默认模型（`runtimeDefaultModels`），没有就取模型目录第一行，再没有用内置默认（`DEFAULT_MODEL_BY_PROVIDER`）。Task runs on Claude Code (2026-11-27, owner rulings R1, R2): a pin without Auto on the assignee's runner is refused (`TASK_MODEL_HAS_NO_AUTO`), and an unpinned run whose default has no Auto is created on the runner's first catalogue model that has it | `providers/custom-provider.ts` `resolveProviderExec`; `tasks/task-run-auto.ts` |
 | effort | `workspace.effort` → 账号默认 `UserPreferences.defaultEffort` → 模型自己的默认 | `sessions.service.ts` `resolveDefaultEffort` |
 | 权限模式 | 账号默认 `UserPreferences.defaultPermissionMode`；所选 Claude 模型不支持 Auto 时，claim 把这次运行派生为 Default | `common/runtime-provider.ts` `normalizeBuiltinPermissionMode` |
 
@@ -63,6 +63,10 @@
   悄悄换回默认模型（通常是 Opus）。路由器**只输出目录里的精确 id**（§4.4）。
 - **Auto 会被悄悄降级**。账号默认是 Auto、而所选 Claude 模型不支持 Auto 时，claim 会把这次运行降成 Default —— 无人值守的
   任务运行就会停在审批卡上没人点。路由器**不选不支持 Auto 的模型**（§5）。
+  Since 2026-11-27 a task run never reaches that claim (owner rulings R1, R2; `tasks/task-run-auto.ts`). A pin to a Claude
+  model without Auto is refused when it is made: on create, batch create, update and batch pin. A stored one is refused when
+  its task starts, before any session exists, and an automatic start stands down and says why on the task once. A run with
+  no model pin is created on the runner's first model with Auto when the runner's default has none.
 
 ## 3. 定档（简易版）
 

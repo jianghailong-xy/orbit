@@ -82,13 +82,18 @@ async function seed(db: PrismaClient) {
   const runnerId = randomUUID();
   const workspaceId = randomUUID();
   await db.user.create({
-    data: { id: ownerId, email: `signed-out-${RUN}-${ownerId}@hold.invalid`, name: 'so', passwordHash: 'x' },
+    data: {
+      id: ownerId, email: `signed-out-${RUN}-${ownerId}@hold.invalid`, name: 'so', passwordHash: 'x',
+      preferences: { defaultPermissionMode: 'default' },
+    },
   });
   await db.runner.create({
     data: {
       id: runnerId, ownerId, name: `mac-${RUN}`, tokenHash: `hash-${runnerId}`,
       status: RunnerStatus.ONLINE, capabilities: [], capabilitiesReportedAt: new Date(),
       lastHeartbeatAt: new Date(), maxConcurrent: 4, engines: claude('no'),
+      runtimeDefaultModels: { claude: 'claude-opus-5-5' },
+      modelCatalog: { claude: [{ value: 'claude-opus-5-5', label: 'Opus 5.5', permissionModes: ['auto'] }] },
     },
   });
   await db.workspace.create({ data: { id: workspaceId, ownerId, runnerId, name: `ws-${RUN}`, enabled: true } });
@@ -117,7 +122,7 @@ const sweep = (h: Harness) =>
 
 const heldLines = (h: Harness) => h.logs.filter((m) => m.includes('engine signed out on their runner'));
 
-test('a signed-out engine holds its auto-run task without a dispatch or a warning, and a sign-in lifts it',
+test('a signed-out engine holds its auto-run task, then the dependency sweep stores and claims Auto after sign-in',
   { skip, timeout: 120_000 }, async () => {
     assertCoordinatorPgUrlIsIsolated(URL!);
     const h = connect();
@@ -143,6 +148,13 @@ test('a signed-out engine holds its auto-run task without a dispatch or a warnin
       await sweep(h);
       assert.deepEqual(h.dispatches.filter((id) => id === taskId), [taskId], 'the sweep did not dispatch it after the sign-in');
       assert.equal(await h.db.session.count({ where: { taskId } }), 1, 'no run was created after the sign-in');
+      const run = await h.db.session.findFirstOrThrow({ where: { taskId } });
+      assert.equal(run.permissionMode, 'auto', 'the dependency sweep stored Auto despite the Default account preference');
+      const realtime = new Proxy({}, { get: () => () => undefined }) as RealtimeService;
+      const queue = new QueueService(h.db as unknown as PrismaService, realtime);
+      const claim = await queue.claimSessionForRunner({ id: runnerId });
+      assert.equal(claim?.sessionId, run.id);
+      assert.equal(claim.agent.permissionMode, 'auto', 'the dependency sweep run claimed Auto');
       assert.deepEqual(heldLines(h), [], 'still reported held after the sign-in');
       assert.deepEqual(h.warns.filter((m) => m.includes(taskId)), []);
     } finally {

@@ -1,7 +1,7 @@
 import { ProjectStatus } from '@prisma/client';
-import { toUuid } from '@orbit/shared';
+import { PermissionMode, toUuid } from '@orbit/shared';
 
-import { isWiderThanStarter, resolvePermissionMode } from '../common/permission-mode';
+import { isWiderThanStarter, resolvePermissionMode, runningPermissionMode } from '../common/permission-mode';
 import type { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -14,8 +14,8 @@ import type { PrismaService } from '../prisma/prisma.service';
  * that the coordinator decides for them, and what work the project needs next is one of those
  * decisions. A card per create stopped the coordinator's turn on a question the owner had already
  * answered. A pause does not change it: a pause holds what starts, not what is filed. That answer
- * covers a coordinator that may start what the account's default starts: what it files runs in that
- * default, so one whose stored mode is narrower is asked, and a person decides.
+ * covers a coordinator that may start work in Auto. When Auto is wider than its running mode,
+ * the card goes to a person.
  *
  * Decided here, at the one door every create card is filed through (`askBeforeCreate` /
  * `askBeforeBatch` in runner-go, from the MCP tools and the CLI alike), so the runner's requests stay
@@ -25,7 +25,7 @@ import type { PrismaService } from '../prisma/prisma.service';
  * All three facts, or it is asked as before:
  *   - the card is a task create — `orbit_task_create` or `orbit_task_batch`;
  *   - every item NAMES the same project, and that project is OPEN and either not started or
- *     Automatic with a coordinator no narrower than the account's default. An item that names no
+ *     Automatic with a coordinator allowed to start work in Auto. An item that names no
  *     project is asked even from a coordinator: which project an unnamed create lands in is the
  *     write's own derivation (`project-scope-admission.ts`), and this door does not re-run it;
  *   - the session asking is that project's coordinator.
@@ -53,7 +53,7 @@ export async function coordinatorCreateAllowedBy(
       select: {
         startedAt: true,
         coordinatorEnabled: true,
-        coordinatorSession: { select: { permissionMode: true, engine: true } },
+        coordinatorSession: { select: { permissionMode: true, actualPermissionMode: true, engine: true } },
         owner: { select: { preferences: true } },
       },
     });
@@ -61,10 +61,13 @@ export async function coordinatorCreateAllowedBy(
     if (project.startedAt === null) return START_CARD_REVIEWS_MESSAGE;
     if (!project.coordinatorEnabled) return null;
     const starter = {
-      mode: resolvePermissionMode(project.coordinatorSession?.permissionMode, project.owner),
+      // R3: the mode the coordinator is actually running in.
+      mode: project.coordinatorSession
+        ? runningPermissionMode(project.coordinatorSession, project.owner)
+        : resolvePermissionMode(null, project.owner),
       engine: project.coordinatorSession?.engine ?? null,
     };
-    return isWiderThanStarter(starter, resolvePermissionMode(null, project.owner), null)
+    return isWiderThanStarter(starter, PermissionMode.AUTO, null)
       ? null
       : AUTOMATIC_COORDINATOR_DECIDES_MESSAGE;
   } catch {
