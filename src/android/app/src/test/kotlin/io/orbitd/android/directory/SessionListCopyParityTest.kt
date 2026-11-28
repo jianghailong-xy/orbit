@@ -27,7 +27,7 @@ class SessionListCopyParityTest {
             SessionListCopy.SESSION_EXPIRED to app("AgentsModel.swift"),
             SessionListCopy.UNREACHABLE to shell, SessionListCopy.UNREACHABLE_DETAIL to shell,
             SessionListCopy.FOLDER_ACTIONS to folder, SessionListCopy.FOLDER_EMPTY to folder,
-            SessionListCopy.FOLDER_RUNNING to folder, SessionListCopy.FOLDER_JOBS to folder,
+            SessionListCopy.FOLDER_RUNNING to folder,
             SessionListCopy.COORDINATOR to views("SessionCoordinatorBadge.swift"), SessionListCopy.COORDINATOR_LABEL to views("SessionCoordinatorBadge.swift"),
             SessionListCopy.NEW_FOLDER to kit("SessionMove.swift"), SessionListCopy.SEARCH to views("SessionListSearch.swift"),
         )
