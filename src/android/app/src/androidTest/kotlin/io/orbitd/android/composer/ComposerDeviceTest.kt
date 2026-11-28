@@ -856,7 +856,7 @@ class ComposerDeviceTest {
               {"seq":3,"type":"result","turnId":"t1","payload":{"subtype":"success","result":"done"}}]}""")
         compose.waitUntil(30000) { compose.onAllNodes(hasTestTag("main-checkout-bar")).fetchSemanticsNodes().isNotEmpty() }
         compose.waitForIdle(); capture("bar")
-        compose.onNodeWithTag("main-checkout-bar").performClick()
+        compose.onNodeWithText("4 not pushed").performClick()  // the row, not its Push pill at the centre
         compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("main-checkout-commit")).fetchSemanticsNodes().size == 4 }
         capture("sheet-clean")
         compose.onAllNodes(hasTestTag("main-checkout-commit"))[0].performClick()
@@ -870,7 +870,7 @@ class ComposerDeviceTest {
         instrument.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
         compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("main-checkout-sheet")).fetchSemanticsNodes().isEmpty() }
         compose.waitUntil(30000) { compose.onAllNodesWithText("3 uncommitted files", substring = true).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithTag("main-checkout-bar").performClick()
+        compose.onNodeWithText("3 uncommitted files", substring = true).performClick()
         compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("main-checkout-more-commits")).fetchSemanticsNodes().isNotEmpty() }
         capture("sheet-dirty")
     }
