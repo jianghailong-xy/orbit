@@ -184,6 +184,7 @@ import {
   sessionCreatedTasksQuery,
   watchesQuery,
   projectDependencyGraphQuery,
+  ownerRequestsQuery,
 } from '../lib/queries';
 import { SEARCH_HINT, openSessionSearch, setSessionSearchScope } from './SessionSearch';
 import { SessionMoveModal, useSessionFolderFiling, type MoveDialogSession } from './SessionMoveModal';
@@ -453,6 +454,8 @@ import {
   OWNER_REQUEST_CHAT_PLACEHOLDER,
   OWNER_REQUEST_CHAT_PREFIX,
   ownerRequestChatContext,
+  COMPLETE_WITH_QUESTIONS_COPY,
+  questionsCompleteEnds,
   type OwnerRequest,
 } from '../lib/ownerRequests';
 import { taskMoveSignal, useCrossingDecisionCards } from './CrossingDecisionCard';
@@ -7784,7 +7787,10 @@ export function WorkspaceView({
     refreshProjectSession(id, projectId);
   };
   const completeMut = useMutation({
-    mutationFn: (session: SessionToastTarget) => completeSession(session.id),
+    mutationFn: (session: SessionToastTarget & { withdrawPendingQuestions?: boolean }) =>
+      (session.withdrawPendingQuestions
+        ? completeSession(session.id, { withdrawPendingQuestions: true })
+        : completeSession(session.id)),
     onSuccess: (_d, session) => {
       leaveIfOpen(session.id);
       dropFromLists(session.id, session.projectId);
@@ -7862,9 +7868,27 @@ export function WorkspaceView({
         message.info('This session cannot be completed right now.');
         return;
       }
-      completeMut.mutate({ id: session.id, title: session.title, projectId: source.projectMembership?.projectId });
+      const target = { id: session.id, title: session.title, projectId: source.projectMembership?.projectId };
+      // A question still waiting on the owner would bring the session straight back to Open; completing it anyway is
+      // the owner's to confirm, and then those questions end unanswered. Read from the cards' own list.
+      const waiting = questionsCompleteEnds(
+        qc.getQueryData(ownerRequestsQuery('open').queryKey)?.requests ?? [],
+        session.id,
+        Date.now(),
+      ).length;
+      if (waiting === 0) {
+        completeMut.mutate(target);
+        return;
+      }
+      void confirm({
+        title: COMPLETE_WITH_QUESTIONS_COPY.title(waiting),
+        description: COMPLETE_WITH_QUESTIONS_COPY.description(waiting),
+        confirmText: COMPLETE_WITH_QUESTIONS_COPY.confirm,
+        cancelText: COMPLETE_WITH_QUESTIONS_COPY.cancel,
+        onConfirm: () => completeMut.mutate({ ...target, withdrawPendingQuestions: true }),
+      });
     },
-    [completeMut, message, selectedSession],
+    [completeMut, confirm, message, qc, selectedSession],
   );
   // An open row menu owns the shortcut, including when its Complete action cannot run.
   // Otherwise ⌘/Ctrl+D completes the selected session, even while the composer is focused.

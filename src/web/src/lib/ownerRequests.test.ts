@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { expiryText, ownerRequestChatContext, resolutionTurnLabel, snoozeChoices } from './ownerRequests';
+import { CONDITION_WAITING_KIND } from '@orbit/shared';
+import {
+  expiryText,
+  ownerRequestChatContext,
+  questionsCompleteEnds,
+  resolutionTurnLabel,
+  snoozeChoices,
+  type OwnerRequest,
+} from './ownerRequests';
 
 const NOW = Date.parse('2026-11-09T12:00:00.000Z');
 const HOUR = 3_600_000;
@@ -54,5 +62,26 @@ describe('ownerRequestChatContext', () => {
       'The owner pressed Chat about this on your request “Register the package name” (owner request 34uabc). '
         + 'It is still open: not marked done and not declined. Their message:',
     );
+  });
+});
+
+describe('questionsCompleteEnds', () => {
+  const SESSION = '34uOqHiF7f3VmoARfQg6y';
+  const asked = (id: string, over: Partial<OwnerRequest> = {}) => ({
+    id, kind: 'CONFIRM', state: 'PENDING', askedBySessionId: SESSION, expiresAt: null, ...over,
+  }) as OwnerRequest;
+
+  it("counts this session's waiting questions, and only those a Complete ends", () => {
+    const requests = [
+      asked('waiting'),
+      asked('decision', { kind: 'DECISION' }),
+      asked('answered', { state: 'DONE' }),
+      asked('past-deadline', { expiresAt: new Date(NOW - 1).toISOString() }),
+      asked('another-session', { askedBySessionId: '34uOtherSessionAaaaaa' }),
+      asked('schedule-card', { kind: 'SCHEDULE_FAILED' }),
+      asked('condition-card', { kind: CONDITION_WAITING_KIND as OwnerRequest['kind'] }),
+    ];
+    expect(questionsCompleteEnds(requests, SESSION, NOW).map((r) => r.id)).toEqual(['waiting', 'decision']);
+    expect(questionsCompleteEnds([], SESSION, NOW)).toEqual([]);
   });
 });
