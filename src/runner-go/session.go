@@ -3177,16 +3177,13 @@ scanLoop:
 		if msg["type"] == "system" && msg["subtype"] == "init" {
 			version, _ := msg["claude_code_version"].(string)
 			rt.noteAnnouncedVersion(version)
-			// The same frame names the MCP servers it started and the tools and skills it has: the
-			// session's Agent Tools report, in the engine's own words. A subagent's init is not the session's.
-			if msg["parent_tool_use_id"] == nil {
-				agentTools.send(claudeAgentToolsReport(job, msg), emit)
-			}
-			// After that report, which carries the mode the engine settled on: the control plane records
-			// the two in the order they are sent, the lower mode first and then the correction.
-			if p := modeFix.begin(rt, msg); p != nil {
-				go modeFix.report(procCtx, rt, p, emit, job.SessionID)
-			}
+		}
+		// The init frame also names the MCP servers it started, the tools and skills it has and its mode: the
+		// session's Agent Tools report, in the engine's own words, restated with the mode each status frame
+		// names. Then the first turn's mode is judged against the Auto the process may have been spawned with
+		// (claude_mode_correction.go). A subagent's frames are not the session's.
+		if p := claudeEngineModeFrame(job, rt, msg, &agentTools, modeFix, emit); p != nil {
+			go modeFix.report(procCtx, rt, p, emit, job.SessionID)
 		}
 		if msg["type"] == "system" && msg["subtype"] == "compact_boundary" {
 			compactedThisTurn = true

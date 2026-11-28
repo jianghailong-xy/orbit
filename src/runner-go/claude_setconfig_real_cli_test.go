@@ -309,6 +309,14 @@ type realClaudeProbe struct {
 // could not.
 func startRealClaudeProbe(t *testing.T, agent AgentExecConfig) *realClaudeProbe {
 	t.Helper()
+	return startRealClaudeProbeWith(t, agent, nil)
+}
+
+// startRealClaudeProbeWith is startRealClaudeProbe with a setup step run once the probe's
+// environment is in place and before the spawn: it may change the agent's env, write into the
+// working dir the CLI is started in, and return flags to add to the spawn.
+func startRealClaudeProbeWith(t *testing.T, agent AgentExecConfig, setup func(agent *AgentExecConfig, cwd string) []string) *realClaudeProbe {
+	t.Helper()
 	exe := requireRealClaude(t)
 
 	// Nothing a probe does may touch this machine's own Claude Code state. Both dirs are
@@ -354,7 +362,12 @@ func startRealClaudeProbe(t *testing.T, agent AgentExecConfig) *realClaudeProbe 
 		Provider:    providerClaude,
 		Agent:       agent,
 	}
-	proc, err := spawnClaude(ctx, job, t.TempDir(), realClaudeTransportArgs(job))
+	cwd := t.TempDir()
+	args := realClaudeTransportArgs(job)
+	if setup != nil {
+		args = append(args, setup(&job.Agent, cwd)...)
+	}
+	proc, err := spawnClaude(ctx, job, cwd, args)
 	if err != nil {
 		cancel()
 		t.Fatalf("spawning %s: %v", exe, err)

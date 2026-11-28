@@ -376,3 +376,213 @@ func TestSetConfigFramesJudgeTheModeAgainstTheEnginesReport(t *testing.T) {
 		})
 	}
 }
+
+// engineModeReports is the sequence of modes the run's Agent Tools reports named, in the order sent.
+func (r *deliverySession) engineModeReports() []string {
+	var out []string
+	for _, e := range r.systemEvents(agentToolsEventSubtype) {
+		report, _ := e.Payload["agentTools"].(map[string]interface{})
+		mode, _ := report["permissionMode"].(string)
+		out = append(out, mode)
+	}
+	return out
+}
+
+// The disableAutoMode case task 354kzrnSltZOM5gAfavxq measured on a real login (Claude Code 2.1.332): the
+// init frame names Auto and the status frame after it names Default. The mode reported is the one the
+// status frame names, and the correction is owed on it: asked once, and its outcome reported, whether the
+// engine refuses it (disableAutoMode's own words) or takes it. Status frames naming Default again later
+// are neither reported again nor asked about again.
+func TestSessionJudgesTheModeAStatusFrameSettlesOnAfterAnInitFrameNamingAuto(t *testing.T) {
+	const refusal = "Cannot set permission mode to auto: auto mode disabled by settings"
+	for _, tc := range []struct {
+		name    string
+		answer  []fakeStep
+		reports []string
+	}{
+		{
+			name:    "refused",
+			answer:  []fakeStep{{Emit: "control_response", IsError: true, Text: refusal}},
+			reports: []string{"auto", "default"},
+		},
+		{
+			name:    "taken",
+			answer:  []fakeStep{{Emit: "control_response"}, {Emit: "system_status", PermissionMode: "auto"}},
+			reports: []string{"auto", "default", "auto"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			steps := []fakeStep{
+				{Await: "user"},
+				{Emit: "system_init", PermissionMode: "auto"},
+				{Emit: "replay_user"},
+				{Emit: "system_status", PermissionMode: "default"},
+				{Await: "control_request", Subtype: ctrlSetPermissionMode},
+			}
+			steps = append(steps, tc.answer...)
+			steps = append(steps, []fakeStep{
+				{Emit: "assistant", Text: "working on it"},
+				{Emit: "result", Text: "first"},
+				// The engine names Default again in the turns after: nothing new to report, nothing to ask.
+				{Await: "user"},
+				{Emit: "system_init", PermissionMode: "auto"},
+				{Emit: "replay_user"},
+				{Emit: "system_status", PermissionMode: "default"},
+				{Emit: "result", Text: "second"},
+				{Await: "user"},
+				{Emit: "replay_user"},
+				{Emit: "result", Text: "third"},
+				{Emit: "eof"},
+			}...)
+			run := runDeliverySessionWith(t, steps,
+				[]scriptedTurn{messageTurn("turn-1", "one"), messageTurn("turn-2", "two"), messageTurn("turn-3", "three")},
+				nil, deliveryOptions{claim: spawnedInAuto})
+
+			requests := controlRequestsOfSubtype(run.fake, ctrlSetPermissionMode)
+			if len(requests) != 1 || requests[0]["mode"] != claudeAutoPermissionMode {
+				t.Fatalf("the CLI received set_permission_mode %v over three turns, want exactly one request for %q", requests, claudeAutoPermissionMode)
+			}
+			outcome := permissionModeCorrectedSubtype
+			if tc.name == "refused" {
+				outcome = permissionModeCorrectionFailedSubtype
+			}
+			waitUntil(t, func() bool { return len(run.systemEvents(outcome)) > 0 }, "the run never reported the correction's outcome")
+			events := run.systemEvents(outcome)
+			if len(events) != 1 {
+				t.Fatalf("the run reported %d %s events, want exactly 1", len(events), outcome)
+			}
+			got := events[0].Payload
+			if tc.name == "refused" {
+				if got["mode"] != "default" || got["requested"] != claudeAutoPermissionMode {
+					t.Errorf("the failure reads %v, want mode %q and requested %q", got, "default", claudeAutoPermissionMode)
+				}
+				if reason, _ := got["reason"].(string); !strings.Contains(reason, refusal) {
+					t.Errorf("the failure's reason is %q, want the engine's own words %q", reason, refusal)
+				}
+				if corrected := run.systemEvents(permissionModeCorrectedSubtype); len(corrected) != 0 {
+					t.Errorf("a refused correction was reported as made: %v", corrected)
+				}
+			} else {
+				if got["mode"] != claudeAutoPermissionMode || got["from"] != "default" {
+					t.Errorf("the correction reads %v, want mode %q from %q", got, claudeAutoPermissionMode, "default")
+				}
+				if failed := run.systemEvents(permissionModeCorrectionFailedSubtype); len(failed) != 0 {
+					t.Errorf("a correction the engine took was also reported as failed: %v", failed)
+				}
+			}
+			// Each change of the mode the engine names is reported once, the lower one before the outcome.
+			// The second turn's init frame names Auto again; it is the engine's word, and reported as such.
+			reports := run.engineModeReports()
+			if len(reports) < len(tc.reports) || strings.Join(reports[:len(tc.reports)], ",") != strings.Join(tc.reports, ",") {
+				t.Errorf("the Agent Tools reports named %v, want them to start %v", reports, tc.reports)
+			}
+			for i := 1; i < len(reports); i++ {
+				if reports[i] == reports[i-1] {
+					t.Errorf("the Agent Tools reports named %v: %q twice in a row, an unchanged mode reported again", reports, reports[i])
+				}
+			}
+			lower := run.position(reportsEngineMode("default"))
+			reported := run.position(func(e RunEvent) bool { return e.Type == evSystem && e.Payload["subtype"] == outcome })
+			if lower < 0 || lower > reported {
+				t.Errorf("the report naming Default is at %d and the outcome at %d; want the report first", lower, reported)
+			}
+			if run.reload {
+				t.Error("the correction asked the supervisor to re-spawn")
+			}
+		})
+	}
+}
+
+// The order the installed CLI was measured in (claude_mode_correction_real_cli_test.go): a status frame
+// naming Default before the first init frame, which names Default too. Nothing is reported or judged
+// before the init frame, which is then judged as before: one request, one report of Default first.
+func TestSessionJudgesTheInitFrameAfterAStatusFrameThatCameBeforeIt(t *testing.T) {
+	run := runDeliverySessionWith(t,
+		[]fakeStep{
+			{Emit: "system_status", PermissionMode: "default"},
+			{Await: "user"},
+			{Emit: "system_init", PermissionMode: "default"},
+			{Emit: "replay_user"},
+			{Await: "control_request", Subtype: ctrlSetPermissionMode},
+			{Emit: "control_response", IsError: true, Text: "Cannot set permission mode to auto: auto mode disabled by settings"},
+			{Emit: "result", Text: "first"},
+			{Emit: "eof"},
+		},
+		[]scriptedTurn{messageTurn("turn-1", "one")},
+		nil, deliveryOptions{claim: spawnedInAuto})
+
+	if requests := controlRequestsOfSubtype(run.fake, ctrlSetPermissionMode); len(requests) != 1 {
+		t.Fatalf("the CLI received %d set_permission_mode request(s), want exactly 1", len(requests))
+	}
+	waitUntil(t, func() bool { return len(run.systemEvents(permissionModeCorrectionFailedSubtype)) > 0 },
+		"the run never reported the refused correction")
+	if got := run.engineModeReports(); strings.Join(got, ",") != "default" {
+		t.Errorf("the Agent Tools reports named %v, want one naming %q", got, "default")
+	}
+	if lower, failed := run.position(reportsEngineMode("default")), run.position(func(e RunEvent) bool {
+		return e.Type == evSystem && e.Payload["subtype"] == permissionModeCorrectionFailedSubtype
+	}); lower < 0 || lower > failed {
+		t.Errorf("the report naming Default is at %d and the failure at %d; want the report first", lower, failed)
+	}
+}
+
+// Only the first turn is judged. A narrower mode after it is the engine moving by itself or someone's
+// pick, and so is Plan inside it (the model's EnterPlanMode: settling falls back to Default, never to
+// Plan); neither is switched back to Auto. Both are still reported: they are the mode the engine runs in.
+func TestSessionLeavesAModeTheEngineMovesToByItselfAlone(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		steps   []fakeStep
+		reports []string
+	}{
+		{
+			name: "Default after the first turn",
+			steps: []fakeStep{
+				{Await: "user"},
+				{Emit: "system_init", PermissionMode: "auto"},
+				{Emit: "replay_user"},
+				{Emit: "result", Text: "first"},
+				{Await: "user"},
+				{Emit: "replay_user"},
+				{Emit: "system_status", PermissionMode: "default"},
+				{Emit: "result", Text: "second"},
+			},
+			reports: []string{"auto", "default"},
+		},
+		{
+			name: "Plan inside the first turn, then Default",
+			steps: []fakeStep{
+				{Await: "user"},
+				{Emit: "system_init", PermissionMode: "auto"},
+				{Emit: "replay_user"},
+				{Emit: "assistant", Text: "planning first"},
+				{Emit: "system_status", PermissionMode: "plan"},
+				{Emit: "system_status", PermissionMode: "default"},
+				{Emit: "result", Text: "first"},
+				{Await: "user"},
+				{Emit: "replay_user"},
+				{Emit: "result", Text: "second"},
+			},
+			reports: []string{"auto", "plan", "default"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			steps := append(tc.steps,
+				// Anything the runner sent on the frames above is written before this turn's frame.
+				fakeStep{Await: "user"}, fakeStep{Emit: "replay_user"}, fakeStep{Emit: "result", Text: "third"}, fakeStep{Emit: "eof"})
+			run := runDeliverySessionWith(t, steps,
+				[]scriptedTurn{messageTurn("turn-1", "one"), messageTurn("turn-2", "two"), messageTurn("turn-3", "three")},
+				nil, deliveryOptions{claim: spawnedInAuto})
+
+			if requests := controlRequestsOfSubtype(run.fake, ctrlSetPermissionMode); len(requests) != 0 {
+				t.Errorf("the CLI was asked for %v over a mode the engine moved to by itself", requests)
+			}
+			if n := len(run.systemEvents(permissionModeCorrectedSubtype)) + len(run.systemEvents(permissionModeCorrectionFailedSubtype)); n != 0 {
+				t.Errorf("the run reported %d correction outcome(s)", n)
+			}
+			if got := run.engineModeReports(); strings.Join(got, ",") != strings.Join(tc.reports, ",") {
+				t.Errorf("the Agent Tools reports named %v, want %v", got, tc.reports)
+			}
+		})
+	}
+}

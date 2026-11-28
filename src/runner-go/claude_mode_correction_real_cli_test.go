@@ -7,6 +7,8 @@ package main
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -108,5 +110,112 @@ func TestRealClaudeTakesTheAutoCorrectionFromDefault(t *testing.T) {
 	})
 	if got := status["permissionMode"]; got != claudeAutoPermissionMode {
 		t.Errorf("%s reports permissionMode %v after taking the correction, want %q: %v", p.exe, got, claudeAutoPermissionMode, status)
+	}
+}
+
+// claudeDisableAutoModeSettings is the settings layer that turns Auto off in the CLI, whatever the model.
+const claudeDisableAutoModeSettings = `{"permissions":{"disableAutoMode":"disable"}}`
+
+// signedInWithTheAutoGateOn makes a probe's CLI behave as one signed in to an account whose Auto gate is
+// on, which is the CLI that names its mode in a status frame as well as its init frame. It is told it
+// holds an OAuth token, a throwaway one like the loopback API's (no credential of this machine is read),
+// and it finds the gate already cached in its empty config dir, where the CLI caches the gates it fetches.
+// With an API token instead, or without the cached gate, 2.1.332 names its mode in its init frame alone.
+func signedInWithTheAutoGateOn(t *testing.T, agent *AgentExecConfig) {
+	t.Helper()
+	agent.Env["ANTHROPIC_AUTH_TOKEN"] = ""
+	agent.Env["CLAUDE_CODE_OAUTH_TOKEN"] = "sk-ant-oat01-orbit-mode-probe"
+	seed := `{"cachedGrowthBookFeatures":{"tengu_auto_mode_config":{"enabled":"enabled"}}}`
+	if err := os.WriteFile(filepath.Join(agent.Env["CLAUDE_CONFIG_DIR"], ".claude.json"), []byte(seed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The disableAutoMode case, end to end on the installed CLI: spawned in Auto on a model that has Auto, with
+// permissions.disableAutoMode "disable" in its project settings or in --settings. Every frame of its first
+// turn goes through what session.go's stdout reader does with it (claudeEngineModeFrame): the mode the CLI
+// names is reported as Default, the runner asks for Auto once, the CLI refuses in its own words, and the
+// refusal is reported.
+func TestRealClaudeWithAutoDisabledBySettingsReportsDefaultAndTheRefusedCorrection(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		setup func(agent *AgentExecConfig, cwd string) []string
+	}{
+		{"project settings", func(agent *AgentExecConfig, cwd string) []string {
+			if err := os.MkdirAll(filepath.Join(cwd, ".claude"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(cwd, ".claude", "settings.json"), []byte(claudeDisableAutoModeSettings), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			return nil
+		}},
+		{"--settings", func(agent *AgentExecConfig, cwd string) []string {
+			return []string{"--settings", claudeDisableAutoModeSettings}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			agent := realClaudeContractAgent()
+			agent.Model = realClaudeTargetModel // a model with Auto: only the setting takes it away
+			agent.PermissionMode = claudeAutoPermissionMode
+			p := startRealClaudeProbeWith(t, agent, func(agent *AgentExecConfig, cwd string) []string {
+				signedInWithTheAutoGateOn(t, agent)
+				return tc.setup(agent, cwd)
+			})
+			job := &ClaimedSession{SessionID: "real-claude-mode-correction", SessionUUID: p.sessionID, Provider: providerClaude, Agent: agent}
+			modeFix := newClaudeModeCorrection(realClaudeTransportArgs(job))
+			var agentTools agentToolsReporter
+			var emitted correctionEvents
+
+			p.startReadbackTurn()
+			var pending []*pendingModeCorrection
+			var named []string
+			p.awaitFrame("the first turn's result", func(m map[string]interface{}) bool {
+				if mode, ok := claudeEngineModeReading(m); ok {
+					named = append(named, m["subtype"].(string)+" "+mode)
+				}
+				if q := claudeEngineModeFrame(job, p.rt, m, &agentTools, modeFix, emitted.emit); q != nil {
+					pending = append(pending, q)
+				}
+				return m["type"] == "result"
+			})
+			t.Logf("%s named its mode as: %s", p.exe, strings.Join(named, ", "))
+			if len(pending) != 1 {
+				t.Fatalf("the runner asked %s for Auto %d time(s) in its first turn, want exactly once (it named %v)%s",
+					p.exe, len(pending), named, p.engineOutput())
+			}
+			modeFix.report(context.Background(), p.rt, pending[0], emitted.emit, p.sessionID)
+
+			var reported []string
+			var failed []RunEvent
+			for _, e := range emitted.all() {
+				switch e.Payload["subtype"] {
+				case agentToolsEventSubtype:
+					report, _ := e.Payload["agentTools"].(map[string]interface{})
+					mode, _ := report["permissionMode"].(string)
+					reported = append(reported, mode)
+				case permissionModeCorrectionFailedSubtype:
+					failed = append(failed, e)
+				case permissionModeCorrectedSubtype:
+					t.Errorf("%s with Auto disabled by settings was reported as switched to Auto: %v", p.exe, e.Payload)
+				}
+			}
+			t.Logf("the Agent Tools reports named %v", reported)
+			if len(reported) == 0 || reported[len(reported)-1] != "default" {
+				t.Errorf("the Agent Tools reports named %v, want the last to name %q, the mode %s runs in", reported, "default", p.exe)
+			}
+			if len(failed) != 1 {
+				t.Fatalf("the refused correction was reported as %v, want one %s event", emitted.all(), permissionModeCorrectionFailedSubtype)
+			}
+			reason, _ := failed[0].Payload["reason"].(string)
+			t.Logf("%s refused set_permission_mode auto with: %s", p.exe, reason)
+			if !strings.Contains(reason, "auto") || !strings.Contains(reason, "settings") {
+				t.Errorf("the reported reason %q does not carry the CLI's refusal of Auto by settings", reason)
+			}
+			if failed[0].Payload["mode"] != "default" {
+				t.Errorf("the failure names the mode the engine runs in as %v, want %q", failed[0].Payload["mode"], "default")
+			}
+		})
 	}
 }
