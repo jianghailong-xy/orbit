@@ -3,9 +3,9 @@ import { api } from '../api';
 
 /**
  * An agent's directory syncs into Drive (docs/drive-directory-sync-design.md, S4): `GET /drive/syncs` is the
- * running ones and those that ended in the last 24 h. The store reads it when the page opens, when the control plane hears
- * `drive.sync`, on focus and after a reconnect, and every 5 s while one is running and the page is visible. "Clear finished"
- * only hides ended syncs on this browser (their ids are kept in localStorage).
+ * running ones, those that ended in the last 24 h and failed ones nobody has handled yet. The store reads it when the page
+ * opens, when the control plane hears `drive.sync`, on focus and after a reconnect, and every 5 s while one is running and
+ * the page is visible. "Clear finished" only hides ended syncs on this browser (their ids are kept in localStorage).
  */
 
 export type DriveSyncStatus = 'CHECKING' | 'UPLOADING' | 'DONE' | 'FAILED' | 'STOPPED';
@@ -31,6 +31,11 @@ export interface DriveSyncView {
   startedAt: string;
   updatedAt: string;
   endedAt: string | null;
+  /** When the failures stopped needing the owner; null while they do (or there were none). */
+  handledAt: string | null;
+  /** The session the failures were handed to, and when. */
+  fixSessionId: string | null;
+  fixRequestedAt: string | null;
 }
 
 /** A sync as the tray draws it: the server's view and the bytes a second between the last two reads. */
