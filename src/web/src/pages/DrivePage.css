@@ -129,6 +129,7 @@ span.files-title-parent {
 }
 
 .files-list-wrap {
+  container-type: inline-size;
   position: relative;
   overflow: auto;
   padding: 0 24px 120px;
@@ -145,7 +146,13 @@ span.files-title-parent {
   font-size: 14px;
 }
 .files-list col.files-col-writer {
-  width: 340px;
+  /* The writer column gives way first: Name keeps 240px of the list's width, then the column goes (below). */
+  width: clamp(160px, calc(100cqw - 496px), 340px);
+}
+@container (max-width: 655px) {
+  .files-list .files-col-writer {
+    display: none;
+  }
 }
 .files-list col.files-col-size {
   width: 96px;
@@ -687,6 +694,16 @@ span.files-title-parent {
   margin-top: 6px;
   color: var(--error);
   font-weight: 500;
+}
+
+/* Where the Drive chat's column takes a share of the window, the tree gives up some width so Name keeps 240px. */
+@media (max-width: 1500px) {
+  .files-body {
+    grid-template-columns: 196px minmax(0, 1fr) auto;
+  }
+  .files-tree {
+    padding-left: 16px;
+  }
 }
 
 @media (max-width: 960px) {
