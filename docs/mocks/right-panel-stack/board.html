@@ -1,0 +1,305 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Right side: one panel that drills in</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #eceef1; font: 15px/1.5 Inter, "Noto Sans SC", sans-serif; color: #1d1d1f; }
+  .b-part { padding: 32px 36px 40px; width: 2120px; }
+  .b-h1 { font-size: 26px; font-weight: 700; margin: 0 0 6px; }
+  .b-lede { color: #555; margin: 0 0 26px; max-width: 1400px; }
+  .b-step { display: flex; align-items: baseline; gap: 10px; margin: 30px 0 10px; }
+  .b-step h2 { font-size: 19px; margin: 0; }
+  .b-step p { margin: 0; color: #666; font-size: 14px; }
+  .b-tag { font-size: 12px; font-weight: 600; padding: 1px 9px; border-radius: 10px; background: #dfe3e8; color: #444; }
+  .b-tag.rec { background: #d6f0dd; color: #1d7a3a; } .b-tag.bad { background: #fde8e8; color: #c62828; }
+
+  /* app frame */
+  .app { display: flex; gap: 8px; height: 560px; background: #f4f5f7; border-radius: 14px; padding: 8px;
+         border: 1px solid #d9dce1; font-size: 13px; position: relative; }
+  .pane { background: #fff; border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; min-width: 0; position: relative; }
+  .side { width: 200px; background: transparent; padding: 8px 10px; color: #333; }
+  .side div { padding: 4px 6px; border-radius: 6px; }
+  .side .sel { background: #e3ebfb; color: #2a5bd7; }
+  .side .h { color: #888; font-size: 12px; margin-top: 10px; }
+  .list { width: 320px; padding: 10px; }
+  .conv { flex: 1; padding: 12px 16px; }
+  .rp { padding: 12px 14px; }
+  .ph { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 14px; margin-bottom: 8px; }
+  .ph .x { margin-left: auto; color: #999; font-weight: 400; }
+  .ph .back { color: #2a5bd7; font-weight: 500; font-size: 13px; }
+  .crumb { font-size: 12px; color: #2a5bd7; margin: -4px 0 6px; }
+  .lbl { color: #888; font-size: 12px; margin: 10px 0 4px; }
+  .row { padding: 6px 8px; border-radius: 8px; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .s { display: block; color: #888; font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+  .row.hl { background: #eaf0fd; outline: 2px solid #2a5bd7; }
+  .prog { background: #f2f3f5; border-radius: 8px; padding: 6px 10px; font-size: 12px; color: #444; }
+  .bar { display: inline-block; width: 60px; height: 4px; background: #2e9b4f; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+  .card { border: 1px solid #c9d7f5; background: #f7f9fe; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+  .card b { color: #2a5bd7; }
+  .green { background: #eef8f0; border: 1px solid #bfe3c8; border-radius: 10px; padding: 8px 12px; margin-bottom: 8px; }
+  .chip { display: inline-block; font-size: 11px; padding: 0 7px; border-radius: 6px; margin-right: 4px; }
+  .c-g { background: #e3f4e8; color: #1d7a3a; } .c-r { background: #fde8e8; color: #c62828; } .c-b { background: #e3ebfb; color: #2a5bd7; }
+  .banner { background: #fff6e5; border: 1px solid #f3d9a4; color: #7a4b00; border-radius: 8px; padding: 6px 10px; margin: 8px 0; font-size: 12.5px; }
+  .banner a { color: #2a5bd7; text-decoration: none; font-weight: 600; }
+  .comp { margin-top: auto; border: 1px solid #ddd; border-radius: 10px; padding: 8px 10px; color: #aaa; }
+  .err { color: #c62828; font-size: 12.5px; }
+  .fill { color: #bbb; font-size: 12px; }
+  .w { position: absolute; bottom: -2px; left: 0; right: 0; text-align: center; font-size: 11.5px; color: #fff; background: #2a5bd7cc; padding: 1px 0; }
+  .w.bad { background: #c62828cc; }
+  .pin { position: absolute; width: 26px; height: 26px; border-radius: 13px; background: #e8710a; color: #fff;
+         font-weight: 700; font-size: 14px; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 4px #0004; z-index: 3; }
+
+  .pin.il { position: static; display: inline-flex; width: 22px; height: 22px; font-size: 12px; vertical-align: middle; margin-left: 6px; }
+  .flow { display: flex; align-items: stretch; gap: 0; }
+  .flow .app { flex: 1; }
+  .arrow { width: 70px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #2a5bd7; font-size: 12px; text-align: center; }
+  .arrow .a { font-size: 34px; line-height: 1; }
+
+  .b-notes { margin-top: 30px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; font-size: 14px; color: #333; }
+  .b-notes > div { background: #fff; border-radius: 12px; padding: 14px 18px; }
+  .b-notes ul, .b-notes ol { margin: 6px 0 0; padding-left: 20px; } .b-notes li { margin: 0 0 5px; }
+  .b-pros { color: #1d7a3a; } .b-cons { color: #b3261e; }
+  table.st { border-collapse: collapse; width: 100%; font-size: 13.5px; margin-top: 6px; }
+  table.st td, table.st th { border-bottom: 1px solid #eee; padding: 5px 6px; text-align: left; vertical-align: top; }
+  table.st th { color: #666; font-weight: 600; }
+</style></head>
+<body>
+<section class="b-part">
+  <p class="b-h1">Right side: one panel that drills in (Project › Task), not two panels side by side</p>
+  <p class="b-lede">Today, opening a task from the project panel adds a second panel to the right. The conversation, which is the main pane, shrinks to about the width of each panel beside it,
+  and two panels show the same status. Proposed: the right side holds <b>one panel</b>. Clicking a task in the project panel <b>replaces</b> the panel's content with the task and adds
+  a back link (‹ Project), so the conversation keeps its width. Same window width (2000 px) in every frame.</p>
+
+  <!-- TODAY -->
+  <div class="b-step"><span class="b-tag bad">Today</span><h2>Two right-side panels</h2><p>Project panel + task panel; the conversation is the narrowest pane.</p></div>
+  <div class="app">
+    <div class="pane side" style="width:170px">
+      <div>Projects</div><div>Tasks</div><div>Scheduled</div><div>Wiki</div><div>Drive</div>
+      <div class="h">Workspaces</div><div class="sel">orbit-ws01</div><div>orbit-ws02</div><div>orbit-ws03</div>
+    </div>
+    <div class="pane list" style="width:260px">
+      <div class="ph">Orbit Session</div>
+      <div class="lbl">Working</div>
+      <div class="row">Main checkout bar: list the…<span class="s">2/5 · Queued</span></div>
+      <div class="row hl">Permission mode: Auto is gu…<span class="s">20/23 · Confirmed 354kzrnS…</span></div>
+      <div class="lbl">Yesterday</div>
+      <div class="row">Cursor Auto: stop asking…<span class="s">4/6 · Holding both…</span></div>
+      <div class="row">Session handoff<span class="s">0/7 · Orbit: From Orbit…</span></div>
+    </div>
+    <div class="pane conv">
+      <div class="ph">Task: Tasks run only on models th… <span class="chip c-b">Task ›</span></div>
+      <div class="card"><b>Task started</b><br>Tasks run only on models that have Auto; a pin to one without is refused when made</div>
+      <div class="err">✖ Cursor said: "Add a payment method to continue."</div>
+      <div class="fill" style="margin-top:8px">Session failed. Send a message to resume this session.</div>
+      <div class="comp">Reply…</div>
+      <div class="w bad">conversation ≈ 530 px</div>
+    </div>
+    <div class="pane rp" style="width:300px">
+      <div class="ph">Permission mode: Auto is gu… <span class="x">⊞ ✕</span></div>
+      <div class="prog"><span class="bar"></span>20/23 done · 1 running</div>
+      <div class="lbl">Coordinator</div><div class="row">Permissio… <span class="chip c-b">Coordinator</span></div>
+      <div class="lbl">Landings</div><div class="row">✓ Landings<span class="s">12 landed today</span></div>
+      <div class="lbl">Needs you</div>
+      <div class="row">Task: Task runs an… <span class="chip c-r">✖</span></div>
+      <div class="row hl">Task: Tasks run o… <span class="chip c-r">✖</span></div>
+      <div class="row">Task: Tasks run o… <span class="chip c-r">✖</span></div>
+      <div class="w">panel ≈ 290 px</div>
+    </div>
+    <div class="pane rp" style="width:330px">
+      <div class="ph">Task <span class="x">⤢ ⋮ ✕</span></div>
+      <div style="font-weight:600">Tasks run only on models that have Auto; a pin to one without is refused when made</div>
+      <div style="margin:6px 0"><span class="chip c-g">Done</span><span class="chip c-g">Landed</span> Nov 23 · $62.72</div>
+      <div class="green"><b>Delivered</b><br>✓ Evidence r1 accepted<br>✓ Landed · Open landing ›</div>
+      <div class="lbl">Branch</div><div class="fill">orbit/task-tasks-run-only-on-models-t…</div>
+      <div class="lbl">Runs</div><div>Run 6 · Nov 27 · $62.72<br>Run 5 · Nov 23<br>Run 3 · Nov 23 · this conversation</div>
+      <div class="w">panel ≈ 400 px</div>
+    </div>
+  </div>
+
+  <!-- PROPOSED FLOW -->
+  <div class="b-step"><span class="b-tag rec">Proposed</span><h2>One panel; a task opens inside it</h2><p>① click a <i>task</i> row in the project panel → ② the same panel shows the task, with ‹ back to the project. (A <i>run</i> row opens the run in the conversation: see ⑤.)</p></div>
+  <div class="flow">
+    <div class="app">
+      <div class="pin" style="left:-10px;top:-10px">①</div>
+      <div class="pane side" style="width:120px">
+        <div>Projects</div><div>Tasks</div><div>Wiki</div>
+        <div class="h">Workspaces</div><div class="sel">orbit-ws01</div><div>orbit-ws02</div>
+      </div>
+      <div class="pane list" style="width:200px">
+        <div class="ph">Orbit Session</div>
+        <div class="lbl">Working</div>
+        <div class="row">Main checkout bar…<span class="s">2/5 · Queued</span></div>
+        <div class="row hl">Permission mode…<span class="s">20/23 · Confirmed…</span></div>
+        <div class="row">Cursor Auto: stop…<span class="s">4/6 · Holding…</span></div>
+      </div>
+      <div class="pane conv">
+        <div class="ph">Permission mode: Auto is guaranteed…</div>
+        <div class="fill">Coordinator conversation…</div>
+        <div class="comp">Reply…</div>
+        <div class="w">conversation gets the freed width</div>
+      </div>
+      <div class="pane rp" style="width:260px">
+        <div class="ph">Permission mode: Auto… <span class="x">✕</span></div>
+        <div class="prog"><span class="bar"></span>20/23 done · 1 running</div>
+        <div class="lbl">Coordinator</div><div class="row">Permissio… <span class="chip c-b">Coordinator</span></div>
+        <div class="lbl">Landings</div><div class="row">✓ 12 landed today</div>
+        <div class="lbl">Needs you</div>
+        <div class="row">Task runs an… <span class="chip c-r">✖</span></div>
+        <div class="row hl">Tasks run only on mod… ›</div>
+        <div class="row">Web: Mode c… <span class="chip c-r">✖</span></div>
+        <div class="w">one panel</div>
+      </div>
+    </div>
+    <div class="arrow"><div class="a">→</div>click<br>task row</div>
+    <div class="app">
+      <div class="pin" style="left:-10px;top:-10px">②</div>
+      <div class="pane side" style="width:120px">
+        <div>Projects</div><div>Tasks</div><div>Wiki</div>
+        <div class="h">Workspaces</div><div class="sel">orbit-ws01</div><div>orbit-ws02</div>
+      </div>
+      <div class="pane list" style="width:200px">
+        <div class="ph">Orbit Session</div>
+        <div class="lbl">Working</div>
+        <div class="row">Main checkout bar…<span class="s">2/5 · Queued</span></div>
+        <div class="row hl">Permission mode…<span class="s">20/23 · Confirmed…</span></div>
+        <div class="row">Cursor Auto: stop…<span class="s">4/6 · Holding…</span></div>
+      </div>
+      <div class="pane conv">
+        <div class="ph">Permission mode: Auto is guaranteed…</div>
+        <div class="fill">Opening a task changes only the panel; the coordinator stays in the conversation.</div>
+        <div class="comp">Reply…</div>
+      </div>
+      <div class="pane rp" style="width:260px">
+        <div class="ph"><span class="back">‹ Permission mode: Auto…</span> <span class="x">⤢ ✕</span></div>
+        <div style="font-weight:600">Tasks run only on models that have Auto; a pin to one without is refused…</div>
+        <div style="margin:6px 0"><span class="chip c-g">Done</span><span class="chip c-g">Landed</span> $62.72</div>
+        <div class="green"><b>Delivered</b><br>✓ Evidence r1 accepted<br>✓ Landed · Open landing ›</div>
+        <div class="lbl">Runs</div><div>Run 6 · Nov 27 · landed<br>Run 5 · Nov 23 · failed<br>Run 3 · Nov 23 · failed</div>
+        <div class="w">same panel, same width</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ENTRY FROM CONVERSATION -->
+  <div class="b-step"><span class="b-tag rec">Proposed</span><h2>Opening a task from elsewhere</h2><p>③ the "Task ›" chip in a run's header opens the task in the same panel; the breadcrumb names its project. ④ an old run says it was superseded.</p></div>
+  <div class="app">
+    <div class="pane side" style="width:170px">
+      <div>Projects</div><div>Tasks</div><div>Scheduled</div><div>Wiki</div><div>Drive</div>
+      <div class="h">Workspaces</div><div class="sel">orbit-ws01</div><div>orbit-ws02</div><div>orbit-ws03</div>
+    </div>
+    <div class="pane list" style="width:260px">
+      <div class="ph">Orbit Session</div>
+      <div class="lbl">Working</div>
+      <div class="row">Main checkout bar: list the…<span class="s">2/5 · Queued</span></div>
+      <div class="row">Permission mode: Auto is gu…<span class="s">20/23 · Confirmed 354kzrnS…</span></div>
+      <div class="lbl">Yesterday</div>
+      <div class="row">Cursor Auto: stop asking…<span class="s">4/6 · Holding both…</span></div>
+    </div>
+    <div class="pane conv">
+      <div class="ph">Task: Tasks run only on models that have Auto; a pin to one without is refused <span class="chip c-b">Task ›</span><span class="pin il">③</span></div>
+      <div class="card"><b>Task started</b><br>Tasks run only on models that have Auto; a pin to one without is refused when made</div>
+      <div class="err">✖ Cursor said: "Add a payment method to continue."</div>
+      <div class="banner"><span class="pin il">④</span> Run 3 of 6 · superseded. This task landed in Run 6. <a>Open Run 6 ›</a></div>
+      <div class="comp">Reply… <span style="float:right;font-size:12px">(this run is history: reply only reopens Run 3)</span></div>
+      <div class="w">conversation ≈ 1100 px</div>
+    </div>
+    <div class="pane rp" style="width:400px">
+      <div class="ph">Task <span class="x">⤢ ⋮ ✕</span></div>
+      <div class="crumb">Project · Permission mode: Auto is guaranteed… ›</div>
+      <div style="font-weight:600">Tasks run only on models that have Auto; a pin to one without is refused when made</div>
+      <div style="margin:6px 0"><span class="chip c-g">Done</span><span class="chip c-g">Landed</span> Nov 23 · $62.72</div>
+      <div class="green"><b>Delivered</b><br>✓ Evidence r1 accepted · 4:57 PM<br>✓ Landed · Open landing ›</div>
+      <div class="lbl">Runs</div><div>Run 6 · Nov 27 · $62.72 · landed<br>Run 5 · Nov 23 · failed<br><b>Run 3 · Nov 23 · this conversation</b></div>
+      <div class="w">one panel ≈ 400 px</div>
+    </div>
+  </div>
+
+  <!-- BACK TO THE COORDINATOR -->
+  <div class="b-step"><span class="b-tag rec">Proposed</span><h2>Back to the coordinator</h2><p>⑤ a run row under Needs you opens that run in the conversation → ⑥ its header starts with "‹ coordinator"; one click returns, and the panel keeps the task open.</p></div>
+  <div class="flow">
+    <div class="app">
+      <div class="pane side" style="width:120px">
+        <div>Projects</div><div>Tasks</div><div>Wiki</div>
+        <div class="h">Workspaces</div><div class="sel">orbit-ws01</div><div>orbit-ws02</div>
+      </div>
+      <div class="pane list" style="width:190px">
+        <div class="ph">Orbit Session</div>
+        <div class="lbl">Working</div>
+        <div class="row">Main checkout bar…<span class="s">2/5 · Queued</span></div>
+        <div class="row">Permission mode…<span class="s">20/23 · Confirmed…</span></div>
+        <div class="row">Cursor Auto: stop…<span class="s">4/6 · Holding…</span></div>
+      </div>
+      <div class="pane conv">
+        <div class="ph" style="white-space:nowrap"><span class="back" style="outline:2px solid #e8710a;border-radius:5px;padding:0 4px">‹ Permission mode…</span><span class="pin il" style="margin:0 2px 0 0">⑥</span><span style="color:#aaa;font-weight:400">·</span> <span style="overflow:hidden;text-overflow:ellipsis;min-width:0">Task: Tasks run only on models th…</span> <span class="chip c-b" style="flex:none">Task ›</span></div>
+        <div class="card"><b>Task started</b><br>Tasks run only on models that have Auto…</div>
+        <div class="err">✖ Cursor said: "Add a payment method to continue."</div>
+        <div class="banner">Run 3 of 6 · superseded. <a>Open Run 6 ›</a></div>
+        <div class="comp">Reply…</div>
+        <div class="w">Run 3, opened from Needs you <span style="opacity:.8">⑤</span></div>
+      </div>
+      <div class="pane rp" style="width:240px">
+        <div class="ph"><span class="back">‹ Permission mode…</span> <span class="x">⤢ ✕</span></div>
+        <div style="font-weight:600">Tasks run only on models that have Auto…</div>
+        <div style="margin:6px 0"><span class="chip c-g">Done</span><span class="chip c-g">Landed</span></div>
+        <div class="lbl">Runs</div><div>Run 6 · landed<br>Run 5 · failed<br><b>Run 3 · this conversation</b></div>
+        <div class="w">task stays open</div>
+      </div>
+    </div>
+    <div class="arrow"><div class="a">→</div>click<br>‹ coordinator</div>
+    <div class="app">
+      <div class="pane side" style="width:120px">
+        <div>Projects</div><div>Tasks</div><div>Wiki</div>
+        <div class="h">Workspaces</div><div class="sel">orbit-ws01</div><div>orbit-ws02</div>
+      </div>
+      <div class="pane list" style="width:190px">
+        <div class="ph">Orbit Session</div>
+        <div class="lbl">Working</div>
+        <div class="row">Main checkout bar…<span class="s">2/5 · Queued</span></div>
+        <div class="row hl">Permission mode…<span class="s">20/23 · Confirmed…</span></div>
+        <div class="row">Cursor Auto: stop…<span class="s">4/6 · Holding…</span></div>
+      </div>
+      <div class="pane conv">
+        <div class="ph">Permission mode: Auto is guaranteed… <span class="chip c-b">Coordinator</span></div>
+        <div class="fill">Coordinator conversation… (no ‹ link: it is the top of the project)</div>
+        <div class="comp">Reply…</div>
+        <div class="w">coordinator, in one click from any run</div>
+      </div>
+      <div class="pane rp" style="width:240px">
+        <div class="ph"><span class="back">‹ Permission mode…</span> <span class="x">⤢ ✕</span></div>
+        <div style="font-weight:600">Tasks run only on models that have Auto…</div>
+        <div style="margin:6px 0"><span class="chip c-g">Done</span><span class="chip c-g">Landed</span></div>
+        <div class="lbl">Runs</div><div>Run 6 · landed<br>Run 5 · failed<br>Run 3 · failed</div>
+        <div class="w">unchanged</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="b-notes">
+    <div><b>The rules</b><ol>
+      <li>The right side shows at most one panel.</li>
+      <li>From the project panel, a task row opens <i>inside</i> the panel; the header becomes "‹ Project name". ‹ returns to the project, scrolled to where you were.</li>
+      <li>From anywhere else (the conversation's "Task ›" chip, the Tasks page, a link), the task opens on its own; a breadcrumb names its project and drills <i>out</i> to it.</li>
+      <li>✕ closes the panel at any depth. Esc goes back one level, then closes.</li>
+      <li>⤢ (expand) still opens the task as a full page.</li>
+      <li>A run row under Needs you opens the run in the conversation. Any session of a project other than its coordinator has "‹ Coordinator name" at the start of its header: one click back to the coordinator, from any depth, panel untouched.</li>
+    </ol></div>
+    <div><b>What changes in each frame</b>
+      <table class="st">
+        <tr><th></th><th>Conversation</th><th>Right side</th></tr>
+        <tr><td>Today</td><td>≈ 530 px</td><td>2 panels ≈ 690 px</td></tr>
+        <tr><td>Proposed</td><td>≈ 1100 px</td><td>1 panel ≈ 400 px</td></tr>
+      </table>
+      <ul style="margin-top:10px">
+        <li class="b-pros">The main pane is the widest again.</li>
+        <li class="b-pros">One status to read, not two that repeat each other.</li>
+        <li class="b-pros">Parent and child look like parent and child (a breadcrumb), not peers.</li>
+        <li class="b-cons">You can't see the project's Needs you list while reading a task; ‹ brings it back in one click.</li>
+      </ul></div>
+    <div><b>Open questions</b><ul>
+      <li>Should very wide windows (≥ 2400 px) offer an explicit "pin side by side"? Proposed: not now; add it only if coordinators ask for it.</li>
+      <li>The ‹ link goes to the coordinator, not to the previous page: Run 3 → Run 6 → Run 5 is still one click back. No browser-history walk.</li>
+      <li>Does the panel remember its depth per conversation (come back and still see the task), or reset to the project? Proposed: remember it.</li>
+      <li>④, the superseded-run banner, and taking failed runs of a landed task out of Needs you are separate changes; they're shown here because they appear on the same screen.</li>
+    </ul></div>
+  </div>
+</section>
+</body></html>

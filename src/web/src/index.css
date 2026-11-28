@@ -3616,6 +3616,29 @@ button.toast--pill:focus-visible {
 .coordinator-badge-link:focus-visible { outline: var(--orbit-focus-width) solid var(--orbit-focus-color); outline-offset: 1px; }
 /* The Task badge while its task is open beside the conversation: pressed, and a press closes it. */
 .coordinator-badge-link[aria-pressed='true'] { background: color-mix(in srgb, var(--brand) 14%, var(--bg-base)); border-color: var(--brand); }
+/* A project member's way back to its coordinator, before the title (docs/mocks/right-panel-stack ⑥): the
+   project's name as a link, cut short so the session's own title keeps the room. */
+.workspace-coordinator-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 220px;
+  margin: 0 8px 0 0;
+  padding: 1px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--link);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.workspace-coordinator-back .anticon { flex: none; font-size: 10px; }
+.workspace-coordinator-back-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-coordinator-back:hover { background: var(--bg-hover); }
+.workspace-coordinator-back:focus-visible { outline: var(--orbit-focus-width) solid var(--orbit-focus-color); outline-offset: 1px; }
 /* The title as the button that opens the session's settings (docs/mocks/session-settings-column ③): plain at
    rest, while the settings are open (owner 11-25: the open state needs no look of its own) and on hover. */
 .workspace-name-button {
@@ -6396,6 +6419,17 @@ button.toast--pill:focus-visible {
 .session-row-icon.tone-red {
   color: var(--error);
 }
+/* The tasks a session created that are running or queued now: the checkbox and its count, in the running blue
+   (docs/mocks/session-row-running-tasks). */
+.session-row-icon.session-created-tasks {
+  align-items: center;
+  gap: 2px;
+  color: var(--brand);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
 /* A public link opens this session (the list row's `shared`): a globe beside the time. */
 .session-shared {
   display: inline-flex;
@@ -8176,6 +8210,162 @@ button.toast--pill:focus-visible {
   font-size: 12px;
   color: var(--text-3);
 }
+
+/* `@` sessions and `#` projects (board docs/mocks/session-at-references/board-at-menu.html): a list of
+   things with a state, placed under the sigil that opened it — not the `/` command menu above. */
+.composer-ref-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  width: min(480px, calc(100% - 16px));
+  padding: 6px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.14), 0 1px 3px rgba(15, 23, 42, 0.08);
+  z-index: 20;
+}
+.composer-ref-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.composer-ref-query {
+  font-weight: 400;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Six rows, then it scrolls. */
+.composer-ref-rows {
+  max-height: 306px;
+  overflow-y: auto;
+}
+.composer-ref-row {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.composer-ref-row.is-active {
+  background: var(--brand-tint);
+}
+.composer-ref-mark {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-3);
+  opacity: 0.55;
+}
+.composer-ref-mark--square {
+  border-radius: 2px;
+}
+.composer-ref-mark.is-run {
+  background: var(--brand);
+  opacity: 1;
+}
+.composer-ref-mark.is-fail {
+  background: var(--error-solid);
+  opacity: 1;
+}
+.composer-ref-mark.is-wait {
+  background: var(--warning-solid);
+  opacity: 1;
+}
+.composer-ref-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.composer-ref-title,
+.composer-ref-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.composer-ref-title {
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--text-1);
+}
+.composer-ref-title mark {
+  background: none;
+  color: var(--brand-strong);
+  font-weight: 600;
+}
+.composer-ref-sub {
+  margin-top: 1px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.composer-ref-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.composer-ref-state {
+  font-weight: 600;
+}
+.composer-ref-state.is-run {
+  color: var(--brand);
+}
+.composer-ref-state.is-fail {
+  color: var(--error);
+}
+.composer-ref-state.is-wait {
+  color: var(--warning);
+}
+.composer-ref-empty {
+  padding: 12px 10px;
+  font-size: 13px;
+  color: var(--text-3);
+}
+.composer-ref-skel {
+  height: 34px;
+  margin: 6px 10px;
+  border-radius: 6px;
+  background: var(--bg-hover);
+}
+.composer-ref-foot {
+  display: flex;
+  gap: 14px;
+  margin-top: 4px;
+  padding: 7px 10px 3px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 11.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.composer-ref-foot kbd {
+  font-family: inherit;
+  font-size: 11px;
+  padding: 0 4px;
+  margin-right: 2px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+.composer-ref-hint {
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* A zero-size marker the mirror draws at the sigil being typed, so the popup can sit under it. */
+.composer-mirror-anchor {
+  display: inline-block;
+  width: 0;
+  height: 0;
+}
+
 /* The card's foot: `+`, workspace (a draft's only), mode — then, right-aligned, the model
    control, the usage gauges and Send. One line, always: on a phone the gauges drop their
    numbers and the model's name gives way before anything else does (see the 600px block).
@@ -17069,6 +17259,26 @@ button.chat-jump-start:hover {
   font-size: 12px;
   color: var(--text-3);
 }
+/* Docked over a project column, the kicker is the way back to it (docs/mocks/right-panel-stack). */
+.tdp-compact-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 2px 4px;
+  margin-left: -4px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--link);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tdp-compact-back .anticon { flex: none; font-size: 10px; }
+.tdp-compact-back-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tdp-compact-back:hover { text-decoration: underline; }
+.tdp-compact-back:focus-visible { outline: var(--orbit-focus-width) solid var(--orbit-focus-color); outline-offset: 1px; }
 .tdp-compact-title {
   margin-right: 8px;
   display: -webkit-box;

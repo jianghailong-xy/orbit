@@ -3,6 +3,9 @@ import type { ReactNode } from 'react';
 import {
   SESSION_MARKS,
   SESSION_ROW_ICON_TIPS,
+  sessionCreatedTasksCount,
+  sessionCreatedTasksTip,
+  type SessionCreatedTasksActive,
   type SessionDisplayState,
   type SessionMark,
   type SessionRowIcon,
@@ -104,6 +107,23 @@ export function SessionRowIcons({ icons }: { icons: readonly SessionRowIcon[] })
         </Tooltip>
       ))}
     </>
+  );
+}
+
+/** A list row's count of the tasks its session created that are running or queued now (sessionCreatedTasksCount),
+ *  after the title-line icons: the Tasks strip's checkbox and the number, in the running blue, its tip saying how many
+ *  run and how many wait (docs/mocks/session-row-running-tasks). Nothing when none is. */
+export function SessionCreatedTasksIcon({ active }: { active: SessionCreatedTasksActive | null | undefined }) {
+  const count = sessionCreatedTasksCount(active);
+  if (count === null || !active) return null;
+  const tip = sessionCreatedTasksTip(active);
+  return (
+    <Tooltip content={tip} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+      <span className="session-row-icon session-created-tasks" data-icon="CREATED_TASKS" aria-label={tip}>
+        {svg(<><rect x="2" y="2" width="12" height="12" rx="2.4" /><path d="M5 8.2l2.1 2.1L11 6" /></>, 12)}
+        <span className="session-created-tasks-count" aria-hidden="true">{count}</span>
+      </span>
+    </Tooltip>
   );
 }
 

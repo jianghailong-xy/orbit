@@ -4,6 +4,7 @@ import { deleteTask } from '../lib/taskDeletion';
 import { encodeId } from '../lib/idCodec';
 import { rememberTaskRunSidebar } from '../lib/taskRunSidebar';
 import { useCloseTaskOverPage, useOpenTaskOverPage } from '../lib/taskInPlace';
+import { useTaskColumnProject } from '../lib/taskColumnProject';
 import { useToast } from '../lib/toast';
 import { TASK_COLUMN_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 import { TaskDetailPanel } from './TaskDetailPanel';
@@ -17,6 +18,9 @@ import { TaskDetailPanel } from './TaskDetailPanel';
  * owner 2026-11-26): the conversation narrows and stays readable, header and all. Docked, the panel is the
  * task run sidebar's compact arrangement (docs/task-run-sidebar-design.md), and closing it in the task's own
  * run conversation is remembered there (lib/taskRunSidebar).
+ *
+ * Docked, it takes the project column's slot (docs/mocks/right-panel-stack): its head reads "‹ project",
+ * which closes the task and the project column comes back, as Esc does; ✕ closes both.
  */
 export function TaskOverPagePanel({ taskId }: { taskId: string }) {
   const qc = useQueryClient();
@@ -27,6 +31,8 @@ export function TaskOverPagePanel({ taskId }: { taskId: string }) {
   const hereSessionId = matchPath('/sessions/:id', pathname)?.params.id ?? null;
   const roomy = useMediaQuery(TASK_COLUMN_QUERY);
   const docked = hereSessionId != null && roomy;
+  const underProject = useTaskColumnProject();
+  const projectBelow = docked ? underProject : null;
   // ✕ in one of the task's own runs is that conversation's choice: it stays closed there until opened again.
   const closePanel = () => {
     const runs = qc.getQueryData<{ sessions?: Array<{ id: string }> }>(['task', taskId])?.sessions ?? [];
@@ -56,7 +62,8 @@ export function TaskOverPagePanel({ taskId }: { taskId: string }) {
         hereSessionId={hereSessionId}
         taskId={taskId}
         onOpenTask={openTask}
-        onClose={closePanel}
+        onClose={projectBelow ? () => { closePanel(); projectBelow.fold(); } : closePanel}
+        backTo={projectBelow ? { label: projectBelow.title, onBack: closePanel } : null}
         onDelete={() => remove.mutate(taskId)}
         deleting={remove.isPending}
       />

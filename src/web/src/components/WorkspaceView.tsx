@@ -6,7 +6,6 @@ import {
   type CoordinatorHandoffSuccessor,
   type LinkPreview,
   type LinkPreviewsResponse,
-  type SessionSearchHit,
   type MergeRecoveryAction,
   type ProjectSidebarTaskCounts,
   type SessionCoordinatorHandoff,
@@ -67,6 +66,7 @@ import { keepPreviousData, useInfiniteQuery, useMutation, useQueries, useQuery, 
 import { AgentToolsDrawer, agentToolsMenuStatus } from './AgentToolsDrawer';
 import {
   applyReferencePick,
+  chipDeletionRange,
   materializeReferences,
   referenceToken,
   sigilOf,
@@ -556,6 +556,7 @@ import {
 import { OwnerConfirmationReopen } from './OwnerConfirmationReopen';
 import { UNDER_REVIEW, underReviewLine } from './OwnerConfirmationReview';
 import { ComposerMirror } from './ComposerMirror';
+import { ComposerRefMenu, rowTime, showsEmpty, type RefMenuRow, type RefMenuTone } from './ComposerRefMenu';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
 import { SessionSettingsDrawer } from './SessionSettingsDrawer';
@@ -656,7 +657,7 @@ import {
   sessionRowMarks,
   type SessionRowIcon,
 } from '../lib/sessionDisplay';
-import { SessionMarkChips, SessionRowIcons, SessionStateGlyph } from './SessionStateDisplay';
+import { SessionCreatedTasksIcon, SessionMarkChips, SessionRowIcons, SessionStateGlyph } from './SessionStateDisplay';
 import { deliveryFailureExplanation, offersSteerWithdraw, steerDeliveryState } from '../lib/steerDelivery';
 import { backgroundWorkIsActive, isSessionTurnActive, outlivingSessionWork } from '../lib/sessionActivity';
 import { MainCheckoutCtx, type MainCheckoutTarget } from '../lib/mainCheckout';
@@ -760,6 +761,7 @@ import { SessionConversation } from './SessionConversation';
 import { useWikiChatSessionCards } from './WikiDraftCard';
 import { currentPromptSuggestion, offeredPromptSuggestion } from '../lib/promptSuggestion';
 import { useCloseTaskOverPage, useOpenTaskOverPage, useShowTaskOverPage, useTaskOverPage } from '../lib/taskInPlace';
+import { setTaskColumnProject } from '../lib/taskColumnProject';
 import {
   OPTIMIZE_SHORTCUT,
   optimizedSendOf,
@@ -1676,6 +1678,7 @@ export function SessionTitleRow({
         </Tooltip>
       )}
       <SessionRowIcons icons={icons} />
+      <SessionCreatedTasksIcon active={s.createdTasksActive} />
       {/* The list row's `shared` (docs/share-links-design.md §8). The tip is hover only: on a touch screen
           a tap opens the row. */}
       {s.shared === true && (
@@ -4040,6 +4043,9 @@ export function WorkspaceView({
   // Session settings as a column (docs/mocks/session-settings-column): on a wide screen, in the project column's
   // slot, which it takes while it is open (one column at a time); on a phone a sheet instead.
   const settingsColumnShown = settingsOpen && !isMobile && !!selected && !selectedTrashed;
+  // A task docked beside the conversation (TaskOverPagePanel) holds the same slot: the right side is one
+  // column (docs/mocks/right-panel-stack), and the task's head leads back to the project column under it.
+  const taskColumnShown = taskOverPage != null && taskColumnRoomy && !isMobile && !!selectedId && !settingsColumnShown;
   // Whether this session's own task is open beside (or over) it: the Task badge reads pressed then.
   const selectedTaskOpen =
     !!selected?.taskId && taskOverPage != null && routeId(taskOverPage) === routeId(selected.taskId);
@@ -4750,7 +4756,7 @@ export function WorkspaceView({
   // read here only while that page is shut: open, the page reads them itself (the same cache entries),
   // and these stop.
   const titleBarPageShown = !!titleBarProjectId && (isMobile ? sheetProjectId === titleBarProjectId
-    : titleBarProjectId === columnProjectId && projectColumnOpen && !settingsColumnShown);
+    : titleBarProjectId === columnProjectId && projectColumnOpen && !settingsColumnShown && !taskColumnShown);
   const titleBarReadsLine = !!titleBarProjectId && !selectedTrashed && !titleBarPageShown;
   const titleBarIntegrationQ = useProjectIntegration(titleBarProjectId ?? '', titleBarReadsLine);
   const titleBarPromotionQ = useQuery({
@@ -4764,6 +4770,13 @@ export function WorkspaceView({
     titleBarIntegrationQ.data,
     titleBarPromotionQ.data,
   );
+  // A member conversation's way back to its project's coordinator (docs/mocks/right-panel-stack ⑥): the head of
+  // every session of a project but the coordinator itself, and the project's landings, which are no conversation.
+  const selectedRole = selectedSession?.projectMembership?.role ?? null;
+  const headerCoordinator = titleBarProjectId && selectedRole && selectedRole !== 'COORDINATOR' && selectedRole !== 'LANDING'
+    ? (titleBarOwnRead ? [...(titleBarOpenQ.data ?? []), ...(titleBarCompletedQ.data ?? [])] : allProjectMembers)
+      .find((s) => s.projectMembership?.role === 'COORDINATOR') ?? null
+    : null;
   // Esc folds the column too, unless focus is in a field, a dialog or a menu, which own the key.
   // With the settings column over it, Esc is the settings column's: it closes that, and the project column
   // underneath comes back.
@@ -4778,13 +4791,25 @@ export function WorkspaceView({
         setSettingsOpen(false);
         return;
       }
+      // The docked task's own Esc closes it, and the project column under it comes back.
+      if (taskColumnShown) return;
       setProjectColumnFolded(true);
       setProjectColumnOnDemand(false);
       localStorage.setItem(PROJECT_COLUMN_FOLDED_KEY, '1');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [projectColumnOpen, settingsColumnShown]);
+  }, [projectColumnOpen, settingsColumnShown, taskColumnShown]);
+  // Tell the docked task which project column it stands in for, so its head can lead back to it.
+  const foldProjectColumnRef = useRef(foldProjectColumn);
+  foldProjectColumnRef.current = foldProjectColumn;
+  const foldUnderTask = useCallback(() => foldProjectColumnRef.current(true), []);
+  const taskOverProjectTitle = taskColumnShown && projectColumnOpen && columnProjectId ? pageProjectTitle : null;
+  useEffect(() => {
+    if (taskOverProjectTitle == null) return;
+    setTaskColumnProject({ title: taskOverProjectTitle, fold: foldUnderTask });
+    return () => setTaskColumnProject(null);
+  }, [taskOverProjectTitle, foldUnderTask]);
   // Whether the address named the column's project together with, or after, the conversation now open
   // (a project row, a member's mark, a link), rather than the selection having moved on under a column
   // already open. Read by the effect below, so it is written first.
@@ -10040,6 +10065,12 @@ export function WorkspaceView({
       setSettingsOpen(false);
       if (titleBarProjectId === columnProjectId && projectColumnOpen) return;
     }
+    // So does a docked task: closed here, it stays closed in this conversation (lib/taskRunSidebar).
+    if (taskColumnShown) {
+      if (ownRunSessionId) rememberTaskRunSidebar(ownRunSessionId, true);
+      closeTaskOverPage();
+      if (titleBarProjectId === columnProjectId && projectColumnOpen) return;
+    }
     if (titleBarProjectId === columnProjectId) {
       foldProjectColumn(projectColumnOpen);
       return;
@@ -12014,6 +12045,21 @@ export function WorkspaceView({
               {isMobile && capsuleMounted && (
                 <div className="workspace-title-jump" hidden={!topPillShown}>{topPill(decisionStrip('line'))}</div>
               )}
+              {/* docs/mocks/right-panel-stack ⑥: a member of a project leads back to its coordinator in one press,
+                  however it was reached; the column beside the conversation is left as it is. */}
+              {!isMobile && !composing && headerCoordinator && (
+                <button
+                  type="button"
+                  className="workspace-coordinator-back"
+                  aria-label={`Back to the coordinator · ${selectedSession?.projectMembership?.projectTitle ?? headerCoordinator.title}`}
+                  onClick={() => navigate(sessionPath(headerCoordinator.id))}
+                >
+                  <LeftOutlined aria-hidden />
+                  <span className="workspace-coordinator-back-text">
+                    {selectedSession?.projectMembership?.projectTitle ?? headerCoordinator.title}
+                  </span>
+                </button>
+              )}
               {selected && !selectedTrashed && !composing ? (
                 // A click opens the session's settings, and again closes them (docs/mocks/session-settings-column ③);
                 // it is renamed there, in the Name field.
@@ -13318,7 +13364,7 @@ export function WorkspaceView({
           <SessionSettingsDrawer {...settingsProps} variant="column" width={settingsColWidth} overlay={settingsColumnCrowds} />
         </>
       )}
-      {projectColumnOpen && columnProjectId && !settingsColumnShown && (
+      {projectColumnOpen && columnProjectId && !settingsColumnShown && !taskColumnShown && (
         <>
           {!projectColumnOnDemand && (
             <div
@@ -13474,14 +13520,6 @@ export interface SessionComposerProps {
   /** The prompt optimizer's ✦ Optimize (docs/prompt-optimizer-design.md): where the draft's context
    *  comes from. Absent, the composer offers no optimizer. */
   promptOptimizer?: PromptOptimizerTarget;
-}
-
-/** A session's state in the `@` menu, in a word — only when it is worth one: running, failed or waiting on you. */
-function mentionStateWord(hit: SessionSearchHit): string | null {
-  if (hit.waitingOn === 'PERSON') return 'Waiting on you';
-  if (hit.lastTurnOutcome === 'FAILED') return 'Failed';
-  if (hit.phase === 'RUNNING') return 'Running';
-  return null;
 }
 
 /** The title a link preview answers with, or null when the object cannot be shown. */
@@ -13718,7 +13756,11 @@ export function SessionComposer({
     () =>
       mentionToken === null
         ? []
-        : (mentionSearchQ.data?.hits ?? []).filter((hit) => hit.id !== selectedId && hit.title).slice(0, 8),
+        : // Your own conversations and project coordinators: a task run is the agents' work, reached
+          // by pasting its link (owner, 2026-11-28; board 07). Landings never come back from search.
+          (mentionSearchQ.data?.hits ?? [])
+            .filter((hit) => hit.id !== selectedId && hit.title && !hit.taskId)
+            .slice(0, 8),
     [mentionToken, mentionSearchQ.data, selectedId],
   );
   useEffect(() => {
@@ -13728,7 +13770,7 @@ export function SessionComposer({
     mentionToken !== null &&
     mentionToken !== mentionDismissed &&
     !composerDisabled &&
-    mentionMatches.length > 0;
+    (mentionMatches.length > 0 || mentionSearchQ.isLoading || showsEmpty(mentionToken));
   const mentionIdx = mentionMatches.length ? Math.min(mentionIndex, mentionMatches.length - 1) : 0;
   const pickMention = (hit: { id: string; title: string }): void => {
     const next = applyReferencePick(text, hit.title, { kind: 'session', id: hit.id }, composerRefs);
@@ -13775,9 +13817,25 @@ export function SessionComposer({
       )
       .filter((p) => p.title.toLowerCase().includes(q))
       .slice(0, 6)
-      .map((p) => ({ kind: 'project' as const, id: p.id, title: p.title }));
+      .map((p) => ({
+        kind: 'project' as const,
+        id: p.id,
+        title: p.title,
+        own: p.id === own?.id,
+        running: (p.buckets?.running ?? 0) > 0,
+        counts: p.taskCounts ?? null,
+        at: p.lastActivityAt ?? p.createdAt,
+      }));
     const tasks = q
-      ? (refTasksQ.data ?? []).slice(0, 4).map((t) => ({ kind: 'task' as const, id: t.id, title: t.title }))
+      ? (refTasksQ.data ?? []).slice(0, 4).map((t) => ({
+          kind: 'task' as const,
+          id: t.id,
+          title: t.title,
+          own: false,
+          running: false,
+          counts: null,
+          at: null,
+        }))
       : [];
     return [...projects, ...tasks];
   }, [refToken, refProjectsQ.data, refTasksQ.data, projectFolder]);
@@ -13788,8 +13846,59 @@ export function SessionComposer({
     refToken !== null &&
     refToken !== refDismissed &&
     !composerDisabled &&
-    refMatches.length > 0;
+    // A blank `#` with no open project shows nothing: there is nothing to pick and nothing typed.
+    (refMatches.length > 0 || refProjectsQ.isLoading || (!!refToken.trim() && showsEmpty(refToken)));
   const refIdx = refMatches.length ? Math.min(refIndex, refMatches.length - 1) : 0;
+  // The popup sits under the sigil being typed: the mirror marks its offset, and the menu reads where
+  // that mark landed. Clamped inside the composer so a sigil near the right edge keeps the menu whole.
+  const boxRef = useRef<HTMLDivElement>(null);
+  const menuToken = showMention ? mentionToken : showRef ? refToken : null;
+  const menuAnchorAt = menuToken === null ? null : text.length - menuToken.length - 1;
+  const [menuLeft, setMenuLeft] = useState(8);
+  useLayoutEffect(() => {
+    const box = boxRef.current;
+    const mark = box?.querySelector('.composer-mirror-anchor');
+    if (!box || !mark) return;
+    const boxRect = box.getBoundingClientRect();
+    const width = Math.min(480, boxRect.width - 16);
+    const x = mark.getBoundingClientRect().left - boxRect.left - 16;
+    setMenuLeft(Math.max(8, Math.min(x, boxRect.width - width - 8)));
+  }, [menuAnchorAt, text]);
+  const now = Date.now();
+  const mentionRows: RefMenuRow[] = mentionMatches.map((hit) => {
+    const [tone, state]: [RefMenuTone, string | null] =
+      hit.waitingOn === 'PERSON'
+        ? ['wait', 'Waiting on you']
+        : hit.lastTurnOutcome === 'FAILED'
+          ? ['fail', 'Failed']
+          : hit.phase === 'RUNNING'
+            ? ['run', 'Running']
+            : ['idle', null];
+    return {
+      key: hit.id,
+      shape: 'round',
+      tone,
+      title: hit.title,
+      // A match on the branch says so, or nothing on the row explains why it is here.
+      sub: hit.matchField === 'branch' && hit.snippet ? `branch ${hit.snippet}` : (hit.agent?.name ?? ''),
+      state,
+      time: rowTime(hit.lastTurnAt ?? hit.listedAt ?? hit.createdAt, now),
+    };
+  });
+  const refRows: RefMenuRow[] = refMatches.map((m) => ({
+    key: `${m.kind}:${m.id}`,
+    shape: 'square',
+    tone: m.running ? 'run' : 'idle',
+    title: m.title,
+    sub:
+      m.kind === 'task'
+        ? 'Task'
+        : [m.own ? "This conversation's project" : 'Project', m.counts ? `${m.counts.done} of ${m.counts.total} tasks done` : null]
+            .filter(Boolean)
+            .join(' · '),
+    state: m.running ? 'Running' : null,
+    time: m.at ? rowTime(m.at, now) : null,
+  }));
   const pickRef = (m: { kind: 'project' | 'task'; id: string; title: string }): void => {
     const next = applyReferencePick(text, m.title, { kind: m.kind, id: m.id }, composerRefs);
     setText(next.text);
@@ -13909,7 +14018,7 @@ export function SessionComposer({
   };
 
   return (
-    <div className={shellMode ? 'composer-box composer-box-shell' : 'composer-box'}>
+    <div ref={boxRef} className={shellMode ? 'composer-box composer-box-shell' : 'composer-box'}>
       {optimizer.card}
       {/* Drag to set an explicit height (overrides auto-grow); double-click to reset.
           Only shown once the box has hit its auto-grow cap or the user set a manual
@@ -13950,46 +14059,30 @@ export function SessionComposer({
         </div>
       )}
       {showRef && (
-        <div className="composer-slash-menu" role="listbox">
-          {refMatches.map((m, i) => (
-            <div
-              key={`${m.kind}:${m.id}`}
-              role="option"
-              aria-selected={i === refIdx}
-              className={`composer-slash-item${i === refIdx ? ' is-active' : ''}`}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                pickRef(m);
-              }}
-              onMouseEnter={() => setRefIndex(i)}
-            >
-              <span className="composer-slash-name">#{m.title}</span>
-              <span className="composer-slash-type">{m.kind === 'project' ? 'project' : 'task'}</span>
-            </div>
-          ))}
-        </div>
+        <ComposerRefMenu
+          heading={refToken?.trim() ? 'Projects and tasks' : 'Projects'}
+          query={refToken ?? ''}
+          rows={refRows}
+          activeIndex={refIdx}
+          loading={refProjectsQ.isLoading}
+          left={menuLeft}
+          hint="Paste a project or task link to reference it"
+          onPick={(i) => pickRef(refMatches[i])}
+          onHover={setRefIndex}
+        />
       )}
       {showMention && (
-        <div className="composer-slash-menu" role="listbox">
-          {mentionMatches.map((hit, i) => (
-            <div
-              key={hit.id}
-              role="option"
-              aria-selected={i === mentionIdx}
-              className={`composer-slash-item${i === mentionIdx ? ' is-active' : ''}`}
-              // mousedown (not click) + preventDefault keeps focus in the textarea.
-              onMouseDown={(e) => {
-                e.preventDefault();
-                pickMention(hit);
-              }}
-              onMouseEnter={() => setMentionIndex(i)}
-            >
-              <span className="composer-slash-name">@{hit.title}</span>
-              <span className="composer-slash-type">{hit.taskId ? 'task run' : (hit.agent?.name ?? 'session')}</span>
-              {mentionStateWord(hit) && <span className="composer-slash-desc">{mentionStateWord(hit)}</span>}
-            </div>
-          ))}
-        </div>
+        <ComposerRefMenu
+          heading={mentionToken?.trim() ? 'Sessions' : 'Recent sessions'}
+          query={mentionToken ?? ''}
+          rows={mentionRows}
+          activeIndex={mentionIdx}
+          loading={mentionSearchQ.isLoading}
+          left={menuLeft}
+          hint="Paste a session link to reference it"
+          onPick={(i) => pickMention(mentionMatches[i])}
+          onHover={setMentionIndex}
+        />
       )}
       {/* Hidden picker the `Image` menu item triggers; we upload via addImage
           ourselves and reset value so re-picking the same file fires onChange again. */}
@@ -14086,7 +14179,7 @@ export function SessionComposer({
       >
       {/* Behind the input, drawing its chips. Same characters, same metrics — see the
           `.composer-field` block in index.css for why that is not negotiable. */}
-      <ComposerMirror text={text} refs={composerRefs} scrollTop={composerScroll} />
+      <ComposerMirror text={text} refs={composerRefs} scrollTop={composerScroll} anchorAt={menuAnchorAt} />
       <Textarea
         ref={taRef}
         onScroll={(e) => setComposerScroll(e.currentTarget.scrollTop)}
@@ -14131,7 +14224,25 @@ export function SessionComposer({
         // One keydown handler: drive the menu while open, else Up/Down recall
         // history (when it doesn't fight cursor movement), Enter=send / Shift+Enter=newline.
         onKeyDown={(e) => {
-          if (showRef && !e.nativeEvent.isComposing) {
+          // One keystroke takes a whole chip: Backspace at (or just after) its end, Delete at its start.
+          // Through the browser's own delete command, so ⌘Z puts the chip back as it was.
+          if ((e.key === 'Backspace' || e.key === 'Delete') && !e.nativeEvent.isComposing && !e.altKey && !e.metaKey && !e.ctrlKey) {
+            const area = e.currentTarget;
+            const range =
+              area.selectionStart === area.selectionEnd
+                ? chipDeletionRange(text, composerRefs, area.selectionStart, e.key)
+                : null;
+            if (range) {
+              e.preventDefault();
+              area.setSelectionRange(range.start, range.end);
+              if (!document.execCommand?.('delete')) {
+                setText(text.slice(0, range.start) + text.slice(range.end));
+                setTimeout(() => area.setSelectionRange(range.start, range.start), 0);
+              }
+              return;
+            }
+          }
+          if (showRef && !e.nativeEvent.isComposing && (refMatches.length > 0 || e.key === 'Escape')) {
             if (e.key === 'ArrowDown') {
               e.preventDefault();
               setRefIndex((i) => (i + 1) % refMatches.length);
@@ -14153,7 +14264,7 @@ export function SessionComposer({
               return;
             }
           }
-          if (showMention && !e.nativeEvent.isComposing) {
+          if (showMention && !e.nativeEvent.isComposing && (mentionMatches.length > 0 || e.key === 'Escape')) {
             if (e.key === 'ArrowDown') {
               e.preventDefault();
               setMentionIndex((i) => (i + 1) % mentionMatches.length);

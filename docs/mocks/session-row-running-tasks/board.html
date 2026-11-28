@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<title>Session list: show the tasks a session has running</title>
+<!-- The list frames are drawn with the shipped stylesheet and the list's own classes
+     (.session-row, .session-icon, .session-title-row, .session-sub, .session-row-icon, .session-project-progress…),
+     so a frame maps 1:1 onto WorkspaceView's SessionEntryRow. The column shell and the hover tip are drawn by hand. -->
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #e9ebef; }
+  .b-part { width: 1880px; padding: 26px 30px 34px; font: 13px/1.6 Inter, "Noto Sans SC", sans-serif; color: #1f2329; }
+  .b-part h1 { font-size: 21px; font-weight: 650; margin: 0 0 6px; }
+  .b-sub { color: #4a4f57; margin: 0 0 18px; font-size: 13px; line-height: 1.65; max-width: 1800px; }
+  .b-part code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11.5px; background: #dfe2e7; border-radius: 4px; padding: 1px 4px; color: #30343b; }
+  .b-cols { display: flex; gap: 22px; align-items: flex-start; }
+  .b-col { width: 440px; }
+  .b-cap { font-size: 13.5px; font-weight: 650; margin: 0 0 8px; }
+  .b-cap.b-now { color: #b3380a; } .b-cap.b-rec { color: #1a7f37; } .b-cap.b-alt { color: #4a4f57; } .b-cap.b-no { color: #8a8f98; }
+  .b-cap span { font-weight: 400; color: #646a73; margin-left: 6px; font-size: 12.5px; }
+  .b-frame { background: var(--bg-base); border: 1px solid #d5d8dd; border-radius: 10px; padding: 4px 10px 6px;
+    font-family: Inter, "Noto Sans SC", sans-serif; }
+  .b-frame .session-row { cursor: default; }
+  .b-ann { font-size: 12px; color: #4a4f57; margin: 10px 2px 0; line-height: 1.6; }
+  .b-ann b { color: #1f2329; }
+  .b-ann ul { margin: 4px 0 0; padding-left: 16px; }
+  .b-mark { outline: 2px dashed #e8590c; outline-offset: 2px; border-radius: 3px; }
+  .b-num { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; border-radius: 50%;
+    background: #e8590c; color: #fff; font-size: 10.5px; font-weight: 700; margin-right: 4px; vertical-align: 1px; }
+  /* Proposal A: the row icon with its count. */
+  .b-tasks-icon { gap: 2px; align-items: center; font-size: 11px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+  .b-tasks-icon.b-blue { color: var(--brand); }
+  /* Proposal C: a badge on the state icon. */
+  .b-badge-wrap { position: relative; display: inline-flex; }
+  .b-badge { position: absolute; right: -4px; bottom: -4px; width: 9px; height: 9px; border-radius: 50%; background: var(--bg-base);
+    display: flex; align-items: center; justify-content: center; }
+  .b-badge::after { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--brand); }
+  /* Hover tip, drawn as the house tooltip looks. */
+  .b-tip { position: absolute; z-index: 3; background: rgba(0,0,0,.85); color: #fff; font-size: 12px; line-height: 1.45; padding: 5px 9px;
+    border-radius: 6px; white-space: nowrap; box-shadow: 0 4px 14px rgba(0,0,0,.18); }
+  .b-tip::before { content: ''; position: absolute; top: -5px; right: 14px; border: 5px solid transparent; border-top: 0; border-bottom-color: rgba(0,0,0,.85); }
+  .b-zoom { display: flex; gap: 22px; margin-top: 26px; align-items: flex-start; }
+  .b-box { background: #fff; border: 1px solid #d5d8dd; border-radius: 10px; padding: 14px 18px; }
+  .b-box h3 { margin: 0 0 8px; font-size: 14.5px; }
+  .b-rec-tag { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 5px; background: #dff3e4; color: #1d7a3a; font-size: 12px; font-weight: 600; }
+  table.b-tab { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.b-tab th, table.b-tab td { padding: 7px 10px; border-top: 1px solid #e6e6ea; text-align: left; vertical-align: top; line-height: 1.55; }
+  table.b-tab th { color: #6b6b70; font-weight: 600; font-size: 12px; }
+  .b-sw { display: flex; gap: 18px; align-items: center; }
+  .b-sw .b-frame { width: 300px; position: relative; }
+</style>
+</head>
+<body>
+<div class="b-part">
+  <h1>会话列表：看得出哪个会话还有任务在跑</h1>
+  <p class="b-sub">
+    现状：会话里建的任务只在打开会话后的 <b>Tasks · 2 running</b> 条上看得见；列表行的数据里没有这件事（那条的数据是打开会话时单独读的 <code>sessionCreatedTasksQuery</code>）。
+    下面四列是同一份列表：①一个会话本身空闲、它建的 2 个任务在跑 1 个排队；②会话本身也在跑；③会话有后台进程（已有的 Background 图标）又有任务在跑；④普通会话；⑤项目行（对照用）。
+    列表框用的是线上的 <code>index.css</code> 和真实类名，外框和悬停提示是手画的。界面文字按上线时的英文画。
+  </p>
+
+  <div class="b-cols" id="cols"></div>
+
+  <div class="b-zoom">
+    <div class="b-box" style="width:640px">
+      <h3>A 的细节：悬停提示、颜色</h3>
+      <div class="b-sw" id="tipcase"></div>
+      <div class="b-ann" style="margin-top:46px">
+        <b>提示文字</b>：<code>2 tasks running · 1 queued</code>，只有排队时 <code>1 task queued</code>。数字 = 在跑 + 排队。<br/>
+        <b>颜色</b>：左边蓝色（推荐，和"正在跑"同一个蓝，扫一眼能看到）；右边灰色（和 Background 图标一样，但 12px 灰色很难扫到，这正是现在的问题）。<br/>
+        <b>点它</b>：不单独做按钮，点行照常打开会话；打开后 Tasks 条已经在那里。
+      </div>
+    </div>
+    <div class="b-box" style="flex:1">
+      <h3>要你定的</h3>
+      <table class="b-tab">
+        <tr><th style="width:44px">#</th><th style="width:250px">问题</th><th>选项</th><th style="width:300px">建议</th></tr>
+        <tr><td>D1</td><td>放哪里</td><td>A 标题行图标+数字 · B 第二行进度条 · C 左侧图标角标</td><td><b>A</b><span class="b-rec-tag">推荐</span><br/>和 Background 同一类事实，同一个位置；不抢摘要，不改左侧状态图标的含义。</td></tr>
+        <tr><td>D2</td><td>A 的颜色</td><td>蓝 · 灰</td><td><b>蓝</b><span class="b-rec-tag">推荐</span><br/>问题就是"看不出来"；灰色 12px 图标扫不到。</td></tr>
+        <tr><td>D3</td><td>算哪些任务</td><td>只算在跑+排队 · 也算失败 / 等你验收</td><td><b>只算在跑+排队</b><span class="b-rec-tag">推荐</span><br/>全结束就消失。失败和等你的事已有各自的提醒（Needs you、失败通知），混进来这个数字就说不清了。</td></tr>
+        <tr><td>D4</td><td>已完成（Completed）列表里也显示吗</td><td>显示 · 不显示</td><td><b>显示</b><span class="b-rec-tag">推荐</span><br/>会话结束了任务还可能在跑，正是最容易忘的时候。</td></tr>
+        <tr><td>D5</td><td>原生端</td><td>Web 先做，iOS/macOS、Android 跟同一条规则</td><td>Web 先做；服务端字段一次加好，三端读同一个字段。</td></tr>
+      </table>
+      <div class="b-ann">
+        <b>不管选哪个都要做的</b>：会话列表每一行加一个字段（如 <code>createdTasksActive: { running, queued }</code>，和 <code>runningBgCount</code> 一起在列表查询里算）；
+        任务开始/结束/失败时，要同时刷新<b>建它的那个会话</b>的列表行，不然数字会停在旧值。这是最容易漏的一步。
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SVG = (body, size = 12, extra = '') => `<svg class="session-mark-svg" width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${body}</svg>`;
+const BUBBLE = '<path d="M2.7 3.7h10.6a.7.7 0 0 1 .7.7v6a.7.7 0 0 1-.7.7H6.7l-3 2.3V11.1h-1a.7.7 0 0 1-.7-.7v-6a.7.7 0 0 1 .7-.7z" />';
+const TASK = '<rect x="2" y="2" width="12" height="12" rx="2.4" /><path d="M5 8.2l2.1 2.1L11 6" />';
+const BG = '<rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.5" /><path d="M4.5 6.2l2 1.8-2 1.8M8 10h3.5" />';
+const PROJ = '<rect x="2" y="2" width="5" height="5" rx="1.2"/><rect x="9" y="2" width="5" height="5" rx="1.2"/><rect x="2" y="9" width="5" height="5" rx="1.2"/><rect x="9" y="9" width="5" height="5" rx="1.2"/>';
+const spinner = `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 1 1-6.5 6.5" fill="none" stroke="var(--brand)" stroke-width="1.6" stroke-linecap="round"/></svg>`;
+const idle = `<span class="session-state-glyph" style="color:var(--text-3)">${SVG(BUBBLE, 16)}</span>`;
+
+// The rows, as the list would hold them.
+const ROWS = [
+  { n: 1, title: '会话完成后卡片重现', time: '1m ago', state: 'idle', tasks: { running: 2, queued: 1, done: 0, total: 3 },
+    line: 'Recorded three follow-up tasks (iOS/macOS, Android, web wiki chat) for Complete…' },
+  { n: 2, title: '排查重复通知无法跳转问题', time: '6m ago', state: 'running', tasks: { running: 1, queued: 0, done: 1, total: 2 },
+    line: 'Running npm test -- WorkspaceView', tone: 'running' },
+  { n: 3, title: 'Deploy after landing', time: '22m ago', state: 'idle', bg: true, tasks: { running: 1, queued: 0, done: 0, total: 1 },
+    line: 'Waiting for the branch to reach main, then deploy…' },
+  { n: 4, title: 'Wiki search ranking', time: '11/27, 18:02', state: 'idle', line: 'Ranking now weights title hits 3× over body hits…' },
+  { n: 5, project: true, title: 'Cursor Auto: stop asking about reads, and…', time: '11/27, 16:20', counts: { done: 4, total: 6, running: 1 },
+    line: 'Holding both downstream tasks (rule cleanup…' },
+];
+
+const bar = (c) => {
+  const w = (k) => `${c.total ? k / c.total * 100 : 0}%`;
+  return `<span class="session-project-progress-bar" aria-hidden="true"><span class="done" style="width:${w(c.done)}"></span><span class="running" style="width:${w(c.running)}"></span><span class="failed" style="width:0%"></span></span>`;
+};
+const pill = (c, mark) => `<span class="session-project-progress${mark ? ' b-mark' : ''}">${bar(c)}${c.done}/${c.total}</span>`;
+const tasksIcon = (t, cls = 'b-blue', mark = true) =>
+  `<span class="session-row-icon b-tasks-icon ${cls}${mark ? ' b-mark' : ''}" data-icon="TASKS">${SVG(TASK, 12)}${t.running + t.queued}</span>`;
+
+function row(r, variant) {
+  let icon, titleIcons = '', pre = '';
+  if (r.project) {
+    icon = `<span class="session-icon session-project-icon">${r.counts.running ? spinner : SVG(PROJ, 16)}</span>`;
+    pre = pill({ ...r.counts });
+  } else {
+    let glyph = r.state === 'running' ? spinner : idle;
+    if (variant === 'C' && r.tasks) glyph = `<span class="b-badge-wrap b-mark">${glyph}<span class="b-badge"></span></span>`;
+    icon = `<span class="session-icon">${glyph}</span>`;
+    if (r.bg) titleIcons += `<span class="session-row-icon" data-icon="BACKGROUND">${SVG(BG, 12)}</span>`;
+    if (variant === 'A' && r.tasks) titleIcons += tasksIcon(r.tasks);
+    if (variant === 'B' && r.tasks) pre = pill({ done: r.tasks.done, total: r.tasks.total, running: r.tasks.running }, true);
+  }
+  return `<div class="session-row">
+    <div class="session-swipe">${icon}
+      <div class="session-main">
+        <div class="session-title-row"><div class="session-title">${r.title}</div>${titleIcons}<span class="session-time">${r.time}</span></div>
+        <div class="session-sub">${pre}<div class="session-preview${r.tone ? ' tone-' + r.tone : ''}">${r.line}</div></div>
+      </div>
+    </div></div>`;
+}
+
+const frame = (variant) => `<div class="b-frame"><div class="session-section-head">Today</div>${ROWS.map((r) => row(r, variant)).join('')}</div>`;
+
+const COLS = [
+  { v: 'now', cls: 'b-now', cap: '现状', sub: '①②③ 和 ④ 看不出区别',
+    ann: '① 是截图里那个会话：本身空闲，三个任务在别处跑。列表上它和 ④ 一模一样。② 的转圈只说明会话自己在跑。' },
+  { v: 'A', cls: 'b-rec', cap: 'A · 标题行图标 + 数字', sub: '推荐',
+    ann: '<b>和 Background 同一个位置、同一种"替这个会话在跑的事"</b>。数字 = 在跑 + 排队，全部结束就消失。不占第二行，摘要照常显示；左侧图标仍只表示会话自己的状态（②仍是转圈，③两个图标并排）。<br/>缺点：小，要扫才看得到，所以 D2 建议用蓝色。' },
+  { v: 'B', cls: 'b-alt', cap: 'B · 第二行进度条', sub: '和项目行同一个控件',
+    ann: '最显眼，且你已经把这个条读作"有活在进行"。<br/>缺点：①②③ 和项目行 ⑤ 只剩左侧图标不同，容易把会话认成项目；进度条占掉摘要的位置；还要另定"3/3 之后什么时候消失"。' },
+  { v: 'C', cls: 'b-no', cap: 'C · 左侧图标加角标', sub: '不建议',
+    ann: '左侧图标是会话自己的三种状态（Queued / Running / Idle，D8 已定 Running 包含后台进程）。加角标后"它在干活"和"它建的任务在干活"混在一起；② 本身在转圈时角标几乎看不出。' },
+];
+
+document.getElementById('cols').innerHTML = COLS.map((c) => `<div class="b-col">
+  <div class="b-cap ${c.cls}">${c.cap}<span>${c.sub}</span></div>
+  ${frame(c.v)}
+  <div class="b-ann">${c.ann}</div></div>`).join('');
+
+// Number the rows in the "now" column so the captions can point at them.
+document.querySelectorAll('.b-col:first-child .session-title').forEach((t, i) => { t.innerHTML = `<span class="b-num">${i + 1}</span>` + t.innerHTML; });
+
+// The tip close-up: row ① under A, blue and grey.
+const one = ROWS[0];
+const tipFrame = (cls, label) => `<div><div class="b-cap ${cls === 'b-blue' ? 'b-rec' : 'b-alt'}" style="font-size:12.5px">${label}</div><div class="b-frame">
+  <div class="session-row"><div class="session-swipe"><span class="session-icon">${idle}</span><div class="session-main">
+  <div class="session-title-row"><div class="session-title">${one.title}</div>${tasksIcon(one.tasks, cls, false)}<span class="session-time">${one.time}</span></div>
+  <div class="session-sub"><div class="session-preview">${one.line}</div></div></div></div></div>
+  ${cls === 'b-blue' ? '<div class="b-tip" style="right:52px;top:72px">2 tasks running · 1 queued</div>' : ''}</div></div>`;
+document.getElementById('tipcase').innerHTML = tipFrame('b-blue', '蓝（推荐）+ 悬停') + tipFrame('', '灰');
+</script>
+</body>
+</html>

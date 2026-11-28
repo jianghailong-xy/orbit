@@ -163,3 +163,31 @@ export function referenceToken(text: string, sigil: ReferenceSigil = '#'): strin
 function queryRe(sigil: ReferenceSigil): RegExp {
   return sigil === '#' ? /(^|\s)#([^#@\n]*)$/ : /(^|\s)@([^#@\n]*)$/;
 }
+
+/**
+ * The span one keystroke deletes when the caret touches a chip: the whole `@title` or `#title`, and
+ * the space after it, which the pick inserted with it. Backspace takes the chip ending at the caret
+ * (or ending just before the space before the caret); Delete takes the one starting at it. Null when
+ * the caret touches no chip, which leaves the key to delete one character as usual.
+ *
+ * Deleting the chip a character at a time used to turn it into plain text with the first key and
+ * leave the rest of its title to delete by hand (owner, 2026-11-28; board 09).
+ */
+export function chipDeletionRange(
+  text: string,
+  refs: ReferenceMap,
+  caret: number,
+  key: 'Backspace' | 'Delete',
+): { start: number; end: number } | null {
+  let at = 0;
+  for (const seg of segmentComposer(text, refs)) {
+    const start = at;
+    const end = at + seg.text.length;
+    at = end;
+    if (seg.type !== 'ref') continue;
+    const withSpace = text[end] === ' ' ? end + 1 : end;
+    if (key === 'Backspace' && (caret === end || caret === withSpace)) return { start, end: withSpace };
+    if (key === 'Delete' && caret === start) return { start, end: withSpace };
+  }
+  return null;
+}

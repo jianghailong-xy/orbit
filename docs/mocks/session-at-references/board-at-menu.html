@@ -1,0 +1,349 @@
+<!doctype html>
+<!-- Design board (2026-11-28), round 2 of the @ menu, after the owner's three notes on the shipped web build
+     (main 0d0d35e479): 1. no task runs under @; 2. the popup's look; 3. Backspace deletes a session chip whole.
+     Drawn from the shipped tokens in src/web/src/index.css. Sample titles only; the counts are production's,
+     read-only, 2026-11-28. Render: /var/tmp/session-at-mock/render.mjs. -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Orbit · @ 菜单第二版</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+
+  .m-sheet { width: 1440px; }
+  .b-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 30px; align-items: start; }
+  .b-h { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 14px; font-weight: 600; color: var(--text-1); }
+  .b-h .m-k.rec { background: #e8f7ee; color: #16833a; }
+  .b-cap { margin: 12px 2px 0; font-size: 12.5px; line-height: 1.85; color: var(--text-2); }
+  .b-cap b { color: var(--text-1); }
+  .b-list { margin: 14px 0 0; padding: 12px 16px; list-style: none; background: #f5f6f8; border-radius: 8px;
+            font-size: 12.5px; line-height: 1.8; color: #3f4652; }
+  .b-list li { display: flex; gap: 8px; }
+  .b-list li + li { margin-top: 6px; }
+  .b-list b { color: var(--text-1); }
+  .b-list .m-n.good, .b-mk.good > .m-n { background: #16833a; }
+  .b-list .dot { flex: none; width: 18px; text-align: center; color: var(--text-3); }
+  .b-ui { font: 12px/1.4 Inter, -apple-system, sans-serif; padding: 0 5px; border-radius: 4px; background: #f0f2f5;
+          color: var(--text-1); white-space: nowrap; }
+  .b-mk { position: relative; }
+  .b-mk::after { content: ''; position: absolute; inset: -5px; border: 1.5px dashed var(--warning-solid); border-radius: 10px;
+                 pointer-events: none; }
+  .b-mk.good::after { border-color: #16833a; }
+  .b-mk > .m-n { position: absolute; top: -14px; right: -14px; margin: 0; box-shadow: 0 0 0 2px #fff; z-index: 3; }
+  .b-mk.tl > .m-n { right: auto; left: -14px; }
+
+  /* ── web conversation frame ─────────────────────────────────────────── */
+  .b-win { border-radius: 10px; background: var(--bg-base); overflow: hidden; font: 14px/1.6 Inter, "Noto Sans SC", sans-serif;
+           box-shadow: 0 0 0 1px rgba(15, 23, 42, .09), 0 1px 3px rgba(15, 23, 42, .06); color: var(--text-1); }
+  .b-win-h { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--border-subtle);
+             font-size: 13px; font-weight: 600; }
+  .b-win-h .sub { font-weight: 400; color: var(--text-3); font-size: 12px; }
+  .b-win-body { padding: 18px 18px 8px; min-height: 120px; background: var(--bg-subtle); }
+  .b-bubble-row { display: flex; flex-direction: column; align-items: flex-end; }
+  .b-bubble { max-width: 82%; padding: 9px 13px; border-radius: 14px; background: var(--brand-tint); color: var(--text-1);
+              font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+  .b-meta { margin-top: 4px; font-size: 12px; color: var(--text-3); }
+  .b-agent { margin-top: 16px; font-size: 13.5px; line-height: 1.65; color: var(--text-1); }
+  .b-tool { display: inline-flex; align-items: center; gap: 6px; margin: 2px 0; padding: 2px 8px; border-radius: 6px;
+            background: var(--bg-sunken); border: 1px solid var(--border-subtle); font: 12px/1.6 "JetBrains Mono", monospace;
+            color: var(--text-2); }
+  .b-composer { position: relative; margin: 0 14px 14px; padding: 10px 12px 8px; border: 1px solid var(--border);
+                border-radius: 12px; background: var(--bg-raised); font-size: 14px; line-height: 1.6; }
+  .b-composer .caret { display: inline-block; width: 1.5px; height: 17px; margin-left: 1px; background: var(--text-1);
+                       vertical-align: -3px; }
+  .b-composer-foot { display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; color: var(--text-3); }
+  .b-send { width: 26px; height: 26px; border-radius: 50%; background: var(--brand); color: #fff; display: inline-flex;
+            align-items: center; justify-content: center; font-size: 14px; }
+  .b-raw { color: var(--brand); text-decoration: underline; }
+  /* the session chip: .composer-chip's look, with a status dot */
+  .b-chip { display: inline; padding: 1px 6px; border-radius: 6px; white-space: nowrap;
+            background: color-mix(in srgb, var(--brand) 10%, transparent);
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand) 38%, transparent); color: var(--brand); }
+  .b-chip .st { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin: 0 5px 1px 1px; background: var(--success-solid); }
+  .b-chip .st.run { background: var(--brand); }
+  .b-chip .st.fail { background: var(--error-solid); }
+  .b-chip .st.idle { background: var(--text-3); }
+  .b-chip .st.wait { background: var(--warning-solid); }
+
+  /* the @ menu */
+  .b-menu { position: absolute; left: 10px; bottom: calc(100% + 6px); width: 560px; padding: 6px; border-radius: 10px;
+            background: var(--bg-raised); border: 1px solid var(--border);
+            box-shadow: 0 8px 24px rgba(15, 23, 42, .12), 0 1px 3px rgba(15, 23, 42, .08); z-index: 2; }
+  .b-menu-g { padding: 6px 10px 4px; font-size: 11px; font-weight: 600; letter-spacing: .04em; color: var(--text-3); }
+  .b-row { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 6px 10px;
+           border-radius: 6px; }
+  .b-row.on { background: var(--bg-hover); }
+  .b-row .st { width: 8px; height: 8px; border-radius: 50%; background: var(--success-solid); }
+  .b-row .st.run { background: var(--brand); } .b-row .st.fail { background: var(--error-solid); }
+  .b-row .st.idle { background: var(--text-3); } .b-row .st.wait { background: var(--warning-solid); }
+  .b-row .t { font-size: 13.5px; color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .b-row mark { background: none; color: var(--brand); font-weight: 600; }
+  .b-row .s { font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .b-row .w { font-size: 12px; color: var(--text-3); white-space: nowrap; text-align: right; }
+  .b-row .w .bad { color: var(--error); }
+  .b-menu-foot { display: flex; gap: 14px; padding: 6px 10px 2px; border-top: 1px solid var(--border-subtle); margin-top: 4px;
+                 font-size: 11.5px; color: var(--text-3); }
+  .b-menu-foot kbd { font: 11px Inter, sans-serif; padding: 0 4px; border: 1px solid var(--border); border-radius: 3px; }
+
+  /* opened attached-context panel */
+  .b-attached { margin-top: 6px; max-width: 100%; padding: 10px 12px; border-radius: 10px; background: var(--bg-sunken);
+                border: 1px solid var(--border-subtle); font: 12px/1.7 "JetBrains Mono", monospace; color: var(--text-2);
+                white-space: pre; overflow: hidden; }
+  .b-attached .k { color: var(--text-3); }
+  .b-attached .hl { color: var(--text-1); background: var(--warning-bg); border-radius: 3px; padding: 0 2px; }
+
+  /* iPhone */
+  .b-phones { display: grid; grid-template-columns: 393px 393px minmax(0, 1fr); gap: 28px; align-items: start; }
+  .b-phone { position: relative; width: 393px; height: 852px; border-radius: 48px; overflow: hidden; background: #f2f2f7;
+             box-shadow: 0 0 0 10px #1c1c1e, 0 0 0 11px #3a3a3c; font: 16px/1.4 Inter, "Noto Sans SC", sans-serif; color: #000; }
+  .b-ph-bar { height: 54px; display: flex; align-items: flex-end; justify-content: space-between; padding: 0 30px 8px;
+              font-size: 15px; font-weight: 600; }
+  .b-ph-nav { padding: 6px 16px 10px; font-size: 17px; font-weight: 600; text-align: center; border-bottom: .5px solid #d1d1d6; background: #f9f9f9; }
+  .b-ph-body { padding: 14px 16px; }
+  .b-ph-bubble { margin-left: auto; max-width: 80%; padding: 9px 13px; border-radius: 18px; background: var(--brand); color: #fff; font-size: 15px; }
+  .b-ph-sheet { position: absolute; left: 0; right: 0; bottom: 0; height: 548px; background: #fff; border-radius: 14px 14px 0 0;
+                box-shadow: 0 -2px 16px rgba(0, 0, 0, .12); }
+  .b-ph-comp { margin: 10px 12px; padding: 9px 14px; border-radius: 20px; border: 1px solid #d1d1d6; font-size: 16px; background: #fff; }
+  .b-ph-g { padding: 8px 20px 4px; font-size: 13px; color: #8a8a8e; text-transform: uppercase; letter-spacing: .02em; }
+  .b-ph-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 12px; align-items: center; margin: 0 16px;
+              padding: 10px 0; border-bottom: .5px solid #e5e5ea; }
+  .b-ph-row .st { width: 9px; height: 9px; border-radius: 50%; background: var(--success-solid); }
+  .b-ph-row .st.run { background: var(--brand); } .b-ph-row .st.fail { background: var(--error-solid); }
+  .b-ph-row .st.idle { background: #aeaeb2; } .b-ph-row .st.wait { background: var(--warning-solid); }
+  .b-ph-row .t { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .b-ph-row .s { font-size: 13px; color: #8a8a8e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .b-ph-row .w { font-size: 13px; color: #8a8a8e; }
+  .b-ph-kb { position: absolute; left: 0; right: 0; bottom: 0; height: 250px; background: #d1d3d9; }
+  .b-ph-kb::after { content: 'keyboard'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+                    color: #8a8a8e; font-size: 13px; letter-spacing: .1em; }
+
+  /* decisions / rollout / data */
+  .b-ask { padding: 14px 18px; border-radius: 8px; background: #fff8e6; border: 1px solid #f5d79e; font-size: 13px;
+           line-height: 1.85; color: #5c4210; }
+  .b-ask + .b-ask { margin-top: 14px; }
+  .b-ask b { color: #3d2b08; } .b-ask .rec { color: #16833a; font-weight: 700; } .b-ask .alt { color: #8a6a2c; font-weight: 700; }
+  .b-steps { margin: 0; padding: 14px 18px; list-style: none; background: #f5f6f8; border-radius: 8px; font-size: 13px;
+             line-height: 1.8; color: #3f4652; counter-reset: s; }
+  .b-steps > li { position: relative; padding-left: 30px; }
+  .b-steps > li + li { margin-top: 10px; }
+  .b-steps > li::before { counter-increment: s; content: counter(s); position: absolute; left: 0; top: 2px; width: 20px; height: 20px;
+                          border-radius: 5px; background: var(--text-1); color: #fff; font: 700 12px/20px Inter, sans-serif; text-align: center; }
+  .b-steps b { color: var(--text-1); }
+  .b-data { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .b-data th, .b-data td { padding: 7px 10px; border-bottom: 1px solid var(--border-subtle); text-align: left; }
+  .b-data th { font-size: 12px; color: var(--text-3); font-weight: 600; }
+  .b-data td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  .b-data tr.top td { font-weight: 700; color: var(--text-1); background: #e8f7ee; }
+  .b-bar { display: inline-block; height: 8px; border-radius: 4px; background: var(--brand); vertical-align: middle; }
+
+  /* ── today's menu, as shipped: the `/` command menu's classes ───────────────── */
+  .b-old-menu { margin: 0 14px; padding: 4px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-raised);
+                box-shadow: 0 8px 24px rgba(0,0,0,.12); }
+  .b-old-row { display: flex; align-items: baseline; gap: 8px; padding: 6px 10px; border-radius: 6px; }
+  .b-old-row.on { background: var(--bg-hover); }
+  .b-old-row .n { font: 13px/1.5 "JetBrains Mono", ui-monospace, monospace; color: var(--text-1); white-space: nowrap; }
+  .b-old-row .t { font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
+  .b-old-row .d { font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* ── the proposed session menu ─────────────────────────────────────────────── */
+  .b-at { width: 480px; padding: 6px; border-radius: 12px; background: var(--bg-raised); border: 1px solid var(--border);
+          box-shadow: 0 10px 28px rgba(15,23,42,.14), 0 1px 3px rgba(15,23,42,.08); font: 14px/1.4 Inter, "Noto Sans SC", sans-serif; }
+  .b-at-h { display: flex; justify-content: space-between; padding: 6px 10px 4px; font-size: 11.5px; font-weight: 600; color: var(--text-3); }
+  .b-at-h .q { font-weight: 400; }
+  .b-at-row { display: grid; grid-template-columns: 10px minmax(0,1fr) auto; gap: 10px; align-items: center; padding: 7px 10px;
+              border-radius: 8px; }
+  .b-at-row.on { background: var(--brand-tint); }
+  .b-at-row .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); opacity: .55; }
+  .b-at-row .dot.run { background: var(--brand); opacity: 1; box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 18%, transparent); }
+  .b-at-row .dot.fail { background: var(--error-solid); opacity: 1; }
+  .b-at-row .dot.wait { background: var(--warning-solid); opacity: 1; }
+  .b-at-row .t { font-size: 14px; color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .b-at-row .t mark { background: none; color: var(--brand-strong); font-weight: 600; }
+  .b-at-row .s { margin-top: 1px; font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .b-at-row .r { text-align: right; font-size: 12px; color: var(--text-3); white-space: nowrap; }
+  .b-at-row .r .st { display: block; font-weight: 600; }
+  .b-at-row .r .st.run { color: var(--brand); } .b-at-row .r .st.fail { color: var(--error); } .b-at-row .r .st.wait { color: var(--warning); }
+  .b-at-row .r .tm { display: block; }
+  .b-at-f { display: flex; gap: 14px; margin-top: 4px; padding: 7px 10px 3px; border-top: 1px solid var(--border-subtle); font-size: 11.5px; color: var(--text-3); }
+  .b-at-f kbd { font: 11px Inter, sans-serif; padding: 0 4px; border: 1px solid var(--border); border-radius: 3px; margin-right: 2px; }
+  .b-at-empty { padding: 14px 10px; font-size: 13px; color: var(--text-3); }
+  .b-at-skel { height: 34px; margin: 6px 10px; border-radius: 6px; background: linear-gradient(90deg, #eef0f3, #e3e6eb, #eef0f3); }
+  .b-at-stage { position: relative; padding: 16px 16px 0; background: var(--bg-subtle); border-radius: 10px 10px 0 0; }
+  .b-caret-anchor { position: relative; margin-left: 46px; }
+
+  /* deletion strip */
+  .b-del { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+  .b-del .b-composer { margin: 0; }
+  .b-key { display: inline-block; padding: 1px 7px; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 5px;
+           font: 600 12px Inter, sans-serif; color: var(--text-1); background: #fff; }
+  .b-arrow { text-align: center; font-size: 13px; color: var(--text-2); margin: 8px 0; }
+  .b-sel { background: color-mix(in srgb, var(--brand) 22%, transparent); border-radius: 4px; }
+</style>
+</head>
+<body class="m">
+
+<!-- ═════════════ part 1: today vs proposed ═════════════ -->
+<section class="m-sheet" id="part-1">
+  <h1 class="m-h1 zh">@ 菜单 · 第二版</h1>
+  <p class="m-sub zh" style="line-height:1.85">按你看了上线版（main 0d0d35e479）后的三点改：<b>① @ 不出任务运行；② 弹框重做；③ 删除时整个会话名一起删</b>。示例标题，非真实会话；数字来自生产库（只读，2026-11-28）。说明写中文，界面上的字是上线文案（英文）。</p>
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">空的 @</span>同一刻、同一批会话，两种画法</div>
+    <div class="b-cols">
+      <div>
+        <div class="b-h zh"><span class="m-k">现在</span>借的是 / 命令菜单的样子</div>
+        <div class="b-win" style="overflow:visible">
+          <div class="b-win-body" style="padding:14px 0 10px">
+            <div class="b-old-menu">
+              <div class="b-mk tl" style="display:block"><span class="m-n">1</span>
+              <div class="b-old-row"><span class="n">@[运维·常驻] 夜间清理僵尸会话 v2（每 10 分钟一次）</span><span class="t">orbit-data</span></div></div>
+              <div class="b-old-row"><span class="n">@优化 Task 卡片渲染效果</span><span class="t">orbit-ws01</span></div>
+              <div class="b-old-row on"><span class="n">@会话列表状态展示设计</span><span class="t">orbit-ws01</span><span class="d">Running</span></div>
+              <div class="b-mk" style="display:block"><span class="m-n">2</span>
+              <div class="b-old-row"><span class="n">@Task: Web wiki chat panel: complete asks first when a question waits</span><span class="t">task run</span><span class="d">Running</span></div>
+              <div class="b-old-row"><span class="n">@Task: Android: complete asks first when a question waits</span><span class="t">task run</span><span class="d">Running</span></div>
+              <div class="b-old-row"><span class="n">@Task: iOS/macOS: complete asks first when a question waits</span><span class="t">task run</span></div></div>
+            </div>
+          </div>
+          <div class="b-composer">@<span class="caret"></span><div class="b-composer-foot"><span>＋ &nbsp; Auto</span><span class="b-send">↑</span></div></div>
+        </div>
+        <ul class="b-list zh">
+          <li><span class="m-n">1</span><span><b>像一张命令清单</b>：等宽字体、整条输入框那么宽、类型是全大写灰字（ORBIT-WS01、TASK RUN）。看不出谁在跑、谁出了错、多久之前。长标题一路拉到右边。</span></li>
+          <li><span class="m-n">2</span><span><b>任务运行占了一大块</b>。你最近的 20 个会话里 5 个是任务运行（25%）——都是 agent 起的，标题以 <span class="b-ui">Task:</span> 开头，挤掉了你自己开的对话。</span></li>
+        </ul>
+      </div>
+      <div>
+        <div class="b-h zh"><span class="m-k rec">建议</span>一张会话列表，贴在光标上</div>
+        <div class="b-win" style="overflow:visible">
+          <div class="b-at-stage">
+            <div class="b-caret-anchor">
+              <div class="b-at">
+                <div class="b-mk good tl" style="display:block"><span class="m-n">1</span><div class="b-at-h"><span>Recent sessions</span><span class="q">yours, newest first</span></div></div>
+                <div class="b-at-row on"><span class="dot run"></span><div><div class="t">会话列表状态展示设计</div><div class="s">orbit-ws01</div></div><div class="r"><span class="st run">Running</span><span class="tm">now</span></div></div>
+                <div class="b-mk good" style="display:block"><span class="m-n">2</span><div class="b-at-row"><span class="dot fail"></span><div><div class="t">Deploy main to staging</div><div class="s">orbit-prod</div></div><div class="r"><span class="st fail">Failed</span><span class="tm">12m</span></div></div></div>
+                <div class="b-at-row"><span class="dot wait"></span><div><div class="t">Coordinator · Runner link hardening</div><div class="s">orbit-ws04 · project coordinator</div></div><div class="r"><span class="st wait">Waiting on you</span><span class="tm">1h</span></div></div>
+                <div class="b-at-row"><span class="dot"></span><div><div class="t">优化 Task 卡片渲染效果</div><div class="s">orbit-ws01</div></div><div class="r"><span class="tm">3h</span></div></div>
+                <div class="b-at-row"><span class="dot"></span><div><div class="t">[运维·常驻] 夜间清理僵尸会话 v2（每 10 分钟一次）</div><div class="s">orbit-data</div></div><div class="r"><span class="tm">Yesterday</span></div></div>
+                <div class="b-mk good" style="display:block"><span class="m-n">3</span><div class="b-at-f"><span><kbd>↑</kbd><kbd>↓</kbd>choose</span><span><kbd>↵</kbd>insert</span><span><kbd>esc</kbd>close</span><span style="margin-left:auto">Paste a session link to reference it</span></div></div>
+              </div>
+            </div>
+          </div>
+          <div class="b-composer" style="margin-top:0">@<span class="caret"></span><div class="b-composer-foot"><span>＋ &nbsp; Auto</span><span class="b-send">↑</span></div></div>
+        </div>
+        <ul class="b-list zh">
+          <li><span class="m-n good">1</span><span><b>只列你开的会话和项目协调会话</b>，按最近活动倒序；当前会话不在里面。任务运行、落地会话不进 @（下面第 4 张有取舍）。<b>粘贴</b>一个任务运行的链接照样变成 chip，服务端照样认。</span></li>
+          <li><span class="m-n good">2</span><span>一行：<b>状态点 · 标题（正文字体，一行，超长省略）· 第二行工作区</b>（协调会话多一句 <span class="b-ui">project coordinator</span>）· 右侧时间。只有 <span class="b-ui">Running</span>、<span class="b-ui">Failed</span>、<span class="b-ui">Waiting on you</span> 才写字，其余只有时间。</span></li>
+          <li><span class="m-n good">3</span><span>宽 480，<b>跟着光标</b>，不再撑满输入框；最多 6 行再滚动。底部一行键位提示和「粘贴会话链接」。</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════════ part 2: anatomy, search, empty, loading, dark ═════════════ -->
+<section class="m-sheet" id="part-2">
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k new">弹框的几种样子</span>打字搜、搜不到、加载中</div>
+    <div class="b-cols" style="grid-template-columns: repeat(3, minmax(0,1fr)); gap: 22px">
+      <div>
+        <div class="b-h zh"><span class="m-k rec">@ + 字</span>命中的字加粗</div>
+        <div class="b-at" style="width:100%">
+          <div class="b-at-h"><span>Sessions</span><span class="q">matching “dep”</span></div>
+          <div class="b-at-row on"><span class="dot fail"></span><div><div class="t"><mark>Dep</mark>loy main to staging</div><div class="s">orbit-prod</div></div><div class="r"><span class="st fail">Failed</span><span class="tm">12m</span></div></div>
+          <div class="b-at-row"><span class="dot"></span><div><div class="t"><mark>Dep</mark>loy runner 0.1.244</div><div class="s">orbit-prod</div></div><div class="r"><span class="tm">2d</span></div></div>
+          <div class="b-at-row"><span class="dot"></span><div><div class="t">Upgrade compose stack</div><div class="s">branch orbit/<mark style="background:none;color:var(--brand-strong);font-weight:600">dep</mark>loy-fix · orbit-ws04</div></div><div class="r"><span class="tm">5d</span></div></div>
+        </div>
+        <p class="b-cap zh">走现有 <code>/sessions/search</code>：标题、分支、id 都能命中。<b>命中在分支上时，第二行写出分支</b>，否则看不出为什么它在这里。</p>
+      </div>
+      <div>
+        <div class="b-h zh"><span class="m-k rec">搜不到</span>说一句，不消失</div>
+        <div class="b-at" style="width:100%">
+          <div class="b-at-h"><span>Sessions</span><span class="q">matching “deploy main to prod”</span></div>
+          <div class="b-at-empty">No session matches. Keep typing, or press <span class="b-key">esc</span> to write it as text.</div>
+        </div>
+        <p class="b-cap zh">今天搜不到弹框就悄悄消失，人以为 @ 坏了。改成说一句；<b>打到 3 个词还搜不到才收起</b>（多半是在写普通的话了）。</p>
+      </div>
+      <div>
+        <div class="b-h zh"><span class="m-k rec">加载中</span>占位，不跳动</div>
+        <div class="b-at" style="width:100%">
+          <div class="b-at-h"><span>Recent sessions</span><span class="q"></span></div>
+          <div class="b-at-skel"></div><div class="b-at-skel" style="opacity:.7"></div><div class="b-at-skel" style="opacity:.45"></div>
+        </div>
+        <p class="b-cap zh">第一次打 @ 时请求还没回来：先画 3 行占位，回来后原地换成会话，弹框高度不跳。之后一分钟内再打 @ 直接用缓存。</p>
+      </div>
+    </div>
+    <ul class="b-list zh">
+      <li><span class="dot">·</span><span><b>颜色全用现有变量</b>：选中行用品牌浅底（和 chip 一个颜色家族，表明「回车就插入它」）；状态色与会话列表里的同一套。深色主题自动跟随。</span></li>
+      <li><span class="dot">·</span><span><b>中英文混排</b>：标题用正文字体（Inter + Noto Sans SC），不再是等宽字体——等宽的中文又宽又散，是截图里显得乱的主要原因。</span></li>
+      <li><span class="dot">·</span><span><b># 菜单用同一个组件</b>：项目一行写状态和判据完成数，方形状态点，和会话的圆点分开（见上一版第 6 张）。</span></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═════════════ part 3: deleting a chip ═════════════ -->
+<section class="m-sheet" id="part-3">
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k state">删除</span>退格一次，整个会话名一起删</div>
+    <div class="b-del">
+      <div>
+        <div class="b-h zh"><span class="m-k">现在</span>一个字一个字删</div>
+        <div class="b-composer"><span>@Deploy main to stagin</span><span class="caret"></span> why is it still running?
+          <div class="b-composer-foot"><span>＋ &nbsp; Auto</span><span class="b-send">↑</span></div></div>
+        <p class="b-cap zh">按一次 <span class="b-key">⌫</span> 只删掉最后一个字母：chip 的颜色没了，剩下一串 <span class="b-ui">@Deploy main to stagin</span> 普通字，不再是引用；要再按 22 次才删干净。</p>
+      </div>
+      <div>
+        <div class="b-h zh"><span class="m-k rec">建议</span>一次删掉整个</div>
+        <div class="b-composer"><span class="b-chip"><span class="st"></span>@Deploy main to staging</span><span class="caret"></span> why is it still running?
+          <div class="b-composer-foot"><span>＋ &nbsp; Auto</span><span class="b-send">↑</span></div></div>
+        <div class="b-arrow zh"><span class="b-key">⌫</span> 光标紧贴 chip 末尾（或 chip 后那个空格）</div>
+        <div class="b-composer"><span class="caret"></span> why is it still running?
+          <div class="b-composer-foot"><span>＋ &nbsp; Auto</span><span class="b-send">↑</span></div></div>
+        <p class="b-cap zh">chip 和它后面插入时带的那个空格一起消失；<span class="b-key">⌘Z</span> 一步撤回，chip 原样回来（仍是引用）。<span class="b-key">Delete</span> 在 chip 开头同理。</p>
+      </div>
+      <div>
+        <div class="b-h zh"><span class="m-k rec">其余情况</span>不变</div>
+        <div class="b-composer"><span>@Deploy main</span><span class="caret"></span><span> to staging</span> why…
+          <div class="b-composer-foot"><span>＋ &nbsp; Auto</span><span class="b-send">↑</span></div></div>
+        <p class="b-cap zh"><b>光标在 chip 中间</b>打字或删字：chip 变回普通文字（颜色消失），发出去就是你看到的字，不再引用——和今天一样，看得见。</p>
+        <div class="b-composer"><span class="b-sel"><span class="b-chip"><span class="st"></span>@Deploy main to staging</span> why</span><span class="caret"></span> is it…
+          <div class="b-composer-foot"><span>＋ &nbsp; Auto</span><span class="b-send">↑</span></div></div>
+        <p class="b-cap zh"><b>选中一段再删</b>：照常删选中的部分。# 的项目、任务、Drive 文件 chip 也一样一次删整个。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════════ part 4: decisions and rollout ═════════════ -->
+<section class="m-sheet" id="part-4">
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">待定 · 落地</span>要你拍板的三件事</div>
+    <div class="b-cols">
+      <div>
+        <div class="b-ask zh"><b>待定 A · @ 里除了你开的会话，还列谁</b><br>
+          <span class="rec">建议 A1</span> 你开的会话 + 项目协调会话；任务运行、落地会话不列。人引用会话的 494 次里，协调会话 89 次，值得留；任务运行 134 次，多是从卡片或通知里点进去后粘贴的，粘贴照样认。<br>
+          <span class="alt">A2</span> 只列你开的会话，协调会话也不列：更干净，但「你为什么没跟进」这类问协调会话的话要靠粘贴。</div>
+        <div class="b-ask zh"><b>待定 B · 退格删整个，要不要先「选中」一下</b><br>
+          <span class="rec">建议 B1</span> 一次就删整个（Slack、Notion 都这样），⌘Z 撤回。<br>
+          <span class="alt">B2</span> 第一次退格只把 chip 选中（变深），第二次才删：不会误删，但每次都多按一下。</div>
+        <div class="b-ask zh"><b>待定 C · 弹框放哪</b><br>
+          <span class="rec">建议 C1</span> 跟着光标、宽 480：短句里一眼就看到。<br>
+          <span class="alt">C2</span> 仍贴在输入框左上角、宽 480：位置固定，长草稿里离光标远。</div>
+      </div>
+      <div>
+        <div class="b-h zh">落地（按代价排）</div>
+        <ol class="b-steps zh">
+          <li><b>@ 不列任务运行和落地会话</b>（客户端过滤，<code>taskId</code> / 会话类型；一行代码）。</li>
+          <li><b>退格 / Delete 删整个 chip</b>，⌘Z 可撤回（用浏览器自己的撤回栈：一次 <code>insertText</code> 式替换）。</li>
+          <li><b>弹框新组件</b>：会话行（状态点、标题、工作区、时间、三种状态字），搜不到 / 加载中两种样子，480 宽、跟光标；# 菜单换用同一组件。</li>
+          <li><b>Apple / Android 的两个任务</b>（已建）按这一版画：同样的行、同样的删除规则。</li>
+        </ol>
+        <ul class="b-list zh">
+          <li><span class="dot">·</span><span>依据：最近 20 个会话里你开的 14、任务运行 5、协调 1。人点名会话 413 次，一半粘贴链接、一半裸 id；七成是让 agent 查它。</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>

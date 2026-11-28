@@ -7,6 +7,7 @@ import {
   ExpandAltOutlined,
   FileMarkdownOutlined,
   GlobalOutlined,
+  LeftOutlined,
   LinkOutlined,
   MoreOutlined,
   PlayCircleOutlined,
@@ -845,6 +846,7 @@ export function TaskDetailPanel({
   docked = false,
   compact = false,
   hereSessionId = null,
+  backTo = null,
 }: {
   taskId: string;
   summary?: TaskSummary;
@@ -861,6 +863,9 @@ export function TaskDetailPanel({
   compact?: boolean;
   /** The conversation the panel sits beside: its run row says so instead of linking to itself. */
   hereSessionId?: string | null;
+  /** The project column the docked panel stands in for (docs/mocks/right-panel-stack): its head leads back
+   *  to it, and Esc goes back there rather than closing the right side. */
+  backTo?: { label: string; onBack: () => void } | null;
 }) {
   const qc = useQueryClient();
   const message = useToast();
@@ -1200,14 +1205,15 @@ export function TaskDetailPanel({
   // The run whose Why is open, if any.
   const [whyOpen, setWhyOpen] = useState<string | null>(null);
 
-  // Esc closes the panel.
+  // Esc closes the panel; over a project column it goes back to that column, one level at a time.
+  const onEscape = backTo?.onBack ?? onClose;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onEscape();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onEscape]);
 
   // Tell the user which mentioned workspaces got triggered (those bound to a runner can
   // actually run; the rest are recorded on the comment but not started).
@@ -2432,7 +2438,15 @@ export function TaskDetailPanel({
   const compactHead = (
     <div className="tdp-compact-head">
       <div className="tdp-compact-bar">
-        <span className="tdp-compact-kicker">Task</span>
+        {backTo ? (
+          <button type="button" className="tdp-compact-kicker tdp-compact-back" onClick={backTo.onBack}
+            aria-label={`Back to ${backTo.label}`}>
+            <LeftOutlined aria-hidden />
+            <span className="tdp-compact-back-text">{backTo.label}</span>
+          </button>
+        ) : (
+          <span className="tdp-compact-kicker">Task</span>
+        )}
         <Tooltip content="Open the full task page">
           <Button variant="text" icon={<ExpandAltOutlined />} aria-label="Open the full task page" onClick={() => navigate(fullPagePath)} />
         </Tooltip>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyReferencePick,
+  chipDeletionRange,
   materializeReferences,
   referenceToken,
   segmentComposer,
@@ -198,5 +199,26 @@ describe('@ sessions and # projects', () => {
     const next = applyReferencePick('@co', 'Cost $5 cap', { kind: 'session', id: 'S1' }, {});
 
     expect(next.text).toBe('@Cost $5 cap ');
+  });
+});
+
+describe('chipDeletionRange', () => {
+  const picked: ReferenceMap = { 'Deploy main': { kind: 'session', id: 'S1' } };
+  const typed = 'see @Deploy main why';
+
+  it('takes the whole chip and its space with one Backspace at its end or after the space', () => {
+    expect(chipDeletionRange(typed, picked, 16, 'Backspace')).toEqual({ start: 4, end: 17 });
+    expect(chipDeletionRange(typed, picked, 17, 'Backspace')).toEqual({ start: 4, end: 17 });
+  });
+
+  it('takes it with Delete at its start', () => {
+    expect(chipDeletionRange(typed, picked, 4, 'Delete')).toEqual({ start: 4, end: 17 });
+  });
+
+  it('leaves other carets to delete one character', () => {
+    expect(chipDeletionRange(typed, picked, 10, 'Backspace')).toBeNull();
+    expect(chipDeletionRange(typed, picked, 20, 'Backspace')).toBeNull();
+    expect(chipDeletionRange(typed, picked, 16, 'Delete')).toBeNull();
+    expect(chipDeletionRange('see @Deploy mai why', picked, 15, 'Backspace')).toBeNull();
   });
 });

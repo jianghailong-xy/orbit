@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import type { RunStatus, SessionBackgroundFields, TaskRunReason } from '@orbit/shared';
+import type { RunStatus, SessionBackgroundFields, SessionCreatedTasksActive, TaskRunReason } from '@orbit/shared';
 
 import {
   ARMED_RETRY,
@@ -168,6 +168,41 @@ export async function readOneSessionBackgroundFields(
   id: string,
 ): Promise<SessionBackgroundFields | null> {
   return (await readSessionBackgroundFields(prisma, [id])).get(id) ?? null;
+}
+
+/**
+ * Per session, the tasks it created (`task.creator_session_id`) that some work session carries now
+ * (`sessionCarriesTaskSql`, the definition every Running/Queued surface reads): the count beside a list row's title
+ * (docs/mocks/session-row-running-tasks). A task counts once: running when any of its carriers has a turn in flight
+ * or is parked with a wake source, queued when every carrier's turn is queued. A session none of whose tasks is
+ * carried is absent. `creators` narrows the read to those sessions; null reads the whole account, which is a
+ * handful of rows: only carried tasks are read, never a session's other tasks.
+ */
+export async function readCreatedTasksActive(
+  prisma: Pick<PrismaService, '$queryRaw'>,
+  ownerId: string,
+  creators: readonly string[] | null,
+): Promise<Map<string, SessionCreatedTasksActive>> {
+  if (creators !== null && creators.length === 0) return new Map();
+  const rows = await prisma.$queryRaw<Array<{ creatorId: string; queued: boolean }>>(Prisma.sql`
+    SELECT t."creator_session_id" AS "creatorId",
+           bool_and(${Prisma.raw(turnSql('carrier'))} IS NOT DISTINCT FROM 'QUEUED') AS "queued"
+      FROM "session" carrier
+      JOIN "task" t ON t."id" = carrier."task_id"
+     WHERE carrier."owner_id" = ${ownerId}::uuid
+       AND carrier."task_id" IS NOT NULL
+       AND ${Prisma.raw(sessionCarriesTaskSql('carrier'))}
+       AND t."creator_session_id" IS NOT NULL
+       ${creators === null ? Prisma.empty : Prisma.sql`AND t."creator_session_id" = ANY(${[...creators]}::uuid[])`}
+     GROUP BY t."creator_session_id", t."id"`);
+  const out = new Map<string, SessionCreatedTasksActive>();
+  for (const row of rows) {
+    const counts = out.get(row.creatorId) ?? { running: 0, queued: 0 };
+    if (row.queued) counts.queued += 1;
+    else counts.running += 1;
+    out.set(row.creatorId, counts);
+  }
+  return out;
 }
 
 /** The session columns `runStalled` reads, as a reader selects them beside the run reason. */
