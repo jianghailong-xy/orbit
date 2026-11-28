@@ -264,3 +264,115 @@ func TestClaudeModeBelowAutoRanksOnlyNarrowerModes(t *testing.T) {
 		}
 	}
 }
+
+// The round trip the control plane now makes (apiserver claimPermissionMode): a session spawned in Auto on a model
+// whose engine settles on Default and refuses Auto, then moved by a setconfig to a model with Auto, carrying the
+// Auto it asked for all along. The process's config still reads `auto`, but the engine said it runs in Default, so
+// the setconfig's Auto is news and goes to the engine after its model, and the turn says the mode was applied.
+func TestSetConfigAsksForTheAutoItCarriesWhenTheEngineSaidItRunsLower(t *testing.T) {
+	const refusal = "Cannot set permission mode to auto: auto mode unavailable for this model"
+	run := runDeliverySessionWith(t,
+		[]fakeStep{
+			{Await: "user"},
+			{Emit: "system_init", PermissionMode: "default"},
+			{Emit: "replay_user"},
+			{Await: "control_request", Subtype: ctrlSetPermissionMode},
+			{Emit: "control_response", IsError: true, Text: refusal},
+			{Emit: "result", Text: "first"},
+			{Await: "control_request", Subtype: ctrlSetModel},
+			{Emit: "control_response"},
+			{Await: "control_request", Subtype: ctrlSetPermissionMode},
+			{Emit: "control_response"},
+			{Await: "user"},
+			{Emit: "system_init", PermissionMode: "auto"},
+			{Emit: "replay_user"},
+			{Emit: "result", Text: "second"},
+			{Emit: "eof"},
+		},
+		[]scriptedTurn{
+			messageTurn("turn-1", "one"),
+			{turn: setConfigTurn("cfg-1", "claude-opus-5", claudeAutoPermissionMode).turn, ungated: true, after: "turn-1"},
+			{turn: messageTurn("turn-2", "two").turn, after: "cfg-1"},
+		},
+		nil, deliveryOptions{claim: func(job *ClaimedSession) {
+			job.Agent.PermissionMode = claudeAutoPermissionMode
+			job.Agent.Model = "claude-haiku-4-5-20251001"
+		}})
+
+	requests := controlRequestsOfSubtype(run.fake, ctrlSetPermissionMode)
+	if len(requests) != 2 {
+		t.Fatalf("the CLI received set_permission_mode %v, want the correction and then the setconfig's", requests)
+	}
+	if requests[1]["mode"] != claudeAutoPermissionMode {
+		t.Errorf("the setconfig asked for mode %v, want %q", requests[1]["mode"], claudeAutoPermissionMode)
+	}
+	r := run.turnResult("cfg-1")
+	if r == nil || !strings.Contains(r.Result, `permission mode "auto"`) {
+		t.Errorf("the setconfig turn settled %+v, want it to say the permission mode was applied", r)
+	}
+	if run.reload {
+		t.Error("a setconfig the engine took asked the supervisor to re-spawn")
+	}
+}
+
+// And nothing is sent where the engine already said it runs in the mode a setconfig carries.
+func TestSetConfigLeavesAnAutoTheEngineReportedAlone(t *testing.T) {
+	run := runDeliverySessionWith(t,
+		[]fakeStep{
+			{Await: "user"},
+			{Emit: "system_init", PermissionMode: "auto"},
+			{Emit: "replay_user"},
+			{Emit: "result", Text: "first"},
+			{Await: "user"},
+			{Emit: "replay_user"},
+			{Emit: "result", Text: "second"},
+			{Emit: "eof"},
+		},
+		[]scriptedTurn{
+			messageTurn("turn-1", "one"),
+			{turn: setConfigTurn("cfg-1", "claude-opus-5", claudeAutoPermissionMode).turn, ungated: true, after: "turn-1"},
+			{turn: messageTurn("turn-2", "two").turn, after: "cfg-1"},
+		},
+		nil, deliveryOptions{claim: spawnedInAuto})
+
+	if requests := controlRequestsOfSubtype(run.fake, ctrlSetPermissionMode); len(requests) != 0 {
+		t.Errorf("the CLI received set_permission_mode %v for the Auto it said it runs in", requests)
+	}
+	if r := run.turnResult("cfg-1"); r == nil || r.Result != "nothing to change" {
+		t.Errorf("the setconfig turn settled %+v, want %q", r, "nothing to change")
+	}
+}
+
+// setConfigFramesFor: a mode is news against the process's config or the engine's own report, whichever differs.
+func TestSetConfigFramesJudgeTheModeAgainstTheEnginesReport(t *testing.T) {
+	agent := AgentExecConfig{Model: "claude-opus-5", PermissionMode: claudeAutoPermissionMode}
+	for _, tc := range []struct {
+		name, payloadMode, engineMode string
+		want                          bool
+	}{
+		{"engine said Default, Auto carried", "auto", "default", true},
+		{"engine said Auto, Auto carried", "auto", "auto", false},
+		{"engine has not said, Auto carried", "auto", "", false},
+		{"engine said Default, Default carried", "default", "default", true},
+		{"engine said Plan, Plan carried, config Auto", "plan", "plan", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			frames, err := setConfigFramesFor(`{"model":"claude-opus-5","permissionMode":"`+tc.payloadMode+`"}`, agent, tc.engineMode)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := false
+			for _, f := range frames {
+				if f.subtype == ctrlSetPermissionMode {
+					got = true
+				}
+				if f.subtype == ctrlSetModel {
+					t.Errorf("a model the process runs was sent as %v", f.payload)
+				}
+			}
+			if got != tc.want {
+				t.Errorf("payload %q, engine %q, config %q: mode frame %v, want %v", tc.payloadMode, tc.engineMode, agent.PermissionMode, got, tc.want)
+			}
+		})
+	}
+}

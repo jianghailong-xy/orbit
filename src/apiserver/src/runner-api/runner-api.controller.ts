@@ -7528,6 +7528,11 @@ export class RunnerApiController {
    * it (runner-go claude_setconfig.go): applied in place, or by the re-spawn it fell back to. Not when the runner
    * could not read the payload, which applied nothing, and not for an acknowledgement older than a config turn
    * handed out after it, whose mode is no longer the one running.
+   *
+   * Nor when the runner sent the engine no mode: "nothing to change", or a model or effort alone. Its config already
+   * held the mode, which no longer says the engine runs in it — a config change hands Auto as asked
+   * (claimPermissionMode), and an engine spawned in Auto may have settled lower — so the mode the engine last
+   * reported stands. setConfigApplied names a mode it sent as `permission mode "<mode>"`.
    */
   private async recordSetConfigAck(
     tx: Prisma.TransactionClient,
@@ -7536,6 +7541,9 @@ export class RunnerApiController {
     result: string | undefined,
   ): Promise<void> {
     if (typeof result === 'string' && result.startsWith('unreadable payload')) return;
+    if (typeof result === 'string' && !result.startsWith('fell back to a re-spawn') && !result.includes('permission mode "')) {
+      return;
+    }
     const turn = await tx.conversationTurn.findFirst({
       where: { id: turnId, sessionId, kind: 'setconfig' },
       select: { seq: true, content: true, senderClient: true, clientTurnId: true },

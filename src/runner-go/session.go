@@ -2932,7 +2932,10 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				// `interrupt` queued behind it waits out the deadline — only ever reached by a CLI
 				// that has stopped servicing control at all, which would have left the interrupt
 				// unanswered too.
-				frames, err := setConfigFrames(resp.Content, job.Agent)
+				// The mode is judged against the one the engine said it runs in, too: a process spawned in Auto
+				// that settled lower still reads `auto` in job.Agent, and the Auto the control plane hands has to
+				// reach it as a frame (setConfigFramesFor, claude_mode_correction.go).
+				frames, err := setConfigFramesFor(resp.Content, job.Agent, modeFix.engineMode())
 				if err != nil {
 					// The control plane builds this payload with JSON.stringify, so an unreadable
 					// one is version skew rather than anything a person did. Nothing to apply, and
@@ -2978,6 +2981,11 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				}
 				job.notePermissionMode(job.Agent.PermissionMode)
 				if refused == nil {
+					for _, f := range frames {
+						if f.subtype == ctrlSetPermissionMode {
+							modeFix.took(job.Agent.PermissionMode)
+						}
+					}
 					// In place: no procCancel, no reloadRequested, and so no `resumed` marker
 					// either. Nothing was resumed, and a transcript that says otherwise teaches
 					// people to read a restart into every setting they change.

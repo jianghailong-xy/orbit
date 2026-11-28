@@ -7,7 +7,8 @@
  *
  *   (1) On a Claude model whose catalogue row lists no Auto, a PATCH that keeps an Auto intent hands the engine Auto in
  *       its setconfig turn — a model move and a mode restatement alike — with no substitution carried and no line
- *       logged. The engine's init frame says what it settled on, and the stored intent stays Auto.
+ *       logged. The engine's init frame says what it settled on, and the stored intent stays Auto. An acknowledgement
+ *       that sent the engine no mode ("nothing to change") records none: the engine's own report stands.
  *   (2) The same on a reload turn (a fast-mode change re-spawns the engine).
  *   (3) Bypass picked on a root runner is handed as Auto, in a Claude setconfig and reload and a Codex reload: each
  *       PATCH writes a `claim-permission-mode` line naming the path, the session, model, the mode asked for, the mode
@@ -238,11 +239,23 @@ test('the mode a config change hands the engine, and every substitution it still
     assert.equal(await actual(id), PermissionMode.AUTO);
     assert.equal(await stored(id), PermissionMode.AUTO);
 
+    // The engine settles lower again; a runner that sends it no mode for the next restatement (its config already
+    // read Auto) answers "nothing to change", and the Default the engine reported is what still runs.
+    await say(w, id, init(PermissionMode.DEFAULT));
+    await sessions.updateConfig(w.ownerId, id, { permissionMode: PermissionMode.AUTO }, undefined, {
+      origin: 'OWNER', senderClient: { client: 'web' },
+    });
+    const unsent = await fetch(w, id);
+    assert.deepEqual(unsent.payload, { model: WITHOUT_AUTO, permissionMode: PermissionMode.AUTO });
+    await acknowledge(w, id, unsent.turnId, 'nothing to change');
+    assert.equal(await actual(id), PermissionMode.DEFAULT, 'a mode the engine was not sent is not recorded as running');
+
     assert.deepEqual(linesFor(id), [], 'nothing was substituted, so nothing is logged');
     assert.deepEqual(await changes(id), [
       { fromMode: null, toMode: PermissionMode.AUTO, cause: 'CLAIM', client: null, requestedMode: null, reason: null },
       { fromMode: PermissionMode.AUTO, toMode: PermissionMode.DEFAULT, cause: 'ENGINE_REPORT', client: null, requestedMode: null, reason: null },
       { fromMode: PermissionMode.DEFAULT, toMode: PermissionMode.AUTO, cause: 'OWNER_PICK', client: 'ios', requestedMode: null, reason: null },
+      { fromMode: PermissionMode.AUTO, toMode: PermissionMode.DEFAULT, cause: 'ENGINE_REPORT', client: null, requestedMode: null, reason: null },
     ]);
   });
 
