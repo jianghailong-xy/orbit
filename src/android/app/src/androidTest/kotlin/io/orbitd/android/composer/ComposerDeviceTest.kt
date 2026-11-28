@@ -849,6 +849,32 @@ class ComposerDeviceTest {
         capture("session-page")
     }
 
+    /** The main checkout bar and its commits not pushed (board docs/mocks/main-checkout-unpushed-commits/02-native frames E-G). */
+    @Test fun mainCheckoutBarTapsIntoItsCommitsNotPushed() = journey("main-checkout-commits") {
+        login("""{"mainCheckout":{"files":0},"rows":[{"seq":1,"type":"user","turnId":"t1","payload":{"text":"The Share tray now opens 14 px from the top."}},
+              {"seq":2,"type":"assistant","turnId":"t1","payload":{"text":"Done.","messageId":"m2"}},
+              {"seq":3,"type":"result","turnId":"t1","payload":{"subtype":"success","result":"done"}}]}""")
+        compose.waitUntil(30000) { compose.onAllNodes(hasTestTag("main-checkout-bar")).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitForIdle(); capture("bar")
+        compose.onNodeWithTag("main-checkout-bar").performClick()
+        compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("main-checkout-commit")).fetchSemanticsNodes().size == 4 }
+        capture("sheet-clean")
+        compose.onAllNodes(hasTestTag("main-checkout-commit"))[0].performClick()
+        compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("commit-screen")).fetchSemanticsNodes().isNotEmpty() }
+        capture("commit")
+        instrument.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+        compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("commit-screen")).fetchSemanticsNodes().isEmpty() }
+        compose.onAllNodes(hasTestTag("main-checkout-commit")).assertCountEquals(4)
+        // Dirty: the files first, the group folded to one row and "3 more".
+        control("""{"mainCheckout":{"files":3}}""")
+        instrument.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+        compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("main-checkout-sheet")).fetchSemanticsNodes().isEmpty() }
+        compose.waitUntil(30000) { compose.onAllNodesWithText("3 uncommitted files", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("main-checkout-bar").performClick()
+        compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("main-checkout-more-commits")).fetchSemanticsNodes().isNotEmpty() }
+        capture("sheet-dirty")
+    }
+
     /** The reader's own turn as iOS draws it (OrbitApp `UserBubbleView`): a sent screenshot over the trailing bubble, the Chinese the
      * owner wrote with the English the agent got under it ("Show both languages"), copy · time · the translation foot; the reply under
      * it the document alone. Compared against the iPhone's frame of the same transcript. */

@@ -34,6 +34,8 @@ class State:
         self.driveChats=[]; self.driveFab={'needsYou':0,'working':False}; self.driveGroups=[]; self.driveQuestions=[]; self.drivePosts=[]
         # The task card's state (task_card_states.STATES): the task the conversation runs, and the reads beside it, by path.
         self.taskReads={}
+        # The main checkout (docs/mocks/main-checkout-unpushed-commits): `{'files':N}` makes the workspace report it, 4 commits not pushed.
+        self.mainCheckout=None
     def detail(self):
         return {'id':SESSION,'title':'Composer conversation','workspaceId':WORKSPACE,'assignedRunnerId':RUNNER,
             'status':self.status,'runState':self.status,'lifecycleState':'OPEN','provider':'codex','model':'fixture-model',
@@ -43,10 +45,25 @@ class State:
         return {'drivePosts':self.drivePosts,'scope':'controlled HTTP fixture; not deployed backend','uniqueTurns':len(self.turns),'attempts':self.attempts,
             'turns':self.turns,'attachments':{k:{a:b for a,b in v.items() if a!='bytes'} for k,v in self.attachments.items()},
             'calls':self.calls,'controls':self.controls,'config':self.config,'rotations':self.rotation,'creations':self.creations,'downloads':self.downloads}
+MC_COMMITS=[{'sha':sha*40,'subject':subject,'body':'Opening Settings swapped the sidebar for a narrower nav, so the page panel moved 24 px left and back.' if i==0 else '',
+    'committedAt':ts,'files':[{'path':path,'status':'M','additions':a,'deletions':d} for path,a,d in files],'filesTruncated':False}
+    for i,(sha,subject,ts,files) in enumerate([
+    ('0','fix(web): Settings and Admin nav take the sidebar\'s width','2026-11-28T09:00:00Z',[('src/web/src/index.css',18,6),('../SettingsLayout.tsx',6,3)]),
+    ('5','fix(web): centre the account menu\'s popover','2026-11-28T08:20:00Z',[('src/web/src/Account.tsx',4,2)]),
+    ('c','feat(web): session header Share is an icon','2026-11-28T07:00:00Z',[('a.tsx',1,1),('b.tsx',1,1),('c.tsx',1,1),('d.tsx',1,1),('e.tsx',1,1)]),
+    ('3','docs(mocks): session header Share a button','2026-11-28T06:00:00Z',[('m1.html',1,0),('m2.html',1,0),('m3.html',1,0)])])]
+def main_checkout_view(q):
+    n=state.mainCheckout['files']; paths=['src/web/src/Nav.tsx','src/web/src/index.css','docs/nav.md'][:n]
+    snapshot={'root':'/root/orbit','branch':'develop','head':MC_COMMITS[0]['sha'],'state':'dirty' if n else 'clean','upstream':'origin/develop','ahead':4,'behind':0,
+        'files':[{'path':p,'status':'M','additions':8,'deletions':0} for p in paths],'fileCount':n,'truncated':False,'fingerprint':'mc1:a:b',
+        'checkedAt':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'commits':MC_COMMITS}
+    commit=q.get('commit',[None])[0]
+    diffs=[{'path':p,'patch':'@@ -1,2 +1,3 @@\n context\n-old line\n+new line\n+another line\n'} for p in q.get('diff',[])] if commit else []
+    return {'snapshot':snapshot,'diffs':diffs,'actionsSupported':True}
 state=State()
 class Handler(BaseHTTPRequestHandler):
     protocol_version='HTTP/1.1'
-    def log_message(self,*args): pass
+    def log_message(self,fmt,*args): print(fmt%args,flush=True)
     def reply(self,value,status=200,mime='application/json'):
         data=value if isinstance(value,bytes) else encoded(value)
         self.send_response(status); self.send_header('Content-Type',mime); self.send_header('Content-Length',str(len(data))); self.end_headers()
@@ -72,7 +89,7 @@ class Handler(BaseHTTPRequestHandler):
                 if body.get('reset'): state.reset()
                 for k in ['losses','uploadFailures','uploadDelay','denial','status','expired','discussion','rejectTurnOnce','rejectTurnStatus','postDelay','createDelay',
                           'extraDetail','runnerExtra','providers','pools','retryMessage','rows','me','queuedTurns',
-                          'driveChats','driveFab','driveGroups','driveQuestions']:
+                          'driveChats','driveFab','driveGroups','driveQuestions','mainCheckout']:
                     if k in body: setattr(state,k,body[k])
                 # The task card: this conversation becomes a run of a task in that state, on a branch of its own.
                 if body.get('taskCard'):
@@ -217,7 +234,10 @@ class Handler(BaseHTTPRequestHandler):
         if path in state.taskReads: return self.reply(state.taskReads[path])
         if path=='/api/users/me' and state.me is not None: return self.reply(state.me)
         if path=='/api/workspaces': return self.reply([{'id':WORKSPACE,'name':'Composer fixture','runnerId':RUNNER,'enabled':True}])
-        if path==f'/api/workspaces/{WORKSPACE}': return self.reply({'id':WORKSPACE,'name':'Composer fixture','runnerId':RUNNER,'provider':'codex','model':'fixture-model'})
+        if path==f'/api/workspaces/{WORKSPACE}/main-checkout' and state.mainCheckout is not None: return self.reply(main_checkout_view(parse_qs(url.query)))
+        if path==f'/api/workspaces/{WORKSPACE}': return self.reply({'id':WORKSPACE,'name':'Composer fixture','runnerId':RUNNER,'provider':'codex','model':'fixture-model',
+            **({'mainCheckoutActions':True,'repoHealth':{'root':'/root/orbit','branch':'develop','head':MC_COMMITS[0]['sha'],'state':'dirty' if state.mainCheckout['files'] else 'clean',
+                'upstream':'origin/develop','ahead':4,'behind':0,'fileCount':state.mainCheckout['files'],'fingerprint':'mc1:a:b'}} if state.mainCheckout is not None else {})})
         if path=='/api/sessions': return self.reply([state.detail()] if parse_qs(url.query).get('view',['open'])[0]=='open' else [])
         if path==f'/api/sessions/{SESSION}': return self.reply(state.detail())
         if path==f'/api/sessions/{CREATED}': return self.reply({**state.detail(),'id':CREATED,'title':'Created conversation'})

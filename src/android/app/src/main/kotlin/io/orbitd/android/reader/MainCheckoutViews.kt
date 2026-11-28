@@ -214,7 +214,8 @@ internal fun MainCheckoutResultRow(result: MainCheckout.Result) {
 internal fun MainCheckoutBar(model: MainCheckoutModel, workspaceId: String, isolated: Boolean) {
     val state by model.state.collectAsState()
     LaunchedEffect(model, workspaceId) { model.bind(workspaceId); model.poll() }
-    val bar = MainCheckout.bar(model.repoHealth, model.actionsSupported) ?: return
+    // Reading the workspace through `state` is what recomposes the bar when the heartbeat counts arrive.
+    val bar = MainCheckout.bar(state.workspace?.get("repoHealth") as? JsonObject, model.actionsSupported) ?: return
     val amber = LocalOrbitColors.current.needsYou
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     val shape = RoundedCornerShape(8.dp)
@@ -225,7 +226,8 @@ internal fun MainCheckoutBar(model: MainCheckoutModel, workspaceId: String, isol
         .clickable(enabled = opens, onClickLabel = MainCheckout.notPushedHeading(bar.ahead), role = Role.Button) { model.open(MainCheckoutState.Sheet.REVIEW) }
         .padding(horizontal = 10.dp, vertical = 5.dp).testTag("main-checkout-bar"), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(7.dp).clip(CircleShape).background(if (bar.fileCount > 0) amber else secondary.copy(alpha = 0.5f)))
-        Text(MainCheckout.COPY_LABEL, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+        // Clean with commits ahead: the short "N not pushed" takes the label's room, so the count survives a phone's width (board 02⑥).
+        if (bar.fileCount > 0 || bar.ahead <= 0) Text(MainCheckout.COPY_LABEL, style = MaterialTheme.typography.labelLarge, maxLines = 1)
         bar.branch?.let {
             Text(it, Modifier.clip(RoundedCornerShape(6.dp)).border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f), RoundedCornerShape(6.dp))
                 .padding(horizontal = 6.dp, vertical = 1.dp).widthIn(max = 120.dp), fontFamily = FontFamily.Monospace,
