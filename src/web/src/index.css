@@ -4208,6 +4208,12 @@ button.toast--pill:focus-visible {
   gap: 4px;
   padding: 0 0 6px;
 }
+.wt-rail-title {
+  padding: 2px 8px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+}
 .wt-rail-tab {
   flex: 1 1 0;
   border: 1px solid transparent;

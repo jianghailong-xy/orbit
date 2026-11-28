@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { BranchCommit } from '@orbit/shared';
 import type { SessionChangedFile } from '../api';
 import { ago } from '../lib/watches';
@@ -142,7 +143,14 @@ function CommitRow({
   );
 }
 
-function PendingRow({ active, onOpen }: { active?: boolean; onOpen: () => void }) {
+/** What the pending row says when the list is not the worktree bar's (the Main checkout bar names its own files). */
+export interface PendingRowText {
+  meta: string;
+  add?: number;
+  del?: number;
+}
+
+function PendingRow({ active, onOpen, text }: { active?: boolean; onOpen: () => void; text?: PendingRowText }) {
   return (
     <Tooltip content="Changes in the worktree that no commit holds yet">
       <button
@@ -157,8 +165,14 @@ function PendingRow({ active, onOpen }: { active?: boolean; onOpen: () => void }
         <span className="wt-commit-dot wt-commit-dot-pending" aria-hidden="true" />
         <span className="wt-commit-text">
           <span className="wt-commit-subject">Uncommitted changes</span>
-          <span className="wt-commit-meta">Not committed yet · shown under All changes</span>
+          <span className="wt-commit-meta">{text ? text.meta : 'Not committed yet · shown under All changes'}</span>
         </span>
+        {text && (text.add || text.del) ? (
+          <span className="wt-commit-stat">
+            <span className="wt-add">+{text.add ?? 0}</span>
+            <span className="wt-del">−{text.del ?? 0}</span>
+          </span>
+        ) : null}
       </button>
     </Tooltip>
   );
@@ -172,10 +186,15 @@ export function CommitList({
   baseLabel,
   onOpenCommit,
   onOpenAll,
+  pending,
+  foot,
 }: {
   commits: BranchCommit[];
   dirty: boolean;
   fileCount: number;
+  /** Replaces the pending row's words, and with `foot` the whole-branch footer (the Main checkout bar). */
+  pending?: PendingRowText;
+  foot?: ReactNode;
   /** "develop @ e9f1c07": what All changes is measured against. */
   baseLabel?: string | null;
   onOpenCommit: (sha: string) => void;
@@ -184,22 +203,29 @@ export function CommitList({
   const now = Date.now();
   return (
     <div className="wt-commits-panel" onClick={(e) => e.stopPropagation()}>
-      {(dirty || commits.length === 0) && <PendingRow onOpen={onOpenAll} />}
+      {(dirty || (commits.length === 0 && !foot)) && <PendingRow onOpen={onOpenAll} text={pending} />}
       {commits.map((c) => (
         <CommitRow key={c.sha} commit={c} now={now} onOpen={() => onOpenCommit(c.sha)} />
       ))}
-      <div className="wt-commits-foot">
-        <button type="button" className="wt-commits-all" onClick={onOpenAll}>
-          All changes
-        </button>
-        <span className="wt-dim">
-          · {fileCount} {fileCount === 1 ? 'file' : 'files'}
-        </span>
-        <span className="wt-spacer" />
-        {baseLabel && <span className="wt-dim">based on {baseLabel}</span>}
-      </div>
+      {foot ?? (
+        <div className="wt-commits-foot">
+          <button type="button" className="wt-commits-all" onClick={onOpenAll}>
+            All changes
+          </button>
+          <span className="wt-dim">
+            · {fileCount} {fileCount === 1 ? 'file' : 'files'}
+          </span>
+          <span className="wt-spacer" />
+          {baseLabel && <span className="wt-dim">based on {baseLabel}</span>}
+        </div>
+      )}
     </div>
   );
+}
+
+/** The drawer rail's heading when only commits are listed (the Main checkout's commits not pushed). */
+export function CommitRailTitle({ children }: { children: ReactNode }) {
+  return <div className="wt-rail-title">{children}</div>;
 }
 
 /** The drawer rail's switch between one commit at a time and the whole branch. */

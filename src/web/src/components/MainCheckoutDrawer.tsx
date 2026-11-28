@@ -22,6 +22,8 @@ import {
 } from '@orbit/shared';
 import { cancelMainCheckoutAction, getMainCheckout, postMainCheckoutAction } from '../api';
 import type { SessionChangedFile, SessionFilePatch } from '../api';
+import type { BranchCommit } from '@orbit/shared';
+import { commitChangedFiles } from './SessionCommits';
 import { type MainCheckoutHost, type MainCheckoutTarget } from '../lib/mainCheckout';
 import { useToast } from '../lib/toast';
 import { MainCheckoutResultRow } from './MainCheckout';
@@ -532,6 +534,62 @@ export function MainCheckoutDrawer({
           else next.add(p);
           setUnchecked(next);
         },
+      }}
+    />
+  );
+}
+
+/** Board 01 C: one commit not pushed in the session's right-side drawer. The rail lists only those commits, and each
+ *  file's patch is read from the runner for that commit alone (`commit` read, contract §10.4). */
+export function MainCheckoutCommitDrawer({
+  workspaceId,
+  commits,
+  openSha,
+  onSelectCommit,
+  onClose,
+}: {
+  workspaceId: string;
+  commits: BranchCommit[];
+  openSha: string;
+  onSelectCommit: (sha: string) => void;
+  onClose: () => void;
+}) {
+  const commit = commits.find((c) => c.sha === openSha) ?? commits[0];
+  const files = useMemo(() => commitChangedFiles(commit), [commit]);
+  const [path, setPath] = useState<string | null>(files[0]?.path ?? null);
+  // A commit has its own files: the first one opens with it.
+  useEffect(() => {
+    setPath((cur) => (cur && files.some((f) => f.path === cur) ? cur : (files[0]?.path ?? null)));
+  }, [files]);
+  const diffQ = useQuery({
+    queryKey: [...mainCheckoutQueryKey(workspaceId), 'commit', commit.sha, path],
+    meta: { entities: ['checkout'] },
+    queryFn: ({ signal }) => getMainCheckout(workspaceId, [path!], signal, commit.sha),
+    enabled: !!path,
+    staleTime: Infinity,
+    retry: false,
+  });
+  const patches = useMemo(() => {
+    const m = new Map<string, SessionFilePatch>();
+    for (const d of diffQ.data?.diffs ?? []) m.set(d.path, { path: d.path, patch: d.patch, truncated: d.patchTruncated });
+    return m;
+  }, [diffQ.data]);
+  return (
+    <WorktreeDiffDrawer
+      sessionId=""
+      files={files}
+      branch=""
+      openPath={path ?? ''}
+      onSelect={setPath}
+      onClose={onClose}
+      commits={commits}
+      openCommit={commit.sha}
+      onSelectCommit={(sha) => sha && onSelectCommit(sha)}
+      source={{
+        patches,
+        loading: diffQ.isLoading,
+        title: <span className="mck-drawer-head"><span className="mck-drawer-title">{MAIN_CHECKOUT_COPY.label}</span></span>,
+        commitsTitle: `Not pushed · ${commits.length}`,
       }}
     />
   );

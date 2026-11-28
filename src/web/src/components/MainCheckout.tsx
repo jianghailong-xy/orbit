@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { CheckOutlined, ExclamationOutlined } from '@ant-design/icons';
 import {
   MAIN_CHECKOUT_CARD_HANDLED_COPY,
@@ -30,6 +31,9 @@ import {
   useMainCheckoutResults,
   type MainCheckoutHost,
 } from '../lib/mainCheckout';
+import { getMainCheckout } from '../api';
+import { checkedAgo, MainCheckoutCommitDrawer, mainCheckoutQueryKey } from './MainCheckoutDrawer';
+import { CommitList } from './SessionCommits';
 import { Menu } from './ui/Menu';
 import { Tooltip } from './ui/Tooltip';
 
@@ -322,31 +326,135 @@ export function mainCheckoutFileCount(health: MainCheckoutRepoHealth | null | un
 export function MainCheckoutBar({ shared }: { shared?: boolean }) {
   const host = useMainCheckoutHost();
   const health = host?.health;
+  const files = health ? mainCheckoutFileCount(health) : 0;
+  const ahead = health?.ahead ?? 0;
+  const [open, setOpen] = useState(false);
+  const [openSha, setOpenSha] = useState<string | null>(null);
+  // The heartbeat has only counts: the commits come from the snapshot, read while there is something not pushed.
+  const ws = host?.workspaceId ?? '';
+  const snapshotQ = useQuery({
+    queryKey: mainCheckoutQueryKey(ws),
+    meta: { entities: ['checkout'] },
+    queryFn: ({ signal }) => getMainCheckout(ws, [], signal),
+    enabled: !!ws && ahead > 0,
+    staleTime: 0,
+    retry: false,
+  });
+  const refetch = snapshotQ.refetch;
+  const seen = useRef(`${ahead}:${health?.head ?? ''}`);
+  const now = `${ahead}:${health?.head ?? ''}`;
+  useEffect(() => {
+    if (seen.current === now) return;
+    seen.current = now;
+    if (ahead > 0) void refetch();
+  }, [now, ahead, refetch]);
   if (!host || !health) return null;
-  const files = mainCheckoutFileCount(health);
-  const ahead = health.ahead ?? 0;
   if (files === 0 && ahead === 0) return null;
+  const snapshot = ahead > 0 ? snapshotQ.data?.snapshot : undefined;
+  // A runner that does not list them (no `commits`) keeps today's bar: no caret, no toggle.
+  const commits = snapshot?.commits;
   const upstream = health.upstream ?? (health.branch ? `origin/${health.branch}` : 'origin');
   const busy = !!host.inFlight;
+  const toggle = ahead > 0 && !!commits;
+  const expanded = toggle && open;
+  const pendingFiles = snapshot?.files ?? [];
+  const pendingAdd = pendingFiles.reduce((n, f) => n + (f.additions ?? 0), 0);
+  const pendingDel = pendingFiles.reduce((n, f) => n + (f.deletions ?? 0), 0);
+  const branch = snapshot?.branch ?? health.branch;
+  const range = `${snapshot?.upstream ?? upstream}..${branch ?? 'HEAD'}`;
+  const more = (snapshot?.commitsTruncated ? ahead - (commits?.length ?? 0) : 0);
   return (
     <div className="wt-bar mck-bar">
-      <div className="wt-row">
+      <div
+        className={toggle ? 'wt-row wt-row-toggle' : 'wt-row'}
+        onClick={
+          toggle
+            ? () => {
+                setOpen(!open);
+                if (!open) void refetch();
+              }
+            : undefined
+        }
+        aria-expanded={toggle ? open : undefined}
+      >
         {files > 0 && <span className="mck-bar-dot" aria-hidden="true" />}
         <span className="mck-bar-label">{MAIN_CHECKOUT_COPY.label}</span>
         {health.branch && <code className="mck-bar-branch">{health.branch}</code>}
         <span className="mck-bar-status">{mainCheckoutBarStatus(files, ahead)}</span>
         <span className="wt-spacer" />
         {host.actionsSupported && files > 0 && (
-          <button type="button" className="wt-merge-btn mck-bar-btn" disabled={busy} onClick={() => host.openReview()}>
+          <button
+            type="button"
+            className="wt-merge-btn mck-bar-btn"
+            disabled={busy}
+            onClick={(e) => {
+              e.stopPropagation();
+              host.openReview();
+            }}
+          >
             {shared ? MAIN_CHECKOUT_COPY.reviewAndCommitShort : MAIN_CHECKOUT_COPY.review}
           </button>
         )}
         {host.actionsSupported && ahead > 0 && (
-          <button type="button" className="wt-merge-btn mck-bar-btn" disabled={busy} onClick={host.push}>
+          <button
+            type="button"
+            className="wt-merge-btn mck-bar-btn"
+            disabled={busy}
+            onClick={(e) => {
+              e.stopPropagation();
+              host.push();
+            }}
+          >
             {mainCheckoutPushLabel(upstream)}
           </button>
         )}
+        {toggle && (
+          <span className="wt-commits-caret" aria-hidden="true">
+            {open ? '▾' : '▸'}
+          </span>
+        )}
       </div>
+      {expanded && commits && (
+        <CommitList
+          commits={commits}
+          dirty={files > 0}
+          fileCount={files}
+          onOpenCommit={setOpenSha}
+          onOpenAll={() => host.openReview()}
+          pending={{
+            meta: `${files} ${files === 1 ? 'file' : 'files'} · not committed yet · opens Review`,
+            add: pendingAdd,
+            del: pendingDel,
+          }}
+          foot={
+            <>
+              {more > 0 && (
+                <div className="wt-commits-foot">
+                  <span className="wt-dim">and {more} more not listed</span>
+                  <span className="wt-dim">·</span>
+                  <code>git log {range}</code>
+                </div>
+              )}
+              <div className="wt-commits-foot">
+                <span className="wt-dim">
+                  On {branch ?? 'HEAD'}, not on {snapshot?.upstream ?? upstream}.
+                </span>
+                <span className="wt-spacer" />
+                <span className="wt-dim">{checkedAgo(snapshot?.checkedAt)}</span>
+              </div>
+            </>
+          }
+        />
+      )}
+      {expanded && commits && openSha && (
+        <MainCheckoutCommitDrawer
+          workspaceId={host.workspaceId}
+          commits={commits}
+          openSha={openSha}
+          onSelectCommit={setOpenSha}
+          onClose={() => setOpenSha(null)}
+        />
+      )}
     </div>
   );
 }

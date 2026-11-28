@@ -23,6 +23,7 @@ import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 import { WorktreeFilePreview } from './WorktreeFilePreview';
 import {
   CommitHead,
+  CommitRailTitle,
   CommitList,
   CommitRail,
   CommitRailTabs,
@@ -1393,6 +1394,9 @@ export interface DiffDrawerSource {
   listFoot?: ReactNode;
   /** The drawer's bottom bar. */
   footer?: ReactNode;
+  /** With `commits`: the rail's heading ("Not pushed · 4") in place of the Commits / All changes tabs. Each file's
+   *  patch is then that commit's own, so a commit's diff is never mixed with the branch's. */
+  commitsTitle?: string;
   checked?: (path: string) => boolean;
   onCheck?: (path: string, on: boolean) => void;
 }
@@ -1441,13 +1445,13 @@ export function WorktreeDiffDrawer({
   const patchByPath = source?.patches ?? sessionPatches;
   // One commit at a time: its own files, each shown with the branch's diff of that file (the
   // runner sends patches for the whole branch, not per commit — CommitHead says when they differ).
-  const commitMode = !source && !!commits && commits.length > 0;
+  const commitMode = (!source || !!source.commitsTitle) && !!commits && commits.length > 0;
   const commit = commitMode ? (commits!.find((c) => c.sha === openCommit) ?? null) : null;
   const commitFiles = useMemo(() => (commit ? commitChangedFiles(commit) : null), [commit]);
   const shown = commitFiles ?? files;
   const active = shown.find((f) => f.path === openPath) ?? null;
   const mixed =
-    !!commit && !!active &&
+    !source && !!commit && !!active &&
     (!!worktreeDirty || commits!.some((c) => c.sha !== commit.sha && c.files.some((f) => f.path === active.path)));
 
   // Drag the drawer's left edge to widen it for a roomier review; the width persists, and a
@@ -1645,7 +1649,7 @@ export function WorktreeDiffDrawer({
           </Tooltip>
         )}
         <div className="wt-diff-list" ref={listRef} style={listWidth != null ? { width: listWidth } : undefined}>
-          {source ? (
+          {source && !commitMode ? (
             <>
               {source.listHead}
               <div className="wt-diff-files">
@@ -1666,13 +1670,17 @@ export function WorktreeDiffDrawer({
             </>
           ) : commitMode ? (
             <>
-              <CommitRailTabs
-                commitCount={commits!.length}
-                fileCount={files.length}
-                showingCommits={!!commit}
-                onCommits={() => onSelectCommit?.(commits![0].sha)}
-                onAll={() => onSelectCommit?.(null)}
-              />
+              {source?.commitsTitle ? (
+                <CommitRailTitle>{source.commitsTitle}</CommitRailTitle>
+              ) : (
+                <CommitRailTabs
+                  commitCount={commits!.length}
+                  fileCount={files.length}
+                  showingCommits={!!commit}
+                  onCommits={() => onSelectCommit?.(commits![0].sha)}
+                  onAll={() => onSelectCommit?.(null)}
+                />
+              )}
               {commit && <CommitRail commits={commits!} activeSha={commit.sha} onSelect={(sha) => onSelectCommit?.(sha)} />}
               <FileTree files={shown} activePath={openPath} onSelect={onSelect} />
             </>
