@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -169,13 +170,35 @@ func readMainCheckoutForRelay(req MainCheckoutRunnerRequest, deps mainCheckoutDe
 	if err != nil {
 		return MainCheckoutSnapshotAnswer{Error: firstLine(err.Error())}
 	}
+	if req.Commit != "" && !mainCheckoutUnpushed(ctx, scan.Snapshot, req.Commit) {
+		return MainCheckoutSnapshotAnswer{Error: "that commit isn't one this checkout hasn't pushed"}
+	}
 	answer := MainCheckoutSnapshotAnswer{Snapshot: &scan.Snapshot}
 	for _, p := range req.DiffPaths {
-		if d, err := mainCheckoutFileDiff(ctx, root, p); err == nil {
+		var d MainCheckoutFileDiff
+		var err error
+		if req.Commit != "" {
+			d, err = mainCheckoutCommitDiff(ctx, root, req.Commit, p)
+		} else {
+			d, err = mainCheckoutFileDiff(ctx, root, p)
+		}
+		if err == nil {
 			answer.Diffs = append(answer.Diffs, d)
 		}
 	}
 	return answer
+}
+
+// mainCheckoutUnpushed reports whether sha is the full id of a commit in upstream..HEAD of the checkout snap saw: the
+// only history a commit read serves. Never without an upstream or on a detached HEAD.
+func mainCheckoutUnpushed(ctx context.Context, snap MainCheckoutSnapshot, sha string) bool {
+	if snap.Upstream == "" {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(ctx, mainCheckoutScanTimeout)
+	defer cancel()
+	out, err := mcGit(ctx, snap.Root, nil, "rev-list", snap.Head, "--not", "@{upstream}")
+	return err == nil && slices.Contains(strings.Fields(string(out)), sha)
 }
 
 // runMainCheckoutAction does one action and returns its contract result. An error means no result

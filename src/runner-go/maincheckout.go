@@ -558,6 +558,32 @@ func mainCheckoutFileDiff(ctx context.Context, dir, file string) (MainCheckoutFi
 		}
 		args = []string{"diff", "--no-index", "--no-ext-diff", "--no-color", "--", "/dev/null", file}
 	}
+	return mainCheckoutPatch(ctx, root, d, args)
+}
+
+// mainCheckoutCommitDiff is one file's patch in commit sha against its first parent (against the empty tree for a root
+// commit), shaped and capped like mainCheckoutFileDiff. The caller has already checked that sha is one it may serve.
+func mainCheckoutCommitDiff(ctx context.Context, root, sha, file string) (MainCheckoutFileDiff, error) {
+	ctx, cancel := context.WithTimeout(ctx, mainCheckoutScanTimeout)
+	defer cancel()
+	if !validMainCheckoutPath(file) {
+		return MainCheckoutFileDiff{}, fmt.Errorf("not a path inside the checkout: %q", file)
+	}
+	parent, err := mcGit(ctx, root, nil, "rev-parse", "--verify", "--quiet", sha+"^1")
+	if isExitCode(err, 1) {
+		// A root commit. Without -w this only names the empty tree; nothing is written.
+		parent, err = mcGit(ctx, root, []byte{}, "hash-object", "-t", "tree", "--stdin")
+	}
+	if err != nil {
+		return MainCheckoutFileDiff{}, fmt.Errorf("git rev-parse: %w", err)
+	}
+	return mainCheckoutPatch(ctx, root, MainCheckoutFileDiff{Path: file}, []string{
+		"diff-tree", "-r", "-p", "--no-renames", "--no-ext-diff", strings.TrimSpace(string(parent)), sha, "--", file})
+}
+
+// mainCheckoutPatch fills d from what the git diff args name: binary with no patch, else the patch cut at
+// mainCheckoutPatchMaxBytes.
+func mainCheckoutPatch(ctx context.Context, root string, d MainCheckoutFileDiff, args []string) (MainCheckoutFileDiff, error) {
 	statArgs := []string{args[0], "--numstat"}
 	for _, a := range args[1:] {
 		if a != "-p" {
