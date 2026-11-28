@@ -584,6 +584,7 @@ import {
   type ModeCapsule,
   modeCorrectionRefusals,
 } from '../lib/sessionPermissionMode';
+import { usePermissionModeChangeHistory } from '../lib/permissionModeChangeHistory';
 import type {
   SessionSourceLanding,
   SessionTurnIntent,
@@ -6781,7 +6782,11 @@ export function WorkspaceView({
   // Only a live session runs in one; an ended one's capsule shows the mode its next start runs in, so no line
   // of it is the reason for a gap.
   const recordedPermissionMode = live ? newerRecordedMode(selected as RecordedMode | null, detailForSelected) : null;
-  const permissionModeChanges = detailForSelected?.permissionModeChanges;
+  // The detail's newest changes, and the older ones as far back as the transcript is loaded (permissionModeChangeHistory).
+  const permissionModeChanges = usePermissionModeChangeHistory(selectedTrashed ? null : selectedId, detailForSelected, {
+    oldestEventTs: transcriptEvents[0]?.ts,
+    reachesStart: transcriptEvents.length > 0 && !hasOlderNow(),
+  });
   // A correction Claude refused is a system event of the conversation, not a mode change: read off the events loaded.
   const permissionModeRefusals = useMemo(() => modeCorrectionRefusals(transcriptEvents), [transcriptEvents]);
   // The list row learns of a new mode before the detail, whose changes the lines are read from: read it again.

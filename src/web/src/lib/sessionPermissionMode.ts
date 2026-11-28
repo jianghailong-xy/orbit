@@ -308,13 +308,18 @@ export function modeChangeLines(
   // A refusal that still stands is the gap's own line; the report it answers is then said plainly.
   const standing = refusalStands(refusals.at(-1), changes.at(-1), facts.actual) && gapOpen ? refusals.at(-1)! : null;
   const lines: ModeChangeLine[] = [];
+  // Which line each change drew, by the change's index.
+  const lineOf = new Map<number, number>();
   changes.forEach((change, i) => {
     const next = changes[i + 1];
     const latest = i === changes.length - 1;
     const gap = latest && gapOpen && change.toMode === facts.actual && !standing;
     const mode = permissionModeLabel(change.toMode);
     const line = (before: string, after = '', amber = gap): void => {
-      lines.push({ key: `${change.at}|${change.cause}|${change.toMode}|${i}`, at: change.at, before, mode, after, gap: amber });
+      // By seq where the server numbers its changes: two can share a moment, cause and mode, never a seq.
+      const key = change.seq !== undefined ? `seq-${change.seq}` : `${change.at}|${change.cause}|${change.toMode}|${i}`;
+      lineOf.set(i, lines.length);
+      lines.push({ key, at: change.at, before, mode, after, gap: amber });
     };
     // Why the mode is not the intent, for the line behind a gap the server's substitution opened.
     const substituted = gap && startingMode(intent, facts) === change.toMode;
@@ -373,7 +378,7 @@ export function modeChangeLines(
     // The report it answers goes right before it: the server stamps a change when it took the runner's batch, after the
     // runner's own stamp on the refusal, so by time alone the report would land below its answer.
     const answered = answeredChange(changes, refusal);
-    const reportLine = answered === null ? undefined : lines.find((l) => l.key.endsWith(`|${answered}`) && l.seq === undefined);
+    const reportLine = answered === null ? undefined : lines[lineOf.get(answered) ?? -1];
     if (reportLine) reportLine.seq = refusal.seq;
     lines.push({
       key: `refused|${refusal.seq}`,

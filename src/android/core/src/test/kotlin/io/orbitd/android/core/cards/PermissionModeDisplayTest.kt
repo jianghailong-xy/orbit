@@ -237,11 +237,11 @@ class PermissionModeDisplayTest {
     }
 
     @Test fun theClaimLineIsWordedFromTheServersRequestedModeAndReason() {
-        val root = PermissionModeChange(null, "auto", "CLAIM", null, "2026-11-22T12:00:00.000Z", "bypassPermissions", "ROOT_RUNNER")
+        val root = PermissionModeChange(null, "auto", "CLAIM", null, "2026-11-22T12:00:00.000Z", requestedMode = "bypassPermissions", reason = "ROOT_RUNNER")
         // Said even where this client does not know the runner runs as root.
         assertEquals("Started in Auto, not Bypass — Bypass can’t run on a root runner",
             PermissionModeDisplay.lines(listOf(root), "bypassPermissions", "auto", null, false, false).single().text)
-        val scheduled = PermissionModeChange("default", "auto", "CLAIM", null, "2026-11-22T12:00:00.000Z", "default", "SCHEDULED_RUN")
+        val scheduled = PermissionModeChange("default", "auto", "CLAIM", null, "2026-11-22T12:00:00.000Z", requestedMode = "default", reason = "SCHEDULED_RUN")
         assertEquals("Resumed in Auto — scheduled runs always use Auto",
             PermissionModeDisplay.lines(listOf(scheduled), "default", "auto", null, false, true).single().text)
     }

@@ -1,19 +1,23 @@
 import Foundation
 
-/// One durable mode change from the session detail, ordered by the server's clock.
+/// One durable mode change from the session detail, oldest first. `seq` is the order it was recorded in
+/// (migration 1810): two changes can share `at`, never a seq. Nil from a server older than that, which pages none.
 public struct SessionPermissionModeChange: Codable, Equatable, Sendable {
     public let fromMode: String?
     public let toMode: String
     public let cause: String
     public let client: String?
     public let at: String
+    public var seq: Int? = nil
     /// For a CLAIM that handed another mode than the session asked for: the mode asked for, and why
     /// (`ROOT_RUNNER`, `SCHEDULED_RUN`). Nil otherwise, and from a server that does not say.
     public var requestedMode: String? = nil
     public var reason: String? = nil
 
+    /// By its seq where the server numbers it, so repeated transitions at one moment are rows apart.
     var rowID: String {
-        "permission-mode-\(at)-\(fromMode ?? "")-\(toMode)-\(cause)-\(client ?? "")"
+        if let seq { return "permission-mode-seq-\(seq)" }
+        return "permission-mode-\(at)-\(fromMode ?? "")-\(toMode)-\(cause)-\(client ?? "")"
     }
 
     public var line: String {
@@ -133,6 +137,74 @@ public struct PermissionModeRefusal: Equatable, Hashable, Sendable {
         let fractional = ISO8601DateFormatter()
         fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return fractional.date(from: iso) ?? ISO8601DateFormatter().date(from: iso)
+    }
+}
+
+/// A page of a session's older mode changes (`GET /sessions/:id/permission-mode-changes?before=<seq>`): oldest first, and
+/// whether older ones remain.
+public struct SessionPermissionModeChangePage: Codable, Equatable, Sendable {
+    public let changes: [SessionPermissionModeChange]
+    public let hasMore: Bool
+
+    public init(changes: [SessionPermissionModeChange], hasMore: Bool) {
+        self.changes = changes
+        self.hasMore = hasMore
+    }
+}
+
+/// Every mode change a transcript holds, not only the detail's newest fifty (web `permissionModeChangeHistory`, Android
+/// `ModeChangeHistory`): the detail's, and the older pages read as the transcript pages back, until the oldest held is
+/// older than the oldest row loaded or, once the transcript reaches the session's start, until none are left. Each change
+/// once, by its seq, in the order it was recorded. A change that falls out of the detail's fifty stays; a detail that no
+/// longer reaches what is held (more than a page recorded since the last read) starts it again, so none in between is missed.
+public struct ModeChangeHistory: Equatable, Sendable {
+    public private(set) var changes: [SessionPermissionModeChange]
+    /// Whether older changes than `changes.first` are recorded.
+    public private(set) var hasMore: Bool
+
+    public init(changes: [SessionPermissionModeChange] = [], hasMore: Bool = false) {
+        self.changes = changes
+        self.hasMore = hasMore
+    }
+
+    /// With the detail's read taken in. A change with no seq (an older server) is held as the detail says, alone.
+    public func adopt(_ detail: [SessionPermissionModeChange], hasMore detailHasMore: Bool) -> ModeChangeHistory {
+        if detail.contains(where: { $0.seq == nil }) { return ModeChangeHistory(changes: detail, hasMore: false) }
+        if changes.isEmpty { return ModeChangeHistory(changes: detail, hasMore: detailHasMore) }
+        guard let first = detail.first else { return self }
+        let known = Set(changes.compactMap(\.seq))
+        if detailHasMore, let seq = first.seq, !known.contains(seq) { return ModeChangeHistory(changes: detail, hasMore: true) }
+        if detail.allSatisfy({ $0.seq.map(known.contains) ?? false }), detailHasMore || !hasMore { return self }
+        return ModeChangeHistory(changes: Self.joined(changes, detail), hasMore: detailHasMore && hasMore)
+    }
+
+    /// With a page read for `before`, while that is still the oldest held: another start since makes it not this one's.
+    public func withOlder(before: Int, _ page: SessionPermissionModeChangePage) -> ModeChangeHistory {
+        guard changes.first?.seq == before else { return self }
+        return ModeChangeHistory(changes: Self.joined(page.changes, changes), hasMore: page.hasMore)
+    }
+
+    /// Whether to read the page before the oldest held for a transcript whose oldest loaded row is stamped
+    /// `oldestRowAt` (none loaded: not yet), and which reaches the session's start when `reachesStart`.
+    public func needsOlder(oldestRowAt: String?, reachesStart: Bool) -> Bool {
+        guard hasMore, let oldest = changes.first, oldest.seq != nil, let oldestRowAt else { return false }
+        if reachesStart { return true }
+        guard let at = ThinkingSummary.date(oldest.at), let row = ThinkingSummary.date(oldestRowAt) else { return false }
+        // A change at the same moment as the oldest row may have older ones beside it.
+        return !(at < row)
+    }
+
+    /// The same, for the transcript `state` holds: its oldest row with a clock, and whether it has paged back to the start.
+    public func needsOlder(in state: TranscriptState) -> Bool {
+        needsOlder(oldestRowAt: state.items.lazy.compactMap(\.clock).first,
+                   reachesStart: state.maxSeq > 0 && !state.hasMoreOlder)
+    }
+
+    private static func joined(_ older: [SessionPermissionModeChange],
+                               _ newer: [SessionPermissionModeChange]) -> [SessionPermissionModeChange] {
+        var bySeq: [Int: SessionPermissionModeChange] = [:]
+        for change in older + newer { if let seq = change.seq { bySeq[seq] = change } }
+        return bySeq.values.sorted { ($0.seq ?? 0) < ($1.seq ?? 0) }
     }
 }
 

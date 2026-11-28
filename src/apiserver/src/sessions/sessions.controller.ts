@@ -1168,6 +1168,28 @@ export class SessionsController {
   }
 
   /**
+   * A page of the session's permission-mode changes, for a transcript that pages back past the newest ones its detail
+   * carries (`permissionModeChanges`, `permissionModeChangesHasMore`): `before=<seq>&limit=N` returns the N recorded
+   * just before that change, oldest first, and whether older ones remain; without `before`, the newest N. N is at
+   * most SESSION_PERMISSION_MODE_CHANGES_LIMIT, the default.
+   */
+  @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
+  @TerminalRoute('SESSION')
+  @Get(':id/permission-mode-changes')
+  permissionModeChangePage(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('before') before?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const num = (s?: string): number | undefined => {
+      const n = Number(s);
+      return s !== undefined && s !== '' && Number.isFinite(n) ? n : undefined;
+    };
+    return this.sessions.getPermissionModeChangePage(user.userId, id, { before: num(before), limit: num(limit) });
+  }
+
+  /**
    * Find within one session (the clients' ⌘F). Returns the matching events newest-first with a
    * snippet each, plus the true total, so the client can walk back to a hit older than the
    * transcript window it has loaded. Sibling of `:id/events/page`; same segment count, distinct

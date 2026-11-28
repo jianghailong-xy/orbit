@@ -255,7 +255,9 @@ func (r *agentToolsReport) payload() map[string]interface{} {
 type agentToolsReporter struct {
 	mu   sync.Mutex
 	last string
-	now  func() time.Time
+	// lastReport is the report last sent, which sendMode restates.
+	lastReport *agentToolsReport
+	now        func() time.Time
 }
 
 // send emits r unless it says what the last one sent said; the time it was built is not part of what it says.
@@ -270,6 +272,8 @@ func (rep *agentToolsReporter) send(r *agentToolsReport, emit emitFn) {
 	same := string(blob) == rep.last
 	if !same {
 		rep.last = string(blob)
+		kept := *r
+		rep.lastReport = &kept
 	}
 	rep.mu.Unlock()
 	if same {
@@ -282,6 +286,22 @@ func (rep *agentToolsReporter) send(r *agentToolsReport, emit emitFn) {
 	}
 	r.At = now().UTC().Format(time.RFC3339)
 	emit(evSystem, r.payload())
+}
+
+// sendMode restates the last report with the permission mode the engine now names: Claude Code names its
+// mode in status frames as well as in its init frame, and a status frame carries nothing else the report
+// says (claude_mode_correction.go). Before any report was sent there is nothing to restate, and the init
+// frame that opens the first one names the mode itself.
+func (rep *agentToolsReporter) sendMode(mode string, emit emitFn) {
+	rep.mu.Lock()
+	if rep.lastReport == nil {
+		rep.mu.Unlock()
+		return
+	}
+	r := *rep.lastReport
+	rep.mu.Unlock()
+	r.PermissionMode = mode
+	rep.send(&r, emit)
 }
 
 // ── Claude Code ──────────────────────────────────────────────────────────────────────────────────

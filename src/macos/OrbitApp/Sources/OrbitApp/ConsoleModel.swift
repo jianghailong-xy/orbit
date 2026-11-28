@@ -543,6 +543,10 @@ final class ConsoleModel {
     /// The corrections Claude refused, oldest first: system events of the conversation, not mode changes, so
     /// they are read off the events this console loads (`noteModeRefusals`).
     private var permissionModeRefusals: [PermissionModeRefusal] = []
+    /// The changes held as far back as the transcript is loaded: the detail's newest and the older pages read as it pages
+    /// back (`ModeChangeHistory`). `permissionModeChanges` is its list.
+    @ObservationIgnored private var modeHistory = ModeChangeHistory()
+    @ObservationIgnored private var loadingOlderModes = false
     private var permissionIntentUpdatedAt: String?
 
     var modeDisplay: SessionModeDisplay {
@@ -1827,6 +1831,7 @@ final class ConsoleModel {
                 noteModeRefusals(page.events)
                 reducer.applyTailPage(page)   // also records the scroll-up window cursor (hasMoreOlder)
                 publishStateNow()
+                loadOlderPermissionModesIfNeeded()
             } else if attempt < 2 {
                 try? await Task.sleep(nanoseconds: UInt64(300 * (attempt + 1)) * 1_000_000)
             }
@@ -2157,6 +2162,8 @@ final class ConsoleModel {
         // prepended — e.g. the cursor hit the start — and yanking the scroll would be wrong).
         if let anchor, reducer.state.items.first?.id != anchor { prependAnchorID = anchor }
         publishStateNow()
+        // The mode changes as old as the rows just paged in.
+        loadOlderPermissionModesIfNeeded()
     }
 
     // MARK: - a link to one record (`SessionRecordLink`; web parity: WorkspaceView's `?at=`)
@@ -2221,6 +2228,7 @@ final class ConsoleModel {
         noteModeRefusals(page.events)
         reducer.applyRecordPage(page)
         publishStateNow()
+        loadOlderPermissionModesIfNeeded()
         markRecord(anchor, page: page.events)
         return true
     }
@@ -2829,9 +2837,30 @@ final class ConsoleModel {
         actualPermissionMode = session.actualPermissionMode
         actualPermissionModeAt = session.actualPermissionModeAt
         if let changes = session.permissionModeChanges {
-            permissionModeChanges = changes
+            modeHistory = modeHistory.adopt(changes, hasMore: session.permissionModeChangesHasMore == true)
+            permissionModeChanges = modeHistory.changes
+            loadOlderPermissionModesIfNeeded()
         } else if changed {
             Task { [weak self] in await self?.refreshPermissionMode() }
+        }
+    }
+
+    /// Read the mode changes older than those held while the loaded transcript reaches back past the oldest of them, or
+    /// to the session's start (web parity: `usePermissionModeChangeHistory`). One page at a time; each one landed asks
+    /// again. A failed read is silent: the next page of the transcript asks again.
+    func loadOlderPermissionModesIfNeeded() {
+        guard !loadingOlderModes, !sessionID.isEmpty, modeHistory.needsOlder(in: reducer.state),
+              let before = modeHistory.changes.first?.seq else { return }
+        loadingOlderModes = true
+        let session = sessionID
+        Task { [weak self] in
+            let page = try? await self?.api.permissionModeChanges(sessionID: session, before: before)
+            guard let self else { return }
+            self.loadingOlderModes = false
+            guard let page else { return }
+            self.modeHistory = self.modeHistory.withOlder(before: before, page)
+            self.permissionModeChanges = self.modeHistory.changes
+            self.loadOlderPermissionModesIfNeeded()
         }
     }
 

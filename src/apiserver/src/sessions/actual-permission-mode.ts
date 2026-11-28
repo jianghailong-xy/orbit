@@ -7,6 +7,7 @@ import {
   type PermissionModeChangeCause,
   RunEventType,
   type SessionPermissionModeChange,
+  type SessionPermissionModeChangePage,
   SESSION_PERMISSION_MODE_CHANGES_LIMIT,
 } from '@orbit/shared';
 
@@ -137,34 +138,75 @@ export function configTurnPayload(content: string | null | undefined): { permiss
   }
 }
 
-/** The session detail's mode changes as its `include` reads them: the newest SESSION_PERMISSION_MODE_CHANGES_LIMIT. */
+/** The session detail's mode changes as its `include` reads them: the newest SESSION_PERMISSION_MODE_CHANGES_LIMIT, and
+ *  one more, which says only whether older ones are recorded (permissionModeChangePageOf). By `seq`, the order they were
+ *  recorded in: two can share a time (migration 1810). */
 export const PERMISSION_MODE_CHANGES_INCLUDE = {
-  orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-  take: SESSION_PERMISSION_MODE_CHANGES_LIMIT,
-  select: { fromMode: true, toMode: true, cause: true, client: true, requestedMode: true, reason: true, createdAt: true },
+  orderBy: { seq: 'desc' },
+  take: SESSION_PERMISSION_MODE_CHANGES_LIMIT + 1,
+  select: { fromMode: true, toMode: true, cause: true, client: true, requestedMode: true, reason: true, createdAt: true, seq: true },
 } satisfies Prisma.Session$permissionModeChangesArgs;
 
-/** Those rows as the detail answers them, oldest first. None read (an older row shape) is none. A claim's substitution
- *  is carried only on the row that made one, so every other row keeps the shape it had. */
-export function permissionModeChangesOf(
-  rows: ReadonlyArray<{
-    fromMode: string | null;
-    toMode: string;
-    cause: string;
-    client: string | null;
-    requestedMode?: string | null;
-    reason?: string | null;
-    createdAt: Date;
-  }> | undefined,
-): SessionPermissionModeChange[] {
-  return [...(rows ?? [])].reverse().map((row) => ({
-    fromMode: row.fromMode,
-    toMode: row.toMode,
-    cause: row.cause as PermissionModeChangeCause,
-    client: row.client,
-    at: row.createdAt.toISOString(),
-    ...(row.requestedMode && row.reason
-      ? { requestedMode: row.requestedMode, reason: row.reason as ClaimPermissionModeSubstitutionReason }
-      : {}),
-  }));
+type ModeChangeRow = {
+  fromMode: string | null;
+  toMode: string;
+  cause: string;
+  client: string | null;
+  requestedMode?: string | null;
+  reason?: string | null;
+  createdAt: Date;
+  seq: bigint;
+};
+
+/** Rows read newest first, `limit` and one more, as a page: those `limit`, oldest first, and whether one more was read.
+ *  None read (an older row shape) is none. A claim's substitution is carried only on the row that made one, so every
+ *  other row keeps the shape it had. */
+function permissionModeChangePageOf(
+  rows: ReadonlyArray<ModeChangeRow> | undefined,
+  limit = SESSION_PERMISSION_MODE_CHANGES_LIMIT,
+): SessionPermissionModeChangePage {
+  const read = rows ?? [];
+  return {
+    changes: read.slice(0, limit).reverse().map((row) => ({
+      fromMode: row.fromMode,
+      toMode: row.toMode,
+      cause: row.cause as PermissionModeChangeCause,
+      client: row.client,
+      at: row.createdAt.toISOString(),
+      ...(row.requestedMode && row.reason
+        ? { requestedMode: row.requestedMode, reason: row.reason as ClaimPermissionModeSubstitutionReason }
+        : {}),
+      seq: Number(row.seq),
+    })),
+    hasMore: read.length > limit,
+  };
+}
+
+/** The detail's read of them as it answers it: the newest, oldest first, and whether older ones are recorded. */
+export function permissionModeChangesOfDetail(rows: ReadonlyArray<ModeChangeRow> | undefined): {
+  permissionModeChanges: SessionPermissionModeChange[];
+  permissionModeChangesHasMore: boolean;
+} {
+  const page = permissionModeChangePageOf(rows);
+  return { permissionModeChanges: page.changes, permissionModeChangesHasMore: page.hasMore };
+}
+
+/**
+ * One page of a session's mode changes (GET /sessions/:id/permission-mode-changes): the `limit` recorded just before
+ * the change numbered `before`, or the newest `limit` without it, oldest first. The caller has checked the session is
+ * the owner's. A limit outside 1..SESSION_PERMISSION_MODE_CHANGES_LIMIT is held to it.
+ */
+export async function readPermissionModeChangePage(
+  db: Pick<Prisma.TransactionClient, 'sessionPermissionModeChange'>,
+  sessionId: string,
+  opts: { before?: number; limit?: number },
+): Promise<SessionPermissionModeChangePage> {
+  const limit = Math.min(Math.max(Math.trunc(opts.limit ?? SESSION_PERMISSION_MODE_CHANGES_LIMIT), 1), SESSION_PERMISSION_MODE_CHANGES_LIMIT);
+  const rows = await db.sessionPermissionModeChange.findMany({
+    where: { sessionId, ...(opts.before !== undefined ? { seq: { lt: BigInt(Math.trunc(opts.before)) } } : {}) },
+    orderBy: { seq: 'desc' },
+    take: limit + 1,
+    select: PERMISSION_MODE_CHANGES_INCLUDE.select,
+  });
+  return permissionModeChangePageOf(rows, limit);
 }

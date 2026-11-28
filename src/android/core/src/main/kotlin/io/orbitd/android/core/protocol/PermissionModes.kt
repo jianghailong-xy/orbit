@@ -2,22 +2,27 @@ package io.orbitd.android.core.protocol
 
 import io.orbitd.android.core.realtime.RunEvent
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.longOrNull
 
 /**
  * One change of the mode a session's engine actually runs in (shared `SessionPermissionModeChange`, migration 1437). [cause] is
  * what made it: CLAIM (a claim handed the runner this mode), OWNER_PICK (the owner's config change reached the engine; [client] is
  * the app it came from when the request said), ENGINE_REPORT (Claude Code's init frame said another mode), RUNNER_CORRECTION (the
  * runner switched the engine itself), RESPAWN (the engine came back from a re-spawn in this mode) or ORBIT_CHANGE (a config change
- * Orbit made, not the owner). [fromMode] is null for the session's first recorded mode. A CLAIM that handed another mode than the
- * session asked for carries the mode asked for, [requestedMode], and why, [reason] (ROOT_RUNNER, SCHEDULED_RUN; migration 1807).
+ * Orbit made, not the owner). [fromMode] is null for the session's first recorded mode. [seq] is the order it was recorded in
+ * (migration 1810): two changes can share [at], never a seq. Null from a server older than that, which pages none. A CLAIM that
+ * handed another mode than the session asked for carries the mode asked for, [requestedMode], and why, [reason] (ROOT_RUNNER,
+ * SCHEDULED_RUN; migration 1807).
  */
 data class PermissionModeChange(val fromMode: String?, val toMode: String, val cause: String, val client: String?, val at: String,
-    val requestedMode: String? = null, val reason: String? = null) {
-    /** Its line in the transcript. */
-    val key: String get() = "permission-mode:$at:$cause:$toMode"
+    val seq: Long? = null, val requestedMode: String? = null, val reason: String? = null) {
+    /** Its line in the transcript: by its seq where the server numbers it, so repeated transitions at one moment are lines apart. */
+    val key: String get() = seq?.let { "permission-mode:seq-$it" } ?: "permission-mode:$at:$cause:$toMode"
 }
 
 /**
@@ -56,7 +61,15 @@ object PermissionModes {
     fun reported(o: JsonObject): Boolean = "actualPermissionMode" in o
 
     /** The detail's changes, oldest first, as the server orders them. An entry with no mode, cause or time is left out. */
-    fun changes(o: JsonObject): List<PermissionModeChange> = (o["permissionModeChanges"] as? JsonArray).orEmpty().mapNotNull { element ->
+    fun changes(o: JsonObject): List<PermissionModeChange> = changesIn(o["permissionModeChanges"])
+
+    /** Whether the detail says older changes than its own are recorded (GET /sessions/:id/permission-mode-changes?before=<seq>). */
+    fun changesHasMore(o: JsonObject): Boolean = (o["permissionModeChangesHasMore"] as? JsonPrimitive)?.booleanOrNull == true
+
+    /** A page of older changes as that route answers it, `{ changes, hasMore }`: its changes, oldest first, and whether older remain. */
+    fun page(o: JsonObject): ModeChangePage = ModeChangePage(changesIn(o["changes"]), (o["hasMore"] as? JsonPrimitive)?.booleanOrNull == true)
+
+    private fun changesIn(array: JsonElement?): List<PermissionModeChange> = (array as? JsonArray).orEmpty().mapNotNull { element ->
         val change = element as? JsonObject ?: return@mapNotNull null
         PermissionModeChange(
             fromMode = word(change, "fromMode"),
@@ -64,6 +77,7 @@ object PermissionModes {
             cause = word(change, "cause") ?: return@mapNotNull null,
             client = word(change, "client"),
             at = word(change, "at") ?: return@mapNotNull null,
+            seq = (change["seq"] as? JsonPrimitive)?.takeUnless { it.isString }?.longOrNull,
             requestedMode = word(change, "requestedMode"),
             reason = word(change, "reason"),
         )

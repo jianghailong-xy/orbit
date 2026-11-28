@@ -6,10 +6,12 @@ import android.view.View
 import android.view.WindowManager
 import androidx.compose.ui.test.*
 import io.orbitd.android.core.cards.PermissionModeDisplay
+import io.orbitd.android.core.protocol.ModeChangeHistory
 import io.orbitd.android.core.protocol.PermissionModes
 import java.io.File
 import java.time.Instant
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Test
@@ -177,6 +179,60 @@ class PermissionModeShellTest : ComposerShellTest() {
         assertTrue(tops[0] < top("event:1")); assertTrue(top("event:1") < tops[1]); assertTrue(tops[1] < top("event:2"))
         assertTrue(top("event:2") < tops[2])
         shot("05-transcript-lines")
+    }
+
+    /** A session with more changes than its detail carries (core's wire/permission-mode/paging, from a real apiserver): with its
+     * transcript at the session's start, the reader reads the two pages before the detail's newest, from the oldest it holds, and
+     * draws every change once, in the order it was recorded, with who or what made it — though whole batches share a moment. */
+    @Test fun aLongSessionReadsItsOlderChangesAndDrawsEachOnceInOrder() {
+        val detail = CapturedPayloads.json("paging/session-paging").jsonObject
+        val newest = PermissionModes.changes(detail)
+        val pages = listOf("paging/session-paging-page-1", "paging/session-paging-page-2")
+        var held = ModeChangeHistory().adopt(newest, PermissionModes.changesHasMore(detail))
+        val before = mutableListOf<Long>()
+        for (page in pages) {
+            before += held.changes.first().seq!!
+            held = held.withOlder(before.last(), PermissionModes.page(CapturedPayloads.json(page).jsonObject))
+        }
+        val all = held.changes
+        assertEquals(111, all.size)
+        ComposerShell.runner = CapturedPayloads.runner("workstation-gpu")
+        ComposerShell.session = CapturedPayloads.fields("paging/session-paging")
+        ComposerShell.modeChangePages = before.zip(pages).associate { (seq, page) -> "$seq" to CapturedPayloads.text(page) }
+        val asked = Instant.parse(all.first().at).minusMillis(300)
+        val answered = Instant.parse(all.last().at).plusMillis(300)
+        ComposerShell.events = listOf(
+            ComposerShell.obj("""{"type":"user","seq":1,"turnId":"t-1","ts":"$asked","payload":{"text":"Toggle the feature flag until the canary settles."}}"""),
+            ComposerShell.obj("""{"type":"assistant","seq":2,"turnId":"t-1","ts":"$answered","payload":{"text":"The canary settled at 25%."}}"""))
+        signIn(); openSession()
+
+        val lines = PermissionModeDisplay.lines(all, PermissionModes.intent(detail), PermissionModes.actual(detail), noAutoModel = null,
+            runsAsRoot = false, scheduledOnClaude = false)
+        assertEquals(1 + 6 + 52, lines.size)
+        await { lines.all { has(hasTestTag(it.key)) } }
+        // Each once, saying who or what made it.
+        lines.forEach { line ->
+            assertEquals(line.key, 1, compose.onAllNodesWithTag(line.key).fetchSemanticsNodes().size)
+            compose.onNodeWithTag(line.key).assertTextEquals(line.text)
+        }
+        assertEquals(listOf("Started in Auto", "Mode set to Plan by you, on the web", "Mode set to Auto by you, on iOS",
+            "Mode set to Accept Edits by you, on Android", "Mode set to Auto by you, on the web", "Mode set to Plan by you, on iOS",
+            "Mode set to Auto by you, on Android"), lines.take(7).map { it.text })
+        // In the order they were recorded, after the question that opened the session. Where each is in the whole transcript, not
+        // the window: the reader follows the tail, so the oldest lines are above it, where their visible bounds are clipped to 0.
+        fun y(tag: String) = compose.onNodeWithTag(tag).fetchSemanticsNode().positionInRoot.y
+        val ys = lines.map { y(it.key) }
+        assertEquals(ys.sorted(), ys)
+        assertEquals("each line below the one before", ys.size, ys.toSet().size)
+        assertTrue(y("event:1") < ys.first())
+        // Asked for once each, from the oldest held: the detail's oldest, then the first page's.
+        assertEquals(before.map { "GET sessions/${ComposerShell.SESSION}/permission-mode-changes?before=$it" },
+            ComposerShell.calls.filter { it.startsWith("GET sessions/${ComposerShell.SESSION}/permission-mode-changes") })
+        shot("07-older-mode-changes")
+        // Scrolled up to where the session started: the lines the pages brought, the claim and the owner's picks.
+        compose.onNodeWithTag("event:1").performScrollTo()
+        compose.onNodeWithTag(lines[6].key).assertIsDisplayed()
+        shot("07b-older-mode-changes-start")
     }
 
     /** A claim-time substitution says why: Bypass can't run on a root runner, so the claim handed Auto. */
