@@ -3,7 +3,7 @@ import Foundation
 /// One project replaces its member sessions, using the coordinator's placement and wording.
 /// Activity and folder counts belong to this workspace/view; supplemental sessions supply content.
 public struct SessionProjectRow: Identifiable, Equatable, Sendable {
-    public enum Indicator: Equatable, Sendable { case needsYou, running, jobs }
+    public enum Indicator: Equatable, Sendable { case needsYou, running }
     public enum Target: Equatable, Sendable { case session(String), project(String) }
 
     public let projectId: String
@@ -20,7 +20,6 @@ public struct SessionProjectRow: Identifiable, Equatable, Sendable {
     public var listedAt: String? = nil
     public let needsYou: Bool
     public let running: Bool
-    public let jobs: Bool
     public let indicator: Indicator?
     public let line: SessionLine
     public let target: Target
@@ -341,9 +340,6 @@ public enum SessionProjectGrouping {
                 WorkspaceActivityLogic.isRunning($0, watching: watching[$0.id])
             }.count
             let running = runningCount > 0
-            let jobs = !runnerOffline && members.contains {
-                WorkspaceActivityLogic.isRunningJob($0, watching: watching[$0.id])
-            }
             rows.append(SessionProjectRow(
                 projectId: projectID, title: summary?.title ?? membership.projectTitle,
                 status: summary?.status ?? membership.projectStatus, members: members,
@@ -352,8 +348,8 @@ public enum SessionProjectGrouping {
                 createdAt: coordinator?.createdAt ?? latest.createdAt,
                 listedAt: members.map { $0.listedAt ?? $0.createdAt }
                     .max { instant($0) < instant($1) } ?? nil,
-                needsYou: needsYou, running: running, jobs: jobs,
-                indicator: needsYou ? .needsYou : running ? .running : jobs ? .jobs : nil,
+                needsYou: needsYou, running: running,
+                indicator: needsYou ? .needsYou : running ? .running : nil,
                 line: selectedLine, target: target, taskCounts: summary?.taskCounts,
                 runningCount: summary?.buckets.running ?? runningCount,
                 started: summary?.started == true, pause: SessionProjectPause(summary)))

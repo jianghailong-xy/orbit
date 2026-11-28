@@ -356,9 +356,6 @@ final class AppModel {
     /// Workspace ids with at least one Session that draws the shared running spinner. Cached beside
     /// `agentNeedsYou` so the drawer, the iPad sidebar and the Mac sidebar never rescan Open once per row/render.
     private(set) var runningWorkspaceIDs: Set<String> = []
-    /// Workspace ids with a background job in flight and nobody generating — read off the same
-    /// glyph, so the two marks can never disagree about one row. Drawn quieter than the spinner.
-    private(set) var jobWorkspaceIDs: Set<String> = []
     /// Each project's coordinator conversation as the Open list shows it, by project — what the
     /// drawer's project rows read beside their fetched summaries (`ProjectCoordinatorPulse`).
     private(set) var projectCoordinators: [String: ProjectCoordinatorPulse] = [:]
@@ -1008,7 +1005,6 @@ final class AppModel {
         needsYouSessions = []
         agentNeedsYou = [:]
         runningWorkspaceIDs = []
-        jobWorkspaceIDs = []
         projectCoordinators = [:]
         projectSessions = []
         projectSessionsAddress = nil
@@ -2142,7 +2138,6 @@ final class AppModel {
         sessionDetails.reconcile(with: [row])
 
         let activity = OpenListDerived.Activity(runningWorkspaceIDs: runningWorkspaceIDs,
-                                                jobWorkspaceIDs: jobWorkspaceIDs,
                                                 coordinatorPulses: projectCoordinators)
         var derived = OpenListDerived(needsYou: needsYouSessions, agentNeedsYou: agentNeedsYou,
                                       menu: menuSummary, activity: activity)
@@ -2155,7 +2150,6 @@ final class AppModel {
         if derived.agentNeedsYou != agentNeedsYou { agentNeedsYou = derived.agentNeedsYou }
         if let marks = derived.activity {
             if marks.runningWorkspaceIDs != runningWorkspaceIDs { runningWorkspaceIDs = marks.runningWorkspaceIDs }
-            if marks.jobWorkspaceIDs != jobWorkspaceIDs { jobWorkspaceIDs = marks.jobWorkspaceIDs }
             if marks.coordinatorPulses != projectCoordinators { projectCoordinators = marks.coordinatorPulses }
         }
         agents?.applyOpenRow(sessions, workspaceIDs: [old.agent?.id ?? old.agentId, row.agent?.id ?? row.agentId])
@@ -2195,7 +2189,6 @@ final class AppModel {
         needsYouSessions = SessionGrouping.group(list).needsYou
         agentNeedsYou = NeedsYouLogic.byAgent(list)
         runningWorkspaceIDs = WorkspaceActivityLogic.runningWorkspaceIDs(list)
-        jobWorkspaceIDs = WorkspaceActivityLogic.jobWorkspaceIDs(list)
         projectCoordinators = ProjectAttention.coordinatorPulses(list)
         // The agent pane's Open list is this same snapshot narrowed to one agent, so hand it over
         // here instead of leaving it to fetch the identical payload on its own timer.

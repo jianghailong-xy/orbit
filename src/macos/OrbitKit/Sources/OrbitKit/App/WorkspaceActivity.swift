@@ -19,23 +19,6 @@ public enum WorkspaceActivityLogic {
         return ids
     }
 
-    /// Workspace ids doing background WORK — a session whose glyph breathes, which is exactly the
-    /// parked-with-a-job-in-flight state. Deliberately not "has a process up": a workspace that
-    /// left a dev server running would answer that for the rest of its life, which is the whole
-    /// reason the rail said nothing here before. Drawn quieter than `runningWorkspaceIDs`, because
-    /// nobody is generating in these workspaces — but something is happening in them, and until
-    /// this existed the rail could not tell that from idle.
-    public static func jobWorkspaceIDs(_ sessions: [Session]) -> Set<String> {
-        var ids: Set<String> = []
-        for session in sessions {
-            guard isRunningJob(session),
-                  let id = session.agent?.id ?? session.agentId
-            else { continue }
-            ids.insert(id)
-        }
-        return ids
-    }
-
     /// One session's half of `runningWorkspaceIDs`: its row draws the spinner. A folder row reads
     /// the same answer for the sessions filed in it (`SessionFolderGrouping`).
     static func isRunning(_ session: Session) -> Bool {
@@ -47,19 +30,10 @@ public enum WorkspaceActivityLogic {
         // background job or sub-agent between turns turns it too, quiet job or not. Read the same
         // here, or a folder or workspace sits idle over a row that spins.
         if let state = SessionDisplay.state(session.displayFacts) { return state == .running }
-        if case .spinner = SessionStatusGlyph.make(for: session, watching: watching).shape { return true }
-        return false
-    }
-
-    /// One session's half of `jobWorkspaceIDs`: its row's glyph breathes.
-    static func isRunningJob(_ session: Session) -> Bool {
-        isRunningJob(session, watching: nil)
-    }
-
-    static func isRunningJob(_ session: Session, watching: WatchSessionSummary?) -> Bool {
-        // With the session facts no row breathes: a job in flight is `phase` RUNNING, the spinner above.
-        if SessionDisplay.state(session.displayFacts) != nil { return false }
-        return SessionStatusGlyph.make(for: session, watching: watching).pulse
+        // An older server's row: the spinner, or the terminal breathing for a background job in flight.
+        let glyph = SessionStatusGlyph.make(for: session, watching: watching)
+        if case .spinner = glyph.shape { return true }
+        return glyph.pulse
     }
 }
 
@@ -92,20 +66,16 @@ public enum WorkspaceRunnerAvailabilityLogic {
 public enum WorkspaceNavigationStatus: Equatable, Sendable {
     case needsYou(Int)
     case running
-    /// Background work in flight and nobody generating (`jobWorkspaceIDs`) — the same slot, drawn
-    /// quieter than `running`: a breathing terminal rather than the working spinner.
-    case jobs
     case idle
 }
 
 public enum WorkspaceNavigationStatusLogic {
-    public static func resolve(waiting: Int, running: Bool, jobs: Bool = false,
+    public static func resolve(waiting: Int, running: Bool,
                                runnerOffline: Bool) -> WorkspaceNavigationStatus {
         if waiting > 0 { return .needsYou(waiting) }
-        // Offline suppresses both activity marks alike: neither can be described from a snapshot
-        // of a machine that is not answering.
+        // Offline suppresses the activity mark: it can't be described from a snapshot of a machine
+        // that is not answering.
         if running && !runnerOffline { return .running }
-        if jobs && !runnerOffline { return .jobs }
         return .idle
     }
 }

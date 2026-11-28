@@ -1357,7 +1357,6 @@ struct NavigationDrawer: View {
                     selected: selected,
                     offline: offline,
                     running: live && model.runningWorkspaceIDs.contains(agent.id),
-                    jobs: live && model.jobWorkspaceIDs.contains(agent.id),
                     waiting: model.agentNeedsYou[agent.id] ?? 0
                 )
             }
