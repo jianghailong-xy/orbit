@@ -1,0 +1,107 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Session list: the Idle icon</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #eceef1; font: 15px/1.5 Inter, "Noto Sans SC", sans-serif; color: #1d1d1f; }
+  .b-part { padding: 32px 36px 36px; width: 1640px; }
+  .b-h1 { font-size: 26px; font-weight: 700; margin: 0 0 6px; }
+  .b-lede { color: #555; margin: 0 0 24px; max-width: 1200px; }
+  .b-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+  .b-col h2 { font-size: 17px; margin: 0 0 4px; display: flex; gap: 8px; align-items: center; }
+  .b-tag { font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 10px; background: #dfe3e8; color: #444; }
+  .b-tag.rec { background: #d6f0dd; color: #1d7a3a; }
+  .b-col .b-sub { color: #666; font-size: 13.5px; margin: 0 0 12px; min-height: 42px; }
+  .b-list { background: #f7f7f8; border-radius: 14px; padding: 8px; }
+  .b-row { display: grid; grid-template-columns: 34px 1fr auto; column-gap: 12px; align-items: center;
+           background: #fff; border-radius: 10px; padding: 11px 16px 11px 14px; margin: 0 0 6px; }
+  .b-row:last-child { margin: 0; }
+  .b-ic { grid-row: 1 / span 2; display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; }
+  .b-t { font-size: 17px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .b-time { font-size: 15px; color: #a1a1a6; white-space: nowrap; }
+  .b-s { grid-column: 2 / span 2; font-size: 15px; color: #86868b; display: flex; gap: 8px; min-width: 0; }
+  .b-s span.txt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+  .b-mark { flex: none; font-size: 12.5px; font-weight: 600; padding: 0 7px; border-radius: 6px; line-height: 20px; align-self: center; }
+  .m-red { background: #fde8e8; color: #c62828; } .m-green { background: #e3f4e8; color: #1d7a3a; }
+  .m-amber { background: #fdf0d8; color: #a35a00; } .m-grey { background: #eef0f2; color: #6b6f76; }
+  .b-notes { margin-top: 28px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; font-size: 14px; color: #333; }
+  .b-notes ul { margin: 0; padding-left: 18px; } .b-notes li { margin: 0 0 4px; }
+  .b-pros { color: #1d7a3a; } .b-cons { color: #b3261e; }
+  .b-zoom { display: flex; gap: 28px; margin-top: 28px; align-items: flex-start; }
+  .b-zcard { background: #fff; border-radius: 12px; padding: 16px 20px; flex: 1; }
+  .b-zcard h3 { margin: 0 0 10px; font-size: 15px; }
+  .b-zrow { display: flex; gap: 18px; align-items: center; margin: 0 0 8px; font-size: 14px; color: #444; }
+  .b-zrow .g { width: 40px; display: flex; justify-content: center; }
+  .b-foot { margin-top: 24px; font-size: 13.5px; color: #555; }
+  @keyframes none {}
+</style></head>
+<body>
+<section class="b-part" id="part-1">
+  <p class="b-h1">Session list: what the Idle icon should be</p>
+  <p class="b-lede">Today an idle session wears an empty grey circle, the same shape as an unticked to-do checkbox (Reminders, Things, Linear)
+  and as Orbit's own pickers (<code>circle</code> → <code>checkmark.circle.fill</code>). Most sessions are idle, so the leftmost column
+  is a stack of checkboxes that invite a click and do nothing. Same eight sample rows in each column; only the Idle icon changes.
+  The Queued clock and the blue Running spinner stay as they are.</p>
+  <div class="b-cols" id="cols"></div>
+  <div class="b-notes">
+    <div><b>Today</b><ul>
+      <li class="b-cons">Reads as "tick me to finish": the most repeated shape in the list is a false affordance.</li>
+      <li class="b-cons">The one Running row is one icon among eight; it has to be searched for.</li>
+    </ul></div>
+    <div><b>A · Nothing for Idle (recommended)</b><ul>
+      <li class="b-pros">Nothing to click by mistake; the column only lights up when something is happening.</li>
+      <li class="b-pros">Running and Queued are found at a glance: they are the only icons.</li>
+      <li class="b-pros">Nothing is lost: the header still says Idle; Failed, Finished, Needs you, Ended are marks.</li>
+      <li>The slot keeps its width, so titles stay aligned.</li>
+      <li>Phones drew nothing for Idle before the three-states board, so this goes back to what they knew.</li>
+    </ul></div>
+    <div><b>B · Small grey dot</b><ul>
+      <li class="b-pros">Reads as a status dot, not a checkbox.</li>
+      <li class="b-cons">Still one mark on every row: noise that says nothing.</li>
+      <li class="b-cons">A dot next to coloured dots elsewhere (presence, unread) invites "what colour does it turn?".</li>
+    </ul></div>
+  </div>
+  <div class="b-zoom">
+    <div class="b-zcard"><h3>The state slot, per state</h3><div id="zoom"></div></div>
+    <div class="b-zcard"><h3>What changes, if A is taken</h3>
+      <div style="font-size:14px;color:#444;line-height:1.7">
+      Web <code>SessionStateGlyph</code> (Idle branch), Mac/iOS <code>SessionDisplayState.idle.glyph</code>,
+      Android <code>SessionLiveMark</code>: draw an empty slot of the same size, keep the accessible name "Idle".<br>
+      Headers, guest view and the task panel keep the word <b>Idle</b>; only list rows lose the icon.<br>
+      Updates the three-states board's rule "phone rows always draw one of the three icons", so that README changes with it.
+      </div>
+    </div>
+  </div>
+</section>
+<script>
+const SP = (rot) => `<svg width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="#d7e3fb" stroke-width="2.4"/><path d="M12 3a9 9 0 0 1 9 9" fill="none" stroke="#2f6fed" stroke-width="2.4" stroke-linecap="round"/></svg>`;
+const CLOCK = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a1a1a6" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`;
+const CIRCLE = `<svg width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="#8e8e93" stroke-width="1.7"/></svg>`;
+const DOT = `<svg width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3.5" fill="#c7c7cc"/></svg>`;
+const rows = [
+  ['idle',    'Check background job status',      '11/22, 21:36', 'Recorded the stale background-job count as an open task to fix next…', null],
+  ['running', 'Runner "full" notice lingers',     '11/22, 17:48', 'Running tests: npm run test -- runner-capacity…', null],
+  ['idle',    'Trim long reply cards',            '11/22, 17:48', 'Landed reply-fold on main; tests and Mac/iOS builds pass.', ['Finished','m-green']],
+  ['idle',    'Parking bar style pass',           '11/22, 16:36', 'Beta is released on macOS, iOS and Android after the re-run passed…', null],
+  ['queued',  'Agents strip hidden by default',   '11/22, 15:55', 'Waiting for a runner…', null],
+  ['idle',    'Deploy the gateway fix',           '11/22, 14:10', 'Approve the production deploy to continue.', ['Needs you','m-amber']],
+  ['idle',    'Nightly wiki maintenance',         '11/22, 12:02', 'The run stopped: the provider returned an error.', ['Failed','m-red']],
+  ['idle',    'Release notes for beta.109',       '11/22, 10:41', 'Drafted the notes and opened them for review.', ['Ended','m-grey']],
+];
+const variants = [
+  ['Today', 'Empty grey circle for Idle', '', CIRCLE],
+  ['A · Nothing for Idle', 'Empty slot of the same width for Idle; only Queued and Running draw an icon.', 'rec', ''],
+  ['B · Small grey dot', '7 px light-grey dot for Idle, centred in the same slot.', '', DOT],
+];
+const icon = (st, idle) => st === 'running' ? SP() : st === 'queued' ? CLOCK : idle;
+document.getElementById('cols').innerHTML = variants.map(([name, sub, tag, idle]) => `
+  <div class="b-col"><h2>${name}${tag ? '<span class="b-tag rec">Recommended</span>' : ''}</h2><p class="b-sub">${sub}</p>
+  <div class="b-list">${rows.map(([st, t, time, s, mark]) => `
+    <div class="b-row"><div class="b-ic">${icon(st, idle)}</div><div class="b-t">${t}</div><div class="b-time">${time}</div>
+    <div class="b-s"><span class="txt">${s}</span>${mark ? `<span class="b-mark ${mark[1]}">${mark[0]}</span>` : ''}</div></div>`).join('')}
+  </div></div>`).join('');
+document.getElementById('zoom').innerHTML = [
+  ['Queued', CLOCK, CLOCK, CLOCK], ['Running', SP(), SP(), SP()], ['Idle', CIRCLE, '<span style="color:#bbb;font-size:12px">(empty)</span>', DOT],
+].map(([w, a, b, c]) => `<div class="b-zrow"><div style="width:70px;font-weight:600">${w}</div><div class="g">${a}</div><div class="g">${b}</div><div class="g">${c}</div></div>`).join('')
+ + `<div class="b-zrow" style="color:#888;font-size:12.5px"><div style="width:70px"></div><div class="g">Today</div><div class="g">A</div><div class="g">B</div></div>`;
+</script>
+</body></html>
