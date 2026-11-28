@@ -8043,15 +8043,12 @@ button.toast--pill:focus-visible {
 }
 .composer-chip--list,
 .composer-chip--task,
-.composer-chip--drive {
+.composer-chip--drive,
+.composer-chip--session,
+.composer-chip--project {
   background: color-mix(in srgb, var(--brand) 10%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand) 38%, transparent);
   color: var(--brand);
-}
-.composer-chip--mention {
-  background: color-mix(in srgb, var(--text-1) 6%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-1) 16%, transparent);
-  color: var(--text-2);
 }
 /* The shell draft is red mono; its metrics differ, so the mirror steps aside entirely rather
    than painting chips at the wrong places. */

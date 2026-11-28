@@ -1,5 +1,6 @@
 /**
- * `#`-references in the composer.
+ * `#`- and `@`-references in the composer: `@` names one of your sessions, `#` a project, a task,
+ * a list or a Drive file (docs/composer-references-design.md, revision 3).
  *
  * The composer is a real `<textarea>`, so a chip cannot live inside it. What renders the chip is
  * a mirror layer painted underneath with identical metrics — which constrains this design more
@@ -17,7 +18,7 @@
  * unchanged; only what the person looks at is.
  */
 
-export type ReferenceKind = 'list' | 'task' | 'drive';
+export type ReferenceKind = 'list' | 'task' | 'drive' | 'session' | 'project';
 
 export interface PickedReference {
   kind: ReferenceKind;
@@ -26,11 +27,15 @@ export interface PickedReference {
   path?: string;
 }
 
-/** Tokens the user has picked, keyed by the exact text inserted after the `#`. */
+/** Tokens the user has picked, keyed by the exact text inserted after the `#` or `@`. */
 export type ReferenceMap = Readonly<Record<string, PickedReference>>;
 
 /** Escape a token for use inside a RegExp. */
 const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** The symbol a kind is typed with: a session is who did the work, everything else what it is about. */
+export type ReferenceSigil = '#' | '@';
+export const sigilOf = (kind: ReferenceKind): ReferenceSigil => (kind === 'session' ? '@' : '#');
 
 /**
  * A matcher for the recorded tokens, longest first.
@@ -44,16 +49,14 @@ const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 function tokenMatcher(refs: ReferenceMap): RegExp | null {
   const tokens = Object.keys(refs).sort((a, b) => b.length - a.length);
   if (tokens.length === 0) return null;
-  return new RegExp(`#(${tokens.map(escapeRe).join('|')})`, 'g');
+  // Each token with its own kind's symbol, so `@Deploy` matches a picked session and `#Deploy` a
+  // picked project, and neither matches the other.
+  return new RegExp(`(${tokens.map((t) => escapeRe(sigilOf(refs[t].kind) + t)).join('|')})`, 'g');
 }
-
-/** A `@workspace` mention. Names are restricted to this shape by the workspace form. */
-const MENTION_RE = /(^|[\s(（])@([A-Za-z0-9._-]+)/g;
 
 export type Segment =
   | { type: 'text'; text: string }
-  | { type: 'ref'; text: string; kind: ReferenceKind }
-  | { type: 'mention'; text: string };
+  | { type: 'ref'; text: string; kind: ReferenceKind };
 
 /**
  * Split `text` into the runs the mirror paints.
@@ -66,28 +69,20 @@ export function segmentComposer(text: string, refs: ReferenceMap): Segment[] {
   const matcher = tokenMatcher(refs);
   if (matcher) {
     for (const m of text.matchAll(matcher)) {
-      const token = m[1];
+      const ref = refs[m[1].slice(1)];
       spans.push({
         start: m.index,
         end: m.index + m[0].length,
-        seg: { type: 'ref', text: m[0], kind: refs[token].kind },
+        seg: { type: 'ref', text: m[0], kind: ref.kind },
       });
     }
   }
-  for (const m of text.matchAll(MENTION_RE)) {
-    // `m[1]` is the boundary character before the `@`; it belongs to the surrounding text.
-    const start = m.index + m[1].length;
-    const end = start + m[2].length + 1;
-    spans.push({ start, end, seg: { type: 'mention', text: text.slice(start, end) } });
-  }
-  spans.sort((a, b) => a.start - b.start);
 
   const out: Segment[] = [];
   let at = 0;
   for (const s of spans) {
-    // Overlaps resolve in favour of whichever span started first, which is what keeps a `@`
-    // inside a reference title part of that title rather than a mention of its own — reference
-    // spans always start at their `#`, ahead of any `@` within them.
+    // The matcher is one longest-first alternation, so its matches never overlap; an `@` inside a
+    // picked title is part of that title, not a reference of its own.
     if (s.start < at) continue;
     if (s.start > at) out.push({ type: 'text', text: text.slice(at, s.start) });
     out.push(s.seg);
@@ -98,7 +93,7 @@ export function segmentComposer(text: string, refs: ReferenceMap): Segment[] {
 }
 
 /**
- * Turn `#<title>` back into the markdown link the server expands.
+ * Turn `#<title>` and `@<title>` back into the markdown links the server expands.
  *
  * A token the user has since edited simply no longer matches anything recorded, so it travels as
  * the literal text they typed: the reference quietly does not expand, which is the failure mode
@@ -107,7 +102,8 @@ export function segmentComposer(text: string, refs: ReferenceMap): Segment[] {
 export function materializeReferences(text: string, refs: ReferenceMap): string {
   const matcher = tokenMatcher(refs);
   if (!matcher) return text;
-  return text.replace(matcher, (whole, token: string) => {
+  return text.replace(matcher, (whole, written: string) => {
+    const token = written.slice(1);
     const ref = refs[token];
     if (!ref) return whole;
     // A drive file goes out as its path, which a Cloud agent reads from its mount (design §4.5).
@@ -140,19 +136,30 @@ export function applyReferencePick(
   ref: PickedReference,
   refs: ReferenceMap,
 ): { text: string; refs: ReferenceMap } {
+  const sigil = sigilOf(ref.kind);
   return {
-    // `[^#\n]*`, not `[^\n]*`: the greedy form reaches back past an earlier `#` in the same
-    // line and swallows the text between them.
-    text: text.replace(/(^|\s)#([^#\n]*)$/, `$1#${title} `),
+    // `[^#@\n]*`, not `[^\n]*`: the greedy form reaches back past an earlier sigil in the same
+    // line and swallows the text between them. A replacer, not a pattern string, so a `$` in a
+    // title is a `$` and not a substitution.
+    text: text.replace(queryRe(sigil), (_whole, lead: string) => `${lead}${sigil}${title} `),
     refs: { ...refs, [title]: ref },
   };
 }
 
-/** The `#` query being typed at the caret, or null when the menu should stay closed. */
-export function referenceToken(text: string): string | null {
+/** The `#` (or `@`) query being typed at the caret, or null when the menu should stay closed. */
+export function referenceToken(text: string, sigil: ReferenceSigil = '#'): string | null {
   // Anything up to the end of the line: titles contain spaces, so stopping at the first one
-  // would make every multi-word list unsearchable past its first word.
-  // Stops at an earlier `#` for the same reason applyReferencePick does — the two must agree
+  // would make every multi-word title unsearchable past its first word.
+  // Stops at an earlier sigil for the same reason applyReferencePick does — the two must agree
   // on where the query starts or the pick replaces a different span than the menu searched.
-  return /(?:^|\s)#([^#\n]*)$/.exec(text)?.[1] ?? null;
+  return queryRe(sigil).exec(text)?.[2] ?? null;
+}
+
+/**
+ * The query at the end of the draft: the sigil at the start or after whitespace, then the rest of
+ * the line up to the other sigil. Stopping at either one is what lets `#Runner link with @depl` open
+ * the `@` menu alone: whichever was typed last is the one being typed.
+ */
+function queryRe(sigil: ReferenceSigil): RegExp {
+  return sigil === '#' ? /(^|\s)#([^#@\n]*)$/ : /(^|\s)@([^#@\n]*)$/;
 }

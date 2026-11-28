@@ -190,6 +190,24 @@ async function serve(url: string, init?: RequestInit): Promise<Response> {
   }
   if (path === '/api/providers') return reply(200, []);
   if (path === '/api/users/me') return reply(200, { id: 'u1', preferences: { defaultPermissionMode: 'default' } });
+  // The composer's `@` menu: your recent sessions, this chat's own among them.
+  if (path === '/api/sessions/search') {
+    return reply(200, {
+      q: '', contentSearched: false, total: 3,
+      hits: [
+        { id: 'S1chat', title: 'This wiki chat', agent: { id: 'w1', name: 'orbit-develop' }, taskId: null, phase: 'IDLE' },
+        { id: 'S2', title: 'Deploy main to staging', agent: { id: 'w1', name: 'orbit-prod' }, taskId: null, phase: 'IDLE', lastTurnOutcome: 'FAILED' },
+        { id: 'S3', title: 'Region check run', agent: { id: 'w1', name: 'orbit-develop' }, taskId: 'T1', phase: 'RUNNING' },
+      ],
+    });
+  }
+  // The composer's `#` menu: open projects.
+  if (path === '/api/projects/sidebar') {
+    return reply(200, [
+      { id: 'P1', title: 'Older project', status: 'OPEN', createdAt: '2026-11-01T00:00:00Z', lastActivityAt: '2026-11-20T00:00:00Z', buckets: { running: 0 } },
+      { id: 'P2', title: 'Runner link hardening', status: 'OPEN', createdAt: '2026-11-02T00:00:00Z', lastActivityAt: '2026-11-28T00:00:00Z', buckets: { running: 1 } },
+    ]);
+  }
   return reply(404, { message: `${url} is not in this fixture` });
 }
 
@@ -1098,3 +1116,36 @@ describe('the history the title opens (board 45 ④, owner 11-11: Q3 A, Q4 A)', 
     expect(document.querySelector('.wk-chat-history'), 'the list stays').toBeTruthy();
   });
 });
+
+describe('@ sessions and # projects in the composer (docs/composer-references-design.md rev. 3)', () => {
+  const menu = () =>
+    [...document.querySelectorAll<HTMLElement>('.composer-slash-menu [role="option"]')].map(
+      (row) => row.querySelector('.composer-slash-name')?.textContent,
+    );
+  const key = async (name: string) =>
+    act(async () => field().dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true })));
+  const sent = () => writes.filter((write) => write.path === '/api/sessions/S1chat/turns/current-work-routing').at(-1)?.body;
+
+  it('@ lists your recent sessions, never the one you are in, and sends the pick as a session link', async () => {
+    await open('/wiki/orbit?chat=S1chat');
+    await type('compare with @');
+    await settle();
+    expect(menu()).toEqual(['@Deploy main to staging', '@Region check run']);
+    await key('Enter');
+    expect(field().value).toBe('compare with @Deploy main to staging ');
+    await type(`${field().value}please`);
+    await press(byLabel('Send'));
+    expect(sent()?.content).toBe('compare with [Deploy main to staging](orbit-session:S2) please');
+  });
+
+  it('# lists open projects by latest activity, and sends the pick as a project link', async () => {
+    await open('/wiki/orbit?chat=S1chat');
+    await type('what is left in #');
+    await settle();
+    expect(menu()).toEqual(['#Runner link hardening', '#Older project']);
+    await key('Enter');
+    await press(byLabel('Send'));
+    expect(sent()?.content).toBe('what is left in [Runner link hardening](orbit-project:P2)');
+  });
+});
+

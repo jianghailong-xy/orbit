@@ -37,10 +37,7 @@ export function ComposerMirror({
       {segmentComposer(text, refs).map((seg, i) => {
         if (seg.type === 'text') return <span key={i}>{seg.text}</span>;
         return (
-          <span
-            key={i}
-            className={`composer-chip composer-chip--${seg.type === 'ref' ? seg.kind : 'mention'}`}
-          >
+          <span key={i} className={`composer-chip composer-chip--${seg.kind}`}>
             {seg.text}
           </span>
         );
