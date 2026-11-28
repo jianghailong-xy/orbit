@@ -969,9 +969,9 @@ answers one page of the list as top-level entries, with an ETag answered `304` w
 | `POST` | `/api/runner/sessions/:id/turns/:turnId/suggestion` | path `id`, `turnId` | `RunnerApiController.turnSuggestion` |
 | `POST` | `/api/runner/sessions/:id/workflows` | body `WorkflowRunCreateDto`; path `id` | `RunnerSubagentsController.openWorkflowRun` |
 | `PATCH` | `/api/runner/sessions/:id/workflows/:workflowRunId` | body `WorkflowRunUpdateDto`; path `id`, `workflowRunId` | `RunnerSubagentsController.updateWorkflowRun` |
-| `GET` | `/api/runner/sessions/claim` | query `drainScope`, `fullScope` | `RunnerApiController.claim` |
+| `GET` | `/api/runner/sessions/claim` | query `drainScope`, `fullScope`, `residentEngines` | `RunnerApiController.claim` |
 | `POST` | `/api/runner/sessions/import` | body `Object` | `RunnerSessionsController.importSession` |
-| `GET` | `/api/runner/sessions/reclaim` | — | `RunnerApiController.reclaim` |
+| `GET` | `/api/runner/sessions/reclaim` | query `residentEngines` | `RunnerApiController.reclaim` |
 | `GET` | `/api/runner/sessions/search` | query `limit`, `q` | `RunnerSessionsController.searchSessions` |
 | `POST` | `/api/runner/sessions/takeover-leases` | body `Object` | `RunnerApiController.takeoverLeasesBatch` |
 | `POST` | `/api/runner/sessions/worktrees-removable` | body `Object` | `RunnerApiController.worktreesRemovable` |

@@ -286,6 +286,9 @@ type Transport struct {
 	// fullClaimScope is, on a full runner, the claim scope its next claim sends (sessionPool.claimScope); ok is false
 	// while a slot is free or for an older control plane. Set by runLoop; nil on every other transport.
 	fullClaimScope func() (scope []string, ok bool)
+	// residentEngines are the sessions whose engine runs in this process now (sessionPool.residentEngineSessionIDs),
+	// which a claim and a reclaim name to the control plane. Set by runLoop; nil on every other transport.
+	residentEngines func() []string
 	// observer hears about every request and card of the tool call it was set for (transport_observe.go).
 	observerMu sync.Mutex
 	observer   func(transportEvent)
@@ -565,6 +568,7 @@ func (t *Transport) claimSession(ctx context.Context, ids *linkRequestIDs, scope
 			path = linkWithQuery(path, "fullScope", strings.Join(full, ","))
 		}
 	}
+	path = t.withResidentEngines(path)
 	err := t.do(ids.with(ctx), "GET", path, nil, &r, fetchCallTimeout)
 	ids.settle(err)
 	if ids.kept() {
@@ -591,10 +595,23 @@ func (t *Transport) waitForWake(ctx context.Context) (bool, error) {
 // RUNNING start active; other open states stay cold until a normal claim arrives.
 func (t *Transport) reclaim(ctx context.Context) (*ReclaimResponse, error) {
 	var r ReclaimResponse
-	if err := t.do(ctx, "GET", "/runner/sessions/reclaim", nil, &r, 15*time.Second); err != nil {
+	if err := t.do(ctx, "GET", t.withResidentEngines("/runner/sessions/reclaim"), nil, &r, 15*time.Second); err != nil {
 		return nil, err
 	}
 	return &r, nil
+}
+
+// withResidentEngines is path naming the sessions whose engine runs in this process now (residentEngines), so the
+// control plane does not record a claim's mode over the mode such an engine reported. Nothing is added when there are
+// none; an older control plane ignores the parameter.
+func (t *Transport) withResidentEngines(path string) string {
+	if t.residentEngines == nil {
+		return path
+	}
+	if ids := t.residentEngines(); len(ids) > 0 {
+		return linkWithQuery(path, "residentEngines", strings.Join(ids, ","))
+	}
+	return path
 }
 
 // pinSessionSource reports this machine's resolution and receives what is frozen (§6.3 step 3).

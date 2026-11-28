@@ -85,7 +85,7 @@ import { normalizeEffortForRuntimeModel } from '../common/runtime-provider';
 import { worktreeOperationFenceSql } from '../common/session-inbox-fence';
 import { sessionDiskHoldSql } from '../common/runner-disk-gate';
 import { workspaceCloneHoldSql } from '../common/workspace-clone-gate';
-import { recordActualPermissionMode } from '../sessions/actual-permission-mode';
+import { claimRecordsMode, recordActualPermissionMode } from '../sessions/actual-permission-mode';
 import {
   batchActiveTurns,
   overCapacityPassPendingSql,
@@ -172,6 +172,12 @@ export interface ClaimingRunner {
    * answer says `capacityClaims`.
    */
   fullScope?: readonly string[];
+  /**
+   * The sessions whose engine runs on this runner now (runner-go sessionPool.residentEngineSessionIDs): a claim of one
+   * hands its turn to that engine rather than spawning one, so the claim's mode is not recorded over what a Claude
+   * engine reported (claimRecordsMode). Absent from an older runner, which the claim reads as none running.
+   */
+  residentEngines?: readonly string[];
 }
 
 /**
@@ -826,7 +832,7 @@ export class QueueService {
       // is still a durable state change every connected client must reconcile.
       this.realtime.publishSessionUpdated(rows[0].id);
       try {
-        return await this.buildSession(rows[0].id);
+        return await this.buildSession(rows[0].id, runner.residentEngines?.includes(rows[0].id) ?? false);
       } catch (error: any) {
         const refusal = error?.getResponse?.();
         if (refusal?.code !== 'POOL_ACCOUNT_PAUSED' && refusal?.code !== 'PROVIDER_ENGINE_INCOMPATIBLE') throw error;
@@ -943,7 +949,7 @@ export class QueueService {
     return { ...accounts, [column]: move.to };
   }
 
-  private async buildSession(sessionId: string): Promise<ClaimedSession> {
+  private async buildSession(sessionId: string, engineResident = false): Promise<ClaimedSession> {
     const session = await this.prisma.session.findUniqueOrThrow({
       where: { id: sessionId },
       include: {
@@ -1270,8 +1276,11 @@ export class QueueService {
       }));
     }
     // The mode this claim hands the runner is the session's actual mode until its engine says otherwise
-    // (actual-permission-mode.ts): for an engine that reports none, it is the whole answer.
-    await recordActualPermissionMode(this.prisma, session.id, handedPermissionMode, 'CLAIM', null, claimedMode.substitution);
+    // (actual-permission-mode.ts): for an engine that reports none, it is the whole answer. A Claude engine the runner
+    // still runs takes the turn as it is, and what it reported stands.
+    if (claimRecordsMode(provider, engineResident)) {
+      await recordActualPermissionMode(this.prisma, session.id, handedPermissionMode, 'CLAIM', null, claimedMode.substitution);
+    }
     return {
       sessionId: session.id,
       provider,

@@ -1130,6 +1130,23 @@ func (p *sessionPool) endTurnCompletion(s *liveSession) {
 	s.startedWhileCompleting = false
 }
 
+// residentEngineSessionIDs are the sessions whose engine process runs in this process now and is not on its way out
+// (GET /runner/sessions/claim and /reclaim, residentEngines=): a claim of one hands its turn to that engine, which is
+// not spawned again in the claim's mode, so the control plane does not record the claim's mode over what the engine
+// itself reported. An engine recycled after this is read spawns again and reports the mode it settles on.
+func (p *sessionPool) residentEngineSessionIDs() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	var ids []string
+	for id, s := range p.sessions {
+		if s.resident && !s.evictRequested && !s.detaching {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	return ids
+}
+
 // liveEngineTurnSessionIDs are the sessions whose engine is running a turn in this process right now:
 // one Orbit handed it (a permit not held for an update) or one the engine started by itself
 // (selfDrivenTurn). While the pool drains for an update these are the only sessions it claims

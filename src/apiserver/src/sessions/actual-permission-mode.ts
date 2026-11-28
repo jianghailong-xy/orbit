@@ -17,7 +17,8 @@ import {
  *
  * Where it is read from:
  *  - a claim or reclaim records the mode it hands the runner (CLAIM). For Codex, Kimi, OpenCode and Antigravity,
- *    which report no mode, that is the whole answer;
+ *    which report no mode, that is the whole answer. Not one that hands its turn to a Claude engine still running
+ *    (claimRecordsMode): that engine is not spawned again in the claim's mode, so what it reported stands;
  *  - Claude Code's init frame, carried in the runner's Agent Tools report (`agentTools.permissionMode`), records what
  *    the engine itself says (ENGINE_REPORT, or RESPAWN when a reload re-spawned it since the last record);
  *  - a `setconfig` turn's acknowledgement, and a `reload` handed to the runner, record the mode they carried
@@ -34,6 +35,19 @@ const KNOWN_MODES = new Set<string>(Object.values(PermissionMode));
 /** Whether a value from a runner or a turn's payload is a mode this server knows. */
 export function isKnownPermissionMode(mode: unknown): mode is PermissionMode {
   return typeof mode === 'string' && KNOWN_MODES.has(mode);
+}
+
+/**
+ * Whether a claim or reclaim records the mode it hands the runner as the session's actual mode (CLAIM). Not when it
+ * hands its turn to a Claude engine the runner names as still running (its claim's `residentEngines`, runner-go
+ * sessionPool.residentEngineSessionIDs): that engine is not spawned again in the claim's mode, and the mode it last
+ * reported is what runs until it reports again, or a re-spawn or a setconfig acknowledgement says otherwise. A claim
+ * that spawns an engine is recorded, as is every claim of an engine that reports no mode of its own, for which the
+ * mode handed is the whole answer. Should the engine be recycled after the runner named it, the one spawned in its
+ * place reports the mode it settles on (its init frame), which is recorded then.
+ */
+export function claimRecordsMode(provider: string, engineResident: boolean): boolean {
+  return !(engineResident && provider === CLAUDE_REPORT_ENGINE);
 }
 
 /** A claim's mode that is not the one the session asked for: the mode asked for, and why (claimPermissionMode). */

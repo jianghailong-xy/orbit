@@ -21,6 +21,10 @@
  *       and says older ones exist; the pages before it (GET /sessions/:id/permission-mode-changes?before=<seq>) have
  *       the rest, so every change is read once, in the order it was recorded, with its cause and client, even where
  *       several share one millisecond.
+ *   (6) A claim or reclaim of a Claude session whose engine the runner names as still running (its claim's
+ *       `residentEngines`) hands the turn to that engine, which is not spawned again: the actual mode stays what the
+ *       engine reported and no CLAIM change is recorded over it. A claim that spawns a new engine records CLAIM as
+ *       before, and so does a claim handed to a running Codex, which reports no mode of its own.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/actual-permission-mode.pg.spec.ts
  *
@@ -35,6 +39,7 @@ import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@pris
 import {
   AgentProvider,
   PERMISSION_MODE_CORRECTED_EVENT_SUBTYPE,
+  PERMISSION_MODE_CORRECTION_FAILED_EVENT_SUBTYPE,
   PermissionMode,
   RunEventType,
   RunStatus as SharedRunStatus,
@@ -94,7 +99,11 @@ test('the stored mode, the mode running, and the ceiling on PostgreSQL', { skip,
     queue,
     quiet,
     new Proxy({}, { get: () => async () => undefined }) as never,
-    { assert: async (_runner: unknown, callingSessionId?: string) => callingSessionId ?? randomUUID() } as never,
+    {
+      assert: async (_runner: unknown, callingSessionId?: string) => callingSessionId ?? randomUUID(),
+      // The claim door issues a credential to a session that may orchestrate.
+      issue: async () => 'orchestration-credential',
+    } as never,
     { expand: async (_ownerId: string, content?: string) => content } as never,
     undefined,
     undefined,
@@ -526,5 +535,70 @@ test('the stored mode, the mode running, and the ceiling on PostgreSQL', { skip,
     assert.deepEqual(oldest, { changes: [all[0]], hasMore: false });
     const other = await world('paging-other');
     await assert.rejects(sessions.getPermissionModeChangePage(other.ownerId, id, {}), /session not found/);
+  });
+
+  await t.test('(6) a claim or reclaim handed to the engine still running keeps the mode it reported', async () => {
+    const w = await world('resident');
+    // The runner's doors as Nest calls them, naming the engines that runner runs now (runner-go
+    // residentEngineSessionIDs): GET sessions/claim?residentEngines= and GET sessions/reclaim?residentEngines=.
+    const runner = { id: w.runnerId, ownerId: w.ownerId };
+    const claimDoor = api.claim as (...args: unknown[]) => ReturnType<RunnerApiController['claim']>;
+    const reclaimDoor = api.reclaim as (...args: unknown[]) => ReturnType<RunnerApiController['reclaim']>;
+    const claimNaming = (resident: string[]) =>
+      claimDoor.call(api, runner, 'claude,codex', undefined, undefined, undefined, undefined, undefined, resident.join(','));
+    const reclaimNaming = (resident: string[]) => reclaimDoor.call(api, runner, 'claude,codex', resident.join(','));
+    /** The session's turn ended and its next message waits for a claim. */
+    const nextMessage = (id: string) => db.session.update({ where: { id }, data: { turnState: 'QUEUED' } });
+
+    // As measured on the local stack (task 354kzrnSltZOM5gAfavxq): claimed in Auto, Claude settles in Default, and the
+    // runner's correction to Auto is refused.
+    const id = await pending(w, { permissionMode: PermissionMode.AUTO });
+    assert.equal((await claimNaming([]))?.sessionId, id, 'the first claim spawns the engine');
+    await say(w, id, init('claude', PermissionMode.DEFAULT));
+    await say(w, id, {
+      subtype: PERMISSION_MODE_CORRECTION_FAILED_EVENT_SUBTYPE,
+      mode: PermissionMode.DEFAULT,
+      requested: PermissionMode.AUTO,
+      reason: 'Cannot set permission mode to auto: auto mode unavailable for this model',
+    });
+    assert.equal((await row(id)).actualPermissionMode, PermissionMode.DEFAULT);
+    const reported = [
+      { fromMode: null, toMode: PermissionMode.AUTO, cause: 'CLAIM', client: null },
+      { fromMode: PermissionMode.AUTO, toMode: PermissionMode.DEFAULT, cause: 'ENGINE_REPORT', client: null },
+    ];
+    assert.deepEqual(await changes(id), reported);
+
+    // The next message is claimed while that engine is still alive in Default: the turn goes to it.
+    await nextMessage(id);
+    const reused = await claimNaming([id]);
+    assert.equal(reused?.sessionId, id, 'the queue claimed the session again');
+    assert.equal(reused.agent.permissionMode, PermissionMode.AUTO, 'the claim still hands the runner the Auto asked for');
+    assert.equal((await row(id)).actualPermissionMode, PermissionMode.DEFAULT, 'the engine still running Default is what runs');
+    assert.deepEqual(await changes(id), reported, 'no CLAIM change is recorded over the engine\'s report');
+
+    // A reclaim of the same live engine (the runner reconciling a lost claim answer) leaves it too.
+    const reclaimed = (await reclaimNaming([id])).sessions.find((s) => s.sessionId === id);
+    assert.ok(reclaimed, 'the reclaim re-handed the session');
+    assert.equal((await row(id)).actualPermissionMode, PermissionMode.DEFAULT);
+    assert.deepEqual(await changes(id), reported);
+
+    // The engine is recycled; the next claim spawns a new one in the claim's Auto and records it.
+    await nextMessage(id);
+    assert.equal((await claimNaming([randomUUID()]))?.sessionId, id);
+    assert.equal((await row(id)).actualPermissionMode, PermissionMode.AUTO, 'a spawn runs in the mode it was handed');
+    assert.deepEqual(await changes(id), [
+      ...reported,
+      { fromMode: PermissionMode.DEFAULT, toMode: PermissionMode.AUTO, cause: 'CLAIM', client: null },
+    ]);
+
+    // Codex reports no mode of its own: the mode handed to its running engine is still the answer.
+    const codex = await pending(w, {
+      provider: AgentProvider.CODEX, engine: AgentProvider.CODEX, model: 'gpt-5.5', permissionMode: PermissionMode.PLAN,
+    });
+    assert.equal((await claimNaming([]))?.sessionId, codex);
+    await db.session.update({ where: { id: codex }, data: { permissionMode: PermissionMode.AUTO } });
+    await nextMessage(codex);
+    assert.equal((await claimNaming([codex]))?.sessionId, codex);
+    assert.equal((await row(codex)).actualPermissionMode, PermissionMode.AUTO);
   });
 });
