@@ -1,231 +1,224 @@
-# `#` and `@` in the composer: design
+# Pointing at a session: `#` and `@` in the composer, redesigned
 
-Status: proposal (2026-11-28). Nothing here is built yet. §9 lists the open decisions, each with a
-recommended default.
+Status: proposal, revision 2 (2026-11-28). Revision 1 gave every object kind equal standing and
+made `@` a delivery everywhere. Production data (§1) says that was the wrong centre: what people
+point at is **a session**, almost always by pasting its link, and almost always to ask the agent to
+look into it. Tasks are created, run and commented on by agents; people do not reference them.
+Nothing here is built yet. §8 lists the open decisions, each with a recommended default.
 
-## 1. Where things stand
+## 1. What production shows
 
-Two symbols that look like a family but were built separately:
+Read-only queries against production on 2026-11-28, over all `conversation_turn` rows since
+2026-06-17. "Typed by a person" means the turn has a client-generated id and is not one of the
+platform's own notices. That filter agrees with `by_person`, which exists only since 2026-11-23,
+on 841 of 844 turns. It covers 18,413 turns in 4,111 sessions.
 
-- **`#`** (web session composer only) picks a task list or task; the Drive picker reuses the same
-  chip for files. The box holds `#<title>`, the client remembers the id
-  (`src/web/src/lib/composerRefs.ts`), send materialises `[title](orbit-list|task:<id>)`, and the
-  apiserver appends a `<referenced-list|task>` block at delivery
-  (`src/apiserver/src/tasks/reference-expansion.ts`). Drive chips are sent as a path instead.
-- **`@`** means two different things:
-  - in the **session composer** it is plain text with no server meaning — the agent may or may not
-    act on it;
-  - in **task comments** (web, Apple, Android) it is an addressed delivery: the client derives
-    `mentions[]` by matching names, and the server delivers through a retried, recorded ledger
-    (`TaskCommentMentionDelivery`, `MentionDeliveryNotes`).
+**What a typed message names**, resolved by looking each id up in its table:
 
-The defects this produces:
-
-| # | Defect |
-|---|---|
-| D1 | `@` in a session is a promise the system does not keep: no id, no delivery, no status. |
-| D2 | The two `@` menus offer different candidates (this runner's workspaces vs all of them). |
-| D3 | Mentions are identified by **name**: a rename, or two workspaces whose names are prefixes, silently changes who was addressed; the session mirror chips any `@word`. |
-| D4 | The session menus read the end of the draft, the comment menu reads the caret. |
-| D5 | `#` covers lists and tasks, but agents already link projects, sessions and wiki entries; the link-preview contract (`src/shared/src/link-preview.ts`) knows all five kinds. |
-| D6 | Drive chips are resolved on the client into a path the server never sees as a reference. |
-| D7 | A reference that cannot be expanded (deleted, not the sender's) vanishes silently for the agent. |
-| D8 | Apple and Android have no `#`, and `@` only in comments. |
-| D9 | The picked-id map lives in component state: a draft restored from storage, or text pasted from another message, loses its references. |
-
-## 2. The model: three symbols, three roles
-
-One rule decides what each symbol is for, so a new kind never has to ask which symbol it gets:
-
-| Symbol | Role | Answers | Effect on the message |
+| Kind | Typed turns that name it | Distinct objects | How it was written |
 |---|---|---|---|
-| `/` | **verb** | "what should happen" | runs a command or skill (unchanged, out of scope) |
-| `#` | **noun** | "what is this about" | adds *context* for the message's existing recipient |
-| `@` | **addressee** | "who should get this" | adds a *recipient*; the message is delivered to them |
+| **Session** | **413** | **308** | 206 pasted web URL, 209 bare id, 0 via a picker |
+| Project | 317 | 77 | 302 bare id, 14 URL |
+| Task | 316 | 184 | 305 bare id, **9 via the `#` chip** |
+| Task list | 8 | 6 | — |
+| Wiki entry | 6 | — | — |
+| Workspace (`@`) | 4 | 7 | — |
 
-The consequences:
+**Who works on tasks.** Agents created 115,350 of 115,674 tasks (99.7%). Agents wrote 10,720 of
+10,730 task comments. People wrote 10 comments, and 2 of them mention anyone. The task ids people
+do type are copied out of agent replies and cards. Nobody goes looking for a task.
 
-- `#` never makes anything happen by itself. It can be added to any message on any surface without
-  changing who receives it.
-- `@` always delivers, everywhere, through one recorded mechanism, with visible status. There is no
-  surface where `@` is only decoration (fixes D1).
-- Something that can both be talked about and talked to (a session, an agent) is `#` when it is the
-  subject and `@` when it is the recipient. "#nightly-crawl stalled again, @reviewer take a look"
-  is two different acts and reads that way.
+**What the referenced sessions are** (494 references):
 
-## 3. What can be referenced and addressed
+- 271 are conversations a person opened, 134 are task runs, and 89 are coordinators. When a person
+  cares about a task, they reach it through its run.
+- 163 (33%) are on a **different runner** from the conversation that names them, so the agent
+  often cannot read that session's machine.
+- 110 are more than a day old. 53 messages name several sessions at once, to compare them. 31
+  carry a page parameter or anchor (`?project=`, `?folder=`, a turn).
+- 156 are almost nothing but the link: under 60 characters of other text.
 
-### 3.1 `#` kinds
+**Why people point at one.** These keyword buckets overlap; the samples read the same way.
 
-| Kind | Scheme | Picker source | Delivered to the agent as | Phase |
-|---|---|---|---|---|
-| Task | `orbit-task:` | task search (exists) | `<referenced-task>` (exists) | 1 |
-| Task list | `orbit-list:` | list index (exists) | `<referenced-list>` (exists) | 1 |
-| Project | `orbit-project:` | project list | `<referenced-project>`: status, criteria x/y, blockers, coordinator session | 2 |
-| Session | `orbit-session:` | `GET /sessions/search` | `<referenced-session>`: title, state, workspace, last turn outcome, task | 2 |
-| Wiki entry | `orbit-wiki:` | `GET /wiki/search` | `<referenced-wiki>`: title, trust, status | 2 |
-| Drive file / folder | `orbit-drive:` | `GET /drive/search` and the Drive picker | `<referenced-drive>`: name, size, **mount path** | 2 |
+- **~70%: investigate it.** "This session finished but the task still shows running", "why does it
+  still offer Merge to main", "why is it stuck waiting for a slot", "debug this session's error".
+  The session is the subject, and the question is usually a mismatch between what a client shows
+  and what happened.
+- **~27%: continue or follow up.** Mostly addressed to coordinators: "why didn't you follow up",
+  "it ended".
+- **~6%: use it as an example.**
 
-Every kind follows the rule the existing expansion already set: the block carries **the shape and
-the id, never the contents**, plus the tool that fetches the rest. The Drive path is part of the
-shape, so Drive stops being a client-side special case (D6).
+**What this means for the current design:**
 
-Not `#` targets, deliberately: attachments (already inline), commands and skills (`/`), runners and
-providers (configuration, not subject matter — a link from Settings is the right tool there).
+- The one picker we built (`#` for tasks and lists) is for the kind people do not reference. It was
+  used 9 times in five months.
+- The kind they do reference gets **nothing**. A pasted session URL travels as plain text, the
+  agent receives a 22-character string, and its first move is a `session_search` to find out what
+  it is — on another machine a third of the time.
+- `@` has almost no human use: 4 typed workspace references, and 2 comment mentions ever.
 
-### 3.2 `@` targets
+## 2. The model
 
-| Target | Scheme | Delivered how | Phase |
-|---|---|---|---|
-| Workspace (agent) | `orbit-workspace:` | the mention ledger (exists for comments) | 1 comments, 3 sessions |
-| Person (owner, session guest) | `orbit-user:` | a notification with a link to the message | 4 |
+- **`#` (and a paste) names something the message is about.** A session first, then a project.
+  Tasks and lists stay valid targets, because agents link them, but they leave the person's
+  default menu.
+- **The server recognises a reference however it was written.** That covers a chip, a pasted URL
+  and a bare id. Half of today's references are bare ids that no picker will ever produce, so the
+  server-side recognition is the feature, and the picker is a convenience on top of it.
+- **What the agent receives answers "look into this session"**: the facts it would otherwise spend
+  its first five tool calls collecting (§4).
+- **`@` stays as it is** and gets no new work (§8 decision A).
 
-The candidates are the same on every surface: every enabled workspace the sender can deliver to,
-with this runner's workspaces ranked first where there is one (fixes D2).
+## 3. Recognising references
 
-## 4. Wire format: one link grammar for both symbols
+### 3.1 On the server, for every message a person sends
 
-Both symbols travel as an ordinary markdown link whose **URI** carries the identity and whose
-**text** carries what the person saw:
+The rule:
+
+1. **What counts as a reference:**
+   - an Orbit web URL, on this deployment's own origin, naming a session, project, task or list,
+     with or without query parameters;
+   - an `orbit-<kind>:<id>` link;
+   - a bare base62 or uuid token that **resolves to an object the sender owns**.
+2. **Bare tokens are resolved, not guessed.** They are looked up with one batched query per kind;
+   a token that resolves to nothing is ordinary text. This is what keeps commit hashes, keys and
+   other 22-character strings from turning into references.
+3. **What it applies to:**
+   - turns a person sends; agent-to-agent `session_send` stays as it is (§8 decision B);
+   - only when the person is the owner. A guest's tokens resolve only to objects the guest can
+     read, and an unreadable one is plain text, so it does not reveal whether the object exists.
+4. **Expansion.** It still happens at delivery, as `reference-expansion.ts` does today, so the
+   facts are current; it is de-duplicated and capped at 8. The cap also covers the 53 messages
+   that compare several sessions.
+
+Old clients and every other way into a session (Feishu, the API) gain this without changing
+anything. This step alone covers all 413 session-referencing turns in §1.
+
+### 3.2 In the composer
+
+The composer does two things.
+
+- **Pasting becomes a chip.** Pasting a session URL or id shows `#<session title>`, with a status
+  dot, where the URL was. What is sent is the canonical link,
+  `[#title](orbit-session:<id>)`, keeping any turn anchor (§4.2). The person sees what they
+  referenced before sending it, which today they cannot.
+- **`#` opens a session-first menu:**
+  - a blank `#` lists, in order: sessions in trouble (failed, stuck, waiting on a person), the
+    sessions viewed most recently, then the conversation's own project;
+  - typing searches sessions through `/sessions/search`, which already resolves ids, prefixes,
+    titles and branch names, then projects;
+  - tasks and lists are reachable with an explicit `#task:` / `#list:` prefix and are not offered
+    otherwise.
+
+The chip mechanics from `composerRefs.ts` stay: the box holds readable text, a map remembers the
+id, and the mirror paints colour only. One addition: the map is stored with the draft, so a restored
+draft keeps its chips.
+
+**"Ask about this session" from the session itself.** A session's header and its list row's menu
+gain a "Discuss in a new conversation" / "Copy reference" action. It opens a composer (or puts on
+the clipboard) a reference that is already a chip. This is the gesture people make today by hand:
+copy the URL, open another session, paste.
+
+## 4. What the agent receives for a session
+
+### 4.1 The block
+
+Built for the ~70% investigating case. It carries facts and ids, never transcript content:
 
 ```
-[#FineWeb CC-MAIN-2025-26](orbit-list:3fK9…)
-[@reviewer](orbit-workspace:7Qa2…)
+<referenced-session id="…">
+  Title        …
+  Opened       2026-11-20T08:14Z by PERSON · workspace orbit-ws04 on runner hpc (not this runner)
+  State        IDLE · last turn ANSWERED 2026-11-20T09:02Z · 14 turns · ended no
+  Shown as     Completed (web list) · Running badge cleared
+  Task         "…" (id …) DONE · project "…" (id …)          — only when it is a task run or coordinator
+  Code         branch orbit/session-ab12 · 3 commits ahead of main · uncommitted 0 · merged to main: no
+  Last error   none | <class>: <first line>
+  Pending      1 approval card · 0 questions
+  Read more    session_get(id) for status and the latest output; session_search for its turns
+</referenced-session>
 ```
 
-- The server parses meaning from the URI only, as `reference-expansion.ts` already does. The label
-  is display, so renames cannot change the addressee (D3).
-- `mentions[]` on the comment API becomes derived server-side from the body. The field stays
-  accepted for one release for old clients, and the server takes the union.
-- Text an old client sends (`@reviewer` without a link) keeps working the way it does today.
-- Ids are base62 public ids, the same spelling as every other id an agent sees.
+- **"Shown as" is the line that answers the common question.** Most investigations are "the
+  client shows X, but Y happened". Putting the server's own reading of what the clients draw next
+  to the facts lets the agent see the mismatch in the first turn.
+- **Where it runs, said outright.** "On runner hpc (not this runner)" stops the agent from looking
+  for local logs that are not there, which is the case for a third of the references.
+- **Task and project lines appear when the session belongs to one.** That is how a task reaches a
+  person's question: through its run (134 of the 494 references).
 
-The grammar, the tokenizer, the label escaping (task titles start with `[W 009/250]`) and the
-longest-first resolution move into `@orbit/shared` as one module, with a shared fixture file that
-the Swift and Kotlin ports are tested against, as `orbit-link.fixture.json` already is for link
-rendering.
+### 4.2 A turn anchor
 
-## 5. Composer behaviour (all clients)
+A URL that points at a turn adds that turn's prompt, outcome and error, truncated, to the block.
+"Why did this one fail" names a turn more often than a whole session.
 
-- **Trigger at the caret**, on every surface, by one shared rule: the token starts at a `#` or `@`
-  that begins the text or follows whitespace or an opening bracket (fixes D4). `#` queries may
-  contain spaces and run to the caret; `@` queries stop at whitespace.
-- **One menu, grouped by kind.** A blank `#` shows *this conversation's own context* first (its
-  task, its project, its list), then recent picks, then lists. Typing searches every kind; a kind
-  prefix (`#task:`, `#wiki:`, `#file:`) narrows it. Each row shows a kind icon, the title and a
-  secondary line (status, list, path) so rows with the same title can be told apart.
-- **Chips are atomic.** Backspace at a chip's end removes the whole chip. Typing inside one turns
-  it back into plain text, visibly: the colour goes, so the person can see the reference is gone
-  before they send it. The web mirror keeps its constraint (colour and background only, same
-  characters).
-- **Paste and drop.** Pasting an Orbit URL or an `orbit-*:` link becomes a chip. Dropping a Drive
-  file does the same.
-- **Drafts own their references.** The draft is stored as text plus its reference map, so a restored
-  draft keeps its chips (D9).
-- **Limits are shown before send.** More than 8 references, or an `@` the sender cannot deliver to,
-  is flagged on the chip rather than discovered afterwards.
+### 4.3 What the agent cannot yet do
 
-## 6. Delivery
+`session_get` returns status and the latest output. There is no tool that reads a range of
+another session's turns, which an investigation needs once the block runs out. Adding a read-only
+`session_turns(id, around?, limit)` tool is part of this design (phase 2). I haven't checked that
+no existing tool already does this; check before building.
 
-### 6.1 `#` expansion
+### 4.4 Projects
 
-The current properties stay: expansion happens at delivery so the counts are current; the
-transcript keeps what the person typed; the result is de-duplicated and capped at 8.
+A project gets the same treatment, smaller: status, criteria met out of total, open blockers,
+coordinator session, and the integration line's state. Lists and tasks keep the blocks they have
+today.
 
-Changes:
+## 5. Rendering
 
-- **A registry per kind.** `ReferenceExpansionService` dispatches by kind; each kind owns its query,
-  its block and its access rule.
-- **Access is the sender's.** In a shared session a guest's `#` expands only what that guest can
-  read. Something they cannot read expands to the same "unavailable" block as a deleted one, so it
-  does not reveal whether the object exists.
-- **No silent drops (D7).** A reference that does not resolve still produces a block:
-  `<referenced-task id="…" unavailable="not found or not accessible"/>`. The agent learns that the
-  person meant something and it is not there, rather than receiving a message that silently
-  mentions nothing.
-- **A size budget**, not just a count: blocks are capped in total bytes, and a block over the
-  budget is replaced by its id and fetch tool.
-- **Agent-written messages too.** The same expansion applies to `session_send` / `project_send`
-  bodies, so an orchestrator writing `[#Fix login](orbit-task:…)` to a sub-agent gives it the same
-  entry point a person's message would.
+- **In the person's bubble,** a reference is drawn as a chip reading the session title, with live
+  state from `POST /api/link-previews`, which already serves sessions. A pasted URL that the server
+  recognised is drawn the same way, so old messages improve too.
+- **What Orbit attached** follows the 2026-10-27 owner ruling: one grey meta line under the
+  bubble (`⊕ Orbit attached: 1 session`), and opening it shows the block.
 
-### 6.2 `@` delivery
+## 6. `@`
 
-One ledger, generalised from `TaskCommentMentionDelivery` into a mention delivery keyed by
-*(source message, target)*, with the same states, retries, terminal codes and the
-availability-refund rule. Sources:
+There is almost no human use (§1), so this design does not extend it:
 
-- **a task comment** (exists; delivers to the task's run when one is going, otherwise opens a reply
-  conversation);
-- **a session message** (new): the message is delivered to the mentioned workspace as a new
-  conversation that links back to the source session, and its reply returns to the source session as
-  a turn, the way `session_send` with `expectReply` already returns answers (§9 decision A).
+- Task-comment mentions keep their delivery ledger as they are. Agents do not use them either
+  (0 of 10,720 agent comments).
+- The session composer's `@` menu stays a plain-text convenience. It should be labelled honestly
+  in its menu ("mention in the message; nothing is sent to that agent") rather than made into a
+  delivery mechanism nobody has asked for.
+- Making `@` deliver (revision 1's decision A) is dropped until there is evidence people address
+  other agents from a conversation.
 
-The status line under the message reuses `MentionDeliveryNotes` on every surface. It is one line in
-the grey meta voice under the bubble, never inside it — the 2026-10-27 owner ruling for anything
-Orbit adds to a person's message.
+## 7. Phases
 
-## 7. Rendering in the transcript
+1. **Server recognition and the session block** (§3.1, §4.1). No client change, and it covers
+   every existing way of referencing a session.
+2. **Turn anchors and `session_turns`** (§4.2, §4.3).
+3. **Web composer:** paste-to-chip, the session-first `#` menu, and drafts that keep their chips
+   (§3.2), plus the chip in sent bubbles (§5).
+4. **Apple and Android:** the same paste-to-chip and bubble chip against a shared fixture. The
+   "Discuss in a new conversation" action on all three clients.
 
-- **The person's bubble** draws each reference as a chip reading exactly what they saw (`#title`,
-  `@name`). Tapping it opens the object. The chip's live state (status dot, title if renamed) comes
-  from `POST /api/link-previews`, which already batches every kind in §3.1 except Drive.
-- **What Orbit added** (the expansion blocks) is not drawn in the bubble. A meta line under it says
-  so (`⊕ Orbit attached: 2 references`), and opening that line shows the blocks.
-- **Unavailable references** draw as a struck-through chip with the reason in its tooltip.
+Each phase stands alone.
 
-## 8. Security and limits
+## 8. Open decisions (recommendation first)
 
-- Every resolve, expand and deliver step checks access as the sender, not the agent; delivery adds
-  the recipient's own access check.
-- Titles are the owner's own text, and they appear in the block as data lines, not as
-  instructions.
-- `@` to a workspace on another runner is allowed only where `session_send` would be allowed. The
-  existing per-pair message rate limit applies to mention deliveries too, so a loop of agents
-  mentioning each other is bounded.
+**A. `@`:** leave it as it is and label it (§6). Alternatives: remove the session-composer `@`
+menu, or make it deliver.
 
-## 9. Open decisions (recommendation first)
+**B. Recognise references in agent-to-agent messages too?** Recommended: not in phase 1. Agents
+already write canonical `orbit-session:` links (89 of 6,028 agent messages name a session) and can
+call `session_get` themselves. Revisit if agents are seen searching for ids they were handed.
 
-**A. What does `@agent` in a session message do?**
-- **A1 (recommended): deliver a copy.** The current agent still gets the message; the mentioned
-  agent gets it as a new linked conversation, through the ledger, with status under the bubble.
-  This is the same meaning `@` has in comments, so there is one rule.
-- A2: an instruction to the current agent ("hand this to X"). This is today's behaviour made
-  explicit. It is cheap, but it leaves `@` meaning something different in sessions and in
-  comments, which is D1 again.
-- A3: switch the recipient (the message goes only to X). This is a different gesture; if wanted,
-  it is a composer recipient control, not a symbol.
+**C. Expand bare ids, or only URLs and links?** Recommended: bare ids too, resolved strictly to
+objects the sender owns (§3.1). They are half of all references. Alternative: URLs only, with
+no chance of a false match but half the coverage.
 
-**B. Do agents' own messages expand `#` references?** Recommended: yes (§6.1), with the same caps.
-Alternative: people only, so agent-to-agent traffic stays byte-identical.
+**D. Tasks in the menu:** recommended: only through an explicit `#task:`. Alternative: drop task
+picking from the composer altogether.
 
-**C. Unavailable references:** recommended: an explicit unavailable block (§6.1). Alternative:
-today's silent drop.
+## 9. What would show this works
 
-**D. Kind prefixes in the menu (`#task:`):** recommended: support them but do not advertise them —
-grouped results are the main path. Alternative: tabs in the menu.
-
-**E. People as `@` targets:** recommended: phase 4, after workspaces are unified; it needs a
-notification route for guests that does not exist yet.
-
-## 10. Phases
-
-1. **Shared grammar.** Tokenizer, link format and fixture in `@orbit/shared`. Caret-based triggers
-   and one candidate rule on web. `@` sent as `orbit-workspace:` links, with comment `mentions[]`
-   derived on the server (D2, D3, D4, D9).
-2. **More `#` kinds.** Project, session, wiki and Drive through the expansion registry, the
-   unavailable block, and the size budget (D5, D6, D7).
-3. **`@` in sessions** through the generalised ledger, per decision A (D1).
-4. **Native clients.** `#` and the unified `@` on Apple and Android, against the shared fixture; then
-   people as targets (D8).
-
-Each phase stands on its own and leaves old messages rendering as they do today.
-
-## 11. What would show this works
-
-- The shared fixture passes in TS, Swift and Kotlin, including titles with brackets, prefix-sharing
-  titles and CJK text around the tokens.
-- Renaming a workspace after a comment mentions it does not change who the mention delivered to.
-- A guest's `#` to an object they cannot read produces the same unavailable block as a deleted id.
-- An `@` in a session message reaches the mentioned agent with the delivery ledger recording it,
-  and the status shows under the source message on all three clients.
+- Replay the 413 historical turns through the recogniser: every session URL and bare session id is
+  found, and no commit hash or other token becomes a reference.
+- On a pasted session that lives on another runner, the agent's first turn answers without calling
+  `session_search`.
+- The bubble chip and the meta line render the same on web, Apple and Android.
+- After a month, compare how often an agent's first tool call after a person's message is a
+  `session_search` / `session_get` for an id in that message, before and after phase 1.
