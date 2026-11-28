@@ -208,8 +208,8 @@ export const CHECK_ONLY_CLAUDE_DISALLOWED_TOOLS: readonly string[] = [
  * 2 hours on one. The level's denials still hold: Claude's --disallowedTools (scheduleRunDisallowedTools) and the
  * server doors (scheduleRunDeniesApproval, checkOnlyRefusesApproval) refuse them in every mode. Claude only: no other
  * engine's Auto has a classifier (permissionSemantics.ts), so every other engine keeps the session's mode. On a model
- * with no Auto the run's engine starts in Default and says so (the claim hands it Auto all the same,
- * queue/claim-permission-mode.ts); a SubAgent's mode is still normalized (normalizeBuiltinPermissionMode).
+ * with no Auto the run's engine starts in Default and says so (the claim, a config change and a SubAgent's spawn hand
+ * it Auto all the same, queue/claim-permission-mode.ts).
  */
 export function scheduleRunPermissionMode(
   mode: PermissionMode,

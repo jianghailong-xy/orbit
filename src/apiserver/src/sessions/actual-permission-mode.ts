@@ -45,8 +45,8 @@ export interface ClaimedModeSubstitution {
  * Record that the session's engine now runs in `mode`, and why. One statement: it locks the session row, moves the
  * two columns only when the mode differs from the one recorded, and inserts the change row only then. Returns
  * whether anything changed. A mode this server does not know is ignored. clock_timestamp(), not now(): two changes
- * recorded in one transaction must not share a time, or the detail could not order them. `substitution` is a CLAIM's
- * only, and rides on its row.
+ * recorded in one transaction must not share a time, or the detail could not order them. `substitution` is a CLAIM's,
+ * or a config turn's (OWNER_PICK, ORBIT_CHANGE; migration 1808), and rides on its row.
  */
 export async function recordActualPermissionMode(
   db: Pick<Prisma.TransactionClient, '$queryRaw'>,
@@ -127,8 +127,11 @@ export function causeOfConfigTurn(clientTurnId: string | null | undefined): Perm
   return clientTurnId?.startsWith(ORBIT_CONFIG_TURN_PREFIX) ? 'ORBIT_CHANGE' : 'OWNER_PICK';
 }
 
-/** A control turn's payload, or {} when it is not a JSON object. */
-export function configTurnPayload(content: string | null | undefined): { permissionMode?: unknown } {
+/** A control turn's payload, or {} when it is not a JSON object. `permissionModeSubstitution` is what updateConfig
+ *  writes beside the mode when it is not the one asked for (configTurnSubstitution reads it). */
+export function configTurnPayload(
+  content: string | null | undefined,
+): { permissionMode?: unknown; permissionModeSubstitution?: unknown } {
   try {
     const parsed: unknown = JSON.parse(content ?? '');
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};

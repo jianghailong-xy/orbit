@@ -274,7 +274,9 @@ export const PERMISSION_MODE_CORRECTION_FAILED_EVENT_SUBTYPE = 'permission_mode_
 
 /**
  * Why a claim handed the runner another mode than the one the session asked for (`session_permission_mode_change.reason`,
- * migration 1807). These are the claim's only substitutions, and neither predicts what the engine can do:
+ * migration 1807). A config change's setconfig or reload turn and a SubAgent's spawn make the same two and no other
+ * (migration 1808, SubagentAttempt.permissionModeSubstitution). They are the only substitutions, and neither predicts
+ * what the engine can do:
  *  - ROOT_RUNNER: Bypass on a runner that runs as root, where Claude Code exits before it says anything; Auto instead;
  *  - SCHEDULED_RUN: a scheduled run on Claude Code, which runs in Auto whatever its level.
  */
@@ -290,7 +292,8 @@ export interface SessionPermissionModeChange {
   /** For OWNER_PICK, the app it came from (`web`, `ios`, `macos`, `android`, `terminal`) when known. */
   client: string | null;
   at: string;
-  /** For a CLAIM that handed another mode than the session asked for: the mode asked for. Absent otherwise. */
+  /** For a CLAIM, OWNER_PICK or ORBIT_CHANGE that handed the engine another mode than the one asked for: the mode
+   *  asked for. Absent otherwise. */
   requestedMode?: string;
   /** And why (CLAIM_PERMISSION_MODE_SUBSTITUTION_REASONS). Absent otherwise. */
   reason?: ClaimPermissionModeSubstitutionReason;
@@ -3199,6 +3202,13 @@ export interface SubagentAttempt extends SubagentCandidateTarget {
     | { keyId: string; label: string };
   startedAt: string;
   endedAt?: string;
+  /** When this attempt's child was spawned in another mode than the one it asked for: the mode asked for, the mode
+   *  it was spawned in, and why (CLAIM_PERMISSION_MODE_SUBSTITUTION_REASONS). Absent otherwise. */
+  permissionModeSubstitution?: {
+    requestedMode: string;
+    mode: string;
+    reason: ClaimPermissionModeSubstitutionReason;
+  };
 }
 
 /** The runner's ask for the next candidate after a child failed on a usage limit or capacity (§4.3). */

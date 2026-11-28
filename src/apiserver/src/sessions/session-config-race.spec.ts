@@ -67,7 +67,7 @@ test('config update seeds the prompt before the control turn when claim just cha
   assert.equal(inboxWakes, 1);
 });
 
-test('a live model change keeps the intent and hands the runner the normalized permission pair', async () => {
+test('a live model change keeps the intent and hands the engine the Auto it asked for, catalogue or not', async () => {
   const id = '11111111-1111-4111-8111-111111111111';
   const ownerId = '22222222-2222-4222-8222-222222222222';
   let updatedData: Record<string, unknown> = {};
@@ -115,12 +115,12 @@ test('a live model change keeps the intent and hands the runner the normalized p
   await service.updateConfig(ownerId, id, { model: 'claude-haiku-4-5' });
 
   assert.equal(updatedData.model, 'claude-haiku-4-5');
-  // The stored mode is the owner's intent: a model with no Auto never writes Default over it. The engine is told
-  // Default, below, and records it as the mode it runs in when it takes it (actual-permission-mode.ts).
+  // The stored mode is the owner's intent, and the engine is told it: Auto, as a claim hands it, on a model whose
+  // catalogue row lists none (claimPermissionMode). The engine says what it settles on, and the runner corrects it.
   assert.equal(updatedData.permissionMode, 'auto');
   assert.deepEqual(JSON.parse(controlTurns[0].content ?? '{}'), {
     model: 'claude-haiku-4-5',
-    permissionMode: 'default',
+    permissionMode: 'auto',
   });
 });
 
@@ -194,7 +194,7 @@ test('concurrent partial config patches serialize without restoring a stale mode
     service.updateConfig(ownerId, id, { permissionMode: 'auto' }),
   ]);
 
-  // The model is not restored, the intent stays Auto, and the engine is told the pair it can run.
+  // The model is not restored, the intent stays Auto, and the engine is told the intent, Auto.
   assert.deepEqual(state, {
     model: 'claude-haiku-4-5',
     permissionMode: 'auto',
@@ -202,6 +202,6 @@ test('concurrent partial config patches serialize without restoring a stale mode
   assert.equal(controlTurns.length, 2);
   assert.deepEqual(JSON.parse(controlTurns[1].content ?? '{}'), {
     model: 'claude-haiku-4-5',
-    permissionMode: 'default',
+    permissionMode: 'auto',
   });
 });

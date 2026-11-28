@@ -267,7 +267,7 @@ import {
 } from '../projects/coordinator-opening';
 import { modelRoutingEnabled } from '../common/model-routing-switch';
 import { DISPATCH_PAUSED } from '../queue/dispatch-pause';
-import { claimPermissionMode, claimPermissionModeLogLine } from '../queue/claim-permission-mode';
+import { claimPermissionMode, claimPermissionModeLogLine, configTurnSubstitution } from '../queue/claim-permission-mode';
 import { QueueService } from '../queue/queue.service';
 import { approvalRequestEvent, RealtimeService, type RestatedSeqs } from '../realtime/realtime.service';
 import { PushService } from '../push/push.service';
@@ -6821,7 +6821,10 @@ export class RunnerApiController {
         // that names no mode (an account move) leaves the engine in the one it had.
         const payload = configTurnPayload(t.content);
         if (payload.permissionMode !== undefined) {
-          await recordActualPermissionMode(tx, sessionId, payload.permissionMode, causeOfConfigTurn(t.clientTurnId), t.senderClient);
+          await recordActualPermissionMode(
+            tx, sessionId, payload.permissionMode, causeOfConfigTurn(t.clientTurnId), t.senderClient,
+            configTurnSubstitution(payload.permissionModeSubstitution),
+          );
         }
       }
       // What a resend of this fetch is answered with (above), on the row this transaction holds: a
@@ -7545,6 +7548,7 @@ export class RunnerApiController {
     const payload = configTurnPayload(turn.content);
     await recordActualPermissionMode(
       tx, sessionId, payload.permissionMode, causeOfConfigTurn(turn.clientTurnId), turn.senderClient,
+      configTurnSubstitution(payload.permissionModeSubstitution),
     );
   }
 

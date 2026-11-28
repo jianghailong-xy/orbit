@@ -96,6 +96,7 @@ import {
   permissionModeChangesOf,
 } from './actual-permission-mode';
 import { readOrbitMessageFrom } from './orbit-message';
+import { claimPermissionMode, claimPermissionModeLogLine } from '../queue/claim-permission-mode';
 import {
   closeRequestsTheRetryWillNotResend,
   isSessionReplyTurn,
@@ -12888,10 +12889,13 @@ export class SessionsService {
    * all, to any value: a mode that runs without asking would take approvals — which only a login may
    * answer — out of the session's way (docs/personal-access-token-design.md §5). The rest is a token's.
    *
-   * The stored `permissionMode` is the owner's intent: only a mode this PATCH names writes it, and never the
-   * normalized one. A model with no Auto runs the engine in Default (normalizeBuiltinPermissionMode), which the
-   * control turn tells the engine and its acknowledgement records as the actual mode (actual-permission-mode.ts);
-   * moving back to a model with Auto then finds the intent still Auto. `origin` says who asked, which the control
+   * The stored `permissionMode` is the owner's intent: only a mode this PATCH names writes it, and never the mode the
+   * engine is told. That is the intent as a claim hands it (claimPermissionMode): Auto stays Auto on a model whose
+   * catalogue row lists none, since that row is a probe's prediction; the engine says what it settles on and the
+   * runner corrects it when it settles lower, as on a claim. Only the substitutions that are not predictions remain —
+   * Bypass on a root runner, a scheduled run on Claude Code, and DeepSeek Harness's and Cursor's refusals — and each is
+   * logged and carried on the control turn, whose acknowledgement records it with the actual mode
+   * (actual-permission-mode.ts). `origin` says who asked, which the control
    * turns' keys carry (configTurnKey) so the actual-mode change they cause names it: the owner (with `senderClient`,
    * the app the request came from, on the turn's own columns), or Orbit itself.
    */
@@ -12925,7 +12929,8 @@ export class SessionsService {
       throw new BadRequestException('nothing to update');
     }
     // Retried whole: a locked re-read decides what the new config may be, and the inbox nudge
-    // below happens once, after commit.
+    // below happens once, after commit — as does the substitution's log line, set by the attempt that committed.
+    let substitutionLine: string | null = null;
     const queuedControlTurn = await withTransactionRetry(this.prisma, async (tx) => {
       // Serialize config patches with each other and with claim/end transitions. The effective
       // model/mode pair must be derived from the latest row: two concurrent partial PATCHes must
@@ -12948,6 +12953,8 @@ export class SessionsService {
           },
           // The account-level permission default, which replaced the per-workspace one.
           owner: { select: { preferences: true } },
+          // A scheduled run's level, which holds its Claude engine in Auto (claimPermissionMode).
+          scheduleRun: { select: { accessLevel: true, schedule: { select: { accessLevel: true } } } },
         },
       });
       if (isReleased(session)) {
@@ -13002,15 +13009,26 @@ export class SessionsService {
       const requestedPermissionMode =
         (dto.permissionMode as PermissionMode | undefined) ??
         resolvePermissionMode(session.permissionMode, session.owner);
-      // What the engine is told; the row keeps requestedPermissionMode, the intent.
-      const normalizedPermissionMode = normalizeBuiltinPermissionMode(
+      // What the engine is told; the row keeps requestedPermissionMode, the intent. As a claim hands it: the intent, but
+      // for the substitutions that are not predictions (claim-permission-mode.ts), each logged here and carried on the
+      // control turn for the mode change it causes. A model whose catalogue row lists no Auto is told Auto all the same.
+      const handed = claimPermissionMode(
         exec.provider,
-        exec.model,
         requestedPermissionMode,
-        next.customRow?.enabled === true,
+        runAccessLevel(session.scheduleRun),
         session.assignedRunner?.runsAsRoot,
-        session.assignedRunner?.modelCatalog,
       );
+      const normalizedPermissionMode = handed.mode;
+      substitutionLine = handed.substitution
+        ? claimPermissionModeLogLine({
+          sessionId: id,
+          path: 'CONFIG_CHANGE',
+          provider: exec.provider,
+          model: exec.model,
+          mode: normalizedPermissionMode,
+          substitution: handed.substitution,
+        })
+        : null;
       const normalizedEffort =
         dto.effort !== undefined
           ? normalizeEffortForProvider(exec.provider, dto.effort)
@@ -13154,6 +13172,9 @@ export class SessionsService {
           content: JSON.stringify({
             model: exec.model,
             permissionMode: normalizedPermissionMode,
+            // Why the mode is not the one asked for, when it is not; the runner reads none of it, and its
+            // acknowledgement records it with the mode (recordSetConfigAck). `undefined` is dropped.
+            permissionModeSubstitution: handed.substitution ?? undefined,
             // Stated only when this PATCH stated it, unlike the pair above. A session with no
             // effort of its own runs on its WORKSPACE's (the claim resolves `session.effort ??
             // workspace.effort`), so the session's committed value is not what the engine was
@@ -13175,6 +13196,8 @@ export class SessionsService {
           content: JSON.stringify({
             model: exec.model,
             permissionMode: normalizedPermissionMode,
+            // As on setconfig: recorded with the mode when the reload is delivered.
+            permissionModeSubstitution: handed.substitution ?? undefined,
             effort: engineEffort,
             // Stated only when this PATCH moved it, like `effort` and for the same reason: the
             // runner reads an absent `fastMode` as "say nothing about fast mode" and keeps what
@@ -13194,6 +13217,7 @@ export class SessionsService {
       }
       return true;
     }, loggedRetry(this.logger, 'sessions.updateConfig'));
+    if (queuedControlTurn && substitutionLine) this.logger.log(substitutionLine);
     if (queuedControlTurn) this.realtime.notifyInbox(id);
     return { ok: true };
   }
