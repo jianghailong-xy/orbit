@@ -1616,6 +1616,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// A full runner names the claims it can still start, and gives back one it cannot (session_pool.go claimScope,
 	// waitActive), where the control plane says it takes them (HeartbeatResponse.CapacityClaims).
 	t.fullClaimScope = pool.claimScope
+	// A claim and a reclaim name the engines running here, whose own report of their mode a claim must not overwrite.
+	t.residentEngines = pool.residentEngineSessionIDs
 	pool.returnFullSlot = t.returnFullSlot
 	t.returnHeldSlot = func(sessionID string) {
 		pool.returnHeldSlot(sessionID, func() (string, error) {
