@@ -4078,7 +4078,8 @@ export function WorkspaceView({
   // until asked for: the overlay would cover the conversation it was opened for.
   const ownRunSessionId: string | null = selected?.taskId && !selectedTrashed ? selected.id : null;
   const ownRunTaskId: string | null = ownRunSessionId ? selected!.taskId! : null;
-  useEffect(() => {
+  // Before paint, so a run switched to never draws the project column for a frame in the task's slot.
+  useLayoutEffect(() => {
     if (!ownRunSessionId || !ownRunTaskId || !taskColumnRoomy || settingsOpen || taskOverPage != null) return;
     if (taskRunSidebarClosed(ownRunSessionId)) return;
     showTaskOverPage(encodeId(ownRunTaskId));
@@ -4389,6 +4390,17 @@ export function WorkspaceView({
         ? new Set([...(titleBarOpenQ.data ?? []), ...(titleBarCompletedQ.data ?? [])]
           .filter((s) => s.sessionKind !== 'LANDING').map((s) => s.id)).size
         : null;
+  // A member conversation's way back to its project's coordinator (docs/mocks/right-panel-stack ⑥): the head of
+  // every session of a project but the coordinator itself, and the project's landings, which are no conversation.
+  const selectedRole = selectedSession?.projectMembership?.role ?? null;
+  const headerCoordinator = titleBarProjectId && selectedRole && selectedRole !== 'COORDINATOR' && selectedRole !== 'LANDING'
+    ? (titleBarOwnRead ? [...(titleBarOpenQ.data ?? []), ...(titleBarCompletedQ.data ?? [])] : allProjectMembers)
+      .find((s) => s.projectMembership?.role === 'COORDINATOR') ?? null
+    : null;
+  // Whether the project reads that find it have answered, so "no coordinator" is an answer, not a wait.
+  const headerCoordinatorRead = !titleBarProjectId || (titleBarOwnRead
+    ? titleBarOpenQ.isSuccess && titleBarCompletedQ.isSuccess
+    : projectSessionsQ.isSuccess && completedProjectSessionsQ.isSuccess);
   const pageMenuCoordinator = pageCoordinator;
   const pageProject = projectsQ.data?.find((p) => p.id === openProjectId);
   const pageProjectDetailsQ = useQuery({
@@ -4596,15 +4608,22 @@ export function WorkspaceView({
     if (!selectedId || placedSessionId.current === selectedId || !selectedSession) return;
     if (!scopeWorkspaceId || scopeWorkspaceId !== resolvedWorkspaceId) return;
     if (!sessionsQ.isSuccess || sessionsQ.isPlaceholderData || !foldersQ.isSuccess) return;
+    // A member is placed where its project's row is, the coordinator's place, once the project's reads say where.
+    if (selectedRole && selectedRole !== 'COORDINATOR' && selectedRole !== 'LANDING' && headerCoordinator == null && !headerCoordinatorRead) return;
     placedSessionId.current = selectedId;
     if (listProjectId || listedSessions.some((s) => s.id === selectedId)) return;
     const memberOf = selectedSession.projectMembership?.projectId;
     if (memberOf && folderListing.entries.some((entry) => entry.kind === 'project' && entry.projectId === memberOf)) return;
-    const place = selectedSession.runSource === 'SCHEDULE' ? SCHEDULED_RUNS_FOLDER
-      : selectedSession.folderId ? encodeId(selectedSession.folderId) : null;
+    // The project's row stands for its coordinator, so a member opened from elsewhere (a link, a notification, a
+    // task's runs) takes the list to the coordinator's page, where that row is selected for it. A coordinator in
+    // another workspace has no row in this list: the member is placed where it is filed itself.
+    const filed = headerCoordinator && headerCoordinator.workspaceId === scopeWorkspaceId ? headerCoordinator : selectedSession;
+    const place = filed.runSource === 'SCHEDULE' ? SCHEDULED_RUNS_FOLDER
+      : filed.folderId ? encodeId(filed.folderId) : null;
     if (place !== folderParam) setConversationPage(place);
   }, [selectedId, selectedSession, scopeWorkspaceId, resolvedWorkspaceId, sessionsQ.isSuccess,
-    sessionsQ.isPlaceholderData, foldersQ.isSuccess, listProjectId, listedSessions, folderListing, folderParam]);
+    sessionsQ.isPlaceholderData, foldersQ.isSuccess, listProjectId, listedSessions, folderListing, folderParam,
+    selectedRole, headerCoordinator, headerCoordinatorRead]);
   // The list's page on a list's own address (a workspace's list, its New session), so a reload keeps it.
   const folderSearch = openFolder
     ? `?folder=${encodeId(openFolder.id)}`
@@ -4793,13 +4812,6 @@ export function WorkspaceView({
     titleBarIntegrationQ.data,
     titleBarPromotionQ.data,
   );
-  // A member conversation's way back to its project's coordinator (docs/mocks/right-panel-stack ⑥): the head of
-  // every session of a project but the coordinator itself, and the project's landings, which are no conversation.
-  const selectedRole = selectedSession?.projectMembership?.role ?? null;
-  const headerCoordinator = titleBarProjectId && selectedRole && selectedRole !== 'COORDINATOR' && selectedRole !== 'LANDING'
-    ? (titleBarOwnRead ? [...(titleBarOpenQ.data ?? []), ...(titleBarCompletedQ.data ?? [])] : allProjectMembers)
-      .find((s) => s.projectMembership?.role === 'COORDINATOR') ?? null
-    : null;
   // Esc folds the column too, unless focus is in a field, a dialog or a menu, which own the key.
   // With the settings column over it, Esc is the settings column's: it closes that, and the project column
   // underneath comes back.
@@ -4828,7 +4840,7 @@ export function WorkspaceView({
   foldProjectColumnRef.current = foldProjectColumn;
   const foldUnderTask = useCallback(() => foldProjectColumnRef.current(true), []);
   const taskOverProjectTitle = taskColumnShown && projectColumnOpen && columnProjectId ? pageProjectTitle : null;
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (taskOverProjectTitle == null) return;
     setTaskColumnProject({ title: taskOverProjectTitle, fold: foldUnderTask });
     return () => setTaskColumnProject(null);

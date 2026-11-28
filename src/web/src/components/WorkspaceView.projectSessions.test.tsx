@@ -1150,6 +1150,25 @@ describe('one column on the right: a docked task over the project column, and th
     expect(underTask).toBeNull();
   });
 
+  it('takes the list to the coordinator’s folder for a member opened from elsewhere, its project row selected', async () => {
+    folders = [FOLDER];
+    rows = [LOOSE, { ...COORDINATOR, folderId: FOLDER.id }, TASK];
+    // A link, a notification or a task's runs: the member is filed nowhere, its project's row is in the folder.
+    await mount(() => expect(headerTitle()).toBe(TASK.title), `/sessions/${TASK.id}`);
+    const listTitle = () => mounted().querySelector('aside.session-col:not(.session-project-column) .session-folder-title')?.textContent;
+    await until(() => expect(listTitle()).toBe(FOLDER.name));
+    expect(projectRows()).toHaveLength(1);
+    expect(projectRow().classList.contains('active')).toBe(true);
+  });
+
+  it('places a member whose coordinator is in another workspace where the member is filed', async () => {
+    folders = [FOLDER];
+    rows = [LOOSE, { ...COORDINATOR, workspaceId: OTHER_WORKSPACE_ID, workspace: { id: OTHER_WORKSPACE_ID, name: 'other workspace' }, folderId: null }, TASK];
+    await mount(() => expect(headerTitle()).toBe(TASK.title), `/sessions/${TASK.id}`);
+    await settle();
+    expect(mounted().querySelector('aside.session-col:not(.session-project-column) .session-folder-title')).toBeNull();
+  });
+
   it('names no column under a docked task while the project column is folded', async () => {
     taskRoom = true;
     await mount();
