@@ -18,6 +18,8 @@ internal object MainCheckout {
     const val FILE_LIMIT = 200
     const val CARD_VISIBLE_FILES = 8
     const val DIFF_PATHS_MAX = 20
+    /** The most commits a snapshot lists (`MAIN_CHECKOUT_COMMITS_MAX`). */
+    const val COMMITS_MAX = 20
     /** The states that block every merge into the checkout (apiserver `isBlockingRepoState`). */
     val BLOCKING_STATES = setOf("unmerged", "merge", "rebase", "cherry-pick", "revert")
 
@@ -32,7 +34,9 @@ internal object MainCheckout {
     /** What `GET /workspaces/:id/main-checkout` answers (§10.4), or a bar's counts read from the workspace's heartbeat entry. */
     data class Snapshot(val root: String, val branch: String?, val head: String?, val state: String, val upstream: String?,
         val ahead: Int, val behind: Int, val files: List<File>, val fileCount: Int, val truncated: Boolean, val fingerprint: String,
-        val checkedAt: String?)
+        val checkedAt: String?,
+        /** `upstream..HEAD`, newest first, at most [COMMITS_MAX]. Null: no upstream, a detached HEAD, or an older runner. */
+        val commits: List<BranchCommit>? = null, val commitsTruncated: Boolean = false)
 
     data class ManagedBranch(val projectId: String, val projectTitle: String, val role: String)
 
@@ -85,7 +89,8 @@ internal object MainCheckout {
         val root = o.str("root") ?: return null
         val files = o.objs("files").mapNotNull(::file)
         return Snapshot(root, o.str("branch"), o.str("head"), o.str("state") ?: "clean", o.str("upstream"), o.int("ahead") ?: 0,
-            o.int("behind") ?: 0, files, o.int("fileCount") ?: files.size, o.bool("truncated"), o.str("fingerprint").orEmpty(), o.str("checkedAt"))
+            o.int("behind") ?: 0, files, o.int("fileCount") ?: files.size, o.bool("truncated"), o.str("fingerprint").orEmpty(), o.str("checkedAt"),
+            BranchCommit.parse(o["commits"])?.take(COMMITS_MAX), o.bool("commitsTruncated"))
     }
 
     fun view(o: JsonObject): View? {
@@ -226,9 +231,31 @@ internal object MainCheckout {
             "A copy of the main checkout is saved on orbit/rescue-… first."
 
     fun barStatus(fileCount: Int, ahead: Int): String {
-        val parts = mutableListOf(if (fileCount > 0) uncommittedFiles(fileCount) else "Clean")
+        // Clean with commits ahead says the short "N not pushed", so the count survives a phone's width (board 02⑥).
+        if (fileCount <= 0) return if (ahead > 0) "$ahead not pushed" else "Clean"
+        val parts = mutableListOf(uncommittedFiles(fileCount))
         if (ahead > 0) parts += "${commitsCount(ahead)} not pushed"
         return parts.joinToString(" · ")
+    }
+
+    // The "Not pushed" group of the review sheet (board 02⑦, iOS ③⑤).
+
+    fun notPushedHeading(ahead: Int) = "Not pushed · $ahead"
+    fun notPushedFooter(branch: String?, upstream: String?) = "On ${branch ?: "HEAD"}, not on ${upstream ?: "its upstream"}."
+    fun notListed(count: Int) = "and $count more not listed"
+    fun moreCommits(hidden: Int) = "$hidden more"
+
+    /** What the group draws. Beside uncommitted files it folds to the newest commit and "N more"; alone it lists them all.
+     *  Null: nothing to show (no list from the runner, or nothing ahead). */
+    data class NotPushed(val heading: String, val shown: List<BranchCommit>, val hidden: Int, val notListed: Int, val footer: String)
+
+    fun notPushed(snapshot: Snapshot, expanded: Boolean = false): NotPushed? {
+        val commits = snapshot.commits?.takeIf { it.isNotEmpty() } ?: return null
+        val fold = snapshot.files.isNotEmpty() && !expanded
+        val shown = if (fold) commits.take(1) else commits
+        return NotPushed(notPushedHeading(maxOf(snapshot.ahead, commits.size)), shown, commits.size - shown.size,
+            if (snapshot.commitsTruncated) (snapshot.ahead - commits.size).coerceAtLeast(0) else 0,
+            notPushedFooter(snapshot.branch, snapshot.upstream))
     }
 
     fun pushLabel(upstream: String) = "Push to $upstream"

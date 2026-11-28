@@ -140,6 +140,61 @@ class MainCheckoutViewTest {
         compose.onNodeWithText("Review").assertDoesNotExist()
     }
 
+    private fun cleanAhead(ahead: Int) = JsonObject(fixture["heartbeatRepo"]!!.jsonObject.toMutableMap().apply {
+        put("fileCount", JsonPrimitive(0)); put("ahead", JsonPrimitive(ahead)); put("state", JsonPrimitive("clean"))
+    })
+
+    @Test fun withCommitsAheadTheWholeRowOpensTheReviewAndPushKeepsItsOwnTap() {
+        val (model, fake) = model(actions = true, repoHealth = cleanAhead(4))
+        show(model) { MainCheckoutBar(model, "ws-1", isolated = true) }
+        compose.onNodeWithText("4 not pushed").assertExists()
+        compose.onNodeWithText("›").assertExists()
+        compose.onNodeWithTag("main-checkout-bar").performClick()
+        assertEquals(MainCheckoutState.Sheet.REVIEW, model.state.value.sheet)
+        model.open(null)
+        compose.onNodeWithText("Push to origin/main").performClick()
+        assertNull("Push does not open the sheet", model.state.value.sheet)
+    }
+
+    @Test fun withNothingAheadTheRowHasNoCaretAndNoTap() {
+        val (model, _) = model(actions = true, repoHealth = JsonObject(cleanAhead(0).toMutableMap().apply { put("fileCount", JsonPrimitive(2)) }))
+        show(model) { MainCheckoutBar(model, "ws-1", isolated = true) }
+        compose.onNodeWithText("›").assertDoesNotExist()
+        compose.onNodeWithTag("main-checkout-bar").performClick()
+        assertNull(model.state.value.sheet)
+    }
+
+    private fun review(commits: Int, files: Int) {
+        val snap = MainCheckout.snapshot(buildJsonObject {
+            put("root", "/r"); put("branch", "develop"); put("head", "0f2a60f1"); put("upstream", "origin/develop"); put("ahead", commits)
+            put("fileCount", files); put("fingerprint", "mc1:a:b")
+            putJsonArray("files") { repeat(files) { add(buildJsonObject { put("path", "f$it.ts"); put("status", "M") }) } }
+            putJsonArray("commits") { repeat(commits) { n -> add(buildJsonObject {
+                put("sha", "%040d".format(n + 1)); put("subject", "commit ${n + 1}"); put("committedAt", "2026-11-26T10:00:00Z")
+                putJsonArray("files") {}; put("filesTruncated", false) }) } }
+        })!!
+        val (model, _) = model(actions = true)
+        val state = MainCheckoutState(view = MainCheckout.View(snap, emptyList(), true, null, null))
+        show(model) { MainCheckoutReview(model, state, true, "orbit/x", "Title") {} }
+    }
+
+    @Test fun aCleanReviewIsTheNotPushedGroupAloneWithoutTheFileChooser() {
+        review(commits = 4, files = 0)
+        compose.onNodeWithText("Not pushed · 4").assertExists()
+        compose.onAllNodesWithTag("main-checkout-commit").assertCountEquals(4)
+        compose.onNodeWithText("On develop, not on origin/develop.").assertExists()
+        compose.onNodeWithText(MainCheckout.COPY_NOT_SHOWN).assertDoesNotExist()
+        compose.onNodeWithText("Choose files", substring = true).assertDoesNotExist()
+    }
+
+    @Test fun aDirtyReviewFoldsTheGroupToOneRowAndNMore() {
+        review(commits = 4, files = 3)
+        compose.onNodeWithText("Choose files to commit · 3 of 3").assertExists()
+        compose.onAllNodesWithTag("main-checkout-commit").assertCountEquals(1)
+        compose.onNodeWithText("3 more").performClick()
+        compose.onAllNodesWithTag("main-checkout-commit").assertCountEquals(4)
+    }
+
     @Test fun aRefusalLineSaysItsSentenceWithItsLink() {
         val (model, _) = model(actions = true)
         val case = fixture["results"]!!.jsonArray.map { it.jsonObject }.first { it["name"]!!.jsonPrimitive.content == "PUSH_REJECTED" }

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -217,9 +218,12 @@ internal fun MainCheckoutBar(model: MainCheckoutModel, workspaceId: String, isol
     val amber = LocalOrbitColors.current.needsYou
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     val shape = RoundedCornerShape(8.dp)
+    // With commits not pushed the whole row opens the review sheet, which lists them; the button keeps its own tap.
+    val opens = bar.ahead > 0 && model.actionsSupported
     Row(Modifier.fillMaxWidth().padding(bottom = 6.dp).clip(shape).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f))
-        .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), shape).padding(horizontal = 10.dp, vertical = 5.dp)
-        .testTag("main-checkout-bar"), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), shape)
+        .clickable(enabled = opens, onClickLabel = MainCheckout.notPushedHeading(bar.ahead), role = Role.Button) { model.open(MainCheckoutState.Sheet.REVIEW) }
+        .padding(horizontal = 10.dp, vertical = 5.dp).testTag("main-checkout-bar"), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(7.dp).clip(CircleShape).background(if (bar.fileCount > 0) amber else secondary.copy(alpha = 0.5f)))
         Text(MainCheckout.COPY_LABEL, style = MaterialTheme.typography.labelLarge, maxLines = 1)
         bar.branch?.let {
@@ -227,7 +231,12 @@ internal fun MainCheckoutBar(model: MainCheckoutModel, workspaceId: String, isol
                 .padding(horizontal = 6.dp, vertical = 1.dp).widthIn(max = 120.dp), fontFamily = FontFamily.Monospace,
                 style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
         }
-        Text(bar.status, Modifier.weight(1f), color = secondary, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        // The › sits right after the words, so a long status truncates before it does.
+        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(bar.status, Modifier.weight(1f, fill = false), color = secondary, style = MaterialTheme.typography.bodySmall, maxLines = 1,
+                overflow = TextOverflow.Ellipsis)
+            if (opens) Text("›", color = secondary, style = MaterialTheme.typography.bodySmall)
+        }
         when (bar.button) {
             MainCheckout.Button.REVIEW -> PillButton(MainCheckout.reviewLabel(isolated), enabled = !state.busy) { model.open(MainCheckoutState.Sheet.REVIEW) }
             MainCheckout.Button.PUSH -> PillButton(MainCheckout.pushLabel(bar.upstream ?: "origin/${bar.branch ?: "HEAD"}"), enabled = !state.busy) { model.push() }
@@ -276,6 +285,8 @@ internal fun MainCheckoutReview(model: MainCheckoutModel, state: MainCheckoutSta
     var moveMenu by remember { mutableStateOf(false) }
     var more by remember { mutableStateOf(false) }
     var discarding by remember { mutableStateOf<List<String>?>(null) }
+    var commitSha by remember(snapshot?.fingerprint) { mutableStateOf<String?>(null) }
+    var allCommits by remember(snapshot?.fingerprint) { mutableStateOf(false) }
     val now = remember(state.view) { System.currentTimeMillis() }
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         // The header: what this is, where, on which commit, how much, and how fresh.
@@ -319,8 +330,12 @@ internal fun MainCheckoutReview(model: MainCheckoutModel, state: MainCheckoutSta
             }
         }
         if (snapshot.truncated) Text(MainCheckout.truncatedNote(), color = secondary, style = MaterialTheme.typography.bodySmall)
-        Text(MainCheckout.COPY_NOT_SHOWN, color = secondary, style = MaterialTheme.typography.bodySmall)
-        if (!actions) return@Column
+        val notPushed = MainCheckout.notPushed(snapshot, allCommits)
+        // Clean with commits not pushed: the group stands alone, with no file chooser, nothing to commit and no ignore note.
+        val onlyCommits = notPushed != null && snapshot.files.isEmpty()
+        if (!onlyCommits) Text(MainCheckout.COPY_NOT_SHOWN, color = secondary, style = MaterialTheme.typography.bodySmall)
+        if (notPushed != null) NotPushedGroup(notPushed, onMore = { allCommits = true }) { commitSha = it }
+        if (!actions || onlyCommits) return@Column
         // The ways out, right under the files they act on: Commit and Discard full width, the rest on one row.
         Button(enabled = !state.busy && chosen.isNotEmpty() && snapshot.branch != null, modifier = Modifier.fillMaxWidth(), onClick = {
             val text = MainCheckout.defaultCommitMessage(snapshot.files.filter { it.path !in unchosen })
@@ -376,6 +391,11 @@ internal fun MainCheckoutReview(model: MainCheckoutModel, state: MainCheckoutSta
             }
         }
     }
+    snapshot?.commits?.firstOrNull { it.sha == commitSha }?.let { commit ->
+        CommitScreen(commit, state.commitDiffs[commit.sha].orEmpty(), commit.sha in state.commitDiffLoading,
+            loadPatches = { model.loadCommitDiffs(commit.sha, commit.files.map { it.path }) },
+            back = { commitSha = null }, done = { commitSha = null; close() })
+    }
     discarding?.let { files ->
         val snap = snapshot ?: return@let
         AlertDialog(onDismissRequest = { discarding = null }, modifier = Modifier.testTag("main-checkout-discard-dialog"),
@@ -388,6 +408,29 @@ internal fun MainCheckoutReview(model: MainCheckoutModel, state: MainCheckoutSta
                 }) { Text(MainCheckout.COPY_DISCARD, color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { discarding = null }) { Text("Cancel") } })
+    }
+}
+
+/** The "Not pushed · N" group: the commits as the worktree's Commits list draws them, a › on each row, and what is left out. */
+@Composable
+private fun NotPushedGroup(group: MainCheckout.NotPushed, onMore: () -> Unit, open: (String) -> Unit) {
+    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    val now = remember { Instant.now() }
+    Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()).testTag("main-checkout-not-pushed")) {
+        Text(group.heading, Modifier.padding(top = 4.dp), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+        group.shown.forEach { c ->
+            ListItem(modifier = Modifier.clickable(role = Role.Button) { open(c.sha) }.testTag("main-checkout-commit"),
+                headlineContent = { Text(c.subject.ifEmpty { "(no message)" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                supportingContent = { Text("${CommitsLogic.shortSha(c.sha)} · ${CommitsLogic.age(c.committedAt, now)} · " +
+                    CommitsLogic.filesLabel(c.files.size, c.filesTruncated), style = MaterialTheme.typography.bodySmall) },
+                leadingContent = { Box(Modifier.size(8.dp).background(secondary, CircleShape)) },
+                trailingContent = { Text("›", color = secondary) })
+        }
+        if (group.hidden > 0) ListItem(modifier = Modifier.clickable(role = Role.Button, onClick = onMore).testTag("main-checkout-more-commits"),
+            headlineContent = { Text(MainCheckout.moreCommits(group.hidden), color = secondary) }, trailingContent = { Text("›", color = secondary) })
+        if (group.notListed > 0) Text(MainCheckout.notListed(group.notListed), Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            color = secondary, style = MaterialTheme.typography.bodySmall)
+        Text(group.footer, Modifier.padding(horizontal = 16.dp, vertical = 4.dp), color = secondary, style = MaterialTheme.typography.bodySmall)
     }
 }
 

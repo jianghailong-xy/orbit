@@ -87,11 +87,60 @@ class MainCheckoutTest {
         assertNull(MainCheckout.bar(null, true))
         // Clean, but a commit not pushed: the bar stays, and offers Push.
         val ahead = MainCheckout.bar(with("fileCount" to JsonPrimitive(0), "state" to JsonPrimitive("clean")), true)!!
-        assertEquals("Clean · 1 commit not pushed", ahead.status)
+        assertEquals("1 not pushed", ahead.status)
         assertEquals(MainCheckout.Button.PUSH, ahead.button)
         assertEquals("Push to origin/main", MainCheckout.pushLabel(ahead.upstream!!))
         // Dirty, nothing ahead.
         assertEquals("1 uncommitted file", MainCheckout.bar(with("fileCount" to JsonPrimitive(1), "ahead" to JsonPrimitive(0)), true)!!.status)
+    }
+
+    // ---- Commits not pushed (docs/main-checkout-unpushed-commits-design.md) -----------------------------------
+
+    private fun commit(n: Int) = buildJsonObject {
+        put("sha", "%040d".format(n)); put("subject", "commit $n"); put("committedAt", "2026-11-26T10:00:00Z")
+        putJsonArray("files") { add(buildJsonObject { put("path", "a$n.ts"); put("status", "M"); put("additions", 2); put("deletions", 1) }) }
+        put("filesTruncated", false)
+    }
+    private fun snapshot(commits: Int?, ahead: Int = commits ?: 0, files: Int = 0, truncated: Boolean = false) = MainCheckout.snapshot(buildJsonObject {
+        put("root", "/r"); put("branch", "develop"); put("upstream", "origin/develop"); put("ahead", ahead)
+        putJsonArray("files") { repeat(files) { add(buildJsonObject { put("path", "f$it.ts"); put("status", "M") }) } }
+        if (commits != null) putJsonArray("commits") { repeat(commits) { add(commit(it + 1)) } }
+        if (truncated) put("commitsTruncated", true)
+    })!!
+
+    @Test fun aSnapshotReadsItsCommitsInTheWorktreesShapeAndAnOlderRunnerHasNone() {
+        val with = snapshot(2)
+        assertEquals(listOf("commit 1", "commit 2"), with.commits!!.map { it.subject })
+        assertEquals(listOf("a1.ts"), with.commits!![0].files.map { it.path })
+        assertFalse(with.commitsTruncated)
+        assertNull("absent = an older runner", snapshot(null, ahead = 3).commits)
+        assertTrue(snapshot(20, ahead = 25, truncated = true).commitsTruncated)
+    }
+
+    @Test fun theBarStatusIsTheShortFormWhenCleanAndKeepsTodaysWordsWhenDirty() {
+        assertEquals("4 not pushed", MainCheckout.barStatus(0, 4))
+        assertEquals("Clean", MainCheckout.barStatus(0, 0))
+        assertEquals("3 uncommitted files · 4 commits not pushed", MainCheckout.barStatus(3, 4))
+    }
+
+    @Test fun cleanListsEveryCommitDirtyFoldsToOneRowAndMore() {
+        val clean = MainCheckout.notPushed(snapshot(4))!!
+        assertEquals("Not pushed · 4", clean.heading)
+        assertEquals(4, clean.shown.size); assertEquals(0, clean.hidden)
+        assertEquals("On develop, not on origin/develop.", clean.footer)
+        val dirty = MainCheckout.notPushed(snapshot(4, files = 3))!!
+        assertEquals(listOf("commit 1"), dirty.shown.map { it.subject })
+        assertEquals(3, dirty.hidden)
+        assertEquals("3 more", MainCheckout.moreCommits(dirty.hidden))
+        assertEquals("expanding shows them all", 4, MainCheckout.notPushed(snapshot(4, files = 3), expanded = true)!!.shown.size)
+        assertNull("no list, no group", MainCheckout.notPushed(snapshot(null, ahead = 4)))
+    }
+
+    @Test fun pastTheCapTheLastLineCountsTheCommitsNotListed() {
+        val capped = MainCheckout.notPushed(snapshot(20, ahead = 25, truncated = true))!!
+        assertEquals("Not pushed · 25", capped.heading)
+        assertEquals("and 5 more not listed", MainCheckout.notListed(capped.notListed))
+        assertEquals(0, MainCheckout.notPushed(snapshot(4))!!.notListed)
     }
 
     @Test fun withoutTheCapabilityTheBarSaysItsStateAndOffersNothing() {

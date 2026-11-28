@@ -38,6 +38,9 @@ internal data class MainCheckoutState(
     val sheet: Sheet? = null,
     /** Other worktree sessions of the workspace a Move could go to (board 02②): id, title, branch, running. */
     val targets: List<MoveTarget> = emptyList(),
+    /** An unpushed commit's patches by sha then path, read with `commit=<sha>`; the shas whose read is under way. */
+    val commitDiffs: Map<String, List<JsonObject>> = emptyMap(),
+    val commitDiffLoading: Set<String> = emptySet(),
 ) {
     enum class Sheet { REVIEW, WORKTREE_CHANGES }
 }
@@ -92,7 +95,7 @@ internal class MainCheckoutModel(private val api: MainCheckoutTransport, val ses
         mutable.update { it.copy(viewLoading = true, viewError = null) }
         return try {
             val view = (api.get(listOf("workspaces", id, "main-checkout")) as? JsonObject)?.let(MainCheckout::view)
-            mutable.update { it.copy(view = view, viewLoading = false, diffs = emptyMap()) }
+            mutable.update { it.copy(view = view, viewLoading = false, diffs = emptyMap(), commitDiffs = emptyMap()) }
             view
         } catch (cancel: CancellationException) { throw cancel }
         catch (error: Exception) { mutable.update { it.copy(viewLoading = false, viewError = reason(error)) }; null }
@@ -110,6 +113,22 @@ internal class MainCheckoutModel(private val api: MainCheckoutTransport, val ses
                 mutable.update { it.copy(diffs = it.diffs + (path to diff)) }
             } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) {
             } finally { mutable.update { it.copy(diffLoading = it.diffLoading - path) } }
+        }
+    }
+
+    /** One unpushed commit's patches (`GET …/main-checkout?commit=<sha>&diff=<path>…`), read once per commit. */
+    fun loadCommitDiffs(sha: String, paths: List<String>) {
+        val id = workspaceId ?: return
+        if (sha in mutable.value.commitDiffs || sha in mutable.value.commitDiffLoading || paths.isEmpty()) return
+        mutable.update { it.copy(commitDiffLoading = it.commitDiffLoading + sha) }
+        scope.launch {
+            try {
+                val query = paths.take(MainCheckout.DIFF_PATHS_MAX).map { "diff" to it } + ("commit" to sha)
+                val read = api.get(listOf("workspaces", id, "main-checkout"), query) as? JsonObject
+                val diffs = (read?.get("diffs") as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
+                mutable.update { it.copy(commitDiffs = it.commitDiffs + (sha to diffs)) }
+            } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) {
+            } finally { mutable.update { it.copy(commitDiffLoading = it.commitDiffLoading - sha) } }
         }
     }
 

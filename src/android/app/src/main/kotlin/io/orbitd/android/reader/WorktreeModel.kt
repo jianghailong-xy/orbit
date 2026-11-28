@@ -36,8 +36,11 @@ internal data class BranchCommit(
 ) {
     companion object {
         /** An empty array means no commits yet; null means the runner did not report them. */
-        fun of(detail: JsonObject): List<BranchCommit>? =
-            (detail["branchCommits"] as? JsonArray)?.filterIsInstance<JsonObject>()?.mapNotNull { commit ->
+        fun of(detail: JsonObject): List<BranchCommit>? = parse(detail["branchCommits"])
+
+        /** The same shape on a main checkout snapshot's `commits`. */
+        fun parse(value: JsonElement?): List<BranchCommit>? =
+            (value as? JsonArray)?.filterIsInstance<JsonObject>()?.mapNotNull { commit ->
                 val sha = commit.string("sha") ?: return@mapNotNull null
                 BranchCommit(sha, commit.string("subject").orEmpty(), commit.string("body"),
                     commit.string("committedAt").orEmpty(), commit.string("savedBy"),

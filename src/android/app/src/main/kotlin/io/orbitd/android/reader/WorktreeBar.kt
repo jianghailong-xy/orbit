@@ -608,6 +608,35 @@ private fun WorktreeChanges(model: WorktreeModel, state: WorktreeState, branch: 
     }
 }
 
+/**
+ * One commit on its own screen, for a list that is not a worktree's (the main checkout's commits not pushed): the worktree's
+ * commit details, then a file's diff. ← and system back step back to the commit, then to the list; Done leaves.
+ */
+@Composable
+internal fun CommitScreen(commit: BranchCommit, patches: List<JsonObject>, loading: Boolean, loadPatches: () -> Unit,
+    back: () -> Unit, done: () -> Unit) {
+    var file by rememberSaveable(commit.sha) { mutableStateOf<String?>(null) }
+    val shown = file?.let { path -> commit.files.firstOrNull { it.path == path } }
+    val step: () -> Unit = { if (shown != null) file = null else back() }
+    LaunchedEffect(commit.sha) { loadPatches() }
+    Dialog(step, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxSize().safeDrawingPadding().testTag("commit-screen")) { Column {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                val label = if (shown != null) "Back to commit" else "Back to Not pushed"
+                IconButton(onClick = step, modifier = Modifier.semantics { contentDescription = label }) {
+                    Text("←", Modifier.clearAndSetSemantics {}, style = MaterialTheme.typography.titleLarge)
+                }
+                Text(shown?.path?.substringAfterLast('/') ?: CommitsLogic.shortSha(commit.sha), Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+                TextButton(onClick = done) { Text("Done") }
+            }
+            HorizontalDivider()
+            if (shown != null) DiffFileView(WorktreeState(diff = patches, diffLoading = loading), shown)
+            else CommitDetails(commit, listOf(commit), false, rememberLazyListState()) { file = it }
+        } }
+    }
+}
+
 @Composable
 private fun CommitList(commits: List<BranchCommit>, dirty: Boolean, detail: JsonObject?, scroll: LazyListState,
     selectTab: (CommitsLogic.Tab) -> Unit, open: (String) -> Unit) {
