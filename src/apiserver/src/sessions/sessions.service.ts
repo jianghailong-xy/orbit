@@ -457,6 +457,7 @@ import {
   assertEngineSession as assertEngineSessionRow,
 } from './engine-session';
 import { returnWaitingSessionsToOpen } from './return-to-open';
+import { expirePendingAskedBy } from '../owner-requests/owner-request-endings';
 import { readLandingView } from '../projects/landing-view';
 import {
   deriveSessionCapabilities,
@@ -12533,7 +12534,7 @@ export class SessionsService {
    * `end` control turn + signal the runner to cancel) so a live claude isn't orphaned.
    * The status settles to CANCELLED async while the row already sits in Completed.
    */
-  async complete(ownerId: string, id: string, opts: { handingOver?: boolean } = {}) {
+  async complete(ownerId: string, id: string, opts: { handingOver?: boolean; withdrawPendingQuestions?: boolean } = {}) {
     // A coordinator handing over (ProjectsService.coordinator's replace with a handoff) ends the same way, but its
     // `end` turn says to leave the session's SubAgent runs and bg_run jobs running: their wake goes to the successor
     // (docs/coordinator-handoff-v2-design.md §1). Every other Complete stops them.
@@ -12556,8 +12557,21 @@ export class SessionsService {
       ended.endReason,
       ended.lifecycleState,
     );
+    // The owner confirmed that the questions this session still asks go unanswered: they end here, so the sweep below
+    // has nothing to bring the session back to Open for. Without it, a waiting question brings it straight back.
+    if (opts.withdrawPendingQuestions) await this.expirePendingQuestions(ownerId, id);
     await this.returnIfStillWaiting(ownerId, [id]);
     return { ok: true };
+  }
+
+  /** Every PENDING owner request this session asked ends EXPIRED (`expirePendingAskedBy`), told as an expiry is. */
+  private async expirePendingQuestions(ownerId: string, id: string): Promise<void> {
+    const ended = await withTransactionRetry(
+      this.prisma,
+      (tx) => expirePendingAskedBy(tx, ownerId, [id], new Date()),
+      loggedRetry(this.logger, 'sessions.expirePendingQuestions'),
+    );
+    if (ended.length > 0) this.realtime.publishOwnerSignalChanged(ownerId, [id]);
   }
 
   /**

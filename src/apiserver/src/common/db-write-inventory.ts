@@ -305,6 +305,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'The sweep logs it and the next tick, a minute later, expires those requests.',
   },
   {
+    at: 'sessions/sessions.service.ts#expirePendingQuestions',
+    shape: 'TX_RETRIED',
+    locks: "Every PENDING owner_request row the completed session asked, other than a schedule's or a condition's card, through one UPDATE to EXPIRED (expirePendingAskedBy); then one watch_delivery INSERT of a row per ended request (enqueueResolutions), whose foreign keys take those owner_request rows FOR KEY SHARE, already held, and the undelivered SECRET grants of those requests (endUndeliveredGrants). No session row is locked: it runs after Complete's own transaction committed.",
+    identity: "The state = 'PENDING' predicate: a re-run after a commit, or an answer or expiry that won, matches nothing. `watch_delivery_owner_request_key` holds each request to one delivery.",
+    isolation: '',
+    attempts: 4,
+    replay: 'Re-run against the committed rows; it writes a delivery for exactly the rows its own UPDATE moved, and a rollback discards both.',
+    effects: "After commit only: owner.signal_changed for the session. The delivery is refused by the worker (the session is in Completed), as any wake of a completed session is.",
+    answer: 'Typed 503 after retry exhaustion to the Complete that asked for it; the session is already in Completed and the sweep after it brings it back to Open, as without the flag.',
+  },
+  {
     at: 'runner-api/runner-api.controller.ts#artifactResult',
     shape: 'TX_RETRIED',
     locks: 'conversation_turn by request id, then attachment by id. Attachment foreign keys only take FOR KEY SHARE on the session and the already locked turn.',
@@ -3557,11 +3568,12 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'sessions/run-notify.ts#recordRunNotify', under: 'sessions.createTurn onTurnWritten, under the recipient Session lock (rank 30). One session_request INSERT (rank 60), whose recipient foreign key names that locked row. The request id and clientTurnId are minted before the retried transaction; a replay of a committed turn never reaches the hook. Turn and request roll back together, with no external effects. A refused or exhausted createTurn is caught by notifyAgentMessage and falls back to the owner after rollback.' },
   // An owner request's ending delivered to the session that asked (migration 0504): its watch_delivery row.
   { at: 'owner-requests/project-reopen.ts#settlePendingProjectReopens', under: "owner-requests/owner-requests.service.ts#reopenProject, projects/projects.service.ts#update (a status write to OPEN) and #remove: one UPDATE of every PENDING PROJECT_REOPEN owner_request of the project, under the caller's project lock, then enqueueResolutions for the rows it ended" },
-  { at: 'owner-requests/owner-request-endings.ts#enqueueResolutions', under: 'owner-requests/owner-requests.service.ts#settle, #settleMadeWikis, #expireDue, #insertChange and #applyChange, and owner-requests/owner-secrets.service.ts#ack' },
+  { at: 'owner-requests/owner-request-endings.ts#enqueueResolutions', under: 'owner-requests/owner-requests.service.ts#settle, #settleMadeWikis, #expireDue, #insertChange and #applyChange, owner-requests/owner-secrets.service.ts#ack, and owner-requests/owner-request-endings.ts#expirePendingAskedBy' },
+  { at: 'owner-requests/owner-request-endings.ts#expirePendingAskedBy', under: 'sessions/sessions.service.ts#expirePendingQuestions' },
   // A SECRET request's key that was never delivered, ended with the request (migration 0506): its grant row.
   // "Save to my account secrets" on a submit: the owner's account_secret row by (owner, label), updated or inserted.
   { at: 'owner-requests/owner-secrets.service.ts#saveInTx', under: 'owner-requests/owner-secrets.service.ts#submit' },
-  { at: 'owner-requests/owner-request-endings.ts#endUndeliveredGrants', under: 'owner-requests/owner-requests.service.ts#settle and #expireDue' },
+  { at: 'owner-requests/owner-request-endings.ts#endUndeliveredGrants', under: 'owner-requests/owner-requests.service.ts#settle and #expireDue, and owner-requests/owner-request-endings.ts#expirePendingAskedBy' },
   // The owner's direct messages to their Feishu bot (docs/feishu-bot-design.md §7.3, migration 0499): a message chain
   // made a session's, and the FEISHU activity row. Run inside the receipt's transaction, and inside createTurn's
   // through its onTurnWritten hook, which a replay of the turn's clientTurnId never reaches.

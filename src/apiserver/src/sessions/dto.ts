@@ -232,6 +232,13 @@ export interface MergeRepairDto {
   preparePR?: boolean;
 }
 
+/** `POST /sessions/:id/complete`. */
+export interface SessionCompleteDto {
+  /** The owner confirmed it: every question this session still has waiting on them ends unanswered (EXPIRED), so the
+   *  session stays in Completed instead of coming straight back to Open. */
+  withdrawPendingQuestions?: boolean;
+}
+
 export interface SessionArmRetryDto {
   /** When the re-send should fire (ISO). Supplied by the caller because disarming cleared the
    *  only copy the server had; the client re-derives it from the failing reply with the same
