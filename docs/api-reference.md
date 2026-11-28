@@ -87,12 +87,12 @@ answers one page of the list as top-level entries, with an ETag answered `304` w
 | Caller | Routes |
 | --- | --- |
 | `public` | 41 |
-| `user` | 588 |
+| `user` | 590 |
 | `admin` | 31 |
 | `runner` | 259 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **923** |
+| **Total** | **925** |
 
 ## Public routes
 
@@ -186,6 +186,7 @@ answers one page of the list as top-level entries, with an ETag answered `304` w
 | `POST` | `/api/auth/google/link` | body `GoogleLinkDto` | `GoogleAuthController.link` |
 | `POST` | `/api/auth/google/link/confirm` | body `GoogleExchangeDto` | `GoogleAuthController.confirmLink` |
 | `GET` | `/api/conditions/:id` | path `id` | `ConditionsController.get` |
+| `GET` | `/api/documents/activity` | query `before`, `tz` | `DriveController.activityPage` |
 | `GET` | `/api/documents/changes` | query `since` | `DriveController.changes` |
 | `GET` | `/api/documents/chats` | query `offset`, `q`, `status` | `DriveChatController.list` |
 | `POST` | `/api/documents/chats` | body `Object` | `DriveChatController.create` |
@@ -223,6 +224,7 @@ answers one page of the list as top-level entries, with an ETag answered `304` w
 | `DELETE` | `/api/documents/versions/:id` | path `id` | `DriveController.deleteVersion` |
 | `GET` | `/api/documents/versions/:id/content` | path `id` | `DriveController.downloadVersion` |
 | `POST` | `/api/documents/versions/:id/restore` | body `RestoreDriveVersionDto`; path `id` | `DriveController.restoreVersion` |
+| `GET` | `/api/drive/activity` | query `before`, `tz` | `DriveController.activityPage` |
 | `GET` | `/api/drive/changes` | query `since` | `DriveController.changes` |
 | `GET` | `/api/drive/chats` | query `offset`, `q`, `status` | `DriveChatController.list` |
 | `POST` | `/api/drive/chats` | body `Object` | `DriveChatController.create` |
