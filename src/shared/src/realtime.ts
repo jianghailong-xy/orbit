@@ -12,7 +12,7 @@ import type { SessionCapabilities, SessionSlotWait } from './dto';
 import type { ConfirmationUnderReview } from './owner-confirmation-review';
 import type { SessionOwnerItem, SessionOwnerRequest, SessionTaskMoveGroup, SessionWaitingKind } from './project-progress';
 import type { ExternalMessageFrom, OrbitMessageFrom, SessionMessageFrom } from './session-message';
-import type { SessionPhase, SessionTurnOutcome, SessionWaitingOn } from './session-phase';
+import type { SessionCreatedTasksActive, SessionPhase, SessionTurnOutcome, SessionWaitingOn } from './session-phase';
 import type { SessionActivity } from './task-run-reason';
 import type { SessionRequestPeer } from './session-request';
 import type { SessionSourceRefusalDetail, SourceRefusalCode, SourceState } from './source';
@@ -265,6 +265,9 @@ export interface ControlSessionSummary {
    *  control plane. */
   activity?: SessionActivity | null;
   runningBgCount?: number;
+  /** The tasks this session created that are running or queued now, null when none (SessionCreatedTasksActive).
+   *  Absent from an older control plane. */
+  createdTasksActive?: SessionCreatedTasksActive | null;
   /** Server-derived actions; optional for rolling-version compatibility. */
   capabilities?: SessionCapabilities;
   /** The engine the session runs on for good — the CLI on the runner (`claude`, `codex`, `kimi`,
