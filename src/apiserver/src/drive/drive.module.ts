@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { DriveActivity } from './drive-activity';
 import { DriveChunksService } from './drive-chunks.service';
 import { DriveChatChanges } from './drive-chat-changes';
 import { DriveChatChangesController } from './drive-chat-changes.controller';
@@ -16,7 +17,7 @@ import { DriveSyncsService } from './drive-syncs.service';
 // PrismaService, FilesService and RealtimeService come from their global modules.
 @Module({
   controllers: [DriveController, DriveDownloadController, RunnerDriveController, RunnerDriveSyncsController, DriveChatChangesController],
-  providers: [DriveService, DriveChatChanges, DriveChunksService, DriveUploadsService, DriveContentService, DriveDownloadLinks, DriveSyncsService],
+  providers: [DriveService, DriveActivity, DriveChatChanges, DriveChunksService, DriveUploadsService, DriveContentService, DriveDownloadLinks, DriveSyncsService],
   exports: [DriveService, DriveChunksService, DriveContentService],
 })
 export class DriveModule {}

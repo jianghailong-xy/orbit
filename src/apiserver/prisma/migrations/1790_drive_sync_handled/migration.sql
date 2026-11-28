@@ -10,7 +10,8 @@
 --
 -- Nullable, no default: catalog only, no row is rewritten, no trigger, no index (the list reads by owner, as before).
 --
--- 1790: the highest number on main was 1750 (1750_runner_presence_last_heard_at), and 1780 in any worktree, when this
+-- 1790: the highest number on main was 1750 (1750_runner_presence_last_heard_at), and 1781 on the project branch
+-- (1781_drive_activity_indexes) and in any worktree, when this
 -- was written. Can run twice.
 
 ALTER TABLE "drive_sync" ADD COLUMN IF NOT EXISTS "handled_at" TIMESTAMPTZ(3);

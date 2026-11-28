@@ -567,6 +567,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
     'DELETE /drive/trash/groups/:id',
     'DELETE /drive/trash',
     'GET /drive/changes',
+    'GET /drive/activity',
     'GET /drive/usage',
     'GET /drive/syncs',
     'GET /drive/syncs/:id',

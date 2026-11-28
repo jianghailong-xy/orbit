@@ -447,7 +447,9 @@ describe('file links and the details rule (board ④ note 2)', () => {
     expect(pane()?.closest('.files-head')).toBeNull();
     const head = document.querySelector('.files-head')!;
     expect(head.contains(pane())).toBe(false);
-    expect([...head.querySelectorAll('button')].map((b) => text(b))).toEqual(expect.arrayContaining(['Upload', 'Trash', 'Storage']));
+    expect([...head.querySelectorAll('button')].map((b) => text(b))).toEqual(expect.arrayContaining(['Upload']));
+    expect([...head.querySelectorAll('button')].map((b) => text(b))).not.toEqual(expect.arrayContaining(['Trash']));
+    expect(head.querySelector('button[aria-label="Settings"]')).toBeTruthy();
     expect(document.querySelector('.files-tree'), 'the tree is untouched').toBeTruthy();
     await press(byLabel('Close details'));
     expect(pane()).toBeNull();
