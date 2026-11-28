@@ -2551,6 +2551,11 @@ struct DeliveredDecisionCardView: View {
                     .font(.orbitLabel)
                     .foregroundStyle(console.modeChangeShowsGap(change) ? Color.orange : Color.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
+            case .permissionModeRefusal(let refusal):
+                Label(refusal.line, systemImage: "shield")
+                    .font(.orbitLabel)
+                    .foregroundStyle(console.modeRefusalShowsGap(refusal) ? Color.orange : Color.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .environment(\.approvalReviewTarget, .delivered(card))
@@ -2560,6 +2565,7 @@ struct DeliveredDecisionCardView: View {
         // asking rather than by being told.
         .task {
             if case .permissionModeChange = card.kind { return }
+            if case .permissionModeRefusal = card.kind { return }
             // Both reads, and each is a no-op where it does not apply: the project's questions
             // belong to a coordinator conversation, the confirmation to a task's run — and a
             // receipt of one of these cards is on screen in the same conversation as the card was.

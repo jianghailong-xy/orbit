@@ -89,6 +89,71 @@ final class SessionPermissionModeTests: XCTestCase {
         XCTAssertEqual(rows.map(\.id), [cards[0].id, "message", cards[1].id, cards[2].id, "transcript-bottom"])
     }
 
+    // A correction Claude refused (`permission_mode_correction_failed`): a gap that lasts at once, in the CLI's words.
+
+    private let words = "Cannot set permission mode to auto: auto mode unavailable for this model"
+
+    private func refusalEvent(seq: Int = 7, ts: String = "2026-11-22T12:00:01.000Z") throws -> RunEvent {
+        let json = """
+        {"seq":\(seq),"type":"system","ts":"\(ts)","payload":{"subtype":"permission_mode_correction_failed",
+         "mode":"default","requested":"auto","reason":"\(words)"}}
+        """
+        return try JSONDecoder().decode(RunEvent.self, from: Data(json.utf8))
+    }
+
+    func testRefusedCorrectionIsALastingGapWithTheCLIWordsNotSwitching() throws {
+        let refusal = try XCTUnwrap(PermissionModeRefusal(event: refusalEvent()))
+        XCTAssertEqual(refusal, PermissionModeRefusal(seq: 7, at: "2026-11-22T12:00:01.000Z", mode: "default",
+                                                      requested: "auto", reason: words))
+        let report = change(from: "auto", to: "default", cause: "ENGINE_REPORT")
+        let gap = SessionModeDisplay(intent: .auto, actual: "default", beforeStart: false,
+                                     latestChange: report, refusal: refusal)
+        XCTAssertEqual(gap.label, "Default")
+        XCTAssertFalse(gap.isCorrecting)
+        XCTAssertEqual(gap.reason, "Running in Default. You asked for Auto, but the runner couldn't switch Claude to it: \(words).")
+        XCTAssertEqual(refusal.line, "Claude stays in Default — the runner couldn't switch it to Auto: \(words)")
+        // Without the refusal the same report still reads as the runner switching it.
+        XCTAssertTrue(SessionModeDisplay(intent: .auto, actual: "default", beforeStart: false, latestChange: report).isCorrecting)
+    }
+
+    func testTheNextChangeEndsARefusal() throws {
+        let refusal = try XCTUnwrap(PermissionModeRefusal(event: refusalEvent()))
+        let corrected = SessionPermissionModeChange(fromMode: "default", toMode: "auto", cause: "RUNNER_CORRECTION",
+                                                    client: nil, at: "2026-11-22T12:05:00.000Z")
+        XCTAssertFalse(refusal.stands(latest: corrected, actual: "auto"))
+        let respawn = SessionPermissionModeChange(fromMode: "auto", toMode: "default", cause: "RESPAWN",
+                                                  client: nil, at: "2026-11-22T12:20:00.000Z")
+        XCTAssertFalse(refusal.stands(latest: respawn, actual: "default"), "a later re-spawn makes its own attempt")
+        let corrected2 = #"{"seq":3,"type":"system","payload":{"subtype":"permission_mode_corrected","mode":"auto"}}"#
+        XCTAssertNil(PermissionModeRefusal(event: try JSONDecoder().decode(RunEvent.self, from: Data(corrected2.utf8))))
+    }
+
+    func testRefusalCardIsARecordPlacedAtTheRunnersReport() throws {
+        let refusal = try XCTUnwrap(PermissionModeRefusal(event: refusalEvent()))
+        let card = DeliveredDecisionCard(kind: .permissionModeRefusal(refusal), placement: .at(refusal.at))
+        XCTAssertTrue(card.kind.isRecord)
+        XCTAssertEqual(card.id, "permission-mode-refused-7")
+    }
+
+    func testClaimLineIsWordedFromTheServersRequestedModeAndReason() throws {
+        let detail = try session(#"""
+        {"id":"s","status":"RUNNING","permissionMode":"bypassPermissions","actualPermissionMode":"auto",
+         "permissionModeChanges":[
+           {"fromMode":null,"toMode":"auto","cause":"CLAIM","client":null,"at":"2026-11-22T12:00:00.000Z",
+            "requestedMode":"bypassPermissions","reason":"ROOT_RUNNER"}
+         ]}
+        """#)
+        let claim = try XCTUnwrap(detail.permissionModeChanges?.first)
+        XCTAssertEqual(claim.requestedMode, "bypassPermissions")
+        XCTAssertEqual(claim.reason, "ROOT_RUNNER")
+        XCTAssertEqual(claim.line, "Started in Auto, not Bypass — Bypass can't run on a root runner")
+        var scheduled = change(from: "default", to: "auto", cause: "CLAIM")
+        scheduled.requestedMode = "default"
+        scheduled.reason = "SCHEDULED_RUN"
+        XCTAssertEqual(scheduled.line, "Resumed in Auto — scheduled runs always use Auto")
+        XCTAssertEqual(change(from: nil, to: "auto", cause: "CLAIM").line, "Started in Auto — assigned at claim")
+    }
+
     private func autoHint(model: String) -> String? {
         SessionModeDisplay.autoStartHint(model: model, engine: "claude", provider: "claude",
                                         configured: [], catalog: nil)
