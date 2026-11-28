@@ -3611,6 +3611,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // Written as 1461 on its task branch, it was renumbered to 1470 after main took 1462, to 1495 after main took
       // 1491, to 1540 after other branches took 1495, to 1736 after main took 1547-1730 (1730 the highest on main then), and to 1756 after main took 1750, then to 1806 after main took 1780-1800.
       '1806_default_permission_mode_audit',
+      // 1807 adds the nullable session_permission_mode_change.requested_mode and .reason and one check on that table;
+      // it is none of the preserved relations, no row is written, and no trigger, function or DONE fence changes.
+      // Written as 1740, it was renumbered to 1770 after main took 1750 and this project's 1735 and 1736 moved to 1755
+      // and 1756, and to 1807 after main took 1780-1800 and they moved to 1805 and 1806; it stays after 1805, which
+      // creates the table it alters.
+      '1807_permission_mode_change_claim_substitution',
       // 1810 adds session_permission_mode_change.seq (a sequence, numbering the rows already there by created_at) and an
       // index on (session_id, seq); it is none of the preserved relations, and no trigger, function or DONE fence changes.
       // It stays after the migration that creates the table it alters. Written as 1780, renumbered to 1810 after main took

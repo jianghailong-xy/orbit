@@ -90,8 +90,9 @@ export function claimModelLogLine(fields: ClaimModelTraceFields): string {
   return `claim-model ${JSON.stringify(line)}`;
 }
 
-/** One model id for the line: the id itself, `null` when the session names none, else redacted. */
-function modelId(value: string | null | undefined): string | null {
+/** One model id for the line: the id itself, `null` when the session names none, else redacted. The claim's
+ *  permission-mode line (claim-permission-mode.ts) writes its model through this too. */
+export function modelId(value: string | null | undefined): string | null {
   if (value === null || value === undefined) return null;
   const trimmed = value.trim();
   if (trimmed === '') return '';

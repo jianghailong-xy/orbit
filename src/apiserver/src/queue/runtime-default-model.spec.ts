@@ -184,7 +184,10 @@ test('persisted Auto is evaluated after a supported Claude runtime default is re
   assert.deepEqual(modelWrites, ['claude-opus-5']);
 });
 
-test('persisted Auto safely downgrades after an unsupported Claude runtime default is resolved', async () => {
+test('persisted Auto is handed as Auto on a Claude runtime default that Orbit lists without Auto', async () => {
+  // The claim no longer foretells that this model settles in Default: Claude Code takes --permission-mode auto on
+  // any model, its init frame says what it settled on, and the runner corrects it when that is lower
+  // (claim-permission-mode.ts, runner-go claude_mode_correction.go).
   const { queue, modelWrites } = harness(null, {
     provider: AgentProvider.CLAUDE,
     runtimeDefaultModel: 'claude-haiku-4-5-20251001',
@@ -194,6 +197,6 @@ test('persisted Auto safely downgrades after an unsupported Claude runtime defau
   const claimed = await build(queue);
 
   assert.equal(claimed.agent.model, 'claude-haiku-4-5-20251001');
-  assert.equal(claimed.agent.permissionMode, PermissionMode.DEFAULT);
+  assert.equal(claimed.agent.permissionMode, PermissionMode.AUTO);
   assert.deepEqual(modelWrites, ['claude-haiku-4-5-20251001']);
 });

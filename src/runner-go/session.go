@@ -2312,6 +2312,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	var contextReset atomic.Bool
 	contextReset.Store(!firstSpawn)
 	args := claudeCommandArgs(job, scratchDir, firstSpawn)
+	// This process's one chance to put an engine that settles below the Auto it is spawned with back in
+	// Auto, judged on its first init frame (claude_mode_correction.go).
+	modeFix := newClaudeModeCorrection(args)
 	// What this process's running totals start from, read from the transcript --resume is about to
 	// read, before it reads it: every completion it sends carries it (claude_running_totals.go).
 	runningTotals := claudeRunningTotals(job, execDir, firstSpawn)
@@ -2939,6 +2942,14 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 					settleSetConfigTurn(resp.TurnID, "unreadable payload: "+err.Error(), job, completeTurn)
 					continue
 				}
+				for _, f := range frames {
+					if f.subtype == ctrlSetPermissionMode {
+						// The mode the session's config now names (the owner's pick, or a change Orbit made)
+						// is about to reach the engine, and no correction may overtake it
+						// (claude_mode_correction.go).
+						modeFix.supersede()
+					}
+				}
 				var refused error
 				for _, f := range frames {
 					// Asked before the frame is built, and only of the one frame whose effect
@@ -3162,6 +3173,11 @@ scanLoop:
 			// session's Agent Tools report, in the engine's own words. A subagent's init is not the session's.
 			if msg["parent_tool_use_id"] == nil {
 				agentTools.send(claudeAgentToolsReport(job, msg), emit)
+			}
+			// After that report, which carries the mode the engine settled on: the control plane records
+			// the two in the order they are sent, the lower mode first and then the correction.
+			if p := modeFix.begin(rt, msg); p != nil {
+				go modeFix.report(procCtx, rt, p, emit, job.SessionID)
 			}
 		}
 		if msg["type"] == "system" && msg["subtype"] == "compact_boundary" {

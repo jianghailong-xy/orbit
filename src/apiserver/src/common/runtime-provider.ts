@@ -94,7 +94,11 @@ export function initializesRuntimeDynamically(provider?: string | null): boolean
  * `modelCatalog` is that same runner's, and is what decides Auto: its row for this model lists the
  * modes the CLI installed there accepts. Pass it wherever the assigned runner is known — without
  * it this falls back to a list in the repo, which is how Auto came to be withheld from a model
- * whose CLI would have honored it. */
+ * whose CLI would have honored it.
+ *
+ * A claim and a reclaim do not come here (queue/claim-permission-mode.ts): they hand Auto as asked,
+ * and the mode the engine settles on is read from the engine, which the runner corrects at once
+ * when it is lower. */
 export function normalizeBuiltinPermissionMode(
   provider: AgentProvider,
   model: string,
