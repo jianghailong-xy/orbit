@@ -593,6 +593,7 @@ import {
   autoMenuNote,
   type ModeCapsule,
   modeCorrectionRefusals,
+  standingRefusal,
 } from '../lib/sessionPermissionMode';
 import { usePermissionModeChangeHistory } from '../lib/permissionModeChangeHistory';
 import type {
@@ -10804,7 +10805,8 @@ export function WorkspaceView({
     actual: recordedPermissionMode,
     latest: permissionModeChanges?.at(-1) ?? null,
     pickedAt: modePickedAt?.sessionId === selectedId ? modePickedAt.at : null,
-    refusal: permissionModeRefusals.at(-1) ?? null,
+    // The detail's, which stands whether or not its event is loaded; else the newest of those loaded.
+    refusal: standingRefusal(detailForSelected?.permissionModeCorrectionRefusal, permissionModeRefusals),
   });
   // Auto stays selectable on a model with no Auto, and its row says what the session does instead (C1).
   const autoModeNote = autoMenuNote(shownModeFacts, !!recordedPermissionMode);

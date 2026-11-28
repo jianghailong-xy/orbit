@@ -1,4 +1,8 @@
-import { PERMISSION_MODE_CORRECTION_FAILED_EVENT_SUBTYPE, type SessionPermissionModeChange } from '@orbit/shared';
+import {
+  PERMISSION_MODE_CORRECTION_FAILED_EVENT_SUBTYPE,
+  type SessionPermissionModeChange,
+  type SessionPermissionModeCorrectionRefusal,
+} from '@orbit/shared';
 import { MODE_OPTIONS } from './workspaceDefaults';
 
 /**
@@ -14,7 +18,8 @@ import { MODE_OPTIONS } from './workspaceDefaults';
  * A gap between the two is either a switch under way (A1, short: "Default → Auto" with a spinner) or
  * one that lasts until something changes ("Default" with an amber dot); both carry their reason.
  * A correction Claude refused (the runner's `permission_mode_correction_failed`) is a gap that lasts,
- * with the CLI's own words, from the moment the runner says so.
+ * with the CLI's own words, from the moment the runner says so. The session detail carries the one that
+ * still stands, so the gap shows whether or not its event is among those loaded.
  */
 
 /** A mode's word, as the capsule and the menu write it: `acceptEdits` → "Accept Edits". */
@@ -67,6 +72,22 @@ export interface ModeCorrectionRefusal {
   reason: string;
 }
 
+/** A refused correction as the capsule reads it: from an event loaded, or from the session detail. */
+export type StandingRefusal = Pick<ModeCorrectionRefusal, 'at' | 'mode' | 'requested' | 'reason'>;
+
+/**
+ * The refused correction the capsule reads: the session detail's, which the server carries while it answers the
+ * newest change whether or not its event is loaded, else the newest among the events loaded (an older server's
+ * detail, or one read before the refusal reached it).
+ */
+export function standingRefusal(
+  detail: SessionPermissionModeCorrectionRefusal | null | undefined,
+  loaded: readonly ModeCorrectionRefusal[],
+): StandingRefusal | null {
+  if (detail) return { at: detail.at, mode: detail.mode, requested: detail.requestedMode, reason: detail.reason.trim() };
+  return loaded.at(-1) ?? null;
+}
+
 /** How far the runner's clock may run behind the server's: the refusal is stamped by the runner, the
  *  report of the lower mode it answers by the server when it took the batch. */
 const REFUSAL_CLOCK_SLACK_MS = 60_000;
@@ -96,11 +117,11 @@ export function modeCorrectionRefusals(
  * settled on (or came back from a re-spawn in), which the runner then failed to correct. Any later
  * change (a correction that took, the owner's pick) ends it.
  */
-export function refusalStands(
-  refusal: ModeCorrectionRefusal | null | undefined,
+export function refusalStands<R extends StandingRefusal>(
+  refusal: R | null | undefined,
   latest: SessionPermissionModeChange | null | undefined,
   actual: string | null | undefined,
-): refusal is ModeCorrectionRefusal {
+): refusal is R {
   if (!refusal || !latest || !actual) return false;
   if (latest.cause !== 'ENGINE_REPORT' && latest.cause !== 'RESPAWN') return false;
   if (latest.toMode !== actual || refusal.mode !== actual) return false;
@@ -125,7 +146,7 @@ function answeredChange(changes: readonly SessionPermissionModeChange[], refusal
 const sentence = (words: string): string => (/[.!?]$/.test(words) ? words : `${words}.`);
 
 /** Why the capsule shows a refused correction (the board's lasting gap, with the CLI's reason). */
-function refusalReason(refusal: ModeCorrectionRefusal): { lead: string; rest: string } {
+function refusalReason(refusal: StandingRefusal): { lead: string; rest: string } {
   const asked = permissionModeLabel(refusal.requested);
   return {
     lead: `Running in ${permissionModeLabel(refusal.mode)}.`,
@@ -143,8 +164,8 @@ export interface ModeCapsuleInput extends ModeFacts {
   latest?: SessionPermissionModeChange | null;
   /** When this client last picked the intent of the running session, while it travels to the engine. */
   pickedAt?: number | null;
-  /** The newest refused correction among the conversation's events (modeCorrectionRefusals). */
-  refusal?: ModeCorrectionRefusal | null;
+  /** The refused correction that stands (standingRefusal): the detail's, or the newest among the events loaded. */
+  refusal?: StandingRefusal | null;
   now: number;
 }
 

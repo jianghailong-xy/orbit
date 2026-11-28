@@ -14,7 +14,9 @@ import type { Runner } from './TasksSidePanel';
  *  - the runner reported `permission_mode_correction_failed`: the capsule shows the lasting gap of the board
  *    (docs/mocks/permission-mode-actual, A1), "Default" with its dot and the CLI's words, never "Default → Auto";
  *    the transcript has a line saying the runner could not switch it, and why (B1);
- *  - the claim handed Auto for Bypass on a root runner: its line is worded from the server's requestedMode and reason.
+ *  - the claim handed Auto for Bypass on a root runner: its line is worded from the server's requestedMode and reason;
+ *  - a long session whose refusal paged out of the tail loaded: the detail's `permissionModeCorrectionRefusal` still gives
+ *    the lasting gap and the CLI's words, not "switching" (task 355JM5aLiNscahuF5Xnes).
  */
 
 vi.mock('../api', async (importOriginal) => {
@@ -44,11 +46,18 @@ const REFUSED = read<Detail>('session-refused.web.json');
 const REFUSED_EVENTS = read<Page>('session-refused.events.json');
 const ROOT = read<Detail>('session-root-claim.web.json');
 const ROOT_EVENTS = read<Page>('session-root-claim.events.json');
-const RUNNERS = read<Array<Record<string, unknown> & { id: string }>>('runners.json');
+const PAGED = read<Detail>('session-refused-paged.web.json');
+const PAGED_EVENTS = read<Page>('session-refused-paged.events.json');
+const RUNNERS = [
+  ...read<Array<Record<string, unknown> & { id: string }>>('runners.json'),
+  ...read<Array<Record<string, unknown> & { id: string }>>('session-refused-paged.runners.json'),
+];
 const WORDS = 'Cannot set permission mode to auto: auto mode unavailable for this model';
 
-const details: Record<string, Detail> = { [REFUSED.id]: REFUSED, [ROOT.id]: ROOT };
-const pages: Record<string, Page> = { [REFUSED.id]: REFUSED_EVENTS, [ROOT.id]: ROOT_EVENTS };
+const details: Record<string, Detail> = { [REFUSED.id]: REFUSED, [ROOT.id]: ROOT, [PAGED.id]: PAGED };
+const pages: Record<string, Page> = { [REFUSED.id]: REFUSED_EVENTS, [ROOT.id]: ROOT_EVENTS, [PAGED.id]: PAGED_EVENTS };
+/** When the server recorded Claude's report of Default in the paged-out session. */
+const pagedReportAt = (): number => Date.parse((PAGED.permissionModeChanges as Array<{ at: string }>).at(-1)!.at);
 const runnerOf = (s: Detail) => RUNNERS.find((r) => r.id === s.assignedRunnerId) as unknown as Runner;
 
 class FakeEventSource {
@@ -74,7 +83,7 @@ const transcript = (): string[] =>
   );
 const menuHead = (): string | undefined => document.querySelector('.orbit-select-header')?.textContent?.trim();
 
-async function mount(session: Detail, expected: string): Promise<void> {
+async function mount(session: Detail, expected: string, opts: { lines?: boolean } = {}): Promise<void> {
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
   container = document.createElement('div');
   root = createRoot(container);
@@ -93,6 +102,7 @@ async function mount(session: Detail, expected: string): Promise<void> {
   await act(async () => {
     await vi.waitFor(() => expect(capsuleText()).toBe(expected), { timeout: 20_000, interval: 20 });
   });
+  if (opts.lines === false) return;
   await act(async () => {
     await vi.waitFor(() => expect(mounted().querySelectorAll('.chat-mode-line').length).toBeGreaterThan(0), { timeout: 10_000, interval: 20 });
   });
@@ -179,6 +189,7 @@ afterEach(async () => {
     delete (HTMLElement.prototype as { scrollTo?: unknown }).scrollTo;
     delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
     vi.unstubAllGlobals();
+    vi.useRealTimers();
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
   }
 });
@@ -207,6 +218,46 @@ describe('a refused correction and a claim’s substitution, from a real apiserv
     ]);
     await openMode();
     expect(menuHead()).toBe(`Running in Default. You asked for Auto, but the runner couldn’t switch Claude to it: ${WORDS}.`);
+  });
+
+  it('a refusal paged out of the events loaded still reads as the lasting gap, from the detail', async () => {
+    // The real payloads: the tail page the transcript loads first has no refusal, and the detail carries it.
+    expect(PAGED_EVENTS.hasMore).toBe(true);
+    expect(PAGED_EVENTS.events.length).toBe(200);
+    expect(
+      PAGED_EVENTS.events.some((e) => (e as { payload?: { subtype?: string } }).payload?.subtype === 'permission_mode_correction_failed'),
+    ).toBe(false);
+    expect((PAGED.permissionModeChanges as Array<{ cause: string }>).map((c) => c.cause)).toEqual(['CLAIM', 'ENGINE_REPORT']);
+    expect(PAGED.permissionModeCorrectionRefusal).toEqual(
+      expect.objectContaining({ mode: 'default', requestedMode: 'auto', reason: WORDS }),
+    );
+
+    // The reports it answers are older than every event loaded: no mode line is drawn, and the capsule still knows. Read
+    // seconds after Claude's report, while a report not yet answered would still read as being switched.
+    vi.useFakeTimers({ toFake: ['Date'], now: pagedReportAt() + 5_000 });
+    await mount(PAGED, 'Default', { lines: false });
+    expect(capsule()?.dataset.modeGap).toBe('lasting');
+    expect(capsule()?.querySelector('.composer-mode-dot')).not.toBeNull();
+    expect(capsule()?.querySelector('.composer-mode-spin')).toBeNull();
+    expect(capsuleText()).not.toContain('→');
+    await openMode();
+    expect(menuHead()).toBe(`Running in Default. You asked for Auto, but the runner couldn’t switch Claude to it: ${WORDS}.`);
+  });
+
+  it('without the detail’s word, the same paged-out session would not say why', async () => {
+    // The control: the detail as a server before migration 1821 answered it.
+    const { permissionModeCorrectionRefusal: _dropped, ...older } = PAGED;
+    details[PAGED.id] = older as Detail;
+    try {
+      vi.useFakeTimers({ toFake: ['Date'], now: pagedReportAt() + 5_000 });
+      await mount(older as Detail, 'Default', { lines: false });
+      await openMode();
+      // A gap, but not the refusal's: the events loaded say nothing of what Claude said.
+      expect(menuHead()).not.toContain(WORDS);
+      expect(menuHead()).not.toContain('couldn’t switch Claude');
+    } finally {
+      details[PAGED.id] = PAGED;
+    }
   });
 
   it('the claim’s line is worded from the server’s requestedMode and reason', async () => {
