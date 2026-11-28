@@ -19,7 +19,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 24px;
+  padding: 24px 24px 16px;
 }
 .files-head h1 {
   margin: 0;
@@ -47,6 +47,26 @@ span.files-title-parent {
   display: flex;
   gap: 8px;
   font-size: 14px;
+  min-width: 0;
+}
+/* Search is 280px and is what gives way where the chat panel narrows the header. */
+.files-head-actions .files-search-box {
+  flex: 0 1 auto;
+  width: 280px;
+  min-width: 0;
+  height: 34px;
+  border-radius: 8px;
+}
+.files-head-actions .orbit-button {
+  gap: 6px;
+  padding: 0 12px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+.files-head-actions .orbit-button > span:last-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .files-head-actions .orbit-btn,
 .files-head-actions .orbit-input,
@@ -72,7 +92,7 @@ span.files-title-parent {
 .files-picker-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   height: 34px;
   border-radius: 6px;
   cursor: pointer;
@@ -120,6 +140,10 @@ span.files-title-parent {
 }
 .files-folder-icon {
   color: var(--brand);
+}
+.files-tree-row .files-folder-icon {
+  color: var(--text-3);
+  font-size: 16px;
 }
 .files-file-icon {
   color: var(--text-3);
@@ -177,13 +201,13 @@ span.files-title-parent {
   font-size: 13px;
   height: 36px;
   color: var(--text-3);
-  padding: 0 8px;
+  padding: 0 10px;
   border-bottom: 1px solid var(--border-subtle);
 }
 .files-list td {
   height: 48px;
   box-sizing: border-box;
-  padding: 0 8px;
+  padding: 0 10px;
   border-bottom: 1px solid var(--border-subtle);
   white-space: nowrap;
   overflow: hidden;
@@ -204,7 +228,10 @@ span.files-title-parent {
 .files-name-cell {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+}
+.files-name-cell > .anticon {
+  font-size: 18px;
 }
 .files-col-name .orbit-input,
 .files-col-name input {
@@ -1259,20 +1286,24 @@ span.files-title-parent {
 }
 
 /* The Settings gear and its menu: the storage meter over Trash (board frame 1 marks 7–8, frame 3). */
-.drive-gear { position: relative; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--text-2); cursor: pointer; }
+.drive-gear { position: relative; flex: none; width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: 8px; background: transparent; color: var(--text-2); cursor: pointer; }
 .drive-gear:hover { background: var(--hover, rgba(0, 0, 0, 0.04)); }
 .drive-gear-dot { position: absolute; top: -2px; right: -2px; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--bg, #fff); }
 .drive-gear-dot[data-level='amber'] { background: var(--warning-solid); }
 .drive-gear-dot[data-level='red'] { background: var(--error-solid); }
-.drive-settings-menu { min-width: 260px; }
+.drive-settings-menu { min-width: 298px; }
 .drive-meter { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 10px 12px; border: 0; background: transparent; text-align: left; cursor: pointer; color: var(--text-1, inherit); font: inherit; }
-.drive-meter-head { display: flex; justify-content: space-between; font-size: 12px; }
-.drive-meter-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; }
+.drive-meter-head { display: flex; justify-content: space-between; font-size: 13px; }
+.drive-meter-bar { display: flex; gap: 2px; height: 6px; border-radius: 3px; overflow: hidden; }
 .drive-seg-drive { background: #3b6df2; }
 .drive-seg-trash { background: #a6abb4; }
 .drive-seg-other { background: #1fa38a; }
-.drive-meter-legend { display: flex; gap: 8px; font-size: 11px; color: var(--text-3); }
-.drive-meter-note { font-size: 11px; }
+.drive-meter-legend { display: flex; gap: 10px; font-size: 12px; color: var(--text-3); }
+.drive-meter-legend span::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 2px; }
+.drive-meter-legend span:nth-child(1)::before { background: #3b6df2; }
+.drive-meter-legend span:nth-child(2)::before { background: #a6abb4; }
+.drive-meter-legend span:nth-child(3)::before { background: #1fa38a; }
+.drive-meter-note { font-size: 12.5px; }
 .drive-meter-note { color: var(--text-3); }
 .drive-meter-note[data-level='amber'] { color: var(--warning); }
 .drive-meter-note[data-level='red'] { color: var(--error); }

@@ -17,6 +17,7 @@ import {
   Html5Outlined,
   LinkOutlined,
   RightOutlined,
+  SearchOutlined,
   UploadOutlined,
 } from '@ant-design/icons';
 import Markdown from '../components/Markdown';
@@ -785,7 +786,8 @@ function DriveBrowser() {
           </h1>
           <div className="files-head-actions">
             <Input
-              size="small"
+              className="files-search-box"
+              prefix={<SearchOutlined />}
               aria-label="Search Drive"
               placeholder="Search Drive"
               value={search}

@@ -1,4 +1,4 @@
-import { CommentOutlined } from '@ant-design/icons';
+import { RobotOutlined } from '@ant-design/icons';
 import { Button } from '../ui/Button';
 import type { DriveAgents } from './DriveChatHost';
 
@@ -14,7 +14,7 @@ export function DriveAgentsButton({ agents }: { agents: DriveAgents }) {
       className={`files-agents${agents.open ? ' is-open' : ''}`}
       aria-pressed={agents.open}
       data-working={agents.working || undefined}
-      icon={agents.working ? <span className="files-agents-ring" aria-hidden="true" /> : <CommentOutlined />}
+      icon={agents.working ? <span className="files-agents-ring" aria-hidden="true" /> : <RobotOutlined />}
       onClick={agents.toggle}
     >
       Agents
