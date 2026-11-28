@@ -429,7 +429,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val scheduleInserts = remember(scheduledState.sessions, scheduledState.runs, route.id) { ScheduleInsert.of(scheduledState, route.id!!) }
     // Each change of the mode the engine runs in, with who or what made it (board permission-mode-actual B1), where it happened: the
     // session's detail carries them, and the runner's catalogue says whether its model has Auto.
-    val permissionModeLines = remember(snapshotDetail, composerState.catalog) { modeLines(snapshotDetail, composerState.catalog) }
+    val permissionModeLines = remember(snapshotDetail, composerState.catalog, state.window.events) {
+        modeLines(snapshotDetail, composerState.catalog, state.window.events)
+    }
     val drawSchedule: @Composable (ScheduleInsert) -> Unit = { insert ->
         key(insert.key) { Box(Modifier.conversationCard()) {
             ScheduleConversationInsert(insert, scheduled, route.id!!) { id ->

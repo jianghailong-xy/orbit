@@ -13,9 +13,9 @@ import kotlinx.serialization.json.jsonObject
  * mode facts written through the server's own doors, read back over HTTP as a signed-in Android client reads them. The one copy is
  * core's; the app's tests find it from their own directory.
  */
-internal object CapturedPayloads {
+internal open class CapturedPayloadsIn(relative: String) {
     private val dir: File = generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
-        .map { File(it, "core/src/test/resources/wire/permission-mode") }.first { it.isDirectory }
+        .map { File(it, relative) }.first { it.isDirectory }
 
     fun json(name: String): JsonElement = Wire.json.parseToJsonElement(File(dir, "$name.json").readText())
 
@@ -36,4 +36,13 @@ internal object CapturedPayloads {
         val row = rows.first { (it["name"] as? kotlinx.serialization.json.JsonPrimitive)?.content == name }
         return JsonObject(row.filterKeys { !ROUTING.matches(it) } + ComposerShell.obj("""{"id":"${ComposerShell.RUNNER}"}"""))
     }
+
+    /** A captured events page's events, as [ComposerShell.events]. */
+    fun events(name: String): List<JsonObject> = json("session-$name").jsonObject.getValue("events").jsonArray.map { it.jsonObject }
 }
+
+internal object CapturedPayloads : CapturedPayloadsIn("core/src/test/resources/wire/permission-mode")
+
+/** The refused Auto correction and the claim's substitution, captured with a real runner (contracts/permission-mode-refused, see its
+ * README): the same files web and OrbitKit test against. */
+internal object RefusedPayloads : CapturedPayloadsIn("contracts/permission-mode-refused")

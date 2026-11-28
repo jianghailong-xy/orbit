@@ -1,6 +1,7 @@
 package io.orbitd.android.core.cards
 
 import io.orbitd.android.core.protocol.PermissionModeChange
+import io.orbitd.android.core.protocol.PermissionModeRefusal
 import io.orbitd.android.core.protocol.PermissionModes
 import io.orbitd.android.core.protocol.PermissionModes.AUTO
 import io.orbitd.android.core.protocol.PermissionModes.BYPASS
@@ -56,9 +57,12 @@ object PermissionModeDisplay {
      * in, the pick staying Auto (C1). Otherwise the mode [actual] the server recorded, with any gap from [intent] explained by the
      * newest change, [latest]. [reported] false is a server that records no running mode, whose intent is all there is to show.
      * A scheduled run on Claude Code ([scheduledOnClaude]) runs in Auto whatever was asked: that is the rule, not a gap.
+     * [refusal], the newest correction Claude refused among the events loaded: while it answers [latest], the gap stands at once,
+     * with the CLI's own words, and nothing is "switching".
      */
     fun capsule(intent: String, actual: String?, reported: Boolean, beforeStart: Boolean, latest: PermissionModeChange?,
-        noAutoModel: String?, runsAsRoot: Boolean, scheduledOnClaude: Boolean, now: Instant): ModeCapsule {
+        noAutoModel: String?, runsAsRoot: Boolean, scheduledOnClaude: Boolean, now: Instant,
+        refusal: PermissionModeRefusal? = null): ModeCapsule {
         val asked = PermissionModes.label(intent)
         if (beforeStart) {
             if (intent == AUTO && noAutoModel != null) return ModeCapsule(PermissionModes.label(DEFAULT), ModeCapsule.Gap.STANDING,
@@ -71,6 +75,8 @@ object PermissionModeDisplay {
         if (actual == intent) return ModeCapsule(running)
         val lead = "Running in $running."
         if (scheduledOnClaude && actual == AUTO) return ModeCapsule(running, head = ModeCapsule.Head(lead, "Scheduled runs always use Auto."))
+        if (refusal != null && refusalStands(refusal, latest, actual)) return ModeCapsule(running, ModeCapsule.Gap.STANDING,
+            ModeCapsule.Head(lead, refusalWhy(refusal)))
         val engineSaid = intent == AUTO && actual in BELOW_AUTO && noAutoModel == null && latest != null && latest.toMode == actual &&
             latest.cause in ENGINE_CAUSES
         if (engineSaid && correctingAt(latest!!.at, now)) return ModeCapsule("$running → $asked", ModeCapsule.Gap.CORRECTING,
@@ -86,6 +92,36 @@ object PermissionModeDisplay {
         return ModeCapsule(running, ModeCapsule.Gap.STANDING, ModeCapsule.Head(lead, why))
     }
 
+    /** How far the runner's clock may run behind the server's: the refusal is stamped by the runner, the report it answers by the
+     * server when it took the batch. */
+    private val REFUSAL_CLOCK_SLACK: Duration = Duration.ofSeconds(60)
+
+    /** Whether [refusal] answers the change the engine runs under now: Claude's report of the mode it settled on (or came back from a
+     * re-spawn in), which the runner then failed to correct. Any later change — a correction that took, the owner's pick — ends it. */
+    fun refusalStands(refusal: PermissionModeRefusal?, latest: PermissionModeChange?, actual: String?): Boolean {
+        if (refusal == null || latest == null || actual == null) return false
+        if (latest.cause !in ENGINE_CAUSES || latest.toMode != actual || refusal.mode != actual) return false
+        val refusedAt = parse(refusal.at) ?: return true
+        val reportedAt = parse(latest.at) ?: return true
+        return !refusedAt.isBefore(reportedAt.minus(REFUSAL_CLOCK_SLACK))
+    }
+
+    /** The index of the change [refusal] answers: the newest report of the mode it stays in, from before it. */
+    private fun answered(changes: List<PermissionModeChange>, refusal: PermissionModeRefusal): Int? {
+        val refusedAt = parse(refusal.at)
+        return changes.indices.lastOrNull { i ->
+            val change = changes[i]
+            change.cause in ENGINE_CAUSES && change.toMode == refusal.mode &&
+                (refusedAt == null || parse(change.at)?.isAfter(refusedAt.plus(REFUSAL_CLOCK_SLACK)) != true)
+        }
+    }
+
+    private fun refusalWhy(refusal: PermissionModeRefusal): String {
+        val asked = PermissionModes.label(refusal.requested)
+        val words = refusal.reason.takeIf { it.isNotEmpty() }?.let { if (it.endsWith(".")) ": $it" else ": $it." } ?: "."
+        return "You asked for $asked, but the runner couldn’t switch Claude to it$words"
+    }
+
     /** When a Claude report recorded at [at] stops reading as being switched back, and the control is drawn again as a gap that stands. */
     fun correctionEnds(at: String): Instant? = parse(at)?.plus(CORRECTION_WINDOW)
 
@@ -97,14 +133,29 @@ object PermissionModeDisplay {
      * The transcript's lines for [changes], oldest first: each says what the mode became and who or what made it. A Claude report the
      * runner then corrected is said once, by the correction ("Mode set back to Auto by the runner — Claude had started in Default").
      * The newest, when the mode it set is still the one running and is not [intent], is the gap's: amber, saying why where that is
-     * known — [noAutoModel] (the model's name when it has no Auto), a root runner.
+     * known — [noAutoModel] (the model's name when it has no Auto), a root runner. Each correction Claude refused ([refusals]) has a
+     * line of its own, saying the runner could not switch it and why; while the newest still stands it is the gap's line.
      */
     fun lines(changes: List<PermissionModeChange>, intent: String?, actual: String?, noAutoModel: String?, runsAsRoot: Boolean,
-        scheduledOnClaude: Boolean): List<ModeLine> = changes.mapIndexedNotNull { i, change ->
-        val next = changes.getOrNull(i + 1)
-        if (change.cause in ENGINE_CAUSES && next?.cause == "RUNNER_CORRECTION" && next.fromMode == change.toMode) return@mapIndexedNotNull null
-        val gap = next == null && intent != null && change.toMode == actual && actual != intent && !(scheduledOnClaude && actual == AUTO)
-        line(change, changes.getOrNull(i - 1), intent?.takeIf { gap }, noAutoModel, runsAsRoot, scheduledOnClaude)
+        scheduledOnClaude: Boolean, refusals: List<PermissionModeRefusal> = emptyList()): List<ModeLine> {
+        val gapOpen = intent != null && actual != null && actual != intent
+        val standing = refusals.lastOrNull()?.takeIf { gapOpen && refusalStands(it, changes.lastOrNull(), actual) }
+        // The report a refusal answers is placed with it: the server stamps a change when it took the runner's batch, after the
+        // runner's own stamp on the refusal, so by time alone the report would land below its answer.
+        val answeredAt = refusals.mapNotNull { r -> answered(changes, r)?.let { it to r.at } }.toMap()
+        val changed = changes.mapIndexedNotNull { i, change ->
+            val next = changes.getOrNull(i + 1)
+            if (change.cause in ENGINE_CAUSES && next?.cause == "RUNNER_CORRECTION" && next.fromMode == change.toMode) return@mapIndexedNotNull null
+            val gap = standing == null && next == null && gapOpen && change.toMode == actual && !(scheduledOnClaude && actual == AUTO)
+            val shown = line(change, changes.getOrNull(i - 1), intent?.takeIf { gap }, noAutoModel, runsAsRoot, scheduledOnClaude)
+            answeredAt[i]?.let { shown.copy(at = it) } ?: shown
+        }
+        return changed + refusals.map { refusal ->
+            val asked = PermissionModes.label(refusal.requested)
+            ModeLine(refusal.key, refusal.at, "Claude stays in ", PermissionModes.label(refusal.mode),
+                " — the runner couldn’t switch it to $asked" + (refusal.reason.takeIf { it.isNotEmpty() }?.let { ": $it" } ?: ""),
+                refusal == standing)
+        }
     }
 
     /** [gapFrom]: the intent the line's mode falls short of, when it is the gap's line. */
@@ -113,6 +164,11 @@ object PermissionModeDisplay {
         val noAuto = gapFrom == AUTO && change.toMode == DEFAULT && noAutoModel != null
         val (before, after) = when (change.cause) {
             "CLAIM" -> (if (change.fromMode == null) "Started in " else "Resumed in ") to when {
+                // The server's own word on why the claim handed another mode than the one asked for.
+                change.reason == "SCHEDULED_RUN" -> " — scheduled runs always use Auto"
+                change.reason == "ROOT_RUNNER" -> PermissionModes.label(change.requestedMode ?: BYPASS).let { asked ->
+                    ", not $asked — $asked can’t run on a root runner"
+                }
                 gapFrom == BYPASS && runsAsRoot -> ", not Bypass — Bypass can’t run on a root runner"
                 noAuto -> ", not Auto — $noAutoModel has no Auto"
                 scheduledOnClaude && change.toMode == AUTO -> " — scheduled runs always use Auto"

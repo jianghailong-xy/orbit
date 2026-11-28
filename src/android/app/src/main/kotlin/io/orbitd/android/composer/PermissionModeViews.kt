@@ -27,6 +27,7 @@ import io.orbitd.android.core.cards.ModeLine
 import io.orbitd.android.core.cards.PermissionModeDisplay
 import io.orbitd.android.core.protocol.PermissionModes
 import io.orbitd.android.core.protocol.SessionFacts
+import io.orbitd.android.core.realtime.RunEvent
 import io.orbitd.android.ui.LocalOrbitColors
 import java.time.Instant
 import kotlinx.serialization.json.JsonObject
@@ -54,9 +55,9 @@ internal fun noAutoModel(catalog: ComposerCatalog?, engine: String, provider: St
 internal fun scheduledOnClaude(detail: JsonObject, engine: String) = engine == ProviderEngines.CLAUDE && detail.text("scheduleRunId") != null
 
 /** The composer's mode control for the session [detail] reads, under the box's picks [effective] — a draft's, or the ones held for an
- * ended session's resume — on [engine]. */
+ * ended session's resume — on [engine]. [events] are the conversation's loaded events, where a correction Claude refused is said. */
 internal fun modeCapsule(detail: JsonObject, effective: JsonObject, engine: String, catalog: ComposerCatalog?, draft: Boolean,
-    now: Instant): ModeCapsule = PermissionModeDisplay.capsule(
+    now: Instant, events: List<RunEvent> = emptyList()): ModeCapsule = PermissionModeDisplay.capsule(
     intent = shownPermissionMode(effective, engine),
     actual = PermissionModes.actual(detail),
     reported = PermissionModes.reported(detail),
@@ -66,18 +67,19 @@ internal fun modeCapsule(detail: JsonObject, effective: JsonObject, engine: Stri
     runsAsRoot = catalog?.runner?.flag("runsAsRoot") == true,
     scheduledOnClaude = scheduledOnClaude(detail, engine),
     now = now,
+    refusal = PermissionModes.refusals(events).lastOrNull(),
 )
 
 /** The transcript's mode lines for the session [detail] (B1), judged against the intent the server holds: a pick held on this device
- * for a resume is not one the engine was asked for. */
-internal fun modeLines(detail: JsonObject?, catalog: ComposerCatalog?): List<ModeLine> {
+ * for a resume is not one the engine was asked for. [events], the conversation's loaded events, say each correction Claude refused. */
+internal fun modeLines(detail: JsonObject?, catalog: ComposerCatalog?, events: List<RunEvent> = emptyList()): List<ModeLine> {
     if (detail == null) return emptyList()
     val changes = PermissionModes.changes(detail)
     if (changes.isEmpty()) return emptyList()
     val engine = ProviderChoices.engine(detail, catalog?.providers.orEmpty())
     return PermissionModeDisplay.lines(changes, shownPermissionMode(detail, engine), PermissionModes.actual(detail),
         noAutoModel(catalog, engine, detail.text("provider") ?: engine, detail.text("model").orEmpty()),
-        catalog?.runner?.flag("runsAsRoot") == true, scheduledOnClaude(detail, engine))
+        catalog?.runner?.flag("runsAsRoot") == true, scheduledOnClaude(detail, engine), PermissionModes.refusals(events))
 }
 
 /** What the mode menu opens on (A1, C1): why the control reads as it does — its lead in bold, amber where it names a gap — over a rule. */
