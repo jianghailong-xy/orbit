@@ -657,7 +657,7 @@ import {
   sessionRowMarks,
   type SessionRowIcon,
 } from '../lib/sessionDisplay';
-import { SessionMarkChips, SessionRowIcons, SessionStateGlyph } from './SessionStateDisplay';
+import { SessionCreatedTasksIcon, SessionMarkChips, SessionRowIcons, SessionStateGlyph } from './SessionStateDisplay';
 import { deliveryFailureExplanation, offersSteerWithdraw, steerDeliveryState } from '../lib/steerDelivery';
 import { backgroundWorkIsActive, isSessionTurnActive, outlivingSessionWork } from '../lib/sessionActivity';
 import { MainCheckoutCtx, type MainCheckoutTarget } from '../lib/mainCheckout';
@@ -1677,6 +1677,7 @@ export function SessionTitleRow({
         </Tooltip>
       )}
       <SessionRowIcons icons={icons} />
+      <SessionCreatedTasksIcon active={s.createdTasksActive} />
       {/* The list row's `shared` (docs/share-links-design.md §8). The tip is hover only: on a touch screen
           a tap opens the row. */}
       {s.shared === true && (

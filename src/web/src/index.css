@@ -6373,6 +6373,17 @@ button.toast--pill:focus-visible {
 .session-row-icon.tone-red {
   color: var(--error);
 }
+/* The tasks a session created that are running or queued now: the checkbox and its count, in the running blue
+   (docs/mocks/session-row-running-tasks). */
+.session-row-icon.session-created-tasks {
+  align-items: center;
+  gap: 2px;
+  color: var(--brand);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
 /* A public link opens this session (the list row's `shared`): a globe beside the time. */
 .session-shared {
   display: inline-flex;
